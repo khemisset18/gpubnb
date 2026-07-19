@@ -2,38 +2,45 @@ services:
   - type: web
     name: gpubnb-api
     runtime: docker
+    plan: free
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: ./apps/api
     healthCheckPath: /health
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 8787
       - key: DATABASE_URL
-        fromDatabase:
-          name: gpubnb-db
-          property: connectionString
+        sync: false
+      - key: DIRECT_URL
+        sync: false
       - key: REDIS_URL
-        fromService:
-          type: redis
-          name: gpubnb-redis
-          property: connectionString
+        sync: false
       - key: PUBLIC_APP_ORIGIN
         sync: false
       - key: SESSION_SECRET
         generateValue: true
       - key: INTERNAL_SERVICE_TOKEN
         generateValue: true
+      - key: SESSION_COOKIE_NAME
+        value: gpubnb_session
+      - key: SESSION_TTL_SECONDS
+        value: 86400
+      - key: PLATFORM_WALLET
+        value: B5WQmXWHL8R86wf3LHLRE4aQAuRdRSz1EXKcwNQDqj2e
       - key: SOLANA_CLUSTER
         value: devnet
+      - key: SOLANA_RPC_URL
+        value: https://api.devnet.solana.com
+      - key: ESCROW_PROGRAM_ID
+        value: REPLACE_AFTER_ANCHOR_DEPLOY
       - key: ALLOW_MAINNET
         value: "false"
-  - type: redis
-    name: gpubnb-redis
-    ipAllowList: []
-    plan: starter
-
-databases:
-  - name: gpubnb-db
-    plan: basic-256mb
+      - key: HEARTBEAT_MAX_AGE_SECONDS
+        value: 25
+      - key: HEARTBEAT_OFFLINE_SECONDS
+        value: 40
+      - key: COMMISSION_BPS
+        value: 500

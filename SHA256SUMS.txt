@@ -1,8 +1,9 @@
-be811a769f9db6ceeab1624895f7c6fdcd2af81b0a752be4cdbab0752b50d053  ./.env.example
+a61570049aac6dc8dba89ab52afe2034162cc672fe459e34283c4ebf2525a20a  ./.env.example
 0a1cffb4b39ae97b51652cd7e5ca618ed045dd52c7ac65da5d638c98a7509eb7  ./.github/workflows/ci.yml
 d0b1ed156a930b52644bd26a215fe04ea866dc73543fdb41a2db479d55140b2c  ./Makefile
-e99e218bb5decfd2a12205da860d6a6b52ea807974766750fdf5e381cb9e18e3  ./README.md
-c3a759edae973273717369577999f13859f4aa22090961d75a3100ff1e3f79eb  ./agent/agent.py
+758dec7c547d1bf95e1a2e07c86806d4ee55a3a754debb28c888df1a28f45134  ./README.md
+147f81888fce0b29820b5605ec3398deaf19693eb1a637700d84f8b2acef7830  ./agent/__pycache__/agent.cpython-313.pyc
+823e9e886f6e09faa59351c97f496c472b0ea34baf58ca0fcfd24580220bbbb3  ./agent/agent.py
 fe2b75ea79bac5eddce9607b0a838310e71d8b3c9c29cc4591c063a9f4d4a206  ./agent/requirements.txt
 4ddc7f952e52b285c0f300fd61fc1c1b77a5b338dc2e6251887b886c9def4384  ./apps/api/.dockerignore
 0a1f7aa99f4a3bc34a74e36b65b213644870c2f66f4a8b4c014a44522fdc2305  ./apps/api/Dockerfile
@@ -10,10 +11,10 @@ fe2b75ea79bac5eddce9607b0a838310e71d8b3c9c29cc4591c063a9f4d4a206  ./agent/requir
 5deb5803dfbb714d9050a561c882ccda8bbc2b15b7afd8e42798481f4241d83c  ./apps/api/package.json
 0ade67616c63cb632e62a7c1bbf509ff6382269c3c5a86cdd7534a78062d5a3a  ./apps/api/prisma/migrations/0001_init/migration.sql
 07b513413a22e06730cb7adaac6f6f563e06ba4d527dd65f6418f3c01a58bd19  ./apps/api/prisma/migrations/0002_booking_exclusion.sql
-c9dac196b19232633ccbafaf265af6e680212ac638acd6dccf30c4628154fe6c  ./apps/api/prisma/schema.prisma
-ad8b6ea2988ef403f52db6644a8c3cf9aecd6db6a609e57b6a92ce607f4a398e  ./apps/api/src/auth.ts
+a58202a79dbf43acdf389dbd6f7f918135bef01aa81d2294b5a947bbe0026d73  ./apps/api/prisma/schema.prisma
+0d5240c67c5e6d66d145e128c9ef0370fe85170151763a2f171d2c64a5ca0c91  ./apps/api/src/auth.ts
 8741482e39d7dcacb113021f8dc1e6e8e504a51017194e19c2ae7180889bf35b  ./apps/api/src/config.ts
-6961d66cf963d5c4ae95c108b873b68e317acc8aea762114fe3b527302af97b8  ./apps/api/src/server.ts
+9d4c24f3da2decc7e7f888e0c5b912cf76339722dc287c2aa6217bba3ab206c8  ./apps/api/src/server.ts
 cea21cd7b9ee63cf93ad0cafaff9ca3277777aafc1bec8c850c93ae75109a318  ./apps/api/src/settlement.ts
 c9f09b6e0381256b8598ddb6629b3ff2f16b3f03d2e05263b9de2f13b9f90ea0  ./apps/api/test/settlement.test.ts
 af459bddfcd7f9157ac37a882a5e10a68e0c5ecd01f6a5607496c9fcc8c00d2b  ./apps/api/tsconfig.json
@@ -22,7 +23,7 @@ b242f040d8cc36cad9479210e977c62f4d02339c3a775873fea939058a3667f2  ./apps/web/con
 1773537a679086ede1e9f18d3f750745269d20ef00639f89b392c2caf864c469  ./apps/web/index.html
 c9761369ff0d0479d024ae968485e652c406fa38b50eab82add787c69b835d5f  ./apps/web/netlify.toml
 af14700c9fe6c3e87265ab77a64d9d13c988ec8dfd68458e0e9d43dd2ee4ce3d  ./apps/web/styles.css
-352be821c719bf43a10fc1e1104505294649d666043a0b640502bf01084f7a4f  ./docs/CORRECTIONS_2026-07-18.md
+2154bf50122fb062edddef4900191376a8ea374cd45f57275869dde23a4b089a  ./docs/DEPLOIEMENT_GRATUIT.md
 d1c3b0f6afd51ba317249b2ec38bf611955999a50cc2fa906aaa593ffb63f895  ./docs/DEPLOYMENT.md
 5fd24cdf38fc12a34dfadb81f8111c5ec029901e09c0a34f2c0da74437f20411  ./docs/LAUNCH_CHECKLIST.md
 651e17c70dea1bba5477791825f6e87fe1c8fb2fc0dfeaa696fcf86c320d7dbe  ./docs/REMAINING_PRODUCTION_GATES.md
@@ -34,5 +35,5 @@ d4fcca676c02b04430ef7df0448ec175258aabcd0b184e8497b2c788dc07b57c  ./infra/docker
 ba5899cd426d4aed9b577297f7f6b07e9b00ba85160f43c05601bd501d6b6713  ./programs/gpu_escrow/Anchor.toml
 69c095dd8f6bc7e4c66a30a386b30674b314e3402b07058215ec22c40b7ee5db  ./programs/gpu_escrow/Cargo.toml
 584fbc946c851d9e35731c5a37b54cfd7f059e3923c68a16871840a8981277e2  ./programs/gpu_escrow/src/lib.rs
-ae14753fe688bb2fca2aeff5caf619ab32d78506727867ee0fafdccaf777b77a  ./render.yaml
-2048bd30e8d9b3280b2b7c9ac12ba362563c6b618fa060fe30fe8198e56ed30f  ./scripts/verify.sh
+63548758efc8927540f59965f3f43ad872e574e76a8aec00428b83c05077a1b7  ./render.yaml
+67918bc00ccd769909bd62d991a8a48eaadb2b0367764ad48a76307e2af227f1  ./scripts/verify.sh

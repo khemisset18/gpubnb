@@ -28,3 +28,7 @@ npm start
 ```
 
 Pour Netlify, déployer **uniquement `apps/web`** et définir `window.GPUBNB_API_URL` dans `config.js`.
+
+## Déploiement gratuit Supabase + Upstash
+
+Le fichier `render.yaml` de cette version déploie uniquement l'API sur Render. PostgreSQL doit être fourni par Supabase et Redis par Upstash. Voir `docs/DEPLOIEMENT_GRATUIT.md`.
