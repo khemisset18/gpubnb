@@ -1,3 +1,7 @@
+# GPUbnb — déploiement Devnet simplifié
+
+> **Version de départ professionnelle : le site et l’API sont servis par un seul service Render.** Supabase fournit PostgreSQL et Upstash fournit Redis. Le déploiement demande seulement `DATABASE_URL` et `REDIS_URL`. Voir `docs/DEPLOIEMENT_PRO_SIMPLE.md`.
+
 # GPUbnb Enterprise — release candidate Devnet
 
 Plateforme pseudonyme de location de GPU. Ce dépôt comprend l'interface Netlify, une API permanente, PostgreSQL/Redis, un agent GPU et un programme d'escrow Solana.

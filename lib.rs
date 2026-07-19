@@ -1,0 +1,27 @@
+use anchor_lang::prelude::*;
+declare_id!("Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m");
+const COMMISSION_BPS:u64=500; const BPS:u64=10_000; const FULL_PAY_THRESHOLD_BPS:u64=9_000;
+#[program]
+pub mod gpu_escrow { use super::*;
+ pub fn initialize_config(ctx:Context<InitializeConfig>,platform:Pubkey,oracle:Pubkey)->Result<()>{let c=&mut ctx.accounts.config;c.admin=ctx.accounts.admin.key();c.platform=platform;c.oracle=oracle;c.paused=false;c.bump=ctx.bumps.config;Ok(())}
+ pub fn open(ctx:Context<Open>,booking:[u8;32],amount:u64,expected_seconds:u32,expires_at:i64)->Result<()>{require!(!ctx.accounts.config.paused,ErrorCode::Paused);require!(amount>0&&expected_seconds>0,ErrorCode::InvalidInput);require!(expires_at>Clock::get()?.unix_timestamp,ErrorCode::InvalidExpiry);let e=&mut ctx.accounts.escrow;e.booking=booking;e.buyer=ctx.accounts.buyer.key();e.provider=ctx.accounts.provider.key();e.amount=amount;e.expected_seconds=expected_seconds;e.expires_at=expires_at;e.state=0;e.bump=ctx.bumps.escrow;let ix=anchor_lang::solana_program::system_instruction::transfer(&ctx.accounts.buyer.key(),&e.key(),amount);anchor_lang::solana_program::program::invoke(&ix,&[ctx.accounts.buyer.to_account_info(),e.to_account_info(),ctx.accounts.system_program.to_account_info()])?;Ok(())}
+ pub fn propose_settlement(ctx:Context<ProposeSettlement>,valid_seconds:u32)->Result<()>{let e=&mut ctx.accounts.escrow;require!(e.state==0,ErrorCode::InvalidState);require!(valid_seconds<=e.expected_seconds,ErrorCode::InvalidInput);e.valid_seconds=valid_seconds;e.settle_after=Clock::get()?.unix_timestamp+3600;e.state=1;Ok(())}
+ pub fn dispute(ctx:Context<Dispute>)->Result<()>{let e=&mut ctx.accounts.escrow;require!(e.state==1,ErrorCode::InvalidState);e.state=2;Ok(())}
+ pub fn finalize(ctx:Context<Finalize>)->Result<()>{let e=&mut ctx.accounts.escrow;require!(e.state==1,ErrorCode::InvalidState);require!(Clock::get()?.unix_timestamp>=e.settle_after,ErrorCode::TooEarly);let availability=(e.valid_seconds as u64).checked_mul(BPS).unwrap()/e.expected_seconds as u64;let payable=if availability>=FULL_PAY_THRESHOLD_BPS{e.amount}else{(e.amount as u128*e.valid_seconds as u128/e.expected_seconds as u128) as u64};let platform=payable.checked_mul(COMMISSION_BPS).unwrap()/BPS;let provider=payable-platform;let refund=e.amount-payable;transfer_lamports(&e.to_account_info(),&ctx.accounts.provider.to_account_info(),provider)?;transfer_lamports(&e.to_account_info(),&ctx.accounts.platform.to_account_info(),platform)?;transfer_lamports(&e.to_account_info(),&ctx.accounts.buyer.to_account_info(),refund)?;e.state=3;Ok(())}
+ pub fn refund_expired(ctx:Context<RefundExpired>)->Result<()>{let e=&mut ctx.accounts.escrow;require!(e.state==0,ErrorCode::InvalidState);require!(Clock::get()?.unix_timestamp>=e.expires_at,ErrorCode::TooEarly);let amount=e.amount;transfer_lamports(&e.to_account_info(),&ctx.accounts.buyer.to_account_info(),amount)?;e.state=4;Ok(())}
+}
+fn transfer_lamports(from:&AccountInfo,to:&AccountInfo,amount:u64)->Result<()>{**from.try_borrow_mut_lamports()?=from.lamports().checked_sub(amount).ok_or(ErrorCode::Math)?;**to.try_borrow_mut_lamports()?=to.lamports().checked_add(amount).ok_or(ErrorCode::Math)?;Ok(())}
+#[derive(Accounts)]pub struct InitializeConfig<'info>{#[account(mut)]pub admin:Signer<'info>,#[account(init,payer=admin,space=8+Config::INIT_SPACE,seeds=[b"config"],bump)]pub config:Account<'info,Config>,pub system_program:Program<'info,System>}
+#[derive(Accounts)]#[instruction(booking:[u8;32])]pub struct Open<'info>{#[account(seeds=[b"config"],bump=config.bump)]pub config:Account<'info,Config>,#[account(mut)]pub buyer:Signer<'info>,/// CHECK: stored destination
+pub provider:UncheckedAccount<'info>,#[account(init,payer=buyer,space=8+Escrow::INIT_SPACE,seeds=[b"escrow",booking.as_ref()],bump)]pub escrow:Account<'info,Escrow>,pub system_program:Program<'info,System>}
+#[derive(Accounts)]pub struct ProposeSettlement<'info>{#[account(seeds=[b"config"],bump=config.bump,has_one=oracle)]pub config:Account<'info,Config>,pub oracle:Signer<'info>,#[account(mut)]pub escrow:Account<'info,Escrow>}
+#[derive(Accounts)]pub struct Dispute<'info>{pub buyer:Signer<'info>,#[account(mut,has_one=buyer)]pub escrow:Account<'info,Escrow>}
+#[derive(Accounts)]pub struct Finalize<'info>{#[account(seeds=[b"config"],bump=config.bump,has_one=platform)]pub config:Account<'info,Config>,#[account(mut,has_one=buyer,has_one=provider)]pub escrow:Account<'info,Escrow>,/// CHECK: constrained
+#[account(mut)]pub buyer:UncheckedAccount<'info>,/// CHECK: constrained
+#[account(mut)]pub provider:UncheckedAccount<'info>,/// CHECK: constrained
+#[account(mut)]pub platform:UncheckedAccount<'info>}
+#[derive(Accounts)]pub struct RefundExpired<'info>{#[account(mut,has_one=buyer)]pub escrow:Account<'info,Escrow>,/// CHECK: constrained
+#[account(mut)]pub buyer:UncheckedAccount<'info>}
+#[account]#[derive(InitSpace)]pub struct Config{pub admin:Pubkey,pub platform:Pubkey,pub oracle:Pubkey,pub paused:bool,pub bump:u8}
+#[account]#[derive(InitSpace)]pub struct Escrow{pub booking:[u8;32],pub buyer:Pubkey,pub provider:Pubkey,pub amount:u64,pub expected_seconds:u32,pub valid_seconds:u32,pub expires_at:i64,pub settle_after:i64,pub state:u8,pub bump:u8}
+#[error_code]pub enum ErrorCode{#[msg("paused")]Paused,#[msg("invalid input")]InvalidInput,#[msg("invalid expiry")]InvalidExpiry,#[msg("invalid state")]InvalidState,#[msg("too early")]TooEarly,#[msg("math error")]Math}

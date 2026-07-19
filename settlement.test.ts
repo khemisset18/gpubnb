@@ -1,0 +1,4 @@
+import test from 'node:test'; import assert from 'node:assert/strict'; import {calculateSettlement} from '../src/settlement.js';
+test('full pay at 90 percent',()=>{const x=calculateSettlement(100_000_000n,3240,3600);assert.equal(x.providerLamports,95_000_000n);assert.equal(x.platformLamports,5_000_000n);assert.equal(x.refundLamports,0n)});
+test('pro rata below threshold',()=>{const x=calculateSettlement(100_000_000n,2700,3600);assert.equal(x.payableLamports,75_000_000n);assert.equal(x.platformLamports,3_750_000n);assert.equal(x.providerLamports,71_250_000n);assert.equal(x.refundLamports,25_000_000n)});
+test('invariant over sample durations',()=>{for(let s=0;s<=3600;s++){const x=calculateSettlement(987654321n,s,3600);assert.equal(x.providerLamports+x.platformLamports+x.refundLamports,x.grossLamports)}});

@@ -1,10 +1,11 @@
 services:
   - type: web
-    name: gpubnb-api
+    name: gpubnb
     runtime: docker
     plan: free
+    region: frankfurt
     dockerfilePath: ./apps/api/Dockerfile
-    dockerContext: ./apps/api
+    dockerContext: .
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -14,11 +15,7 @@ services:
         value: 8787
       - key: DATABASE_URL
         sync: false
-      - key: DIRECT_URL
-        sync: false
       - key: REDIS_URL
-        sync: false
-      - key: PUBLIC_APP_ORIGIN
         sync: false
       - key: SESSION_SECRET
         generateValue: true
@@ -35,7 +32,7 @@ services:
       - key: SOLANA_RPC_URL
         value: https://api.devnet.solana.com
       - key: ESCROW_PROGRAM_ID
-        value: REPLACE_AFTER_ANCHOR_DEPLOY
+        value: NOT_DEPLOYED_YET
       - key: ALLOW_MAINNET
         value: "false"
       - key: HEARTBEAT_MAX_AGE_SECONDS
