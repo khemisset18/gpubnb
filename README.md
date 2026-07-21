@@ -57,3 +57,20 @@ Le dépôt inclut désormais une migration d'admin en deux étapes, les outils d
 ## Premier démarrage sans coder
 
 Lire `COMMENCER_ICI.txt`, puis `docs/ETAPE_1_GITHUB_NETLIFY.md`. Exécuter `node scripts/devnet-doctor.mjs` pour vérifier la machine.
+
+## v1.1 — Publication GPU locale (démo)
+
+- Nouvelle page `apps/web/publish.html`, reliée à la navigation principale.
+- Formulaire de publication avec validation côté navigateur.
+- Sauvegarde des annonces dans `localStorage` (`gpubnb.demo.listings.v1`).
+- Fusion automatique des annonces locales avec les annonces API dans la marketplace.
+- Les annonces locales sont clairement marquées comme démo et ne déclenchent aucune transaction.
+
+## Version v1.2 — Demandes et propositions
+
+Le frontend inclut maintenant deux espaces complémentaires :
+
+- `apps/web/demandes.html` : publication et suivi des demandes GPU côté client ;
+- `apps/web/propositions.html` : réponse aux demandes côté propriétaire, avec statuts en attente, acceptée ou refusée.
+
+Dans cette version Devnet, ces données restent locales au navigateur et sont clairement signalées comme démonstration. La prochaine étape consiste à connecter ces écrans à l'API et à PostgreSQL avant tout usage réel.
