@@ -1,7 +1,7 @@
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app/api
 COPY apps/api/package*.json ./
-RUN npm ci --omit=dev=false
+RUN npm ci
 
 FROM deps AS build
 COPY apps/api/prisma ./prisma
