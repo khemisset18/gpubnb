@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Publiez un GPU sur GPUbnb en mode démonstration locale Devnet.">
+  <meta name="description" content="Publiez un GPU vérifié sur GPUbnb Devnet.">
   <meta name="theme-color" content="#070a09">
   <title>Publier un GPU — GPUbnb</title>
   <link rel="stylesheet" href="styles.css">
+  <script defer src="config.js"></script>
   <script defer src="publish.js"></script>
 </head>
 <body>
@@ -18,34 +19,32 @@
   </header>
   <main class="publish-page shell">
     <section class="publish-intro">
-      <span class="eyebrow"><i></i> Publication locale · Devnet</span>
+      <span class="eyebrow"><i></i> Publication authentifiée · Devnet</span>
       <h1>Publiez votre GPU.</h1>
-      <p>Créez une annonce de démonstration enregistrée uniquement dans ce navigateur. Aucune donnée n’est envoyée au serveur et aucune transaction Solana n’est déclenchée.</p>
-      <div class="demo-notice"><strong>Mode démo</strong><span>Les annonces locales apparaissent immédiatement sur la marketplace de cet appareil.</span></div>
+      <p>Créez une annonce liée à votre compte et à votre agent GPU. Elle ne devient visible que lorsque la machine envoie des preuves valides et reste en ligne.</p>
+      <div class="demo-notice"><strong id="accountState">Vérification du compte…</strong><span>Une machine hors ligne reste masquée automatiquement.</span></div>
     </section>
     <section class="publish-layout">
       <form id="publishForm" class="publish-form" novalidate>
         <div class="form-heading"><span>Nouvelle annonce</span><b>1 / 1</b></div>
         <div class="field-grid">
-          <label class="field field-wide"><span>Titre de l’annonce</span><input name="title" required maxlength="80" placeholder="Ex. RTX 4090 optimisée pour LLM"></label>
-          <label class="field"><span>Modèle du GPU</span><input name="gpuModel" required maxlength="80" placeholder="NVIDIA RTX 4090"></label>
-          <label class="field"><span>VRAM</span><div class="input-suffix"><input name="vramGb" type="number" required min="1" max="512" step="1" placeholder="24"><span>GB</span></div></label>
-          <label class="field"><span>Prix horaire</span><div class="input-suffix"><input name="hourlySol" type="number" required min="0.0001" max="100" step="0.0001" placeholder="0.0250"><span>SOL/h</span></div></label>
-          <label class="field"><span>Localisation</span><input name="location" required maxlength="60" placeholder="Paris, FR"></label>
-          <label class="field"><span>Pseudonyme</span><input name="ownerPseudonym" required maxlength="40" placeholder="compute-node-42"></label>
-          <label class="field field-wide"><span>Description</span><textarea name="description" required maxlength="280" rows="5" placeholder="Décrivez la machine, les workloads adaptés et les conditions de disponibilité."></textarea><small><output id="descriptionCount">0</output>/280</small></label>
+          <label class="field field-wide"><span>Machine existante</span><select name="machineId"><option value="">Créer une machine avec la clé agent</option></select></label>
+          <label class="field field-wide"><span>Clé publique de l’agent</span><input name="agentPublicKey" required minlength="32" maxlength="64" placeholder="Clé Ed25519 encodée en base58"></label>
+          <label class="field field-wide"><span>Titre de l’annonce</span><input name="title" required minlength="5" maxlength="120" placeholder="Ex. RTX 4090 optimisée pour LLM"></label>
+          <label class="field"><span>Prix horaire</span><div class="input-suffix"><input name="hourlySol" type="number" required min="0.000000001" max="100" step="0.000000001" placeholder="0.025"><span>SOL/h</span></div></label>
+          <label class="field field-wide"><span>Description</span><textarea name="description" required minlength="20" maxlength="3000" rows="7" placeholder="Décrivez la machine, les workloads adaptés et les conditions de disponibilité."></textarea><small><output id="descriptionCount">0</output>/3000</small></label>
         </div>
-        <label class="consent"><input name="demoConsent" type="checkbox" required><span>Je comprends que cette annonce est enregistrée localement pour la démonstration.</span></label>
         <div id="formMessage" class="form-message" role="status" aria-live="polite"></div>
         <div class="form-actions"><button class="button button-primary button-large" type="submit">Publier l’annonce</button><button id="resetForm" class="button button-secondary button-large" type="button">Réinitialiser</button></div>
       </form>
       <aside class="local-listings-panel">
-        <div class="panel-heading"><div><span class="eyebrow"><i></i> Ce navigateur</span><h2>Mes annonces locales</h2></div><span id="localCount" class="count-badge">0</span></div>
-        <div id="localListings" class="local-listings"><p class="panel-empty">Aucune annonce locale enregistrée.</p></div>
+        <div class="panel-heading"><div><span class="eyebrow"><i></i> Agent GPU</span><h2>Activation automatique</h2></div></div>
+        <p>Après publication, configurez l’agent avec l’identifiant machine renvoyé. L’annonce passe en ligne uniquement après un heartbeat signé, récent et cohérent.</p>
+        <p>Si l’agent s’arrête, le balayage serveur classe la machine hors ligne et masque l’annonce.</p>
         <a class="button button-secondary" href="index.html#market">Ouvrir la marketplace</a>
       </aside>
     </section>
   </main>
-  <footer><div class="shell footer-inner"><a class="brand" href="index.html"><span class="brand-mark">G</span><span>GPUbnb</span></a><p>Publication locale pour démonstration.</p><span>Devnet · Mainnet désactivé</span></div></footer>
+  <footer><div class="shell footer-inner"><a class="brand" href="index.html"><span class="brand-mark">G</span><span>GPUbnb</span></a><p>Publication liée au compte et vérifiée par agent.</p><span>Devnet · Mainnet désactivé</span></div></footer>
 </body>
 </html>

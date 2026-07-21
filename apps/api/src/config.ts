@@ -23,6 +23,8 @@ const schema = z.object({
   HEARTBEAT_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(120).default(25),
   HEARTBEAT_OFFLINE_SECONDS: z.coerce.number().int().min(15).max(300).default(40),
   COMMISSION_BPS: z.coerce.number().int().min(0).max(1000).default(500),
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_ANON_KEY: z.string().min(20).optional(),
 });
 
 export const config = schema.parse(process.env);
