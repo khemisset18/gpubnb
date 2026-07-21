@@ -1,1 +1,131 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Location pseudonyme de GPU avec paiement Solana"><title>GPUbnb</title><link rel="stylesheet" href="styles.css"><script defer src="config.js"></script><script defer src="vendor/solana-web3.min.js"></script><script defer src="app.js"></script></head><body><header><a class="brand" href="#">GPUbnb</a><nav><a href="#market">GPU</a><a href="#trust">Fiabilité</a><a href="#community">Communauté</a></nav><button id="wallet">Connecter Phantom</button></header><main><section class="hero"><span class="eyebrow">SOLANA · CONFIDENTIALITÉ · GPU VÉRIFIÉS</span><h1>Louez une puissance GPU réellement connectée.</h1><p>Les annonces disparaissent automatiquement quand l'agent ou le GPU n'est plus disponible.</p><div class="status"><b id="apiStatus">API en vérification…</b><span id="networkWarning">Réseau configuré par le serveur.</span></div></section><section id="market"><div class="section-head"><div><span class="eyebrow">Marketplace</span><h2>GPU disponibles maintenant</h2></div><button id="refresh">Actualiser</button></div><div id="listings" class="grid"><article class="empty">Chargement des annonces réelles…</article></div></section><section id="trust" class="panel"><span class="eyebrow">Règles de confiance</span><h2>Aucune note inventée, aucun GPU hors ligne.</h2><div class="features"><div><b>Heartbeat signé</b><p>Challenge unique et compteur anti-rejeu.</p></div><div><b>Règlement mesuré</b><p>90 % de disponibilité donne le paiement intégral, sinon calcul proportionnel.</p></div><div><b>Escrow</b><p>Les fonds restent bloqués jusqu'au règlement ou remboursement.</p></div></div></section><section id="community"><span class="eyebrow">Communauté</span><h2>Forum et installations</h2><p>Le forum doit être alimenté par l'API réelle. Aucun faux sujet n'est affiché.</p></section></main><footer><b>GPUbnb</b><span>Plateforme pseudonyme — l'activité Solana reste publique sur la blockchain.</span></footer></body></html>
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="GPUbnb — marketplace pseudonyme de location GPU avec paiement en SOL et escrow Solana.">
+  <meta name="theme-color" content="#070a09">
+  <title>GPUbnb — Louez de la puissance GPU</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="config.js"></script>
+  <script defer src="vendor/solana-web3.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="GPUbnb accueil">
+      <span class="brand-mark">G</span><span>GPUbnb</span>
+    </a>
+    <nav aria-label="Navigation principale">
+      <a href="#market">Marketplace</a>
+      <a href="#community">Communauté</a>
+      <a href="#security">Sécurité</a>
+      <a href="#reliability">Fiabilité</a>
+    </nav>
+    <div class="header-actions">
+      <a class="dashboard-link" href="#dashboard">Tableau de bord</a>
+      <button id="wallet" class="button button-primary" type="button">Connecter Phantom</button>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero shell">
+      <div class="hero-copy">
+        <span class="eyebrow"><i></i> Marketplace GPU pseudonyme</span>
+        <h1>Louez de la<br>puissance GPU.<br><em>Gardez votre<br>vie privée.</em></h1>
+        <p>Publiez un GPU, réservez une machine vérifiée et payez en SOL. L’escrow protège la transaction sans KYC imposé par la plateforme.</p>
+        <div class="hero-actions">
+          <a class="button button-primary button-large" href="#market">Explorer la marketplace</a>
+          <a class="button button-secondary button-large" href="#publish">Publier un GPU</a>
+        </div>
+        <div class="trust-row" aria-label="Garanties principales">
+          <span><b>5 %</b> commission fixe</span>
+          <span><b>Escrow</b> natif Solana</span>
+          <span><b>Agent</b> GPU signé</span>
+        </div>
+      </div>
+
+      <div class="hero-visual" aria-label="Aperçu de vérification GPU">
+        <div class="glow-orb"></div>
+        <div class="terminal-card">
+          <div class="terminal-top"><span class="terminal-dots"><i></i><i></i><i></i></span><span>agent-gpu-demo</span></div>
+          <div class="terminal-body">
+            <p class="terminal-command"><strong>$</strong> gpubnb-agent verify</p>
+            <p class="muted">Vérification locale du matériel…</p>
+            <p class="terminal-success">✓ RTX 4090 détectée · preuve signée</p>
+            <div class="terminal-stats">
+              <div><b>24 GB</b><span>VRAM</span></div>
+              <div><b>99,2 %</b><span>stabilité démo</span></div>
+              <div><b>58°C</b><span>température</span></div>
+            </div>
+            <div class="progress"><span></span></div>
+            <p class="terminal-note">Aucun accès au bureau hôte</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="status-strip shell" aria-live="polite">
+      <div><span class="status-dot"></span><b id="apiStatus">API en vérification…</b></div>
+      <span id="networkWarning">Réseau configuré par le serveur.</span>
+    </section>
+
+    <section id="market" class="section shell">
+      <div class="section-heading">
+        <div><span class="eyebrow"><i></i> Marketplace en direct</span><h2>Des GPU prêts à calculer.</h2><p>Seules les annonces confirmées par un agent actif apparaissent ici.</p></div>
+        <button id="refresh" class="button button-secondary" type="button">Actualiser</button>
+      </div>
+      <div class="filter-bar" aria-label="Filtres de présentation">
+        <span class="filter active">Tous les GPU</span><span class="filter">24 GB+</span><span class="filter">IA & LLM</span><span class="filter">Rendu 3D</span><span class="filter">Disponible</span>
+      </div>
+      <div id="listings" class="gpu-grid"><article class="empty">Chargement des annonces réelles…</article></div>
+    </section>
+
+    <section id="reliability" class="metrics-section shell">
+      <div class="metric"><strong>90 %</strong><span>seuil de disponibilité pour paiement intégral</span></div>
+      <div class="metric"><strong>95 / 5</strong><span>fournisseur / plateforme sur le montant payable</span></div>
+      <div class="metric"><strong>1 escrow</strong><span>PDA unique pour chaque réservation</span></div>
+    </section>
+
+    <section id="security" class="section shell split-section">
+      <div>
+        <span class="eyebrow"><i></i> Sécurité vérifiable</span>
+        <h2>La confiance ne repose pas sur une promesse.</h2>
+        <p class="lead">Chaque étape importante laisse une preuve : signature Phantom, dépôt on-chain, heartbeat de l’agent et règlement mesuré.</p>
+      </div>
+      <div class="feature-list">
+        <article><span>01</span><div><h3>Escrow Solana</h3><p>Les fonds restent verrouillés jusqu’au règlement ou remboursement prévu.</p></div></article>
+        <article><span>02</span><div><h3>Matériel vérifié</h3><p>Challenge signé, compteur anti-rejeu et disparition automatique hors ligne.</p></div></article>
+        <article><span>03</span><div><h3>Mainnet verrouillé</h3><p>Cette version reste en mode Devnet tant que les preuves d’audit ne sont pas réunies.</p></div></article>
+      </div>
+    </section>
+
+    <section id="publish" class="cta shell">
+      <div><span class="eyebrow"><i></i> Pour les propriétaires</span><h2>Votre GPU peut travailler quand vous ne l’utilisez pas.</h2><p>Installez l’agent, publiez votre capacité et suivez vos sessions depuis un tableau de bord unique.</p></div>
+      <button class="button button-primary button-large" type="button" data-coming-soon>Préparer mon GPU</button>
+    </section>
+
+    <section id="community" class="section shell community-section">
+      <span class="eyebrow"><i></i> Communauté</span>
+      <h2>Construisons un cloud GPU plus ouvert.</h2>
+      <p>Le forum, le chat et la réputation seront reliés à l’API réelle. Aucun faux avis ni faux volume n’est affiché.</p>
+    </section>
+
+    <section id="dashboard" class="dashboard-preview shell">
+      <div class="dashboard-copy"><span class="eyebrow"><i></i> Tableau de bord</span><h2>Tout suivre au même endroit.</h2><p>Réservations, revenus, sessions actives et paiements seront accessibles après connexion Phantom.</p></div>
+      <div class="dashboard-card">
+        <div class="mini-nav"><b>Vue générale</b><span>Devnet</span></div>
+        <div class="mini-stats"><div><span>Sessions actives</span><strong>—</strong></div><div><span>Revenus</span><strong>— SOL</strong></div><div><span>Disponibilité</span><strong>— %</strong></div></div>
+        <div class="chart-placeholder"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell footer-inner"><a class="brand" href="#top"><span class="brand-mark">G</span><span>GPUbnb</span></a><p>Marketplace pseudonyme de location GPU sur Solana.</p><span>Devnet · Mainnet désactivé</span></div>
+  </footer>
+</body>
+</html>

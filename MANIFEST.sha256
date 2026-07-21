@@ -27,12 +27,12 @@ cea21cd7b9ee63cf93ad0cafaff9ca3277777aafc1bec8c850c93ae75109a318  ./apps/api/src
 4ce01336fa2883691a3c66a71b09123fffbd8d191ba87b4399ecfc1a1727fc9c  ./apps/api/test/settlement.test.ts
 b687461cf48ae144080e1da613c08b75aa59fd9ee1a8c5799d5d7171bdef914c  ./apps/api/test/solana.test.ts
 af459bddfcd7f9157ac37a882a5e10a68e0c5ecd01f6a5607496c9fcc8c00d2b  ./apps/api/tsconfig.json
-05c3448005bfc00aa439fe8eb7265b9c346ed00a7bc5ebbfbc679c66def67bff  ./apps/web/app.js
+23ae8c5d27f2c11e2dce87bae1fadb264451d17b7adf97f7f3f67d3ad1ecfd09  ./apps/web/app.js
 656861e570f8fc49f7edf8c880acc4269a7934d42ddd5b0006a3cab5be5a9e37  ./apps/web/config.js
-ac70591ec55f2806362fbf34da1ace564286fb19ac20dde724c958d404a889a8  ./apps/web/index.html
+b0a1cd0d519b743e6c7802487c2da1f34f0cd15ae88b9e28bfb03096113d6bf6  ./apps/web/index.html
 139ee08ba1b4cc59a9e97336e963ae404e9c7f4eaf6e517c61711e5e8fa00f4e  ./apps/web/netlify.toml
 0f6ff9a2756ac248a352c47876e1f33bac1f62543696441d4c9caa6111e68a96  ./apps/web/robots.txt
-af14700c9fe6c3e87265ab77a64d9d13c988ec8dfd68458e0e9d43dd2ee4ce3d  ./apps/web/styles.css
+c52d01e57c5beed41eb6a8e591f98f86e460e55f55967477a92f8712705241fa  ./apps/web/styles.css
 09cdbea951b2ed0e11bcbe3aeb1ee9f035f9fb51ed212aca645475ae82688cc3  ./apps/web/vendor/solana-web3.min.js
 6b0c589f4aefee2760543518b629206be0bfa3258aad8c43c1f46ac30ec772c4  ./audit/README.md
 073aa0796ee0da137de95344943cfa9413872a6a59face876f736825e39d109c  ./audit/evidence/README.md
@@ -42,6 +42,7 @@ cfbd2ea4c132821c4a46bc8ce69ba77a31d077ab56d9f0aecbebea665e09bfe4  ./audit/eviden
 852aac8a9d83f1a65844642ff63135a54ff8045cde1f9966561f67497aa21e7e  ./docs/DEPLOIEMENT_ETAPE_PAR_ETAPE.md
 7a65d1f36ddcaa42bd0d7c6b228521570ddfe7e8115fced4920f0f210c1ef0d8  ./docs/DEPLOIEMENT_PRO_SIMPLE.md
 aaf517ff12423eaa1bf19ef8b7be9b01f2b35b31f7bf22ab2df2205bc6ce3fc3  ./docs/ETAPE_1_GITHUB_NETLIFY.md
+0bd2d86bde265c3111a91f2ee01a209d3696148e764b574f3a2c7e03008ed4ad  ./docs/FRONTEND_PREMIUM.md
 25933e854f00231be55c7d42e9f8fb94a1eb5d68dbb6b00cfeb90fd4a53947d9  ./docs/INCIDENT_RESPONSE.md
 5fd24cdf38fc12a34dfadb81f8111c5ec029901e09c0a34f2c0da74437f20411  ./docs/LAUNCH_CHECKLIST.md
 a0dad08163b5cf994d2699bb9e59cded4f3cbc6b38a5a297339e18929c6960c3  ./docs/MAINNET_GO_LIVE.md
