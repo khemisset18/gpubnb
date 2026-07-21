@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+target/
+.anchor/
+*.keypair.json
+*-keypair.json
+agent/__pycache__/
+*.pyc
+.DS_Store

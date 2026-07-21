@@ -1,0 +1,12 @@
+GPUbnb v1.0 DEVNET — COMMENCER ICI
+
+1) Extraire cette archive.
+2) Ouvrir docs/ETAPE_1_GITHUB_NETLIFY.md.
+3) Publier le dossier complet avec GitHub Desktop, dépôt privé.
+4) Créer seulement l’aperçu du site sur Netlify.
+5) Ne pas activer Mainnet et ne fournir aucune clé privée.
+
+Avant le contrat, exécuter depuis le dossier du projet :
+  node scripts/devnet-doctor.mjs
+
+Statut réel : lire docs/STATUT_RELEASE.md.

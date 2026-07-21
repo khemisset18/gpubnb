@@ -1,21 +1,28 @@
-# GPUbnb — déploiement Devnet simplifié
+> GPUbnb v1.0 Devnet — base renforcée destinée aux tests locaux et Devnet, jamais aux fonds Mainnet sans audit.
 
-> **Version de départ professionnelle : le site et l’API sont servis par un seul service Render.** Supabase fournit PostgreSQL et Upstash fournit Redis. Le déploiement demande seulement `DATABASE_URL` et `REDIS_URL`. Voir `docs/DEPLOIEMENT_PRO_SIMPLE.md`.
+# GPUbnb v1.0 — Devnet Release
 
-# GPUbnb Enterprise — release candidate Devnet
+Marketplace pseudonyme de location de GPU avec authentification Phantom, agent GPU signé, PostgreSQL/Redis et escrow natif SOL.
 
-Plateforme pseudonyme de location de GPU. Ce dépôt comprend l'interface Netlify, une API permanente, PostgreSQL/Redis, un agent GPU et un programme d'escrow Solana.
+## Paiement
 
-## Statut de sécurité
+Le contrat Anchor verrouille les lamports dans un PDA unique par réservation. Après mesure d'usage :
 
-- **Devnet uniquement** par défaut.
-- `ALLOW_MAINNET=false` est obligatoire.
-- Aucun KYC obligatoire ; authentification par signature de portefeuille et session opaque.
-- Une annonce publique n'est visible que si le GPU a été récemment attesté par son agent.
-- Le règlement est déterministe : 5 % sur la partie payable, 95 % fournisseur, remboursement du solde.
-- Le seuil commercial est 90 % de disponibilité par heure. Sous ce seuil, paiement proportionnel.
+- disponibilité >= 90 % : montant payable intégral ;
+- disponibilité < 90 % : paiement proportionnel ;
+- 5 % du montant payable vers `B5WQmXWHL8R86wf3LHLRE4aQAuRdRSz1EXKcwNQDqj2e` ;
+- 95 % au fournisseur ;
+- solde non payable remboursé au locataire.
 
-Ce dépôt corrige les principaux défauts du prototype, mais un audit indépendant du binaire Solana déployé et des tests d'évasion de la sandbox restent requis avant tout Mainnet.
+Le frontend peut créer une réservation d'une heure, demander à l'API une transaction non signée, la faire signer par Phantom et confirmer le dépôt. L'API vérifie ensuite la signature, le programme invoqué, le PDA, le propriétaire du compte, l'acheteur, le fournisseur, le montant et la durée avant de passer la réservation à `FUNDED`.
+
+## Structure
+
+- `apps/web` : interface web statique et bundle Solana local.
+- `apps/api` : API Fastify, Prisma, Redis et vérification on-chain.
+- `programs/gpu_escrow` : contrat Anchor SOL.
+- `agent` : agent de preuve GPU signé.
+- `docs` : procédures de déploiement et limites de production.
 
 ## Démarrage local
 
@@ -24,15 +31,29 @@ cp .env.example .env
 docker compose -f infra/docker-compose.yml up -d
 cd apps/api
 npm ci
-npm run prisma:generate
-npm run prisma:migrate
+npx prisma generate
+npx prisma migrate deploy
 npm test
 npm run build
 npm start
 ```
 
-Pour Netlify, déployer **uniquement `apps/web`** et définir `window.GPUBNB_API_URL` dans `config.js`.
+## Important
 
-## Déploiement gratuit Supabase + Upstash
+Le dépôt est une **candidate production**, pas une garantie de sécurité financière. Un déploiement Mainnet exige un nouveau Program ID, des clés protégées, des tests Anchor exécutés, un RPC de production, une surveillance et un audit indépendant du binaire exact déployé. Voir `docs/MAINNET_GO_LIVE.md`.
 
-Le fichier `render.yaml` de cette version déploie uniquement l'API sur Render. PostgreSQL doit être fourni par Supabase et Redis par Upstash. Voir `docs/DEPLOIEMENT_GRATUIT.md`.
+## Mainnet safety status
+
+This repository is deliberately **NO-GO for public mainnet** until `./scripts/mainnet-gate.sh` passes with genuine third-party evidence. Never bypass `ALLOW_MAINNET`, the external audit, multisig, sandbox pentest, private RPC, backup-restore test, and legal review requirements.
+
+See `docs/CHANGES_MAINNET_HARDENING.md` and `audit/README.md`.
+
+## RC3 — préparation des autorités Mainnet
+
+Voir `docs/RC3_ADDITIONS.md`, `docs/MULTISIG_SETUP.md` et `docs/SANDBOX_SECURITY.md`.
+Le dépôt inclut désormais une migration d'admin en deux étapes, les outils de Program ID, une baseline de sandbox et un bundle de preuves. Les attestations externes ne sont jamais générées artificiellement.
+
+
+## Premier démarrage sans coder
+
+Lire `COMMENCER_ICI.txt`, puis `docs/ETAPE_1_GITHUB_NETLIFY.md`. Exécuter `node scripts/devnet-doctor.mjs` pour vérifier la machine.
