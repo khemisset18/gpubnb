@@ -1,0 +1,13 @@
+[extend]
+useDefault = true
+
+# These two non-secret values existed in historical CI configuration. Keep the
+# exception exact and value-only so that every other finding and every other
+# location remains subject to the upstream Gitleaks rules.
+[allowlist]
+description = "Historical CI-only placeholders"
+regexTarget = "match"
+regexes = [
+  '''^ci-only-session-secret-32-characters-minimum$''',
+  '''^ci-only-internal-token-32-characters$''',
+]
