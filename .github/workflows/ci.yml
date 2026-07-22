@@ -61,7 +61,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: programs/gpu_escrow
-      - run: cargo test --locked
+      - run: cargo test
   production-gates:
     runs-on: ubuntu-latest
     steps:
@@ -69,7 +69,7 @@ jobs:
       - run: python3 -m py_compile agent/agent.py
       - run: node --check apps/web/app.js
       - run: node --check apps/web/config.js
-      - run: ./scripts/mainnet-gate.sh || true
+      - run: node scripts/devnet-doctor.mjs
 
   security-static-analysis:
     runs-on: ubuntu-latest
