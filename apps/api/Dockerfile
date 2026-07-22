@@ -11,7 +11,7 @@ RUN apt-get update \
 
 COPY apps/api/package.json apps/api/package-lock.json ./
 
-RUN npm install --include=dev --no-audit --no-fund --legacy-peer-deps
+RUN npm ci --include=dev --no-audit --no-fund
 
 FROM deps AS build
 
@@ -33,12 +33,15 @@ RUN apt-get update \
     && useradd -r -g app app
 
 COPY --from=build /app/api/package.json /app/api/package-lock.json ./
-COPY --from=build /app/api/node_modules ./node_modules
+RUN npm ci --omit=dev --no-audit --no-fund
 COPY --from=build /app/api/dist ./dist
 COPY --from=build /app/api/prisma ./prisma
 COPY apps/web /app/web
 
 USER app
 EXPOSE 8787
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:8787/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/server.js"]

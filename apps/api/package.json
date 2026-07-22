@@ -10,7 +10,8 @@
     "test": "tsx --test test/*.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "verify": "npm test && npm run build"
+    "verify": "npm test && npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
@@ -23,11 +24,11 @@
     "fastify": "^5.4.0",
     "ioredis": "^5.6.1",
     "tweetnacl": "^1.0.3",
-    "zod": "^3.25.67"
+    "zod": "^3.25.67",
+    "prisma": "^6.10.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
-    "prisma": "^6.10.0",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   },

@@ -36,6 +36,7 @@ jobs:
           cache: npm
           cache-dependency-path: apps/api/package-lock.json
       - run: npm ci
+      - run: npx prisma validate
       - run: npx prisma generate
       - run: npx prisma migrate deploy
       - run: npm test
@@ -61,7 +62,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: programs/gpu_escrow
-      - run: cargo test --locked
+      - run: cargo test
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --all-features
   production-gates:
     runs-on: ubuntu-latest
     steps:
@@ -69,6 +72,7 @@ jobs:
       - run: python3 -m py_compile agent/agent.py
       - run: node --check apps/web/app.js
       - run: node --check apps/web/config.js
+      - run: node --check apps/web/auth.js
       - run: ./scripts/mainnet-gate.sh || true
 
   security-static-analysis:
@@ -81,7 +85,7 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: fs
           scan-ref: .

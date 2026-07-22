@@ -28,6 +28,9 @@ const schema = z.object({
 });
 
 export const config = schema.parse(process.env);
+if (Boolean(config.SUPABASE_URL) !== Boolean(config.SUPABASE_ANON_KEY)) {
+  throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY must be configured together');
+}
 new PublicKey(config.PLATFORM_WALLET);
 if (config.NODE_ENV === 'production' && !config.REDIS_URL.startsWith('rediss://')) throw new Error('Production Redis must use TLS (rediss://)');
 if (config.SOLANA_CLUSTER === 'mainnet-beta' && config.ALLOW_MAINNET !== 'true') {
