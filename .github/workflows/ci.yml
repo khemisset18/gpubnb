@@ -84,9 +84,14 @@ jobs:
         with:
           fetch-depth: 0
       - name: Gitleaks secret scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --volume "$GITHUB_WORKSPACE:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.24.3 \
+            detect --source=/repo --config=/repo/.gitleaks.toml \
+            --redact --verbose --no-banner
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@0.28.0
         with:
