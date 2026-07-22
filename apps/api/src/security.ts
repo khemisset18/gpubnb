@@ -10,6 +10,8 @@ export function constantTimeToken(actual: string | undefined, expected: string):
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+export const validCsrfToken = constantTimeToken;
+
 export function assertTrustedOrigin(req: FastifyRequest, reply: FastifyReply, domain: string): boolean {
   if (!['POST','PUT','PATCH','DELETE'].includes(req.method)) return true;
   const origin = req.headers.origin;

@@ -1,4 +1,4 @@
-.PHONY: dev verify api-build api-test zip
+.PHONY: dev verify api-build api-test
 
 dev:
 	docker compose -f infra/docker-compose.yml up --build
@@ -11,6 +11,3 @@ api-test:
 
 verify:
 	bash scripts/verify.sh
-
-zip:
-	cd .. && zip -r gpubnb-enterprise-final.zip gpubnb-enterprise -x '*/node_modules/*' '*/.git/*' '*/.env'

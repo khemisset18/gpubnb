@@ -3,6 +3,13 @@ test('full pay at 90 percent',()=>{const x=calculateSettlement(100_000_000n,3240
 test('pro rata below threshold',()=>{const x=calculateSettlement(100_000_000n,2700,3600);assert.equal(x.payableLamports,75_000_000n);assert.equal(x.platformLamports,3_750_000n);assert.equal(x.providerLamports,71_250_000n);assert.equal(x.refundLamports,25_000_000n)});
 test('invariant over sample durations',()=>{for(let s=0;s<=3600;s++){const x=calculateSettlement(987654321n,s,3600);assert.equal(x.providerLamports+x.platformLamports+x.refundLamports,x.grossLamports)}});
 
+test('platform commission is always exactly five percent of payable lamports, rounded down',()=>{
+  for(const gross of [1n,19n,20n,21n,1_000_000_019n]){
+    const s=calculateSettlement(gross,1000,1000);
+    assert.equal(s.platformLamports,s.payableLamports*500n/10_000n);
+  }
+});
+
 test('zero usage refunds the full amount',()=>{
   const s=calculateSettlement(1_000_000n,0,1000);
   assert.equal(s.payableLamports,0n);

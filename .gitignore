@@ -1,12 +1,78 @@
+# Runtime configuration and secrets (keep only documented templates)
 .env
 .env.*
 !.env.example
-node_modules/
-dist/
-target/
-.anchor/
+apps/web/auth-config.js
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
 *.keypair.json
 *-keypair.json
-agent/__pycache__/
-*.pyc
+id.json
+*-wallet.json
+id_rsa*
+
+# JavaScript / TypeScript dependencies, caches and outputs
+node_modules/
+dist/
+build/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+.npm/
+.pnpm-store/
+.yarn/cache/
+
+# Rust, Anchor and Solana local state
+target/
+.anchor/
+test-ledger/
+.solana/
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Logs, diagnostics, database dumps and temporary files
+*.log
+logs/
+*.sql.gz
+*.dump
+*.backup
+*.sqlite
+*.sqlite3
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.cache/
+tmp/
+temp/
+
+# Generated archives, reports and screenshots
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+npm-audit.json
+trivy-*.json
+gitleaks-report.*
+playwright-report/
+test-results/
+screenshots/
+
+# IDE and operating-system metadata
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml

@@ -1,5 +1,0 @@
-[provider]
-cluster="Devnet"
-wallet="~/.config/solana/id.json"
-[programs.devnet]
-gpu_escrow="REPLACE_WITH_DEPLOYED_PROGRAM_ID"

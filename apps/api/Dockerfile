@@ -11,7 +11,7 @@ RUN apt-get update \
 
 COPY apps/api/package.json apps/api/package-lock.json ./
 
-RUN npm install --include=dev --no-audit --no-fund --legacy-peer-deps
+RUN npm ci --include=dev --no-audit --no-fund
 
 FROM deps AS build
 
@@ -19,8 +19,10 @@ COPY apps/api/prisma ./prisma
 COPY apps/api/tsconfig.json ./
 COPY apps/api/src ./src
 
-RUN ./node_modules/.bin/prisma generate
 RUN npm run build
+
+# The runtime needs Prisma's migration CLI, but not TypeScript or the test runner.
+RUN npm prune --omit=dev
 
 FROM node:22.14.0-bookworm-slim AS runtime
 ENV NODE_ENV=production
@@ -41,4 +43,7 @@ COPY apps/web /app/web
 USER app
 EXPOSE 8787
 
-CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/server.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && exec node dist/server.js"]
