@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { PublicKey } from '@solana/web3.js';
 
+const optionalEnvironmentUrl = z.preprocess(value => value === '' ? undefined : value, z.string().url().optional());
+const optionalEnvironmentSecret = z.preprocess(value => value === '' ? undefined : value, z.string().min(20).optional());
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(8787),
@@ -13,7 +16,7 @@ const schema = z.object({
   MAX_BODY_BYTES: z.coerce.number().int().min(1024).max(1_048_576).default(131072),
   SESSION_SECRET: z.string().min(32),
   INTERNAL_SERVICE_TOKEN: z.string().min(32),
-  PUBLIC_APP_DOMAIN: z.string().min(3).default('localhost'),
+  PUBLIC_APP_DOMAIN: z.string().regex(/^(localhost|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?::\d{1,5})?$/i).default('localhost'),
   PLATFORM_WALLET: z.string(),
   SOLANA_CLUSTER: z.enum(['devnet', 'testnet', 'mainnet-beta']).default('devnet'),
   SOLANA_RPC_URL: z.string().url().default('https://api.devnet.solana.com'),
@@ -23,12 +26,13 @@ const schema = z.object({
   HEARTBEAT_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(120).default(25),
   HEARTBEAT_OFFLINE_SECONDS: z.coerce.number().int().min(15).max(300).default(40),
   COMMISSION_BPS: z.coerce.number().int().min(0).max(1000).default(500),
-  SUPABASE_URL: z.string().url().optional(),
-  SUPABASE_ANON_KEY: z.string().min(20).optional(),
+  SUPABASE_URL: optionalEnvironmentUrl,
+  SUPABASE_ANON_KEY: optionalEnvironmentSecret,
 });
 
 export const config = schema.parse(process.env);
 new PublicKey(config.PLATFORM_WALLET);
+if ((config.SUPABASE_URL === undefined) !== (config.SUPABASE_ANON_KEY === undefined)) throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY must be configured together');
 if (config.NODE_ENV === 'production' && !config.REDIS_URL.startsWith('rediss://')) throw new Error('Production Redis must use TLS (rediss://)');
 if (config.SOLANA_CLUSTER === 'mainnet-beta' && config.ALLOW_MAINNET !== 'true') {
   throw new Error('Mainnet is disabled until independent audit approval');

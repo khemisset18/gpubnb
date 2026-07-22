@@ -25,6 +25,12 @@ services:
         value: gpubnb_session
       - key: SESSION_TTL_SECONDS
         value: 86400
+      - key: SESSION_IDLE_TTL_SECONDS
+        value: 3600
+      - key: TRUST_PROXY
+        value: "true"
+      - key: PUBLIC_APP_DOMAIN
+        sync: false
       - key: PLATFORM_WALLET
         value: B5WQmXWHL8R86wf3LHLRE4aQAuRdRSz1EXKcwNQDqj2e
       - key: SOLANA_CLUSTER

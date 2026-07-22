@@ -7,7 +7,8 @@ const BPS: u64 = 10_000;
 const FULL_PAY_THRESHOLD_BPS: u64 = 9_000;
 const DISPUTE_WINDOW_SECONDS: i64 = 3_600;
 const MAX_BOOKING_SECONDS: u32 = 86_400;
-const MAX_EXPIRY_SECONDS: i64 = 7 * 86_400;
+// API reservations may start up to 30 days ahead and last up to one day.
+const MAX_EXPIRY_SECONDS: i64 = 32 * 86_400;
 
 #[program]
 pub mod gpu_escrow {

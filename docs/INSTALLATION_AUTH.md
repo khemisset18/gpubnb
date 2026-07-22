@@ -1,14 +1,14 @@
 # Installation du module d’authentification
 
 1. Copier `apps/web/auth.html`, `auth.css` et `auth.js` dans le dossier `apps/web` du dépôt.
-2. Copier `auth-config.example.js` sous le nom `auth-config.js`, puis ajouter l’URL Supabase et la clé **publique anon**. Ne jamais utiliser la clé service_role dans le navigateur.
+2. Définir `SUPABASE_URL` et `SUPABASE_ANON_KEY` côté API. `GET /public-config.js` les transmet au navigateur ; ne jamais utiliser la clé service_role.
 3. Dans Supabase SQL Editor, exécuter `supabase/migrations/20260721_auth_profiles.sql`.
 4. Dans Supabase > Authentication > Providers :
    - activer Email ;
    - activer Google et configurer le client Google ;
    - activer Web3 Wallet > Solana.
-5. Dans Authentication > URL Configuration, ajouter l’URL du site et `https://VOTRE-SITE.netlify.app/auth.html`.
-6. Dans Netlify, vérifier que `auth-config.js` est publié.
+5. Dans Authentication > URL Configuration, ajouter l’URL du site et `https://<DOMAINE_RENDER>/auth.html`.
+6. Vérifier que le déploiement Render sert la configuration publique via `GET /public-config.js`.
 7. Ajouter dans le menu du site un lien vers `/auth.html`.
 
 ## Confidentialité

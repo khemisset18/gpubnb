@@ -26,6 +26,17 @@ Le frontend peut créer une réservation d'une heure, demander à l'API une tran
 
 ## Démarrage local
 
+### Prérequis
+
+- Node.js 22 et npm 10.9.2 ;
+- PostgreSQL 16 et Redis 7 (ou `docker compose`) ;
+- Docker pour reproduire l'image Render ;
+- Rust/Anchor uniquement pour le programme d'escrow.
+
+`apps/api` est le package Node canonique et autonome. Le dépôt n'utilise pas de
+workspaces npm : toute installation, génération Prisma et compilation de l'API
+doit être lancée depuis ce dossier. Les anciennes copies Node à la racine ont été supprimées : il n’existe plus qu’une source canonique pour chaque application.
+
 ```bash
 cp .env.example .env
 docker compose -f infra/docker-compose.yml up -d
@@ -37,6 +48,53 @@ npm test
 npm run build
 npm start
 ```
+
+L'API écoute sur `0.0.0.0:$PORT`. `GET /health` est un contrôle de processus sans
+accès aux dépendances ; `GET /ready` vérifie PostgreSQL et Redis.
+
+## Configuration
+
+Copier `.env.example` vers un fichier local non suivi. Les variables obligatoires
+sont `DATABASE_URL`, `REDIS_URL`, `SESSION_SECRET`, `INTERNAL_SERVICE_TOKEN`,
+`PUBLIC_APP_DOMAIN` et `PLATFORM_WALLET`. En production, Redis doit utiliser
+`rediss://`, `PUBLIC_APP_DOMAIN` doit être le nom d'hôte public du frontend (sans
+protocole), et `TRUST_PROXY=true` est requis derrière Render. Les paramètres
+Supabase `SUPABASE_URL` et `SUPABASE_ANON_KEY` sont facultatifs ensemble ; la clé
+anon est publique, aucune service-role key n'est utilisée par le code.
+
+Google OAuth et les e-mails sont fournis par Supabase Auth : aucune clé Google
+n'entre dans l'API ou le frontend. Le navigateur charge la configuration publique depuis `GET /public-config.js`, généré par l’API à partir des variables Render. Seules l’URL et la clé anon publiques y sont exposées ; aucune clé privée ne rejoint le bundle. Pour conserver les cookies de session `SameSite=Strict`, le lancement pris en charge sert le frontend et l’API depuis le même domaine Render.
+
+## Commandes de validation
+
+Depuis `apps/api` : `npm ci`, `npm test`, `npm run build`,
+`npx prisma validate`, `npx prisma format --check` et `npx prisma generate`.
+La migration de production non destructive est `npx prisma migrate deploy`.
+Depuis la racine, `cargo test --manifest-path programs/gpu_escrow/Cargo.toml`
+teste le contrat et `node --check apps/web/*.js` contrôle le JavaScript statique.
+
+## Docker et Render
+
+Construire depuis la racine, comme Render :
+
+```bash
+docker build -f apps/api/Dockerfile -t gpubnb-api .
+```
+
+Render doit utiliser **Root Directory vide (racine du dépôt)**, Dockerfile
+`./apps/api/Dockerfile`, healthcheck `/health` et la branche/commit explicitement
+choisi. `render.yaml` décrit ces réglages. Le conteneur lance `prisma migrate deploy`
+avant l'API ; consulter les migrations en PR avant tout déploiement. Les domaines,
+secrets et services managés restent des opérations manuelles détaillées dans
+`DEPLOYMENT_CHECKLIST.md`.
+
+## Limites et rollback
+
+Le frontend conserve encore certaines fonctions de démonstration en stockage
+local et le Mainnet reste volontairement bloqué jusqu'aux preuves d'audit décrites
+ci-dessous. Pour revenir en arrière, sélectionner dans Render le dernier déploiement
+sain ou redéployer son SHA ; les migrations Prisma doivent rester additives et ne
+doivent jamais être annulées par une suppression manuelle de données.
 
 ## Important
 
@@ -56,7 +114,7 @@ Le dépôt inclut désormais une migration d'admin en deux étapes, les outils d
 
 ## Premier démarrage sans coder
 
-Lire `COMMENCER_ICI.txt`, puis `docs/ETAPE_1_GITHUB_NETLIFY.md`. Exécuter `node scripts/devnet-doctor.mjs` pour vérifier la machine.
+Lire `DEPLOYMENT_CHECKLIST.md`, puis exécuter `node scripts/devnet-doctor.mjs` pour vérifier la machine.
 
 ## v1.1 — Publication GPU locale (démo)
 

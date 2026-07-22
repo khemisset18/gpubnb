@@ -2,7 +2,7 @@
 
 Ces opérations ne peuvent pas être réalisées depuis une archive locale :
 
-1. Créer et payer les comptes Netlify, hébergeur, base de données et RPC Solana.
+1. Créer et payer les comptes Render, hébergeur, base de données et RPC Solana.
 2. Posséder ou saisir les clés privées de déploiement.
 3. Acheter et configurer le domaine.
 4. Déployer le programme Solana avec une autorité que vous contrôlez.

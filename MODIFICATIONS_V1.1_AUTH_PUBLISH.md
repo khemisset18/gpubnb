@@ -17,7 +17,7 @@
 
 ## Configuration requise
 
-Copier `apps/web/auth-config.example.js` vers `apps/web/auth-config.js` et renseigner le projet Supabase. Le fichier est inclus avec des valeurs factices à remplacer.
+Configurer `SUPABASE_URL` et `SUPABASE_ANON_KEY` dans Render. L’API sert ensuite les valeurs publiques via `/public-config.js`.
 
 Ajouter côté API :
 

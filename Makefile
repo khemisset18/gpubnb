@@ -13,4 +13,4 @@ verify:
 	bash scripts/verify.sh
 
 zip:
-	cd .. && zip -r gpubnb-enterprise-final.zip gpubnb-enterprise -x '*/node_modules/*' '*/.git/*' '*/.env'
+	cd .. && zip -r gpubnb-final.zip gpubnb -x '*/node_modules/*' '*/.git/*' '*/.env'

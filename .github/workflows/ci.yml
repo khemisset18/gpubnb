@@ -1,7 +1,10 @@
 name: CI
 on:
   push:
+    branches: [main]
   pull_request:
+permissions:
+  contents: read
 jobs:
   api:
     runs-on: ubuntu-latest
@@ -35,13 +38,17 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/api/package-lock.json
+      - run: npm install --global npm@10.9.2
       - run: npm ci
       - run: npx prisma generate
       - run: npx prisma migrate deploy
       - run: npm test
       - run: npm run build
       - run: npm audit --audit-level=high
-      - run: npx tsc -p tsconfig.json --noEmit
+      - run: npm run typecheck
+      - name: Build production image
+        working-directory: ${{ github.workspace }}
+        run: docker build -f apps/api/Dockerfile -t gpubnb-api:ci .
   agent:
     runs-on: ubuntu-latest
     steps:
@@ -61,7 +68,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: programs/gpu_escrow
-      - run: cargo test --locked
+      - run: cargo test
   production-gates:
     runs-on: ubuntu-latest
     steps:
@@ -69,7 +76,8 @@ jobs:
       - run: python3 -m py_compile agent/agent.py
       - run: node --check apps/web/app.js
       - run: node --check apps/web/config.js
-      - run: ./scripts/mainnet-gate.sh || true
+      - name: Verify production gate script syntax
+        run: bash -n scripts/mainnet-gate.sh
 
   security-static-analysis:
     runs-on: ubuntu-latest

@@ -1,13 +1,9 @@
-# Activer Google et e-mail
+# Activer Google et e-mail via Supabase
 
-Le frontend affiche maintenant Google, e-mail et Phantom depuis `apps/web/auth.html`.
-
-1. Ouvrir `apps/web/auth-config.js`.
-2. Remplacer `YOUR_PROJECT` et `YOUR_PUBLIC_ANON_KEY` par les valeurs publiques du projet Supabase.
-3. Remplacer `YOUR_SITE` par le domaine Netlify réel.
-4. Dans Supabase > Authentication > Providers, activer Email et Google.
-5. Dans Google Cloud, ajouter l’URL de callback Supabase indiquée dans le panneau du provider Google.
-6. Dans Supabase > URL Configuration, ajouter `https://VOTRE_SITE.netlify.app/auth.html` aux Redirect URLs.
-7. Configurer aussi côté API `SUPABASE_URL` et `SUPABASE_ANON_KEY` avec le même projet.
-
-Attention : sans ces valeurs propres à votre compte Supabase/Google, aucun ZIP ne peut rendre Google opérationnel automatiquement.
+1. Dans Supabase, activer Email et Google et imposer la confirmation d’e-mail.
+2. Dans Google Cloud, déclarer l’origine `https://<DOMAINE_RENDER>` et le callback Supabase `https://<PROJECT_REF>.supabase.co/auth/v1/callback`.
+3. Dans Supabase URL Configuration, définir le Site URL `https://<DOMAINE_RENDER>` et autoriser `https://<DOMAINE_RENDER>/auth.html`.
+4. Configurer `SUPABASE_URL` et `SUPABASE_ANON_KEY` dans Render.
+5. Définir ces deux valeurs **publiques** dans Render ; l’API génère `GET /public-config.js` et l’URL de redirection.
+6. Ne jamais placer le Client Secret Google ou une clé Supabase `service_role` dans Render côté frontend, Git ou le bundle navigateur.
+7. Tester inscription, confirmation, connexion, récupération, expiration et déconnexion.

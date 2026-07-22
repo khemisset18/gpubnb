@@ -2,7 +2,7 @@
 
 ## Fonctionne ou est vérifiable sans fonds réels
 
-- interface statique Netlify ;
+- frontend statique servi par Render ;
 - authentification par signature de portefeuille côté API ;
 - schéma PostgreSQL et migrations ;
 - sessions Redis ;
