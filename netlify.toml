@@ -1,4 +1,5 @@
 [build]
+command="node scripts/generate-web-config.mjs"
 publish="apps/web"
 
 [[headers]]

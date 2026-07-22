@@ -1,0 +1,16 @@
+# Compatibility configuration for the existing Netlify project whose base
+# directory is `apps/web`. The repository-root netlify.toml remains canonical
+# when Netlify is configured with the repository root as its base.
+[build]
+command = "node ../../scripts/generate-web-config.mjs"
+publish = "."
+
+[[headers]]
+for = "/*"
+[headers.values]
+X-Content-Type-Options = "nosniff"
+X-Frame-Options = "DENY"
+Referrer-Policy = "strict-origin-when-cross-origin"
+Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+Content-Security-Policy = "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co https://*.onrender.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"

@@ -18,7 +18,9 @@ fichier d'exemple committé.
 - Pour le frontend servi par l'API, configurer `SUPABASE_URL` et
   `SUPABASE_ANON_KEY` : `/auth-config.js` est généré dynamiquement. Pour un
   frontend Netlify autonome, générer `apps/web/auth-config.js` depuis le fichier
-  d'exemple avant publication. Garder la clé `service_role` uniquement dans un
+  d'exemple avant publication. Le build Netlify génère automatiquement cette
+  configuration depuis `SUPABASE_URL`, `SUPABASE_ANON_KEY` et
+  `GPUBNB_API_URL`. Garder la clé `service_role` uniquement dans un
   coffre serveur; l'API actuelle n'en a pas besoin.
 - Configurer `SUPABASE_URL` et `SUPABASE_ANON_KEY` côté API. Si le navigateur
   accède directement à des tables à l'avenir, activer et tester RLS avant cela.
@@ -40,6 +42,10 @@ fichier d'exemple committé.
   les actions approuvées. Activer Dependabot et secret scanning.
 - Les déploiements mainnet doivent utiliser un Environment protégé avec revue
   obligatoire. Ne jamais stocker de keypair Solana comme secret générique de PR.
+- Gitleaks conserve une exception étroitement limitée à l'ancienne clé
+  navigateur Supabase `anon` dans `apps/web/auth-config.js`. Cette exception ne
+  couvre aucun autre chemin ni commit et ne doit jamais être élargie à une clé
+  `service_role`.
 
 ## Render
 

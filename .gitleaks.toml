@@ -1,0 +1,15 @@
+[extend]
+useDefault = true
+
+# The historical browser bundle contained one Supabase `anon` JWT. Supabase
+# anon keys are intentionally public and restricted by RLS; no service-role key
+# was committed. Limit this exception to the two historical commits and the
+# removed browser-config path so every other secret and path remains scanned.
+[[allowlists]]
+description = "Historical public Supabase anon browser key"
+commits = [
+  "62a71b4033c3f00288c6791c6d2fac5a5f1fcc0e",
+  "d2507f506f307026b17a134ccaedd475ec6aca4d",
+]
+paths = ['''^apps/web/auth-config\.js$''']
+condition = "AND"
