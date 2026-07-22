@@ -11,7 +11,7 @@ RUN apt-get update \
 
 COPY apps/api/package.json apps/api/package-lock.json ./
 
-RUN npm ci --include=dev --no-audit --no-fund --foreground-scripts
+RUN npm install --include=dev --no-audit --no-fund --legacy-peer-deps
 
 FROM deps AS build
 
