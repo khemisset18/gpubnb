@@ -11,6 +11,7 @@
 <header class="account-header"><a class="brand" href="index.html">GPUbnb</a><a class="button" href="dashboard.html">Mon espace</a></header>
 <main class="account-shell" id="sessionRoot">
   <div class="dashboard-head"><div><span class="eyebrow">Environnement isolé</span><h1 id="sessionTitle">Compute</h1><p id="sessionSummary" class="muted">Connexion sécurisée à la session…</p></div><span id="sessionStatus" class="badge">CHARGEMENT</span></div>
+  <section class="panel preparation-panel"><div class="preparation-head"><div><span class="eyebrow">Préparation avant votre arrivée</span><h2 id="preparationStep">Réservation confirmée</h2></div><strong id="preparationPercent">0 %</strong></div><div class="progress-track" role="progressbar" aria-label="Préparation du Workspace" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="preparationBar"></span></div><p id="preparationMessage" class="muted">GPUbnb vérifie la machine et prépare les composants automatiquement.</p></section>
   <section class="stats metric-grid">
     <article class="stat"><span>GPU</span><strong id="gpuMetric">—</strong></article><article class="stat"><span>VRAM utilisée</span><strong id="vramMetric">—</strong></article>
     <article class="stat"><span>Température</span><strong id="tempMetric">—</strong></article><article class="stat"><span>CPU</span><strong id="cpuMetric">—</strong></article>
@@ -20,6 +21,6 @@
     <p><strong>Isolation :</strong> <span id="isolationValue">—</span></p><p><strong>Réseau :</strong> <span id="networkValue">—</span></p>
     <p><strong>Limite mémoire :</strong> <span id="memoryLimitValue">—</span></p><p><strong>Expiration automatique :</strong> <span id="expiresValue">—</span></p>
   </div><p class="muted">Le locataire utilise uniquement l’environnement autorisé. Les fichiers personnels, le bureau et le réseau local du loueur ne sont pas exposés.</p></section>
-  <aside class="panel"><h2>Contrôles</h2><p id="sessionMessage" class="muted">Les mesures sont actualisées automatiquement.</p><button id="startSession" class="button button-primary" type="button">Démarrer la session</button><button id="stopSession" class="button button-danger stop-button" type="button">Arrêter immédiatement</button></aside></div>
+  <aside class="panel"><h2>Contrôles</h2><p id="sessionMessage" class="muted">L’accès sera activé uniquement lorsque tous les contrôles seront réussis.</p><button id="startSession" class="button button-primary" type="button" disabled>Entrer dans mon espace</button><button id="stopSession" class="button button-danger stop-button" type="button">Annuler / arrêter</button></aside></div>
 </main>
 </body></html>

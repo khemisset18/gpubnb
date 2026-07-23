@@ -56,6 +56,7 @@ enum PaymentStatus {
 }
 enum JobType {
   GPU_DIAGNOSTIC
+  WORKSPACE_PREPARE
 }
 enum JobStatus {
   DRAFT
@@ -255,7 +256,7 @@ model MachineWorkspace {
 }
 model WorkspaceSession {
   id String @id @default(cuid())
-  bookingId String
+  bookingId String @unique
   renterId String
   machineId String
   machineWorkspaceId String
@@ -266,6 +267,13 @@ model WorkspaceSession {
   connectionType String? @db.VarChar(32)
   connectionMetadata Json?
   lastMetricCounter BigInt @default(0)
+  preparationProgress Int @default(0)
+  preparationStep String? @db.VarChar(80)
+  preparationRequestedAt DateTime?
+  preparationStartedAt DateTime?
+  preparationCompletedAt DateTime?
+  readyDeadlineAt DateTime?
+  preparationAttempts Int @default(0)
   startedAt DateTime?
   readyAt DateTime?
   endedAt DateTime?
@@ -283,6 +291,7 @@ model WorkspaceSession {
   @@index([renterId, createdAt])
   @@index([machineId, status])
   @@index([bookingId])
+  @@index([status, readyDeadlineAt])
 }
 model WorkspaceMetric {
   id String @id @default(cuid())

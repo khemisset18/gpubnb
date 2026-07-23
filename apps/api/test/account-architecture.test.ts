@@ -27,6 +27,17 @@ test('Compute session has protected lifecycle, metrics and emergency stop',()=>{
  for(const id of ['gpuMetric','vramMetric','usageMetric','stopSession'])assert.match(page,new RegExp(`id="${id}"`));
 });
 
+test('Compute is prepared before renter arrival and access waits for READY',()=>{
+ const server=read('apps/api/src/server.ts');
+ assert.match(server,/ensureComputePreparation/);
+ assert.match(server,/JobType\.WORKSPACE_PREPARE/);
+ assert.match(server,/status:WorkspaceSessionStatus\.READY/);
+ assert.match(server,/preparationProgress:100/);
+ const script=read('apps/web/session.js');
+ assert.match(script,/session\.status!=='READY'/);
+ assert.match(read('apps/web/session.html'),/Préparation avant votre arrivée/);
+});
+
 test('account schema separates private identity and user capabilities',()=>{
  const schema=read('apps/api/prisma/schema.prisma');
  for(const field of ['email String? @unique','firstName String?','lastName String?','canRent Boolean','canHost Boolean','profileCompletedAt DateTime?'])assert.ok(schema.includes(field),field);

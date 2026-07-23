@@ -15,7 +15,7 @@ from typing import Any
 
 from . import __version__
 from .client import ApiClient, agent_request, heartbeat
-from .runner import run_gpu_diagnostic
+from .runner import prepare_workspace, run_gpu_diagnostic
 from .platform_info import find_nvidia_smi, gpu_inventory, system_inventory
 from .storage import (
     config_dir, fingerprint, generate_key, key_path, load_config, load_key,
@@ -194,17 +194,22 @@ def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, An
     if not job:
         return
     job_id = str(job["id"])
-    if job.get("type") != "GPU_DIAGNOSTIC":
+    if job.get("type") not in {"GPU_DIAGNOSTIC", "WORKSPACE_PREPARE"}:
         update_job(api, key, machine_id, job_id, "REJECTED", "unsupported_job_type")
         return
     image = str(config.get("diagnosticImage") or "")
     try:
+        if job.get("type") == "WORKSPACE_PREPARE":
+            update_job(api, key, machine_id, job_id, "DOWNLOADING")
         update_job(api, key, machine_id, job_id, "PREPARING")
         update_job(api, key, machine_id, job_id, "RUNNING")
         parameters = job.get("parameters") if isinstance(job.get("parameters"), dict) else {}
-        result = run_gpu_diagnostic(image, int(parameters.get("timeoutSeconds", 120)))
+        if job.get("type") == "WORKSPACE_PREPARE":
+            result = prepare_workspace(image, int(parameters.get("timeoutSeconds", 600)))
+        else:
+            result = run_gpu_diagnostic(image, int(parameters.get("timeoutSeconds", 120)))
         session_value = job.get("workspaceSession")
-        if isinstance(session_value, dict) and isinstance(session_value.get("id"), str):
+        if job.get("type") == "GPU_DIAGNOSTIC" and isinstance(session_value, dict) and isinstance(session_value.get("id"), str):
             send_session_metric(api, key, machine_id, session_value["id"], result)
         update_job(api, key, machine_id, job_id, "UPLOADING_RESULTS")
         complete_path = f"/agent/jobs/{job_id}/complete"

@@ -41,3 +41,27 @@ def run_gpu_diagnostic(image: str, timeout_seconds: int) -> dict[str, Any]:
         "summary": "Diagnostic GPU isolé terminé." if rows else "Aucun GPU détecté dans le conteneur.",
         "metrics": {"gpuCount": len(rows), "nvidiaSmi": " | ".join(rows)[:4000]},
     }
+
+
+def prepare_workspace(image: str, timeout_seconds: int) -> dict[str, Any]:
+    if not PINNED_IMAGE.fullmatch(image):
+        raise RuntimeError("diagnosticImage doit être une image Docker épinglée par digest sha256")
+    timeout = max(30, min(600, int(timeout_seconds)))
+    inspect = subprocess.run(
+        ["docker", "image", "inspect", image],
+        capture_output=True, text=True, timeout=30, check=False, shell=False,
+    )
+    cache_hit = inspect.returncode == 0
+    if not cache_hit:
+        pull = subprocess.run(
+            ["docker", "pull", image],
+            capture_output=True, text=True, timeout=timeout, check=False, shell=False,
+        )
+        if pull.returncode != 0:
+            raise RuntimeError(f"workspace_image_pull_failed:{pull.returncode}:{pull.stderr[:1000].strip()}")
+    result = run_gpu_diagnostic(image, timeout)
+    if not result.get("gpuDetected"):
+        raise RuntimeError("workspace_gpu_health_check_failed")
+    result["summary"] = "Image Workspace préparée et contrôle GPU isolé réussi."
+    result.setdefault("metrics", {})["cacheHit"] = cache_hit
+    return result

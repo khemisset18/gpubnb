@@ -4,6 +4,10 @@
 
 Le premier environnement GPUbnb est `Compute`. Une réservation financée peut créer une `WorkspaceSession`, la démarrer, consulter ses métriques et demander son arrêt. Le propriétaire de la machine dispose du même arrêt d'urgence.
 
+La confirmation du dépôt crée désormais automatiquement la session et une commande `WORKSPACE_PREPARE`. L'agent la récupère sans attendre l'arrivée du locataire, vérifie le cache Docker, télécharge réellement l'image épinglée si elle manque, lance le diagnostic GPU isolé puis transmet son résultat. La session reste `PREPARING` et inaccessible jusqu'à la réussite du contrôle, puis passe à `READY`.
+
+Au moment de l'entrée, l'API vérifie encore que la réservation a commencé, que l'agent a envoyé un heartbeat récent et que la machine est disponible. Une préparation ancienne ne suffit donc pas à ouvrir l'accès si la machine est devenue hors ligne.
+
 GPUbnb Agent est le logiciel installé chez le loueur. Il authentifie la machine par signature Ed25519, exécute uniquement le diagnostic GPU autorisé et publie une mesure liée à la session. Le locataire n'obtient ni session Windows, ni accès SSH, ni accès au réseau local ou aux fichiers personnels.
 
 ## Isolation et limites
