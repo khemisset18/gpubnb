@@ -91,7 +91,7 @@ jobs:
             --volume "$GITHUB_WORKSPACE:/repo" \
             ghcr.io/gitleaks/gitleaks:v8.24.3 \
             detect --source=/repo --config=/repo/.gitleaks.toml \
-            --redact --verbose --no-banner
+            --redact --verbose --no-banner --no-git
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
