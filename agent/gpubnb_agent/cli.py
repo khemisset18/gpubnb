@@ -1,0 +1,272 @@
+"""Beginner-friendly GPUbnb Agent CLI."""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+import webbrowser
+from pathlib import Path
+from typing import Any
+
+from . import __version__
+from .client import ApiClient, heartbeat
+from .platform_info import find_nvidia_smi, gpu_inventory, system_inventory
+from .storage import (
+    config_dir, fingerprint, generate_key, key_path, load_config, load_key,
+    log_path, pid_path, public_key, save_config,
+)
+
+DEFAULT_API = "https://gpubnb.netlify.app/api"
+
+
+def print_json(value: Any) -> None:
+    print(json.dumps(value, ensure_ascii=False, indent=2, default=str))
+
+
+def client(config: dict[str, Any]) -> ApiClient:
+    return ApiClient(str(config.get("apiUrl") or DEFAULT_API), config.get("caFile"))
+
+
+def command_setup(args: argparse.Namespace) -> int:
+    directory = config_dir()
+    key_existed = key_path().exists()
+    key = generate_key()
+    config = load_config()
+    config.update({"apiUrl": args.api_url.rstrip("/"), "intervalSeconds": args.interval})
+    save_config(config)
+    print("GPUbnb Agent est configuré.")
+    print(f"Dossier : {directory}")
+    print(f"Clé : {'conservée' if key_existed else 'générée'}")
+    print(f"Clé publique : {public_key(key)}")
+    print(f"Fingerprint : {fingerprint(key)}")
+    print("\nÉtape suivante : ouvrez votre espace loueur, créez un code de liaison, puis :")
+    print("  gpubnb-agent link CODE")
+    print("\nDiagnostic initial :")
+    return command_diagnose(args)
+
+
+def command_login(args: argparse.Namespace) -> int:
+    url = args.site.rstrip("/") + "/dashboard.html"
+    print(f"Ouverture de votre espace GPUbnb : {url}")
+    return 0 if webbrowser.open(url) else 1
+
+
+def command_link(args: argparse.Namespace) -> int:
+    config = load_config()
+    key = load_key()
+    inventory = {"system": system_inventory(), "gpus": gpu_inventory(), "agentVersion": __version__}
+    result = client(config).link(args.code.strip().upper(), public_key(key), inventory)
+    machine_id = result.get("machineId")
+    if not isinstance(machine_id, str):
+        raise RuntimeError("Réponse de liaison invalide")
+    config.update({"machineId": machine_id, "linkedAt": result.get("linkedAt")})
+    save_config(config)
+    print("Machine liée avec succès.")
+    print(f"Machine ID : {machine_id}")
+    print("Lancez maintenant : gpubnb-agent start")
+    return 0
+
+
+def command_show_key(_: argparse.Namespace) -> int:
+    print(f"Clé publique : {public_key()}")
+    print(f"Fingerprint : {fingerprint()}")
+    return 0
+
+
+def command_reset_key(args: argparse.Namespace) -> int:
+    if not args.yes:
+        print("Cette action invalide la liaison actuelle. Relancez avec --yes pour confirmer.", file=sys.stderr)
+        return 2
+    key = generate_key(force=True)
+    config = load_config()
+    config.pop("machineId", None)
+    config.pop("linkedAt", None)
+    save_config(config)
+    print("Nouvelle clé générée. La machine doit être liée à nouveau.")
+    print(f"Clé publique : {public_key(key)}")
+    print(f"Fingerprint : {fingerprint(key)}")
+    return 0
+
+
+def diagnostic_report() -> dict[str, Any]:
+    config = load_config()
+    executable = find_nvidia_smi()
+    system = system_inventory()
+    gpus = gpu_inventory(executable)
+    api_result: dict[str, Any]
+    try:
+        api_result = {"reachable": True, **client(config).health()}
+    except Exception as exc:
+        api_result = {"reachable": False, "error": str(exc)}
+    return {
+        "agentVersion": __version__,
+        "configurationDirectory": str(config_dir()),
+        "keyPresent": key_path().exists(),
+        "machineLinked": bool(config.get("machineId")),
+        "machineId": config.get("machineId"),
+        "nvidiaSmi": executable,
+        "gpus": gpus,
+        "system": system,
+        "api": api_result,
+        "readyForHeartbeat": bool(key_path().exists() and config.get("machineId") and len(gpus) == 1 and api_result.get("reachable")),
+    }
+
+
+def command_diagnose(_: argparse.Namespace) -> int:
+    report = diagnostic_report()
+    print_json(report)
+    if report["readyForHeartbeat"]:
+        print("\nRésultat : prêt à démarrer.")
+        return 0
+    print("\nRésultat : configuration incomplète.")
+    if not report["nvidiaSmi"]:
+        print("- NVIDIA SMI introuvable : installez ou mettez à jour le pilote NVIDIA.")
+    if not report["keyPresent"]:
+        print("- Exécutez : gpubnb-agent setup")
+    if not report["machineLinked"]:
+        print("- Créez un code dans l'espace loueur puis exécutez : gpubnb-agent link CODE")
+    if not report["api"].get("reachable"):
+        print("- Vérifiez Internet, le pare-feu et l'URL API.")
+    return 1
+
+
+def command_status(_: argparse.Namespace) -> int:
+    config = load_config()
+    pid = None
+    try:
+        pid = int(pid_path().read_text().strip())
+        os.kill(pid, 0)
+    except (FileNotFoundError, ValueError, ProcessLookupError, PermissionError, OSError):
+        pid = None
+    print_json({
+        "running": pid is not None,
+        "pid": pid,
+        "machineId": config.get("machineId"),
+        "linked": bool(config.get("machineId")),
+        "logFile": str(log_path()),
+    })
+    return 0
+
+
+def heartbeat_loop() -> int:
+    config = load_config()
+    machine_id = config.get("machineId")
+    if not isinstance(machine_id, str):
+        raise RuntimeError("Machine non liée. Exécutez : gpubnb-agent link CODE")
+    key = load_key()
+    interval = max(5, min(60, int(config.get("intervalSeconds", 10))))
+    failures = 0
+    pid_path().write_text(str(os.getpid()), encoding="ascii")
+    if os.name != "nt":
+        pid_path().chmod(0o600)
+    try:
+        while True:
+            try:
+                result = heartbeat(client(config), key, machine_id)
+                print_json({"event": "heartbeat", "result": result})
+                failures = 0
+            except Exception as exc:
+                failures = min(failures + 1, 8)
+                print_json({"event": "heartbeat_error", "type": type(exc).__name__, "message": str(exc)[:300]})
+            time.sleep(min(300, interval * (2 ** failures)) if failures else interval)
+    except KeyboardInterrupt:
+        print("Agent arrêté.")
+        return 0
+    finally:
+        try:
+            pid_path().unlink()
+        except FileNotFoundError:
+            pass
+
+
+def command_start(args: argparse.Namespace) -> int:
+    if args.daemon:
+        if os.name == "nt":
+            flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+            handle = open(log_path(), "a", encoding="utf-8")
+            process = subprocess.Popen([sys.executable, str(Path(__file__).parents[1] / "agent.py"), "_run"], stdout=handle, stderr=handle, creationflags=flags, close_fds=True)
+        else:
+            handle = open(log_path(), "a", encoding="utf-8")
+            process = subprocess.Popen([sys.executable, str(Path(__file__).parents[1] / "agent.py"), "_run"], stdout=handle, stderr=handle, start_new_session=True, close_fds=True)
+        print(f"Agent démarré en arrière-plan (PID {process.pid}).")
+        return 0
+    return heartbeat_loop()
+
+
+def command_stop(_: argparse.Namespace) -> int:
+    try:
+        pid = int(pid_path().read_text().strip())
+    except (FileNotFoundError, ValueError):
+        print("L'agent n'est pas démarré.")
+        return 0
+    try:
+        os.kill(pid, signal.SIGTERM)
+        print(f"Arrêt demandé au processus {pid}.")
+    except ProcessLookupError:
+        print("Le processus était déjà arrêté.")
+    return 0
+
+
+def command_benchmark(_: argparse.Namespace) -> int:
+    executable = find_nvidia_smi()
+    if not executable:
+        raise RuntimeError("nvidia-smi introuvable")
+    started = time.monotonic()
+    gpus = gpu_inventory(executable)
+    print_json({"type": "GPU_DIAGNOSTIC_LOCAL", "durationMs": round((time.monotonic() - started) * 1000), "gpus": gpus})
+    return 0 if gpus else 1
+
+
+def command_logs(args: argparse.Namespace) -> int:
+    try:
+        lines = log_path().read_text(encoding="utf-8", errors="replace").splitlines()
+    except FileNotFoundError:
+        print("Aucun journal disponible.")
+        return 0
+    print("\n".join(lines[-args.lines:]))
+    return 0
+
+
+def parser() -> argparse.ArgumentParser:
+    root = argparse.ArgumentParser(prog="gpubnb-agent", description="Agent local sécurisé GPUbnb")
+    commands = root.add_subparsers(dest="command", required=True)
+    setup = commands.add_parser("setup", help="préparer la machine et générer la clé")
+    setup.add_argument("--api-url", default=DEFAULT_API)
+    setup.add_argument("--interval", type=int, default=10)
+    setup.set_defaults(handler=command_setup)
+    login = commands.add_parser("login", help="ouvrir l'espace GPUbnb")
+    login.add_argument("--site", default="https://gpubnb.netlify.app")
+    login.set_defaults(handler=command_login)
+    link = commands.add_parser("link", help="lier la machine avec un code temporaire")
+    link.add_argument("code")
+    link.set_defaults(handler=command_link)
+    start = commands.add_parser("start", help="démarrer les heartbeats")
+    start.add_argument("--daemon", action="store_true")
+    start.set_defaults(handler=command_start)
+    commands.add_parser("_run").set_defaults(handler=lambda _: heartbeat_loop())
+    commands.add_parser("stop", help="arrêter l'agent en arrière-plan").set_defaults(handler=command_stop)
+    commands.add_parser("status", help="afficher l'état local").set_defaults(handler=command_status)
+    commands.add_parser("diagnose", help="tester GPU, Docker, API et liaison").set_defaults(handler=command_diagnose)
+    commands.add_parser("show-key", help="afficher uniquement la clé publique").set_defaults(handler=command_show_key)
+    reset = commands.add_parser("reset-key", help="régénérer la clé locale")
+    reset.add_argument("--yes", action="store_true")
+    reset.set_defaults(handler=command_reset_key)
+    commands.add_parser("benchmark", help="lancer le diagnostic GPU local").set_defaults(handler=command_benchmark)
+    logs = commands.add_parser("logs", help="afficher les derniers journaux")
+    logs.add_argument("--lines", type=int, default=100)
+    logs.set_defaults(handler=command_logs)
+    commands.add_parser("version", help="afficher la version").set_defaults(handler=lambda _: print(__version__) or 0)
+    return root
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        args = parser().parse_args(argv)
+        return int(args.handler(args))
+    except RuntimeError as exc:
+        print(f"Erreur : {exc}", file=sys.stderr)
+        return 1

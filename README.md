@@ -24,6 +24,22 @@ Le frontend peut créer une réservation d'une heure, demander à l'API une tran
 - `agent` : agent de preuve GPU signé.
 - `docs` : procédures de déploiement et limites de production.
 
+## GPUbnb Agent
+
+La Phase 1 fournit une CLI Windows/Linux avec génération de clé Ed25519 locale,
+diagnostic matériel, liaison par code à usage unique et heartbeats signés.
+
+```bash
+python -m pip install -e agent
+gpubnb-agent setup
+gpubnb-agent link CODE_TEMPORAIRE
+gpubnb-agent diagnose
+gpubnb-agent start
+```
+
+La clé privée reste uniquement dans le dossier de configuration de la machine.
+Voir `docs/AGENT.md` et `docs/TWO_PC_TEST.md`.
+
 ## Démarrage local
 
 ```bash
