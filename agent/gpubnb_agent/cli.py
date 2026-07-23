@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import webbrowser
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -202,6 +203,9 @@ def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, An
         update_job(api, key, machine_id, job_id, "RUNNING")
         parameters = job.get("parameters") if isinstance(job.get("parameters"), dict) else {}
         result = run_gpu_diagnostic(image, int(parameters.get("timeoutSeconds", 120)))
+        session_value = job.get("workspaceSession")
+        if isinstance(session_value, dict) and isinstance(session_value.get("id"), str):
+            send_session_metric(api, key, machine_id, session_value["id"], result)
         update_job(api, key, machine_id, job_id, "UPLOADING_RESULTS")
         complete_path = f"/agent/jobs/{job_id}/complete"
         agent_request(api, key, machine_id, complete_path, "POST", {"machineId": machine_id, "result": result})
@@ -219,6 +223,29 @@ def update_job(api: ApiClient, key: Any, machine_id: str, job_id: str, status: s
     if error_code:
         body["errorCode"] = error_code
     return agent_request(api, key, machine_id, path, "POST", body)
+
+
+def send_session_metric(api: ApiClient, key: Any, machine_id: str, session_id: str, result: dict[str, Any]) -> dict[str, Any]:
+    system = system_inventory()
+    gpus = gpu_inventory()
+    gpu = gpus[0] if gpus else {}
+    ram_total = int(system.get("ramTotalMiB") or 0)
+    ram_available = int(system.get("ramAvailableMiB") or 0)
+    disk_total = int(system.get("diskTotalMiB") or 0)
+    disk_available = int(system.get("diskAvailableMiB") or 0)
+    payload = {
+        "machineId": machine_id, "counter": 1,
+        "capturedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "intervalSeconds": 5, "gpuUtilization": int(gpu.get("gpuUtilization") or 0),
+        "memoryUsedMiB": int(gpu.get("memoryUsedMiB") or 0),
+        "temperatureC": int(gpu.get("temperatureC") or 0),
+        "cpuUtilization": 0, "ramUsedMiB": max(0, ram_total - ram_available),
+        "diskUsedMiB": max(0, disk_total - disk_available),
+        "networkRxBytes": 0, "networkTxBytes": 0,
+        "available": bool(result.get("gpuDetected")), "workloadProof": bool(result.get("gpuDetected")),
+    }
+    path = f"/agent/workspace-sessions/{session_id}/metrics"
+    return agent_request(api, key, machine_id, path, "POST", payload)
 
 
 def command_start(args: argparse.Namespace) -> int:

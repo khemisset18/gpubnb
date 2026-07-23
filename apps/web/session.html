@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Supervision d’une session Compute isolée GPUbnb.">
+  <title>Session Compute — GPUbnb</title>
+  <link rel="stylesheet" href="account.css"><link rel="stylesheet" href="session.css">
+  <script defer src="config.js"></script><script defer src="session.js"></script>
+</head>
+<body>
+<header class="account-header"><a class="brand" href="index.html">GPUbnb</a><a class="button" href="dashboard.html">Mon espace</a></header>
+<main class="account-shell" id="sessionRoot">
+  <div class="dashboard-head"><div><span class="eyebrow">Environnement isolé</span><h1 id="sessionTitle">Compute</h1><p id="sessionSummary" class="muted">Connexion sécurisée à la session…</p></div><span id="sessionStatus" class="badge">CHARGEMENT</span></div>
+  <section class="stats metric-grid">
+    <article class="stat"><span>GPU</span><strong id="gpuMetric">—</strong></article><article class="stat"><span>VRAM utilisée</span><strong id="vramMetric">—</strong></article>
+    <article class="stat"><span>Température</span><strong id="tempMetric">—</strong></article><article class="stat"><span>CPU</span><strong id="cpuMetric">—</strong></article>
+    <article class="stat"><span>RAM utilisée</span><strong id="ramMetric">—</strong></article><article class="stat"><span>Secondes validées</span><strong id="usageMetric">—</strong></article>
+  </section>
+  <div class="workspace"><section class="panel"><h2>Protection de la machine</h2><div class="protection-list">
+    <p><strong>Isolation :</strong> <span id="isolationValue">—</span></p><p><strong>Réseau :</strong> <span id="networkValue">—</span></p>
+    <p><strong>Limite mémoire :</strong> <span id="memoryLimitValue">—</span></p><p><strong>Expiration automatique :</strong> <span id="expiresValue">—</span></p>
+  </div><p class="muted">Le locataire utilise uniquement l’environnement autorisé. Les fichiers personnels, le bureau et le réseau local du loueur ne sont pas exposés.</p></section>
+  <aside class="panel"><h2>Contrôles</h2><p id="sessionMessage" class="muted">Les mesures sont actualisées automatiquement.</p><button id="startSession" class="button button-primary" type="button">Démarrer la session</button><button id="stopSession" class="button button-danger stop-button" type="button">Arrêter immédiatement</button></aside></div>
+</main>
+</body></html>

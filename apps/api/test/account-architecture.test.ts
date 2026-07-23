@@ -15,9 +15,16 @@ test('Netlify proxies same-origin API calls to Render',()=>{
 });
 
 test('professional account pages and protected API routes exist',()=>{
- for(const page of ['apps/web/onboarding.html','apps/web/dashboard.html'])assert.match(read(page),/<title>/);
+ for(const page of ['apps/web/onboarding.html','apps/web/dashboard.html','apps/web/session.html'])assert.match(read(page),/<title>/);
  const server=read('apps/api/src/server.ts');
  for(const route of ["app.get('/profile'","app.put('/profile'","app.get('/dashboard'"])assert.ok(server.includes(route),route);
+});
+
+test('Compute session has protected lifecycle, metrics and emergency stop',()=>{
+ const server=read('apps/api/src/server.ts');
+ for(const route of ["app.post('/bookings/:bookingId/workspace-sessions'","app.post('/workspace-sessions/:id/start'","app.get('/workspace-sessions/:id'","app.post('/workspace-sessions/:id/stop'","app.post('/agent/workspace-sessions/:id/metrics'"])assert.ok(server.includes(route),route);
+ const page=read('apps/web/session.html');
+ for(const id of ['gpuMetric','vramMetric','usageMetric','stopSession'])assert.match(page,new RegExp(`id="${id}"`));
 });
 
 test('account schema separates private identity and user capabilities',()=>{

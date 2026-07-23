@@ -86,6 +86,29 @@ enum MachineWorkspaceState {
   INCOMPATIBLE
   OWNER_DISABLED
 }
+enum WorkspaceSessionStatus {
+  RESERVED
+  PREPARING
+  READY
+  RUNNING
+  STOP_REQUESTED
+  STOPPING
+  COMPLETED
+  FAILED
+  CANCELLED
+  TIMED_OUT
+  QUARANTINED
+}
+enum SessionTerminationReason {
+  USER_STOP
+  OWNER_EMERGENCY_STOP
+  PLATFORM_EMERGENCY_STOP
+  COMPLETED
+  TIMEOUT
+  AGENT_OFFLINE
+  SECURITY_POLICY
+  EXECUTION_FAILED
+}
 model User {
   id String @id @default(cuid())
   wallet String @unique
@@ -111,6 +134,7 @@ model User {
   conversationMembers ConversationMember[]
   messages Message[]
   jobs Job[]
+  workspaceSessions WorkspaceSession[]
 }
 model Profile {
   id String @id @default(cuid())
@@ -156,6 +180,7 @@ model Machine {
   listings GpuListing[]
   heartbeats Heartbeat[]
   jobs Job[]
+  workspaceSessions WorkspaceSession[]
   workspaces MachineWorkspace[]
 }
 model GpuListing {
@@ -193,6 +218,7 @@ model Booking {
   usageSamples UsageSample[]
   reviews Review[]
   jobs Job[]
+  workspaceSessions WorkspaceSession[]
   @@unique([buyerId, idempotencyKey])
   @@index([listingId, startsAt, endsAt])
 }
@@ -221,10 +247,74 @@ model MachineWorkspace {
   hourlyLamports BigInt?
   analyzedAt DateTime @default(now())
   testedAt DateTime?
+  sessions WorkspaceSession[]
   machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
   workspace WorkspaceDefinition @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   @@unique([machineId, workspaceId])
   @@index([machineId, enabledByOwner, state])
+}
+model WorkspaceSession {
+  id String @id @default(cuid())
+  bookingId String
+  renterId String
+  machineId String
+  machineWorkspaceId String
+  jobId String? @unique
+  status WorkspaceSessionStatus @default(RESERVED)
+  isolationType String @db.VarChar(32)
+  resourceLimits Json
+  connectionType String? @db.VarChar(32)
+  connectionMetadata Json?
+  lastMetricCounter BigInt @default(0)
+  startedAt DateTime?
+  readyAt DateTime?
+  endedAt DateTime?
+  expiresAt DateTime
+  terminationReason SessionTerminationReason?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  renter User @relation(fields: [renterId], references: [id], onDelete: Cascade)
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  machineWorkspace MachineWorkspace @relation(fields: [machineWorkspaceId], references: [id], onDelete: Restrict)
+  job Job? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  metrics WorkspaceMetric[]
+  events WorkspaceSessionEvent[]
+  @@index([renterId, createdAt])
+  @@index([machineId, status])
+  @@index([bookingId])
+}
+model WorkspaceMetric {
+  id String @id @default(cuid())
+  sessionId String
+  counter BigInt
+  capturedAt DateTime
+  intervalSeconds Int
+  gpuUtilization Int
+  memoryUsedMiB Int
+  temperatureC Int
+  cpuUtilization Int
+  ramUsedMiB Int
+  diskUsedMiB Int
+  networkRxBytes BigInt
+  networkTxBytes BigInt
+  available Boolean
+  workloadProof Boolean
+  signatureHash String @unique
+  session WorkspaceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@unique([sessionId, counter])
+  @@index([sessionId, capturedAt])
+}
+model WorkspaceSessionEvent {
+  id String @id @default(cuid())
+  sessionId String
+  actorType String @db.VarChar(24)
+  actorId String?
+  action String @db.VarChar(80)
+  details Json?
+  createdAt DateTime @default(now())
+  session WorkspaceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([sessionId, createdAt])
 }
 model Job {
   id String @id @default(cuid())
@@ -247,6 +337,7 @@ model Job {
   attempts JobAttempt[]
   logs JobLog[]
   artifacts JobArtifact[]
+  workspaceSession WorkspaceSession?
   @@index([renterId, createdAt])
   @@index([machineId, status, createdAt])
 }
