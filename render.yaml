@@ -12,7 +12,11 @@ services:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 8787
+        value: 10000
+      - key: PUBLIC_APP_DOMAIN
+        value: gpubnb.onrender.com
+      - key: TRUST_PROXY
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
