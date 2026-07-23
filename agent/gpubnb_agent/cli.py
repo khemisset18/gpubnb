@@ -269,6 +269,18 @@ def command_logs(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_workspaces_list(_: argparse.Namespace) -> int:
+    config = load_config()
+    result = client(config).request("/workspaces")
+    print_json(result)
+    return 0
+
+
+def command_workspaces_analyze(_: argparse.Namespace) -> int:
+    print_json({"system": system_inventory(), "gpus": gpu_inventory(), "note": "L’analyse persistée et l’activation se font depuis l’espace loueur authentifié."})
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="gpubnb-agent", description="Agent local sécurisé GPUbnb")
     commands = root.add_subparsers(dest="command", required=True)
@@ -298,6 +310,10 @@ def parser() -> argparse.ArgumentParser:
     logs = commands.add_parser("logs", help="afficher les derniers journaux")
     logs.add_argument("--lines", type=int, default=100)
     logs.set_defaults(handler=command_logs)
+    workspaces = commands.add_parser("workspaces", help="catalogue et capacités Workspace")
+    workspace_commands = workspaces.add_subparsers(dest="workspace_command", required=True)
+    workspace_commands.add_parser("list", help="afficher les 13 espaces du catalogue").set_defaults(handler=command_workspaces_list)
+    workspace_commands.add_parser("analyze", help="afficher les capacités locales utilisées pour la compatibilité").set_defaults(handler=command_workspaces_analyze)
     commands.add_parser("version", help="afficher la version").set_defaults(handler=lambda _: print(__version__) or 0)
     return root
 

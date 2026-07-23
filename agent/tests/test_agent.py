@@ -7,7 +7,7 @@ from unittest.mock import patch
 from nacl.signing import SigningKey
 
 from gpubnb_agent.client import signed_headers
-from gpubnb_agent.platform_info import parse_nvidia_csv
+from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available
 from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key
 from gpubnb_agent.runner import diagnostic_command
 
@@ -21,6 +21,9 @@ class PlatformTests(unittest.TestCase):
 
     def test_rejects_impossible_telemetry(self):
         self.assertEqual(parse_nvidia_csv("GPU, uuid, 100, 200, 1, 1, 500, 200, 1\n"), [])
+
+    def test_virtualization_probe_returns_boolean(self):
+        self.assertIsInstance(virtualization_available(), bool)
 
 
 class KeyTests(unittest.TestCase):

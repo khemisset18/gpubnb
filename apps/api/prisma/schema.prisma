@@ -73,6 +73,19 @@ enum JobStatus {
   REJECTED
   QUARANTINED
 }
+enum WorkspaceRelease {
+  BETA
+  UPCOMING
+  EXPERIMENTAL
+  SUSPENDED
+}
+enum MachineWorkspaceState {
+  READY
+  LIMITED
+  INSTALL_REQUIRED
+  INCOMPATIBLE
+  OWNER_DISABLED
+}
 model User {
   id String @id @default(cuid())
   wallet String @unique
@@ -127,6 +140,7 @@ model Machine {
   cudaVersion String?
   dockerAvailable Boolean @default(false)
   nvidiaRuntimeAvailable Boolean @default(false)
+  virtualizationAvailable Boolean @default(false)
   connectivity MachineConnectivity @default(OFFLINE)
   operational MachineOperational @default(UNAVAILABLE)
   moderationStatus ModerationStatus @default(CLEAR)
@@ -142,6 +156,7 @@ model Machine {
   listings GpuListing[]
   heartbeats Heartbeat[]
   jobs Job[]
+  workspaces MachineWorkspace[]
 }
 model GpuListing {
   id String @id @default(cuid())
@@ -180,6 +195,36 @@ model Booking {
   jobs Job[]
   @@unique([buyerId, idempotencyKey])
   @@index([listingId, startsAt, endsAt])
+}
+model WorkspaceDefinition {
+  id String @id @default(cuid())
+  slug String @unique @db.VarChar(80)
+  version Int @default(1)
+  name String @db.VarChar(120)
+  category String @db.VarChar(40)
+  release WorkspaceRelease @default(UPCOMING)
+  globallyEnabled Boolean @default(true)
+  manifest Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  machines MachineWorkspace[]
+}
+model MachineWorkspace {
+  id String @id @default(cuid())
+  machineId String
+  workspaceId String
+  compatibilityScore Int
+  state MachineWorkspaceState
+  enabledByOwner Boolean @default(false)
+  analysis Json
+  configuration Json?
+  hourlyLamports BigInt?
+  analyzedAt DateTime @default(now())
+  testedAt DateTime?
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  workspace WorkspaceDefinition @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  @@unique([machineId, workspaceId])
+  @@index([machineId, enabledByOwner, state])
 }
 model Job {
   id String @id @default(cuid())

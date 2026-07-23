@@ -103,6 +103,17 @@ def memory_info() -> dict[str, int | None]:
         return {"ramTotalMiB": None, "ramAvailableMiB": None}
 
 
+def virtualization_available() -> bool:
+    if platform.system() == "Windows":
+        result = run_command(["powershell.exe", "-NoProfile", "-Command", "(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty VirtualizationFirmwareEnabled)"])
+        return result.returncode == 0 and result.stdout.strip().lower() == "true"
+    try:
+        cpuinfo = Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="ignore").lower()
+        return " vmx " in f" {cpuinfo} " or " svm " in f" {cpuinfo} "
+    except OSError:
+        return False
+
+
 def system_inventory() -> dict[str, Any]:
     disk = shutil.disk_usage(configured_disk_root())
     docker = docker_info()
@@ -119,6 +130,7 @@ def system_inventory() -> dict[str, Any]:
         "dockerAvailable": docker["available"],
         "dockerVersion": docker["version"],
         "nvidiaRuntimeAvailable": docker["nvidiaRuntime"],
+        "virtualizationAvailable": virtualization_available(),
     }
 
 

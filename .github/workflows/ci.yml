@@ -74,6 +74,8 @@ jobs:
       - run: python3 -m py_compile agent/agent.py
       - run: node --check apps/web/app.js
       - run: node --check apps/web/config.js
+      - run: node --check apps/web/account.js
+      - run: node --check apps/web/workspaces.js
       - run: node scripts/devnet-doctor.mjs
 
   security-static-analysis:
