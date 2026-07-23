@@ -27,13 +27,13 @@ jobs:
       SOLANA_CLUSTER: devnet
       ALLOW_MAINNET: "false"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Generate ephemeral CI secrets
         shell: bash
         run: |
           echo "SESSION_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
           echo "INTERNAL_SERVICE_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -48,8 +48,8 @@ jobs:
   agent:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with: { python-version: '3.12' }
       - run: python -m py_compile agent/agent.py
 
@@ -59,7 +59,7 @@ jobs:
       run:
         working-directory: programs/gpu_escrow
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -68,7 +68,7 @@ jobs:
   production-gates:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: python3 -m py_compile agent/agent.py
       - run: node --check apps/web/app.js
       - run: node --check apps/web/config.js
@@ -80,7 +80,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Gitleaks secret scan
