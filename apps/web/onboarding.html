@@ -1,0 +1,16 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Finalisez votre profil privé GPUbnb."><title>Finaliser mon profil — GPUbnb</title><link rel="stylesheet" href="account.css"><script defer src="config.js"></script><script defer src="account.js"></script></head><body>
+<header class="account-header"><a class="brand" href="index.html">GPUbnb</a><div class="header-links"><span id="privateEmail" class="optional"></span><button class="button button-danger" data-logout>Se déconnecter</button></div></header>
+<main class="account-shell"><section class="hero-small"><span class="eyebrow">Compte privé · Profil public maîtrisé</span><h1>Finalisez votre compte.</h1><p>Vos coordonnées restent privées. Seuls votre pseudo, votre avatar, votre bio et vos évaluations pourront apparaître publiquement.</p></section>
+<form id="profileForm" class="panel"><div class="profile-grid">
+<label class="field"><span>Prénom privé *</span><input name="firstName" required minlength="1" maxlength="80" autocomplete="given-name"></label>
+<label class="field"><span>Nom privé *</span><input name="lastName" required minlength="1" maxlength="80" autocomplete="family-name"></label>
+<label class="field"><span>Pseudo public *</span><input name="pseudonym" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_-]+"></label>
+<label class="field"><span>Téléphone privé</span><input name="phone" maxlength="30" autocomplete="tel"></label>
+<label class="field"><span>Pays (code ISO) *</span><input name="countryCode" required minlength="2" maxlength="2" placeholder="FR" autocomplete="country"></label>
+<label class="field"><span>Langue *</span><select name="language"><option value="fr">Français</option><option value="en">English</option></select></label>
+<div class="field field-wide"><span>Comment utiliserez-vous GPUbnb ? *</span><div class="role-grid"><label class="role-card"><input type="checkbox" name="canRent"><span><strong>Locataire</strong><span>Rechercher et réserver des GPU.</span></span></label><label class="role-card"><input type="checkbox" name="canHost"><span><strong>Loueur</strong><span>Publier des machines et suivre les revenus.</span></span></label></div></div>
+<label class="field field-wide"><span>Bio publique</span><textarea name="bio" maxlength="800" placeholder="Présentez votre activité sans publier d’information sensible."></textarea></label>
+<label class="field"><span>Entreprise publique</span><input name="companyName" maxlength="120"></label>
+<label class="field"><span>Site web public</span><input name="websiteUrl" type="url" maxlength="300" placeholder="https://"></label>
+<label class="field field-wide"><span>URL de l’avatar public</span><input name="avatarUrl" type="url" maxlength="500" placeholder="https://"></label>
+</div><div class="form-actions"><button class="button button-primary" type="submit">Enregistrer et ouvrir mon espace</button><p id="profileMessage" class="message" role="status"></p></div></form></main></body></html>

@@ -14,7 +14,7 @@ services:
       - key: PORT
         value: 10000
       - key: PUBLIC_APP_DOMAIN
-        value: gpubnb.onrender.com
+        value: gpubnb.netlify.app
       - key: TRUST_PROXY
         value: "true"
       - key: DATABASE_URL

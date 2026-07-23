@@ -58,6 +58,15 @@ model User {
   id String @id @default(cuid())
   wallet String @unique
   pseudonym String @unique
+  email String? @unique
+  firstName String?
+  lastName String?
+  phone String?
+  countryCode String?
+  language String @default("fr")
+  canRent Boolean @default(true)
+  canHost Boolean @default(false)
+  profileCompletedAt DateTime?
   lastLoginAt DateTime?
   createdAt DateTime @default(now())
   profile Profile?
@@ -75,6 +84,8 @@ model Profile {
   userId String @unique
   bio String?
   avatarUrl String?
+  companyName String?
+  websiteUrl String?
   reliabilityScore Int @default(0)
   completedSessions Int @default(0)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

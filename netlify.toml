@@ -1,6 +1,12 @@
 [build]
 publish="apps/web"
 
+[[redirects]]
+from="/api/*"
+to="https://gpubnb.onrender.com/:splat"
+status=200
+force=true
+
 [[headers]]
 for="/*"
 [headers.values]
