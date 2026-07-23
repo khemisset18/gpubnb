@@ -175,6 +175,7 @@ model Machine {
   gpuModel String?
   vramMiB Int?
   driverVersion String?
+  gpuVendor String? @db.VarChar(20)
   lastCudaProbeOk Boolean @default(false)
   verifiedAt DateTime?
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)

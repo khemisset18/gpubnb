@@ -114,7 +114,7 @@ def amdgpu_inventory(binary: str | None = None) -> list[dict[str, Any]]:
         try:
             vram = int(card.get("VRAM Total Memory (B)", card.get("memory", {}).get("vram", {}).get("total_memory", "0")))
             vram_mib = vram // (1024 * 1024) if vram else 0
-            used = int(card.get("VRAM Total Memory (B)", card.get("memory", {}).get("vram", {}).get("used_memory", "0")))
+            used = int(card.get("VRAM Total Memory Used (B)", card.get("memory", {}).get("vram", {}).get("used_memory", "0")))
             used_mib = used // (1024 * 1024) if used else 0
             row = {
                 "gpuModel": str(card.get("Card series", card.get("Card model", card.get("gpu", "AMD GPU"))))[:200],

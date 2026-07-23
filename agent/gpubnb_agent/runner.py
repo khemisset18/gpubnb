@@ -22,18 +22,26 @@ def gpu_passthrough_flags() -> list[str]:
     return ["--gpus=device=0"]
 
 
-def diagnostic_command(image: str) -> list[str]:
-    if not PINNED_IMAGE.fullmatch(image):
-        raise RuntimeError("diagnosticImage doit être une image Docker épinglée par digest sha256")
-    return [
+def gpu_probe_command(image: str) -> list[str]:
+    gpus = gpu_inventory()
+    vendor = gpus[0].get("gpuVendor", "NVIDIA") if gpus else "NVIDIA"
+    base = [
         "docker", "run", "--rm", "--network=none", "--read-only",
         "--cap-drop=ALL", "--security-opt=no-new-privileges",
         "--pids-limit=64", "--memory=512m", "--cpus=1",
         "--tmpfs=/tmp:rw,noexec,nosuid,size=32m", *gpu_passthrough_flags(),
-        image, "nvidia-smi",
-        "--query-gpu=name,uuid,memory.total,driver_version,temperature.gpu",
-        "--format=csv,noheader,nounits",
     ]
+    if vendor == "AMD":
+        return [*base, image, "rocm-smi", "--showproductname", "--showmeminfo", "vram", "--json"]
+    if vendor == "INTEL":
+        return [*base, image, "xpu-smi", "discovery", "-j"]
+    return [*base, image, "nvidia-smi", "--query-gpu=name,uuid,memory.total,driver_version,temperature.gpu", "--format=csv,noheader,nounits"]
+
+
+def diagnostic_command(image: str) -> list[str]:
+    if not PINNED_IMAGE.fullmatch(image):
+        raise RuntimeError("diagnosticImage doit être une image Docker épinglée par digest sha256")
+    return gpu_probe_command(image)
 
 
 def run_gpu_diagnostic(image: str, timeout_seconds: int) -> dict[str, Any]:
@@ -66,7 +74,9 @@ def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
     ]
     if workspace_slug == "developer":
         return [*base, "--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", image]
-    return [*base, image, "nvidia-smi"]
+    if workspace_slug == "developer":
+        return [*base, "--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", image]
+    return gpu_probe_command(image)
 
 
 def prepare_workspace(image: str, timeout_seconds: int, workspace_slug: str = "compute") -> dict[str, Any]:

@@ -16,7 +16,7 @@ from typing import Any
 from . import __version__
 from .client import ApiClient, agent_request, heartbeat
 from .runner import prepare_workspace, run_gpu_diagnostic, cleanup_workspace
-from .platform_info import find_nvidia_smi, gpu_inventory, system_inventory
+from .platform_info import find_nvidia_smi, find_rocm_smi, find_xpu_smi, gpu_inventory, system_inventory
 from .storage import (
     config_dir, fingerprint, generate_key, key_path, load_config, load_key,
     log_path, pid_path, public_key, save_config,
@@ -98,7 +98,7 @@ def command_reset_key(args: argparse.Namespace) -> int:
 
 def diagnostic_report() -> dict[str, Any]:
     config = load_config()
-    executable = find_nvidia_smi()
+    executable = find_nvidia_smi() or find_rocm_smi() or find_xpu_smi()
     system = system_inventory()
     gpus = gpu_inventory(executable)
     api_result: dict[str, Any]
@@ -112,7 +112,7 @@ def diagnostic_report() -> dict[str, Any]:
         "keyPresent": key_path().exists(),
         "machineLinked": bool(config.get("machineId")),
         "machineId": config.get("machineId"),
-        "nvidiaSmi": executable,
+        "gpuSmi": executable,
         "gpus": gpus,
         "system": system,
         "api": api_result,
@@ -127,8 +127,8 @@ def command_diagnose(_: argparse.Namespace) -> int:
         print("\nRésultat : prêt à démarrer.")
         return 0
     print("\nRésultat : configuration incomplète.")
-    if not report["nvidiaSmi"]:
-        print("- NVIDIA SMI introuvable : installez ou mettez à jour le pilote NVIDIA.")
+    if not report["gpuSmi"]:
+        print("- Utilitaire GPU introuvable : installez nvidia-smi (NVIDIA), rocm-smi (AMD) ou xpu-smi (Intel).")
     if not report["keyPresent"]:
         print("- Exécutez : gpubnb-agent setup")
     if not report["machineLinked"]:
@@ -284,11 +284,8 @@ def command_stop(_: argparse.Namespace) -> int:
 
 
 def command_benchmark(_: argparse.Namespace) -> int:
-    executable = find_nvidia_smi()
-    if not executable:
-        raise RuntimeError("nvidia-smi introuvable")
     started = time.monotonic()
-    gpus = gpu_inventory(executable)
+    gpus = gpu_inventory()
     print_json({"type": "GPU_DIAGNOSTIC_LOCAL", "durationMs": round((time.monotonic() - started) * 1000), "gpus": gpus})
     return 0 if gpus else 1
 

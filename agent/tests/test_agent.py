@@ -7,9 +7,9 @@ from unittest.mock import patch
 from nacl.signing import SigningKey
 
 from gpubnb_agent.client import signed_headers
-from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available
-from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key
-from gpubnb_agent.runner import diagnostic_command, prepare_workspace, workspace_health_command
+from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available, machine_fingerprint
+from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key, load_machine_fingerprint, save_machine_fingerprint, detect_hardware_change
+from gpubnb_agent.runner import diagnostic_command, prepare_workspace, workspace_health_command, gpu_passthrough_flags
 
 
 class PlatformTests(unittest.TestCase):
@@ -24,6 +24,33 @@ class PlatformTests(unittest.TestCase):
 
     def test_virtualization_probe_returns_boolean(self):
         self.assertIsInstance(virtualization_available(), bool)
+
+    def test_machine_fingerprint_is_stable(self):
+        fp1 = machine_fingerprint()
+        fp2 = machine_fingerprint()
+        self.assertEqual(fp1, fp2)
+        self.assertEqual(len(fp1), 32)
+        self.assertRegex(fp1, r'^[a-f0-9]{32}$')
+
+
+class FingerprintTests(unittest.TestCase):
+    def test_fingerprint_persistence_and_change_detection(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"GPUBNB_CONFIG_DIR": directory}):
+            self.assertIsNone(load_machine_fingerprint())
+            save_machine_fingerprint("abc123")
+            self.assertEqual(load_machine_fingerprint(), "abc123")
+            changed, prev = detect_hardware_change("abc123")
+            self.assertFalse(changed)
+            changed, prev = detect_hardware_change("different")
+            self.assertTrue(changed)
+            self.assertEqual(prev, "abc123")
+
+    def test_first_fingerprint_saves_and_no_change(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"GPUBNB_CONFIG_DIR": directory}):
+            changed, prev = detect_hardware_change("newfp")
+            self.assertFalse(changed)
+            self.assertIsNone(prev)
+            self.assertEqual(load_machine_fingerprint(), "newfp")
 
 
 class KeyTests(unittest.TestCase):
@@ -57,6 +84,33 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("--cap-drop=ALL", command)
         self.assertNotIn("--privileged", command)
 
+    def test_gpu_passthrough_flags_are_vendor_aware(self):
+        flags = gpu_passthrough_flags()
+        self.assertIsInstance(flags, list)
+
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    def test_diagnostic_command_uses_amd_tool_for_amd_gpu(self, mock_gpu):
+        mock_gpu.return_value = [{"gpuVendor": "AMD", "gpuModel": "RX 7900", "gpuUuid": "amd-1", "vramMiB": 24576, "driverVersion": "rocm-6.0", "gpuUtilization": 0, "memoryUsedMiB": 0, "temperatureC": 40}]
+        image = "registry.example/gpubnb/diagnostic@sha256:" + ("a" * 64)
+        command = diagnostic_command(image)
+        self.assertIn("rocm-smi", command)
+        self.assertNotIn("nvidia-smi", command)
+
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    def test_diagnostic_command_uses_intel_tool_for_intel_gpu(self, mock_gpu):
+        mock_gpu.return_value = [{"gpuVendor": "INTEL", "gpuModel": "Arc A770", "gpuUuid": "intel-1", "vramMiB": 16384, "driverVersion": "xpu-1.0", "gpuUtilization": 0, "memoryUsedMiB": 0, "temperatureC": 35}]
+        image = "registry.example/gpubnb/diagnostic@sha256:" + ("a" * 64)
+        command = diagnostic_command(image)
+        self.assertIn("xpu-smi", command)
+        self.assertNotIn("nvidia-smi", command)
+
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    def test_diagnostic_command_uses_nvidia_tool_for_nvidia_gpu(self, mock_gpu):
+        mock_gpu.return_value = [{"gpuVendor": "NVIDIA", "gpuModel": "RTX 4090", "gpuUuid": "GPU-1", "vramMiB": 24576, "driverVersion": "550.0", "gpuUtilization": 0, "memoryUsedMiB": 0, "temperatureC": 40}]
+        image = "registry.example/gpubnb/diagnostic@sha256:" + ("a" * 64)
+        command = diagnostic_command(image)
+        self.assertIn("nvidia-smi", command)
+
     @patch("gpubnb_agent.runner.subprocess.run")
     def test_preparation_pulls_uncached_image_and_runs_health_check(self, run):
         image = "registry.example/gpubnb/diagnostic@sha256:" + ("a" * 64)
@@ -73,7 +127,7 @@ class RunnerTests(unittest.TestCase):
     def test_developer_healthcheck_is_inside_hardened_container(self):
         image = "registry.example/gpubnb/developer@sha256:" + ("b" * 64)
         command = workspace_health_command(image, "developer")
-        self.assertIn("/usr/local/bin/gpubnb-developer-healthcheck", command)
+        self.assertIn("--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", command)
         self.assertIn("--network=none", command)
         self.assertIn("--read-only", command)
 
