@@ -44,14 +44,15 @@ def run_gpu_diagnostic(image: str, timeout_seconds: int) -> dict[str, Any]:
 
 
 def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
-    command = "/usr/local/bin/gpubnb-developer-healthcheck" if workspace_slug == "developer" else "nvidia-smi"
-    return [
+    base = [
         "docker", "run", "--rm", "--network=none", "--read-only",
         "--cap-drop=ALL", "--security-opt=no-new-privileges",
         "--pids-limit=64", "--memory=512m", "--cpus=1",
         "--tmpfs=/tmp:rw,noexec,nosuid,size=32m", "--gpus=device=0",
-        image, command,
     ]
+    if workspace_slug == "developer":
+        return [*base, "--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", image]
+    return [*base, image, "nvidia-smi"]
 
 
 def prepare_workspace(image: str, timeout_seconds: int, workspace_slug: str = "compute") -> dict[str, Any]:

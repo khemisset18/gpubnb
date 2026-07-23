@@ -6,7 +6,8 @@ RUN apt-get update \
     ca-certificates cargo curl default-jdk-headless g++ gcc git golang-go make \
     nodejs npm postgresql-client python3 python3-pip redis-tools rustc sqlite3 unzip \
  && npm cache clean --force \
- && rm -rf /var/lib/apt/lists/* /root/.cache \
+ && npm install --global npm@11.6.2 js-yaml@4.3.0 shell-quote@1.9.0 tar@7.5.19 \
+ && rm -rf /var/lib/apt/lists/* /root/.cache /usr/local/bin/fixuid \
  && install -d -o coder -g coder -m 700 /workspace /workspace/imports /workspace/output
 
 COPY --chmod=755 healthcheck.sh /usr/local/bin/gpubnb-developer-healthcheck
@@ -17,3 +18,5 @@ WORKDIR /workspace
 ENV HOME=/home/coder
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 CMD ["/usr/local/bin/gpubnb-developer-healthcheck"]
+ENTRYPOINT ["code-server"]
+CMD ["--bind-addr", "0.0.0.0:3000", "--auth", "password", "/workspace"]
