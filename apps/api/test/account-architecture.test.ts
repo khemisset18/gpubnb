@@ -34,4 +34,5 @@ test('workspace catalogue uses one responsive five-column grid',()=>{
  assert.match(css,/@media\(max-width:760px\)/);
  assert.match(script,/\/workspaces/);
  assert.doesNotMatch(html,/Que souhaitez-vous faire aujourd/);
+ for(const page of ['apps/web/index.html','apps/web/publish.html','apps/web/demandes.html','apps/web/propositions.html'])assert.match(read(page),/href="workspaces\.html">Espaces de travail/);
 });

@@ -1,6 +1,92 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Choisissez un espace de travail GPUbnb adapté à votre machine."><title>Espaces de travail — GPUbnb</title><link rel="stylesheet" href="workspaces.css"><script defer src="config.js"></script><script defer src="workspaces.js"></script></head><body>
-<header class="workspace-header"><a class="brand" href="index.html">GPUbnb</a><nav><a href="index.html#market">Machines</a><a href="dashboard.html">Mon espace</a></nav></header>
-<main><section class="intro"><span class="eyebrow">GPUbnb Workspaces</span><h1>Choisissez votre espace de travail</h1><p>Une interface simple, des capacités vérifiées et des limites expliquées. Les espaces non opérationnels restent visibles avec leur statut réel.</p><div id="ownerTools" class="owner-tools" hidden><button id="analyzeButton" type="button">Analyser cette machine</button><span id="ownerMessage" role="status"></span></div></section>
-<section class="filters" aria-label="Filtres des espaces"><button class="active" data-filter="ALL">Tous</button><button data-filter="AVAILABLE">Disponibles</button><button data-filter="AI">IA</button><button data-filter="DEVELOPMENT">Développement</button><button data-filter="COMPUTE">Calcul</button><button data-filter="CREATION">Création</button><button data-filter="GAMING">Divertissement</button></section>
-<section id="workspaceGrid" class="workspace-grid" aria-live="polite"><p>Chargement des espaces…</p></section></main>
-</body></html>
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Choisissez un espace GPUbnb prêt pour l’IA, le développement, le calcul ou la création.">
+  <meta name="theme-color" content="#050907">
+  <title>Espaces de travail — GPUbnb</title>
+  <link rel="stylesheet" href="workspaces.css">
+  <script defer src="config.js"></script>
+  <script defer src="workspaces.js"></script>
+</head>
+<body>
+  <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="GPUbnb accueil"><span class="brand-mark">G</span><span>GPUbnb</span></a>
+    <nav aria-label="Navigation principale">
+      <a href="index.html#market">Marketplace</a>
+      <a class="current" href="workspaces.html" aria-current="page">Espaces de travail</a>
+      <a href="publish.html">Publier un GPU</a>
+      <a href="demandes.html">Demandes</a>
+      <a href="propositions.html">Propositions</a>
+      <a href="index.html#security">Sécurité</a>
+      <a href="index.html#reliability">Fiabilité</a>
+    </nav>
+    <a class="account-link" href="dashboard.html">Mon espace <span aria-hidden="true">↗</span></a>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow"><i></i> GPUbnb Workspaces</span>
+        <h1>Votre machine distante,<br><em>déjà prête à travailler.</em></h1>
+        <p>Choisissez un environnement adapté à votre projet. GPUbnb vérifie le matériel, explique les limites et prépare l’espace sur la machine du propriétaire.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#catalogue">Explorer les espaces</a>
+          <a class="button secondary" href="index.html#market">Voir les machines</a>
+        </div>
+      </div>
+      <aside class="hero-panel" aria-label="Fonctionnement de GPUbnb Workspaces">
+        <div class="panel-head"><span>Parcours simplifié</span><b>03 étapes</b></div>
+        <ol>
+          <li><span>01</span><div><strong>Choisissez une machine</strong><small>Matériel et fiabilité vérifiés.</small></div></li>
+          <li><span>02</span><div><strong>Sélectionnez votre espace</strong><small>Compatibilité et licences expliquées.</small></div></li>
+          <li><span>03</span><div><strong>Commencez à travailler</strong><small>Environnement isolé sur le PC distant.</small></div></li>
+        </ol>
+        <p class="privacy-note"><i></i> Aucun accès au bureau personnel du propriétaire</p>
+      </aside>
+    </section>
+
+    <section class="proof-strip" aria-label="État du catalogue">
+      <div><strong>13</strong><span>espaces spécialisés</span></div>
+      <div><strong>1</strong><span>module actuellement en bêta</span></div>
+      <div><strong>0–100</strong><span>score explicable</span></div>
+      <div><strong>Isolé</strong><span>par conception</span></div>
+    </section>
+
+    <section id="catalogue" class="catalogue">
+      <header class="section-heading">
+        <div><span class="eyebrow"><i></i> Catalogue modulaire</span><h2>Choisissez votre espace de travail</h2><p>Toutes les possibilités restent visibles. Les modules indisponibles indiquent clairement pourquoi.</p></div>
+        <div class="legend"><span><i class="dot beta"></i>Bêta</span><span><i class="dot soon"></i>Bientôt disponible</span><span><i class="dot experimental"></i>Expérimental</span></div>
+      </header>
+
+      <div id="ownerTools" class="owner-tools" hidden>
+        <div><strong>Configuration propriétaire</strong><span>Analysez la machine avant d’activer un espace compatible.</span></div>
+        <button id="analyzeButton" type="button">Analyser cette machine</button>
+        <span id="ownerMessage" role="status"></span>
+      </div>
+
+      <div class="filter-row">
+        <div class="filters" aria-label="Filtres des espaces">
+          <button class="active" data-filter="ALL">Tous <span>13</span></button>
+          <button data-filter="AVAILABLE">Disponibles</button>
+          <button data-filter="AI">IA</button>
+          <button data-filter="DEVELOPMENT">Développement</button>
+          <button data-filter="COMPUTE">Calcul</button>
+          <button data-filter="CREATION">Création</button>
+          <button data-filter="GAMING">Divertissement</button>
+        </div>
+        <p id="resultCount" class="result-count" aria-live="polite"></p>
+      </div>
+      <section id="workspaceGrid" class="workspace-grid" aria-live="polite"><p class="loading">Chargement des espaces…</p></section>
+    </section>
+
+    <section class="bottom-cta">
+      <div><span class="eyebrow"><i></i> Une nouvelle façon de louer un GPU</span><h2>Une machine. Un espace.<br>Votre projet démarre.</h2></div>
+      <a class="button primary" href="index.html#market">Trouver une machine</a>
+    </section>
+  </main>
+  <footer><a class="brand" href="index.html"><span class="brand-mark">G</span><span>GPUbnb</span></a><p>Workspaces sécurisés sur des machines distribuées.</p><span>Devnet · Mainnet désactivé</span></footer>
+</body>
+</html>
