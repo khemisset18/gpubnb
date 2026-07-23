@@ -29,7 +29,18 @@ const schema = z.object({
 
 export const config = schema.parse(process.env);
 new PublicKey(config.PLATFORM_WALLET);
-if (config.NODE_ENV === 'production' && !config.REDIS_URL.startsWith('rediss://')) throw new Error('Production Redis must use TLS (rediss://)');
+
+const redisUrl = new URL(config.REDIS_URL);
+const isTlsRedis = redisUrl.protocol === 'rediss:';
+const isPrivateRenderRedis =
+  process.env.RENDER === 'true' &&
+  redisUrl.protocol === 'redis:' &&
+  redisUrl.port === '6379' &&
+  /^red-[a-z0-9-]+$/.test(redisUrl.hostname);
+
+if (config.NODE_ENV === 'production' && !isTlsRedis && !isPrivateRenderRedis) {
+  throw new Error('Production Redis must use TLS or a private Render Key Value URL');
+}
 if (config.SOLANA_CLUSTER === 'mainnet-beta' && config.ALLOW_MAINNET !== 'true') {
   throw new Error('Mainnet is disabled until independent audit approval');
 }

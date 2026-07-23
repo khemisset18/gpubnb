@@ -10,16 +10,12 @@ RUN apt-get update \
     && npm config set fetch-retry-maxtimeout 120000
 
 COPY apps/api/package.json apps/api/package-lock.json ./
-
-RUN npm install --include=dev --no-audit --no-fund --legacy-peer-deps
+RUN npm ci --include=dev --no-audit --no-fund --foreground-scripts
 
 FROM deps AS build
-
 COPY apps/api/prisma ./prisma
 COPY apps/api/tsconfig.json ./
 COPY apps/api/src ./src
-
-RUN ./node_modules/.bin/prisma generate
 RUN npm run build
 
 FROM node:22.14.0-bookworm-slim AS runtime
@@ -39,6 +35,6 @@ COPY --from=build /app/api/prisma ./prisma
 COPY apps/web /app/web
 
 USER app
-EXPOSE 8787
+EXPOSE 10000
 
 CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/server.js"]
