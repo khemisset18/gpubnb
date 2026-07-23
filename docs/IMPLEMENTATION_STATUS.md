@@ -13,7 +13,7 @@ Dernière mise à jour : 23 juillet 2026.
 | Marketplace persistée | Partiel | Annonces oui, demandes non |
 | Réservations | Partiel | Création et anti-chevauchement |
 | Paiement Devnet | Bloqué | Program ID non déployé |
-| Moteur de tâches | Implémenté, validation CI en cours | États stricts, API locataire/agent, diagnostic uniquement |
+| Moteur de tâches | Implémenté et validé par CI | États stricts, API locataire/agent, diagnostic uniquement |
 | Docker isolé | Implémenté, test GPU requis | Digest obligatoire, réseau coupé, lecture seule, capacités supprimées |
 | Logs et artefacts | Partiel | Logs persistés et plafonnés ; stockage d’artefacts à connecter |
 | Notifications/messagerie | Non commencé | Modèles partiels |
@@ -42,3 +42,6 @@ Une image de diagnostic contrôlée doit encore être construite, scannée, publ
 et renseignée avec `gpubnb-agent setup --diagnostic-image ...@sha256:...`.
 La validation physique bout en bout reste bloquée tant qu’il n’existe pas de
 réservation Devnet financée et de machine NVIDIA liée.
+
+Validation logicielle Phase 2 : GitHub Actions `29978188424`, cinq jobs réussis
+(API, agent, contrat, portes de production et analyse statique de sécurité).
