@@ -197,15 +197,17 @@ def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, An
     if job.get("type") not in {"GPU_DIAGNOSTIC", "WORKSPACE_PREPARE"}:
         update_job(api, key, machine_id, job_id, "REJECTED", "unsupported_job_type")
         return
-    image = str(config.get("diagnosticImage") or "")
+    parameters = job.get("parameters") if isinstance(job.get("parameters"), dict) else {}
+    workspace_slug = str(parameters.get("workspaceSlug") or "compute")
+    workspace_images = config.get("workspaceImages") if isinstance(config.get("workspaceImages"), dict) else {}
+    image = str(workspace_images.get(workspace_slug) or config.get("diagnosticImage") or "")
     try:
         if job.get("type") == "WORKSPACE_PREPARE":
             update_job(api, key, machine_id, job_id, "DOWNLOADING")
         update_job(api, key, machine_id, job_id, "PREPARING")
         update_job(api, key, machine_id, job_id, "RUNNING")
-        parameters = job.get("parameters") if isinstance(job.get("parameters"), dict) else {}
         if job.get("type") == "WORKSPACE_PREPARE":
-            result = prepare_workspace(image, int(parameters.get("timeoutSeconds", 600)))
+            result = prepare_workspace(image, int(parameters.get("timeoutSeconds", 600)), workspace_slug)
         else:
             result = run_gpu_diagnostic(image, int(parameters.get("timeoutSeconds", 120)))
         session_value = job.get("workspaceSession")
@@ -313,6 +315,19 @@ def command_workspaces_analyze(_: argparse.Namespace) -> int:
     return 0
 
 
+def command_workspace_install(args: argparse.Namespace) -> int:
+    config = load_config()
+    result = prepare_workspace(args.image, args.timeout, args.slug)
+    images = config.get("workspaceImages")
+    if not isinstance(images, dict):
+        images = {}
+    images[args.slug] = args.image
+    config["workspaceImages"] = images
+    save_config(config)
+    print_json({"installed": True, "slug": args.slug, "image": args.image, "verification": result})
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="gpubnb-agent", description="Agent local sécurisé GPUbnb")
     commands = root.add_subparsers(dest="command", required=True)
@@ -346,6 +361,11 @@ def parser() -> argparse.ArgumentParser:
     workspace_commands = workspaces.add_subparsers(dest="workspace_command", required=True)
     workspace_commands.add_parser("list", help="afficher les 13 espaces du catalogue").set_defaults(handler=command_workspaces_list)
     workspace_commands.add_parser("analyze", help="afficher les capacités locales utilisées pour la compatibilité").set_defaults(handler=command_workspaces_analyze)
+    install_workspace = workspace_commands.add_parser("install", help="télécharger et vérifier une image Workspace épinglée")
+    install_workspace.add_argument("slug", choices=["compute", "developer"])
+    install_workspace.add_argument("image", help="registre/image@sha256:digest")
+    install_workspace.add_argument("--timeout", type=int, default=600)
+    install_workspace.set_defaults(handler=command_workspace_install)
     commands.add_parser("version", help="afficher la version").set_defaults(handler=lambda _: print(__version__) or 0)
     return root
 

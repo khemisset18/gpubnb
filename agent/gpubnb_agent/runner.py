@@ -43,7 +43,18 @@ def run_gpu_diagnostic(image: str, timeout_seconds: int) -> dict[str, Any]:
     }
 
 
-def prepare_workspace(image: str, timeout_seconds: int) -> dict[str, Any]:
+def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
+    command = "/usr/local/bin/gpubnb-developer-healthcheck" if workspace_slug == "developer" else "nvidia-smi"
+    return [
+        "docker", "run", "--rm", "--network=none", "--read-only",
+        "--cap-drop=ALL", "--security-opt=no-new-privileges",
+        "--pids-limit=64", "--memory=512m", "--cpus=1",
+        "--tmpfs=/tmp:rw,noexec,nosuid,size=32m", "--gpus=device=0",
+        image, command,
+    ]
+
+
+def prepare_workspace(image: str, timeout_seconds: int, workspace_slug: str = "compute") -> dict[str, Any]:
     if not PINNED_IMAGE.fullmatch(image):
         raise RuntimeError("diagnosticImage doit être une image Docker épinglée par digest sha256")
     timeout = max(30, min(600, int(timeout_seconds)))
@@ -59,9 +70,14 @@ def prepare_workspace(image: str, timeout_seconds: int) -> dict[str, Any]:
         )
         if pull.returncode != 0:
             raise RuntimeError(f"workspace_image_pull_failed:{pull.returncode}:{pull.stderr[:1000].strip()}")
-    result = run_gpu_diagnostic(image, timeout)
-    if not result.get("gpuDetected"):
-        raise RuntimeError("workspace_gpu_health_check_failed")
-    result["summary"] = "Image Workspace préparée et contrôle GPU isolé réussi."
-    result.setdefault("metrics", {})["cacheHit"] = cache_hit
-    return result
+    health = subprocess.run(
+        workspace_health_command(image, workspace_slug),
+        capture_output=True, text=True, timeout=timeout, check=False, shell=False,
+    )
+    if health.returncode != 0:
+        raise RuntimeError(f"workspace_health_check_failed:{health.returncode}:{health.stderr[:1000].strip()}")
+    return {
+        "gpuDetected": True,
+        "summary": f"Workspace {workspace_slug} préparé et contrôle isolé réussi.",
+        "metrics": {"cacheHit": cache_hit, "workspaceSlug": workspace_slug},
+    }

@@ -1,4 +1,4 @@
-FROM codercom/code-server@sha256:6edc8e2d2849749c1a1a5eff8e76563b96db407e68899c143473a6004d0a6b5a
+FROM codercom/code-server@sha256:49d5e176224523b0c924ee35b05c51e9a87f9c170f650ee0f7da05a4581a79ff
 
 USER root
 RUN apt-get update \

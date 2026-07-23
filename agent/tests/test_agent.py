@@ -9,7 +9,7 @@ from nacl.signing import SigningKey
 from gpubnb_agent.client import signed_headers
 from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available
 from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key
-from gpubnb_agent.runner import diagnostic_command, prepare_workspace
+from gpubnb_agent.runner import diagnostic_command, prepare_workspace, workspace_health_command
 
 
 class PlatformTests(unittest.TestCase):
@@ -57,19 +57,25 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("--cap-drop=ALL", command)
         self.assertNotIn("--privileged", command)
 
-    @patch("gpubnb_agent.runner.run_gpu_diagnostic")
     @patch("gpubnb_agent.runner.subprocess.run")
-    def test_preparation_pulls_uncached_image_and_runs_health_check(self, run, diagnostic):
+    def test_preparation_pulls_uncached_image_and_runs_health_check(self, run):
         image = "registry.example/gpubnb/diagnostic@sha256:" + ("a" * 64)
         run.side_effect = [
             type("Result", (), {"returncode": 1, "stderr": "missing"})(),
             type("Result", (), {"returncode": 0, "stderr": ""})(),
+            type("Result", (), {"returncode": 0, "stderr": ""})(),
         ]
-        diagnostic.return_value = {"gpuDetected": True, "summary": "ok", "metrics": {}}
         result = prepare_workspace(image, 120)
         self.assertEqual(run.call_args_list[1].args[0][:2], ["docker", "pull"])
         self.assertTrue(result["gpuDetected"])
         self.assertFalse(result["metrics"]["cacheHit"])
+
+    def test_developer_healthcheck_is_inside_hardened_container(self):
+        image = "registry.example/gpubnb/developer@sha256:" + ("b" * 64)
+        command = workspace_health_command(image, "developer")
+        self.assertIn("/usr/local/bin/gpubnb-developer-healthcheck", command)
+        self.assertIn("--network=none", command)
+        self.assertIn("--read-only", command)
 
 
 if __name__ == "__main__":
