@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "slug": "developer",
+  "version": "1.0.0",
+  "baseImage": "codercom/code-server@sha256:6edc8e2d2849749c1a1a5eff8e76563b96db407e68899c143473a6004d0a6b5a",
+  "runsAsUser": "coder",
+  "connectionType": "CODE_SERVER",
+  "port": 3000,
+  "networkPolicy": "RESTRICTED_EGRESS",
+  "writablePaths": ["/workspace", "/tmp"],
+  "requiredCommands": ["code-server", "git", "python3", "node", "npm", "java", "go", "rustc", "cargo", "gcc", "g++"],
+  "forbiddenCapabilities": ["privileged", "hostNetwork", "hostPid", "hostIpc", "dockerSocket", "ownerHomeMount"],
+  "cleanupPaths": ["/workspace/imports", "/workspace/output"],
+  "license": "INCLUDED_OPEN_SOURCE"
+}

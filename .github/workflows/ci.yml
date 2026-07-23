@@ -77,6 +77,10 @@ jobs:
       - run: node --check apps/web/account.js
       - run: node --check apps/web/workspaces.js
       - run: node scripts/devnet-doctor.mjs
+      - name: Validate Developer Workspace manifest and shell
+        run: |
+          python3 -m json.tool workspaces/developer/manifest.json >/dev/null
+          sh -n workspaces/developer/healthcheck.sh
 
   security-static-analysis:
     runs-on: ubuntu-latest
