@@ -34,6 +34,8 @@ class ApiClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=12, context=self.context) as response:
+                if response.status == 204:
+                    return {}
                 return json.loads(response.read(1_000_000).decode())
         except urllib.error.HTTPError as exc:
             detail = exc.read(4096).decode(errors="replace")
@@ -53,6 +55,10 @@ def signed_headers(key: SigningKey, machine_id: str, method: str, path: str) -> 
     canonical = f"{method.upper()}|{path}|{machine_id}|{epoch}"
     signature = base58.b58encode(key.sign(canonical.encode()).signature).decode()
     return {"x-agent-timestamp": str(epoch), "x-agent-signature": signature}
+
+
+def agent_request(client: ApiClient, key: SigningKey, machine_id: str, path: str, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
+    return client.request(path, method, body, signed_headers(key, machine_id, method, path))
 
 
 def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, Any]:

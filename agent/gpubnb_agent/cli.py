@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .client import ApiClient, heartbeat
+from .client import ApiClient, agent_request, heartbeat
+from .runner import run_gpu_diagnostic
 from .platform_info import find_nvidia_smi, gpu_inventory, system_inventory
 from .storage import (
     config_dir, fingerprint, generate_key, key_path, load_config, load_key,
@@ -37,6 +38,8 @@ def command_setup(args: argparse.Namespace) -> int:
     key = generate_key()
     config = load_config()
     config.update({"apiUrl": args.api_url.rstrip("/"), "intervalSeconds": args.interval})
+    if args.diagnostic_image:
+        config["diagnosticImage"] = args.diagnostic_image
     save_config(config)
     print("GPUbnb Agent est configuré.")
     print(f"Dossier : {directory}")
@@ -168,6 +171,7 @@ def heartbeat_loop() -> int:
             try:
                 result = heartbeat(client(config), key, machine_id)
                 print_json({"event": "heartbeat", "result": result})
+                run_next_job(client(config), key, machine_id, config)
                 failures = 0
             except Exception as exc:
                 failures = min(failures + 1, 8)
@@ -181,6 +185,40 @@ def heartbeat_loop() -> int:
             pid_path().unlink()
         except FileNotFoundError:
             pass
+
+
+def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, Any]) -> None:
+    path = f"/agent/jobs/next/{machine_id}"
+    job = agent_request(api, key, machine_id, path)
+    if not job:
+        return
+    job_id = str(job["id"])
+    if job.get("type") != "GPU_DIAGNOSTIC":
+        update_job(api, key, machine_id, job_id, "REJECTED", "unsupported_job_type")
+        return
+    image = str(config.get("diagnosticImage") or "")
+    try:
+        update_job(api, key, machine_id, job_id, "PREPARING")
+        update_job(api, key, machine_id, job_id, "RUNNING")
+        parameters = job.get("parameters") if isinstance(job.get("parameters"), dict) else {}
+        result = run_gpu_diagnostic(image, int(parameters.get("timeoutSeconds", 120)))
+        update_job(api, key, machine_id, job_id, "UPLOADING_RESULTS")
+        complete_path = f"/agent/jobs/{job_id}/complete"
+        agent_request(api, key, machine_id, complete_path, "POST", {"machineId": machine_id, "result": result})
+        print_json({"event": "job_completed", "jobId": job_id})
+    except Exception as exc:
+        try:
+            update_job(api, key, machine_id, job_id, "FAILED", str(exc)[:100])
+        finally:
+            print_json({"event": "job_failed", "jobId": job_id, "message": str(exc)[:300]})
+
+
+def update_job(api: ApiClient, key: Any, machine_id: str, job_id: str, status: str, error_code: str | None = None) -> dict[str, Any]:
+    path = f"/agent/jobs/{job_id}/state"
+    body = {"machineId": machine_id, "status": status}
+    if error_code:
+        body["errorCode"] = error_code
+    return agent_request(api, key, machine_id, path, "POST", body)
 
 
 def command_start(args: argparse.Namespace) -> int:
@@ -237,6 +275,7 @@ def parser() -> argparse.ArgumentParser:
     setup = commands.add_parser("setup", help="préparer la machine et générer la clé")
     setup.add_argument("--api-url", default=DEFAULT_API)
     setup.add_argument("--interval", type=int, default=10)
+    setup.add_argument("--diagnostic-image", help="image de diagnostic épinglée, au format registre/image@sha256:...")
     setup.set_defaults(handler=command_setup)
     login = commands.add_parser("login", help="ouvrir l'espace GPUbnb")
     login.add_argument("--site", default="https://gpubnb.netlify.app")

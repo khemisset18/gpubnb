@@ -9,6 +9,7 @@ from nacl.signing import SigningKey
 from gpubnb_agent.client import signed_headers
 from gpubnb_agent.platform_info import parse_nvidia_csv
 from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key
+from gpubnb_agent.runner import diagnostic_command
 
 
 class PlatformTests(unittest.TestCase):
@@ -38,6 +39,20 @@ class KeyTests(unittest.TestCase):
         headers = signed_headers(key, "machine", "GET", "/agent/challenge/machine")
         self.assertIn("x-agent-signature", headers)
         self.assertIn("x-agent-timestamp", headers)
+
+
+class RunnerTests(unittest.TestCase):
+    def test_requires_digest_pinned_image(self):
+        with self.assertRaises(RuntimeError):
+            diagnostic_command("nvidia/cuda:latest")
+
+    def test_hardens_docker_invocation(self):
+        image = "registry.example/gpubnb/diagnostic@sha256:" + ("a" * 64)
+        command = diagnostic_command(image)
+        self.assertIn("--network=none", command)
+        self.assertIn("--read-only", command)
+        self.assertIn("--cap-drop=ALL", command)
+        self.assertNotIn("--privileged", command)
 
 
 if __name__ == "__main__":

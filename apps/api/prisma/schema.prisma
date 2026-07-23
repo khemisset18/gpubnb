@@ -54,6 +54,25 @@ enum PaymentStatus {
   RELEASED
   FROZEN
 }
+enum JobType {
+  GPU_DIAGNOSTIC
+}
+enum JobStatus {
+  DRAFT
+  QUEUED
+  ASSIGNED
+  DOWNLOADING
+  PREPARING
+  RUNNING
+  UPLOADING_RESULTS
+  COMPLETED
+  FAILED
+  CANCEL_REQUESTED
+  CANCELLED
+  TIMED_OUT
+  REJECTED
+  QUARANTINED
+}
 model User {
   id String @id @default(cuid())
   wallet String @unique
@@ -78,6 +97,7 @@ model User {
   forumPosts ForumPost[]
   conversationMembers ConversationMember[]
   messages Message[]
+  jobs Job[]
 }
 model Profile {
   id String @id @default(cuid())
@@ -121,6 +141,7 @@ model Machine {
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   listings GpuListing[]
   heartbeats Heartbeat[]
+  jobs Job[]
 }
 model GpuListing {
   id String @id @default(cuid())
@@ -156,8 +177,65 @@ model Booking {
   payment Payment?
   usageSamples UsageSample[]
   reviews Review[]
+  jobs Job[]
   @@unique([buyerId, idempotencyKey])
   @@index([listingId, startsAt, endsAt])
+}
+model Job {
+  id String @id @default(cuid())
+  bookingId String
+  renterId String
+  machineId String
+  type JobType
+  status JobStatus @default(QUEUED)
+  parameters Json
+  result Json?
+  errorCode String?
+  cancelRequestedAt DateTime?
+  startedAt DateTime?
+  finishedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  renter User @relation(fields: [renterId], references: [id], onDelete: Cascade)
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  attempts JobAttempt[]
+  logs JobLog[]
+  artifacts JobArtifact[]
+  @@index([renterId, createdAt])
+  @@index([machineId, status, createdAt])
+}
+model JobAttempt {
+  id String @id @default(cuid())
+  jobId String
+  sequence Int
+  agentVersion String?
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  exitCode Int?
+  failureReason String?
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([jobId, sequence])
+}
+model JobLog {
+  id String @id @default(cuid())
+  jobId String
+  level String @db.VarChar(16)
+  message String @db.VarChar(2000)
+  createdAt DateTime @default(now())
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@index([jobId, createdAt])
+}
+model JobArtifact {
+  id String @id @default(cuid())
+  jobId String
+  kind String @db.VarChar(32)
+  sha256 String @db.VarChar(64)
+  sizeBytes Int
+  storageKey String @db.VarChar(500)
+  createdAt DateTime @default(now())
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@index([jobId, createdAt])
 }
 model Payment {
   id String @id @default(cuid())
