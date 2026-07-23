@@ -25,12 +25,12 @@ test('account schema separates private identity and user capabilities',()=>{
  for(const field of ['email String? @unique','firstName String?','lastName String?','canRent Boolean','canHost Boolean','profileCompletedAt DateTime?'])assert.ok(schema.includes(field),field);
 });
 
-test('workspace catalogue uses one responsive five-column grid',()=>{
+test('workspace catalogue uses one responsive four-column grid',()=>{
  const html=read('apps/web/workspaces.html');
- const css=read('apps/web/workspaces.css');
+ const css=read('apps/web/workspaces.css')+read('apps/web/workspaces-layout.css');
  const script=read('apps/web/workspaces.js');
  assert.match(html,/id="workspaceGrid"/);
- assert.match(css,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+ assert.match(css,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
  assert.match(css,/@media\(max-width:900px\)/);
  assert.match(css,/@media\(max-width:600px\)/);
  assert.match(script,/\/workspaces/);
