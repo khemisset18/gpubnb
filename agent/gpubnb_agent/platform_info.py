@@ -9,6 +9,7 @@ import re
 import shutil
 import socket
 import subprocess
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -18,10 +19,30 @@ WINDOWS_NVIDIA_SMI = Path(r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi
 
 def find_nvidia_smi() -> str | None:
     override = os.environ.get("GPUBNB_NVIDIA_SMI")
-    candidates = [override, shutil.which("nvidia-smi")]
+    candidates: list[str | None] = [override, shutil.which("nvidia-smi")]
     if platform.system() == "Windows":
         candidates.append(str(WINDOWS_NVIDIA_SMI))
     candidates.extend(["/usr/bin/nvidia-smi", "/usr/local/bin/nvidia-smi"])
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return str(Path(candidate))
+    return None
+
+
+def find_rocm_smi() -> str | None:
+    override = os.environ.get("GPUBNB_ROCM_SMI")
+    candidates: list[str | None] = [override, shutil.which("rocm-smi"), shutil.which("rocm_smi")]
+    candidates.extend(["/opt/rocm/bin/rocm-smi", "/usr/bin/rocm-smi"])
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return str(Path(candidate))
+    return None
+
+
+def find_xpu_smi() -> str | None:
+    override = os.environ.get("GPUBNB_XPU_SMI")
+    candidates: list[str | None] = [override, shutil.which("xpu-smi"), shutil.which("xpu_smi")]
+    candidates.extend(["/usr/local/bin/xpu-smi", "/usr/bin/xpu-smi"])
     for candidate in candidates:
         if candidate and Path(candidate).is_file():
             return str(Path(candidate))
@@ -39,7 +60,7 @@ def parse_nvidia_csv(output: str) -> list[dict[str, Any]]:
         if len(fields) not in {8, 9}:
             continue
         try:
-            row = {
+            row: dict[str, Any] = {
                 "gpuModel": fields[0][:200],
                 "gpuUuid": fields[1][:200],
                 "vramMiB": int(fields[2]),
@@ -57,7 +78,7 @@ def parse_nvidia_csv(output: str) -> list[dict[str, Any]]:
     return rows
 
 
-def gpu_inventory(binary: str | None = None) -> list[dict[str, Any]]:
+def nvidia_gpu_inventory(binary: str | None = None) -> list[dict[str, Any]]:
     executable = binary or find_nvidia_smi()
     if not executable:
         return []
@@ -66,9 +87,98 @@ def gpu_inventory(binary: str | None = None) -> list[dict[str, Any]]:
     rows = parse_nvidia_csv(result.stdout) if result.returncode == 0 else []
     version = run_command([executable]).stdout
     match = re.search(r"CUDA Version:\s*([0-9.]+)", version)
+    cuda_version = match.group(1) if match else None
     for row in rows:
-        row["cudaVersion"] = match.group(1) if match else None
+        row["cudaVersion"] = cuda_version
+        row["gpuVendor"] = "NVIDIA"
     return rows
+
+
+def amdgpu_inventory(binary: str | None = None) -> list[dict[str, Any]]:
+    executable = binary or find_rocm_smi()
+    if not executable:
+        return []
+    result = run_command([executable, "--json"])
+    if result.returncode != 0:
+        return []
+    try:
+        data = json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if not isinstance(data, list):
+        data = [data]
+    rows: list[dict[str, Any]] = []
+    for card in data:
+        if not isinstance(card, dict):
+            continue
+        try:
+            vram = int(card.get("VRAM Total Memory (B)", card.get("memory", {}).get("vram", {}).get("total_memory", "0")))
+            vram_mib = vram // (1024 * 1024) if vram else 0
+            used = int(card.get("VRAM Total Memory (B)", card.get("memory", {}).get("vram", {}).get("used_memory", "0")))
+            used_mib = used // (1024 * 1024) if used else 0
+            row = {
+                "gpuModel": str(card.get("Card series", card.get("Card model", card.get("gpu", "AMD GPU"))))[:200],
+                "gpuUuid": str(card.get("GPU UUID", card.get("GUID", card.get("gpu_id", "amd-unknown"))))[:200],
+                "vramMiB": vram_mib,
+                "memoryUsedMiB": used_mib,
+                "driverVersion": str(card.get("Driver version", "rocm"))[:100],
+                "cudaVersion": None,
+                "temperatureC": int(float(card.get("Temperature (Sensor edge) (C)", card.get("temperature", {}).get("edge", "0")))),
+                "gpuUtilization": int(float(card.get("GPU use (%)", card.get("utilization", {}).get("gpu", "0")))),
+                "powerWatts": float(card.get("Average Graphics Package Power (W)", card.get("power", {}).get("average_graphics", 0))) or None,
+                "gpuVendor": "AMD",
+            }
+        except (ValueError, TypeError):
+            continue
+        if vram_mib > 0 and -20 <= row["temperatureC"] <= 130 and 0 <= row["gpuUtilization"] <= 100:
+            rows.append(row)
+    return rows
+
+
+def intel_gpu_inventory(binary: str | None = None) -> list[dict[str, Any]]:
+    executable = binary or find_xpu_smi()
+    if not executable:
+        return []
+    result = run_command([executable, "discovery", "-j"])
+    if result.returncode != 0:
+        return []
+    try:
+        data = json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if not isinstance(data, list):
+        data = [data]
+    rows: list[dict[str, Any]] = []
+    for gpu in data:
+        if not isinstance(gpu, dict):
+            continue
+        try:
+            vram_mib = int(gpu.get("memory", {}).get("size", 0)) // (1024 * 1024)
+            row = {
+                "gpuModel": str(gpu.get("name", "Intel GPU"))[:200],
+                "gpuUuid": str(gpu.get("device_id", f"intel-{gpu.get('pci_device', 'unknown')}"))[:200],
+                "vramMiB": vram_mib or 0,
+                "memoryUsedMiB": 0,
+                "driverVersion": str(gpu.get("driver_version", "xpu"))[:100],
+                "cudaVersion": None,
+                "temperatureC": int(gpu.get("temperature", {}).get("celsius", 0)),
+                "gpuUtilization": 0,
+                "powerWatts": float(gpu.get("power", {}).get("watts", 0)) or None,
+                "gpuVendor": "INTEL",
+            }
+        except (ValueError, TypeError):
+            continue
+        if vram_mib >= 0 and -20 <= row["temperatureC"] <= 130:
+            rows.append(row)
+    return rows
+
+
+def gpu_inventory(binary: str | None = None) -> list[dict[str, Any]]:
+    for detector in (nvidia_gpu_inventory, amdgpu_inventory, intel_gpu_inventory):
+        rows = detector(binary if detector is nvidia_gpu_inventory else None)
+        if rows:
+            return rows
+    return []
 
 
 def docker_info() -> dict[str, Any]:
@@ -114,6 +224,41 @@ def virtualization_available() -> bool:
         return False
 
 
+def internet_available() -> bool:
+    try:
+        urllib.request.urlopen("https://httpbin.org/status/200", timeout=5)
+        return True
+    except Exception:
+        return False
+
+
+def public_ip() -> str | None:
+    try:
+        with urllib.request.urlopen("https://httpbin.org/ip", timeout=5) as response:
+            data = json.loads(response.read(1024).decode())
+            return data.get("origin")
+    except Exception:
+        return None
+
+
+def machine_fingerprint() -> str:
+    gpus = gpu_inventory()
+    gpu = gpus[0] if gpus else {}
+    parts = [
+        socket.gethostname(),
+        platform.machine(),
+        platform.processor() or platform.machine(),
+        str(os.cpu_count() or 0),
+        str(memory_info().get("ramTotalMiB") or 0),
+        str(shutil.disk_usage(configured_disk_root()).total // (1024 * 1024)),
+        str(gpu.get("gpuModel") or ""),
+        str(gpu.get("gpuUuid") or ""),
+        str(gpu.get("vramMiB") or 0),
+    ]
+    import hashlib
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:32]
+
+
 def system_inventory() -> dict[str, Any]:
     disk = shutil.disk_usage(configured_disk_root())
     docker = docker_info()
@@ -131,6 +276,9 @@ def system_inventory() -> dict[str, Any]:
         "dockerVersion": docker["version"],
         "nvidiaRuntimeAvailable": docker["nvidiaRuntime"],
         "virtualizationAvailable": virtualization_available(),
+        "internetAvailable": internet_available(),
+        "publicIp": public_ip(),
+        "machineFingerprint": machine_fingerprint(),
     }
 
 

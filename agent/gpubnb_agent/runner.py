@@ -5,7 +5,21 @@ import re
 import subprocess
 from typing import Any
 
+from .platform_info import gpu_inventory
+
 PINNED_IMAGE = re.compile(r"^[a-z0-9._/-]+@sha256:[a-f0-9]{64}$")
+
+
+def gpu_passthrough_flags() -> list[str]:
+    gpus = gpu_inventory()
+    if not gpus:
+        return []
+    vendor = gpus[0].get("gpuVendor", "NVIDIA")
+    if vendor == "AMD":
+        return ["--device=/dev/kfd", "--device=/dev/dri", "--security-opt=seccomp=unconfined"]
+    if vendor == "INTEL":
+        return ["--device=/dev/dri", "--security-opt=seccomp=unconfined"]
+    return ["--gpus=device=0"]
 
 
 def diagnostic_command(image: str) -> list[str]:
@@ -15,7 +29,7 @@ def diagnostic_command(image: str) -> list[str]:
         "docker", "run", "--rm", "--network=none", "--read-only",
         "--cap-drop=ALL", "--security-opt=no-new-privileges",
         "--pids-limit=64", "--memory=512m", "--cpus=1",
-        "--tmpfs=/tmp:rw,noexec,nosuid,size=32m", "--gpus=device=0",
+        "--tmpfs=/tmp:rw,noexec,nosuid,size=32m", *gpu_passthrough_flags(),
         image, "nvidia-smi",
         "--query-gpu=name,uuid,memory.total,driver_version,temperature.gpu",
         "--format=csv,noheader,nounits",
@@ -48,7 +62,7 @@ def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
         "docker", "run", "--rm", "--network=none", "--read-only",
         "--cap-drop=ALL", "--security-opt=no-new-privileges",
         "--pids-limit=64", "--memory=512m", "--cpus=1",
-        "--tmpfs=/tmp:rw,noexec,nosuid,size=32m", "--gpus=device=0",
+        "--tmpfs=/tmp:rw,noexec,nosuid,size=32m", *gpu_passthrough_flags(),
     ]
     if workspace_slug == "developer":
         return [*base, "--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", image]
@@ -82,3 +96,11 @@ def prepare_workspace(image: str, timeout_seconds: int, workspace_slug: str = "c
         "summary": f"Workspace {workspace_slug} préparé et contrôle isolé réussi.",
         "metrics": {"cacheHit": cache_hit, "workspaceSlug": workspace_slug},
     }
+
+
+def cleanup_workspace(container_name: str) -> dict[str, Any]:
+    subprocess.run(
+        ["docker", "rm", "-f", container_name],
+        capture_output=True, text=True, timeout=30, check=False, shell=False,
+    )
+    return {"cleaned": True, "container": container_name}

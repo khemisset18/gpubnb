@@ -25,6 +25,8 @@ const schema = z.object({
   COMMISSION_BPS: z.coerce.number().int().min(0).max(1000).default(500),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_ANON_KEY: z.string().min(20).optional(),
+  FILE_STORAGE_DIR: z.string().default('./data/artifacts'),
+  MAX_ARTIFACT_BYTES: z.coerce.number().int().min(1024).max(500_000_000).default(104_857_600),
 });
 
 export const config = schema.parse(process.env);

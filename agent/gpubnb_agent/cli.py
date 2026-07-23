@@ -15,7 +15,7 @@ from typing import Any
 
 from . import __version__
 from .client import ApiClient, agent_request, heartbeat
-from .runner import prepare_workspace, run_gpu_diagnostic
+from .runner import prepare_workspace, run_gpu_diagnostic, cleanup_workspace
 from .platform_info import find_nvidia_smi, gpu_inventory, system_inventory
 from .storage import (
     config_dir, fingerprint, generate_key, key_path, load_config, load_key,
@@ -315,6 +315,49 @@ def command_workspaces_analyze(_: argparse.Namespace) -> int:
     return 0
 
 
+def command_files_upload(args: argparse.Namespace) -> int:
+    config = load_config()
+    key = load_key()
+    machine_id = config.get("machineId")
+    if not isinstance(machine_id, str):
+        raise RuntimeError("Machine non liée. Exécutez : gpubnb-agent link CODE")
+    file_path = Path(args.path)
+    if not file_path.is_file():
+        raise RuntimeError(f"Fichier introuvable : {args.path}")
+    upload_path = f"/jobs/{args.job_id}/artifacts?machineId={machine_id}&kind={args.kind}"
+    import hashlib
+    sha256 = hashlib.sha256(file_path.read_bytes()).hexdigest()
+    upload_path += f"&sha256={sha256}&sizeBytes={file_path.stat().st_size}"
+    result = client(config).upload_file(upload_path, args.job_id, args.path, args.kind)
+    print_json({"uploaded": True, "jobId": args.job_id, "artifact": result})
+    return 0
+
+
+def command_files_download(args: argparse.Namespace) -> int:
+    config = load_config()
+    key = load_key()
+    machine_id = config.get("machineId")
+    if not isinstance(machine_id, str):
+        raise RuntimeError("Machine non liée. Exécutez : gpubnb-agent link CODE")
+    output = args.output or f"artifact_{args.artifact_id}"
+    download_path = f"/jobs/{args.job_id}/artifacts/{args.artifact_id}"
+    result = client(config).download_file(download_path, output, args.sha256)
+    print_json({"downloaded": True, "jobId": args.job_id, "artifactId": args.artifact_id, **result})
+    return 0
+
+
+def command_files_list(args: argparse.Namespace) -> int:
+    config = load_config()
+    key = load_key()
+    machine_id = config.get("machineId")
+    if not isinstance(machine_id, str):
+        raise RuntimeError("Machine non liée. Exécutez : gpubnb-agent link CODE")
+    list_path = f"/jobs/{args.job_id}/artifacts"
+    result = agent_request(client(config), key, machine_id, list_path)
+    print_json(result)
+    return 0
+
+
 def command_workspace_install(args: argparse.Namespace) -> int:
     config = load_config()
     result = prepare_workspace(args.image, args.timeout, args.slug)
@@ -366,6 +409,22 @@ def parser() -> argparse.ArgumentParser:
     install_workspace.add_argument("image", help="registre/image@sha256:digest")
     install_workspace.add_argument("--timeout", type=int, default=600)
     install_workspace.set_defaults(handler=command_workspace_install)
+    files = commands.add_parser("files", help="transférer des fichiers de résultats")
+    file_commands = files.add_subparsers(dest="file_command", required=True)
+    upload_cmd = file_commands.add_parser("upload", help="téléverser un fichier de résultat vers un job")
+    upload_cmd.add_argument("job_id", help="identifiant du job")
+    upload_cmd.add_argument("path", help="chemin du fichier local à téléverser")
+    upload_cmd.add_argument("--kind", default="result", help="type d'artefact (result, log, etc.)")
+    upload_cmd.set_defaults(handler=command_files_upload)
+    download_cmd = file_commands.add_parser("download", help="télécharger un artefact depuis un job")
+    download_cmd.add_argument("job_id", help="identifiant du job")
+    download_cmd.add_argument("artifact_id", help="identifiant de l'artefact")
+    download_cmd.add_argument("--output", help="chemin de destination local")
+    download_cmd.add_argument("--sha256", help="empreinte attendue pour vérification d'intégrité")
+    download_cmd.set_defaults(handler=command_files_download)
+    list_cmd = file_commands.add_parser("list", help="lister les artefacts d'un job")
+    list_cmd.add_argument("job_id", help="identifiant du job")
+    list_cmd.set_defaults(handler=command_files_list)
     commands.add_parser("version", help="afficher la version").set_defaults(handler=lambda _: print(__version__) or 0)
     return root
 

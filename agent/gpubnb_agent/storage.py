@@ -119,3 +119,30 @@ def load_counter() -> int:
 
 def save_counter(value: int) -> None:
     _atomic_write(counter_path(), str(value))
+
+
+def fingerprint_path() -> Path:
+    return config_dir() / "machine.fingerprint"
+
+
+def load_machine_fingerprint() -> str | None:
+    try:
+        return fingerprint_path().read_text(encoding="ascii").strip() or None
+    except FileNotFoundError:
+        return None
+
+
+def save_machine_fingerprint(value: str) -> None:
+    if value:
+        _atomic_write(fingerprint_path(), value)
+
+
+def detect_hardware_change(current_fingerprint: str) -> tuple[bool, str | None]:
+    previous = load_machine_fingerprint()
+    if not previous:
+        if current_fingerprint:
+            save_machine_fingerprint(current_fingerprint)
+        return False, None
+    if not current_fingerprint:
+        return False, previous
+    return previous != current_fingerprint, previous

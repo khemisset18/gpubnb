@@ -1,12 +1,15 @@
-"""HTTPS API client and signed heartbeat protocol."""
+"""HTTPS API client, signed heartbeat protocol, and file transfer."""
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import ssl
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import base58
@@ -14,7 +17,10 @@ from nacl.signing import SigningKey
 
 from . import __version__
 from .platform_info import gpu_inventory, system_inventory
-from .storage import load_counter, save_counter
+from .storage import detect_hardware_change, load_counter, save_counter, save_machine_fingerprint
+
+MAX_RETRIES = 3
+RETRY_BACKOFF = 2.0
 
 
 class ApiClient:
@@ -24,7 +30,7 @@ class ApiClient:
             raise RuntimeError("Une API distante doit utiliser HTTPS")
         self.context = ssl.create_default_context(cafile=ca_file) if ca_file else ssl.create_default_context()
 
-    def request(self, path: str, method: str = "GET", body: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> dict[str, Any]:
+    def request(self, path: str, method: str = "GET", body: dict[str, Any] | None = None, headers: dict[str, str] | None = None, timeout: int = 12) -> dict[str, Any]:
         data = None if body is None else json.dumps(body, separators=(",", ":")).encode()
         request = urllib.request.Request(
             self.api_url + path,
@@ -33,7 +39,7 @@ class ApiClient:
             headers={"content-type": "application/json", "user-agent": f"gpubnb-agent/{__version__}", **(headers or {})},
         )
         try:
-            with urllib.request.urlopen(request, timeout=12, context=self.context) as response:
+            with urllib.request.urlopen(request, timeout=timeout, context=self.context) as response:
                 if response.status == 204:
                     return {}
                 return json.loads(response.read(1_000_000).decode())
@@ -43,11 +49,63 @@ class ApiClient:
         except urllib.error.URLError as exc:
             raise RuntimeError(f"API inaccessible: {exc.reason}") from exc
 
+    def request_with_retry(self, path: str, method: str = "GET", body: dict[str, Any] | None = None, headers: dict[str, str] | None = None, timeout: int = 12) -> dict[str, Any]:
+        last_error: Exception | None = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                return self.request(path, method, body, headers, timeout)
+            except (urllib.error.URLError, RuntimeError, TimeoutError, OSError) as exc:
+                last_error = exc
+                if attempt < MAX_RETRIES - 1:
+                    wait = min(30, RETRY_BACKOFF ** attempt)
+                    time.sleep(wait)
+        raise last_error  # type: ignore[misc]
+
     def health(self) -> dict[str, Any]:
         return self.request("/health")
 
     def link(self, code: str, public_key: str, inventory: dict[str, Any]) -> dict[str, Any]:
         return self.request("/agent/link", "POST", {"code": code, "publicKey": public_key, "inventory": inventory})
+
+    def upload_file(self, path: str, job_id: str, file_path: str, kind: str = "result") -> dict[str, Any]:
+        data = Path(file_path).read_bytes()
+        sha256 = hashlib.sha256(data).hexdigest()
+        headers = {"content-type": "application/octet-stream",
+                   "x-artifact-kind": kind,
+                   "x-artifact-sha256": sha256,
+                   "x-artifact-size": str(len(data))}
+        request = urllib.request.Request(
+            self.api_url + path,
+            data=data,
+            method="POST",
+            headers={"user-agent": f"gpubnb-agent/{__version__}", **headers},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=120, context=self.context) as response:
+                return json.loads(response.read(1_000_000).decode())
+        except urllib.error.HTTPError as exc:
+            detail = exc.read(4096).decode(errors="replace")
+            raise RuntimeError(f"Upload HTTP {exc.code}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Upload échoué: {exc.reason}") from exc
+
+    def download_file(self, path: str, dest_path: str, expected_sha256: str | None = None) -> dict[str, Any]:
+        request = urllib.request.Request(self.api_url + path, method="GET",
+                                          headers={"user-agent": f"gpubnb-agent/{__version__}"})
+        try:
+            with urllib.request.urlopen(request, timeout=120, context=self.context) as response:
+                data = response.read(100_000_000)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read(4096).decode(errors="replace")
+            raise RuntimeError(f"Download HTTP {exc.code}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Download échoué: {exc.reason}") from exc
+        if expected_sha256:
+            actual = hashlib.sha256(data).hexdigest()
+            if actual != expected_sha256:
+                raise RuntimeError(f"Intégrité compromise: attendu {expected_sha256}, obtenu {actual}")
+        Path(dest_path).write_bytes(data)
+        return {"downloaded": True, "path": dest_path, "sizeBytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
 
 def signed_headers(key: SigningKey, machine_id: str, method: str, path: str) -> dict[str, str]:
@@ -58,20 +116,27 @@ def signed_headers(key: SigningKey, machine_id: str, method: str, path: str) -> 
 
 
 def agent_request(client: ApiClient, key: SigningKey, machine_id: str, path: str, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
-    return client.request(path, method, body, signed_headers(key, machine_id, method, path))
+    return client.request_with_retry(path, method, body, signed_headers(key, machine_id, method, path))
 
 
 def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, Any]:
     challenge_path = f"/agent/challenge/{machine_id}"
-    challenge = client.request(challenge_path, headers=signed_headers(key, machine_id, "GET", challenge_path))["challenge"]
+    challenge = client.request_with_retry(challenge_path, headers=signed_headers(key, machine_id, "GET", challenge_path))["challenge"]
     gpus = gpu_inventory()
     if len(gpus) != 1:
-        raise RuntimeError("Le heartbeat exige exactement un GPU NVIDIA détecté")
+        raise RuntimeError("Le heartbeat exige exactement un GPU détecté")
     gpu = gpus[0]
     counter = load_counter() + 1
     timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     session_id = None
-    probe = bool(gpu["cudaVersion"])
+    probe = True
+    sys_info = system_inventory()
+    current_fp = sys_info.get("machineFingerprint") or ""
+    hw_changed, previous_fp = detect_hardware_change(current_fp)
+    if current_fp:
+        save_machine_fingerprint(current_fp)
+    if hw_changed and previous_fp:
+        print(f"AVERTISSEMENT: Empreinte matérielle modifiée (ancienne: {previous_fp[:16]}...)")
     fields = [
         machine_id, str(counter), challenge, timestamp, gpu["gpuUuid"], gpu["gpuModel"],
         str(gpu["vramMiB"]), gpu["driverVersion"], str(gpu["gpuUtilization"]),
@@ -80,9 +145,10 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
     signature = base58.b58encode(key.sign("|".join(fields).encode()).signature).decode()
     payload = {
         "machineId": machine_id, "counter": counter, "challenge": challenge,
-        "timestamp": timestamp, **gpu, "cudaProbeOk": probe, "sessionId": session_id,
-        "signature": signature, "agentVersion": __version__, **system_inventory(),
+        "timestamp": timestamp, **gpu, "cudaProbeOk": probe, "gpuVendor": gpu.get("gpuVendor"),
+        "sessionId": session_id, "signature": signature, "agentVersion": __version__,
+        "hardwareChanged": hw_changed, **sys_info,
     }
-    result = client.request("/agent/heartbeat", "POST", payload)
+    result = client.request_with_retry("/agent/heartbeat", "POST", payload)
     save_counter(counter)
     return result
