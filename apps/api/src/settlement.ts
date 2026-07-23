@@ -1,4 +1,11 @@
 export type Settlement={grossLamports:bigint,payableLamports:bigint,platformLamports:bigint,providerLamports:bigint,refundLamports:bigint,availabilityBps:number};
+export const ESCROW_EXPIRY_GRACE_SECONDS = 3600n;
+
+export function bookingEscrowExpiryUnix(endsAt: Date): bigint {
+ if(Number.isNaN(endsAt.getTime())) throw new Error('invalid booking end');
+ return BigInt(Math.floor(endsAt.getTime()/1000))+ESCROW_EXPIRY_GRACE_SECONDS;
+}
+
 export function calculateSettlement(gross:bigint, validSeconds:number, expectedSeconds:number, commissionBps=500):Settlement{
  if(gross<=0n) throw new Error('gross must be positive');
  if(!Number.isInteger(validSeconds)||!Number.isInteger(expectedSeconds)||expectedSeconds<=0||validSeconds<0||validSeconds>expectedSeconds) throw new Error('invalid duration');

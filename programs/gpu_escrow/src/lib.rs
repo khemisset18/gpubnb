@@ -110,7 +110,11 @@ pub mod gpu_escrow {
     pub fn finalize(ctx: Context<Finalize>) -> Result<()> {
         require!(ctx.accounts.escrow.state == EscrowState::SettlementProposed as u8, ErrorCode::InvalidState);
         require!(Clock::get()?.unix_timestamp >= ctx.accounts.escrow.settle_after, ErrorCode::TooEarly);
-        settle(&mut ctx.accounts.escrow, &ctx.accounts.buyer, &ctx.accounts.provider, &ctx.accounts.platform, ctx.accounts.escrow.valid_seconds)
+        // Read the value before taking a mutable borrow of the escrow account.
+        // Keeping both borrows in a single call expression is rejected by the
+        // Rust borrow checker and prevented the on-chain program from compiling.
+        let valid_seconds = ctx.accounts.escrow.valid_seconds;
+        settle(&mut ctx.accounts.escrow, &ctx.accounts.buyer, &ctx.accounts.provider, &ctx.accounts.platform, valid_seconds)
     }
 
     pub fn resolve_dispute(ctx: Context<ResolveDispute>, valid_seconds: u32) -> Result<()> {

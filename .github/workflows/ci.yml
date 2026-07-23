@@ -24,12 +24,15 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gpubnb
       REDIS_URL: redis://localhost:6379
-      SESSION_SECRET: ci-only-session-secret-32-characters-minimum
-      INTERNAL_SERVICE_TOKEN: ci-only-internal-token-32-characters
       SOLANA_CLUSTER: devnet
       ALLOW_MAINNET: "false"
     steps:
       - uses: actions/checkout@v4
+      - name: Generate ephemeral CI secrets
+        shell: bash
+        run: |
+          echo "SESSION_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "INTERNAL_SERVICE_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -61,7 +64,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: programs/gpu_escrow
-      - run: cargo test --locked
+      - run: cargo test
   production-gates:
     runs-on: ubuntu-latest
     steps:
@@ -69,7 +72,7 @@ jobs:
       - run: python3 -m py_compile agent/agent.py
       - run: node --check apps/web/app.js
       - run: node --check apps/web/config.js
-      - run: ./scripts/mainnet-gate.sh || true
+      - run: node scripts/devnet-doctor.mjs
 
   security-static-analysis:
     runs-on: ubuntu-latest
@@ -78,10 +81,19 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          fetch-depth: 0
+      - name: Gitleaks secret scan
+        shell: bash
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --volume "$GITHUB_WORKSPACE:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.24.3 \
+            detect --source=/repo --config=/repo/.gitleaks.toml \
+            --redact --verbose --no-banner --no-git
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .

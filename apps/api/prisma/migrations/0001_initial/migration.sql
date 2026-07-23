@@ -169,6 +169,6 @@ ALTER TABLE "Booking"
 ADD CONSTRAINT "booking_no_overlap"
 EXCLUDE USING gist (
   "listingId" WITH =,
-  tstzrange("startsAt", "endsAt", '[)') WITH &&
+  tsrange("startsAt", "endsAt", '[)') WITH &&
 )
 WHERE ("status" IN ('AWAITING_DEPOSIT','FUNDED','STARTING','ACTIVE'));
