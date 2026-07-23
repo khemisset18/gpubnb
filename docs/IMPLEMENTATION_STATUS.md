@@ -22,6 +22,8 @@ Dernière mise à jour : 23 juillet 2026.
 
 ## Phase active
 
-Phase 1 : implémentée dans le code et soumise aux tests CI. Un test physique
+Phase 1 : implémentée et validée par la CI (`29977272068`) : installation du
+paquet, tests unitaires Python, migration PostgreSQL, tests API, compilation
+TypeScript, tests Rust et scans de sécurité réussis. Un test physique
 Windows/Linux avec GPU reste nécessaire. Le moteur de tâches et le paiement
 réel ne sont pas déclarés fonctionnels.
