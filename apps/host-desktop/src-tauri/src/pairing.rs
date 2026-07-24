@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 const DEFAULT_PAIRING_PATH: &str = "/host/pair";
+const ALLOWED_PAIRING_ORIGINS: [&str; 2] = ["https://gpubnb.com", "https://app.gpubnb.com"];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -14,36 +15,18 @@ pub struct PairingConfiguration {
 pub fn pairing_configuration() -> PairingConfiguration {
     let base_url = option_env!("GPUBNB_WEB_BASE_URL")
         .map(str::trim)
-        .filter(|value| is_allowed_https_origin(value));
+        .filter(|value| is_allowed_pairing_origin(value));
 
     PairingConfiguration {
         configured: base_url.is_some(),
-        browser_url: base_url.map(|value| {
-            format!(
-                "{}{DEFAULT_PAIRING_PATH}",
-                value.trim_end_matches('/')
-            )
-        }),
+        browser_url: base_url.map(|value| format!("{value}{DEFAULT_PAIRING_PATH}")),
         stores_password: false,
         explanation: "La connexion s'effectue dans le navigateur avec un code temporaire. Le mot de passe n'est jamais transmis à l'application.",
     }
 }
 
-fn is_allowed_https_origin(value: &str) -> bool {
-    if !value.starts_with("https://") || value.len() > 200 {
-        return false;
-    }
-
-    let authority = &value[8..];
-    let contains_forbidden_character = authority
-        .chars()
-        .any(|character| matches!(character, '/' | '?' | '#' | '@' | '\\'));
-
-    !authority.is_empty()
-        && !contains_forbidden_character
-        && authority.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b':')
-        })
+fn is_allowed_pairing_origin(value: &str) -> bool {
+    ALLOWED_PAIRING_ORIGINS.contains(&value)
 }
 
 #[cfg(test)]
@@ -51,17 +34,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn accepts_a_plain_https_origin() {
-        assert!(is_allowed_https_origin("https://gpubnb.example"));
-        assert!(is_allowed_https_origin("https://app.gpubnb.example:443"));
+    fn accepts_only_official_pairing_origins() {
+        assert!(is_allowed_pairing_origin("https://gpubnb.com"));
+        assert!(is_allowed_pairing_origin("https://app.gpubnb.com"));
     }
 
     #[test]
-    fn rejects_unsafe_or_ambiguous_origins() {
-        assert!(!is_allowed_https_origin("http://gpubnb.example"));
-        assert!(!is_allowed_https_origin("https://gpubnb.example/path"));
-        assert!(!is_allowed_https_origin("https://user@gpubnb.example"));
-        assert!(!is_allowed_https_origin("javascript:alert(1)"));
+    fn rejects_lookalike_or_ambiguous_origins() {
+        assert!(!is_allowed_pairing_origin("http://gpubnb.com"));
+        assert!(!is_allowed_pairing_origin("https://gpubnb.com.evil.example"));
+        assert!(!is_allowed_pairing_origin("https://app.gpubnb.com:443"));
+        assert!(!is_allowed_pairing_origin("https://gpubnb.com/path"));
+        assert!(!is_allowed_pairing_origin("https://user@gpubnb.com"));
+        assert!(!is_allowed_pairing_origin("javascript:alert(1)"));
     }
 
     #[test]
