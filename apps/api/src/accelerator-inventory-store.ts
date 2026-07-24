@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { normalizeAcceleratorTelemetry, type AcceleratorTelemetry } from './accelerator-telemetry.js';
+import { sanitizeAccelerators, type AcceleratorTelemetry } from './accelerator-telemetry.js';
 
 type SqlClient = Pick<PrismaClient, '$queryRaw' | '$executeRaw'>;
 
@@ -62,7 +62,7 @@ export async function syncMachineAccelerators(
   rawAccelerators: unknown,
   now = new Date(),
 ): Promise<InventorySyncResult> {
-  const accelerators = normalizeAcceleratorTelemetry(rawAccelerators);
+  const accelerators = sanitizeAccelerators(rawAccelerators);
   const existing = await db.$queryRaw<ExistingAccelerator[]>`
     SELECT "id", "kind", "vendor", "deviceId", "fingerprint", "removedAt"
     FROM "MachineAccelerator"
