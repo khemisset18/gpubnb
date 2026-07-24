@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import secrets
 import ssl
 import time
 import urllib.error
@@ -21,6 +22,7 @@ from .storage import detect_hardware_change, load_counter, save_counter, save_ma
 
 MAX_RETRIES = 3
 RETRY_BACKOFF = 2.0
+EMPTY_BODY_SHA256 = hashlib.sha256(b"").hexdigest()
 
 
 class ApiClient:
@@ -108,15 +110,45 @@ class ApiClient:
         return {"downloaded": True, "path": dest_path, "sizeBytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
 
-def signed_headers(key: SigningKey, machine_id: str, method: str, path: str) -> dict[str, str]:
+def canonical_json_bytes(body: dict[str, Any] | None) -> bytes:
+    """Serialize request JSON exactly as ApiClient.request sends it."""
+    if body is None:
+        return b""
+    return json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def request_body_sha256(body: dict[str, Any] | None) -> str:
+    return hashlib.sha256(canonical_json_bytes(body)).hexdigest()
+
+
+def signed_headers(key: SigningKey, machine_id: str, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, str]:
+    """Build legacy and v2 signatures during the migration window.
+
+    The legacy signature keeps current servers compatible. The v2 signature binds
+    the method, path, machine, timestamp, random nonce, and exact JSON body hash.
+    """
     epoch = int(time.time() * 1000)
-    canonical = f"{method.upper()}|{path}|{machine_id}|{epoch}"
-    signature = base58.b58encode(key.sign(canonical.encode()).signature).decode()
-    return {"x-agent-timestamp": str(epoch), "x-agent-signature": signature}
+    nonce = secrets.token_urlsafe(18)
+    body_sha256 = request_body_sha256(body)
+
+    legacy_canonical = f"{method.upper()}|{path}|{machine_id}|{epoch}"
+    legacy_signature = base58.b58encode(key.sign(legacy_canonical.encode()).signature).decode()
+
+    v2_canonical = f"{method.upper()}|{path}|{machine_id}|{epoch}|{nonce}|{body_sha256}"
+    v2_signature = base58.b58encode(key.sign(v2_canonical.encode()).signature).decode()
+
+    return {
+        "x-agent-timestamp": str(epoch),
+        "x-agent-signature": legacy_signature,
+        "x-agent-signature-version": "2",
+        "x-agent-nonce": nonce,
+        "x-agent-body-sha256": body_sha256,
+        "x-agent-signature-v2": v2_signature,
+    }
 
 
 def agent_request(client: ApiClient, key: SigningKey, machine_id: str, path: str, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
-    return client.request_with_retry(path, method, body, signed_headers(key, machine_id, method, path))
+    return client.request_with_retry(path, method, body, signed_headers(key, machine_id, method, path, body))
 
 
 def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, Any]:
@@ -149,6 +181,9 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
         "sessionId": session_id, "signature": signature, "agentVersion": __version__,
         "hardwareChanged": hw_changed, **sys_info,
     }
-    result = client.request_with_retry("/agent/heartbeat", "POST", payload)
+    result = client.request_with_retry(
+        "/agent/heartbeat", "POST", payload,
+        signed_headers(key, machine_id, "POST", "/agent/heartbeat", payload),
+    )
     save_counter(counter)
     return result
