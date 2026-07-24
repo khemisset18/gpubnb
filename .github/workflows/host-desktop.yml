@@ -63,6 +63,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/host-desktop/src-tauri
+      - name: Require committed Cargo lock
+        shell: bash
+        run: test -f Cargo.lock
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Tests
@@ -81,4 +84,4 @@ jobs:
           test -f docs/HOST_DESKTOP_PRODUCTION_READINESS.md
           test -f docs/HOST_DESKTOP_THREAT_MODEL.md
           test -f docs/HOST_DESKTOP_RESOURCE_ORCHESTRATION.md
-          grep -q 'do-not-merge' docs/HOST_DESKTOP_PRODUCTION_READINESS.md
+          grep -q 'Status: \*\*NOT READY TO MERGE\*\*' docs/HOST_DESKTOP_PRODUCTION_READINESS.md
