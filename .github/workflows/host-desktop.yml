@@ -30,24 +30,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
+          cache: npm
+          cache-dependency-path: apps/host-desktop/package-lock.json
+      - name: Require committed dependency lock
+        shell: bash
+        run: test -f package-lock.json
+      - name: Install dependencies reproducibly
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Typecheck
         run: npm run check
       - name: Build web interface
         run: npm run build
 
   rust:
-    name: rust tests and lint
-    runs-on: ubuntu-latest
+    name: rust tests and lint (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: apps/host-desktop/src-tauri
     steps:
       - uses: actions/checkout@v4
       - name: Install Tauri Linux dependencies
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.77.2
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
@@ -56,6 +66,19 @@ jobs:
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Tests
-        run: cargo test --all-targets
+        run: cargo test --all-targets --locked
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+  security-gate:
+    name: production security gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require production readiness evidence
+        shell: bash
+        run: |
+          test -f docs/HOST_DESKTOP_PRODUCTION_READINESS.md
+          test -f docs/HOST_DESKTOP_THREAT_MODEL.md
+          test -f docs/HOST_DESKTOP_RESOURCE_ORCHESTRATION.md
+          grep -q 'do-not-merge' docs/HOST_DESKTOP_PRODUCTION_READINESS.md
