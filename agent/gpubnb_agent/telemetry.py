@@ -6,16 +6,14 @@ collects process lists, usernames, file paths, hostnames, or public IP addresses
 """
 from __future__ import annotations
 
-import os
 import platform
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .accelerators import accelerator_inventory
 from .platform_info import gpu_inventory, system_inventory
-
-_MIB = 1024 * 1024
 
 
 def _clamp(value: float | int | None, minimum: float, maximum: float) -> float | None:
@@ -92,7 +90,6 @@ def boot_id() -> str:
             return value
     except OSError:
         pass
-    # Windows and restricted hosts: monotonic start approximation, not a device ID.
     started = max(0, int(time.time() - time.monotonic()))
     return f"boot-{started:x}"
 
@@ -132,13 +129,14 @@ class TelemetrySampler:
         system = system_inventory()
         gpus = [normalize_gpu_metric(gpu) for gpu in gpu_inventory()]
         gpus = [gpu for gpu in gpus if gpu is not None]
+        accelerators = accelerator_inventory()
         ram_total = int(system.get("ramTotalMiB") or 0)
         ram_available = int(system.get("ramAvailableMiB") or 0)
         disk_total = int(system.get("diskTotalMiB") or 0)
         disk_available = int(system.get("diskAvailableMiB") or 0)
 
         return {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "sequence": self.sequence,
             "bootId": boot_id(),
             "monotonicMs": int(now * 1000),
@@ -148,6 +146,7 @@ class TelemetrySampler:
             "networkRxBytesPerSecond": rx_rate,
             "networkTxBytesPerSecond": tx_rate,
             "gpus": gpus,
+            "accelerators": accelerators,
             "runtime": {
                 "dockerAvailable": bool(system.get("dockerAvailable")),
                 "dockerVersion": system.get("dockerVersion"),
