@@ -1,12 +1,11 @@
 import crypto from 'node:crypto';
 import {
+  appendOutboxEvent,
   enqueueMachineCommand,
-  enqueueOutboxEvent,
   nextMachineSequence,
-  type MachineCommandEnvelope,
-  type OutboxEnvelope,
   type SqlClient,
-} from './reliable-delivery-store.js';
+} from './delivery-store.js';
+import type { MachineCommandEnvelope, OutboxEnvelope } from './reliable-delivery.js';
 
 export type RentalEventType =
   | 'booking.created'
@@ -45,9 +44,7 @@ export interface DeliveryWriteResult {
 const SAFE_CUID = /^c[a-z0-9]{20,31}$/;
 
 function assertCuid(value: string, field: string): string {
-  if (!SAFE_CUID.test(value)) {
-    throw new Error(`${field}_invalid`);
-  }
+  if (!SAFE_CUID.test(value)) throw new Error(`${field}_invalid`);
   return value;
 }
 
@@ -58,9 +55,7 @@ function stableId(prefix: string, ...parts: string[]): string {
 
 function dateValue(value?: Date): string | undefined {
   if (value === undefined) return undefined;
-  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
-    throw new Error('delivery_date_invalid');
-  }
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) throw new Error('delivery_date_invalid');
   return value.toISOString();
 }
 
@@ -104,7 +99,7 @@ export async function recordRentalEvent(
     payload,
     headers: { schemaVersion: '1' },
   };
-  await enqueueOutboxEvent(tx, envelope);
+  await appendOutboxEvent(tx, envelope);
   return { eventId };
 }
 
@@ -132,7 +127,6 @@ export async function recordRentalEventAndCommand(
     payload,
     headers: { schemaVersion: '1' },
   };
-
   const command: MachineCommandEnvelope = {
     id: commandId,
     machineId: context.machineId,
@@ -143,31 +137,29 @@ export async function recordRentalEventAndCommand(
     payload,
   };
 
-  await enqueueOutboxEvent(tx, event);
+  await appendOutboxEvent(tx, event);
   await enqueueMachineCommand(tx, command);
   return { eventId, commandId, sequence };
 }
 
-export async function requestPreparation(
-  tx: SqlClient,
-  context: RentalDeliveryContext,
-): Promise<DeliveryWriteResult> {
-  const expiry = context.startsAt ?? new Date(Date.now() + 15 * 60_000);
+export async function requestPreparation(tx: SqlClient, context: RentalDeliveryContext): Promise<DeliveryWriteResult> {
   return recordRentalEventAndCommand(
     tx,
     'rental.preparation_requested',
     'prepare_rental',
     context,
-    expiry,
+    context.startsAt ?? new Date(Date.now() + 15 * 60_000),
   );
 }
 
-export async function requestRentalStart(
-  tx: SqlClient,
-  context: RentalDeliveryContext,
-): Promise<DeliveryWriteResult> {
-  const expiry = context.endsAt ?? new Date(Date.now() + 60 * 60_000);
-  return recordRentalEventAndCommand(tx, 'rental.start_requested', 'start_rental', context, expiry);
+export async function requestRentalStart(tx: SqlClient, context: RentalDeliveryContext): Promise<DeliveryWriteResult> {
+  return recordRentalEventAndCommand(
+    tx,
+    'rental.start_requested',
+    'start_rental',
+    context,
+    context.endsAt ?? new Date(Date.now() + 60 * 60_000),
+  );
 }
 
 export async function requestRentalStop(
@@ -185,10 +177,7 @@ export async function requestRentalStop(
   );
 }
 
-export async function requestCleanup(
-  tx: SqlClient,
-  context: RentalDeliveryContext,
-): Promise<DeliveryWriteResult> {
+export async function requestCleanup(tx: SqlClient, context: RentalDeliveryContext): Promise<DeliveryWriteResult> {
   return recordRentalEventAndCommand(
     tx,
     'rental.completed',
