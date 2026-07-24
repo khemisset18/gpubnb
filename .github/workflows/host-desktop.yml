@@ -1,0 +1,136 @@
+name: host-desktop
+
+on:
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'apps/host-desktop/**'
+      - 'docs/HOST_DESKTOP_*.md'
+      - '.github/workflows/host-desktop.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'apps/host-desktop/**'
+      - 'docs/HOST_DESKTOP_*.md'
+      - '.github/workflows/host-desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: frontend typecheck and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/host-desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/host-desktop/package-lock.json
+      - name: Require committed dependency lock
+        shell: bash
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo 'package-lock.json is required for reproducible builds.' >&2
+            exit 1
+          fi
+      - name: Install dependencies reproducibly
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Typecheck
+        run: npm run check
+      - name: Build web interface
+        run: npm run build
+
+  rust:
+    name: rust tests and lint (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Materialize Windows bundle icon
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $source = 'apps/host-desktop/src-tauri/icons/icon.ico.base64'
+          $target = 'apps/host-desktop/src-tauri/icons/icon.ico'
+          if (!(Test-Path $source)) { throw 'Missing staged Windows icon source.' }
+          [IO.File]::WriteAllBytes($target, [Convert]::FromBase64String((Get-Content $source -Raw).Trim()))
+      - name: Install Tauri Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+      - name: Require committed Cargo lock
+        shell: bash
+        run: |
+          if [ ! -f Cargo.lock ]; then
+            echo 'Cargo.lock is required at the workspace root for reproducible builds.' >&2
+            exit 1
+          fi
+      - name: Normalize host package formatting
+        run: cargo fmt -p gpubnb-host-desktop
+      - name: Tests
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p gpubnb-host-desktop --all-targets 2>&1 | tee cargo-test-${{ runner.os }}.log
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-test-${{ runner.os }}
+          path: cargo-test-${{ runner.os }}.log
+          if-no-files-found: error
+      - name: Upload refreshed Cargo lock
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: refreshed-cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
+      - name: Clippy
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy -p gpubnb-host-desktop --all-targets -- -D warnings 2>&1 | tee cargo-clippy-${{ runner.os }}.log
+      - name: Upload Clippy diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-clippy-${{ runner.os }}
+          path: cargo-clippy-${{ runner.os }}.log
+          if-no-files-found: error
+
+  security-gate:
+    name: production security gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require production readiness evidence
+        shell: bash
+        run: |
+          test -f docs/HOST_DESKTOP_PRODUCTION_READINESS.md
+          test -f docs/HOST_DESKTOP_THREAT_MODEL.md
+          test -f docs/HOST_DESKTOP_RESOURCE_ORCHESTRATION.md
+          grep -Fq 'Status: **NOT READY TO MERGE**' docs/HOST_DESKTOP_PRODUCTION_READINESS.md

@@ -1,0 +1,105 @@
+.resource-automation {
+  margin-top: 24px;
+  padding: 23px;
+  border: 1px solid #31466f;
+  border-radius: 21px;
+  background: linear-gradient(145deg, rgba(21, 31, 50, .96), rgba(13, 19, 31, .98));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .2);
+}
+
+.automation-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.automation-status {
+  padding: 8px 12px;
+  border: 1px solid #3a4f75;
+  border-radius: 999px;
+  background: #17243b;
+  color: #d9e5ff;
+  font-size: .82rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.automation-status.offline { border-color: #5b4650; background: #2a1e25; color: #ffb4a6; }
+.automation-status.idle { border-color: #3f765e; background: #173326; color: #8ce7b5; }
+
+.automation-detail {
+  margin: 10px 0 0;
+  color: #aab6cb;
+}
+
+.automation-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0;
+  margin: 20px 0 0;
+  list-style: none;
+}
+
+.automation-flow li {
+  position: relative;
+  min-height: 150px;
+  padding: 16px;
+  border: 1px solid #273750;
+  border-radius: 16px;
+  background: #0d1523;
+}
+
+.automation-flow li.active {
+  border-color: #5e87dd;
+  background: linear-gradient(145deg, #172946, #111b2d);
+  box-shadow: 0 12px 30px rgba(58, 92, 164, .16);
+}
+
+.automation-flow li > span {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  margin-bottom: 14px;
+  border: 1px solid #3b4c69;
+  border-radius: 50%;
+  color: #a9b9d5;
+  font-weight: 900;
+}
+
+.automation-flow li.active > span {
+  border-color: #78a3ff;
+  background: #2a4d88;
+  color: white;
+}
+
+.automation-flow strong,
+.automation-flow small { display: block; }
+
+.automation-flow small {
+  margin-top: 6px;
+  color: #95a3ba;
+  line-height: 1.45;
+}
+
+.automation-guard {
+  margin: 16px 0 0;
+  padding-top: 15px;
+  border-top: 1px solid #273750;
+  color: #91a9d5;
+  font-size: .9rem;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .automation-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .automation-heading { display: block; }
+  .automation-status { display: inline-block; margin-top: 14px; }
+  .automation-flow { grid-template-columns: 1fr; }
+  .automation-flow li { min-height: 0; }
+}
