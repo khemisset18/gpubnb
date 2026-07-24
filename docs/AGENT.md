@@ -48,8 +48,40 @@ gpubnb-agent show-key
 gpubnb-agent reset-key --yes
 gpubnb-agent benchmark
 gpubnb-agent logs
+gpubnb-agent simulate
 gpubnb-agent version
 ```
+
+## Simulateur GPU (tests sans vrai GPU)
+
+`gpubnb-agent simulate` génère des machines GPU factices pour tester le site et
+le tableau de bord sans posséder de vrai matériel. Chaque machine simulée a sa
+propre identité Ed25519 et utilise exactement le même protocole signé
+(liaison → challenge → heartbeat) que l'agent réel : la chaîne de sécurité du
+serveur (signatures, compteur anti-rejeu, cohérence des métriques) est donc
+exercée de bout en bout.
+
+Deux modes :
+
+- **Hors-ligne** (par défaut) : fait évoluer des métriques réalistes et les
+  affiche en JSON. Aucun réseau requis.
+
+  ```bash
+  gpubnb-agent simulate --count 5 --scenario mixed --steps 20 --seed 1
+  ```
+
+- **Live** : lie chaque machine avec un code à usage unique puis envoie des
+  heartbeats signés à une API en cours d'exécution.
+
+  ```bash
+  gpubnb-agent simulate --api-url http://localhost:8787 --codes CODE1,CODE2 \
+    --scenario steady --steps 10 --interval 5
+  ```
+
+Scénarios disponibles : `steady`, `idle`, `spike`, `overheat`, `failure`,
+`flapping`, `mixed`. La graine `--seed` rend chaque simulation reproductible.
+Le catalogue couvre plusieurs modèles NVIDIA, AMD et Intel avec VRAM,
+température, puissance et pannes/déconnexions simulées.
 
 ## Données locales
 
