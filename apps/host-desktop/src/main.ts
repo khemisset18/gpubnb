@@ -11,6 +11,13 @@ type Check = {
   actionLabel?: string | null;
 };
 
+type PairingConfiguration = {
+  configured: boolean;
+  browserUrl?: string | null;
+  storesPassword: boolean;
+  explanation: string;
+};
+
 type HostStatus = {
   platform: string;
   architecture: string;
@@ -20,6 +27,7 @@ type HostStatus = {
   blockingCount: number;
   summary: string;
   nextActionId?: string | null;
+  pairing: PairingConfiguration;
   checks: Check[];
 };
 
@@ -46,8 +54,8 @@ const lifecycleLabel = (lifecycle: Lifecycle): string => {
 
 const friendlyActionMessage = (result: string): string => {
   switch (result) {
-    case 'account_link_pending':
-      return 'Connexion sécurisée préparée. Aucun mot de passe ne sera stocké dans l’application.';
+    case 'open_secure_pairing':
+      return 'Connexion sécurisée prête. Ouvrez le lien indiqué et confirmez cet ordinateur.';
     case 'automatic_setup_pending':
       return 'Configuration préparée. Une confirmation système sera demandée avant toute modification.';
     default:
@@ -75,6 +83,23 @@ const setActionStatus = (message: string, tone: 'info' | 'success' | 'error' = '
   element.dataset.tone = tone;
 };
 
+const renderPairingGuide = (pairing: PairingConfiguration): string => {
+  const serviceMessage = pairing.configured
+    ? `<p><strong>1.</strong> Cliquez sur « Connecter mon compte ».<br><strong>2.</strong> Ouvrez <code>${escapeHtml(pairing.browserUrl ?? '')}</code> dans votre navigateur.<br><strong>3.</strong> Connectez-vous et confirmez cet ordinateur.</p>`
+    : '<p>Le service de connexion officiel n’est pas encore configuré dans cette version. L’application bloque donc l’association au lieu d’utiliser un faux compte.</p>';
+
+  return `
+    <section class="explanation pairing-guide" aria-labelledby="pairing-title">
+      <div><p class="eyebrow">Connexion simple</p><h2 id="pairing-title">Connectez votre compte sans saisir votre mot de passe ici</h2></div>
+      ${serviceMessage}
+      <div class="benefits">
+        <article><span>01</span><strong>Navigateur sécurisé</strong><p>La connexion s’effectue sur le site GPUbnb, pas dans l’application.</p></article>
+        <article><span>02</span><strong>Code temporaire</strong><p>Le code ne sert qu’à associer cet ordinateur une seule fois.</p></article>
+        <article><span>03</span><strong>Aucun mot de passe stocké</strong><p>${escapeHtml(pairing.explanation)}</p></article>
+      </div>
+    </section>`;
+};
+
 async function refresh(): Promise<void> {
   app.innerHTML = '<main class="loading" aria-live="polite"><div class="spinner"></div><p>Vérification sécurisée de votre ordinateur…</p></main>';
 
@@ -99,7 +124,7 @@ async function refresh(): Promise<void> {
 
         <section class="content">
           <header class="topbar">
-            <div><p class="eyebrow">GPUbnb Host</p><h1>${online ? 'Votre GPU est disponible.' : 'Configurez-le sans risque.'}</h1><p class="lead">Une étape à la fois. GPUbnb vérifie tout avant d’autoriser une location.</p></div>
+            <div><p class="eyebrow">GPUbnb Host</p><h1>${online ? 'Votre GPU est disponible.' : 'Installez tout, une étape à la fois.'}</h1><p class="lead">Pas de commande technique : l’application explique, vérifie et bloque toute opération risquée.</p></div>
             <div class="status-stack"><span class="status-pill ${status.lifecycle}"><span></span>${lifecycleLabel(status.lifecycle)}</span><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div>
           </header>
 
@@ -115,21 +140,23 @@ async function refresh(): Promise<void> {
             <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${safeProgress}"><span style="width:${safeProgress}%"></span></div>
           </section>
 
+          ${status.nextActionId === 'account' ? renderPairingGuide(status.pairing) : ''}
+
           <p id="action-status" class="action-status" aria-live="polite"></p>
           <ul class="checks">${status.checks.map((check) => renderCheck(check, status.nextActionId)).join('')}</ul>
 
           <section class="explanation">
-            <div><p class="eyebrow">Protection automatique</p><h2>GPUbnb s’occupe du travail technique</h2></div>
+            <div><p class="eyebrow">Installation automatique</p><h2>GPUbnb s’occupe du travail technique</h2></div>
             <div class="benefits">
-              <article><span>01</span><strong>Session séparée</strong><p>Un espace temporaire est créé uniquement pour le locataire.</p></article>
-              <article><span>02</span><strong>Accès minimal</strong><p>Aucun dossier personnel n’est monté dans la session.</p></article>
-              <article><span>03</span><strong>Nettoyage complet</strong><p>Les accès et fichiers temporaires sont détruits à la fin.</p></article>
+              <article><span>01</span><strong>Service système</strong><p>L’application expliquera la demande administrateur avant de l’afficher.</p></article>
+              <article><span>02</span><strong>Protection automatique</strong><p>Aucun dossier personnel n’est ajouté à l’environnement locataire.</p></article>
+              <article><span>03</span><strong>Vérification finale</strong><p>Le bouton de mise en ligne reste bloqué tant qu’un contrôle manque.</p></article>
             </div>
           </section>
 
           <div class="actions">
             <button id="refresh" class="secondary large">Revérifier</button>
-            <button id="publish" class="primary large" ${status.ready && !emergencyStopped ? '' : 'disabled'}>${online ? 'GPU déjà en ligne' : status.ready ? 'Continuer vers mes disponibilités' : 'Terminez la prochaine étape'}</button>
+            <button id="publish" class="primary large" ${status.ready && !emergencyStopped && !online ? '' : 'disabled'}>${online ? 'GPU déjà en ligne' : status.ready ? 'Continuer vers mes disponibilités' : 'Terminez la prochaine étape'}</button>
           </div>
           <p class="notice">Aucune location ne démarre sans votre action explicite.</p>
         </section>
@@ -156,7 +183,12 @@ async function refresh(): Promise<void> {
 
         void invoke<string>('run_setup_action', { actionId })
           .then((result) => setActionStatus(friendlyActionMessage(result), 'success'))
-          .catch(() => setActionStatus('Cette action a été bloquée pour protéger votre ordinateur.', 'error'))
+          .catch((error: unknown) => {
+            const message = String(error).includes('pairing_service_not_configured')
+              ? 'Connexion indisponible dans cette version : le service officiel doit d’abord être configuré. Votre ordinateur reste protégé.'
+              : 'Cette action a été bloquée pour protéger votre ordinateur.';
+            setActionStatus(message, 'error');
+          })
           .finally(() => {
             button.disabled = false;
             button.removeAttribute('aria-busy');
