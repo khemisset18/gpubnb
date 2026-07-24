@@ -3,21 +3,16 @@ use serde::Serialize;
 const MAX_WORKER_NAME_LEN: usize = 64;
 const MAX_WALLET_ADDRESS_LEN: usize = 128;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MinerRuntimeState {
+    #[default]
     Stopped,
     Starting,
     Running,
     Stopping,
     Faulted,
     Quarantined,
-}
-
-impl Default for MinerRuntimeState {
-    fn default() -> Self {
-        Self::Stopped
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -248,6 +243,34 @@ mod tests {
         assert_eq!(
             supervisor.stop_for_rental(false),
             Err("miner_process_still_running")
+        );
+        assert_eq!(supervisor.state, MinerRuntimeState::Quarantined);
+        assert!(!supervisor.is_gpu_released());
+    }
+
+    #[test]
+    fn emergency_stop_failure_quarantines_until_local_review() {
+        let mut supervisor = MiningSupervisor::default();
+        supervisor
+            .start_simulated(&config(), true, false, true)
+            .expect("simulation should start");
+        assert_eq!(supervisor.emergency_stop(false), Err("emergency_stop_failed"));
+        assert_eq!(supervisor.state, MinerRuntimeState::Quarantined);
+        assert!(!supervisor.is_gpu_released());
+
+        supervisor.clear_quarantine_after_local_review();
+        assert!(supervisor.is_gpu_released());
+    }
+
+    #[test]
+    fn faulted_miner_requires_cleanup_before_gpu_release() {
+        let mut supervisor = MiningSupervisor::default();
+        supervisor.active_gpu_id = Some("gpu-0".into());
+        supervisor.record_fault("miner_watchdog_timeout");
+        assert_eq!(supervisor.state, MinerRuntimeState::Faulted);
+        assert_eq!(
+            supervisor.stop_for_rental(true),
+            Err("faulted_miner_requires_cleanup")
         );
         assert_eq!(supervisor.state, MinerRuntimeState::Quarantined);
         assert!(!supervisor.is_gpu_released());
