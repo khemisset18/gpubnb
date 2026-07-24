@@ -28,7 +28,7 @@ const stableJson = (value: unknown): string => {
       .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`);
     return `{${entries.join(',')}}`;
   }
-  return JSON.stringify(value);
+  return JSON.stringify(value) ?? 'null';
 };
 
 export const acceleratorFingerprint = (item: AcceleratorTelemetry): string => {
