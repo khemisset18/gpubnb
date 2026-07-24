@@ -1,0 +1,46 @@
+name: refresh-security-lockfiles
+
+on:
+  push:
+    branches:
+      - feature/host-gpu-rental-e2e
+    paths:
+      - package.json
+      - apps/api/package.json
+      - .github/workflows/refresh-security-lockfiles.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lockfiles:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/host-gpu-rental-e2e
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/api/package-lock.json
+      - name: Regenerate root lockfile
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Regenerate API lockfile
+        working-directory: apps/api
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Commit reproducible lockfiles
+        run: |
+          if git diff --quiet -- package-lock.json apps/api/package-lock.json; then
+            echo "Lockfiles already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json apps/api/package-lock.json
+          git commit -m "chore(security): refresh npm lockfiles"
+          git push origin HEAD:feature/host-gpu-rental-e2e
