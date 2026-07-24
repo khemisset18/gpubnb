@@ -51,13 +51,15 @@ function writeState(state: StoredOnboarding): void {
 function migrate(state: StoredOnboarding): StoredOnboarding {
   return {
     schemaVersion: SCHEMA_VERSION,
-    introductionCompleted: Boolean(state.introductionCompleted),
+    introductionCompleted: state.introductionCompleted,
   };
 }
 
 function isStoredOnboarding(value: unknown): value is StoredOnboarding {
   if (!value || typeof value !== 'object') return false;
+
   const candidate = value as Partial<StoredOnboarding>;
-  return Number.isInteger(candidate.schemaVersion)
+  return typeof candidate.schemaVersion === 'number'
+    && Number.isInteger(candidate.schemaVersion)
     && typeof candidate.introductionCompleted === 'boolean';
 }
