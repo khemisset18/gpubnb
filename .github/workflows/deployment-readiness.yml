@@ -1,0 +1,88 @@
+name: deployment-readiness
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'apps/api/**'
+      - 'netlify.toml'
+      - 'render.yaml'
+      - '.github/workflows/deployment-readiness.yml'
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'apps/api/**'
+      - 'netlify.toml'
+      - 'render.yaml'
+      - '.github/workflows/deployment-readiness.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deployment-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-site:
+    name: Netlify static site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate required static assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f apps/web/index.html
+          test -f apps/web/app.js
+          test -f apps/web/styles.css
+          test -f apps/web/config.js
+          test -f apps/web/vendor/solana-web3.min.js
+      - name: Validate Netlify routing and security policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'publish = "apps/web"' netlify.toml
+          grep -Fq 'https://gpubnb.onrender.com/:splat' netlify.toml
+          grep -Fq 'Content-Security-Policy' netlify.toml
+          grep -Fq "frame-ancestors 'none'" netlify.toml
+          grep -Fq 'X-Content-Type-Options = "nosniff"' netlify.toml
+          ! grep -RInE '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|seed phrase|mnemonic)' apps/web netlify.toml
+
+  api-image:
+    name: Render API container
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production fail-closed settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'dockerfilePath: ./apps/api/Dockerfile' render.yaml
+          grep -Fq 'healthCheckPath: /health' render.yaml
+          grep -Fq 'value: "false"' render.yaml
+          grep -Fq 'prisma migrate deploy' apps/api/Dockerfile
+          grep -Fq 'USER app' apps/api/Dockerfile
+      - name: Build API image
+        run: docker build --file apps/api/Dockerfile --tag gpubnb-api:deployment-check .
+      - name: Inspect non-root runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect gpubnb-api:deployment-check --format '{{.Config.User}}')" = 'app'
+
+  configuration:
+    name: Deployment configuration safety
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject production Mainnet activation and placeholder secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -Fq 'ALLOW_MAINNET=true' .env.example render.yaml
+          grep -Fq 'ALLOW_MAINNET' render.yaml
+          grep -Fq 'value: "false"' render.yaml
+          ! grep -RInE '(DATABASE_URL|REDIS_URL|SESSION_SECRET|INTERNAL_SERVICE_TOKEN):[[:space:]]+[^[:space:]]+' render.yaml
