@@ -30,8 +30,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: apps/host-desktop/package-lock.json
       - name: Install dependencies
         run: npm install --ignore-scripts --no-audit --no-fund
       - name: Typecheck
@@ -58,6 +56,6 @@ jobs:
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Tests
-        run: cargo test --all-targets --locked
+        run: cargo test --all-targets
       - name: Clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
