@@ -264,8 +264,10 @@ mod tests {
 
     #[test]
     fn faulted_miner_requires_cleanup_before_gpu_release() {
-        let mut supervisor = MiningSupervisor::default();
-        supervisor.active_gpu_id = Some("gpu-0".into());
+        let mut supervisor = MiningSupervisor {
+            active_gpu_id: Some("gpu-0".into()),
+            ..MiningSupervisor::default()
+        };
         supervisor.record_fault("miner_watchdog_timeout");
         assert_eq!(supervisor.state, MinerRuntimeState::Faulted);
         assert_eq!(
