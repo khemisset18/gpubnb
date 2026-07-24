@@ -1,3 +1,5 @@
+import './resource-orchestration.css';
+
 export type ResourceMode = 'offline' | 'idle' | 'mining' | 'stopping_miner' | 'rental' | 'recovering';
 
 export type ResourceAutomationView = {
