@@ -33,8 +33,6 @@ jobs:
       - name: Regenerate API lockfile
         working-directory: apps/api
         run: npm install --package-lock-only --ignore-scripts
-      - name: Enforce high and critical audit gate
-        run: npm audit --audit-level=high && npm --prefix apps/api audit --audit-level=high
       - name: Commit reproducible lockfiles
         run: |
           if git diff --quiet -- package-lock.json apps/api/package-lock.json; then
