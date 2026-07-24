@@ -18,7 +18,12 @@ pub fn pairing_configuration() -> PairingConfiguration {
 
     PairingConfiguration {
         configured: base_url.is_some(),
-        browser_url: base_url.map(|value| format!("{}{DEFAULT_PAIRING_PATH}", value.trim_end_matches('/'))),
+        browser_url: base_url.map(|value| {
+            format!(
+                "{}{DEFAULT_PAIRING_PATH}",
+                value.trim_end_matches('/')
+            )
+        }),
         stores_password: false,
         explanation: "La connexion s'effectue dans le navigateur avec un code temporaire. Le mot de passe n'est jamais transmis à l'application.",
     }
@@ -30,8 +35,12 @@ fn is_allowed_https_origin(value: &str) -> bool {
     }
 
     let authority = &value[8..];
+    let contains_forbidden_character = authority
+        .chars()
+        .any(|character| matches!(character, '/' | '?' | '#' | '@' | '\\'));
+
     !authority.is_empty()
-        && !authority.contains(['/', '?', '#', '@', '\\'])
+        && !contains_forbidden_character
         && authority.bytes().all(|byte| {
             byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b':')
         })
