@@ -1,3 +1,6 @@
+mod diagnostics;
+
+use diagnostics::{collect_native_diagnostic, NativeDiagnostic};
 use serde::Serialize;
 use std::sync::Mutex;
 
@@ -47,8 +50,8 @@ struct Readiness {
 }
 
 impl Readiness {
-    fn is_ready(&self, platform_supported: bool) -> bool {
-        platform_supported
+    fn is_ready(&self, diagnostic: &NativeDiagnostic) -> bool {
+        diagnostic.can_host
             && self.account_linked
             && self.service_installed
             && self.isolation_certified
@@ -83,38 +86,32 @@ struct HostStatus {
     lifecycle: HostLifecycle,
     completed_steps: usize,
     total_steps: usize,
+    diagnostic: NativeDiagnostic,
     checks: Vec<Check>,
 }
 
 fn platform_name() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "Windows"
-    } else if cfg!(target_os = "macos") {
-        "macOS"
-    } else if cfg!(target_os = "linux") {
-        "Linux"
-    } else {
-        "Non pris en charge"
+    match std::env::consts::OS {
+        "windows" => "Windows",
+        "macos" => "macOS",
+        "linux" => "Linux",
+        _ => "Non pris en charge",
     }
 }
 
-fn platform_supported() -> bool {
-    cfg!(any(target_os = "windows", target_os = "macos", target_os = "linux"))
-}
-
 fn build_status(state: &AppState) -> HostStatus {
-    let supported = platform_supported();
+    let diagnostic = collect_native_diagnostic();
     let readiness = &state.readiness;
     let checks = vec![
         Check {
             id: "platform",
             label: "Ordinateur compatible",
-            ok: supported,
+            ok: diagnostic.can_host,
             blocking: true,
-            detail: if supported {
-                format!("{} est pris en charge", platform_name())
+            detail: if diagnostic.can_host {
+                format!("{} et {} sont pris en charge", platform_name(), std::env::consts::ARCH)
             } else {
-                "Ce système ne peut pas héberger de location".into()
+                "Ce système ne peut pas héberger une location sécurisée".into()
             },
             action_label: None,
         },
@@ -147,7 +144,7 @@ fn build_status(state: &AppState) -> HostStatus {
             label: "Fichiers personnels protégés",
             ok: readiness.storage_protected,
             blocking: true,
-            detail: "Les dossiers personnels sont exclus par défaut et sans exception implicite".into(),
+            detail: "Les dossiers personnels sont exclus par défaut".into(),
             action_label: (!readiness.storage_protected).then_some("Vérifier"),
         },
         Check {
@@ -159,15 +156,22 @@ fn build_status(state: &AppState) -> HostStatus {
             action_label: (!readiness.network_filtered).then_some("Configurer"),
         },
     ];
-    let ready = readiness.is_ready(supported);
+    let ready = readiness.is_ready(&diagnostic);
+    let lifecycle = match state.lifecycle {
+        HostLifecycle::EmergencyStopped => HostLifecycle::EmergencyStopped,
+        HostLifecycle::Online if ready => HostLifecycle::Online,
+        _ if ready => HostLifecycle::Ready,
+        _ => HostLifecycle::SetupRequired,
+    };
 
     HostStatus {
         platform: platform_name(),
         architecture: std::env::consts::ARCH,
         ready,
-        lifecycle: state.lifecycle,
+        lifecycle,
         completed_steps: checks.iter().filter(|check| check.ok).count(),
         total_steps: TOTAL_SETUP_STEPS,
+        diagnostic,
         checks,
     }
 }
@@ -184,7 +188,8 @@ fn request_publish(state: tauri::State<'_, Mutex<AppState>>) -> Result<(), &'sta
     if state.lifecycle == HostLifecycle::EmergencyStopped {
         return Err("emergency_stop_requires_review");
     }
-    if !state.readiness.is_ready(platform_supported()) {
+    let diagnostic = collect_native_diagnostic();
+    if !state.readiness.is_ready(&diagnostic) {
         return Err("host_not_certified");
     }
     state.lifecycle = HostLifecycle::Online;
@@ -205,10 +210,9 @@ fn run_setup_action(action_id: String) -> Result<String, &'static str> {
     }
     match SetupAction::try_from(action_id.as_str())? {
         SetupAction::Account => Ok("account_link_pending".into()),
-        SetupAction::Agent
-        | SetupAction::Isolation
-        | SetupAction::Storage
-        | SetupAction::Network => Ok("automatic_setup_pending".into()),
+        SetupAction::Agent | SetupAction::Isolation | SetupAction::Storage | SetupAction::Network => {
+            Ok("automatic_setup_pending".into())
+        }
     }
 }
 
@@ -230,11 +234,20 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    fn supported_diagnostic() -> NativeDiagnostic {
+        NativeDiagnostic {
+            platform_supported: true,
+            architecture_supported: true,
+            isolation_backend: diagnostics::IsolationBackend::Kvm,
+            requires_administrator: true,
+            can_host: true,
+            reason: "native_checks_pending",
+        }
+    }
+
     #[test]
     fn readiness_is_fail_closed() {
-        let readiness = Readiness::default();
-        assert!(!readiness.is_ready(true));
-        assert!(!readiness.is_ready(false));
+        assert!(!Readiness::default().is_ready(&supported_diagnostic()));
     }
 
     #[test]
@@ -246,9 +259,23 @@ mod tests {
             storage_protected: true,
             network_filtered: true,
         };
-        assert!(readiness.is_ready(true));
+        assert!(readiness.is_ready(&supported_diagnostic()));
         readiness.network_filtered = false;
-        assert!(!readiness.is_ready(true));
+        assert!(!readiness.is_ready(&supported_diagnostic()));
+    }
+
+    #[test]
+    fn unsupported_native_environment_blocks_readiness() {
+        let mut diagnostic = supported_diagnostic();
+        diagnostic.can_host = false;
+        let readiness = Readiness {
+            account_linked: true,
+            service_installed: true,
+            isolation_certified: true,
+            storage_protected: true,
+            network_filtered: true,
+        };
+        assert!(!readiness.is_ready(&diagnostic));
     }
 
     #[test]
