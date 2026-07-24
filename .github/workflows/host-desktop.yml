@@ -64,6 +64,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Materialize Windows bundle icon
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $source = 'apps/host-desktop/src-tauri/icons/icon.ico.base64'
+          $target = 'apps/host-desktop/src-tauri/icons/icon.ico'
+          if (!(Test-Path $source)) { throw 'Missing staged Windows icon source.' }
+          [IO.File]::WriteAllBytes($target, [Convert]::FromBase64String((Get-Content $source -Raw).Trim()))
       - name: Install Tauri Linux dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
@@ -102,7 +110,17 @@ jobs:
           path: Cargo.lock
           if-no-files-found: error
       - name: Clippy
-        run: cargo clippy -p gpubnb-host-desktop --all-targets -- -D warnings
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy -p gpubnb-host-desktop --all-targets -- -D warnings 2>&1 | tee cargo-clippy-${{ runner.os }}.log
+      - name: Upload Clippy diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-clippy-${{ runner.os }}
+          path: cargo-clippy-${{ runner.os }}.log
+          if-no-files-found: error
 
   security-gate:
     name: production security gate
