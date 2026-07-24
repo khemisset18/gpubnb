@@ -41,7 +41,10 @@ impl ApprovedMiningConfig {
 
         if self.wallet_address.is_empty()
             || self.wallet_address.len() > MAX_WALLET_ADDRESS_LEN
-            || !self.wallet_address.bytes().all(|byte| byte.is_ascii_graphic())
+            || !self
+                .wallet_address
+                .bytes()
+                .all(|byte| byte.is_ascii_graphic())
         {
             return Err("invalid_wallet_address");
         }
