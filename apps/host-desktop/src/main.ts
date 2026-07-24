@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { completeIntroduction, readOnboardingState } from './onboarding-state';
 import './styles.css';
 
 type Lifecycle = 'setup_required' | 'ready' | 'online' | 'emergency_stopped';
@@ -99,6 +100,30 @@ const renderPairingGuide = (pairing: PairingConfiguration): string => {
       </div>
     </section>`;
 };
+
+function renderWelcome(): void {
+  app.innerHTML = `
+    <main class="welcome-shell">
+      <section class="welcome-card" aria-labelledby="welcome-title">
+        <div class="brand welcome-brand"><span class="brand-mark">G</span><div><strong>GPUbnb Host</strong><small>Installation guidée</small></div></div>
+        <p class="eyebrow">Bienvenue</p>
+        <h1 id="welcome-title">Préparons votre ordinateur simplement.</h1>
+        <p class="lead">GPUbnb vous accompagne une étape à la fois. Aucun terminal et aucun réglage technique incompréhensible.</p>
+        <ul class="promise-list">
+          <li><span>✓</span><div><strong>Votre ordinateur reste privé</strong><small>Le bureau, les comptes et les fichiers personnels ne sont jamais partagés.</small></div></li>
+          <li><span>✓</span><div><strong>Chaque installation est expliquée</strong><small>Une autorisation système n’est demandée qu’au moment nécessaire.</small></div></li>
+          <li><span>✓</span><div><strong>La sécurité est revérifiée</strong><small>La progression visuelle est mémorisée, mais jamais les validations sensibles.</small></div></li>
+        </ul>
+        <button id="start-onboarding" class="primary large welcome-action">Commencer la configuration</button>
+        <p class="notice">Vous pourrez fermer l’application et reprendre plus tard.</p>
+      </section>
+    </main>`;
+
+  document.querySelector<HTMLButtonElement>('#start-onboarding')?.addEventListener('click', () => {
+    completeIntroduction();
+    void refresh();
+  });
+}
 
 async function refresh(): Promise<void> {
   app.innerHTML = '<main class="loading" aria-live="polite"><div class="spinner"></div><p>Vérification sécurisée de votre ordinateur…</p></main>';
@@ -210,4 +235,8 @@ async function refresh(): Promise<void> {
   }
 }
 
-void refresh();
+if (readOnboardingState().introductionCompleted) {
+  void refresh();
+} else {
+  renderWelcome();
+}
