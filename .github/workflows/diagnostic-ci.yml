@@ -67,7 +67,7 @@ jobs:
               printf -- '- ✅ %s\n' "$name" >> .ci/diagnostic-report.md
             else
               printf -- '- ❌ %s (exit %s)\n\n```text\n' "$name" "$status" >> .ci/diagnostic-report.md
-              tail -n 120 "$logfile" >> .ci/diagnostic-report.md
+              cat "$logfile" >> .ci/diagnostic-report.md
               printf '\n```\n' >> .ci/diagnostic-report.md
             fi
           }
