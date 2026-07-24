@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { completeIntroduction, readOnboardingState } from './onboarding-state';
+import { renderResourceAutomation, resourceAutomationView } from './resource-orchestration';
 import './styles.css';
 
 type Lifecycle = 'setup_required' | 'ready' | 'online' | 'emergency_stopped';
@@ -133,6 +134,7 @@ async function refresh(): Promise<void> {
     const safeProgress = Math.round(Math.min(100, Math.max(0, status.progress)));
     const emergencyStopped = status.lifecycle === 'emergency_stopped';
     const online = status.lifecycle === 'online';
+    const automation = resourceAutomationView(status.lifecycle);
 
     app.innerHTML = `
       <main class="layout">
@@ -169,6 +171,8 @@ async function refresh(): Promise<void> {
 
           <p id="action-status" class="action-status" aria-live="polite"></p>
           <ul class="checks">${status.checks.map((check) => renderCheck(check, status.nextActionId)).join('')}</ul>
+
+          ${renderResourceAutomation(automation)}
 
           <section class="explanation">
             <div><p class="eyebrow">Installation automatique</p><h2>GPUbnb s’occupe du travail technique</h2></div>
