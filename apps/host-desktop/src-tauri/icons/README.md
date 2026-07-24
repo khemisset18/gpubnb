@@ -1,0 +1,1 @@
+Application icons used by Tauri packaging. Binary platform icons are generated from the approved GPUbnb source artwork and must be present before release builds.
