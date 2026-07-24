@@ -33,15 +33,18 @@ fn collect_for(os: &str, architecture: &str) -> NativeDiagnostic {
         "linux" => IsolationBackend::Kvm,
         _ => IsolationBackend::Unsupported,
     };
-    let can_host = platform_supported
-        && architecture_supported
-        && isolation_backend != IsolationBackend::Unsupported;
+
+    // Fail closed: selecting a possible backend is not proof that the backend
+    // exists, is enabled, is correctly configured, or can isolate a renter.
+    // Hosting remains disabled until OS-specific probes certify every required
+    // security property.
+    let can_host = false;
     let reason = if !platform_supported {
         "operating_system_not_supported"
     } else if !architecture_supported {
         "architecture_not_supported"
     } else {
-        "native_checks_pending"
+        "native_security_checks_pending"
     };
 
     NativeDiagnostic {
@@ -72,6 +75,13 @@ mod tests {
             collect_for("linux", "x86_64").isolation_backend,
             IsolationBackend::Kvm
         );
+    }
+
+    #[test]
+    fn supported_platform_still_fails_closed_without_native_certification() {
+        let diagnostic = collect_for("linux", "x86_64");
+        assert!(!diagnostic.can_host);
+        assert_eq!(diagnostic.reason, "native_security_checks_pending");
     }
 
     #[test]
