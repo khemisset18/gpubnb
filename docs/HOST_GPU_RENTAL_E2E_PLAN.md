@@ -2,7 +2,7 @@
 
 ## Objectif
 
-Valider une location GPU réelle et sécurisée de bout en bout avant tout développement lié au minage.
+Valider une location GPU réelle, sécurisée et reproductible de bout en bout.
 
 ## Ordre de réalisation
 
@@ -30,6 +30,18 @@ Valider une location GPU réelle et sécurisée de bout en bout avant tout déve
 - journaux exploitables sans secret ni donnée personnelle sensible ;
 - tests automatisés et test manuel sur deux machines réussis.
 
+## Frontières d'architecture à préserver
+
+La branche doit seulement conserver des interfaces génériques entre :
+
+- disponibilité de la machine ;
+- préparation d'une location ;
+- session active ;
+- nettoyage ;
+- retour à l'état disponible.
+
+Ces interfaces ne doivent contenir aucune logique métier supplémentaire. Elles servent uniquement à éviter de coupler le Host Desktop à une seule évolution future.
+
 ## Hors périmètre
 
-Le minage CPU/GPU, les pools externes, l'orchestration du minage et la GPUBNB Pool sont reportés après la validation complète de la location GPU.
+Aucune fonctionnalité secondaire utilisant les ressources libres ne doit être développée dans cette branche. Aucun exécutable, pool, configuration, écran, état métier ou test associé ne doit être ajouté avant la validation complète de la location GPU.
