@@ -4,38 +4,6 @@ on:
   pull_request:
 
 jobs:
-  lockfile-refresh:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/step-2-hardware-metrics'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    defaults:
-      run:
-        working-directory: apps/api
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: codex/step-2-hardware-metrics
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      - name: Regenerate npm lockfile
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Validate regenerated lockfile
-        run: npm ci --ignore-scripts
-      - name: Commit regenerated lockfile
-        shell: bash
-        run: |
-          if git diff --quiet -- package-lock.json; then
-            echo "package-lock.json already synchronized"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git commit -m "security: synchronize patched npm lockfile"
-          git push origin HEAD:codex/step-2-hardware-metrics
-
   api:
     runs-on: ubuntu-latest
     defaults:
