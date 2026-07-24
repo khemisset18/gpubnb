@@ -16,6 +16,7 @@ from typing import Any
 from . import __version__
 from .client import ApiClient, agent_request, heartbeat
 from .runner import prepare_workspace, run_gpu_diagnostic, cleanup_workspace
+from .simulator import add_simulate_parser
 from .platform_info import find_nvidia_smi, find_rocm_smi, find_xpu_smi, gpu_inventory, system_inventory
 from .storage import (
     config_dir, fingerprint, generate_key, key_path, load_config, load_key,
@@ -422,6 +423,7 @@ def parser() -> argparse.ArgumentParser:
     list_cmd = file_commands.add_parser("list", help="lister les artefacts d'un job")
     list_cmd.add_argument("job_id", help="identifiant du job")
     list_cmd.set_defaults(handler=command_files_list)
+    add_simulate_parser(commands)
     commands.add_parser("version", help="afficher la version").set_defaults(handler=lambda _: print(__version__) or 0)
     return root
 

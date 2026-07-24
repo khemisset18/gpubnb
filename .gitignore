@@ -9,4 +9,6 @@ target/
 *-keypair.json
 agent/__pycache__/
 *.pyc
+*.egg-info/
 .DS_Store
+apps/api/data/
