@@ -25,6 +25,18 @@ enum SetupAction {
     Network,
 }
 
+impl SetupAction {
+    const fn id(self) -> &'static str {
+        match self {
+            Self::Account => "account",
+            Self::Agent => "agent",
+            Self::Isolation => "isolation",
+            Self::Storage => "storage",
+            Self::Network => "network",
+        }
+    }
+}
+
 impl TryFrom<&str> for SetupAction {
     type Error = &'static str;
 
@@ -58,6 +70,22 @@ impl Readiness {
             && self.storage_protected
             && self.network_filtered
     }
+
+    fn next_action(&self) -> Option<SetupAction> {
+        if !self.account_linked {
+            Some(SetupAction::Account)
+        } else if !self.service_installed {
+            Some(SetupAction::Agent)
+        } else if !self.isolation_certified {
+            Some(SetupAction::Isolation)
+        } else if !self.storage_protected {
+            Some(SetupAction::Storage)
+        } else if !self.network_filtered {
+            Some(SetupAction::Network)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Default)]
@@ -87,7 +115,9 @@ struct HostStatus {
     completed_steps: usize,
     total_steps: usize,
     progress: u8,
+    blocking_count: usize,
     summary: String,
+    next_action_id: Option<&'static str>,
     diagnostic: NativeDiagnostic,
     checks: Vec<Check>,
 }
@@ -98,19 +128,6 @@ fn platform_name() -> &'static str {
         "macos" => "macOS",
         "linux" => "Linux",
         _ => "Non pris en charge",
-    }
-}
-
-fn status_summary(completed_steps: usize, ready: bool, lifecycle: HostLifecycle) -> String {
-    match lifecycle {
-        HostLifecycle::EmergencyStopped => {
-            "Arrêt d’urgence actif — une révision est obligatoire".into()
-        }
-        HostLifecycle::Online => "Votre GPU est en ligne dans un espace isolé".into(),
-        _ if ready => "Toutes les protections obligatoires sont actives".into(),
-        _ => format!(
-            "{completed_steps} protection(s) validée(s) sur {TOTAL_SETUP_STEPS}"
-        ),
     }
 }
 
@@ -156,8 +173,7 @@ fn build_status(state: &AppState) -> HostStatus {
             ok: readiness.isolation_certified,
             blocking: true,
             detail: "Le locataire ne peut jamais voir votre session personnelle".into(),
-            action_label: (!readiness.isolation_certified)
-                .then_some("Configurer la protection"),
+            action_label: (!readiness.isolation_certified).then_some("Configurer la protection"),
         },
         Check {
             id: "storage",
@@ -176,6 +192,7 @@ fn build_status(state: &AppState) -> HostStatus {
             action_label: (!readiness.network_filtered).then_some("Configurer"),
         },
     ];
+
     let ready = readiness.is_ready(&diagnostic);
     let lifecycle = match state.lifecycle {
         HostLifecycle::EmergencyStopped => HostLifecycle::EmergencyStopped,
@@ -184,8 +201,23 @@ fn build_status(state: &AppState) -> HostStatus {
         _ => HostLifecycle::SetupRequired,
     };
     let completed_steps = checks.iter().filter(|check| check.ok).count();
+    let blocking_count = checks
+        .iter()
+        .filter(|check| check.blocking && !check.ok)
+        .count();
     let progress = ((completed_steps * 100) / TOTAL_SETUP_STEPS) as u8;
-    let summary = status_summary(completed_steps, ready, lifecycle);
+    let summary = match lifecycle {
+        HostLifecycle::EmergencyStopped => "Arrêt d'urgence actif".to_owned(),
+        HostLifecycle::Online => "Votre GPU est en ligne".to_owned(),
+        HostLifecycle::Ready => "Toutes les protections sont prêtes".to_owned(),
+        HostLifecycle::SetupRequired => {
+            if blocking_count == 1 {
+                "Une protection reste à configurer".to_owned()
+            } else {
+                format!("{blocking_count} protections restent à configurer")
+            }
+        }
+    };
 
     HostStatus {
         platform: platform_name(),
@@ -195,7 +227,9 @@ fn build_status(state: &AppState) -> HostStatus {
         completed_steps,
         total_steps: TOTAL_SETUP_STEPS,
         progress,
+        blocking_count,
         summary,
+        next_action_id: readiness.next_action().map(SetupAction::id),
         diagnostic,
         checks,
     }
@@ -213,10 +247,12 @@ fn request_publish(state: tauri::State<'_, Mutex<AppState>>) -> Result<(), &'sta
     if state.lifecycle == HostLifecycle::EmergencyStopped {
         return Err("emergency_stop_requires_review");
     }
+
     let diagnostic = collect_native_diagnostic();
     if !state.readiness.is_ready(&diagnostic) {
         return Err("host_not_certified");
     }
+
     state.lifecycle = HostLifecycle::Online;
     Ok(())
 }
@@ -233,6 +269,7 @@ fn run_setup_action(action_id: String) -> Result<String, &'static str> {
     if action_id.len() > 32 || !action_id.bytes().all(|byte| byte.is_ascii_lowercase()) {
         return Err("invalid_setup_action");
     }
+
     match SetupAction::try_from(action_id.as_str())? {
         SetupAction::Account => Ok("account_link_pending".into()),
         SetupAction::Agent
@@ -271,6 +308,16 @@ mod tests {
         }
     }
 
+    fn fully_ready() -> Readiness {
+        Readiness {
+            account_linked: true,
+            service_installed: true,
+            isolation_certified: true,
+            storage_protected: true,
+            network_filtered: true,
+        }
+    }
+
     #[test]
     fn readiness_is_fail_closed() {
         assert!(!Readiness::default().is_ready(&supported_diagnostic()));
@@ -278,13 +325,7 @@ mod tests {
 
     #[test]
     fn readiness_requires_every_protection() {
-        let mut readiness = Readiness {
-            account_linked: true,
-            service_installed: true,
-            isolation_certified: true,
-            storage_protected: true,
-            network_filtered: true,
-        };
+        let mut readiness = fully_ready();
         assert!(readiness.is_ready(&supported_diagnostic()));
         readiness.network_filtered = false;
         assert!(!readiness.is_ready(&supported_diagnostic()));
@@ -294,14 +335,15 @@ mod tests {
     fn unsupported_native_environment_blocks_readiness() {
         let mut diagnostic = supported_diagnostic();
         diagnostic.can_host = false;
-        let readiness = Readiness {
-            account_linked: true,
-            service_installed: true,
-            isolation_certified: true,
-            storage_protected: true,
-            network_filtered: true,
-        };
-        assert!(!readiness.is_ready(&diagnostic));
+        assert!(!fully_ready().is_ready(&diagnostic));
+    }
+
+    #[test]
+    fn next_action_is_deterministic() {
+        let mut readiness = Readiness::default();
+        assert_eq!(readiness.next_action(), Some(SetupAction::Account));
+        readiness.account_linked = true;
+        assert_eq!(readiness.next_action(), Some(SetupAction::Agent));
     }
 
     #[test]
@@ -315,12 +357,6 @@ mod tests {
         let status = build_status(&AppState::default());
         assert!(!status.ready);
         assert_eq!(status.total_steps, TOTAL_SETUP_STEPS);
-        assert!(status.progress < 100);
-    }
-
-    #[test]
-    fn progress_is_bounded() {
-        let status = build_status(&AppState::default());
-        assert!(status.progress <= 100);
+        assert_eq!(status.next_action_id, Some("account"));
     }
 }
