@@ -87,6 +87,26 @@ jobs:
       - name: Clippy
         run: cargo clippy -p gpubnb-host-desktop --all-targets --locked -- -D warnings
 
+  rustfmt-diagnostic:
+    name: rustfmt diagnostic patch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt
+      - name: Generate exact rustfmt patch
+        shell: bash
+        run: |
+          cargo fmt --all
+          git diff --binary > rustfmt.patch
+      - name: Upload rustfmt patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustfmt-patch
+          path: rustfmt.patch
+          if-no-files-found: error
+
   security-gate:
     name: production security gate
     runs-on: ubuntu-latest
