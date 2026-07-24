@@ -1,6 +1,8 @@
 mod diagnostics;
+mod pairing;
 
 use diagnostics::{collect_native_diagnostic, NativeDiagnostic};
+use pairing::{pairing_configuration, PairingConfiguration};
 use serde::Serialize;
 use std::sync::Mutex;
 
@@ -118,6 +120,7 @@ struct HostStatus {
     blocking_count: usize,
     summary: String,
     next_action_id: Option<&'static str>,
+    pairing: PairingConfiguration,
     diagnostic: NativeDiagnostic,
     checks: Vec<Check>,
 }
@@ -133,7 +136,15 @@ fn platform_name() -> &'static str {
 
 fn build_status(state: &AppState) -> HostStatus {
     let diagnostic = collect_native_diagnostic();
+    let pairing = pairing_configuration();
     let readiness = &state.readiness;
+    let account_detail = if readiness.account_linked {
+        "Cet ordinateur est associé à votre compte sans mot de passe local".into()
+    } else if pairing.configured {
+        "Connexion sécurisée dans votre navigateur avec un code temporaire".into()
+    } else {
+        "Le service de connexion doit être configuré avant l'installation publique".into()
+    };
     let checks = vec![
         Check {
             id: "platform",
@@ -156,8 +167,8 @@ fn build_status(state: &AppState) -> HostStatus {
             label: "Compte GPUbnb connecté",
             ok: readiness.account_linked,
             blocking: true,
-            detail: "L'association utilise un code court à usage unique".into(),
-            action_label: (!readiness.account_linked).then_some("Se connecter"),
+            detail: account_detail,
+            action_label: (!readiness.account_linked).then_some("Connecter mon compte"),
         },
         Check {
             id: "agent",
@@ -210,13 +221,10 @@ fn build_status(state: &AppState) -> HostStatus {
         HostLifecycle::EmergencyStopped => "Arrêt d'urgence actif".to_owned(),
         HostLifecycle::Online => "Votre GPU est en ligne".to_owned(),
         HostLifecycle::Ready => "Toutes les protections sont prêtes".to_owned(),
-        HostLifecycle::SetupRequired => {
-            if blocking_count == 1 {
-                "Une protection reste à configurer".to_owned()
-            } else {
-                format!("{blocking_count} protections restent à configurer")
-            }
-        }
+        HostLifecycle::SetupRequired => match blocking_count {
+            1 => "Une protection reste à configurer".to_owned(),
+            count => format!("{count} protections restent à configurer"),
+        },
     };
 
     HostStatus {
@@ -230,6 +238,7 @@ fn build_status(state: &AppState) -> HostStatus {
         blocking_count,
         summary,
         next_action_id: readiness.next_action().map(SetupAction::id),
+        pairing,
         diagnostic,
         checks,
     }
@@ -239,6 +248,11 @@ fn build_status(state: &AppState) -> HostStatus {
 fn host_status(state: tauri::State<'_, Mutex<AppState>>) -> Result<HostStatus, &'static str> {
     let state = state.lock().map_err(|_| "state_unavailable")?;
     Ok(build_status(&state))
+}
+
+#[tauri::command]
+fn account_pairing_configuration() -> PairingConfiguration {
+    pairing_configuration()
 }
 
 #[tauri::command]
@@ -271,7 +285,13 @@ fn run_setup_action(action_id: String) -> Result<String, &'static str> {
     }
 
     match SetupAction::try_from(action_id.as_str())? {
-        SetupAction::Account => Ok("account_link_pending".into()),
+        SetupAction::Account => {
+            if pairing_configuration().configured {
+                Ok("open_secure_pairing".into())
+            } else {
+                Err("pairing_service_not_configured")
+            }
+        }
         SetupAction::Agent
         | SetupAction::Isolation
         | SetupAction::Storage
@@ -285,6 +305,7 @@ pub fn run() {
         .manage(Mutex::new(AppState::default()))
         .invoke_handler(tauri::generate_handler![
             host_status,
+            account_pairing_configuration,
             request_publish,
             emergency_stop,
             run_setup_action
@@ -358,5 +379,6 @@ mod tests {
         assert!(!status.ready);
         assert_eq!(status.total_steps, TOTAL_SETUP_STEPS);
         assert_eq!(status.next_action_id, Some("account"));
+        assert!(!status.pairing.stores_password);
     }
 }
