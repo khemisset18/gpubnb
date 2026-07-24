@@ -21,6 +21,7 @@ SCHEMA_VERSION = 1
 ENTRY_POINT_GROUP = "gpubnb.accelerator_providers"
 MAX_DEVICES = 256
 MAX_TEXT = 200
+MAX_KIND = 32
 
 
 def _text(value: Any, fallback: str = "unknown", limit: int = MAX_TEXT) -> str:
@@ -162,10 +163,10 @@ def normalize_device(raw: AcceleratorDevice | dict[str, Any], provider_name: str
         return None
 
     provider = _text(raw.get("provider"), provider_name, 80)
-    kind = _text(raw.get("kind"), "ACCELERATOR", 40).upper()
+    kind = _text(raw.get("kind"), "ACCELERATOR", MAX_KIND).upper()
     vendor = _text(raw.get("vendor"), "UNKNOWN", 80)
     model = _text(raw.get("model"), "Unknown accelerator")
-    bus = _text(raw.get("busAddress"), "", 120) or None
+    bus = _text(raw.get("busAddress"), "", 100) or None
     device_id = _text(raw.get("deviceId"), "", 200)
     if not device_id:
         device_id = _stable_fallback_id(provider, vendor, model, bus)
@@ -177,7 +178,7 @@ def normalize_device(raw: AcceleratorDevice | dict[str, Any], provider_name: str
         used_i = None if used is None else int(used)
     except (TypeError, ValueError):
         return None
-    if total_i is not None and not 0 <= total_i <= 16_000_000:
+    if total_i is not None and not 0 <= total_i <= 100_000_000:
         return None
     if used_i is not None and (used_i < 0 or (total_i is not None and used_i > total_i)):
         return None
@@ -194,7 +195,7 @@ def normalize_device(raw: AcceleratorDevice | dict[str, Any], provider_name: str
         memory_total_mib=total_i,
         memory_used_mib=used_i,
         utilization_percent=_number(raw.get("utilizationPercent"), 0, 100),
-        temperature_c=_number(raw.get("temperatureC"), -273.15, 1000),
+        temperature_c=_number(raw.get("temperatureC"), -273.15, 300),
         power_watts=_number(raw.get("powerWatts"), 0, 100_000),
         driver_version=_text(raw.get("driverVersion"), "", 100) or None,
         runtime_version=_text(raw.get("runtimeVersion"), "", 100) or None,
