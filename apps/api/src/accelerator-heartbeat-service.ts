@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { normalizeAcceleratorTelemetry } from './accelerator-telemetry.js';
+import { sanitizeAccelerators } from './accelerator-telemetry.js';
 import { syncMachineAccelerators } from './accelerator-inventory-store.js';
 import { decideAcceleratorSecurity } from './accelerator-security-policy.js';
 import { enforceAcceleratorSecurityDecision } from './accelerator-security-executor.js';
@@ -7,8 +7,7 @@ import { enforceAcceleratorSecurityDecision } from './accelerator-security-execu
 export type AcceleratorHeartbeatContext = {
   machineId: string;
   historicalGpuUuid: string | null;
-  hasBoundSession: boolean;
-  sessionIsActive: boolean;
+  sessionActive: boolean;
   rawAccelerators: unknown;
 };
 
@@ -16,7 +15,7 @@ export async function processAcceleratorHeartbeat(
   tx: Prisma.TransactionClient,
   context: AcceleratorHeartbeatContext,
 ) {
-  const accelerators = normalizeAcceleratorTelemetry(context.rawAccelerators);
+  const accelerators = sanitizeAccelerators(context.rawAccelerators);
   const sync = await syncMachineAccelerators(
     tx as unknown as Pick<PrismaClient, '$queryRaw' | '$executeRaw'>,
     context.machineId,
@@ -25,14 +24,12 @@ export async function processAcceleratorHeartbeat(
   const primaryGpu = accelerators.find((item) => item.kind === 'GPU' && item.available)
     ?? accelerators.find((item) => item.kind === 'GPU')
     ?? null;
-  const legacyGpuMatches = !context.historicalGpuUuid
-    || primaryGpu?.deviceId === context.historicalGpuUuid;
 
   const decision = decideAcceleratorSecurity(sync, {
-    hasBoundSession: context.hasBoundSession,
-    sessionIsActive: context.sessionIsActive,
+    hasBoundSession: context.sessionActive,
+    sessionIsActive: context.sessionActive,
     primaryAcceleratorAvailable: Boolean(primaryGpu?.available),
-    legacyGpuMatches,
+    legacyGpuMatches: !context.historicalGpuUuid || primaryGpu?.deviceId === context.historicalGpuUuid,
   });
 
   const enforcement = await enforceAcceleratorSecurityDecision(
@@ -47,7 +44,7 @@ export async function processAcceleratorHeartbeat(
     sync,
     decision,
     enforcement,
-    publishable: decision.publishable,
+    publishable: decision.publishable && Boolean(primaryGpu?.available),
   };
 }
 
