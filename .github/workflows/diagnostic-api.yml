@@ -1,0 +1,60 @@
+name: Diagnostic API
+
+on:
+  push:
+    branches:
+      - codex/step-2-hardware-metrics
+    paths-ignore:
+      - .ci/api-test-report.txt
+      - .ci/diagnostic-report.md
+
+permissions:
+  contents: write
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gpubnb
+      REDIS_URL: redis://localhost:6379
+      SOLANA_CLUSTER: devnet
+      ALLOW_MAINNET: "false"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/step-2-hardware-metrics
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - name: Run API tests and capture output
+        shell: bash
+        run: |
+          set +e
+          cd apps/api
+          npm ci > /tmp/npm-ci.log 2>&1
+          npm_status=$?
+          if [ "$npm_status" -eq 0 ]; then
+            npm test > /tmp/api-tests.log 2>&1
+            test_status=$?
+          else
+            cp /tmp/npm-ci.log /tmp/api-tests.log
+            test_status=$npm_status
+          fi
+          cd ../..
+          {
+            echo "commit=$GITHUB_SHA"
+            echo "exit=$test_status"
+            cat /tmp/api-tests.log
+          } > .ci/api-test-report.txt
+          exit 0
+      - name: Commit API test report
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .ci/api-test-report.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "ci: record focused API test output"
+          git push origin HEAD:codex/step-2-hardware-metrics
