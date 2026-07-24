@@ -204,7 +204,9 @@ fn build_status(state: &AppState) -> HostStatus {
         },
     ];
 
-    let ready = readiness.is_ready(&diagnostic);
+    let protections_ready = readiness.is_ready(&diagnostic);
+    let emergency_stopped = state.lifecycle == HostLifecycle::EmergencyStopped;
+    let ready = protections_ready && !emergency_stopped;
     let lifecycle = match state.lifecycle {
         HostLifecycle::EmergencyStopped => HostLifecycle::EmergencyStopped,
         HostLifecycle::Online if ready => HostLifecycle::Online,
@@ -237,7 +239,9 @@ fn build_status(state: &AppState) -> HostStatus {
         progress,
         blocking_count,
         summary,
-        next_action_id: readiness.next_action().map(SetupAction::id),
+        next_action_id: (!emergency_stopped)
+            .then(|| readiness.next_action().map(SetupAction::id))
+            .flatten(),
         pairing,
         diagnostic,
         checks,
@@ -380,5 +384,18 @@ mod tests {
         assert_eq!(status.total_steps, TOTAL_SETUP_STEPS);
         assert_eq!(status.next_action_id, Some("account"));
         assert!(!status.pairing.stores_password);
+    }
+
+    #[test]
+    fn emergency_stop_never_exposes_ready_status_or_setup_action() {
+        let state = AppState {
+            readiness: fully_ready(),
+            lifecycle: HostLifecycle::EmergencyStopped,
+        };
+        let status = build_status(&state);
+        assert!(!status.ready);
+        assert_eq!(status.lifecycle, HostLifecycle::EmergencyStopped);
+        assert_eq!(status.next_action_id, None);
+        assert_eq!(status.summary, "Arrêt d'urgence actif");
     }
 }
