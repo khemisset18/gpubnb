@@ -7,7 +7,8 @@ import { enforceAcceleratorSecurityDecision } from './accelerator-security-execu
 export type AcceleratorHeartbeatContext = {
   machineId: string;
   historicalGpuUuid: string | null;
-  sessionActive: boolean;
+  hasBoundSession: boolean;
+  sessionIsActive: boolean;
   rawAccelerators: unknown;
 };
 
@@ -16,17 +17,22 @@ export async function processAcceleratorHeartbeat(
   context: AcceleratorHeartbeatContext,
 ) {
   const accelerators = normalizeAcceleratorTelemetry(context.rawAccelerators);
-  const sync = await syncMachineAccelerators(tx as unknown as Pick<PrismaClient, '$queryRaw' | '$executeRaw'>, context.machineId, accelerators);
+  const sync = await syncMachineAccelerators(
+    tx as unknown as Pick<PrismaClient, '$queryRaw' | '$executeRaw'>,
+    context.machineId,
+    accelerators,
+  );
   const primaryGpu = accelerators.find((item) => item.kind === 'GPU' && item.available)
     ?? accelerators.find((item) => item.kind === 'GPU')
     ?? null;
+  const legacyGpuMatches = !context.historicalGpuUuid
+    || primaryGpu?.deviceId === context.historicalGpuUuid;
 
-  const decision = decideAcceleratorSecurity({
-    sessionActive: context.sessionActive,
-    inventory: accelerators,
-    historicalGpuUuid: context.historicalGpuUuid,
-    sync,
-    primaryGpuDeviceId: primaryGpu?.deviceId ?? null,
+  const decision = decideAcceleratorSecurity(sync, {
+    hasBoundSession: context.hasBoundSession,
+    sessionIsActive: context.sessionIsActive,
+    primaryAcceleratorAvailable: Boolean(primaryGpu?.available),
+    legacyGpuMatches,
   });
 
   const enforcement = await enforceAcceleratorSecurityDecision(
@@ -41,7 +47,7 @@ export async function processAcceleratorHeartbeat(
     sync,
     decision,
     enforcement,
-    publishable: decision.severity === 'NONE' && Boolean(primaryGpu?.available),
+    publishable: decision.publishable,
   };
 }
 
