@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 const MAX_IDENTIFIER_LEN: usize = 96;
+const MAX_RESERVATION_DURATION_SECONDS: u64 = 7 * 24 * 60 * 60;
+const MAX_RESERVATION_PREPARATION_LEAD_SECONDS: u64 = 15 * 60;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -46,8 +48,20 @@ impl VerifiedReservation {
         if self.ends_at_unix_seconds <= self.starts_at_unix_seconds {
             return Err("reservation_invalid_window");
         }
+        if self
+            .ends_at_unix_seconds
+            .saturating_sub(self.starts_at_unix_seconds)
+            > MAX_RESERVATION_DURATION_SECONDS
+        {
+            return Err("reservation_duration_exceeded");
+        }
         if now >= self.ends_at_unix_seconds {
             return Err("reservation_expired");
+        }
+        if self.starts_at_unix_seconds.saturating_sub(now)
+            > MAX_RESERVATION_PREPARATION_LEAD_SECONDS
+        {
+            return Err("reservation_too_early");
         }
         Ok(())
     }
@@ -213,6 +227,7 @@ impl RentalOrchestrator {
 
     pub fn emergency_stop(&mut self, all_processes_stopped: bool) -> Result<(), &'static str> {
         self.active_reservation = None;
+        self.mining_enabled = false;
         if all_processes_stopped {
             self.state = HostWorkloadState::EmergencyStopped;
             self.last_error = None;
@@ -263,6 +278,7 @@ impl RentalOrchestrator {
 
     fn quarantine<T>(&mut self, error: &'static str) -> Result<T, &'static str> {
         self.state = HostWorkloadState::Quarantined;
+        self.mining_enabled = false;
         self.last_error = Some(error);
         Err(error)
     }
@@ -303,6 +319,33 @@ mod tests {
     }
 
     #[test]
+    fn reservation_too_far_in_future_is_rejected() {
+        let mut orchestrator = ready_host();
+        let mut candidate = reservation();
+        candidate.starts_at_unix_seconds = 10_000;
+        candidate.ends_at_unix_seconds = 11_000;
+        assert_eq!(
+            orchestrator.accept_reservation(candidate, 1_000),
+            Err("reservation_too_early")
+        );
+        assert_eq!(orchestrator.snapshot().state, HostWorkloadState::Available);
+    }
+
+    #[test]
+    fn excessive_reservation_duration_is_rejected() {
+        let mut orchestrator = ready_host();
+        let mut candidate = reservation();
+        candidate.ends_at_unix_seconds = candidate.starts_at_unix_seconds
+            + MAX_RESERVATION_DURATION_SECONDS
+            + 1;
+        assert_eq!(
+            orchestrator.accept_reservation(candidate, 1_000),
+            Err("reservation_duration_exceeded")
+        );
+        assert_eq!(orchestrator.snapshot().state, HostWorkloadState::Available);
+    }
+
+    #[test]
     fn rental_preempts_mining_and_resumes_only_after_verified_cleanup() {
         let mut orchestrator = ready_host();
         orchestrator.set_mining_enabled(true).unwrap();
@@ -325,7 +368,9 @@ mod tests {
             orchestrator.confirm_mining_stopped(false),
             Err("miner_process_still_running")
         );
-        assert_eq!(orchestrator.snapshot().state, HostWorkloadState::Quarantined);
+        let snapshot = orchestrator.snapshot();
+        assert_eq!(snapshot.state, HostWorkloadState::Quarantined);
+        assert!(!snapshot.mining_enabled);
     }
 
     #[test]
@@ -349,6 +394,22 @@ mod tests {
             orchestrator.confirm_cleanup(true, true, false, true, true),
             Err("cleanup_verification_failed")
         );
-        assert_eq!(orchestrator.snapshot().state, HostWorkloadState::Quarantined);
+        let snapshot = orchestrator.snapshot();
+        assert_eq!(snapshot.state, HostWorkloadState::Quarantined);
+        assert!(!snapshot.mining_enabled);
+    }
+
+    #[test]
+    fn emergency_stop_disables_mining_and_clears_active_reservation() {
+        let mut orchestrator = ready_host();
+        orchestrator.set_mining_enabled(true).unwrap();
+        orchestrator.accept_reservation(reservation(), 1_100).unwrap();
+        orchestrator.emergency_stop(true).unwrap();
+
+        let snapshot = orchestrator.snapshot();
+        assert_eq!(snapshot.state, HostWorkloadState::EmergencyStopped);
+        assert!(!snapshot.mining_enabled);
+        assert!(snapshot.active_reservation_id.is_none());
+        assert!(snapshot.active_gpu_id.is_none());
     }
 }
