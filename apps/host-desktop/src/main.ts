@@ -13,15 +13,17 @@ type HostStatus = {
   platform: string;
   architecture: string;
   ready: boolean;
+  lifecycle: 'setup_required' | 'ready' | 'online' | 'emergency_stopped';
   progress: number;
   summary: string;
   checks: Check[];
 };
 
-const app = document.querySelector<HTMLElement>('#app');
-if (!app) throw new Error('missing_app_root');
+const root = document.querySelector<HTMLElement>('#app');
+if (!root) throw new Error('missing_app_root');
+const app: HTMLElement = root;
 
-const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({
+const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (char) => ({
   '&': '&amp;',
   '<': '&lt;',
   '>': '&gt;',
@@ -39,12 +41,24 @@ const renderCheck = (check: Check): string => `
     ${!check.ok && check.actionLabel ? `<button class="secondary" data-action="${escapeHtml(check.id)}">${escapeHtml(check.actionLabel)}</button>` : ''}
   </li>`;
 
+const friendlyActionMessage = (result: string): string => {
+  switch (result) {
+    case 'account_link_pending':
+      return 'La connexion sécurisée au compte sera ouverte dans la prochaine étape.';
+    case 'automatic_setup_pending':
+      return 'La configuration automatique est préparée. Aucune modification risquée n’a été appliquée.';
+    default:
+      return 'Action enregistrée.';
+  }
+};
+
 async function refresh(): Promise<void> {
   app.innerHTML = '<main class="loading" aria-live="polite"><div class="spinner"></div><p>Vérification sécurisée de votre ordinateur…</p></main>';
 
   try {
     const status = await invoke<HostStatus>('host_status');
-    const safeProgress = Math.min(100, Math.max(0, status.progress));
+    const safeProgress = Math.round(Math.min(100, Math.max(0, status.progress)));
+    const emergencyStopped = status.lifecycle === 'emergency_stopped';
 
     app.innerHTML = `
       <main class="layout">
@@ -65,6 +79,8 @@ async function refresh(): Promise<void> {
             <span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span>
           </header>
 
+          ${emergencyStopped ? '<section class="privacy-card" role="alert"><div class="shield" aria-hidden="true">!</div><div><strong>Arrêt d’urgence actif</strong><p>Aucune nouvelle location ne peut démarrer avant une révision complète de la sécurité.</p></div></section>' : ''}
+
           <section class="privacy-card">
             <div class="shield" aria-hidden="true">✓</div>
             <div><strong>Vos fichiers personnels ne sont jamais partagés</strong><p>Le locataire utilisera uniquement un espace temporaire isolé. Il ne verra ni votre bureau, ni vos documents, ni vos comptes.</p></div>
@@ -75,6 +91,7 @@ async function refresh(): Promise<void> {
             <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${safeProgress}"><span style="width:${safeProgress}%"></span></div>
           </section>
 
+          <p id="action-status" class="notice" aria-live="polite"></p>
           <ul class="checks">${status.checks.map(renderCheck).join('')}</ul>
 
           <section class="explanation">
@@ -88,7 +105,7 @@ async function refresh(): Promise<void> {
 
           <div class="actions">
             <button id="refresh" class="secondary large">Revérifier mon ordinateur</button>
-            <button id="publish" class="primary large" ${status.ready ? '' : 'disabled'}>${status.ready ? 'Continuer vers mes disponibilités' : 'Protection incomplète'}</button>
+            <button id="publish" class="primary large" ${status.ready && !emergencyStopped ? '' : 'disabled'}>${status.ready ? 'Continuer vers mes disponibilités' : 'Protection incomplète'}</button>
           </div>
           <p class="notice">GPUbnb bloque automatiquement toute location tant qu’une protection obligatoire manque.</p>
         </section>
@@ -96,15 +113,33 @@ async function refresh(): Promise<void> {
 
     document.querySelector<HTMLButtonElement>('#refresh')?.addEventListener('click', () => void refresh());
     document.querySelector<HTMLButtonElement>('#publish')?.addEventListener('click', () => {
-      void invoke('request_publish').catch((error) => console.error('publish_request_failed', error));
+      void invoke('request_publish')
+        .then(() => refresh())
+        .catch((error: unknown) => {
+          const statusElement = document.querySelector<HTMLElement>('#action-status');
+          if (statusElement) statusElement.textContent = `Activation refusée en sécurité : ${String(error)}`;
+        });
     });
     document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach((button) => {
       button.addEventListener('click', () => {
-        const action = button.dataset.action ?? 'unknown';
-        console.info('guided_action_requested', action);
+        const actionId = button.dataset.action;
+        if (!actionId) return;
+        button.disabled = true;
+        void invoke<string>('run_setup_action', { actionId })
+          .then((result) => {
+            const statusElement = document.querySelector<HTMLElement>('#action-status');
+            if (statusElement) statusElement.textContent = friendlyActionMessage(result);
+          })
+          .catch((error: unknown) => {
+            const statusElement = document.querySelector<HTMLElement>('#action-status');
+            if (statusElement) statusElement.textContent = `Action bloquée en sécurité : ${String(error)}`;
+          })
+          .finally(() => {
+            button.disabled = false;
+          });
       });
     });
-  } catch (error) {
+  } catch (error: unknown) {
     app.innerHTML = `
       <main class="error-state">
         <div class="error-icon" aria-hidden="true">!</div>
