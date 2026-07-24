@@ -1,47 +1,94 @@
-# Host Desktop et location GPU de bout en bout
+# Host Desktop, location GPU et orchestration
 
 ## Objectif
 
-Valider une location GPU réelle, sécurisée et reproductible de bout en bout.
+Livrer un Host Desktop professionnel capable de gérer une location GPU de bout en bout, avec une orchestration fail-closed entre disponibilité, minage optionnel, location, nettoyage et reprise.
 
-## Ordre de réalisation
+## Priorité absolue
 
-1. Finaliser le Host Desktop et ses diagnostics natifs.
-2. Relier correctement le compte utilisateur, la machine hôte et l'annonce GPU.
-3. Créer une réservation réelle sur Devnet et vérifier son financement.
-4. Transmettre la réservation au Host Desktop de manière authentifiée.
-5. Préparer un environnement locataire isolé.
-6. Attacher uniquement le GPU réservé et les ressources explicitement autorisées.
-7. Démarrer la session locataire et superviser son état.
-8. Mesurer l'usage et transmettre les preuves nécessaires à l'API.
-9. Terminer la session, révoquer les accès et détruire l'environnement.
-10. Vérifier que le GPU, le stockage et le réseau sont revenus dans un état sain.
-11. Exécuter un test complet avec deux machines distinctes.
-12. Corriger les problèmes détectés et documenter le résultat.
+Une location GPU financée et vérifiée est toujours prioritaire sur le minage.
 
-## Critères de validation
+Le flux obligatoire est :
 
-- aucun accès aux fichiers personnels de l'hôte ;
-- aucun démarrage de session sans réservation financée et vérifiée ;
-- aucune ressource non réservée exposée au locataire ;
-- arrêt d'urgence fonctionnel pendant toute la location ;
-- clés et accès temporaires révoqués à la fin ;
-- nettoyage vérifié avant de rendre la machine disponible ;
-- journaux exploitables sans secret ni donnée personnelle sensible ;
-- tests automatisés et test manuel sur deux machines réussis.
+1. machine certifiée et disponible ;
+2. minage optionnel uniquement lorsque la machine est libre ;
+3. réception d'une réservation authentifiée et financée ;
+4. arrêt du mineur ;
+5. preuve que tous les processus de minage sont terminés ;
+6. préparation d'un workspace isolé ;
+7. preuve d'isolation, d'exclusivité GPU et d'accès temporaire ;
+8. session locataire active ;
+9. fin de session ;
+10. révocation des accès et destruction du workspace ;
+11. vérification GPU, stockage et réseau ;
+12. reprise du minage uniquement si toutes les vérifications réussissent.
 
-## Frontières d'architecture à préserver
+## États du coordinateur
 
-La branche doit seulement conserver des interfaces génériques entre :
+- `offline`
+- `available`
+- `mining`
+- `stopping_mining`
+- `preparing_rental`
+- `rental_active`
+- `cleaning_rental`
+- `quarantined`
+- `emergency_stopped`
 
-- disponibilité de la machine ;
-- préparation d'une location ;
-- session active ;
-- nettoyage ;
-- retour à l'état disponible.
+Une transition non prévue est refusée. Une preuve de sécurité manquante place la machine en quarantaine.
 
-Ces interfaces ne doivent contenir aucune logique métier supplémentaire. Elles servent uniquement à éviter de coupler le Host Desktop à une seule évolution future.
+## Frontières de sécurité
 
-## Hors périmètre
+- aucune location sans réservation financée ;
+- identifiants strictement validés ;
+- aucune commande shell arbitraire ;
+- aucune exécution provenant directement d'une entrée utilisateur ;
+- aucun démarrage de location avant arrêt confirmé du mineur ;
+- aucune ressource non réservée exposée ;
+- aucun retour à l'état disponible avant nettoyage complet ;
+- aucune sortie de quarantaine sans revue locale et recertification ;
+- arrêt d'urgence disponible pendant tout le cycle.
 
-Aucune fonctionnalité secondaire utilisant les ressources libres ne doit être développée dans cette branche. Aucun exécutable, pool, configuration, écran, état métier ou test associé ne doit être ajouté avant la validation complète de la location GPU.
+## Architecture cible
+
+### Interface Tauri
+
+L'interface utilisateur reste non privilégiée. Elle affiche l'état et demande des actions au service local signé.
+
+### Service GPUbnb Host
+
+Le service privilégié détient la machine d'états, valide les commandes authentifiées, applique l'anti-rejeu et coordonne les adaptateurs natifs.
+
+### Adaptateur de workspace
+
+Responsable de la création, de l'isolation, de l'attachement exclusif du GPU, de la supervision et de la destruction du workspace.
+
+### Adaptateur de minage
+
+Responsable uniquement d'un binaire approuvé, signé et configuré par des paramètres structurés. Il doit fournir une preuve fiable d'arrêt avant toute location.
+
+### API GPUbnb
+
+Responsable de l'identité, des machines, des annonces, de la réservation, de la preuve de financement et de la réception des mesures d'usage.
+
+## Critères de validation de bout en bout
+
+- association utilisateur-machine authentifiée ;
+- annonce GPU publiée depuis une machine certifiée ;
+- réservation créée et financée sur Devnet ;
+- réservation transmise au bon Host Desktop ;
+- arrêt du minage vérifié ;
+- workspace isolé créé ;
+- GPU réservé attaché exclusivement ;
+- accès locataire temporaire fonctionnel ;
+- télémétrie et arrêt d'urgence fonctionnels ;
+- session terminée ;
+- accès révoqués ;
+- workspace détruit ;
+- GPU sain et remis en disponibilité ;
+- reprise du minage seulement après nettoyage validé ;
+- scénario testé sur deux machines distinctes.
+
+## État actuel de la branche
+
+Le coordinateur fail-closed et ses tests automatisés sont présents. Les adaptateurs natifs de workspace, le transport authentifié API vers Host Desktop et l'exécution réelle d'un mineur approuvé restent à connecter avant de déclarer le parcours entièrement fonctionnel sur deux machines.
