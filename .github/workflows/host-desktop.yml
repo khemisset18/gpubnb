@@ -3,12 +3,18 @@ name: host-desktop
 on:
   pull_request:
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'apps/host-desktop/**'
+      - 'docs/HOST_DESKTOP_*.md'
       - '.github/workflows/host-desktop.yml'
   push:
     branches: [main]
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'apps/host-desktop/**'
+      - 'docs/HOST_DESKTOP_*.md'
       - '.github/workflows/host-desktop.yml'
 
 permissions:
@@ -30,6 +36,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/host-desktop/package-lock.json
       - name: Require committed dependency lock
         shell: bash
         run: |
@@ -51,9 +59,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: apps/host-desktop/src-tauri
     steps:
       - uses: actions/checkout@v4
       - name: Install Tauri Linux dependencies
@@ -64,20 +69,20 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: apps/host-desktop/src-tauri
+          workspaces: .
       - name: Require committed Cargo lock
         shell: bash
         run: |
           if [ ! -f Cargo.lock ]; then
-            echo 'Cargo.lock is required for reproducible application builds.' >&2
+            echo 'Cargo.lock is required at the workspace root for reproducible builds.' >&2
             exit 1
           fi
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Tests
-        run: cargo test --all-targets --locked
+        run: cargo test -p gpubnb-host-desktop --all-targets --locked
       - name: Clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: cargo clippy -p gpubnb-host-desktop --all-targets --locked -- -D warnings
 
   security-gate:
     name: production security gate
@@ -90,4 +95,4 @@ jobs:
           test -f docs/HOST_DESKTOP_PRODUCTION_READINESS.md
           test -f docs/HOST_DESKTOP_THREAT_MODEL.md
           test -f docs/HOST_DESKTOP_RESOURCE_ORCHESTRATION.md
-          grep -q 'Status: \*\*NOT READY TO MERGE\*\*' docs/HOST_DESKTOP_PRODUCTION_READINESS.md
+          grep -Fq 'Status: **NOT READY TO MERGE**' docs/HOST_DESKTOP_PRODUCTION_READINESS.md
