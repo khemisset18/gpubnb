@@ -33,17 +33,20 @@ pub enum ResourceEvent {
 pub struct ResourceController {
     pub state: ResourceState,
     pub mining_enabled: bool,
+    pub reservation_pending: bool,
 }
 
 impl ResourceController {
     pub fn apply(&mut self, event: ResourceEvent) -> Result<ResourceState, &'static str> {
         if event == ResourceEvent::EmergencyStop {
             self.state = ResourceState::EmergencyStopped;
+            self.reservation_pending = false;
             return Ok(self.state);
         }
 
         if event == ResourceEvent::SecurityInvalidated {
             self.state = ResourceState::Offline;
+            self.reservation_pending = false;
             return Ok(self.state);
         }
 
@@ -59,18 +62,28 @@ impl ResourceController {
             }
             (ResourceState::Mining, ResourceEvent::MiningDisabled) => {
                 self.mining_enabled = false;
+                self.reservation_pending = false;
                 ResourceState::StoppingMiner
             }
             (ResourceState::Mining, ResourceEvent::ReservationReceived) => {
+                self.reservation_pending = true;
                 ResourceState::StoppingMiner
             }
             (ResourceState::Idle, ResourceEvent::ReservationReceived) => {
+                self.reservation_pending = true;
                 ResourceState::PreparingRental
             }
             (ResourceState::StoppingMiner, ResourceEvent::MinerStoppedCleanly) => {
-                ResourceState::PreparingRental
+                if self.reservation_pending {
+                    ResourceState::PreparingRental
+                } else {
+                    ResourceState::Idle
+                }
             }
-            (ResourceState::PreparingRental, ResourceEvent::RentalWorkspaceReady) => {
+            (ResourceState::PreparingRental, ResourceEvent::RentalWorkspaceReady)
+                if self.reservation_pending =>
+            {
+                self.reservation_pending = false;
                 ResourceState::Rental
             }
             (ResourceState::Rental, ResourceEvent::RentalFinished) => ResourceState::Cleaning,
@@ -85,6 +98,7 @@ impl ResourceController {
                 if matches!(state, ResourceState::Offline | ResourceState::EmergencyStopped) =>
             {
                 self.mining_enabled = false;
+                self.reservation_pending = false;
                 state
             }
             _ => return Err("resource_transition_not_allowed"),
@@ -98,17 +112,23 @@ impl ResourceController {
 mod tests {
     use super::*;
 
+    fn controller(state: ResourceState, mining_enabled: bool) -> ResourceController {
+        ResourceController {
+            state,
+            mining_enabled,
+            reservation_pending: false,
+        }
+    }
+
     #[test]
     fn rental_cannot_start_before_clean_miner_stop() {
-        let mut controller = ResourceController {
-            state: ResourceState::Mining,
-            mining_enabled: true,
-        };
+        let mut controller = controller(ResourceState::Mining, true);
 
         assert_eq!(
             controller.apply(ResourceEvent::ReservationReceived),
             Ok(ResourceState::StoppingMiner)
         );
+        assert!(controller.reservation_pending);
         assert_eq!(
             controller.apply(ResourceEvent::RentalWorkspaceReady),
             Err("resource_transition_not_allowed")
@@ -120,11 +140,24 @@ mod tests {
     }
 
     #[test]
+    fn manual_miner_stop_never_creates_a_rental() {
+        let mut controller = controller(ResourceState::Mining, true);
+
+        assert_eq!(
+            controller.apply(ResourceEvent::MiningDisabled),
+            Ok(ResourceState::StoppingMiner)
+        );
+        assert!(!controller.mining_enabled);
+        assert!(!controller.reservation_pending);
+        assert_eq!(
+            controller.apply(ResourceEvent::MinerStoppedCleanly),
+            Ok(ResourceState::Idle)
+        );
+    }
+
+    #[test]
     fn rental_requires_workspace_readiness_proof() {
-        let mut controller = ResourceController {
-            state: ResourceState::Idle,
-            mining_enabled: false,
-        };
+        let mut controller = controller(ResourceState::Idle, false);
 
         controller
             .apply(ResourceEvent::ReservationReceived)
@@ -138,14 +171,26 @@ mod tests {
             controller.apply(ResourceEvent::RentalWorkspaceReady),
             Ok(ResourceState::Rental)
         );
+        assert!(!controller.reservation_pending);
+    }
+
+    #[test]
+    fn workspace_proof_without_reservation_is_rejected() {
+        let mut controller = ResourceController {
+            state: ResourceState::PreparingRental,
+            mining_enabled: false,
+            reservation_pending: false,
+        };
+
+        assert_eq!(
+            controller.apply(ResourceEvent::RentalWorkspaceReady),
+            Err("resource_transition_not_allowed")
+        );
     }
 
     #[test]
     fn mining_never_resumes_before_verified_cleanup() {
-        let mut controller = ResourceController {
-            state: ResourceState::Rental,
-            mining_enabled: true,
-        };
+        let mut controller = controller(ResourceState::Rental, true);
 
         controller
             .apply(ResourceEvent::RentalFinished)
@@ -176,23 +221,27 @@ mod tests {
             let mut controller = ResourceController {
                 state,
                 mining_enabled: true,
+                reservation_pending: true,
             };
             assert_eq!(
                 controller.apply(ResourceEvent::EmergencyStop),
                 Ok(ResourceState::EmergencyStopped)
             );
+            assert!(!controller.reservation_pending);
         }
     }
 
     #[test]
-    fn invalidated_security_forces_offline() {
+    fn invalidated_security_forces_offline_and_drops_reservation() {
         let mut controller = ResourceController {
             state: ResourceState::Rental,
             mining_enabled: true,
+            reservation_pending: true,
         };
         assert_eq!(
             controller.apply(ResourceEvent::SecurityInvalidated),
             Ok(ResourceState::Offline)
         );
+        assert!(!controller.reservation_pending);
     }
 }
