@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 const MAX_IDENTIFIER_LEN: usize = 96;
-const MAX_RESERVATION_DURATION_SECONDS: u64 = 7 * 24 * 60 * 60;
-const MAX_RESERVATION_PREPARATION_LEAD_SECONDS: u64 = 15 * 60;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -48,20 +46,8 @@ impl VerifiedReservation {
         if self.ends_at_unix_seconds <= self.starts_at_unix_seconds {
             return Err("reservation_invalid_window");
         }
-        if self
-            .ends_at_unix_seconds
-            .saturating_sub(self.starts_at_unix_seconds)
-            > MAX_RESERVATION_DURATION_SECONDS
-        {
-            return Err("reservation_duration_exceeded");
-        }
         if now >= self.ends_at_unix_seconds {
             return Err("reservation_expired");
-        }
-        if self.starts_at_unix_seconds.saturating_sub(now)
-            > MAX_RESERVATION_PREPARATION_LEAD_SECONDS
-        {
-            return Err("reservation_too_early");
         }
         Ok(())
     }
@@ -319,30 +305,21 @@ mod tests {
     }
 
     #[test]
-    fn reservation_too_far_in_future_is_rejected() {
+    fn reservation_can_be_scheduled_far_in_advance() {
         let mut orchestrator = ready_host();
         let mut candidate = reservation();
-        candidate.starts_at_unix_seconds = 10_000;
-        candidate.ends_at_unix_seconds = 11_000;
-        assert_eq!(
-            orchestrator.accept_reservation(candidate, 1_000),
-            Err("reservation_too_early")
-        );
-        assert_eq!(orchestrator.snapshot().state, HostWorkloadState::Available);
+        candidate.starts_at_unix_seconds = 10_000_000;
+        candidate.ends_at_unix_seconds = 10_003_600;
+        assert!(orchestrator.accept_reservation(candidate, 1_000).is_ok());
     }
 
     #[test]
-    fn excessive_reservation_duration_is_rejected() {
+    fn multi_month_reservation_is_allowed() {
         let mut orchestrator = ready_host();
         let mut candidate = reservation();
-        candidate.ends_at_unix_seconds = candidate.starts_at_unix_seconds
-            + MAX_RESERVATION_DURATION_SECONDS
-            + 1;
-        assert_eq!(
-            orchestrator.accept_reservation(candidate, 1_000),
-            Err("reservation_duration_exceeded")
-        );
-        assert_eq!(orchestrator.snapshot().state, HostWorkloadState::Available);
+        candidate.starts_at_unix_seconds = 1_000;
+        candidate.ends_at_unix_seconds = 1_000 + 90 * 24 * 60 * 60;
+        assert!(orchestrator.accept_reservation(candidate, 1_000).is_ok());
     }
 
     #[test]
