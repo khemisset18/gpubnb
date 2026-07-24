@@ -30,6 +30,7 @@ export const acceleratorKindSchema = z
 
 export const acceleratorTelemetrySchema = z.object({
   schemaVersion: z.literal(1),
+  provider: z.string().trim().min(1).max(80).optional(),
   kind: acceleratorKindSchema,
   vendor: z.string().trim().min(1).max(80),
   model: z.string().trim().min(1).max(200),
