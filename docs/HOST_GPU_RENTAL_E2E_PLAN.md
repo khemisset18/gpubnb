@@ -49,6 +49,30 @@ Une transition non prévue est refusée. Une preuve de sécurité manquante plac
 - aucune sortie de quarantaine sans revue locale et recertification ;
 - arrêt d'urgence disponible pendant tout le cycle.
 
+## Configuration du minage par le propriétaire
+
+Le minage est facultatif et appartient exclusivement au propriétaire de la machine. Le locataire, le control plane et le service hôte ne peuvent pas modifier ses préférences.
+
+Le propriétaire peut :
+
+- désactiver complètement le minage ;
+- activer le minage automatique seulement lorsque le GPU est libre ;
+- choisir une crypto parmi les profils approuvés ;
+- utiliser une pool gérée par GPUbnb ;
+- ou fournir sa propre pool compatible avec un protocole Stratum autorisé ;
+- définir son wallet, son nom de worker et une référence vers un secret stocké séparément.
+
+La configuration ne contient jamais :
+
+- un chemin d'exécutable arbitraire ;
+- une commande shell ;
+- des arguments libres ;
+- un mot de passe brut ;
+- des identifiants intégrés dans l'URL de pool ;
+- une URL HTTP servant à télécharger ou exécuter un programme.
+
+Le profil de mineur est choisi dans une liste approuvée et signée. La résolution d'une pool gérée provient d'un catalogue de confiance. Une réservation financée arrête toujours le minage, quelle que soit la configuration du propriétaire.
+
 ## Architecture cible
 
 ### Interface Tauri
@@ -65,7 +89,7 @@ Responsable de la création, de l'isolation, de l'attachement exclusif du GPU, d
 
 ### Adaptateur de minage
 
-Responsable uniquement d'un binaire approuvé, signé et configuré par des paramètres structurés. Il doit fournir une preuve fiable d'arrêt avant toute location.
+Responsable uniquement d'un binaire approuvé, signé et configuré par des paramètres structurés. Il doit fournir une preuve fiable d'arrêt avant toute location. Il reçoit un `MiningLaunchSpec` validé et ne construit jamais une ligne de commande à partir d'un texte libre.
 
 ### API GPUbnb
 
@@ -77,6 +101,8 @@ Responsable de l'identité, des machines, des annonces, de la réservation, de l
 - annonce GPU publiée depuis une machine certifiée ;
 - réservation créée et financée sur Devnet ;
 - réservation transmise au bon Host Desktop ;
+- configuration de minage modifiable uniquement par le propriétaire ;
+- profil de mineur et pool validés avant démarrage ;
 - arrêt du minage vérifié ;
 - workspace isolé créé ;
 - GPU réservé attaché exclusivement ;
@@ -91,4 +117,4 @@ Responsable de l'identité, des machines, des annonces, de la réservation, de l
 
 ## État actuel de la branche
 
-Le coordinateur fail-closed et ses tests automatisés sont présents. Les adaptateurs natifs de workspace, le transport authentifié API vers Host Desktop et l'exécution réelle d'un mineur approuvé restent à connecter avant de déclarer le parcours entièrement fonctionnel sur deux machines.
+Le coordinateur fail-closed, le règlement proportionnel, la validation de configuration du minage et leurs tests automatisés sont présents. Les préférences de minage ne sont pas encore persistées ni reliées à un adaptateur natif réel. Les adaptateurs de workspace, le transport authentifié API vers Host Desktop et l'exécution réelle d'un mineur approuvé restent à connecter avant de déclarer le parcours entièrement fonctionnel sur deux machines.
