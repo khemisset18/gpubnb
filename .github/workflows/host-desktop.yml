@@ -30,11 +30,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: apps/host-desktop/package-lock.json
       - name: Require committed dependency lock
         shell: bash
-        run: test -f package-lock.json
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo 'package-lock.json is required for reproducible builds.' >&2
+            exit 1
+          fi
       - name: Install dependencies reproducibly
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Typecheck
@@ -65,7 +67,11 @@ jobs:
           workspaces: apps/host-desktop/src-tauri
       - name: Require committed Cargo lock
         shell: bash
-        run: test -f Cargo.lock
+        run: |
+          if [ ! -f Cargo.lock ]; then
+            echo 'Cargo.lock is required for reproducible application builds.' >&2
+            exit 1
+          fi
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Tests
