@@ -1,3 +1,6 @@
 [workspace]
-members = ["programs/gpu_escrow"]
+members = [
+  "programs/gpu_escrow",
+  "apps/host-desktop/src-tauri",
+]
 resolver = "2"
