@@ -5,23 +5,33 @@ on:
 
 jobs:
   root-lockfile-refresh:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/step-2-hardware-metrics'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: codex/step-2-hardware-metrics
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-      - name: Regenerate root npm lockfile
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Validate root lockfile
-        run: npm ci --ignore-scripts
-      - name: Upload root lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: regenerated-root-lockfile
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 2
+      - name: Regenerate and validate root lockfile
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts
+      - name: Commit root lockfile
+        shell: bash
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json already synchronized"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "security: synchronize patched root npm lockfile"
+          git push origin HEAD:codex/step-2-hardware-metrics
 
   api:
     runs-on: ubuntu-latest
