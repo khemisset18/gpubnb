@@ -4,6 +4,25 @@ on:
   pull_request:
 
 jobs:
+  root-lockfile-refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Regenerate root npm lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Validate root lockfile
+        run: npm ci --ignore-scripts
+      - name: Upload root lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: regenerated-root-lockfile
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 2
+
   api:
     runs-on: ubuntu-latest
     defaults:
