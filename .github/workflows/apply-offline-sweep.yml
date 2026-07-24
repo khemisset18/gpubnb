@@ -21,13 +21,16 @@ jobs:
         with:
           node-version: 22
       - run: node scripts/apply-offline-sweep-integration.mjs
+      - name: Generate ephemeral validation secrets
+        shell: bash
+        run: |
+          echo "SESSION_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "INTERNAL_SERVICE_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - name: Validate API before commit
         working-directory: apps/api
         env:
-          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
           REDIS_URL: redis://localhost:6379
-          SESSION_SECRET: 0123456789abcdef0123456789abcdef
-          INTERNAL_SERVICE_TOKEN: 0123456789abcdef0123456789abcdef
           PLATFORM_WALLET: 11111111111111111111111111111111
         run: |
           npm ci
