@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "GPUbnb Host",
+  "version": "0.1.0",
+  "identifier": "com.gpubnb.host",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' https://api.gpubnb.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    },
+    "windows": [
+      {
+        "title": "GPUbnb Host",
+        "width": 920,
+        "height": 720,
+        "minWidth": 360,
+        "minHeight": 560,
+        "resizable": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "shortDescription": "Securely share compute capacity with GPUbnb"
+  }
+}
