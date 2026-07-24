@@ -72,3 +72,10 @@ export function sanitizeAccelerators(input: unknown): AcceleratorTelemetry[] {
 export function primaryGpu(items: AcceleratorTelemetry[]): AcceleratorTelemetry | null {
   return items.find((item) => item.kind === 'GPU' && item.available) ?? items.find((item) => item.kind === 'GPU') ?? null;
 }
+
+export function acceleratorFingerprint(items: AcceleratorTelemetry[]): string {
+  return items
+    .map((item) => `${item.kind}:${item.vendor.toLowerCase()}:${item.deviceId}`)
+    .sort()
+    .join('|');
+}
