@@ -78,10 +78,7 @@ mod tests {
     fn unknown_platform_fails_closed() {
         let diagnostic = collect_for("unknown", "x86_64");
         assert!(!diagnostic.can_host);
-        assert_eq!(
-            diagnostic.isolation_backend,
-            IsolationBackend::Unsupported
-        );
+        assert_eq!(diagnostic.isolation_backend, IsolationBackend::Unsupported);
         assert_eq!(diagnostic.reason, "operating_system_not_supported");
     }
 
