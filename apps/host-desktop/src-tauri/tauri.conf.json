@@ -27,6 +27,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "icon": [],
     "category": "Utility",
     "shortDescription": "Securely share compute capacity with GPUbnb"
   }
