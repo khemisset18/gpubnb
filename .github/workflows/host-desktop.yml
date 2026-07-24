@@ -86,7 +86,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo test -p gpubnb-host-desktop --all-targets --locked 2>&1 | tee cargo-test-${{ runner.os }}.log
+          cargo test -p gpubnb-host-desktop --all-targets 2>&1 | tee cargo-test-${{ runner.os }}.log
       - name: Upload test diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -94,8 +94,15 @@ jobs:
           name: cargo-test-${{ runner.os }}
           path: cargo-test-${{ runner.os }}.log
           if-no-files-found: error
+      - name: Upload refreshed Cargo lock
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: refreshed-cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
       - name: Clippy
-        run: cargo clippy -p gpubnb-host-desktop --all-targets --locked -- -D warnings
+        run: cargo clippy -p gpubnb-host-desktop --all-targets -- -D warnings
 
   security-gate:
     name: production security gate
