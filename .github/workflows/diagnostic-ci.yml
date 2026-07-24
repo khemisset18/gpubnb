@@ -1,0 +1,104 @@
+name: Diagnostic CI
+
+on:
+  push:
+    branches:
+      - codex/step-2-hardware-metrics
+    paths-ignore:
+      - .ci/diagnostic-report.md
+
+permissions:
+  contents: write
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gpubnb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gpubnb
+      REDIS_URL: redis://localhost:6379
+      SOLANA_CLUSTER: devnet
+      ALLOW_MAINNET: "false"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/step-2-hardware-metrics
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run complete diagnostics
+        shell: bash
+        run: |
+          set +e
+          mkdir -p .ci/logs
+          : > .ci/diagnostic-report.md
+          printf '# CI diagnostic\n\nCommit: `%s`\n\n' "$GITHUB_SHA" >> .ci/diagnostic-report.md
+
+          run_check() {
+            name="$1"
+            shift
+            logfile=".ci/logs/$(echo "$name" | tr ' /' '__').log"
+            echo "Running $name"
+            "$@" >"$logfile" 2>&1
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              printf -- '- ✅ %s\n' "$name" >> .ci/diagnostic-report.md
+            else
+              printf -- '- ❌ %s (exit %s)\n\n```text\n' "$name" "$status" >> .ci/diagnostic-report.md
+              tail -n 120 "$logfile" >> .ci/diagnostic-report.md
+              printf '\n```\n' >> .ci/diagnostic-report.md
+            fi
+          }
+
+          export SESSION_SECRET="$(openssl rand -hex 32)"
+          export INTERNAL_SERVICE_TOKEN="$(openssl rand -hex 32)"
+
+          run_check "API npm ci" bash -lc 'cd apps/api && npm ci'
+          run_check "Prisma generate" bash -lc 'cd apps/api && npx prisma generate'
+          run_check "Prisma migrate deploy" bash -lc 'cd apps/api && npx prisma migrate deploy'
+          run_check "API tests" bash -lc 'cd apps/api && npm test'
+          run_check "API build" bash -lc 'cd apps/api && npm run build'
+          run_check "API typecheck" bash -lc 'cd apps/api && npx tsc -p tsconfig.json --noEmit'
+          run_check "Agent install" bash -lc 'python -m pip install --disable-pip-version-check -e agent'
+          run_check "Agent compile" bash -lc 'python -m py_compile agent/agent.py agent/gpubnb_agent/*.py'
+          run_check "Agent tests" bash -lc 'python -m unittest discover -s agent/tests -v'
+          run_check "Rust contract tests" bash -lc 'cd programs/gpu_escrow && cargo test'
+          run_check "Web syntax" bash -lc 'node --check apps/web/app.js && node --check apps/web/config.js && node --check apps/web/account.js && node --check apps/web/workspaces.js'
+          run_check "Devnet doctor" bash -lc 'node scripts/devnet-doctor.mjs'
+          run_check "Workspace manifest" bash -lc 'python -m json.tool workspaces/developer/manifest.json >/dev/null && sh -n workspaces/developer/healthcheck.sh'
+          run_check "Shell syntax" bash -lc 'bash -n sandbox/*.sh scripts/*.sh'
+
+      - name: Commit diagnostic report
+        if: always()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .ci/diagnostic-report.md
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "ci: record full diagnostic results"
+          git push origin HEAD:codex/step-2-hardware-metrics
