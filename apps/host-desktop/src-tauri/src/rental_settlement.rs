@@ -106,7 +106,7 @@ mod tests {
     fn terms() -> SettlementTerms {
         SettlementTerms {
             reservation_id: "reservation_001".into(),
-            prepaid_amount_minor_units: 100_00,
+            prepaid_amount_minor_units: 10_000,
             scheduled_seconds: 3_600,
         }
     }
@@ -116,7 +116,7 @@ mod tests {
         let mut meter = AvailabilityMeter::new(terms()).unwrap();
         meter.record_verified_service(3_600).unwrap();
         let settlement = meter.finalize().unwrap();
-        assert_eq!(settlement.host_payout_minor_units, 100_00);
+        assert_eq!(settlement.host_payout_minor_units, 10_000);
         assert_eq!(settlement.renter_refund_minor_units, 0);
     }
 
@@ -125,8 +125,8 @@ mod tests {
         let mut meter = AvailabilityMeter::new(terms()).unwrap();
         meter.record_verified_service(1_800).unwrap();
         let settlement = meter.finalize().unwrap();
-        assert_eq!(settlement.host_payout_minor_units, 50_00);
-        assert_eq!(settlement.renter_refund_minor_units, 50_00);
+        assert_eq!(settlement.host_payout_minor_units, 5_000);
+        assert_eq!(settlement.renter_refund_minor_units, 5_000);
     }
 
     #[test]
@@ -135,7 +135,7 @@ mod tests {
         meter.record_verified_service(50_000).unwrap();
         let settlement = meter.finalize().unwrap();
         assert_eq!(settlement.verified_service_seconds, 3_600);
-        assert_eq!(settlement.host_payout_minor_units, 100_00);
+        assert_eq!(settlement.host_payout_minor_units, 10_000);
     }
 
     #[test]
