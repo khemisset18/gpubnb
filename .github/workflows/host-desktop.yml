@@ -1,0 +1,63 @@
+name: host-desktop
+
+on:
+  pull_request:
+    paths:
+      - 'apps/host-desktop/**'
+      - '.github/workflows/host-desktop.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/host-desktop/**'
+      - '.github/workflows/host-desktop.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: frontend typecheck and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/host-desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/host-desktop/package-lock.json
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Typecheck
+        run: npm run check
+      - name: Build web interface
+        run: npm run build
+
+  rust:
+    name: rust tests and lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/host-desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tauri Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/host-desktop/src-tauri
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Tests
+        run: cargo test --all-targets --locked
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
