@@ -30,6 +30,7 @@ export const acceleratorKindSchema = z
 
 export const acceleratorTelemetrySchema = z.object({
   schemaVersion: z.literal(1),
+  provider: z.string().trim().min(1).max(80).optional(),
   kind: acceleratorKindSchema,
   vendor: z.string().trim().min(1).max(80),
   model: z.string().trim().min(1).max(200),
@@ -52,18 +53,15 @@ export const acceleratorTelemetrySchema = z.object({
   }
 });
 
-export const acceleratorListSchema = z
-  .array(acceleratorTelemetrySchema)
-  .max(256)
-  .superRefine((items, ctx) => {
-    const seen = new Set<string>();
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      const key = `${item.kind}\u0000${item.vendor.toLowerCase()}\u0000${item.deviceId}`;
-      if (seen.has(key)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [index, 'deviceId'], message: 'duplicate_accelerator' });
-      seen.add(key);
-    }
-  });
+export const acceleratorListSchema = z.array(acceleratorTelemetrySchema).max(256).superRefine((items, ctx) => {
+  const seen = new Set<string>();
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]!;
+    const key = `${item.kind}\u0000${item.vendor.toLowerCase()}\u0000${item.deviceId}`;
+    if (seen.has(key)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [index, 'deviceId'], message: 'duplicate_accelerator' });
+    seen.add(key);
+  }
+});
 
 export type AcceleratorTelemetry = z.infer<typeof acceleratorTelemetrySchema>;
 

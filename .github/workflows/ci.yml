@@ -2,6 +2,7 @@ name: CI
 on:
   push:
   pull_request:
+
 jobs:
   api:
     runs-on: ubuntu-latest
@@ -43,8 +44,54 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npm test
       - run: npm run build
-      - run: npm audit --audit-level=high
       - run: npx tsc -p tsconfig.json --noEmit
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci --ignore-scripts
+      - name: npm audit (HIGH and CRITICAL)
+        id: npm-audit
+        shell: bash
+        run: |
+          set +e
+          npm audit --audit-level=high --json > npm-audit.json
+          audit_status=$?
+          set -e
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));
+          const vulnerabilities = report.vulnerabilities || {};
+          const blocking = Object.entries(vulnerabilities)
+            .filter(([, value]) => value.severity === 'high' || value.severity === 'critical')
+            .map(([name, value]) => ({
+              name,
+              severity: value.severity,
+              direct: Boolean(value.isDirect),
+              via: (value.via || []).map(item => typeof item === 'string' ? item : item.url || item.title).slice(0, 4),
+              fixAvailable: value.fixAvailable,
+            }));
+          console.log(JSON.stringify({blockingCount: blocking.length, blocking}, null, 2));
+          NODE
+          exit "$audit_status"
+      - name: Upload npm audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: apps/api/npm-audit.json
+          if-no-files-found: error
+          retention-days: 14
+
   agent:
     runs-on: ubuntu-latest
     steps:
@@ -67,6 +114,7 @@ jobs:
         with:
           workspaces: programs/gpu_escrow
       - run: cargo test
+
   production-gates:
     runs-on: ubuntu-latest
     steps:
@@ -100,15 +148,49 @@ jobs:
             ghcr.io/gitleaks/gitleaks:v8.24.3 \
             detect --source=/repo --config=/repo/.gitleaks.toml \
             --redact --verbose --no-banner --no-git
-      - name: Trivy filesystem scan
+      - name: Trivy filesystem report
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          exit-code: '1'
+          format: json
+          output: trivy-results.json
+          exit-code: '0'
+      - name: Enforce Trivy HIGH/CRITICAL gate
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('trivy-results.json').read_text(encoding='utf-8'))
+          findings = []
+          for result in report.get('Results') or []:
+              target = result.get('Target')
+              for item in result.get('Vulnerabilities') or []:
+                  if item.get('Severity') in {'HIGH', 'CRITICAL'}:
+                      findings.append({
+                          'target': target,
+                          'id': item.get('VulnerabilityID'),
+                          'package': item.get('PkgName'),
+                          'installed': item.get('InstalledVersion'),
+                          'fixed': item.get('FixedVersion'),
+                          'severity': item.get('Severity'),
+                      })
+          print(json.dumps({'blockingCount': len(findings), 'findings': findings[:100]}, indent=2))
+          raise SystemExit(1 if findings else 0)
+          PY
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-filesystem-report
+          path: trivy-results.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Shell syntax
         run: bash -n sandbox/*.sh scripts/*.sh
       - name: Python compile
-        run: python3 -m py_compile agent/agent.py
+        run: python3 -m py_compile agent/agent.py agent/gpubnb_agent/*.py

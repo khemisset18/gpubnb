@@ -46,5 +46,11 @@ test('selects a compatible primary GPU without excluding other devices', () => {
 
 test('rejects unknown top-level fields and excessive devices', () => {
   assert.throws(() => sanitizeAccelerators([{ ...valid, injected: true }]), /Unrecognized key/);
-  assert.throws(() => sanitizeAccelerators(Array.from({ length: 257 }, (_, i) => ({ ...valid, deviceId: `qpu-${i}` }))), /less than or equal to 256/);
+  assert.throws(
+    () => sanitizeAccelerators(Array.from({ length: 257 }, (_, i) => ({ ...valid, deviceId: `qpu-${i}` }))),
+    (error: unknown) => {
+      if (!(error instanceof Error)) return false;
+      return error.message.includes('"code": "too_big"') && error.message.includes('"maximum": 256');
+    },
+  );
 });

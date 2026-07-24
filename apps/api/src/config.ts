@@ -21,7 +21,7 @@ const schema = z.object({
   ESCROW_PROGRAM_ID: z.string().default('NOT_DEPLOYED_YET'),
   ALLOW_MAINNET: z.enum(['true', 'false']).default('false'),
   HEARTBEAT_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(120).default(25),
-  HEARTBEAT_OFFLINE_SECONDS: z.coerce.number().int().min(15).max(300).default(40),
+  HEARTBEAT_OFFLINE_SECONDS: z.coerce.number().int().min(15).max(300).default(60),
   COMMISSION_BPS: z.coerce.number().int().min(0).max(1000).default(500),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_ANON_KEY: z.string().min(20).optional(),
