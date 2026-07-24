@@ -1,4 +1,7 @@
-import { payloadHash, validateDeliveryKey, validatePayload, validateTopic, type SqlClient } from './reliable-delivery.js';
+import type { PrismaClient } from '@prisma/client';
+import { payloadHash, validateDeliveryKey, validatePayload, validateTopic } from './reliable-delivery.js';
+
+type SqlClient = Pick<PrismaClient, '$executeRaw' | '$queryRaw'>;
 
 export interface ConsumedEnvelope {
   id: string;
