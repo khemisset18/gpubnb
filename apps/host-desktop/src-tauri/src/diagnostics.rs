@@ -60,16 +60,28 @@ mod tests {
 
     #[test]
     fn supported_platforms_select_an_isolation_backend() {
-        assert_eq!(collect_for("windows", "x86_64").isolation_backend, IsolationBackend::HyperV);
-        assert_eq!(collect_for("macos", "aarch64").isolation_backend, IsolationBackend::VirtualizationFramework);
-        assert_eq!(collect_for("linux", "x86_64").isolation_backend, IsolationBackend::Kvm);
+        assert_eq!(
+            collect_for("windows", "x86_64").isolation_backend,
+            IsolationBackend::HyperV
+        );
+        assert_eq!(
+            collect_for("macos", "aarch64").isolation_backend,
+            IsolationBackend::VirtualizationFramework
+        );
+        assert_eq!(
+            collect_for("linux", "x86_64").isolation_backend,
+            IsolationBackend::Kvm
+        );
     }
 
     #[test]
     fn unknown_platform_fails_closed() {
         let diagnostic = collect_for("unknown", "x86_64");
         assert!(!diagnostic.can_host);
-        assert_eq!(diagnostic.isolation_backend, IsolationBackend::Unsupported);
+        assert_eq!(
+            diagnostic.isolation_backend,
+            IsolationBackend::Unsupported
+        );
         assert_eq!(diagnostic.reason, "operating_system_not_supported");
     }
 
