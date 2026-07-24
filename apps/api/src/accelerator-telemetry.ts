@@ -55,7 +55,7 @@ export const acceleratorTelemetrySchema = z.object({
 export const acceleratorListSchema = z.array(acceleratorTelemetrySchema).max(256).superRefine((items, ctx) => {
   const seen = new Set<string>();
   for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
+    const item = items[index]!;
     const key = `${item.kind}\u0000${item.vendor.toLowerCase()}\u0000${item.deviceId}`;
     if (seen.has(key)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [index, 'deviceId'], message: 'duplicate_accelerator' });
     seen.add(key);
