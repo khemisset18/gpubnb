@@ -7,15 +7,16 @@ const apiRoot = resolve(import.meta.dirname, '..');
 const repoRoot = resolve(apiRoot, '../..');
 const read = (path: string) => readFileSync(resolve(repoRoot, path), 'utf8');
 
-const tomlAssignment = (key: string, value: string) =>
-  new RegExp(`^\\s*${key}\\s*=\\s*"${value.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}"\\s*$`, 'm');
+const normalizedLines = (content: string) =>
+  new Set(content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
 
 test('Netlify proxies same-origin API calls to Render', () => {
   const config = read('netlify.toml');
-  assert.match(config, tomlAssignment('from', '/api/*'));
-  assert.match(config, tomlAssignment('to', 'https://gpubnb.onrender.com/:splat'));
-  assert.match(config, /^\s*status\s*=\s*200\s*$/m);
-  assert.match(config, /^\s*force\s*=\s*true\s*$/m);
+  const lines = normalizedLines(config);
+  assert.ok(lines.has('from = "/api/*"'));
+  assert.ok(lines.has('to = "https://gpubnb.onrender.com/:splat"'));
+  assert.ok(lines.has('status = 200'));
+  assert.ok(lines.has('force = true'));
   assert.match(read('apps/web/config.js'), /GPUBNB_API_URL = .+ "\/api"/);
 });
 
