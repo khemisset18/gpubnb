@@ -1,5 +1,5 @@
-commit=e384c72140a8b7a6832624cc2045659ce4eb5f0b
-exit=1
+commit=bd45a147f0630298a45a2fbc1a0f748073c468d7
+exit=0
 
 > gpubnb-enterprise-api@1.0.0-devnet.1 test
 > tsx --test test/*.test.ts
@@ -8,399 +8,357 @@ TAP version 13
 # Subtest: keeps a stable machine publishable
 ok 1 - keeps a stable machine publishable
   ---
-  duration_ms: 1.768636
+  duration_ms: 1.044363
   type: 'test'
   ...
 # Subtest: requires verification when inventory changes outside a session
 ok 2 - requires verification when inventory changes outside a session
   ---
-  duration_ms: 0.159411
+  duration_ms: 0.125599
   type: 'test'
   ...
 # Subtest: quarantines and freezes on removal during an active bound session
 ok 3 - quarantines and freezes on removal during an active bound session
   ---
-  duration_ms: 0.132991
+  duration_ms: 0.084817
   type: 'test'
   ...
 # Subtest: quarantines an identity mutation during an active session
 ok 4 - quarantines an identity mutation during an active session
   ---
-  duration_ms: 0.117772
+  duration_ms: 0.076821
   type: 'test'
   ...
 # Subtest: does not quarantine a missing accelerator outside a session
 ok 5 - does not quarantine a missing accelerator outside a session
   ---
-  duration_ms: 0.210988
+  duration_ms: 0.14016
   type: 'test'
   ...
 # Subtest: treats a legacy GPU mismatch as verification outside a session
 ok 6 - treats a legacy GPU mismatch as verification outside a session
   ---
-  duration_ms: 0.118483
+  duration_ms: 0.092765
   type: 'test'
   ...
 # Subtest: accepts unknown future accelerator kinds
 ok 7 - accepts unknown future accelerator kinds
   ---
-  duration_ms: 4.281404
+  duration_ms: 3.686392
   type: 'test'
   ...
 # Subtest: rejects duplicate identities
 ok 8 - rejects duplicate identities
   ---
-  duration_ms: 1.333114
+  duration_ms: 1.305787
   type: 'test'
   ...
 # Subtest: rejects unsafe and unbounded metadata
 ok 9 - rejects unsafe and unbounded metadata
   ---
-  duration_ms: 1.192298
+  duration_ms: 0.851375
   type: 'test'
   ...
 # Subtest: rejects impossible memory and metric values
 ok 10 - rejects impossible memory and metric values
   ---
-  duration_ms: 0.772477
+  duration_ms: 0.5343
   type: 'test'
   ...
 # Subtest: selects a compatible primary GPU without excluding other devices
 ok 11 - selects a compatible primary GPU without excluding other devices
   ---
-  duration_ms: 0.433157
+  duration_ms: 0.283778
   type: 'test'
   ...
 # Subtest: rejects unknown top-level fields and excessive devices
-not ok 12 - rejects unknown top-level fields and excessive devices
+ok 12 - rejects unknown top-level fields and excessive devices
   ---
-  duration_ms: 33.079364
+  duration_ms: 19.071279
   type: 'test'
-  location: '/home/runner/work/gpubnb/gpubnb/apps/api/test/accelerator-telemetry.test.ts:1:1740'
-  failureType: 'testCodeFailure'
-  error: |-
-    The input did not match the regular expression /less than or equal to 256/. Input:
-    
-    '[\n' +
-      '  {\n' +
-      '    "code": "too_big",\n' +
-      '    "maximum": 256,\n' +
-      '    "type": "array",\n' +
-      '    "inclusive": true,\n' +
-      '    "exact": false,\n' +
-      '    "message": "Array must contain at most 256 element(s)",\n' +
-      '    "path": []\n' +
-      '  }\n' +
-      ']'
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected:
-  actual:
-  error: ''
-  stack: |-
-    get error (file:///home/runner/work/gpubnb/gpubnb/apps/api/node_modules/zod/v3/types.js:39:31)
-    ZodEffects.parse (file:///home/runner/work/gpubnb/gpubnb/apps/api/node_modules/zod/v3/types.js:114:22)
-    sanitizeAccelerators (/home/runner/work/gpubnb/gpubnb/apps/api/src/accelerator-telemetry.ts:69:32)
-    <anonymous> (/home/runner/work/gpubnb/gpubnb/apps/api/test/accelerator-telemetry.test.ts:49:23)
-    getActual (node:assert:609:5)
-    Function.throws (node:assert:757:24)
-    TestContext.<anonymous> (/home/runner/work/gpubnb/gpubnb/apps/api/test/accelerator-telemetry.test.ts:49:10)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-  operator: 'throws'
-  stack: |-
-    TestContext.<anonymous> (/home/runner/work/gpubnb/gpubnb/apps/api/test/accelerator-telemetry.test.ts:49:10)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-    Test.postRun (node:internal/test_runner/test:1173:19)
-    Test.run (node:internal/test_runner/test:1101:12)
-    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...
 # Subtest: Netlify proxies same-origin API calls to Render
 ok 13 - Netlify proxies same-origin API calls to Render
   ---
-  duration_ms: 1.064147
+  duration_ms: 0.858238
   type: 'test'
   ...
 # Subtest: professional account pages and protected API routes exist
 ok 14 - professional account pages and protected API routes exist
   ---
-  duration_ms: 0.445621
+  duration_ms: 0.543348
   type: 'test'
   ...
 # Subtest: Compute session has protected lifecycle, metrics and emergency stop
 ok 15 - Compute session has protected lifecycle, metrics and emergency stop
   ---
-  duration_ms: 0.415945
+  duration_ms: 0.409195
   type: 'test'
   ...
 # Subtest: Compute is prepared before renter arrival and access waits for READY
 ok 16 - Compute is prepared before renter arrival and access waits for READY
   ---
-  duration_ms: 0.465948
+  duration_ms: 0.379865
   type: 'test'
   ...
 # Subtest: account schema separates private identity and user capabilities
 ok 17 - account schema separates private identity and user capabilities
   ---
-  duration_ms: 0.200929
+  duration_ms: 0.141225
   type: 'test'
   ...
 # Subtest: workspace catalogue uses one responsive four-column grid
 ok 18 - workspace catalogue uses one responsive four-column grid
   ---
-  duration_ms: 0.474666
+  duration_ms: 0.326248
   type: 'test'
   ...
 # Subtest: writes and reads an artifact file
 ok 19 - writes and reads an artifact file
   ---
-  duration_ms: 9.398253
+  duration_ms: 7.887695
   type: 'test'
   ...
 # Subtest: sha256 hash is 64 hex chars
 ok 20 - sha256 hash is 64 hex chars
   ---
-  duration_ms: 0.617694
+  duration_ms: 0.435906
   type: 'test'
   ...
 # Subtest: creates nested directory structure for storage key
 ok 21 - creates nested directory structure for storage key
   ---
-  duration_ms: 4.084514
+  duration_ms: 2.713708
   type: 'test'
   ...
 # Subtest: allows the diagnostic happy path
 ok 22 - allows the diagnostic happy path
   ---
-  duration_ms: 0.893826
+  duration_ms: 0.601747
   type: 'test'
   ...
 # Subtest: terminal statuses cannot transition
 ok 23 - terminal statuses cannot transition
   ---
-  duration_ms: 0.219093
+  duration_ms: 0.169161
   type: 'test'
   ...
 # Subtest: cannot skip directly from queued to running
 ok 24 - cannot skip directly from queued to running
   ---
-  duration_ms: 0.130877
+  duration_ms: 0.080096
   type: 'test'
   ...
 # Subtest: accepts multi-month reservations without a product duration limit
 ok 25 - accepts multi-month reservations without a product duration limit
   ---
-  duration_ms: 0.987052
+  duration_ms: 0.867836
   type: 'test'
   ...
 # Subtest: treats adjacent reservations as non-overlapping
 ok 26 - treats adjacent reservations as non-overlapping
   ---
-  duration_ms: 0.204365
+  duration_ms: 0.140635
   type: 'test'
   ...
 # Subtest: instant rental ends no later than the next future reservation
 ok 27 - instant rental ends no later than the next future reservation
   ---
-  duration_ms: 0.788196
+  duration_ms: 0.707046
   type: 'test'
   ...
 # Subtest: requires bilateral acceptance of a negotiated price
 ok 28 - requires bilateral acceptance of a negotiated price
   ---
-  duration_ms: 0.241405
+  duration_ms: 0.183871
   type: 'test'
   ...
 # Subtest: scheduled reservation time starts at the agreed hour even if provider is late
 ok 29 - scheduled reservation time starts at the agreed hour even if provider is late
   ---
-  duration_ms: 0.21752
+  duration_ms: 0.145835
   type: 'test'
   ...
 # Subtest: accepts unknown and future accelerator identities
 ok 30 - accepts unknown and future accelerator identities
   ---
-  duration_ms: 0.734114
+  duration_ms: 0.592515
   type: 'test'
   ...
 # Subtest: builds a deterministic idempotent offline transition plan
 ok 31 - builds a deterministic idempotent offline transition plan
   ---
-  duration_ms: 1.511721
+  duration_ms: 1.064708
   type: 'test'
   ...
 # Subtest: computes the heartbeat cutoff from a trusted server clock
 ok 32 - computes the heartbeat cutoff from a trusted server clock
   ---
-  duration_ms: 0.351713
+  duration_ms: 0.354257
   type: 'test'
   ...
 # Subtest: rejects invalid offline thresholds
 ok 33 - rejects invalid offline thresholds
   ---
-  duration_ms: 0.425893
+  duration_ms: 0.477447
   type: 'test'
   ...
 # Subtest: accepts a valid v2 signature exactly once
 ok 34 - accepts a valid v2 signature exactly once
   ---
-  duration_ms: 55.972238
+  duration_ms: 51.030232
   type: 'test'
   ...
 # Subtest: rejects any body alteration
 ok 35 - rejects any body alteration
   ---
-  duration_ms: 8.247965
+  duration_ms: 11.523139
   type: 'test'
   ...
 # Subtest: rejects malformed nonces and unsupported versions
 ok 36 - rejects malformed nonces and unsupported versions
   ---
-  duration_ms: 7.605513
+  duration_ms: 5.95213
   type: 'test'
   ...
 # Subtest: constant-time token comparison accepts exact value
 ok 37 - constant-time token comparison accepts exact value
   ---
-  duration_ms: 0.876582
+  duration_ms: 0.960505
   type: 'test'
   ...
 # Subtest: constant-time token comparison rejects missing, short and different values
 ok 38 - constant-time token comparison rejects missing, short and different values
   ---
-  duration_ms: 0.174248
+  duration_ms: 0.203662
   type: 'test'
   ...
 # Subtest: full pay at 90 percent
 ok 39 - full pay at 90 percent
   ---
-  duration_ms: 1.025474
+  duration_ms: 0.748527
   type: 'test'
   ...
 # Subtest: pro rata below threshold
 ok 40 - pro rata below threshold
   ---
-  duration_ms: 0.13751
+  duration_ms: 0.131119
   type: 'test'
   ...
 # Subtest: invariant over sample durations
 ok 41 - invariant over sample durations
   ---
-  duration_ms: 3.486795
+  duration_ms: 3.005358
   type: 'test'
   ...
 # Subtest: zero usage refunds the full amount
 ok 42 - zero usage refunds the full amount
   ---
-  duration_ms: 0.187764
+  duration_ms: 0.184378
   type: 'test'
   ...
 # Subtest: 89.9 percent remains proportional
 ok 43 - 89.9 percent remains proportional
   ---
-  duration_ms: 0.19081
+  duration_ms: 0.147643
   type: 'test'
   ...
 # Subtest: rejects invalid durations
 ok 44 - rejects invalid durations
   ---
-  duration_ms: 0.395946
+  duration_ms: 0.364971
   type: 'test'
   ...
 # Subtest: one lamport never creates money
 ok 45 - one lamport never creates money
   ---
-  duration_ms: 0.253147
+  duration_ms: 0.157117
   type: 'test'
   ...
 # Subtest: escrow expires one hour after booking end
 ok 46 - escrow expires one hour after booking end
   ---
-  duration_ms: 0.211639
+  duration_ms: 0.159688
   type: 'test'
   ...
 # Subtest: booking digest is deterministic and domain separated
 ok 47 - booking digest is deterministic and domain separated
   ---
-  duration_ms: 1.668807
+  duration_ms: 1.565991
   type: 'test'
   ...
 # Subtest: escrow PDA is deterministic
 ok 48 - escrow PDA is deterministic
   ---
-  duration_ms: 4.973079
+  duration_ms: 4.057354
   type: 'test'
   ...
 # Subtest: heartbeat accepts NVIDIA with cudaVersion
 ok 49 - heartbeat accepts NVIDIA with cudaVersion
   ---
-  duration_ms: 3.732259
+  duration_ms: 4.182597
   type: 'test'
   ...
 # Subtest: heartbeat accepts AMD without cudaVersion
 ok 50 - heartbeat accepts AMD without cudaVersion
   ---
-  duration_ms: 1.449073
+  duration_ms: 0.399429
   type: 'test'
   ...
 # Subtest: heartbeat accepts Intel with gpuVendor INTEL
 ok 51 - heartbeat accepts Intel with gpuVendor INTEL
   ---
-  duration_ms: 0.47221
+  duration_ms: 0.283589
   type: 'test'
   ...
 # Subtest: inventory accepts without nvidiaRuntimeAvailable
 ok 52 - inventory accepts without nvidiaRuntimeAvailable
   ---
-  duration_ms: 0.538025
+  duration_ms: 0.414998
   type: 'test'
   ...
 # Subtest: inventory accepts with nvidiaRuntimeAvailable false
 ok 53 - inventory accepts with nvidiaRuntimeAvailable false
   ---
-  duration_ms: 0.231496
+  duration_ms: 0.169544
   type: 'test'
   ...
 # Subtest: high-end machine receives an explainable AI score
 ok 54 - high-end machine receives an explainable AI score
   ---
-  duration_ms: 1.033599
+  duration_ms: 0.835904
   type: 'test'
   ...
 # Subtest: missing requirements produce explicit incompatibility
 ok 55 - missing requirements produce explicit incompatibility
   ---
-  duration_ms: 0.191461
+  duration_ms: 0.151196
   type: 'test'
   ...
 # Subtest: catalogue contains exactly thirteen unique workspaces
 ok 56 - catalogue contains exactly thirteen unique workspaces
   ---
-  duration_ms: 0.394504
+  duration_ms: 0.337053
   type: 'test'
   ...
 # Subtest: counts only available intervals backed by a workload proof
 ok 57 - counts only available intervals backed by a workload proof
   ---
-  duration_ms: 0.812051
+  duration_ms: 0.542789
   type: 'test'
   ...
 # Subtest: never validates more usage than the booking duration
 ok 58 - never validates more usage than the booking duration
   ---
-  duration_ms: 0.137149
+  duration_ms: 0.089065
   type: 'test'
   ...
 1..58
 # tests 58
 # suites 0
-# pass 57
-# fail 1
+# pass 58
+# fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 3793.809019
+# duration_ms 3157.110243
