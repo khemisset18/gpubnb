@@ -141,7 +141,7 @@ export async function enforceAcceleratorSecurityDecision(
           actorType: 'PLATFORM',
           action: 'ACCELERATOR_SECURITY_QUARANTINE',
           details: {
-            reasons: decision.reasons,
+            reason: decision.reason,
             machineId,
           },
         },
