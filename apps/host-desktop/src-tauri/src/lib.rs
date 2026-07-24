@@ -86,6 +86,8 @@ struct HostStatus {
     lifecycle: HostLifecycle,
     completed_steps: usize,
     total_steps: usize,
+    progress: u8,
+    summary: String,
     diagnostic: NativeDiagnostic,
     checks: Vec<Check>,
 }
@@ -99,6 +101,19 @@ fn platform_name() -> &'static str {
     }
 }
 
+fn status_summary(completed_steps: usize, ready: bool, lifecycle: HostLifecycle) -> String {
+    match lifecycle {
+        HostLifecycle::EmergencyStopped => {
+            "Arrêt d’urgence actif — une révision est obligatoire".into()
+        }
+        HostLifecycle::Online => "Votre GPU est en ligne dans un espace isolé".into(),
+        _ if ready => "Toutes les protections obligatoires sont actives".into(),
+        _ => format!(
+            "{completed_steps} protection(s) validée(s) sur {TOTAL_SETUP_STEPS}"
+        ),
+    }
+}
+
 fn build_status(state: &AppState) -> HostStatus {
     let diagnostic = collect_native_diagnostic();
     let readiness = &state.readiness;
@@ -109,7 +124,11 @@ fn build_status(state: &AppState) -> HostStatus {
             ok: diagnostic.can_host,
             blocking: true,
             detail: if diagnostic.can_host {
-                format!("{} et {} sont pris en charge", platform_name(), std::env::consts::ARCH)
+                format!(
+                    "{} et {} sont pris en charge",
+                    platform_name(),
+                    std::env::consts::ARCH
+                )
             } else {
                 "Ce système ne peut pas héberger une location sécurisée".into()
             },
@@ -137,7 +156,8 @@ fn build_status(state: &AppState) -> HostStatus {
             ok: readiness.isolation_certified,
             blocking: true,
             detail: "Le locataire ne peut jamais voir votre session personnelle".into(),
-            action_label: (!readiness.isolation_certified).then_some("Configurer la protection"),
+            action_label: (!readiness.isolation_certified)
+                .then_some("Configurer la protection"),
         },
         Check {
             id: "storage",
@@ -163,14 +183,19 @@ fn build_status(state: &AppState) -> HostStatus {
         _ if ready => HostLifecycle::Ready,
         _ => HostLifecycle::SetupRequired,
     };
+    let completed_steps = checks.iter().filter(|check| check.ok).count();
+    let progress = ((completed_steps * 100) / TOTAL_SETUP_STEPS) as u8;
+    let summary = status_summary(completed_steps, ready, lifecycle);
 
     HostStatus {
         platform: platform_name(),
         architecture: std::env::consts::ARCH,
         ready,
         lifecycle,
-        completed_steps: checks.iter().filter(|check| check.ok).count(),
+        completed_steps,
         total_steps: TOTAL_SETUP_STEPS,
+        progress,
+        summary,
         diagnostic,
         checks,
     }
@@ -210,9 +235,10 @@ fn run_setup_action(action_id: String) -> Result<String, &'static str> {
     }
     match SetupAction::try_from(action_id.as_str())? {
         SetupAction::Account => Ok("account_link_pending".into()),
-        SetupAction::Agent | SetupAction::Isolation | SetupAction::Storage | SetupAction::Network => {
-            Ok("automatic_setup_pending".into())
-        }
+        SetupAction::Agent
+        | SetupAction::Isolation
+        | SetupAction::Storage
+        | SetupAction::Network => Ok("automatic_setup_pending".into()),
     }
 }
 
@@ -289,5 +315,12 @@ mod tests {
         let status = build_status(&AppState::default());
         assert!(!status.ready);
         assert_eq!(status.total_steps, TOTAL_SETUP_STEPS);
+        assert!(status.progress < 100);
+    }
+
+    #[test]
+    fn progress_is_bounded() {
+        let status = build_status(&AppState::default());
+        assert!(status.progress <= 100);
     }
 }
