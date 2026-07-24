@@ -19,6 +19,7 @@ from nacl.signing import SigningKey
 from . import __version__
 from .platform_info import gpu_inventory, system_inventory
 from .storage import detect_hardware_change, load_counter, save_counter, save_machine_fingerprint
+from .telemetry import telemetry_snapshot
 
 MAX_RETRIES = 3
 RETRY_BACKOFF = 2.0
@@ -33,7 +34,7 @@ class ApiClient:
         self.context = ssl.create_default_context(cafile=ca_file) if ca_file else ssl.create_default_context()
 
     def request(self, path: str, method: str = "GET", body: dict[str, Any] | None = None, headers: dict[str, str] | None = None, timeout: int = 12) -> dict[str, Any]:
-        data = None if body is None else json.dumps(body, separators=(",", ":")).encode()
+        data = None if body is None else canonical_json_bytes(body)
         request = urllib.request.Request(
             self.api_url + path,
             data=data,
@@ -72,16 +73,8 @@ class ApiClient:
     def upload_file(self, path: str, job_id: str, file_path: str, kind: str = "result") -> dict[str, Any]:
         data = Path(file_path).read_bytes()
         sha256 = hashlib.sha256(data).hexdigest()
-        headers = {"content-type": "application/octet-stream",
-                   "x-artifact-kind": kind,
-                   "x-artifact-sha256": sha256,
-                   "x-artifact-size": str(len(data))}
-        request = urllib.request.Request(
-            self.api_url + path,
-            data=data,
-            method="POST",
-            headers={"user-agent": f"gpubnb-agent/{__version__}", **headers},
-        )
+        headers = {"content-type": "application/octet-stream", "x-artifact-kind": kind, "x-artifact-sha256": sha256, "x-artifact-size": str(len(data))}
+        request = urllib.request.Request(self.api_url + path, data=data, method="POST", headers={"user-agent": f"gpubnb-agent/{__version__}", **headers})
         try:
             with urllib.request.urlopen(request, timeout=120, context=self.context) as response:
                 return json.loads(response.read(1_000_000).decode())
@@ -92,8 +85,7 @@ class ApiClient:
             raise RuntimeError(f"Upload échoué: {exc.reason}") from exc
 
     def download_file(self, path: str, dest_path: str, expected_sha256: str | None = None) -> dict[str, Any]:
-        request = urllib.request.Request(self.api_url + path, method="GET",
-                                          headers={"user-agent": f"gpubnb-agent/{__version__}"})
+        request = urllib.request.Request(self.api_url + path, method="GET", headers={"user-agent": f"gpubnb-agent/{__version__}"})
         try:
             with urllib.request.urlopen(request, timeout=120, context=self.context) as response:
                 data = response.read(100_000_000)
@@ -122,21 +114,14 @@ def request_body_sha256(body: dict[str, Any] | None) -> str:
 
 
 def signed_headers(key: SigningKey, machine_id: str, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, str]:
-    """Build legacy and v2 signatures during the migration window.
-
-    The legacy signature keeps current servers compatible. The v2 signature binds
-    the method, path, machine, timestamp, random nonce, and exact JSON body hash.
-    """
+    """Build legacy and v2 signatures during the migration window."""
     epoch = int(time.time() * 1000)
     nonce = secrets.token_urlsafe(18)
     body_sha256 = request_body_sha256(body)
-
     legacy_canonical = f"{method.upper()}|{path}|{machine_id}|{epoch}"
     legacy_signature = base58.b58encode(key.sign(legacy_canonical.encode()).signature).decode()
-
     v2_canonical = f"{method.upper()}|{path}|{machine_id}|{epoch}|{nonce}|{body_sha256}"
     v2_signature = base58.b58encode(key.sign(v2_canonical.encode()).signature).decode()
-
     return {
         "x-agent-timestamp": str(epoch),
         "x-agent-signature": legacy_signature,
@@ -155,14 +140,17 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
     challenge_path = f"/agent/challenge/{machine_id}"
     challenge = client.request_with_retry(challenge_path, headers=signed_headers(key, machine_id, "GET", challenge_path))["challenge"]
     gpus = gpu_inventory()
-    if len(gpus) != 1:
-        raise RuntimeError("Le heartbeat exige exactement un GPU détecté")
+    if not gpus:
+        raise RuntimeError("Le heartbeat exige au moins un GPU détecté")
+    # The legacy heartbeat schema carries one primary GPU. The complete validated
+    # multi-GPU snapshot is attached under telemetry for the v2 server migration.
     gpu = gpus[0]
     counter = load_counter() + 1
     timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     session_id = None
     probe = True
     sys_info = system_inventory()
+    telemetry = telemetry_snapshot()
     current_fp = sys_info.get("machineFingerprint") or ""
     hw_changed, previous_fp = detect_hardware_change(current_fp)
     if current_fp:
@@ -176,14 +164,20 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
     ]
     signature = base58.b58encode(key.sign("|".join(fields).encode()).signature).decode()
     payload = {
-        "machineId": machine_id, "counter": counter, "challenge": challenge,
-        "timestamp": timestamp, **gpu, "cudaProbeOk": probe, "gpuVendor": gpu.get("gpuVendor"),
-        "sessionId": session_id, "signature": signature, "agentVersion": __version__,
-        "hardwareChanged": hw_changed, **sys_info,
+        "machineId": machine_id,
+        "counter": counter,
+        "challenge": challenge,
+        "timestamp": timestamp,
+        **gpu,
+        "cudaProbeOk": probe,
+        "gpuVendor": gpu.get("gpuVendor"),
+        "sessionId": session_id,
+        "signature": signature,
+        "agentVersion": __version__,
+        "hardwareChanged": hw_changed,
+        "telemetry": telemetry,
+        **sys_info,
     }
-    result = client.request_with_retry(
-        "/agent/heartbeat", "POST", payload,
-        signed_headers(key, machine_id, "POST", "/agent/heartbeat", payload),
-    )
+    result = client.request_with_retry("/agent/heartbeat", "POST", payload, signed_headers(key, machine_id, "POST", "/agent/heartbeat", payload))
     save_counter(counter)
     return result
