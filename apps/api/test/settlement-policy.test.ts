@@ -33,15 +33,24 @@ test('refunds the full escrow when no service time is validated', () => {
   assert.equal(result.refundLamports, 10_000n);
 });
 
-test('rounding never overpays the provider and preserves the escrow invariant', () => {
-  const result = calculateSettlement(100n, 1, 3, 500);
+test('complete-minute rounding never overpays and preserves the escrow invariant', () => {
+  const result = calculateSettlement(100n, 61, 121, 500);
 
+  // 121 reserved seconds are three billable minutes; 61 validated seconds
+  // contain exactly one complete minute, so only one third is payable.
   assert.equal(result.payableLamports, 33n);
   assert.equal(result.refundLamports, 67n);
   assert.equal(
     result.providerLamports + result.platformLamports + result.refundLamports,
     100n,
   );
+});
+
+test('an incomplete first minute is not billed', () => {
+  const result = calculateSettlement(100n, 59, 3_600, 0);
+
+  assert.equal(result.payableLamports, 0n);
+  assert.equal(result.refundLamports, 100n);
 });
 
 test('rejects unsafe or impossible duration values', () => {
