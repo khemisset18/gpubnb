@@ -126,11 +126,7 @@ fn docker_evidence() -> (bool, bool, bool) {
 }
 
 fn kvm_accessible(path: &Path) -> bool {
-    OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(path)
-        .is_ok()
+    OpenOptions::new().read(true).write(true).open(path).is_ok()
 }
 
 fn isolation_available(os: &str) -> bool {
