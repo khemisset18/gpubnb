@@ -35,16 +35,7 @@ pub struct NativeDiagnostic {
     pub platform_supported: bool,
     pub architecture_supported: bool,
     pub isolation_backend: IsolationBackend,
-    pub isolation_available: bool,
     pub requires_administrator: bool,
-    pub gpu_detected: bool,
-    pub gpu_model: Option<String>,
-    pub gpu_uuid: Option<String>,
-    pub vram_mib: Option<u64>,
-    pub driver_version: Option<String>,
-    pub docker_installed: bool,
-    pub docker_reachable: bool,
-    pub nvidia_runtime_available: bool,
     pub can_host: bool,
     pub reason: &'static str,
 }
@@ -74,12 +65,7 @@ fn command_output(program: &str, args: &[&str]) -> Option<String> {
                     .map(|value| value.trim().to_owned());
             }
             Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(25)),
-            Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return None;
-            }
-            Err(_) => {
+            Ok(None) | Err(_) => {
                 let _ = child.kill();
                 let _ = child.wait();
                 return None;
@@ -162,10 +148,10 @@ pub fn collect_native_diagnostic() -> NativeDiagnostic {
     evidence.docker_reachable = docker_reachable;
     evidence.nvidia_runtime_available = nvidia_runtime_available;
     evidence.isolation_available = isolation_available(std::env::consts::OS);
-    evaluate(std::env::consts::OS, std::env::consts::ARCH, evidence)
+    evaluate(std::env::consts::OS, std::env::consts::ARCH, &evidence)
 }
 
-fn evaluate(os: &str, architecture: &str, evidence: ProbeEvidence) -> NativeDiagnostic {
+fn evaluate(os: &str, architecture: &str, evidence: &ProbeEvidence) -> NativeDiagnostic {
     let platform_supported = matches!(os, "windows" | "macos" | "linux");
     let architecture_supported = matches!(architecture, "x86_64" | "aarch64");
     let isolation_backend = match os {
@@ -193,22 +179,12 @@ fn evaluate(os: &str, architecture: &str, evidence: ProbeEvidence) -> NativeDiag
         "native_prerequisites_ready"
     };
 
-    let can_host = reason == "native_prerequisites_ready";
     NativeDiagnostic {
         platform_supported,
         architecture_supported,
         isolation_backend,
-        isolation_available: evidence.isolation_available,
         requires_administrator: matches!(os, "windows" | "linux"),
-        gpu_detected: evidence.gpu_detected,
-        gpu_model: evidence.gpu_model,
-        gpu_uuid: evidence.gpu_uuid,
-        vram_mib: evidence.vram_mib,
-        driver_version: evidence.driver_version,
-        docker_installed: evidence.docker_installed,
-        docker_reachable: evidence.docker_reachable,
-        nvidia_runtime_available: evidence.nvidia_runtime_available,
-        can_host,
+        can_host: reason == "native_prerequisites_ready",
         reason,
     }
 }
@@ -242,7 +218,8 @@ mod tests {
 
     #[test]
     fn ready_machine_receives_certificate() {
-        let diagnostic = evaluate("linux", "x86_64", ready_evidence());
+        let evidence = ready_evidence();
+        let diagnostic = evaluate("linux", "x86_64", &evidence);
         assert!(diagnostic.can_host);
         assert_eq!(diagnostic.reason, "native_prerequisites_ready");
     }
@@ -251,19 +228,20 @@ mod tests {
     fn every_missing_control_fails_closed() {
         let mut evidence = ready_evidence();
         evidence.nvidia_runtime_available = false;
-        let diagnostic = evaluate("linux", "x86_64", evidence);
+        let diagnostic = evaluate("linux", "x86_64", &evidence);
         assert!(!diagnostic.can_host);
         assert_eq!(diagnostic.reason, "nvidia_container_runtime_missing");
     }
 
     #[test]
     fn unknown_platform_and_architecture_fail_closed() {
-        let platform = evaluate("unknown", "x86_64", ready_evidence());
+        let evidence = ready_evidence();
+        let platform = evaluate("unknown", "x86_64", &evidence);
         assert!(!platform.can_host);
         assert_eq!(platform.isolation_backend, IsolationBackend::Unsupported);
         assert_eq!(platform.reason, "operating_system_not_supported");
 
-        let architecture = evaluate("linux", "mips", ready_evidence());
+        let architecture = evaluate("linux", "mips", &evidence);
         assert!(!architecture.can_host);
         assert_eq!(architecture.reason, "architecture_not_supported");
     }
