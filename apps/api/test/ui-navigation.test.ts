@@ -29,6 +29,18 @@ test('account pages render real API collections safely',async()=>{
   assert.match(portal,/escapeHTML/);
 });
 
+test('cross-origin GET requests remain simple and preserve error status',async()=>{
+  for(const name of ['portal.js','publish.js']){
+    const script=await readFile(path.join(webRoot,name),'utf8');
+    assert.match(script,/headers=\{accept:'application\/json'/);
+    assert.match(script,/options\.body!==undefined/);
+    assert.doesNotMatch(script,/headers:\{'content-type':'application\/json'/);
+  }
+  const portal=await readFile(path.join(webRoot,'portal.js'),'utf8');
+  assert.match(portal,/error\.status=response\.status/);
+  assert.match(portal,/errorState\(/);
+});
+
 test('listing publication requires a machine linked by Host',async()=>{
   const html=await readFile(path.join(webRoot,'publish.html'),'utf8');
   const script=await readFile(path.join(webRoot,'publish.js'),'utf8');
