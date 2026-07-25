@@ -1,38 +1,87 @@
-import test from 'node:test'; import assert from 'node:assert/strict'; import {bookingEscrowExpiryUnix,calculateSettlement} from '../src/settlement.js';
-test('full pay at 90 percent',()=>{const x=calculateSettlement(100_000_000n,3240,3600);assert.equal(x.providerLamports,95_000_000n);assert.equal(x.platformLamports,5_000_000n);assert.equal(x.refundLamports,0n)});
-test('pro rata below threshold',()=>{const x=calculateSettlement(100_000_000n,2700,3600);assert.equal(x.payableLamports,75_000_000n);assert.equal(x.platformLamports,3_750_000n);assert.equal(x.providerLamports,71_250_000n);assert.equal(x.refundLamports,25_000_000n)});
-test('invariant over sample durations',()=>{for(let s=0;s<=3600;s++){const x=calculateSettlement(987654321n,s,3600);assert.equal(x.providerLamports+x.platformLamports+x.refundLamports,x.grossLamports)}});
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { bookingEscrowExpiryUnix, calculateSettlement } from '../src/settlement.js';
 
-test('zero usage refunds the full amount',()=>{
-  const s=calculateSettlement(1_000_000n,0,1000);
-  assert.equal(s.payableLamports,0n);
-  assert.equal(s.platformLamports,0n);
-  assert.equal(s.providerLamports,0n);
-  assert.equal(s.refundLamports,1_000_000n);
+test('pays exactly 40 minutes of a 60-minute reservation', () => {
+  const settlement = calculateSettlement(60_000_000n, 2400, 3600);
+
+  assert.equal(settlement.payableLamports, 40_000_000n);
+  assert.equal(settlement.platformLamports, 2_000_000n);
+  assert.equal(settlement.providerLamports, 38_000_000n);
+  assert.equal(settlement.refundLamports, 20_000_000n);
+  assert.equal(settlement.availabilityBps, 6666);
 });
 
-test('89.9 percent remains proportional',()=>{
-  const s=calculateSettlement(1_000_000n,899,1000);
-  assert.equal(s.payableLamports,899_000n);
-  assert.equal(s.platformLamports,44_950n);
-  assert.equal(s.providerLamports,854_050n);
-  assert.equal(s.refundLamports,101_000n);
+test('90 percent availability remains strictly proportional', () => {
+  const settlement = calculateSettlement(100_000_000n, 3240, 3600);
+
+  assert.equal(settlement.payableLamports, 90_000_000n);
+  assert.equal(settlement.platformLamports, 4_500_000n);
+  assert.equal(settlement.providerLamports, 85_500_000n);
+  assert.equal(settlement.refundLamports, 10_000_000n);
 });
 
-test('rejects invalid durations',()=>{
-  assert.throws(()=>calculateSettlement(100n,-1,100));
-  assert.throws(()=>calculateSettlement(100n,101,100));
-  assert.throws(()=>calculateSettlement(100n,0,0));
+test('full service pays the full escrow minus commission', () => {
+  const settlement = calculateSettlement(100_000_000n, 3600, 3600);
+
+  assert.equal(settlement.payableLamports, 100_000_000n);
+  assert.equal(settlement.platformLamports, 5_000_000n);
+  assert.equal(settlement.providerLamports, 95_000_000n);
+  assert.equal(settlement.refundLamports, 0n);
 });
 
-test('one lamport never creates money',()=>{
-  for(let valid=0; valid<=10; valid++){
-    const s=calculateSettlement(1n,valid,10);
-    assert.equal(s.providerLamports+s.platformLamports+s.refundLamports,1n);
+test('zero validated service refunds the full amount', () => {
+  const settlement = calculateSettlement(1_000_000n, 0, 1000);
+
+  assert.equal(settlement.payableLamports, 0n);
+  assert.equal(settlement.platformLamports, 0n);
+  assert.equal(settlement.providerLamports, 0n);
+  assert.equal(settlement.refundLamports, 1_000_000n);
+});
+
+test('settlement invariant holds for every second of an hour', () => {
+  for (let validSeconds = 0; validSeconds <= 3600; validSeconds += 1) {
+    const settlement = calculateSettlement(987_654_321n, validSeconds, 3600);
+
+    assert.equal(
+      settlement.providerLamports + settlement.platformLamports + settlement.refundLamports,
+      settlement.grossLamports,
+    );
+    assert.equal(
+      settlement.payableLamports,
+      settlement.grossLamports - settlement.refundLamports,
+    );
   }
 });
 
-test('escrow expires one hour after booking end',()=>{
- const end=new Date('2026-07-22T12:00:00.000Z');
- assert.equal(bookingEscrowExpiryUnix(end),BigInt(Math.floor(end.getTime()/1000)+3600));
+test('integer rounding never overcharges the renter', () => {
+  const settlement = calculateSettlement(10n, 1, 3, 0);
+
+  assert.equal(settlement.payableLamports, 3n);
+  assert.equal(settlement.providerLamports, 3n);
+  assert.equal(settlement.refundLamports, 7n);
+});
+
+test('rejects invalid durations and commissions', () => {
+  assert.throws(() => calculateSettlement(100n, -1, 100));
+  assert.throws(() => calculateSettlement(100n, 101, 100));
+  assert.throws(() => calculateSettlement(100n, 0, 0));
+  assert.throws(() => calculateSettlement(100n, Number.MAX_SAFE_INTEGER + 1, Number.MAX_SAFE_INTEGER + 1));
+  assert.throws(() => calculateSettlement(100n, 50, 100, -1));
+  assert.throws(() => calculateSettlement(100n, 50, 100, 10_001));
+});
+
+test('one lamport never creates money', () => {
+  for (let validSeconds = 0; validSeconds <= 10; validSeconds += 1) {
+    const settlement = calculateSettlement(1n, validSeconds, 10);
+    assert.equal(
+      settlement.providerLamports + settlement.platformLamports + settlement.refundLamports,
+      1n,
+    );
+  }
+});
+
+test('escrow expires one hour after booking end', () => {
+  const end = new Date('2026-07-22T12:00:00.000Z');
+  assert.equal(bookingEscrowExpiryUnix(end), BigInt(Math.floor(end.getTime() / 1000) + 3600));
 });
