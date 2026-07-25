@@ -7,7 +7,7 @@ const descriptionCount=document.querySelector('#descriptionCount');
 const machineSelect=form.elements.machineId;
 const submitButton=document.querySelector('#publishSubmit');
 const machineState=document.querySelector('#machineState');
-async function api(path,options={}){const r=await fetch(`${API}${path}`,{credentials:'include',headers:{'content-type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(data.error||'Erreur API');e.status=r.status;throw e}return data;}
+async function api(path,options={}){const headers={accept:'application/json',...(options.headers||{})};if(options.body!==undefined&&!('content-type' in headers)&&!('Content-Type' in headers))headers['content-type']='application/json';const r=await fetch(`${API}${path}`,{credentials:'include',...options,headers});const data=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(data.error||`HTTP ${r.status}`);e.status=r.status;throw e}return data;}
 function show(text,error=false){message.textContent=text;message.className=`form-message ${error?'error':'success'}`}
 function value(name){return String(form.elements[name].value||'').trim()}
 function setPublishReady(ready){submitButton.disabled=!ready;machineSelect.disabled=!ready}
