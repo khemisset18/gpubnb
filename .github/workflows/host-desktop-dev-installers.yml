@@ -91,7 +91,19 @@ jobs:
         run: cargo fmt -p gpubnb-host-desktop
 
       - name: Test native host core
-        run: cargo test -p gpubnb-host-desktop --all-targets --locked
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p gpubnb-host-desktop --all-targets --locked 2>&1 | tee cargo-test-${RUNNER_OS}.log
+
+      - name: Upload native test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: host-installer-test-${{ runner.os }}-${{ github.sha }}
+          path: cargo-test-${{ runner.os }}.log
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Lint native host core
         run: cargo clippy -p gpubnb-host-desktop --all-targets --locked -- -D warnings
