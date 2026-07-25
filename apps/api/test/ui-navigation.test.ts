@@ -57,7 +57,7 @@ test('installer downloads use direct GitHub release URLs',async()=>{
   const script=await readFile(path.join(webRoot,'host-downloads.js'),'utf8');
   assert.match(html,/host-downloads\.js/);
   assert.match(html,/Version de test/);
-  assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-windows-x64\.exe/);
+  assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-windows-x64\.zip/);
   assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-linux-x64\.deb/);
   assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-macos-arm64\.dmg/);
   assert.doesNotMatch(html,/\.netlify\/functions\/host-download/);
@@ -76,6 +76,8 @@ test('test release workflow publishes predictable installer names automatically'
   assert.match(workflow,/branches:\s*\n\s*- main/);
   assert.match(workflow,/contents: write/);
   assert.match(workflow,/gpubnb-host-windows-x64\.exe/);
+  assert.match(workflow,/gpubnb-host-windows-x64\.zip/);
+  assert.match(workflow,/Compress-Archive/);
   assert.match(workflow,/gpubnb-host-linux-x64\.deb/);
   assert.match(workflow,/gpubnb-host-macos-arm64\.dmg/);
   assert.match(workflow,/gh release create host-test-latest/);
