@@ -66,6 +66,7 @@ test('a new pairing code immediately invalidates the previous code for the same 
  assert.equal(redis.values.get(`${LINK_PREFIX}${second}`),'host-1');
  assert.equal(redis.values.get(`${OWNER_PREFIX}host-1`),second);
  assert.equal(redis.ttls.get(`${LINK_PREFIX}${second}`),600);
+ assert.equal(redis.ttls.get(`${OWNER_PREFIX}host-1`),600);
 });
 
 test('concurrent requests leave exactly one active code for a host',async()=>{
