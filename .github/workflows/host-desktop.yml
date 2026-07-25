@@ -21,13 +21,43 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: host-desktop-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  format-repair:
+    name: temporary scoped KVM rustfmt repair
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'feature/professional-host-onboarding'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt
+      - name: Apply deterministic formatting to KVM diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt -p gpubnb-host-desktop
+          if git diff --quiet -- apps/host-desktop/src-tauri/src/diagnostics.rs; then
+            echo 'KVM diagnostic is already formatted.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/host-desktop/src-tauri/src/diagnostics.rs
+          git commit -m 'style(host-desktop): format KVM access check'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+
   frontend:
     name: frontend typecheck and build
     runs-on: ubuntu-latest
