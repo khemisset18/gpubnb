@@ -116,10 +116,7 @@ fn docker_evidence() -> (bool, bool, bool) {
     if !installed {
         return (false, false, false);
     }
-    let runtimes = command_output(
-        "docker",
-        &["info", "--format", "{{json .Runtimes}}"],
-    );
+    let runtimes = command_output("docker", &["info", "--format", "{{json .Runtimes}}"]);
     let reachable = runtimes.as_ref().is_some_and(|value| !value.is_empty());
     let nvidia = runtimes
         .as_ref()
@@ -243,10 +240,7 @@ mod tests {
         let evidence = ready_evidence();
         let platform = evaluate("unknown", "x86_64", &evidence);
         assert!(!platform.can_host);
-        assert_eq!(
-            platform.isolation_backend,
-            IsolationBackend::Unsupported
-        );
+        assert_eq!(platform.isolation_backend, IsolationBackend::Unsupported);
         assert_eq!(platform.reason, "operating_system_not_supported");
 
         let architecture = evaluate("linux", "mips", &evidence);
