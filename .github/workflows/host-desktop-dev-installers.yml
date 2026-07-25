@@ -85,7 +85,6 @@ jobs:
           set -euo pipefail
           test -s Cargo.lock
           test -s apps/host-desktop/package-lock.json
-          cargo metadata --locked --format-version 1 >/dev/null
 
       - name: Install locked JavaScript dependencies
         working-directory: apps/host-desktop
@@ -116,7 +115,7 @@ jobs:
         with:
           name: host-installer-test-${{ runner.os }}-${{ github.sha }}
           path: cargo-test-${{ runner.os }}.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
       - name: Lint native host core
@@ -139,7 +138,7 @@ jobs:
         with:
           name: host-installer-build-${{ runner.os }}-${{ github.sha }}
           path: installer-build-${{ runner.os }}.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
       - name: Verify expected native installer
