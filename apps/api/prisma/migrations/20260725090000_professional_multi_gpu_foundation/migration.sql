@@ -4,29 +4,16 @@
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 CREATE TYPE "AcceleratorOperationalStatus" AS ENUM (
-  'DISCOVERED',
-  'VERIFYING',
-  'AVAILABLE',
-  'RESERVED',
-  'RUNNING',
-  'DEGRADED',
-  'MAINTENANCE',
-  'MISSING',
-  'QUARANTINED'
+  'DISCOVERED', 'VERIFYING', 'AVAILABLE', 'RESERVED', 'RUNNING',
+  'DEGRADED', 'MAINTENANCE', 'MISSING', 'QUARANTINED'
 );
 
 CREATE TYPE "ListingResourceMode" AS ENUM (
-  'FULL_MACHINE',
-  'SELECTED_ACCELERATORS',
-  'COMPUTE_POOL'
+  'FULL_MACHINE', 'SELECTED_ACCELERATORS', 'COMPUTE_POOL'
 );
 
 CREATE TYPE "ResourceAllocationStatus" AS ENUM (
-  'HELD',
-  'CONFIRMED',
-  'ACTIVE',
-  'RELEASED',
-  'CANCELLED'
+  'HELD', 'CONFIRMED', 'ACTIVE', 'RELEASED', 'CANCELLED'
 );
 
 ALTER TABLE "GpuListing"
@@ -118,7 +105,7 @@ ALTER TABLE "MachineAllocation"
   ADD CONSTRAINT "MachineAllocation_no_overlap"
   EXCLUDE USING gist (
     "machineId" WITH =,
-    tstzrange("startsAt", COALESCE("releasedAt", "endsAt"), '[)') WITH &&
+    tsrange("startsAt", COALESCE("releasedAt", "endsAt"), '[)') WITH &&
   ) WHERE ("status" IN ('HELD', 'CONFIRMED', 'ACTIVE'));
 
 CREATE TABLE "AcceleratorAllocation" (
@@ -147,11 +134,9 @@ ALTER TABLE "AcceleratorAllocation"
   ADD CONSTRAINT "AcceleratorAllocation_no_overlap"
   EXCLUDE USING gist (
     "acceleratorId" WITH =,
-    tstzrange("startsAt", COALESCE("releasedAt", "endsAt"), '[)') WITH &&
+    tsrange("startsAt", COALESCE("releasedAt", "endsAt"), '[)') WITH &&
   ) WHERE ("status" IN ('HELD', 'CONFIRMED', 'ACTIVE'));
 
--- A full-machine allocation conflicts with every accelerator allocation on that machine,
--- and an accelerator allocation conflicts with an active full-machine allocation.
 CREATE OR REPLACE FUNCTION "guard_machine_allocation_conflicts"()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -161,8 +146,8 @@ BEGIN
     JOIN "Accelerator" a ON a."id" = aa."acceleratorId"
     WHERE a."machineId" = NEW."machineId"
       AND aa."status" IN ('HELD', 'CONFIRMED', 'ACTIVE')
-      AND tstzrange(aa."startsAt", COALESCE(aa."releasedAt", aa."endsAt"), '[)')
-          && tstzrange(NEW."startsAt", COALESCE(NEW."releasedAt", NEW."endsAt"), '[)')
+      AND tsrange(aa."startsAt", COALESCE(aa."releasedAt", aa."endsAt"), '[)')
+          && tsrange(NEW."startsAt", COALESCE(NEW."releasedAt", NEW."endsAt"), '[)')
   ) THEN
     RAISE EXCEPTION 'machine allocation conflicts with an accelerator allocation'
       USING ERRCODE = '23P01';
@@ -188,8 +173,8 @@ BEGIN
     FROM "MachineAllocation" ma
     WHERE ma."machineId" = target_machine_id
       AND ma."status" IN ('HELD', 'CONFIRMED', 'ACTIVE')
-      AND tstzrange(ma."startsAt", COALESCE(ma."releasedAt", ma."endsAt"), '[)')
-          && tstzrange(NEW."startsAt", COALESCE(NEW."releasedAt", NEW."endsAt"), '[)')
+      AND tsrange(ma."startsAt", COALESCE(ma."releasedAt", ma."endsAt"), '[)')
+          && tsrange(NEW."startsAt", COALESCE(NEW."releasedAt", NEW."endsAt"), '[)')
   ) THEN
     RAISE EXCEPTION 'accelerator allocation conflicts with a full-machine allocation'
       USING ERRCODE = '23P01';
@@ -208,7 +193,6 @@ AFTER INSERT OR UPDATE ON "AcceleratorAllocation"
 DEFERRABLE INITIALLY IMMEDIATE
 FOR EACH ROW EXECUTE FUNCTION "guard_accelerator_allocation_conflicts"();
 
--- Ensure a listing can reference only accelerators belonging to its machine.
 CREATE OR REPLACE FUNCTION "guard_listing_accelerator_machine"()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -229,8 +213,6 @@ CREATE TRIGGER "ListingAccelerator_same_machine_guard"
 BEFORE INSERT OR UPDATE ON "ListingAccelerator"
 FOR EACH ROW EXECUTE FUNCTION "guard_listing_accelerator_machine"();
 
--- Backfill one accelerator for legacy machines that already expose one GPU.
--- Legacy columns remain available during the transition.
 INSERT INTO "Accelerator" (
   "id", "machineId", "hardwareUuid", "vendor", "model", "vramMiB",
   "driverVersion", "cudaVersion", "status", "moderationStatus",
