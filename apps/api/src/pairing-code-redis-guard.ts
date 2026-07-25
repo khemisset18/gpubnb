@@ -14,6 +14,10 @@ export type GuardedRedisPrototype={
  getdel:(this:GuardedRedisClient,key:string)=>Promise<unknown>;
 };
 
+/**
+ * Enforces the machine-pairing invariants without changing unrelated Redis keys:
+ * one active digest per host, atomic replacement, matching TTLs and single use.
+ */
 export function installPairingCodeRedisGuard(prototype:GuardedRedisPrototype):void{
  if(prototype[INSTALL_MARK])return;
  const originalSet=prototype.set;
