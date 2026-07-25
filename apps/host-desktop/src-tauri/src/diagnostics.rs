@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::fs::OpenOptions;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread;
@@ -124,9 +125,17 @@ fn docker_evidence() -> (bool, bool, bool) {
     (installed, reachable, nvidia)
 }
 
+fn kvm_accessible(path: &Path) -> bool {
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .is_ok()
+}
+
 fn isolation_available(os: &str) -> bool {
     match os {
-        "linux" => Path::new("/dev/kvm").exists(),
+        "linux" => kvm_accessible(Path::new("/dev/kvm")),
         "windows" => command_output(
             "powershell.exe",
             &[
@@ -217,6 +226,12 @@ mod tests {
         assert_eq!(evidence.vram_mib, Some(24_576));
         assert_eq!(evidence.gpu_model.as_deref(), Some("NVIDIA RTX"));
         assert!(!parse_gpu_evidence("broken").gpu_detected);
+    }
+
+    #[test]
+    fn inaccessible_kvm_device_fails_closed() {
+        let missing = std::env::temp_dir().join("gpubnb-kvm-device-that-does-not-exist");
+        assert!(!kvm_accessible(&missing));
     }
 
     #[test]
