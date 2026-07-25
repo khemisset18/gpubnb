@@ -60,14 +60,21 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Materialize Windows bundle icon
-        if: runner.os == 'Windows'
-        shell: pwsh
+      - name: Materialize bundle icon reproducibly
+        shell: bash
         run: |
-          $source = 'apps/host-desktop/src-tauri/icons/icon.ico.base64'
-          $target = 'apps/host-desktop/src-tauri/icons/icon.ico'
-          if (!(Test-Path $source)) { throw 'Missing staged Windows icon source.' }
-          [IO.File]::WriteAllBytes($target, [Convert]::FromBase64String((Get-Content $source -Raw).Trim()))
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const source = 'apps/host-desktop/src-tauri/icons/icon.ico.base64';
+          const target = 'apps/host-desktop/src-tauri/icons/icon.ico';
+          if (!fs.existsSync(source)) throw new Error('Missing staged bundle icon source.');
+          const encoded = fs.readFileSync(source, 'utf8').trim();
+          const decoded = Buffer.from(encoded, 'base64');
+          if (decoded.length < 256) throw new Error('Decoded bundle icon is unexpectedly small.');
+          fs.writeFileSync(target, decoded, { mode: 0o644 });
+          NODE
+          test -s apps/host-desktop/src-tauri/icons/icon.ico
 
       - name: Require committed lockfiles
         shell: bash
@@ -122,6 +129,7 @@ jobs:
           npm run tauri -- build --bundles ${{ matrix.bundle }} 2>&1 | tee ../../installer-build-${RUNNER_OS}.log
         env:
           GPUBNB_RELEASE_CHANNEL: development
+          RUST_BACKTRACE: "1"
 
       - name: Upload installer diagnostics
         if: failure()
@@ -147,6 +155,7 @@ jobs:
             | sort -z \
             | xargs -0 shasum -a 256 > apps/host-desktop/dist-evidence/SHA256SUMS.txt
           shasum -a 256 Cargo.lock > apps/host-desktop/dist-evidence/CARGO-LOCK-SHA256.txt
+          shasum -a 256 apps/host-desktop/src-tauri/icons/icon.ico > apps/host-desktop/dist-evidence/BUNDLE-ICON-SHA256.txt
           test -s apps/host-desktop/dist-evidence/SHA256SUMS.txt
           printf '%s\n' "$bundle_dir" > apps/host-desktop/dist-evidence/BUNDLE-DIRECTORY.txt
           printf '%s\n' '${{ matrix.bundle }}' > apps/host-desktop/dist-evidence/BUNDLE-FORMAT.txt
