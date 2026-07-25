@@ -66,16 +66,28 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Assert shell-free runtime
+      - name: Assert hardened shell-free runtime
         run: |
           set -euo pipefail
           test "$(docker image inspect gpu-diagnostic:ci --format '{{.Config.User}}')" = "65532:65532"
-          docker run --rm --entrypoint=/bin/sh gpu-diagnostic:ci -c true >/dev/null 2>&1 && {
+          test "$(docker image inspect gpu-diagnostic:ci --format '{{json .Config.Entrypoint}}')" = '["/usr/local/bin/gpu-diagnostic"]'
+          test -z "$(docker image inspect gpu-diagnostic:ci --format '{{json .Config.Cmd}}' | grep -v '^null$' || true)"
+          if docker run --rm --entrypoint=/bin/sh gpu-diagnostic:ci -c true >/dev/null 2>&1; then
             echo 'Runtime image unexpectedly contains a shell' >&2
             exit 1
-          } || true
+          fi
 
-      - name: Scan image for HIGH and CRITICAL vulnerabilities
+      - name: Scan image and block HIGH or CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@v0.33.1
+        with:
+          image-ref: gpu-diagnostic:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Generate Trivy SARIF
+        if: always()
         uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: gpu-diagnostic:ci
@@ -83,22 +95,24 @@ jobs:
           output: trivy-gpu-diagnostic.sarif
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          exit-code: '1'
+          exit-code: '0'
 
       - name: Upload Trivy SARIF
-        if: always()
+        if: always() && hashFiles('trivy-gpu-diagnostic.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-gpu-diagnostic.sarif
 
       - name: Install Syft
+        if: success()
         uses: anchore/sbom-action/download-syft@v0
 
       - name: Generate SBOM
+        if: success()
         run: syft gpu-diagnostic:ci -o spdx-json=sbom.spdx.json
 
       - name: Publish image by immutable digest
-        if: github.event_name != 'pull_request'
+        if: success() && github.event_name != 'pull_request'
         id: publish
         uses: docker/build-push-action@v6
         with:
@@ -112,20 +126,23 @@ jobs:
           cache-from: type=gha
 
       - name: Install Cosign
-        if: github.event_name != 'pull_request'
+        if: success() && github.event_name != 'pull_request'
         uses: sigstore/cosign-installer@v3
 
       - name: Sign immutable image digest
-        if: github.event_name != 'pull_request'
-        env:
-          DIGEST: ${{ steps.publish.outputs.digest }}
-        run: cosign sign --yes "${IMAGE}@${DIGEST}"
-
-      - name: Write agent configuration reference
-        if: github.event_name != 'pull_request'
+        if: success() && github.event_name != 'pull_request'
         env:
           DIGEST: ${{ steps.publish.outputs.digest }}
         run: |
+          test "$DIGEST" != ""
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+
+      - name: Write agent configuration reference
+        if: success() && github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          test "$DIGEST" != ""
           printf '%s@%s\n' "$IMAGE" "$DIGEST" | tee gpu-diagnostic-image.txt
           printf 'diagnosticImage=%s@%s\n' "$IMAGE" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
 
