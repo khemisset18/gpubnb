@@ -116,11 +116,10 @@ fn docker_evidence() -> (bool, bool, bool) {
     if !installed {
         return (false, false, false);
     }
-    let runtimes = command_output("docker", &["info", "--format", "{{json .Runtimes}}"]);
-    let reachable = runtimes.as_ref().is_some_and(|value| !value.is_empty());
-    let nvidia = runtimes
-        .as_ref()
-        .is_some_and(|value| value.contains("nvidia"));
+    let runtimes = command_output("docker", &["info", "--format", "{{json .Runtimes}}"]).is_some();
+    let runtime_data = command_output("docker", &["info", "--format", "{{json .Runtimes}}"]).unwrap_or_default();
+    let reachable = runtimes && !runtime_data.is_empty();
+    let nvidia = runtime_data.contains("nvidia");
     (installed, reachable, nvidia)
 }
 
@@ -137,8 +136,9 @@ fn isolation_available(os: &str) -> bool {
             ],
         )
         .is_some_and(|value| value.eq_ignore_ascii_case("true")),
-        "macos" => command_output("sysctl", &["-n", "kern.hv_support"])
-            .is_some_and(|value| value == "1"),
+        "macos" => {
+            command_output("sysctl", &["-n", "kern.hv_support"]).is_some_and(|value| value == "1")
+        }
         _ => false,
     }
 }
