@@ -73,7 +73,7 @@ jobs:
           test -s Cargo.lock
           test -s apps/host-desktop/package-lock.json
 
-      - name: Install locked dependencies
+      - name: Install locked JavaScript dependencies
         working-directory: apps/host-desktop
         run: npm ci --ignore-scripts --no-audit --no-fund
 
@@ -90,11 +90,14 @@ jobs:
       - name: Normalize Rust sources with pinned toolchain
         run: cargo fmt -p gpubnb-host-desktop
 
+      - name: Resolve platform Cargo lock
+        run: cargo update --workspace
+
       - name: Test native host core
         shell: bash
         run: |
           set -o pipefail
-          cargo test -p gpubnb-host-desktop --all-targets --locked 2>&1 | tee cargo-test-${RUNNER_OS}.log
+          cargo test -p gpubnb-host-desktop --all-targets 2>&1 | tee cargo-test-${RUNNER_OS}.log
 
       - name: Upload native test diagnostics
         if: failure()
@@ -106,7 +109,7 @@ jobs:
           retention-days: 14
 
       - name: Lint native host core
-        run: cargo clippy -p gpubnb-host-desktop --all-targets --locked -- -D warnings
+        run: cargo clippy -p gpubnb-host-desktop --all-targets -- -D warnings
 
       - name: Build development installer
         working-directory: apps/host-desktop
@@ -114,14 +117,16 @@ jobs:
         env:
           GPUBNB_RELEASE_CHANNEL: development
 
-      - name: Generate SHA-256 manifest
+      - name: Generate build evidence
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p apps/host-desktop/dist-evidence
+          cp Cargo.lock apps/host-desktop/dist-evidence/Cargo.lock.resolved
           find apps/host-desktop/src-tauri/target/release/bundle -type f -print0 \
             | sort -z \
             | xargs -0 shasum -a 256 > apps/host-desktop/dist-evidence/SHA256SUMS.txt
+          shasum -a 256 Cargo.lock > apps/host-desktop/dist-evidence/CARGO-LOCK-SHA256.txt
           test -s apps/host-desktop/dist-evidence/SHA256SUMS.txt
           printf '%s\n' \
             'UNSIGNED DEVELOPMENT BUILD' \
