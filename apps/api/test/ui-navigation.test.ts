@@ -17,6 +17,18 @@ test('portal pages expose accessible navigation and real targets',async()=>{
   }
 });
 
+test('account pages render real API collections safely',async()=>{
+  const listings=await readFile(path.join(webRoot,'listings.html'),'utf8');
+  const bookings=await readFile(path.join(webRoot,'bookings.html'),'utf8');
+  const portal=await readFile(path.join(webRoot,'portal.js'),'utf8');
+  assert.match(listings,/data-listings/);
+  assert.match(bookings,/data-bookings/);
+  assert.match(portal,/async function listings\(\)/);
+  assert.match(portal,/async function bookings\(\)/);
+  assert.match(portal,/request\('\/dashboard'\)/);
+  assert.match(portal,/escapeHTML/);
+});
+
 test('installer page uses guarded direct download routes',async()=>{
   const html=await readFile(path.join(webRoot,'host-install.html'),'utf8');
   assert.match(html,/host-downloads\.js/);
