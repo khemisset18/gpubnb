@@ -15,8 +15,10 @@ export function bookingEscrowExpiryUnix(endsAt: Date): bigint {
  * still settles the full escrow, including reservations whose duration is not
  * an exact multiple of one minute.
  *
- * Example: 45 validated minutes of a 60-minute, 6 EUR reservation makes
- * 4.50 EUR payable before platform commission and refunds the remaining 1.50 EUR.
+ * Monetary illustration: 45 validated minutes of a 60-minute reservation
+ * priced at 6 units makes 4.50 units payable before platform commission and
+ * refunds the remaining 1.50 units. Actual settlement remains denominated in
+ * escrow lamports.
  */
 export function calculateSettlement(gross:bigint, validSeconds:number, expectedSeconds:number, commissionBps=500):Settlement{
  if(gross<=0n) throw new Error('gross must be positive');
