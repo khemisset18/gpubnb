@@ -67,23 +67,17 @@ function canTransitionAllocation(
 ): boolean {
   if (current === target) return true;
   if (current === ResourceAllocationStatus.HELD) {
-    return [
-      ResourceAllocationStatus.CONFIRMED,
-      ResourceAllocationStatus.RELEASED,
-      ResourceAllocationStatus.CANCELLED,
-    ].includes(target);
+    return target === ResourceAllocationStatus.CONFIRMED ||
+      target === ResourceAllocationStatus.RELEASED ||
+      target === ResourceAllocationStatus.CANCELLED;
   }
   if (current === ResourceAllocationStatus.CONFIRMED) {
-    return [
-      ResourceAllocationStatus.ACTIVE,
-      ResourceAllocationStatus.RELEASED,
-      ResourceAllocationStatus.CANCELLED,
-    ].includes(target);
+    return target === ResourceAllocationStatus.ACTIVE ||
+      target === ResourceAllocationStatus.RELEASED ||
+      target === ResourceAllocationStatus.CANCELLED;
   }
-  if (current === ResourceAllocationStatus.ACTIVE) {
-    return target === ResourceAllocationStatus.RELEASED;
-  }
-  return false;
+  return current === ResourceAllocationStatus.ACTIVE &&
+    target === ResourceAllocationStatus.RELEASED;
 }
 
 async function allocateInTransaction(
@@ -118,9 +112,7 @@ async function allocateInTransaction(
   });
 
   if (!booking) throw new ResourceAllocationError('booking_not_found');
-  if (booking.endsAt <= booking.startsAt) {
-    throw new ResourceAllocationError('invalid_booking_period');
-  }
+  if (booking.endsAt <= booking.startsAt) throw new ResourceAllocationError('invalid_booking_period');
   if (booking.machineAllocation || booking.acceleratorAllocations.length > 0) {
     throw new ResourceAllocationError('allocation_already_exists');
   }
@@ -140,9 +132,7 @@ async function allocateInTransaction(
   const listedIds = new Set(booking.listing.accelerators.map((row) => row.acceleratorId));
 
   if (booking.listing.resourceMode === ListingResourceMode.FULL_MACHINE) {
-    if (requestedIds.length > 0) {
-      throw new ResourceAllocationError('accelerator_selection_not_allowed');
-    }
+    if (requestedIds.length > 0) throw new ResourceAllocationError('accelerator_selection_not_allowed');
     await tx.machineAllocation.create({
       data: {
         bookingId: booking.id,
@@ -175,9 +165,7 @@ async function allocateInTransaction(
     selectedIds = requestedIds;
   }
 
-  if (selectedIds.length === 0) {
-    throw new ResourceAllocationError('accelerator_count_out_of_range');
-  }
+  if (selectedIds.length === 0) throw new ResourceAllocationError('accelerator_count_out_of_range');
 
   for (const acceleratorId of selectedIds) {
     const accelerator = machineAccelerators.get(acceleratorId);
@@ -221,9 +209,7 @@ export async function allocateBookingResources(
     });
   } catch (error) {
     if (error instanceof ResourceAllocationError) throw error;
-    if (isResourceConflict(error)) {
-      throw new ResourceAllocationError('resource_conflict');
-    }
+    if (isResourceConflict(error)) throw new ResourceAllocationError('resource_conflict');
     throw error;
   }
 }
@@ -257,19 +243,14 @@ export async function transitionBookingResources(
       throw new ResourceAllocationError('invalid_allocation_transition');
     }
 
-    const terminal =
-      target === ResourceAllocationStatus.RELEASED ||
+    const terminal = target === ResourceAllocationStatus.RELEASED ||
       target === ResourceAllocationStatus.CANCELLED;
-    const data = terminal ? { status: target, releasedAt: at } : { status: target };
+    const data: Prisma.MachineAllocationUpdateManyMutationInput = terminal
+      ? { status: target, releasedAt: at }
+      : { status: target, releasedAt: null };
 
-    await tx.machineAllocation.updateMany({
-      where: { bookingId },
-      data,
-    });
-    await tx.acceleratorAllocation.updateMany({
-      where: { bookingId },
-      data,
-    });
+    await tx.machineAllocation.updateMany({ where: { bookingId }, data });
+    await tx.acceleratorAllocation.updateMany({ where: { bookingId }, data });
   }, {
     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     maxWait: 5_000,
