@@ -116,9 +116,21 @@ jobs:
 
       - name: Build native development installer
         working-directory: apps/host-desktop
-        run: npm run tauri -- build --bundles ${{ matrix.bundle }}
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run tauri -- build --bundles ${{ matrix.bundle }} 2>&1 | tee ../../installer-build-${RUNNER_OS}.log
         env:
           GPUBNB_RELEASE_CHANNEL: development
+
+      - name: Upload installer diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: host-installer-build-${{ runner.os }}-${{ github.sha }}
+          path: installer-build-${{ runner.os }}.log
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Generate build evidence
         shell: bash
