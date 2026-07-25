@@ -129,6 +129,30 @@ class RunnerTests(unittest.TestCase):
 
     @patch("gpubnb_agent.runner.gpu_inventory")
     @patch("gpubnb_agent.runner.subprocess.run")
+    def test_rejects_gpu_count_mismatch(self, run, mock_gpu):
+        mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        run.return_value = type("Result", (), {
+            "returncode": 0,
+            "stderr": "",
+            "stdout": '{"schemaVersion":1,"vendor":"NVIDIA","gpuCount":2,"gpus":[]}'
+        })()
+        with self.assertRaisesRegex(RuntimeError, "gpu_count_mismatch"):
+            run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
+
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_rejects_impossible_official_telemetry(self, run, mock_gpu):
+        mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        run.return_value = type("Result", (), {
+            "returncode": 0,
+            "stderr": "",
+            "stdout": '{"schemaVersion":1,"vendor":"NVIDIA","gpuCount":1,"gpus":[{"index":0,"name":"RTX","uuid":"GPU-1","memoryTotalMiB":100,"memoryUsedMiB":101,"temperatureC":45}]}'
+        })()
+        with self.assertRaisesRegex(RuntimeError, "memory_used"):
+            run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
+
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    @patch("gpubnb_agent.runner.subprocess.run")
     def test_preparation_pulls_uncached_image_and_runs_health_check(self, run, mock_gpu):
         mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
         run.side_effect = [
