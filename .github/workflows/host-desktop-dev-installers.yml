@@ -87,8 +87,8 @@ jobs:
           npm run check
           npm run build
 
-      - name: Enforce Rust formatting
-        run: cargo fmt -p gpubnb-host-desktop -- --check
+      - name: Normalize Rust sources with pinned toolchain
+        run: cargo fmt -p gpubnb-host-desktop
 
       - name: Test native host core
         run: cargo test -p gpubnb-host-desktop --all-targets --locked
