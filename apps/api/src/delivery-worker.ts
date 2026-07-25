@@ -99,7 +99,7 @@ async function main(): Promise<void> {
     console.info(JSON.stringify({ level: 'info', message: 'delivery_worker_started', workerId }));
 
     while (!stopping) {
-      const events = await claimOutboxEvents(db, workerId, 100, 45);
+      const events = await claimOutboxEvents(db, workerId, 500, 45);
       inFlight = events.length;
       if (events.length === 0) {
         const now = Date.now();
