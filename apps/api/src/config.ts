@@ -20,6 +20,8 @@ const schema = z.object({
   SOLANA_COMMITMENT: z.enum(['confirmed', 'finalized']).default('finalized'),
   ESCROW_PROGRAM_ID: z.string().default('NOT_DEPLOYED_YET'),
   ALLOW_MAINNET: z.enum(['true', 'false']).default('false'),
+  DEV_PAYMENT_BYPASS: z.enum(['true', 'false']).default('false'),
+  DEV_DIAGNOSTIC_IMAGE: z.string().regex(/^ghcr\.io\/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$/).optional(),
   HEARTBEAT_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(120).default(25),
   HEARTBEAT_OFFLINE_SECONDS: z.coerce.number().int().min(15).max(300).default(60),
   COMMISSION_BPS: z.coerce.number().int().min(0).max(1000).default(500),
@@ -42,6 +44,9 @@ const isPrivateRenderRedis =
 
 if (config.NODE_ENV === 'production' && !isTlsRedis && !isPrivateRenderRedis) {
   throw new Error('Production Redis must use TLS or a private Render Key Value URL');
+}
+if (config.NODE_ENV === 'production' && config.DEV_PAYMENT_BYPASS === 'true') {
+  throw new Error('DEV_PAYMENT_BYPASS is forbidden in production');
 }
 if (config.SOLANA_CLUSTER === 'mainnet-beta' && config.ALLOW_MAINNET !== 'true') {
   throw new Error('Mainnet is disabled until independent audit approval');
