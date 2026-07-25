@@ -52,29 +52,21 @@ test('listing publication requires a machine linked by Host',async()=>{
   assert.match(script,/Reliez d’abord une machine/);
 });
 
-test('installer downloads stay clickable while availability is informational',async()=>{
+test('installer downloads use direct GitHub release URLs',async()=>{
   const html=await readFile(path.join(webRoot,'host-install.html'),'utf8');
   const script=await readFile(path.join(webRoot,'host-downloads.js'),'utf8');
   assert.match(html,/host-downloads\.js/);
   assert.match(html,/Version de test/);
-  for(const platform of ['windows','linux','macos']){
-    assert.match(html,new RegExp(`data-download-platform=["']${platform}["']`));
-    assert.match(html,new RegExp(`host-download\\?platform=${platform}`));
-  }
-  assert.doesNotMatch(html,/aria-disabled="true"/);
-  assert.doesNotMatch(script,/preventDefault\(\)/);
-  assert.match(script,/Le téléchargement reste accessible/);
+  assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-windows-x64\.exe/);
+  assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-linux-x64\.deb/);
+  assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-macos-arm64\.dmg/);
+  assert.doesNotMatch(html,/\.netlify\/functions\/host-download/);
+  assert.doesNotMatch(script,/fetch\(/);
+  assert.doesNotMatch(script,/\.netlify\/functions\/host-download/);
+  assert.match(script,/Téléchargement direct depuis GitHub Releases/);
 
   const fn=await readFile(path.join(repoRoot,'netlify/functions/host-download.mjs'),'utf8');
-  assert.match(fn,/GPUBNB_HOST_WINDOWS_URL/);
-  assert.match(fn,/GPUBNB_HOST_LINUX_URL/);
-  assert.match(fn,/GPUBNB_HOST_MACOS_URL/);
   assert.match(fn,/host-test-latest/);
-  assert.match(fn,/url\.protocol === 'https:'/);
-  assert.match(fn,/method: 'HEAD'/);
-  assert.match(fn,/if \(checkOnly\)/);
-  assert.doesNotMatch(fn,/installer_not_published/);
-  assert.match(fn,/status: 302/);
 });
 
 test('test release workflow publishes predictable installer names automatically',async()=>{
