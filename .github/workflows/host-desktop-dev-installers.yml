@@ -1,0 +1,100 @@
+name: host-desktop-dev-installers
+
+on:
+  pull_request:
+    paths:
+      - apps/host-desktop/**
+      - .github/workflows/host-desktop-dev-installers.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-desktop-dev-installers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows x64
+          - os: ubuntu-24.04
+            label: Linux x64
+          - os: macos-14
+            label: macOS arm64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: apps/host-desktop
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/host-desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check frontend
+        run: npm run check
+
+      - name: Test native host core
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+
+      - name: Build development installer
+        run: npm run tauri -- build
+        env:
+          GPUBNB_RELEASE_CHANNEL: development
+
+      - name: Generate SHA-256 manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist-evidence
+          find src-tauri/target/release/bundle -type f -maxdepth 4 -print0 \
+            | sort -z \
+            | xargs -0 shasum -a 256 > dist-evidence/SHA256SUMS.txt
+          printf '%s\n' \
+            'UNSIGNED DEVELOPMENT BUILD' \
+            'Do not distribute as a production release.' \
+            "Commit: $GITHUB_SHA" \
+            "Runner: $RUNNER_OS/$RUNNER_ARCH" \
+            > dist-evidence/BUILD-NOTICE.txt
+
+      - name: Upload installer and evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: gpubnb-host-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          path: |
+            apps/host-desktop/src-tauri/target/release/bundle/**
+            apps/host-desktop/dist-evidence/**
+          if-no-files-found: error
+          retention-days: 14
+
+  release-policy:
+    name: Public release policy
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Block unsigned public release
+        run: |
+          echo 'This workflow only creates short-lived development artifacts.'
+          echo 'Production installers require platform signing, notarization, provenance and an approved release workflow.'
