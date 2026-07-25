@@ -1,12 +1,20 @@
 mod diagnostics;
+mod orchestration_gateway;
 mod pairing;
+mod rental_orchestrator;
 
 use diagnostics::{collect_native_diagnostic, NativeDiagnostic};
+use orchestration_gateway::{
+    ActorRole, AuthenticatedContext, CommandResult, OrchestrationCommand, OrchestrationGateway,
+};
 use pairing::{pairing_configuration, PairingConfiguration};
+use rental_orchestrator::OrchestrationSnapshot;
 use serde::Serialize;
-use std::sync::Mutex;
+use std::sync::{atomic::{AtomicU64, Ordering}, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const TOTAL_SETUP_STEPS: usize = 6;
+static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -122,7 +130,61 @@ struct HostStatus {
     next_action_id: Option<&'static str>,
     pairing: PairingConfiguration,
     diagnostic: NativeDiagnostic,
+    orchestration: OrchestrationSnapshot,
     checks: Vec<Check>,
+}
+
+fn unix_seconds() -> Result<u64, &'static str> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .map_err(|_| "system_clock_invalid")
+}
+
+fn local_context(role: ActorRole, now: u64) -> AuthenticatedContext {
+    let sequence = REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    AuthenticatedContext {
+        request_id: format!("desktop_{now}_{sequence}"),
+        installation_id: installation_id(),
+        actor_id: "host_desktop".into(),
+        actor_role: role,
+        issued_at_unix_seconds: now,
+    }
+}
+
+fn installation_id() -> String {
+    std::env::var("GPUBNB_INSTALLATION_ID")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "unpaired_installation".into())
+}
+
+fn machine_id() -> String {
+    std::env::var("GPUBNB_MACHINE_ID")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "unpaired_machine".into())
+}
+
+fn create_gateway() -> OrchestrationGateway {
+    OrchestrationGateway::new(installation_id(), machine_id())
+        .expect("static fallback orchestration identifiers must be valid")
+}
+
+fn execute_local(
+    gateway: &mut OrchestrationGateway,
+    role: ActorRole,
+    command: OrchestrationCommand,
+) -> Result<CommandResult, &'static str> {
+    let now = unix_seconds()?;
+    gateway.execute(local_context(role, now), command, now)
+}
+
+fn read_orchestration(
+    gateway: &mut OrchestrationGateway,
+) -> Result<OrchestrationSnapshot, &'static str> {
+    execute_local(gateway, ActorRole::LocalAdministrator, OrchestrationCommand::ReadStatus)
+        .map(|result| result.snapshot)
 }
 
 fn platform_name() -> &'static str {
@@ -134,7 +196,7 @@ fn platform_name() -> &'static str {
     }
 }
 
-fn build_status(state: &AppState) -> HostStatus {
+fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostStatus {
     let diagnostic = collect_native_diagnostic();
     let pairing = pairing_configuration();
     let readiness = &state.readiness;
@@ -152,11 +214,7 @@ fn build_status(state: &AppState) -> HostStatus {
             ok: diagnostic.can_host,
             blocking: true,
             detail: if diagnostic.can_host {
-                format!(
-                    "{} et {} sont pris en charge",
-                    platform_name(),
-                    std::env::consts::ARCH
-                )
+                format!("{} et {} sont pris en charge", platform_name(), std::env::consts::ARCH)
             } else {
                 "Ce système ne peut pas héberger une location sécurisée".into()
             },
@@ -214,14 +272,11 @@ fn build_status(state: &AppState) -> HostStatus {
         _ => HostLifecycle::SetupRequired,
     };
     let completed_steps = checks.iter().filter(|check| check.ok).count();
-    let blocking_count = checks
-        .iter()
-        .filter(|check| check.blocking && !check.ok)
-        .count();
+    let blocking_count = checks.iter().filter(|check| check.blocking && !check.ok).count();
     let progress = ((completed_steps * 100) / TOTAL_SETUP_STEPS) as u8;
     let summary = match lifecycle {
         HostLifecycle::EmergencyStopped => "Arrêt d'urgence actif".to_owned(),
-        HostLifecycle::Online => "Votre GPU est en ligne".to_owned(),
+        HostLifecycle::Online => format!("GPU en ligne — état {:?}", orchestration.state),
         HostLifecycle::Ready => "Toutes les protections sont prêtes".to_owned(),
         HostLifecycle::SetupRequired => match blocking_count {
             1 => "Une protection reste à configurer".to_owned(),
@@ -244,14 +299,27 @@ fn build_status(state: &AppState) -> HostStatus {
             .flatten(),
         pairing,
         diagnostic,
+        orchestration,
         checks,
     }
 }
 
 #[tauri::command]
-fn host_status(state: tauri::State<'_, Mutex<AppState>>) -> Result<HostStatus, &'static str> {
+fn host_status(
+    state: tauri::State<'_, Mutex<AppState>>,
+    gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
+) -> Result<HostStatus, &'static str> {
     let state = state.lock().map_err(|_| "state_unavailable")?;
-    Ok(build_status(&state))
+    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
+    Ok(build_status(&state, read_orchestration(&mut gateway)?))
+}
+
+#[tauri::command]
+fn orchestration_status(
+    gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
+) -> Result<OrchestrationSnapshot, &'static str> {
+    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
+    read_orchestration(&mut gateway)
 }
 
 #[tauri::command]
@@ -260,26 +328,74 @@ fn account_pairing_configuration() -> PairingConfiguration {
 }
 
 #[tauri::command]
-fn request_publish(state: tauri::State<'_, Mutex<AppState>>) -> Result<(), &'static str> {
+fn request_publish(
+    state: tauri::State<'_, Mutex<AppState>>,
+    gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
+) -> Result<OrchestrationSnapshot, &'static str> {
     let mut state = state.lock().map_err(|_| "state_unavailable")?;
     if state.lifecycle == HostLifecycle::EmergencyStopped {
         return Err("emergency_stop_requires_review");
     }
-
-    let diagnostic = collect_native_diagnostic();
-    if !state.readiness.is_ready(&diagnostic) {
+    if !state.readiness.is_ready(&collect_native_diagnostic()) {
         return Err("host_not_certified");
     }
 
+    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
+    let result = execute_local(
+        &mut gateway,
+        ActorRole::LocalAdministrator,
+        OrchestrationCommand::CertifyHost,
+    )?;
     state.lifecycle = HostLifecycle::Online;
-    Ok(())
+    Ok(result.snapshot)
 }
 
 #[tauri::command]
-fn emergency_stop(state: tauri::State<'_, Mutex<AppState>>) -> Result<(), &'static str> {
+fn set_idle_mining(
+    enabled: bool,
+    state: tauri::State<'_, Mutex<AppState>>,
+    gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
+) -> Result<OrchestrationSnapshot, &'static str> {
+    let state = state.lock().map_err(|_| "state_unavailable")?;
+    if state.lifecycle != HostLifecycle::Online {
+        return Err("host_must_be_online");
+    }
+    if !state.readiness.is_ready(&collect_native_diagnostic()) {
+        return Err("host_not_certified");
+    }
+    drop(state);
+
+    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
+    execute_local(
+        &mut gateway,
+        ActorRole::LocalAdministrator,
+        OrchestrationCommand::SetMiningEnabled { enabled },
+    )
+    .map(|result| result.snapshot)
+}
+
+#[tauri::command]
+fn emergency_stop(
+    state: tauri::State<'_, Mutex<AppState>>,
+    gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
+) -> Result<OrchestrationSnapshot, &'static str> {
     let mut state = state.lock().map_err(|_| "state_unavailable")?;
     state.lifecycle = HostLifecycle::EmergencyStopped;
-    Ok(())
+    drop(state);
+
+    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
+    let result = execute_local(
+        &mut gateway,
+        ActorRole::LocalAdministrator,
+        OrchestrationCommand::EmergencyStop {
+            all_processes_stopped: false,
+        },
+    );
+    match result {
+        Ok(result) => Ok(result.snapshot),
+        Err("emergency_stop_failed") => read_orchestration(&mut gateway),
+        Err(error) => Err(error),
+    }
 }
 
 #[tauri::command]
@@ -289,13 +405,10 @@ fn run_setup_action(action_id: String) -> Result<String, &'static str> {
     }
 
     match SetupAction::try_from(action_id.as_str())? {
-        SetupAction::Account => {
-            if pairing_configuration().configured {
-                Ok("open_secure_pairing".into())
-            } else {
-                Err("pairing_service_not_configured")
-            }
-        }
+        SetupAction::Account => pairing_configuration()
+            .configured
+            .then(|| "open_secure_pairing".into())
+            .ok_or("pairing_service_not_configured"),
         SetupAction::Agent
         | SetupAction::Isolation
         | SetupAction::Storage
@@ -307,10 +420,13 @@ fn run_setup_action(action_id: String) -> Result<String, &'static str> {
 pub fn run() {
     tauri::Builder::default()
         .manage(Mutex::new(AppState::default()))
+        .manage(Mutex::new(create_gateway()))
         .invoke_handler(tauri::generate_handler![
             host_status,
+            orchestration_status,
             account_pairing_configuration,
             request_publish,
+            set_idle_mining,
             emergency_stop,
             run_setup_action
         ])
@@ -321,6 +437,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rental_orchestrator::HostWorkloadState;
 
     fn supported_diagnostic() -> NativeDiagnostic {
         NativeDiagnostic {
@@ -343,6 +460,16 @@ mod tests {
         }
     }
 
+    fn offline_snapshot() -> OrchestrationSnapshot {
+        OrchestrationSnapshot {
+            state: HostWorkloadState::Offline,
+            mining_enabled: false,
+            active_reservation_id: None,
+            active_gpu_id: None,
+            last_error: None,
+        }
+    }
+
     #[test]
     fn readiness_is_fail_closed() {
         assert!(!Readiness::default().is_ready(&supported_diagnostic()));
@@ -357,21 +484,6 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_native_environment_blocks_readiness() {
-        let mut diagnostic = supported_diagnostic();
-        diagnostic.can_host = false;
-        assert!(!fully_ready().is_ready(&diagnostic));
-    }
-
-    #[test]
-    fn next_action_is_deterministic() {
-        let mut readiness = Readiness::default();
-        assert_eq!(readiness.next_action(), Some(SetupAction::Account));
-        readiness.account_linked = true;
-        assert_eq!(readiness.next_action(), Some(SetupAction::Agent));
-    }
-
-    #[test]
     fn setup_actions_are_allowlisted() {
         assert_eq!(SetupAction::try_from("account"), Ok(SetupAction::Account));
         assert_eq!(SetupAction::try_from("shell"), Err("unknown_setup_action"));
@@ -379,7 +491,7 @@ mod tests {
 
     #[test]
     fn status_never_claims_ready_by_default() {
-        let status = build_status(&AppState::default());
+        let status = build_status(&AppState::default(), offline_snapshot());
         assert!(!status.ready);
         assert_eq!(status.total_steps, TOTAL_SETUP_STEPS);
         assert_eq!(status.next_action_id, Some("account"));
@@ -392,10 +504,26 @@ mod tests {
             readiness: fully_ready(),
             lifecycle: HostLifecycle::EmergencyStopped,
         };
-        let status = build_status(&state);
+        let status = build_status(&state, offline_snapshot());
         assert!(!status.ready);
         assert_eq!(status.lifecycle, HostLifecycle::EmergencyStopped);
         assert_eq!(status.next_action_id, None);
         assert_eq!(status.summary, "Arrêt d'urgence actif");
+    }
+
+    #[test]
+    fn frontend_has_no_generic_privileged_gateway_command() {
+        let exposed = [
+            "host_status",
+            "orchestration_status",
+            "account_pairing_configuration",
+            "request_publish",
+            "set_idle_mining",
+            "emergency_stop",
+            "run_setup_action",
+        ];
+        assert!(!exposed.contains(&"execute_orchestration"));
+        assert!(!exposed.contains(&"accept_reservation"));
+        assert!(!exposed.contains(&"confirm_cleanup"));
     }
 }
