@@ -49,6 +49,56 @@ def diagnostic_command(image: str) -> list[str]:
     return gpu_probe_command(image)
 
 
+def _bounded_int(value: object, name: str, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RuntimeError(f"diagnostic_invalid_{name}")
+    if value < minimum or value > maximum:
+        raise RuntimeError(f"diagnostic_invalid_{name}")
+    return value
+
+
+def _parse_report(stdout: str) -> list[dict[str, object]]:
+    try:
+        report = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("diagnostic_invalid_json") from exc
+    if not isinstance(report, dict) or report.get("schemaVersion") != 1 or report.get("vendor") != "NVIDIA":
+        raise RuntimeError("diagnostic_invalid_schema")
+    gpus = report.get("gpus")
+    if not isinstance(gpus, list) or len(gpus) > 16:
+        raise RuntimeError("diagnostic_invalid_gpu_list")
+    declared_count = _bounded_int(report.get("gpuCount"), "gpu_count", 0, 16)
+    if declared_count != len(gpus):
+        raise RuntimeError("diagnostic_gpu_count_mismatch")
+    safe_gpus: list[dict[str, object]] = []
+    seen_uuids: set[str] = set()
+    for expected_index, gpu in enumerate(gpus):
+        if not isinstance(gpu, dict):
+            raise RuntimeError("diagnostic_invalid_gpu_entry")
+        index = _bounded_int(gpu.get("index"), "gpu_index", 0, 15)
+        if index != expected_index:
+            raise RuntimeError("diagnostic_invalid_gpu_index")
+        name = gpu.get("name")
+        uuid = gpu.get("uuid")
+        if not isinstance(name, str) or not 1 <= len(name) <= 200:
+            raise RuntimeError("diagnostic_invalid_gpu_name")
+        if not isinstance(uuid, str) or not 1 <= len(uuid) <= 200 or uuid in seen_uuids:
+            raise RuntimeError("diagnostic_invalid_gpu_uuid")
+        seen_uuids.add(uuid)
+        total = _bounded_int(gpu.get("memoryTotalMiB"), "memory_total", 1, 2_000_000)
+        used = _bounded_int(gpu.get("memoryUsedMiB"), "memory_used", 0, total)
+        temperature = _bounded_int(gpu.get("temperatureC"), "temperature", 0, 130)
+        safe_gpus.append({
+            "index": index,
+            "name": name,
+            "uuid": uuid,
+            "memoryTotalMiB": total,
+            "memoryUsedMiB": used,
+            "temperatureC": temperature,
+        })
+    return safe_gpus
+
+
 def run_gpu_diagnostic(image: str, timeout_seconds: int) -> dict[str, Any]:
     timeout = max(30, min(600, int(timeout_seconds)))
     try:
@@ -62,27 +112,7 @@ def run_gpu_diagnostic(image: str, timeout_seconds: int) -> dict[str, Any]:
     stderr = result.stderr[:4_000].strip()
     if result.returncode != 0:
         raise RuntimeError(f"diagnostic_container_failed:{result.returncode}:{stderr}")
-    try:
-        report = json.loads(stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("diagnostic_invalid_json") from exc
-    if not isinstance(report, dict) or report.get("schemaVersion") != 1 or report.get("vendor") != "NVIDIA":
-        raise RuntimeError("diagnostic_invalid_schema")
-    gpus = report.get("gpus")
-    if not isinstance(gpus, list):
-        raise RuntimeError("diagnostic_invalid_gpu_list")
-    safe_gpus = []
-    for gpu in gpus[:16]:
-        if not isinstance(gpu, dict):
-            raise RuntimeError("diagnostic_invalid_gpu_entry")
-        safe_gpus.append({
-            "index": int(gpu.get("index", 0)),
-            "name": str(gpu.get("name", ""))[:200],
-            "uuid": str(gpu.get("uuid", ""))[:200],
-            "memoryTotalMiB": int(gpu.get("memoryTotalMiB", 0)),
-            "memoryUsedMiB": int(gpu.get("memoryUsedMiB", 0)),
-            "temperatureC": int(gpu.get("temperatureC", 0)),
-        })
+    safe_gpus = _parse_report(stdout)
     return {
         "gpuDetected": bool(safe_gpus),
         "summary": "Diagnostic GPU officiel terminé." if safe_gpus else "Aucun GPU détecté dans le conteneur.",
