@@ -121,13 +121,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          bundle_dir='target/release/bundle'
+          if [ ! -d "$bundle_dir" ]; then
+            bundle_dir='apps/host-desktop/src-tauri/target/release/bundle'
+          fi
+          test -d "$bundle_dir"
           mkdir -p apps/host-desktop/dist-evidence
           cp Cargo.lock apps/host-desktop/dist-evidence/Cargo.lock.resolved
-          find apps/host-desktop/src-tauri/target/release/bundle -type f -print0 \
+          find "$bundle_dir" -type f -print0 \
             | sort -z \
             | xargs -0 shasum -a 256 > apps/host-desktop/dist-evidence/SHA256SUMS.txt
           shasum -a 256 Cargo.lock > apps/host-desktop/dist-evidence/CARGO-LOCK-SHA256.txt
           test -s apps/host-desktop/dist-evidence/SHA256SUMS.txt
+          printf '%s\n' "$bundle_dir" > apps/host-desktop/dist-evidence/BUNDLE-DIRECTORY.txt
           printf '%s\n' \
             'UNSIGNED DEVELOPMENT BUILD' \
             'Do not distribute as a production release.' \
@@ -135,12 +141,20 @@ jobs:
             "Runner: $RUNNER_OS/$RUNNER_ARCH" \
             > apps/host-desktop/dist-evidence/BUILD-NOTICE.txt
 
+      - name: Stage installer bundles for upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_dir="$(cat apps/host-desktop/dist-evidence/BUNDLE-DIRECTORY.txt)"
+          mkdir -p apps/host-desktop/dist-installers
+          cp -R "$bundle_dir"/. apps/host-desktop/dist-installers/
+
       - name: Upload installer and evidence
         uses: actions/upload-artifact@v6
         with:
           name: gpubnb-host-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
           path: |
-            apps/host-desktop/src-tauri/target/release/bundle/**
+            apps/host-desktop/dist-installers/**
             apps/host-desktop/dist-evidence/**
           if-no-files-found: error
           retention-days: 14
