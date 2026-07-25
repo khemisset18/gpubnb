@@ -9,12 +9,33 @@ import { calculateSettlement, type Settlement } from './settlement.js';
 import { recordRentalEvent } from './rental-delivery-service.js';
 
 const SIGNATURE_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,128}$/;
-const TERMINAL_BOOKING_STATUSES = new Set<BookingStatus>([
+const TERMINAL_BOOKING_STATUSES: ReadonlySet<BookingStatus> = new Set([
   BookingStatus.SETTLED,
   BookingStatus.REFUNDED,
 ]);
+const PREVIEWABLE_BOOKING_STATUSES: ReadonlySet<BookingStatus> = new Set([
+  BookingStatus.COMPLETED,
+  BookingStatus.DEGRADED,
+  BookingStatus.DISPUTED,
+]);
+const SETTLEABLE_BOOKING_STATUSES: ReadonlySet<BookingStatus> = new Set([
+  BookingStatus.COMPLETED,
+  BookingStatus.DEGRADED,
+]);
+const TERMINAL_PAYMENT_STATUSES: ReadonlySet<PaymentStatus> = new Set([
+  PaymentStatus.RELEASED,
+  PaymentStatus.FULLY_REFUNDED,
+]);
 
 type TransactionClient = Prisma.TransactionClient;
+type LockedBooking = Prisma.BookingGetPayload<{
+  include: {
+    payment: true;
+    listing: { select: { machineId: true } };
+  };
+}> & {
+  payment: NonNullable<Prisma.BookingGetPayload<{ include: { payment: true } }>['payment']>;
+};
 
 export interface SettlementPreview {
   bookingId: string;
@@ -54,7 +75,7 @@ function assertSettlementInvariant(settlement: Settlement): void {
   }
 }
 
-async function lockBookingAndPayment(tx: TransactionClient, bookingId: string) {
+async function lockBookingAndPayment(tx: TransactionClient, bookingId: string): Promise<LockedBooking> {
   const locked = await tx.$queryRaw<Array<{ id: string }>>`
     SELECT booking."id"
     FROM "Booking" AS booking
@@ -72,7 +93,7 @@ async function lockBookingAndPayment(tx: TransactionClient, bookingId: string) {
     },
   });
   if (!booking?.payment) throw new Error('booking_payment_not_found');
-  return booking;
+  return { ...booking, payment: booking.payment };
 }
 
 function calculateForBooking(booking: {
@@ -102,13 +123,13 @@ export async function previewSettlement(
     include: { payment: true },
   });
   if (!booking?.payment) throw new Error('booking_payment_not_found');
-  if (![BookingStatus.COMPLETED, BookingStatus.DEGRADED, BookingStatus.DISPUTED].includes(booking.status)) {
+  if (!PREVIEWABLE_BOOKING_STATUSES.has(booking.status)) {
     throw new Error('booking_not_settleable');
   }
   return {
     bookingId,
     paymentId: booking.payment.id,
-    settlement: calculateForBooking(booking),
+    settlement: calculateForBooking({ ...booking, payment: booking.payment }),
   };
 }
 
@@ -119,11 +140,11 @@ export async function requestSettlement(
   return db.$transaction(
     async (tx) => {
       const booking = await lockBookingAndPayment(tx, bookingId);
-      if (![BookingStatus.COMPLETED, BookingStatus.DEGRADED].includes(booking.status)) {
+      if (!SETTLEABLE_BOOKING_STATUSES.has(booking.status)) {
         throw new Error('booking_not_settleable');
       }
       if (booking.payment.status === PaymentStatus.FROZEN) throw new Error('payment_frozen');
-      if ([PaymentStatus.RELEASED, PaymentStatus.FULLY_REFUNDED].includes(booking.payment.status)) {
+      if (TERMINAL_PAYMENT_STATUSES.has(booking.payment.status)) {
         throw new Error('payment_already_terminal');
       }
 
@@ -194,7 +215,7 @@ export async function confirmSettlement(
       if (booking.payment.status !== PaymentStatus.SETTLEMENT_PENDING) {
         throw new Error('settlement_not_requested');
       }
-      if (![BookingStatus.COMPLETED, BookingStatus.DEGRADED].includes(booking.status)) {
+      if (!SETTLEABLE_BOOKING_STATUSES.has(booking.status)) {
         throw new Error('booking_not_settleable');
       }
 
