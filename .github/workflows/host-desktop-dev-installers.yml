@@ -3,6 +3,9 @@ name: host-desktop-dev-installers
 on:
   pull_request:
     paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
       - apps/host-desktop/**
       - .github/workflows/host-desktop-dev-installers.yml
   workflow_dispatch:
@@ -28,9 +31,6 @@ jobs:
           - os: macos-14
             label: macOS arm64
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: apps/host-desktop
     steps:
       - uses: actions/checkout@v6
         with:
@@ -42,7 +42,13 @@ jobs:
           cache: npm
           cache-dependency-path: apps/host-desktop/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
 
       - name: Install Linux native dependencies
         if: runner.os == 'Linux'
@@ -51,16 +57,46 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
+      - name: Materialize Windows bundle icon
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $source = 'apps/host-desktop/src-tauri/icons/icon.ico.base64'
+          $target = 'apps/host-desktop/src-tauri/icons/icon.ico'
+          if (!(Test-Path $source)) { throw 'Missing staged Windows icon source.' }
+          [IO.File]::WriteAllBytes($target, [Convert]::FromBase64String((Get-Content $source -Raw).Trim()))
+
+      - name: Require committed lockfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s Cargo.lock
+          test -s apps/host-desktop/package-lock.json
+
       - name: Install locked dependencies
-        run: npm ci
+        working-directory: apps/host-desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Type-check frontend
-        run: npm run check
+      - name: Audit JavaScript production dependencies
+        working-directory: apps/host-desktop
+        run: npm audit --omit=dev --audit-level=high
 
-      - name: Test native host core
-        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Type-check and build frontend
+        working-directory: apps/host-desktop
+        run: |
+          npm run check
+          npm run build
+
+      - name: Test and lint native host core
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt -p gpubnb-host-desktop -- --check
+          cargo test -p gpubnb-host-desktop --all-targets --locked
+          cargo clippy -p gpubnb-host-desktop --all-targets --locked -- -D warnings
 
       - name: Build development installer
+        working-directory: apps/host-desktop
         run: npm run tauri -- build
         env:
           GPUBNB_RELEASE_CHANNEL: development
@@ -69,17 +105,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist-evidence
-          find src-tauri/target/release/bundle -type f -print0 \
+          mkdir -p apps/host-desktop/dist-evidence
+          find apps/host-desktop/src-tauri/target/release/bundle -type f -print0 \
             | sort -z \
-            | xargs -0 shasum -a 256 > dist-evidence/SHA256SUMS.txt
-          test -s dist-evidence/SHA256SUMS.txt
+            | xargs -0 shasum -a 256 > apps/host-desktop/dist-evidence/SHA256SUMS.txt
+          test -s apps/host-desktop/dist-evidence/SHA256SUMS.txt
           printf '%s\n' \
             'UNSIGNED DEVELOPMENT BUILD' \
             'Do not distribute as a production release.' \
             "Commit: $GITHUB_SHA" \
             "Runner: $RUNNER_OS/$RUNNER_ARCH" \
-            > dist-evidence/BUILD-NOTICE.txt
+            > apps/host-desktop/dist-evidence/BUILD-NOTICE.txt
 
       - name: Upload installer and evidence
         uses: actions/upload-artifact@v6
