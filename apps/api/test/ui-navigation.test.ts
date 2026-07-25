@@ -52,15 +52,18 @@ test('listing publication requires a machine linked by Host',async()=>{
   assert.match(script,/Reliez d’abord une machine/);
 });
 
-test('installer page uses guarded direct download routes',async()=>{
+test('installer downloads stay clickable while availability is informational',async()=>{
   const html=await readFile(path.join(webRoot,'host-install.html'),'utf8');
+  const script=await readFile(path.join(webRoot,'host-downloads.js'),'utf8');
   assert.match(html,/host-downloads\.js/);
   assert.match(html,/Version de test/);
   for(const platform of ['windows','linux','macos']){
     assert.match(html,new RegExp(`data-download-platform=["']${platform}["']`));
     assert.match(html,new RegExp(`host-download\\?platform=${platform}`));
   }
-  assert.equal((html.match(/aria-disabled="true"/g)||[]).length,3);
+  assert.doesNotMatch(html,/aria-disabled="true"/);
+  assert.doesNotMatch(script,/preventDefault\(\)/);
+  assert.match(script,/Le téléchargement reste accessible/);
 
   const fn=await readFile(path.join(repoRoot,'netlify/functions/host-download.mjs'),'utf8');
   assert.match(fn,/GPUBNB_HOST_WINDOWS_URL/);
@@ -68,13 +71,17 @@ test('installer page uses guarded direct download routes',async()=>{
   assert.match(fn,/GPUBNB_HOST_MACOS_URL/);
   assert.match(fn,/host-test-latest/);
   assert.match(fn,/url\.protocol === 'https:'/);
-  assert.match(fn,/installer_not_published/);
   assert.match(fn,/method: 'HEAD'/);
+  assert.match(fn,/if \(checkOnly\)/);
+  assert.doesNotMatch(fn,/installer_not_published/);
+  assert.match(fn,/status: 302/);
 });
 
-test('test release workflow publishes predictable installer names',async()=>{
+test('test release workflow publishes predictable installer names automatically',async()=>{
   const workflow=await readFile(path.join(repoRoot,'.github/workflows/publish-host-test-release.yml'),'utf8');
   assert.match(workflow,/workflow_dispatch/);
+  assert.match(workflow,/push:/);
+  assert.match(workflow,/branches:\s*\n\s*- main/);
   assert.match(workflow,/contents: write/);
   assert.match(workflow,/gpubnb-host-windows-x64\.exe/);
   assert.match(workflow,/gpubnb-host-linux-x64\.deb/);

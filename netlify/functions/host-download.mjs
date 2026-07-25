@@ -49,23 +49,19 @@ export default async (request) => {
   }
 
   const target = downloads[platform];
-  const available = await isPublished(target);
 
-  if (checkOnly) {
+  if (!isAllowedDownloadUrl(target)) {
     return Response.json(
-      { platform, label: labels[platform], available, channel: 'test' },
-      { status: 200, headers: { 'cache-control': 'no-store' } },
+      { error: 'invalid_installer_url', platform },
+      { status: 500, headers: { 'cache-control': 'no-store' } },
     );
   }
 
-  if (!available) {
+  if (checkOnly) {
+    const available = await isPublished(target);
     return Response.json(
-      {
-        error: 'installer_not_published',
-        platform,
-        message: `L’installateur GPUbnb Host pour ${labels[platform]} n’est pas encore publié.`,
-      },
-      { status: 503, headers: { 'cache-control': 'no-store', 'retry-after': '3600' } },
+      { platform, label: labels[platform], available, channel: 'test' },
+      { status: 200, headers: { 'cache-control': 'no-store' } },
     );
   }
 

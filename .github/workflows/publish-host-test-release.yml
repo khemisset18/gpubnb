@@ -2,6 +2,14 @@ name: publish-host-test-release
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/host-desktop/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/publish-host-test-release.yml'
 
 permissions:
   contents: write
