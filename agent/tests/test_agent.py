@@ -9,7 +9,10 @@ from nacl.signing import SigningKey
 from gpubnb_agent.client import signed_headers
 from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available, machine_fingerprint
 from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key, load_machine_fingerprint, save_machine_fingerprint, detect_hardware_change
-from gpubnb_agent.runner import diagnostic_command, prepare_workspace, workspace_health_command, gpu_passthrough_flags
+from gpubnb_agent.runner import diagnostic_command, prepare_workspace, workspace_health_command, gpu_passthrough_flags, run_gpu_diagnostic
+
+
+OFFICIAL_IMAGE = "ghcr.io/khemisset18/gpu-diagnostic@sha256:" + ("a" * 64)
 
 
 class PlatformTests(unittest.TestCase):
@@ -74,52 +77,90 @@ class KeyTests(unittest.TestCase):
 class RunnerTests(unittest.TestCase):
     def test_requires_digest_pinned_image(self):
         with self.assertRaises(RuntimeError):
-            diagnostic_command("nvidia/cuda:latest")
+            diagnostic_command("ghcr.io/khemisset18/gpu-diagnostic:latest")
 
-    def test_hardens_docker_invocation(self):
+    def test_rejects_non_official_registry_image(self):
         image = "registry.example/gpubnb/diagnostic@sha256:" + ("a" * 64)
-        command = diagnostic_command(image)
+        with self.assertRaisesRegex(RuntimeError, "image officielle"):
+            diagnostic_command(image)
+
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    def test_hardens_official_docker_invocation(self, mock_gpu):
+        mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        command = diagnostic_command(OFFICIAL_IMAGE)
         self.assertIn("--network=none", command)
         self.assertIn("--read-only", command)
         self.assertIn("--cap-drop=ALL", command)
+        self.assertIn("--security-opt=no-new-privileges", command)
+        self.assertIn("--gpus=device=0", command)
         self.assertNotIn("--privileged", command)
+        self.assertEqual(command[-1], OFFICIAL_IMAGE)
+        self.assertNotIn("nvidia-smi", command)
 
     def test_gpu_passthrough_flags_are_vendor_aware(self):
         flags = gpu_passthrough_flags()
         self.assertIsInstance(flags, list)
 
     @patch("gpubnb_agent.runner.gpu_inventory")
-    def test_diagnostic_command_uses_amd_tool_for_amd_gpu(self, mock_gpu):
-        mock_gpu.return_value = [{"gpuVendor": "AMD", "gpuModel": "RX 7900", "gpuUuid": "amd-1", "vramMiB": 24576, "driverVersion": "rocm-6.0", "gpuUtilization": 0, "memoryUsedMiB": 0, "temperatureC": 40}]
-        image = "registry.example/gpubnb/diagnostic@sha256:" + ("a" * 64)
-        command = diagnostic_command(image)
-        self.assertIn("rocm-smi", command)
-        self.assertNotIn("nvidia-smi", command)
+    def test_official_image_fails_closed_for_amd(self, mock_gpu):
+        mock_gpu.return_value = [{"gpuVendor": "AMD"}]
+        with self.assertRaisesRegex(RuntimeError, "supports_nvidia_only"):
+            diagnostic_command(OFFICIAL_IMAGE)
 
     @patch("gpubnb_agent.runner.gpu_inventory")
-    def test_diagnostic_command_uses_intel_tool_for_intel_gpu(self, mock_gpu):
-        mock_gpu.return_value = [{"gpuVendor": "INTEL", "gpuModel": "Arc A770", "gpuUuid": "intel-1", "vramMiB": 16384, "driverVersion": "xpu-1.0", "gpuUtilization": 0, "memoryUsedMiB": 0, "temperatureC": 35}]
-        image = "registry.example/gpubnb/diagnostic@sha256:" + ("a" * 64)
-        command = diagnostic_command(image)
-        self.assertIn("xpu-smi", command)
-        self.assertNotIn("nvidia-smi", command)
+    def test_official_image_fails_closed_for_intel(self, mock_gpu):
+        mock_gpu.return_value = [{"gpuVendor": "INTEL"}]
+        with self.assertRaisesRegex(RuntimeError, "supports_nvidia_only"):
+            diagnostic_command(OFFICIAL_IMAGE)
 
     @patch("gpubnb_agent.runner.gpu_inventory")
-    def test_diagnostic_command_uses_nvidia_tool_for_nvidia_gpu(self, mock_gpu):
-        mock_gpu.return_value = [{"gpuVendor": "NVIDIA", "gpuModel": "RTX 4090", "gpuUuid": "GPU-1", "vramMiB": 24576, "driverVersion": "550.0", "gpuUtilization": 0, "memoryUsedMiB": 0, "temperatureC": 40}]
-        image = "registry.example/gpubnb/diagnostic@sha256:" + ("a" * 64)
-        command = diagnostic_command(image)
-        self.assertIn("nvidia-smi", command)
-
     @patch("gpubnb_agent.runner.subprocess.run")
-    def test_preparation_pulls_uncached_image_and_runs_health_check(self, run):
-        image = "registry.example/gpubnb/diagnostic@sha256:" + ("a" * 64)
+    def test_parses_official_json_report(self, run, mock_gpu):
+        mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        run.return_value = type("Result", (), {
+            "returncode": 0,
+            "stderr": "",
+            "stdout": '{"schemaVersion":1,"vendor":"NVIDIA","gpuCount":1,"gpus":[{"index":0,"name":"RTX 4090","uuid":"GPU-1","memoryTotalMiB":24564,"memoryUsedMiB":100,"temperatureC":45}]}'
+        })()
+        result = run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
+        self.assertTrue(result["gpuDetected"])
+        self.assertEqual(result["metrics"]["gpuCount"], 1)
+        self.assertEqual(result["metrics"]["gpus"][0]["uuid"], "GPU-1")
+
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_rejects_gpu_count_mismatch(self, run, mock_gpu):
+        mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        run.return_value = type("Result", (), {
+            "returncode": 0,
+            "stderr": "",
+            "stdout": '{"schemaVersion":1,"vendor":"NVIDIA","gpuCount":2,"gpus":[]}'
+        })()
+        with self.assertRaisesRegex(RuntimeError, "gpu_count_mismatch"):
+            run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
+
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_rejects_impossible_official_telemetry(self, run, mock_gpu):
+        mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        run.return_value = type("Result", (), {
+            "returncode": 0,
+            "stderr": "",
+            "stdout": '{"schemaVersion":1,"vendor":"NVIDIA","gpuCount":1,"gpus":[{"index":0,"name":"RTX","uuid":"GPU-1","memoryTotalMiB":100,"memoryUsedMiB":101,"temperatureC":45}]}'
+        })()
+        with self.assertRaisesRegex(RuntimeError, "memory_used"):
+            run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
+
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_preparation_pulls_uncached_image_and_runs_health_check(self, run, mock_gpu):
+        mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
         run.side_effect = [
             type("Result", (), {"returncode": 1, "stderr": "missing"})(),
             type("Result", (), {"returncode": 0, "stderr": ""})(),
-            type("Result", (), {"returncode": 0, "stderr": ""})(),
+            type("Result", (), {"returncode": 0, "stderr": "", "stdout": "{}"})(),
         ]
-        result = prepare_workspace(image, 120)
+        result = prepare_workspace(OFFICIAL_IMAGE, 120)
         self.assertEqual(run.call_args_list[1].args[0][:2], ["docker", "pull"])
         self.assertTrue(result["gpuDetected"])
         self.assertFalse(result["metrics"]["cacheHit"])
