@@ -87,13 +87,14 @@ jobs:
           npm run check
           npm run build
 
-      - name: Test and lint native host core
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo fmt -p gpubnb-host-desktop -- --check
-          cargo test -p gpubnb-host-desktop --all-targets --locked
-          cargo clippy -p gpubnb-host-desktop --all-targets --locked -- -D warnings
+      - name: Enforce Rust formatting
+        run: cargo fmt -p gpubnb-host-desktop -- --check
+
+      - name: Test native host core
+        run: cargo test -p gpubnb-host-desktop --all-targets --locked
+
+      - name: Lint native host core
+        run: cargo clippy -p gpubnb-host-desktop --all-targets --locked -- -D warnings
 
       - name: Build development installer
         working-directory: apps/host-desktop
