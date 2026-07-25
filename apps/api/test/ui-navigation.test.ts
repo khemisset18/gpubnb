@@ -29,6 +29,17 @@ test('account pages render real API collections safely',async()=>{
   assert.match(portal,/escapeHTML/);
 });
 
+test('listing publication requires a machine linked by Host',async()=>{
+  const html=await readFile(path.join(webRoot,'publish.html'),'utf8');
+  const script=await readFile(path.join(webRoot,'publish.js'),'utf8');
+  assert.match(html,/Machine reliée/);
+  assert.match(html,/publishSubmit/);
+  assert.doesNotMatch(html,/agentPublicKey/);
+  assert.doesNotMatch(script,/api\('\/machines',\{method:'POST'/);
+  assert.match(script,/api\('\/machines\/mine'\)/);
+  assert.match(script,/Reliez d’abord une machine/);
+});
+
 test('installer page uses guarded direct download routes',async()=>{
   const html=await readFile(path.join(webRoot,'host-install.html'),'utf8');
   assert.match(html,/host-downloads\.js/);
