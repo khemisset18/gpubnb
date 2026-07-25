@@ -110,7 +110,13 @@ jobs:
           test -n "$source_file"
           mkdir -p release-assets
           cp "$source_file" "release-assets/$ASSET_NAME"
-          sha256sum "release-assets/$ASSET_NAME" > "release-assets/$ASSET_NAME.sha256"
+          ASSET_PATH="release-assets/$ASSET_NAME" node - <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const file = process.env.ASSET_PATH;
+          const hash = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+          fs.writeFileSync(`${file}.sha256`, `${hash}  ${file.split('/').pop()}\n`);
+          NODE
 
       - uses: actions/upload-artifact@v6
         with:
