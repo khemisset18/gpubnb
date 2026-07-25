@@ -77,42 +77,43 @@ jobs:
             exit 1
           fi
 
-      - name: Scan image and block HIGH or CRITICAL vulnerabilities
-        uses: aquasecurity/trivy-action@v0.33.1
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1
         with:
-          image-ref: gpu-diagnostic:ci
-          format: table
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
+          version: v0.65.0
+          cache: true
 
-      - name: Generate Trivy SARIF
-        if: always()
-        uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          image-ref: gpu-diagnostic:ci
-          format: sarif
-          output: trivy-gpu-diagnostic.sarif
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: '0'
+      - name: Generate vulnerability evidence
+        run: |
+          set -euo pipefail
+          trivy image --ignore-unfixed --severity HIGH,CRITICAL --format json --output trivy-gpu-diagnostic.json gpu-diagnostic:ci
+          trivy image --ignore-unfixed --severity HIGH,CRITICAL --format sarif --output trivy-gpu-diagnostic.sarif gpu-diagnostic:ci
+          jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-gpu-diagnostic.json | tee trivy-vulnerability-count.txt
 
       - name: Upload Trivy SARIF
-        if: always() && hashFiles('trivy-gpu-diagnostic.sarif') != ''
+        if: hashFiles('trivy-gpu-diagnostic.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-gpu-diagnostic.sarif
 
       - name: Install Syft
-        if: success()
         uses: anchore/sbom-action/download-syft@v0
 
       - name: Generate SBOM
-        if: success()
         run: syft gpu-diagnostic:ci -o spdx-json=sbom.spdx.json
 
+      - name: Enforce zero fixable HIGH or CRITICAL vulnerabilities
+        run: |
+          set -euo pipefail
+          count="$(cat trivy-vulnerability-count.txt)"
+          if [ "$count" -ne 0 ]; then
+            jq -r '.Results[]? | .Target as $target | .Vulnerabilities[]? | [$target,.VulnerabilityID,.PkgName,.InstalledVersion,.FixedVersion,.Severity] | @tsv' trivy-gpu-diagnostic.json
+            echo "Image rejected: $count fixable HIGH/CRITICAL vulnerabilities" >&2
+            exit 1
+          fi
+
       - name: Publish image by immutable digest
-        if: success() && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request'
         id: publish
         uses: docker/build-push-action@v6
         with:
@@ -126,11 +127,11 @@ jobs:
           cache-from: type=gha
 
       - name: Install Cosign
-        if: success() && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request'
         uses: sigstore/cosign-installer@v3
 
       - name: Sign immutable image digest
-        if: success() && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request'
         env:
           DIGEST: ${{ steps.publish.outputs.digest }}
         run: |
@@ -138,7 +139,7 @@ jobs:
           cosign sign --yes "${IMAGE}@${DIGEST}"
 
       - name: Write agent configuration reference
-        if: success() && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request'
         env:
           DIGEST: ${{ steps.publish.outputs.digest }}
         run: |
@@ -153,7 +154,9 @@ jobs:
           name: gpu-diagnostic-image-evidence
           path: |
             sbom.spdx.json
+            trivy-gpu-diagnostic.json
             trivy-gpu-diagnostic.sarif
+            trivy-vulnerability-count.txt
             gpu-diagnostic-image.txt
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 30
