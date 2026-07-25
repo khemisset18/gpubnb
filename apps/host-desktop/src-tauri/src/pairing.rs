@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-const DEFAULT_PAIRING_PATH: &str = "/host/pair";
+const DEFAULT_PAIRING_PATH: &str = "/dashboard.html?pair=host";
 const ALLOWED_PAIRING_ORIGINS: [&str; 2] = ["https://gpubnb.com", "https://app.gpubnb.com"];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -21,7 +21,7 @@ pub fn pairing_configuration() -> PairingConfiguration {
         configured: base_url.is_some(),
         browser_url: base_url.map(|value| format!("{value}{DEFAULT_PAIRING_PATH}")),
         stores_password: false,
-        explanation: "La connexion s'effectue dans le navigateur avec un code temporaire. Le mot de passe n'est jamais transmis à l'application.",
+        explanation: "La connexion s'effectue sur le site officiel. Un code à usage unique valable dix minutes associe cet ordinateur sans transmettre ni stocker votre mot de passe.",
     }
 }
 
@@ -51,6 +51,10 @@ mod tests {
 
     #[test]
     fn pairing_never_claims_to_store_a_password() {
-        assert!(!pairing_configuration().stores_password);
+        let pairing = pairing_configuration();
+        assert!(!pairing.stores_password);
+        if let Some(url) = pairing.browser_url {
+            assert!(url.ends_with("/dashboard.html?pair=host"));
+        }
     }
 }
