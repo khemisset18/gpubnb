@@ -55,8 +55,26 @@ jobs:
           path: apps/api/api-test.log
           if-no-files-found: error
           retention-days: 3
-      - run: npm run build
-      - run: npx tsc -p tsconfig.json --noEmit
+      - name: Build API
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee api-build.log
+      - name: Strict TypeScript check
+        shell: bash
+        run: |
+          set -o pipefail
+          npx tsc -p tsconfig.json --noEmit 2>&1 | tee api-tsc.log
+      - name: Upload API build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-build-diagnostics
+          path: |
+            apps/api/api-build.log
+            apps/api/api-tsc.log
+          if-no-files-found: warn
+          retention-days: 3
 
   dependency-audit:
     runs-on: ubuntu-latest
