@@ -77,9 +77,11 @@ test('installer downloads stay clickable while availability is informational',as
   assert.match(fn,/status: 302/);
 });
 
-test('test release workflow publishes predictable installer names',async()=>{
+test('test release workflow publishes predictable installer names automatically',async()=>{
   const workflow=await readFile(path.join(repoRoot,'.github/workflows/publish-host-test-release.yml'),'utf8');
   assert.match(workflow,/workflow_dispatch/);
+  assert.match(workflow,/push:/);
+  assert.match(workflow,/branches:\s*\n\s*- main/);
   assert.match(workflow,/contents: write/);
   assert.match(workflow,/gpubnb-host-windows-x64\.exe/);
   assert.match(workflow,/gpubnb-host-linux-x64\.deb/);
