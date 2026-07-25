@@ -102,12 +102,14 @@ jobs:
           name: cargo-test-${{ runner.os }}
           path: cargo-test-${{ runner.os }}.log
           if-no-files-found: error
-      - name: Upload refreshed Cargo lock
+      - name: Upload normalized Rust sources and Cargo lock
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: refreshed-cargo-lock
-          path: Cargo.lock
+          name: normalized-host-rust-sources
+          path: |
+            Cargo.lock
+            apps/host-desktop/src-tauri/src/**/*.rs
           if-no-files-found: error
       - name: Clippy
         shell: bash
