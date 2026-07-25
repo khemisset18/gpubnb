@@ -70,9 +70,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist-evidence
-          find src-tauri/target/release/bundle -type f -maxdepth 4 -print0 \
+          find src-tauri/target/release/bundle -type f -print0 \
             | sort -z \
             | xargs -0 shasum -a 256 > dist-evidence/SHA256SUMS.txt
+          test -s dist-evidence/SHA256SUMS.txt
           printf '%s\n' \
             'UNSIGNED DEVELOPMENT BUILD' \
             'Do not distribute as a production release.' \
