@@ -68,6 +68,19 @@ test('a new pairing code immediately invalidates the previous code for the same 
  assert.equal(redis.ttls.get(`${LINK_PREFIX}${second}`),600);
 });
 
+test('concurrent requests leave exactly one active code for a host',async()=>{
+ const redis=new FakeRedis();
+ const first=digest('1');
+ const second=digest('2');
+ await Promise.all([
+  redis.set(`${LINK_PREFIX}${first}`,'host-race','EX',600,'NX'),
+  redis.set(`${LINK_PREFIX}${second}`,'host-race','EX',600,'NX'),
+ ]);
+ const active=[first,second].filter(value=>redis.values.has(`${LINK_PREFIX}${value}`));
+ assert.equal(active.length,1);
+ assert.equal(redis.values.get(`${OWNER_PREFIX}host-race`),active[0]);
+});
+
 test('a pairing code can only be consumed once and clears the host reference',async()=>{
  const redis=new FakeRedis();
  const codeDigest=digest('c');
