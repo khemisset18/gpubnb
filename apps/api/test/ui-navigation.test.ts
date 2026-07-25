@@ -20,6 +20,7 @@ test('portal pages expose accessible navigation and real targets',async()=>{
 test('installer page uses guarded direct download routes',async()=>{
   const html=await readFile(path.join(webRoot,'host-install.html'),'utf8');
   assert.match(html,/host-downloads\.js/);
+  assert.match(html,/Version de test/);
   for(const platform of ['windows','linux','macos']){
     assert.match(html,new RegExp(`data-download-platform=["']${platform}["']`));
     assert.match(html,new RegExp(`host-download\\?platform=${platform}`));
@@ -30,8 +31,20 @@ test('installer page uses guarded direct download routes',async()=>{
   assert.match(fn,/GPUBNB_HOST_WINDOWS_URL/);
   assert.match(fn,/GPUBNB_HOST_LINUX_URL/);
   assert.match(fn,/GPUBNB_HOST_MACOS_URL/);
+  assert.match(fn,/host-test-latest/);
   assert.match(fn,/url\.protocol === 'https:'/);
-  assert.match(fn,/installer_not_configured/);
+  assert.match(fn,/installer_not_published/);
+  assert.match(fn,/method: 'HEAD'/);
+});
+
+test('test release workflow publishes predictable installer names',async()=>{
+  const workflow=await readFile(path.join(repoRoot,'.github/workflows/publish-host-test-release.yml'),'utf8');
+  assert.match(workflow,/workflow_dispatch/);
+  assert.match(workflow,/contents: write/);
+  assert.match(workflow,/gpubnb-host-windows-x64\.exe/);
+  assert.match(workflow,/gpubnb-host-linux-x64\.deb/);
+  assert.match(workflow,/gpubnb-host-macos-arm64\.dmg/);
+  assert.match(workflow,/gh release create host-test-latest/);
 });
 
 test('dashboard does not present mining as operational',async()=>{
