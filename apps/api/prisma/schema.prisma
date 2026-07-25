@@ -6,10 +6,12 @@ datasource db {
   provider = "postgresql"
   url = env("DATABASE_URL")
 }
+
 enum MachineConnectivity {
   OFFLINE
   ONLINE
 }
+
 enum MachineOperational {
   UNAVAILABLE
   VERIFYING
@@ -19,11 +21,13 @@ enum MachineOperational {
   DEGRADED
   MAINTENANCE
 }
+
 enum ModerationStatus {
   CLEAR
   SUSPENDED
   QUARANTINED
 }
+
 enum ListingStatus {
   DRAFT
   PENDING_GPU_VERIFICATION
@@ -32,6 +36,33 @@ enum ListingStatus {
   HIDDEN_OFFLINE
   SUSPENDED
 }
+
+enum ListingResourceMode {
+  FULL_MACHINE
+  SELECTED_ACCELERATORS
+  COMPUTE_POOL
+}
+
+enum AcceleratorOperationalStatus {
+  DISCOVERED
+  VERIFYING
+  AVAILABLE
+  RESERVED
+  RUNNING
+  DEGRADED
+  MAINTENANCE
+  MISSING
+  QUARANTINED
+}
+
+enum ResourceAllocationStatus {
+  HELD
+  CONFIRMED
+  ACTIVE
+  RELEASED
+  CANCELLED
+}
+
 enum BookingStatus {
   CREATED
   AWAITING_DEPOSIT
@@ -45,6 +76,7 @@ enum BookingStatus {
   REFUNDED
   CANCELLED
 }
+
 enum PaymentStatus {
   ESCROW_PENDING
   ESCROW_FUNDED
@@ -54,10 +86,12 @@ enum PaymentStatus {
   RELEASED
   FROZEN
 }
+
 enum JobType {
   GPU_DIAGNOSTIC
   WORKSPACE_PREPARE
 }
+
 enum JobStatus {
   DRAFT
   QUEUED
@@ -74,12 +108,14 @@ enum JobStatus {
   REJECTED
   QUARANTINED
 }
+
 enum WorkspaceRelease {
   BETA
   UPCOMING
   EXPERIMENTAL
   SUSPENDED
 }
+
 enum MachineWorkspaceState {
   READY
   LIMITED
@@ -87,6 +123,7 @@ enum MachineWorkspaceState {
   INCOMPATIBLE
   OWNER_DISABLED
 }
+
 enum WorkspaceSessionStatus {
   RESERVED
   PREPARING
@@ -100,6 +137,7 @@ enum WorkspaceSessionStatus {
   TIMED_OUT
   QUARANTINED
 }
+
 enum SessionTerminationReason {
   USER_STOP
   OWNER_EMERGENCY_STOP
@@ -110,6 +148,7 @@ enum SessionTerminationReason {
   SECURITY_POLICY
   EXECUTION_FAILED
 }
+
 model User {
   id String @id @default(cuid())
   wallet String @unique
@@ -137,6 +176,7 @@ model User {
   jobs Job[]
   workspaceSessions WorkspaceSession[]
 }
+
 model Profile {
   id String @id @default(cuid())
   userId String @unique
@@ -148,6 +188,7 @@ model Profile {
   completedSessions Int @default(0)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
 model Machine {
   id String @id @default(cuid())
   ownerId String
@@ -180,11 +221,38 @@ model Machine {
   verifiedAt DateTime?
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   listings GpuListing[]
+  accelerators Accelerator[]
+  machineAllocations MachineAllocation[]
   heartbeats Heartbeat[]
   jobs Job[]
   workspaceSessions WorkspaceSession[]
   workspaces MachineWorkspace[]
 }
+
+model Accelerator {
+  id String @id @default(cuid())
+  machineId String
+  hardwareUuid String
+  slotIndex Int?
+  vendor String? @db.VarChar(40)
+  model String @db.VarChar(160)
+  vramMiB Int
+  driverVersion String? @db.VarChar(80)
+  cudaVersion String? @db.VarChar(40)
+  status AcceleratorOperationalStatus @default(DISCOVERED)
+  moderationStatus ModerationStatus @default(CLEAR)
+  isolationVerified Boolean @default(false)
+  verifiedAt DateTime?
+  lastSeenAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  listings ListingAccelerator[]
+  allocations AcceleratorAllocation[]
+  @@unique([machineId, hardwareUuid])
+  @@index([machineId, status])
+}
+
 model GpuListing {
   id String @id @default(cuid())
   ownerId String
@@ -193,13 +261,29 @@ model GpuListing {
   description String @db.VarChar(3000)
   hourlyLamports BigInt
   status ListingStatus @default(PENDING_GPU_VERIFICATION)
+  resourceMode ListingResourceMode @default(FULL_MACHINE)
+  minimumAccelerators Int?
+  maximumAccelerators Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   owner User @relation(fields: [ownerId], references: [id])
   machine Machine @relation(fields: [machineId], references: [id])
+  accelerators ListingAccelerator[]
   bookings Booking[]
   @@index([status, createdAt])
+  @@index([machineId, resourceMode, status])
 }
+
+model ListingAccelerator {
+  listingId String
+  acceleratorId String
+  createdAt DateTime @default(now())
+  listing GpuListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  accelerator Accelerator @relation(fields: [acceleratorId], references: [id], onDelete: Restrict)
+  @@id([listingId, acceleratorId])
+  @@index([acceleratorId])
+}
+
 model Booking {
   id String @id @default(cuid())
   buyerId String
@@ -216,6 +300,8 @@ model Booking {
   createdAt DateTime @default(now())
   buyer User @relation("BuyerBookings", fields: [buyerId], references: [id])
   listing GpuListing @relation(fields: [listingId], references: [id])
+  machineAllocation MachineAllocation?
+  acceleratorAllocations AcceleratorAllocation[]
   payment Payment?
   usageSamples UsageSample[]
   reviews Review[]
@@ -224,6 +310,36 @@ model Booking {
   @@unique([buyerId, idempotencyKey])
   @@index([listingId, startsAt, endsAt])
 }
+
+model MachineAllocation {
+  id String @id @default(cuid())
+  bookingId String @unique
+  machineId String
+  status ResourceAllocationStatus @default(HELD)
+  startsAt DateTime
+  endsAt DateTime
+  releasedAt DateTime?
+  createdAt DateTime @default(now())
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  @@index([machineId, startsAt, endsAt])
+}
+
+model AcceleratorAllocation {
+  id String @id @default(cuid())
+  bookingId String
+  acceleratorId String
+  status ResourceAllocationStatus @default(HELD)
+  startsAt DateTime
+  endsAt DateTime
+  releasedAt DateTime?
+  createdAt DateTime @default(now())
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  accelerator Accelerator @relation(fields: [acceleratorId], references: [id], onDelete: Restrict)
+  @@unique([bookingId, acceleratorId])
+  @@index([acceleratorId, startsAt, endsAt])
+}
+
 model WorkspaceDefinition {
   id String @id @default(cuid())
   slug String @unique @db.VarChar(80)
@@ -237,6 +353,7 @@ model WorkspaceDefinition {
   updatedAt DateTime @updatedAt
   machines MachineWorkspace[]
 }
+
 model MachineWorkspace {
   id String @id @default(cuid())
   machineId String
@@ -255,6 +372,7 @@ model MachineWorkspace {
   @@unique([machineId, workspaceId])
   @@index([machineId, enabledByOwner, state])
 }
+
 model WorkspaceSession {
   id String @id @default(cuid())
   bookingId String @unique
@@ -294,6 +412,7 @@ model WorkspaceSession {
   @@index([bookingId])
   @@index([status, readyDeadlineAt])
 }
+
 model WorkspaceMetric {
   id String @id @default(cuid())
   sessionId String
@@ -315,6 +434,7 @@ model WorkspaceMetric {
   @@unique([sessionId, counter])
   @@index([sessionId, capturedAt])
 }
+
 model WorkspaceSessionEvent {
   id String @id @default(cuid())
   sessionId String
@@ -326,6 +446,7 @@ model WorkspaceSessionEvent {
   session WorkspaceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   @@index([sessionId, createdAt])
 }
+
 model Job {
   id String @id @default(cuid())
   bookingId String
@@ -351,6 +472,7 @@ model Job {
   @@index([renterId, createdAt])
   @@index([machineId, status, createdAt])
 }
+
 model JobAttempt {
   id String @id @default(cuid())
   jobId String
@@ -363,6 +485,7 @@ model JobAttempt {
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
   @@unique([jobId, sequence])
 }
+
 model JobLog {
   id String @id @default(cuid())
   jobId String
@@ -372,6 +495,7 @@ model JobLog {
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
   @@index([jobId, createdAt])
 }
+
 model JobArtifact {
   id String @id @default(cuid())
   jobId String
@@ -383,6 +507,7 @@ model JobArtifact {
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
   @@index([jobId, createdAt])
 }
+
 model Payment {
   id String @id @default(cuid())
   bookingId String @unique
@@ -395,6 +520,7 @@ model Payment {
   settlementSignature String? @unique
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 }
+
 model Heartbeat {
   id String @id @default(cuid())
   machineId String
@@ -411,6 +537,7 @@ model Heartbeat {
   @@unique([machineId, counter])
   @@index([machineId, receivedAt])
 }
+
 model UsageSample {
   id String @id @default(cuid())
   bookingId String
@@ -423,12 +550,14 @@ model UsageSample {
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   @@unique([bookingId, timestamp])
 }
+
 model Conversation {
   id String @id @default(cuid())
   createdAt DateTime @default(now())
   members ConversationMember[]
   messages Message[]
 }
+
 model ConversationMember {
   conversationId String
   userId String
@@ -437,6 +566,7 @@ model ConversationMember {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@id([conversationId, userId])
 }
+
 model Message {
   id String @id @default(cuid())
   conversationId String
@@ -447,6 +577,7 @@ model Message {
   sender User @relation(fields: [senderId], references: [id], onDelete: Cascade)
   @@index([conversationId, createdAt])
 }
+
 model Review {
   id String @id @default(cuid())
   bookingId String
@@ -458,6 +589,7 @@ model Review {
   reviewer User @relation("ReviewsWritten", fields: [reviewerId], references: [id])
   @@unique([bookingId, reviewerId])
 }
+
 model ForumTopic {
   id String @id @default(cuid())
   authorId String
@@ -469,6 +601,7 @@ model ForumTopic {
   author User @relation(fields: [authorId], references: [id])
   posts ForumPost[]
 }
+
 model ForumPost {
   id String @id @default(cuid())
   topicId String
