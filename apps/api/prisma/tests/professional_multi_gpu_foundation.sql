@@ -14,6 +14,7 @@ DECLARE
   listing_b TEXT := 'test-listing-full';
   booking_a TEXT := 'test-booking-a';
   booking_b TEXT := 'test-booking-b';
+  booking_c TEXT := 'test-booking-c';
 BEGIN
   INSERT INTO "User" ("id", "wallet", "pseudonym", "canHost") VALUES
     (owner_id, 'wallet-owner-multigpu', 'owner-multigpu', true),
@@ -40,7 +41,6 @@ BEGIN
     (listing_a, 'gpu-a1'),
     (listing_a, 'gpu-a2');
 
-  -- A listing cannot select a GPU from another machine.
   BEGIN
     INSERT INTO "ListingAccelerator" ("listingId", "acceleratorId") VALUES (listing_a, 'gpu-b1');
     RAISE EXCEPTION 'expected cross-machine listing selection to fail';
@@ -50,12 +50,15 @@ BEGIN
 
   INSERT INTO "Booking" ("id", "buyerId", "listingId", "idempotencyKey", "startsAt", "endsAt", "quotedLamports", "expectedSeconds") VALUES
     (booking_a, renter_a, listing_a, 'idem-a', '2030-01-01 10:00:00+00', '2030-01-01 12:00:00+00', 2000, 7200),
-    (booking_b, renter_b, listing_a, 'idem-b', '2030-01-01 10:30:00+00', '2030-01-01 11:30:00+00', 1000, 3600);
+    (booking_b, renter_b, listing_a, 'idem-b', '2030-01-01 10:30:00+00', '2030-01-01 11:30:00+00', 1000, 3600),
+    (booking_c, renter_a, listing_b, 'idem-c', '2030-01-01 10:00:00+00', '2030-01-01 12:00:00+00', 2000, 7200);
 
   INSERT INTO "AcceleratorAllocation" ("id", "bookingId", "acceleratorId", "startsAt", "endsAt", "status") VALUES
-    ('allocation-a1', booking_a, 'gpu-a1', '2030-01-01 10:00:00+00', '2030-01-01 12:00:00+00', 'CONFIRMED');
+    ('allocation-a1', booking_a, 'gpu-a1', '2030-01-01 10:00:00+00', '2030-01-01 12:00:00+00', 'HELD');
 
-  -- Same GPU cannot overlap.
+  UPDATE "AcceleratorAllocation" SET "status" = 'CONFIRMED' WHERE "id" = 'allocation-a1';
+  UPDATE "AcceleratorAllocation" SET "status" = 'ACTIVE' WHERE "id" = 'allocation-a1';
+
   BEGIN
     INSERT INTO "AcceleratorAllocation" ("id", "bookingId", "acceleratorId", "startsAt", "endsAt", "status") VALUES
       ('allocation-conflict', booking_b, 'gpu-a1', '2030-01-01 10:30:00+00', '2030-01-01 11:30:00+00', 'CONFIRMED');
@@ -64,11 +67,9 @@ BEGIN
     NULL;
   END;
 
-  -- Different GPUs on the same machine may be rented simultaneously.
   INSERT INTO "AcceleratorAllocation" ("id", "bookingId", "acceleratorId", "startsAt", "endsAt", "status") VALUES
     ('allocation-a2', booking_b, 'gpu-a2', '2030-01-01 10:30:00+00', '2030-01-01 11:30:00+00', 'CONFIRMED');
 
-  -- Full-machine rental conflicts with any partial GPU rental on that machine.
   BEGIN
     INSERT INTO "MachineAllocation" ("id", "bookingId", "machineId", "startsAt", "endsAt", "status") VALUES
       ('machine-conflict', booking_b, machine_a, '2030-01-01 10:45:00+00', '2030-01-01 11:00:00+00', 'CONFIRMED');
@@ -78,13 +79,21 @@ BEGIN
     NULL;
   END;
 
-  -- Early release makes the GPU available after releasedAt while preserving history.
+  -- A different machine from the same Host remains rentable simultaneously.
+  INSERT INTO "MachineAllocation" ("id", "bookingId", "machineId", "startsAt", "endsAt", "status") VALUES
+    ('machine-b-active', booking_c, machine_b, '2030-01-01 10:00:00+00', '2030-01-01 12:00:00+00', 'ACTIVE');
+
+  -- Early release preserves history and frees the exact GPU at releasedAt.
   UPDATE "AcceleratorAllocation"
   SET "releasedAt" = '2030-01-01 11:00:00+00', "status" = 'RELEASED'
   WHERE "id" = 'allocation-a1';
 
   INSERT INTO "AcceleratorAllocation" ("id", "bookingId", "acceleratorId", "startsAt", "endsAt", "status") VALUES
     ('allocation-after-release', booking_b, 'gpu-a1', '2030-01-01 11:00:00+00', '2030-01-01 11:30:00+00', 'CONFIRMED');
+
+  IF (SELECT COUNT(*) FROM "MachineAllocation" WHERE "machineId" = machine_b AND "status" = 'ACTIVE') <> 1 THEN
+    RAISE EXCEPTION 'expected second machine of same owner to remain independently rentable';
+  END IF;
 END;
 $$;
 
