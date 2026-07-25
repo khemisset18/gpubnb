@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BookingStatus, PaymentStatus, type PrismaClient } from '@prisma/client';
+import { BookingStatus, PaymentStatus, ResourceAllocationStatus, type PrismaClient } from '@prisma/client';
 import { confirmSettlement, requestSettlement } from '../src/settlement-transactions.js';
 
 const id = (char: string) => `c${char.repeat(24)}`;
@@ -45,6 +45,12 @@ function fakeDb(fixture: ReturnType<typeof bookingFixture>) {
     payment: {
       update: async ({ data }: { data: unknown }) => { calls.push({ kind: 'payment.update', value: data }); return fixture.payment; },
     },
+    machineAllocation: {
+      updateMany: async ({ data }: { data: unknown }) => { calls.push({ kind: 'machineAllocation.updateMany', value: data }); return { count: 1 }; },
+    },
+    acceleratorAllocation: {
+      updateMany: async ({ data }: { data: unknown }) => { calls.push({ kind: 'acceleratorAllocation.updateMany', value: data }); return { count: 2 }; },
+    },
   };
   const db = {
     $transaction: async (handler: (client: typeof tx) => Promise<unknown>) => handler(tx),
@@ -64,7 +70,7 @@ test('requestSettlement atomically persists calculated settlement and outbox eve
   assert.ok(calls.some((call) => call.kind === 'outbox'));
 });
 
-test('confirmSettlement creates a partial refund and settles booking once', async () => {
+test('confirmSettlement creates a partial refund, settles booking and releases resources once', async () => {
   const fixture = bookingFixture({
     payment: {
       ...bookingFixture().payment,
@@ -82,6 +88,11 @@ test('confirmSettlement creates a partial refund and settles booking once', asyn
     status: PaymentStatus.PARTIALLY_REFUNDED,
     settlementSignature: validSignature,
   });
+  for (const kind of ['machineAllocation.updateMany', 'acceleratorAllocation.updateMany']) {
+    const release = calls.find((call) => call.kind === kind);
+    assert.equal((release?.value as { status?: ResourceAllocationStatus })?.status, ResourceAllocationStatus.RELEASED);
+    assert.ok((release?.value as { releasedAt?: Date })?.releasedAt instanceof Date);
+  }
 });
 
 test('confirmSettlement is idempotent for the same finalized signature', async () => {

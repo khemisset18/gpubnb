@@ -3,6 +3,7 @@ import {
   BookingStatus,
   PaymentStatus,
   Prisma,
+  ResourceAllocationStatus,
   type PrismaClient,
 } from '@prisma/client';
 import { calculateSettlement, type Settlement } from './settlement.js';
@@ -26,6 +27,11 @@ const TERMINAL_PAYMENT_STATUSES: ReadonlySet<PaymentStatus> = new Set([
   PaymentStatus.RELEASED,
   PaymentStatus.FULLY_REFUNDED,
 ]);
+const LIVE_ALLOCATION_STATUSES: ResourceAllocationStatus[] = [
+  ResourceAllocationStatus.HELD,
+  ResourceAllocationStatus.CONFIRMED,
+  ResourceAllocationStatus.ACTIVE,
+];
 
 type TransactionClient = Prisma.TransactionClient;
 type LockedBooking = Prisma.BookingGetPayload<{
@@ -94,6 +100,21 @@ async function lockBookingAndPayment(tx: TransactionClient, bookingId: string): 
   });
   if (!booking?.payment) throw new Error('booking_payment_not_found');
   return { ...booking, payment: booking.payment };
+}
+
+async function releaseAllocations(tx: TransactionClient, bookingId: string, releasedAt: Date): Promise<void> {
+  const data = {
+    status: ResourceAllocationStatus.RELEASED,
+    releasedAt,
+  };
+  await tx.machineAllocation.updateMany({
+    where: { bookingId, status: { in: LIVE_ALLOCATION_STATUSES } },
+    data,
+  });
+  await tx.acceleratorAllocation.updateMany({
+    where: { bookingId, status: { in: LIVE_ALLOCATION_STATUSES } },
+    data,
+  });
 }
 
 function calculateForBooking(booking: {
@@ -227,12 +248,14 @@ export async function confirmSettlement(
           ? PaymentStatus.PARTIALLY_REFUNDED
           : PaymentStatus.RELEASED;
       const bookingStatus = fullRefund ? BookingStatus.REFUNDED : BookingStatus.SETTLED;
+      const settledAt = new Date();
 
       await tx.payment.update({
         where: { id: booking.payment.id },
         data: { status: paymentStatus, settlementSignature: signature },
       });
       await tx.booking.update({ where: { id: booking.id }, data: { status: bookingStatus } });
+      await releaseAllocations(tx, booking.id, settledAt);
 
       const eventType = fullRefund ? 'payment.refunded' : 'payment.settled';
       await recordRentalEvent(tx, eventType, {
