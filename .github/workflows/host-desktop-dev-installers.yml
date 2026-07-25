@@ -27,12 +27,15 @@ jobs:
           - os: windows-latest
             label: Windows x64
             bundle: nsis
+            installer_pattern: '*.exe'
           - os: ubuntu-24.04
             label: Linux x64
             bundle: deb
+            installer_pattern: '*.deb'
           - os: macos-14
             label: macOS arm64
             bundle: dmg
+            installer_pattern: '*.dmg'
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -140,7 +143,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Generate build evidence
+      - name: Verify expected native installer
         shell: bash
         run: |
           set -euo pipefail
@@ -149,6 +152,15 @@ jobs:
             bundle_dir='apps/host-desktop/src-tauri/target/release/bundle'
           fi
           test -d "$bundle_dir"
+          count="$(find "$bundle_dir" -type f -name '${{ matrix.installer_pattern }}' | wc -l | tr -d ' ')"
+          test "$count" -ge 1
+          printf '%s\n' "$bundle_dir" > bundle-directory.txt
+
+      - name: Generate build evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_dir="$(cat bundle-directory.txt)"
           mkdir -p apps/host-desktop/dist-evidence
           cp Cargo.lock apps/host-desktop/dist-evidence/Cargo.lock.resolved
           find "$bundle_dir" -type f -print0 \
@@ -159,6 +171,7 @@ jobs:
           test -s apps/host-desktop/dist-evidence/SHA256SUMS.txt
           printf '%s\n' "$bundle_dir" > apps/host-desktop/dist-evidence/BUNDLE-DIRECTORY.txt
           printf '%s\n' '${{ matrix.bundle }}' > apps/host-desktop/dist-evidence/BUNDLE-FORMAT.txt
+          printf '%s\n' '${{ matrix.installer_pattern }}' > apps/host-desktop/dist-evidence/EXPECTED-INSTALLER-PATTERN.txt
           printf '%s\n' \
             'UNSIGNED DEVELOPMENT BUILD' \
             'Do not distribute as a production release.' \
