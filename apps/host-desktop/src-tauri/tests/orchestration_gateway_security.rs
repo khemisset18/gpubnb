@@ -1,7 +1,7 @@
-#[path = "../src/rental_orchestrator.rs"]
-mod rental_orchestrator;
 #[path = "../src/orchestration_gateway.rs"]
 mod orchestration_gateway;
+#[path = "../src/rental_orchestrator.rs"]
+mod rental_orchestrator;
 
 use orchestration_gateway::{
     ActorRole, AuthenticatedContext, OrchestrationCommand, OrchestrationGateway,
@@ -32,11 +32,8 @@ fn reservation() -> VerifiedReservation {
 
 #[test]
 fn authorized_roles_complete_the_full_cycle_without_privilege_overlap() {
-    let mut gateway = OrchestrationGateway::new(
-        "install_e2e_001".into(),
-        "machine_e2e_001".into(),
-    )
-    .unwrap();
+    let mut gateway =
+        OrchestrationGateway::new("install_e2e_001".into(), "machine_e2e_001".into()).unwrap();
 
     let certified = gateway
         .execute(
@@ -116,11 +113,8 @@ fn authorized_roles_complete_the_full_cycle_without_privilege_overlap() {
 
 #[test]
 fn expired_wrong_installation_and_replayed_requests_are_rejected() {
-    let mut gateway = OrchestrationGateway::new(
-        "install_e2e_001".into(),
-        "machine_e2e_001".into(),
-    )
-    .unwrap();
+    let mut gateway =
+        OrchestrationGateway::new("install_e2e_001".into(), "machine_e2e_001".into()).unwrap();
 
     let mut wrong_installation = context(ActorRole::LocalAdministrator, "request_101", 1_000);
     wrong_installation.installation_id = "install_other".into();

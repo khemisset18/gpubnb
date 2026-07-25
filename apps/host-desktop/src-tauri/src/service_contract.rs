@@ -116,10 +116,7 @@ mod tests {
     #[test]
     fn rejects_stale_or_future_requests() {
         let stale = request(ServiceCommand::ReadStatus);
-        assert_eq!(
-            stale.validate_shape(1_121),
-            Err("service_request_expired")
-        );
+        assert_eq!(stale.validate_shape(1_121), Err("service_request_expired"));
         assert_eq!(stale.validate_shape(879), Err("service_request_expired"));
     }
 

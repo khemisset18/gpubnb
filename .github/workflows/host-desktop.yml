@@ -36,6 +36,8 @@ jobs:
         working-directory: apps/host-desktop
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -50,6 +52,8 @@ jobs:
           fi
       - name: Install dependencies reproducibly
         run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
       - name: Typecheck
         run: npm run check
       - name: Build web interface
@@ -64,6 +68,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Materialize Windows bundle icon
         if: runner.os == 'Windows'
         shell: pwsh
@@ -88,45 +94,40 @@ jobs:
             echo 'Cargo.lock is required at the workspace root for reproducible builds.' >&2
             exit 1
           fi
-      - name: Normalize host package formatting
-        run: cargo fmt -p gpubnb-host-desktop
+      - name: Verify host package formatting
+        run: cargo fmt -p gpubnb-host-desktop -- --check
       - name: Tests
         shell: bash
         run: |
           set -o pipefail
-          cargo test -p gpubnb-host-desktop --all-targets 2>&1 | tee cargo-test-${{ runner.os }}.log
+          cargo test --locked -p gpubnb-host-desktop --all-targets 2>&1 | tee cargo-test-${{ runner.os }}.log
       - name: Upload test diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: cargo-test-${{ runner.os }}
           path: cargo-test-${{ runner.os }}.log
-          if-no-files-found: error
-      - name: Upload refreshed Cargo lock
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: refreshed-cargo-lock
-          path: Cargo.lock
-          if-no-files-found: error
+          if-no-files-found: warn
       - name: Clippy
         shell: bash
         run: |
           set -o pipefail
-          cargo clippy -p gpubnb-host-desktop --all-targets -- -D warnings 2>&1 | tee cargo-clippy-${{ runner.os }}.log
+          cargo clippy --locked -p gpubnb-host-desktop --all-targets -- -D warnings 2>&1 | tee cargo-clippy-${{ runner.os }}.log
       - name: Upload Clippy diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: cargo-clippy-${{ runner.os }}
           path: cargo-clippy-${{ runner.os }}.log
-          if-no-files-found: error
+          if-no-files-found: warn
 
   security-gate:
     name: production security gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Require production readiness evidence
         shell: bash
         run: |

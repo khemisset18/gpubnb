@@ -254,7 +254,10 @@ mod tests {
         supervisor
             .start_simulated(&config(), true, false, true)
             .expect("simulation should start");
-        assert_eq!(supervisor.emergency_stop(false), Err("emergency_stop_failed"));
+        assert_eq!(
+            supervisor.emergency_stop(false),
+            Err("emergency_stop_failed")
+        );
         assert_eq!(supervisor.state, MinerRuntimeState::Quarantined);
         assert!(!supervisor.is_gpu_released());
 

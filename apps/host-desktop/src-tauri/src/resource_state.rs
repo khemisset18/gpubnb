@@ -95,7 +95,10 @@ impl ResourceController {
                 }
             }
             (state, ResourceEvent::MiningDisabled)
-                if matches!(state, ResourceState::Offline | ResourceState::EmergencyStopped) =>
+                if matches!(
+                    state,
+                    ResourceState::Offline | ResourceState::EmergencyStopped
+                ) =>
             {
                 self.mining_enabled = false;
                 self.reservation_pending = false;

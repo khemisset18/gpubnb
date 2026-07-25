@@ -1,3 +1,5 @@
+// Load the machine pairing-code guard before any Redis client is used.
+import './pairing-code-redis-guard.js';
 import crypto from 'node:crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { Redis } from 'ioredis';

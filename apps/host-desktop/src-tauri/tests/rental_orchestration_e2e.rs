@@ -69,10 +69,7 @@ fn emergency_stop_is_fail_closed_until_every_process_is_confirmed_stopped() {
     host.certify_host().unwrap();
     host.set_mining_enabled(true).unwrap();
 
-    assert_eq!(
-        host.emergency_stop(false),
-        Err("emergency_stop_failed")
-    );
+    assert_eq!(host.emergency_stop(false), Err("emergency_stop_failed"));
     assert_eq!(host.snapshot().state, HostWorkloadState::Quarantined);
     assert_eq!(host.snapshot().last_error, Some("emergency_stop_failed"));
 

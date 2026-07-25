@@ -1,0 +1,245 @@
+name: host-desktop-dev-installers
+
+on:
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - apps/host-desktop/**
+      - .github/workflows/host-desktop-dev-installers.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-desktop-dev-installers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows x64
+            bundle: nsis
+            installer_pattern: '*.exe'
+          - os: ubuntu-24.04
+            label: Linux x64
+            bundle: deb
+            installer_pattern: '*.deb'
+          - os: macos-14
+            label: macOS arm64
+            bundle: dmg
+            installer_pattern: '*.dmg'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/host-desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Materialize bundle icon reproducibly
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const source = 'apps/host-desktop/src-tauri/icons/icon.ico.base64';
+          const target = 'apps/host-desktop/src-tauri/icons/icon.ico';
+          if (!fs.existsSync(source)) throw new Error('Missing staged bundle icon source.');
+          const encoded = fs.readFileSync(source, 'utf8').trim();
+          const decoded = Buffer.from(encoded, 'base64');
+          if (decoded.length < 256) throw new Error('Decoded bundle icon is unexpectedly small.');
+          fs.writeFileSync(target, decoded, { mode: 0o644 });
+          NODE
+          test -s apps/host-desktop/src-tauri/icons/icon.ico
+
+      - name: Require committed lockfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s Cargo.lock
+          test -s apps/host-desktop/package-lock.json
+
+      - name: Install locked JavaScript dependencies
+        working-directory: apps/host-desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Audit JavaScript production dependencies
+        working-directory: apps/host-desktop
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Type-check and build frontend
+        working-directory: apps/host-desktop
+        run: |
+          npm run check
+          npm run build
+
+      - name: Verify Rust formatting
+        run: cargo fmt -p gpubnb-host-desktop -- --check
+
+      - name: Test native host core
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked -p gpubnb-host-desktop --all-targets 2>&1 | tee cargo-test-${RUNNER_OS}.log
+
+      - name: Upload native test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: host-installer-test-${{ runner.os }}-${{ github.sha }}
+          path: cargo-test-${{ runner.os }}.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Lint native host core
+        run: cargo clippy --locked -p gpubnb-host-desktop --all-targets -- -D warnings
+
+      - name: Build native development installer
+        working-directory: apps/host-desktop
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run tauri -- build --bundles ${{ matrix.bundle }} 2>&1 | tee ../../installer-build-${RUNNER_OS}.log
+        env:
+          GPUBNB_RELEASE_CHANNEL: development
+          RUST_BACKTRACE: "1"
+          CARGO_NET_OFFLINE: "false"
+
+      - name: Upload installer diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: host-installer-build-${{ runner.os }}-${{ github.sha }}
+          path: installer-build-${{ runner.os }}.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify expected native installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_dir='target/release/bundle'
+          if [ ! -d "$bundle_dir" ]; then
+            bundle_dir='apps/host-desktop/src-tauri/target/release/bundle'
+          fi
+          test -d "$bundle_dir"
+          count="$(find "$bundle_dir" -type f -name '${{ matrix.installer_pattern }}' | wc -l | tr -d ' ')"
+          test "$count" -ge 1
+          printf '%s\n' "$bundle_dir" > bundle-directory.txt
+
+      - name: Generate dependency evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p apps/host-desktop/dist-evidence
+          cargo metadata --locked --format-version 1 \
+            > apps/host-desktop/dist-evidence/CARGO-METADATA.json
+          (
+            cd apps/host-desktop
+            npm sbom --omit=dev --sbom-format=cyclonedx \
+              > dist-evidence/NPM-SBOM.cdx.json
+          )
+          test -s apps/host-desktop/dist-evidence/CARGO-METADATA.json
+          test -s apps/host-desktop/dist-evidence/NPM-SBOM.cdx.json
+
+      - name: Generate build evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_dir="$(cat bundle-directory.txt)"
+          mkdir -p apps/host-desktop/dist-evidence
+          cp Cargo.lock apps/host-desktop/dist-evidence/Cargo.lock.resolved
+          BUNDLE_DIR="$bundle_dir" node - <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const evidenceDir = 'apps/host-desktop/dist-evidence';
+          const hashFile = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+          const listFiles = (directory) => fs.readdirSync(directory, { withFileTypes: true })
+            .flatMap((entry) => {
+              const fullPath = path.join(directory, entry.name);
+              return entry.isDirectory() ? listFiles(fullPath) : [fullPath];
+            });
+
+          const bundleDir = process.env.BUNDLE_DIR;
+          if (!bundleDir || !fs.existsSync(bundleDir)) throw new Error('Bundle directory is unavailable.');
+          const bundleFiles = listFiles(bundleDir).sort((a, b) => a.localeCompare(b));
+          if (bundleFiles.length === 0) throw new Error('Bundle directory contains no files.');
+          fs.writeFileSync(
+            path.join(evidenceDir, 'SHA256SUMS.txt'),
+            `${bundleFiles.map((file) => `${hashFile(file)}  ${file.split(path.sep).join('/')}`).join('\n')}\n`,
+          );
+
+          for (const [source, destination] of [
+            ['Cargo.lock', 'CARGO-LOCK-SHA256.txt'],
+            ['apps/host-desktop/package-lock.json', 'NPM-LOCK-SHA256.txt'],
+            ['apps/host-desktop/src-tauri/icons/icon.ico', 'BUNDLE-ICON-SHA256.txt'],
+          ]) {
+            fs.writeFileSync(path.join(evidenceDir, destination), `${hashFile(source)}  ${source}\n`);
+          }
+          NODE
+          test -s apps/host-desktop/dist-evidence/SHA256SUMS.txt
+          printf '%s\n' "$bundle_dir" > apps/host-desktop/dist-evidence/BUNDLE-DIRECTORY.txt
+          printf '%s\n' '${{ matrix.bundle }}' > apps/host-desktop/dist-evidence/BUNDLE-FORMAT.txt
+          printf '%s\n' '${{ matrix.installer_pattern }}' > apps/host-desktop/dist-evidence/EXPECTED-INSTALLER-PATTERN.txt
+          printf '%s\n' \
+            'UNSIGNED DEVELOPMENT BUILD' \
+            'Do not distribute as a production release.' \
+            "Commit: $GITHUB_SHA" \
+            "Runner: $RUNNER_OS/$RUNNER_ARCH" \
+            > apps/host-desktop/dist-evidence/BUILD-NOTICE.txt
+
+      - name: Stage installer bundles for upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_dir="$(cat apps/host-desktop/dist-evidence/BUNDLE-DIRECTORY.txt)"
+          mkdir -p apps/host-desktop/dist-installers
+          cp -R "$bundle_dir"/. apps/host-desktop/dist-installers/
+
+      - name: Upload installer and evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: gpubnb-host-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          path: |
+            apps/host-desktop/dist-installers/**
+            apps/host-desktop/dist-evidence/**
+          if-no-files-found: error
+          retention-days: 14
+
+  release-policy:
+    name: Public release policy
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Block unsigned public release
+        run: |
+          echo 'This workflow only creates short-lived development artifacts.'
+          echo 'Production installers require platform signing, notarization, provenance and an approved release workflow.'

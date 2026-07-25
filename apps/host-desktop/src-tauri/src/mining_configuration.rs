@@ -112,9 +112,7 @@ impl MiningConfiguration {
     }
 }
 
-pub fn authorize_configuration_change(
-    actor: MiningConfigurationActor,
-) -> Result<(), &'static str> {
+pub fn authorize_configuration_change(actor: MiningConfigurationActor) -> Result<(), &'static str> {
     matches!(actor, MiningConfigurationActor::HostOwner)
         .then_some(())
         .ok_or("mining_configuration_change_forbidden")
@@ -148,7 +146,10 @@ fn validate_wallet(value: &str) -> Result<(), &'static str> {
         || value.len() > MAX_WALLET_LEN
         || value.bytes().any(|byte| {
             byte.is_ascii_whitespace()
-                || matches!(byte, b'"' | b'\'' | b'`' | b'\\' | b';' | b'|' | b'&' | b'<' | b'>')
+                || matches!(
+                    byte,
+                    b'"' | b'\'' | b'`' | b'\\' | b';' | b'|' | b'&' | b'<' | b'>'
+                )
         })
     {
         return Err("mining_invalid_wallet");
@@ -170,7 +171,10 @@ fn validate_pool_url(value: &str) -> Result<(), &'static str> {
     if value.is_empty() || value.len() > MAX_POOL_URL_LEN {
         return Err("mining_invalid_pool_url");
     }
-    if value.bytes().any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control()) {
+    if value
+        .bytes()
+        .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+    {
         return Err("mining_invalid_pool_url");
     }
     if value.contains('@') || value.contains('?') || value.contains('#') {
@@ -188,9 +192,9 @@ fn validate_pool_url(value: &str) -> Result<(), &'static str> {
     if host.is_empty()
         || host.starts_with('.')
         || host.ends_with('.')
-        || !host
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'[' | b']' | b':'))
+        || !host.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'[' | b']' | b':')
+        })
     {
         return Err("mining_invalid_pool_host");
     }
@@ -233,18 +237,14 @@ mod tests {
     fn arbitrary_executable_profile_is_rejected() {
         let mut configuration = custom_configuration();
         configuration.miner_profile_id = "powershell".into();
-        assert_eq!(
-            configuration.validate(),
-            Err("mining_profile_not_approved")
-        );
+        assert_eq!(configuration.validate(), Err("mining_profile_not_approved"));
     }
 
     #[test]
     fn pool_url_cannot_embed_credentials_or_query_parameters() {
         let mut configuration = custom_configuration();
-        configuration.custom_pool_url = Some(
-            "stratum+tcp://user:password@pool.example.com:3333?x=1".into(),
-        );
+        configuration.custom_pool_url =
+            Some("stratum+tcp://user:password@pool.example.com:3333?x=1".into());
         assert_eq!(
             configuration.validate(),
             Err("mining_pool_url_contains_forbidden_components")

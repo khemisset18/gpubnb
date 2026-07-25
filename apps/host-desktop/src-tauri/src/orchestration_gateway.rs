@@ -1,6 +1,4 @@
-use crate::rental_orchestrator::{
-    OrchestrationSnapshot, RentalOrchestrator, VerifiedReservation,
-};
+use crate::rental_orchestrator::{OrchestrationSnapshot, RentalOrchestrator, VerifiedReservation};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, VecDeque};
 
@@ -31,9 +29,15 @@ pub struct AuthenticatedContext {
 pub enum OrchestrationCommand {
     ReadStatus,
     CertifyHost,
-    SetMiningEnabled { enabled: bool },
-    AcceptReservation { reservation: VerifiedReservation },
-    ConfirmMiningStopped { process_exited: bool },
+    SetMiningEnabled {
+        enabled: bool,
+    },
+    AcceptReservation {
+        reservation: VerifiedReservation,
+    },
+    ConfirmMiningStopped {
+        process_exited: bool,
+    },
     ConfirmWorkspaceReady {
         isolation_verified: bool,
         gpu_attached_exclusively: bool,
@@ -47,8 +51,12 @@ pub enum OrchestrationCommand {
         storage_clean: bool,
         network_clean: bool,
     },
-    EmergencyStop { all_processes_stopped: bool },
-    ClearQuarantine { host_recertified: bool },
+    EmergencyStop {
+        all_processes_stopped: bool,
+    },
+    ClearQuarantine {
+        host_recertified: bool,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -112,10 +120,9 @@ impl OrchestrationGateway {
             OrchestrationCommand::SetMiningEnabled { enabled } => {
                 self.orchestrator.set_mining_enabled(enabled)?
             }
-            OrchestrationCommand::AcceptReservation { reservation } => {
-                self.orchestrator
-                    .accept_reservation(reservation, now_unix_seconds)?
-            }
+            OrchestrationCommand::AcceptReservation { reservation } => self
+                .orchestrator
+                .accept_reservation(reservation, now_unix_seconds)?,
             OrchestrationCommand::ConfirmMiningStopped { process_exited } => {
                 self.orchestrator.confirm_mining_stopped(process_exited)?
             }
@@ -199,7 +206,9 @@ fn authorize(role: ActorRole, command: &OrchestrationCommand) -> Result<(), &'st
                 | OrchestrationCommand::EmergencyStop { .. }
         ),
     };
-    allowed.then_some(()).ok_or("orchestration_command_forbidden")
+    allowed
+        .then_some(())
+        .ok_or("orchestration_command_forbidden")
 }
 
 fn validate_identifier(value: &str) -> Result<(), &'static str> {
@@ -230,11 +239,8 @@ mod tests {
 
     #[test]
     fn frontend_like_control_plane_cannot_certify_host() {
-        let mut gateway = OrchestrationGateway::new(
-            "install_001".into(),
-            "machine_001".into(),
-        )
-        .unwrap();
+        let mut gateway =
+            OrchestrationGateway::new("install_001".into(), "machine_001".into()).unwrap();
         assert_eq!(
             gateway.execute(
                 context(ActorRole::ControlPlane, "request_001"),
@@ -247,11 +253,8 @@ mod tests {
 
     #[test]
     fn replay_is_rejected_before_second_state_change() {
-        let mut gateway = OrchestrationGateway::new(
-            "install_001".into(),
-            "machine_001".into(),
-        )
-        .unwrap();
+        let mut gateway =
+            OrchestrationGateway::new("install_001".into(), "machine_001".into()).unwrap();
         let ctx = context(ActorRole::LocalAdministrator, "request_001");
         gateway
             .execute(ctx.clone(), OrchestrationCommand::CertifyHost, 1_000)
@@ -264,11 +267,8 @@ mod tests {
 
     #[test]
     fn host_service_cannot_enable_mining() {
-        let mut gateway = OrchestrationGateway::new(
-            "install_001".into(),
-            "machine_001".into(),
-        )
-        .unwrap();
+        let mut gateway =
+            OrchestrationGateway::new("install_001".into(), "machine_001".into()).unwrap();
         assert_eq!(
             gateway.execute(
                 context(ActorRole::HostService, "request_001"),
