@@ -78,9 +78,9 @@ jobs:
           fi
 
       - name: Install Trivy
-        uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1
+        uses: aquasecurity/setup-trivy@v0.2.6
         with:
-          version: 0.65.0
+          version: v0.70.0
           cache: true
 
       - name: Generate vulnerability evidence
