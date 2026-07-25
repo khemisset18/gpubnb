@@ -14,6 +14,12 @@ const RENTABLE_ACCELERATOR_STATUSES: AcceleratorOperationalStatus[] = [
   AcceleratorOperationalStatus.RUNNING,
 ];
 
+const LIVE_ALLOCATION_STATUSES: ResourceAllocationStatus[] = [
+  ResourceAllocationStatus.HELD,
+  ResourceAllocationStatus.CONFIRMED,
+  ResourceAllocationStatus.ACTIVE,
+];
+
 export class ResourceAllocationError extends Error {
   constructor(
     public readonly code:
@@ -21,6 +27,8 @@ export class ResourceAllocationError extends Error {
       | 'listing_not_available'
       | 'invalid_booking_period'
       | 'allocation_already_exists'
+      | 'allocation_missing'
+      | 'invalid_allocation_transition'
       | 'accelerator_selection_not_allowed'
       | 'accelerator_count_out_of_range'
       | 'accelerator_not_rentable'
@@ -50,7 +58,32 @@ function normalizedIds(ids: string[] | undefined): string[] {
 
 function isResourceConflict(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
-  return error.code === 'P2002' || error.code === 'P2010';
+  return error.code === 'P2002' || error.code === 'P2010' || error.code === 'P2034';
+}
+
+function canTransitionAllocation(
+  current: ResourceAllocationStatus,
+  target: ResourceAllocationStatus,
+): boolean {
+  if (current === target) return true;
+  if (current === ResourceAllocationStatus.HELD) {
+    return [
+      ResourceAllocationStatus.CONFIRMED,
+      ResourceAllocationStatus.RELEASED,
+      ResourceAllocationStatus.CANCELLED,
+    ].includes(target);
+  }
+  if (current === ResourceAllocationStatus.CONFIRMED) {
+    return [
+      ResourceAllocationStatus.ACTIVE,
+      ResourceAllocationStatus.RELEASED,
+      ResourceAllocationStatus.CANCELLED,
+    ].includes(target);
+  }
+  if (current === ResourceAllocationStatus.ACTIVE) {
+    return target === ResourceAllocationStatus.RELEASED;
+  }
+  return false;
 }
 
 async function allocateInTransaction(
@@ -98,8 +131,6 @@ async function allocateInTransaction(
     throw new ResourceAllocationError('listing_not_available');
   }
 
-  // One advisory lock per physical machine serializes all allocation decisions,
-  // including full-machine versus partial-GPU races.
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${booking.listing.machineId}, 0))`;
 
   const requestedIds = normalizedIds(input.acceleratorIds);
@@ -197,28 +228,95 @@ export async function allocateBookingResources(
   }
 }
 
+export async function transitionBookingResources(
+  db: PrismaClient,
+  bookingId: string,
+  target: ResourceAllocationStatus,
+  at = new Date(),
+): Promise<void> {
+  await db.$transaction(async (tx) => {
+    const booking = await tx.booking.findUnique({
+      where: { id: bookingId },
+      select: {
+        id: true,
+        listing: { select: { machineId: true } },
+        machineAllocation: { select: { id: true, status: true } },
+        acceleratorAllocations: { select: { id: true, status: true } },
+      },
+    });
+    if (!booking) throw new ResourceAllocationError('booking_not_found');
+
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${booking.listing.machineId}, 0))`;
+
+    const allocations = [
+      ...(booking.machineAllocation ? [booking.machineAllocation] : []),
+      ...booking.acceleratorAllocations,
+    ];
+    if (allocations.length === 0) throw new ResourceAllocationError('allocation_missing');
+    if (allocations.some((allocation) => !canTransitionAllocation(allocation.status, target))) {
+      throw new ResourceAllocationError('invalid_allocation_transition');
+    }
+
+    const terminal =
+      target === ResourceAllocationStatus.RELEASED ||
+      target === ResourceAllocationStatus.CANCELLED;
+    const data = terminal ? { status: target, releasedAt: at } : { status: target };
+
+    await tx.machineAllocation.updateMany({
+      where: { bookingId },
+      data,
+    });
+    await tx.acceleratorAllocation.updateMany({
+      where: { bookingId },
+      data,
+    });
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    maxWait: 5_000,
+    timeout: 10_000,
+  });
+}
+
+export async function confirmBookingResources(db: PrismaClient, bookingId: string): Promise<void> {
+  await transitionBookingResources(db, bookingId, ResourceAllocationStatus.CONFIRMED);
+}
+
+export async function activateBookingResources(db: PrismaClient, bookingId: string): Promise<void> {
+  await transitionBookingResources(db, bookingId, ResourceAllocationStatus.ACTIVE);
+}
+
+export async function cancelBookingResources(
+  db: PrismaClient,
+  bookingId: string,
+  cancelledAt = new Date(),
+): Promise<void> {
+  await transitionBookingResources(db, bookingId, ResourceAllocationStatus.CANCELLED, cancelledAt);
+}
+
 export async function releaseBookingResources(
   db: PrismaClient,
   bookingId: string,
   releasedAt = new Date(),
 ): Promise<void> {
-  await db.$transaction(
-    [
-      db.machineAllocation.updateMany({
-        where: {
-          bookingId,
-          status: { in: [ResourceAllocationStatus.HELD, ResourceAllocationStatus.CONFIRMED, ResourceAllocationStatus.ACTIVE] },
-        },
-        data: { status: ResourceAllocationStatus.RELEASED, releasedAt },
-      }),
-      db.acceleratorAllocation.updateMany({
-        where: {
-          bookingId,
-          status: { in: [ResourceAllocationStatus.HELD, ResourceAllocationStatus.CONFIRMED, ResourceAllocationStatus.ACTIVE] },
-        },
-        data: { status: ResourceAllocationStatus.RELEASED, releasedAt },
-      }),
-    ],
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-  );
+  await db.$transaction(async (tx) => {
+    const booking = await tx.booking.findUnique({
+      where: { id: bookingId },
+      select: { listing: { select: { machineId: true } } },
+    });
+    if (!booking) throw new ResourceAllocationError('booking_not_found');
+
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${booking.listing.machineId}, 0))`;
+    await tx.machineAllocation.updateMany({
+      where: { bookingId, status: { in: LIVE_ALLOCATION_STATUSES } },
+      data: { status: ResourceAllocationStatus.RELEASED, releasedAt },
+    });
+    await tx.acceleratorAllocation.updateMany({
+      where: { bookingId, status: { in: LIVE_ALLOCATION_STATUSES } },
+      data: { status: ResourceAllocationStatus.RELEASED, releasedAt },
+    });
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    maxWait: 5_000,
+    timeout: 10_000,
+  });
 }
