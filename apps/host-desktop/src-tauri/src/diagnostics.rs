@@ -116,10 +116,11 @@ fn docker_evidence() -> (bool, bool, bool) {
     if !installed {
         return (false, false, false);
     }
-    let runtimes = command_output("docker", &["info", "--format", "{{json .Runtimes}}"]).is_some();
-    let runtime_data = command_output("docker", &["info", "--format", "{{json .Runtimes}}"]).unwrap_or_default();
-    let reachable = runtimes && !runtime_data.is_empty();
-    let nvidia = runtime_data.contains("nvidia");
+    let runtimes = command_output("docker", &["info", "--format", "{{json .Runtimes}}");
+    let reachable = runtimes.as_ref().is_some_and(|value| !value.is_empty());
+    let nvidia = runtimes
+        .as_ref()
+        .is_some_and(|value| value.contains("nvidia"));
     (installed, reachable, nvidia)
 }
 
