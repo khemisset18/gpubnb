@@ -326,13 +326,25 @@ mod tests {
     fn rental_preempts_mining_and_resumes_only_after_verified_cleanup() {
         let mut orchestrator = ready_host();
         orchestrator.set_mining_enabled(true).unwrap();
-        orchestrator.accept_reservation(reservation(), 1_100).unwrap();
-        assert_eq!(orchestrator.snapshot().state, HostWorkloadState::StoppingMining);
+        orchestrator
+            .accept_reservation(reservation(), 1_100)
+            .unwrap();
+        assert_eq!(
+            orchestrator.snapshot().state,
+            HostWorkloadState::StoppingMining
+        );
         orchestrator.confirm_mining_stopped(true).unwrap();
-        orchestrator.confirm_workspace_ready(true, true, true).unwrap();
-        assert_eq!(orchestrator.snapshot().state, HostWorkloadState::RentalActive);
+        orchestrator
+            .confirm_workspace_ready(true, true, true)
+            .unwrap();
+        assert_eq!(
+            orchestrator.snapshot().state,
+            HostWorkloadState::RentalActive
+        );
         orchestrator.finish_rental().unwrap();
-        orchestrator.confirm_cleanup(true, true, true, true, true).unwrap();
+        orchestrator
+            .confirm_cleanup(true, true, true, true, true)
+            .unwrap();
         assert_eq!(orchestrator.snapshot().state, HostWorkloadState::Mining);
     }
 
@@ -340,7 +352,9 @@ mod tests {
     fn failed_miner_stop_blocks_rental_and_quarantines_host() {
         let mut orchestrator = ready_host();
         orchestrator.set_mining_enabled(true).unwrap();
-        orchestrator.accept_reservation(reservation(), 1_100).unwrap();
+        orchestrator
+            .accept_reservation(reservation(), 1_100)
+            .unwrap();
         assert_eq!(
             orchestrator.confirm_mining_stopped(false),
             Err("miner_process_still_running")
@@ -353,19 +367,28 @@ mod tests {
     #[test]
     fn workspace_requires_all_security_proofs() {
         let mut orchestrator = ready_host();
-        orchestrator.accept_reservation(reservation(), 1_100).unwrap();
+        orchestrator
+            .accept_reservation(reservation(), 1_100)
+            .unwrap();
         assert_eq!(
             orchestrator.confirm_workspace_ready(true, false, true),
             Err("gpu_exclusivity_unverified")
         );
-        assert_eq!(orchestrator.snapshot().state, HostWorkloadState::Quarantined);
+        assert_eq!(
+            orchestrator.snapshot().state,
+            HostWorkloadState::Quarantined
+        );
     }
 
     #[test]
     fn failed_cleanup_never_returns_host_to_available_or_mining() {
         let mut orchestrator = ready_host();
-        orchestrator.accept_reservation(reservation(), 1_100).unwrap();
-        orchestrator.confirm_workspace_ready(true, true, true).unwrap();
+        orchestrator
+            .accept_reservation(reservation(), 1_100)
+            .unwrap();
+        orchestrator
+            .confirm_workspace_ready(true, true, true)
+            .unwrap();
         orchestrator.finish_rental().unwrap();
         assert_eq!(
             orchestrator.confirm_cleanup(true, true, false, true, true),
@@ -380,7 +403,9 @@ mod tests {
     fn emergency_stop_disables_mining_and_clears_active_reservation() {
         let mut orchestrator = ready_host();
         orchestrator.set_mining_enabled(true).unwrap();
-        orchestrator.accept_reservation(reservation(), 1_100).unwrap();
+        orchestrator
+            .accept_reservation(reservation(), 1_100)
+            .unwrap();
         orchestrator.emergency_stop(true).unwrap();
 
         let snapshot = orchestrator.snapshot();

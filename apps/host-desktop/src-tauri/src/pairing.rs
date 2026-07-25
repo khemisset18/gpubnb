@@ -42,7 +42,9 @@ mod tests {
     #[test]
     fn rejects_lookalike_or_ambiguous_origins() {
         assert!(!is_allowed_pairing_origin("http://gpubnb.com"));
-        assert!(!is_allowed_pairing_origin("https://gpubnb.com.evil.example"));
+        assert!(!is_allowed_pairing_origin(
+            "https://gpubnb.com.evil.example"
+        ));
         assert!(!is_allowed_pairing_origin("https://app.gpubnb.com:443"));
         assert!(!is_allowed_pairing_origin("https://gpubnb.com/path"));
         assert!(!is_allowed_pairing_origin("https://user@gpubnb.com"));
