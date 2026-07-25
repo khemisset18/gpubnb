@@ -56,7 +56,8 @@ test('installer downloads use direct GitHub release URLs',async()=>{
   const html=await readFile(path.join(webRoot,'host-install.html'),'utf8');
   const script=await readFile(path.join(webRoot,'host-downloads.js'),'utf8');
   assert.match(html,/host-downloads\.js/);
-  assert.match(html,/Version de test/);
+  assert.match(html,/Version portable de test/);
+  assert.match(html,/GPUbnb-Host-Portable\.exe/);
   assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-windows-x64\.zip/);
   assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-linux-x64\.deb/);
   assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-macos-arm64\.dmg/);
@@ -69,7 +70,7 @@ test('installer downloads use direct GitHub release URLs',async()=>{
   assert.match(fn,/host-test-latest/);
 });
 
-test('test release workflow publishes predictable installer names automatically',async()=>{
+test('test release workflow publishes a verified Windows portable package',async()=>{
   const workflow=await readFile(path.join(repoRoot,'.github/workflows/publish-host-test-release.yml'),'utf8');
   assert.match(workflow,/workflow_dispatch/);
   assert.match(workflow,/push:/);
@@ -77,6 +78,9 @@ test('test release workflow publishes predictable installer names automatically'
   assert.match(workflow,/contents: write/);
   assert.match(workflow,/gpubnb-host-windows-x64\.exe/);
   assert.match(workflow,/gpubnb-host-windows-x64\.zip/);
+  assert.match(workflow,/GPUbnb-Host-Portable\.exe/);
+  assert.match(workflow,/missing MZ header/);
+  assert.match(workflow,/unexpectedly small/);
   assert.match(workflow,/Compress-Archive/);
   assert.match(workflow,/gpubnb-host-linux-x64\.deb/);
   assert.match(workflow,/gpubnb-host-macos-arm64\.dmg/);
