@@ -92,6 +92,25 @@ jobs:
           fi
       - name: Verify host package formatting
         run: cargo fmt -p gpubnb-host-desktop -- --check
+      - name: Materialize formatting diagnostics
+        if: failure() && runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt -p gpubnb-host-desktop
+          git diff -- apps/host-desktop/src-tauri > rustfmt.patch
+          test -s rustfmt.patch
+      - name: Upload formatting diagnostics
+        if: failure() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-rustfmt-diagnostics-${{ github.sha }}
+          path: |
+            rustfmt.patch
+            apps/host-desktop/src-tauri/build.rs
+            apps/host-desktop/src-tauri/src/**/*.rs
+          if-no-files-found: error
+          retention-days: 14
       - name: Tests
         shell: bash
         run: |
