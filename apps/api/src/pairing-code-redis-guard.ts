@@ -1,24 +1,27 @@
 import { Redis } from 'ioredis';
 
-const LINK_PREFIX='machine-link:';
-const OWNER_PREFIX='machine-link-owner:';
+export const LINK_PREFIX='machine-link:';
+export const OWNER_PREFIX='machine-link-owner:';
 const INSTALL_MARK=Symbol.for('gpubnb.pairing-code-redis-guard');
 
-type GuardedRedisPrototype={
- [INSTALL_MARK]?:boolean;
- set:(this:Redis,...args:unknown[])=>Promise<unknown>;
- getdel:(this:Redis,key:string)=>Promise<unknown>;
+export type GuardedRedisClient={
+ eval:(script:string,numKeys:number,...args:string[])=>Promise<unknown>;
 };
 
-const prototype=Redis.prototype as unknown as GuardedRedisPrototype;
+export type GuardedRedisPrototype={
+ [INSTALL_MARK]?:boolean;
+ set:(this:GuardedRedisClient,...args:unknown[])=>Promise<unknown>;
+ getdel:(this:GuardedRedisClient,key:string)=>Promise<unknown>;
+};
 
-if(!prototype[INSTALL_MARK]){
+export function installPairingCodeRedisGuard(prototype:GuardedRedisPrototype):void{
+ if(prototype[INSTALL_MARK])return;
  const originalSet=prototype.set;
  const originalGetdel=prototype.getdel;
 
- prototype.set=async function(this:Redis,...args:unknown[]):Promise<unknown>{
+ prototype.set=async function(this:GuardedRedisClient,...args:unknown[]):Promise<unknown>{
   const [key,value,...options]=args;
-  if(typeof key!== 'string'||!key.startsWith(LINK_PREFIX)||typeof value!=='string')return originalSet.apply(this,args);
+  if(typeof key!=='string'||!key.startsWith(LINK_PREFIX)||typeof value!=='string')return originalSet.apply(this,args);
   const digest=key.slice(LINK_PREFIX.length);
   if(!/^[a-f0-9]{64}$/.test(digest))return originalSet.apply(this,args);
   const exIndex=options.findIndex(option=>String(option).toUpperCase()==='EX');
@@ -38,7 +41,7 @@ if(!prototype[INSTALL_MARK]){
   );
  };
 
- prototype.getdel=async function(this:Redis,key:string):Promise<unknown>{
+ prototype.getdel=async function(this:GuardedRedisClient,key:string):Promise<unknown>{
   if(typeof key!=='string'||!key.startsWith(LINK_PREFIX))return originalGetdel.call(this,key);
   const digest=key.slice(LINK_PREFIX.length);
   if(!/^[a-f0-9]{64}$/.test(digest))return originalGetdel.call(this,key);
@@ -53,3 +56,5 @@ if(!prototype[INSTALL_MARK]){
 
  prototype[INSTALL_MARK]=true;
 }
+
+installPairingCodeRedisGuard(Redis.prototype as unknown as GuardedRedisPrototype);
