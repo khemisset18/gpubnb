@@ -27,6 +27,7 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/gpu-diagnostic
+  COSIGN_OIDC_ISSUER: https://token.actions.githubusercontent.com
 
 jobs:
   build-scan-publish:
@@ -44,7 +45,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute tags
+      - name: Compute tags and OCI labels
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -53,6 +54,13 @@ jobs:
             type=sha,prefix=sha-
             type=ref,event=tag
             type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=GPUbnb GPU Diagnostic
+            org.opencontainers.image.description=Minimal NVIDIA NVML diagnostic image for GPUbnb hosts
+            org.opencontainers.image.vendor=GPUbnb
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Build local image for security tests
         uses: docker/build-push-action@v6
@@ -61,6 +69,7 @@ jobs:
           load: true
           push: false
           tags: gpu-diagnostic:ci
+          labels: ${{ steps.meta.outputs.labels }}
           provenance: false
           sbom: false
           cache-from: type=gha
@@ -72,6 +81,7 @@ jobs:
           test "$(docker image inspect gpu-diagnostic:ci --format '{{.Config.User}}')" = "65532:65532"
           test "$(docker image inspect gpu-diagnostic:ci --format '{{json .Config.Entrypoint}}')" = '["/usr/local/bin/gpu-diagnostic"]'
           test -z "$(docker image inspect gpu-diagnostic:ci --format '{{json .Config.Cmd}}' | grep -v '^null$' || true)"
+          test "$(docker image inspect gpu-diagnostic:ci --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "${GITHUB_SHA}"
           if docker run --rm --entrypoint=/bin/sh gpu-diagnostic:ci -c true >/dev/null 2>&1; then
             echo 'Runtime image unexpectedly contains a shell' >&2
             exit 1
@@ -99,7 +109,7 @@ jobs:
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@v0
 
-      - name: Generate SBOM
+      - name: Generate local SBOM
         run: syft gpu-diagnostic:ci -o spdx-json=sbom.spdx.json
 
       - name: Enforce zero fixable HIGH or CRITICAL vulnerabilities
@@ -130,20 +140,51 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: sigstore/cosign-installer@v3
 
-      - name: Sign immutable image digest
+      - name: Verify published digest and regenerate SBOM
         if: github.event_name != 'pull_request'
         env:
           DIGEST: ${{ steps.publish.outputs.digest }}
         run: |
-          test "$DIGEST" != ""
-          cosign sign --yes "${IMAGE}@${DIGEST}"
+          set -euo pipefail
+          test -n "$DIGEST"
+          case "$DIGEST" in sha256:[a-f0-9][a-f0-9]*) ;; *) echo 'Invalid published digest' >&2; exit 1 ;; esac
+          docker buildx imagetools inspect "${IMAGE}@${DIGEST}" >/dev/null
+          syft "${IMAGE}@${DIGEST}" -o spdx-json=sbom.spdx.json
 
-      - name: Write agent configuration reference
+      - name: Sign image and attest SBOM
         if: github.event_name != 'pull_request'
         env:
           DIGEST: ${{ steps.publish.outputs.digest }}
         run: |
-          test "$DIGEST" != ""
+          set -euo pipefail
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+          cosign attest --yes --type spdxjson --predicate sbom.spdx.json "${IMAGE}@${DIGEST}"
+
+      - name: Verify signature and SBOM attestation
+        if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/gpu-diagnostic-image.yml@${GITHUB_REF}"
+          cosign verify \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer "$COSIGN_OIDC_ISSUER" \
+            "${IMAGE}@${DIGEST}" > cosign-signature-verification.json
+          cosign verify-attestation \
+            --type spdxjson \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer "$COSIGN_OIDC_ISSUER" \
+            "${IMAGE}@${DIGEST}" > cosign-sbom-verification.json
+
+      - name: Write verified agent configuration reference
+        if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -s cosign-signature-verification.json
+          test -s cosign-sbom-verification.json
           printf '%s@%s\n' "$IMAGE" "$DIGEST" | tee gpu-diagnostic-image.txt
           printf 'diagnosticImage=%s@%s\n' "$IMAGE" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
 
@@ -157,6 +198,8 @@ jobs:
             trivy-gpu-diagnostic.json
             trivy-gpu-diagnostic.sarif
             trivy-vulnerability-count.txt
+            cosign-signature-verification.json
+            cosign-sbom-verification.json
             gpu-diagnostic-image.txt
           if-no-files-found: warn
           retention-days: 30
