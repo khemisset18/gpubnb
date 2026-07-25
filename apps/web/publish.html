@@ -15,33 +15,33 @@
   <header class="site-header">
     <a class="brand" href="index.html#top" aria-label="GPUbnb accueil"><span class="brand-mark">G</span><span>GPUbnb</span></a>
     <nav aria-label="Navigation principale"><a href="index.html#market">Marketplace</a><a href="workspaces.html">Espaces de travail</a><a class="nav-active" href="publish.html">Publier un GPU</a><a href="demandes.html">Demandes</a><a href="propositions.html">Propositions</a></nav>
-    <div class="header-actions"><a class="dashboard-link" href="index.html#market">Voir les annonces</a><a class="button button-secondary" href="index.html">Retour</a></div>
+    <div class="header-actions"><a class="dashboard-link" href="listings.html">Mes annonces</a><a class="button button-secondary" href="dashboard.html">Mon espace</a></div>
   </header>
   <main class="publish-page shell">
     <section class="publish-intro">
       <span class="eyebrow"><i></i> Publication authentifiée · Devnet</span>
       <h1>Publiez votre GPU.</h1>
-      <p>Créez une annonce liée à votre compte et à votre agent GPU. Elle ne devient visible que lorsque la machine envoie des preuves valides et reste en ligne.</p>
-      <div class="demo-notice"><strong id="accountState">Vérification du compte…</strong><span>Une machine hors ligne reste masquée automatiquement.</span></div>
+      <p>Une annonce doit être reliée à une machine déjà connectée avec GPUbnb Host. Elle devient visible uniquement lorsque la machine est vérifiée et en ligne.</p>
+      <div class="demo-notice"><strong id="accountState">Vérification du compte…</strong><span id="machineState">Chargement des machines reliées…</span></div>
     </section>
     <section class="publish-layout">
       <form id="publishForm" class="publish-form" novalidate>
         <div class="form-heading"><span>Nouvelle annonce</span><b>1 / 1</b></div>
         <div class="field-grid">
-          <label class="field field-wide"><span>Machine existante</span><select name="machineId"><option value="">Créer une machine avec la clé agent</option></select></label>
-          <label class="field field-wide"><span>Clé publique de l’agent</span><input name="agentPublicKey" required minlength="32" maxlength="64" placeholder="Clé Ed25519 encodée en base58"></label>
+          <label class="field field-wide"><span>Machine reliée</span><select name="machineId" required><option value="">Chargement…</option></select></label>
           <label class="field field-wide"><span>Titre de l’annonce</span><input name="title" required minlength="5" maxlength="120" placeholder="Ex. RTX 4090 optimisée pour LLM"></label>
           <label class="field"><span>Prix horaire</span><div class="input-suffix"><input name="hourlySol" type="number" required min="0.000000001" max="100" step="0.000000001" placeholder="0.025"><span>SOL/h</span></div></label>
           <label class="field field-wide"><span>Description</span><textarea name="description" required minlength="20" maxlength="3000" rows="7" placeholder="Décrivez la machine, les workloads adaptés et les conditions de disponibilité."></textarea><small><output id="descriptionCount">0</output>/3000</small></label>
         </div>
         <div id="formMessage" class="form-message" role="status" aria-live="polite"></div>
-        <div class="form-actions"><button class="button button-primary button-large" type="submit">Publier l’annonce</button><button id="resetForm" class="button button-secondary button-large" type="button">Réinitialiser</button></div>
+        <div class="form-actions"><button id="publishSubmit" class="button button-primary button-large" type="submit" disabled>Publier l’annonce</button><button id="resetForm" class="button button-secondary button-large" type="button">Réinitialiser</button></div>
       </form>
       <aside class="local-listings-panel">
-        <div class="panel-heading"><div><span class="eyebrow"><i></i> Agent GPU</span><h2>Activation automatique</h2></div></div>
-        <p>Après publication, configurez l’agent avec l’identifiant machine renvoyé. L’annonce passe en ligne uniquement après un heartbeat signé, récent et cohérent.</p>
-        <p>Si l’agent s’arrête, le balayage serveur classe la machine hors ligne et masque l’annonce.</p>
-        <a class="button button-secondary" href="index.html#market">Ouvrir la marketplace</a>
+        <div class="panel-heading"><div><span class="eyebrow"><i></i> GPUbnb Host</span><h2>Machine obligatoire</h2></div></div>
+        <p>Installez GPUbnb Host, créez un code de liaison puis attendez le premier heartbeat signé avant de publier.</p>
+        <p>Une machine hors ligne peut recevoir une annonce en attente, mais l’annonce reste masquée jusqu’au retour d’un heartbeat valide.</p>
+        <a class="button button-primary" href="host-install.html">Installer et relier Host</a>
+        <a class="button button-secondary" href="machines.html">Vérifier mes machines</a>
       </aside>
     </section>
   </main>

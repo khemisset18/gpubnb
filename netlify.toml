@@ -1,6 +1,7 @@
 [build]
   publish = "apps/web"
-  command = "test -f apps/web/index.html && test -f apps/web/app.js && test -f apps/web/styles.css && test -f apps/web/config.js"
+  functions = "netlify/functions"
+  command = "test -f apps/web/index.html && test -f apps/web/app.js && test -f apps/web/styles.css && test -f apps/web/config.js && test -f apps/web/portal.css && test -f apps/web/portal.js && test -f apps/web/host-downloads.js && test -f apps/web/dashboard.html && test -f apps/web/host-install.html && test -f netlify/functions/host-download.mjs"
 
 [build.environment]
   NODE_VERSION = "22"
@@ -10,6 +11,21 @@
   to = "https://gpubnb.onrender.com/:splat"
   status = 200
   force = true
+
+[[redirects]]
+  from = "/dashboard"
+  to = "/dashboard.html"
+  status = 200
+
+[[redirects]]
+  from = "/machines"
+  to = "/machines.html"
+  status = 200
+
+[[redirects]]
+  from = "/host-install"
+  to = "/host-install.html"
+  status = 200
 
 [[headers]]
   for = "/*"
@@ -24,6 +40,11 @@
     Content-Security-Policy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://gpubnb.onrender.com https://api.devnet.solana.com https://*.supabase.co wss://*.supabase.co; upgrade-insecure-requests"
 
 [[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
+
+[[headers]]
   for = "/config.js"
   [headers.values]
     Cache-Control = "no-store, max-age=0"
@@ -36,9 +57,9 @@
 [[headers]]
   for = "/*.css"
   [headers.values]
-    Cache-Control = "public, max-age=3600"
+    Cache-Control = "public, max-age=300, must-revalidate"
 
 [[headers]]
   for = "/*.js"
   [headers.values]
-    Cache-Control = "public, max-age=3600"
+    Cache-Control = "public, max-age=300, must-revalidate"

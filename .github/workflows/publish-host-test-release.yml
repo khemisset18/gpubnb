@@ -1,0 +1,149 @@
+name: publish-host-test-release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-host-test-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows x64
+            bundle: nsis
+            pattern: '*.exe'
+            asset: gpubnb-host-windows-x64.exe
+          - os: ubuntu-24.04
+            label: Linux x64
+            bundle: deb
+            pattern: '*.deb'
+            asset: gpubnb-host-linux-x64.deb
+          - os: macos-14
+            label: macOS arm64
+            bundle: dmg
+            pattern: '*.dmg'
+            asset: gpubnb-host-macos-arm64.dmg
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/host-desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Materialize bundle icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const source = 'apps/host-desktop/src-tauri/icons/icon.ico.base64';
+          const target = 'apps/host-desktop/src-tauri/icons/icon.ico';
+          const decoded = Buffer.from(fs.readFileSync(source, 'utf8').trim(), 'base64');
+          if (decoded.length < 256) throw new Error('Invalid icon');
+          fs.writeFileSync(target, decoded);
+          NODE
+
+      - name: Install locked dependencies
+        working-directory: apps/host-desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Validate application
+        working-directory: apps/host-desktop
+        run: |
+          npm run check
+          npm run build
+
+      - name: Validate native core
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt -p gpubnb-host-desktop -- --check
+          cargo test --locked -p gpubnb-host-desktop --all-targets
+          cargo clippy --locked -p gpubnb-host-desktop --all-targets -- -D warnings
+
+      - name: Build test installer
+        working-directory: apps/host-desktop
+        shell: bash
+        env:
+          GPUBNB_RELEASE_CHANNEL: test
+          RUST_BACKTRACE: '1'
+        run: npm run tauri -- build --bundles ${{ matrix.bundle }}
+
+      - name: Stage predictable asset name
+        shell: bash
+        env:
+          EXPECTED_PATTERN: ${{ matrix.pattern }}
+          ASSET_NAME: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          bundle_dir='target/release/bundle'
+          if [ ! -d "$bundle_dir" ]; then bundle_dir='apps/host-desktop/src-tauri/target/release/bundle'; fi
+          source_file="$(find "$bundle_dir" -type f -name "$EXPECTED_PATTERN" | head -n 1)"
+          test -n "$source_file"
+          mkdir -p release-assets
+          cp "$source_file" "release-assets/$ASSET_NAME"
+          ASSET_PATH="release-assets/$ASSET_NAME" node - <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const file = process.env.ASSET_PATH;
+          const hash = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+          fs.writeFileSync(`${file}.sha256`, `${hash}  ${file.split('/').pop()}\n`);
+          NODE
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.asset }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish test release
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish stable prerelease URLs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete host-test-latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+          gh release create host-test-latest release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title 'GPUbnb Host — version de test' \
+            --notes 'Version de test non signée destinée à valider la détection GPU, la liaison machine et le parcours de location sur Devnet. Ne pas utiliser en production.' \
+            --prerelease
