@@ -176,12 +176,36 @@ jobs:
           bundle_dir="$(cat bundle-directory.txt)"
           mkdir -p apps/host-desktop/dist-evidence
           cp Cargo.lock apps/host-desktop/dist-evidence/Cargo.lock.resolved
-          find "$bundle_dir" -type f -print0 \
-            | sort -z \
-            | xargs -0 shasum -a 256 > apps/host-desktop/dist-evidence/SHA256SUMS.txt
-          shasum -a 256 Cargo.lock > apps/host-desktop/dist-evidence/CARGO-LOCK-SHA256.txt
-          shasum -a 256 apps/host-desktop/package-lock.json > apps/host-desktop/dist-evidence/NPM-LOCK-SHA256.txt
-          shasum -a 256 apps/host-desktop/src-tauri/icons/icon.ico > apps/host-desktop/dist-evidence/BUNDLE-ICON-SHA256.txt
+          BUNDLE_DIR="$bundle_dir" node - <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const evidenceDir = 'apps/host-desktop/dist-evidence';
+          const hashFile = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+          const listFiles = (directory) => fs.readdirSync(directory, { withFileTypes: true })
+            .flatMap((entry) => {
+              const fullPath = path.join(directory, entry.name);
+              return entry.isDirectory() ? listFiles(fullPath) : [fullPath];
+            });
+
+          const bundleDir = process.env.BUNDLE_DIR;
+          if (!bundleDir || !fs.existsSync(bundleDir)) throw new Error('Bundle directory is unavailable.');
+          const bundleFiles = listFiles(bundleDir).sort((a, b) => a.localeCompare(b));
+          if (bundleFiles.length === 0) throw new Error('Bundle directory contains no files.');
+          fs.writeFileSync(
+            path.join(evidenceDir, 'SHA256SUMS.txt'),
+            `${bundleFiles.map((file) => `${hashFile(file)}  ${file.split(path.sep).join('/')}`).join('\n')}\n`,
+          );
+
+          for (const [source, destination] of [
+            ['Cargo.lock', 'CARGO-LOCK-SHA256.txt'],
+            ['apps/host-desktop/package-lock.json', 'NPM-LOCK-SHA256.txt'],
+            ['apps/host-desktop/src-tauri/icons/icon.ico', 'BUNDLE-ICON-SHA256.txt'],
+          ]) {
+            fs.writeFileSync(path.join(evidenceDir, destination), `${hashFile(source)}  ${source}\n`);
+          }
+          NODE
           test -s apps/host-desktop/dist-evidence/SHA256SUMS.txt
           printf '%s\n' "$bundle_dir" > apps/host-desktop/dist-evidence/BUNDLE-DIRECTORY.txt
           printf '%s\n' '${{ matrix.bundle }}' > apps/host-desktop/dist-evidence/BUNDLE-FORMAT.txt
