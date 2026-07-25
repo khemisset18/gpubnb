@@ -1,3 +1,4 @@
+import './pairing-code-redis-guard.js';
 import crypto from 'node:crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { Redis } from 'ioredis';
