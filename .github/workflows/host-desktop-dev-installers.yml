@@ -85,6 +85,7 @@ jobs:
           set -euo pipefail
           test -s Cargo.lock
           test -s apps/host-desktop/package-lock.json
+          cargo metadata --locked --format-version 1 >/dev/null
 
       - name: Install locked JavaScript dependencies
         working-directory: apps/host-desktop
@@ -100,17 +101,14 @@ jobs:
           npm run check
           npm run build
 
-      - name: Normalize Rust sources with pinned toolchain
-        run: cargo fmt -p gpubnb-host-desktop
-
-      - name: Resolve platform Cargo lock
-        run: cargo update --workspace
+      - name: Verify Rust formatting
+        run: cargo fmt -p gpubnb-host-desktop -- --check
 
       - name: Test native host core
         shell: bash
         run: |
           set -o pipefail
-          cargo test -p gpubnb-host-desktop --all-targets 2>&1 | tee cargo-test-${RUNNER_OS}.log
+          cargo test --locked -p gpubnb-host-desktop --all-targets 2>&1 | tee cargo-test-${RUNNER_OS}.log
 
       - name: Upload native test diagnostics
         if: failure()
@@ -122,7 +120,7 @@ jobs:
           retention-days: 14
 
       - name: Lint native host core
-        run: cargo clippy -p gpubnb-host-desktop --all-targets -- -D warnings
+        run: cargo clippy --locked -p gpubnb-host-desktop --all-targets -- -D warnings
 
       - name: Build native development installer
         working-directory: apps/host-desktop
@@ -133,6 +131,7 @@ jobs:
         env:
           GPUBNB_RELEASE_CHANNEL: development
           RUST_BACKTRACE: "1"
+          CARGO_NET_OFFLINE: "false"
 
       - name: Upload installer diagnostics
         if: failure()
@@ -156,6 +155,21 @@ jobs:
           test "$count" -ge 1
           printf '%s\n' "$bundle_dir" > bundle-directory.txt
 
+      - name: Generate dependency evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p apps/host-desktop/dist-evidence
+          cargo metadata --locked --format-version 1 \
+            > apps/host-desktop/dist-evidence/CARGO-METADATA.json
+          (
+            cd apps/host-desktop
+            npm sbom --omit=dev --sbom-format=cyclonedx \
+              > dist-evidence/NPM-SBOM.cdx.json
+          )
+          test -s apps/host-desktop/dist-evidence/CARGO-METADATA.json
+          test -s apps/host-desktop/dist-evidence/NPM-SBOM.cdx.json
+
       - name: Generate build evidence
         shell: bash
         run: |
@@ -167,6 +181,7 @@ jobs:
             | sort -z \
             | xargs -0 shasum -a 256 > apps/host-desktop/dist-evidence/SHA256SUMS.txt
           shasum -a 256 Cargo.lock > apps/host-desktop/dist-evidence/CARGO-LOCK-SHA256.txt
+          shasum -a 256 apps/host-desktop/package-lock.json > apps/host-desktop/dist-evidence/NPM-LOCK-SHA256.txt
           shasum -a 256 apps/host-desktop/src-tauri/icons/icon.ico > apps/host-desktop/dist-evidence/BUNDLE-ICON-SHA256.txt
           test -s apps/host-desktop/dist-evidence/SHA256SUMS.txt
           printf '%s\n' "$bundle_dir" > apps/host-desktop/dist-evidence/BUNDLE-DIRECTORY.txt
