@@ -1,7 +1,11 @@
 use serde::Serialize;
 
-const DEFAULT_PAIRING_PATH: &str = "/dashboard.html?pair=host";
-const ALLOWED_PAIRING_ORIGINS: [&str; 2] = ["https://gpubnb.com", "https://app.gpubnb.com"];
+const DEFAULT_PAIRING_PATH: &str = "/host-install.html";
+const ALLOWED_PAIRING_ORIGINS: [&str; 3] = [
+    "https://gpubnb.com",
+    "https://app.gpubnb.com",
+    "https://gpubnb.netlify.app",
+];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +41,7 @@ mod tests {
     fn accepts_only_official_pairing_origins() {
         assert!(is_allowed_pairing_origin("https://gpubnb.com"));
         assert!(is_allowed_pairing_origin("https://app.gpubnb.com"));
+        assert!(is_allowed_pairing_origin("https://gpubnb.netlify.app"));
     }
 
     #[test]
@@ -56,7 +61,7 @@ mod tests {
         let pairing = pairing_configuration();
         assert!(!pairing.stores_password);
         if let Some(url) = pairing.browser_url {
-            assert!(url.ends_with("/dashboard.html?pair=host"));
+            assert!(url.ends_with("/host-install.html"));
         }
     }
 }

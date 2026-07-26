@@ -57,7 +57,7 @@ const lifecycleLabel = (lifecycle: Lifecycle): string => {
 const friendlyActionMessage = (result: string): string => {
   switch (result) {
     case 'open_secure_pairing':
-      return 'Connexion sécurisée prête. Ouvrez le lien indiqué et confirmez cet ordinateur.';
+      return 'Le site GPUbnb a été ouvert. Connectez-vous, créez un code de liaison puis revenez dans GPUbnb Host.';
     case 'automatic_setup_pending':
       return 'Configuration préparée. Une confirmation système sera demandée avant toute modification.';
     default:
@@ -85,9 +85,15 @@ const setActionStatus = (message: string, tone: 'info' | 'success' | 'error' = '
   element.dataset.tone = tone;
 };
 
+const openPairingPage = (pairing: PairingConfiguration): boolean => {
+  if (!pairing.configured || !pairing.browserUrl) return false;
+  const opened = window.open(pairing.browserUrl, '_blank', 'noopener,noreferrer');
+  return opened !== null;
+};
+
 const renderPairingGuide = (pairing: PairingConfiguration): string => {
   const serviceMessage = pairing.configured
-    ? `<p><strong>1.</strong> Cliquez sur « Connecter mon compte ».<br><strong>2.</strong> Ouvrez <code>${escapeHtml(pairing.browserUrl ?? '')}</code> dans votre navigateur.<br><strong>3.</strong> Connectez-vous et confirmez cet ordinateur.</p>`
+    ? `<p><strong>1.</strong> Cliquez sur « Connecter mon compte ».<br><strong>2.</strong> Le site officiel GPUbnb s’ouvre dans votre navigateur.<br><strong>3.</strong> Connectez-vous puis créez un code de liaison pour cet ordinateur.</p>`
     : '<p>Le service de connexion officiel n’est pas encore configuré dans cette version. L’application bloque donc l’association au lieu d’utiliser un faux compte.</p>';
 
   return `
@@ -211,11 +217,19 @@ async function refresh(): Promise<void> {
         button.textContent = 'Préparation…';
 
         void invoke<string>('run_setup_action', { actionId })
-          .then((result) => setActionStatus(friendlyActionMessage(result), 'success'))
+          .then((result) => {
+            if (result === 'open_secure_pairing' && !openPairingPage(status.pairing)) {
+              throw new Error('pairing_browser_blocked');
+            }
+            setActionStatus(friendlyActionMessage(result), 'success');
+          })
           .catch((error: unknown) => {
-            const message = String(error).includes('pairing_service_not_configured')
-              ? 'Connexion indisponible dans cette version : le service officiel doit d’abord être configuré. Votre ordinateur reste protégé.'
-              : 'Cette action a été bloquée pour protéger votre ordinateur.';
+            const errorText = String(error);
+            const message = errorText.includes('pairing_service_not_configured')
+              ? 'Connexion indisponible : l’adresse du site officiel manque dans cette version.'
+              : errorText.includes('pairing_browser_blocked')
+                ? `Le navigateur n’a pas pu s’ouvrir automatiquement. Ouvrez cette adresse : ${status.pairing.browserUrl ?? ''}`
+                : 'Cette action a été bloquée pour protéger votre ordinateur.';
             setActionStatus(message, 'error');
           })
           .finally(() => {

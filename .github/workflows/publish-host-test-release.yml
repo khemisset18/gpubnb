@@ -91,6 +91,8 @@ jobs:
 
       - name: Validate native core
         shell: bash
+        env:
+          GPUBNB_WEB_BASE_URL: https://gpubnb.netlify.app
         run: |
           set -euo pipefail
           cargo fmt -p gpubnb-host-desktop -- --check
@@ -102,6 +104,7 @@ jobs:
         shell: bash
         env:
           GPUBNB_RELEASE_CHANNEL: test
+          GPUBNB_WEB_BASE_URL: https://gpubnb.netlify.app
           RUST_BACKTRACE: '1'
         run: npm run tauri -- build --bundles ${{ matrix.bundle }}
 
