@@ -166,9 +166,7 @@ mod tests {
         let valid = "A1B2C3D4E5";
         assert_eq!(valid.len(), 10);
         assert!(valid.bytes().all(|byte| byte.is_ascii_hexdigit()));
-        assert!(!"NOT-A-CODE"
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit()));
+        assert!(!"NOT-A-CODE".bytes().all(|byte| byte.is_ascii_hexdigit()));
     }
 
     #[test]
