@@ -1,3 +1,9 @@
+/*
+ * Pairing UI contract:
+ * - the browser handles account authentication;
+ * - the desktop only accepts the one-time hexadecimal link code;
+ * - the machine identity shown after success comes from the local agent.
+ */
 .pairing-guide > p {
   margin: 12px 0 0;
   color: #aeb8cb;
