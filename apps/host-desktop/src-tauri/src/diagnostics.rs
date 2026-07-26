@@ -1,4 +1,3 @@
-use serde::ser::{SerializeStruct, Serializer};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fs::OpenOptions;
@@ -23,12 +22,12 @@ pub enum IsolationBackend {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GpuDevice {
-    index: u32,
-    uuid: String,
-    model: String,
-    driver_version: String,
-    vram_mib: u64,
+pub struct GpuDevice {
+    pub index: u32,
+    pub uuid: String,
+    pub model: String,
+    pub driver_version: String,
+    pub vram_mib: u64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -40,7 +39,8 @@ struct ProbeEvidence {
     isolation_available: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NativeDiagnostic {
     pub platform_supported: bool,
     pub architecture_supported: bool,
@@ -48,23 +48,7 @@ pub struct NativeDiagnostic {
     pub requires_administrator: bool,
     pub can_host: bool,
     pub reason: &'static str,
-}
-
-impl Serialize for NativeDiagnostic {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("NativeDiagnostic", 7)?;
-        state.serialize_field("platformSupported", &self.platform_supported)?;
-        state.serialize_field("architectureSupported", &self.architecture_supported)?;
-        state.serialize_field("isolationBackend", &self.isolation_backend)?;
-        state.serialize_field("requiresAdministrator", &self.requires_administrator)?;
-        state.serialize_field("canHost", &self.can_host)?;
-        state.serialize_field("reason", self.reason)?;
-        state.serialize_field("gpus", &gpu_inventory())?;
-        state.end()
-    }
+    pub gpus: Vec<GpuDevice>,
 }
 
 fn command_output(program: &str, args: &[&str]) -> Option<String> {
@@ -83,15 +67,19 @@ fn command_output(program: &str, args: &[&str]) -> Option<String> {
                 if !status.success() {
                     return None;
                 }
+
                 let output = child.wait_with_output().ok()?;
                 if output.stdout.len() > MAX_COMMAND_OUTPUT_BYTES {
                     return None;
                 }
+
                 return String::from_utf8(output.stdout)
                     .ok()
                     .map(|value| value.trim().to_owned());
             }
-            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(25)),
+            Ok(None) if Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(25));
+            }
             Ok(None) | Err(_) => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -189,9 +177,8 @@ fn isolation_available(os: &str) -> bool {
             ],
         )
         .is_some_and(|value| value.eq_ignore_ascii_case("true")),
-        "macos" => {
-            command_output("sysctl", &["-n", "kern.hv_support"]).is_some_and(|value| value == "1")
-        }
+        "macos" => command_output("sysctl", &["-n", "kern.hv_support"])
+            .is_some_and(|value| value == "1"),
         _ => false,
     }
 }
@@ -205,10 +192,11 @@ pub fn collect_native_diagnostic() -> NativeDiagnostic {
         nvidia_runtime_available,
         isolation_available: isolation_available(std::env::consts::OS),
     };
-    evaluate(std::env::consts::OS, std::env::consts::ARCH, &evidence)
+
+    evaluate(std::env::consts::OS, std::env::consts::ARCH, evidence)
 }
 
-fn evaluate(os: &str, architecture: &str, evidence: &ProbeEvidence) -> NativeDiagnostic {
+fn evaluate(os: &str, architecture: &str, evidence: ProbeEvidence) -> NativeDiagnostic {
     let platform_supported = matches!(os, "windows" | "macos" | "linux");
     let architecture_supported = matches!(architecture, "x86_64" | "aarch64");
     let isolation_backend = match os {
@@ -243,6 +231,7 @@ fn evaluate(os: &str, architecture: &str, evidence: &ProbeEvidence) -> NativeDia
         requires_administrator: matches!(os, "windows" | "linux"),
         can_host: reason == "native_prerequisites_ready",
         reason,
+        gpus: evidence.gpus,
     }
 }
 
@@ -273,8 +262,10 @@ mod tests {
     #[test]
     fn parses_multiple_bounded_gpu_devices() {
         let inventory = parse_gpu_inventory(
-            "GPU-1, NVIDIA RTX 4090, 560.1, 24576, 0\nGPU-2, NVIDIA RTX 3090, 560.1, 24576, 1",
+            "GPU-1, NVIDIA RTX 4090, 560.1, 24576, 0\n\
+             GPU-2, NVIDIA RTX 3090, 560.1, 24576, 1",
         );
+
         assert_eq!(inventory.len(), 2);
         assert_eq!(inventory[0].index, 0);
         assert_eq!(inventory[1].model, "NVIDIA RTX 3090");
@@ -284,8 +275,11 @@ mod tests {
     #[test]
     fn duplicate_gpu_identity_is_ignored() {
         let inventory = parse_gpu_inventory(
-            "GPU-1, NVIDIA RTX, 560.1, 24576, 0\nGPU-1, NVIDIA RTX, 560.1, 24576, 1\nGPU-2, NVIDIA RTX, 560.1, 24576, 0",
+            "GPU-1, NVIDIA RTX, 560.1, 24576, 0\n\
+             GPU-1, NVIDIA RTX, 560.1, 24576, 1\n\
+             GPU-2, NVIDIA RTX, 560.1, 24576, 0",
         );
+
         assert_eq!(inventory.len(), 1);
     }
 
@@ -305,30 +299,40 @@ mod tests {
 
     #[test]
     fn ready_machine_receives_certificate() {
-        let evidence = ready_evidence();
-        let diagnostic = evaluate("linux", "x86_64", &evidence);
+        let diagnostic = evaluate("linux", "x86_64", ready_evidence());
+
         assert!(diagnostic.can_host);
         assert_eq!(diagnostic.reason, "native_prerequisites_ready");
+        assert_eq!(diagnostic.gpus, vec![gpu(0)]);
     }
 
     #[test]
     fn every_missing_control_fails_closed() {
         let mut evidence = ready_evidence();
         evidence.nvidia_runtime_available = false;
-        let diagnostic = evaluate("linux", "x86_64", &evidence);
+        let diagnostic = evaluate("linux", "x86_64", evidence);
+
         assert!(!diagnostic.can_host);
         assert_eq!(diagnostic.reason, "nvidia_container_runtime_missing");
     }
 
     #[test]
     fn unknown_platform_and_architecture_fail_closed() {
-        let evidence = ready_evidence();
-        let platform = evaluate("unknown", "x86_64", &evidence);
+        let platform = evaluate("unknown", "x86_64", ready_evidence());
         assert!(!platform.can_host);
         assert_eq!(platform.isolation_backend, IsolationBackend::Unsupported);
 
-        let architecture = evaluate("linux", "mips", &evidence);
+        let architecture = evaluate("linux", "mips", ready_evidence());
         assert!(!architecture.can_host);
         assert_eq!(architecture.reason, "architecture_not_supported");
+    }
+
+    #[test]
+    fn serialized_snapshot_contains_the_collected_inventory() {
+        let diagnostic = evaluate("linux", "x86_64", ready_evidence());
+        let serialized = serde_json::to_value(diagnostic).expect("diagnostic must serialize");
+
+        assert_eq!(serialized["gpus"][0]["uuid"], "GPU-test-0");
+        assert_eq!(serialized["gpus"][0]["vramMib"], 24_576);
     }
 }
