@@ -20,14 +20,13 @@ pub enum IsolationBackend {
     Unsupported,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GpuDevice {
-    pub index: u32,
-    pub uuid: String,
-    pub model: String,
-    pub driver_version: String,
-    pub vram_mib: u64,
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct GpuDevice {
+    index: u32,
+    uuid: String,
+    model: String,
+    driver_version: String,
+    vram_mib: u64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -48,7 +47,6 @@ pub struct NativeDiagnostic {
     pub requires_administrator: bool,
     pub can_host: bool,
     pub reason: &'static str,
-    pub gpus: Vec<GpuDevice>,
 }
 
 fn command_output(program: &str, args: &[&str]) -> Option<String> {
@@ -217,7 +215,6 @@ fn evaluate(os: &str, architecture: &str, evidence: &ProbeEvidence) -> NativeDia
         requires_administrator: matches!(os, "windows" | "linux"),
         can_host: reason == "native_prerequisites_ready",
         reason,
-        gpus: evidence.gpus.clone(),
     }
 }
 
@@ -276,7 +273,6 @@ mod tests {
         let diagnostic = evaluate("linux", "x86_64", &evidence);
         assert!(diagnostic.can_host);
         assert_eq!(diagnostic.reason, "native_prerequisites_ready");
-        assert_eq!(diagnostic.gpus.len(), 1);
     }
 
     #[test]
