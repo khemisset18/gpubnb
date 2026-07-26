@@ -16,6 +16,9 @@
 .machine-identity span { color: #9cccb1; font-size: .8rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .machine-identity code { overflow-wrap: anywhere; color: #e8fff0; font-size: .95rem; }
 
+.safe-external-link { display: inline-flex; margin-left: 6px; color: #ffd4cb; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
+.safe-external-link:focus-visible { border-radius: 4px; outline: 3px solid rgba(120, 156, 255, .45); outline-offset: 3px; }
+
 .gpu-inventory { margin-top: 22px; padding: 22px; border: 1px solid #283955; border-radius: 20px; background: #101827; }
 .inventory-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
 .inventory-heading h2 { margin: 4px 0 0; }
