@@ -108,8 +108,7 @@ fn run_agent(arguments: &[&str]) -> Result<Output, &'static str> {
 }
 
 pub fn status() -> AgentStatus {
-    let installed = run_agent(&["--version"])
-        .is_ok_and(|output| output.status.success());
+    let installed = run_agent(&["--version"]).is_ok_and(|output| output.status.success());
     let machine_id = parse_config().and_then(|value| value.machine_id);
     let linked = machine_id.is_some();
 
