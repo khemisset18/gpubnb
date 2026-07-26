@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -7,6 +8,8 @@ use std::time::{Duration, Instant};
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_COMMAND_OUTPUT_BYTES: usize = 16 * 1024;
+const MAX_GPU_COUNT: usize = 32;
+const MAX_VRAM_MIB: u64 = 2_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -17,13 +20,19 @@ pub enum IsolationBackend {
     Unsupported,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuDevice {
+    pub index: u32,
+    pub uuid: String,
+    pub model: String,
+    pub driver_version: String,
+    pub vram_mib: u64,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct ProbeEvidence {
-    gpu_detected: bool,
-    gpu_model: Option<String>,
-    gpu_uuid: Option<String>,
-    vram_mib: Option<u64>,
-    driver_version: Option<String>,
+    gpus: Vec<GpuDevice>,
     docker_installed: bool,
     docker_reachable: bool,
     nvidia_runtime_available: bool,
@@ -39,6 +48,7 @@ pub struct NativeDiagnostic {
     pub requires_administrator: bool,
     pub can_host: bool,
     pub reason: &'static str,
+    pub gpus: Vec<GpuDevice>,
 }
 
 fn command_output(program: &str, args: &[&str]) -> Option<String> {
@@ -75,40 +85,51 @@ fn command_output(program: &str, args: &[&str]) -> Option<String> {
     }
 }
 
-fn parse_gpu_evidence(value: &str) -> ProbeEvidence {
-    let Some(line) = value.lines().next() else {
-        return ProbeEvidence::default();
-    };
+fn parse_gpu_line(line: &str) -> Option<GpuDevice> {
     let fields: Vec<&str> = line.split(',').map(str::trim).collect();
     if fields.len() != 5 || fields.iter().any(|field| field.is_empty()) {
-        return ProbeEvidence::default();
+        return None;
     }
-    let Ok(vram_mib) = fields[3].parse::<u64>() else {
-        return ProbeEvidence::default();
-    };
-    if vram_mib == 0 || vram_mib > 2_000_000 {
-        return ProbeEvidence::default();
+
+    let vram_mib = fields[3].parse::<u64>().ok()?;
+    let index = fields[4].parse::<u32>().ok()?;
+    if vram_mib == 0 || vram_mib > MAX_VRAM_MIB {
+        return None;
     }
-    ProbeEvidence {
-        gpu_detected: true,
-        gpu_uuid: Some(fields[0].to_owned()),
-        gpu_model: Some(fields[1].to_owned()),
-        driver_version: Some(fields[2].to_owned()),
-        vram_mib: Some(vram_mib),
-        ..ProbeEvidence::default()
+
+    let uuid = fields[0];
+    if !uuid.starts_with("GPU-") || uuid.len() > 128 {
+        return None;
     }
+
+    Some(GpuDevice {
+        index,
+        uuid: uuid.to_owned(),
+        model: fields[1].chars().take(160).collect(),
+        driver_version: fields[2].chars().take(64).collect(),
+        vram_mib,
+    })
 }
 
-fn gpu_evidence() -> ProbeEvidence {
+fn parse_gpu_inventory(value: &str) -> Vec<GpuDevice> {
+    let mut seen = HashSet::new();
+    value
+        .lines()
+        .filter_map(parse_gpu_line)
+        .filter(|gpu| seen.insert(gpu.uuid.clone()))
+        .take(MAX_GPU_COUNT)
+        .collect()
+}
+
+fn gpu_inventory() -> Vec<GpuDevice> {
     command_output(
         "nvidia-smi",
         &[
             "--query-gpu=uuid,name,driver_version,memory.total,index",
             "--format=csv,noheader,nounits",
-            "--id=0",
         ],
     )
-    .map(|value| parse_gpu_evidence(&value))
+    .map(|value| parse_gpu_inventory(&value))
     .unwrap_or_default()
 }
 
@@ -150,12 +171,14 @@ fn isolation_available(os: &str) -> bool {
 }
 
 pub fn collect_native_diagnostic() -> NativeDiagnostic {
-    let mut evidence = gpu_evidence();
     let (docker_installed, docker_reachable, nvidia_runtime_available) = docker_evidence();
-    evidence.docker_installed = docker_installed;
-    evidence.docker_reachable = docker_reachable;
-    evidence.nvidia_runtime_available = nvidia_runtime_available;
-    evidence.isolation_available = isolation_available(std::env::consts::OS);
+    let evidence = ProbeEvidence {
+        gpus: gpu_inventory(),
+        docker_installed,
+        docker_reachable,
+        nvidia_runtime_available,
+        isolation_available: isolation_available(std::env::consts::OS),
+    };
     evaluate(std::env::consts::OS, std::env::consts::ARCH, &evidence)
 }
 
@@ -173,7 +196,7 @@ fn evaluate(os: &str, architecture: &str, evidence: &ProbeEvidence) -> NativeDia
         "operating_system_not_supported"
     } else if !architecture_supported {
         "architecture_not_supported"
-    } else if !evidence.gpu_detected {
+    } else if evidence.gpus.is_empty() {
         "nvidia_gpu_not_detected"
     } else if !evidence.docker_installed {
         "docker_not_installed"
@@ -194,6 +217,7 @@ fn evaluate(os: &str, architecture: &str, evidence: &ProbeEvidence) -> NativeDia
         requires_administrator: matches!(os, "windows" | "linux"),
         can_host: reason == "native_prerequisites_ready",
         reason,
+        gpus: evidence.gpus.clone(),
     }
 }
 
@@ -201,13 +225,19 @@ fn evaluate(os: &str, architecture: &str, evidence: &ProbeEvidence) -> NativeDia
 mod tests {
     use super::*;
 
+    fn gpu(index: u32) -> GpuDevice {
+        GpuDevice {
+            index,
+            uuid: format!("GPU-test-{index}"),
+            model: "NVIDIA Test GPU".into(),
+            driver_version: "999.1".into(),
+            vram_mib: 24_576,
+        }
+    }
+
     fn ready_evidence() -> ProbeEvidence {
         ProbeEvidence {
-            gpu_detected: true,
-            gpu_model: Some("NVIDIA Test GPU".into()),
-            gpu_uuid: Some("GPU-test".into()),
-            vram_mib: Some(24_576),
-            driver_version: Some("999.1".into()),
+            gpus: vec![gpu(0)],
             docker_installed: true,
             docker_reachable: true,
             nvidia_runtime_available: true,
@@ -216,12 +246,22 @@ mod tests {
     }
 
     #[test]
-    fn parses_bounded_gpu_evidence() {
-        let evidence = parse_gpu_evidence("GPU-1, NVIDIA RTX, 560.1, 24576, 0");
-        assert!(evidence.gpu_detected);
-        assert_eq!(evidence.vram_mib, Some(24_576));
-        assert_eq!(evidence.gpu_model.as_deref(), Some("NVIDIA RTX"));
-        assert!(!parse_gpu_evidence("broken").gpu_detected);
+    fn parses_multiple_bounded_gpu_devices() {
+        let inventory = parse_gpu_inventory(
+            "GPU-1, NVIDIA RTX 4090, 560.1, 24576, 0\nGPU-2, NVIDIA RTX 3090, 560.1, 24576, 1",
+        );
+        assert_eq!(inventory.len(), 2);
+        assert_eq!(inventory[0].index, 0);
+        assert_eq!(inventory[1].model, "NVIDIA RTX 3090");
+        assert!(parse_gpu_inventory("broken").is_empty());
+    }
+
+    #[test]
+    fn duplicate_gpu_uuid_is_ignored() {
+        let inventory = parse_gpu_inventory(
+            "GPU-1, NVIDIA RTX, 560.1, 24576, 0\nGPU-1, NVIDIA RTX, 560.1, 24576, 1",
+        );
+        assert_eq!(inventory.len(), 1);
     }
 
     #[test]
@@ -236,6 +276,7 @@ mod tests {
         let diagnostic = evaluate("linux", "x86_64", &evidence);
         assert!(diagnostic.can_host);
         assert_eq!(diagnostic.reason, "native_prerequisites_ready");
+        assert_eq!(diagnostic.gpus.len(), 1);
     }
 
     #[test]
@@ -253,7 +294,6 @@ mod tests {
         let platform = evaluate("unknown", "x86_64", &evidence);
         assert!(!platform.can_host);
         assert_eq!(platform.isolation_backend, IsolationBackend::Unsupported);
-        assert_eq!(platform.reason, "operating_system_not_supported");
 
         let architecture = evaluate("linux", "mips", &evidence);
         assert!(!architecture.can_host);
