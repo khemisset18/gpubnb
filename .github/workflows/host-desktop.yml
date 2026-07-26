@@ -28,36 +28,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  format:
-    name: apply host rustfmt
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          persist-credentials: true
-      - uses: dtolnay/rust-toolchain@1.97.1
-        with:
-          components: rustfmt
-      - name: Apply canonical Rust formatting
-        shell: bash
-        run: cargo fmt -p gpubnb-host-desktop
-      - name: Commit formatting changes
-        shell: bash
-        run: |
-          if git diff --quiet; then
-            echo 'Rust sources are already formatted.'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add apps/host-desktop/src-tauri/src
-          git commit -m 'style(host): apply cargo fmt'
-          git push origin HEAD:${{ github.head_ref }}
-
   frontend:
     name: frontend typecheck and build
     runs-on: ubuntu-latest
