@@ -89,7 +89,11 @@ pub fn link(code: &str) -> Result<AgentStatus, String> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let detail = if stderr.trim().is_empty() { stdout } else { stderr };
+        let detail = if stderr.trim().is_empty() {
+            stdout
+        } else {
+            stderr
+        };
         return Err(format!("agent_link_failed:{}", detail.trim()));
     }
 
@@ -107,6 +111,8 @@ mod tests {
         let valid = "A1B2C3D4E5";
         assert_eq!(valid.len(), 10);
         assert!(valid.bytes().all(|byte| byte.is_ascii_hexdigit()));
-        assert!(!"NOT-A-CODE".bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert!(!"NOT-A-CODE"
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit()));
     }
 }
