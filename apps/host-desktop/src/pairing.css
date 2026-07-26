@@ -25,6 +25,8 @@
 
 .pairing-controls input {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 14px 16px;
   border: 1px solid #415272;
   border-radius: 14px;
