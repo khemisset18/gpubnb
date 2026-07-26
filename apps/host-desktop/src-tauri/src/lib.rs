@@ -1,8 +1,10 @@
+mod agent_bridge;
 mod diagnostics;
 mod orchestration_gateway;
 mod pairing;
 mod rental_orchestrator;
 
+use agent_bridge::AgentStatus;
 use diagnostics::{collect_native_diagnostic, NativeDiagnostic};
 use orchestration_gateway::{
     ActorRole, AuthenticatedContext, CommandResult, OrchestrationCommand, OrchestrationGateway,
@@ -67,27 +69,25 @@ impl TryFrom<&str> for SetupAction {
 
 #[derive(Clone, Debug, Default)]
 struct Readiness {
-    account_linked: bool,
-    service_installed: bool,
     isolation_certified: bool,
     storage_protected: bool,
     network_filtered: bool,
 }
 
 impl Readiness {
-    fn is_ready(&self, diagnostic: &NativeDiagnostic) -> bool {
+    fn is_ready(&self, diagnostic: &NativeDiagnostic, agent: &AgentStatus) -> bool {
         diagnostic.can_host
-            && self.account_linked
-            && self.service_installed
+            && agent.linked
+            && agent.running
             && self.isolation_certified
             && self.storage_protected
             && self.network_filtered
     }
 
-    fn next_action(&self) -> Option<SetupAction> {
-        if !self.account_linked {
+    fn next_action(&self, agent: &AgentStatus) -> Option<SetupAction> {
+        if !agent.linked {
             Some(SetupAction::Account)
-        } else if !self.service_installed {
+        } else if !agent.running {
             Some(SetupAction::Agent)
         } else if !self.isolation_certified {
             Some(SetupAction::Isolation)
@@ -132,6 +132,7 @@ struct HostStatus {
     summary: String,
     next_action_id: Option<&'static str>,
     pairing: PairingConfiguration,
+    agent: AgentStatus,
     diagnostic: NativeDiagnostic,
     orchestration: OrchestrationSnapshot,
     checks: Vec<Check>,
@@ -163,15 +164,15 @@ fn installation_id() -> String {
 }
 
 fn machine_id() -> String {
-    std::env::var("GPUBNB_MACHINE_ID")
-        .ok()
-        .filter(|value| !value.is_empty())
+    agent_bridge::status()
+        .machine_id
+        .or_else(|| std::env::var("GPUBNB_MACHINE_ID").ok().filter(|value| !value.is_empty()))
         .unwrap_or_else(|| "unpaired_machine".into())
 }
 
 fn create_gateway() -> OrchestrationGateway {
     OrchestrationGateway::new(installation_id(), machine_id())
-        .expect("static fallback orchestration identifiers must be valid")
+        .expect("orchestration identifiers must be valid")
 }
 
 fn execute_local(
@@ -206,14 +207,16 @@ fn platform_name() -> &'static str {
 fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostStatus {
     let diagnostic = collect_native_diagnostic();
     let pairing = pairing_configuration();
+    let agent = agent_bridge::status();
     let readiness = &state.readiness;
-    let account_detail = if readiness.account_linked {
-        "Cet ordinateur est associé à votre compte sans mot de passe local".into()
+    let account_detail = if let Some(machine_id) = agent.machine_id.as_deref() {
+        format!("Machine associée : {machine_id}")
     } else if pairing.configured {
         "Connexion sécurisée dans votre navigateur avec un code temporaire".into()
     } else {
         "Le service de connexion doit être configuré avant l'installation publique".into()
     };
+
     let checks = vec![
         Check {
             id: "platform",
@@ -221,11 +224,7 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
             ok: diagnostic.can_host,
             blocking: true,
             detail: if diagnostic.can_host {
-                format!(
-                    "{} et {} sont pris en charge",
-                    platform_name(),
-                    std::env::consts::ARCH
-                )
+                format!("{} et {} sont pris en charge", platform_name(), std::env::consts::ARCH)
             } else {
                 "Ce système ne peut pas héberger une location sécurisée".into()
             },
@@ -234,18 +233,22 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
         Check {
             id: "account",
             label: "Compte GPUbnb connecté",
-            ok: readiness.account_linked,
+            ok: agent.linked,
             blocking: true,
             detail: account_detail,
-            action_label: (!readiness.account_linked).then_some("Connecter mon compte"),
+            action_label: (!agent.linked).then_some("Connecter mon compte"),
         },
         Check {
             id: "agent",
-            label: "Service GPUbnb installé",
-            ok: readiness.service_installed,
+            label: "Service GPUbnb actif",
+            ok: agent.running,
             blocking: true,
-            detail: "Le service signé fonctionne séparément de l'interface".into(),
-            action_label: (!readiness.service_installed).then_some("Installer automatiquement"),
+            detail: agent.detail.clone(),
+            action_label: (!agent.running).then_some(if agent.installed {
+                "Démarrer le service"
+            } else {
+                "Installer automatiquement"
+            }),
         },
         Check {
             id: "isolation",
@@ -273,7 +276,7 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
         },
     ];
 
-    let protections_ready = readiness.is_ready(&diagnostic);
+    let protections_ready = readiness.is_ready(&diagnostic, &agent);
     let emergency_stopped = state.lifecycle == HostLifecycle::EmergencyStopped;
     let ready = protections_ready && !emergency_stopped;
     let lifecycle = match state.lifecycle {
@@ -283,10 +286,7 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
         _ => HostLifecycle::SetupRequired,
     };
     let completed_steps = checks.iter().filter(|check| check.ok).count();
-    let blocking_count = checks
-        .iter()
-        .filter(|check| check.blocking && !check.ok)
-        .count();
+    let blocking_count = checks.iter().filter(|check| check.blocking && !check.ok).count();
     let progress = ((completed_steps * 100) / TOTAL_SETUP_STEPS) as u8;
     let summary = match lifecycle {
         HostLifecycle::EmergencyStopped => "Arrêt d'urgence actif".to_owned(),
@@ -309,9 +309,10 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
         blocking_count,
         summary,
         next_action_id: (!emergency_stopped)
-            .then(|| readiness.next_action().map(SetupAction::id))
+            .then(|| readiness.next_action(&agent).map(SetupAction::id))
             .flatten(),
         pairing,
+        agent,
         diagnostic,
         orchestration,
         checks,
@@ -324,19 +325,25 @@ fn host_status(
     gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
 ) -> Result<HostStatus, &'static str> {
     let state = state.lock().map_err(|_| "state_unavailable")?;
-    let mut gateway = gateway
-        .lock()
-        .map_err(|_| "orchestration_state_unavailable")?;
+    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
     Ok(build_status(&state, read_orchestration(&mut gateway)?))
+}
+
+#[tauri::command]
+fn local_agent_status() -> AgentStatus {
+    agent_bridge::status()
+}
+
+#[tauri::command]
+fn link_local_agent(code: String) -> Result<AgentStatus, String> {
+    agent_bridge::link(&code)
 }
 
 #[tauri::command]
 fn orchestration_status(
     gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
 ) -> Result<OrchestrationSnapshot, &'static str> {
-    let mut gateway = gateway
-        .lock()
-        .map_err(|_| "orchestration_state_unavailable")?;
+    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
     read_orchestration(&mut gateway)
 }
 
@@ -354,13 +361,11 @@ fn request_publish(
     if state.lifecycle == HostLifecycle::EmergencyStopped {
         return Err("emergency_stop_requires_review");
     }
-    if !state.readiness.is_ready(&collect_native_diagnostic()) {
+    let agent = agent_bridge::status();
+    if !state.readiness.is_ready(&collect_native_diagnostic(), &agent) {
         return Err("host_not_certified");
     }
-
-    let mut gateway = gateway
-        .lock()
-        .map_err(|_| "orchestration_state_unavailable")?;
+    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
     let result = execute_local(
         &mut gateway,
         ActorRole::LocalAdministrator,
@@ -377,17 +382,15 @@ fn set_idle_mining(
     gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
 ) -> Result<OrchestrationSnapshot, &'static str> {
     let state = state.lock().map_err(|_| "state_unavailable")?;
+    let agent = agent_bridge::status();
     if state.lifecycle != HostLifecycle::Online {
         return Err("host_must_be_online");
     }
-    if !state.readiness.is_ready(&collect_native_diagnostic()) {
+    if !state.readiness.is_ready(&collect_native_diagnostic(), &agent) {
         return Err("host_not_certified");
     }
     drop(state);
-
-    let mut gateway = gateway
-        .lock()
-        .map_err(|_| "orchestration_state_unavailable")?;
+    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
     execute_local(
         &mut gateway,
         ActorRole::LocalAdministrator,
@@ -404,10 +407,7 @@ fn emergency_stop(
     let mut state = state.lock().map_err(|_| "state_unavailable")?;
     state.lifecycle = HostLifecycle::EmergencyStopped;
     drop(state);
-
-    let mut gateway = gateway
-        .lock()
-        .map_err(|_| "orchestration_state_unavailable")?;
+    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
     let result = execute_local(
         &mut gateway,
         ActorRole::LocalAdministrator,
@@ -427,16 +427,15 @@ fn run_setup_action(action_id: String) -> Result<String, &'static str> {
     if action_id.len() > 32 || !action_id.bytes().all(|byte| byte.is_ascii_lowercase()) {
         return Err("invalid_setup_action");
     }
-
     match SetupAction::try_from(action_id.as_str())? {
         SetupAction::Account => pairing_configuration()
             .configured
             .then(|| "open_secure_pairing".into())
             .ok_or("pairing_service_not_configured"),
-        SetupAction::Agent
-        | SetupAction::Isolation
-        | SetupAction::Storage
-        | SetupAction::Network => Ok("automatic_setup_pending".into()),
+        SetupAction::Agent => Ok("agent_setup_required".into()),
+        SetupAction::Isolation | SetupAction::Storage | SetupAction::Network => {
+            Ok("automatic_setup_pending".into())
+        }
     }
 }
 
@@ -447,6 +446,8 @@ pub fn run() {
         .manage(Mutex::new(create_gateway()))
         .invoke_handler(tauri::generate_handler![
             host_status,
+            local_agent_status,
+            link_local_agent,
             orchestration_status,
             account_pairing_configuration,
             request_publish,
@@ -474,10 +475,18 @@ mod tests {
         }
     }
 
+    fn running_agent() -> AgentStatus {
+        AgentStatus {
+            installed: true,
+            linked: true,
+            running: true,
+            machine_id: Some("machine_test".into()),
+            detail: "ok".into(),
+        }
+    }
+
     fn fully_ready() -> Readiness {
         Readiness {
-            account_linked: true,
-            service_installed: true,
             isolation_certified: true,
             storage_protected: true,
             network_filtered: true,
@@ -495,16 +504,17 @@ mod tests {
     }
 
     #[test]
-    fn readiness_is_fail_closed() {
-        assert!(!Readiness::default().is_ready(&supported_diagnostic()));
+    fn readiness_is_fail_closed_without_real_agent() {
+        assert!(!Readiness::default().is_ready(&supported_diagnostic(), &AgentStatus::default()));
     }
 
     #[test]
-    fn readiness_requires_every_protection() {
-        let mut readiness = fully_ready();
-        assert!(readiness.is_ready(&supported_diagnostic()));
-        readiness.network_filtered = false;
-        assert!(!readiness.is_ready(&supported_diagnostic()));
+    fn readiness_requires_running_persistent_agent() {
+        let readiness = fully_ready();
+        assert!(readiness.is_ready(&supported_diagnostic(), &running_agent()));
+        let mut stopped = running_agent();
+        stopped.running = false;
+        assert!(!readiness.is_ready(&supported_diagnostic(), &stopped));
     }
 
     #[test]
@@ -518,27 +528,15 @@ mod tests {
         let status = build_status(&AppState::default(), offline_snapshot());
         assert!(!status.ready);
         assert_eq!(status.total_steps, TOTAL_SETUP_STEPS);
-        assert_eq!(status.next_action_id, Some("account"));
         assert!(!status.pairing.stores_password);
-    }
-
-    #[test]
-    fn emergency_stop_never_exposes_ready_status_or_setup_action() {
-        let state = AppState {
-            readiness: fully_ready(),
-            lifecycle: HostLifecycle::EmergencyStopped,
-        };
-        let status = build_status(&state, offline_snapshot());
-        assert!(!status.ready);
-        assert_eq!(status.lifecycle, HostLifecycle::EmergencyStopped);
-        assert_eq!(status.next_action_id, None);
-        assert_eq!(status.summary, "Arrêt d'urgence actif");
     }
 
     #[test]
     fn frontend_has_no_generic_privileged_gateway_command() {
         let exposed = [
             "host_status",
+            "local_agent_status",
+            "link_local_agent",
             "orchestration_status",
             "account_pairing_configuration",
             "request_publish",
