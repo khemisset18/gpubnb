@@ -166,7 +166,11 @@ fn installation_id() -> String {
 fn machine_id() -> String {
     agent_bridge::status()
         .machine_id
-        .or_else(|| std::env::var("GPUBNB_MACHINE_ID").ok().filter(|value| !value.is_empty()))
+        .or_else(|| {
+            std::env::var("GPUBNB_MACHINE_ID")
+                .ok()
+                .filter(|value| !value.is_empty())
+        })
         .unwrap_or_else(|| "unpaired_machine".into())
 }
 
@@ -224,7 +228,11 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
             ok: diagnostic.can_host,
             blocking: true,
             detail: if diagnostic.can_host {
-                format!("{} et {} sont pris en charge", platform_name(), std::env::consts::ARCH)
+                format!(
+                    "{} et {} sont pris en charge",
+                    platform_name(),
+                    std::env::consts::ARCH
+                )
             } else {
                 "Ce système ne peut pas héberger une location sécurisée".into()
             },
@@ -286,7 +294,10 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
         _ => HostLifecycle::SetupRequired,
     };
     let completed_steps = checks.iter().filter(|check| check.ok).count();
-    let blocking_count = checks.iter().filter(|check| check.blocking && !check.ok).count();
+    let blocking_count = checks
+        .iter()
+        .filter(|check| check.blocking && !check.ok)
+        .count();
     let progress = ((completed_steps * 100) / TOTAL_SETUP_STEPS) as u8;
     let summary = match lifecycle {
         HostLifecycle::EmergencyStopped => "Arrêt d'urgence actif".to_owned(),
@@ -325,7 +336,9 @@ fn host_status(
     gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
 ) -> Result<HostStatus, &'static str> {
     let state = state.lock().map_err(|_| "state_unavailable")?;
-    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
+    let mut gateway = gateway
+        .lock()
+        .map_err(|_| "orchestration_state_unavailable")?;
     Ok(build_status(&state, read_orchestration(&mut gateway)?))
 }
 
@@ -343,7 +356,9 @@ fn link_local_agent(code: String) -> Result<AgentStatus, String> {
 fn orchestration_status(
     gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
 ) -> Result<OrchestrationSnapshot, &'static str> {
-    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
+    let mut gateway = gateway
+        .lock()
+        .map_err(|_| "orchestration_state_unavailable")?;
     read_orchestration(&mut gateway)
 }
 
@@ -362,10 +377,15 @@ fn request_publish(
         return Err("emergency_stop_requires_review");
     }
     let agent = agent_bridge::status();
-    if !state.readiness.is_ready(&collect_native_diagnostic(), &agent) {
+    if !state
+        .readiness
+        .is_ready(&collect_native_diagnostic(), &agent)
+    {
         return Err("host_not_certified");
     }
-    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
+    let mut gateway = gateway
+        .lock()
+        .map_err(|_| "orchestration_state_unavailable")?;
     let result = execute_local(
         &mut gateway,
         ActorRole::LocalAdministrator,
@@ -386,11 +406,16 @@ fn set_idle_mining(
     if state.lifecycle != HostLifecycle::Online {
         return Err("host_must_be_online");
     }
-    if !state.readiness.is_ready(&collect_native_diagnostic(), &agent) {
+    if !state
+        .readiness
+        .is_ready(&collect_native_diagnostic(), &agent)
+    {
         return Err("host_not_certified");
     }
     drop(state);
-    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
+    let mut gateway = gateway
+        .lock()
+        .map_err(|_| "orchestration_state_unavailable")?;
     execute_local(
         &mut gateway,
         ActorRole::LocalAdministrator,
@@ -407,7 +432,9 @@ fn emergency_stop(
     let mut state = state.lock().map_err(|_| "state_unavailable")?;
     state.lifecycle = HostLifecycle::EmergencyStopped;
     drop(state);
-    let mut gateway = gateway.lock().map_err(|_| "orchestration_state_unavailable")?;
+    let mut gateway = gateway
+        .lock()
+        .map_err(|_| "orchestration_state_unavailable")?;
     let result = execute_local(
         &mut gateway,
         ActorRole::LocalAdministrator,
