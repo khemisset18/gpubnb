@@ -20,6 +20,14 @@ type PairingConfiguration = {
   explanation: string;
 };
 
+type AgentStatus = {
+  installed: boolean;
+  linked: boolean;
+  running: boolean;
+  machineId?: string | null;
+  detail: string;
+};
+
 type HostStatus = {
   platform: string;
   architecture: string;
@@ -30,6 +38,7 @@ type HostStatus = {
   summary: string;
   nextActionId?: string | null;
   pairing: PairingConfiguration;
+  agent: AgentStatus;
   checks: Check[];
 };
 
@@ -57,7 +66,7 @@ const lifecycleLabel = (lifecycle: Lifecycle): string => {
 const friendlyActionMessage = (result: string): string => {
   switch (result) {
     case 'open_secure_pairing':
-      return 'Le site GPUbnb a été ouvert. Connectez-vous, créez un code de liaison puis revenez dans GPUbnb Host.';
+      return 'Le site GPUbnb a été ouvert. Connectez-vous, générez un code puis saisissez-le ci-dessous.';
     case 'automatic_setup_pending':
       return 'Configuration préparée. Une confirmation système sera demandée avant toute modification.';
     default:
@@ -91,18 +100,45 @@ const openPairingPage = (pairing: PairingConfiguration): boolean => {
   return opened !== null;
 };
 
-const renderPairingGuide = (pairing: PairingConfiguration): string => {
+const pairingErrorMessage = (error: unknown): string => {
+  const value = String(error);
+  if (value.includes('invalid_link_code')) return 'Le code doit contenir exactement 10 caractères hexadécimaux.';
+  if (value.includes('agent_not_installed')) return 'L’agent GPUbnb doit être installé avant de relier cette machine.';
+  if (value.includes('agent_link_not_persisted')) return 'La liaison a été refusée car aucun identifiant machine n’a été sauvegardé.';
+  if (value.includes('agent_link_failed')) return 'Le serveur a refusé ce code. Vérifiez qu’il est récent et qu’il n’a pas déjà été utilisé.';
+  return 'La liaison n’a pas abouti. La machine reste hors ligne.';
+};
+
+const renderPairingGuide = (pairing: PairingConfiguration, agent: AgentStatus): string => {
+  if (agent.linked && agent.machineId) {
+    return `
+      <section class="explanation pairing-guide" aria-labelledby="pairing-title">
+        <div><p class="eyebrow">Machine associée</p><h2 id="pairing-title">Ce Host est relié à votre compte</h2></div>
+        <p>${escapeHtml(agent.detail)}</p>
+        <div class="machine-identity"><span>Identifiant machine</span><code>${escapeHtml(agent.machineId)}</code></div>
+      </section>`;
+  }
+
   const serviceMessage = pairing.configured
-    ? `<p><strong>1.</strong> Cliquez sur « Connecter mon compte ».<br><strong>2.</strong> Le site officiel GPUbnb s’ouvre dans votre navigateur.<br><strong>3.</strong> Connectez-vous puis créez un code de liaison pour cet ordinateur.</p>`
-    : '<p>Le service de connexion officiel n’est pas encore configuré dans cette version. L’application bloque donc l’association au lieu d’utiliser un faux compte.</p>';
+    ? '<p>Ouvrez le site GPUbnb, connectez-vous et générez un code temporaire pour cet ordinateur. Saisissez ensuite ce code ici.</p>'
+    : '<p>Le service officiel de connexion n’est pas configuré. L’application refuse donc toute association simulée.</p>';
 
   return `
     <section class="explanation pairing-guide" aria-labelledby="pairing-title">
-      <div><p class="eyebrow">Connexion simple</p><h2 id="pairing-title">Connectez votre compte sans saisir votre mot de passe ici</h2></div>
+      <div><p class="eyebrow">Connexion sécurisée</p><h2 id="pairing-title">Reliez cet ordinateur sans partager votre mot de passe</h2></div>
       ${serviceMessage}
+      ${pairing.configured ? `
+        <form id="pairing-form" class="pairing-form" novalidate>
+          <label for="pairing-code">Code de liaison</label>
+          <div class="pairing-controls">
+            <input id="pairing-code" name="pairingCode" type="text" inputmode="text" autocomplete="one-time-code" maxlength="10" pattern="[A-Fa-f0-9]{10}" placeholder="A1B2C3D4E5" aria-describedby="pairing-help" required>
+            <button id="pairing-submit" class="primary large" type="submit">Relier cette machine</button>
+          </div>
+          <small id="pairing-help">10 caractères, utilisable une seule fois. Le code est envoyé à l’agent local, jamais stocké par l’interface.</small>
+        </form>` : ''}
       <div class="benefits">
-        <article><span>01</span><strong>Navigateur sécurisé</strong><p>La connexion s’effectue sur le site GPUbnb, pas dans l’application.</p></article>
-        <article><span>02</span><strong>Code temporaire</strong><p>Le code ne sert qu’à associer cet ordinateur une seule fois.</p></article>
+        <article><span>01</span><strong>Navigateur sécurisé</strong><p>La connexion s’effectue sur le site GPUbnb.</p></article>
+        <article><span>02</span><strong>Code temporaire</strong><p>Le code sert uniquement à associer cet ordinateur.</p></article>
         <article><span>03</span><strong>Aucun mot de passe stocké</strong><p>${escapeHtml(pairing.explanation)}</p></article>
       </div>
     </section>`;
@@ -173,7 +209,7 @@ async function refresh(): Promise<void> {
             <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${safeProgress}"><span style="width:${safeProgress}%"></span></div>
           </section>
 
-          ${status.nextActionId === 'account' ? renderPairingGuide(status.pairing) : ''}
+          ${status.nextActionId === 'account' || status.agent.linked ? renderPairingGuide(status.pairing, status.agent) : ''}
 
           <p id="action-status" class="action-status" aria-live="polite"></p>
           <ul class="checks">${status.checks.map((check) => renderCheck(check, status.nextActionId)).join('')}</ul>
@@ -196,6 +232,47 @@ async function refresh(): Promise<void> {
           <p class="notice">Aucune location ne démarre sans votre action explicite.</p>
         </section>
       </main>`;
+
+    document.querySelector<HTMLInputElement>('#pairing-code')?.addEventListener('input', (event) => {
+      const input = event.currentTarget;
+      input.value = input.value.toUpperCase().replace(/[^A-F0-9]/g, '').slice(0, 10);
+      input.setCustomValidity('');
+    });
+
+    document.querySelector<HTMLFormElement>('#pairing-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const input = document.querySelector<HTMLInputElement>('#pairing-code');
+      const button = document.querySelector<HTMLButtonElement>('#pairing-submit');
+      const code = input?.value.trim().toUpperCase() ?? '';
+      if (!/^[A-F0-9]{10}$/.test(code)) {
+        input?.setCustomValidity('Code invalide');
+        input?.reportValidity();
+        setActionStatus('Le code doit contenir exactement 10 caractères hexadécimaux.', 'error');
+        return;
+      }
+
+      if (button) {
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+        button.textContent = 'Liaison…';
+      }
+      setActionStatus('Vérification du code et association de la machine…');
+
+      void invoke<AgentStatus>('link_local_agent', { code })
+        .then((agent) => {
+          if (!agent.linked || !agent.machineId) throw new Error('agent_link_not_persisted');
+          setActionStatus(`Machine associée : ${agent.machineId}`, 'success');
+          window.setTimeout(() => void refresh(), 500);
+        })
+        .catch((error: unknown) => setActionStatus(pairingErrorMessage(error), 'error'))
+        .finally(() => {
+          if (button) {
+            button.disabled = false;
+            button.removeAttribute('aria-busy');
+            button.textContent = 'Relier cette machine';
+          }
+        });
+    });
 
     document.querySelector<HTMLButtonElement>('#refresh')?.addEventListener('click', () => void refresh());
     document.querySelector<HTMLButtonElement>('#publish')?.addEventListener('click', () => {
