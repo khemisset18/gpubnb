@@ -1,0 +1,81 @@
+.pairing-guide > p {
+  margin: 12px 0 0;
+  color: #aeb8cb;
+}
+
+.pairing-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid #31415f;
+  border-radius: 17px;
+  background: #0d1421;
+}
+
+.pairing-form label {
+  font-weight: 800;
+}
+
+.pairing-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, .8fr) minmax(220px, 1.2fr);
+  gap: 12px;
+}
+
+.pairing-controls input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #415272;
+  border-radius: 14px;
+  outline: none;
+  background: #090f19;
+  color: #f4f7ff;
+  font: inherit;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.pairing-controls input:focus {
+  border-color: #789cff;
+  box-shadow: 0 0 0 3px rgba(120, 156, 255, .18);
+}
+
+.pairing-controls input:invalid:not(:placeholder-shown) {
+  border-color: #d27968;
+}
+
+.pairing-form small {
+  color: #98a5ba;
+}
+
+.machine-identity {
+  display: grid;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(63, 142, 99, .55);
+  border-radius: 15px;
+  background: rgba(19, 54, 39, .55);
+}
+
+.machine-identity span {
+  color: #9cccb1;
+  font-size: .8rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.machine-identity code {
+  overflow-wrap: anywhere;
+  color: #e8fff0;
+  font-size: .95rem;
+}
+
+@media (max-width: 640px) {
+  .pairing-controls {
+    grid-template-columns: 1fr;
+  }
+}
