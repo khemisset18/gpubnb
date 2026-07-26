@@ -1,0 +1,22 @@
+name: host-rustfmt-diagnostic
+
+on:
+  push:
+    branches:
+      - feature/v1-production-rental-flow
+
+permissions:
+  contents: read
+
+jobs:
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt
+      - name: Show exact Rust formatting diff
+        run: cargo fmt --manifest-path apps/host-desktop/src-tauri/Cargo.toml -- --check
