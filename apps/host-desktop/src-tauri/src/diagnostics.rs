@@ -1,3 +1,4 @@
+use serde::ser::{SerializeStruct, Serializer};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fs::OpenOptions;
@@ -20,7 +21,8 @@ pub enum IsolationBackend {
     Unsupported,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct GpuDevice {
     index: u32,
     uuid: String,
@@ -38,8 +40,7 @@ struct ProbeEvidence {
     isolation_available: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeDiagnostic {
     pub platform_supported: bool,
     pub architecture_supported: bool,
@@ -47,6 +48,23 @@ pub struct NativeDiagnostic {
     pub requires_administrator: bool,
     pub can_host: bool,
     pub reason: &'static str,
+}
+
+impl Serialize for NativeDiagnostic {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("NativeDiagnostic", 7)?;
+        state.serialize_field("platformSupported", &self.platform_supported)?;
+        state.serialize_field("architectureSupported", &self.architecture_supported)?;
+        state.serialize_field("isolationBackend", &self.isolation_backend)?;
+        state.serialize_field("requiresAdministrator", &self.requires_administrator)?;
+        state.serialize_field("canHost", &self.can_host)?;
+        state.serialize_field("reason", self.reason)?;
+        state.serialize_field("gpus", &gpu_inventory())?;
+        state.end()
+    }
 }
 
 fn command_output(program: &str, args: &[&str]) -> Option<String> {
@@ -100,21 +118,30 @@ fn parse_gpu_line(line: &str) -> Option<GpuDevice> {
         return None;
     }
 
+    let model: String = fields[1].chars().take(160).collect();
+    let driver_version: String = fields[2].chars().take(64).collect();
+    if model.is_empty() || driver_version.is_empty() {
+        return None;
+    }
+
     Some(GpuDevice {
         index,
         uuid: uuid.to_owned(),
-        model: fields[1].chars().take(160).collect(),
-        driver_version: fields[2].chars().take(64).collect(),
+        model,
+        driver_version,
         vram_mib,
     })
 }
 
 fn parse_gpu_inventory(value: &str) -> Vec<GpuDevice> {
-    let mut seen = HashSet::new();
+    let mut seen_uuids = HashSet::new();
+    let mut seen_indexes = HashSet::new();
+
     value
         .lines()
         .filter_map(parse_gpu_line)
-        .filter(|gpu| seen.insert(gpu.uuid.clone()))
+        .filter(|gpu| seen_uuids.insert(gpu.uuid.clone()))
+        .filter(|gpu| seen_indexes.insert(gpu.index))
         .take(MAX_GPU_COUNT)
         .collect()
 }
@@ -136,7 +163,8 @@ fn docker_evidence() -> (bool, bool, bool) {
     if !installed {
         return (false, false, false);
     }
-    let runtimes = command_output("docker", &["info", "--format", "{{json .Runtimes}}"]);
+
+    let runtimes = command_output("docker", &["info", "--format", "{{json .Runtimes}}}"]);
     let reachable = runtimes.as_ref().is_some_and(|value| !value.is_empty());
     let nvidia = runtimes
         .as_ref()
@@ -254,11 +282,19 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_gpu_uuid_is_ignored() {
+    fn duplicate_gpu_identity_is_ignored() {
         let inventory = parse_gpu_inventory(
-            "GPU-1, NVIDIA RTX, 560.1, 24576, 0\nGPU-1, NVIDIA RTX, 560.1, 24576, 1",
+            "GPU-1, NVIDIA RTX, 560.1, 24576, 0\nGPU-1, NVIDIA RTX, 560.1, 24576, 1\nGPU-2, NVIDIA RTX, 560.1, 24576, 0",
         );
         assert_eq!(inventory.len(), 1);
+    }
+
+    #[test]
+    fn malformed_or_unbounded_gpu_data_is_rejected() {
+        assert!(parse_gpu_inventory("broken").is_empty());
+        assert!(parse_gpu_inventory("GPU-1, RTX, driver, 0, 0").is_empty());
+        assert!(parse_gpu_inventory("GPU-1, RTX, driver, 2000001, 0").is_empty());
+        assert!(parse_gpu_inventory("not-a-gpu, RTX, driver, 24576, 0").is_empty());
     }
 
     #[test]
@@ -293,6 +329,6 @@ mod tests {
 
         let architecture = evaluate("linux", "mips", &evidence);
         assert!(!architecture.can_host);
-        assert_eq!(architecture.reason, "architecture_not_supported");
+        assert_eq!(diagnostic.reason, "architecture_not_supported");
     }
 }
