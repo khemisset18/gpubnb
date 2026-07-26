@@ -288,9 +288,7 @@ mod tests {
         assert!(parse_gpu_inventory("broken").is_empty());
         assert!(parse_gpu_inventory("GPU-1, RTX, driver, 0, 0").is_empty());
         assert!(parse_gpu_inventory("GPU-1, RTX, driver, 2000001, 0").is_empty());
-        assert!(
-            parse_gpu_inventory("not-a-gpu, RTX, driver, 24576, 0").is_empty()
-        );
+        assert!(parse_gpu_inventory("not-a-gpu, RTX, driver, 24576, 0").is_empty());
     }
 
     #[test]
