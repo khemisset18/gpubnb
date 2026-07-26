@@ -152,7 +152,7 @@ fn docker_evidence() -> (bool, bool, bool) {
         return (false, false, false);
     }
 
-    let runtimes = command_output("docker", &["info", "--format", "{{json .Runtimes}}"];);
+    let runtimes = command_output("docker", &["info", "--format", "{{json .Runtimes}}"]);
     let reachable = runtimes.as_ref().is_some_and(|value| !value.is_empty());
     let nvidia = runtimes
         .as_ref()
