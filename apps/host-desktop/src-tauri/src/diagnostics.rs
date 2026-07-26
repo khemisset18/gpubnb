@@ -329,6 +329,6 @@ mod tests {
 
         let architecture = evaluate("linux", "mips", &evidence);
         assert!(!architecture.can_host);
-        assert_eq!(diagnostic.reason, "architecture_not_supported");
+        assert_eq!(architecture.reason, "architecture_not_supported");
     }
 }
