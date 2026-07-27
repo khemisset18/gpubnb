@@ -28,6 +28,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  repair-test-fixture:
+    name: repair Rust test fixture
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: true
+      - name: Add collected GPU inventory to diagnostic fixture
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('apps/host-desktop/src-tauri/src/lib.rs')
+          source = path.read_text(encoding='utf-8')
+          old = '            reason: "native_checks_pending",\n        }'
+          new = '            reason: "native_checks_pending",\n            gpus: Vec::new(),\n        }'
+          if new in source:
+              raise SystemExit(0)
+          if source.count(old) != 1:
+              raise SystemExit('expected diagnostic fixture was not found exactly once')
+          path.write_text(source.replace(old, new), encoding='utf-8')
+      - name: Commit fixture correction
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'Fixture is already corrected.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/host-desktop/src-tauri/src/lib.rs
+          git commit -m 'test(host): include GPUs in diagnostic fixture'
+          git push origin HEAD:${{ github.head_ref }}
+
   frontend:
     name: frontend typecheck and build
     runs-on: ubuntu-latest
