@@ -1,0 +1,67 @@
+name: Harden device authorization
+
+on:
+  push:
+    paths:
+      - .github/workflows/harden-device-authorization.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v1-production-rental-flow
+          fetch-depth: 0
+      - name: Apply safety fixes and regression test
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          server = Path('apps/api/src/server.ts')
+          text = server.read_text()
+          text = text.replace("registerDeviceAuthorizationRoutes(app, db, redis);\nredis.on", "redis.on", 1)
+          hook = "app.addHook('onRequest',async(req,reply)=>{reply.header('cache-control','no-store');reply.header('x-request-id',req.id);if(!assertTrustedOrigin(req,reply,config.PUBLIC_APP_DOMAIN))return reply;});\n"
+          assert hook in text
+          text = text.replace(hook, hook + "registerDeviceAuthorizationRoutes(app, db, redis);\n", 1)
+          server.write_text(text)
+
+          core = Path('apps/api/src/device-authorization.ts')
+          text = core.read_text()
+          text = text.replace("      | 'authorization_already_consumed',", "      | 'authorization_already_consumed'\n      | 'device_identity_mismatch',", 1)
+          core.write_text(text)
+
+          store = Path('apps/api/src/device-authorization-store.ts')
+          text = store.read_text()
+          text = text.replace(
+            "  async consume(deviceCode: string, nowUnix = Math.floor(Date.now() / 1000)) {",
+            "  async consume(\n    deviceCode: string,\n    expectedPublicKey: string,\n    expectedMachineFingerprint: string,\n    nowUnix = Math.floor(Date.now() / 1000),\n  ) {",
+            1,
+          )
+          needle = "      const current = parseRecord(await this.redis.get(deviceKey));\n      const consumed = consumeDeviceAuthorization(current, nowUnix);"
+          replacement = "      const current = parseRecord(await this.redis.get(deviceKey));\n      if (current && (current.publicKey !== expectedPublicKey || current.machineFingerprint !== expectedMachineFingerprint.toLowerCase())) {\n        await this.redis.unwatch();\n        throw new DeviceAuthorizationError('device_identity_mismatch');\n      }\n      const consumed = consumeDeviceAuthorization(current, nowUnix);"
+          assert needle in text
+          store.write_text(text.replace(needle, replacement, 1))
+
+          routes = Path('apps/api/src/device-authorization-routes.ts')
+          text = routes.read_text()
+          text = text.replace("    case 'authorization_already_consumed':\n      return reply.code(409)", "    case 'authorization_already_consumed':\n    case 'device_identity_mismatch':\n      return reply.code(409)", 1)
+          old = "      const authorization = await store.consume(body.deviceCode);\n      if (authorization.publicKey !== body.publicKey || authorization.machineFingerprint !== body.machineFingerprint.toLowerCase()) {\n        return reply.code(409).send({ error: 'device_identity_mismatch' });\n      }"
+          new = "      const authorization = await store.consume(body.deviceCode, body.publicKey, body.machineFingerprint);"
+          assert old in text
+          routes.write_text(text.replace(old, new, 1))
+
+          test = Path('apps/api/test/server-device-authorization-registration.test.ts')
+          test.write_text("""import assert from 'node:assert/strict';\nimport { readFile } from 'node:fs/promises';\nimport test from 'node:test';\n\ntest('registers device authorization routes after security plugins and hooks', async () => {\n  const source = await readFile(new URL('../src/server.ts', import.meta.url), 'utf8');\n  const registration = source.indexOf('registerDeviceAuthorizationRoutes(app, db, redis);');\n  assert.ok(registration > source.indexOf('await app.register(cookie)'));\n  assert.ok(registration > source.indexOf('await app.register(rateLimit'));\n  assert.ok(registration > source.indexOf("app.addHook('onRequest'"));\n  assert.ok(registration < source.indexOf("app.get('/health'"));\n  assert.equal(source.match(/registerDeviceAuthorizationRoutes\\(app, db, redis\\);/g)?.length, 1);\n});\n""")
+          PY
+      - name: Commit fixes
+        run: |
+          rm .github/workflows/harden-device-authorization.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/api/src apps/api/test .github/workflows/harden-device-authorization.yml
+          git commit -m "fix: harden device authorization exchange"
+          git push origin HEAD:feature/v1-production-rental-flow
