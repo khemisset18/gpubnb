@@ -1,0 +1,56 @@
+name: Register device authorization routes
+
+on:
+  push:
+    paths:
+      - '.github/workflows/register-device-authorization-routes.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v1-production-rental-flow
+          fetch-depth: 0
+
+      - name: Register device authorization routes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('apps/api/src/server.ts')
+          text = path.read_text(encoding='utf-8')
+
+          import_line = "import { registerDeviceAuthorizationRoutes } from './device-authorization-routes.js';"
+          anchor_import = "import { listOwnerMachineAccelerators, listPublicMachineAccelerators } from './accelerator-public-view.js';"
+          anchor_init = "const app=Fastify({logger:{redact:['req.headers.authorization','req.headers.cookie','req.headers.x-agent-signature','res.headers.set-cookie']},trustProxy:config.TRUST_PROXY==='true',bodyLimit:config.MAX_BODY_BYTES,requestIdHeader:'x-request-id'}); const db=new PrismaClient(); const redis=new Redis(config.REDIS_URL,{maxRetriesPerRequest:2,enableReadyCheck:true});"
+          registration = "registerDeviceAuthorizationRoutes(app, db, redis);"
+
+          if import_line not in text:
+              if text.count(anchor_import) != 1:
+                  raise SystemExit('Expected accelerator import anchor exactly once')
+              text = text.replace(anchor_import, anchor_import + '\n' + import_line, 1)
+
+          if registration not in text:
+              if text.count(anchor_init) != 1:
+                  raise SystemExit('Expected app initialization anchor exactly once')
+              text = text.replace(anchor_init, anchor_init + '\n' + registration, 1)
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Commit patch
+        run: |
+          if git diff --quiet -- apps/api/src/server.ts; then
+            echo 'Routes already registered; nothing to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/api/src/server.ts
+          git commit -m 'fix(api): register device authorization routes'
+          git push origin HEAD:feature/v1-production-rental-flow
