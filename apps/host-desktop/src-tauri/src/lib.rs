@@ -499,6 +499,7 @@ mod tests {
             requires_administrator: true,
             can_host: true,
             reason: "native_checks_pending",
+            gpus: Vec::new(),
         }
     }
 
