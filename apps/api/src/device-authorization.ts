@@ -48,7 +48,8 @@ export class DeviceAuthorizationError extends Error {
       | 'authorization_expired'
       | 'authorization_pending'
       | 'authorization_already_authorized'
-      | 'authorization_already_consumed',
+      | 'authorization_already_consumed'
+      | 'device_identity_mismatch',
   ) {
     super(code);
     this.name = 'DeviceAuthorizationError';

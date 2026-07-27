@@ -84,12 +84,21 @@ export class RedisDeviceAuthorizationStore {
     throw new Error('device_authorization_concurrent_update');
   }
 
-  async consume(deviceCode: string, nowUnix = Math.floor(Date.now() / 1000)) {
+  async consume(
+    deviceCode: string,
+    expectedPublicKey: string,
+    expectedMachineFingerprint: string,
+    nowUnix = Math.floor(Date.now() / 1000),
+  ) {
     const deviceKey = `${DEVICE_PREFIX}${digestDeviceAuthorizationSecret(deviceCode)}`;
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await this.redis.watch(deviceKey);
       const current = parseRecord(await this.redis.get(deviceKey));
+      if (current && (current.publicKey !== expectedPublicKey || current.machineFingerprint !== expectedMachineFingerprint.toLowerCase())) {
+        await this.redis.unwatch();
+        throw new DeviceAuthorizationError('device_identity_mismatch');
+      }
       const consumed = consumeDeviceAuthorization(current, nowUnix);
       const remainingTtl = Math.max(1, consumed.record.expiresAtUnix - nowUnix);
       const result = await this.redis

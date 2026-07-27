@@ -46,6 +46,7 @@ const sendAuthorizationError = (reply: FastifyReply, error: DeviceAuthorizationE
       return reply.code(404).send({ error: error.code });
     case 'authorization_already_authorized':
     case 'authorization_already_consumed':
+    case 'device_identity_mismatch':
       return reply.code(409).send({ error: error.code });
     default:
       return reply.code(400).send({ error: error.code });
@@ -116,10 +117,7 @@ export const registerDeviceAuthorizationRoutes = (
     }).parse(request.body);
 
     try {
-      const authorization = await store.consume(body.deviceCode);
-      if (authorization.publicKey !== body.publicKey || authorization.machineFingerprint !== body.machineFingerprint.toLowerCase()) {
-        return reply.code(409).send({ error: 'device_identity_mismatch' });
-      }
+      const authorization = await store.consume(body.deviceCode, body.publicKey, body.machineFingerprint);
 
       const existing = await db.machine.findUnique({
         where: { agentPublicKey: authorization.publicKey },
