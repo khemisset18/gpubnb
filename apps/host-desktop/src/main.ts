@@ -102,12 +102,22 @@ const officialUrl = (rawUrl: string): URL | null => {
 };
 
 const openOfficialUrl = (url: URL, successMessage: string): void => {
-  const opened = window.open(url.toString(), '_blank', 'noopener,noreferrer');
-  if (opened) {
-    setMessage(successMessage, 'success');
-    return;
+  const href = url.toString();
+  const link = document.createElement('a');
+  link.href = href;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.hidden = true;
+  document.body.append(link);
+
+  try {
+    link.click();
+    setMessage(`${successMessage} Si rien ne s’ouvre, utilisez le lien suivant.`, 'success', href);
+  } catch {
+    setMessage("Le navigateur n’a pas pu s’ouvrir automatiquement.", 'error', href);
+  } finally {
+    link.remove();
   }
-  setMessage("Le navigateur n’a pas pu s’ouvrir automatiquement.", 'error', url.toString());
 };
 
 const listingUrl = (baseUrl: string, machineId: string, gpuUuid: string): URL | null => {
