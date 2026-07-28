@@ -4,12 +4,17 @@
   "type": "module",
   "version": "0.2.0",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "prisma generate && tsc -p tsconfig.json",
-    "start": "node dist/server.js",
-    "test": "tsx --test test/*.test.ts",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate deploy"
+    "dev": "npm --prefix apps/api run dev",
+    "build": "npm --prefix apps/api run build",
+    "start": "npm --prefix apps/api run start",
+    "test": "npm --prefix apps/api run test",
+    "prisma:generate": "npm --prefix apps/api run prisma:generate",
+    "prisma:migrate": "npm --prefix apps/api run prisma:migrate",
+    "api:verify": "npm --prefix apps/api run verify",
+    "host:check": "npm --prefix apps/host-desktop run check",
+    "host:build": "npm --prefix apps/host-desktop run build",
+    "host:tauri:dev": "npm --prefix apps/host-desktop run tauri:dev",
+    "host:tauri:build": "npm --prefix apps/host-desktop run tauri:build"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
@@ -37,5 +42,6 @@
   },
   "engines": {
     "node": ">=22.0.0"
-  }
+  },
+  "description": "Repository-level proxy scripts for the GPUbnb API package"
 }

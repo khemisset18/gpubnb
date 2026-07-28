@@ -106,7 +106,7 @@ jobs:
           GPUBNB_RELEASE_CHANNEL: test
           GPUBNB_WEB_BASE_URL: https://gpubnb.netlify.app
           RUST_BACKTRACE: '1'
-        run: npm run tauri -- build --bundles ${{ matrix.bundle }}
+        run: npm run tauri:build -- --bundles ${{ matrix.bundle }}
 
       - name: Stage predictable asset name
         shell: bash
