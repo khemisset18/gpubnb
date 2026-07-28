@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "desktop-runtime"), allow(dead_code, unused_imports))]
+
 mod agent_bridge;
 mod diagnostics;
 mod orchestration_gateway;
@@ -330,6 +332,7 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
     }
 }
 
+#[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn host_status(
     state: tauri::State<'_, Mutex<AppState>>,
@@ -342,16 +345,19 @@ fn host_status(
     Ok(build_status(&state, read_orchestration(&mut gateway)?))
 }
 
+#[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn local_agent_status() -> AgentStatus {
     agent_bridge::status()
 }
 
+#[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn link_local_agent(code: String) -> Result<AgentStatus, String> {
     agent_bridge::link(&code)
 }
 
+#[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn orchestration_status(
     gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
@@ -362,11 +368,13 @@ fn orchestration_status(
     read_orchestration(&mut gateway)
 }
 
+#[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn account_pairing_configuration() -> PairingConfiguration {
     pairing_configuration()
 }
 
+#[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn request_publish(
     state: tauri::State<'_, Mutex<AppState>>,
@@ -395,6 +403,7 @@ fn request_publish(
     Ok(result.snapshot)
 }
 
+#[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn set_idle_mining(
     enabled: bool,
@@ -424,6 +433,7 @@ fn set_idle_mining(
     .map(|result| result.snapshot)
 }
 
+#[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn emergency_stop(
     state: tauri::State<'_, Mutex<AppState>>,
@@ -449,23 +459,36 @@ fn emergency_stop(
     }
 }
 
+#[cfg(feature = "desktop-runtime")]
 #[tauri::command]
-fn run_setup_action(action_id: String) -> Result<String, &'static str> {
+fn run_setup_action(action_id: String) -> Result<String, String> {
     if action_id.len() > 32 || !action_id.bytes().all(|byte| byte.is_ascii_lowercase()) {
-        return Err("invalid_setup_action");
+        return Err("invalid_setup_action".into());
     }
-    match SetupAction::try_from(action_id.as_str())? {
+    match SetupAction::try_from(action_id.as_str()).map_err(str::to_owned)? {
         SetupAction::Account => pairing_configuration()
             .configured
             .then(|| "open_secure_pairing".into())
-            .ok_or("pairing_service_not_configured"),
-        SetupAction::Agent => Ok("agent_setup_required".into()),
+            .ok_or_else(|| "pairing_service_not_configured".to_owned()),
+        SetupAction::Agent => {
+            let agent = agent_bridge::status();
+            if agent.linked {
+                agent_bridge::start()
+                    .map(|_| "agent_started".into())
+                    .map_err(|error| error)
+            } else {
+                agent_bridge::setup()
+                    .map(|_| "agent_setup_completed".into())
+                    .map_err(|error| error)
+            }
+        }
         SetupAction::Isolation | SetupAction::Storage | SetupAction::Network => {
             Ok("automatic_setup_pending".into())
         }
     }
 }
 
+#[cfg(feature = "desktop-runtime")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
