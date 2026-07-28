@@ -95,7 +95,17 @@ jobs:
             exit 1
           fi
       - name: Verify host package formatting
-        run: cargo fmt -p gpubnb-host-desktop -- --check
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo fmt -p gpubnb-host-desktop -- --check 2>&1 | tee cargo-fmt-${{ runner.os }}.log
+      - name: Upload formatting diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-fmt-${{ runner.os }}
+          path: cargo-fmt-${{ runner.os }}.log
+          if-no-files-found: error
       - name: Tests
         shell: bash
         run: |

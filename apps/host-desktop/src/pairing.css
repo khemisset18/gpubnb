@@ -1,0 +1,41 @@
+/*
+ * Pairing UI contract:
+ * - the browser handles account authentication;
+ * - the desktop only accepts the one-time hexadecimal link code;
+ * - the machine identity shown after success comes from the local agent.
+ */
+.pairing-guide > p { margin: 12px 0 0; color: #aeb8cb; }
+.pairing-form { display: grid; gap: 10px; margin-top: 20px; padding: 18px; border: 1px solid #31415f; border-radius: 17px; background: #0d1421; }
+.pairing-form label { font-weight: 800; }
+.pairing-controls { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(220px, 1.2fr); gap: 12px; }
+.pairing-controls input { width: 100%; min-width: 0; box-sizing: border-box; padding: 14px 16px; border: 1px solid #415272; border-radius: 14px; outline: none; background: #090f19; color: #f4f7ff; font: inherit; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.pairing-controls input:focus { border-color: #789cff; box-shadow: 0 0 0 3px rgba(120, 156, 255, .18); }
+.pairing-controls input:invalid:not(:placeholder-shown) { border-color: #d27968; }
+.pairing-form small { color: #98a5ba; }
+.machine-identity { display: grid; gap: 6px; margin-top: 18px; padding: 16px; border: 1px solid rgba(63, 142, 99, .55); border-radius: 15px; background: rgba(19, 54, 39, .55); }
+.machine-identity span { color: #9cccb1; font-size: .8rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.machine-identity code { overflow-wrap: anywhere; color: #e8fff0; font-size: .95rem; }
+
+.safe-external-link { display: inline-flex; margin-left: 6px; color: #ffd4cb; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
+.safe-external-link:focus-visible { border-radius: 4px; outline: 3px solid rgba(120, 156, 255, .45); outline-offset: 3px; }
+
+.gpu-inventory { margin-top: 22px; padding: 22px; border: 1px solid #283955; border-radius: 20px; background: #101827; }
+.inventory-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+.inventory-heading h2 { margin: 4px 0 0; }
+.gpu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.gpu-card { display: grid; gap: 14px; padding: 18px; border: 1px solid #334664; border-radius: 17px; background: #0b1320; }
+.gpu-card h3 { margin: 5px 0 0; font-size: 1.08rem; }
+.gpu-index { color: #8fa9dc; font-size: .75rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.gpu-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; }
+.gpu-card dl div { display: grid; gap: 3px; }
+.gpu-card dt { color: #8f9db4; font-size: .75rem; text-transform: uppercase; }
+.gpu-card dd { margin: 0; color: #f4f7ff; font-weight: 800; }
+.gpu-card code { overflow: hidden; color: #8f9db4; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.gpu-card .create-listing { width: 100%; }
+.gpu-card .create-listing:disabled { cursor: not-allowed; opacity: .45; }
+
+@media (max-width: 640px) {
+  .pairing-controls { grid-template-columns: 1fr; }
+  .inventory-heading { display: grid; }
+  .gpu-grid { grid-template-columns: 1fr; }
+}
