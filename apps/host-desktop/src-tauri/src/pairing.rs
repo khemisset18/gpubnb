@@ -1,5 +1,6 @@
 use serde::Serialize;
 
+const DEFAULT_PAIRING_ORIGIN: &str = "https://gpubnb.netlify.app";
 const DEFAULT_PAIRING_PATH: &str = "/host-install.html";
 const ALLOWED_PAIRING_ORIGINS: [&str; 3] = [
     "https://gpubnb.com",
@@ -19,7 +20,9 @@ pub struct PairingConfiguration {
 pub fn pairing_configuration() -> PairingConfiguration {
     let base_url = option_env!("GPUBNB_WEB_BASE_URL")
         .map(str::trim)
-        .filter(|value| is_allowed_pairing_origin(value));
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_PAIRING_ORIGIN);
+    let base_url = is_allowed_pairing_origin(base_url).then_some(base_url);
 
     PairingConfiguration {
         configured: base_url.is_some(),
@@ -54,6 +57,16 @@ mod tests {
         assert!(!is_allowed_pairing_origin("https://gpubnb.com/path"));
         assert!(!is_allowed_pairing_origin("https://user@gpubnb.com"));
         assert!(!is_allowed_pairing_origin("javascript:alert(1)"));
+    }
+
+    #[test]
+    fn pairing_is_configured_with_safe_default_when_build_env_is_absent() {
+        let pairing = pairing_configuration();
+        assert!(pairing.configured);
+        assert_eq!(
+            pairing.browser_url.as_deref(),
+            Some("https://gpubnb.netlify.app/host-install.html")
+        );
     }
 
     #[test]

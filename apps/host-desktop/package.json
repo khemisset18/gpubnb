@@ -11,7 +11,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "tauri": "tauri",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "tauri:dev": "tauri dev --features desktop-runtime",
+    "tauri:build": "tauri build --features desktop-runtime"
   },
   "dependencies": {
     "@tauri-apps/api": "2.0.0"

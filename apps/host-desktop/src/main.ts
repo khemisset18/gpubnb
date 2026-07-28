@@ -26,7 +26,7 @@ type HostStatus = {
 
 type MessageTone = 'info' | 'success' | 'error';
 
-const OFFICIAL_ORIGIN = 'https://gpubnb.netlify.app';
+const OFFICIAL_ORIGINS = new Set(['https://gpubnb.com', 'https://app.gpubnb.com', 'https://gpubnb.netlify.app']);
 const MACHINE_ID_PATTERN = /^[A-Za-z0-9_-]{3,128}$/;
 const GPU_UUID_PATTERN = /^GPU-[A-Za-z0-9-]{3,124}$/;
 
@@ -66,7 +66,10 @@ const pairingErrorMessage = (error: unknown): string => {
   const value = String(error);
   if (value.includes('invalid_link_code')) return 'Le code doit contenir exactement 10 caractères hexadécimaux.';
   if (value.includes('agent_not_installed')) return 'Installez d’abord le service GPUbnb sur cet ordinateur.';
+  if (value.includes('agent_setup_required')) return 'Préparation locale requise : cliquez sur « Installer automatiquement », puis réessayez le code.';
+  if (value.includes('agent_not_linked')) return 'Cette machine doit d’abord être reliée avec un code GPUbnb valide.';
   if (value.includes('agent_link_not_persisted')) return 'La liaison n’a pas été sauvegardée par le service local.';
+  if (value.includes('agent_key_already_registered')) return 'Cette clé agent est déjà reliée à un autre compte. Réinitialisez la clé puis recréez un code.';
   if (value.includes('agent_link_failed')) return 'Le code a été refusé, a expiré ou a déjà été utilisé.';
   return 'La liaison n’a pas abouti. La machine reste hors ligne.';
 };
@@ -91,7 +94,7 @@ const setMessage = (message: string, tone: MessageTone = 'info', fallbackUrl?: s
 const officialUrl = (rawUrl: string): URL | null => {
   try {
     const url = new URL(rawUrl);
-    if (url.origin !== OFFICIAL_ORIGIN || url.protocol !== 'https:') return null;
+    if (!OFFICIAL_ORIGINS.has(url.origin) || url.protocol !== 'https:') return null;
     url.username = '';
     url.password = '';
     url.hash = '';
@@ -240,8 +243,17 @@ const bindActions = (status: HostStatus): void => {
       return;
     }
     void invoke<string>('run_setup_action', { actionId })
-      .then(() => setMessage('Action préparée.', 'success'))
-      .catch(() => setMessage('Cette action a été bloquée pour protéger votre ordinateur.', 'error'));
+      .then((result) => {
+        const messages: Record<string, string> = {
+          agent_setup_completed: 'Agent préparé. Créez ou collez maintenant le code de liaison.',
+          agent_started: 'Service GPUbnb démarré. Vérification en cours…',
+          automatic_setup_pending: 'Protection préparée pour cette version de test.',
+          open_secure_pairing: 'Ouvrez GPUbnb dans le navigateur pour créer le code.'
+        };
+        setMessage(messages[result] ?? 'Action préparée.', 'success');
+        window.setTimeout(() => void refresh(), 700);
+      })
+      .catch((error: unknown) => setMessage(pairingErrorMessage(error), 'error'));
   }));
 };
 
