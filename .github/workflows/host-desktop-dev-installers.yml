@@ -126,7 +126,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          npm run tauri -- build --bundles ${{ matrix.bundle }} 2>&1 | tee ../../installer-build-${RUNNER_OS}.log
+          npm run tauri:build -- --bundles ${{ matrix.bundle }} 2>&1 | tee ../../installer-build-${RUNNER_OS}.log
         env:
           GPUBNB_RELEASE_CHANNEL: development
           RUST_BACKTRACE: "1"
