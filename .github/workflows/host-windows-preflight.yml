@@ -118,12 +118,34 @@ jobs:
             throw "Expected exactly one NSIS installer, found $($installer.Count)."
           }
 
-          $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
-          if (-not (Test-Path $sevenZip)) { throw '7-Zip is unavailable on the Windows runner.' }
-          $contents = & $sevenZip l $installer.FullName
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to inspect the NSIS installer.' }
-          if ($contents -notmatch 'gpubnb-agent\.exe') {
-            throw 'The NSIS installer does not contain the gpubnb-agent sidecar.'
+          $installDirectory = Join-Path $env:RUNNER_TEMP 'gpubnb-host-smoke-test'
+          if (Test-Path $installDirectory) {
+            throw "Smoke-test install directory already exists: $installDirectory"
+          }
+          $installation = Start-Process -FilePath $installer.FullName `
+            -ArgumentList '/S', "/D=$installDirectory" -Wait -PassThru
+          if ($installation.ExitCode -ne 0) {
+            throw "NSIS silent installation failed with exit code $($installation.ExitCode)."
+          }
+
+          $installedSidecar = Join-Path $installDirectory 'gpubnb-agent.exe'
+          if (-not (Test-Path $installedSidecar -PathType Leaf)) {
+            throw 'The installed application does not contain the gpubnb-agent sidecar.'
+          }
+          & $installedSidecar version
+          if ($LASTEXITCODE -ne 0) { throw 'The installed agent sidecar is not executable.' }
+
+          $uninstaller = Join-Path $installDirectory 'uninstall.exe'
+          if (-not (Test-Path $uninstaller -PathType Leaf)) {
+            throw 'The NSIS package did not install an uninstaller.'
+          }
+          $uninstallation = Start-Process -FilePath $uninstaller `
+            -ArgumentList '/S' -Wait -PassThru
+          if ($uninstallation.ExitCode -ne 0) {
+            throw "NSIS silent uninstallation failed with exit code $($uninstallation.ExitCode)."
+          }
+          if (Test-Path $installedSidecar) {
+            throw 'The uninstaller left the agent sidecar behind.'
           }
 
           $artifactDirectory = 'apps/host-desktop/dist-windows'
