@@ -113,10 +113,12 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "supports_nvidia_only"):
             diagnostic_command(OFFICIAL_IMAGE)
 
+    @patch("gpubnb_agent.runner.cleanup_workspace")
     @patch("gpubnb_agent.runner.gpu_inventory")
     @patch("gpubnb_agent.runner.subprocess.run")
-    def test_parses_official_json_report(self, run, mock_gpu):
+    def test_parses_official_json_report(self, run, mock_gpu, cleanup):
         mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        cleanup.return_value = {"cleaned": True, "container": "test"}
         run.return_value = type("Result", (), {
             "returncode": 0,
             "stderr": "",
@@ -127,10 +129,12 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["gpuCount"], 1)
         self.assertEqual(result["metrics"]["gpus"][0]["uuid"], "GPU-1")
 
+    @patch("gpubnb_agent.runner.cleanup_workspace")
     @patch("gpubnb_agent.runner.gpu_inventory")
     @patch("gpubnb_agent.runner.subprocess.run")
-    def test_rejects_gpu_count_mismatch(self, run, mock_gpu):
+    def test_rejects_gpu_count_mismatch(self, run, mock_gpu, cleanup):
         mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        cleanup.return_value = {"cleaned": True, "container": "test"}
         run.return_value = type("Result", (), {
             "returncode": 0,
             "stderr": "",
@@ -139,10 +143,12 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "gpu_count_mismatch"):
             run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
 
+    @patch("gpubnb_agent.runner.cleanup_workspace")
     @patch("gpubnb_agent.runner.gpu_inventory")
     @patch("gpubnb_agent.runner.subprocess.run")
-    def test_rejects_impossible_official_telemetry(self, run, mock_gpu):
+    def test_rejects_impossible_official_telemetry(self, run, mock_gpu, cleanup):
         mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        cleanup.return_value = {"cleaned": True, "container": "test"}
         run.return_value = type("Result", (), {
             "returncode": 0,
             "stderr": "",
@@ -164,6 +170,33 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(run.call_args_list[1].args[0][:2], ["docker", "pull"])
         self.assertTrue(result["gpuDetected"])
         self.assertFalse(result["metrics"]["cacheHit"])
+
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_cleanup_requires_container_absence(self, run):
+        run.side_effect = [
+            type("Result", (), {"returncode": 1})(),
+            type("Result", (), {"returncode": 0})(),
+        ]
+
+        result = cleanup_workspace("gpubnb-diagnostic-test")
+
+        self.assertFalse(result["cleaned"])
+        self.assertEqual(run.call_args_list[1].args[0][:3], ["docker", "container", "inspect"])
+
+    @patch("gpubnb_agent.runner.cleanup_workspace")
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_diagnostic_fails_when_cleanup_cannot_be_verified(self, run, mock_gpu, cleanup):
+        mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        cleanup.return_value = {"cleaned": False, "container": "test"}
+        run.return_value = type("Result", (), {
+            "returncode": 0,
+            "stderr": "",
+            "stdout": '{"schemaVersion":1,"vendor":"NVIDIA","gpuCount":1,"gpus":[{"index":0,"name":"RTX 4090","uuid":"GPU-1","memoryTotalMiB":24564,"memoryUsedMiB":100,"temperatureC":45}]}'
+        })()
+
+        with self.assertRaisesRegex(RuntimeError, "cleanup_unverified"):
+            run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
 
     def test_developer_healthcheck_is_inside_hardened_container(self):
         image = "registry.example/gpubnb/developer@sha256:" + ("b" * 64)

@@ -136,16 +136,23 @@ def run_gpu_diagnostic(image: str, timeout_seconds: int) -> dict[str, Any]:
         if result.returncode != 0:
             raise RuntimeError(f"diagnostic_container_failed:{result.returncode}:{stderr}")
         safe_gpus = _parse_report(stdout)
-        return {
+        report = {
             "gpuDetected": bool(safe_gpus),
             "summary": "Diagnostic GPU officiel terminé." if safe_gpus else "Aucun GPU détecté dans le conteneur.",
             "metrics": {
                 "gpuCount": len(safe_gpus), "vendor": "NVIDIA", "gpus": safe_gpus,
-                "imageCacheHit": cache_hit, "containerCleaned": True,
+                "imageCacheHit": cache_hit,
             },
         }
-    finally:
+    except Exception:
         cleanup_workspace(container_name)
+        raise
+
+    cleanup = cleanup_workspace(container_name)
+    if not cleanup["cleaned"]:
+        raise RuntimeError("diagnostic_cleanup_unverified")
+    report["metrics"]["containerCleaned"] = True
+    return report
 
 
 def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
@@ -171,10 +178,15 @@ def prepare_workspace(image: str, timeout_seconds: int, workspace_slug: str = "c
     )
     if health.returncode != 0:
         raise RuntimeError(f"workspace_health_check_failed:{health.returncode}:{health.stderr[:1000].strip()}")
+    detected_gpus = gpu_inventory()
     return {
-        "gpuDetected": True,
+        "gpuDetected": bool(detected_gpus),
         "summary": f"Workspace {workspace_slug} préparé et contrôle isolé réussi.",
-        "metrics": {"cacheHit": cache_hit, "workspaceSlug": workspace_slug},
+        "metrics": {
+            "cacheHit": cache_hit,
+            "workspaceSlug": workspace_slug,
+            "gpuCount": len(detected_gpus),
+        },
     }
 
 
@@ -182,8 +194,21 @@ def cleanup_workspace(container_name: str) -> dict[str, Any]:
     safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "", container_name)[:128]
     if not safe_name:
         return {"cleaned": False, "container": ""}
-    subprocess.run(
-        ["docker", "rm", "-f", safe_name],
-        capture_output=True, text=True, timeout=30, check=False, shell=False,
-    )
-    return {"cleaned": True, "container": safe_name}
+    try:
+        removal = subprocess.run(
+            ["docker", "rm", "-f", safe_name],
+            capture_output=True, text=True, timeout=30, check=False, shell=False,
+        )
+        inspection = subprocess.run(
+            ["docker", "container", "inspect", safe_name],
+            capture_output=True, text=True, timeout=30, check=False, shell=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {"cleaned": False, "container": safe_name}
+
+    cleaned = inspection.returncode != 0
+    return {
+        "cleaned": cleaned,
+        "container": safe_name,
+        "removalExitCode": removal.returncode,
+    }
