@@ -182,14 +182,35 @@ class RunnerTests(unittest.TestCase):
     @patch("gpubnb_agent.runner.subprocess.run")
     def test_cleanup_requires_container_absence(self, run):
         run.side_effect = [
-            type("Result", (), {"returncode": 1})(),
             type("Result", (), {"returncode": 0})(),
+            type("Result", (), {"returncode": 0, "stdout": "container-id\n"})(),
         ]
 
         result = cleanup_workspace("gpubnb-diagnostic-test")
 
         self.assertFalse(result["cleaned"])
-        self.assertEqual(run.call_args_list[1].args[0][:3], ["docker", "container", "inspect"])
+        self.assertEqual(run.call_args_list[1].args[0][:4], ["docker", "container", "ls", "-a"])
+
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_cleanup_rejects_docker_daemon_failure(self, run):
+        run.side_effect = [
+            type("Result", (), {"returncode": 1})(),
+            type("Result", (), {"returncode": 1, "stdout": ""})(),
+        ]
+
+        result = cleanup_workspace("gpubnb-diagnostic-test")
+
+        self.assertFalse(result["cleaned"])
+        self.assertEqual(result["verificationExitCode"], 1)
+
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_cleanup_accepts_verified_absence(self, run):
+        run.side_effect = [
+            type("Result", (), {"returncode": 0})(),
+            type("Result", (), {"returncode": 0, "stdout": ""})(),
+        ]
+
+        self.assertTrue(cleanup_workspace("gpubnb-diagnostic-test")["cleaned"])
 
     @patch("gpubnb_agent.runner.cleanup_workspace")
     @patch("gpubnb_agent.runner.gpu_inventory")

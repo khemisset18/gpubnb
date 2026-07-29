@@ -260,16 +260,21 @@ def cleanup_workspace(container_name: str) -> dict[str, Any]:
             ["docker", "rm", "-f", safe_name],
             capture_output=True, text=True, timeout=30, check=False, shell=False,
         )
-        inspection = subprocess.run(
-            ["docker", "container", "inspect", safe_name],
+        remaining = subprocess.run(
+            [
+                "docker", "container", "ls", "-a",
+                "--filter", f"name=^/{safe_name}$",
+                "--format", "{{.ID}}",
+            ],
             capture_output=True, text=True, timeout=30, check=False, shell=False,
         )
     except (OSError, subprocess.SubprocessError):
         return {"cleaned": False, "container": safe_name}
 
-    cleaned = inspection.returncode != 0
+    cleaned = remaining.returncode == 0 and not remaining.stdout.strip()
     return {
         "cleaned": cleaned,
         "container": safe_name,
         "removalExitCode": removal.returncode,
+        "verificationExitCode": remaining.returncode,
     }
