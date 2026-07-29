@@ -148,6 +148,11 @@ fn command_timeout(arguments: &[&str]) -> Duration {
 }
 
 fn bundled_agent_path() -> Option<PathBuf> {
+    #[cfg(test)]
+    if let Some(test_executable) = std::env::var_os("GPUBNB_TEST_AGENT_EXECUTABLE") {
+        return Some(PathBuf::from(test_executable));
+    }
+
     let executable = std::env::current_exe().ok()?;
     let directory = executable.parent()?;
     Some(directory.join(if cfg!(target_os = "windows") {
@@ -277,6 +282,61 @@ pub fn link(code: &str) -> Result<AgentStatus, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::sync::Mutex;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
+
+    fn integration_fixture() -> (PathBuf, PathBuf) {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "gpubnb-agent-bridge-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+
+        #[cfg(target_os = "windows")]
+        let executable = {
+            let path = directory.join("gpubnb-agent.cmd");
+            fs::write(
+                &path,
+                "@echo off\r\n\
+                 if \"%1\"==\"--version\" (echo 0.1.0& exit /b 0)\r\n\
+                 if \"%1\"==\"status\" (echo {\"running\":true}& exit /b 0)\r\n\
+                 if \"%1\"==\"setup\" exit /b 0\r\n\
+                 if \"%1\"==\"link\" exit /b 0\r\n\
+                 if \"%1\"==\"start\" exit /b 0\r\n\
+                 exit /b 9\r\n",
+            )
+            .unwrap();
+            path
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        let executable = {
+            use std::os::unix::fs::PermissionsExt;
+            let path = directory.join("gpubnb-agent");
+            fs::write(
+                &path,
+                "#!/bin/sh\n\
+                 case \"$1\" in\n\
+                 --version) echo 0.1.0 ;;\n\
+                 status) echo '{\"running\":true}' ;;\n\
+                 setup|link|start) ;;\n\
+                 *) exit 9 ;;\n\
+                 esac\n",
+            )
+            .unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+            path
+        };
+
+        (directory, executable)
+    }
 
     #[test]
     fn link_code_contract_is_ten_hex_characters() {
@@ -317,5 +377,38 @@ mod tests {
             command_timeout(&["protections", "verify"]),
             PROTECTION_TIMEOUT
         );
+    }
+
+    #[test]
+    fn desktop_bridge_executes_setup_link_start_and_status_against_agent_protocol() {
+        let _guard = ENVIRONMENT_LOCK.lock().unwrap();
+        let (directory, executable) = integration_fixture();
+        let config_directory = directory.join("config");
+        fs::create_dir_all(&config_directory).unwrap();
+        fs::write(
+            config_directory.join("config.json"),
+            r#"{"machineId":"machine_integration"}"#,
+        )
+        .unwrap();
+        std::env::set_var("GPUBNB_TEST_AGENT_EXECUTABLE", &executable);
+        std::env::set_var("GPUBNB_CONFIG_DIR", &config_directory);
+
+        let result = (|| {
+            let setup_status = setup()?;
+            assert!(setup_status.installed);
+            assert!(setup_status.linked);
+            assert!(setup_status.running);
+            assert_eq!(
+                link("A1B2C3D4E5")?.machine_id.as_deref(),
+                Some("machine_integration")
+            );
+            assert!(start()?.running);
+            Ok::<(), String>(())
+        })();
+
+        std::env::remove_var("GPUBNB_TEST_AGENT_EXECUTABLE");
+        std::env::remove_var("GPUBNB_CONFIG_DIR");
+        let _ = fs::remove_dir_all(directory);
+        result.unwrap();
     }
 }
