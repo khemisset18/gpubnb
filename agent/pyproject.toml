@@ -7,7 +7,11 @@ name = "gpubnb-agent"
 version = "0.5.0"
 description = "GPUbnb local signed GPU agent"
 requires-python = ">=3.10"
-dependencies = ["PyNaCl==1.5.0", "base58==2.1.1"]
+dependencies = [
+  "PyNaCl==1.5.0",
+  "base58==2.1.1",
+  "pywin32==312; platform_system == 'Windows'",
+]
 
 [project.scripts]
 gpubnb-agent = "gpubnb_agent.cli:main"

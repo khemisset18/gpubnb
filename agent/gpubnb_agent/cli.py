@@ -7,6 +7,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
 from datetime import datetime, timezone
@@ -234,7 +235,7 @@ def _running_agent_pid() -> int | None:
     return None
 
 
-def heartbeat_loop() -> int:
+def heartbeat_loop(stop_event: threading.Event | None = None) -> int:
     config = load_config()
     machine_id = config.get("machineId")
     if not isinstance(machine_id, str):
@@ -249,7 +250,7 @@ def heartbeat_loop() -> int:
     if os.name != "nt":
         pid_path().chmod(0o600)
     try:
-        while True:
+        while stop_event is None or not stop_event.is_set():
             try:
                 result = heartbeat(client(config), key, machine_id)
                 print_json({"event": "heartbeat", "result": result})
@@ -258,7 +259,11 @@ def heartbeat_loop() -> int:
             except Exception as exc:
                 failures = min(failures + 1, 8)
                 print_json({"event": "heartbeat_error", "type": type(exc).__name__, "message": str(exc)[:300]})
-            time.sleep(min(300, interval * (2 ** failures)) if failures else interval)
+            delay = min(300, interval * (2 ** failures)) if failures else interval
+            if stop_event is not None:
+                stop_event.wait(delay)
+            else:
+                time.sleep(delay)
     except KeyboardInterrupt:
         print("Agent arrêté.")
         return 0
@@ -492,6 +497,12 @@ def command_protections_verify(_: argparse.Namespace) -> int:
     return 0
 
 
+def command_service(args: argparse.Namespace) -> int:
+    from .windows_service import manage_service
+
+    return manage_service(args.service_action)
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="gpubnb-agent", description="Agent local sécurisé GPUbnb")
     commands = root.add_subparsers(dest="command", required=True)
@@ -537,6 +548,16 @@ def parser() -> argparse.ArgumentParser:
     protection_commands.add_parser(
         "verify", help="créer, inspecter et supprimer un conteneur de contrôle"
     ).set_defaults(handler=command_protections_verify)
+    service = commands.add_parser("service", help="gérer le service système Windows")
+    service.add_argument(
+        "service_action", choices=["install", "remove", "start", "stop", "restart", "status"]
+    )
+    service.set_defaults(handler=command_service)
+    commands.add_parser("_service").set_defaults(
+        handler=lambda _: __import__(
+            "gpubnb_agent.windows_service", fromlist=["dispatch_service"]
+        ).dispatch_service()
+    )
     files = commands.add_parser("files", help="transférer des fichiers de résultats")
     file_commands = files.add_subparsers(dest="file_command", required=True)
     upload_cmd = file_commands.add_parser("upload", help="téléverser un fichier de résultat vers un job")
