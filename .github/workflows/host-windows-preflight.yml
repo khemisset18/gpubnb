@@ -91,7 +91,7 @@ jobs:
 
       - name: Build Windows installer with embedded agent
         working-directory: apps/host-desktop
-        run: npm run tauri:build -- --bundles nsis --config src-tauri/tauri.windows.conf.json
+        run: npm run tauri:build -- --bundles nsis --config src-tauri/tauri.sidecar.conf.json
         env:
           GPUBNB_RELEASE_CHANNEL: development
           RUST_BACKTRACE: '1'
