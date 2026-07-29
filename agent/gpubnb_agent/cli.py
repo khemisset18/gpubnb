@@ -140,12 +140,7 @@ def command_diagnose(_: argparse.Namespace) -> int:
 
 def command_status(_: argparse.Namespace) -> int:
     config = load_config()
-    pid = None
-    try:
-        pid = int(pid_path().read_text().strip())
-        os.kill(pid, 0)
-    except (FileNotFoundError, ValueError, ProcessLookupError, PermissionError, OSError):
-        pid = None
+    pid = _running_agent_pid()
     print_json({
         "running": pid is not None,
         "pid": pid,
@@ -156,6 +151,84 @@ def command_status(_: argparse.Namespace) -> int:
     return 0
 
 
+def _agent_process_command() -> list[str]:
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "_run"]
+    return [sys.executable, "-m", "gpubnb_agent", "_run"]
+
+
+def _process_record() -> dict[str, Any] | None:
+    try:
+        value = json.loads(pid_path().read_text(encoding="ascii"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(value, dict):
+        return None
+    pid = value.get("pid")
+    executable = value.get("executable")
+    if not isinstance(pid, int) or pid <= 0 or not isinstance(executable, str) or not executable:
+        return None
+    return {"pid": pid, "executable": executable}
+
+
+def _process_matches(pid: int, executable: str) -> bool:
+    try:
+        if os.name == "nt":
+            command = (
+                f"$p=Get-CimInstance Win32_Process -Filter 'ProcessId={pid}';"
+                "if($p){@{ExecutablePath=$p.ExecutablePath;CommandLine=$p.CommandLine}"
+                "|ConvertTo-Json -Compress}"
+            )
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                return False
+            process = json.loads(result.stdout)
+            actual_executable = str(process.get("ExecutablePath") or "")
+            command_line = str(process.get("CommandLine") or "")
+            return (
+                os.path.normcase(os.path.abspath(actual_executable))
+                == os.path.normcase(os.path.abspath(executable))
+                and "_run" in command_line.split()
+            )
+
+        executable_path = Path(f"/proc/{pid}/exe")
+        command_line_path = Path(f"/proc/{pid}/cmdline")
+        if executable_path.exists() and command_line_path.exists():
+            actual_executable = str(executable_path.resolve())
+            command_line = command_line_path.read_bytes().replace(b"\0", b" ").decode(
+                "utf-8", errors="replace"
+            )
+            return os.path.samefile(actual_executable, executable) and "_run" in command_line.split()
+
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        return (
+            result.returncode == 0
+            and Path(executable).name in result.stdout
+            and "_run" in result.stdout.split()
+        )
+    except (json.JSONDecodeError, OSError, subprocess.SubprocessError):
+        return False
+
+
+def _running_agent_pid() -> int | None:
+    record = _process_record()
+    if record and _process_matches(record["pid"], record["executable"]):
+        return int(record["pid"])
+    return None
+
+
 def heartbeat_loop() -> int:
     config = load_config()
     machine_id = config.get("machineId")
@@ -164,7 +237,10 @@ def heartbeat_loop() -> int:
     key = load_key()
     interval = max(5, min(60, int(config.get("intervalSeconds", 10))))
     failures = 0
-    pid_path().write_text(str(os.getpid()), encoding="ascii")
+    pid_path().write_text(
+        json.dumps({"pid": os.getpid(), "executable": sys.executable}),
+        encoding="ascii",
+    )
     if os.name != "nt":
         pid_path().chmod(0o600)
     try:
@@ -257,24 +333,56 @@ def send_session_metric(api: ApiClient, key: Any, machine_id: str, session_id: s
 
 def command_start(args: argparse.Namespace) -> int:
     if args.daemon:
-        if os.name == "nt":
-            flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-            handle = open(log_path(), "a", encoding="utf-8")
-            process = subprocess.Popen([sys.executable, str(Path(__file__).parents[1] / "agent.py"), "_run"], stdout=handle, stderr=handle, creationflags=flags, close_fds=True)
-        else:
-            handle = open(log_path(), "a", encoding="utf-8")
-            process = subprocess.Popen([sys.executable, str(Path(__file__).parents[1] / "agent.py"), "_run"], stdout=handle, stderr=handle, start_new_session=True, close_fds=True)
-        print(f"Agent démarré en arrière-plan (PID {process.pid}).")
-        return 0
+        running_pid = _running_agent_pid()
+        if running_pid is not None:
+            print(f"Agent déjà démarré (PID {running_pid}).")
+            return 0
+        handle = open(log_path(), "a", encoding="utf-8")
+        try:
+            if os.name == "nt":
+                flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+                process = subprocess.Popen(
+                    _agent_process_command(),
+                    stdout=handle,
+                    stderr=handle,
+                    creationflags=flags,
+                    close_fds=True,
+                )
+            else:
+                process = subprocess.Popen(
+                    _agent_process_command(),
+                    stdout=handle,
+                    stderr=handle,
+                    start_new_session=True,
+                    close_fds=True,
+                )
+        finally:
+            handle.close()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                print("L'agent n'a pas pu démarrer. Consultez les journaux.", file=sys.stderr)
+                return 1
+            if _running_agent_pid() == process.pid:
+                print(f"Agent démarré en arrière-plan (PID {process.pid}).")
+                return 0
+            time.sleep(0.05)
+        process.terminate()
+        process.wait(timeout=5)
+        print("Le démarrage de l'agent n'a pas pu être confirmé.", file=sys.stderr)
+        return 1
     return heartbeat_loop()
 
 
 def command_stop(_: argparse.Namespace) -> int:
-    try:
-        pid = int(pid_path().read_text().strip())
-    except (FileNotFoundError, ValueError):
+    pid = _running_agent_pid()
+    if pid is None:
+        try:
+            pid_path().unlink()
+        except FileNotFoundError:
+            pass
         print("L'agent n'est pas démarré.")
-        return 0
+        return 1
     try:
         os.kill(pid, signal.SIGTERM)
         print(f"Arrêt demandé au processus {pid}.")
