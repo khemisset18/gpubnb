@@ -65,13 +65,15 @@ const diagnosticDetail = (reason: string): string => ({
 const pairingErrorMessage = (error: unknown): string => {
   const value = String(error);
   if (value.includes('invalid_link_code')) return 'Le code doit contenir exactement 10 caractères hexadécimaux.';
-  if (value.includes('agent_not_installed')) return 'Installez d’abord le service GPUbnb sur cet ordinateur.';
-  if (value.includes('agent_setup_required')) return 'Préparation locale requise : cliquez sur « Installer automatiquement », puis réessayez le code.';
+  if (value.includes('agent_not_installed')) return 'Le service GPUbnb n’est pas présent dans cette version. Réinstallez le paquet Windows complet.';
+  if (value.includes('agent_setup_required')) return 'Préparation locale requise : installez le service GPUbnb, puis réessayez.';
   if (value.includes('agent_not_linked')) return 'Cette machine doit d’abord être reliée avec un code GPUbnb valide.';
   if (value.includes('agent_link_not_persisted')) return 'La liaison n’a pas été sauvegardée par le service local.';
   if (value.includes('agent_key_already_registered')) return 'Cette clé agent est déjà reliée à un autre compte. Réinitialisez la clé puis recréez un code.';
   if (value.includes('agent_link_failed')) return 'Le code a été refusé, a expiré ou a déjà été utilisé.';
-  return 'La liaison n’a pas abouti. La machine reste hors ligne.';
+  if (value.includes('setup_not_available')) return 'Cette protection n’est pas encore automatisée. Elle reste bloquée au lieu d’afficher un faux succès.';
+  if (value.includes('agent_command_failed')) return 'Le service GPUbnb n’a pas pu exécuter la commande demandée.';
+  return 'La liaison ou la configuration n’a pas abouti. La machine reste hors ligne.';
 };
 
 const setMessage = (message: string, tone: MessageTone = 'info', fallbackUrl?: string): void => {
@@ -105,12 +107,22 @@ const officialUrl = (rawUrl: string): URL | null => {
 };
 
 const openOfficialUrl = (url: URL, successMessage: string): void => {
-  const opened = window.open(url.toString(), '_blank', 'noopener,noreferrer');
-  if (opened) {
-    setMessage(successMessage, 'success');
-    return;
+  const href = url.toString();
+  const link = document.createElement('a');
+  link.href = href;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.hidden = true;
+  document.body.append(link);
+
+  try {
+    link.click();
+    setMessage(`${successMessage} Si rien ne s’ouvre, utilisez le lien suivant.`, 'success', href);
+  } catch {
+    setMessage("Le navigateur n’a pas pu s’ouvrir automatiquement.", 'error', href);
+  } finally {
+    link.remove();
   }
-  setMessage("Le navigateur n’a pas pu s’ouvrir automatiquement.", 'error', url.toString());
 };
 
 const listingUrl = (baseUrl: string, machineId: string, gpuUuid: string): URL | null => {
@@ -206,6 +218,31 @@ const bindPairing = (): void => {
   });
 };
 
+const verifyAgentSetup = async (): Promise<void> => {
+  const agent = await invoke<AgentStatus>('local_agent_status');
+  if (!agent.installed) throw new Error('agent_not_installed');
+  setMessage('Service GPUbnb installé. Créez ou collez maintenant le code de liaison.', 'success');
+};
+
+const handleSetupResult = async (result: string): Promise<void> => {
+  if (result === 'automatic_setup_pending') throw new Error('setup_not_available');
+  if (result === 'agent_setup_completed') {
+    await verifyAgentSetup();
+    return;
+  }
+  if (result === 'agent_started') {
+    const agent = await invoke<AgentStatus>('local_agent_status');
+    if (!agent.running) throw new Error('agent_command_failed');
+    setMessage('Service GPUbnb démarré. Vérification en cours…', 'success');
+    return;
+  }
+  if (result === 'open_secure_pairing') {
+    setMessage('Ouvrez GPUbnb dans le navigateur pour créer le code.', 'success');
+    return;
+  }
+  throw new Error('agent_command_failed');
+};
+
 const bindActions = (status: HostStatus): void => {
   document.querySelector<HTMLButtonElement>('#refresh')?.addEventListener('click', () => void refresh());
   document.querySelector<HTMLButtonElement>('#publish')?.addEventListener('click', () => {
@@ -242,18 +279,12 @@ const bindActions = (status: HostStatus): void => {
       openOfficialUrl(target, 'Le site officiel GPUbnb a été ouvert.');
       return;
     }
+    button.disabled = true;
     void invoke<string>('run_setup_action', { actionId })
-      .then((result) => {
-        const messages: Record<string, string> = {
-          agent_setup_completed: 'Agent préparé. Créez ou collez maintenant le code de liaison.',
-          agent_started: 'Service GPUbnb démarré. Vérification en cours…',
-          automatic_setup_pending: 'Protection préparée pour cette version de test.',
-          open_secure_pairing: 'Ouvrez GPUbnb dans le navigateur pour créer le code.'
-        };
-        setMessage(messages[result] ?? 'Action préparée.', 'success');
-        window.setTimeout(() => void refresh(), 700);
-      })
-      .catch((error: unknown) => setMessage(pairingErrorMessage(error), 'error'));
+      .then((result) => handleSetupResult(result))
+      .then(() => window.setTimeout(() => void refresh(), 700))
+      .catch((error: unknown) => setMessage(pairingErrorMessage(error), 'error'))
+      .finally(() => { button.disabled = false; });
   }));
 };
 
