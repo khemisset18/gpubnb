@@ -165,7 +165,14 @@ jobs:
             throw 'The service data directory grants access to a broad Windows principal.'
           }
           $failure = & sc.exe qfailure GPUbnbAgent
-          if ($LASTEXITCODE -ne 0 -or $failure -notmatch 'RESTART') {
+          $failureText = $failure -join "`n"
+          if (
+            $LASTEXITCODE -ne 0 -or
+            $failureText -notmatch '86400' -or
+            $failureText -notmatch '5000' -or
+            $failureText -notmatch '30000' -or
+            $failureText -notmatch '120000'
+          ) {
             throw 'Windows Service recovery is not configured.'
           }
           & $installedSidecar service restart
