@@ -69,7 +69,7 @@ impl TryFrom<&str> for SetupAction {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 struct Readiness {
     isolation_certified: bool,
     storage_protected: bool,
@@ -77,6 +77,14 @@ struct Readiness {
 }
 
 impl Readiness {
+    fn from_diagnostic(diagnostic: &NativeDiagnostic) -> Self {
+        Self {
+            isolation_certified: diagnostic.can_host,
+            storage_protected: false,
+            network_filtered: false,
+        }
+    }
+
     fn is_ready(&self, diagnostic: &NativeDiagnostic, agent: &AgentStatus) -> bool {
         diagnostic.can_host
             && agent.linked
@@ -105,7 +113,6 @@ impl Readiness {
 
 #[derive(Default)]
 struct AppState {
-    readiness: Readiness,
     lifecycle: HostLifecycle,
 }
 
@@ -214,7 +221,7 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
     let diagnostic = collect_native_diagnostic();
     let pairing = pairing_configuration();
     let agent = agent_bridge::status();
-    let readiness = &state.readiness;
+    let readiness = Readiness::from_diagnostic(&diagnostic);
     let account_detail = if let Some(machine_id) = agent.machine_id.as_deref() {
         format!("Machine associée : {machine_id}")
     } else if pairing.configured {
@@ -265,7 +272,11 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
             label: "Espace locataire isolé",
             ok: readiness.isolation_certified,
             blocking: true,
-            detail: "Le locataire ne peut jamais voir votre session personnelle".into(),
+            detail: if readiness.isolation_certified {
+                "Le backend d’isolation matériel requis a été vérifié".into()
+            } else {
+                "Aucune preuve technique d’isolation exploitable n’est disponible".into()
+            },
             action_label: (!readiness.isolation_certified).then_some("Configurer la protection"),
         },
         Check {
@@ -273,7 +284,8 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
             label: "Fichiers personnels protégés",
             ok: readiness.storage_protected,
             blocking: true,
-            detail: "Les dossiers personnels sont exclus par défaut".into(),
+            detail: "Le stockage locataire isolé et son nettoyage ne sont pas encore provisionnés"
+                .into(),
             action_label: (!readiness.storage_protected).then_some("Vérifier"),
         },
         Check {
@@ -281,7 +293,7 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
             label: "Connexion locataire filtrée",
             ok: readiness.network_filtered,
             blocking: true,
-            detail: "Le pare-feu de session applique une politique restrictive".into(),
+            detail: "Aucune politique réseau locataire vérifiée n’est encore installée".into(),
             action_label: (!readiness.network_filtered).then_some("Configurer"),
         },
     ];
@@ -385,10 +397,8 @@ fn request_publish(
         return Err("emergency_stop_requires_review");
     }
     let agent = agent_bridge::status();
-    if !state
-        .readiness
-        .is_ready(&collect_native_diagnostic(), &agent)
-    {
+    let diagnostic = collect_native_diagnostic();
+    if !Readiness::from_diagnostic(&diagnostic).is_ready(&diagnostic, &agent) {
         return Err("host_not_certified");
     }
     let mut gateway = gateway
@@ -415,10 +425,8 @@ fn set_idle_mining(
     if state.lifecycle != HostLifecycle::Online {
         return Err("host_must_be_online");
     }
-    if !state
-        .readiness
-        .is_ready(&collect_native_diagnostic(), &agent)
-    {
+    let diagnostic = collect_native_diagnostic();
+    if !Readiness::from_diagnostic(&diagnostic).is_ready(&diagnostic, &agent) {
         return Err("host_not_certified");
     }
     drop(state);
@@ -482,9 +490,15 @@ fn run_setup_action(action_id: String) -> Result<String, String> {
                     .map_err(|error| error)
             }
         }
-        SetupAction::Isolation | SetupAction::Storage | SetupAction::Network => {
-            Ok("automatic_setup_pending".into())
+        SetupAction::Isolation => {
+            let diagnostic = collect_native_diagnostic();
+            diagnostic
+                .can_host
+                .then(|| "isolation_verified".into())
+                .ok_or_else(|| diagnostic.reason.to_owned())
         }
+        SetupAction::Storage => Err("storage_protection_not_implemented".into()),
+        SetupAction::Network => Err("network_filter_not_implemented".into()),
     }
 }
 
@@ -556,7 +570,10 @@ mod tests {
 
     #[test]
     fn readiness_is_fail_closed_without_real_agent() {
-        assert!(!Readiness::default().is_ready(&supported_diagnostic(), &AgentStatus::default()));
+        let diagnostic = supported_diagnostic();
+        assert!(
+            !Readiness::from_diagnostic(&diagnostic).is_ready(&diagnostic, &AgentStatus::default())
+        );
     }
 
     #[test]
