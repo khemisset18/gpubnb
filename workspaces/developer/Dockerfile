@@ -6,7 +6,7 @@ RUN apt-get update \
     ca-certificates cargo curl default-jdk-headless g++ gcc git golang-go make \
     nodejs npm postgresql-client python3 python3-pip redis-tools rustc sqlite3 unzip \
  && npm cache clean --force \
- && npm install --global npm@11.6.2 js-yaml@4.3.0 shell-quote@1.9.0 tar@7.5.19 \
+ && npm install --global npm@11.19.0 js-yaml@5.2.2 shell-quote@1.10.0 tar@7.5.22 \
  && rm -rf /var/lib/apt/lists/* /root/.cache /usr/local/bin/fixuid \
  && install -d -o coder -g coder -m 700 /workspace /workspace/imports /workspace/output
 

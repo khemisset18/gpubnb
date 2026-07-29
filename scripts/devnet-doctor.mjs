@@ -11,7 +11,10 @@ const fail = (m) => { failures += 1; console.log(`❌ ${m}`); };
 
 function command(name, args=['--version'], required=true) {
   try {
-    const out = execFileSync(name,args,{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim().split('\n')[0];
+    const [executable, commandArgs] = process.platform === 'win32'
+      ? [process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', [name, ...args].join(' ')]]
+      : [name, args];
+    const out = execFileSync(executable,commandArgs,{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim().split('\n')[0];
     ok(`${name}: ${out}`);
   } catch {
     (required ? fail : warn)(`${name} introuvable`);

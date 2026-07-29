@@ -188,7 +188,9 @@ jobs:
           test -s release-assets/gpubnb-host-windows-x64.zip
           test -s release-assets/gpubnb-host-linux-x64.deb
           test -s release-assets/gpubnb-host-macos-arm64.dmg
-          gh release delete host-test-latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+          if gh release view host-test-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete host-test-latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          fi
           gh release create host-test-latest release-assets/* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \

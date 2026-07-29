@@ -80,7 +80,7 @@ jobs:
           set -euo pipefail
           test "$(docker image inspect gpu-diagnostic:ci --format '{{.Config.User}}')" = "65532:65532"
           test "$(docker image inspect gpu-diagnostic:ci --format '{{json .Config.Entrypoint}}')" = '["/usr/local/bin/gpu-diagnostic"]'
-          test -z "$(docker image inspect gpu-diagnostic:ci --format '{{json .Config.Cmd}}' | grep -v '^null$' || true)"
+          test "$(docker image inspect gpu-diagnostic:ci --format '{{json .Config.Cmd}}')" = "null"
           test "$(docker image inspect gpu-diagnostic:ci --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "${GITHUB_SHA}"
           if docker run --rm --entrypoint=/bin/sh gpu-diagnostic:ci -c true >/dev/null 2>&1; then
             echo 'Runtime image unexpectedly contains a shell' >&2

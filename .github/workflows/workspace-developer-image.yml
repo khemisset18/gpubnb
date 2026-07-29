@@ -5,6 +5,10 @@ on:
     paths:
       - "workspaces/developer/**"
       - ".github/workflows/workspace-developer-image.yml"
+  pull_request:
+    paths:
+      - "workspaces/developer/**"
+      - ".github/workflows/workspace-developer-image.yml"
   workflow_dispatch:
 permissions:
   contents: read
