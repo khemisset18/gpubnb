@@ -1,0 +1,217 @@
+name: host-windows-preflight
+
+on:
+  pull_request:
+    paths:
+      - agent/**
+      - apps/host-desktop/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .github/workflows/host-windows-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-windows-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: agent/pyproject.toml
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/host-desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: Materialize Windows bundle icon
+        shell: pwsh
+        run: |
+          $source = 'apps/host-desktop/src-tauri/icons/icon.ico.base64'
+          $target = 'apps/host-desktop/src-tauri/icons/icon.ico'
+          if (-not (Test-Path $source)) { throw 'Missing staged bundle icon source.' }
+          $encoded = (Get-Content $source -Raw).Trim()
+          $decoded = [Convert]::FromBase64String($encoded)
+          if ($decoded.Length -lt 256) { throw 'Decoded bundle icon is unexpectedly small.' }
+          [IO.File]::WriteAllBytes($target, $decoded)
+          if (-not (Test-Path $target)) { throw 'Windows bundle icon was not generated.' }
+
+      - name: Install locked desktop dependencies
+        working-directory: apps/host-desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install agent and PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./agent pyinstaller==6.16.0
+
+      - name: Test agent CLI
+        run: |
+          python -m compileall -q agent/gpubnb_agent
+          gpubnb-agent version
+          python -m gpubnb_agent status
+
+      - name: Build standalone agent
+        shell: pwsh
+        run: |
+          pyinstaller --clean --noconfirm --onefile --name gpubnb-agent --hidden-import=_cffi_backend --hidden-import=servicemanager --hidden-import=win32event --hidden-import=win32service --hidden-import=win32serviceutil --hidden-import=win32timezone --collect-all cffi --collect-all nacl agent/gpubnb_agent/__main__.py
+          if (-not (Test-Path dist/gpubnb-agent.exe)) { throw 'Standalone agent was not generated.' }
+          $target = (rustc -vV | Select-String '^host:' | ForEach-Object { ($_ -split ':', 2)[1].Trim() })
+          if (-not $target) { throw 'Rust target triple could not be determined.' }
+          New-Item -ItemType Directory -Force apps/host-desktop/src-tauri/binaries | Out-Null
+          Copy-Item dist/gpubnb-agent.exe "apps/host-desktop/src-tauri/binaries/gpubnb-agent-$target.exe"
+
+      - name: Verify standalone agent
+        shell: pwsh
+        run: |
+          & ./dist/gpubnb-agent.exe version
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone agent version command failed.' }
+          & ./dist/gpubnb-agent.exe status
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone agent status command failed.' }
+
+      - name: Type-check and build frontend
+        working-directory: apps/host-desktop
+        run: |
+          npm run check
+          npm run build
+
+      - name: Test and lint native host
+        run: |
+          cargo fmt -p gpubnb-host-desktop -- --check
+          cargo test --locked -p gpubnb-host-desktop --all-targets
+          cargo clippy --locked -p gpubnb-host-desktop --all-targets -- -D warnings
+
+      - name: Build Windows installer with embedded agent
+        working-directory: apps/host-desktop
+        run: npm run tauri:build -- --bundles nsis --config src-tauri/tauri.sidecar.conf.json
+        env:
+          GPUBNB_RELEASE_CHANNEL: development
+          RUST_BACKTRACE: '1'
+
+      - name: Verify installer and bundled sidecar
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path target/release/bundle/nsis -Filter '*-setup.exe' -File -ErrorAction Stop
+          if ($installer.Count -ne 1) {
+            throw "Expected exactly one NSIS installer, found $($installer.Count)."
+          }
+
+          $installDirectory = Join-Path $env:RUNNER_TEMP 'gpubnb-host-smoke-test'
+          if (Test-Path $installDirectory) {
+            throw "Smoke-test install directory already exists: $installDirectory"
+          }
+          $installation = Start-Process -FilePath $installer.FullName `
+            -ArgumentList '/S', "/D=$installDirectory" -Wait -PassThru
+          if ($installation.ExitCode -ne 0) {
+            $installerLog = Join-Path $env:TEMP 'gpubnb-installer.log'
+            if (Test-Path $installerLog) {
+              Write-Host (Get-Content $installerLog -Raw)
+            }
+            throw "NSIS silent installation failed with exit code $($installation.ExitCode)."
+          }
+
+          $installedSidecar = Join-Path $installDirectory 'gpubnb-agent.exe'
+          if (-not (Test-Path $installedSidecar -PathType Leaf)) {
+            throw 'The installed application does not contain the gpubnb-agent sidecar.'
+          }
+          & $installedSidecar version
+          if ($LASTEXITCODE -ne 0) { throw 'The installed agent sidecar is not executable.' }
+          $service = Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
+          if (-not $service) { throw 'The installer did not register the GPUbnbAgent service.' }
+          if ($service.StartMode -ne 'Auto') {
+            throw "The GPUbnbAgent service is not automatic: $($service.StartMode)"
+          }
+          if ($service.PathName -notlike "*$installedSidecar*") {
+            throw "The service does not execute the installed sidecar: $($service.PathName)"
+          }
+          $dataDirectory = Join-Path $env:PROGRAMDATA 'GPUbnb'
+          if (-not (Test-Path $dataDirectory -PathType Container)) {
+            throw 'The installer did not create the shared service data directory.'
+          }
+          $broadPrincipals = @(
+            'S-1-1-0',
+            'S-1-5-11',
+            'S-1-5-32-545'
+          )
+          $unsafeRules = (Get-Acl $dataDirectory).Access | Where-Object {
+            $_.AccessControlType -eq 'Allow' -and
+            $broadPrincipals -contains $_.IdentityReference.Translate(
+              [System.Security.Principal.SecurityIdentifier]
+            ).Value
+          }
+          if ($unsafeRules) {
+            throw 'The service data directory grants access to a broad Windows principal.'
+          }
+          $failure = & sc.exe qfailure GPUbnbAgent
+          $failureText = $failure -join "`n"
+          if (
+            $LASTEXITCODE -ne 0 -or
+            $failureText -notmatch '86400' -or
+            $failureText -notmatch '5000' -or
+            $failureText -notmatch '30000' -or
+            $failureText -notmatch '120000'
+          ) {
+            throw 'Windows Service recovery is not configured.'
+          }
+          & $installedSidecar service restart
+          if ($LASTEXITCODE -ne 0) { throw 'The installed service could not be restarted.' }
+          $service = Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
+          if ($service.State -ne 'Running') {
+            throw "The restarted service is not running: $($service.State)"
+          }
+
+          $uninstaller = Join-Path $installDirectory 'uninstall.exe'
+          if (-not (Test-Path $uninstaller -PathType Leaf)) {
+            throw 'The NSIS package did not install an uninstaller.'
+          }
+          $uninstallation = Start-Process -FilePath $uninstaller `
+            -ArgumentList '/S' -Wait -PassThru
+          if ($uninstallation.ExitCode -ne 0) {
+            throw "NSIS silent uninstallation failed with exit code $($uninstallation.ExitCode)."
+          }
+          if (Test-Path $installedSidecar) {
+            throw 'The uninstaller left the agent sidecar behind.'
+          }
+          if (Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'") {
+            throw 'The uninstaller left the GPUbnbAgent service registered.'
+          }
+
+          $artifactDirectory = 'apps/host-desktop/dist-windows'
+          New-Item -ItemType Directory -Force $artifactDirectory | Out-Null
+          Copy-Item $installer.FullName $artifactDirectory
+          Copy-Item dist/gpubnb-agent.exe (Join-Path $artifactDirectory 'gpubnb-agent.exe')
+
+          $payloads = Get-ChildItem $artifactDirectory -File
+          $checksums = $payloads | Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))" }
+          $checksums | Set-Content (Join-Path $artifactDirectory 'SHA256SUMS.txt') -Encoding ascii
+
+      - name: Upload Windows preflight artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: gpubnb-host-windows-preflight-${{ github.sha }}
+          path: apps/host-desktop/dist-windows/**
+          if-no-files-found: error
+          retention-days: 14

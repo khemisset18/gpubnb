@@ -21,9 +21,9 @@ def _gpu_vendor() -> str:
 def gpu_passthrough_flags() -> list[str]:
     vendor = _gpu_vendor()
     if vendor == "AMD":
-        return ["--device=/dev/kfd", "--device=/dev/dri", "--security-opt=seccomp=unconfined"]
+        return ["--device=/dev/kfd", "--device=/dev/dri"]
     if vendor == "INTEL":
-        return ["--device=/dev/dri", "--security-opt=seccomp=unconfined"]
+        return ["--device=/dev/dri"]
     return ["--gpus=device=0", "--env=NVIDIA_DRIVER_CAPABILITIES=utility"]
 
 
@@ -136,16 +136,23 @@ def run_gpu_diagnostic(image: str, timeout_seconds: int) -> dict[str, Any]:
         if result.returncode != 0:
             raise RuntimeError(f"diagnostic_container_failed:{result.returncode}:{stderr}")
         safe_gpus = _parse_report(stdout)
-        return {
+        report = {
             "gpuDetected": bool(safe_gpus),
             "summary": "Diagnostic GPU officiel terminé." if safe_gpus else "Aucun GPU détecté dans le conteneur.",
             "metrics": {
                 "gpuCount": len(safe_gpus), "vendor": "NVIDIA", "gpus": safe_gpus,
-                "imageCacheHit": cache_hit, "containerCleaned": True,
+                "imageCacheHit": cache_hit,
             },
         }
-    finally:
+    except Exception:
         cleanup_workspace(container_name)
+        raise
+
+    cleanup = cleanup_workspace(container_name)
+    if not cleanup["cleaned"]:
+        raise RuntimeError("diagnostic_cleanup_unverified")
+    report["metrics"]["containerCleaned"] = True
+    return report
 
 
 def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
@@ -171,10 +178,76 @@ def prepare_workspace(image: str, timeout_seconds: int, workspace_slug: str = "c
     )
     if health.returncode != 0:
         raise RuntimeError(f"workspace_health_check_failed:{health.returncode}:{health.stderr[:1000].strip()}")
+    detected_gpus = gpu_inventory()
     return {
-        "gpuDetected": True,
+        "gpuDetected": bool(detected_gpus),
         "summary": f"Workspace {workspace_slug} préparé et contrôle isolé réussi.",
-        "metrics": {"cacheHit": cache_hit, "workspaceSlug": workspace_slug},
+        "metrics": {
+            "cacheHit": cache_hit,
+            "workspaceSlug": workspace_slug,
+            "gpuCount": len(detected_gpus),
+        },
+    }
+
+
+def verify_protection_profile(image: str) -> dict[str, bool]:
+    if not PINNED_IMAGE.fullmatch(image):
+        raise RuntimeError("protection_image_must_be_digest_pinned")
+
+    container_name = f"gpubnb-protection-probe-{uuid.uuid4().hex[:12]}"
+    create = subprocess.run(
+        [
+            "docker", "create", "--name", container_name,
+            "--network=none", "--read-only", "--cap-drop=ALL",
+            "--security-opt=no-new-privileges", "--pids-limit=32",
+            "--memory=128m", "--cpus=0.5",
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=8m", image,
+        ],
+        capture_output=True, text=True, timeout=30, check=False, shell=False,
+    )
+    if create.returncode != 0:
+        raise RuntimeError(
+            f"protection_probe_create_failed:{create.returncode}:{create.stderr[:1000].strip()}"
+        )
+
+    try:
+        inspection = subprocess.run(
+            ["docker", "inspect", container_name],
+            capture_output=True, text=True, timeout=30, check=False, shell=False,
+        )
+        if inspection.returncode != 0:
+            raise RuntimeError("protection_probe_inspect_failed")
+        try:
+            records = json.loads(inspection.stdout)
+            record = records[0]
+            host_config = record["HostConfig"]
+            mounts = record.get("Mounts") or []
+        except (json.JSONDecodeError, IndexError, KeyError, TypeError) as exc:
+            raise RuntimeError("protection_probe_invalid_inspection") from exc
+
+        isolation = (
+            host_config.get("ReadonlyRootfs") is True
+            and "ALL" in (host_config.get("CapDrop") or [])
+            and "no-new-privileges" in (host_config.get("SecurityOpt") or [])
+        )
+        storage = (
+            not (host_config.get("Binds") or [])
+            and all(mount.get("Type") != "bind" for mount in mounts if isinstance(mount, dict))
+            and "/tmp" in (host_config.get("Tmpfs") or {})
+        )
+        network = host_config.get("NetworkMode") == "none"
+    finally:
+        cleanup = cleanup_workspace(container_name)
+
+    if not cleanup["cleaned"]:
+        raise RuntimeError("protection_probe_cleanup_unverified")
+    if not (isolation and storage and network):
+        raise RuntimeError("protection_profile_not_enforced")
+    return {
+        "isolationVerified": isolation,
+        "storageProtected": storage,
+        "networkFiltered": network,
+        "cleanupVerified": True,
     }
 
 
@@ -182,8 +255,26 @@ def cleanup_workspace(container_name: str) -> dict[str, Any]:
     safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "", container_name)[:128]
     if not safe_name:
         return {"cleaned": False, "container": ""}
-    subprocess.run(
-        ["docker", "rm", "-f", safe_name],
-        capture_output=True, text=True, timeout=30, check=False, shell=False,
-    )
-    return {"cleaned": True, "container": safe_name}
+    try:
+        removal = subprocess.run(
+            ["docker", "rm", "-f", safe_name],
+            capture_output=True, text=True, timeout=30, check=False, shell=False,
+        )
+        remaining = subprocess.run(
+            [
+                "docker", "container", "ls", "-a",
+                "--filter", f"name=^/{safe_name}$",
+                "--format", "{{.ID}}",
+            ],
+            capture_output=True, text=True, timeout=30, check=False, shell=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {"cleaned": False, "container": safe_name}
+
+    cleaned = remaining.returncode == 0 and not remaining.stdout.strip()
+    return {
+        "cleaned": cleaned,
+        "container": safe_name,
+        "removalExitCode": removal.returncode,
+        "verificationExitCode": remaining.returncode,
+    }

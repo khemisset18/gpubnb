@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-capability",
+  "description": "Least-privilege permissions for the GPUbnb Host main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://gpubnb.com/**" },
+        { "url": "https://app.gpubnb.com/**" },
+        { "url": "https://gpubnb.netlify.app/**" }
+      ]
+    }
+  ]
+}

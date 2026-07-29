@@ -6,7 +6,7 @@ mod orchestration_gateway;
 mod pairing;
 mod rental_orchestrator;
 
-use agent_bridge::AgentStatus;
+use agent_bridge::{AgentStatus, ProtectionStatus};
 use diagnostics::{collect_native_diagnostic, NativeDiagnostic};
 use orchestration_gateway::{
     ActorRole, AuthenticatedContext, CommandResult, OrchestrationCommand, OrchestrationGateway,
@@ -69,7 +69,7 @@ impl TryFrom<&str> for SetupAction {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 struct Readiness {
     isolation_certified: bool,
     storage_protected: bool,
@@ -77,6 +77,16 @@ struct Readiness {
 }
 
 impl Readiness {
+    fn from_evidence(diagnostic: &NativeDiagnostic, protections: &ProtectionStatus) -> Self {
+        Self {
+            isolation_certified: diagnostic.can_host
+                && protections.isolation_verified
+                && protections.cleanup_verified,
+            storage_protected: protections.storage_protected && protections.cleanup_verified,
+            network_filtered: protections.network_filtered && protections.cleanup_verified,
+        }
+    }
+
     fn is_ready(&self, diagnostic: &NativeDiagnostic, agent: &AgentStatus) -> bool {
         diagnostic.can_host
             && agent.linked
@@ -105,7 +115,6 @@ impl Readiness {
 
 #[derive(Default)]
 struct AppState {
-    readiness: Readiness,
     lifecycle: HostLifecycle,
 }
 
@@ -135,6 +144,7 @@ struct HostStatus {
     next_action_id: Option<&'static str>,
     pairing: PairingConfiguration,
     agent: AgentStatus,
+    protections: ProtectionStatus,
     diagnostic: NativeDiagnostic,
     orchestration: OrchestrationSnapshot,
     checks: Vec<Check>,
@@ -214,7 +224,8 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
     let diagnostic = collect_native_diagnostic();
     let pairing = pairing_configuration();
     let agent = agent_bridge::status();
-    let readiness = &state.readiness;
+    let protections = agent_bridge::protections();
+    let readiness = Readiness::from_evidence(&diagnostic, &protections);
     let account_detail = if let Some(machine_id) = agent.machine_id.as_deref() {
         format!("Machine associée : {machine_id}")
     } else if pairing.configured {
@@ -265,7 +276,11 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
             label: "Espace locataire isolé",
             ok: readiness.isolation_certified,
             blocking: true,
-            detail: "Le locataire ne peut jamais voir votre session personnelle".into(),
+            detail: if readiness.isolation_certified {
+                "Le backend d’isolation matériel requis a été vérifié".into()
+            } else {
+                "Aucune preuve technique d’isolation exploitable n’est disponible".into()
+            },
             action_label: (!readiness.isolation_certified).then_some("Configurer la protection"),
         },
         Check {
@@ -273,7 +288,8 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
             label: "Fichiers personnels protégés",
             ok: readiness.storage_protected,
             blocking: true,
-            detail: "Les dossiers personnels sont exclus par défaut".into(),
+            detail: "Le stockage locataire isolé et son nettoyage ne sont pas encore provisionnés"
+                .into(),
             action_label: (!readiness.storage_protected).then_some("Vérifier"),
         },
         Check {
@@ -281,7 +297,7 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
             label: "Connexion locataire filtrée",
             ok: readiness.network_filtered,
             blocking: true,
-            detail: "Le pare-feu de session applique une politique restrictive".into(),
+            detail: "Aucune politique réseau locataire vérifiée n’est encore installée".into(),
             action_label: (!readiness.network_filtered).then_some("Configurer"),
         },
     ];
@@ -326,6 +342,7 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
             .flatten(),
         pairing,
         agent,
+        protections,
         diagnostic,
         orchestration,
         checks,
@@ -385,10 +402,9 @@ fn request_publish(
         return Err("emergency_stop_requires_review");
     }
     let agent = agent_bridge::status();
-    if !state
-        .readiness
-        .is_ready(&collect_native_diagnostic(), &agent)
-    {
+    let diagnostic = collect_native_diagnostic();
+    let protections = agent_bridge::protections();
+    if !Readiness::from_evidence(&diagnostic, &protections).is_ready(&diagnostic, &agent) {
         return Err("host_not_certified");
     }
     let mut gateway = gateway
@@ -410,15 +426,17 @@ fn set_idle_mining(
     state: tauri::State<'_, Mutex<AppState>>,
     gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
 ) -> Result<OrchestrationSnapshot, &'static str> {
+    if enabled {
+        return Err("mining_runtime_not_installed");
+    }
     let state = state.lock().map_err(|_| "state_unavailable")?;
     let agent = agent_bridge::status();
     if state.lifecycle != HostLifecycle::Online {
         return Err("host_must_be_online");
     }
-    if !state
-        .readiness
-        .is_ready(&collect_native_diagnostic(), &agent)
-    {
+    let diagnostic = collect_native_diagnostic();
+    let protections = agent_bridge::protections();
+    if !Readiness::from_evidence(&diagnostic, &protections).is_ready(&diagnostic, &agent) {
         return Err("host_not_certified");
     }
     drop(state);
@@ -482,8 +500,30 @@ fn run_setup_action(action_id: String) -> Result<String, String> {
                     .map_err(|error| error)
             }
         }
-        SetupAction::Isolation | SetupAction::Storage | SetupAction::Network => {
-            Ok("automatic_setup_pending".into())
+        SetupAction::Isolation => {
+            let diagnostic = collect_native_diagnostic();
+            let protections = agent_bridge::protections();
+            (diagnostic.can_host && protections.isolation_verified && protections.cleanup_verified)
+                .then(|| "isolation_verified".into())
+                .ok_or_else(|| {
+                    if diagnostic.can_host {
+                        "isolation_profile_unverified".into()
+                    } else {
+                        diagnostic.reason.to_owned()
+                    }
+                })
+        }
+        SetupAction::Storage => {
+            let protections = agent_bridge::protections();
+            (protections.storage_protected && protections.cleanup_verified)
+                .then(|| "storage_verified".into())
+                .ok_or_else(|| "storage_protection_unverified".into())
+        }
+        SetupAction::Network => {
+            let protections = agent_bridge::protections();
+            (protections.network_filtered && protections.cleanup_verified)
+                .then(|| "network_verified".into())
+                .ok_or_else(|| "network_filter_unverified".into())
         }
     }
 }
@@ -492,6 +532,7 @@ fn run_setup_action(action_id: String) -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(AppState::default()))
         .manage(Mutex::new(create_gateway()))
         .invoke_handler(tauri::generate_handler![
@@ -556,7 +597,11 @@ mod tests {
 
     #[test]
     fn readiness_is_fail_closed_without_real_agent() {
-        assert!(!Readiness::default().is_ready(&supported_diagnostic(), &AgentStatus::default()));
+        let diagnostic = supported_diagnostic();
+        assert!(
+            !Readiness::from_evidence(&diagnostic, &ProtectionStatus::default())
+                .is_ready(&diagnostic, &AgentStatus::default())
+        );
     }
 
     #[test]

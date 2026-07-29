@@ -4,7 +4,10 @@ use std::process::{Child, Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-const AGENT_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
+const STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+const MUTATION_TIMEOUT: Duration = Duration::from_secs(30);
+const SETUP_TIMEOUT: Duration = Duration::from_secs(120);
+const PROTECTION_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_AGENT_OUTPUT_BYTES: usize = 64 * 1024;
 const MAX_CONFIG_BYTES: u64 = 64 * 1024;
 const MAX_MACHINE_ID_LENGTH: usize = 128;
@@ -17,6 +20,15 @@ pub struct AgentStatus {
     pub running: bool,
     pub machine_id: Option<String>,
     pub detail: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectionStatus {
+    pub isolation_verified: bool,
+    pub storage_protected: bool,
+    pub network_filtered: bool,
+    pub cleanup_verified: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -33,9 +45,9 @@ fn config_path_candidates() -> Vec<PathBuf> {
     }
 
     if cfg!(target_os = "windows") {
-        if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+        if let Some(program_data) = std::env::var_os("PROGRAMDATA") {
             paths.push(
-                PathBuf::from(local_app_data)
+                PathBuf::from(program_data)
                     .join("GPUbnb")
                     .join("config.json"),
             );
@@ -97,8 +109,8 @@ fn spawn_agent(program: &str, prefix: &[&str], arguments: &[&str]) -> Option<Chi
         .ok()
 }
 
-fn bounded_output(mut child: Child) -> Result<Output, &'static str> {
-    let deadline = Instant::now() + AGENT_COMMAND_TIMEOUT;
+fn bounded_output(mut child: Child, timeout: Duration) -> Result<Output, &'static str> {
+    let deadline = Instant::now() + timeout;
     loop {
         match child.try_wait() {
             Ok(Some(_)) => {
@@ -126,14 +138,46 @@ fn bounded_output(mut child: Child) -> Result<Output, &'static str> {
     }
 }
 
+fn command_timeout(arguments: &[&str]) -> Duration {
+    match arguments {
+        ["setup", ..] => SETUP_TIMEOUT,
+        ["protections", "verify", ..] => PROTECTION_TIMEOUT,
+        ["link", ..] | ["start", ..] => MUTATION_TIMEOUT,
+        _ => STATUS_TIMEOUT,
+    }
+}
+
+fn bundled_agent_path() -> Option<PathBuf> {
+    #[cfg(test)]
+    if let Some(test_executable) = std::env::var_os("GPUBNB_TEST_AGENT_EXECUTABLE") {
+        return Some(PathBuf::from(test_executable));
+    }
+
+    let executable = std::env::current_exe().ok()?;
+    let directory = executable.parent()?;
+    Some(directory.join(if cfg!(target_os = "windows") {
+        "gpubnb-agent.exe"
+    } else {
+        "gpubnb-agent"
+    }))
+}
+
 fn run_agent(arguments: &[&str]) -> Result<Output, &'static str> {
+    let timeout = command_timeout(arguments);
+    if let Some(path) = bundled_agent_path().filter(|path| path.is_file()) {
+        if let Some(child) = spawn_agent(path.to_string_lossy().as_ref(), &[], arguments) {
+            return bounded_output(child, timeout);
+        }
+        return Err("agent_command_failed");
+    }
+
     if let Some(child) = spawn_agent("gpubnb-agent", &[], arguments) {
-        return bounded_output(child);
+        return bounded_output(child, timeout);
     }
 
     for python in ["python", "python3", "py"] {
         if let Some(child) = spawn_agent(python, &["-m", "gpubnb_agent"], arguments) {
-            return bounded_output(child);
+            return bounded_output(child, timeout);
         }
     }
 
@@ -170,6 +214,14 @@ pub fn status() -> AgentStatus {
         machine_id,
         detail,
     }
+}
+
+pub fn protections() -> ProtectionStatus {
+    run_agent(&["protections", "verify"])
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| serde_json::from_slice(&output.stdout).ok())
+        .unwrap_or_default()
 }
 
 pub fn setup() -> Result<AgentStatus, String> {
@@ -230,6 +282,61 @@ pub fn link(code: &str) -> Result<AgentStatus, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::sync::Mutex;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
+
+    fn integration_fixture() -> (PathBuf, PathBuf) {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "gpubnb-agent-bridge-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+
+        #[cfg(target_os = "windows")]
+        let executable = {
+            let path = directory.join("gpubnb-agent.cmd");
+            fs::write(
+                &path,
+                "@echo off\r\n\
+                 if \"%1\"==\"--version\" (echo 0.1.0& exit /b 0)\r\n\
+                 if \"%1\"==\"status\" (echo {\"running\":true}& exit /b 0)\r\n\
+                 if \"%1\"==\"setup\" exit /b 0\r\n\
+                 if \"%1\"==\"link\" exit /b 0\r\n\
+                 if \"%1\"==\"start\" exit /b 0\r\n\
+                 exit /b 9\r\n",
+            )
+            .unwrap();
+            path
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        let executable = {
+            use std::os::unix::fs::PermissionsExt;
+            let path = directory.join("gpubnb-agent");
+            fs::write(
+                &path,
+                "#!/bin/sh\n\
+                 case \"$1\" in\n\
+                 --version) echo 0.1.0 ;;\n\
+                 status) echo '{\"running\":true}' ;;\n\
+                 setup|link|start) ;;\n\
+                 *) exit 9 ;;\n\
+                 esac\n",
+            )
+            .unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+            path
+        };
+
+        (directory, executable)
+    }
 
     #[test]
     fn link_code_contract_is_ten_hex_characters() {
@@ -259,5 +366,49 @@ mod tests {
         assert!(!valid_machine_id("machine id"));
         assert!(!valid_machine_id("machine/../../secret"));
         assert!(!valid_machine_id(&"a".repeat(MAX_MACHINE_ID_LENGTH + 1)));
+    }
+
+    #[test]
+    fn expensive_commands_have_explicit_longer_timeouts() {
+        assert_eq!(command_timeout(&["status"]), STATUS_TIMEOUT);
+        assert_eq!(command_timeout(&["link", "A1B2C3D4E5"]), MUTATION_TIMEOUT);
+        assert_eq!(command_timeout(&["setup"]), SETUP_TIMEOUT);
+        assert_eq!(
+            command_timeout(&["protections", "verify"]),
+            PROTECTION_TIMEOUT
+        );
+    }
+
+    #[test]
+    fn desktop_bridge_executes_setup_link_start_and_status_against_agent_protocol() {
+        let _guard = ENVIRONMENT_LOCK.lock().unwrap();
+        let (directory, executable) = integration_fixture();
+        let config_directory = directory.join("config");
+        fs::create_dir_all(&config_directory).unwrap();
+        fs::write(
+            config_directory.join("config.json"),
+            r#"{"machineId":"machine_integration"}"#,
+        )
+        .unwrap();
+        std::env::set_var("GPUBNB_TEST_AGENT_EXECUTABLE", &executable);
+        std::env::set_var("GPUBNB_CONFIG_DIR", &config_directory);
+
+        let result = (|| {
+            let setup_status = setup()?;
+            assert!(setup_status.installed);
+            assert!(setup_status.linked);
+            assert!(setup_status.running);
+            assert_eq!(
+                link("A1B2C3D4E5")?.machine_id.as_deref(),
+                Some("machine_integration")
+            );
+            assert!(start()?.running);
+            Ok::<(), String>(())
+        })();
+
+        std::env::remove_var("GPUBNB_TEST_AGENT_EXECUTABLE");
+        std::env::remove_var("GPUBNB_CONFIG_DIR");
+        let _ = fs::remove_dir_all(directory);
+        result.unwrap();
     }
 }

@@ -7,6 +7,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
 from datetime import datetime, timezone
@@ -15,7 +16,12 @@ from typing import Any
 
 from . import __version__
 from .client import ApiClient, agent_request, heartbeat
-from .runner import prepare_workspace, run_gpu_diagnostic, cleanup_workspace
+from .runner import (
+    cleanup_workspace,
+    prepare_workspace,
+    run_gpu_diagnostic,
+    verify_protection_profile,
+)
 from .platform_info import find_nvidia_smi, find_rocm_smi, find_xpu_smi, gpu_inventory, system_inventory
 from .storage import (
     config_dir, fingerprint, generate_key, key_path, load_config, load_key,
@@ -140,15 +146,17 @@ def command_diagnose(_: argparse.Namespace) -> int:
 
 def command_status(_: argparse.Namespace) -> int:
     config = load_config()
-    pid = None
-    try:
-        pid = int(pid_path().read_text().strip())
-        os.kill(pid, 0)
-    except (FileNotFoundError, ValueError, ProcessLookupError, PermissionError, OSError):
-        pid = None
+    pid = _running_agent_pid()
+    service = {"installed": False, "running": False}
+    if os.name == "nt":
+        from .windows_service import service_status
+
+        service = service_status()
     print_json({
-        "running": pid is not None,
+        "running": pid is not None or service["running"],
         "pid": pid,
+        "serviceInstalled": service["installed"],
+        "serviceRunning": service["running"],
         "machineId": config.get("machineId"),
         "linked": bool(config.get("machineId")),
         "logFile": str(log_path()),
@@ -156,7 +164,98 @@ def command_status(_: argparse.Namespace) -> int:
     return 0
 
 
-def heartbeat_loop() -> int:
+def _agent_process_command() -> list[str]:
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "_run"]
+    return [sys.executable, "-m", "gpubnb_agent", "_run"]
+
+
+def _process_record() -> dict[str, Any] | None:
+    try:
+        value = json.loads(pid_path().read_text(encoding="ascii"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(value, dict):
+        return None
+    pid = value.get("pid")
+    executable = value.get("executable")
+    mode = value.get("mode")
+    if (
+        not isinstance(pid, int)
+        or pid <= 0
+        or not isinstance(executable, str)
+        or not executable
+        or mode not in {"_run", "_service"}
+    ):
+        return None
+    return {"pid": pid, "executable": executable, "mode": mode}
+
+
+def _process_matches(pid: int, executable: str, mode: str) -> bool:
+    if mode not in {"_run", "_service"}:
+        return False
+    try:
+        if os.name == "nt":
+            command = (
+                f"$p=Get-CimInstance Win32_Process -Filter 'ProcessId={pid}';"
+                "if($p){@{ExecutablePath=$p.ExecutablePath;CommandLine=$p.CommandLine}"
+                "|ConvertTo-Json -Compress}"
+            )
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                return False
+            process = json.loads(result.stdout)
+            actual_executable = str(process.get("ExecutablePath") or "")
+            command_line = str(process.get("CommandLine") or "")
+            return (
+                os.path.normcase(os.path.abspath(actual_executable))
+                == os.path.normcase(os.path.abspath(executable))
+                and mode in command_line.split()
+            )
+
+        executable_path = Path(f"/proc/{pid}/exe")
+        command_line_path = Path(f"/proc/{pid}/cmdline")
+        if executable_path.exists() and command_line_path.exists():
+            actual_executable = str(executable_path.resolve())
+            command_line = command_line_path.read_bytes().replace(b"\0", b" ").decode(
+                "utf-8", errors="replace"
+            )
+            return os.path.samefile(actual_executable, executable) and mode in command_line.split()
+
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        return (
+            result.returncode == 0
+            and Path(executable).name in result.stdout
+            and mode in result.stdout.split()
+        )
+    except (json.JSONDecodeError, OSError, subprocess.SubprocessError):
+        return False
+
+
+def _running_agent_pid() -> int | None:
+    record = _process_record()
+    if record and _process_matches(record["pid"], record["executable"], record["mode"]):
+        return int(record["pid"])
+    return None
+
+
+def heartbeat_loop(
+    stop_event: threading.Event | None = None, process_mode: str = "_run"
+) -> int:
+    if process_mode not in {"_run", "_service"}:
+        raise RuntimeError("invalid_agent_process_mode")
     config = load_config()
     machine_id = config.get("machineId")
     if not isinstance(machine_id, str):
@@ -164,11 +263,20 @@ def heartbeat_loop() -> int:
     key = load_key()
     interval = max(5, min(60, int(config.get("intervalSeconds", 10))))
     failures = 0
-    pid_path().write_text(str(os.getpid()), encoding="ascii")
+    pid_path().write_text(
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "executable": sys.executable,
+                "mode": process_mode,
+            }
+        ),
+        encoding="ascii",
+    )
     if os.name != "nt":
         pid_path().chmod(0o600)
     try:
-        while True:
+        while stop_event is None or not stop_event.is_set():
             try:
                 result = heartbeat(client(config), key, machine_id)
                 print_json({"event": "heartbeat", "result": result})
@@ -177,7 +285,11 @@ def heartbeat_loop() -> int:
             except Exception as exc:
                 failures = min(failures + 1, 8)
                 print_json({"event": "heartbeat_error", "type": type(exc).__name__, "message": str(exc)[:300]})
-            time.sleep(min(300, interval * (2 ** failures)) if failures else interval)
+            delay = min(300, interval * (2 ** failures)) if failures else interval
+            if stop_event is not None:
+                stop_event.wait(delay)
+            else:
+                time.sleep(delay)
     except KeyboardInterrupt:
         print("Agent arrêté.")
         return 0
@@ -257,24 +369,56 @@ def send_session_metric(api: ApiClient, key: Any, machine_id: str, session_id: s
 
 def command_start(args: argparse.Namespace) -> int:
     if args.daemon:
-        if os.name == "nt":
-            flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-            handle = open(log_path(), "a", encoding="utf-8")
-            process = subprocess.Popen([sys.executable, str(Path(__file__).parents[1] / "agent.py"), "_run"], stdout=handle, stderr=handle, creationflags=flags, close_fds=True)
-        else:
-            handle = open(log_path(), "a", encoding="utf-8")
-            process = subprocess.Popen([sys.executable, str(Path(__file__).parents[1] / "agent.py"), "_run"], stdout=handle, stderr=handle, start_new_session=True, close_fds=True)
-        print(f"Agent démarré en arrière-plan (PID {process.pid}).")
-        return 0
+        running_pid = _running_agent_pid()
+        if running_pid is not None:
+            print(f"Agent déjà démarré (PID {running_pid}).")
+            return 0
+        handle = open(log_path(), "a", encoding="utf-8")
+        try:
+            if os.name == "nt":
+                flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+                process = subprocess.Popen(
+                    _agent_process_command(),
+                    stdout=handle,
+                    stderr=handle,
+                    creationflags=flags,
+                    close_fds=True,
+                )
+            else:
+                process = subprocess.Popen(
+                    _agent_process_command(),
+                    stdout=handle,
+                    stderr=handle,
+                    start_new_session=True,
+                    close_fds=True,
+                )
+        finally:
+            handle.close()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                print("L'agent n'a pas pu démarrer. Consultez les journaux.", file=sys.stderr)
+                return 1
+            if _running_agent_pid() == process.pid:
+                print(f"Agent démarré en arrière-plan (PID {process.pid}).")
+                return 0
+            time.sleep(0.05)
+        process.terminate()
+        process.wait(timeout=5)
+        print("Le démarrage de l'agent n'a pas pu être confirmé.", file=sys.stderr)
+        return 1
     return heartbeat_loop()
 
 
 def command_stop(_: argparse.Namespace) -> int:
-    try:
-        pid = int(pid_path().read_text().strip())
-    except (FileNotFoundError, ValueError):
+    pid = _running_agent_pid()
+    if pid is None:
+        try:
+            pid_path().unlink()
+        except FileNotFoundError:
+            pass
         print("L'agent n'est pas démarré.")
-        return 0
+        return 1
     try:
         os.kill(pid, signal.SIGTERM)
         print(f"Arrêt demandé au processus {pid}.")
@@ -368,6 +512,23 @@ def command_workspace_install(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_protections_verify(_: argparse.Namespace) -> int:
+    config = load_config()
+    workspace_images = config.get("workspaceImages")
+    image = workspace_images.get("compute") if isinstance(workspace_images, dict) else None
+    image = image or config.get("diagnosticImage")
+    if not isinstance(image, str) or not image:
+        raise RuntimeError("protection_image_not_configured")
+    print_json(verify_protection_profile(image))
+    return 0
+
+
+def command_service(args: argparse.Namespace) -> int:
+    from .windows_service import manage_service
+
+    return manage_service(args.service_action)
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="gpubnb-agent", description="Agent local sécurisé GPUbnb")
     commands = root.add_subparsers(dest="command", required=True)
@@ -406,6 +567,23 @@ def parser() -> argparse.ArgumentParser:
     install_workspace.add_argument("image", help="registre/image@sha256:digest")
     install_workspace.add_argument("--timeout", type=int, default=600)
     install_workspace.set_defaults(handler=command_workspace_install)
+    protections = commands.add_parser("protections", help="vérifier les protections du runtime")
+    protection_commands = protections.add_subparsers(
+        dest="protection_command", required=True
+    )
+    protection_commands.add_parser(
+        "verify", help="créer, inspecter et supprimer un conteneur de contrôle"
+    ).set_defaults(handler=command_protections_verify)
+    service = commands.add_parser("service", help="gérer le service système Windows")
+    service.add_argument(
+        "service_action", choices=["install", "remove", "start", "stop", "restart", "status"]
+    )
+    service.set_defaults(handler=command_service)
+    commands.add_parser("_service").set_defaults(
+        handler=lambda _: __import__(
+            "gpubnb_agent.windows_service", fromlist=["dispatch_service"]
+        ).dispatch_service()
+    )
     files = commands.add_parser("files", help="transférer des fichiers de résultats")
     file_commands = files.add_subparsers(dest="file_command", required=True)
     upload_cmd = file_commands.add_parser("upload", help="téléverser un fichier de résultat vers un job")

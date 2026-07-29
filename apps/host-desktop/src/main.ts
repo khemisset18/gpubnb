@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { completeIntroduction, readOnboardingState } from './onboarding-state';
 import './styles.css';
 import './pairing.css';
@@ -71,7 +72,8 @@ const pairingErrorMessage = (error: unknown): string => {
   if (value.includes('agent_link_not_persisted')) return 'La liaison n’a pas été sauvegardée par le service local.';
   if (value.includes('agent_key_already_registered')) return 'Cette clé agent est déjà reliée à un autre compte. Réinitialisez la clé puis recréez un code.';
   if (value.includes('agent_link_failed')) return 'Le code a été refusé, a expiré ou a déjà été utilisé.';
-  if (value.includes('setup_not_available')) return 'Cette protection n’est pas encore automatisée. Elle reste bloquée au lieu d’afficher un faux succès.';
+  if (value.includes('storage_protection_unverified')) return 'Docker n’a pas confirmé le stockage isolé et sans montage hôte. La mise en ligne reste bloquée.';
+  if (value.includes('network_filter_unverified')) return 'Docker n’a pas confirmé la coupure réseau du conteneur de contrôle. La mise en ligne reste bloquée.';
   if (value.includes('agent_command_failed')) return 'Le service GPUbnb n’a pas pu exécuter la commande demandée.';
   return 'La liaison ou la configuration n’a pas abouti. La machine reste hors ligne.';
 };
@@ -108,21 +110,11 @@ const officialUrl = (rawUrl: string): URL | null => {
 
 const openOfficialUrl = (url: URL, successMessage: string): void => {
   const href = url.toString();
-  const link = document.createElement('a');
-  link.href = href;
-  link.target = '_blank';
-  link.rel = 'noopener noreferrer';
-  link.hidden = true;
-  document.body.append(link);
-
-  try {
-    link.click();
+  void openUrl(href).then(() => {
     setMessage(`${successMessage} Si rien ne s’ouvre, utilisez le lien suivant.`, 'success', href);
-  } catch {
+  }).catch(() => {
     setMessage("Le navigateur n’a pas pu s’ouvrir automatiquement.", 'error', href);
-  } finally {
-    link.remove();
-  }
+  });
 };
 
 const listingUrl = (baseUrl: string, machineId: string, gpuUuid: string): URL | null => {
@@ -225,7 +217,18 @@ const verifyAgentSetup = async (): Promise<void> => {
 };
 
 const handleSetupResult = async (result: string): Promise<void> => {
-  if (result === 'automatic_setup_pending') throw new Error('setup_not_available');
+  if (result === 'isolation_verified') {
+    setMessage('Isolation matérielle vérifiée.', 'success');
+    return;
+  }
+  if (result === 'storage_verified') {
+    setMessage('Stockage locataire isolé vérifié.', 'success');
+    return;
+  }
+  if (result === 'network_verified') {
+    setMessage('Filtrage réseau locataire vérifié.', 'success');
+    return;
+  }
   if (result === 'agent_setup_completed') {
     await verifyAgentSetup();
     return;

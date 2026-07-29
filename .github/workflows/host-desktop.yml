@@ -141,7 +141,28 @@ jobs:
       - name: Require production readiness evidence
         shell: bash
         run: |
+          set -euo pipefail
           test -f docs/HOST_DESKTOP_PRODUCTION_READINESS.md
           test -f docs/HOST_DESKTOP_THREAT_MODEL.md
           test -f docs/HOST_DESKTOP_RESOURCE_ORCHESTRATION.md
           grep -Fq 'Status: **NOT READY TO MERGE**' docs/HOST_DESKTOP_PRODUCTION_READINESS.md
+
+      - name: Reject simulated production behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden='automatic_setup_pending|start_simulated|gpubnb-fake-miner|simulated-ravencoin'
+          if grep -RInE "$forbidden" agent apps/host-desktop \
+            --exclude-dir=node_modules --exclude-dir=target; then
+            echo 'A simulated production behavior was found.' >&2
+            exit 1
+          fi
+
+      - name: Require fail-closed cleanup verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'diagnostic_cleanup_unverified' agent/gpubnb_agent/runner.py
+          grep -Fq 'protection_probe_cleanup_unverified' agent/gpubnb_agent/runner.py
+          grep -Fq 'test_diagnostic_fails_when_cleanup_cannot_be_verified' agent/tests/test_agent.py
+          grep -Fq 'test_protection_profile_rejects_host_bind_mount' agent/tests/test_agent.py

@@ -9,7 +9,15 @@ from nacl.signing import SigningKey
 from gpubnb_agent.client import signed_headers
 from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available, machine_fingerprint
 from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key, load_machine_fingerprint, save_machine_fingerprint, detect_hardware_change
-from gpubnb_agent.runner import diagnostic_command, prepare_workspace, workspace_health_command, gpu_passthrough_flags, run_gpu_diagnostic
+from gpubnb_agent.runner import (
+    cleanup_workspace,
+    diagnostic_command,
+    gpu_passthrough_flags,
+    prepare_workspace,
+    run_gpu_diagnostic,
+    verify_protection_profile,
+    workspace_health_command,
+)
 
 
 OFFICIAL_IMAGE = "ghcr.io/khemisset18/gpu-diagnostic@sha256:" + ("a" * 64)
@@ -97,9 +105,12 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(command[-1], OFFICIAL_IMAGE)
         self.assertNotIn("nvidia-smi", command)
 
-    def test_gpu_passthrough_flags_are_vendor_aware(self):
-        flags = gpu_passthrough_flags()
-        self.assertIsInstance(flags, list)
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    def test_gpu_passthrough_never_disables_seccomp(self, mock_gpu):
+        for vendor in ("NVIDIA", "AMD", "INTEL"):
+            mock_gpu.return_value = [{"gpuVendor": vendor}]
+            flags = gpu_passthrough_flags()
+            self.assertNotIn("--security-opt=seccomp=unconfined", flags)
 
     @patch("gpubnb_agent.runner.gpu_inventory")
     def test_official_image_fails_closed_for_amd(self, mock_gpu):
@@ -113,10 +124,12 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "supports_nvidia_only"):
             diagnostic_command(OFFICIAL_IMAGE)
 
+    @patch("gpubnb_agent.runner.cleanup_workspace")
     @patch("gpubnb_agent.runner.gpu_inventory")
     @patch("gpubnb_agent.runner.subprocess.run")
-    def test_parses_official_json_report(self, run, mock_gpu):
+    def test_parses_official_json_report(self, run, mock_gpu, cleanup):
         mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        cleanup.return_value = {"cleaned": True, "container": "test"}
         run.return_value = type("Result", (), {
             "returncode": 0,
             "stderr": "",
@@ -127,10 +140,12 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["gpuCount"], 1)
         self.assertEqual(result["metrics"]["gpus"][0]["uuid"], "GPU-1")
 
+    @patch("gpubnb_agent.runner.cleanup_workspace")
     @patch("gpubnb_agent.runner.gpu_inventory")
     @patch("gpubnb_agent.runner.subprocess.run")
-    def test_rejects_gpu_count_mismatch(self, run, mock_gpu):
+    def test_rejects_gpu_count_mismatch(self, run, mock_gpu, cleanup):
         mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        cleanup.return_value = {"cleaned": True, "container": "test"}
         run.return_value = type("Result", (), {
             "returncode": 0,
             "stderr": "",
@@ -139,10 +154,12 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "gpu_count_mismatch"):
             run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
 
+    @patch("gpubnb_agent.runner.cleanup_workspace")
     @patch("gpubnb_agent.runner.gpu_inventory")
     @patch("gpubnb_agent.runner.subprocess.run")
-    def test_rejects_impossible_official_telemetry(self, run, mock_gpu):
+    def test_rejects_impossible_official_telemetry(self, run, mock_gpu, cleanup):
         mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        cleanup.return_value = {"cleaned": True, "container": "test"}
         run.return_value = type("Result", (), {
             "returncode": 0,
             "stderr": "",
@@ -164,6 +181,98 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(run.call_args_list[1].args[0][:2], ["docker", "pull"])
         self.assertTrue(result["gpuDetected"])
         self.assertFalse(result["metrics"]["cacheHit"])
+
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_cleanup_requires_container_absence(self, run):
+        run.side_effect = [
+            type("Result", (), {"returncode": 0})(),
+            type("Result", (), {"returncode": 0, "stdout": "container-id\n"})(),
+        ]
+
+        result = cleanup_workspace("gpubnb-diagnostic-test")
+
+        self.assertFalse(result["cleaned"])
+        self.assertEqual(run.call_args_list[1].args[0][:4], ["docker", "container", "ls", "-a"])
+
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_cleanup_rejects_docker_daemon_failure(self, run):
+        run.side_effect = [
+            type("Result", (), {"returncode": 1})(),
+            type("Result", (), {"returncode": 1, "stdout": ""})(),
+        ]
+
+        result = cleanup_workspace("gpubnb-diagnostic-test")
+
+        self.assertFalse(result["cleaned"])
+        self.assertEqual(result["verificationExitCode"], 1)
+
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_cleanup_accepts_verified_absence(self, run):
+        run.side_effect = [
+            type("Result", (), {"returncode": 0})(),
+            type("Result", (), {"returncode": 0, "stdout": ""})(),
+        ]
+
+        self.assertTrue(cleanup_workspace("gpubnb-diagnostic-test")["cleaned"])
+
+    @patch("gpubnb_agent.runner.cleanup_workspace")
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_diagnostic_fails_when_cleanup_cannot_be_verified(self, run, mock_gpu, cleanup):
+        mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        cleanup.return_value = {"cleaned": False, "container": "test"}
+        run.return_value = type("Result", (), {
+            "returncode": 0,
+            "stderr": "",
+            "stdout": '{"schemaVersion":1,"vendor":"NVIDIA","gpuCount":1,"gpus":[{"index":0,"name":"RTX 4090","uuid":"GPU-1","memoryTotalMiB":24564,"memoryUsedMiB":100,"temperatureC":45}]}'
+        })()
+
+        with self.assertRaisesRegex(RuntimeError, "cleanup_unverified"):
+            run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
+
+    @patch("gpubnb_agent.runner.cleanup_workspace")
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_protection_profile_uses_inspected_docker_state(self, run, cleanup):
+        cleanup.return_value = {"cleaned": True, "container": "probe"}
+        run.side_effect = [
+            type("Result", (), {"returncode": 0, "stderr": "", "stdout": "probe"})(),
+            type("Result", (), {
+                "returncode": 0,
+                "stderr": "",
+                "stdout": (
+                    '[{"HostConfig":{"ReadonlyRootfs":true,"CapDrop":["ALL"],'
+                    '"SecurityOpt":["no-new-privileges"],"Binds":null,'
+                    '"Tmpfs":{"/tmp":"rw,noexec,nosuid,size=8m"},'
+                    '"NetworkMode":"none"},"Mounts":[]}]'
+                ),
+            })(),
+        ]
+
+        result = verify_protection_profile(OFFICIAL_IMAGE)
+
+        self.assertTrue(result["isolationVerified"])
+        self.assertTrue(result["storageProtected"])
+        self.assertTrue(result["networkFiltered"])
+
+    @patch("gpubnb_agent.runner.cleanup_workspace")
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_protection_profile_rejects_host_bind_mount(self, run, cleanup):
+        cleanup.return_value = {"cleaned": True, "container": "probe"}
+        run.side_effect = [
+            type("Result", (), {"returncode": 0, "stderr": "", "stdout": "probe"})(),
+            type("Result", (), {
+                "returncode": 0,
+                "stderr": "",
+                "stdout": (
+                    '[{"HostConfig":{"ReadonlyRootfs":true,"CapDrop":["ALL"],'
+                    '"SecurityOpt":["no-new-privileges"],"Binds":["C:\\\\Users:/host"],'
+                    '"Tmpfs":{"/tmp":"rw"},"NetworkMode":"none"},"Mounts":[]}]'
+                ),
+            })(),
+        ]
+
+        with self.assertRaisesRegex(RuntimeError, "not_enforced"):
+            verify_protection_profile(OFFICIAL_IMAGE)
 
     def test_developer_healthcheck_is_inside_hardened_container(self):
         image = "registry.example/gpubnb/developer@sha256:" + ("b" * 64)
