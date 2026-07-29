@@ -1,0 +1,116 @@
+name: host-windows-preflight
+
+on:
+  pull_request:
+    paths:
+      - agent/**
+      - apps/host-desktop/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .github/workflows/host-windows-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-windows-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: agent/pyproject.toml
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/host-desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: Install locked desktop dependencies
+        working-directory: apps/host-desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install agent and PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./agent pyinstaller==6.16.0
+
+      - name: Test agent CLI
+        run: |
+          python -m compileall -q agent/gpubnb_agent
+          gpubnb-agent --version
+          gpubnb-agent status
+
+      - name: Build standalone agent
+        shell: pwsh
+        run: |
+          pyinstaller --clean --noconfirm --onefile --name gpubnb-agent agent/gpubnb_agent/__main__.py
+          if (-not (Test-Path dist/gpubnb-agent.exe)) { throw 'Standalone agent was not generated.' }
+          $target = (rustc -vV | Select-String '^host:' | ForEach-Object { ($_ -split ':', 2)[1].Trim() })
+          if (-not $target) { throw 'Rust target triple could not be determined.' }
+          New-Item -ItemType Directory -Force apps/host-desktop/src-tauri/binaries | Out-Null
+          Copy-Item dist/gpubnb-agent.exe "apps/host-desktop/src-tauri/binaries/gpubnb-agent-$target.exe"
+
+      - name: Verify standalone agent
+        shell: pwsh
+        run: |
+          & ./dist/gpubnb-agent.exe --version
+          & ./dist/gpubnb-agent.exe status
+
+      - name: Type-check and build frontend
+        working-directory: apps/host-desktop
+        run: |
+          npm run check
+          npm run build
+
+      - name: Test and lint native host
+        run: |
+          cargo fmt -p gpubnb-host-desktop -- --check
+          cargo test --locked -p gpubnb-host-desktop --all-targets
+          cargo clippy --locked -p gpubnb-host-desktop --all-targets -- -D warnings
+
+      - name: Build Windows installer with embedded agent
+        working-directory: apps/host-desktop
+        run: npm run tauri:build -- --bundles nsis --config src-tauri/tauri.windows.conf.json
+        env:
+          GPUBNB_RELEASE_CHANNEL: development
+          RUST_BACKTRACE: '1'
+
+      - name: Verify installer and bundled sidecar
+        shell: pwsh
+        run: |
+          $bundle = Get-ChildItem -Path target/release/bundle,apps/host-desktop/src-tauri/target/release/bundle -Recurse -Filter *.exe -ErrorAction SilentlyContinue
+          if (-not $bundle) { throw 'No Windows installer was generated.' }
+          if (-not (Test-Path dist/gpubnb-agent.exe)) { throw 'Agent sidecar is missing.' }
+          New-Item -ItemType Directory -Force apps/host-desktop/dist-windows | Out-Null
+          $bundle | ForEach-Object { Copy-Item $_.FullName apps/host-desktop/dist-windows/ }
+          Copy-Item dist/gpubnb-agent.exe apps/host-desktop/dist-windows/gpubnb-agent.exe
+          Get-FileHash apps/host-desktop/dist-windows/* -Algorithm SHA256 | Format-Table -AutoSize | Out-File apps/host-desktop/dist-windows/SHA256SUMS.txt
+
+      - name: Upload Windows preflight artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: gpubnb-host-windows-preflight-${{ github.sha }}
+          path: apps/host-desktop/dist-windows/**
+          if-no-files-found: error
+          retention-days: 14
