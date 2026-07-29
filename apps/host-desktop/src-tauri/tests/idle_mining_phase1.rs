@@ -8,8 +8,8 @@ use resource_state::{ResourceController, ResourceEvent, ResourceState};
 
 fn approved_config() -> ApprovedMiningConfig {
     ApprovedMiningConfig {
-        asset_id: "simulated-ravencoin".into(),
-        miner_id: "gpubnb-fake-miner".into(),
+        asset_id: "ravencoin".into(),
+        miner_id: "gpubnb-approved-miner".into(),
         miner_version: "0.1.0".into(),
         wallet_address: "RExamplePublicAddressOnly123".into(),
         worker_name: "host-gpu-0".into(),
@@ -20,7 +20,7 @@ fn approved_config() -> ApprovedMiningConfig {
 }
 
 #[test]
-fn full_simulated_mining_to_rental_handoff_is_fail_closed() {
+fn verified_mining_to_rental_handoff_is_fail_closed() {
     let mut resource = ResourceController::default();
     let mut miner = MiningSupervisor::default();
 
@@ -29,10 +29,10 @@ fn full_simulated_mining_to_rental_handoff_is_fail_closed() {
         .expect("certified host should become idle");
     resource
         .apply(ResourceEvent::MiningEnabled)
-        .expect("owner should be able to enable simulated mining");
+        .expect("owner should be able to enable mining");
     miner
-        .start_simulated(&approved_config(), true, false, true)
-        .expect("approved simulation should start");
+        .record_verified_start(&approved_config(), true, false, true, true, true)
+        .expect("verified miner process should start");
 
     assert_eq!(resource.state, ResourceState::Mining);
     assert!(!miner.is_gpu_released());
@@ -49,7 +49,7 @@ fn full_simulated_mining_to_rental_handoff_is_fail_closed() {
 
     miner
         .stop_for_rental(true)
-        .expect("simulated miner should stop cleanly");
+        .expect("verified miner should stop cleanly");
     assert!(miner.is_gpu_released());
 
     resource
@@ -71,7 +71,7 @@ fn failed_miner_stop_blocks_the_rental_and_quarantines_gpu() {
     resource.apply(ResourceEvent::HostCertified).unwrap();
     resource.apply(ResourceEvent::MiningEnabled).unwrap();
     miner
-        .start_simulated(&approved_config(), true, false, true)
+        .record_verified_start(&approved_config(), true, false, true, true, true)
         .unwrap();
     resource.apply(ResourceEvent::ReservationReceived).unwrap();
 

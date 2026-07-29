@@ -426,6 +426,9 @@ fn set_idle_mining(
     state: tauri::State<'_, Mutex<AppState>>,
     gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
 ) -> Result<OrchestrationSnapshot, &'static str> {
+    if enabled {
+        return Err("mining_runtime_not_installed");
+    }
     let state = state.lock().map_err(|_| "state_unavailable")?;
     let agent = agent_bridge::status();
     if state.lifecycle != HostLifecycle::Online {

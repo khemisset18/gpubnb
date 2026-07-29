@@ -100,14 +100,16 @@ pub struct MiningSupervisor {
 }
 
 impl MiningSupervisor {
-    /// Phase 1 deliberately simulates process control. No binary, URL, shell,
-    /// command line or user-provided argument is executed here.
-    pub fn start_simulated(
+    /// Records a process start only after the privileged runtime has confirmed
+    /// both process identity and GPU ownership.
+    pub fn record_verified_start(
         &mut self,
         config: &ApprovedMiningConfig,
         gpu_is_idle: bool,
         reservation_pending: bool,
         locally_allowed: bool,
+        process_identity_verified: bool,
+        gpu_ownership_verified: bool,
     ) -> Result<(), &'static str> {
         config.validate()?;
 
@@ -116,6 +118,12 @@ impl MiningSupervisor {
         }
         if reservation_pending || !gpu_is_idle {
             return Err("gpu_not_available_for_mining");
+        }
+        if !process_identity_verified {
+            return Err("miner_process_identity_unverified");
+        }
+        if !gpu_ownership_verified {
+            return Err("miner_gpu_ownership_unverified");
         }
         if self.state == MinerRuntimeState::Quarantined {
             return Err("miner_quarantined");
@@ -192,8 +200,8 @@ mod tests {
 
     fn config() -> ApprovedMiningConfig {
         ApprovedMiningConfig {
-            asset_id: "simulated-ravencoin".into(),
-            miner_id: "gpubnb-fake-miner".into(),
+            asset_id: "ravencoin".into(),
+            miner_id: "gpubnb-approved-miner".into(),
             miner_version: "0.1.0".into(),
             wallet_address: "RExamplePublicAddressOnly123".into(),
             worker_name: "host-gpu-0".into(),
@@ -207,7 +215,7 @@ mod tests {
     fn mining_is_rejected_when_a_rental_is_pending() {
         let mut supervisor = MiningSupervisor::default();
         assert_eq!(
-            supervisor.start_simulated(&config(), true, true, true),
+            supervisor.record_verified_start(&config(), true, true, true, true, true),
             Err("gpu_not_available_for_mining")
         );
         assert!(supervisor.is_gpu_released());
@@ -217,7 +225,7 @@ mod tests {
     fn local_consent_is_required() {
         let mut supervisor = MiningSupervisor::default();
         assert_eq!(
-            supervisor.start_simulated(&config(), true, false, false),
+            supervisor.record_verified_start(&config(), true, false, false, true, true),
             Err("mining_not_locally_authorized")
         );
     }
@@ -226,8 +234,8 @@ mod tests {
     fn clean_stop_releases_the_gpu_for_rental() {
         let mut supervisor = MiningSupervisor::default();
         supervisor
-            .start_simulated(&config(), true, false, true)
-            .expect("simulation should start");
+            .record_verified_start(&config(), true, false, true, true, true)
+            .expect("verified process should start");
         supervisor
             .stop_for_rental(true)
             .expect("simulation should stop");
@@ -238,8 +246,8 @@ mod tests {
     fn failed_stop_quarantines_the_gpu() {
         let mut supervisor = MiningSupervisor::default();
         supervisor
-            .start_simulated(&config(), true, false, true)
-            .expect("simulation should start");
+            .record_verified_start(&config(), true, false, true, true, true)
+            .expect("verified process should start");
         assert_eq!(
             supervisor.stop_for_rental(false),
             Err("miner_process_still_running")
@@ -252,8 +260,8 @@ mod tests {
     fn emergency_stop_failure_quarantines_until_local_review() {
         let mut supervisor = MiningSupervisor::default();
         supervisor
-            .start_simulated(&config(), true, false, true)
-            .expect("simulation should start");
+            .record_verified_start(&config(), true, false, true, true, true)
+            .expect("verified process should start");
         assert_eq!(
             supervisor.emergency_stop(false),
             Err("emergency_stop_failed")
@@ -286,5 +294,15 @@ mod tests {
         let mut unsafe_config = config();
         unsafe_config.worker_name = "worker; rm -rf /".into();
         assert_eq!(unsafe_config.validate(), Err("invalid_worker_name"));
+    }
+
+    #[test]
+    fn unverified_process_never_transitions_to_running() {
+        let mut supervisor = MiningSupervisor::default();
+        assert_eq!(
+            supervisor.record_verified_start(&config(), true, false, true, false, true),
+            Err("miner_process_identity_unverified")
+        );
+        assert!(supervisor.is_gpu_released());
     }
 }
