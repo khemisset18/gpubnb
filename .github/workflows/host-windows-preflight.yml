@@ -142,6 +142,24 @@ jobs:
           if ($service.PathName -notlike "*$installedSidecar*") {
             throw "The service does not execute the installed sidecar: $($service.PathName)"
           }
+          $dataDirectory = Join-Path $env:PROGRAMDATA 'GPUbnb'
+          if (-not (Test-Path $dataDirectory -PathType Container)) {
+            throw 'The installer did not create the shared service data directory.'
+          }
+          $broadPrincipals = @(
+            'S-1-1-0',
+            'S-1-5-11',
+            'S-1-5-32-545'
+          )
+          $unsafeRules = (Get-Acl $dataDirectory).Access | Where-Object {
+            $_.AccessControlType -eq 'Allow' -and
+            $broadPrincipals -contains $_.IdentityReference.Translate(
+              [System.Security.Principal.SecurityIdentifier]
+            ).Value
+          }
+          if ($unsafeRules) {
+            throw 'The service data directory grants access to a broad Windows principal.'
+          }
           $failure = & sc.exe qfailure GPUbnbAgent
           if ($LASTEXITCODE -ne 0 -or $failure -notmatch 'RESTART') {
             throw 'Windows Service recovery is not configured.'

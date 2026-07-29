@@ -53,7 +53,9 @@ gpubnb-agent version
 
 ## Données locales
 
-- Windows : `%LOCALAPPDATA%\GPUbnb`
+- Windows : `%PROGRAMDATA%\GPUbnb` (ACL limitée au compte d’installation,
+  aux administrateurs locaux et à `SYSTEM`, afin que le service SCM et
+  l’application utilisent la même identité persistante)
 - Linux : `${XDG_CONFIG_HOME:-~/.config}/gpubnb`
 
 La clé privée `agent.key` reste dans ce dossier. Elle n'est jamais envoyée à
