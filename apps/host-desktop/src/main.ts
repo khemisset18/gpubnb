@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { completeIntroduction, readOnboardingState } from './onboarding-state';
 import './styles.css';
 import './pairing.css';
@@ -109,21 +110,11 @@ const officialUrl = (rawUrl: string): URL | null => {
 
 const openOfficialUrl = (url: URL, successMessage: string): void => {
   const href = url.toString();
-  const link = document.createElement('a');
-  link.href = href;
-  link.target = '_blank';
-  link.rel = 'noopener noreferrer';
-  link.hidden = true;
-  document.body.append(link);
-
-  try {
-    link.click();
+  void openUrl(href).then(() => {
     setMessage(`${successMessage} Si rien ne s’ouvre, utilisez le lien suivant.`, 'success', href);
-  } catch {
+  }).catch(() => {
     setMessage("Le navigateur n’a pas pu s’ouvrir automatiquement.", 'error', href);
-  } finally {
-    link.remove();
-  }
+  });
 };
 
 const listingUrl = (baseUrl: string, machineId: string, gpuUuid: string): URL | null => {
