@@ -4,7 +4,10 @@ use std::process::{Child, Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-const AGENT_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
+const STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+const MUTATION_TIMEOUT: Duration = Duration::from_secs(30);
+const SETUP_TIMEOUT: Duration = Duration::from_secs(120);
+const PROTECTION_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_AGENT_OUTPUT_BYTES: usize = 64 * 1024;
 const MAX_CONFIG_BYTES: u64 = 64 * 1024;
 const MAX_MACHINE_ID_LENGTH: usize = 128;
@@ -42,9 +45,9 @@ fn config_path_candidates() -> Vec<PathBuf> {
     }
 
     if cfg!(target_os = "windows") {
-        if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+        if let Some(program_data) = std::env::var_os("PROGRAMDATA") {
             paths.push(
-                PathBuf::from(local_app_data)
+                PathBuf::from(program_data)
                     .join("GPUbnb")
                     .join("config.json"),
             );
@@ -106,8 +109,8 @@ fn spawn_agent(program: &str, prefix: &[&str], arguments: &[&str]) -> Option<Chi
         .ok()
 }
 
-fn bounded_output(mut child: Child) -> Result<Output, &'static str> {
-    let deadline = Instant::now() + AGENT_COMMAND_TIMEOUT;
+fn bounded_output(mut child: Child, timeout: Duration) -> Result<Output, &'static str> {
+    let deadline = Instant::now() + timeout;
     loop {
         match child.try_wait() {
             Ok(Some(_)) => {
@@ -135,14 +138,41 @@ fn bounded_output(mut child: Child) -> Result<Output, &'static str> {
     }
 }
 
+fn command_timeout(arguments: &[&str]) -> Duration {
+    match arguments {
+        ["setup", ..] => SETUP_TIMEOUT,
+        ["protections", "verify", ..] => PROTECTION_TIMEOUT,
+        ["link", ..] | ["start", ..] => MUTATION_TIMEOUT,
+        _ => STATUS_TIMEOUT,
+    }
+}
+
+fn bundled_agent_path() -> Option<PathBuf> {
+    let executable = std::env::current_exe().ok()?;
+    let directory = executable.parent()?;
+    Some(directory.join(if cfg!(target_os = "windows") {
+        "gpubnb-agent.exe"
+    } else {
+        "gpubnb-agent"
+    }))
+}
+
 fn run_agent(arguments: &[&str]) -> Result<Output, &'static str> {
+    let timeout = command_timeout(arguments);
+    if let Some(path) = bundled_agent_path().filter(|path| path.is_file()) {
+        if let Some(child) = spawn_agent(path.to_string_lossy().as_ref(), &[], arguments) {
+            return bounded_output(child, timeout);
+        }
+        return Err("agent_command_failed");
+    }
+
     if let Some(child) = spawn_agent("gpubnb-agent", &[], arguments) {
-        return bounded_output(child);
+        return bounded_output(child, timeout);
     }
 
     for python in ["python", "python3", "py"] {
         if let Some(child) = spawn_agent(python, &["-m", "gpubnb_agent"], arguments) {
-            return bounded_output(child);
+            return bounded_output(child, timeout);
         }
     }
 
@@ -276,5 +306,16 @@ mod tests {
         assert!(!valid_machine_id("machine id"));
         assert!(!valid_machine_id("machine/../../secret"));
         assert!(!valid_machine_id(&"a".repeat(MAX_MACHINE_ID_LENGTH + 1)));
+    }
+
+    #[test]
+    fn expensive_commands_have_explicit_longer_timeouts() {
+        assert_eq!(command_timeout(&["status"]), STATUS_TIMEOUT);
+        assert_eq!(command_timeout(&["link", "A1B2C3D4E5"]), MUTATION_TIMEOUT);
+        assert_eq!(command_timeout(&["setup"]), SETUP_TIMEOUT);
+        assert_eq!(
+            command_timeout(&["protections", "verify"]),
+            PROTECTION_TIMEOUT
+        );
     }
 }
