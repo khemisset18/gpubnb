@@ -125,6 +125,10 @@ jobs:
           $installation = Start-Process -FilePath $installer.FullName `
             -ArgumentList '/S', "/D=$installDirectory" -Wait -PassThru
           if ($installation.ExitCode -ne 0) {
+            $installerLog = Join-Path $env:TEMP 'gpubnb-installer.log'
+            if (Test-Path $installerLog) {
+              Write-Host (Get-Content $installerLog -Raw)
+            }
             throw "NSIS silent installation failed with exit code $($installation.ExitCode)."
           }
 

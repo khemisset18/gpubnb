@@ -4,6 +4,9 @@
   nsExec::ExecToStack '${command}'
   Pop $0
   Pop $1
+  FileOpen $2 "$TEMP\gpubnb-installer.log" a
+  FileWrite $2 "${failureMessage}: exit code $0$\r$\n$1$\r$\n"
+  FileClose $2
   ${If} $0 != 0
     DetailPrint "${failureMessage}: exit code $0"
     DetailPrint "$1"
@@ -12,6 +15,7 @@
 !macroend
 
 !macro NSIS_HOOK_PREINSTALL
+  Delete "$TEMP\gpubnb-installer.log"
   ; An existing service must release the sidecar before an upgrade can replace it.
   nsExec::ExecToStack '"$SYSDIR\sc.exe" query GPUbnbAgent'
   Pop $0
