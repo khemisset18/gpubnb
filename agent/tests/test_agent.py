@@ -105,9 +105,12 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(command[-1], OFFICIAL_IMAGE)
         self.assertNotIn("nvidia-smi", command)
 
-    def test_gpu_passthrough_flags_are_vendor_aware(self):
-        flags = gpu_passthrough_flags()
-        self.assertIsInstance(flags, list)
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    def test_gpu_passthrough_never_disables_seccomp(self, mock_gpu):
+        for vendor in ("NVIDIA", "AMD", "INTEL"):
+            mock_gpu.return_value = [{"gpuVendor": vendor}]
+            flags = gpu_passthrough_flags()
+            self.assertNotIn("--security-opt=seccomp=unconfined", flags)
 
     @patch("gpubnb_agent.runner.gpu_inventory")
     def test_official_image_fails_closed_for_amd(self, mock_gpu):

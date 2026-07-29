@@ -21,9 +21,9 @@ def _gpu_vendor() -> str:
 def gpu_passthrough_flags() -> list[str]:
     vendor = _gpu_vendor()
     if vendor == "AMD":
-        return ["--device=/dev/kfd", "--device=/dev/dri", "--security-opt=seccomp=unconfined"]
+        return ["--device=/dev/kfd", "--device=/dev/dri"]
     if vendor == "INTEL":
-        return ["--device=/dev/dri", "--security-opt=seccomp=unconfined"]
+        return ["--device=/dev/dri"]
     return ["--gpus=device=0", "--env=NVIDIA_DRIVER_CAPABILITIES=utility"]
 
 
