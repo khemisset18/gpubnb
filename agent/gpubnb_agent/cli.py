@@ -147,9 +147,16 @@ def command_diagnose(_: argparse.Namespace) -> int:
 def command_status(_: argparse.Namespace) -> int:
     config = load_config()
     pid = _running_agent_pid()
+    service = {"installed": False, "running": False}
+    if os.name == "nt":
+        from .windows_service import service_status
+
+        service = service_status()
     print_json({
-        "running": pid is not None,
+        "running": pid is not None or service["running"],
         "pid": pid,
+        "serviceInstalled": service["installed"],
+        "serviceRunning": service["running"],
         "machineId": config.get("machineId"),
         "linked": bool(config.get("machineId")),
         "logFile": str(log_path()),
@@ -172,12 +179,21 @@ def _process_record() -> dict[str, Any] | None:
         return None
     pid = value.get("pid")
     executable = value.get("executable")
-    if not isinstance(pid, int) or pid <= 0 or not isinstance(executable, str) or not executable:
+    mode = value.get("mode")
+    if (
+        not isinstance(pid, int)
+        or pid <= 0
+        or not isinstance(executable, str)
+        or not executable
+        or mode not in {"_run", "_service"}
+    ):
         return None
-    return {"pid": pid, "executable": executable}
+    return {"pid": pid, "executable": executable, "mode": mode}
 
 
-def _process_matches(pid: int, executable: str) -> bool:
+def _process_matches(pid: int, executable: str, mode: str) -> bool:
+    if mode not in {"_run", "_service"}:
+        return False
     try:
         if os.name == "nt":
             command = (
@@ -200,7 +216,7 @@ def _process_matches(pid: int, executable: str) -> bool:
             return (
                 os.path.normcase(os.path.abspath(actual_executable))
                 == os.path.normcase(os.path.abspath(executable))
-                and "_run" in command_line.split()
+                and mode in command_line.split()
             )
 
         executable_path = Path(f"/proc/{pid}/exe")
@@ -210,7 +226,7 @@ def _process_matches(pid: int, executable: str) -> bool:
             command_line = command_line_path.read_bytes().replace(b"\0", b" ").decode(
                 "utf-8", errors="replace"
             )
-            return os.path.samefile(actual_executable, executable) and "_run" in command_line.split()
+            return os.path.samefile(actual_executable, executable) and mode in command_line.split()
 
         result = subprocess.run(
             ["ps", "-p", str(pid), "-o", "command="],
@@ -222,7 +238,7 @@ def _process_matches(pid: int, executable: str) -> bool:
         return (
             result.returncode == 0
             and Path(executable).name in result.stdout
-            and "_run" in result.stdout.split()
+            and mode in result.stdout.split()
         )
     except (json.JSONDecodeError, OSError, subprocess.SubprocessError):
         return False
@@ -230,12 +246,16 @@ def _process_matches(pid: int, executable: str) -> bool:
 
 def _running_agent_pid() -> int | None:
     record = _process_record()
-    if record and _process_matches(record["pid"], record["executable"]):
+    if record and _process_matches(record["pid"], record["executable"], record["mode"]):
         return int(record["pid"])
     return None
 
 
-def heartbeat_loop(stop_event: threading.Event | None = None) -> int:
+def heartbeat_loop(
+    stop_event: threading.Event | None = None, process_mode: str = "_run"
+) -> int:
+    if process_mode not in {"_run", "_service"}:
+        raise RuntimeError("invalid_agent_process_mode")
     config = load_config()
     machine_id = config.get("machineId")
     if not isinstance(machine_id, str):
@@ -244,7 +264,13 @@ def heartbeat_loop(stop_event: threading.Event | None = None) -> int:
     interval = max(5, min(60, int(config.get("intervalSeconds", 10))))
     failures = 0
     pid_path().write_text(
-        json.dumps({"pid": os.getpid(), "executable": sys.executable}),
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "executable": sys.executable,
+                "mode": process_mode,
+            }
+        ),
         encoding="ascii",
     )
     if os.name != "nt":

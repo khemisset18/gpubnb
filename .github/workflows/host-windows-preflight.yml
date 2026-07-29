@@ -134,6 +134,24 @@ jobs:
           }
           & $installedSidecar version
           if ($LASTEXITCODE -ne 0) { throw 'The installed agent sidecar is not executable.' }
+          $service = Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
+          if (-not $service) { throw 'The installer did not register the GPUbnbAgent service.' }
+          if ($service.StartMode -ne 'Auto') {
+            throw "The GPUbnbAgent service is not automatic: $($service.StartMode)"
+          }
+          if ($service.PathName -notlike "*$installedSidecar*") {
+            throw "The service does not execute the installed sidecar: $($service.PathName)"
+          }
+          $failure = & sc.exe qfailure GPUbnbAgent
+          if ($LASTEXITCODE -ne 0 -or $failure -notmatch 'RESTART') {
+            throw 'Windows Service recovery is not configured.'
+          }
+          & $installedSidecar service restart
+          if ($LASTEXITCODE -ne 0) { throw 'The installed service could not be restarted.' }
+          $service = Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
+          if ($service.State -ne 'Running') {
+            throw "The restarted service is not running: $($service.State)"
+          }
 
           $uninstaller = Join-Path $installDirectory 'uninstall.exe'
           if (-not (Test-Path $uninstaller -PathType Leaf)) {
@@ -146,6 +164,9 @@ jobs:
           }
           if (Test-Path $installedSidecar) {
             throw 'The uninstaller left the agent sidecar behind.'
+          }
+          if (Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'") {
+            throw 'The uninstaller left the GPUbnbAgent service registered.'
           }
 
           $artifactDirectory = 'apps/host-desktop/dist-windows'

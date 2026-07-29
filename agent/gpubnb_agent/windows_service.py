@@ -2,13 +2,53 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import threading
+from logging import Formatter, Logger
+from logging.handlers import RotatingFileHandler
 from typing import Any
 
 SERVICE_NAME = "GPUbnbAgent"
 SERVICE_DISPLAY_NAME = "GPUbnb Host Agent"
 SERVICE_DESCRIPTION = "Supervises the GPUbnb host agent and secure workspace runtime."
+RESTART_DELAY_SECONDS = 5
+MAX_RESTART_DELAY_SECONDS = 300
+
+
+def _service_logger() -> Logger:
+    from .storage import log_path
+
+    path = log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    logger = Logger("gpubnb-agent-service")
+    handler = RotatingFileHandler(
+        path, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+    )
+    handler.setFormatter(
+        Formatter("%(asctime)s %(levelname)s %(message)s", "%Y-%m-%dT%H:%M:%S%z")
+    )
+    logger.addHandler(handler)
+    return logger
+
+
+def supervise_heartbeat(
+    stop_event: threading.Event,
+    heartbeat: Any,
+    logger: Logger,
+) -> None:
+    delay = RESTART_DELAY_SECONDS
+    while not stop_event.is_set():
+        try:
+            exit_code = heartbeat(stop_event, process_mode="_service")
+            if stop_event.is_set() and exit_code in (None, 0):
+                return
+            raise RuntimeError(f"agent_service_exited:{exit_code}")
+        except Exception:
+            logger.exception("Agent worker failed; retry scheduled in %s seconds", delay)
+            if stop_event.wait(delay):
+                return
+            delay = min(MAX_RESTART_DELAY_SECONDS, delay * 2)
 
 
 def _require_windows() -> tuple[Any, Any, Any, Any]:
@@ -47,9 +87,10 @@ def _service_class() -> type:
 
         def SvcDoRun(self) -> None:
             servicemanager.LogInfoMsg(f"{SERVICE_NAME} starting")
-            exit_code = heartbeat_loop(self._stop_event)
-            if exit_code:
-                raise RuntimeError(f"agent_service_exited:{exit_code}")
+            logger = _service_logger()
+            logger.info("%s starting", SERVICE_NAME)
+            supervise_heartbeat(self._stop_event, heartbeat_loop, logger)
+            logger.info("%s stopped", SERVICE_NAME)
             servicemanager.LogInfoMsg(f"{SERVICE_NAME} stopped")
 
     return GPUbnbAgentService
@@ -78,4 +119,47 @@ def manage_service(action: str) -> int:
         win32serviceutil.HandleCommandLine(service_class)
     finally:
         sys.argv = previous
+    if action == "install":
+        _configure_recovery()
     return 0
+
+
+def _sc(*arguments: str) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        ["sc.exe", *arguments],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+        shell=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()[-500:]
+        raise RuntimeError(f"service_control_failed:{arguments[0]}:{detail}")
+    return result
+
+
+def _configure_recovery() -> None:
+    _sc(
+        "failure",
+        SERVICE_NAME,
+        "reset=",
+        "86400",
+        "actions=",
+        "restart/5000/restart/30000/restart/120000",
+    )
+    _sc("failureflag", SERVICE_NAME, "1")
+
+
+def service_status() -> dict[str, bool]:
+    _, _, win32service, win32serviceutil = _require_windows()
+    try:
+        status = win32serviceutil.QueryServiceStatus(SERVICE_NAME)
+    except win32service.error as exc:
+        if getattr(exc, "winerror", None) == 1060:
+            return {"installed": False, "running": False}
+        raise RuntimeError(f"service_status_failed:{exc}") from exc
+    return {
+        "installed": True,
+        "running": status[1] == win32service.SERVICE_RUNNING,
+    }

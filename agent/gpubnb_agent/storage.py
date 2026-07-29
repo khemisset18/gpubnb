@@ -19,7 +19,10 @@ def config_dir() -> Path:
     if override:
         return Path(override).expanduser()
     if platform.system() == "Windows":
-        return Path(os.environ.get("LOCALAPPDATA", Path.home())) / "GPUbnb"
+        program_data = os.environ.get("PROGRAMDATA")
+        if not program_data:
+            raise RuntimeError("PROGRAMDATA_absent")
+        return Path(program_data) / "GPUbnb"
     return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "gpubnb"
 
 

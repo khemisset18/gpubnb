@@ -42,7 +42,7 @@ class ProcessLifecycleTests(unittest.TestCase):
 
     def test_status_rejects_a_reused_pid(self) -> None:
         cli.pid_path().write_text(
-            json.dumps({"pid": 4242, "executable": "/opt/gpubnb-agent"}),
+            json.dumps({"pid": 4242, "executable": "/opt/gpubnb-agent", "mode": "_run"}),
             encoding="ascii",
         )
         output = io.StringIO()
@@ -72,7 +72,7 @@ class ProcessLifecycleTests(unittest.TestCase):
 
     def test_stop_never_signals_an_unverified_pid(self) -> None:
         cli.pid_path().write_text(
-            json.dumps({"pid": 4242, "executable": "/opt/gpubnb-agent"}),
+            json.dumps({"pid": 4242, "executable": "/opt/gpubnb-agent", "mode": "_run"}),
             encoding="ascii",
         )
 
@@ -84,6 +84,25 @@ class ProcessLifecycleTests(unittest.TestCase):
 
         kill.assert_not_called()
         self.assertFalse(cli.pid_path().exists())
+
+    def test_status_accepts_verified_windows_service_identity(self) -> None:
+        cli.pid_path().write_text(
+            json.dumps(
+                {
+                    "pid": 4242,
+                    "executable": r"C:\Program Files\GPUbnb\gpubnb-agent.exe",
+                    "mode": "_service",
+                }
+            ),
+            encoding="ascii",
+        )
+
+        with patch.object(cli, "_process_matches", return_value=True) as matches:
+            self.assertEqual(cli._running_agent_pid(), 4242)
+
+        matches.assert_called_once_with(
+            4242, r"C:\Program Files\GPUbnb\gpubnb-agent.exe", "_service"
+        )
 
 
 if __name__ == "__main__":

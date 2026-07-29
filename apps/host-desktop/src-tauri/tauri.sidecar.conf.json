@@ -3,6 +3,12 @@
   "bundle": {
     "externalBin": [
       "binaries/gpubnb-agent"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "./windows/installer-hooks.nsh"
+      }
+    }
   }
 }
