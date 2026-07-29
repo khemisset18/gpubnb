@@ -9,7 +9,14 @@ from nacl.signing import SigningKey
 from gpubnb_agent.client import signed_headers
 from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available, machine_fingerprint
 from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key, load_machine_fingerprint, save_machine_fingerprint, detect_hardware_change
-from gpubnb_agent.runner import diagnostic_command, prepare_workspace, workspace_health_command, gpu_passthrough_flags, run_gpu_diagnostic
+from gpubnb_agent.runner import (
+    cleanup_workspace,
+    diagnostic_command,
+    gpu_passthrough_flags,
+    prepare_workspace,
+    run_gpu_diagnostic,
+    workspace_health_command,
+)
 
 
 OFFICIAL_IMAGE = "ghcr.io/khemisset18/gpu-diagnostic@sha256:" + ("a" * 64)
