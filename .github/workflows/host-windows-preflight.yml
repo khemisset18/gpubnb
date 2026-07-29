@@ -113,13 +113,28 @@ jobs:
       - name: Verify installer and bundled sidecar
         shell: pwsh
         run: |
-          $bundle = Get-ChildItem -Path target/release/bundle,apps/host-desktop/src-tauri/target/release/bundle -Recurse -Filter *.exe -ErrorAction SilentlyContinue
-          if (-not $bundle) { throw 'No Windows installer was generated.' }
-          if (-not (Test-Path dist/gpubnb-agent.exe)) { throw 'Agent sidecar is missing.' }
-          New-Item -ItemType Directory -Force apps/host-desktop/dist-windows | Out-Null
-          $bundle | ForEach-Object { Copy-Item $_.FullName apps/host-desktop/dist-windows/ }
-          Copy-Item dist/gpubnb-agent.exe apps/host-desktop/dist-windows/gpubnb-agent.exe
-          Get-FileHash apps/host-desktop/dist-windows/* -Algorithm SHA256 | Format-Table -AutoSize | Out-File apps/host-desktop/dist-windows/SHA256SUMS.txt
+          $installer = Get-ChildItem -Path target/release/bundle/nsis -Filter '*-setup.exe' -File -ErrorAction Stop
+          if ($installer.Count -ne 1) {
+            throw "Expected exactly one NSIS installer, found $($installer.Count)."
+          }
+
+          $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
+          if (-not (Test-Path $sevenZip)) { throw '7-Zip is unavailable on the Windows runner.' }
+          $contents = & $sevenZip l $installer.FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to inspect the NSIS installer.' }
+          if ($contents -notmatch 'gpubnb-agent\.exe') {
+            throw 'The NSIS installer does not contain the gpubnb-agent sidecar.'
+          }
+
+          $artifactDirectory = 'apps/host-desktop/dist-windows'
+          New-Item -ItemType Directory -Force $artifactDirectory | Out-Null
+          Copy-Item $installer.FullName $artifactDirectory
+          Copy-Item dist/gpubnb-agent.exe (Join-Path $artifactDirectory 'gpubnb-agent.exe')
+
+          $payloads = Get-ChildItem $artifactDirectory -File
+          $checksums = $payloads | Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))" }
+          $checksums | Set-Content (Join-Path $artifactDirectory 'SHA256SUMS.txt') -Encoding ascii
 
       - name: Upload Windows preflight artifact
         uses: actions/upload-artifact@v6
