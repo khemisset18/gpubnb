@@ -64,7 +64,7 @@ jobs:
       - name: Build standalone agent
         shell: pwsh
         run: |
-          pyinstaller --clean --noconfirm --onefile --name gpubnb-agent agent/gpubnb_agent/__main__.py
+          pyinstaller --clean --noconfirm --onefile --name gpubnb-agent --hidden-import=_cffi_backend --collect-all cffi --collect-all nacl agent/gpubnb_agent/__main__.py
           if (-not (Test-Path dist/gpubnb-agent.exe)) { throw 'Standalone agent was not generated.' }
           $target = (rustc -vV | Select-String '^host:' | ForEach-Object { ($_ -split ':', 2)[1].Trim() })
           if (-not $target) { throw 'Rust target triple could not be determined.' }
@@ -75,7 +75,9 @@ jobs:
         shell: pwsh
         run: |
           & ./dist/gpubnb-agent.exe version
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone agent version command failed.' }
           & ./dist/gpubnb-agent.exe status
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone agent status command failed.' }
 
       - name: Type-check and build frontend
         working-directory: apps/host-desktop
