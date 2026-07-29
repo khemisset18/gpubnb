@@ -7,8 +7,7 @@ RUN apt-get update \
     nodejs npm postgresql-client python3 python3-pip redis-tools rustc sqlite3 unzip \
  && npm cache clean --force \
  && npm install --global npm@11.19.0 js-yaml@5.2.2 shell-quote@1.10.0 tar@7.5.22 \
- && npm update --prefix /usr/local/lib/node_modules/npm --omit=dev \
- && npm install --prefix /usr/local/lib/node_modules/npm --no-save \
+ && npm install --prefix /usr/local/lib/node_modules/npm --omit=dev --no-save \
     brace-expansion@5.0.8 js-yaml@4.3.0 shell-quote@1.9.0 tar@7.5.22 \
  && rm -rf /var/lib/apt/lists/* /root/.cache /usr/local/bin/fixuid \
  && install -d -o coder -g coder -m 700 /workspace /workspace/imports /workspace/output
