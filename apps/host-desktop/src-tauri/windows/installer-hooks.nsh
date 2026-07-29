@@ -25,7 +25,7 @@
 
 !macro NSIS_HOOK_POSTINSTALL
   CreateDirectory "$COMMONAPPDATA\GPUbnb"
-  !insertmacro GPUbnbExecChecked '"$SYSDIR\icacls.exe" "$COMMONAPPDATA\GPUbnb" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "$USERNAME:(OI)(CI)M"' "Unable to secure the GPUbnb data directory"
+  !insertmacro GPUbnbExecChecked '"$SYSDIR\icacls.exe" "$COMMONAPPDATA\GPUbnb" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "$%USERNAME%:(OI)(CI)M"' "Unable to secure the GPUbnb data directory"
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service install' "Unable to install the GPUbnb Windows service"
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service start' "Unable to start the GPUbnb Windows service"
 !macroend
