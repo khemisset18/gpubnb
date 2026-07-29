@@ -1,4 +1,4 @@
-FROM node:22.22.2-bookworm-slim@sha256:9f6d5975c7dca860947d3915877f85607946403fc55349f39b4bc3688448bb6e AS node-runtime
+FROM node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d AS node-runtime
 
 FROM codercom/code-server:4.130.0-ubuntu@sha256:d39c88f837f78465b4cf99f54b76eadf52440dc9ffb589e2ddc5d2fd9d0592d2
 
@@ -13,6 +13,17 @@ RUN apt-get update \
  && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
  && npm cache clean --force \
  && npm install --global js-yaml@5.2.2 shell-quote@1.10.0 tar@7.5.22 \
+ && npm install --prefix /tmp/code-server-fixes --omit=dev --no-save \
+    js-yaml@4.3.0 shell-quote@1.9.0 tar@7.5.22 \
+ && rm -rf /usr/lib/code-server/node_modules/js-yaml \
+    /usr/lib/code-server/lib/vscode/node_modules/shell-quote \
+    /usr/lib/code-server/lib/vscode/node_modules/tar \
+ && cp -a /tmp/code-server-fixes/node_modules/js-yaml /usr/lib/code-server/node_modules/ \
+ && cp -a /tmp/code-server-fixes/node_modules/shell-quote \
+    /usr/lib/code-server/lib/vscode/node_modules/ \
+ && cp -a /tmp/code-server-fixes/node_modules/tar \
+    /usr/lib/code-server/lib/vscode/node_modules/ \
+ && rm -rf /tmp/code-server-fixes \
  && rm -rf /var/lib/apt/lists/* /root/.cache /usr/local/bin/fixuid \
  && install -d -o coder -g coder -m 700 /workspace /workspace/imports /workspace/output
 
