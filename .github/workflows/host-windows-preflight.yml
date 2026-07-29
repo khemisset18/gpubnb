@@ -58,8 +58,8 @@ jobs:
       - name: Test agent CLI
         run: |
           python -m compileall -q agent/gpubnb_agent
-          gpubnb-agent --version
-          gpubnb-agent status
+          gpubnb-agent version
+          python -m gpubnb_agent status
 
       - name: Build standalone agent
         shell: pwsh
@@ -74,7 +74,7 @@ jobs:
       - name: Verify standalone agent
         shell: pwsh
         run: |
-          & ./dist/gpubnb-agent.exe --version
+          & ./dist/gpubnb-agent.exe version
           & ./dist/gpubnb-agent.exe status
 
       - name: Type-check and build frontend
