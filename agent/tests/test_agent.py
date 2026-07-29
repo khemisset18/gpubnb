@@ -15,6 +15,7 @@ from gpubnb_agent.runner import (
     gpu_passthrough_flags,
     prepare_workspace,
     run_gpu_diagnostic,
+    verify_protection_profile,
     workspace_health_command,
 )
 
@@ -204,6 +205,50 @@ class RunnerTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "cleanup_unverified"):
             run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
+
+    @patch("gpubnb_agent.runner.cleanup_workspace")
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_protection_profile_uses_inspected_docker_state(self, run, cleanup):
+        cleanup.return_value = {"cleaned": True, "container": "probe"}
+        run.side_effect = [
+            type("Result", (), {"returncode": 0, "stderr": "", "stdout": "probe"})(),
+            type("Result", (), {
+                "returncode": 0,
+                "stderr": "",
+                "stdout": (
+                    '[{"HostConfig":{"ReadonlyRootfs":true,"CapDrop":["ALL"],'
+                    '"SecurityOpt":["no-new-privileges"],"Binds":null,'
+                    '"Tmpfs":{"/tmp":"rw,noexec,nosuid,size=8m"},'
+                    '"NetworkMode":"none"},"Mounts":[]}]'
+                ),
+            })(),
+        ]
+
+        result = verify_protection_profile(OFFICIAL_IMAGE)
+
+        self.assertTrue(result["isolationVerified"])
+        self.assertTrue(result["storageProtected"])
+        self.assertTrue(result["networkFiltered"])
+
+    @patch("gpubnb_agent.runner.cleanup_workspace")
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_protection_profile_rejects_host_bind_mount(self, run, cleanup):
+        cleanup.return_value = {"cleaned": True, "container": "probe"}
+        run.side_effect = [
+            type("Result", (), {"returncode": 0, "stderr": "", "stdout": "probe"})(),
+            type("Result", (), {
+                "returncode": 0,
+                "stderr": "",
+                "stdout": (
+                    '[{"HostConfig":{"ReadonlyRootfs":true,"CapDrop":["ALL"],'
+                    '"SecurityOpt":["no-new-privileges"],"Binds":["C:\\\\Users:/host"],'
+                    '"Tmpfs":{"/tmp":"rw"},"NetworkMode":"none"},"Mounts":[]}]'
+                ),
+            })(),
+        ]
+
+        with self.assertRaisesRegex(RuntimeError, "not_enforced"):
+            verify_protection_profile(OFFICIAL_IMAGE)
 
     def test_developer_healthcheck_is_inside_hardened_container(self):
         image = "registry.example/gpubnb/developer@sha256:" + ("b" * 64)

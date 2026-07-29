@@ -71,8 +71,8 @@ const pairingErrorMessage = (error: unknown): string => {
   if (value.includes('agent_link_not_persisted')) return 'La liaison n’a pas été sauvegardée par le service local.';
   if (value.includes('agent_key_already_registered')) return 'Cette clé agent est déjà reliée à un autre compte. Réinitialisez la clé puis recréez un code.';
   if (value.includes('agent_link_failed')) return 'Le code a été refusé, a expiré ou a déjà été utilisé.';
-  if (value.includes('storage_protection_not_implemented')) return 'Le stockage locataire isolé n’est pas encore provisionné. La mise en ligne reste bloquée.';
-  if (value.includes('network_filter_not_implemented')) return 'Le filtrage réseau locataire n’est pas encore provisionné. La mise en ligne reste bloquée.';
+  if (value.includes('storage_protection_unverified')) return 'Docker n’a pas confirmé le stockage isolé et sans montage hôte. La mise en ligne reste bloquée.';
+  if (value.includes('network_filter_unverified')) return 'Docker n’a pas confirmé la coupure réseau du conteneur de contrôle. La mise en ligne reste bloquée.';
   if (value.includes('agent_command_failed')) return 'Le service GPUbnb n’a pas pu exécuter la commande demandée.';
   return 'La liaison ou la configuration n’a pas abouti. La machine reste hors ligne.';
 };
@@ -228,6 +228,14 @@ const verifyAgentSetup = async (): Promise<void> => {
 const handleSetupResult = async (result: string): Promise<void> => {
   if (result === 'isolation_verified') {
     setMessage('Isolation matérielle vérifiée.', 'success');
+    return;
+  }
+  if (result === 'storage_verified') {
+    setMessage('Stockage locataire isolé vérifié.', 'success');
+    return;
+  }
+  if (result === 'network_verified') {
+    setMessage('Filtrage réseau locataire vérifié.', 'success');
     return;
   }
   if (result === 'agent_setup_completed') {

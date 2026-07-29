@@ -19,6 +19,15 @@ pub struct AgentStatus {
     pub detail: String,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectionStatus {
+    pub isolation_verified: bool,
+    pub storage_protected: bool,
+    pub network_filtered: bool,
+    pub cleanup_verified: bool,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AgentConfig {
@@ -170,6 +179,14 @@ pub fn status() -> AgentStatus {
         machine_id,
         detail,
     }
+}
+
+pub fn protections() -> ProtectionStatus {
+    run_agent(&["protections", "verify"])
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| serde_json::from_slice(&output.stdout).ok())
+        .unwrap_or_default()
 }
 
 pub fn setup() -> Result<AgentStatus, String> {

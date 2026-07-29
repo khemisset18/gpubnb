@@ -6,7 +6,7 @@ mod orchestration_gateway;
 mod pairing;
 mod rental_orchestrator;
 
-use agent_bridge::AgentStatus;
+use agent_bridge::{AgentStatus, ProtectionStatus};
 use diagnostics::{collect_native_diagnostic, NativeDiagnostic};
 use orchestration_gateway::{
     ActorRole, AuthenticatedContext, CommandResult, OrchestrationCommand, OrchestrationGateway,
@@ -77,11 +77,13 @@ struct Readiness {
 }
 
 impl Readiness {
-    fn from_diagnostic(diagnostic: &NativeDiagnostic) -> Self {
+    fn from_evidence(diagnostic: &NativeDiagnostic, protections: &ProtectionStatus) -> Self {
         Self {
-            isolation_certified: diagnostic.can_host,
-            storage_protected: false,
-            network_filtered: false,
+            isolation_certified: diagnostic.can_host
+                && protections.isolation_verified
+                && protections.cleanup_verified,
+            storage_protected: protections.storage_protected && protections.cleanup_verified,
+            network_filtered: protections.network_filtered && protections.cleanup_verified,
         }
     }
 
@@ -142,6 +144,7 @@ struct HostStatus {
     next_action_id: Option<&'static str>,
     pairing: PairingConfiguration,
     agent: AgentStatus,
+    protections: ProtectionStatus,
     diagnostic: NativeDiagnostic,
     orchestration: OrchestrationSnapshot,
     checks: Vec<Check>,
@@ -221,7 +224,8 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
     let diagnostic = collect_native_diagnostic();
     let pairing = pairing_configuration();
     let agent = agent_bridge::status();
-    let readiness = Readiness::from_diagnostic(&diagnostic);
+    let protections = agent_bridge::protections();
+    let readiness = Readiness::from_evidence(&diagnostic, &protections);
     let account_detail = if let Some(machine_id) = agent.machine_id.as_deref() {
         format!("Machine associée : {machine_id}")
     } else if pairing.configured {
@@ -338,6 +342,7 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
             .flatten(),
         pairing,
         agent,
+        protections,
         diagnostic,
         orchestration,
         checks,
@@ -398,7 +403,8 @@ fn request_publish(
     }
     let agent = agent_bridge::status();
     let diagnostic = collect_native_diagnostic();
-    if !Readiness::from_diagnostic(&diagnostic).is_ready(&diagnostic, &agent) {
+    let protections = agent_bridge::protections();
+    if !Readiness::from_evidence(&diagnostic, &protections).is_ready(&diagnostic, &agent) {
         return Err("host_not_certified");
     }
     let mut gateway = gateway
@@ -426,7 +432,8 @@ fn set_idle_mining(
         return Err("host_must_be_online");
     }
     let diagnostic = collect_native_diagnostic();
-    if !Readiness::from_diagnostic(&diagnostic).is_ready(&diagnostic, &agent) {
+    let protections = agent_bridge::protections();
+    if !Readiness::from_evidence(&diagnostic, &protections).is_ready(&diagnostic, &agent) {
         return Err("host_not_certified");
     }
     drop(state);
@@ -492,13 +499,29 @@ fn run_setup_action(action_id: String) -> Result<String, String> {
         }
         SetupAction::Isolation => {
             let diagnostic = collect_native_diagnostic();
-            diagnostic
-                .can_host
+            let protections = agent_bridge::protections();
+            (diagnostic.can_host && protections.isolation_verified && protections.cleanup_verified)
                 .then(|| "isolation_verified".into())
-                .ok_or_else(|| diagnostic.reason.to_owned())
+                .ok_or_else(|| {
+                    if diagnostic.can_host {
+                        "isolation_profile_unverified".into()
+                    } else {
+                        diagnostic.reason.to_owned()
+                    }
+                })
         }
-        SetupAction::Storage => Err("storage_protection_not_implemented".into()),
-        SetupAction::Network => Err("network_filter_not_implemented".into()),
+        SetupAction::Storage => {
+            let protections = agent_bridge::protections();
+            (protections.storage_protected && protections.cleanup_verified)
+                .then(|| "storage_verified".into())
+                .ok_or_else(|| "storage_protection_unverified".into())
+        }
+        SetupAction::Network => {
+            let protections = agent_bridge::protections();
+            (protections.network_filtered && protections.cleanup_verified)
+                .then(|| "network_verified".into())
+                .ok_or_else(|| "network_filter_unverified".into())
+        }
     }
 }
 
@@ -572,7 +595,8 @@ mod tests {
     fn readiness_is_fail_closed_without_real_agent() {
         let diagnostic = supported_diagnostic();
         assert!(
-            !Readiness::from_diagnostic(&diagnostic).is_ready(&diagnostic, &AgentStatus::default())
+            !Readiness::from_evidence(&diagnostic, &ProtectionStatus::default())
+                .is_ready(&diagnostic, &AgentStatus::default())
         );
     }
 

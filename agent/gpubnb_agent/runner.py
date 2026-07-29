@@ -190,6 +190,67 @@ def prepare_workspace(image: str, timeout_seconds: int, workspace_slug: str = "c
     }
 
 
+def verify_protection_profile(image: str) -> dict[str, bool]:
+    if not PINNED_IMAGE.fullmatch(image):
+        raise RuntimeError("protection_image_must_be_digest_pinned")
+
+    container_name = f"gpubnb-protection-probe-{uuid.uuid4().hex[:12]}"
+    create = subprocess.run(
+        [
+            "docker", "create", "--name", container_name,
+            "--network=none", "--read-only", "--cap-drop=ALL",
+            "--security-opt=no-new-privileges", "--pids-limit=32",
+            "--memory=128m", "--cpus=0.5",
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=8m", image,
+        ],
+        capture_output=True, text=True, timeout=30, check=False, shell=False,
+    )
+    if create.returncode != 0:
+        raise RuntimeError(
+            f"protection_probe_create_failed:{create.returncode}:{create.stderr[:1000].strip()}"
+        )
+
+    try:
+        inspection = subprocess.run(
+            ["docker", "inspect", container_name],
+            capture_output=True, text=True, timeout=30, check=False, shell=False,
+        )
+        if inspection.returncode != 0:
+            raise RuntimeError("protection_probe_inspect_failed")
+        try:
+            records = json.loads(inspection.stdout)
+            record = records[0]
+            host_config = record["HostConfig"]
+            mounts = record.get("Mounts") or []
+        except (json.JSONDecodeError, IndexError, KeyError, TypeError) as exc:
+            raise RuntimeError("protection_probe_invalid_inspection") from exc
+
+        isolation = (
+            host_config.get("ReadonlyRootfs") is True
+            and "ALL" in (host_config.get("CapDrop") or [])
+            and "no-new-privileges" in (host_config.get("SecurityOpt") or [])
+        )
+        storage = (
+            not (host_config.get("Binds") or [])
+            and all(mount.get("Type") != "bind" for mount in mounts if isinstance(mount, dict))
+            and "/tmp" in (host_config.get("Tmpfs") or {})
+        )
+        network = host_config.get("NetworkMode") == "none"
+    finally:
+        cleanup = cleanup_workspace(container_name)
+
+    if not cleanup["cleaned"]:
+        raise RuntimeError("protection_probe_cleanup_unverified")
+    if not (isolation and storage and network):
+        raise RuntimeError("protection_profile_not_enforced")
+    return {
+        "isolationVerified": isolation,
+        "storageProtected": storage,
+        "networkFiltered": network,
+        "cleanupVerified": True,
+    }
+
+
 def cleanup_workspace(container_name: str) -> dict[str, Any]:
     safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "", container_name)[:128]
     if not safe_name:

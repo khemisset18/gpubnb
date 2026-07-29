@@ -15,7 +15,12 @@ from typing import Any
 
 from . import __version__
 from .client import ApiClient, agent_request, heartbeat
-from .runner import prepare_workspace, run_gpu_diagnostic, cleanup_workspace
+from .runner import (
+    cleanup_workspace,
+    prepare_workspace,
+    run_gpu_diagnostic,
+    verify_protection_profile,
+)
 from .platform_info import find_nvidia_smi, find_rocm_smi, find_xpu_smi, gpu_inventory, system_inventory
 from .storage import (
     config_dir, fingerprint, generate_key, key_path, load_config, load_key,
@@ -476,6 +481,17 @@ def command_workspace_install(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_protections_verify(_: argparse.Namespace) -> int:
+    config = load_config()
+    workspace_images = config.get("workspaceImages")
+    image = workspace_images.get("compute") if isinstance(workspace_images, dict) else None
+    image = image or config.get("diagnosticImage")
+    if not isinstance(image, str) or not image:
+        raise RuntimeError("protection_image_not_configured")
+    print_json(verify_protection_profile(image))
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="gpubnb-agent", description="Agent local sécurisé GPUbnb")
     commands = root.add_subparsers(dest="command", required=True)
@@ -514,6 +530,13 @@ def parser() -> argparse.ArgumentParser:
     install_workspace.add_argument("image", help="registre/image@sha256:digest")
     install_workspace.add_argument("--timeout", type=int, default=600)
     install_workspace.set_defaults(handler=command_workspace_install)
+    protections = commands.add_parser("protections", help="vérifier les protections du runtime")
+    protection_commands = protections.add_subparsers(
+        dest="protection_command", required=True
+    )
+    protection_commands.add_parser(
+        "verify", help="créer, inspecter et supprimer un conteneur de contrôle"
+    ).set_defaults(handler=command_protections_verify)
     files = commands.add_parser("files", help="transférer des fichiers de résultats")
     file_commands = files.add_subparsers(dest="file_command", required=True)
     upload_cmd = file_commands.add_parser("upload", help="téléverser un fichier de résultat vers un job")
