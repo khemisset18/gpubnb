@@ -12,14 +12,7 @@ RUN apt-get update \
  && ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
  && npm cache clean --force \
- && npm install --global npm@11.19.0 js-yaml@5.2.2 shell-quote@1.10.0 tar@7.5.22 \
- && npm install --prefix /tmp/npm-fixes --omit=dev --no-save \
-    brace-expansion@5.0.8 js-yaml@4.3.0 shell-quote@1.9.0 tar@7.5.22 \
- && for package in brace-expansion js-yaml shell-quote tar; do \
-      rm -rf "/usr/local/lib/node_modules/npm/node_modules/$package"; \
-      cp -a "/tmp/npm-fixes/node_modules/$package" /usr/local/lib/node_modules/npm/node_modules/; \
-    done \
- && rm -rf /tmp/npm-fixes \
+ && npm install --global js-yaml@5.2.2 shell-quote@1.10.0 tar@7.5.22 \
  && rm -rf /var/lib/apt/lists/* /root/.cache /usr/local/bin/fixuid \
  && install -d -o coder -g coder -m 700 /workspace /workspace/imports /workspace/output
 
