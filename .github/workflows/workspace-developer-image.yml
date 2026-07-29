@@ -5,6 +5,10 @@ on:
     paths:
       - "workspaces/developer/**"
       - ".github/workflows/workspace-developer-image.yml"
+  pull_request:
+    paths:
+      - "workspaces/developer/**"
+      - ".github/workflows/workspace-developer-image.yml"
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,7 +23,45 @@ jobs:
       - name: Verify tools and non-root execution
         run: docker run --rm --entrypoint /usr/local/bin/gpubnb-developer-healthcheck gpubnb-developer:candidate
       - name: Scan high and critical vulnerabilities
-        run: docker run --rm --volume /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.66.0 image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed gpubnb-developer:candidate
+        run: |
+          docker run --rm \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            --volume "$PWD:/report" \
+            aquasec/trivy:0.66.0 image \
+            --exit-code 0 \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --format json \
+            --output /report/trivy-developer.json \
+            gpubnb-developer:candidate
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("trivy-developer.json").read_text(encoding="utf-8"))
+          findings = []
+          for result in report.get("Results") or []:
+              for item in result.get("Vulnerabilities") or []:
+                  findings.append({
+                      "target": result.get("Target"),
+                      "package": item.get("PkgName"),
+                      "path": item.get("PkgPath"),
+                      "id": item.get("VulnerabilityID"),
+                      "severity": item.get("Severity"),
+                      "installed": item.get("InstalledVersion"),
+                      "fixed": item.get("FixedVersion"),
+                  })
+          print(json.dumps({"blockingCount": len(findings), "findings": findings}, indent=2))
+          raise SystemExit(1 if findings else 0)
+          PY
+      - name: Upload Developer Workspace Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-developer-workspace
+          path: trivy-developer.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Publish commit-addressed image
         env:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}

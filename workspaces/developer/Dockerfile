@@ -1,12 +1,42 @@
-FROM codercom/code-server@sha256:49d5e176224523b0c924ee35b05c51e9a87f9c170f650ee0f7da05a4581a79ff
+FROM node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d AS node-runtime
+
+FROM codercom/code-server:4.130.0-ubuntu@sha256:d39c88f837f78465b4cf99f54b76eadf52440dc9ffb589e2ddc5d2fd9d0592d2
 
 USER root
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates cargo curl default-jdk-headless g++ gcc git golang-go make \
-    nodejs npm postgresql-client python3 python3-pip redis-tools rustc sqlite3 unzip \
+    postgresql-client python3 python3-pip redis-tools rustc sqlite3 unzip \
+ && ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+ && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
  && npm cache clean --force \
- && npm install --global npm@11.6.2 js-yaml@4.3.0 shell-quote@1.9.0 tar@7.5.19 \
+ && npm install --global js-yaml@5.2.2 shell-quote@1.10.0 tar@7.5.22 \
+ && npm install --prefix /tmp/code-server-fixes --omit=dev --no-save \
+    brace-expansion@5.0.8 js-yaml@4.3.0 picomatch@4.0.4 \
+    shell-quote@1.9.0 sigstore@4.1.1 tar@7.5.22 \
+ && rm -rf /usr/lib/code-server/node_modules/js-yaml \
+    /usr/lib/code-server/lib/vscode/node_modules/shell-quote \
+    /usr/lib/code-server/lib/vscode/node_modules/tar \
+    /usr/local/lib/node_modules/npm/node_modules/brace-expansion \
+    /usr/local/lib/node_modules/npm/node_modules/sigstore \
+    /usr/local/lib/node_modules/npm/node_modules/tar \
+    /usr/local/lib/node_modules/npm/node_modules/tinyglobby/node_modules/picomatch \
+ && cp -a /tmp/code-server-fixes/node_modules/js-yaml /usr/lib/code-server/node_modules/ \
+ && cp -a /tmp/code-server-fixes/node_modules/shell-quote \
+    /usr/lib/code-server/lib/vscode/node_modules/ \
+ && cp -a /tmp/code-server-fixes/node_modules/tar \
+    /usr/lib/code-server/lib/vscode/node_modules/ \
+ && cp -a /tmp/code-server-fixes/node_modules/brace-expansion \
+    /usr/local/lib/node_modules/npm/node_modules/ \
+ && cp -a /tmp/code-server-fixes/node_modules/sigstore \
+    /usr/local/lib/node_modules/npm/node_modules/ \
+ && cp -a /tmp/code-server-fixes/node_modules/tar \
+    /usr/local/lib/node_modules/npm/node_modules/ \
+ && cp -a /tmp/code-server-fixes/node_modules/picomatch \
+    /usr/local/lib/node_modules/npm/node_modules/tinyglobby/node_modules/ \
+ && rm -rf /tmp/code-server-fixes \
  && rm -rf /var/lib/apt/lists/* /root/.cache /usr/local/bin/fixuid \
  && install -d -o coder -g coder -m 700 /workspace /workspace/imports /workspace/output
 
