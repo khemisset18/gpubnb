@@ -46,6 +46,18 @@ jobs:
         with:
           workspaces: .
 
+      - name: Materialize Windows bundle icon
+        shell: pwsh
+        run: |
+          $source = 'apps/host-desktop/src-tauri/icons/icon.ico.base64'
+          $target = 'apps/host-desktop/src-tauri/icons/icon.ico'
+          if (-not (Test-Path $source)) { throw 'Missing staged bundle icon source.' }
+          $encoded = (Get-Content $source -Raw).Trim()
+          $decoded = [Convert]::FromBase64String($encoded)
+          if ($decoded.Length -lt 256) { throw 'Decoded bundle icon is unexpectedly small.' }
+          [IO.File]::WriteAllBytes($target, $decoded)
+          if (-not (Test-Path $target)) { throw 'Windows bundle icon was not generated.' }
+
       - name: Install locked desktop dependencies
         working-directory: apps/host-desktop
         run: npm ci --ignore-scripts --no-audit --no-fund
