@@ -125,6 +125,9 @@ test('test release workflow publishes a verified Windows portable package',async
   assert.match(workflow,/gpubnb-host-windows-x64\.exe/);
   assert.match(workflow,/gpubnb-host-windows-x64\.zip/);
   assert.match(workflow,/GPUbnb-Host-Portable\.exe/);
+  assert.match(workflow,/pyinstaller .*--name gpubnb-agent/);
+  assert.match(workflow,/tauri\.sidecar\.conf\.json/);
+  assert.match(workflow,/Copy-Item 'dist\/gpubnb-agent\.exe'/);
   assert.match(workflow,/missing MZ header/);
   assert.match(workflow,/unexpectedly small/);
   assert.match(workflow,/Compress-Archive/);
