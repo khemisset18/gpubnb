@@ -3,12 +3,6 @@ publish="."
 functions="netlify/functions"
 command="node ../../scripts/generate-web-build-info.mjs"
 
-[[redirects]]
-from="/api/*"
-to="https://gpubnb.onrender.com/:splat"
-status=200
-force=true
-
 [[headers]]
 for="/*"
 [headers.values]

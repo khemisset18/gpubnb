@@ -82,8 +82,13 @@ test('OAuth callbacks stay on the current Netlify origin and preserve next',asyn
 test('both supported Netlify base configurations publish the download function',async()=>{
   const rootConfig=await readFile(path.join(repoRoot,'netlify.toml'),'utf8');
   const webConfig=await readFile(path.join(webRoot,'netlify.toml'),'utf8');
+  const buildScript=await readFile(path.join(repoRoot,'scripts/generate-web-build-info.mjs'),'utf8');
   assert.match(rootConfig,/functions\s*=\s*"netlify\/functions"/);
   assert.match(webConfig,/functions\s*=\s*"netlify\/functions"/);
+  assert.match(buildScript,/CONTEXT === 'deploy-preview'/);
+  assert.match(buildScript,/gpubnb-pr-\$\{reviewId\}\.onrender\.com/);
+  assert.match(buildScript,/gpubnb\.onrender\.com/);
+  assert.doesNotMatch(webConfig,/\[\[redirects\]\]/);
   const webFunction=await readFile(path.join(webRoot,'netlify/functions/host-download.mjs'),'utf8');
   assert.match(webFunction,/netlify\/functions\/host-download\.mjs/);
 });
