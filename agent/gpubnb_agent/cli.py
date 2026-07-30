@@ -32,7 +32,7 @@ DEFAULT_API = "https://gpubnb.netlify.app/api"
 
 
 def print_json(value: Any) -> None:
-    print(json.dumps(value, ensure_ascii=False, indent=2, default=str))
+    print(json.dumps(value, ensure_ascii=False, indent=2, default=str), flush=True)
 
 
 def client(config: dict[str, Any]) -> ApiClient:
