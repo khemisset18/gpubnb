@@ -70,6 +70,15 @@ test('installer downloads are verified by the Netlify function',async()=>{
   assert.match(fn,/unsupported_platform/);
 });
 
+test('OAuth callbacks stay on the current Netlify origin and preserve next',async()=>{
+  const authConfig=await readFile(path.join(webRoot,'auth-config.js'),'utf8');
+  const auth=await readFile(path.join(webRoot,'auth.js'),'utf8');
+  assert.match(authConfig,/window\.location\.origin/);
+  assert.doesNotMatch(authConfig,/https:\/\/gpubnb\.netlify\.app\/auth\.html/);
+  assert.match(auth,/url\.origin!==location\.origin/);
+  assert.match(auth,/url\.searchParams\.set\('next',safeNext\(\)\)/);
+});
+
 test('both supported Netlify base configurations publish the download function',async()=>{
   const rootConfig=await readFile(path.join(repoRoot,'netlify.toml'),'utf8');
   const webConfig=await readFile(path.join(webRoot,'netlify.toml'),'utf8');
