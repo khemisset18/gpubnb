@@ -12,3 +12,9 @@ window.GPUBNB_CONFIG = {
     }
   }
 };
+window.GPUBNB_BUILD = window.GPUBNB_BUILD || {
+  version: "0.2.0",
+  commit: "local",
+  environment: "Devnet",
+  date: "développement"
+};

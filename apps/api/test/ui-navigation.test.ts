@@ -119,4 +119,10 @@ test('dashboard does not present mining as operational',async()=>{
   assert.match(portal,/data-check="diagnostic"/);
   assert.match(portal,/Ce code expire dans/);
   assert.match(portal,/Math\.min\(Number\(data\.expiresIn\)\|\|0,600\)/);
+  assert.match(portal,/privatePages/);
+  assert.match(portal,/data-portal-logout/);
+  assert.match(portal,/J’ai saisi le code dans GPUbnb Host/);
+  assert.match(portal,/attempts\+\+>=60/);
+  assert.match(portal,/clearInterval\(pairingPollTimer\)/);
+  assert.match(portal,/publicationReadiness/);
 });
