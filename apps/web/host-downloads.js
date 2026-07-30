@@ -12,6 +12,13 @@
     return null;
   }
 
+  function detectArchitecture(navigatorLike = {}) {
+    const value = `${navigatorLike.userAgentData?.architecture || ''} ${navigatorLike.userAgent || ''}`.toLowerCase();
+    if (/(arm64|aarch64|apple silicon)/.test(value)) return 'arm64';
+    if (/(x86_64|x64|win64|amd64)/.test(value)) return 'x64';
+    return null;
+  }
+
   function formatBytes(value) {
     if (!Number.isFinite(value) || value < 0) return 'Inconnue';
     return `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(value / 1024 / 1024)} Mo`;
@@ -48,6 +55,9 @@
     button.href = metadata.downloadUrl;
     button.removeAttribute('aria-disabled');
     button.textContent = `Télécharger pour ${labels[platform]}`;
+    button.addEventListener('click', () => {
+      button.textContent = 'Préparation du téléchargement…';
+    }, { once: true });
     status.textContent = 'Disponible';
     for (const [field, value] of Object.entries({
       version: metadata.version,
@@ -62,6 +72,7 @@
 
   async function initialize(doc = document, navigatorLike = navigator) {
     const recommended = detectPlatform(navigatorLike);
+    const architecture = detectArchitecture(navigatorLike);
     const cards = [...doc.querySelectorAll('[data-download-platform]')];
     await Promise.all(cards.map(async card => {
       const platform = card.dataset.downloadPlatform;
@@ -72,7 +83,7 @@
       button.setAttribute('aria-disabled', 'true');
       button.textContent = 'Vérification…';
       status.textContent = 'Vérification du fichier…';
-      if (platform === recommended) {
+      if (platform === recommended && (platform !== 'macos' || !architecture || architecture === 'arm64')) {
         card.classList.add('recommended');
         card.querySelector('[data-recommended]').hidden = false;
       }
@@ -85,7 +96,7 @@
     }));
   }
 
-  const api = { detectPlatform, fetchMetadata, formatBytes, renderCard };
+  const api = { detectArchitecture, detectPlatform, fetchMetadata, formatBytes, renderCard };
   if (typeof module !== 'undefined') module.exports = api;
   root.GPUBNB_HOST_DOWNLOADS = api;
   if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', () => initialize());

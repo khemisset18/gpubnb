@@ -188,12 +188,26 @@ jobs:
           test -s release-assets/gpubnb-host-windows-x64.zip
           test -s release-assets/gpubnb-host-linux-x64.deb
           test -s release-assets/gpubnb-host-macos-arm64.dmg
+          (cd release-assets && cat ./*.sha256 | sort -k2 > SHA256SUMS.txt)
+          test "$(wc -l < release-assets/SHA256SUMS.txt)" -eq 3
+          (cd release-assets && sha256sum --check SHA256SUMS.txt)
+          VERSION_TAG="host-v0.2.0-beta.${GITHUB_RUN_NUMBER}"
+          if gh release view "$VERSION_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Immutable release $VERSION_TAG already exists; refusing to replace it."
+            exit 1
+          fi
+          gh release create "$VERSION_TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "GPUbnb Host v0.2.0-beta.${GITHUB_RUN_NUMBER}" \
+            --notes "Préversion immuable Devnet construite depuis ${GITHUB_SHA}. Les sommes SHA-256 sont publiées dans SHA256SUMS.txt." \
+            --prerelease
           if gh release view host-test-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release delete host-test-latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
           fi
           gh release create host-test-latest release-assets/* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title 'GPUbnb Host — version de test' \
-            --notes 'Version de test non signée destinée à valider la détection GPU, la liaison machine et le parcours de location sur Devnet. Windows utilise une archive portable vérifiée : extraire le ZIP puis lancer GPUbnb-Host-Portable.exe. Ne pas utiliser en production.' \
+            --title "GPUbnb Host — alias de $VERSION_TAG" \
+            --notes "Alias mutable vers $VERSION_TAG. Version de test non signée destinée à valider la détection GPU, la liaison machine et le parcours de location sur Devnet. Windows utilise une archive portable vérifiée : extraire le ZIP puis lancer GPUbnb-Host-Portable.exe. Ne pas utiliser en production." \
             --prerelease

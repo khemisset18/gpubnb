@@ -1,7 +1,7 @@
 [build]
   publish = "apps/web"
   functions = "netlify/functions"
-  command = "test -f apps/web/index.html && test -f apps/web/app.js && test -f apps/web/styles.css && test -f apps/web/config.js && test -f apps/web/portal.css && test -f apps/web/portal.js && test -f apps/web/host-downloads.js && test -f apps/web/dashboard.html && test -f apps/web/host-install.html && test -f netlify/functions/host-download.mjs"
+  command = "node scripts/generate-web-build-info.mjs && test -f apps/web/index.html && test -f apps/web/app.js && test -f apps/web/styles.css && test -f apps/web/config.js && test -f apps/web/portal.css && test -f apps/web/portal.js && test -f apps/web/host-downloads.js && test -f apps/web/dashboard.html && test -f apps/web/host-install.html && test -f netlify/functions/host-download.mjs"
 
 [build.environment]
   NODE_VERSION = "22"

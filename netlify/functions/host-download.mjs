@@ -44,6 +44,10 @@ export default async request => {
   const platform = url.searchParams.get('platform');
   const requested = allowed[platform];
   if (!requested) return json({ error: 'unsupported_platform', supported: Object.keys(allowed) }, 400);
+  const architecture = url.searchParams.get('arch');
+  if (architecture && architecture !== requested.architecture) {
+    return json({ error: 'unsupported_architecture', platform, supported: [requested.architecture] }, 400);
+  }
 
   try {
     const release = await releaseMetadata();

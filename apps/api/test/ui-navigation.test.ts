@@ -79,11 +79,13 @@ test('download helpers preserve instructions and detect platforms',async()=>{
   assert.equal(helpers.detectPlatform({platform:'Win32'}),'windows');
   assert.equal(helpers.detectPlatform({platform:'MacIntel'}),'macos');
   assert.equal(helpers.detectPlatform({userAgent:'X11; Linux x86_64'}),'linux');
+  assert.equal(helpers.detectArchitecture({userAgent:'Windows Win64 x64'}),'x64');
+  assert.equal(helpers.detectArchitecture({userAgent:'Macintosh Apple Silicon arm64'}),'arm64');
   assert.equal(helpers.formatBytes(1048576),'1 Mo');
 
   const instruction={textContent:'Instruction Windows spécifique'};
   const status={textContent:''};
-  const button:any={textContent:'',href:'',removeAttribute(){},setAttribute(){}};
+  const button:any={textContent:'',href:'',removeAttribute(){},setAttribute(){},addEventListener(){}};
   const nodes:any={'[data-download-button]':button,'[data-download-availability]':status,'[data-download-instructions]':instruction};
   const card:any={dataset:{downloadPlatform:'windows'},querySelector:(selector:string)=>nodes[selector]||null};
   helpers.renderCard(card,{available:true,downloadUrl:'/download',version:'v1',size:1});
@@ -106,6 +108,9 @@ test('test release workflow publishes a verified Windows portable package',async
   assert.match(workflow,/gpubnb-host-linux-x64\.deb/);
   assert.match(workflow,/gpubnb-host-macos-arm64\.dmg/);
   assert.match(workflow,/gh release create host-test-latest/);
+  assert.match(workflow,/host-v0\.2\.0-beta\./);
+  assert.match(workflow,/SHA256SUMS\.txt/);
+  assert.match(workflow,/sha256sum --check/);
 });
 
 test('dashboard does not present mining as operational',async()=>{
