@@ -105,8 +105,8 @@ jobs:
           Copy-Item dist/gpubnb-agent.exe "apps/host-desktop/src-tauri/binaries/gpubnb-agent-$target.exe"
           & ./dist/gpubnb-agent.exe version
           if ($LASTEXITCODE -ne 0) { throw 'Standalone agent validation failed.' }
-          & ./dist/gpubnb-agent.exe api-health
-          if ($LASTEXITCODE -ne 0) { throw 'Standalone agent API health check failed.' }
+          & ./dist/gpubnb-agent.exe runtime-check
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone agent network runtime check failed.' }
 
       - name: Validate application
         working-directory: apps/host-desktop

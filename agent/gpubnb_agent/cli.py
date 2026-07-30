@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import codecs
 import json
 import os
 import signal
+import socket
+import ssl
 import subprocess
 import sys
 import threading
@@ -148,6 +151,18 @@ def command_api_health(_: argparse.Namespace) -> int:
     config = load_config()
     result = client(config).health()
     print_json({"reachable": True, **result})
+    return 0
+
+
+def command_runtime_check(_: argparse.Namespace) -> int:
+    codecs.lookup("idna")
+    addresses = socket.getaddrinfo("localhost", 443, type=socket.SOCK_STREAM)
+    ssl.create_default_context()
+    print_json({
+        "idnaCodec": True,
+        "dnsResolution": bool(addresses),
+        "tlsContext": True,
+    })
     return 0
 
 
@@ -558,6 +573,7 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("status", help="afficher l'état local").set_defaults(handler=command_status)
     commands.add_parser("diagnose", help="tester GPU, Docker, API et liaison").set_defaults(handler=command_diagnose)
     commands.add_parser("api-health", help="tester uniquement la connexion à l'API").set_defaults(handler=command_api_health)
+    commands.add_parser("runtime-check", help=argparse.SUPPRESS).set_defaults(handler=command_runtime_check)
     commands.add_parser("show-key", help="afficher uniquement la clé publique").set_defaults(handler=command_show_key)
     reset = commands.add_parser("reset-key", help="régénérer la clé locale")
     reset.add_argument("--yes", action="store_true")

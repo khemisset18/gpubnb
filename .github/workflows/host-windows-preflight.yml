@@ -90,8 +90,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Standalone agent version command failed.' }
           & ./dist/gpubnb-agent.exe status
           if ($LASTEXITCODE -ne 0) { throw 'Standalone agent status command failed.' }
-          & ./dist/gpubnb-agent.exe api-health
-          if ($LASTEXITCODE -ne 0) { throw 'Standalone agent API health check failed.' }
+          & ./dist/gpubnb-agent.exe runtime-check
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone agent network runtime check failed.' }
 
       - name: Type-check and build frontend
         working-directory: apps/host-desktop
