@@ -30,7 +30,8 @@ async function releaseMetadata() {
 }
 
 async function checksumFor(release, filename) {
-  const asset = release.assets.find(item => item.name === 'SHA256SUMS.txt');
+  const asset = release.assets.find(item => item.name === 'SHA256SUMS.txt')
+    || release.assets.find(item => item.name === `${filename}.sha256`);
   if (!asset) return null;
   const response = await fetch(asset.browser_download_url, { headers: { 'user-agent': headers['user-agent'] } });
   if (!response.ok) return null;
