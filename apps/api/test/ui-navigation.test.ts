@@ -49,6 +49,9 @@ test('listing publication requires a machine linked by Host',async()=>{
   assert.doesNotMatch(html,/agentPublicKey/);
   assert.doesNotMatch(script,/api\('\/machines',\{method:'POST'/);
   assert.match(script,/api\('\/machines\/mine'\)/);
+  assert.match(script,/state\?\.canPublish/);
+  assert.match(script,/blockingReason/);
+  assert.doesNotMatch(script,/option\.disabled=!m\.state\?\.canPublish/);
   assert.match(script,/Reliez d’abord une machine/);
 });
 
