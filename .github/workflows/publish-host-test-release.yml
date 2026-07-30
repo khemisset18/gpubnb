@@ -97,7 +97,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install ./agent pyinstaller==6.16.0
-          pyinstaller --clean --noconfirm --onefile --name gpubnb-agent --hidden-import=_cffi_backend --hidden-import=servicemanager --hidden-import=win32event --hidden-import=win32service --hidden-import=win32serviceutil --hidden-import=win32timezone --collect-all cffi --collect-all nacl agent/gpubnb_agent/__main__.py
+          pyinstaller --clean --noconfirm --onefile --name gpubnb-agent --hidden-import=_cffi_backend --hidden-import=encodings.idna --hidden-import=servicemanager --hidden-import=win32event --hidden-import=win32service --hidden-import=win32serviceutil --hidden-import=win32timezone --collect-all cffi --collect-all nacl agent/gpubnb_agent/__main__.py
           if (-not (Test-Path dist/gpubnb-agent.exe)) { throw 'Standalone agent was not generated.' }
           $target = (rustc -vV | Select-String '^host:' | ForEach-Object { ($_ -split ':', 2)[1].Trim() })
           if (-not $target) { throw 'Rust target triple could not be determined.' }
@@ -105,6 +105,8 @@ jobs:
           Copy-Item dist/gpubnb-agent.exe "apps/host-desktop/src-tauri/binaries/gpubnb-agent-$target.exe"
           & ./dist/gpubnb-agent.exe version
           if ($LASTEXITCODE -ne 0) { throw 'Standalone agent validation failed.' }
+          & ./dist/gpubnb-agent.exe api-health
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone agent API health check failed.' }
 
       - name: Validate application
         working-directory: apps/host-desktop
