@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import vm from 'node:vm';
 
 const webRoot=path.resolve(process.cwd(),'../web');
 const repoRoot=path.resolve(process.cwd(),'../..');
@@ -52,22 +53,42 @@ test('listing publication requires a machine linked by Host',async()=>{
   assert.match(script,/Reliez d’abord une machine/);
 });
 
-test('installer downloads use direct GitHub release URLs',async()=>{
+test('installer downloads are verified by the Netlify function',async()=>{
   const html=await readFile(path.join(webRoot,'host-install.html'),'utf8');
   const script=await readFile(path.join(webRoot,'host-downloads.js'),'utf8');
   assert.match(html,/host-downloads\.js/);
-  assert.match(html,/Version portable de test/);
   assert.match(html,/GPUbnb-Host-Portable\.exe/);
-  assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-windows-x64\.zip/);
-  assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-linux-x64\.deb/);
-  assert.match(html,/releases\/download\/host-test-latest\/gpubnb-host-macos-arm64\.dmg/);
-  assert.doesNotMatch(html,/\.netlify\/functions\/host-download/);
-  assert.doesNotMatch(script,/fetch\(/);
-  assert.doesNotMatch(script,/\.netlify\/functions\/host-download/);
-  assert.match(script,/Téléchargement direct depuis GitHub Releases/);
+  assert.match(html,/data-download-instructions/);
+  assert.match(html,/data-download-availability/);
+  assert.doesNotMatch(html,/releases\/download\/host-test-latest/);
+  assert.match(script,/\.netlify\/functions\/host-download/);
+  assert.match(script,/AbortController/);
 
   const fn=await readFile(path.join(repoRoot,'netlify/functions/host-download.mjs'),'utf8');
   assert.match(fn,/host-test-latest/);
+  assert.match(fn,/SHA256SUMS\.txt/);
+  assert.match(fn,/unsupported_platform/);
+});
+
+test('download helpers preserve instructions and detect platforms',async()=>{
+  const script=await readFile(path.join(webRoot,'host-downloads.js'),'utf8');
+  const context:any={Intl,URL,AbortController,setTimeout,clearTimeout};
+  context.globalThis=context;
+  vm.runInNewContext(script,context);
+  const helpers=context.GPUBNB_HOST_DOWNLOADS;
+  assert.equal(helpers.detectPlatform({platform:'Win32'}),'windows');
+  assert.equal(helpers.detectPlatform({platform:'MacIntel'}),'macos');
+  assert.equal(helpers.detectPlatform({userAgent:'X11; Linux x86_64'}),'linux');
+  assert.equal(helpers.formatBytes(1048576),'1 Mo');
+
+  const instruction={textContent:'Instruction Windows spécifique'};
+  const status={textContent:''};
+  const button:any={textContent:'',href:'',removeAttribute(){},setAttribute(){}};
+  const nodes:any={'[data-download-button]':button,'[data-download-availability]':status,'[data-download-instructions]':instruction};
+  const card:any={dataset:{downloadPlatform:'windows'},querySelector:(selector:string)=>nodes[selector]||null};
+  helpers.renderCard(card,{available:true,downloadUrl:'/download',version:'v1',size:1});
+  assert.equal(instruction.textContent,'Instruction Windows spécifique');
+  assert.equal(status.textContent,'Disponible');
 });
 
 test('test release workflow publishes a verified Windows portable package',async()=>{

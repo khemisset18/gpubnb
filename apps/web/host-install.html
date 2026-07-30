@@ -1,1 +1,60 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Installer GPUbnb Host</title><link rel="stylesheet" href="portal.css"><script defer src="config.js"></script><script defer src="portal.js"></script><script defer src="host-downloads.js"></script></head><body><main class="portal-main"><section class="panel"><span class="badge warn">Version de test · Devnet</span><h1>Installer GPUbnb Host</h1><p class="muted">Téléchargez l’application directement depuis GPUbnb puis reliez votre ordinateur pour permettre la détection de votre GPU. Les boutons ci-dessous ouvrent directement les fichiers publiés sur GitHub Releases.</p></section><section class="downloads" style="margin-top:18px"><article class="card download-card" data-download-platform="windows"><span class="badge warn">Version portable de test</span><h2>Windows</h2><p class="muted" data-download-status>Archive portable vérifiée : extrayez entièrement le ZIP puis lancez GPUbnb-Host-Portable.exe. Aucune installation n’est nécessaire.</p><a class="button button-primary" href="https://github.com/khemisset18/gpubnb/releases/download/host-test-latest/gpubnb-host-windows-x64.zip" data-download-button>Télécharger Windows portable (.zip)</a></article><article class="card download-card" data-download-platform="linux"><span class="badge warn">Version de test</span><h2>Linux</h2><p class="muted" data-download-status>Téléchargement direct depuis GitHub Releases.</p><a class="button button-primary" href="https://github.com/khemisset18/gpubnb/releases/download/host-test-latest/gpubnb-host-linux-x64.deb" data-download-button>Télécharger pour Linux</a></article><article class="card download-card" data-download-platform="macos"><span class="badge warn">Version de test</span><h2>macOS</h2><p class="muted" data-download-status>Téléchargement direct depuis GitHub Releases.</p><a class="button button-primary" href="https://github.com/khemisset18/gpubnb/releases/download/host-test-latest/gpubnb-host-macos-arm64.dmg" data-download-button>Télécharger pour macOS</a></article></section><section class="hero-row" style="margin-top:18px"><article class="panel"><h2>Test en cinq étapes</h2><ol><li>Activez le rôle propriétaire dans votre profil.</li><li>Téléchargez GPUbnb Host pour votre système.</li><li>Sous Windows, extrayez entièrement le ZIP dans un dossier.</li><li>Lancez GPUbnb-Host-Portable.exe puis créez un code de liaison.</li><li>Saisissez ce code dans Host et attendez le premier heartbeat.</li><li>Ouvrez « Mes machines », vérifiez le GPU puis publiez votre annonce.</li></ol><div class="card" style="margin-top:16px"><strong>Important</strong><p class="muted">Cette version est une préversion de test non signée. Windows ou macOS peut afficher un avertissement de sécurité. Elle sert uniquement à tester GPUbnb sur Devnet, pas à héberger des charges de production.</p></div><p><a href="https://github.com/khemisset18/gpubnb/releases/tag/host-test-latest">Consulter la version de test sur GitHub</a></p></article><aside class="panel"><h2>Lier une machine</h2><p class="muted">Le code est créé par l’API et expire après dix minutes.</p><button class="button button-primary" type="button" data-create-link>Créer un code de liaison</button><div data-link-result role="status" style="margin-top:18px"></div><a class="button" style="margin-top:12px" href="machines.html">Vérifier mes machines</a></aside></section></main></body></html>
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Installer GPUbnb Host</title>
+  <link rel="stylesheet" href="portal.css">
+  <script defer src="config.js"></script>
+  <script defer src="portal.js"></script>
+  <script defer src="host-downloads.js"></script>
+</head>
+<body>
+<main class="portal-main">
+  <section class="panel">
+    <span class="badge warn">Préversion · Devnet</span>
+    <h1>Installer GPUbnb Host</h1>
+    <p class="muted">Téléchargez l’application propriétaire officielle, puis reliez votre machine. Aucun téléchargement ne démarre automatiquement.</p>
+  </section>
+  <section class="downloads" style="margin-top:18px">
+    <article class="card download-card" data-download-platform="windows">
+      <span class="badge ok" data-recommended hidden>Recommandé pour votre appareil</span>
+      <h2>Windows 64 bits</h2>
+      <p data-download-instructions>Créez un nouveau dossier, extrayez entièrement le ZIP, puis lancez GPUbnb-Host-Portable.exe. Ne lancez jamais l’exécutable depuis l’archive.</p>
+      <p class="muted"><strong>Disponibilité :</strong> <span data-download-availability>Vérification du fichier…</span></p>
+      <p class="muted">Archive ZIP portable · Version : <span data-download-version>—</span> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature : non signée</p>
+      <details><summary>Vérifier l’intégrité</summary><p>Comparez la somme fournie avec celle calculée sur votre fichier.</p><code data-download-checksum>—</code></details>
+      <a class="button button-primary" data-download-button aria-disabled="true">Vérification…</a>
+      <details><summary>« Windows protège votre ordinateur »</summary><p>Vérifiez que le fichier provient de la release officielle et consultez ses propriétés. Ne désactivez pas globalement Microsoft Defender.</p></details>
+    </article>
+    <article class="card download-card" data-download-platform="linux">
+      <span class="badge ok" data-recommended hidden>Recommandé pour votre appareil</span>
+      <h2>Linux x86-64</h2>
+      <p data-download-instructions>Installez le paquet avec <code>sudo apt install ./gpubnb-host-linux-x64.deb</code>. Un pilote NVIDIA fonctionnel et <code>nvidia-smi</code> sont nécessaires pour héberger une charge CUDA.</p>
+      <p class="muted"><strong>Disponibilité :</strong> <span data-download-availability>Vérification du fichier…</span></p>
+      <p class="muted">Paquet DEB · Version : <span data-download-version>—</span> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature : non signée</p>
+      <details><summary>Vérifier l’intégrité</summary><code data-download-checksum>—</code></details>
+      <a class="button button-primary" data-download-button aria-disabled="true">Vérification…</a>
+    </article>
+    <article class="card download-card" data-download-platform="macos">
+      <span class="badge ok" data-recommended hidden>Recommandé pour votre appareil</span>
+      <h2>macOS Apple Silicon</h2>
+      <p data-download-instructions>Compatible uniquement avec les Mac Apple Silicon dans cette préversion. Cette version permet de tester l’application, mais elle ne permet pas d’héberger une charge CUDA NVIDIA.</p>
+      <p class="muted"><strong>Disponibilité :</strong> <span data-download-availability>Vérification du fichier…</span></p>
+      <p class="muted">Image DMG · Version : <span data-download-version>—</span> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature : non signée</p>
+      <details><summary>Vérifier l’intégrité</summary><code data-download-checksum>—</code></details>
+      <a class="button button-primary" data-download-button aria-disabled="true">Vérification…</a>
+    </article>
+  </section>
+  <p><a href="https://github.com/khemisset18/gpubnb/releases" target="_blank" rel="noopener noreferrer">Voir toutes les versions sur GitHub</a></p>
+  <section class="hero-row" style="margin-top:18px">
+    <article class="panel">
+      <h2>Parcours en sept étapes</h2>
+      <ol><li>Activer l’espace propriétaire</li><li>Télécharger GPUbnb Host</li><li>Installer ou extraire l’application</li><li>Lancer GPUbnb Host</li><li>Créer et copier le code de liaison</li><li>Saisir le code dans GPUbnb Host</li><li>Vérifier la machine et publier l’annonce</li></ol>
+      <div class="card"><strong>Limite actuelle</strong><p class="muted">Fonction testable : location avec diagnostic GPU contrôlé. Les sessions CUDA interactives, Jupyter, Blender et l’accès distant arbitraire ne sont pas encore disponibles.</p></div>
+    </article>
+    <aside class="panel"><h2>Lier une machine</h2><p class="muted">Le code est à usage unique et expire après dix minutes.</p><button class="button button-primary" type="button" data-create-link>Créer un code de liaison</button><div data-link-result role="status" style="margin-top:18px"></div><a class="button" style="margin-top:12px" href="machines.html">Vérifier mes machines</a></aside>
+  </section>
+</main>
+</body>
+</html>
