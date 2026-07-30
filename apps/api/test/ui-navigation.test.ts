@@ -110,7 +110,13 @@ test('test release workflow publishes a verified Windows portable package',async
 
 test('dashboard does not present mining as operational',async()=>{
   const html=await readFile(path.join(webRoot,'dashboard.html'),'utf8');
+  const portal=await readFile(path.join(webRoot,'portal.js'),'utf8');
   assert.match(html,/Expérimental/);
   assert.match(html,/Minage/);
   assert.match(html,/Indisponible/);
+  assert.match(portal,/Aucun rôle activé/);
+  assert.match(portal,/machineReadiness/);
+  assert.match(portal,/data-check="diagnostic"/);
+  assert.match(portal,/Ce code expire dans/);
+  assert.match(portal,/Math\.min\(Number\(data\.expiresIn\)\|\|0,600\)/);
 });
