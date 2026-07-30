@@ -10,14 +10,24 @@ export function constantTimeToken(actual: string | undefined, expected: string):
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+export function isTrustedBrowserOrigin(origin: string, domain: string): boolean {
+  try {
+    const url = new URL(origin);
+    const expected = domain.toLowerCase();
+    if (url.protocol !== 'https:' && expected !== 'localhost') return false;
+    if (url.host.toLowerCase() === expected || url.hostname.toLowerCase() === expected) return true;
+    return expected === 'gpubnb.netlify.app'
+      && /^deploy-preview-[1-9]\d*--gpubnb\.netlify\.app$/.test(url.hostname.toLowerCase())
+      && !url.port;
+  } catch {}
+  return false;
+}
+
 export function assertTrustedOrigin(req: FastifyRequest, reply: FastifyReply, domain: string): boolean {
   if (!['POST','PUT','PATCH','DELETE'].includes(req.method)) return true;
   const origin = req.headers.origin;
   if (!origin) return true; // non-browser clients rely on SameSite cookies and signatures
-  try {
-    const host = new URL(origin).host.toLowerCase();
-    if (host === domain.toLowerCase()) return true;
-  } catch {}
+  if (isTrustedBrowserOrigin(origin, domain)) return true;
   reply.code(403).send({error:'untrusted_origin'}); return false;
 }
 

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from nacl.signing import SigningKey
 
-from gpubnb_agent.client import signed_headers
+from gpubnb_agent.client import heartbeat, signed_headers
 from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available, machine_fingerprint
 from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key, load_machine_fingerprint, save_machine_fingerprint, detect_hardware_change
 from gpubnb_agent.runner import (
@@ -80,6 +80,41 @@ class KeyTests(unittest.TestCase):
         headers = signed_headers(key, "machine", "GET", "/agent/challenge/machine")
         self.assertIn("x-agent-signature", headers)
         self.assertIn("x-agent-timestamp", headers)
+
+
+class HeartbeatTests(unittest.TestCase):
+    def test_collects_inventory_before_requesting_short_lived_challenge(self):
+        events = []
+        gpu = {
+            "gpuUuid": "GPU-test",
+            "gpuModel": "NVIDIA Test",
+            "vramMiB": 4096,
+            "memoryUsedMiB": 0,
+            "driverVersion": "1",
+            "cudaVersion": "1",
+            "temperatureC": 40,
+            "gpuUtilization": 0,
+            "powerWatts": 1.0,
+            "gpuVendor": "NVIDIA",
+        }
+
+        class Client:
+            def request_with_retry(self, path, method="GET", body=None, headers=None, timeout=12):
+                events.append("challenge" if path.startswith("/agent/challenge/") else "heartbeat")
+                return {"challenge": "challenge-value-long-enough"} if method == "GET" else {"ok": True}
+
+        with (
+            patch("gpubnb_agent.client.gpu_inventory", side_effect=lambda: events.append("gpu") or [gpu]),
+            patch("gpubnb_agent.client.system_inventory", side_effect=lambda: events.append("system") or {"machineFingerprint": "abc"}),
+            patch("gpubnb_agent.client.telemetry_snapshot", side_effect=lambda: events.append("telemetry") or {"schemaVersion": 2, "accelerators": []}),
+            patch("gpubnb_agent.client.detect_hardware_change", return_value=(False, None)),
+            patch("gpubnb_agent.client.save_machine_fingerprint"),
+            patch("gpubnb_agent.client.load_counter", return_value=0),
+            patch("gpubnb_agent.client.save_counter"),
+        ):
+            self.assertEqual(heartbeat(Client(), SigningKey.generate(), "machine-id"), {"ok": True})
+
+        self.assertEqual(events, ["gpu", "system", "telemetry", "challenge", "heartbeat"])
 
 
 class RunnerTests(unittest.TestCase):

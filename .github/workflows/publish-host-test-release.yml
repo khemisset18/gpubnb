@@ -30,16 +30,19 @@ jobs:
             bundle: nsis
             pattern: '*.exe'
             asset: gpubnb-host-windows-x64.exe
+            tauri_config: '--config src-tauri/tauri.sidecar.conf.json'
           - os: ubuntu-24.04
             label: Linux x64
             bundle: deb
             pattern: '*.deb'
             asset: gpubnb-host-linux-x64.deb
+            tauri_config: ''
           - os: macos-14
             label: macOS arm64
             bundle: dmg
             pattern: '*.dmg'
             asset: gpubnb-host-macos-arm64.dmg
+            tauri_config: ''
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -55,6 +58,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: rustfmt, clippy
+
+      - uses: actions/setup-python@v6
+        if: runner.os == 'Windows'
+        with:
+          python-version: '3.12'
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -83,6 +91,23 @@ jobs:
         working-directory: apps/host-desktop
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      - name: Build standalone Windows agent
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./agent pyinstaller==6.16.0
+          pyinstaller --clean --noconfirm --onefile --name gpubnb-agent --hidden-import=_cffi_backend --hidden-import=encodings.idna --hidden-import=servicemanager --hidden-import=win32event --hidden-import=win32service --hidden-import=win32serviceutil --hidden-import=win32timezone --collect-all cffi --collect-all nacl agent/gpubnb_agent/__main__.py
+          if (-not (Test-Path dist/gpubnb-agent.exe)) { throw 'Standalone agent was not generated.' }
+          $target = (rustc -vV | Select-String '^host:' | ForEach-Object { ($_ -split ':', 2)[1].Trim() })
+          if (-not $target) { throw 'Rust target triple could not be determined.' }
+          New-Item -ItemType Directory -Force apps/host-desktop/src-tauri/binaries | Out-Null
+          Copy-Item dist/gpubnb-agent.exe "apps/host-desktop/src-tauri/binaries/gpubnb-agent-$target.exe"
+          & ./dist/gpubnb-agent.exe version
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone agent validation failed.' }
+          & ./dist/gpubnb-agent.exe runtime-check
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone agent network runtime check failed.' }
+
       - name: Validate application
         working-directory: apps/host-desktop
         run: |
@@ -106,7 +131,7 @@ jobs:
           GPUBNB_RELEASE_CHANNEL: test
           GPUBNB_WEB_BASE_URL: https://gpubnb.netlify.app
           RUST_BACKTRACE: '1'
-        run: npm run tauri:build -- --bundles ${{ matrix.bundle }}
+        run: npm run tauri:build -- --bundles ${{ matrix.bundle }} ${{ matrix.tauri_config }}
 
       - name: Stage predictable asset name
         shell: bash
@@ -147,6 +172,8 @@ jobs:
           $portableDir = 'windows-portable'
           New-Item -ItemType Directory -Path $portableDir -Force | Out-Null
           Copy-Item $portable "$portableDir/GPUbnb-Host-Portable.exe"
+          if (-not (Test-Path 'dist/gpubnb-agent.exe')) { throw 'Windows agent sidecar is missing.' }
+          Copy-Item 'dist/gpubnb-agent.exe' "$portableDir/gpubnb-agent.exe"
           @'
           GPUbnb Host — version portable Windows
 
@@ -162,6 +189,7 @@ jobs:
           if ($zip.Length -lt 262144) { throw "Windows ZIP is unexpectedly small: $($zip.Length) bytes." }
           $hash = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLower()
           Set-Content -Path 'release-assets/gpubnb-host-windows-x64.zip.sha256' -Value "$hash  gpubnb-host-windows-x64.zip"
+          Remove-Item 'release-assets/gpubnb-host-windows-x64.exe', 'release-assets/gpubnb-host-windows-x64.exe.sha256' -Force
 
       - uses: actions/upload-artifact@v6
         with:
@@ -188,12 +216,26 @@ jobs:
           test -s release-assets/gpubnb-host-windows-x64.zip
           test -s release-assets/gpubnb-host-linux-x64.deb
           test -s release-assets/gpubnb-host-macos-arm64.dmg
+          (cd release-assets && cat ./*.sha256 | sort -k2 > SHA256SUMS.txt)
+          test "$(wc -l < release-assets/SHA256SUMS.txt)" -eq 3
+          (cd release-assets && sha256sum --check SHA256SUMS.txt)
+          VERSION_TAG="host-v0.2.0-beta.${GITHUB_RUN_NUMBER}"
+          if gh release view "$VERSION_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Immutable release $VERSION_TAG already exists; refusing to replace it."
+            exit 1
+          fi
+          gh release create "$VERSION_TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "GPUbnb Host v0.2.0-beta.${GITHUB_RUN_NUMBER}" \
+            --notes "Préversion immuable Devnet construite depuis ${GITHUB_SHA}. Les sommes SHA-256 sont publiées dans SHA256SUMS.txt." \
+            --prerelease
           if gh release view host-test-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release delete host-test-latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
           fi
           gh release create host-test-latest release-assets/* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title 'GPUbnb Host — version de test' \
-            --notes 'Version de test non signée destinée à valider la détection GPU, la liaison machine et le parcours de location sur Devnet. Windows utilise une archive portable vérifiée : extraire le ZIP puis lancer GPUbnb-Host-Portable.exe. Ne pas utiliser en production.' \
+            --title "GPUbnb Host — alias de $VERSION_TAG" \
+            --notes "Alias mutable vers $VERSION_TAG. Version de test non signée destinée à valider la détection GPU, la liaison machine et le parcours de location sur Devnet. Windows utilise une archive portable vérifiée : extraire le ZIP puis lancer GPUbnb-Host-Portable.exe. Ne pas utiliser en production." \
             --prerelease

@@ -10,3 +10,4 @@ target/
 agent/__pycache__/
 *.pyc
 .DS_Store
+apps/web/_redirects

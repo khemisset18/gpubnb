@@ -1,11 +1,7 @@
 [build]
 publish="."
-
-[[redirects]]
-from="/api/*"
-to="https://gpubnb.onrender.com/:splat"
-status=200
-force=true
+functions="netlify/functions"
+command="node ../../scripts/generate-web-build-info.mjs"
 
 [[headers]]
 for="/*"

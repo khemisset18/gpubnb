@@ -34,6 +34,9 @@ COPY --from=build /app/api/dist ./dist
 COPY --from=build /app/api/prisma ./prisma
 COPY apps/web /app/web
 
+RUN mkdir -p /app/api/data/artifacts \
+    && chown -R app:app /app/api/data
+
 USER app
 EXPOSE 10000
 
