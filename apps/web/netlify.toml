@@ -1,5 +1,7 @@
 [build]
 publish="."
+functions="../../netlify/functions"
+command="node ../../scripts/generate-web-build-info.mjs"
 
 [[redirects]]
 from="/api/*"

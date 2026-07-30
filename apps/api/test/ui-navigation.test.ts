@@ -70,6 +70,13 @@ test('installer downloads are verified by the Netlify function',async()=>{
   assert.match(fn,/unsupported_platform/);
 });
 
+test('both supported Netlify base configurations publish the download function',async()=>{
+  const rootConfig=await readFile(path.join(repoRoot,'netlify.toml'),'utf8');
+  const webConfig=await readFile(path.join(webRoot,'netlify.toml'),'utf8');
+  assert.match(rootConfig,/functions\s*=\s*"netlify\/functions"/);
+  assert.match(webConfig,/functions\s*=\s*"\.\.\/\.\.\/netlify\/functions"/);
+});
+
 test('download helpers preserve instructions and detect platforms',async()=>{
   const script=await readFile(path.join(webRoot,'host-downloads.js'),'utf8');
   const context:any={Intl,URL,AbortController,setTimeout,clearTimeout};
