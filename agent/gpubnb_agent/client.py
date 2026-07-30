@@ -137,16 +137,15 @@ def agent_request(client: ApiClient, key: SigningKey, machine_id: str, path: str
 
 
 def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, Any]:
-    challenge_path = f"/agent/challenge/{machine_id}"
-    challenge = client.request_with_retry(challenge_path, headers=signed_headers(key, machine_id, "GET", challenge_path))["challenge"]
+    # Collect the comparatively slow Windows inventory before requesting the
+    # short-lived server challenge or timestamping the heartbeat. Otherwise a
+    # cold hardware scan can consume the entire validity window before send.
     gpus = gpu_inventory()
     if not gpus:
         raise RuntimeError("Le heartbeat exige au moins un GPU détecté")
     # The legacy heartbeat schema carries one primary GPU. The complete validated
     # multi-GPU snapshot is attached under telemetry for the v2 server migration.
     gpu = gpus[0]
-    counter = load_counter() + 1
-    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     session_id = None
     probe = True
     sys_info = system_inventory()
@@ -157,6 +156,13 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
         save_machine_fingerprint(current_fp)
     if hw_changed and previous_fp:
         print(f"AVERTISSEMENT: Empreinte matérielle modifiée (ancienne: {previous_fp[:16]}...)")
+    challenge_path = f"/agent/challenge/{machine_id}"
+    challenge = client.request_with_retry(
+        challenge_path,
+        headers=signed_headers(key, machine_id, "GET", challenge_path),
+    )["challenge"]
+    counter = load_counter() + 1
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     fields = [
         machine_id, str(counter), challenge, timestamp, gpu["gpuUuid"], gpu["gpuModel"],
         str(gpu["vramMiB"]), gpu["driverVersion"], str(gpu["gpuUtilization"]),
