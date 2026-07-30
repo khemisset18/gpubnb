@@ -6,7 +6,7 @@ mod mining_fee_policy;
 mod mining_supervisor;
 
 use mining_catalog::{approved_for_vendor, GpuVendor};
-use mining_fee_policy::{apply_pool_fee, PoolBillingMode};
+use mining_fee_policy::{calculate_reward_split, MiningFeeMode};
 use mining_supervisor::{ApprovedMiningConfig, MiningSupervisor};
 
 fn approved_config() -> ApprovedMiningConfig {
@@ -24,17 +24,17 @@ fn approved_config() -> ApprovedMiningConfig {
 
 #[test]
 fn managed_pool_keeps_exact_one_percent_and_owner_receives_rest() {
-    let settlement = apply_pool_fee(1_000_000, PoolBillingMode::GpuBnbManaged);
-    assert_eq!(settlement.platform_amount, 10_000);
-    assert_eq!(settlement.owner_amount, 990_000);
-    assert_eq!(settlement.owner_amount + settlement.platform_amount, 1_000_000);
+    let split = calculate_reward_split(1_000_000, MiningFeeMode::ManagedGpuBnbPool);
+    assert_eq!(split.platform_atomic_units, 10_000);
+    assert_eq!(split.owner_atomic_units, 990_000);
+    assert_eq!(split.owner_atomic_units + split.platform_atomic_units, 1_000_000);
 }
 
 #[test]
 fn custom_pool_has_zero_gpubnb_fee() {
-    let settlement = apply_pool_fee(1_000_000, PoolBillingMode::OwnerCustom);
-    assert_eq!(settlement.platform_amount, 0);
-    assert_eq!(settlement.owner_amount, 1_000_000);
+    let split = calculate_reward_split(1_000_000, MiningFeeMode::ExternalPool);
+    assert_eq!(split.platform_atomic_units, 0);
+    assert_eq!(split.owner_atomic_units, 1_000_000);
 }
 
 #[test]
