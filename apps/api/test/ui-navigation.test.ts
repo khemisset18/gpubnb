@@ -74,7 +74,9 @@ test('both supported Netlify base configurations publish the download function',
   const rootConfig=await readFile(path.join(repoRoot,'netlify.toml'),'utf8');
   const webConfig=await readFile(path.join(webRoot,'netlify.toml'),'utf8');
   assert.match(rootConfig,/functions\s*=\s*"netlify\/functions"/);
-  assert.match(webConfig,/functions\s*=\s*"\.\.\/\.\.\/netlify\/functions"/);
+  assert.match(webConfig,/functions\s*=\s*"netlify\/functions"/);
+  const webFunction=await readFile(path.join(webRoot,'netlify/functions/host-download.mjs'),'utf8');
+  assert.match(webFunction,/netlify\/functions\/host-download\.mjs/);
 });
 
 test('download helpers preserve instructions and detect platforms',async()=>{
