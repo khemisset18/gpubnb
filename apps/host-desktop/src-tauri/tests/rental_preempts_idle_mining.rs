@@ -45,10 +45,15 @@ fn rental_preempts_active_mining_and_resumes_after_verified_cleanup() {
     coordinator
         .reservation_confirmed("reservation_001".into())
         .unwrap();
-    assert_eq!(coordinator.snapshot().state, WorkloadState::PreemptingMining);
+    assert_eq!(
+        coordinator.snapshot().state,
+        WorkloadState::PreemptingMining
+    );
     assert!(!coordinator.snapshot().should_start_mining);
 
-    coordinator.confirm_mining_stopped(clean_stop_proof()).unwrap();
+    coordinator
+        .confirm_mining_stopped(clean_stop_proof())
+        .unwrap();
     assert_eq!(coordinator.snapshot().state, WorkloadState::RentalReady);
 
     coordinator.confirm_rental_started().unwrap();
@@ -57,11 +62,16 @@ fn rental_preempts_active_mining_and_resumes_after_verified_cleanup() {
     coordinator.confirm_rental_finished().unwrap();
     assert_eq!(coordinator.snapshot().state, WorkloadState::CleaningRental);
 
-    coordinator.confirm_rental_cleanup(clean_rental_proof()).unwrap();
+    coordinator
+        .confirm_rental_cleanup(clean_rental_proof())
+        .unwrap();
     let snapshot = coordinator.snapshot();
     assert_eq!(snapshot.state, WorkloadState::Idle);
     assert!(snapshot.should_start_mining);
-    assert_eq!(snapshot.pool_preference, MiningPoolPreference::GpuBnbManaged);
+    assert_eq!(
+        snapshot.pool_preference,
+        MiningPoolPreference::GpuBnbManaged
+    );
 }
 
 #[test]
@@ -100,10 +110,15 @@ fn disabling_auto_resume_keeps_gpu_idle_after_rental() {
         .unwrap();
     coordinator.confirm_rental_started().unwrap();
     coordinator.confirm_rental_finished().unwrap();
-    coordinator.confirm_rental_cleanup(clean_rental_proof()).unwrap();
+    coordinator
+        .confirm_rental_cleanup(clean_rental_proof())
+        .unwrap();
 
     let snapshot = coordinator.snapshot();
     assert_eq!(snapshot.state, WorkloadState::Idle);
     assert!(!snapshot.should_start_mining);
-    assert_eq!(snapshot.pool_preference, MiningPoolPreference::OwnerCustom);
+    assert_eq!(
+        snapshot.pool_preference,
+        MiningPoolPreference::OwnerCustom
+    );
 }
