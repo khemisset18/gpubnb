@@ -7,7 +7,7 @@ pub enum GpuVendor {
     Amd,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MiningProfile {
     pub id: &'static str,
