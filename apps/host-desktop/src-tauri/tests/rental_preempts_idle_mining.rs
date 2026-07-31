@@ -202,3 +202,27 @@ fn cleanup_failure_prevents_resume_and_keeps_gpu_quarantined() {
     assert!(!quarantined.should_start_mining);
     assert_eq!(quarantined.last_error, Some("rental_cleanup_proof_failed"));
 }
+
+#[test]
+fn emergency_stop_is_fail_closed_until_shutdown_is_verified() {
+    let mut coordinator = RentalMiningCoordinator::default();
+    coordinator
+        .set_owner_consent(MiningConsent::ManagedPool)
+        .unwrap();
+    coordinator.request_idle_mining_start().unwrap();
+
+    assert_eq!(
+        coordinator.emergency_stop(false),
+        Err("emergency_stop_failed")
+    );
+    let quarantined = coordinator.snapshot();
+    assert_eq!(quarantined.state, CoordinatedGpuState::Quarantined);
+    assert!(!quarantined.should_start_mining);
+
+    let mut coordinator = RentalMiningCoordinator::default();
+    coordinator.emergency_stop(true).unwrap();
+    assert_eq!(
+        coordinator.snapshot().state,
+        CoordinatedGpuState::EmergencyStopped
+    );
+}
