@@ -9,6 +9,15 @@ export const miningModeSchema = z.enum(['DISABLED', 'GPUBNB_MANAGED', 'OWNER_POO
 export const miningResourceKindSchema = z.enum(['GPU', 'CPU']);
 
 const resourceIdentifierSchema = z.string().trim().min(3).max(128).regex(/^[A-Za-z0-9:_-]+$/);
+const ownerPoolSecretReferenceSchema = z
+  .string()
+  .trim()
+  .min(12)
+  .max(200)
+  .regex(
+    /^(?:vault|secret|aws-secretsmanager|gcp-secretmanager|azure-keyvault):\/\/[A-Za-z0-9][A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*$/,
+    'owner_pool_secret_reference_required',
+  );
 
 export const miningConfigurationInputSchema = z
   .object({
@@ -24,7 +33,7 @@ export const miningConfigurationInputSchema = z
       .max(300)
       .regex(/^stratum\+(tcp|ssl|tls):\/\//)
       .optional(),
-    ownerPoolSecretRef: z.string().trim().min(8).max(200).optional(),
+    ownerPoolSecretRef: ownerPoolSecretReferenceSchema.optional(),
     autoResumeAfterRental: z.boolean().default(false),
     maximumTemperatureC: z.number().int().min(40).max(95),
     maximumPowerWatts: z.number().int().min(5).max(1500),
