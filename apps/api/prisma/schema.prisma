@@ -696,7 +696,7 @@ model MiningConfiguration {
   workerName String @db.VarChar(64)
   ownerPoolEndpoint String? @db.VarChar(300)
   ownerPoolSecretRef String? @db.VarChar(200)
-  autoResumeAfterRental Boolean @default(true)
+  autoResumeAfterRental Boolean @default(false)
   maximumTemperatureC Int?
   maximumPowerWatts Int?
   maximumCpuPercent Int?
