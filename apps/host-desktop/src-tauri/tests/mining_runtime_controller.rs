@@ -4,7 +4,9 @@ mod mining_runtime_controller;
 mod rental_mining_coordinator;
 
 use mining_runtime_controller::{MiningRuntimeController, RuntimeOrder};
-use rental_mining_coordinator::{MiningConsent, RentalCleanupProof, StopProof};
+use rental_mining_coordinator::{
+    CoordinatedGpuState, MiningConsent, RentalCleanupProof, RentalMiningCoordinator, StopProof,
+};
 
 fn stop_proof() -> StopProof {
     StopProof {
@@ -100,4 +102,36 @@ fn disabled_consent_does_not_restart_mining_after_rental() {
 
     let decision = runtime.rental_cleanup_verified(cleanup_proof()).unwrap();
     assert_eq!(decision.order, RuntimeOrder::Noop);
+}
+
+#[test]
+fn snapshot_reports_the_current_fail_closed_state() {
+    let runtime = MiningRuntimeController::default();
+    let snapshot = runtime.snapshot();
+
+    assert_eq!(snapshot.state, CoordinatedGpuState::Idle);
+    assert_eq!(snapshot.consent, MiningConsent::Disabled);
+    assert!(!snapshot.should_start_mining);
+    assert!(!snapshot.rental_may_start);
+}
+
+#[test]
+fn emergency_stop_requires_confirmation_that_all_workloads_stopped() {
+    let mut coordinator = RentalMiningCoordinator::default();
+
+    assert_eq!(
+        coordinator.emergency_stop(false),
+        Err("emergency_stop_failed")
+    );
+    assert_eq!(
+        coordinator.snapshot().state,
+        CoordinatedGpuState::Quarantined
+    );
+
+    let mut coordinator = RentalMiningCoordinator::default();
+    coordinator.emergency_stop(true).unwrap();
+    assert_eq!(
+        coordinator.snapshot().state,
+        CoordinatedGpuState::EmergencyStopped
+    );
 }
