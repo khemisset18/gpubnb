@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::rental_mining_coordinator::{
-    CoordinatorSnapshot, MiningConsent, RentalCleanupProof, RentalMiningCoordinator, StopProof,
+    CoordinatedGpuState, CoordinatorSnapshot, MiningConsent, RentalCleanupProof,
+    RentalMiningCoordinator, StopProof,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,6 +24,33 @@ pub struct RuntimeDecision {
     pub reservation_id: Option<String>,
     pub consent: MiningConsent,
     pub reason: &'static str,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RuntimeRecoveryProof {
+    pub miner_processes_absent: bool,
+    pub rental_processes_absent: bool,
+    pub containers_absent: bool,
+    pub gpu_handles_released: bool,
+    pub temporary_credentials_revoked: bool,
+    pub temporary_storage_clean: bool,
+    pub network_rules_clean: bool,
+    pub resource_healthy: bool,
+    pub no_active_reservation: bool,
+}
+
+impl RuntimeRecoveryProof {
+    pub fn verified(self) -> bool {
+        self.miner_processes_absent
+            && self.rental_processes_absent
+            && self.containers_absent
+            && self.gpu_handles_released
+            && self.temporary_credentials_revoked
+            && self.temporary_storage_clean
+            && self.network_rules_clean
+            && self.resource_healthy
+            && self.no_active_reservation
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -120,6 +148,36 @@ impl MiningRuntimeController {
         Ok(self.reconcile("emergency_stop_verified"))
     }
 
+    /// Returns a quarantined or emergency-stopped resource to an idle, fail-closed state.
+    ///
+    /// Recovery never resumes mining automatically. The caller must provide a complete
+    /// local cleanup and health proof, after which the previous owner consent and
+    /// auto-resume preference are restored. A new explicit start request is still
+    /// required before any miner process can launch.
+    pub fn recover_runtime(
+        &mut self,
+        proof: RuntimeRecoveryProof,
+    ) -> Result<RuntimeDecision, &'static str> {
+        let snapshot = self.coordinator.snapshot();
+        if !matches!(
+            snapshot.state,
+            CoordinatedGpuState::Quarantined | CoordinatedGpuState::EmergencyStopped
+        ) {
+            return Err("runtime_recovery_not_expected");
+        }
+        if !proof.verified() {
+            return Err("runtime_recovery_proof_failed");
+        }
+
+        let mut recovered = RentalMiningCoordinator::default();
+        recovered.set_owner_consent(snapshot.consent)?;
+        recovered.set_auto_resume_after_rental(snapshot.auto_resume_after_rental)?;
+        self.coordinator = recovered;
+        self.last_emitted = None;
+
+        Ok(self.reconcile("runtime_recovery_verified"))
+    }
+
     pub fn snapshot(&self) -> CoordinatorSnapshot {
         self.coordinator.snapshot()
     }
@@ -134,12 +192,10 @@ impl MiningRuntimeController {
             RuntimeOrder::StartApprovedMiner
         } else {
             match snapshot.state {
-                crate::rental_mining_coordinator::CoordinatedGpuState::VerifyingRentalReadiness => {
+                CoordinatedGpuState::VerifyingRentalReadiness => {
                     RuntimeOrder::PrepareRentalWorkspace
                 }
-                crate::rental_mining_coordinator::CoordinatedGpuState::CleaningRental => {
-                    RuntimeOrder::DestroyRentalWorkspace
-                }
+                CoordinatedGpuState::CleaningRental => RuntimeOrder::DestroyRentalWorkspace,
                 _ => RuntimeOrder::Noop,
             }
         };
