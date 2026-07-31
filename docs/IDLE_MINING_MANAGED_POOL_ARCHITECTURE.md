@@ -1,131 +1,225 @@
-# GPUbnb optional idle mining architecture
+# Architecture du minage optionnel GPUbnb
 
-Status: development only. Rental remains the primary product. Mining is disabled by default and must never delay or weaken a rental.
+## Statut et principe produit
 
-## Product policy
+Le produit principal de GPUbnb reste la location de ressources de calcul. Le minage est une activité optionnelle utilisée uniquement lorsque la ressource n'est pas louée.
 
-The host owner chooses one of three modes per GPU:
+Principes non négociables :
 
-1. Disabled: the GPU remains idle outside rentals.
-2. GPUbnb managed pool: GPUbnb routes approved mining traffic and charges exactly 1% of the gross mining payout credited by the pool accounting layer.
-3. Owner custom pool: the owner provides an approved Stratum endpoint and public wallet/worker settings. GPUbnb charges 0% and does not participate in pool payouts.
+- la location est toujours prioritaire ;
+- le minage est désactivé par défaut ;
+- l'autorisation de miner et la reprise automatique après location sont deux choix distincts ;
+- `autoResumeAfterRental` vaut `false` par défaut dans le desktop, Prisma et PostgreSQL ;
+- aucun appel administrateur, locataire ou contrôle distant ne peut activer silencieusement le minage ;
+- CPU et GPU sont gérés comme des ressources indépendantes ;
+- louer un GPU ne doit pas interrompre les autres GPU ni le CPU, sauf location explicitement exclusive de toute la machine.
 
-The owner can revoke consent at any time. A renter, administrator API call or remote control plane cannot silently enable mining.
+## Modes de minage
 
-## Non-custodial payment design
+Chaque ressource CPU ou GPU possède une configuration indépendante :
 
-GPUbnb should not hold private wallet keys. For the managed mode, use a Stratum routing/accounting service that records accepted shares and splits attributable rewards:
+1. `DISABLED` : aucun minage hors location ;
+2. `GPUBNB_MANAGED` : utilisation d'un profil approuvé et du pool géré GPUbnb, avec 100 points de base, soit 1 %, de frais de plateforme ;
+3. `OWNER_POOL` : utilisation du pool personnel du propriétaire, avec 0 % de frais GPUbnb.
 
-- 99% owner entitlement
-- 1% GPUbnb platform entitlement
+Les calculs monétaires futurs doivent utiliser des unités atomiques entières et conserver l'invariant :
 
-Accounting must use integer atomic units and maintain the invariant:
+`ownerAmount + platformAmount = grossAmount`
 
-`owner_amount + platform_amount = gross_amount`
+GPUbnb ne doit pas conserver les clés privées des portefeuilles des propriétaires.
 
-Pool-side payout thresholds, network fees, stale shares and orphaned blocks must be visible separately. Never advertise guaranteed revenue.
+## Ressources persistées
 
-## Rental-first state machine
+La couche Prisma/PostgreSQL conserve notamment :
 
-A GPU can be in only one exclusive workload state:
+- `MiningResource` : ressource CPU ou GPU, état runtime, location active et quarantaine ;
+- `MiningConfiguration` : mode, profil, wallet public, worker, limites matérielles et version optimiste ;
+- `MiningRuntimeEvent` : journal idempotent des transitions envoyées par l'agent ;
+- `MiningAuditLog` : historique des modifications de configuration ;
+- `Machine.lastCounter` : compteur monotone durable utilisé contre les rejeux.
 
-- DISABLED
-- IDLE
-- MINING_STARTING
-- MINING
-- STOPPING_FOR_RENTAL
-- CLEANUP_VERIFYING
-- RENTAL_READY
-- RENTAL_ACTIVE
-- QUARANTINED
+L'inventaire de l'agent synchronise séparément le CPU et chaque GPU à l'aide de clés de ressource stables.
 
-On reservation preparation:
+## API propriétaire implémentée
 
-1. stop accepting new mining work;
-2. terminate the approved miner process tree;
-3. verify process exit;
-4. release GPU handles and temporary files;
-5. wait for temperature and utilization to return below policy limits;
-6. prove no miner process or container remains;
-7. only then mark the GPU RENTAL_READY.
+Routes principales :
 
-Any failed stop, cleanup, ownership check or thermal check places the GPU in QUARANTINED and blocks both mining and rental until local recovery succeeds.
+- `GET /machines/:machineId/mining-resources`
+- `PUT /machines/:machineId/mining-resources/:resourceId/configuration`
+- `POST /internal/mining/runtime-events`
 
-## Controlled miner catalog
+Les routes propriétaire exigent une session valide et vérifient que la machine appartient à l'utilisateur.
 
-GPUbnb must not accept arbitrary executable paths, shell commands or miner arguments from users or the API. Every enabled profile is versioned and allow-listed with:
+Les modifications de configuration utilisent `expectedVersion`. Une mise à jour fondée sur une ancienne version est rejetée afin d'éviter l'écrasement concurrent de réglages récents.
 
-- asset and algorithm;
-- GPU vendor compatibility;
-- miner binary name and pinned version;
-- download origin and SHA-256 digest;
-- license and redistribution status;
-- approved argument template;
-- default thermal and power limits;
-- supported Stratum schemes;
-- rollback version.
+Une configuration ne peut pas être activée sur une ressource en quarantaine ou actuellement louée.
 
-Cryptocurrencies and miners change frequently. Profiles are therefore enabled individually after build, malware scan, license review and physical GPU testing. "All GPU-mineable coins" is a catalog goal, not a safe one-time implementation claim.
+## Priorité à la location et machine à états
 
-## Custom pool validation
+États runtime persistés :
 
-Allow only explicit `stratum+tcp`, `stratum+ssl` or `stratum+tls` endpoints. Reject embedded credentials, query strings, fragments, whitespace, local addresses and blocked ports. Store pool passwords only as encrypted secret references. Redact wallets, credentials, authorization messages and full pool URLs from logs where appropriate.
+- `IDLE`
+- `STARTING`
+- `MINING`
+- `PREEMPTING`
+- `VERIFYING_STOP`
+- `RENTAL_BLOCKED`
+- `STOPPED`
+- `QUARANTINED`
+- `EMERGENCY_STOPPED`
 
-Before starting, resolve DNS and protect against rebinding to loopback, link-local, private control-plane or cloud metadata addresses.
+Lorsqu'une location cible une ressource qui mine :
 
-## Telemetry and safety
+1. aucun nouveau démarrage de mineur n'est accepté ;
+2. le processus de minage reçoit un ordre d'arrêt ;
+3. le processus et ses enfants doivent être terminés ;
+4. les handles GPU, conteneurs et fichiers temporaires doivent être libérés ;
+5. l'utilisation et la température doivent revenir sous les seuils de sécurité ;
+6. l'environnement de location est préparé seulement après confirmation de l'arrêt ;
+7. un échec place la ressource en quarantaine et bloque son utilisation.
 
-Collect per GPU:
+Après la location, le minage ne reprend que si :
 
-- miner process identity;
-- algorithm and profile version;
-- accepted, rejected and stale shares;
-- effective hashrate;
-- temperature, hotspot temperature and fan speed when available;
-- power draw and configured power limit;
-- start/stop reason;
-- last verified cleanup;
-- reservation preemption latency.
+- la ressource minait avant la réservation ;
+- le nettoyage est confirmé ;
+- la ressource est saine et non mise en quarantaine ;
+- aucune nouvelle location n'est en attente ;
+- le consentement minage est toujours actif ;
+- `autoResumeAfterRental` a été explicitement activé.
 
-Automatically stop and quarantine on sustained temperature breach, process identity mismatch, GPU ownership mismatch, watchdog timeout, repeated crashes or failed rental preemption.
+## Catalogue contrôlé de mineurs
 
-## Services for managed pool mode
+Le desktop n'accepte jamais une commande shell, un chemin d'exécutable ou des arguments arbitraires provenant de l'API.
 
-Recommended separately deployable components:
+Chaque profil approuvé doit définir :
 
-- Mining Catalog Service: signed profile and endpoint configuration.
-- Stratum Gateway: TLS entrypoint, protocol normalization and upstream routing.
-- Share Accounting Service: idempotent accepted-share ledger.
-- Reward Reconciliation Worker: reconciles upstream pool credits and chain payouts.
-- Settlement Ledger: immutable owner/platform accounting in atomic units.
-- Payout Worker: executes configured payout policy without storing host private keys.
-- Risk and Abuse Service: rate limits, detects proxy abuse and blocks unsupported destinations.
+- l'actif et l'algorithme ;
+- la compatibilité CPU, NVIDIA ou AMD ;
+- le binaire et sa version épinglée ;
+- l'origine de téléchargement et le SHA-256 ;
+- la licence et le droit de redistribution ;
+- le modèle d'arguments autorisé ;
+- les limites thermiques et électriques ;
+- les protocoles Stratum acceptés ;
+- une stratégie de retour arrière.
 
-Do not operate a public managed pool until monitoring, DDoS protection, legal review, tax/accounting rules and payout reconciliation have been completed.
+Un profil peut rester désactivé tant que les tests matériels, l'analyse antivirus et la revue de licence ne sont pas terminés.
 
-## API boundaries
+## Pools personnels et références de secrets
 
-Suggested owner-only resources:
+Les endpoints de pool doivent utiliser explicitement :
 
-- `GET /mining/catalog`
-- `GET /machines/:machineId/gpus/:gpuId/mining-config`
-- `PUT /machines/:machineId/gpus/:gpuId/mining-config`
-- `POST /machines/:machineId/gpus/:gpuId/mining/stop`
-- `GET /machines/:machineId/gpus/:gpuId/mining/status`
-- `GET /mining/earnings`
+- `stratum+tcp://`
+- `stratum+ssl://`
+- `stratum+tls://`
 
-Every mutation requires owner authorization, optimistic concurrency and audit logging. The Host agent receives a structured signed launch specification, never a raw command.
+`ownerPoolSecretRef` ne peut pas contenir un mot de passe brut. Les préfixes de références autorisés sont :
 
-## Production gates
+- `vault://`
+- `secret://`
+- `aws-secretsmanager://`
+- `gcp-secretmanager://`
+- `azure-keyvault://`
 
-This feature remains NOT READY until all of the following are proven:
+La valeur désigne un secret dans un coffre externe. Elle n'est pas renvoyée par la route de liste des ressources.
 
-- Rust, API, web and agent tests pass;
-- approved miner binaries are pinned, scanned and legally distributable;
-- NVIDIA and AMD physical tests pass for every enabled profile;
-- mining stops and cleanup completes before rental within a measured SLA;
-- thermal and power protections are validated;
-- custom-pool SSRF and secret-handling tests pass;
-- managed accounting reconciles exactly with upstream pool data;
-- 1%/99% settlement invariants pass under retries and partial payouts;
-- legal, tax, sanctions and consumer disclosures are approved for launch jurisdictions.
+Une migration PostgreSQL installe également un trigger défensif sur `MiningAuditLog`. Avant chaque insertion ou modification, la base supprime automatiquement `ownerPoolSecretRef` de `previousValue` et `nextValue`, même si une future route oublie de le masquer.
+
+Avant une ouverture publique des pools personnalisés, compléter les protections réseau : résolution DNS contrôlée, défense contre le DNS rebinding, blocage des adresses loopback, link-local, privées de contrôle et des métadonnées cloud.
+
+## Authentification Ed25519 V2 des événements runtime
+
+`POST /internal/mining/runtime-events` utilise une signature propre à chaque machine.
+
+La donnée signée contient :
+
+`METHOD|PATH|machineId|timestamp|nonce|bodySha256`
+
+Contrôles appliqués :
+
+- version de signature `2` obligatoire ;
+- clé publique Ed25519 associée à la machine ;
+- vérification du SHA-256 du corps brut ;
+- corps brut obligatoire, sans reconstruction JSON de secours ;
+- fenêtre temporelle limitée ;
+- nonce à usage unique enregistré dans Redis ;
+- machine non révoquée et non mise en quarantaine ;
+- ressource appartenant à la machine signataire ;
+- `agentCounter` strictement positif et monotone ;
+- mise à jour de `Machine.lastCounter` dans une transaction PostgreSQL `Serializable`.
+
+Une signature invalide ou l'absence du corps brut est enregistrée comme incident de sécurité.
+
+## Idempotence des événements
+
+Chaque événement possède une `idempotencyKey`.
+
+- Un événement déjà enregistré et strictement identique retourne `accepted: false` sans consommer de nouveau compteur.
+- Une même clé utilisée avec un contenu différent est rejetée par `idempotency_key_collision`.
+- Le compteur machine n'avance que pour un nouvel événement accepté.
+- Un compteur inférieur ou égal au compteur durable est rejeté par `agent_counter_replay`.
+
+Les événements ordinaires, notamment les heartbeats, ne peuvent pas effacer accidentellement une location active. Seuls les événements de libération et de nettoyage autorisés peuvent supprimer `activeRentalId`.
+
+## Observabilité et audit
+
+À collecter par ressource :
+
+- identité du processus de minage ;
+- profil, algorithme et version ;
+- hashrate et shares acceptées, rejetées ou périmées ;
+- température, hotspot et ventilateurs lorsque disponibles ;
+- consommation et limite de puissance ;
+- raison de démarrage ou d'arrêt ;
+- dernière preuve de nettoyage ;
+- latence de préemption avant location ;
+- changements de configuration et acteur associé.
+
+Ne jamais journaliser :
+
+- mots de passe de pools ;
+- clés privées ;
+- jetons d'authentification ;
+- commandes contenant des secrets ;
+- contenu résolu des coffres de secrets.
+
+## Composants futurs du pool géré
+
+Le mode géré complet doit être séparé en services :
+
+- catalogue de profils signé ;
+- passerelle Stratum avec TLS et protection DDoS ;
+- validation et comptabilisation idempotente des shares ;
+- rapprochement des récompenses avec les pools en amont ;
+- registre immuable propriétaire/plateforme ;
+- moteur de paiement sans conservation de clés privées ;
+- détection des abus, limites de débit et sanctions.
+
+La présente PR fournit l'architecture de configuration, de runtime, de sécurité et de préemption. Elle ne constitue pas à elle seule un pool public complet ni un système de paiement en production.
+
+## Validation continue
+
+Les workflows concernés sont :
+
+- `CI`
+- `api-mining-ci`
+- `deployment-readiness`
+- `host-desktop`
+- `host-desktop-dev-installers`
+- `host-windows-preflight`
+
+Ils vérifient notamment Prisma, les migrations PostgreSQL, TypeScript, les tests API, le build, Rustfmt, Clippy, les tests desktop et la création des installateurs.
+
+## Critères avant activation publique
+
+Même si le code peut être fusionné derrière des choix désactivés par défaut, l'activation publique du minage reste interdite tant que les éléments suivants ne sont pas validés :
+
+- tests physiques NVIDIA et AMD pour chaque profil activé ;
+- validation antivirus et licences des binaires distribués ;
+- mesure de la préemption et du nettoyage sur machines réelles ;
+- tests de température, puissance, crash et redémarrage ;
+- audit SSRF et DNS rebinding des pools personnalisés ;
+- stockage et rotation réels des secrets dans un coffre ;
+- réconciliation exacte du pool géré et des frais 99 % / 1 % ;
+- supervision, alertes, procédures d'incident et retour arrière ;
+- revue juridique, fiscale, sanctions et information consommateur dans les pays de lancement.
