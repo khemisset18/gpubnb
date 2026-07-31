@@ -1,3 +1,4 @@
+#[path = "mining_catalog/secure_launcher.rs"]
 pub mod secure_launcher;
 
 use serde::{Deserialize, Serialize};
