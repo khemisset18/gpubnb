@@ -75,6 +75,46 @@ test('rejects any body alteration', async () => {
   ), false);
 });
 
+test('rejects an invalid signature and an expired timestamp', async () => {
+  const body = Buffer.from('{"machineId":"machine-test","counter":1}');
+  const signed = signedRequest(body);
+
+  assert.equal(await verifyAgentRequestV2(
+    new FakeRedis() as never,
+    signed.machineId,
+    signed.publicKey,
+    'POST',
+    '/agent/heartbeat',
+    body,
+    { ...signed.headers, signature: `${signed.headers.signature}x` },
+  ), false);
+
+  assert.equal(await verifyAgentRequestV2(
+    new FakeRedis() as never,
+    signed.machineId,
+    signed.publicKey,
+    'POST',
+    '/agent/heartbeat',
+    body,
+    { ...signed.headers, timestamp: String(Date.now() - 31_000) },
+  ), false);
+});
+
+test('rejects a signature presented for another machine', async () => {
+  const body = Buffer.from('{"machineId":"machine-test","counter":1}');
+  const signed = signedRequest(body);
+
+  assert.equal(await verifyAgentRequestV2(
+    new FakeRedis() as never,
+    'different-machine',
+    signed.publicKey,
+    'POST',
+    '/agent/heartbeat',
+    body,
+    signed.headers,
+  ), false);
+});
+
 test('rejects malformed nonces and unsupported versions', async () => {
   const body = Buffer.from('{}');
   const signed = signedRequest(body);

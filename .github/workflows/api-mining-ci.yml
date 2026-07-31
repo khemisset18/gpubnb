@@ -1,0 +1,83 @@
+name: api-mining-ci
+
+on:
+  pull_request:
+    paths:
+      - 'apps/api/**'
+      - '.github/workflows/api-mining-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - '.github/workflows/api-mining-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-mining-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-and-test:
+    name: Prisma, TypeScript and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      DATABASE_URL: postgresql://gpubnb:gpubnb@localhost:5432/gpubnb_ci?schema=public
+      NODE_ENV: test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: gpubnb
+          POSTGRES_PASSWORD: gpubnb
+          POSTGRES_DB: gpubnb_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gpubnb -d gpubnb_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply migrations to PostgreSQL
+        run: npx prisma migrate deploy
+
+      - name: Verify migration state
+        run: npx prisma migrate status
+
+      - name: Type-check API
+        run: npx tsc -p tsconfig.json --noEmit
+
+      - name: Run mining policy tests
+        run: npx tsx --test test/mining-config-policy.test.ts
+
+      - name: Run complete API test suite
+        run: npm test
+
+      - name: Build API
+        run: npm run build

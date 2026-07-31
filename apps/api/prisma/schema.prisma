@@ -149,6 +149,52 @@ enum SessionTerminationReason {
   EXECUTION_FAILED
 }
 
+enum MiningResourceKind {
+  CPU
+  GPU
+}
+
+enum MiningMode {
+  DISABLED
+  GPUBNB_MANAGED
+  OWNER_POOL
+}
+
+enum MiningRuntimeState {
+  IDLE
+  STARTING
+  MINING
+  PREEMPTING
+  VERIFYING_STOP
+  RENTAL_BLOCKED
+  STOPPED
+  QUARANTINED
+  EMERGENCY_STOPPED
+}
+
+enum MiningEventType {
+  CONFIGURATION_CHANGED
+  START_REQUESTED
+  STARTED
+  STOP_REQUESTED
+  STOP_VERIFIED
+  STOP_FAILED
+  RENTAL_PREEMPTED
+  RENTAL_RELEASED
+  CLEANUP_VERIFIED
+  AUTO_RESUME_REQUESTED
+  QUARANTINED
+  EMERGENCY_STOPPED
+  HEARTBEAT
+}
+
+enum MiningAuditActorType {
+  OWNER
+  AGENT
+  PLATFORM
+  SYSTEM
+}
+
 model User {
   id String @id @default(cuid())
   wallet String @unique
@@ -227,6 +273,8 @@ model Machine {
   jobs Job[]
   workspaceSessions WorkspaceSession[]
   workspaces MachineWorkspace[]
+  miningResources MiningResource[]
+  miningAuditLogs MiningAuditLog[]
 }
 
 model Accelerator {
@@ -249,6 +297,7 @@ model Accelerator {
   machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
   listings ListingAccelerator[]
   allocations AcceleratorAllocation[]
+  miningResource MiningResource?
   @@unique([machineId, hardwareUuid])
   @@index([machineId, status])
 }
@@ -610,4 +659,91 @@ model ForumPost {
   createdAt DateTime @default(now())
   topic ForumTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
   author User @relation(fields: [authorId], references: [id])
+}
+
+model MiningResource {
+  id String @id
+  machineId String
+  kind MiningResourceKind
+  resourceKey String @db.VarChar(200)
+  displayName String @db.VarChar(200)
+  acceleratorId String? @unique
+  cpuPackageIndex Int?
+  cpuLogicalCores Int?
+  enabled Boolean @default(true)
+  quarantined Boolean @default(false)
+  runtimeState MiningRuntimeState @default(IDLE)
+  activeRentalId String?
+  lastSeenAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  accelerator Accelerator? @relation(fields: [acceleratorId], references: [id], onDelete: Cascade)
+  configuration MiningConfiguration?
+  runtimeEvents MiningRuntimeEvent[]
+  auditLogs MiningAuditLog[]
+  @@unique([machineId, resourceKey])
+  @@index([machineId, kind])
+  @@index([runtimeState])
+}
+
+model MiningConfiguration {
+  id String @id
+  resourceId String @unique
+  mode MiningMode @default(DISABLED)
+  profileId String? @db.VarChar(96)
+  walletAddress String? @db.VarChar(160)
+  workerName String @db.VarChar(64)
+  ownerPoolEndpoint String? @db.VarChar(300)
+  ownerPoolSecretRef String? @db.VarChar(200)
+  autoResumeAfterRental Boolean @default(false)
+  maximumTemperatureC Int?
+  maximumPowerWatts Int?
+  maximumCpuPercent Int?
+  cpuThreadCount Int?
+  gpuIntensityPercent Int?
+  platformFeeBasisPoints Int @default(0)
+  version Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  resource MiningResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  auditLogs MiningAuditLog[]
+  @@index([mode])
+}
+
+model MiningRuntimeEvent {
+  id String @id
+  resourceId String
+  eventType MiningEventType
+  stateBefore MiningRuntimeState?
+  stateAfter MiningRuntimeState
+  reservationId String?
+  idempotencyKey String @unique @db.VarChar(160)
+  agentCounter BigInt?
+  payload Json?
+  occurredAt DateTime
+  createdAt DateTime @default(now())
+  resource MiningResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  @@index([resourceId, occurredAt])
+  @@index([reservationId])
+}
+
+model MiningAuditLog {
+  id String @id
+  machineId String
+  resourceId String?
+  configurationId String?
+  actorType MiningAuditActorType
+  actorId String @db.VarChar(160)
+  action String @db.VarChar(120)
+  requestId String? @db.VarChar(160)
+  ipAddressHash String? @db.VarChar(128)
+  previousValue Json?
+  nextValue Json?
+  createdAt DateTime @default(now())
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  resource MiningResource? @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  configuration MiningConfiguration? @relation(fields: [configurationId], references: [id], onDelete: SetNull)
+  @@index([machineId, createdAt])
+  @@index([resourceId, createdAt])
 }

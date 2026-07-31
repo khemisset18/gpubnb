@@ -6,7 +6,7 @@ import vm from 'node:vm';
 
 const webRoot=path.resolve(process.cwd(),'../web');
 const repoRoot=path.resolve(process.cwd(),'../..');
-const pages=['dashboard.html','host-install.html','machines.html','listings.html','bookings.html','revenues.html'];
+const pages=['dashboard.html','host-install.html','machines.html','listings.html','bookings.html','revenues.html','mining.html'];
 
 test('portal pages expose accessible navigation and real targets',async()=>{
   for(const page of pages){
@@ -139,12 +139,14 @@ test('test release workflow publishes a verified Windows portable package',async
   assert.match(workflow,/sha256sum --check/);
 });
 
-test('dashboard does not present mining as operational',async()=>{
+test('dashboard presents mining as configurable but not production-ready',async()=>{
   const html=await readFile(path.join(webRoot,'dashboard.html'),'utf8');
   const portal=await readFile(path.join(webRoot,'portal.js'),'utf8');
-  assert.match(html,/Expérimental/);
+  assert.match(html,/Expérimental sécurisé/);
   assert.match(html,/Minage/);
-  assert.match(html,/Indisponible/);
+  assert.match(html,/href="mining\.html"/);
+  assert.match(html,/désactivé par défaut/);
+  assert.doesNotMatch(html,/Minage.*Fonctionnel/s);
   assert.match(portal,/Aucun rôle activé/);
   assert.match(portal,/machineReadiness/);
   assert.match(portal,/data-check="diagnostic"/);

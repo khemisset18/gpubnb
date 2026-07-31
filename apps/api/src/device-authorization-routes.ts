@@ -9,6 +9,8 @@ import {
   createDeviceAuthorization,
 } from './device-authorization.js';
 import { RedisDeviceAuthorizationStore } from './device-authorization-store.js';
+import { registerMiningRoutes } from './mining-routes.js';
+import { syncMiningResourcesFromInventory } from './mining-resource-inventory.js';
 
 const agentPublicKeySchema = z.string().min(32).max(64).regex(/^[1-9A-HJ-NP-Za-km-z]+$/);
 const machineFingerprintSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
@@ -59,6 +61,7 @@ export const registerDeviceAuthorizationRoutes = (
   redis: Redis,
 ): void => {
   const store = new RedisDeviceAuthorizationStore(redis);
+  registerMiningRoutes(app, db, redis);
 
   app.post('/agent/device-authorizations', {
     config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
@@ -118,6 +121,20 @@ export const registerDeviceAuthorizationRoutes = (
 
     try {
       const authorization = await store.consume(body.deviceCode, body.publicKey, body.machineFingerprint);
+      const miningInventory = {
+        system: {
+          cpu: body.inventory.system.cpu,
+          cpuCount: body.inventory.system.cpuCount ?? null,
+        },
+        gpus: body.inventory.gpus.map((gpu) => ({
+          gpuUuid: gpu.gpuUuid,
+          gpuModel: gpu.gpuModel,
+          vramMiB: gpu.vramMiB,
+          driverVersion: gpu.driverVersion,
+          cudaVersion: gpu.cudaVersion ?? null,
+          gpuVendor: gpu.gpuVendor ?? null,
+        })),
+      };
 
       const existing = await db.machine.findUnique({
         where: { agentPublicKey: authorization.publicKey },
@@ -125,6 +142,7 @@ export const registerDeviceAuthorizationRoutes = (
       });
       if (existing) {
         if (existing.ownerId !== authorization.ownerId) return reply.code(409).send({ error: 'agent_key_already_registered' });
+        await syncMiningResourcesFromInventory(db, existing.id, miningInventory);
         return { machineId: existing.id, linkedAt: existing.keyCreatedAt.toISOString() };
       }
 
@@ -155,6 +173,7 @@ export const registerDeviceAuthorizationRoutes = (
         select: { id: true, keyCreatedAt: true },
       });
 
+      await syncMiningResourcesFromInventory(db, machine.id, miningInventory);
       return reply.code(201).send({ machineId: machine.id, linkedAt: machine.keyCreatedAt.toISOString() });
     } catch (error) {
       if (error instanceof DeviceAuthorizationError) return sendAuthorizationError(reply, error);
