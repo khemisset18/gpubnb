@@ -62,7 +62,7 @@ CREATE TABLE "MiningConfiguration" (
   "workerName" VARCHAR(64) NOT NULL,
   "ownerPoolEndpoint" VARCHAR(300),
   "ownerPoolSecretRef" VARCHAR(200),
-  "autoResumeAfterRental" BOOLEAN NOT NULL DEFAULT true,
+  "autoResumeAfterRental" BOOLEAN NOT NULL DEFAULT false,
   "maximumTemperatureC" INTEGER,
   "maximumPowerWatts" INTEGER,
   "maximumCpuPercent" INTEGER,
