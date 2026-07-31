@@ -16,6 +16,11 @@ import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
 const machineParamsSchema = z.object({ machineId: z.string().cuid() });
 const resourceParamsSchema = machineParamsSchema.extend({ resourceId: z.string().min(3).max(128) });
 
+const runtimeStates = [
+  'IDLE', 'STARTING', 'MINING', 'PREEMPTING', 'VERIFYING_STOP',
+  'RENTAL_BLOCKED', 'STOPPED', 'QUARANTINED', 'EMERGENCY_STOPPED',
+] as const;
+
 const runtimeEventSchema = z.object({
   machineId: z.string().cuid(),
   resourceId: z.string().min(3).max(128),
@@ -25,11 +30,8 @@ const runtimeEventSchema = z.object({
     'CLEANUP_VERIFIED', 'AUTO_RESUME_REQUESTED', 'QUARANTINED',
     'EMERGENCY_STOPPED', 'HEARTBEAT',
   ]),
-  stateBefore: z.string().max(40).nullable().optional(),
-  stateAfter: z.enum([
-    'IDLE', 'STARTING', 'MINING', 'PREEMPTING', 'VERIFYING_STOP',
-    'RENTAL_BLOCKED', 'STOPPED', 'QUARANTINED', 'EMERGENCY_STOPPED',
-  ]),
+  stateBefore: z.enum(runtimeStates).nullable().optional(),
+  stateAfter: z.enum(runtimeStates),
   reservationId: z.string().max(96).nullable().optional(),
   idempotencyKey: z.string().min(16).max(160),
   agentCounter: z.coerce.bigint().positive(),
@@ -62,6 +64,14 @@ type MiningResourceRow = {
   gpuIntensityPercent: number | null;
   platformFeeBasisPoints: number | null;
   version: number | null;
+};
+
+type ExistingRuntimeEventRow = {
+  resourceId: string;
+  eventType: string;
+  stateAfter: string;
+  reservationId: string | null;
+  agentCounter: bigint;
 };
 
 const listOwnerResources = async (db: PrismaClient, machineId: string, ownerId: string) =>
@@ -254,6 +264,25 @@ export const registerMiningRoutes = (
         `);
         if (!resource.length) throw new Error('mining_resource_not_found');
 
+        const existing = await tx.$queryRaw<ExistingRuntimeEventRow[]>(Prisma.sql`
+          SELECT e."resourceId", e."eventType"::text AS "eventType",
+                 e."stateAfter"::text AS "stateAfter", e."reservationId", e."agentCounter"
+            FROM "MiningRuntimeEvent" e
+            JOIN "MiningResource" r ON r."id" = e."resourceId"
+           WHERE e."idempotencyKey" = ${event.idempotencyKey}
+             AND r."machineId" = ${event.machineId}
+        `);
+        if (existing.length) {
+          const previous = existing[0];
+          const sameEvent = previous.resourceId === event.resourceId
+            && previous.eventType === event.eventType
+            && previous.stateAfter === event.stateAfter
+            && previous.reservationId === (event.reservationId ?? null)
+            && previous.agentCounter === event.agentCounter;
+          if (!sameEvent) throw new Error('idempotency_key_collision');
+          return false;
+        }
+
         const advanced = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           UPDATE "Machine"
              SET "lastCounter" = ${event.agentCounter}, "keyLastUsedAt" = CURRENT_TIMESTAMP
@@ -262,7 +291,7 @@ export const registerMiningRoutes = (
         `);
         if (!advanced.length) throw new Error('agent_counter_replay');
 
-        const count = await tx.$executeRaw(Prisma.sql`
+        await tx.$executeRaw(Prisma.sql`
           INSERT INTO "MiningRuntimeEvent" (
             "id", "resourceId", "eventType", "stateBefore", "stateAfter", "reservationId",
             "idempotencyKey", "agentCounter", "payload", "occurredAt", "createdAt"
@@ -271,16 +300,27 @@ export const registerMiningRoutes = (
             ${event.stateBefore ?? null}::"MiningRuntimeState", ${event.stateAfter}::"MiningRuntimeState",
             ${event.reservationId ?? null}, ${event.idempotencyKey}, ${event.agentCounter},
             ${JSON.stringify(event.payload ?? {})}::jsonb, ${new Date(event.occurredAt)}, CURRENT_TIMESTAMP
-          ) ON CONFLICT ("idempotencyKey") DO NOTHING
+          )
         `);
-        if (count > 0) {
-          await tx.$executeRaw(Prisma.sql`
-            UPDATE "MiningResource" SET "runtimeState" = ${event.stateAfter}::"MiningRuntimeState",
-                   "activeRentalId" = ${event.reservationId ?? null}, "updatedAt" = CURRENT_TIMESTAMP
-             WHERE "id" = ${event.resourceId}
-          `);
-        }
-        return count > 0;
+
+        await tx.$executeRaw(Prisma.sql`
+          UPDATE "MiningResource"
+             SET "runtimeState" = ${event.stateAfter}::"MiningRuntimeState",
+                 "activeRentalId" = CASE
+                   WHEN ${event.eventType}::"MiningEventType" IN (
+                     'RENTAL_RELEASED'::"MiningEventType", 'CLEANUP_VERIFIED'::"MiningEventType"
+                   ) THEN NULL
+                   WHEN ${event.reservationId ?? null} IS NOT NULL
+                    AND ${event.eventType}::"MiningEventType" IN (
+                      'RENTAL_PREEMPTED'::"MiningEventType", 'STOP_REQUESTED'::"MiningEventType",
+                      'STOP_VERIFIED'::"MiningEventType", 'STOP_FAILED'::"MiningEventType"
+                    ) THEN ${event.reservationId ?? null}
+                   ELSE "activeRentalId"
+                 END,
+                 "updatedAt" = CURRENT_TIMESTAMP
+           WHERE "id" = ${event.resourceId}
+        `);
+        return true;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
       return { accepted: inserted };
     } catch (error) {
