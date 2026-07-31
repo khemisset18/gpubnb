@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
-import { isMiningProfileApproved } from './mining-profile-catalog.js';
+import {
+  isMiningProfileApproved,
+  type MiningGpuVendor,
+} from './mining-profile-catalog.js';
 
 export const miningModeSchema = z.enum(['DISABLED', 'GPUBNB_MANAGED', 'OWNER_POOL']);
 export const miningResourceKindSchema = z.enum(['GPU', 'CPU']);
@@ -108,11 +111,11 @@ export type MiningConfigurationContext = {
   requestedMachineId: string;
   resourceKind: MiningConfigurationInput['resourceKind'];
   resourceId: string;
+  gpuVendor?: MiningGpuVendor;
   rentedResourceIds: ReadonlySet<string>;
   machineExclusiveRental: boolean;
   resourceQuarantined: boolean;
   currentVersion: number;
-  profileApproved: boolean;
 };
 
 export function authorizeMiningConfigurationUpdate(
@@ -138,11 +141,11 @@ export function authorizeMiningConfigurationUpdate(
     throw new Error('mining_configuration_version_conflict');
   }
 
-  if (input.mode !== 'DISABLED') {
-    const approvedByCatalog = isMiningProfileApproved(input.profileId, input.resourceKind);
-    if (!context.profileApproved || !approvedByCatalog) {
-      throw new Error('mining_profile_not_approved');
-    }
+  if (
+    input.mode !== 'DISABLED'
+    && !isMiningProfileApproved(input.profileId, input.resourceKind, context.gpuVendor)
+  ) {
+    throw new Error('mining_profile_not_approved');
   }
 }
 
