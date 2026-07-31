@@ -117,8 +117,5 @@ fn disabling_auto_resume_keeps_gpu_idle_after_rental() {
     let snapshot = coordinator.snapshot();
     assert_eq!(snapshot.state, WorkloadState::Idle);
     assert!(!snapshot.should_start_mining);
-    assert_eq!(
-        snapshot.pool_preference,
-        MiningPoolPreference::OwnerCustom
-    );
+    assert_eq!(snapshot.pool_preference, MiningPoolPreference::OwnerCustom);
 }
