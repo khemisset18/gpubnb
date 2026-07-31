@@ -1,3 +1,5 @@
+#[path = "mining_catalog/process_manager.rs"]
+pub mod process_manager;
 #[path = "mining_catalog/secure_launcher.rs"]
 pub mod secure_launcher;
 
