@@ -1,7 +1,7 @@
-#[path = "../src/rental_mining_coordinator.rs"]
-mod rental_mining_coordinator;
 #[path = "../src/mining_runtime_controller.rs"]
 mod mining_runtime_controller;
+#[path = "../src/rental_mining_coordinator.rs"]
+mod rental_mining_coordinator;
 
 use mining_runtime_controller::{MiningRuntimeController, RuntimeOrder};
 use rental_mining_coordinator::{MiningConsent, RentalCleanupProof, StopProof};
@@ -32,11 +32,15 @@ fn cleanup_proof() -> RentalCleanupProof {
 fn full_cycle_stops_mining_before_rental_and_restarts_after_cleanup() {
     let mut runtime = MiningRuntimeController::default();
 
-    let start = runtime.set_owner_consent(MiningConsent::ManagedPool).unwrap();
+    let start = runtime
+        .set_owner_consent(MiningConsent::ManagedPool)
+        .unwrap();
     assert_eq!(start.order, RuntimeOrder::StartApprovedMiner);
 
     runtime.mining_started().unwrap();
-    let stop = runtime.reservation_confirmed("reservation-001".into()).unwrap();
+    let stop = runtime
+        .reservation_confirmed("reservation-001".into())
+        .unwrap();
     assert_eq!(stop.order, RuntimeOrder::StopMinerForRental);
 
     let prepare = runtime.mining_stopped(stop_proof()).unwrap();
@@ -66,16 +70,22 @@ fn duplicate_reconciliation_never_emits_duplicate_process_start() {
 #[test]
 fn reservation_during_miner_start_is_still_preempted() {
     let mut runtime = MiningRuntimeController::default();
-    runtime.set_owner_consent(MiningConsent::ManagedPool).unwrap();
+    runtime
+        .set_owner_consent(MiningConsent::ManagedPool)
+        .unwrap();
 
-    let stop = runtime.reservation_confirmed("reservation-002".into()).unwrap();
+    let stop = runtime
+        .reservation_confirmed("reservation-002".into())
+        .unwrap();
     assert_eq!(stop.order, RuntimeOrder::StopMinerForRental);
 }
 
 #[test]
 fn disabled_consent_does_not_restart_mining_after_rental() {
     let mut runtime = MiningRuntimeController::default();
-    runtime.reservation_confirmed("reservation-003".into()).unwrap();
+    runtime
+        .reservation_confirmed("reservation-003".into())
+        .unwrap();
     runtime.rental_ready(true, true, true).unwrap();
     runtime.rental_started().unwrap();
     runtime.rental_finished().unwrap();
