@@ -13,11 +13,11 @@ import {
 } from './mining-config-policy.js';
 
 const machineParamsSchema = z.object({ machineId: z.string().cuid() });
-const resourceParamsSchema = machineParamsSchema.extend({ resourceId: z.string().cuid() });
+const resourceParamsSchema = machineParamsSchema.extend({ resourceId: z.string().min(3).max(128) });
 
 const runtimeEventSchema = z.object({
   machineId: z.string().cuid(),
-  resourceId: z.string().cuid(),
+  resourceId: z.string().min(3).max(128),
   eventType: z.enum([
     'CONFIGURATION_CHANGED', 'START_REQUESTED', 'STARTED', 'STOP_REQUESTED',
     'STOP_VERIFIED', 'STOP_FAILED', 'RENTAL_PREEMPTED', 'RENTAL_RELEASED',
@@ -119,14 +119,18 @@ export const registerMiningRoutes = (
         const current = rows[0];
         if (!current) throw new Error('mining_resource_not_found');
 
+        const rentedResourceIds = current.activeRentalId
+          ? new Set<string>([current.id])
+          : new Set<string>();
+
         authorizeMiningConfigurationUpdate(input, {
           ownerId: session.userId,
           machineOwnerId: current.ownerId,
           resourceMachineId: current.machineId,
           requestedMachineId: machineId,
           resourceKind: current.kind,
-          requestedResourceKind: input.resourceKind,
-          activeRental: Boolean(current.activeRentalId),
+          resourceId: current.id,
+          rentedResourceIds,
           machineExclusiveRental: false,
           resourceQuarantined: current.quarantined,
           currentVersion: current.version ?? 0,
@@ -143,11 +147,11 @@ export const registerMiningRoutes = (
             "cpuThreadCount", "gpuIntensityPercent", "platformFeeBasisPoints",
             "version", "createdAt", "updatedAt"
           ) VALUES (
-            ${configurationId}, ${resourceId}, ${input.mode}::"MiningMode", ${input.profileId ?? null},
+            ${configurationId}, ${resourceId}, ${input.mode}::"MiningMode", ${input.profileId},
             ${input.walletAddress ?? null}, ${input.workerName}, ${input.ownerPoolEndpoint ?? null},
             ${input.ownerPoolSecretRef ?? null}, ${input.autoResumeAfterRental},
-            ${input.maximumTemperatureC ?? null}, ${input.maximumPowerWatts ?? null},
-            ${input.maximumCpuPercent ?? null}, ${input.cpuThreadCount ?? null},
+            ${input.maximumTemperatureC}, ${input.maximumPowerWatts},
+            ${input.cpuUtilizationLimitPercent ?? null}, ${input.cpuThreadLimit ?? null},
             ${input.gpuIntensityPercent ?? null}, ${feeBps}, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
           )
           ON CONFLICT ("resourceId") DO UPDATE SET
