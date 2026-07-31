@@ -68,6 +68,32 @@ describe('mining configuration policy', () => {
     assert.equal(miningConfigurationInputSchema.parse(validCpuInput).resourceKind, 'CPU');
   });
 
+  it('accepts supported secret-manager references for owner pools', () => {
+    for (const ownerPoolSecretRef of [
+      'vault://gpubnb/mining/owner-1/cpu-0',
+      'secret://owner/pool/cpu-0',
+      'aws-secretsmanager://prod/gpubnb/mining/cpu-0',
+      'gcp-secretmanager://projects/gpubnb/secrets/cpu-0/versions/latest',
+      'azure-keyvault://gpubnb-vault/secrets/cpu-0',
+    ]) {
+      assert.equal(
+        miningConfigurationInputSchema.parse({ ...validCpuInput, ownerPoolSecretRef }).ownerPoolSecretRef,
+        ownerPoolSecretRef,
+      );
+    }
+  });
+
+  it('rejects raw owner-pool passwords and unsupported secret references', () => {
+    for (const ownerPoolSecretRef of [
+      'super-secret-password',
+      'password=miner123',
+      'https://vault.example.com/secrets/cpu-0',
+      'env://MINING_POOL_PASSWORD',
+    ]) {
+      assert.throws(() => miningConfigurationInputSchema.parse({ ...validCpuInput, ownerPoolSecretRef }));
+    }
+  });
+
   it('stops only the resource selected by a partial rental', () => {
     const rented = new Set(['gpu:machine_1:0']);
     assert.equal(resourceMustStopForRental({ resourceId: 'gpu:machine_1:0', rentedResourceIds: rented, machineExclusiveRental: false }), true);
