@@ -116,6 +116,37 @@ fn snapshot_reports_the_current_fail_closed_state() {
 }
 
 #[test]
+fn controller_emergency_stop_enters_verified_stopped_state() {
+    let mut runtime = MiningRuntimeController::default();
+    authorize_and_start(&mut runtime, MiningConsent::ManagedPool, true);
+    runtime.mining_started().unwrap();
+
+    let decision = runtime.emergency_stop(true).unwrap();
+    assert_eq!(decision.order, RuntimeOrder::Noop);
+    assert_eq!(decision.reason, "emergency_stop_verified");
+
+    let snapshot = runtime.snapshot();
+    assert_eq!(snapshot.state, CoordinatedGpuState::EmergencyStopped);
+    assert!(snapshot.reservation_id.is_none());
+    assert!(!snapshot.should_start_mining);
+    assert!(!snapshot.should_stop_mining);
+    assert!(!snapshot.rental_may_start);
+}
+
+#[test]
+fn controller_emergency_stop_failure_quarantines_resource() {
+    let mut runtime = MiningRuntimeController::default();
+    authorize_and_start(&mut runtime, MiningConsent::OwnerPool, false);
+
+    assert_eq!(runtime.emergency_stop(false), Err("emergency_stop_failed"));
+    let snapshot = runtime.snapshot();
+    assert_eq!(snapshot.state, CoordinatedGpuState::Quarantined);
+    assert_eq!(snapshot.last_error, Some("emergency_stop_failed"));
+    assert!(!snapshot.should_start_mining);
+    assert!(!snapshot.rental_may_start);
+}
+
+#[test]
 fn emergency_stop_requires_confirmation_that_all_workloads_stopped() {
     let mut coordinator = RentalMiningCoordinator::default();
 
