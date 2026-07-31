@@ -9,6 +9,7 @@ import {
   createDeviceAuthorization,
 } from './device-authorization.js';
 import { RedisDeviceAuthorizationStore } from './device-authorization-store.js';
+import { registerMiningRoutes } from './mining-routes.js';
 
 const agentPublicKeySchema = z.string().min(32).max(64).regex(/^[1-9A-HJ-NP-Za-km-z]+$/);
 const machineFingerprintSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
@@ -59,6 +60,7 @@ export const registerDeviceAuthorizationRoutes = (
   redis: Redis,
 ): void => {
   const store = new RedisDeviceAuthorizationStore(redis);
+  registerMiningRoutes(app, db, redis);
 
   app.post('/agent/device-authorizations', {
     config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
