@@ -41,6 +41,19 @@ impl MiningRuntimeController {
         Ok(self.reconcile("owner_consent_changed"))
     }
 
+    pub fn set_auto_resume_after_rental(
+        &mut self,
+        enabled: bool,
+    ) -> Result<RuntimeDecision, &'static str> {
+        self.coordinator.set_auto_resume_after_rental(enabled)?;
+        Ok(self.reconcile("auto_resume_policy_changed"))
+    }
+
+    pub fn request_idle_mining_start(&mut self) -> Result<RuntimeDecision, &'static str> {
+        self.coordinator.request_idle_mining_start()?;
+        Ok(self.reconcile("manual_mining_start_requested"))
+    }
+
     pub fn reservation_confirmed(
         &mut self,
         reservation_id: String,
@@ -115,8 +128,6 @@ impl MiningRuntimeController {
             }
         };
 
-        // Idempotency: repeated heartbeats or duplicate API events must not spawn
-        // duplicate miners or rental workspaces.
         let order = if self.last_emitted.as_ref() == Some(&order) {
             RuntimeOrder::Noop
         } else {
