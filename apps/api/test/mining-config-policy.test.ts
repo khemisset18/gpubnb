@@ -45,11 +45,11 @@ const validContext = {
   requestedMachineId: 'machine_1',
   resourceKind: 'GPU' as const,
   resourceId: 'gpu:machine_1:0',
+  gpuVendor: 'NVIDIA' as const,
   rentedResourceIds: new Set<string>(),
   machineExclusiveRental: false,
   resourceQuarantined: false,
   currentVersion: 2,
-  profileApproved: true,
 };
 
 const throwsMessage = (fn: () => unknown, message: string) => {
@@ -89,6 +89,7 @@ describe('mining configuration policy', () => {
       ...validContext,
       resourceKind: 'CPU',
       resourceId: validCpuInput.resourceId,
+      gpuVendor: undefined,
       rentedResourceIds: new Set([validGpuInput.resourceId]),
     }));
   });
@@ -108,9 +109,22 @@ describe('mining configuration policy', () => {
     throwsMessage(() => authorizeMiningConfigurationUpdate(input, { ...validContext, resourceQuarantined: true }), 'quarantined_resource_cannot_mine');
   });
 
-  it('requires an approved profile', () => {
+  it('rejects an NVIDIA-only profile on AMD', () => {
     const input = miningConfigurationInputSchema.parse(validGpuInput);
-    throwsMessage(() => authorizeMiningConfigurationUpdate(input, { ...validContext, profileApproved: false }), 'mining_profile_not_approved');
+    throwsMessage(() => authorizeMiningConfigurationUpdate(input, { ...validContext, gpuVendor: 'AMD' }), 'mining_profile_not_approved');
+  });
+
+  it('rejects GPU mining when the hardware vendor is unknown', () => {
+    const input = miningConfigurationInputSchema.parse(validGpuInput);
+    throwsMessage(() => authorizeMiningConfigurationUpdate(input, { ...validContext, gpuVendor: undefined }), 'mining_profile_not_approved');
+  });
+
+  it('accepts a dual-vendor profile on AMD', () => {
+    const input = miningConfigurationInputSchema.parse({
+      ...validGpuInput,
+      profileId: 'lolminer_etc_etchash',
+    });
+    assert.doesNotThrow(() => authorizeMiningConfigurationUpdate(input, { ...validContext, gpuVendor: 'AMD' }));
   });
 
   it('requires CPU-specific limits', () => {
