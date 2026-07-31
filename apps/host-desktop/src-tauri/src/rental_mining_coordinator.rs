@@ -77,6 +77,7 @@ impl RentalCleanupProof {
 pub struct CoordinatorSnapshot {
     pub state: CoordinatedGpuState,
     pub consent: MiningConsent,
+    pub auto_resume_after_rental: bool,
     pub reservation_id: Option<String>,
     pub should_start_mining: bool,
     pub should_stop_mining: bool,
@@ -88,6 +89,9 @@ pub struct CoordinatorSnapshot {
 pub struct RentalMiningCoordinator {
     state: CoordinatedGpuState,
     consent: MiningConsent,
+    auto_resume_after_rental: bool,
+    was_mining_before_reservation: bool,
+    resume_requested: bool,
     reservation_id: Option<String>,
     last_error: Option<&'static str>,
 }
@@ -101,13 +105,28 @@ impl RentalMiningCoordinator {
             return Err("mining_consent_locked_during_rental");
         }
         self.consent = consent;
-        if consent == MiningConsent::Disabled
-            && matches!(
+        if consent == MiningConsent::Disabled {
+            self.resume_requested = false;
+            if matches!(
                 self.state,
                 CoordinatedGpuState::Mining | CoordinatedGpuState::MiningStarting
-            )
-        {
-            self.state = CoordinatedGpuState::PreemptingMining;
+            ) {
+                self.state = CoordinatedGpuState::PreemptingMining;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn set_auto_resume_after_rental(&mut self, enabled: bool) -> Result<(), &'static str> {
+        if matches!(
+            self.state,
+            CoordinatedGpuState::RentalActive | CoordinatedGpuState::CleaningRental
+        ) {
+            return Err("auto_resume_locked_during_rental");
+        }
+        self.auto_resume_after_rental = enabled;
+        if !enabled {
+            self.resume_requested = false;
         }
         Ok(())
     }
@@ -122,6 +141,7 @@ impl RentalMiningCoordinator {
         if self.state != CoordinatedGpuState::Idle {
             return Err("gpu_not_idle");
         }
+        self.resume_requested = false;
         self.state = CoordinatedGpuState::MiningStarting;
         Ok(())
     }
@@ -134,6 +154,7 @@ impl RentalMiningCoordinator {
             self.state = CoordinatedGpuState::PreemptingMining;
             return Err("reservation_preempted_mining_start");
         }
+        self.resume_requested = false;
         self.state = CoordinatedGpuState::Mining;
         Ok(())
     }
@@ -154,6 +175,11 @@ impl RentalMiningCoordinator {
             return Err("gpu_unavailable");
         }
 
+        self.was_mining_before_reservation = matches!(
+            self.state,
+            CoordinatedGpuState::Mining | CoordinatedGpuState::MiningStarting
+        );
+        self.resume_requested = false;
         self.reservation_id = Some(reservation_id);
         self.state = match self.state {
             CoordinatedGpuState::Mining | CoordinatedGpuState::MiningStarting => {
@@ -225,11 +251,17 @@ impl RentalMiningCoordinator {
         self.reservation_id = None;
         self.last_error = None;
         self.state = CoordinatedGpuState::Idle;
+        self.resume_requested = self.was_mining_before_reservation
+            && self.auto_resume_after_rental
+            && self.consent != MiningConsent::Disabled;
+        self.was_mining_before_reservation = false;
         Ok(())
     }
 
     pub fn emergency_stop(&mut self, all_workloads_stopped: bool) -> Result<(), &'static str> {
         self.reservation_id = None;
+        self.was_mining_before_reservation = false;
+        self.resume_requested = false;
         if all_workloads_stopped {
             self.state = CoordinatedGpuState::EmergencyStopped;
             self.last_error = None;
@@ -243,8 +275,10 @@ impl RentalMiningCoordinator {
         CoordinatorSnapshot {
             state: self.state,
             consent: self.consent,
+            auto_resume_after_rental: self.auto_resume_after_rental,
             reservation_id: self.reservation_id.clone(),
             should_start_mining: self.state == CoordinatedGpuState::Idle
+                && self.resume_requested
                 && self.consent != MiningConsent::Disabled
                 && self.reservation_id.is_none(),
             should_stop_mining: self.state == CoordinatedGpuState::PreemptingMining,
@@ -255,6 +289,8 @@ impl RentalMiningCoordinator {
 
     fn quarantine<T>(&mut self, error: &'static str) -> Result<T, &'static str> {
         self.state = CoordinatedGpuState::Quarantined;
+        self.was_mining_before_reservation = false;
+        self.resume_requested = false;
         self.last_error = Some(error);
         Err(error)
     }
@@ -286,8 +322,21 @@ mod tests {
         }
     }
 
+    fn complete_rental(coordinator: &mut RentalMiningCoordinator, reservation_id: &str) {
+        coordinator
+            .reservation_requested(reservation_id.into())
+            .unwrap();
+        if coordinator.snapshot().should_stop_mining {
+            coordinator.confirm_mining_stopped(stop_proof()).unwrap();
+        }
+        coordinator.confirm_rental_ready(true, true, true).unwrap();
+        coordinator.start_rental().unwrap();
+        coordinator.finish_rental().unwrap();
+        coordinator.confirm_rental_cleanup(cleanup_proof()).unwrap();
+    }
+
     #[test]
-    fn reservation_immediately_preempts_mining_and_resumes_after_cleanup() {
+    fn auto_resume_is_disabled_by_default() {
         let mut coordinator = RentalMiningCoordinator::default();
         coordinator
             .set_owner_consent(MiningConsent::ManagedPool)
@@ -295,20 +344,40 @@ mod tests {
         coordinator.request_idle_mining_start().unwrap();
         coordinator.confirm_mining_started().unwrap();
 
-        coordinator
-            .reservation_requested("reservation_1".into())
-            .unwrap();
-        assert!(coordinator.snapshot().should_stop_mining);
-        coordinator.confirm_mining_stopped(stop_proof()).unwrap();
-        coordinator.confirm_rental_ready(true, true, true).unwrap();
-        coordinator.start_rental().unwrap();
-        coordinator.finish_rental().unwrap();
-        coordinator.confirm_rental_cleanup(cleanup_proof()).unwrap();
+        complete_rental(&mut coordinator, "reservation_1");
 
         let snapshot = coordinator.snapshot();
         assert_eq!(snapshot.state, CoordinatedGpuState::Idle);
-        assert!(snapshot.should_start_mining);
-        assert_eq!(snapshot.consent, MiningConsent::ManagedPool);
+        assert!(!snapshot.auto_resume_after_rental);
+        assert!(!snapshot.should_start_mining);
+    }
+
+    #[test]
+    fn enabled_auto_resume_only_restarts_preempted_mining() {
+        let mut coordinator = RentalMiningCoordinator::default();
+        coordinator
+            .set_owner_consent(MiningConsent::ManagedPool)
+            .unwrap();
+        coordinator.set_auto_resume_after_rental(true).unwrap();
+        coordinator.request_idle_mining_start().unwrap();
+        coordinator.confirm_mining_started().unwrap();
+
+        complete_rental(&mut coordinator, "reservation_2");
+
+        assert!(coordinator.snapshot().should_start_mining);
+    }
+
+    #[test]
+    fn enabled_auto_resume_does_not_start_a_previously_idle_gpu() {
+        let mut coordinator = RentalMiningCoordinator::default();
+        coordinator
+            .set_owner_consent(MiningConsent::ManagedPool)
+            .unwrap();
+        coordinator.set_auto_resume_after_rental(true).unwrap();
+
+        complete_rental(&mut coordinator, "reservation_3");
+
+        assert!(!coordinator.snapshot().should_start_mining);
     }
 
     #[test]
@@ -317,10 +386,11 @@ mod tests {
         coordinator
             .set_owner_consent(MiningConsent::OwnerPool)
             .unwrap();
+        coordinator.set_auto_resume_after_rental(true).unwrap();
         coordinator.request_idle_mining_start().unwrap();
         coordinator.confirm_mining_started().unwrap();
         coordinator
-            .reservation_requested("reservation_2".into())
+            .reservation_requested("reservation_4".into())
             .unwrap();
 
         let mut proof = stop_proof();
@@ -334,6 +404,7 @@ mod tests {
             CoordinatedGpuState::Quarantined
         );
         assert!(!coordinator.snapshot().rental_may_start);
+        assert!(!coordinator.snapshot().should_start_mining);
     }
 
     #[test]
@@ -343,7 +414,7 @@ mod tests {
             .set_owner_consent(MiningConsent::ManagedPool)
             .unwrap();
         coordinator
-            .reservation_requested("reservation_3".into())
+            .reservation_requested("reservation_5".into())
             .unwrap();
         assert_eq!(
             coordinator.request_idle_mining_start(),
@@ -357,9 +428,13 @@ mod tests {
         coordinator
             .set_owner_consent(MiningConsent::ManagedPool)
             .unwrap();
+        coordinator.set_auto_resume_after_rental(true).unwrap();
+        coordinator.request_idle_mining_start().unwrap();
+        coordinator.confirm_mining_started().unwrap();
         coordinator
-            .reservation_requested("reservation_4".into())
+            .reservation_requested("reservation_6".into())
             .unwrap();
+        coordinator.confirm_mining_stopped(stop_proof()).unwrap();
         coordinator.confirm_rental_ready(true, true, true).unwrap();
         coordinator.start_rental().unwrap();
         coordinator.finish_rental().unwrap();
