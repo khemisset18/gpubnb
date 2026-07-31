@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 import {
   authorizeMiningConfigurationUpdate,
   miningConfigurationInputSchema,
@@ -51,112 +52,72 @@ const validContext = {
   profileApproved: true,
 };
 
+const throwsMessage = (fn: () => unknown, message: string) => {
+  assert.throws(fn, (error: unknown) => error instanceof Error && error.message === message);
+};
+
 describe('mining configuration policy', () => {
   it('charges one percent only for the managed pool', () => {
-    expect(platformFeeBasisPoints('GPUBNB_MANAGED')).toBe(100);
-    expect(platformFeeBasisPoints('OWNER_POOL')).toBe(0);
-    expect(platformFeeBasisPoints('DISABLED')).toBe(0);
+    assert.equal(platformFeeBasisPoints('GPUBNB_MANAGED'), 100);
+    assert.equal(platformFeeBasisPoints('OWNER_POOL'), 0);
+    assert.equal(platformFeeBasisPoints('DISABLED'), 0);
   });
 
   it('accepts independently configured GPU and CPU resources', () => {
-    expect(miningConfigurationInputSchema.parse(validGpuInput).resourceKind).toBe('GPU');
-    expect(miningConfigurationInputSchema.parse(validCpuInput).resourceKind).toBe('CPU');
+    assert.equal(miningConfigurationInputSchema.parse(validGpuInput).resourceKind, 'GPU');
+    assert.equal(miningConfigurationInputSchema.parse(validCpuInput).resourceKind, 'CPU');
   });
 
   it('stops only the resource selected by a partial rental', () => {
     const rented = new Set(['gpu:machine_1:0']);
-    expect(
-      resourceMustStopForRental({
-        resourceId: 'gpu:machine_1:0',
-        rentedResourceIds: rented,
-        machineExclusiveRental: false,
-      }),
-    ).toBe(true);
-    expect(
-      resourceMustStopForRental({
-        resourceId: 'cpu:machine_1:package_0',
-        rentedResourceIds: rented,
-        machineExclusiveRental: false,
-      }),
-    ).toBe(false);
+    assert.equal(resourceMustStopForRental({ resourceId: 'gpu:machine_1:0', rentedResourceIds: rented, machineExclusiveRental: false }), true);
+    assert.equal(resourceMustStopForRental({ resourceId: 'cpu:machine_1:package_0', rentedResourceIds: rented, machineExclusiveRental: false }), false);
   });
 
   it('stops every miner for an exclusive-machine rental', () => {
-    expect(
-      resourceMustStopForRental({
-        resourceId: 'cpu:machine_1:package_0',
-        rentedResourceIds: new Set(),
-        machineExclusiveRental: true,
-      }),
-    ).toBe(true);
+    assert.equal(resourceMustStopForRental({ resourceId: 'cpu:machine_1:package_0', rentedResourceIds: new Set(), machineExclusiveRental: true }), true);
   });
 
   it('locks configuration changes for the rented resource', () => {
     const input = miningConfigurationInputSchema.parse(validGpuInput);
-    expect(() =>
-      authorizeMiningConfigurationUpdate(input, {
-        ...validContext,
-        rentedResourceIds: new Set([validGpuInput.resourceId]),
-      }),
-    ).toThrow('mining_configuration_locked_during_rental');
+    throwsMessage(() => authorizeMiningConfigurationUpdate(input, { ...validContext, rentedResourceIds: new Set([validGpuInput.resourceId]) }), 'mining_configuration_locked_during_rental');
   });
 
   it('allows CPU configuration while only a GPU is rented', () => {
     const input = miningConfigurationInputSchema.parse(validCpuInput);
-    expect(() =>
-      authorizeMiningConfigurationUpdate(input, {
-        ...validContext,
-        resourceKind: 'CPU',
-        resourceId: validCpuInput.resourceId,
-        rentedResourceIds: new Set([validGpuInput.resourceId]),
-      }),
-    ).not.toThrow();
+    assert.doesNotThrow(() => authorizeMiningConfigurationUpdate(input, {
+      ...validContext,
+      resourceKind: 'CPU',
+      resourceId: validCpuInput.resourceId,
+      rentedResourceIds: new Set([validGpuInput.resourceId]),
+    }));
   });
 
   it('requires the machine owner', () => {
     const input = miningConfigurationInputSchema.parse(validGpuInput);
-    expect(() =>
-      authorizeMiningConfigurationUpdate(input, { ...validContext, ownerId: 'attacker' }),
-    ).toThrow('machine_owner_required');
+    throwsMessage(() => authorizeMiningConfigurationUpdate(input, { ...validContext, ownerId: 'attacker' }), 'machine_owner_required');
   });
 
   it('uses optimistic concurrency', () => {
     const input = miningConfigurationInputSchema.parse(validGpuInput);
-    expect(() =>
-      authorizeMiningConfigurationUpdate(input, { ...validContext, currentVersion: 3 }),
-    ).toThrow('mining_configuration_version_conflict');
+    throwsMessage(() => authorizeMiningConfigurationUpdate(input, { ...validContext, currentVersion: 3 }), 'mining_configuration_version_conflict');
   });
 
   it('rejects enabling mining on a quarantined resource', () => {
     const input = miningConfigurationInputSchema.parse(validGpuInput);
-    expect(() =>
-      authorizeMiningConfigurationUpdate(input, {
-        ...validContext,
-        resourceQuarantined: true,
-      }),
-    ).toThrow('quarantined_resource_cannot_mine');
+    throwsMessage(() => authorizeMiningConfigurationUpdate(input, { ...validContext, resourceQuarantined: true }), 'quarantined_resource_cannot_mine');
   });
 
   it('requires an approved profile', () => {
     const input = miningConfigurationInputSchema.parse(validGpuInput);
-    expect(() =>
-      authorizeMiningConfigurationUpdate(input, { ...validContext, profileApproved: false }),
-    ).toThrow('mining_profile_not_approved');
+    throwsMessage(() => authorizeMiningConfigurationUpdate(input, { ...validContext, profileApproved: false }), 'mining_profile_not_approved');
   });
 
   it('requires CPU-specific limits', () => {
-    expect(() =>
-      miningConfigurationInputSchema.parse({ ...validCpuInput, cpuThreadLimit: undefined }),
-    ).toThrow();
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validCpuInput, cpuThreadLimit: undefined }));
   });
 
   it('requires GPU intensity and rejects CPU controls on a GPU', () => {
-    expect(() =>
-      miningConfigurationInputSchema.parse({
-        ...validGpuInput,
-        gpuIntensityPercent: undefined,
-        cpuThreadLimit: 4,
-      }),
-    ).toThrow();
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, gpuIntensityPercent: undefined, cpuThreadLimit: 4 }));
   });
 });
