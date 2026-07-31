@@ -10,6 +10,7 @@ import {
 } from './device-authorization.js';
 import { RedisDeviceAuthorizationStore } from './device-authorization-store.js';
 import { registerMiningRoutes } from './mining-routes.js';
+import { syncMiningResourcesFromInventory } from './mining-resource-inventory.js';
 
 const agentPublicKeySchema = z.string().min(32).max(64).regex(/^[1-9A-HJ-NP-Za-km-z]+$/);
 const machineFingerprintSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
@@ -127,6 +128,7 @@ export const registerDeviceAuthorizationRoutes = (
       });
       if (existing) {
         if (existing.ownerId !== authorization.ownerId) return reply.code(409).send({ error: 'agent_key_already_registered' });
+        await syncMiningResourcesFromInventory(db, existing.id, body.inventory);
         return { machineId: existing.id, linkedAt: existing.keyCreatedAt.toISOString() };
       }
 
@@ -157,6 +159,7 @@ export const registerDeviceAuthorizationRoutes = (
         select: { id: true, keyCreatedAt: true },
       });
 
+      await syncMiningResourcesFromInventory(db, machine.id, body.inventory);
       return reply.code(201).send({ machineId: machine.id, linkedAt: machine.keyCreatedAt.toISOString() });
     } catch (error) {
       if (error instanceof DeviceAuthorizationError) return sendAuthorizationError(reply, error);
