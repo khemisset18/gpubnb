@@ -36,9 +36,7 @@ fn authorize_and_start(
     let consent_decision = runtime.set_owner_consent(consent).unwrap();
     assert_eq!(consent_decision.order, RuntimeOrder::Noop);
 
-    let policy_decision = runtime
-        .set_auto_resume_after_rental(auto_resume)
-        .unwrap();
+    let policy_decision = runtime.set_auto_resume_after_rental(auto_resume).unwrap();
     assert_eq!(policy_decision.order, RuntimeOrder::Noop);
 
     let start = runtime.request_idle_mining_start().unwrap();
