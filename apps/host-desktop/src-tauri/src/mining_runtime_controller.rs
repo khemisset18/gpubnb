@@ -33,7 +33,10 @@ pub struct MiningRuntimeController {
 }
 
 impl MiningRuntimeController {
-    pub fn set_owner_consent(&mut self, consent: MiningConsent) -> Result<RuntimeDecision, &'static str> {
+    pub fn set_owner_consent(
+        &mut self,
+        consent: MiningConsent,
+    ) -> Result<RuntimeDecision, &'static str> {
         self.coordinator.set_owner_consent(consent)?;
         Ok(self.reconcile("owner_consent_changed"))
     }
