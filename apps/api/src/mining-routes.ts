@@ -10,6 +10,7 @@ import {
   miningConfigurationInputSchema,
   platformFeeBasisPoints,
 } from './mining-config-policy.js';
+import { normalizeMiningGpuVendor } from './mining-profile-catalog.js';
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
 
 const machineParamsSchema = z.object({ machineId: z.string().cuid() });
@@ -31,8 +32,6 @@ const runtimeEventSchema = z.object({
   ]),
   reservationId: z.string().max(96).nullable().optional(),
   idempotencyKey: z.string().min(16).max(160),
-  // The machine counter is shared by all authenticated agent events and must
-  // advance strictly. Optional counters would make replay protection ineffective.
   agentCounter: z.coerce.bigint().positive(),
   occurredAt: z.string().datetime(),
   payload: z.record(z.string(), z.unknown()).optional(),
@@ -45,6 +44,7 @@ type MiningResourceRow = {
   kind: 'CPU' | 'GPU';
   resourceKey: string;
   displayName: string;
+  gpuVendor: string | null;
   quarantined: boolean;
   runtimeState: string;
   activeRentalId: string | null;
@@ -67,13 +67,15 @@ type MiningResourceRow = {
 const listOwnerResources = async (db: PrismaClient, machineId: string, ownerId: string) =>
   db.$queryRaw<MiningResourceRow[]>(Prisma.sql`
     SELECT r."id", r."machineId", m."ownerId", r."kind", r."resourceKey",
-           r."displayName", r."quarantined", r."runtimeState", r."activeRentalId",
-           c."id" AS "configurationId", c."mode", c."profileId", c."walletAddress",
-           c."workerName", c."ownerPoolEndpoint", c."autoResumeAfterRental",
-           c."maximumTemperatureC", c."maximumPowerWatts", c."maximumCpuPercent",
-           c."cpuThreadCount", c."gpuIntensityPercent", c."platformFeeBasisPoints", c."version"
+           r."displayName", a."vendor" AS "gpuVendor", r."quarantined",
+           r."runtimeState", r."activeRentalId", c."id" AS "configurationId",
+           c."mode", c."profileId", c."walletAddress", c."workerName",
+           c."ownerPoolEndpoint", c."autoResumeAfterRental", c."maximumTemperatureC",
+           c."maximumPowerWatts", c."maximumCpuPercent", c."cpuThreadCount",
+           c."gpuIntensityPercent", c."platformFeeBasisPoints", c."version"
       FROM "MiningResource" r
       JOIN "Machine" m ON m."id" = r."machineId"
+ LEFT JOIN "Accelerator" a ON a."id" = r."acceleratorId"
  LEFT JOIN "MiningConfiguration" c ON c."resourceId" = r."id"
      WHERE r."machineId" = ${machineId} AND m."ownerId" = ${ownerId}
   ORDER BY r."kind", r."resourceKey"
@@ -107,13 +109,15 @@ export const registerMiningRoutes = (
       const configuration = await db.$transaction(async (tx) => {
         const rows = await tx.$queryRaw<MiningResourceRow[]>(Prisma.sql`
           SELECT r."id", r."machineId", m."ownerId", r."kind", r."resourceKey",
-                 r."displayName", r."quarantined", r."runtimeState", r."activeRentalId",
-                 c."id" AS "configurationId", c."mode", c."profileId", c."walletAddress",
-                 c."workerName", c."ownerPoolEndpoint", c."autoResumeAfterRental",
-                 c."maximumTemperatureC", c."maximumPowerWatts", c."maximumCpuPercent",
-                 c."cpuThreadCount", c."gpuIntensityPercent", c."platformFeeBasisPoints", c."version"
+                 r."displayName", a."vendor" AS "gpuVendor", r."quarantined",
+                 r."runtimeState", r."activeRentalId", c."id" AS "configurationId",
+                 c."mode", c."profileId", c."walletAddress", c."workerName",
+                 c."ownerPoolEndpoint", c."autoResumeAfterRental", c."maximumTemperatureC",
+                 c."maximumPowerWatts", c."maximumCpuPercent", c."cpuThreadCount",
+                 c."gpuIntensityPercent", c."platformFeeBasisPoints", c."version"
             FROM "MiningResource" r
             JOIN "Machine" m ON m."id" = r."machineId"
+       LEFT JOIN "Accelerator" a ON a."id" = r."acceleratorId"
        LEFT JOIN "MiningConfiguration" c ON c."resourceId" = r."id"
            WHERE r."id" = ${resourceId} AND r."machineId" = ${machineId}
            FOR UPDATE OF r
@@ -132,11 +136,11 @@ export const registerMiningRoutes = (
           requestedMachineId: machineId,
           resourceKind: current.kind,
           resourceId: current.id,
+          gpuVendor: normalizeMiningGpuVendor(current.gpuVendor),
           rentedResourceIds,
           machineExclusiveRental: false,
           resourceQuarantined: current.quarantined,
           currentVersion: current.version ?? 0,
-          profileApproved: true,
         });
 
         const feeBps = platformFeeBasisPoints(input.mode);
@@ -175,11 +179,12 @@ export const registerMiningRoutes = (
           WHERE "MiningConfiguration"."version" = ${input.expectedVersion}
           RETURNING "id" AS "configurationId", "resourceId" AS "id", ${machineId}::text AS "machineId",
                     ${session.userId}::text AS "ownerId", ${input.resourceKind}::"MiningResourceKind" AS "kind",
-                    ''::text AS "resourceKey", ''::text AS "displayName", false AS "quarantined",
-                    'IDLE'::text AS "runtimeState", NULL::text AS "activeRentalId", "mode", "profileId",
-                    "walletAddress", "workerName", "ownerPoolEndpoint", "autoResumeAfterRental",
-                    "maximumTemperatureC", "maximumPowerWatts", "maximumCpuPercent", "cpuThreadCount",
-                    "gpuIntensityPercent", "platformFeeBasisPoints", "version"
+                    ''::text AS "resourceKey", ''::text AS "displayName", NULL::text AS "gpuVendor",
+                    false AS "quarantined", 'IDLE'::text AS "runtimeState", NULL::text AS "activeRentalId",
+                    "mode", "profileId", "walletAddress", "workerName", "ownerPoolEndpoint",
+                    "autoResumeAfterRental", "maximumTemperatureC", "maximumPowerWatts",
+                    "maximumCpuPercent", "cpuThreadCount", "gpuIntensityPercent",
+                    "platformFeeBasisPoints", "version"
         `);
         if (!updated.length) throw new Error('mining_configuration_version_conflict');
 
@@ -249,8 +254,6 @@ export const registerMiningRoutes = (
         `);
         if (!resource.length) throw new Error('mining_resource_not_found');
 
-        // This conditional update is the per-machine monotonic counter guard.
-        // It is atomic even when CPU and GPU resources report concurrently.
         const advanced = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           UPDATE "Machine"
              SET "lastCounter" = ${event.agentCounter}, "keyLastUsedAt" = CURRENT_TIMESTAMP
