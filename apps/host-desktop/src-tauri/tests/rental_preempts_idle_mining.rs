@@ -55,7 +55,10 @@ fn rental_preempts_active_mining_and_resumes_after_verified_cleanup() {
     coordinator.confirm_rental_ready(true, true, true).unwrap();
     assert!(coordinator.snapshot().rental_may_start);
     coordinator.start_rental().unwrap();
-    assert_eq!(coordinator.snapshot().state, CoordinatedGpuState::RentalActive);
+    assert_eq!(
+        coordinator.snapshot().state,
+        CoordinatedGpuState::RentalActive
+    );
 
     coordinator.finish_rental().unwrap();
     assert_eq!(
