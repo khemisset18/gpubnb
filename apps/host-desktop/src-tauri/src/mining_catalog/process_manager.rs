@@ -178,9 +178,8 @@ impl<B: ProcessBackend> MinerProcessSupervisor<B> {
     }
 
     fn reap_finished(&mut self) {
-        self.processes.retain(|_, entry| {
-            matches!(entry.process.try_wait(), Ok(None) | Err(_))
-        });
+        self.processes
+            .retain(|_, entry| matches!(entry.process.try_wait(), Ok(None) | Err(_)));
     }
 }
 
@@ -219,7 +218,9 @@ fn validate_arguments(arguments: &[String]) -> Result<(), &'static str> {
     for argument in arguments {
         if argument.is_empty()
             || argument.len() > MAX_ARGUMENT_LENGTH
-            || argument.bytes().any(|byte| byte == 0 || byte == b'\n' || byte == b'\r')
+            || argument
+                .bytes()
+                .any(|byte| byte == 0 || byte == b'\n' || byte == b'\r')
         {
             return Err("invalid_miner_argument");
         }
@@ -307,12 +308,7 @@ mod tests {
             .expect("start fake miner");
         assert_eq!(running.process_id, 42);
         assert_eq!(
-            supervisor.start(
-                "gpu-0",
-                "trex_rvn_kawpow",
-                &verified_binary(),
-                &arguments
-            ),
+            supervisor.start("gpu-0", "trex_rvn_kawpow", &verified_binary(), &arguments),
             Err("miner_process_already_running")
         );
         supervisor
