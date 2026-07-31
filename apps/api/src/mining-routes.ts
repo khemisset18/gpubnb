@@ -205,6 +205,12 @@ export const registerMiningRoutes = (
 
   app.post('/internal/mining/runtime-events', async (request, reply) => {
     const event = runtimeEventSchema.parse(request.body);
+    const rawBody = request.rawBody;
+    if (!rawBody) {
+      await recordSecurityFailure(redis, `agent-v2:${event.machineId}`, 4);
+      return reply.code(400).send({ error: 'raw_body_required' });
+    }
+
     const machine = await db.machine.findUnique({
       where: { id: event.machineId },
       select: { agentPublicKey: true, keyRevokedAt: true, moderationStatus: true },
@@ -220,7 +226,7 @@ export const registerMiningRoutes = (
       machine.agentPublicKey,
       request.method,
       '/internal/mining/runtime-events',
-      request.rawBody ?? Buffer.from(JSON.stringify(request.body)),
+      rawBody,
       {
         timestamp: request.headers['x-agent-timestamp'],
         nonce: request.headers['x-agent-nonce'],
@@ -236,42 +242,42 @@ export const registerMiningRoutes = (
 
     try {
       const inserted = await db.$transaction(async (tx) => {
-      const resource = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        SELECT "id" FROM "MiningResource"
-         WHERE "id" = ${event.resourceId} AND "machineId" = ${event.machineId}
-         FOR UPDATE
-      `);
-      if (!resource.length) throw new Error('mining_resource_not_found');
-
-      // This conditional update is the per-machine monotonic counter guard.
-      // It is atomic even when CPU and GPU resources report concurrently.
-      const advanced = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        UPDATE "Machine"
-           SET "lastCounter" = ${event.agentCounter}, "keyLastUsedAt" = CURRENT_TIMESTAMP
-         WHERE "id" = ${event.machineId} AND "lastCounter" < ${event.agentCounter}
-         RETURNING "id"
-      `);
-      if (!advanced.length) throw new Error('agent_counter_replay');
-
-      const count = await tx.$executeRaw(Prisma.sql`
-        INSERT INTO "MiningRuntimeEvent" (
-          "id", "resourceId", "eventType", "stateBefore", "stateAfter", "reservationId",
-          "idempotencyKey", "agentCounter", "payload", "occurredAt", "createdAt"
-        ) VALUES (
-          ${crypto.randomUUID()}, ${event.resourceId}, ${event.eventType}::"MiningEventType",
-          ${event.stateBefore ?? null}::"MiningRuntimeState", ${event.stateAfter}::"MiningRuntimeState",
-          ${event.reservationId ?? null}, ${event.idempotencyKey}, ${event.agentCounter ?? null},
-          ${JSON.stringify(event.payload ?? {})}::jsonb, ${new Date(event.occurredAt)}, CURRENT_TIMESTAMP
-        ) ON CONFLICT ("idempotencyKey") DO NOTHING
-      `);
-      if (count > 0) {
-        await tx.$executeRaw(Prisma.sql`
-          UPDATE "MiningResource" SET "runtimeState" = ${event.stateAfter}::"MiningRuntimeState",
-                 "activeRentalId" = ${event.reservationId ?? null}, "updatedAt" = CURRENT_TIMESTAMP
-           WHERE "id" = ${event.resourceId}
+        const resource = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT "id" FROM "MiningResource"
+           WHERE "id" = ${event.resourceId} AND "machineId" = ${event.machineId}
+           FOR UPDATE
         `);
-      }
-      return count > 0;
+        if (!resource.length) throw new Error('mining_resource_not_found');
+
+        // This conditional update is the per-machine monotonic counter guard.
+        // It is atomic even when CPU and GPU resources report concurrently.
+        const advanced = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          UPDATE "Machine"
+             SET "lastCounter" = ${event.agentCounter}, "keyLastUsedAt" = CURRENT_TIMESTAMP
+           WHERE "id" = ${event.machineId} AND "lastCounter" < ${event.agentCounter}
+           RETURNING "id"
+        `);
+        if (!advanced.length) throw new Error('agent_counter_replay');
+
+        const count = await tx.$executeRaw(Prisma.sql`
+          INSERT INTO "MiningRuntimeEvent" (
+            "id", "resourceId", "eventType", "stateBefore", "stateAfter", "reservationId",
+            "idempotencyKey", "agentCounter", "payload", "occurredAt", "createdAt"
+          ) VALUES (
+            ${crypto.randomUUID()}, ${event.resourceId}, ${event.eventType}::"MiningEventType",
+            ${event.stateBefore ?? null}::"MiningRuntimeState", ${event.stateAfter}::"MiningRuntimeState",
+            ${event.reservationId ?? null}, ${event.idempotencyKey}, ${event.agentCounter},
+            ${JSON.stringify(event.payload ?? {})}::jsonb, ${new Date(event.occurredAt)}, CURRENT_TIMESTAMP
+          ) ON CONFLICT ("idempotencyKey") DO NOTHING
+        `);
+        if (count > 0) {
+          await tx.$executeRaw(Prisma.sql`
+            UPDATE "MiningResource" SET "runtimeState" = ${event.stateAfter}::"MiningRuntimeState",
+                   "activeRentalId" = ${event.reservationId ?? null}, "updatedAt" = CURRENT_TIMESTAMP
+             WHERE "id" = ${event.resourceId}
+          `);
+        }
+        return count > 0;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
       return { accepted: inserted };
     } catch (error) {
