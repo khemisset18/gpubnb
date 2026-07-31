@@ -121,6 +121,20 @@ export const registerDeviceAuthorizationRoutes = (
 
     try {
       const authorization = await store.consume(body.deviceCode, body.publicKey, body.machineFingerprint);
+      const miningInventory = {
+        system: {
+          cpu: body.inventory.system.cpu,
+          cpuCount: body.inventory.system.cpuCount ?? null,
+        },
+        gpus: body.inventory.gpus.map((gpu) => ({
+          gpuUuid: gpu.gpuUuid,
+          gpuModel: gpu.gpuModel,
+          vramMiB: gpu.vramMiB,
+          driverVersion: gpu.driverVersion,
+          cudaVersion: gpu.cudaVersion ?? null,
+          gpuVendor: gpu.gpuVendor ?? null,
+        })),
+      };
 
       const existing = await db.machine.findUnique({
         where: { agentPublicKey: authorization.publicKey },
@@ -128,7 +142,7 @@ export const registerDeviceAuthorizationRoutes = (
       });
       if (existing) {
         if (existing.ownerId !== authorization.ownerId) return reply.code(409).send({ error: 'agent_key_already_registered' });
-        await syncMiningResourcesFromInventory(db, existing.id, body.inventory);
+        await syncMiningResourcesFromInventory(db, existing.id, miningInventory);
         return { machineId: existing.id, linkedAt: existing.keyCreatedAt.toISOString() };
       }
 
@@ -159,7 +173,7 @@ export const registerDeviceAuthorizationRoutes = (
         select: { id: true, keyCreatedAt: true },
       });
 
-      await syncMiningResourcesFromInventory(db, machine.id, body.inventory);
+      await syncMiningResourcesFromInventory(db, machine.id, miningInventory);
       return reply.code(201).send({ machineId: machine.id, linkedAt: machine.keyCreatedAt.toISOString() });
     } catch (error) {
       if (error instanceof DeviceAuthorizationError) return sendAuthorizationError(reply, error);
