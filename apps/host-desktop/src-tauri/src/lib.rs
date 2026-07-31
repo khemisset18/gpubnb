@@ -2,16 +2,20 @@
 
 mod agent_bridge;
 mod diagnostics;
+mod mining_runtime_controller;
 mod orchestration_gateway;
 mod pairing;
+mod rental_mining_coordinator;
 mod rental_orchestrator;
 
 use agent_bridge::{AgentStatus, ProtectionStatus};
 use diagnostics::{collect_native_diagnostic, NativeDiagnostic};
+use mining_runtime_controller::{MiningRuntimeController, RuntimeDecision};
 use orchestration_gateway::{
     ActorRole, AuthenticatedContext, CommandResult, OrchestrationCommand, OrchestrationGateway,
 };
 use pairing::{pairing_configuration, PairingConfiguration};
+use rental_mining_coordinator::{CoordinatorSnapshot, MiningConsent};
 use rental_orchestrator::OrchestrationSnapshot;
 use serde::Serialize;
 use std::sync::{
@@ -147,6 +151,7 @@ struct HostStatus {
     protections: ProtectionStatus,
     diagnostic: NativeDiagnostic,
     orchestration: OrchestrationSnapshot,
+    mining_runtime: CoordinatorSnapshot,
     checks: Vec<Check>,
 }
 
@@ -220,7 +225,11 @@ fn platform_name() -> &'static str {
     }
 }
 
-fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostStatus {
+fn build_status(
+    state: &AppState,
+    orchestration: OrchestrationSnapshot,
+    mining_runtime: CoordinatorSnapshot,
+) -> HostStatus {
     let diagnostic = collect_native_diagnostic();
     let pairing = pairing_configuration();
     let agent = agent_bridge::status();
@@ -319,7 +328,10 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
     let progress = ((completed_steps * 100) / TOTAL_SETUP_STEPS) as u8;
     let summary = match lifecycle {
         HostLifecycle::EmergencyStopped => "Arrêt d'urgence actif".to_owned(),
-        HostLifecycle::Online => format!("GPU en ligne — état {:?}", orchestration.state),
+        HostLifecycle::Online => format!(
+            "GPU en ligne — location {:?}, minage {:?}",
+            orchestration.state, mining_runtime.state
+        ),
         HostLifecycle::Ready => "Toutes les protections sont prêtes".to_owned(),
         HostLifecycle::SetupRequired => match blocking_count {
             1 => "Une protection reste à configurer".to_owned(),
@@ -345,8 +357,25 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
         protections,
         diagnostic,
         orchestration,
+        mining_runtime,
         checks,
     }
+}
+
+fn ensure_host_can_configure_mining(state: &AppState) -> Result<(), &'static str> {
+    if state.lifecycle == HostLifecycle::EmergencyStopped {
+        return Err("emergency_stop_requires_review");
+    }
+    if state.lifecycle != HostLifecycle::Online {
+        return Err("host_must_be_online");
+    }
+    let agent = agent_bridge::status();
+    let diagnostic = collect_native_diagnostic();
+    let protections = agent_bridge::protections();
+    if !Readiness::from_evidence(&diagnostic, &protections).is_ready(&diagnostic, &agent) {
+        return Err("host_not_certified");
+    }
+    Ok(())
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -354,12 +383,20 @@ fn build_status(state: &AppState, orchestration: OrchestrationSnapshot) -> HostS
 fn host_status(
     state: tauri::State<'_, Mutex<AppState>>,
     gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
+    mining: tauri::State<'_, Mutex<MiningRuntimeController>>,
 ) -> Result<HostStatus, &'static str> {
     let state = state.lock().map_err(|_| "state_unavailable")?;
     let mut gateway = gateway
         .lock()
         .map_err(|_| "orchestration_state_unavailable")?;
-    Ok(build_status(&state, read_orchestration(&mut gateway)?))
+    let mining = mining
+        .lock()
+        .map_err(|_| "mining_runtime_state_unavailable")?;
+    Ok(build_status(
+        &state,
+        read_orchestration(&mut gateway)?,
+        mining.snapshot(),
+    ))
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -383,6 +420,33 @@ fn orchestration_status(
         .lock()
         .map_err(|_| "orchestration_state_unavailable")?;
     read_orchestration(&mut gateway)
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
+fn mining_runtime_status(
+    mining: tauri::State<'_, Mutex<MiningRuntimeController>>,
+) -> Result<CoordinatorSnapshot, &'static str> {
+    mining
+        .lock()
+        .map_err(|_| "mining_runtime_state_unavailable")
+        .map(|controller| controller.snapshot())
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
+fn set_idle_mining_mode(
+    consent: MiningConsent,
+    state: tauri::State<'_, Mutex<AppState>>,
+    mining: tauri::State<'_, Mutex<MiningRuntimeController>>,
+) -> Result<RuntimeDecision, &'static str> {
+    let state = state.lock().map_err(|_| "state_unavailable")?;
+    ensure_host_can_configure_mining(&state)?;
+    drop(state);
+    mining
+        .lock()
+        .map_err(|_| "mining_runtime_state_unavailable")?
+        .set_owner_consent(consent)
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -427,18 +491,10 @@ fn set_idle_mining(
     gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
 ) -> Result<OrchestrationSnapshot, &'static str> {
     if enabled {
-        return Err("mining_runtime_not_installed");
+        return Err("use_set_idle_mining_mode");
     }
     let state = state.lock().map_err(|_| "state_unavailable")?;
-    let agent = agent_bridge::status();
-    if state.lifecycle != HostLifecycle::Online {
-        return Err("host_must_be_online");
-    }
-    let diagnostic = collect_native_diagnostic();
-    let protections = agent_bridge::protections();
-    if !Readiness::from_evidence(&diagnostic, &protections).is_ready(&diagnostic, &agent) {
-        return Err("host_not_certified");
-    }
+    ensure_host_can_configure_mining(&state)?;
     drop(state);
     let mut gateway = gateway
         .lock()
@@ -535,11 +591,14 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(AppState::default()))
         .manage(Mutex::new(create_gateway()))
+        .manage(Mutex::new(MiningRuntimeController::default()))
         .invoke_handler(tauri::generate_handler![
             host_status,
             local_agent_status,
             link_local_agent,
             orchestration_status,
+            mining_runtime_status,
+            set_idle_mining_mode,
             account_pairing_configuration,
             request_publish,
             set_idle_mining,
@@ -621,10 +680,15 @@ mod tests {
 
     #[test]
     fn status_never_claims_ready_by_default() {
-        let status = build_status(&AppState::default(), offline_snapshot());
+        let status = build_status(
+            &AppState::default(),
+            offline_snapshot(),
+            MiningRuntimeController::default().snapshot(),
+        );
         assert!(!status.ready);
         assert_eq!(status.total_steps, TOTAL_SETUP_STEPS);
         assert!(!status.pairing.stores_password);
+        assert_eq!(status.mining_runtime.consent, MiningConsent::Disabled);
     }
 
     #[test]
@@ -634,6 +698,8 @@ mod tests {
             "local_agent_status",
             "link_local_agent",
             "orchestration_status",
+            "mining_runtime_status",
+            "set_idle_mining_mode",
             "account_pairing_configuration",
             "request_publish",
             "set_idle_mining",
@@ -643,5 +709,7 @@ mod tests {
         assert!(!exposed.contains(&"execute_orchestration"));
         assert!(!exposed.contains(&"accept_reservation"));
         assert!(!exposed.contains(&"confirm_cleanup"));
+        assert!(!exposed.contains(&"reservation_confirmed"));
+        assert!(!exposed.contains(&"mining_stopped"));
     }
 }
