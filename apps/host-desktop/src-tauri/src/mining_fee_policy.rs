@@ -19,18 +19,14 @@ pub struct RewardSplit {
     pub fee_basis_points: u16,
 }
 
-pub fn calculate_reward_split(
-    gross_atomic_units: u128,
-    mode: MiningFeeMode,
-) -> RewardSplit {
+pub fn calculate_reward_split(gross_atomic_units: u128, mode: MiningFeeMode) -> RewardSplit {
     let fee_basis_points = match mode {
         MiningFeeMode::ManagedGpuBnbPool => MANAGED_POOL_FEE_BPS,
         MiningFeeMode::ExternalPool => 0,
     };
 
-    let platform_atomic_units = gross_atomic_units
-        .saturating_mul(fee_basis_points as u128)
-        / BASIS_POINTS_DENOMINATOR;
+    let platform_atomic_units =
+        gross_atomic_units.saturating_mul(fee_basis_points as u128) / BASIS_POINTS_DENOMINATOR;
     let owner_atomic_units = gross_atomic_units.saturating_sub(platform_atomic_units);
 
     RewardSplit {
