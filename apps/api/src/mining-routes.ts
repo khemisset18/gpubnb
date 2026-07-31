@@ -5,12 +5,12 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 
 import { requireSession } from './auth.js';
-import { config } from './config.js';
 import {
   authorizeMiningConfigurationUpdate,
   miningConfigurationInputSchema,
   platformFeeBasisPoints,
 } from './mining-config-policy.js';
+import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
 
 const machineParamsSchema = z.object({ machineId: z.string().cuid() });
 const resourceParamsSchema = machineParamsSchema.extend({ resourceId: z.string().min(3).max(128) });
@@ -31,7 +31,9 @@ const runtimeEventSchema = z.object({
   ]),
   reservationId: z.string().max(96).nullable().optional(),
   idempotencyKey: z.string().min(16).max(160),
-  agentCounter: z.coerce.bigint().nonnegative().nullable().optional(),
+  // The machine counter is shared by all authenticated agent events and must
+  // advance strictly. Optional counters would make replay protection ineffective.
+  agentCounter: z.coerce.bigint().positive(),
   occurredAt: z.string().datetime(),
   payload: z.record(z.string(), z.unknown()).optional(),
 });
@@ -202,17 +204,55 @@ export const registerMiningRoutes = (
   });
 
   app.post('/internal/mining/runtime-events', async (request, reply) => {
-    if (request.headers.authorization !== `Bearer ${config.INTERNAL_SERVICE_TOKEN}`) {
-      return reply.code(401).send({ error: 'unauthorized' });
-    }
     const event = runtimeEventSchema.parse(request.body);
-    const inserted = await db.$transaction(async (tx) => {
+    const machine = await db.machine.findUnique({
+      where: { id: event.machineId },
+      select: { agentPublicKey: true, keyRevokedAt: true, moderationStatus: true },
+    });
+    if (!machine) return reply.code(404).send({ error: 'unknown_machine' });
+    if (machine.keyRevokedAt || machine.moderationStatus === 'QUARANTINED') {
+      return reply.code(403).send({ error: 'machine_not_authorized' });
+    }
+
+    const validSignature = await verifyAgentRequestV2(
+      redis,
+      event.machineId,
+      machine.agentPublicKey,
+      request.method,
+      '/internal/mining/runtime-events',
+      request.rawBody ?? Buffer.from(JSON.stringify(request.body)),
+      {
+        timestamp: request.headers['x-agent-timestamp'],
+        nonce: request.headers['x-agent-nonce'],
+        bodySha256: request.headers['x-agent-body-sha256'],
+        signature: request.headers['x-agent-signature-v2'],
+        version: request.headers['x-agent-signature-version'],
+      },
+    );
+    if (!validSignature) {
+      await recordSecurityFailure(redis, `agent-v2:${event.machineId}`, 4);
+      return reply.code(401).send({ error: 'invalid_agent_request' });
+    }
+
+    try {
+      const inserted = await db.$transaction(async (tx) => {
       const resource = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         SELECT "id" FROM "MiningResource"
          WHERE "id" = ${event.resourceId} AND "machineId" = ${event.machineId}
          FOR UPDATE
       `);
       if (!resource.length) throw new Error('mining_resource_not_found');
+
+      // This conditional update is the per-machine monotonic counter guard.
+      // It is atomic even when CPU and GPU resources report concurrently.
+      const advanced = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        UPDATE "Machine"
+           SET "lastCounter" = ${event.agentCounter}, "keyLastUsedAt" = CURRENT_TIMESTAMP
+         WHERE "id" = ${event.machineId} AND "lastCounter" < ${event.agentCounter}
+         RETURNING "id"
+      `);
+      if (!advanced.length) throw new Error('agent_counter_replay');
+
       const count = await tx.$executeRaw(Prisma.sql`
         INSERT INTO "MiningRuntimeEvent" (
           "id", "resourceId", "eventType", "stateBefore", "stateAfter", "reservationId",
@@ -232,7 +272,12 @@ export const registerMiningRoutes = (
         `);
       }
       return count > 0;
-    });
-    return { accepted: inserted };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      return { accepted: inserted };
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'runtime_event_rejected';
+      const status = code === 'mining_resource_not_found' ? 404 : 409;
+      return reply.code(status).send({ error: code });
+    }
   });
 };

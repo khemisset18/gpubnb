@@ -131,13 +131,11 @@ impl MiningRuntimeController {
         // Only real side-effecting orders participate in duplicate suppression.
         // A Noop is an observation, not an emitted process command, and must not
         // overwrite the last command or suppress a later legitimate transition.
-        let order = if order == RuntimeOrder::Noop {
-            RuntimeOrder::Noop
-        } else if self.last_emitted.as_ref() == Some(&order) {
-            RuntimeOrder::Noop
-        } else {
+        let order = if order != RuntimeOrder::Noop && self.last_emitted.as_ref() != Some(&order) {
             self.last_emitted = Some(order.clone());
             order
+        } else {
+            RuntimeOrder::Noop
         };
 
         self.sequence = self.sequence.saturating_add(1);

@@ -16,18 +16,13 @@ pub enum CoordinatedGpuState {
     EmergencyStopped,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MiningConsent {
+    #[default]
     Disabled,
     ManagedPool,
     OwnerPool,
-}
-
-impl Default for MiningConsent {
-    fn default() -> Self {
-        Self::Disabled
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -277,8 +272,8 @@ impl RentalMiningCoordinator {
             consent: self.consent,
             auto_resume_after_rental: self.auto_resume_after_rental,
             reservation_id: self.reservation_id.clone(),
-            should_start_mining: self.state == CoordinatedGpuState::Idle
-                && self.resume_requested
+            should_start_mining: (self.state == CoordinatedGpuState::MiningStarting
+                || (self.state == CoordinatedGpuState::Idle && self.resume_requested))
                 && self.consent != MiningConsent::Disabled
                 && self.reservation_id.is_none(),
             should_stop_mining: self.state == CoordinatedGpuState::PreemptingMining,
