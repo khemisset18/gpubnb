@@ -111,7 +111,7 @@ export type MiningConfigurationContext = {
   requestedMachineId: string;
   resourceKind: MiningConfigurationInput['resourceKind'];
   resourceId: string;
-  gpuVendor?: MiningGpuVendor;
+  gpuVendor?: MiningGpuVendor | undefined;
   rentedResourceIds: ReadonlySet<string>;
   machineExclusiveRental: boolean;
   resourceQuarantined: boolean;
