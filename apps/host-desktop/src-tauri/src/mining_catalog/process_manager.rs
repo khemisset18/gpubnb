@@ -296,6 +296,19 @@ mod tests {
     }
 
     #[test]
+    fn system_backend_fails_closed_for_missing_binary() {
+        let backend = SystemProcessBackend;
+        let missing = VerifiedMinerBinary {
+            canonical_path: std::env::temp_dir().join("gpubnb-definitely-missing-miner"),
+            sha256: "00".repeat(32),
+        };
+        assert!(matches!(
+            backend.spawn(&missing, &["--version".to_owned()]),
+            Err("miner_process_spawn_failed")
+        ));
+    }
+
+    #[test]
     fn starts_only_one_process_per_resource_and_stops_it() {
         let state = Arc::new(Mutex::new(FakeState::default()));
         let backend = FakeBackend {
@@ -318,6 +331,27 @@ mod tests {
         let state = state.lock().expect("fake state");
         assert_eq!(state.stop_requests, 1);
         assert_eq!(state.force_requests, 0);
+    }
+
+    #[test]
+    fn stops_all_resources_before_global_handoff() {
+        let state = Arc::new(Mutex::new(FakeState::default()));
+        let backend = FakeBackend {
+            state: Arc::clone(&state),
+        };
+        let mut supervisor = MinerProcessSupervisor::new(backend);
+        let arguments = vec!["--algorithm".to_owned(), "kawpow".to_owned()];
+        supervisor
+            .start("gpu-0", "trex_rvn_kawpow", &verified_binary(), &arguments)
+            .expect("start first fake miner");
+        supervisor
+            .start("gpu-1", "trex_rvn_kawpow", &verified_binary(), &arguments)
+            .expect("start second fake miner");
+        supervisor
+            .stop_all_and_verify(Duration::ZERO, Duration::ZERO)
+            .expect("verified global stop");
+        assert!(supervisor.running("gpu-0").is_none());
+        assert!(supervisor.running("gpu-1").is_none());
     }
 
     #[test]
