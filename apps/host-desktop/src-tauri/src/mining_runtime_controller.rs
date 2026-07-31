@@ -104,6 +104,22 @@ impl MiningRuntimeController {
         Ok(self.reconcile("rental_cleanup_verified"))
     }
 
+    /// Stops every mining and rental workload through the fail-closed emergency path.
+    ///
+    /// The caller must independently verify that all process trees, containers and
+    /// rental workspaces have stopped before passing `all_workloads_stopped = true`.
+    /// A failed verification quarantines the resource. Command deduplication history
+    /// is cleared so a later operator-approved recovery cannot inherit stale orders.
+    pub fn emergency_stop(
+        &mut self,
+        all_workloads_stopped: bool,
+    ) -> Result<RuntimeDecision, &'static str> {
+        let result = self.coordinator.emergency_stop(all_workloads_stopped);
+        self.last_emitted = None;
+        result?;
+        Ok(self.reconcile("emergency_stop_verified"))
+    }
+
     pub fn snapshot(&self) -> CoordinatorSnapshot {
         self.coordinator.snapshot()
     }
