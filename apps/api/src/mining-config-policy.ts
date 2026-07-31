@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { isMiningProfileApproved } from './mining-profile-catalog.js';
+
 export const miningModeSchema = z.enum(['DISABLED', 'GPUBNB_MANAGED', 'OWNER_POOL']);
 export const miningResourceKindSchema = z.enum(['GPU', 'CPU']);
 
@@ -20,7 +22,7 @@ export const miningConfigurationInputSchema = z
       .regex(/^stratum\+(tcp|ssl|tls):\/\//)
       .optional(),
     ownerPoolSecretRef: z.string().trim().min(8).max(200).optional(),
-    autoResumeAfterRental: z.boolean().default(true),
+    autoResumeAfterRental: z.boolean().default(false),
     maximumTemperatureC: z.number().int().min(40).max(95),
     maximumPowerWatts: z.number().int().min(5).max(1500),
     cpuThreadLimit: z.number().int().min(1).max(1024).optional(),
@@ -135,8 +137,12 @@ export function authorizeMiningConfigurationUpdate(
   if (input.expectedVersion !== context.currentVersion) {
     throw new Error('mining_configuration_version_conflict');
   }
-  if (input.mode !== 'DISABLED' && !context.profileApproved) {
-    throw new Error('mining_profile_not_approved');
+
+  if (input.mode !== 'DISABLED') {
+    const approvedByCatalog = isMiningProfileApproved(input.profileId, input.resourceKind);
+    if (!context.profileApproved || !approvedByCatalog) {
+      throw new Error('mining_profile_not_approved');
+    }
   }
 }
 
