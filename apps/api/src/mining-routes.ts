@@ -273,7 +273,7 @@ export const registerMiningRoutes = (
              AND r."machineId" = ${event.machineId}
         `);
         if (existing.length) {
-          const previous = existing[0];
+          const previous = existing[0]!;
           const sameEvent = previous.resourceId === event.resourceId
             && previous.eventType === event.eventType
             && previous.stateAfter === event.stateAfter
