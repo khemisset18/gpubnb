@@ -7,9 +7,10 @@ GPUbnb will make personal-pool mining operational before considering any GPUbnb-
 For this phase:
 
 - `OWNER_POOL` is the only mining mode targeted for real execution.
-- `GPUBNB_MANAGED` remains disabled and outside the operational scope.
-- GPUbnb takes no commission on personal pools.
-- Owners keep their usual pool, wallet and worker configuration.
+- Personal pools use the owner's usual pool, wallet and worker configuration.
+- GPUbnb takes **0% commission** on personal pools.
+- `GPUBNB_MANAGED` remains fully disabled and outside the operational scope.
+- If the GPUbnb-managed pool is introduced later, its platform commission will be **1%**.
 - Rental always has scheduling priority over mining.
 
 ## Core behavior
@@ -61,4 +62,4 @@ No real mining binary may be enabled by default before this lifecycle passes CI 
 
 ## Future scope
 
-A GPUbnb-managed pool may be reconsidered later. It is not required for the first operational mining release and must not delay the owner-pool runtime.
+A GPUbnb-managed pool may be reconsidered later with a fixed **1% platform commission**. It remains disabled, is not required for the first operational mining release, and must not delay the owner-pool runtime.
