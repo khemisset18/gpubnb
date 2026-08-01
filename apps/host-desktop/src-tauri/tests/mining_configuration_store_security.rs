@@ -45,11 +45,9 @@ fn owner_configuration_requires_fresh_matching_connection_evidence() {
     );
 
     store.record_connection_evidence(evidence()).unwrap();
-    assert!(
-        store
-            .verified_configuration(1_010, DEFAULT_CONNECTION_EVIDENCE_MAX_AGE_SECONDS)
-            .is_ok()
-    );
+    assert!(store
+        .verified_configuration(1_010, DEFAULT_CONNECTION_EVIDENCE_MAX_AGE_SECONDS)
+        .is_ok());
     assert_eq!(
         store.verified_configuration(2_000, DEFAULT_CONNECTION_EVIDENCE_MAX_AGE_SECONDS),
         Err("mining_pool_connection_test_required")
