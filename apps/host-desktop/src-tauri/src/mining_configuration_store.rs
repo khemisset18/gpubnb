@@ -1,5 +1,5 @@
 use crate::mining_configuration::{
-    MiningConfiguration, MiningConfigurationStatus, PoolConnectionEvidence,
+    MiningConfiguration, MiningConfigurationStatus, PoolConnectionEvidence, PoolMode,
 };
 use serde::Serialize;
 
@@ -14,9 +14,39 @@ pub struct MiningConfigurationStore {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MiningConfigurationPublic {
+    pub enabled: bool,
+    pub auto_mine_when_idle: bool,
+    pub cryptocurrency: String,
+    pub miner_profile_id: String,
+    pub pool_mode: PoolMode,
+    pub custom_pool_url: Option<String>,
+    pub wallet_address: String,
+    pub worker_name: String,
+    pub has_pool_credential: bool,
+}
+
+impl From<&MiningConfiguration> for MiningConfigurationPublic {
+    fn from(configuration: &MiningConfiguration) -> Self {
+        Self {
+            enabled: configuration.enabled,
+            auto_mine_when_idle: configuration.auto_mine_when_idle,
+            cryptocurrency: configuration.cryptocurrency.clone(),
+            miner_profile_id: configuration.miner_profile_id.clone(),
+            pool_mode: configuration.pool_mode,
+            custom_pool_url: configuration.custom_pool_url.clone(),
+            wallet_address: configuration.wallet_address.clone(),
+            worker_name: configuration.worker_name.clone(),
+            has_pool_credential: configuration.pool_credential_ref.is_some(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MiningConfigurationView {
     pub configured: bool,
-    pub configuration: Option<MiningConfiguration>,
+    pub configuration: Option<MiningConfigurationPublic>,
     pub status: Option<MiningConfigurationStatus>,
     pub revision: u64,
     pub connection_verified_at_unix_seconds: Option<u64>,
@@ -45,7 +75,7 @@ impl MiningConfigurationStore {
         )?;
         Ok(MiningConfigurationView {
             configured: true,
-            configuration: Some(configuration.clone()),
+            configuration: Some(MiningConfigurationPublic::from(configuration)),
             status: Some(status),
             revision: self.revision,
             connection_verified_at_unix_seconds: self
@@ -116,7 +146,6 @@ impl MiningConfigurationStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mining_configuration::PoolMode;
 
     fn configuration(worker_name: &str) -> MiningConfiguration {
         MiningConfiguration {
@@ -140,6 +169,19 @@ mod tests {
             tls_verified: true,
             verified_at_unix_seconds: 1_000,
         }
+    }
+
+    #[test]
+    fn public_view_never_exposes_the_secret_reference() {
+        let mut store = MiningConfigurationStore::default();
+        store.save(configuration("worker_a")).unwrap();
+
+        let view = store.view(1_010, 60).unwrap();
+        let public = view.configuration.unwrap();
+        assert!(public.has_pool_credential);
+        let serialized = serde_json::to_string(&public).unwrap();
+        assert!(!serialized.contains("secret_pool_001"));
+        assert!(!serialized.contains("poolCredentialRef"));
     }
 
     #[test]
