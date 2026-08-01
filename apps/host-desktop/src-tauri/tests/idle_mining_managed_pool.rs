@@ -12,6 +12,7 @@ mod rental_mining_coordinator;
 use mining_catalog::{approved_for_vendor, GpuVendor};
 use mining_fee_policy::{calculate_reward_split, MiningFeeMode};
 use mining_supervisor::{ApprovedMiningConfig, MiningSupervisor};
+use rental_mining_coordinator::{CoordinatedGpuState, MiningConsent, RentalMiningCoordinator};
 
 fn approved_config() -> ApprovedMiningConfig {
     ApprovedMiningConfig {
@@ -55,6 +56,39 @@ fn rental_always_preempts_mining_and_failed_stop_quarantines_gpu() {
         Err("miner_process_still_running")
     );
     assert!(!supervisor.is_gpu_released());
+}
+
+#[test]
+fn emergency_stop_is_fail_closed_until_all_workloads_are_confirmed_stopped() {
+    let mut coordinator = RentalMiningCoordinator::default();
+    coordinator
+        .set_owner_consent(MiningConsent::OwnerPool)
+        .unwrap();
+    coordinator.request_idle_mining_start().unwrap();
+    coordinator.confirm_mining_started().unwrap();
+
+    assert_eq!(
+        coordinator.emergency_stop(false),
+        Err("emergency_stop_failed")
+    );
+    assert_eq!(
+        coordinator.snapshot().state,
+        CoordinatedGpuState::Quarantined
+    );
+
+    let mut recovered = RentalMiningCoordinator::default();
+    recovered
+        .set_owner_consent(MiningConsent::OwnerPool)
+        .unwrap();
+    recovered.request_idle_mining_start().unwrap();
+    recovered.confirm_mining_started().unwrap();
+    recovered.emergency_stop(true).unwrap();
+    assert_eq!(
+        recovered.snapshot().state,
+        CoordinatedGpuState::EmergencyStopped
+    );
+    assert!(!recovered.snapshot().should_start_mining);
+    assert!(!recovered.snapshot().rental_may_start);
 }
 
 #[test]
