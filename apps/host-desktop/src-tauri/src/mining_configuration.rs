@@ -64,11 +64,7 @@ impl MiningConfiguration {
         }
 
         match self.pool_mode {
-            PoolMode::Managed => {
-                if self.custom_pool_url.is_some() {
-                    return Err("managed_pool_rejects_custom_url");
-                }
-            }
+            PoolMode::Managed => return Err("managed_pool_disabled"),
             PoolMode::Custom => {
                 let pool_url = self
                     .custom_pool_url
@@ -82,7 +78,7 @@ impl MiningConfiguration {
 
     pub fn build_launch_spec(
         &self,
-        managed_pool_url: Option<&str>,
+        _managed_pool_url: Option<&str>,
     ) -> Result<Option<MiningLaunchSpec>, &'static str> {
         self.validate()?;
         if !self.enabled || !self.auto_mine_when_idle {
@@ -90,11 +86,7 @@ impl MiningConfiguration {
         }
 
         let pool_url = match self.pool_mode {
-            PoolMode::Managed => {
-                let pool_url = managed_pool_url.ok_or("managed_pool_unavailable")?;
-                validate_pool_url(pool_url)?;
-                pool_url.to_owned()
-            }
+            PoolMode::Managed => return Err("managed_pool_disabled"),
             PoolMode::Custom => self
                 .custom_pool_url
                 .clone()
@@ -262,15 +254,15 @@ mod tests {
     }
 
     #[test]
-    fn managed_pool_is_resolved_from_trusted_catalog() {
+    fn managed_pool_is_disabled_for_operational_configuration() {
         let mut configuration = custom_configuration();
         configuration.pool_mode = PoolMode::Managed;
         configuration.custom_pool_url = None;
-        let spec = configuration
-            .build_launch_spec(Some("stratum+tls://managed.example.com:443"))
-            .unwrap()
-            .unwrap();
-        assert_eq!(spec.pool_url, "stratum+tls://managed.example.com:443");
+        assert_eq!(configuration.validate(), Err("managed_pool_disabled"));
+        assert_eq!(
+            configuration.build_launch_spec(Some("stratum+tls://managed.example.com:443")),
+            Err("managed_pool_disabled")
+        );
     }
 
     #[test]
