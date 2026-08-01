@@ -86,8 +86,8 @@ impl InstallationIdentityStore {
     pub fn load(&self) -> Result<InstallationIdentity, &'static str> {
         let content =
             fs::read_to_string(&self.path).map_err(|_| "installation_identity_read_failed")?;
-        let identity: InstallationIdentity = serde_json::from_str(&content)
-            .map_err(|_| "installation_identity_decode_failed")?;
+        let identity: InstallationIdentity =
+            serde_json::from_str(&content).map_err(|_| "installation_identity_decode_failed")?;
         identity.validate()?;
         Ok(identity)
     }
@@ -99,8 +99,8 @@ impl InstallationIdentityStore {
             .parent()
             .ok_or("installation_identity_parent_missing")?;
         fs::create_dir_all(parent).map_err(|_| "installation_identity_directory_failed")?;
-        let content =
-            serde_json::to_vec_pretty(identity).map_err(|_| "installation_identity_encode_failed")?;
+        let content = serde_json::to_vec_pretty(identity)
+            .map_err(|_| "installation_identity_encode_failed")?;
         let temporary = self
             .path
             .with_extension(format!("tmp-{}", std::process::id()));
