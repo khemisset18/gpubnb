@@ -1,13 +1,13 @@
 #[path = "../src/mining_configuration.rs"]
 mod mining_configuration;
-#[path = "../src/mining_configuration_store.rs"]
-mod mining_configuration_store;
-#[path = "../src/mining_configuration_service.rs"]
-mod mining_configuration_service;
-#[path = "../src/mining_pool_probe.rs"]
-mod mining_pool_probe;
 #[path = "../src/mining_configuration_commands.rs"]
 mod mining_configuration_commands;
+#[path = "../src/mining_configuration_service.rs"]
+mod mining_configuration_service;
+#[path = "../src/mining_configuration_store.rs"]
+mod mining_configuration_store;
+#[path = "../src/mining_pool_probe.rs"]
+mod mining_pool_probe;
 
 use mining_configuration::{MiningConfiguration, PoolMode};
 use mining_configuration_commands::MiningConfigurationCommands;
