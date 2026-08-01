@@ -3,8 +3,7 @@ use crate::mining_configuration::{
     PoolConnectionEvidence,
 };
 use crate::mining_configuration_store::{
-    MiningConfigurationStore, MiningConfigurationView,
-    DEFAULT_CONNECTION_EVIDENCE_MAX_AGE_SECONDS,
+    MiningConfigurationStore, MiningConfigurationView, DEFAULT_CONNECTION_EVIDENCE_MAX_AGE_SECONDS,
 };
 
 #[derive(Clone, Debug, Default)]
