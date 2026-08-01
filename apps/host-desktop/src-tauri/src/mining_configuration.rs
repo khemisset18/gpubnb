@@ -334,7 +334,9 @@ mod tests {
     fn stale_or_mismatched_connection_evidence_never_authorizes_launch() {
         let configuration = custom_configuration();
         assert_eq!(
-            configuration.status(Some(&verified_evidence()), 2_000, 60).unwrap(),
+            configuration
+                .status(Some(&verified_evidence()), 2_000, 60)
+                .unwrap(),
             MiningConfigurationStatus::NeedsConnectionTest
         );
 
