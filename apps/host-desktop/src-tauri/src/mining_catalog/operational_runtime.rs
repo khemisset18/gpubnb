@@ -1,8 +1,6 @@
 use super::process_manager::{MinerProcessSupervisor, ProcessBackend, RunningMiner};
 use super::secure_launcher::VerifiedMinerBinary;
-use crate::mining_runtime_controller::{
-    MiningRuntimeController, RuntimeDecision, RuntimeOrder,
-};
+use crate::mining_runtime_controller::{MiningRuntimeController, RuntimeDecision, RuntimeOrder};
 use crate::rental_mining_coordinator::{MiningConsent, StopProof};
 use std::time::Duration;
 
@@ -120,9 +118,7 @@ impl<B: ProcessBackend, V: ResourceReleaseVerifier> OperationalMiningRuntime<B, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rental_mining_coordinator::{
-        CoordinatedGpuState, RentalCleanupProof,
-    };
+    use crate::rental_mining_coordinator::{CoordinatedGpuState, RentalCleanupProof};
     use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
