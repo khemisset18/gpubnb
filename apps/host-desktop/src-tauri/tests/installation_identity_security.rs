@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[path = "../src/installation_identity.rs"]
 mod installation_identity;
 
