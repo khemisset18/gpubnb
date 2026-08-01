@@ -201,8 +201,8 @@ mod tests {
         let mut store = MiningConfigurationStore::default();
         store.save(configuration("worker_a")).unwrap();
         store.record_connection_evidence(evidence()).unwrap();
-        let restored = MiningConfigurationStore::from_persistent(store.persistent_snapshot())
-            .unwrap();
+        let restored =
+            MiningConfigurationStore::from_persistent(store.persistent_snapshot()).unwrap();
         assert_eq!(restored.revision(), 1);
         assert!(restored.verified_configuration(1_010, 60).is_ok());
     }
