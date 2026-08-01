@@ -76,6 +76,7 @@ pub fn mining_configuration_get(
 }
 
 #[cfg(not(feature = "desktop-runtime"))]
+#[allow(dead_code)]
 pub fn mining_configuration_get() {}
 
 #[cfg(feature = "desktop-runtime")]
@@ -89,6 +90,7 @@ pub fn mining_configuration_save(
 }
 
 #[cfg(not(feature = "desktop-runtime"))]
+#[allow(dead_code)]
 pub fn mining_configuration_save() {}
 
 #[cfg(feature = "desktop-runtime")]
@@ -101,6 +103,7 @@ pub fn mining_configuration_test_connection(
 }
 
 #[cfg(not(feature = "desktop-runtime"))]
+#[allow(dead_code)]
 pub fn mining_configuration_test_connection() {}
 
 #[cfg(feature = "desktop-runtime")]
@@ -113,4 +116,5 @@ pub fn mining_configuration_clear(
 }
 
 #[cfg(not(feature = "desktop-runtime"))]
+#[allow(dead_code)]
 pub fn mining_configuration_clear() {}
