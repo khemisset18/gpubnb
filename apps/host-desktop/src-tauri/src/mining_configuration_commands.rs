@@ -1,8 +1,11 @@
+#[path = "mining_configuration_persistence.rs"]
+pub(crate) mod mining_configuration_persistence;
+
 use crate::mining_configuration::{MiningConfiguration, MiningConfigurationActor};
-use crate::mining_configuration_persistence::MiningConfigurationPersistence;
 use crate::mining_configuration_service::MiningConfigurationService;
 use crate::mining_configuration_store::MiningConfigurationView;
 use crate::mining_pool_probe::probe_pool_connection;
+use mining_configuration_persistence::MiningConfigurationPersistence;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Debug)]
