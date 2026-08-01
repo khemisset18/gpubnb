@@ -1,5 +1,10 @@
 #[path = "../src/mining_configuration.rs"]
 mod mining_configuration;
+#[path = "../src/mining_configuration_persistence.rs"]
+mod mining_configuration_persistence;
+mod mining_configuration_commands {
+    pub(crate) use crate::mining_configuration_persistence;
+}
 #[path = "../src/mining_configuration_store.rs"]
 mod mining_configuration_store;
 
