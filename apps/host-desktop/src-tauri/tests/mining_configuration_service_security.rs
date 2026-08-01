@@ -99,6 +99,31 @@ fn configuration_change_revokes_ready_authority() {
 }
 
 #[test]
+fn clearing_configuration_removes_launch_authority() {
+    let mut service = MiningConfigurationService::default();
+    service
+        .save(
+            MiningConfigurationActor::HostOwner,
+            0,
+            configuration("worker_a"),
+        )
+        .unwrap();
+    service
+        .record_connection_evidence(MiningConfigurationActor::HostOwner, 1, evidence())
+        .unwrap();
+
+    let cleared = service
+        .clear(MiningConfigurationActor::HostOwner, 1, 1_010)
+        .unwrap();
+    assert!(!cleared.configured);
+    assert_eq!(cleared.revision, 2);
+    assert_eq!(
+        service.require_ready_configuration(1_010),
+        Err("mining_configuration_missing")
+    );
+}
+
+#[test]
 fn frontend_view_never_exposes_secret_reference() {
     let mut service = MiningConfigurationService::default();
     let view = service
