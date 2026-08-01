@@ -1,13 +1,13 @@
-#[path = "../src/rental_mining_coordinator.rs"]
-mod rental_mining_coordinator;
-#[path = "../src/mining_runtime_controller.rs"]
-mod mining_runtime_controller;
 #[path = "../src/mining_catalog.rs"]
 mod mining_catalog;
 #[path = "../src/mining_fee_policy.rs"]
 mod mining_fee_policy;
+#[path = "../src/mining_runtime_controller.rs"]
+mod mining_runtime_controller;
 #[path = "../src/mining_supervisor.rs"]
 mod mining_supervisor;
+#[path = "../src/rental_mining_coordinator.rs"]
+mod rental_mining_coordinator;
 
 use mining_catalog::{approved_for_vendor, GpuVendor};
 use mining_fee_policy::{calculate_reward_split, MiningFeeMode};
