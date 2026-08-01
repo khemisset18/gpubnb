@@ -15,7 +15,8 @@ pub struct MiningPoolEndpoint {
 
 impl MiningPoolEndpoint {
     pub fn parse(pool_url: &str) -> Result<Self, &'static str> {
-        let (authority, requires_tls) = if let Some(value) = pool_url.strip_prefix("stratum+tcp://") {
+        let (authority, requires_tls) = if let Some(value) = pool_url.strip_prefix("stratum+tcp://")
+        {
             (value, false)
         } else if let Some(value) = pool_url.strip_prefix("stratum+tls://") {
             (value, true)
