@@ -67,8 +67,7 @@ impl MiningConfigurationService {
     }
 
     fn require_revision(&self, expected_revision: u64) -> Result<(), &'static str> {
-        let current_revision = self.store.view(0, 0)?.revision;
-        if current_revision != expected_revision {
+        if self.store.revision() != expected_revision {
             return Err("mining_configuration_revision_conflict");
         }
         Ok(())
