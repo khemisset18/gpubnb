@@ -51,10 +51,7 @@ impl MiningConfigurationState {
             .test_connection(expected_revision, &pool_url)
     }
 
-    pub fn clear(
-        &self,
-        expected_revision: u64,
-    ) -> Result<MiningConfigurationView, &'static str> {
+    pub fn clear(&self, expected_revision: u64) -> Result<MiningConfigurationView, &'static str> {
         self.commands
             .lock()
             .map_err(|_| "mining_configuration_state_unavailable")?
