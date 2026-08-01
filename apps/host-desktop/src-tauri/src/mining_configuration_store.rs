@@ -53,6 +53,10 @@ pub struct MiningConfigurationView {
 }
 
 impl MiningConfigurationStore {
+    pub const fn revision(&self) -> u64 {
+        self.revision
+    }
+
     pub fn view(
         &self,
         now_unix_seconds: u64,
@@ -169,6 +173,15 @@ mod tests {
             tls_verified: true,
             verified_at_unix_seconds: 1_000,
         }
+    }
+
+    #[test]
+    fn revision_is_available_without_evaluating_connection_evidence() {
+        let mut store = MiningConfigurationStore::default();
+        assert_eq!(store.revision(), 0);
+        store.save(configuration("worker_a")).unwrap();
+        store.record_connection_evidence(evidence()).unwrap();
+        assert_eq!(store.revision(), 1);
     }
 
     #[test]
