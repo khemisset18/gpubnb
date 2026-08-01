@@ -59,7 +59,10 @@ impl MiningConfigurationStore {
         configuration.validate()?;
         self.configuration = Some(configuration);
         self.connection_evidence = None;
-        self.revision = self.revision.checked_add(1).ok_or("mining_revision_overflow")?;
+        self.revision = self
+            .revision
+            .checked_add(1)
+            .ok_or("mining_revision_overflow")?;
         Ok(self.revision)
     }
 
