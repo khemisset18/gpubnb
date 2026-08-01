@@ -2,7 +2,7 @@ use crate::mining_configuration::{
     authorize_configuration_change, MiningConfiguration, MiningConfigurationActor,
     PoolConnectionEvidence,
 };
-use crate::mining_configuration_persistence::PersistentMiningConfiguration;
+use crate::mining_configuration_commands::mining_configuration_persistence::PersistentMiningConfiguration;
 use crate::mining_configuration_store::{
     MiningConfigurationStore, MiningConfigurationView, DEFAULT_CONNECTION_EVIDENCE_MAX_AGE_SECONDS,
 };
