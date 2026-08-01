@@ -1,3 +1,5 @@
+#[path = "mining_catalog/operational_runtime.rs"]
+pub mod operational_runtime;
 #[path = "mining_catalog/process_manager.rs"]
 pub mod process_manager;
 #[path = "mining_catalog/secure_launcher.rs"]
