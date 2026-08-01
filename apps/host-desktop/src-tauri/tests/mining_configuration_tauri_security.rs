@@ -91,5 +91,8 @@ fn clear_removes_configuration_and_launch_authority() {
 
 #[test]
 fn host_service_actor_remains_non_authoritative() {
-    assert_eq!(MiningConfigurationActor::HostService, MiningConfigurationActor::HostService);
+    assert_eq!(
+        MiningConfigurationActor::HostService,
+        MiningConfigurationActor::HostService
+    );
 }
