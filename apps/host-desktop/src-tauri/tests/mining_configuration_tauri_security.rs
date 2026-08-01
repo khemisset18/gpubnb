@@ -67,7 +67,7 @@ fn connection_test_uses_saved_pool_url_and_fails_closed() {
         .unwrap();
     assert_eq!(
         state.test_connection(saved.revision),
-        Err("mining_pool_tls_probe_unavailable")
+        Err("mining_pool_dns_unverified")
     );
     assert_eq!(
         state.require_ready(),
@@ -83,10 +83,7 @@ fn clear_removes_configuration_and_launch_authority() {
         .unwrap();
     let cleared = state.clear(saved.revision).unwrap();
     assert!(!cleared.configured);
-    assert_eq!(
-        state.require_ready(),
-        Err("mining_configuration_not_configured")
-    );
+    assert_eq!(state.require_ready(), Err("mining_configuration_missing"));
 }
 
 #[test]
