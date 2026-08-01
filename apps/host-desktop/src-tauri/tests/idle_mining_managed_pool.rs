@@ -1,3 +1,7 @@
+#[path = "../src/rental_mining_coordinator.rs"]
+mod rental_mining_coordinator;
+#[path = "../src/mining_runtime_controller.rs"]
+mod mining_runtime_controller;
 #[path = "../src/mining_catalog.rs"]
 mod mining_catalog;
 #[path = "../src/mining_fee_policy.rs"]
