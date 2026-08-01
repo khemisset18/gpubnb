@@ -2,6 +2,7 @@ use crate::mining_configuration::{
     authorize_configuration_change, MiningConfiguration, MiningConfigurationActor,
     PoolConnectionEvidence,
 };
+use crate::mining_configuration_persistence::PersistentMiningConfiguration;
 use crate::mining_configuration_store::{
     MiningConfigurationStore, MiningConfigurationView, DEFAULT_CONNECTION_EVIDENCE_MAX_AGE_SECONDS,
 };
@@ -12,6 +13,18 @@ pub struct MiningConfigurationService {
 }
 
 impl MiningConfigurationService {
+    pub fn from_persistent(
+        persistent: PersistentMiningConfiguration,
+    ) -> Result<Self, &'static str> {
+        Ok(Self {
+            store: MiningConfigurationStore::from_persistent(persistent)?,
+        })
+    }
+
+    pub fn persistent_snapshot(&self) -> PersistentMiningConfiguration {
+        self.store.persistent_snapshot()
+    }
+
     pub fn view(&self, now_unix_seconds: u64) -> Result<MiningConfigurationView, &'static str> {
         self.store.view(
             now_unix_seconds,
