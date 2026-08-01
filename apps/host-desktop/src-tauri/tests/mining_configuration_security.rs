@@ -29,7 +29,10 @@ fn owner_pool_builds_structured_spec_and_managed_pool_stays_disabled() {
     assert_eq!(custom.pool_url, "stratum+tls://pool.example.com:443");
     assert_eq!(custom.wallet_address, "kaspa:qownerwallet");
     assert_eq!(custom.worker_name, "gpu_host_001");
-    assert_eq!(custom.pool_credential_ref.as_deref(), Some("secret_pool_001"));
+    assert_eq!(
+        custom.pool_credential_ref.as_deref(),
+        Some("secret_pool_001")
+    );
 
     assert_eq!(
         configuration(PoolMode::Managed)
