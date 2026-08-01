@@ -9,7 +9,9 @@ mod mining_configuration_store;
 #[path = "../src/mining_pool_probe.rs"]
 mod mining_pool_probe;
 
-use mining_configuration::{MiningConfiguration, PoolMode};
+use mining_configuration::{
+    authorize_configuration_change, MiningConfiguration, MiningConfigurationActor, PoolMode,
+};
 use mining_configuration_commands::MiningConfigurationCommands;
 
 fn configuration(worker_name: &str) -> MiningConfiguration {
@@ -30,10 +32,21 @@ fn configuration(worker_name: &str) -> MiningConfiguration {
 fn command_views_never_expose_secret_references() {
     let mut commands = MiningConfigurationCommands::default();
     let view = commands.save(0, configuration("rig-01")).unwrap();
-    let json = serde_json::to_string(&view).unwrap();
+    let read_back = commands.get().unwrap();
+    assert_eq!(read_back, view);
+
+    let json = serde_json::to_string(&read_back).unwrap();
     assert!(json.contains("hasPoolCredential"));
     assert!(!json.contains("secret_pool_001"));
     assert!(!json.contains("poolCredentialRef"));
+}
+
+#[test]
+fn host_service_cannot_change_owner_configuration() {
+    assert_eq!(
+        authorize_configuration_change(MiningConfigurationActor::HostService),
+        Err("mining_configuration_change_forbidden")
+    );
 }
 
 #[test]
