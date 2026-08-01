@@ -1,7 +1,7 @@
 use crate::mining_configuration::{
     MiningConfiguration, MiningConfigurationStatus, PoolConnectionEvidence, PoolMode,
 };
-use crate::mining_configuration_persistence::PersistentMiningConfiguration;
+use crate::mining_configuration_commands::mining_configuration_persistence::PersistentMiningConfiguration;
 use serde::Serialize;
 
 pub const DEFAULT_CONNECTION_EVIDENCE_MAX_AGE_SECONDS: u64 = 300;
