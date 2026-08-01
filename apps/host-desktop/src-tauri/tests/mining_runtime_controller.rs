@@ -3,9 +3,7 @@ mod mining_runtime_controller;
 #[path = "../src/rental_mining_coordinator.rs"]
 mod rental_mining_coordinator;
 
-use mining_runtime_controller::{
-    MiningRuntimeController, RuntimeOrder, RuntimeRecoveryProof,
-};
+use mining_runtime_controller::{MiningRuntimeController, RuntimeOrder, RuntimeRecoveryProof};
 use rental_mining_coordinator::{
     CoordinatedGpuState, MiningConsent, RentalCleanupProof, RentalMiningCoordinator, StopProof,
 };
