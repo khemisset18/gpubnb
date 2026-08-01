@@ -25,6 +25,13 @@ impl Default for MiningConfigurationState {
 }
 
 impl MiningConfigurationState {
+    pub fn in_memory() -> Self {
+        Self {
+            commands: Mutex::new(MiningConfigurationCommands::in_memory()),
+            initialization_error: None,
+        }
+    }
+
     fn ensure_initialized(&self) -> Result<(), &'static str> {
         self.initialization_error.map_or(Ok(()), Err)
     }
