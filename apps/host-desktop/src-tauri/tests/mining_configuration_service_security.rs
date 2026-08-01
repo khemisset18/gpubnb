@@ -1,9 +1,9 @@
 #[path = "../src/mining_configuration.rs"]
 mod mining_configuration;
-#[path = "../src/mining_configuration_store.rs"]
-mod mining_configuration_store;
 #[path = "../src/mining_configuration_service.rs"]
 mod mining_configuration_service;
+#[path = "../src/mining_configuration_store.rs"]
+mod mining_configuration_store;
 
 use mining_configuration::{
     MiningConfiguration, MiningConfigurationActor, PoolConnectionEvidence, PoolMode,
