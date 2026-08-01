@@ -75,6 +75,9 @@ pub fn mining_configuration_get(
     state.get()
 }
 
+#[cfg(not(feature = "desktop-runtime"))]
+pub fn mining_configuration_get() {}
+
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 pub fn mining_configuration_save(
@@ -85,6 +88,9 @@ pub fn mining_configuration_save(
     state.save(expected_revision, configuration)
 }
 
+#[cfg(not(feature = "desktop-runtime"))]
+pub fn mining_configuration_save() {}
+
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 pub fn mining_configuration_test_connection(
@@ -94,6 +100,9 @@ pub fn mining_configuration_test_connection(
     state.test_connection(expected_revision)
 }
 
+#[cfg(not(feature = "desktop-runtime"))]
+pub fn mining_configuration_test_connection() {}
+
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 pub fn mining_configuration_clear(
@@ -102,3 +111,6 @@ pub fn mining_configuration_clear(
 ) -> Result<MiningConfigurationView, &'static str> {
     state.clear(expected_revision)
 }
+
+#[cfg(not(feature = "desktop-runtime"))]
+pub fn mining_configuration_clear() {}
