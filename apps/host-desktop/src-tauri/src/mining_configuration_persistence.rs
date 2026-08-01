@@ -37,11 +37,7 @@ impl PersistentMiningConfiguration {
             (Some(configuration), evidence) => {
                 configuration.validate()?;
                 if let Some(evidence) = evidence {
-                    configuration.status(
-                        Some(evidence),
-                        evidence.verified_at_unix_seconds,
-                        0,
-                    )?;
+                    configuration.status(Some(evidence), evidence.verified_at_unix_seconds, 0)?;
                 }
                 Ok(())
             }
@@ -77,10 +73,10 @@ impl MiningConfigurationPersistence {
         if !self.path.exists() {
             return Ok(PersistentMiningConfiguration::empty());
         }
-        let content = fs::read_to_string(&self.path)
-            .map_err(|_| "mining_persistence_read_failed")?;
-        let state: PersistentMiningConfiguration = serde_json::from_str(&content)
-            .map_err(|_| "mining_persistence_decode_failed")?;
+        let content =
+            fs::read_to_string(&self.path).map_err(|_| "mining_persistence_read_failed")?;
+        let state: PersistentMiningConfiguration =
+            serde_json::from_str(&content).map_err(|_| "mining_persistence_decode_failed")?;
         state.validate()?;
         Ok(state)
     }
@@ -93,9 +89,11 @@ impl MiningConfigurationPersistence {
             .ok_or("mining_persistence_parent_missing")?;
         fs::create_dir_all(parent).map_err(|_| "mining_persistence_directory_failed")?;
 
-        let content = serde_json::to_vec_pretty(state)
-            .map_err(|_| "mining_persistence_encode_failed")?;
-        let temporary = self.path.with_extension(format!("tmp-{}", std::process::id()));
+        let content =
+            serde_json::to_vec_pretty(state).map_err(|_| "mining_persistence_encode_failed")?;
+        let temporary = self
+            .path
+            .with_extension(format!("tmp-{}", std::process::id()));
         let backup = self.path.with_extension("bak");
 
         let mut file = OpenOptions::new()
@@ -114,10 +112,9 @@ impl MiningConfigurationPersistence {
             fs::remove_file(&backup).map_err(|_| "mining_persistence_backup_cleanup_failed")?;
         }
         if self.path.exists() {
-            fs::rename(&self.path, &backup)
-                .map_err(|_| "mining_persistence_backup_failed")?;
+            fs::rename(&self.path, &backup).map_err(|_| "mining_persistence_backup_failed")?;
         }
-        if let Err(_) = fs::rename(&temporary, &self.path) {
+        if fs::rename(&temporary, &self.path).is_err() {
             if backup.exists() {
                 let _ = fs::rename(&backup, &self.path);
             }
@@ -139,8 +136,7 @@ impl MiningConfigurationPersistence {
             .map_err(|_| "system_clock_invalid")?
             .as_secs();
         let quarantined = self.path.with_extension(format!("corrupt-{suffix}"));
-        fs::rename(&self.path, quarantined)
-            .map_err(|_| "mining_persistence_quarantine_failed")
+        fs::rename(&self.path, quarantined).map_err(|_| "mining_persistence_quarantine_failed")
     }
 
     #[cfg(test)]
@@ -235,7 +231,10 @@ mod tests {
         let parent = path.parent().unwrap();
         let prefix = path.file_stem().unwrap().to_string_lossy();
         assert!(fs::read_dir(parent).unwrap().flatten().any(|entry| {
-            entry.file_name().to_string_lossy().starts_with(prefix.as_ref())
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(prefix.as_ref())
                 && entry.file_name().to_string_lossy().contains("corrupt-")
         }));
     }
