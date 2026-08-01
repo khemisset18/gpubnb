@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[path = "../src/mining_configuration.rs"]
 mod mining_configuration;
 #[path = "../src/mining_configuration_persistence.rs"]
