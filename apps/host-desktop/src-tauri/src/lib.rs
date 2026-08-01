@@ -2,6 +2,12 @@
 
 mod agent_bridge;
 mod diagnostics;
+mod mining_configuration;
+mod mining_configuration_commands;
+mod mining_configuration_service;
+mod mining_configuration_store;
+mod mining_configuration_tauri;
+mod mining_pool_probe;
 mod mining_runtime_controller;
 mod orchestration_gateway;
 mod pairing;
@@ -10,6 +16,10 @@ mod rental_orchestrator;
 
 use agent_bridge::{AgentStatus, ProtectionStatus};
 use diagnostics::{collect_native_diagnostic, NativeDiagnostic};
+use mining_configuration_tauri::{
+    mining_configuration_clear, mining_configuration_get, mining_configuration_save,
+    mining_configuration_test_connection, MiningConfigurationState,
+};
 use mining_runtime_controller::{MiningRuntimeController, RuntimeDecision};
 use orchestration_gateway::{
     ActorRole, AuthenticatedContext, CommandResult, OrchestrationCommand, OrchestrationGateway,
@@ -592,6 +602,7 @@ pub fn run() {
         .manage(Mutex::new(AppState::default()))
         .manage(Mutex::new(create_gateway()))
         .manage(Mutex::new(MiningRuntimeController::default()))
+        .manage(MiningConfigurationState::default())
         .invoke_handler(tauri::generate_handler![
             host_status,
             local_agent_status,
@@ -603,7 +614,11 @@ pub fn run() {
             request_publish,
             set_idle_mining,
             emergency_stop,
-            run_setup_action
+            run_setup_action,
+            mining_configuration_get,
+            mining_configuration_save,
+            mining_configuration_test_connection,
+            mining_configuration_clear
         ])
         .run(tauri::generate_context!())
         .expect("failed to run GPUbnb Host");
@@ -705,6 +720,10 @@ mod tests {
             "set_idle_mining",
             "emergency_stop",
             "run_setup_action",
+            "mining_configuration_get",
+            "mining_configuration_save",
+            "mining_configuration_test_connection",
+            "mining_configuration_clear",
         ];
         assert!(!exposed.contains(&"execute_orchestration"));
         assert!(!exposed.contains(&"accept_reservation"));

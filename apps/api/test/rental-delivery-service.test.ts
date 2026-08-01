@@ -7,14 +7,15 @@ import {
   type RentalDeliveryContext,
 } from '../src/rental-delivery-service.js';
 
+const fixtureNow = Date.now();
 const context: RentalDeliveryContext = {
   bookingId: 'cm8abcdefghijklmnopqrstuv',
   machineId: 'cm8bcdefghijklmnopqrstuvw',
   renterId: 'cm8cdefghijklmnopqrstuvwx',
   listingId: 'cm8defghijklmnopqrstuvwxy',
   sessionId: 'cm8efghijklmnopqrstuvwxyz',
-  startsAt: new Date('2026-08-01T10:00:00.000Z'),
-  endsAt: new Date('2026-08-01T12:00:00.000Z'),
+  startsAt: new Date(fixtureNow + 60_000),
+  endsAt: new Date(fixtureNow + 2 * 60 * 60 * 1_000),
 };
 
 test('records a deterministic outbox event', async () => {

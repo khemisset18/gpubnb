@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::rental_mining_coordinator::{
-    CoordinatorSnapshot, MiningConsent, RentalCleanupProof, RentalMiningCoordinator, StopProof,
+    CoordinatedGpuState, CoordinatorSnapshot, MiningConsent, RentalCleanupProof,
+    RentalMiningCoordinator, StopProof,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,6 +64,10 @@ impl MiningRuntimeController {
     }
 
     pub fn mining_started(&mut self) -> Result<RuntimeDecision, &'static str> {
+        let snapshot = self.coordinator.snapshot();
+        if snapshot.state == CoordinatedGpuState::Idle && snapshot.should_start_mining {
+            self.coordinator.request_idle_mining_start()?;
+        }
         self.coordinator.confirm_mining_started()?;
         Ok(self.reconcile("mining_started"))
     }
@@ -118,12 +123,10 @@ impl MiningRuntimeController {
             RuntimeOrder::StartApprovedMiner
         } else {
             match snapshot.state {
-                crate::rental_mining_coordinator::CoordinatedGpuState::VerifyingRentalReadiness => {
+                CoordinatedGpuState::VerifyingRentalReadiness => {
                     RuntimeOrder::PrepareRentalWorkspace
                 }
-                crate::rental_mining_coordinator::CoordinatedGpuState::CleaningRental => {
-                    RuntimeOrder::DestroyRentalWorkspace
-                }
+                CoordinatedGpuState::CleaningRental => RuntimeOrder::DestroyRentalWorkspace,
                 _ => RuntimeOrder::Noop,
             }
         };

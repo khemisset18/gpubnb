@@ -21,18 +21,24 @@ fn configuration(pool_mode: PoolMode) -> MiningConfiguration {
 }
 
 #[test]
-fn owner_can_choose_managed_or_custom_pool_without_shell_arguments() {
+fn owner_pool_builds_structured_spec_and_managed_pool_stays_disabled() {
     let custom = configuration(PoolMode::Custom)
         .build_launch_spec(None)
         .unwrap()
         .unwrap();
     assert_eq!(custom.pool_url, "stratum+tls://pool.example.com:443");
+    assert_eq!(custom.wallet_address, "kaspa:qownerwallet");
+    assert_eq!(custom.worker_name, "gpu_host_001");
+    assert_eq!(
+        custom.pool_credential_ref.as_deref(),
+        Some("secret_pool_001")
+    );
 
-    let managed = configuration(PoolMode::Managed)
-        .build_launch_spec(Some("stratum+tls://managed.example.com:443"))
-        .unwrap()
-        .unwrap();
-    assert_eq!(managed.pool_url, "stratum+tls://managed.example.com:443");
+    assert_eq!(
+        configuration(PoolMode::Managed)
+            .build_launch_spec(Some("stratum+tls://managed.example.com:443")),
+        Err("managed_pool_disabled")
+    );
 }
 
 #[test]
@@ -66,7 +72,7 @@ fn malicious_wallet_and_pool_inputs_are_rejected() {
 
 #[test]
 fn disabling_mining_never_leaves_auto_start_enabled() {
-    let mut disabled = configuration(PoolMode::Managed);
+    let mut disabled = configuration(PoolMode::Custom);
     disabled.enabled = false;
     assert_eq!(
         disabled.validate(),

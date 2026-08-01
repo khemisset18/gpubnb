@@ -33,6 +33,24 @@ pub struct MiningConfiguration {
     pub pool_credential_ref: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PoolConnectionEvidence {
+    pub pool_url: String,
+    pub dns_resolved: bool,
+    pub tcp_connected: bool,
+    pub tls_verified: bool,
+    pub verified_at_unix_seconds: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MiningConfigurationStatus {
+    Disabled,
+    NeedsConnectionTest,
+    Ready,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MiningLaunchSpec {
@@ -64,11 +82,7 @@ impl MiningConfiguration {
         }
 
         match self.pool_mode {
-            PoolMode::Managed => {
-                if self.custom_pool_url.is_some() {
-                    return Err("managed_pool_rejects_custom_url");
-                }
-            }
+            PoolMode::Managed => return Err("managed_pool_disabled"),
             PoolMode::Custom => {
                 let pool_url = self
                     .custom_pool_url
@@ -80,9 +94,49 @@ impl MiningConfiguration {
         Ok(())
     }
 
+    pub fn status(
+        &self,
+        evidence: Option<&PoolConnectionEvidence>,
+        now_unix_seconds: u64,
+        maximum_evidence_age_seconds: u64,
+    ) -> Result<MiningConfigurationStatus, &'static str> {
+        self.validate()?;
+        if !self.enabled {
+            return Ok(MiningConfigurationStatus::Disabled);
+        }
+
+        let pool_url = self
+            .custom_pool_url
+            .as_deref()
+            .ok_or("custom_pool_url_required")?;
+        let Some(evidence) = evidence else {
+            return Ok(MiningConfigurationStatus::NeedsConnectionTest);
+        };
+        if evidence.pool_url != pool_url {
+            return Err("mining_pool_evidence_url_mismatch");
+        }
+        if !evidence.dns_resolved {
+            return Err("mining_pool_dns_unverified");
+        }
+        if !evidence.tcp_connected {
+            return Err("mining_pool_tcp_unverified");
+        }
+        if requires_tls(pool_url) && !evidence.tls_verified {
+            return Err("mining_pool_tls_unverified");
+        }
+        let age = now_unix_seconds
+            .checked_sub(evidence.verified_at_unix_seconds)
+            .ok_or("mining_pool_evidence_from_future")?;
+        if age > maximum_evidence_age_seconds {
+            return Ok(MiningConfigurationStatus::NeedsConnectionTest);
+        }
+
+        Ok(MiningConfigurationStatus::Ready)
+    }
+
     pub fn build_launch_spec(
         &self,
-        managed_pool_url: Option<&str>,
+        _managed_pool_url: Option<&str>,
     ) -> Result<Option<MiningLaunchSpec>, &'static str> {
         self.validate()?;
         if !self.enabled || !self.auto_mine_when_idle {
@@ -90,11 +144,7 @@ impl MiningConfiguration {
         }
 
         let pool_url = match self.pool_mode {
-            PoolMode::Managed => {
-                let pool_url = managed_pool_url.ok_or("managed_pool_unavailable")?;
-                validate_pool_url(pool_url)?;
-                pool_url.to_owned()
-            }
+            PoolMode::Managed => return Err("managed_pool_disabled"),
             PoolMode::Custom => self
                 .custom_pool_url
                 .clone()
@@ -109,6 +159,25 @@ impl MiningConfiguration {
             worker_name: self.worker_name.clone(),
             pool_credential_ref: self.pool_credential_ref.clone(),
         }))
+    }
+
+    pub fn build_verified_launch_spec(
+        &self,
+        evidence: &PoolConnectionEvidence,
+        now_unix_seconds: u64,
+        maximum_evidence_age_seconds: u64,
+    ) -> Result<Option<MiningLaunchSpec>, &'static str> {
+        match self.status(
+            Some(evidence),
+            now_unix_seconds,
+            maximum_evidence_age_seconds,
+        )? {
+            MiningConfigurationStatus::Disabled => Ok(None),
+            MiningConfigurationStatus::NeedsConnectionTest => {
+                Err("mining_pool_connection_test_required")
+            }
+            MiningConfigurationStatus::Ready => self.build_launch_spec(None),
+        }
     }
 }
 
@@ -207,6 +276,10 @@ fn validate_pool_url(value: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
+fn requires_tls(pool_url: &str) -> bool {
+    pool_url.starts_with("stratum+ssl://") || pool_url.starts_with("stratum+tls://")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,12 +298,65 @@ mod tests {
         }
     }
 
+    fn verified_evidence() -> PoolConnectionEvidence {
+        PoolConnectionEvidence {
+            pool_url: "stratum+tls://pool.example.com:443".into(),
+            dns_resolved: true,
+            tcp_connected: true,
+            tls_verified: true,
+            verified_at_unix_seconds: 1_000,
+        }
+    }
+
     #[test]
     fn approved_custom_configuration_builds_structured_spec() {
         let configuration = custom_configuration();
         let spec = configuration.build_launch_spec(None).unwrap().unwrap();
         assert_eq!(spec.miner_profile_id, "lolminer_kaspa");
         assert_eq!(spec.pool_url, "stratum+tls://pool.example.com:443");
+    }
+
+    #[test]
+    fn fresh_connection_evidence_is_required_before_verified_launch() {
+        let configuration = custom_configuration();
+        assert_eq!(
+            configuration.status(None, 1_010, 60).unwrap(),
+            MiningConfigurationStatus::NeedsConnectionTest
+        );
+        let spec = configuration
+            .build_verified_launch_spec(&verified_evidence(), 1_010, 60)
+            .unwrap()
+            .unwrap();
+        assert_eq!(spec.pool_url, "stratum+tls://pool.example.com:443");
+    }
+
+    #[test]
+    fn stale_or_mismatched_connection_evidence_never_authorizes_launch() {
+        let configuration = custom_configuration();
+        assert_eq!(
+            configuration
+                .status(Some(&verified_evidence()), 2_000, 60)
+                .unwrap(),
+            MiningConfigurationStatus::NeedsConnectionTest
+        );
+
+        let mut mismatch = verified_evidence();
+        mismatch.pool_url = "stratum+tls://other.example.com:443".into();
+        assert_eq!(
+            configuration.status(Some(&mismatch), 1_010, 60),
+            Err("mining_pool_evidence_url_mismatch")
+        );
+    }
+
+    #[test]
+    fn tls_pool_requires_verified_tls() {
+        let configuration = custom_configuration();
+        let mut evidence = verified_evidence();
+        evidence.tls_verified = false;
+        assert_eq!(
+            configuration.status(Some(&evidence), 1_010, 60),
+            Err("mining_pool_tls_unverified")
+        );
     }
 
     #[test]
@@ -262,15 +388,15 @@ mod tests {
     }
 
     #[test]
-    fn managed_pool_is_resolved_from_trusted_catalog() {
+    fn managed_pool_is_disabled_for_operational_configuration() {
         let mut configuration = custom_configuration();
         configuration.pool_mode = PoolMode::Managed;
         configuration.custom_pool_url = None;
-        let spec = configuration
-            .build_launch_spec(Some("stratum+tls://managed.example.com:443"))
-            .unwrap()
-            .unwrap();
-        assert_eq!(spec.pool_url, "stratum+tls://managed.example.com:443");
+        assert_eq!(configuration.validate(), Err("managed_pool_disabled"));
+        assert_eq!(
+            configuration.build_launch_spec(Some("stratum+tls://managed.example.com:443")),
+            Err("managed_pool_disabled")
+        );
     }
 
     #[test]
