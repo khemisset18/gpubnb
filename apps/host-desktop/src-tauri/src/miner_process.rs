@@ -258,10 +258,8 @@ mod tests {
 
     #[test]
     fn tampered_approved_binary_is_rejected_before_spawn() {
-        let root = std::env::temp_dir().join(format!(
-            "gpubnb-tampered-miner-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("gpubnb-tampered-miner-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let manager = MinerProcessManager::from_approved_root(root.clone()).unwrap();
         let release = approved_miner_release("xmrig_randomx").unwrap();

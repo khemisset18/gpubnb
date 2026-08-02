@@ -1,8 +1,7 @@
 use super::secure_launcher::MinerBinaryManifest;
 
 pub const XMRIG_VERSION: &str = "6.26.0";
-const XMRIG_RELEASE_BASE_URL: &str =
-    "https://github.com/xmrig/xmrig/releases/download/v6.26.0";
+const XMRIG_RELEASE_BASE_URL: &str = "https://github.com/xmrig/xmrig/releases/download/v6.26.0";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ApprovedMinerRelease {
