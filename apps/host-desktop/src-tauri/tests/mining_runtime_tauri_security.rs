@@ -8,7 +8,6 @@ mod miner_runtime_executor;
 mod mining_configuration;
 #[path = "../src/mining_configuration_commands.rs"]
 mod mining_configuration_commands;
-pub(crate) use mining_configuration_commands::mining_configuration_persistence;
 #[path = "../src/mining_configuration_service.rs"]
 mod mining_configuration_service;
 #[path = "../src/mining_configuration_store.rs"]
