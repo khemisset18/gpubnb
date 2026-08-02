@@ -10,6 +10,22 @@ type PairingConfiguration = { configured: boolean; browserUrl?: string | null; s
 type AgentStatus = { installed: boolean; linked: boolean; running: boolean; machineId?: string | null; detail: string };
 type GpuDevice = { index: number; uuid: string; model: string; driverVersion: string; vramMib: number };
 type NativeDiagnostic = { canHost: boolean; reason: string; gpus?: GpuDevice[] };
+type MiningRuntimeStatus = {
+  runtime: {
+    state: string;
+    consent: string;
+    autoResumeAfterRental: boolean;
+    reservationId?: string | null;
+    lastError?: string | null;
+  };
+  process: {
+    status: 'stopped' | 'running' | 'exited';
+    pid?: number | null;
+    profileId?: string | null;
+    lastExitCode?: number | null;
+  };
+};
+type MiningRuntimeRead = { status: MiningRuntimeStatus | null; error: string | null };
 type HostStatus = {
   platform: string;
   architecture: string;
@@ -172,6 +188,33 @@ const renderGpuInventory = (status: HostStatus): string => {
     }).join('')}</div></section>`;
 };
 
+const miningStateLabel = (state: string): string => ({
+  idle: 'Inactif',
+  mining_starting: 'Démarrage',
+  mining: 'Minage actif',
+  preempting_mining: 'Arrêt prioritaire',
+  verifying_rental_readiness: 'Préparation de location',
+  rental_ready: 'Location prête',
+  rental_active: 'Location active',
+  cleaning_rental: 'Nettoyage',
+  quarantined: 'Quarantaine',
+  emergency_stopped: 'Arrêt d’urgence',
+})[state] ?? 'État inconnu';
+
+const renderMiningRuntime = (read: MiningRuntimeRead): string => {
+  if (!read.status) return `<section class="mining-runtime unavailable"><div><p class="eyebrow">Minage personnel</p><h2>Runtime indisponible</h2></div>
+    <p>Le lancement reste bloqué tant que le mineur approuvé n’est pas installé et vérifié.</p><code>${escapeHtml(read.error ?? 'miner_runtime_unavailable')}</code></section>`;
+
+  const { runtime, process } = read.status;
+  const running = process.status === 'running' && typeof process.pid === 'number';
+  const processLabel = running ? 'Processus confirmé' : process.status === 'exited' ? 'Processus terminé' : 'Aucun processus actif';
+  return `<section class="mining-runtime ${running ? 'running' : ''}"><div class="runtime-heading"><div><p class="eyebrow">Minage personnel</p><h2>${escapeHtml(miningStateLabel(runtime.state))}</h2></div>
+    <span class="status-pill ${running ? 'online' : ''}">${escapeHtml(processLabel)}</span></div>
+    <dl class="runtime-details"><div><dt>Profil</dt><dd>${escapeHtml(process.profileId ?? 'Aucun')}</dd></div><div><dt>PID</dt><dd>${process.pid ?? '—'}</dd></div>
+    <div><dt>Consentement</dt><dd>${escapeHtml(runtime.consent)}</dd></div><div><dt>Dernière sortie</dt><dd>${process.lastExitCode ?? '—'}</dd></div></dl>
+    ${runtime.lastError ? `<p class="runtime-error">${escapeHtml(runtime.lastError)}</p>` : ''}</section>`;
+};
+
 const bindPairing = (): void => {
   const input = document.querySelector<HTMLInputElement>('#pairing-code');
   input?.addEventListener('input', () => {
@@ -294,7 +337,12 @@ const bindActions = (status: HostStatus): void => {
 async function refresh(): Promise<void> {
   app.innerHTML = '<main class="loading"><div class="spinner"></div><p>Vérification sécurisée de votre ordinateur…</p></main>';
   try {
-    const status = await invoke<HostStatus>('host_status');
+    const [status, mining] = await Promise.all([
+      invoke<HostStatus>('host_status'),
+      invoke<MiningRuntimeStatus>('mining_runtime_status')
+        .then((runtime): MiningRuntimeRead => ({ status: runtime, error: null }))
+        .catch((error: unknown): MiningRuntimeRead => ({ status: null, error: String(error) })),
+    ]);
     const progress = Math.round(Math.min(100, Math.max(0, status.progress)));
     const online = status.lifecycle === 'online';
     const stopped = status.lifecycle === 'emergency_stopped';
@@ -303,7 +351,7 @@ async function refresh(): Promise<void> {
       <div class="status-stack"><span class="status-pill ${status.lifecycle}">${lifecycleLabel(status.lifecycle)}</span><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
       ${stopped ? '<section class="alert-card danger"><strong>Arrêt d’urgence actif</strong></section>' : ''}
       <section class="progress-card"><div class="progress-heading"><div><p class="eyebrow">État de préparation</p><h2>${escapeHtml(status.summary)}</h2></div><strong>${progress}%</strong></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div></section>
-      ${renderPairing(status)}${renderGpuInventory(status)}<p id="action-status" class="action-status" aria-live="polite"></p><ul class="checks">${renderChecks(status.checks)}</ul>
+      ${renderPairing(status)}${renderGpuInventory(status)}${renderMiningRuntime(mining)}<p id="action-status" class="action-status" aria-live="polite"></p><ul class="checks">${renderChecks(status.checks)}</ul>
       <div class="actions"><button id="refresh" class="secondary large">Revérifier</button><button id="publish" class="primary large" ${status.ready && !stopped && !online ? '' : 'disabled'}>${online ? 'Machine déjà en ligne' : 'Mettre en ligne'}</button></div></section></main>`;
     bindPairing();
     bindActions(status);

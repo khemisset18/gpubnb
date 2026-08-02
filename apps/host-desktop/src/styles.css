@@ -87,6 +87,16 @@ h2 { margin-bottom: 0; font-size: 1.28rem; }
 .next-label { padding: 3px 8px; border-radius: 999px; background: #263e6c; color: #cbdcff; font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
 
 .explanation { padding: 23px; }
+.mining-runtime { margin-top: 24px; padding: 23px; border: 1px solid #2e3c57; border-radius: 21px; background: linear-gradient(145deg, #121b2c, #0d1421); }
+.mining-runtime.unavailable { border-color: #4a3b35; background: linear-gradient(145deg, #251b1c, #141419); }
+.mining-runtime > p { margin: 10px 0 0; color: #a5b0c4; }
+.mining-runtime > code { display: inline-block; margin-top: 12px; color: #d4b0a8; font-size: .82rem; }
+.runtime-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.runtime-details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 20px 0 0; }
+.runtime-details > div { min-width: 0; padding: 13px; border: 1px solid #26334a; border-radius: 14px; background: #0c1320; }
+.runtime-details dt { color: #8997ae; font-size: .78rem; }
+.runtime-details dd { overflow: hidden; margin: 4px 0 0; color: #edf3ff; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.runtime-error { color: #ffac9a !important; }
 .benefits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 17px; }
 .benefits article { padding: 17px; border: 1px solid #202b40; border-radius: 16px; background: #0d1421; }
 .benefits article > span { display: block; margin-bottom: 12px; color: #789cff; font-weight: 900; font-size: .8rem; }
@@ -132,6 +142,7 @@ h2 { margin-bottom: 0; font-size: 1.28rem; }
   .help-card { display: none; }
   .content { padding: 30px 22px; }
   .benefits { grid-template-columns: 1fr; }
+  .runtime-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 640px) {
@@ -144,6 +155,9 @@ h2 { margin-bottom: 0; font-size: 1.28rem; }
   .sidebar { padding: 20px 16px; }
   .steps { grid-template-columns: repeat(4, 205px); }
   .progress-heading { align-items: flex-start; }
+  .runtime-heading { display: block; }
+  .runtime-heading .status-pill { margin-top: 14px; }
+  .runtime-details { grid-template-columns: 1fr; }
   .welcome-shell { padding: 14px; }
   .welcome-card { border-radius: 21px; }
 }
