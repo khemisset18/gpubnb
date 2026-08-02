@@ -33,14 +33,20 @@ use mining_runtime_tauri::MiningRuntimeState;
 fn transactional_runtime_state_is_readable_with_controlled_executor() {
     let manager = MinerProcessManager::from_approved_root(std::env::temp_dir())
         .expect("temporary directory must be a valid approved root");
-    let state = MiningRuntimeState::from_executor(MinerRuntimeExecutor::from_process_manager(manager));
+    let state =
+        MiningRuntimeState::from_executor(MinerRuntimeExecutor::from_process_manager(manager));
 
-    let runtime = state.snapshot().expect("runtime snapshot must be available");
+    let runtime = state
+        .snapshot()
+        .expect("runtime snapshot must be available");
     let process = state
         .process_snapshot()
         .expect("process snapshot must be available");
 
-    assert_eq!(runtime.consent, rental_mining_coordinator::MiningConsent::Disabled);
+    assert_eq!(
+        runtime.consent,
+        rental_mining_coordinator::MiningConsent::Disabled
+    );
     assert_ne!(process.status, MinerProcessStatus::Running);
     assert!(process.pid.is_none());
 }
@@ -49,7 +55,8 @@ fn transactional_runtime_state_is_readable_with_controlled_executor() {
 fn emergency_stop_confirms_no_process_is_running() {
     let manager = MinerProcessManager::from_approved_root(std::env::temp_dir())
         .expect("temporary directory must be a valid approved root");
-    let state = MiningRuntimeState::from_executor(MinerRuntimeExecutor::from_process_manager(manager));
+    let state =
+        MiningRuntimeState::from_executor(MinerRuntimeExecutor::from_process_manager(manager));
 
     let process = state
         .emergency_stop()
