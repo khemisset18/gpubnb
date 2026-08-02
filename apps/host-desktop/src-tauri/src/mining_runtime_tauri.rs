@@ -3,6 +3,7 @@ use crate::miner_runtime_executor::MinerRuntimeExecutor;
 use crate::mining_configuration_tauri::MiningConfigurationState;
 use crate::mining_runtime_controller::{MiningRuntimeController, RuntimeDecision, RuntimeOrder};
 use crate::rental_mining_coordinator::{CoordinatorSnapshot, MiningConsent};
+use serde::Serialize;
 use std::sync::Mutex;
 
 #[derive(Debug)]
@@ -12,9 +13,17 @@ pub struct MiningRuntimeState {
     initialization_error: Option<&'static str>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MiningRuntimeExecution {
     pub decision: RuntimeDecision,
+    pub process: MinerProcessSnapshot,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MiningRuntimeSnapshot {
+    pub runtime: CoordinatorSnapshot,
     pub process: MinerProcessSnapshot,
 }
 
@@ -63,6 +72,13 @@ impl MiningRuntimeState {
             .snapshot()
     }
 
+    pub fn runtime_snapshot(&self) -> Result<MiningRuntimeSnapshot, &'static str> {
+        Ok(MiningRuntimeSnapshot {
+            runtime: self.snapshot()?,
+            process: self.process_snapshot()?,
+        })
+    }
+
     pub fn set_owner_consent(
         &self,
         consent: MiningConsent,
@@ -82,21 +98,81 @@ impl MiningRuntimeState {
         configuration: &MiningConfigurationState,
     ) -> Result<MiningRuntimeExecution, &'static str> {
         let launch_spec = match decision.order {
-            RuntimeOrder::StartApprovedMiner => Some(configuration.require_ready_launch_spec()?),
+            RuntimeOrder::StartApprovedMiner => match configuration.require_ready_launch_spec() {
+                Ok(spec) => Some(spec),
+                Err(error) => {
+                    if let Ok(mut controller) = self.controller.lock() {
+                        let _ = controller.emergency_stop(false);
+                    }
+                    return Err(error);
+                }
+            },
             _ => None,
         };
-        let process = self
-            .executor()?
-            .lock()
-            .map_err(|_| "miner_process_state_unavailable")?
-            .execute(&decision.order, launch_spec.as_ref())?;
+        let process_result = self.executor()?.lock().map_or_else(
+            |_| Err("miner_process_state_unavailable"),
+            |mut executor| executor.execute(&decision.order, launch_spec.as_ref()),
+        );
+        let process = match process_result {
+            Ok(process) => process,
+            Err(error) => {
+                if let Ok(mut controller) = self.controller.lock() {
+                    let _ = controller.emergency_stop(false);
+                }
+                return Err(error);
+            }
+        };
         Ok(MiningRuntimeExecution { decision, process })
     }
 
-    pub fn emergency_stop(&self) -> Result<MinerProcessSnapshot, &'static str> {
-        self.executor()?
+    pub fn start_idle_mining(
+        &self,
+        configuration: &MiningConfigurationState,
+    ) -> Result<MiningRuntimeExecution, &'static str> {
+        let decision = self
+            .controller
             .lock()
-            .map_err(|_| "miner_process_state_unavailable")?
-            .execute(&RuntimeOrder::StopMinerForRental, None)
+            .map_err(|_| "mining_runtime_state_unavailable")?
+            .request_idle_mining_start()?;
+        let execution = self.execute_decision(decision, configuration)?;
+        let confirmation = self
+            .controller
+            .lock()
+            .map_err(|_| "mining_runtime_state_unavailable")?
+            .mining_started();
+        if let Err(error) = confirmation {
+            if let Ok(executor) = self.executor() {
+                if let Ok(mut executor) = executor.lock() {
+                    let _ = executor.execute(&RuntimeOrder::StopMinerForRental, None);
+                }
+            }
+            if let Ok(mut controller) = self.controller.lock() {
+                let _ = controller.emergency_stop(false);
+            }
+            return Err(error);
+        }
+        Ok(execution)
+    }
+
+    pub fn emergency_stop(&self) -> Result<MiningRuntimeExecution, &'static str> {
+        let process_result = self.executor()?.lock().map_or_else(
+            |_| Err("miner_process_state_unavailable"),
+            |mut executor| executor.execute(&RuntimeOrder::StopMinerForRental, None),
+        );
+        let process = match process_result {
+            Ok(process) => process,
+            Err(error) => {
+                if let Ok(mut controller) = self.controller.lock() {
+                    let _ = controller.emergency_stop(false);
+                }
+                return Err(error);
+            }
+        };
+        let decision = self
+            .controller
+            .lock()
+            .map_err(|_| "mining_runtime_state_unavailable")?
+            .emergency_stop(true)?;
+        Ok(MiningRuntimeExecution { decision, process })
     }
 }

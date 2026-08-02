@@ -109,6 +109,14 @@ impl MiningRuntimeController {
         Ok(self.reconcile("rental_cleanup_verified"))
     }
 
+    pub fn emergency_stop(
+        &mut self,
+        all_workloads_stopped: bool,
+    ) -> Result<RuntimeDecision, &'static str> {
+        self.coordinator.emergency_stop(all_workloads_stopped)?;
+        Ok(self.reconcile("emergency_stop_verified"))
+    }
+
     pub fn snapshot(&self) -> CoordinatorSnapshot {
         self.coordinator.snapshot()
     }

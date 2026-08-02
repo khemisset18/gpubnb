@@ -25,6 +25,7 @@ mod rental_mining_coordinator;
 
 use miner_process::{MinerProcessManager, MinerProcessStatus};
 use miner_runtime_executor::MinerRuntimeExecutor;
+use mining_configuration_tauri::MiningConfigurationState;
 use mining_runtime_tauri::MiningRuntimeState;
 
 #[test]
@@ -56,10 +57,39 @@ fn emergency_stop_confirms_no_process_is_running() {
     let state =
         MiningRuntimeState::from_executor(MinerRuntimeExecutor::from_process_manager(manager));
 
-    let process = state
+    let execution = state
         .emergency_stop()
         .expect("stopping an idle runtime must be safe");
 
-    assert_ne!(process.status, MinerProcessStatus::Running);
-    assert!(process.pid.is_none());
+    assert_ne!(execution.process.status, MinerProcessStatus::Running);
+    assert!(execution.process.pid.is_none());
+    assert_eq!(
+        state.snapshot().unwrap().state,
+        rental_mining_coordinator::CoordinatedGpuState::EmergencyStopped
+    );
+}
+
+#[test]
+fn failed_start_quarantines_the_runtime_without_a_process() {
+    let manager = MinerProcessManager::from_approved_root(std::env::temp_dir())
+        .expect("temporary directory must be a valid approved root");
+    let state =
+        MiningRuntimeState::from_executor(MinerRuntimeExecutor::from_process_manager(manager));
+    let configuration = MiningConfigurationState::in_memory();
+
+    state
+        .set_owner_consent(
+            rental_mining_coordinator::MiningConsent::OwnerPool,
+            &configuration,
+        )
+        .unwrap();
+    assert!(matches!(
+        state.start_idle_mining(&configuration),
+        Err("mining_configuration_missing")
+    ));
+    assert_eq!(
+        state.snapshot().unwrap().state,
+        rental_mining_coordinator::CoordinatedGpuState::Quarantined
+    );
+    assert!(state.process_snapshot().unwrap().pid.is_none());
 }

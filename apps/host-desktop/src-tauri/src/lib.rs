@@ -2,6 +2,8 @@
 
 mod agent_bridge;
 mod diagnostics;
+mod miner_process;
+mod miner_runtime_executor;
 mod mining_configuration;
 mod mining_configuration_commands;
 mod mining_configuration_service;
@@ -9,6 +11,7 @@ mod mining_configuration_store;
 mod mining_configuration_tauri;
 mod mining_pool_probe;
 mod mining_runtime_controller;
+mod mining_runtime_tauri;
 mod orchestration_gateway;
 mod pairing;
 mod rental_mining_coordinator;
@@ -20,7 +23,9 @@ use mining_configuration_tauri::{
     mining_configuration_clear, mining_configuration_get, mining_configuration_save,
     mining_configuration_test_connection, MiningConfigurationState,
 };
-use mining_runtime_controller::{MiningRuntimeController, RuntimeDecision};
+use mining_runtime_tauri::{MiningRuntimeExecution, MiningRuntimeSnapshot, MiningRuntimeState};
+#[cfg(test)]
+use mining_runtime_controller::MiningRuntimeController;
 use orchestration_gateway::{
     ActorRole, AuthenticatedContext, CommandResult, OrchestrationCommand, OrchestrationGateway,
 };
@@ -393,19 +398,16 @@ fn ensure_host_can_configure_mining(state: &AppState) -> Result<(), &'static str
 fn host_status(
     state: tauri::State<'_, Mutex<AppState>>,
     gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
-    mining: tauri::State<'_, Mutex<MiningRuntimeController>>,
+    mining: tauri::State<'_, MiningRuntimeState>,
 ) -> Result<HostStatus, &'static str> {
     let state = state.lock().map_err(|_| "state_unavailable")?;
     let mut gateway = gateway
         .lock()
         .map_err(|_| "orchestration_state_unavailable")?;
-    let mining = mining
-        .lock()
-        .map_err(|_| "mining_runtime_state_unavailable")?;
     Ok(build_status(
         &state,
         read_orchestration(&mut gateway)?,
-        mining.snapshot(),
+        mining.snapshot()?,
     ))
 }
 
@@ -435,12 +437,9 @@ fn orchestration_status(
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn mining_runtime_status(
-    mining: tauri::State<'_, Mutex<MiningRuntimeController>>,
-) -> Result<CoordinatorSnapshot, &'static str> {
-    mining
-        .lock()
-        .map_err(|_| "mining_runtime_state_unavailable")
-        .map(|controller| controller.snapshot())
+    mining: tauri::State<'_, MiningRuntimeState>,
+) -> Result<MiningRuntimeSnapshot, &'static str> {
+    mining.runtime_snapshot()
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -448,15 +447,26 @@ fn mining_runtime_status(
 fn set_idle_mining_mode(
     consent: MiningConsent,
     state: tauri::State<'_, Mutex<AppState>>,
-    mining: tauri::State<'_, Mutex<MiningRuntimeController>>,
-) -> Result<RuntimeDecision, &'static str> {
+    mining: tauri::State<'_, MiningRuntimeState>,
+    configuration: tauri::State<'_, MiningConfigurationState>,
+) -> Result<MiningRuntimeExecution, &'static str> {
     let state = state.lock().map_err(|_| "state_unavailable")?;
     ensure_host_can_configure_mining(&state)?;
     drop(state);
-    mining
-        .lock()
-        .map_err(|_| "mining_runtime_state_unavailable")?
-        .set_owner_consent(consent)
+    mining.set_owner_consent(consent, &configuration)
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
+fn start_idle_mining(
+    state: tauri::State<'_, Mutex<AppState>>,
+    mining: tauri::State<'_, MiningRuntimeState>,
+    configuration: tauri::State<'_, MiningConfigurationState>,
+) -> Result<MiningRuntimeExecution, &'static str> {
+    let state = state.lock().map_err(|_| "state_unavailable")?;
+    ensure_host_can_configure_mining(&state)?;
+    drop(state);
+    mining.start_idle_mining(&configuration)
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -522,10 +532,12 @@ fn set_idle_mining(
 fn emergency_stop(
     state: tauri::State<'_, Mutex<AppState>>,
     gateway: tauri::State<'_, Mutex<OrchestrationGateway>>,
+    mining: tauri::State<'_, MiningRuntimeState>,
 ) -> Result<OrchestrationSnapshot, &'static str> {
     let mut state = state.lock().map_err(|_| "state_unavailable")?;
     state.lifecycle = HostLifecycle::EmergencyStopped;
     drop(state);
+    let execution = mining.emergency_stop();
     let mut gateway = gateway
         .lock()
         .map_err(|_| "orchestration_state_unavailable")?;
@@ -533,9 +545,10 @@ fn emergency_stop(
         &mut gateway,
         ActorRole::LocalAdministrator,
         OrchestrationCommand::EmergencyStop {
-            all_processes_stopped: false,
+            all_processes_stopped: execution.is_ok(),
         },
     );
+    execution?;
     match result {
         Ok(result) => Ok(result.snapshot),
         Err("emergency_stop_failed") => read_orchestration(&mut gateway),
@@ -601,7 +614,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(AppState::default()))
         .manage(Mutex::new(create_gateway()))
-        .manage(Mutex::new(MiningRuntimeController::default()))
+        .manage(MiningRuntimeState::default())
         .manage(MiningConfigurationState::default())
         .invoke_handler(tauri::generate_handler![
             host_status,
@@ -610,6 +623,7 @@ pub fn run() {
             orchestration_status,
             mining_runtime_status,
             set_idle_mining_mode,
+            start_idle_mining,
             account_pairing_configuration,
             request_publish,
             set_idle_mining,
@@ -715,6 +729,7 @@ mod tests {
             "orchestration_status",
             "mining_runtime_status",
             "set_idle_mining_mode",
+            "start_idle_mining",
             "account_pairing_configuration",
             "request_publish",
             "set_idle_mining",
