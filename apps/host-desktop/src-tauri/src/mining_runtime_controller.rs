@@ -109,6 +109,7 @@ impl MiningRuntimeController {
         Ok(self.reconcile("rental_cleanup_verified"))
     }
 
+    #[cfg_attr(not(feature = "desktop-runtime"), allow(dead_code))]
     pub fn emergency_stop(
         &mut self,
         all_workloads_stopped: bool,
