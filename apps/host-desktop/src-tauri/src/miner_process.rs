@@ -1,7 +1,7 @@
 use crate::mining_configuration::MiningLaunchSpec;
 use serde::Serialize;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 
 const APPROVED_MINER_DIRECTORY_ENV: &str = "GPUBNB_APPROVED_MINER_DIR";
@@ -280,9 +280,9 @@ mod tests {
     #[test]
     fn unavailable_root_fails_closed() {
         let missing = std::env::temp_dir().join("gpubnb-missing-approved-miner-root");
-        assert_eq!(
+        assert!(matches!(
             MinerProcessManager::from_approved_root(missing),
             Err("approved_miner_directory_unavailable")
-        );
+        ));
     }
 }
