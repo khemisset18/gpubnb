@@ -159,7 +159,7 @@ fn approved_executable_name(profile_id: &str) -> Result<&'static str, &'static s
 }
 
 #[cfg(target_os = "windows")]
-const fn platform_executable(base: &'static str) -> &'static str {
+fn platform_executable(base: &'static str) -> &'static str {
     match base {
         "lolMiner" => "lolMiner.exe",
         "t-rex" => "t-rex.exe",
@@ -169,7 +169,7 @@ const fn platform_executable(base: &'static str) -> &'static str {
 }
 
 #[cfg(not(target_os = "windows"))]
-const fn platform_executable(base: &'static str) -> &'static str {
+fn platform_executable(base: &'static str) -> &'static str {
     base
 }
 
