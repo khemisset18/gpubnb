@@ -85,9 +85,7 @@ impl MinerProcessManager {
         };
 
         child.kill().map_err(|_| "miner_process_stop_failed")?;
-        let status = child
-            .wait()
-            .map_err(|_| "miner_process_wait_failed")?;
+        let status = child.wait().map_err(|_| "miner_process_wait_failed")?;
         self.last_exit_code = status.code();
         self.profile_id = None;
         Ok(self.snapshot())
