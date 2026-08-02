@@ -89,6 +89,10 @@ impl MiningConfigurationState {
             .clear(expected_revision)
     }
 
+    pub fn require_ready(&self) -> Result<(), &'static str> {
+        self.require_ready_launch_spec().map(|_| ())
+    }
+
     pub fn require_ready_launch_spec(&self) -> Result<MiningLaunchSpec, &'static str> {
         self.ensure_initialized()?;
         self.commands
