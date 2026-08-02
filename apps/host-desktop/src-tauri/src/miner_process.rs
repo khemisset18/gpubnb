@@ -1,6 +1,11 @@
+#[path = "approved_miner_manifest.rs"]
+mod approved_miner_manifest;
+#[path = "mining_catalog/secure_launcher.rs"]
+mod secure_launcher;
+
 use crate::mining_configuration::MiningLaunchSpec;
+use approved_miner_manifest::{approved_miner_release, validate_release_metadata};
 use serde::Serialize;
-use std::fs;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 
@@ -122,19 +127,10 @@ impl MinerProcessManager {
     }
 
     fn resolve_approved_executable(&self, profile_id: &str) -> Result<PathBuf, &'static str> {
-        let file_name = approved_executable_name(profile_id)?;
-        let candidate = self.approved_root.join(file_name);
-        let canonical = candidate
-            .canonicalize()
-            .map_err(|_| "approved_miner_binary_missing")?;
-        if !canonical.starts_with(&self.approved_root) || !canonical.is_file() {
-            return Err("approved_miner_binary_invalid");
-        }
-        let metadata = fs::metadata(&canonical).map_err(|_| "approved_miner_binary_unreadable")?;
-        if metadata.len() == 0 {
-            return Err("approved_miner_binary_empty");
-        }
-        Ok(canonical)
+        let release = approved_miner_release(profile_id)?;
+        validate_release_metadata(&release)?;
+        secure_launcher::verify_miner_binary(&self.approved_root, &release.binary_manifest())
+            .map(|verified| verified.canonical_path)
     }
 }
 
@@ -145,32 +141,6 @@ impl Drop for MinerProcessManager {
             let _ = child.wait();
         }
     }
-}
-
-fn approved_executable_name(profile_id: &str) -> Result<&'static str, &'static str> {
-    match profile_id {
-        "lolminer_kaspa" | "lolminer_etchash" | "lolminer_autolykos" => {
-            Ok(platform_executable("lolMiner"))
-        }
-        "trex_kawpow" => Ok(platform_executable("t-rex")),
-        "xmrig_randomx" => Ok(platform_executable("xmrig")),
-        _ => Err("mining_profile_not_approved"),
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn platform_executable(base: &'static str) -> &'static str {
-    match base {
-        "lolMiner" => "lolMiner.exe",
-        "t-rex" => "t-rex.exe",
-        "xmrig" => "xmrig.exe",
-        _ => "",
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn platform_executable(base: &'static str) -> &'static str {
-    base
 }
 
 fn build_approved_arguments(spec: &MiningLaunchSpec) -> Result<Vec<String>, &'static str> {
@@ -252,10 +222,10 @@ mod tests {
 
     #[test]
     fn only_allowlisted_profiles_resolve_to_executables() {
-        assert!(approved_executable_name("lolminer_kaspa").is_ok());
+        assert!(approved_miner_release("xmrig_randomx").is_ok());
         assert_eq!(
-            approved_executable_name("powershell"),
-            Err("mining_profile_not_approved")
+            approved_miner_release("powershell"),
+            Err("approved_miner_manifest_missing")
         );
     }
 
@@ -284,5 +254,23 @@ mod tests {
             MinerProcessManager::from_approved_root(missing),
             Err("approved_miner_directory_unavailable")
         ));
+    }
+
+    #[test]
+    fn tampered_approved_binary_is_rejected_before_spawn() {
+        let root = std::env::temp_dir().join(format!(
+            "gpubnb-tampered-miner-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let manager = MinerProcessManager::from_approved_root(root.clone()).unwrap();
+        let release = approved_miner_release("xmrig_randomx").unwrap();
+        std::fs::write(root.join(release.binary_file_name), b"tampered miner").unwrap();
+
+        assert_eq!(
+            manager.resolve_approved_executable("xmrig_randomx"),
+            Err("miner_binary_hash_mismatch")
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
