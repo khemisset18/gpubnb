@@ -1,7 +1,9 @@
 #[path = "mining_configuration_persistence.rs"]
 pub(crate) mod mining_configuration_persistence;
 
-use crate::mining_configuration::{MiningConfiguration, MiningConfigurationActor};
+use crate::mining_configuration::{
+    MiningConfiguration, MiningConfigurationActor, MiningLaunchSpec,
+};
 use crate::mining_configuration_service::MiningConfigurationService;
 use crate::mining_configuration_store::MiningConfigurationView;
 use crate::mining_pool_probe::probe_pool_connection;
@@ -88,8 +90,11 @@ impl MiningConfigurationCommands {
         Ok(view)
     }
 
-    pub fn require_ready(&self) -> Result<&MiningConfiguration, &'static str> {
-        self.service.require_ready_configuration(unix_seconds()?)
+    pub fn require_ready(&self) -> Result<MiningLaunchSpec, &'static str> {
+        self.service
+            .require_ready_configuration(unix_seconds()?)?
+            .build_launch_spec(None)?
+            .ok_or("mining_auto_start_disabled")
     }
 
     fn persist_or_restore(
