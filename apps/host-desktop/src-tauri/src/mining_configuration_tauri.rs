@@ -1,4 +1,4 @@
-use crate::mining_configuration::MiningConfiguration;
+use crate::mining_configuration::{MiningConfiguration, MiningLaunchSpec};
 use crate::mining_configuration_commands::MiningConfigurationCommands;
 use crate::mining_configuration_store::MiningConfigurationView;
 use std::sync::Mutex;
@@ -89,13 +89,12 @@ impl MiningConfigurationState {
             .clear(expected_revision)
     }
 
-    pub fn require_ready(&self) -> Result<(), &'static str> {
+    pub fn require_ready_launch_spec(&self) -> Result<MiningLaunchSpec, &'static str> {
         self.ensure_initialized()?;
         self.commands
             .lock()
             .map_err(|_| "mining_configuration_state_unavailable")?
             .require_ready()
-            .map(|_| ())
     }
 }
 
