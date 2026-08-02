@@ -23,9 +23,9 @@ use mining_configuration_tauri::{
     mining_configuration_clear, mining_configuration_get, mining_configuration_save,
     mining_configuration_test_connection, MiningConfigurationState,
 };
-use mining_runtime_tauri::{MiningRuntimeExecution, MiningRuntimeSnapshot, MiningRuntimeState};
 #[cfg(test)]
 use mining_runtime_controller::MiningRuntimeController;
+use mining_runtime_tauri::{MiningRuntimeExecution, MiningRuntimeSnapshot, MiningRuntimeState};
 use orchestration_gateway::{
     ActorRole, AuthenticatedContext, CommandResult, OrchestrationCommand, OrchestrationGateway,
 };
