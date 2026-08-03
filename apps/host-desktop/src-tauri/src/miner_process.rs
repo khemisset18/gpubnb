@@ -1,5 +1,6 @@
 use crate::approved_miner_manifest::{approved_miner_release, validate_release_metadata};
 use crate::mining_configuration::MiningLaunchSpec;
+use crate::miner_paths;
 use crate::secure_launcher;
 use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
@@ -12,7 +13,6 @@ use std::time::{Duration, Instant};
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
-const APPROVED_MINER_DIRECTORY_ENV: &str = "GPUBNB_APPROVED_MINER_DIR";
 const MAX_ARGUMENT_LEN: usize = 512;
 const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
 const STOP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -48,11 +48,7 @@ pub struct MinerProcessManager {
 
 impl MinerProcessManager {
     pub fn from_environment() -> Result<Self, &'static str> {
-        let root = std::env::var_os(APPROVED_MINER_DIRECTORY_ENV)
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
-            .ok_or("approved_miner_directory_not_configured")?;
-        Self::from_approved_root(root)
+        Self::from_approved_root(miner_paths::approved_miner_root()?)
     }
 
     pub fn from_approved_root(root: PathBuf) -> Result<Self, &'static str> {

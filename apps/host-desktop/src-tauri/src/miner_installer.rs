@@ -1,6 +1,7 @@
 use crate::approved_miner_manifest::{
     approved_miner_release, validate_release_metadata, ApprovedMinerRelease,
 };
+use crate::miner_paths;
 use crate::secure_launcher;
 use flate2::read::{DeflateDecoder, GzDecoder};
 use serde::Serialize;
@@ -13,7 +14,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
-const APPROVED_MINER_DIRECTORY_ENV: &str = "GPUBNB_APPROVED_MINER_DIR";
 const MAX_ARCHIVE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_BINARY_BYTES: usize = 64 * 1024 * 1024;
 
@@ -25,6 +25,46 @@ pub struct MinerInstallationSnapshot {
     pub executable_path: String,
     pub archive_sha256: String,
     pub binary_sha256: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MinerInstallationStatus {
+    pub profile_id: String,
+    pub version: String,
+    pub archive_name: String,
+    pub source_url: String,
+    pub installed: bool,
+    pub verified: bool,
+    pub verification_error: Option<String>,
+}
+
+pub fn approved_miner_installation_status(
+    profile_id: &str,
+) -> Result<MinerInstallationStatus, &'static str> {
+    let release = approved_miner_release(profile_id)?;
+    validate_release_metadata(&release)?;
+    let root = miner_paths::approved_miner_root()?;
+    let verification = secure_launcher::verify_miner_binary(&root, &release.binary_manifest());
+    let installed = root.join(release.binary_file_name).exists();
+    Ok(MinerInstallationStatus {
+        profile_id: release.profile_id.into(),
+        version: release.version.into(),
+        archive_name: release.archive_name.into(),
+        source_url: release.source_url.into(),
+        installed,
+        verified: verification.is_ok(),
+        verification_error: verification.err().map(str::to_owned),
+    })
+}
+
+pub fn install_approved_miner_from_downloads(
+    profile_id: &str,
+    consent_confirmed: bool,
+) -> Result<MinerInstallationSnapshot, &'static str> {
+    let release = approved_miner_release(profile_id)?;
+    let archive = miner_paths::downloads_root()?.join(release.archive_name);
+    install_approved_miner_archive(profile_id, &archive, consent_confirmed)
 }
 
 pub fn install_approved_miner_archive(
@@ -51,7 +91,7 @@ pub fn install_approved_miner_archive(
         return Err("miner_archive_binary_hash_mismatch");
     }
 
-    let root = approved_root()?;
+    let root = miner_paths::approved_miner_root()?;
     let executable = commit_binary(&root, &release, &binary)?;
     let verified = secure_launcher::verify_miner_binary(&root, &release.binary_manifest())?;
     if verified.canonical_path
@@ -80,21 +120,6 @@ fn validate_archive_path(path: &Path, release: &ApprovedMinerRelease) -> Result<
         return Err("miner_archive_name_mismatch");
     }
     Ok(())
-}
-
-fn approved_root() -> Result<PathBuf, &'static str> {
-    let root = std::env::var_os(APPROVED_MINER_DIRECTORY_ENV)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .ok_or("approved_miner_directory_not_configured")?;
-    fs::create_dir_all(&root).map_err(|_| "approved_miner_directory_create_failed")?;
-    let root = root
-        .canonicalize()
-        .map_err(|_| "approved_miner_directory_unavailable")?;
-    if !root.is_dir() {
-        return Err("approved_miner_directory_invalid");
-    }
-    Ok(root)
 }
 
 fn extract_pinned_binary(

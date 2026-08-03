@@ -4,6 +4,7 @@ mod agent_bridge;
 mod approved_miner_manifest;
 mod diagnostics;
 mod miner_installer;
+mod miner_paths;
 mod miner_process;
 mod miner_runtime_executor;
 mod mining_configuration;
@@ -24,7 +25,10 @@ mod secure_launcher;
 use agent_bridge::{AgentStatus, ProtectionStatus};
 use diagnostics::{collect_native_diagnostic, NativeDiagnostic};
 #[cfg(feature = "desktop-runtime")]
-use miner_installer::{install_approved_miner_archive, MinerInstallationSnapshot};
+use miner_installer::{
+    approved_miner_installation_status, install_approved_miner_from_downloads,
+    MinerInstallationSnapshot, MinerInstallationStatus,
+};
 use mining_configuration_tauri::{
     mining_configuration_clear, mining_configuration_get, mining_configuration_save,
     mining_configuration_test_connection, MiningConfigurationState,
@@ -450,16 +454,17 @@ fn mining_runtime_status(
 
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
+fn approved_miner_status() -> Result<MinerInstallationStatus, &'static str> {
+    approved_miner_installation_status("xmrig_randomx")
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
 fn install_approved_miner(
     profile_id: String,
-    archive_path: String,
     consent_confirmed: bool,
 ) -> Result<MinerInstallationSnapshot, &'static str> {
-    install_approved_miner_archive(
-        &profile_id,
-        std::path::Path::new(&archive_path),
-        consent_confirmed,
-    )
+    install_approved_miner_from_downloads(&profile_id, consent_confirmed)
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -642,6 +647,7 @@ pub fn run() {
             link_local_agent,
             orchestration_status,
             mining_runtime_status,
+            approved_miner_status,
             install_approved_miner,
             set_idle_mining_mode,
             start_idle_mining,

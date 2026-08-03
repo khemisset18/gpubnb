@@ -4,6 +4,8 @@
 mod approved_miner_manifest;
 #[path = "../src/miner_process.rs"]
 mod miner_process;
+#[path = "../src/miner_paths.rs"]
+mod miner_paths;
 #[path = "../src/mining_configuration.rs"]
 mod mining_configuration;
 #[path = "../src/mining_catalog/secure_launcher.rs"]
