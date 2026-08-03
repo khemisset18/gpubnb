@@ -77,6 +77,7 @@ impl MiningRuntimeController {
         Ok(self.reconcile("mining_stopped_and_verified"))
     }
 
+    #[cfg_attr(not(feature = "desktop-runtime"), allow(dead_code))]
     pub fn owner_mining_stopped(
         &mut self,
         process_exited: bool,
@@ -86,6 +87,7 @@ impl MiningRuntimeController {
         Ok(self.reconcile("owner_mining_stopped_and_verified"))
     }
 
+    #[cfg_attr(not(feature = "desktop-runtime"), allow(dead_code))]
     pub fn unexpected_miner_exit(&mut self) -> Result<RuntimeDecision, &'static str> {
         self.coordinator.record_unexpected_miner_exit()?;
         Ok(self.reconcile("unexpected_miner_exit_quarantined"))
