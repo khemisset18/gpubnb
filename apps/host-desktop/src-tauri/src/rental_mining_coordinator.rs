@@ -408,10 +408,14 @@ mod tests {
     #[test]
     fn owner_stop_returns_to_idle_only_after_process_exit() {
         let mut coordinator = RentalMiningCoordinator::default();
-        coordinator.set_owner_consent(MiningConsent::OwnerPool).unwrap();
+        coordinator
+            .set_owner_consent(MiningConsent::OwnerPool)
+            .unwrap();
         coordinator.request_idle_mining_start().unwrap();
         coordinator.confirm_mining_started().unwrap();
-        coordinator.set_owner_consent(MiningConsent::Disabled).unwrap();
+        coordinator
+            .set_owner_consent(MiningConsent::Disabled)
+            .unwrap();
 
         coordinator.confirm_owner_mining_stopped(true).unwrap();
 
@@ -421,7 +425,9 @@ mod tests {
     #[test]
     fn unexpected_process_exit_quarantines_active_mining() {
         let mut coordinator = RentalMiningCoordinator::default();
-        coordinator.set_owner_consent(MiningConsent::OwnerPool).unwrap();
+        coordinator
+            .set_owner_consent(MiningConsent::OwnerPool)
+            .unwrap();
         coordinator.request_idle_mining_start().unwrap();
         coordinator.confirm_mining_started().unwrap();
 
@@ -429,7 +435,10 @@ mod tests {
 
         let snapshot = coordinator.snapshot();
         assert_eq!(snapshot.state, CoordinatedGpuState::Quarantined);
-        assert_eq!(snapshot.last_error, Some("miner_process_exited_unexpectedly"));
+        assert_eq!(
+            snapshot.last_error,
+            Some("miner_process_exited_unexpectedly")
+        );
     }
 
     #[test]

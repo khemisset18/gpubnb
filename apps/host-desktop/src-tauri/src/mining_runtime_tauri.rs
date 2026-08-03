@@ -78,7 +78,8 @@ impl MiningRuntimeState {
             .controller
             .lock()
             .map_err(|_| "mining_runtime_state_unavailable")?;
-        if controller.snapshot().state == crate::rental_mining_coordinator::CoordinatedGpuState::Mining
+        if controller.snapshot().state
+            == crate::rental_mining_coordinator::CoordinatedGpuState::Mining
             && process.status != MinerProcessStatus::Running
         {
             controller.unexpected_miner_exit()?;
