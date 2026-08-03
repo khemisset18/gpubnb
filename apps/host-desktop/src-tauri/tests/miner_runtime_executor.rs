@@ -2,10 +2,10 @@
 
 #[path = "../src/approved_miner_manifest.rs"]
 mod approved_miner_manifest;
-#[path = "../src/miner_process.rs"]
-mod miner_process;
 #[path = "../src/miner_paths.rs"]
 mod miner_paths;
+#[path = "../src/miner_process.rs"]
+mod miner_process;
 #[path = "../src/miner_runtime_executor.rs"]
 mod miner_runtime_executor;
 #[path = "../src/mining_configuration.rs"]

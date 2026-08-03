@@ -1,6 +1,6 @@
 use crate::approved_miner_manifest::{approved_miner_release, validate_release_metadata};
-use crate::mining_configuration::MiningLaunchSpec;
 use crate::miner_paths;
+use crate::mining_configuration::MiningLaunchSpec;
 use crate::secure_launcher;
 use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
