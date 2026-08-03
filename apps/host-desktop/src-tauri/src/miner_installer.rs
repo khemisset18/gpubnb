@@ -43,8 +43,8 @@ pub fn install_approved_miner_archive(
     validate_release_metadata(&release)?;
     validate_archive_path(archive_path, &release)?;
 
-    let actual_archive_hash = secure_launcher::sha256_file(archive_path)
-        .map_err(|_| "miner_archive_hash_failed")?;
+    let actual_archive_hash =
+        secure_launcher::sha256_file(archive_path).map_err(|_| "miner_archive_hash_failed")?;
     if !secure_launcher::constant_time_hex_eq(&actual_archive_hash, release.archive_sha256) {
         return Err("miner_archive_hash_mismatch");
     }
@@ -92,7 +92,9 @@ fn approved_root() -> Result<PathBuf, &'static str> {
         .map(PathBuf::from)
         .ok_or("approved_miner_directory_not_configured")?;
     fs::create_dir_all(&root).map_err(|_| "approved_miner_directory_create_failed")?;
-    let root = root.canonicalize().map_err(|_| "approved_miner_directory_unavailable")?;
+    let root = root
+        .canonicalize()
+        .map_err(|_| "approved_miner_directory_unavailable")?;
     if !root.is_dir() {
         return Err("approved_miner_directory_invalid");
     }
@@ -137,7 +139,9 @@ fn extract_from_tar_gz(path: &Path, expected_name: &str) -> Result<Vec<u8>, &'st
         }
         if matches {
             let mut bytes = vec![0_u8; size];
-            reader.read_exact(&mut bytes).map_err(|_| "miner_archive_read_failed")?;
+            reader
+                .read_exact(&mut bytes)
+                .map_err(|_| "miner_archive_read_failed")?;
             found = Some(bytes);
         } else {
             copy_exact(&mut reader, size)?;
@@ -297,7 +301,10 @@ fn copy_exact(reader: &mut impl Read, bytes: usize) -> Result<(), &'static str> 
 }
 
 fn nul_terminated(bytes: &[u8]) -> Result<&str, &'static str> {
-    let end = bytes.iter().position(|byte| *byte == 0).unwrap_or(bytes.len());
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
     std::str::from_utf8(&bytes[..end]).map_err(|_| "miner_archive_entry_name_invalid")
 }
 

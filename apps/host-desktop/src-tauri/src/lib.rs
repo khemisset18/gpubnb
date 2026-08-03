@@ -2,8 +2,8 @@
 
 mod agent_bridge;
 mod diagnostics;
-mod miner_process;
 mod miner_installer;
+mod miner_process;
 mod miner_runtime_executor;
 mod mining_configuration;
 mod mining_configuration_commands;
@@ -20,12 +20,12 @@ mod rental_orchestrator;
 
 use agent_bridge::{AgentStatus, ProtectionStatus};
 use diagnostics::{collect_native_diagnostic, NativeDiagnostic};
+#[cfg(feature = "desktop-runtime")]
+use miner_installer::{install_approved_miner_archive, MinerInstallationSnapshot};
 use mining_configuration_tauri::{
     mining_configuration_clear, mining_configuration_get, mining_configuration_save,
     mining_configuration_test_connection, MiningConfigurationState,
 };
-#[cfg(feature = "desktop-runtime")]
-use miner_installer::{install_approved_miner_archive, MinerInstallationSnapshot};
 #[cfg(test)]
 use mining_runtime_controller::MiningRuntimeController;
 use mining_runtime_tauri::{MiningRuntimeExecution, MiningRuntimeSnapshot, MiningRuntimeState};
@@ -452,7 +452,11 @@ fn install_approved_miner(
     archive_path: String,
     consent_confirmed: bool,
 ) -> Result<MinerInstallationSnapshot, &'static str> {
-    install_approved_miner_archive(&profile_id, std::path::Path::new(&archive_path), consent_confirmed)
+    install_approved_miner_archive(
+        &profile_id,
+        std::path::Path::new(&archive_path),
+        consent_confirmed,
+    )
 }
 
 #[cfg(feature = "desktop-runtime")]
