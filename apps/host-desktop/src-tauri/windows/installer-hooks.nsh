@@ -29,11 +29,28 @@
 
 !macro NSIS_HOOK_POSTINSTALL
   CreateDirectory "$%PROGRAMDATA%\GPUbnb"
-  ; A bare %USERNAME% is not reliably resolvable on localized, domain-joined,
-  ; Microsoft-account or Entra-joined Windows installations (Win32 error 1332).
-  ; Qualifying it with USERDOMAIN keeps the ACL independent from translated
-  ; built-in account names while granting access only to the installing user.
-  !insertmacro GPUbnbExecChecked '"$SYSDIR\icacls.exe" "$%PROGRAMDATA%\GPUbnb" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "$%USERDOMAIN%\$%USERNAME%:(OI)(CI)M"' "Unable to secure the GPUbnb data directory"
+  ; Resolve the installing principal directly to its SID. Account-name based
+  ; ACLs fail with Win32 error 1332 on some localized, Microsoft-account and
+  ; Entra-joined Windows installations even when USERDOMAIN is supplied.
+  FileOpen $2 "$TEMP\gpubnb-secure-data-directory.ps1" w
+  FileWrite $2 "$$ErrorActionPreference = 'Stop'$\r$\n"
+  FileWrite $2 "$$path = Join-Path $$env:ProgramData 'GPUbnb'$\r$\n"
+  FileWrite $2 "$$currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User$\r$\n"
+  FileWrite $2 "if ($$null -eq $$currentSid) { throw 'Current Windows SID is unavailable.' }$\r$\n"
+  FileWrite $2 "$$systemSid = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18')$\r$\n"
+  FileWrite $2 "$$administratorsSid = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')$\r$\n"
+  FileWrite $2 "$$acl = [System.Security.AccessControl.DirectorySecurity]::new()$\r$\n"
+  FileWrite $2 "$$acl.SetAccessRuleProtection($$true, $$false)$\r$\n"
+  FileWrite $2 "$$inheritance = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit$\r$\n"
+  FileWrite $2 "$$propagation = [System.Security.AccessControl.PropagationFlags]::None$\r$\n"
+  FileWrite $2 "$$allow = [System.Security.AccessControl.AccessControlType]::Allow$\r$\n"
+  FileWrite $2 "$$acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($$systemSid, [System.Security.AccessControl.FileSystemRights]::FullControl, $$inheritance, $$propagation, $$allow))$\r$\n"
+  FileWrite $2 "$$acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($$administratorsSid, [System.Security.AccessControl.FileSystemRights]::FullControl, $$inheritance, $$propagation, $$allow))$\r$\n"
+  FileWrite $2 "$$acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($$currentSid, [System.Security.AccessControl.FileSystemRights]::Modify, $$inheritance, $$propagation, $$allow))$\r$\n"
+  FileWrite $2 "[System.IO.Directory]::SetAccessControl($$path, $$acl)$\r$\n"
+  FileClose $2
+  !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$TEMP\gpubnb-secure-data-directory.ps1"' "Unable to secure the GPUbnb data directory"
+  Delete "$TEMP\gpubnb-secure-data-directory.ps1"
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service install' "Unable to install the GPUbnb Windows service"
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service start' "Unable to start the GPUbnb Windows service"
 !macroend
