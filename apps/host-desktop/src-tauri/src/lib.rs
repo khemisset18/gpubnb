@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "desktop-runtime"), allow(dead_code, unused_imports))]
 
 mod agent_bridge;
+mod approved_miner_manifest;
 mod diagnostics;
 mod miner_installer;
 mod miner_process;
@@ -17,6 +18,8 @@ mod orchestration_gateway;
 mod pairing;
 mod rental_mining_coordinator;
 mod rental_orchestrator;
+#[path = "mining_catalog/secure_launcher.rs"]
+mod secure_launcher;
 
 use agent_bridge::{AgentStatus, ProtectionStatus};
 use diagnostics::{collect_native_diagnostic, NativeDiagnostic};

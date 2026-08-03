@@ -1,10 +1,6 @@
-#[path = "approved_miner_manifest.rs"]
-mod approved_miner_manifest;
-#[path = "mining_catalog/secure_launcher.rs"]
-mod secure_launcher;
-
+use crate::approved_miner_manifest::{approved_miner_release, validate_release_metadata};
 use crate::mining_configuration::MiningLaunchSpec;
-use approved_miner_manifest::{approved_miner_release, validate_release_metadata};
+use crate::secure_launcher;
 use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};

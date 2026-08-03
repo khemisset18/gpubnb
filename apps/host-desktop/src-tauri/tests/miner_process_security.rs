@@ -1,9 +1,13 @@
 #![allow(dead_code)]
 
+#[path = "../src/approved_miner_manifest.rs"]
+mod approved_miner_manifest;
 #[path = "../src/miner_process.rs"]
 mod miner_process;
 #[path = "../src/mining_configuration.rs"]
 mod mining_configuration;
+#[path = "../src/mining_catalog/secure_launcher.rs"]
+mod secure_launcher;
 
 use miner_process::MinerProcessManager;
 

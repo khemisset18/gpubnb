@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+#[path = "../src/approved_miner_manifest.rs"]
+mod approved_miner_manifest;
 #[path = "../src/miner_process.rs"]
 mod miner_process;
 #[path = "../src/miner_runtime_executor.rs"]
@@ -22,6 +24,8 @@ mod mining_runtime_controller;
 mod mining_runtime_tauri;
 #[path = "../src/rental_mining_coordinator.rs"]
 mod rental_mining_coordinator;
+#[path = "../src/mining_catalog/secure_launcher.rs"]
+mod secure_launcher;
 
 use miner_process::{MinerProcessManager, MinerProcessStatus};
 use miner_runtime_executor::MinerRuntimeExecutor;

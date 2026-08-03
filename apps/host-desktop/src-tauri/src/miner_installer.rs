@@ -1,11 +1,7 @@
-#[path = "approved_miner_manifest.rs"]
-mod approved_miner_manifest;
-#[path = "mining_catalog/secure_launcher.rs"]
-mod secure_launcher;
-
-use approved_miner_manifest::{
+use crate::approved_miner_manifest::{
     approved_miner_release, validate_release_metadata, ApprovedMinerRelease,
 };
+use crate::secure_launcher;
 use flate2::read::{DeflateDecoder, GzDecoder};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
