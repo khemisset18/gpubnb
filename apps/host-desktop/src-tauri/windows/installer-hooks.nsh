@@ -29,7 +29,11 @@
 
 !macro NSIS_HOOK_POSTINSTALL
   CreateDirectory "$%PROGRAMDATA%\GPUbnb"
-  !insertmacro GPUbnbExecChecked '"$SYSDIR\icacls.exe" "$%PROGRAMDATA%\GPUbnb" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "$%USERNAME%:(OI)(CI)M"' "Unable to secure the GPUbnb data directory"
+  ; A bare %USERNAME% is not reliably resolvable on localized, domain-joined,
+  ; Microsoft-account or Entra-joined Windows installations (Win32 error 1332).
+  ; Qualifying it with USERDOMAIN keeps the ACL independent from translated
+  ; built-in account names while granting access only to the installing user.
+  !insertmacro GPUbnbExecChecked '"$SYSDIR\icacls.exe" "$%PROGRAMDATA%\GPUbnb" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "$%USERDOMAIN%\$%USERNAME%:(OI)(CI)M"' "Unable to secure the GPUbnb data directory"
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service install' "Unable to install the GPUbnb Windows service"
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service start' "Unable to start the GPUbnb Windows service"
 !macroend
