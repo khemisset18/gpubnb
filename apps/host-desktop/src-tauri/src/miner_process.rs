@@ -203,7 +203,10 @@ impl MinerProcessManager {
         let stderr_path = log_root.join(STDERR_LOG_NAME);
         rotate_log(&stdout_path, MAX_LOG_BYTES)?;
         rotate_log(&stderr_path, MAX_LOG_BYTES)?;
-        Ok((open_private_log(&stdout_path)?, open_private_log(&stderr_path)?))
+        Ok((
+            open_private_log(&stdout_path)?,
+            open_private_log(&stderr_path)?,
+        ))
     }
 
     fn finish_log_threads(&mut self) {
@@ -258,12 +261,11 @@ where
     })
 }
 
-fn drain_to_capped_log<R: Read>(
-    mut reader: R,
-    mut log: File,
-    max_bytes: u64,
-) -> io::Result<()> {
-    let mut written = log.metadata().map(|metadata| metadata.len()).unwrap_or(max_bytes);
+fn drain_to_capped_log<R: Read>(mut reader: R, mut log: File, max_bytes: u64) -> io::Result<()> {
+    let mut written = log
+        .metadata()
+        .map(|metadata| metadata.len())
+        .unwrap_or(max_bytes);
     let mut log_writable = written < max_bytes;
     let mut buffer = [0_u8; 8 * 1024];
     loop {
@@ -290,10 +292,7 @@ fn wait_for_exit(
 ) -> Result<Option<std::process::ExitStatus>, &'static str> {
     let deadline = Instant::now() + timeout;
     loop {
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|_| "miner_process_wait_failed")?
-        {
+        if let Some(status) = child.try_wait().map_err(|_| "miner_process_wait_failed")? {
             return Ok(Some(status));
         }
         if Instant::now() >= deadline {
@@ -455,7 +454,10 @@ mod tests {
         rotate_log(&path, 4).unwrap();
 
         assert!(!path.exists());
-        assert_eq!(std::fs::read(path.with_extension("log.1")).unwrap(), b"12345");
+        assert_eq!(
+            std::fs::read(path.with_extension("log.1")).unwrap(),
+            b"12345"
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 }
