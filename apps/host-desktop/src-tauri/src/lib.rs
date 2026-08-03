@@ -3,6 +3,7 @@
 mod agent_bridge;
 mod diagnostics;
 mod miner_process;
+mod miner_installer;
 mod miner_runtime_executor;
 mod mining_configuration;
 mod mining_configuration_commands;
@@ -23,6 +24,8 @@ use mining_configuration_tauri::{
     mining_configuration_clear, mining_configuration_get, mining_configuration_save,
     mining_configuration_test_connection, MiningConfigurationState,
 };
+#[cfg(feature = "desktop-runtime")]
+use miner_installer::{install_approved_miner_archive, MinerInstallationSnapshot};
 #[cfg(test)]
 use mining_runtime_controller::MiningRuntimeController;
 use mining_runtime_tauri::{MiningRuntimeExecution, MiningRuntimeSnapshot, MiningRuntimeState};
@@ -444,6 +447,16 @@ fn mining_runtime_status(
 
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
+fn install_approved_miner(
+    profile_id: String,
+    archive_path: String,
+    consent_confirmed: bool,
+) -> Result<MinerInstallationSnapshot, &'static str> {
+    install_approved_miner_archive(&profile_id, std::path::Path::new(&archive_path), consent_confirmed)
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
 fn set_idle_mining_mode(
     consent: MiningConsent,
     state: tauri::State<'_, Mutex<AppState>>,
@@ -622,6 +635,7 @@ pub fn run() {
             link_local_agent,
             orchestration_status,
             mining_runtime_status,
+            install_approved_miner,
             set_idle_mining_mode,
             start_idle_mining,
             account_pairing_configuration,

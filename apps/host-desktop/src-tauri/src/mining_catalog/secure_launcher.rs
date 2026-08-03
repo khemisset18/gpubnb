@@ -79,14 +79,14 @@ fn validate_manifest(manifest: &MinerBinaryManifest) -> Result<(), &'static str>
     Ok(())
 }
 
-fn sha256_file(path: &Path) -> io::Result<String> {
+pub(crate) fn sha256_file(path: &Path) -> io::Result<String> {
     let mut file = File::open(path)?;
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes)?;
     Ok(hex(&sha256(&bytes)))
 }
 
-fn constant_time_hex_eq(actual: &str, expected: &str) -> bool {
+pub(crate) fn constant_time_hex_eq(actual: &str, expected: &str) -> bool {
     if actual.len() != expected.len() {
         return false;
     }
