@@ -1,4 +1,4 @@
-use crate::miner_process::MinerProcessSnapshot;
+use crate::miner_process::{MinerProcessSnapshot, MinerProcessStatus};
 use crate::miner_runtime_executor::MinerRuntimeExecutor;
 use crate::mining_configuration_tauri::MiningConfigurationState;
 use crate::mining_runtime_controller::{MiningRuntimeController, RuntimeDecision, RuntimeOrder};
@@ -73,9 +73,19 @@ impl MiningRuntimeState {
     }
 
     pub fn runtime_snapshot(&self) -> Result<MiningRuntimeSnapshot, &'static str> {
+        let process = self.process_snapshot()?;
+        let mut controller = self
+            .controller
+            .lock()
+            .map_err(|_| "mining_runtime_state_unavailable")?;
+        if controller.snapshot().state == crate::rental_mining_coordinator::CoordinatedGpuState::Mining
+            && process.status != MinerProcessStatus::Running
+        {
+            controller.unexpected_miner_exit()?;
+        }
         Ok(MiningRuntimeSnapshot {
-            runtime: self.snapshot()?,
-            process: self.process_snapshot()?,
+            runtime: controller.snapshot(),
+            process,
         })
     }
 
@@ -89,7 +99,18 @@ impl MiningRuntimeState {
             .lock()
             .map_err(|_| "mining_runtime_state_unavailable")?
             .set_owner_consent(consent)?;
-        self.execute_decision(decision, configuration)
+        let execution = self.execute_decision(decision, configuration)?;
+        if consent == MiningConsent::Disabled
+            && execution.decision.order == RuntimeOrder::StopMinerForRental
+        {
+            let process_exited = execution.process.status != MinerProcessStatus::Running
+                && execution.process.pid.is_none();
+            self.controller
+                .lock()
+                .map_err(|_| "mining_runtime_state_unavailable")?
+                .owner_mining_stopped(process_exited)?;
+        }
+        Ok(execution)
     }
 
     pub fn execute_decision(

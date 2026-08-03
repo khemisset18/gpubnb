@@ -77,6 +77,20 @@ impl MiningRuntimeController {
         Ok(self.reconcile("mining_stopped_and_verified"))
     }
 
+    pub fn owner_mining_stopped(
+        &mut self,
+        process_exited: bool,
+    ) -> Result<RuntimeDecision, &'static str> {
+        self.coordinator
+            .confirm_owner_mining_stopped(process_exited)?;
+        Ok(self.reconcile("owner_mining_stopped_and_verified"))
+    }
+
+    pub fn unexpected_miner_exit(&mut self) -> Result<RuntimeDecision, &'static str> {
+        self.coordinator.record_unexpected_miner_exit()?;
+        Ok(self.reconcile("unexpected_miner_exit_quarantined"))
+    }
+
     pub fn rental_ready(
         &mut self,
         exclusive_gpu_access: bool,

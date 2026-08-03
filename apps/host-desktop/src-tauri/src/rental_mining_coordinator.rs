@@ -201,6 +201,36 @@ impl RentalMiningCoordinator {
         Ok(())
     }
 
+    pub fn confirm_owner_mining_stopped(
+        &mut self,
+        process_exited: bool,
+    ) -> Result<(), &'static str> {
+        if self.state != CoordinatedGpuState::PreemptingMining
+            || self.consent != MiningConsent::Disabled
+            || self.reservation_id.is_some()
+        {
+            return Err("owner_mining_stop_not_expected");
+        }
+        if !process_exited {
+            self.state = CoordinatedGpuState::Quarantined;
+            self.last_error = Some("owner_mining_process_still_running");
+            return Err("owner_mining_process_still_running");
+        }
+        self.state = CoordinatedGpuState::Idle;
+        self.last_error = None;
+        Ok(())
+    }
+
+    pub fn record_unexpected_miner_exit(&mut self) -> Result<(), &'static str> {
+        if self.state != CoordinatedGpuState::Mining {
+            return Err("unexpected_miner_exit_not_applicable");
+        }
+        self.state = CoordinatedGpuState::Quarantined;
+        self.resume_requested = false;
+        self.last_error = Some("miner_process_exited_unexpectedly");
+        Ok(())
+    }
+
     pub fn confirm_rental_ready(
         &mut self,
         exclusive_gpu_access: bool,
@@ -373,6 +403,33 @@ mod tests {
         complete_rental(&mut coordinator, "reservation_3");
 
         assert!(!coordinator.snapshot().should_start_mining);
+    }
+
+    #[test]
+    fn owner_stop_returns_to_idle_only_after_process_exit() {
+        let mut coordinator = RentalMiningCoordinator::default();
+        coordinator.set_owner_consent(MiningConsent::OwnerPool).unwrap();
+        coordinator.request_idle_mining_start().unwrap();
+        coordinator.confirm_mining_started().unwrap();
+        coordinator.set_owner_consent(MiningConsent::Disabled).unwrap();
+
+        coordinator.confirm_owner_mining_stopped(true).unwrap();
+
+        assert_eq!(coordinator.snapshot().state, CoordinatedGpuState::Idle);
+    }
+
+    #[test]
+    fn unexpected_process_exit_quarantines_active_mining() {
+        let mut coordinator = RentalMiningCoordinator::default();
+        coordinator.set_owner_consent(MiningConsent::OwnerPool).unwrap();
+        coordinator.request_idle_mining_start().unwrap();
+        coordinator.confirm_mining_started().unwrap();
+
+        coordinator.record_unexpected_miner_exit().unwrap();
+
+        let snapshot = coordinator.snapshot();
+        assert_eq!(snapshot.state, CoordinatedGpuState::Quarantined);
+        assert_eq!(snapshot.last_error, Some("miner_process_exited_unexpectedly"));
     }
 
     #[test]
