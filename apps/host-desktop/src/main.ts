@@ -158,8 +158,12 @@ const officialUrl = (rawUrl: string): URL | null => {
 const officialMinerUrl = (installation: MinerInstallationStatus): URL | null => {
   try {
     const url = new URL(installation.sourceUrl);
-    const expectedPath = `/xmrig/xmrig/releases/download/v${installation.version}/${installation.archiveName}`;
-    if (url.origin !== 'https://github.com' || url.pathname !== expectedPath || url.search || url.hash) return null;
+    const expectedPath = installation.profileId === 'xmrig_randomx'
+      ? `/xmrig/xmrig/releases/download/v${installation.version}/${installation.archiveName}`
+      : installation.profileId.startsWith('lolminer_')
+        ? `/Lolliedieb/lolMiner-releases/releases/download/${installation.version}/${installation.archiveName}`
+        : '';
+    if (!expectedPath || url.origin !== 'https://github.com' || url.pathname !== expectedPath || url.search || url.hash) return null;
     return url;
   } catch {
     return null;
@@ -252,10 +256,10 @@ type MiningCatalogEntry = {
 const MINING_CATALOG: MiningCatalogEntry[] = [
   { symbol: 'XMR', name: 'Monero', profileId: 'xmrig_randomx' },
   { symbol: 'PRL', name: 'Pearl' },
-  { symbol: 'ALPH', name: 'Alephium' },
+  { symbol: 'ALPH', name: 'Alephium', profileId: 'lolminer_blake3' },
   { symbol: 'KAS', name: 'Kaspa' },
-  { symbol: 'ETC', name: 'Ethereum Classic' },
-  { symbol: 'CFX', name: 'Conflux' },
+  { symbol: 'ETC', name: 'Ethereum Classic', profileId: 'lolminer_etchash' },
+  { symbol: 'CFX', name: 'Conflux', profileId: 'lolminer_octopus' },
   { symbol: 'RVN', name: 'Ravencoin' },
   { symbol: 'NEOX', name: 'Neoxa' },
 ];
@@ -270,15 +274,17 @@ const renderMiningCatalog = (): string => `<section class="mining-catalog">
 </section>`;
 
 const renderMiningRuntime = (
+  coin: MiningCatalogEntry,
   read: MiningRuntimeRead,
   installationRead: MinerInstallationRead,
   configuration: MiningConfigurationView | null,
 ): string => {
   const installation = installationRead.status;
+  const minerName = coin.profileId === 'xmrig_randomx' ? 'XMRig' : 'lolMiner';
   const installReady = Boolean(installation?.verified);
   const installPanel = installation ? `<div class="miner-installation ${installReady ? 'verified' : 'required'}">
-    <div><strong>XMRig ${escapeHtml(installation.version)}</strong><small>${installReady ? 'Exécutable installé et empreinte vérifiée.' : installation.installed ? 'Installation présente mais non valide.' : 'Téléchargez l’archive officielle avant l’installation.'}</small></div>
-    <div class="miner-install-actions">${installReady ? '<span class="verification-badge">✓ Vérifié</span>' : `<button id="download-miner" class="secondary">Télécharger</button><label class="consent-check"><input id="miner-consent" type="checkbox"> J’autorise l’installation de XMRig</label><button id="install-miner" class="primary" disabled>Installer depuis Téléchargements</button>`}</div>
+    <div><strong>${escapeHtml(minerName)} ${escapeHtml(installation.version)}</strong><small>${installReady ? 'Exécutable installé et empreinte vérifiée.' : installation.installed ? 'Installation présente mais non valide.' : 'Téléchargez l’archive officielle avant l’installation.'}</small></div>
+    <div class="miner-install-actions">${installReady ? '<span class="verification-badge">✓ Vérifié</span>' : `<button id="download-miner" class="secondary">Télécharger</button><label class="consent-check"><input id="miner-consent" type="checkbox"> J’autorise l’installation de ${escapeHtml(minerName)}</label><button id="install-miner" class="primary" disabled>Installer depuis Téléchargements</button>`}</div>
     ${installation.verificationError && installation.installed ? `<code>${escapeHtml(installation.verificationError)}</code>` : ''}</div>`
     : `<div class="miner-installation required"><strong>Installation indisponible</strong><code>${escapeHtml(installationRead.error ?? 'miner_installation_status_unavailable')}</code></div>`;
 
@@ -291,9 +297,9 @@ const renderMiningRuntime = (
   const saved = configuration?.configuration;
   const configurationReady = configuration?.status === 'ready';
   const configurationPanel = installReady ? `<form id="mining-configuration" class="mining-configuration" novalidate>
-    <div class="configuration-heading"><div><strong>Pool XMR personnel</strong><small>${configurationReady ? 'Connexion vérifiée. Le démarrage est autorisé.' : 'Enregistrez puis testez la connexion avant le démarrage.'}</small></div><span class="verification-badge ${configurationReady ? '' : 'pending'}">${configurationReady ? '✓ Prêt' : 'Test requis'}</span></div>
+    <div class="configuration-heading"><div><strong>Pool ${escapeHtml(coin.symbol)} personnel</strong><small>${configurationReady ? 'Connexion vérifiée. Le démarrage est autorisé.' : 'Enregistrez puis testez la connexion avant le démarrage.'}</small></div><span class="verification-badge ${configurationReady ? '' : 'pending'}">${configurationReady ? '✓ Prêt' : 'Test requis'}</span></div>
     <div class="configuration-fields"><label>Adresse du pool<input id="mining-pool" value="${escapeHtml(saved?.customPoolUrl ?? '')}" placeholder="stratum+tls://pool.example.com:443" required></label>
-    <label>Adresse du portefeuille XMR<input id="mining-wallet" value="${escapeHtml(saved?.walletAddress ?? '')}" maxlength="192" required></label>
+    <label>Adresse du portefeuille ${escapeHtml(coin.symbol)}<input id="mining-wallet" value="${escapeHtml(saved?.walletAddress ?? '')}" maxlength="192" required></label>
     <label>Nom de ce PC<input id="mining-worker" value="${escapeHtml(saved?.workerName ?? 'gpubnb-host')}" maxlength="96" required></label></div>
     <div class="configuration-actions"><button id="save-mining" class="secondary" type="submit">Enregistrer</button><button id="test-mining" class="secondary" type="button" ${configuration?.configured ? '' : 'disabled'}>Tester la connexion</button></div></form>` : '';
   return `<section class="mining-runtime ${running ? 'running' : ''}"><div class="runtime-heading"><div><p class="eyebrow">Minage personnel</p><h2>${escapeHtml(miningStateLabel(runtime.state))}</h2></div>
@@ -317,6 +323,7 @@ const miningErrorMessage = (error: unknown): string => {
 };
 
 const bindMining = (
+  coin: MiningCatalogEntry,
   runtime: MiningRuntimeRead,
   installationRead: MinerInstallationRead,
   configuration: MiningConfigurationView | null,
@@ -337,9 +344,9 @@ const bindMining = (
   install?.addEventListener('click', () => {
     if (!consent?.checked) return;
     install.disabled = true;
-    setMessage('Vérification et installation transactionnelle de XMRig…');
-    void invoke('install_approved_miner', { profileId: 'xmrig_randomx', consentConfirmed: true })
-      .then(() => { setMessage('XMRig est installé et vérifié.', 'success'); window.setTimeout(() => void refresh(), 500); })
+    setMessage(`Vérification et installation transactionnelle de ${minerName}…`);
+    void invoke('install_approved_miner', { profileId: coin.profileId, consentConfirmed: true })
+      .then(() => { setMessage(`${minerName} est installé et vérifié.`, 'success'); window.setTimeout(() => void refresh(), 500); })
       .catch((error: unknown) => setMessage(miningErrorMessage(error), 'error'))
       .finally(() => { install.disabled = false; });
   });
@@ -349,7 +356,7 @@ const bindMining = (
     const pool = document.querySelector<HTMLInputElement>('#mining-pool')?.value.trim() ?? '';
     const wallet = document.querySelector<HTMLInputElement>('#mining-wallet')?.value.trim() ?? '';
     const worker = document.querySelector<HTMLInputElement>('#mining-worker')?.value.trim() ?? '';
-    const candidate: MiningConfiguration = { enabled: true, autoMineWhenIdle: true, cryptocurrency: 'XMR', minerProfileId: 'xmrig_randomx', poolMode: 'custom', customPoolUrl: pool, walletAddress: wallet, workerName: worker, poolCredentialRef: null };
+    const candidate: MiningConfiguration = { enabled: true, autoMineWhenIdle: true, cryptocurrency: coin.symbol, minerProfileId: coin.profileId ?? '', poolMode: 'custom', customPoolUrl: pool, walletAddress: wallet, workerName: worker, poolCredentialRef: null };
     setMessage('Enregistrement sécurisé de la configuration…');
     void invoke('mining_configuration_save', { expectedRevision: configuration?.revision ?? 0, configuration: candidate })
       .then(() => { setMessage('Configuration enregistrée. Testez maintenant le pool.', 'success'); window.setTimeout(() => void refresh(), 400); })
@@ -528,9 +535,13 @@ async function refresh(): Promise<void> {
       invoke<MiningRuntimeStatus>('mining_runtime_status')
         .then((runtime): MiningRuntimeRead => ({ status: runtime, error: null }))
         .catch((error: unknown): MiningRuntimeRead => ({ status: null, error: String(error) })),
-      invoke<MinerInstallationStatus>('approved_miner_status')
-        .then((value): MinerInstallationRead => ({ status: value, error: null }))
-        .catch((error: unknown): MinerInstallationRead => ({ status: null, error: String(error) })),
+      (() => {
+        const profileId = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin)?.profileId;
+        if (!profileId) return Promise.resolve<MinerInstallationRead>({ status: null, error: 'miner_profile_not_integrated' });
+        return invoke<MinerInstallationStatus>('approved_miner_status', { profileId })
+          .then((value): MinerInstallationRead => ({ status: value, error: null }))
+          .catch((error: unknown): MinerInstallationRead => ({ status: null, error: String(error) }));
+      })(),
       invoke<MiningConfigurationView>('mining_configuration_get').catch(() => null),
     ]);
     const progress = Math.round(Math.min(100, Math.max(0, status.progress)));
@@ -548,7 +559,12 @@ async function refresh(): Promise<void> {
     const miningPage = `<section class="content mining-page"><header class="topbar"><div><p class="eyebrow">Minage personnel</p><h1>Choisissez une cryptomonnaie.</h1><p class="lead">Le minage personnel est indépendant de la publication GPUbnb. Le rendement sera calculé à partir du test réel de cette machine.</p></div>
       <div class="status-stack"><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
       ${stopped ? '<section class="alert-card danger"><strong>Arrêt d’urgence actif — redémarrage interdit.</strong></section>' : ''}
-      ${renderMiningCatalog()}${selectedMiningCoin === 'XMR' ? renderMiningRuntime(mining, installation, miningConfiguration) : `<section class="mining-runtime unavailable"><div><p class="eyebrow">${escapeHtml(selectedMiningCoin)}</p><h2>Profil sélectionné</h2></div><div class="mining-controls"><button class="primary" disabled>Démarrer le minage</button></div></section>`}<p id="action-status" class="action-status" aria-live="polite"></p></section>`;
+      ${renderMiningCatalog()}${(() => {
+        const coin = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin);
+        return coin?.profileId
+          ? renderMiningRuntime(coin, mining, installation, miningConfiguration)
+          : `<section class="mining-runtime unavailable"><div><p class="eyebrow">${escapeHtml(selectedMiningCoin)}</p><h2>Profil sélectionné</h2></div><div class="mining-controls"><button class="primary" disabled>Démarrer le minage</button></div></section>`;
+      })()}<p id="action-status" class="action-status" aria-live="polite"></p></section>`;
     app.innerHTML = `<main class="layout">${sidebar}${activeView === 'host' ? hostPage : miningPage}</main>`;
     bindNavigation();
     bindCatalog();
@@ -556,7 +572,8 @@ async function refresh(): Promise<void> {
       bindPairing();
       bindActions(status);
     } else {
-      bindMining(mining, installation, miningConfiguration);
+      const coin = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin);
+      if (coin?.profileId) bindMining(coin, mining, installation, miningConfiguration);
     }
   } catch (error: unknown) {
     app.innerHTML = `<main class="error-state"><h1>Votre ordinateur reste protégé.</h1><p>${escapeHtml(String(error))}</p><button id="retry" class="primary large">Relancer</button></main>`;
