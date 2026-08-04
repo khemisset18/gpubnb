@@ -461,9 +461,7 @@ fn mining_runtime_status(
 
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
-fn approved_miner_status(
-    profile_id: String,
-) -> Result<MinerInstallationStatus, &'static str> {
+fn approved_miner_status(profile_id: String) -> Result<MinerInstallationStatus, &'static str> {
     approved_miner_installation_status(&profile_id)
 }
 
