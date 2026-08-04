@@ -27,6 +27,14 @@ button:focus-visible, summary:focus-visible { outline: 3px solid #8aa9ff; outlin
 .brand strong, .brand small { display: block; }
 .brand small { color: #8f9bb2; }
 
+.app-navigation { display: grid; gap: 10px; }
+.app-navigation button { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; width: 100%; padding: 14px; border: 1px solid transparent; border-radius: 15px; background: transparent; color: #8f9bb2; text-align: left; cursor: pointer; }
+.app-navigation button > span { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #35415a; border-radius: 11px; font-size: .75rem; font-weight: 900; }
+.app-navigation strong, .app-navigation small { display: block; }
+.app-navigation small { margin-top: 2px; }
+.app-navigation button.active { border-color: #31466f; background: #151e31; color: #f5f8ff; }
+.app-navigation button.active > span { border-color: #7ca5ff; background: #2a477f; }
+
 .steps { display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; }
 .steps li { display: flex; gap: 12px; padding: 14px; border: 1px solid transparent; border-radius: 15px; color: #8691a8; transition: .2s ease; }
 .steps li > span { display: grid; place-items: center; flex: 0 0 31px; height: 31px; border: 1px solid #35415a; border-radius: 50%; font-weight: 800; }
@@ -87,6 +95,28 @@ h2 { margin-bottom: 0; font-size: 1.28rem; }
 .next-label { padding: 3px 8px; border-radius: 999px; background: #263e6c; color: #cbdcff; font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
 
 .explanation { padding: 23px; }
+.mining-catalog { margin-top: 24px; padding: 23px; border: 1px solid #2e3c57; border-radius: 21px; background: linear-gradient(145deg, #121b2c, #0d1421); }
+.catalog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.catalog-intro { max-width: 800px; margin: 12px 0 0; color: #a5b0c4; }
+.catalog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 20px; }
+.catalog-card { display: flex; min-width: 0; flex-direction: column; padding: 17px; border: 1px solid #29364f; border-radius: 17px; background: #0b121e; }
+.catalog-card.verified { border-color: rgba(63, 142, 99, .65); background: linear-gradient(145deg, #10271e, #0b1717); }
+.catalog-card.experimental { border-color: #5b4930; }
+.catalog-card.limited { border-color: #594039; }
+.catalog-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.catalog-card-heading > div { display: flex; align-items: center; gap: 10px; }
+.catalog-card h3 { margin: 0; font-size: 1.05rem; }
+.coin-symbol { display: grid; place-items: center; min-width: 45px; height: 34px; padding: 0 8px; border-radius: 10px; background: #263e6c; color: #d8e5ff; font-size: .75rem; font-weight: 900; }
+.catalog-state { padding: 5px 8px; border-radius: 999px; background: #263247; color: #bdc9dc; font-size: .7rem; font-weight: 900; white-space: nowrap; }
+.catalog-card.verified .catalog-state { background: #173b2b; color: #7be6ad; }
+.catalog-card.experimental .catalog-state, .catalog-card.limited .catalog-state { background: #49391f; color: #ffd78a; }
+.catalog-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0 0; }
+.catalog-card dl > div { min-width: 0; padding: 10px; border-radius: 11px; background: #101a2a; }
+.catalog-card dt { color: #8997ae; font-size: .72rem; }
+.catalog-card dd { overflow: hidden; margin: 3px 0 0; color: #eef3ff; font-size: .84rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.catalog-card p { flex: 1; margin: 13px 0; color: #9da9bc; font-size: .86rem; }
+.catalog-select { width: 100%; }
+
 .mining-runtime { margin-top: 24px; padding: 23px; border: 1px solid #2e3c57; border-radius: 21px; background: linear-gradient(145deg, #121b2c, #0d1421); }
 .mining-runtime.unavailable { border-color: #4a3b35; background: linear-gradient(145deg, #251b1c, #141419); }
 .mining-runtime > p { margin: 10px 0 0; color: #a5b0c4; }
@@ -165,6 +195,7 @@ h2 { margin-bottom: 0; font-size: 1.28rem; }
   .benefits { grid-template-columns: 1fr; }
   .runtime-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .configuration-fields { grid-template-columns: 1fr; }
+  .catalog-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {
@@ -184,4 +215,6 @@ h2 { margin-bottom: 0; font-size: 1.28rem; }
   .miner-install-actions, .mining-controls { align-items: stretch; flex-direction: column; }
   .welcome-shell { padding: 14px; }
   .welcome-card { border-radius: 21px; }
+  .catalog-heading { display: block; }
+  .catalog-heading .badge { display: inline-block; margin-top: 12px; }
 }
