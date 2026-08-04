@@ -305,6 +305,22 @@ fn build_approved_arguments(spec: &MiningLaunchSpec) -> Result<Vec<String>, &'st
     let user = format!("{}.{}", spec.wallet_address, spec.worker_name);
     validate_argument(&user)?;
     match spec.miner_profile_id.as_str() {
+        "lolminer_blake3" => Ok(vec![
+            "--algo".into(),
+            "BLAKE3".into(),
+            "--pool".into(),
+            spec.pool_url.clone(),
+            "--user".into(),
+            user,
+        ]),
+        "lolminer_octopus" => Ok(vec![
+            "--algo".into(),
+            "OCTOPUS".into(),
+            "--pool".into(),
+            spec.pool_url.clone(),
+            "--user".into(),
+            user,
+        ]),
         "lolminer_kaspa" => Ok(vec![
             "--algo".into(),
             "KASPA".into(),
@@ -386,6 +402,21 @@ mod tests {
         assert_eq!(args[0], "--algo");
         assert!(args.contains(&"stratum+tcp://pool.example.com:3333".to_owned()));
         assert!(!args.iter().any(|argument| argument.contains("&&")));
+    }
+
+    #[test]
+    fn lolminer_profiles_use_structured_algorithm_arguments() {
+        for (profile, algorithm) in [
+            ("lolminer_blake3", "BLAKE3"),
+            ("lolminer_etchash", "ETCHASH"),
+            ("lolminer_octopus", "OCTOPUS"),
+        ] {
+            let args = build_approved_arguments(&spec(profile)).unwrap();
+            assert_eq!(args[0], "--algo");
+            assert_eq!(args[1], algorithm);
+            assert!(args.iter().any(|argument| argument == "--pool"));
+            assert!(args.iter().any(|argument| argument == "--user"));
+        }
     }
 
     #[test]
