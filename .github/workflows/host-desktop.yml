@@ -166,3 +166,42 @@ jobs:
           grep -Fq 'protection_probe_cleanup_unverified' agent/gpubnb_agent/runner.py
           grep -Fq 'test_diagnostic_fails_when_cleanup_cannot_be_verified' agent/tests/test_agent.py
           grep -Fq 'test_protection_profile_rejects_host_bind_mount' agent/tests/test_agent.py
+
+  miner-provenance:
+    name: pinned miner provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download official lolMiner archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --output lolMiner_v1.98a_Win64.zip https://github.com/Lolliedieb/lolMiner-releases/releases/download/1.98a/lolMiner_v1.98a_Win64.zip
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --output lolMiner_v1.98a_Lin64.tar.gz https://github.com/Lolliedieb/lolMiner-releases/releases/download/1.98a/lolMiner_v1.98a_Lin64.tar.gz
+      - name: Verify archives and extract only pinned basenames
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' f2bbda2d2255155d50935967b8c55105b9aeefbd27cda3e8d01beaf535a16762 lolMiner_v1.98a_Win64.zip 0b8078299654a12846e4967f1db3506409cfb8b1031687a910965d1a99c6f270 lolMiner_v1.98a_Lin64.tar.gz | sha256sum --check --strict
+          win_entry="$(unzip -Z1 lolMiner_v1.98a_Win64.zip | awk 'BEGIN { n=0 } /(^|\/)lolMiner\.exe$/ { e=$0; n++ } END { if (n != 1) exit 1; print e }')"
+          linux_entry="$(tar -tzf lolMiner_v1.98a_Lin64.tar.gz | awk 'BEGIN { n=0 } /(^|\/)lolMiner$/ { e=$0; n++ } END { if (n != 1) exit 1; print e }')"
+          case "$win_entry" in /*|*../*|../*) exit 1;; esac
+          case "$linux_entry" in /*|*../*|../*) exit 1;; esac
+          unzip -p lolMiner_v1.98a_Win64.zip "$win_entry" > lolMiner.exe
+          tar -xOzf lolMiner_v1.98a_Lin64.tar.gz "$linux_entry" > lolMiner
+          test -s lolMiner.exe
+          test -s lolMiner
+      - name: Write provenance report
+        shell: bash
+        run: |
+          {
+            printf 'lolMiner release: 1.98a\n'
+            printf 'source: https://github.com/Lolliedieb/lolMiner-releases/releases/tag/1.98a\n'
+            sha256sum lolMiner_v1.98a_Win64.zip lolMiner.exe lolMiner_v1.98a_Lin64.tar.gz lolMiner
+          } | tee miner-provenance.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lolminer-1.98a-provenance
+          path: miner-provenance.txt
+          if-no-files-found: error
+          retention-days: 14
