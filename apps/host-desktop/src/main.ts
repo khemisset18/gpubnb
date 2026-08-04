@@ -255,6 +255,7 @@ const MINING_CATALOG: MiningCatalogEntry[] = [
   { symbol: 'ALPH', name: 'Alephium' },
   { symbol: 'KAS', name: 'Kaspa' },
   { symbol: 'ETC', name: 'Ethereum Classic' },
+  { symbol: 'CFX', name: 'Conflux' },
   { symbol: 'RVN', name: 'Ravencoin' },
   { symbol: 'NEOX', name: 'Neoxa' },
 ];
