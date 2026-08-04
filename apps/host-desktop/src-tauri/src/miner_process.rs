@@ -307,7 +307,7 @@ fn build_approved_arguments(spec: &MiningLaunchSpec) -> Result<Vec<String>, &'st
     match spec.miner_profile_id.as_str() {
         "lolminer_blake3" => Ok(vec![
             "--algo".into(),
-            "ALPH".into(),
+            "ALEPH".into(),
             "--pool".into(),
             spec.pool_url.clone(),
             "--user".into(),
@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn lolminer_profiles_use_structured_algorithm_arguments() {
         for (profile, algorithm) in [
-            ("lolminer_blake3", "ALPH"),
+            ("lolminer_blake3", "ALEPH"),
             ("lolminer_etchash", "ETCHASH"),
             ("lolminer_octopus", "OCTOPUS"),
         ] {
