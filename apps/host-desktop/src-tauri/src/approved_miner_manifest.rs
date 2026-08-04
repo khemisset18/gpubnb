@@ -30,9 +30,12 @@ impl ApprovedMinerRelease {
 pub fn approved_miner_release(profile_id: &str) -> Result<ApprovedMinerRelease, &'static str> {
     match profile_id {
         "xmrig_randomx" => platform_xmrig_release().ok_or("approved_miner_platform_unsupported"),
-        "lolminer_blake3" | "lolminer_etchash" | "lolminer_octopus" => {
-            platform_lolminer_release(profile_id).ok_or("approved_miner_platform_unsupported")
-        }
+        "lolminer_blake3" => platform_lolminer_release("lolminer_blake3")
+            .ok_or("approved_miner_platform_unsupported"),
+        "lolminer_etchash" => platform_lolminer_release("lolminer_etchash")
+            .ok_or("approved_miner_platform_unsupported"),
+        "lolminer_octopus" => platform_lolminer_release("lolminer_octopus")
+            .ok_or("approved_miner_platform_unsupported"),
         _ => Err("approved_miner_manifest_missing"),
     }
 }
