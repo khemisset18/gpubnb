@@ -2,6 +2,9 @@ use super::secure_launcher::MinerBinaryManifest;
 
 pub const XMRIG_VERSION: &str = "6.26.0";
 const XMRIG_RELEASE_BASE_URL: &str = "https://github.com/xmrig/xmrig/releases/download/v6.26.0";
+pub const LOLMINER_VERSION: &str = "1.98a";
+const LOLMINER_RELEASE_BASE_URL: &str =
+    "https://github.com/Lolliedieb/lolMiner-releases/releases/download/1.98a";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ApprovedMinerRelease {
@@ -25,10 +28,15 @@ impl ApprovedMinerRelease {
 }
 
 pub fn approved_miner_release(profile_id: &str) -> Result<ApprovedMinerRelease, &'static str> {
-    if profile_id != "xmrig_randomx" {
-        return Err("approved_miner_manifest_missing");
+    match profile_id {
+        "xmrig_randomx" => {
+            platform_xmrig_release().ok_or("approved_miner_platform_unsupported")
+        }
+        "lolminer_blake3" | "lolminer_etchash" | "lolminer_octopus" => {
+            platform_lolminer_release(profile_id).ok_or("approved_miner_platform_unsupported")
+        }
+        _ => Err("approved_miner_manifest_missing"),
     }
-    platform_xmrig_release().ok_or("approved_miner_platform_unsupported")
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
@@ -95,6 +103,46 @@ fn platform_xmrig_release() -> Option<ApprovedMinerRelease> {
     })
 }
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn platform_lolminer_release(profile_id: &'static str) -> Option<ApprovedMinerRelease> {
+    Some(ApprovedMinerRelease {
+        profile_id,
+        version: LOLMINER_VERSION,
+        archive_name: "lolMiner_v1.98a_Lin64.tar.gz",
+        archive_sha256: "0b8078299654a12846e4967f1db3506409cfb8b1031687a910965d1a99c6f270",
+        binary_file_name: "lolMiner",
+        binary_sha256: "23c3719c7f949d6074fd3505928116df52de0e95e18a0a9e8c966b276b08e4ee",
+        source_url: concat!(
+            "https://github.com/Lolliedieb/lolMiner-releases/releases/download/1.98a/",
+            "lolMiner_v1.98a_Lin64.tar.gz"
+        ),
+    })
+}
+
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+fn platform_lolminer_release(profile_id: &'static str) -> Option<ApprovedMinerRelease> {
+    Some(ApprovedMinerRelease {
+        profile_id,
+        version: LOLMINER_VERSION,
+        archive_name: "lolMiner_v1.98a_Win64.zip",
+        archive_sha256: "f2bbda2d2255155d50935967b8c55105b9aeefbd27cda3e8d01beaf535a16762",
+        binary_file_name: "lolMiner.exe",
+        binary_sha256: "45d54e54e0bfcae4f983a8c5db88d1e3fed1618b26d4461c76af8027c4ec4616",
+        source_url: concat!(
+            "https://github.com/Lolliedieb/lolMiner-releases/releases/download/1.98a/",
+            "lolMiner_v1.98a_Win64.zip"
+        ),
+    })
+}
+
+#[cfg(not(any(
+    all(target_os = "linux", target_arch = "x86_64"),
+    all(target_os = "windows", target_arch = "x86_64")
+)))]
+fn platform_lolminer_release(_profile_id: &'static str) -> Option<ApprovedMinerRelease> {
+    None
+}
+
 #[cfg(not(any(
     all(target_os = "linux", target_arch = "x86_64"),
     all(target_os = "macos", target_arch = "x86_64"),
@@ -106,7 +154,14 @@ fn platform_xmrig_release() -> Option<ApprovedMinerRelease> {
 }
 
 pub fn validate_release_metadata(release: &ApprovedMinerRelease) -> Result<(), &'static str> {
-    if release.version != XMRIG_VERSION
+    let (expected_version, expected_base_url) = match release.profile_id {
+        "xmrig_randomx" => (XMRIG_VERSION, XMRIG_RELEASE_BASE_URL),
+        "lolminer_blake3" | "lolminer_etchash" | "lolminer_octopus" => {
+            (LOLMINER_VERSION, LOLMINER_RELEASE_BASE_URL)
+        }
+        _ => return Err("approved_miner_release_invalid"),
+    };
+    if release.version != expected_version
         || release.archive_name.is_empty()
         || release.archive_sha256.len() != 64
         || release.binary_sha256.len() != 64
@@ -115,7 +170,7 @@ pub fn validate_release_metadata(release: &ApprovedMinerRelease) -> Result<(), &
             .bytes()
             .chain(release.binary_sha256.bytes())
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-        || !release.source_url.starts_with(XMRIG_RELEASE_BASE_URL)
+        || !release.source_url.starts_with(expected_base_url)
         || !release.source_url.ends_with(release.archive_name)
     {
         return Err("approved_miner_release_invalid");
@@ -132,6 +187,22 @@ mod tests {
         let release = approved_miner_release("xmrig_randomx").unwrap();
         assert_eq!(release.version, "6.26.0");
         assert!(validate_release_metadata(&release).is_ok());
+    }
+
+    #[cfg(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "windows", target_arch = "x86_64")
+    ))]
+    #[test]
+    fn lolminer_profiles_share_the_same_pinned_binary() {
+        let alph = approved_miner_release("lolminer_blake3").unwrap();
+        let etc = approved_miner_release("lolminer_etchash").unwrap();
+        let cfx = approved_miner_release("lolminer_octopus").unwrap();
+        assert_eq!(alph.binary_sha256, etc.binary_sha256);
+        assert_eq!(etc.binary_sha256, cfx.binary_sha256);
+        assert!(validate_release_metadata(&alph).is_ok());
+        assert!(validate_release_metadata(&etc).is_ok());
+        assert!(validate_release_metadata(&cfx).is_ok());
     }
 
     #[test]
