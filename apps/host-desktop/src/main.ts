@@ -295,13 +295,15 @@ const renderMiningRuntime = (
   const running = process.status === 'running' && typeof process.pid === 'number';
   const processLabel = running ? 'Processus confirmé' : process.status === 'exited' ? 'Processus terminé' : 'Aucun processus actif';
   const saved = configuration?.configuration;
-  const configurationReady = configuration?.status === 'ready';
+  const configurationMatches = saved?.cryptocurrency === coin.symbol
+    && saved?.minerProfileId === coin.profileId;
+  const configurationReady = configurationMatches && configuration?.status === 'ready';
   const configurationPanel = installReady ? `<form id="mining-configuration" class="mining-configuration" novalidate>
     <div class="configuration-heading"><div><strong>Pool ${escapeHtml(coin.symbol)} personnel</strong><small>${configurationReady ? 'Connexion vérifiée. Le démarrage est autorisé.' : 'Enregistrez puis testez la connexion avant le démarrage.'}</small></div><span class="verification-badge ${configurationReady ? '' : 'pending'}">${configurationReady ? '✓ Prêt' : 'Test requis'}</span></div>
-    <div class="configuration-fields"><label>Adresse du pool<input id="mining-pool" value="${escapeHtml(saved?.customPoolUrl ?? '')}" placeholder="stratum+tls://pool.example.com:443" required></label>
-    <label>Adresse du portefeuille ${escapeHtml(coin.symbol)}<input id="mining-wallet" value="${escapeHtml(saved?.walletAddress ?? '')}" maxlength="192" required></label>
-    <label>Nom de ce PC<input id="mining-worker" value="${escapeHtml(saved?.workerName ?? 'gpubnb-host')}" maxlength="96" required></label></div>
-    <div class="configuration-actions"><button id="save-mining" class="secondary" type="submit">Enregistrer</button><button id="test-mining" class="secondary" type="button" ${configuration?.configured ? '' : 'disabled'}>Tester la connexion</button></div></form>` : '';
+    <div class="configuration-fields"><label>Adresse du pool<input id="mining-pool" value="${escapeHtml(configurationMatches ? saved?.customPoolUrl ?? '' : '')}" placeholder="stratum+tls://pool.example.com:443" required></label>
+    <label>Adresse du portefeuille ${escapeHtml(coin.symbol)}<input id="mining-wallet" value="${escapeHtml(configurationMatches ? saved?.walletAddress ?? '' : '')}" maxlength="192" required></label>
+    <label>Nom de ce PC<input id="mining-worker" value="${escapeHtml(configurationMatches ? saved?.workerName ?? 'gpubnb-host' : 'gpubnb-host')}" maxlength="96" required></label></div>
+    <div class="configuration-actions"><button id="save-mining" class="secondary" type="submit">Enregistrer</button><button id="test-mining" class="secondary" type="button" ${configurationMatches && configuration?.configured ? '' : 'disabled'}>Tester la connexion</button></div></form>` : '';
   return `<section class="mining-runtime ${running ? 'running' : ''}"><div class="runtime-heading"><div><p class="eyebrow">Minage personnel</p><h2>${escapeHtml(miningStateLabel(runtime.state))}</h2></div>
     <span class="status-pill ${running ? 'online' : ''}">${escapeHtml(processLabel)}</span></div>
     <dl class="runtime-details"><div><dt>Profil</dt><dd>${escapeHtml(process.profileId ?? 'Aucun')}</dd></div><div><dt>PID</dt><dd>${process.pid ?? '—'}</dd></div>
@@ -329,6 +331,7 @@ const bindMining = (
   configuration: MiningConfigurationView | null,
 ): void => {
   const installation = installationRead.status;
+  const minerName = coin.profileId === 'xmrig_randomx' ? 'XMRig' : 'lolMiner';
   const consent = document.querySelector<HTMLInputElement>('#miner-consent');
   const install = document.querySelector<HTMLButtonElement>('#install-miner');
   consent?.addEventListener('change', () => { if (install) install.disabled = !consent.checked; });
