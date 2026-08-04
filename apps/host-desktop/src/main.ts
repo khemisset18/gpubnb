@@ -80,6 +80,7 @@ const root = document.querySelector<HTMLElement>('#app');
 if (!root) throw new Error('missing_app_root');
 const app = root;
 let activeView: AppView = 'host';
+let selectedMiningCoin = 'XMR';
 
 const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (char) => ({
   '&': '&amp;',
@@ -260,10 +261,10 @@ const MINING_CATALOG: MiningCatalogEntry[] = [
 
 const renderMiningCatalog = (): string => `<section class="mining-catalog">
   <div class="catalog-heading"><div><p class="eyebrow">Catalogue multi-crypto</p><h2>Choisissez votre cryptomonnaie</h2></div></div>
-  <div class="catalog-grid">${MINING_CATALOG.map((entry) => `<article class="catalog-card ${entry.profileId ? 'selected' : ''}">
+  <div class="catalog-grid">${MINING_CATALOG.map((entry) => `<article class="catalog-card ${selectedMiningCoin === entry.symbol ? 'selected' : ''}">
     <div class="catalog-card-heading"><div><span class="coin-symbol">${escapeHtml(entry.symbol)}</span><h3>${escapeHtml(entry.name)}</h3></div></div>
     <div class="profit-estimate"><span>Rendement estimé</span><strong>— €/jour</strong><small>Calculé après le test réel de cette carte</small></div>
-    <button class="${entry.profileId ? 'primary' : 'secondary'} catalog-select" data-coin="${escapeHtml(entry.symbol)}" ${entry.profileId ? '' : 'disabled'}>${entry.profileId ? 'Sélectionnée' : 'Sélectionner'}</button>
+    <button class="${selectedMiningCoin === entry.symbol ? 'primary' : 'secondary'} catalog-select" data-coin="${escapeHtml(entry.symbol)}">${selectedMiningCoin === entry.symbol ? 'Sélectionnée' : 'Sélectionner'}</button>
   </article>`).join('')}</div>
 </section>`;
 
@@ -386,6 +387,15 @@ const bindNavigation = (): void => {
     const view = button.dataset.view;
     if (view !== 'host' && view !== 'mining') return;
     activeView = view;
+    void refresh();
+  }));
+};
+
+const bindCatalog = (): void => {
+  document.querySelectorAll<HTMLButtonElement>('.catalog-select').forEach((button) => button.addEventListener('click', () => {
+    const coin = button.dataset.coin;
+    if (!coin || !MINING_CATALOG.some((entry) => entry.symbol === coin)) return;
+    selectedMiningCoin = coin;
     void refresh();
   }));
 };
@@ -537,9 +547,10 @@ async function refresh(): Promise<void> {
     const miningPage = `<section class="content mining-page"><header class="topbar"><div><p class="eyebrow">Minage personnel</p><h1>Choisissez une cryptomonnaie.</h1><p class="lead">Le minage personnel est indépendant de la publication GPUbnb. Le rendement sera calculé à partir du test réel de cette machine.</p></div>
       <div class="status-stack"><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
       ${stopped ? '<section class="alert-card danger"><strong>Arrêt d’urgence actif — redémarrage interdit.</strong></section>' : ''}
-      ${renderMiningCatalog()}${renderMiningRuntime(mining, installation, miningConfiguration)}<p id="action-status" class="action-status" aria-live="polite"></p></section>`;
+      ${renderMiningCatalog()}${selectedMiningCoin === 'XMR' ? renderMiningRuntime(mining, installation, miningConfiguration) : `<section class="mining-runtime unavailable"><div><p class="eyebrow">${escapeHtml(selectedMiningCoin)}</p><h2>Profil sélectionné</h2></div><div class="mining-controls"><button class="primary" disabled>Démarrer le minage</button></div></section>`}<p id="action-status" class="action-status" aria-live="polite"></p></section>`;
     app.innerHTML = `<main class="layout">${sidebar}${activeView === 'host' ? hostPage : miningPage}</main>`;
     bindNavigation();
+    bindCatalog();
     if (activeView === 'host') {
       bindPairing();
       bindActions(status);
