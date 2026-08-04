@@ -403,6 +403,13 @@ fn ensure_host_can_configure_mining(state: &AppState) -> Result<(), &'static str
     Ok(())
 }
 
+fn ensure_owner_mining_allowed(state: &AppState) -> Result<(), &'static str> {
+    if state.lifecycle == HostLifecycle::EmergencyStopped {
+        return Err("emergency_stop_requires_review");
+    }
+    Ok(())
+}
+
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn host_status(
@@ -476,7 +483,7 @@ fn set_idle_mining_mode(
     configuration: tauri::State<'_, MiningConfigurationState>,
 ) -> Result<MiningRuntimeExecution, &'static str> {
     let state = state.lock().map_err(|_| "state_unavailable")?;
-    ensure_host_can_configure_mining(&state)?;
+    ensure_owner_mining_allowed(&state)?;
     drop(state);
     mining.set_owner_consent(consent, &configuration)
 }
@@ -489,7 +496,7 @@ fn start_idle_mining(
     configuration: tauri::State<'_, MiningConfigurationState>,
 ) -> Result<MiningRuntimeExecution, &'static str> {
     let state = state.lock().map_err(|_| "state_unavailable")?;
-    ensure_host_can_configure_mining(&state)?;
+    ensure_owner_mining_allowed(&state)?;
     drop(state);
     mining.start_idle_mining(&configuration)
 }
@@ -745,6 +752,22 @@ mod tests {
         assert_eq!(status.total_steps, TOTAL_SETUP_STEPS);
         assert!(!status.pairing.stores_password);
         assert_eq!(status.mining_runtime.consent, MiningConsent::Disabled);
+    }
+
+    #[test]
+    fn owner_mining_does_not_require_rental_publication() {
+        assert_eq!(ensure_owner_mining_allowed(&AppState::default()), Ok(()));
+    }
+
+    #[test]
+    fn emergency_stop_still_blocks_owner_mining() {
+        let state = AppState {
+            lifecycle: HostLifecycle::EmergencyStopped,
+        };
+        assert_eq!(
+            ensure_owner_mining_allowed(&state),
+            Err("emergency_stop_requires_review")
+        );
     }
 
     #[test]
