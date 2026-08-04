@@ -309,12 +309,12 @@ const renderMiningRuntime = (
     <dl class="runtime-details"><div><dt>Profil</dt><dd>${escapeHtml(process.profileId ?? 'Aucun')}</dd></div><div><dt>PID</dt><dd>${process.pid ?? '—'}</dd></div>
     <div><dt>Consentement</dt><dd>${escapeHtml(runtime.consent)}</dd></div><div><dt>Dernière sortie</dt><dd>${process.lastExitCode ?? '—'}</dd></div></dl>
     ${runtime.lastError ? `<p class="runtime-error">${escapeHtml(runtime.lastError)}</p>` : ''}${installPanel}${configurationPanel}
-    <div class="mining-controls"><button id="start-mining" class="primary" ${installReady && configurationReady && !running ? '' : 'disabled'}>Démarrer le minage</button><button id="stop-mining" class="secondary" ${running ? '' : 'disabled'}>Arrêter proprement</button><button id="emergency-mining" class="danger-button">Arrêt d’urgence</button></div></section>`;
+    <div class="mining-controls"><button id="start-mining" class="primary" ${installReady && configurationReady && !running ? '' : 'disabled'}>Démarrer le minage</button><button id="stop-mining" class="secondary" ${running ? '' : 'disabled'}>Arrêter le minage</button><button id="emergency-mining" class="danger-button">Arrêt d’urgence</button></div></section>`;
 };
 
 const miningErrorMessage = (error: unknown): string => {
   const value = String(error);
-  if (value.includes('miner_installation_consent_required')) return 'Confirmez explicitement l’installation de XMRig.';
+  if (value.includes('miner_installation_consent_required')) return 'Confirmez explicitement l’installation du mineur.';
   if (value.includes('miner_archive_unavailable')) return 'L’archive attendue est absente du dossier Téléchargements.';
   if (value.includes('miner_archive_hash_mismatch')) return 'L’archive téléchargée ne correspond pas à la version officielle approuvée.';
   if (value.includes('miner_archive_binary_hash_mismatch')) return 'L’exécutable contenu dans l’archive a une empreinte invalide.';
