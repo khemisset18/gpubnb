@@ -70,6 +70,7 @@ type HostStatus = {
 };
 
 type MessageTone = 'info' | 'success' | 'error';
+type AppView = 'host' | 'mining';
 
 const OFFICIAL_ORIGINS = new Set(['https://gpubnb.com', 'https://app.gpubnb.com', 'https://gpubnb.netlify.app']);
 const MACHINE_ID_PATTERN = /^[A-Za-z0-9_-]{3,128}$/;
@@ -78,6 +79,7 @@ const GPU_UUID_PATTERN = /^GPU-[A-Za-z0-9-]{3,124}$/;
 const root = document.querySelector<HTMLElement>('#app');
 if (!root) throw new Error('missing_app_root');
 const app = root;
+let activeView: AppView = 'host';
 
 const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (char) => ({
   '&': '&amp;',
@@ -240,6 +242,37 @@ const miningStateLabel = (state: string): string => ({
   emergency_stopped: 'Arrêt d’urgence',
 })[state] ?? 'État inconnu';
 
+type MiningCatalogEntry = {
+  symbol: string;
+  name: string;
+  algorithm: string;
+  hardware: string;
+  state: 'verified' | 'planned' | 'experimental' | 'limited';
+  stateLabel: string;
+  detail: string;
+};
+
+const MINING_CATALOG: MiningCatalogEntry[] = [
+  { symbol: 'XMR', name: 'Monero', algorithm: 'RandomX', hardware: 'CPU', state: 'verified', stateLabel: 'Vérifié', detail: 'XMRig 6.26.0 est installé avec empreinte contrôlée et a passé le test réel Windows.' },
+  { symbol: 'PRL', name: 'Pearl', algorithm: 'cuPOW / MatMul', hardware: 'NVIDIA Hopper', state: 'experimental', stateLabel: 'Expérimental', detail: 'Projet récent. Le support officiel vise surtout H100/H200 ; aucune compatibilité RTX grand public n’est promise.' },
+  { symbol: 'ALPH', name: 'Alephium', algorithm: 'Blake3', hardware: 'GPU / ASIC', state: 'planned', stateLabel: 'À valider', detail: 'Profil prévu après validation du mineur, des pools, des portefeuilles et de la concurrence ASIC.' },
+  { symbol: 'KAS', name: 'Kaspa', algorithm: 'kHeavyHash', hardware: 'ASIC dominant', state: 'limited', stateLabel: 'ASIC dominant', detail: 'Le GPU reste techniquement possible mais ne sera jamais présenté comme rentable sans mesure réelle.' },
+  { symbol: 'ETC', name: 'Ethereum Classic', algorithm: 'Etchash', hardware: 'GPU VRAM', state: 'planned', stateLabel: 'À valider', detail: 'Profil GPU prévu avec contrôle de la taille DAG, du mineur et des limites thermiques.' },
+  { symbol: 'RVN', name: 'Ravencoin', algorithm: 'KawPoW', hardware: 'GPU', state: 'planned', stateLabel: 'À valider', detail: 'Profil énergivore : estimation électrique et limites de température obligatoires.' },
+  { symbol: 'NEOX', name: 'Neoxa', algorithm: 'KawPoW', hardware: 'GPU', state: 'planned', stateLabel: 'À valider', detail: 'Même famille technique que KawPoW, mais portefeuille, pools et paiements restent à certifier.' },
+];
+
+const renderMiningCatalog = (): string => `<section class="mining-catalog">
+  <div class="catalog-heading"><div><p class="eyebrow">Catalogue multi-crypto</p><h2>Choisissez ce que votre machine peut miner</h2></div><span class="badge">Ajouts progressifs et vérifiés</span></div>
+  <p class="catalog-intro">Un profil n’est activable qu’après validation de sa source, de ses empreintes, de son arrêt, de son portefeuille et de sa compatibilité matérielle. La rentabilité n’est jamais garantie.</p>
+  <div class="catalog-grid">${MINING_CATALOG.map((entry) => `<article class="catalog-card ${entry.state}">
+    <div class="catalog-card-heading"><div><span class="coin-symbol">${escapeHtml(entry.symbol)}</span><h3>${escapeHtml(entry.name)}</h3></div><span class="catalog-state">${escapeHtml(entry.stateLabel)}</span></div>
+    <dl><div><dt>Algorithme</dt><dd>${escapeHtml(entry.algorithm)}</dd></div><div><dt>Matériel</dt><dd>${escapeHtml(entry.hardware)}</dd></div></dl>
+    <p>${escapeHtml(entry.detail)}</p>
+    <button class="${entry.state === 'verified' ? 'primary' : 'secondary'} catalog-select" data-profile="${escapeHtml(entry.symbol)}" ${entry.state === 'verified' ? '' : 'disabled'}>${entry.state === 'verified' ? 'Profil disponible' : 'Validation requise'}</button>
+  </article>`).join('')}</div>
+</section>`;
+
 const renderMiningRuntime = (
   read: MiningRuntimeRead,
   installationRead: MinerInstallationRead,
@@ -352,6 +385,15 @@ const bindMining = (
       .catch((error: unknown) => setMessage(miningErrorMessage(error), 'error'));
   });
   void runtime;
+};
+
+const bindNavigation = (): void => {
+  document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((button) => button.addEventListener('click', () => {
+    const view = button.dataset.view;
+    if (view !== 'host' && view !== 'mining') return;
+    activeView = view;
+    void refresh();
+  }));
 };
 
 const bindPairing = (): void => {
@@ -489,16 +531,27 @@ async function refresh(): Promise<void> {
     const progress = Math.round(Math.min(100, Math.max(0, status.progress)));
     const online = status.lifecycle === 'online';
     const stopped = status.lifecycle === 'emergency_stopped';
-    app.innerHTML = `<main class="layout"><aside class="sidebar"><div class="brand"><span class="brand-mark">G</span><div><strong>GPUbnb Host</strong><small>Hôte sécurisé</small></div></div></aside>
-      <section class="content"><header class="topbar"><div><p class="eyebrow">GPUbnb Host</p><h1>${online ? 'Votre machine est disponible.' : 'Préparez cet ordinateur.'}</h1></div>
+    const sidebar = `<aside class="sidebar"><div class="brand"><span class="brand-mark">G</span><div><strong>GPUbnb Host</strong><small>Location et minage séparés</small></div></div>
+      <nav class="app-navigation" aria-label="Sections principales"><button class="${activeView === 'host' ? 'active' : ''}" data-view="host"><span>01</span><div><strong>GPUbnb</strong><small>Préparation et location</small></div></button>
+      <button class="${activeView === 'mining' ? 'active' : ''}" data-view="mining"><span>02</span><div><strong>Minage</strong><small>Cryptos et rendement</small></div></button></nav></aside>`;
+    const hostPage = `<section class="content"><header class="topbar"><div><p class="eyebrow">GPUbnb Host</p><h1>${online ? 'Votre machine est disponible.' : 'Préparez cet ordinateur.'}</h1><p class="lead">Cette page gère uniquement la préparation sécurisée et la location GPUbnb.</p></div>
       <div class="status-stack"><span class="status-pill ${status.lifecycle}">${lifecycleLabel(status.lifecycle)}</span><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
       ${stopped ? '<section class="alert-card danger"><strong>Arrêt d’urgence actif</strong></section>' : ''}
       <section class="progress-card"><div class="progress-heading"><div><p class="eyebrow">État de préparation</p><h2>${escapeHtml(status.summary)}</h2></div><strong>${progress}%</strong></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div></section>
-      ${renderPairing(status)}${renderGpuInventory(status)}${renderMiningRuntime(mining, installation, miningConfiguration)}<p id="action-status" class="action-status" aria-live="polite"></p><ul class="checks">${renderChecks(status.checks)}</ul>
-      <div class="actions"><button id="refresh" class="secondary large">Revérifier</button><button id="publish" class="primary large" ${status.ready && !stopped && !online ? '' : 'disabled'}>${online ? 'Machine déjà en ligne' : 'Mettre en ligne'}</button></div></section></main>`;
-    bindPairing();
-    bindActions(status);
-    bindMining(mining, installation, miningConfiguration);
+      ${renderPairing(status)}${renderGpuInventory(status)}<p id="action-status" class="action-status" aria-live="polite"></p><ul class="checks">${renderChecks(status.checks)}</ul>
+      <div class="actions"><button id="refresh" class="secondary large">Revérifier</button><button id="publish" class="primary large" ${status.ready && !stopped && !online ? '' : 'disabled'}>${online ? 'Machine déjà en ligne' : 'Mettre en ligne'}</button></div></section>`;
+    const miningPage = `<section class="content mining-page"><header class="topbar"><div><p class="eyebrow">Minage personnel</p><h1>Choisissez une cryptomonnaie.</h1><p class="lead">Le minage personnel est indépendant de la publication GPUbnb. Seuls les profils vérifiés peuvent lancer un processus.</p></div>
+      <div class="status-stack"><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
+      ${stopped ? '<section class="alert-card danger"><strong>Arrêt d’urgence actif — redémarrage interdit.</strong></section>' : ''}
+      ${renderMiningCatalog()}${renderMiningRuntime(mining, installation, miningConfiguration)}<p id="action-status" class="action-status" aria-live="polite"></p></section>`;
+    app.innerHTML = `<main class="layout">${sidebar}${activeView === 'host' ? hostPage : miningPage}</main>`;
+    bindNavigation();
+    if (activeView === 'host') {
+      bindPairing();
+      bindActions(status);
+    } else {
+      bindMining(mining, installation, miningConfiguration);
+    }
   } catch (error: unknown) {
     app.innerHTML = `<main class="error-state"><h1>Votre ordinateur reste protégé.</h1><p>${escapeHtml(String(error))}</p><button id="retry" class="primary large">Relancer</button></main>`;
     document.querySelector<HTMLButtonElement>('#retry')?.addEventListener('click', () => void refresh());
