@@ -190,7 +190,9 @@ pub fn authorize_configuration_change(actor: MiningConfigurationActor) -> Result
 fn approved_profile(cryptocurrency: &str, profile_id: &str) -> bool {
     matches!(
         (cryptocurrency, profile_id),
-        ("KAS", "lolminer_kaspa")
+        ("ALPH", "lolminer_blake3")
+            | ("CFX", "lolminer_octopus")
+            | ("KAS", "lolminer_kaspa")
             | ("ETC", "lolminer_etchash")
             | ("RVN", "trex_kawpow")
             | ("ERG", "lolminer_autolykos")
@@ -357,6 +359,20 @@ mod tests {
             configuration.status(Some(&evidence), 1_010, 60),
             Err("mining_pool_tls_unverified")
         );
+    }
+
+    #[test]
+    fn pinned_lolminer_coin_profiles_are_approved() {
+        for (coin, profile) in [
+            ("ALPH", "lolminer_blake3"),
+            ("CFX", "lolminer_octopus"),
+            ("ETC", "lolminer_etchash"),
+        ] {
+            let mut configuration = custom_configuration();
+            configuration.cryptocurrency = coin.into();
+            configuration.miner_profile_id = profile.into();
+            assert!(configuration.validate().is_ok());
+        }
     }
 
     #[test]
