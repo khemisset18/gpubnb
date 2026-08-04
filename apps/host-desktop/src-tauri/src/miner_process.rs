@@ -321,36 +321,12 @@ fn build_approved_arguments(spec: &MiningLaunchSpec) -> Result<Vec<String>, &'st
             "--user".into(),
             user,
         ]),
-        "lolminer_kaspa" => Ok(vec![
-            "--algo".into(),
-            "KASPA".into(),
-            "--pool".into(),
-            spec.pool_url.clone(),
-            "--user".into(),
-            user,
-        ]),
         "lolminer_etchash" => Ok(vec![
             "--algo".into(),
             "ETCHASH".into(),
             "--pool".into(),
             spec.pool_url.clone(),
             "--user".into(),
-            user,
-        ]),
-        "lolminer_autolykos" => Ok(vec![
-            "--algo".into(),
-            "AUTOLYKOS2".into(),
-            "--pool".into(),
-            spec.pool_url.clone(),
-            "--user".into(),
-            user,
-        ]),
-        "trex_kawpow" => Ok(vec![
-            "-a".into(),
-            "kawpow".into(),
-            "-o".into(),
-            spec.pool_url.clone(),
-            "-u".into(),
             user,
         ]),
         "xmrig_randomx" => Ok(vec![
@@ -398,7 +374,7 @@ mod tests {
 
     #[test]
     fn arguments_are_structured_without_shell_fragments() {
-        let args = build_approved_arguments(&spec("lolminer_kaspa")).unwrap();
+        let args = build_approved_arguments(&spec("lolminer_blake3")).unwrap();
         assert_eq!(args[0], "--algo");
         assert!(args.contains(&"stratum+tcp://pool.example.com:3333".to_owned()));
         assert!(!args.iter().any(|argument| argument.contains("&&")));
@@ -421,12 +397,22 @@ mod tests {
 
     #[test]
     fn unresolved_secret_never_reaches_process_arguments() {
-        let mut launch = spec("lolminer_kaspa");
+        let mut launch = spec("lolminer_blake3");
         launch.pool_credential_ref = Some("secret_pool_001".into());
         assert_eq!(
             build_approved_arguments(&launch),
             Err("miner_secret_resolution_required")
         );
+    }
+
+    #[test]
+    fn profiles_without_a_pinned_binary_have_no_arguments() {
+        for profile in ["lolminer_kaspa", "lolminer_autolykos", "trex_kawpow"] {
+            assert_eq!(
+                build_approved_arguments(&spec(profile)),
+                Err("mining_profile_not_approved")
+            );
+        }
     }
 
     #[test]
