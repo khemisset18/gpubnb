@@ -245,31 +245,25 @@ const miningStateLabel = (state: string): string => ({
 type MiningCatalogEntry = {
   symbol: string;
   name: string;
-  algorithm: string;
-  hardware: string;
-  state: 'verified' | 'planned' | 'experimental' | 'limited';
-  stateLabel: string;
-  detail: string;
+  profileId?: string;
 };
 
 const MINING_CATALOG: MiningCatalogEntry[] = [
-  { symbol: 'XMR', name: 'Monero', algorithm: 'RandomX', hardware: 'CPU', state: 'verified', stateLabel: 'Vérifié', detail: 'XMRig 6.26.0 est installé avec empreinte contrôlée et a passé le test réel Windows.' },
-  { symbol: 'PRL', name: 'Pearl', algorithm: 'cuPOW / MatMul', hardware: 'NVIDIA Hopper', state: 'experimental', stateLabel: 'Expérimental', detail: 'Projet récent. Le support officiel vise surtout H100/H200 ; aucune compatibilité RTX grand public n’est promise.' },
-  { symbol: 'ALPH', name: 'Alephium', algorithm: 'Blake3', hardware: 'GPU / ASIC', state: 'planned', stateLabel: 'À valider', detail: 'Profil prévu après validation du mineur, des pools, des portefeuilles et de la concurrence ASIC.' },
-  { symbol: 'KAS', name: 'Kaspa', algorithm: 'kHeavyHash', hardware: 'ASIC dominant', state: 'limited', stateLabel: 'ASIC dominant', detail: 'Le GPU reste techniquement possible mais ne sera jamais présenté comme rentable sans mesure réelle.' },
-  { symbol: 'ETC', name: 'Ethereum Classic', algorithm: 'Etchash', hardware: 'GPU VRAM', state: 'planned', stateLabel: 'À valider', detail: 'Profil GPU prévu avec contrôle de la taille DAG, du mineur et des limites thermiques.' },
-  { symbol: 'RVN', name: 'Ravencoin', algorithm: 'KawPoW', hardware: 'GPU', state: 'planned', stateLabel: 'À valider', detail: 'Profil énergivore : estimation électrique et limites de température obligatoires.' },
-  { symbol: 'NEOX', name: 'Neoxa', algorithm: 'KawPoW', hardware: 'GPU', state: 'planned', stateLabel: 'À valider', detail: 'Même famille technique que KawPoW, mais portefeuille, pools et paiements restent à certifier.' },
+  { symbol: 'XMR', name: 'Monero', profileId: 'xmrig_randomx' },
+  { symbol: 'PRL', name: 'Pearl' },
+  { symbol: 'ALPH', name: 'Alephium' },
+  { symbol: 'KAS', name: 'Kaspa' },
+  { symbol: 'ETC', name: 'Ethereum Classic' },
+  { symbol: 'RVN', name: 'Ravencoin' },
+  { symbol: 'NEOX', name: 'Neoxa' },
 ];
 
 const renderMiningCatalog = (): string => `<section class="mining-catalog">
-  <div class="catalog-heading"><div><p class="eyebrow">Catalogue multi-crypto</p><h2>Choisissez ce que votre machine peut miner</h2></div><span class="badge">Ajouts progressifs et vérifiés</span></div>
-  <p class="catalog-intro">Un profil n’est activable qu’après validation de sa source, de ses empreintes, de son arrêt, de son portefeuille et de sa compatibilité matérielle. La rentabilité n’est jamais garantie.</p>
-  <div class="catalog-grid">${MINING_CATALOG.map((entry) => `<article class="catalog-card ${entry.state}">
-    <div class="catalog-card-heading"><div><span class="coin-symbol">${escapeHtml(entry.symbol)}</span><h3>${escapeHtml(entry.name)}</h3></div><span class="catalog-state">${escapeHtml(entry.stateLabel)}</span></div>
-    <dl><div><dt>Algorithme</dt><dd>${escapeHtml(entry.algorithm)}</dd></div><div><dt>Matériel</dt><dd>${escapeHtml(entry.hardware)}</dd></div></dl>
-    <p>${escapeHtml(entry.detail)}</p>
-    <button class="${entry.state === 'verified' ? 'primary' : 'secondary'} catalog-select" data-profile="${escapeHtml(entry.symbol)}" ${entry.state === 'verified' ? '' : 'disabled'}>${entry.state === 'verified' ? 'Profil disponible' : 'Validation requise'}</button>
+  <div class="catalog-heading"><div><p class="eyebrow">Catalogue multi-crypto</p><h2>Choisissez votre cryptomonnaie</h2></div></div>
+  <div class="catalog-grid">${MINING_CATALOG.map((entry) => `<article class="catalog-card ${entry.profileId ? 'selected' : ''}">
+    <div class="catalog-card-heading"><div><span class="coin-symbol">${escapeHtml(entry.symbol)}</span><h3>${escapeHtml(entry.name)}</h3></div></div>
+    <div class="profit-estimate"><span>Rendement estimé</span><strong>— €/jour</strong><small>Calculé après le test réel de cette carte</small></div>
+    <button class="${entry.profileId ? 'primary' : 'secondary'} catalog-select" data-coin="${escapeHtml(entry.symbol)}" ${entry.profileId ? '' : 'disabled'}>${entry.profileId ? 'Sélectionnée' : 'Sélectionner'}</button>
   </article>`).join('')}</div>
 </section>`;
 
@@ -540,7 +534,7 @@ async function refresh(): Promise<void> {
       <section class="progress-card"><div class="progress-heading"><div><p class="eyebrow">État de préparation</p><h2>${escapeHtml(status.summary)}</h2></div><strong>${progress}%</strong></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div></section>
       ${renderPairing(status)}${renderGpuInventory(status)}<p id="action-status" class="action-status" aria-live="polite"></p><ul class="checks">${renderChecks(status.checks)}</ul>
       <div class="actions"><button id="refresh" class="secondary large">Revérifier</button><button id="publish" class="primary large" ${status.ready && !stopped && !online ? '' : 'disabled'}>${online ? 'Machine déjà en ligne' : 'Mettre en ligne'}</button></div></section>`;
-    const miningPage = `<section class="content mining-page"><header class="topbar"><div><p class="eyebrow">Minage personnel</p><h1>Choisissez une cryptomonnaie.</h1><p class="lead">Le minage personnel est indépendant de la publication GPUbnb. Seuls les profils vérifiés peuvent lancer un processus.</p></div>
+    const miningPage = `<section class="content mining-page"><header class="topbar"><div><p class="eyebrow">Minage personnel</p><h1>Choisissez une cryptomonnaie.</h1><p class="lead">Le minage personnel est indépendant de la publication GPUbnb. Le rendement sera calculé à partir du test réel de cette machine.</p></div>
       <div class="status-stack"><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
       ${stopped ? '<section class="alert-card danger"><strong>Arrêt d’urgence actif — redémarrage interdit.</strong></section>' : ''}
       ${renderMiningCatalog()}${renderMiningRuntime(mining, installation, miningConfiguration)}<p id="action-status" class="action-status" aria-live="polite"></p></section>`;
