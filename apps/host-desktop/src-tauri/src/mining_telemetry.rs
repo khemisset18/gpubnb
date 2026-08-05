@@ -58,8 +58,7 @@ fn latest_session<'a>(log: &'a str, marker: &str) -> &'a str {
 fn parse_lolminer(log: &str) -> MiningTelemetry {
     let session = latest_session(log, "Setup Miner...");
     let mut telemetry = MiningTelemetry {
-        pool_connected: session.contains("Authorized worker:")
-            || session.contains("Connected to:"),
+        pool_connected: session.contains("Authorized worker:") || session.contains("Connected to:"),
         ..MiningTelemetry::default()
     };
     for line in session.lines() {
@@ -73,7 +72,10 @@ fn parse_lolminer(log: &str) -> MiningTelemetry {
             continue;
         }
         let fields: Vec<&str> = clean.split_whitespace().collect();
-        let Some(share_index) = fields.iter().position(|field| parse_shares(field).is_some()) else {
+        let Some(share_index) = fields
+            .iter()
+            .position(|field| parse_shares(field).is_some())
+        else {
             continue;
         };
         if share_index < 4 || fields.len() <= share_index + 6 {
@@ -103,11 +105,7 @@ fn parse_xmrig(log: &str) -> MiningTelemetry {
     for line in session.lines() {
         let clean = strip_ansi(line);
         if let Some(cpu) = clean.trim().strip_prefix("* CPU") {
-            telemetry.device_name = cpu
-                .split(" (1)")
-                .next()
-                .map(str::trim)
-                .map(str::to_owned);
+            telemetry.device_name = cpu.split(" (1)").next().map(str::trim).map(str::to_owned);
         }
         if clean.contains("accepted (") {
             if let Some(value) = clean
