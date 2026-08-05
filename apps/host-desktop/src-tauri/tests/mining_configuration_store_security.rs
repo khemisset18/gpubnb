@@ -22,6 +22,7 @@ fn configuration(worker_name: &str) -> MiningConfiguration {
     MiningConfiguration {
         enabled: true,
         auto_mine_when_idle: true,
+        performance_mode: Default::default(),
         cryptocurrency: "KAS".into(),
         miner_profile_id: "lolminer_kaspa".into(),
         pool_mode: PoolMode::Custom,
