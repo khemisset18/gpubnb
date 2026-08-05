@@ -1,6 +1,8 @@
 use crate::mining_configuration::{
-    MiningConfiguration, MiningConfigurationStatus, PoolConnectionEvidence, PoolMode,
+    MiningConfiguration, MiningConfigurationStatus, MiningPerformanceMode, PoolConnectionEvidence,
+    PoolMode,
 };
+use crate::mining_configuration_commands::mining_configuration_persistence::PersistentMiningConfiguration;
 use serde::Serialize;
 
 pub const DEFAULT_CONNECTION_EVIDENCE_MAX_AGE_SECONDS: u64 = 300;
@@ -17,6 +19,7 @@ pub struct MiningConfigurationStore {
 pub struct MiningConfigurationPublic {
     pub enabled: bool,
     pub auto_mine_when_idle: bool,
+    pub performance_mode: MiningPerformanceMode,
     pub cryptocurrency: String,
     pub miner_profile_id: String,
     pub pool_mode: PoolMode,
@@ -31,6 +34,7 @@ impl From<&MiningConfiguration> for MiningConfigurationPublic {
         Self {
             enabled: configuration.enabled,
             auto_mine_when_idle: configuration.auto_mine_when_idle,
+            performance_mode: configuration.performance_mode,
             cryptocurrency: configuration.cryptocurrency.clone(),
             miner_profile_id: configuration.miner_profile_id.clone(),
             pool_mode: configuration.pool_mode,
@@ -53,6 +57,26 @@ pub struct MiningConfigurationView {
 }
 
 impl MiningConfigurationStore {
+    pub fn from_persistent(
+        persistent: PersistentMiningConfiguration,
+    ) -> Result<Self, &'static str> {
+        persistent.validate()?;
+        Ok(Self {
+            configuration: persistent.configuration,
+            connection_evidence: persistent.connection_evidence,
+            revision: persistent.revision,
+        })
+    }
+
+    pub fn persistent_snapshot(&self) -> PersistentMiningConfiguration {
+        PersistentMiningConfiguration {
+            schema_version: 1,
+            configuration: self.configuration.clone(),
+            connection_evidence: self.connection_evidence.clone(),
+            revision: self.revision,
+        }
+    }
+
     pub const fn revision(&self) -> u64 {
         self.revision
     }
@@ -155,6 +179,7 @@ mod tests {
         MiningConfiguration {
             enabled: true,
             auto_mine_when_idle: true,
+            performance_mode: MiningPerformanceMode::Balanced,
             cryptocurrency: "KAS".into(),
             miner_profile_id: "lolminer_kaspa".into(),
             pool_mode: PoolMode::Custom,
@@ -173,6 +198,17 @@ mod tests {
             tls_verified: true,
             verified_at_unix_seconds: 1_000,
         }
+    }
+
+    #[test]
+    fn persistent_round_trip_preserves_revision_and_evidence() {
+        let mut store = MiningConfigurationStore::default();
+        store.save(configuration("worker_a")).unwrap();
+        store.record_connection_evidence(evidence()).unwrap();
+        let restored =
+            MiningConfigurationStore::from_persistent(store.persistent_snapshot()).unwrap();
+        assert_eq!(restored.revision(), 1);
+        assert!(restored.verified_configuration(1_010, 60).is_ok());
     }
 
     #[test]

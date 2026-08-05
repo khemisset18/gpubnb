@@ -77,6 +77,22 @@ impl MiningRuntimeController {
         Ok(self.reconcile("mining_stopped_and_verified"))
     }
 
+    #[cfg_attr(not(feature = "desktop-runtime"), allow(dead_code))]
+    pub fn owner_mining_stopped(
+        &mut self,
+        process_exited: bool,
+    ) -> Result<RuntimeDecision, &'static str> {
+        self.coordinator
+            .confirm_owner_mining_stopped(process_exited)?;
+        Ok(self.reconcile("owner_mining_stopped_and_verified"))
+    }
+
+    #[cfg_attr(not(feature = "desktop-runtime"), allow(dead_code))]
+    pub fn unexpected_miner_exit(&mut self) -> Result<RuntimeDecision, &'static str> {
+        self.coordinator.record_unexpected_miner_exit()?;
+        Ok(self.reconcile("unexpected_miner_exit_quarantined"))
+    }
+
     pub fn rental_ready(
         &mut self,
         exclusive_gpu_access: bool,
@@ -107,6 +123,15 @@ impl MiningRuntimeController {
     ) -> Result<RuntimeDecision, &'static str> {
         self.coordinator.confirm_rental_cleanup(proof)?;
         Ok(self.reconcile("rental_cleanup_verified"))
+    }
+
+    #[cfg_attr(not(feature = "desktop-runtime"), allow(dead_code))]
+    pub fn emergency_stop(
+        &mut self,
+        all_workloads_stopped: bool,
+    ) -> Result<RuntimeDecision, &'static str> {
+        self.coordinator.emergency_stop(all_workloads_stopped)?;
+        Ok(self.reconcile("emergency_stop_verified"))
     }
 
     pub fn snapshot(&self) -> CoordinatorSnapshot {

@@ -10,6 +10,71 @@ type PairingConfiguration = { configured: boolean; browserUrl?: string | null; s
 type AgentStatus = { installed: boolean; linked: boolean; running: boolean; machineId?: string | null; detail: string };
 type GpuDevice = { index: number; uuid: string; model: string; driverVersion: string; vramMib: number };
 type NativeDiagnostic = { canHost: boolean; reason: string; gpus?: GpuDevice[] };
+type MiningRuntimeStatus = {
+  runtime: {
+    state: string;
+    consent: string;
+    autoResumeAfterRental: boolean;
+    reservationId?: string | null;
+    lastError?: string | null;
+  };
+  process: {
+    status: 'stopped' | 'running' | 'exited';
+    pid?: number | null;
+    profileId?: string | null;
+    lastExitCode?: number | null;
+  };
+};
+type MiningRuntimeRead = { status: MiningRuntimeStatus | null; error: string | null };
+type MinerInstallationStatus = {
+  profileId: string;
+  version: string;
+  archiveName: string;
+  sourceUrl: string;
+  installed: boolean;
+  verified: boolean;
+  verificationError?: string | null;
+};
+type MinerInstallationRead = { status: MinerInstallationStatus | null; error: string | null };
+type MiningTelemetry = {
+  available: boolean;
+  deviceName?: string | null;
+  hashrate?: number | null;
+  hashrateUnit?: string | null;
+  acceptedShares?: number | null;
+  staleShares?: number | null;
+  hardwareErrors?: number | null;
+  temperatureCelsius?: number | null;
+  powerWatts?: number | null;
+  uptimeSeconds?: number | null;
+  poolConnected: boolean;
+};
+type MiningThermalSafety = {
+  latched: boolean;
+  lastTemperatureCelsius?: number | null;
+  warningCelsius: number;
+  stopCelsius: number;
+  rearmCelsius: number;
+};
+type MiningConfiguration = {
+  enabled: boolean;
+  autoMineWhenIdle: boolean;
+  performanceMode: 'eco' | 'balanced' | 'full';
+  cryptocurrency: string;
+  minerProfileId: string;
+  poolMode: 'custom';
+  customPoolUrl: string;
+  walletAddress: string;
+  workerName: string;
+  poolCredentialRef: null;
+};
+type MiningConfigurationView = {
+  configured: boolean;
+  configuration?: Omit<MiningConfiguration, 'poolCredentialRef'> & { hasPoolCredential: boolean } | null;
+  status?: 'disabled' | 'needs_connection_test' | 'ready' | null;
+  revision: number;
+  connectionVerifiedAtUnixSeconds?: number | null;
+};
 type HostStatus = {
   platform: string;
   architecture: string;
@@ -26,6 +91,8 @@ type HostStatus = {
 };
 
 type MessageTone = 'info' | 'success' | 'error';
+type AppView = 'host' | 'mining';
+type DisplayCurrency = 'USD' | 'EUR' | 'JPY' | 'GBP' | 'CNY';
 
 const OFFICIAL_ORIGINS = new Set(['https://gpubnb.com', 'https://app.gpubnb.com', 'https://gpubnb.netlify.app']);
 const MACHINE_ID_PATTERN = /^[A-Za-z0-9_-]{3,128}$/;
@@ -34,6 +101,14 @@ const GPU_UUID_PATTERN = /^GPU-[A-Za-z0-9-]{3,124}$/;
 const root = document.querySelector<HTMLElement>('#app');
 if (!root) throw new Error('missing_app_root');
 const app = root;
+let activeView: AppView = 'host';
+let selectedMiningCoin = 'XMR';
+const DISPLAY_CURRENCIES: DisplayCurrency[] = ['USD', 'EUR', 'JPY', 'GBP', 'CNY'];
+const savedCurrency = window.localStorage.getItem('gpubnb-mining-currency');
+let displayCurrency: DisplayCurrency = DISPLAY_CURRENCIES.includes(savedCurrency as DisplayCurrency)
+  ? savedCurrency as DisplayCurrency
+  : 'USD';
+let refreshTimer: number | undefined;
 
 const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (char) => ({
   '&': '&amp;',
@@ -108,6 +183,21 @@ const officialUrl = (rawUrl: string): URL | null => {
   }
 };
 
+const officialMinerUrl = (installation: MinerInstallationStatus): URL | null => {
+  try {
+    const url = new URL(installation.sourceUrl);
+    const expectedPath = installation.profileId === 'xmrig_randomx'
+      ? `/xmrig/xmrig/releases/download/v${installation.version}/${installation.archiveName}`
+      : installation.profileId.startsWith('lolminer_')
+        ? `/Lolliedieb/lolMiner-releases/releases/download/${installation.version}/${installation.archiveName}`
+        : '';
+    if (!expectedPath || url.origin !== 'https://github.com' || url.pathname !== expectedPath || url.search || url.hash) return null;
+    return url;
+  } catch {
+    return null;
+  }
+};
+
 const openOfficialUrl = (url: URL, successMessage: string): void => {
   const href = url.toString();
   void openUrl(href).then(() => {
@@ -170,6 +260,247 @@ const renderGpuInventory = (status: HostStatus): string => {
         <button class="primary create-listing" data-gpu-uuid="${escapeHtml(gpu.uuid)}" ${canCreateListing && valid ? '' : 'disabled'}>Nouvelle annonce</button>
       </article>`;
     }).join('')}</div></section>`;
+};
+
+const miningStateLabel = (state: string): string => ({
+  idle: 'Inactif',
+  mining_starting: 'Démarrage',
+  mining: 'Minage actif',
+  preempting_mining: 'Arrêt prioritaire',
+  verifying_rental_readiness: 'Préparation de location',
+  rental_ready: 'Location prête',
+  rental_active: 'Location active',
+  cleaning_rental: 'Nettoyage',
+  quarantined: 'Quarantaine',
+  emergency_stopped: 'Arrêt d’urgence',
+})[state] ?? 'État inconnu';
+
+type MiningCatalogEntry = {
+  symbol: string;
+  name: string;
+  profileId?: string;
+  hardwareValidated?: boolean;
+};
+
+const MINING_CATALOG: MiningCatalogEntry[] = [
+  { symbol: 'XMR', name: 'Monero', profileId: 'xmrig_randomx', hardwareValidated: true },
+  { symbol: 'PRL', name: 'Pearl' },
+  { symbol: 'ALPH', name: 'Alephium', profileId: 'lolminer_blake3', hardwareValidated: true },
+  { symbol: 'KAS', name: 'Kaspa' },
+  { symbol: 'ETC', name: 'Ethereum Classic', profileId: 'lolminer_etchash' },
+  { symbol: 'CFX', name: 'Conflux', profileId: 'lolminer_octopus' },
+  { symbol: 'RVN', name: 'Ravencoin' },
+  { symbol: 'NEOX', name: 'Neoxa' },
+];
+
+const renderMiningCatalog = (): string => `<section class="mining-catalog">
+  <div class="catalog-heading"><div><p class="eyebrow">Catalogue multi-crypto</p><h2>Choisissez votre cryptomonnaie</h2></div>
+    <label class="currency-selector">Devise<select id="mining-currency" aria-label="Devise d’affichage">${DISPLAY_CURRENCIES.map((currency) => `<option value="${currency}" ${currency === displayCurrency ? 'selected' : ''}>${currency}</option>`).join('')}</select></label></div>
+  <div class="catalog-grid">${MINING_CATALOG.map((entry) => `<article class="catalog-card ${selectedMiningCoin === entry.symbol ? 'selected' : ''}">
+    <div class="catalog-card-heading"><div><span class="coin-symbol">${escapeHtml(entry.symbol)}</span><h3>${escapeHtml(entry.name)}</h3></div>${entry.hardwareValidated ? '<span class="catalog-validation">✓ Test réel validé</span>' : ''}</div>
+    <div class="profit-estimate"><span>Rendement estimé</span><strong>— ${displayCurrency}/jour</strong><small>${entry.hardwareValidated ? 'Mesures disponibles · source de prix à raccorder' : 'Calculé après le test réel de cette carte'}</small></div>
+    <button class="${selectedMiningCoin === entry.symbol ? 'primary' : 'secondary'} catalog-select" data-coin="${escapeHtml(entry.symbol)}">${selectedMiningCoin === entry.symbol ? 'Sélectionnée' : 'Sélectionner'}</button>
+  </article>`).join('')}</div>
+</section>`;
+
+const formatDuration = (seconds?: number | null): string => {
+  if (typeof seconds !== 'number') return '—';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remaining = seconds % 60;
+  return `${hours} h ${minutes} min ${remaining} s`;
+};
+
+const formatMetric = (value: number | null | undefined, unit: string): string => (
+  typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(value < 10 ? 1 : 0)} ${unit}` : '—'
+);
+
+const renderMiningTelemetry = (telemetry: MiningTelemetry | null): string => {
+  if (!telemetry?.available) return `<section class="mining-performance unavailable"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Mesures en attente</h2></div><span class="badge">Aucune session mesurée</span></div>
+    <p>Le tableau sera alimenté automatiquement après le démarrage du mineur.</p></section>`;
+  const temperature = telemetry.temperatureCelsius;
+  const thermalState = typeof temperature !== 'number' ? 'unknown' : temperature >= 85 ? 'danger' : temperature >= 80 ? 'warning' : 'safe';
+  return `<section class="mining-performance ${thermalState}"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Tableau de minage</h2></div><span class="badge">Actualisation automatique</span></div>
+    ${thermalState === 'danger' ? '<div class="thermal-alert">Température excessive détectée. La protection native arrête automatiquement le minage à 85 °C.</div>' : ''}
+    <dl class="performance-grid">
+      <div><dt>Matériel</dt><dd>${escapeHtml(telemetry.deviceName ?? '—')}</dd></div>
+      <div><dt>Hashrate</dt><dd>${formatMetric(telemetry.hashrate, telemetry.hashrateUnit ?? 'H/s')}</dd></div>
+      <div><dt>Température</dt><dd>${formatMetric(temperature, '°C')}</dd></div>
+      <div><dt>Puissance</dt><dd>${formatMetric(telemetry.powerWatts, 'W')}</dd></div>
+      <div><dt>Parts A/S/Hw</dt><dd>${telemetry.acceptedShares ?? '—'} / ${telemetry.staleShares ?? '—'} / ${telemetry.hardwareErrors ?? '—'}</dd></div>
+      <div><dt>Durée mesurée</dt><dd>${formatDuration(telemetry.uptimeSeconds)}</dd></div>
+      <div><dt>Pool</dt><dd>${telemetry.poolConnected ? 'Connecté' : 'Non confirmé'}</dd></div>
+      <div><dt>Estimation</dt><dd>— ${displayCurrency}/jour</dd><small>Source de prix non raccordée</small></div>
+    </dl>
+    <p class="performance-note">Les parts et mesures sont réelles. Le montant restera vide tant que le rendement réseau et le cours ${displayCurrency} ne sont pas disponibles de façon fiable.</p></section>`;
+};
+
+const renderMiningRuntime = (
+  coin: MiningCatalogEntry,
+  read: MiningRuntimeRead,
+  installationRead: MinerInstallationRead,
+  configuration: MiningConfigurationView | null,
+  telemetry: MiningTelemetry | null,
+  thermalSafety: MiningThermalSafety | null,
+): string => {
+  const installation = installationRead.status;
+  const minerName = coin.profileId === 'xmrig_randomx' ? 'XMRig' : 'lolMiner';
+  const installReady = Boolean(installation?.verified);
+  const installPanel = installation ? `<div class="miner-installation ${installReady ? 'verified' : 'required'}">
+    <div><strong>${escapeHtml(minerName)} ${escapeHtml(installation.version)}</strong><small>${installReady ? 'Exécutable installé et empreinte vérifiée.' : installation.installed ? 'Installation présente mais non valide.' : 'Téléchargez l’archive officielle avant l’installation.'}</small></div>
+    <div class="miner-install-actions">${installReady ? '<span class="verification-badge">✓ Vérifié</span>' : `<button id="download-miner" class="secondary">Télécharger</button><label class="consent-check"><input id="miner-consent" type="checkbox"> J’autorise l’installation de ${escapeHtml(minerName)}</label><button id="install-miner" class="primary" disabled>Installer depuis Téléchargements</button>`}</div>
+    ${installation.verificationError && installation.installed ? `<code>${escapeHtml(installation.verificationError)}</code>` : ''}</div>`
+    : `<div class="miner-installation required"><strong>Installation indisponible</strong><code>${escapeHtml(installationRead.error ?? 'miner_installation_status_unavailable')}</code></div>`;
+
+  if (!read.status) return `<section class="mining-runtime unavailable"><div><p class="eyebrow">Minage personnel</p><h2>Runtime indisponible</h2></div>
+    <p>Le lancement reste bloqué tant que le runtime natif n’est pas disponible.</p><code>${escapeHtml(read.error ?? 'miner_runtime_unavailable')}</code>${installPanel}</section>`;
+
+  const { runtime, process } = read.status;
+  const running = process.status === 'running' && typeof process.pid === 'number';
+  const processLabel = running ? 'Processus confirmé' : process.status === 'exited' ? 'Processus terminé' : 'Aucun processus actif';
+  const saved = configuration?.configuration;
+  const configurationMatches = saved?.cryptocurrency === coin.symbol
+    && saved?.minerProfileId === coin.profileId;
+  const configurationReady = configurationMatches && configuration?.status === 'ready';
+  const gpuMining = coin.profileId?.startsWith('lolminer_') === true;
+  const performanceMode = configurationMatches ? saved?.performanceMode ?? 'balanced' : 'balanced';
+  const thermalLatched = thermalSafety?.latched === true;
+  const thermalPanel = thermalLatched ? `<div class="thermal-alert thermal-latched"><strong>Protection thermique déclenchée</strong><span>Le mineur a été arrêté automatiquement à ${formatMetric(thermalSafety?.lastTemperatureCelsius, '°C')}. Attendez que la carte descende à ${thermalSafety?.rearmCelsius ?? 75} °C maximum.</span><button id="acknowledge-thermal-safety" class="secondary" type="button">Vérifier et réarmer</button></div>` : '';
+  const configurationPanel = installReady ? `<form id="mining-configuration" class="mining-configuration" novalidate>
+    <div class="configuration-heading"><div><strong>Pool ${escapeHtml(coin.symbol)} personnel</strong><small>${configurationReady ? 'Connexion vérifiée. Le démarrage est autorisé.' : 'Enregistrez puis testez la connexion avant le démarrage.'}</small></div><span class="verification-badge ${configurationReady ? '' : 'pending'}">${configurationReady ? '✓ Prêt' : 'Test requis'}</span></div>
+    ${gpuMining ? `<fieldset class="performance-modes"><legend>Puissance de minage</legend>
+      <label><input type="radio" name="performance-mode" value="eco" ${performanceMode === 'eco' ? 'checked' : ''}><strong>Éco</strong><span>33 %</span></label>
+      <label><input type="radio" name="performance-mode" value="balanced" ${performanceMode === 'balanced' ? 'checked' : ''}><strong>Équilibré</strong><span>66 %</span></label>
+      <label><input type="radio" name="performance-mode" value="full" ${performanceMode === 'full' ? 'checked' : ''}><strong>Pleine puissance</strong><span>100 %</span></label>
+      <small>La limite minimale NVIDIA de la carte reste prioritaire. La protection thermique arrête toujours le mineur à 85 °C.</small></fieldset>` : '<p class="cpu-mining-note">Ce profil XMR utilise le processeur sur cette machine ; les modes de puissance GPU ne s’appliquent pas.</p>'}
+    <div class="configuration-fields"><label>Adresse du pool<input id="mining-pool" value="${escapeHtml(configurationMatches ? saved?.customPoolUrl ?? '' : '')}" placeholder="stratum+tls://pool.example.com:443" required></label>
+    <label>Adresse du portefeuille ${escapeHtml(coin.symbol)}<input id="mining-wallet" value="${escapeHtml(configurationMatches ? saved?.walletAddress ?? '' : '')}" maxlength="192" required></label>
+    <label>Nom de ce PC<input id="mining-worker" value="${escapeHtml(configurationMatches ? saved?.workerName ?? 'gpubnb-host' : 'gpubnb-host')}" maxlength="96" required></label></div>
+    <div class="configuration-actions"><button id="save-mining" class="secondary" type="submit">Enregistrer</button><button id="test-mining" class="secondary" type="button" ${configurationMatches && configuration?.configured ? '' : 'disabled'}>Tester la connexion</button></div></form>` : '';
+  return `<section class="mining-runtime ${running ? 'running' : ''}"><div class="runtime-heading"><div><p class="eyebrow">Minage personnel</p><h2>${escapeHtml(miningStateLabel(runtime.state))}</h2></div>
+    <span class="status-pill ${running ? 'online' : ''}">${escapeHtml(processLabel)}</span></div>
+    <dl class="runtime-details"><div><dt>Profil</dt><dd>${escapeHtml(process.profileId ?? 'Aucun')}</dd></div><div><dt>PID</dt><dd>${process.pid ?? '—'}</dd></div>
+    <div><dt>Consentement</dt><dd>${escapeHtml(runtime.consent)}</dd></div><div><dt>Dernière sortie</dt><dd>${process.lastExitCode ?? '—'}</dd></div></dl>
+    ${runtime.lastError ? `<p class="runtime-error">${escapeHtml(runtime.lastError)}</p>` : ''}${thermalPanel}${renderMiningTelemetry(telemetry)}${installPanel}${configurationPanel}
+    <div class="mining-controls"><button id="start-mining" class="primary" ${installReady && configurationReady && !running && !thermalLatched ? '' : 'disabled'}>Démarrer le minage</button><button id="stop-mining" class="secondary" ${running ? '' : 'disabled'}>Arrêter le minage</button><button id="emergency-mining" class="danger-button">Arrêt d’urgence</button></div></section>`;
+};
+
+const miningErrorMessage = (error: unknown): string => {
+  const value = String(error);
+  if (value.includes('miner_installation_consent_required')) return 'Confirmez explicitement l’installation du mineur.';
+  if (value.includes('miner_archive_unavailable')) return 'L’archive attendue est absente du dossier Téléchargements.';
+  if (value.includes('miner_archive_hash_mismatch')) return 'L’archive téléchargée ne correspond pas à la version officielle approuvée.';
+  if (value.includes('miner_archive_binary_hash_mismatch')) return 'L’exécutable contenu dans l’archive a une empreinte invalide.';
+  if (value.includes('mining_pool_connection_test_required')) return 'Testez la connexion au pool avant de démarrer.';
+  if (value.includes('mining_configuration_missing')) return 'Enregistrez la configuration de minage.';
+  if (value.includes('miner_binary_missing')) return 'Installez d’abord le mineur approuvé.';
+  if (value.includes('thermal_safety_review_required')) return 'Le redémarrage reste bloqué après un arrêt thermique. Laissez refroidir la carte puis cliquez sur « Vérifier et réarmer ».';
+  if (value.includes('miner_temperature_still_too_high')) return 'La carte est encore trop chaude. Attendez qu’elle descende à 75 °C maximum.';
+  if (value.includes('gpu_temperature_sensor_unavailable') || value.includes('gpu_temperature_sensor_invalid')) return 'Le capteur NVIDIA ne peut pas être vérifié. Le réarmement reste bloqué par sécurité.';
+  if (value.includes('gpu_power_limit_unavailable') || value.includes('gpu_power_limit_invalid')) return 'La limite de puissance NVIDIA n’est pas disponible sur cette carte. Le mineur reste arrêté.';
+  return `Opération refusée : ${value}`;
+};
+
+const bindMining = (
+  coin: MiningCatalogEntry,
+  runtime: MiningRuntimeRead,
+  installationRead: MinerInstallationRead,
+  configuration: MiningConfigurationView | null,
+): void => {
+  const installation = installationRead.status;
+  const minerName = coin.profileId === 'xmrig_randomx' ? 'XMRig' : 'lolMiner';
+  const consent = document.querySelector<HTMLInputElement>('#miner-consent');
+  const install = document.querySelector<HTMLButtonElement>('#install-miner');
+  consent?.addEventListener('change', () => { if (install) install.disabled = !consent.checked; });
+  document.querySelector<HTMLButtonElement>('#download-miner')?.addEventListener('click', () => {
+    if (!installation) return;
+    const target = officialMinerUrl(installation);
+    if (!target) {
+      setMessage('La source du mineur a été refusée car son adresse ne correspond pas au manifeste.', 'error');
+      return;
+    }
+    openOfficialUrl(target, `Téléchargez ${installation.archiveName} sans le renommer.`);
+  });
+  install?.addEventListener('click', () => {
+    if (!consent?.checked) return;
+    install.disabled = true;
+    setMessage(`Vérification et installation transactionnelle de ${minerName}…`);
+    void invoke('install_approved_miner', { profileId: coin.profileId, consentConfirmed: true })
+      .then(() => { setMessage(`${minerName} est installé et vérifié.`, 'success'); window.setTimeout(() => void refresh(), 500); })
+      .catch((error: unknown) => setMessage(miningErrorMessage(error), 'error'))
+      .finally(() => { install.disabled = false; });
+  });
+
+  document.querySelector<HTMLFormElement>('#mining-configuration')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const pool = document.querySelector<HTMLInputElement>('#mining-pool')?.value.trim() ?? '';
+    const wallet = document.querySelector<HTMLInputElement>('#mining-wallet')?.value.trim() ?? '';
+    const worker = document.querySelector<HTMLInputElement>('#mining-worker')?.value.trim() ?? '';
+    const selectedMode = document.querySelector<HTMLInputElement>('input[name="performance-mode"]:checked')?.value;
+    const performanceMode = selectedMode === 'eco' || selectedMode === 'full' ? selectedMode : 'balanced';
+    const candidate: MiningConfiguration = { enabled: true, autoMineWhenIdle: true, performanceMode: coin.profileId?.startsWith('lolminer_') ? performanceMode : 'full', cryptocurrency: coin.symbol, minerProfileId: coin.profileId ?? '', poolMode: 'custom', customPoolUrl: pool, walletAddress: wallet, workerName: worker, poolCredentialRef: null };
+    setMessage('Enregistrement sécurisé de la configuration…');
+    void invoke('mining_configuration_save', { expectedRevision: configuration?.revision ?? 0, configuration: candidate })
+      .then(() => { setMessage('Configuration enregistrée. Testez maintenant le pool.', 'success'); window.setTimeout(() => void refresh(), 400); })
+      .catch((error: unknown) => setMessage(miningErrorMessage(error), 'error'));
+  });
+  document.querySelector<HTMLButtonElement>('#test-mining')?.addEventListener('click', () => {
+    setMessage('Test DNS, TCP et TLS du pool…');
+    void invoke('mining_configuration_test_connection', { expectedRevision: configuration?.revision ?? 0 })
+      .then(() => { setMessage('Connexion au pool vérifiée.', 'success'); window.setTimeout(() => void refresh(), 400); })
+      .catch((error: unknown) => setMessage(miningErrorMessage(error), 'error'));
+  });
+  document.querySelector<HTMLButtonElement>('#start-mining')?.addEventListener('click', () => {
+    setMessage('Démarrage du processus minier vérifié…');
+    void invoke('set_idle_mining_mode', { consent: 'owner_pool' })
+      .then(() => invoke('start_idle_mining'))
+      .then(() => { setMessage('Minage démarré avec PID confirmé.', 'success'); window.setTimeout(() => void refresh(), 500); })
+      .catch((error: unknown) => setMessage(miningErrorMessage(error), 'error'));
+  });
+  document.querySelector<HTMLButtonElement>('#stop-mining')?.addEventListener('click', () => {
+    setMessage('Arrêt et confirmation du processus…');
+    void invoke('set_idle_mining_mode', { consent: 'disabled' })
+      .then(() => { setMessage('Processus minier arrêté.', 'success'); window.setTimeout(() => void refresh(), 400); })
+      .catch((error: unknown) => setMessage(miningErrorMessage(error), 'error'));
+  });
+  document.querySelector<HTMLButtonElement>('#emergency-mining')?.addEventListener('click', () => {
+    setMessage('Arrêt d’urgence en cours…', 'error');
+    void invoke('emergency_stop')
+      .then(() => void refresh())
+      .catch((error: unknown) => setMessage(miningErrorMessage(error), 'error'));
+  });
+  document.querySelector<HTMLButtonElement>('#acknowledge-thermal-safety')?.addEventListener('click', () => {
+    setMessage('Vérification de la température avant réarmement…');
+    void invoke('acknowledge_mining_thermal_safety')
+      .then(() => { setMessage('Protection thermique réarmée. Le démarrage manuel est de nouveau disponible.', 'success'); window.setTimeout(() => void refresh(), 400); })
+      .catch((error: unknown) => setMessage(miningErrorMessage(error), 'error'));
+  });
+  void runtime;
+};
+
+const bindNavigation = (): void => {
+  document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((button) => button.addEventListener('click', () => {
+    const view = button.dataset.view;
+    if (view !== 'host' && view !== 'mining') return;
+    activeView = view;
+    void refresh();
+  }));
+};
+
+const bindCatalog = (): void => {
+  document.querySelector<HTMLSelectElement>('#mining-currency')?.addEventListener('change', (event) => {
+    const currency = (event.currentTarget as HTMLSelectElement).value as DisplayCurrency;
+    if (!DISPLAY_CURRENCIES.includes(currency)) return;
+    displayCurrency = currency;
+    window.localStorage.setItem('gpubnb-mining-currency', currency);
+    void refresh();
+  });
+  document.querySelectorAll<HTMLButtonElement>('.catalog-select').forEach((button) => button.addEventListener('click', () => {
+    const coin = button.dataset.coin;
+    if (!coin || !MINING_CATALOG.some((entry) => entry.symbol === coin)) return;
+    selectedMiningCoin = coin;
+    void refresh();
+  }));
 };
 
 const bindPairing = (): void => {
@@ -291,22 +622,65 @@ const bindActions = (status: HostStatus): void => {
   }));
 };
 
-async function refresh(): Promise<void> {
-  app.innerHTML = '<main class="loading"><div class="spinner"></div><p>Vérification sécurisée de votre ordinateur…</p></main>';
+async function refresh(showLoading = true): Promise<void> {
+  if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+  if (showLoading) {
+    app.innerHTML = '<main class="loading"><div class="spinner"></div><p>Vérification sécurisée de votre ordinateur…</p></main>';
+  }
   try {
-    const status = await invoke<HostStatus>('host_status');
+    const selectedProfileId = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin)?.profileId;
+    const [status, mining, installation, miningConfiguration, telemetry, thermalSafety] = await Promise.all([
+      invoke<HostStatus>('host_status'),
+      invoke<MiningRuntimeStatus>('mining_runtime_status')
+        .then((runtime): MiningRuntimeRead => ({ status: runtime, error: null }))
+        .catch((error: unknown): MiningRuntimeRead => ({ status: null, error: String(error) })),
+      (() => {
+        const profileId = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin)?.profileId;
+        if (!profileId) return Promise.resolve<MinerInstallationRead>({ status: null, error: 'miner_profile_not_integrated' });
+        return invoke<MinerInstallationStatus>('approved_miner_status', { profileId })
+          .then((value): MinerInstallationRead => ({ status: value, error: null }))
+          .catch((error: unknown): MinerInstallationRead => ({ status: null, error: String(error) }));
+      })(),
+      invoke<MiningConfigurationView>('mining_configuration_get').catch(() => null),
+      selectedProfileId
+        ? invoke<MiningTelemetry>('mining_telemetry_status', { profileId: selectedProfileId }).catch(() => null)
+        : Promise.resolve(null),
+      invoke<MiningThermalSafety>('mining_thermal_safety_status').catch(() => null),
+    ]);
     const progress = Math.round(Math.min(100, Math.max(0, status.progress)));
     const online = status.lifecycle === 'online';
     const stopped = status.lifecycle === 'emergency_stopped';
-    app.innerHTML = `<main class="layout"><aside class="sidebar"><div class="brand"><span class="brand-mark">G</span><div><strong>GPUbnb Host</strong><small>Hôte sécurisé</small></div></div></aside>
-      <section class="content"><header class="topbar"><div><p class="eyebrow">GPUbnb Host</p><h1>${online ? 'Votre machine est disponible.' : 'Préparez cet ordinateur.'}</h1></div>
+    const sidebar = `<aside class="sidebar"><div class="brand"><span class="brand-mark">G</span><div><strong>GPUbnb Host</strong><small>Location et minage séparés</small></div></div>
+      <nav class="app-navigation" aria-label="Sections principales"><button class="${activeView === 'host' ? 'active' : ''}" data-view="host"><span>01</span><div><strong>GPUbnb</strong><small>Préparation et location</small></div></button>
+      <button class="${activeView === 'mining' ? 'active' : ''}" data-view="mining"><span>02</span><div><strong>Minage</strong><small>Cryptos et rendement</small></div></button></nav></aside>`;
+    const hostPage = `<section class="content"><header class="topbar"><div><p class="eyebrow">GPUbnb Host</p><h1>${online ? 'Votre machine est disponible.' : 'Préparez cet ordinateur.'}</h1><p class="lead">Cette page gère uniquement la préparation sécurisée et la location GPUbnb.</p></div>
       <div class="status-stack"><span class="status-pill ${status.lifecycle}">${lifecycleLabel(status.lifecycle)}</span><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
       ${stopped ? '<section class="alert-card danger"><strong>Arrêt d’urgence actif</strong></section>' : ''}
       <section class="progress-card"><div class="progress-heading"><div><p class="eyebrow">État de préparation</p><h2>${escapeHtml(status.summary)}</h2></div><strong>${progress}%</strong></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div></section>
       ${renderPairing(status)}${renderGpuInventory(status)}<p id="action-status" class="action-status" aria-live="polite"></p><ul class="checks">${renderChecks(status.checks)}</ul>
-      <div class="actions"><button id="refresh" class="secondary large">Revérifier</button><button id="publish" class="primary large" ${status.ready && !stopped && !online ? '' : 'disabled'}>${online ? 'Machine déjà en ligne' : 'Mettre en ligne'}</button></div></section></main>`;
-    bindPairing();
-    bindActions(status);
+      <div class="actions"><button id="refresh" class="secondary large">Revérifier</button><button id="publish" class="primary large" ${status.ready && !stopped && !online ? '' : 'disabled'}>${online ? 'Machine déjà en ligne' : 'Mettre en ligne'}</button></div></section>`;
+    const miningPage = `<section class="content mining-page"><header class="topbar"><div><p class="eyebrow">Minage personnel</p><h1>Choisissez une cryptomonnaie.</h1><p class="lead">Le minage personnel est indépendant de la publication GPUbnb. Le rendement sera calculé à partir du test réel de cette machine.</p></div>
+      <div class="status-stack"><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
+      ${stopped ? '<section class="alert-card danger"><strong>Arrêt d’urgence actif — redémarrage interdit.</strong></section>' : ''}
+      ${renderMiningCatalog()}${(() => {
+        const coin = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin);
+        return coin?.profileId
+          ? renderMiningRuntime(coin, mining, installation, miningConfiguration, telemetry, thermalSafety)
+          : `<section class="mining-runtime unavailable"><div><p class="eyebrow">${escapeHtml(selectedMiningCoin)}</p><h2>Profil sélectionné</h2></div><div class="mining-controls"><button class="primary" disabled>Démarrer le minage</button></div></section>`;
+      })()}<p id="action-status" class="action-status" aria-live="polite"></p></section>`;
+    app.innerHTML = `<main class="layout">${sidebar}${activeView === 'host' ? hostPage : miningPage}</main>`;
+    bindNavigation();
+    bindCatalog();
+    if (activeView === 'host') {
+      bindPairing();
+      bindActions(status);
+    } else {
+      const coin = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin);
+      if (coin?.profileId) bindMining(coin, mining, installation, miningConfiguration);
+    }
+    if (activeView === 'mining' && mining.status?.process.status === 'running') {
+      refreshTimer = window.setTimeout(() => void refresh(false), 5_000);
+    }
   } catch (error: unknown) {
     app.innerHTML = `<main class="error-state"><h1>Votre ordinateur reste protégé.</h1><p>${escapeHtml(String(error))}</p><button id="retry" class="primary large">Relancer</button></main>`;
     document.querySelector<HTMLButtonElement>('#retry')?.addEventListener('click', () => void refresh());

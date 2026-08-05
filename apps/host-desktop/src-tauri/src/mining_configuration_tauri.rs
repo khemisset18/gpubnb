@@ -1,15 +1,43 @@
-use crate::mining_configuration::MiningConfiguration;
+use crate::mining_configuration::{MiningConfiguration, MiningLaunchSpec};
 use crate::mining_configuration_commands::MiningConfigurationCommands;
 use crate::mining_configuration_store::MiningConfigurationView;
 use std::sync::Mutex;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct MiningConfigurationState {
     commands: Mutex<MiningConfigurationCommands>,
+    initialization_error: Option<&'static str>,
+}
+
+impl Default for MiningConfigurationState {
+    fn default() -> Self {
+        match MiningConfigurationCommands::persistent_default() {
+            Ok(commands) => Self {
+                commands: Mutex::new(commands),
+                initialization_error: None,
+            },
+            Err(error) => Self {
+                commands: Mutex::new(MiningConfigurationCommands::in_memory()),
+                initialization_error: Some(error),
+            },
+        }
+    }
 }
 
 impl MiningConfigurationState {
+    pub fn in_memory() -> Self {
+        Self {
+            commands: Mutex::new(MiningConfigurationCommands::in_memory()),
+            initialization_error: None,
+        }
+    }
+
+    fn ensure_initialized(&self) -> Result<(), &'static str> {
+        self.initialization_error.map_or(Ok(()), Err)
+    }
+
     pub fn get(&self) -> Result<MiningConfigurationView, &'static str> {
+        self.ensure_initialized()?;
         self.commands
             .lock()
             .map_err(|_| "mining_configuration_state_unavailable")?
@@ -21,6 +49,7 @@ impl MiningConfigurationState {
         expected_revision: u64,
         configuration: MiningConfiguration,
     ) -> Result<MiningConfigurationView, &'static str> {
+        self.ensure_initialized()?;
         self.commands
             .lock()
             .map_err(|_| "mining_configuration_state_unavailable")?
@@ -31,6 +60,7 @@ impl MiningConfigurationState {
         &self,
         expected_revision: u64,
     ) -> Result<MiningConfigurationView, &'static str> {
+        self.ensure_initialized()?;
         let pool_url = {
             let commands = self
                 .commands
@@ -52,6 +82,7 @@ impl MiningConfigurationState {
     }
 
     pub fn clear(&self, expected_revision: u64) -> Result<MiningConfigurationView, &'static str> {
+        self.ensure_initialized()?;
         self.commands
             .lock()
             .map_err(|_| "mining_configuration_state_unavailable")?
@@ -59,11 +90,15 @@ impl MiningConfigurationState {
     }
 
     pub fn require_ready(&self) -> Result<(), &'static str> {
+        self.require_ready_launch_spec().map(|_| ())
+    }
+
+    pub fn require_ready_launch_spec(&self) -> Result<MiningLaunchSpec, &'static str> {
+        self.ensure_initialized()?;
         self.commands
             .lock()
             .map_err(|_| "mining_configuration_state_unavailable")?
             .require_ready()
-            .map(|_| ())
     }
 }
 

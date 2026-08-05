@@ -1,5 +1,12 @@
+#![allow(dead_code)]
+
 #[path = "../src/mining_configuration.rs"]
 mod mining_configuration;
+#[path = "../src/mining_configuration_persistence.rs"]
+mod mining_configuration_persistence;
+mod mining_configuration_commands {
+    pub(crate) use crate::mining_configuration_persistence;
+}
 #[path = "../src/mining_configuration_store.rs"]
 mod mining_configuration_store;
 
@@ -15,6 +22,7 @@ fn configuration(worker_name: &str) -> MiningConfiguration {
     MiningConfiguration {
         enabled: true,
         auto_mine_when_idle: true,
+        performance_mode: Default::default(),
         cryptocurrency: "KAS".into(),
         miner_profile_id: "lolminer_kaspa".into(),
         pool_mode: PoolMode::Custom,

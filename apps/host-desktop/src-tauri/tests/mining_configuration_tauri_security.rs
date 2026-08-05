@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[path = "../src/mining_configuration.rs"]
 mod mining_configuration;
 #[path = "../src/mining_configuration_commands.rs"]
@@ -18,6 +20,7 @@ fn configuration(pool_url: &str) -> MiningConfiguration {
     MiningConfiguration {
         enabled: true,
         auto_mine_when_idle: true,
+        performance_mode: Default::default(),
         cryptocurrency: "KAS".into(),
         miner_profile_id: "lolminer_kaspa".into(),
         pool_mode: PoolMode::Custom,
@@ -30,7 +33,7 @@ fn configuration(pool_url: &str) -> MiningConfiguration {
 
 #[test]
 fn state_round_trip_never_exposes_secret_reference() {
-    let state = MiningConfigurationState::default();
+    let state = MiningConfigurationState::in_memory();
     let saved = state
         .save(0, configuration("stratum+tcp://127.0.0.1:1"))
         .unwrap();
@@ -44,7 +47,7 @@ fn state_round_trip_never_exposes_secret_reference() {
 
 #[test]
 fn stale_revision_is_rejected_by_shared_state() {
-    let state = MiningConfigurationState::default();
+    let state = MiningConfigurationState::in_memory();
     state
         .save(0, configuration("stratum+tcp://127.0.0.1:1"))
         .unwrap();
@@ -56,7 +59,7 @@ fn stale_revision_is_rejected_by_shared_state() {
 
 #[test]
 fn connection_test_uses_saved_pool_url_and_fails_closed() {
-    let state = MiningConfigurationState::default();
+    let state = MiningConfigurationState::in_memory();
     let saved = state
         .save(0, configuration("https://pool.example.com:443"))
         .unwrap_err();
@@ -77,7 +80,7 @@ fn connection_test_uses_saved_pool_url_and_fails_closed() {
 
 #[test]
 fn clear_removes_configuration_and_launch_authority() {
-    let state = MiningConfigurationState::default();
+    let state = MiningConfigurationState::in_memory();
     let saved = state
         .save(0, configuration("stratum+tcp://127.0.0.1:1"))
         .unwrap();

@@ -26,6 +26,25 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate language-independent installer ACLs
+        shell: pwsh
+        run: |
+          $hook = Get-Content 'apps/host-desktop/src-tauri/windows/installer-hooks.nsh' -Raw
+          if ($hook -match '\$%USERNAME%' -or $hook -match '\$%USERDOMAIN%') {
+            throw 'The installer must not grant ACLs through translated account names.'
+          }
+          if ($hook -notmatch [regex]::Escape('[System.Security.Principal.WindowsIdentity]::GetCurrent().User')) {
+            throw 'The installer must resolve the current principal directly to its Windows SID.'
+          }
+          if ($hook -notmatch [regex]::Escape('[System.IO.Directory]::SetAccessControl')) {
+            throw 'The installer must apply its ACL without account-name translation.'
+          }
+          foreach ($sid in @('S-1-5-18', 'S-1-5-32-544')) {
+            if ($hook -notmatch [regex]::Escape($sid)) {
+              throw "The installer ACL is missing required SID $sid."
+            }
+          }
+
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'

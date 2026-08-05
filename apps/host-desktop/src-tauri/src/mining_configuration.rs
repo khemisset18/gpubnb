@@ -11,6 +11,15 @@ pub enum PoolMode {
     Custom,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MiningPerformanceMode {
+    Eco,
+    #[default]
+    Balanced,
+    Full,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MiningConfigurationActor {
     HostOwner,
@@ -24,6 +33,8 @@ pub enum MiningConfigurationActor {
 pub struct MiningConfiguration {
     pub enabled: bool,
     pub auto_mine_when_idle: bool,
+    #[serde(default)]
+    pub performance_mode: MiningPerformanceMode,
     pub cryptocurrency: String,
     pub miner_profile_id: String,
     pub pool_mode: PoolMode,
@@ -56,6 +67,7 @@ pub enum MiningConfigurationStatus {
 pub struct MiningLaunchSpec {
     pub cryptocurrency: String,
     pub miner_profile_id: String,
+    pub performance_mode: MiningPerformanceMode,
     pub pool_url: String,
     pub wallet_address: String,
     pub worker_name: String,
@@ -154,6 +166,7 @@ impl MiningConfiguration {
         Ok(Some(MiningLaunchSpec {
             cryptocurrency: self.cryptocurrency.clone(),
             miner_profile_id: self.miner_profile_id.clone(),
+            performance_mode: self.performance_mode,
             pool_url,
             wallet_address: self.wallet_address.clone(),
             worker_name: self.worker_name.clone(),
@@ -190,7 +203,9 @@ pub fn authorize_configuration_change(actor: MiningConfigurationActor) -> Result
 fn approved_profile(cryptocurrency: &str, profile_id: &str) -> bool {
     matches!(
         (cryptocurrency, profile_id),
-        ("KAS", "lolminer_kaspa")
+        ("ALPH", "lolminer_blake3")
+            | ("CFX", "lolminer_octopus")
+            | ("KAS", "lolminer_kaspa")
             | ("ETC", "lolminer_etchash")
             | ("RVN", "trex_kawpow")
             | ("ERG", "lolminer_autolykos")
@@ -288,6 +303,7 @@ mod tests {
         MiningConfiguration {
             enabled: true,
             auto_mine_when_idle: true,
+            performance_mode: MiningPerformanceMode::Balanced,
             cryptocurrency: "KAS".into(),
             miner_profile_id: "lolminer_kaspa".into(),
             pool_mode: PoolMode::Custom,
@@ -357,6 +373,20 @@ mod tests {
             configuration.status(Some(&evidence), 1_010, 60),
             Err("mining_pool_tls_unverified")
         );
+    }
+
+    #[test]
+    fn pinned_lolminer_coin_profiles_are_approved() {
+        for (coin, profile) in [
+            ("ALPH", "lolminer_blake3"),
+            ("CFX", "lolminer_octopus"),
+            ("ETC", "lolminer_etchash"),
+        ] {
+            let mut configuration = custom_configuration();
+            configuration.cryptocurrency = coin.into();
+            configuration.miner_profile_id = profile.into();
+            assert!(configuration.validate().is_ok());
+        }
     }
 
     #[test]
