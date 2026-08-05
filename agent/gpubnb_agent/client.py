@@ -82,7 +82,7 @@ class ApiClient:
             detail = exc.read(4096).decode(errors="replace")
             raise RuntimeError(f"Upload HTTP {exc.code}: {detail}") from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"Upload ?chou?: {exc.reason}") from exc
+            raise RuntimeError(f"Upload échoué: {exc.reason}") from exc
 
     def download_file(self, path: str, dest_path: str, expected_sha256: str | None = None) -> dict[str, Any]:
         request = urllib.request.Request(self.api_url + path, method="GET", headers={"user-agent": f"gpubnb-agent/{__version__}"})
@@ -93,11 +93,11 @@ class ApiClient:
             detail = exc.read(4096).decode(errors="replace")
             raise RuntimeError(f"Download HTTP {exc.code}: {detail}") from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"Download ?chou?: {exc.reason}") from exc
+            raise RuntimeError(f"Download échoué: {exc.reason}") from exc
         if expected_sha256:
             actual = hashlib.sha256(data).hexdigest()
             if actual != expected_sha256:
-                raise RuntimeError(f"Int?grit? compromise: attendu {expected_sha256}, obtenu {actual}")
+                raise RuntimeError(f"Intégrité compromise: attendu {expected_sha256}, obtenu {actual}")
         Path(dest_path).write_bytes(data)
         return {"downloaded": True, "path": dest_path, "sizeBytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
@@ -143,7 +143,7 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
     # cold hardware scan can consume the entire validity window before send.
     gpus = gpu_inventory()
     if not gpus:
-        raise RuntimeError("Le heartbeat exige au moins un GPU d?tect?")
+        raise RuntimeError("Le heartbeat exige au moins un GPU détecté")
     # The legacy heartbeat schema carries one primary GPU. The complete validated
     # multi-GPU snapshot is attached under telemetry for the v2 server migration.
     gpu = gpus[0]
@@ -156,7 +156,7 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
     if current_fp:
         save_machine_fingerprint(current_fp)
     if hw_changed and previous_fp:
-        print(f"AVERTISSEMENT: Empreinte mat?rielle modifi?e (ancienne: {previous_fp[:16]}...)")
+        print(f"AVERTISSEMENT: Empreinte matérielle modifiée (ancienne: {previous_fp[:16]}...)")
     challenge_path = f"/agent/challenge/{machine_id}"
     challenge = client.request_with_retry(
         challenge_path,

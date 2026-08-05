@@ -2,26 +2,26 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Supervision d?une session Compute isol?e GPUbnb.">
-  <title>Session Compute ? GPUbnb</title>
+  <meta name="description" content="Supervision d’une session Compute isolée GPUbnb.">
+  <title>Session Compute — GPUbnb</title>
   <link rel="stylesheet" href="account.css"><link rel="stylesheet" href="session.css">
   <script defer src="config.js"></script><script defer src="session.js"></script>
 </head>
 <body>
 <header class="account-header"><a class="brand" href="index.html">GPUbnb</a><a class="button" href="dashboard.html">Mon espace</a></header>
 <main class="account-shell" id="sessionRoot">
-  <div class="dashboard-head"><div><span class="eyebrow">Environnement isol?</span><h1 id="sessionTitle">Compute</h1><p id="sessionSummary" class="muted">Connexion s?curis?e ? la session?</p></div><span id="sessionStatus" class="badge">CHARGEMENT</span></div>
-  <section class="panel preparation-panel"><div class="preparation-head"><div><span class="eyebrow">Pr?paration avant votre arriv?e</span><h2 id="preparationStep">R?servation confirm?e</h2></div><strong id="preparationPercent">0 %</strong></div><div class="progress-track" role="progressbar" aria-label="Pr?paration du Workspace" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="preparationBar"></span></div><p id="preparationMessage" class="muted">GPUbnb v?rifie la machine et pr?pare les composants automatiquement.</p></section>
+  <div class="dashboard-head"><div><span class="eyebrow">Environnement isolé</span><h1 id="sessionTitle">Compute</h1><p id="sessionSummary" class="muted">Connexion sécurisée à la session…</p></div><span id="sessionStatus" class="badge">CHARGEMENT</span></div>
+  <section class="panel preparation-panel"><div class="preparation-head"><div><span class="eyebrow">Préparation avant votre arrivée</span><h2 id="preparationStep">Réservation confirmée</h2></div><strong id="preparationPercent">0 %</strong></div><div class="progress-track" role="progressbar" aria-label="Préparation du Workspace" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="preparationBar"></span></div><p id="preparationMessage" class="muted">GPUbnb vérifie la machine et prépare les composants automatiquement.</p></section>
   <section class="stats metric-grid">
-    <article class="stat"><span>GPU</span><strong id="gpuMetric">?</strong></article><article class="stat"><span>VRAM utilis?e</span><strong id="vramMetric">?</strong></article>
-    <article class="stat"><span>Temp?rature</span><strong id="tempMetric">?</strong></article><article class="stat"><span>CPU</span><strong id="cpuMetric">?</strong></article>
-    <article class="stat"><span>RAM utilis?e</span><strong id="ramMetric">?</strong></article><article class="stat"><span>Secondes valid?es</span><strong id="usageMetric">?</strong></article>
+    <article class="stat"><span>GPU</span><strong id="gpuMetric">—</strong></article><article class="stat"><span>VRAM utilisée</span><strong id="vramMetric">—</strong></article>
+    <article class="stat"><span>Température</span><strong id="tempMetric">—</strong></article><article class="stat"><span>CPU</span><strong id="cpuMetric">—</strong></article>
+    <article class="stat"><span>RAM utilisée</span><strong id="ramMetric">—</strong></article><article class="stat"><span>Secondes validées</span><strong id="usageMetric">—</strong></article>
   </section>
-  <section class="panel" style="margin-top:18px"><span class="eyebrow">Preuve de calcul</span><h2 id="proofTitle">GPU Proof en attente</h2><p id="proofResult" class="muted">Le r?sultat sign? appara?tra apr?s le calcul CUDA et le nettoyage du conteneur.</p></section>
+  <section class="panel" style="margin-top:18px"><span class="eyebrow">Preuve de calcul</span><h2 id="proofTitle">GPU Proof en attente</h2><p id="proofResult" class="muted">Le résultat signé apparaîtra après le calcul CUDA et le nettoyage du conteneur.</p></section>
   <div class="workspace"><section class="panel"><h2>Protection de la machine</h2><div class="protection-list">
-    <p><strong>Isolation :</strong> <span id="isolationValue">?</span></p><p><strong>R?seau :</strong> <span id="networkValue">?</span></p>
-    <p><strong>Limite m?moire :</strong> <span id="memoryLimitValue">?</span></p><p><strong>Expiration automatique :</strong> <span id="expiresValue">?</span></p>
-  </div><p class="muted">Le locataire utilise uniquement l?environnement autoris?. Les fichiers personnels, le bureau et le r?seau local du loueur ne sont pas expos?s.</p></section>
-  <aside class="panel"><h2>Contr?les</h2><p id="sessionMessage" class="muted">Le GPU Proof d?marre automatiquement au d?but de la r?servation.</p><button id="startSession" class="button button-primary" type="button" disabled>Ex?cution automatique</button><button id="stopSession" class="button button-danger stop-button" type="button">Annuler / arr?ter</button></aside></div>
+    <p><strong>Isolation :</strong> <span id="isolationValue">—</span></p><p><strong>Réseau :</strong> <span id="networkValue">—</span></p>
+    <p><strong>Limite mémoire :</strong> <span id="memoryLimitValue">—</span></p><p><strong>Expiration automatique :</strong> <span id="expiresValue">—</span></p>
+  </div><p class="muted">Le locataire utilise uniquement l’environnement autorisé. Les fichiers personnels, le bureau et le réseau local du loueur ne sont pas exposés.</p></section>
+  <aside class="panel"><h2>Contrôles</h2><p id="sessionMessage" class="muted">Le GPU Proof démarre automatiquement au début de la réservation.</p><button id="startSession" class="button button-primary" type="button" disabled>Exécution automatique</button><button id="stopSession" class="button button-danger stop-button" type="button">Annuler / arrêter</button></aside></div>
 </main>
 </body></html>

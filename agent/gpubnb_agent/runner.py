@@ -48,9 +48,9 @@ def gpu_probe_command(image: str, container_name: str | None = None) -> list[str
 
 def diagnostic_command(image: str, container_name: str | None = None) -> list[str]:
     if not PINNED_IMAGE.fullmatch(image):
-        raise RuntimeError("diagnosticImage doit ?tre une image Docker ?pingl?e par digest sha256")
+        raise RuntimeError("diagnosticImage doit être une image Docker épinglée par digest sha256")
     if not OFFICIAL_DIAGNOSTIC_IMAGE.fullmatch(image):
-        raise RuntimeError("diagnosticImage doit utiliser l'image officielle ghcr.io/khemisset18/gpu-diagnostic ?pingl?e par digest")
+        raise RuntimeError("diagnosticImage doit utiliser l'image officielle ghcr.io/khemisset18/gpu-diagnostic épinglée par digest")
     return gpu_probe_command(image, container_name)
 
 
@@ -139,7 +139,7 @@ def run_gpu_diagnostic(image: str, timeout_seconds: int) -> dict[str, Any]:
         safe_gpus = _parse_report(stdout)
         report = {
             "gpuDetected": bool(safe_gpus),
-            "summary": "Diagnostic GPU officiel termin?." if safe_gpus else "Aucun GPU d?tect? dans le conteneur.",
+            "summary": "Diagnostic GPU officiel terminé." if safe_gpus else "Aucun GPU détecté dans le conteneur.",
             "metrics": {
                 "gpuCount": len(safe_gpus), "vendor": "NVIDIA", "gpus": safe_gpus,
                 "imageCacheHit": cache_hit,
@@ -209,7 +209,7 @@ def run_gpu_proof_workspace(
                     raise RuntimeError("gpu_proof_invalid_device")
                 final = {
                     "gpuDetected": event.get("gpuDetected") is True,
-                    "summary": "Calcul CUDA GPU Proof termin? et nettoy?.",
+                    "summary": "Calcul CUDA GPU Proof terminé et nettoyé.",
                     "metrics": {
                         "durationSeconds": _bounded_int(event.get("durationSeconds"), "duration", 30, 600),
                         "iterations": _bounded_int(event.get("iterations"), "iterations", 1, 10_000_000_000),
@@ -250,7 +250,7 @@ def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
 
 def prepare_workspace(image: str, timeout_seconds: int, workspace_slug: str = "compute") -> dict[str, Any]:
     if not PINNED_IMAGE.fullmatch(image):
-        raise RuntimeError("diagnosticImage doit ?tre une image Docker ?pingl?e par digest sha256")
+        raise RuntimeError("diagnosticImage doit être une image Docker épinglée par digest sha256")
     timeout = max(30, min(600, int(timeout_seconds)))
     cache_hit = _pull_image(image, timeout)
     health = subprocess.run(
@@ -262,7 +262,7 @@ def prepare_workspace(image: str, timeout_seconds: int, workspace_slug: str = "c
     detected_gpus = gpu_inventory()
     return {
         "gpuDetected": bool(detected_gpus),
-        "summary": f"Workspace {workspace_slug} pr?par? et contr?le isol? r?ussi.",
+        "summary": f"Workspace {workspace_slug} préparé et contrôle isolé réussi.",
         "metrics": {
             "cacheHit": cache_hit,
             "workspaceSlug": workspace_slug,

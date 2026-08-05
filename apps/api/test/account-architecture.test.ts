@@ -55,7 +55,7 @@ test('Compute is prepared before renter arrival and access waits for READY', () 
   assert.match(server, /preparationProgress:100/);
   const script = read('apps/web/session.js');
   assert.match(script, /session\.status!==\'READY\'/);
-  assert.match(read('apps/web/session.html'), /Pr?paration avant votre arriv?e/);
+  assert.match(read('apps/web/session.html'), /Préparation avant votre arrivée/);
 });
 
 test('account schema separates private identity and user capabilities', () => {

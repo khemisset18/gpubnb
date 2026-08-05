@@ -1,36 +1,36 @@
-# Premi?re location GPU Proof
+# Première location GPU Proof
 
-Le parcours `GPU_PROOF` ex?cute une charge CUDA born?e dans un conteneur isol?. Il ne donne pas de shell au locataire et ne monte aucun fichier de l'h?te.
+Le parcours `GPU_PROOF` exécute une charge CUDA bornée dans un conteneur isolé. Il ne donne pas de shell au locataire et ne monte aucun fichier de l'hôte.
 
-## Pr?requis h?te
+## Prérequis hôte
 
 - Docker avec NVIDIA Container Toolkit ;
 - un GPU NVIDIA sain et suffisamment refroidi ;
-- l'agent GPUbnb li? ? une machine disponible ;
-- l'escrow Solana d?ploy? et configur? sur Devnet ;
-- l'image publi?e par le workflow `GPU Proof workspace image`.
+- l'agent GPUbnb lié à une machine disponible ;
+- l'escrow Solana déployé et configuré sur Devnet ;
+- l'image publiée par le workflow `GPU Proof workspace image`.
 
 ## Installer l'image immuable
 
-Le workflow fournit le digest apr?s construction et signature. Sur l'h?te GPU, remplacez `<digest>` par cette valeur :
+Le workflow fournit le digest après construction et signature. Sur l'hôte GPU, remplacez `<digest>` par cette valeur :
 
 ```powershell
 gpubnb-agent workspaces install compute ghcr.io/khemisset18/gpu-proof-workspace@sha256:<digest>
 gpubnb-agent protections verify
 ```
 
-L'agent refuse une image hors de l'espace officiel ou non ?pingl?e par digest.
+L'agent refuse une image hors de l'espace officiel ou non épinglée par digest.
 
-## Ex?cuter la premi?re preuve
+## Exécuter la première preuve
 
 1. Publier une annonce Devnet pour la machine.
-2. Depuis l'interface, choisir `Lancer un GPU Proof ? 5 min`.
-3. Signer le d?p?t d'escrow dans Phantom.
-4. Laisser l'agent r?clamer et ex?cuter le job automatiquement.
-5. V?rifier dans la session le GPU d?tect?, la dur?e, les it?rations et la suppression du conteneur.
+2. Depuis l'interface, choisir `Lancer un GPU Proof · 5 min`.
+3. Signer le dépôt d'escrow dans Phantom.
+4. Laisser l'agent réclamer et exécuter le job automatiquement.
+5. Vérifier dans la session le GPU détecté, la durée, les itérations et la suppression du conteneur.
 
-Le succ?s exige des m?triques d'usage sign?es, un GPU CUDA d?tect? et `containerCleaned=true`. Un arr?t demand? ou une erreur ne valide pas la location.
+Le succès exige des métriques d'usage signées, un GPU CUDA détecté et `containerCleaned=true`. Un arrêt demandé ou une erreur ne valide pas la location.
 
-## Contr?le avant production
+## Contrôle avant production
 
-Restez sur Devnet jusqu'? validation d'une location compl?te. Ne lancez pas la preuve si le GPU surchauffe : corrigez d'abord le refroidissement et confirmez la stabilit? avec les outils du constructeur.
+Restez sur Devnet jusqu'à validation d'une location complète. Ne lancez pas la preuve si le GPU surchauffe : corrigez d'abord le refroidissement et confirmez la stabilité avec les outils du constructeur.
