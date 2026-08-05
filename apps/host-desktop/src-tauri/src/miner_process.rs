@@ -383,7 +383,7 @@ fn parse_gpu_power_limits(output: &str) -> Result<Vec<(f64, f64)>, &'static str>
                 .trim()
                 .parse::<f64>()
                 .map_err(|_| "gpu_power_limit_invalid")?;
-            Ok((default, minimum))
+            Ok::<(f64, f64), &'static str>((default, minimum))
         })
         .collect::<Result<Vec<_>, _>>()?;
     (!limits.is_empty())

@@ -2,7 +2,9 @@ use crate::mining_configuration::{MiningConfiguration, PoolConnectionEvidence};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::path::Path;
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const SCHEMA_VERSION: u32 = 1;
