@@ -59,6 +59,7 @@ type MiningThermalSafety = {
 type MiningConfiguration = {
   enabled: boolean;
   autoMineWhenIdle: boolean;
+  performanceMode: 'eco' | 'balanced' | 'full';
   cryptocurrency: string;
   minerProfileId: string;
   poolMode: 'custom';
@@ -361,10 +362,17 @@ const renderMiningRuntime = (
   const configurationMatches = saved?.cryptocurrency === coin.symbol
     && saved?.minerProfileId === coin.profileId;
   const configurationReady = configurationMatches && configuration?.status === 'ready';
+  const gpuMining = coin.profileId?.startsWith('lolminer_') === true;
+  const performanceMode = configurationMatches ? saved?.performanceMode ?? 'balanced' : 'balanced';
   const thermalLatched = thermalSafety?.latched === true;
   const thermalPanel = thermalLatched ? `<div class="thermal-alert thermal-latched"><strong>Protection thermique déclenchée</strong><span>Le mineur a été arrêté automatiquement à ${formatMetric(thermalSafety?.lastTemperatureCelsius, '°C')}. Attendez que la carte descende à ${thermalSafety?.rearmCelsius ?? 75} °C maximum.</span><button id="acknowledge-thermal-safety" class="secondary" type="button">Vérifier et réarmer</button></div>` : '';
   const configurationPanel = installReady ? `<form id="mining-configuration" class="mining-configuration" novalidate>
     <div class="configuration-heading"><div><strong>Pool ${escapeHtml(coin.symbol)} personnel</strong><small>${configurationReady ? 'Connexion vérifiée. Le démarrage est autorisé.' : 'Enregistrez puis testez la connexion avant le démarrage.'}</small></div><span class="verification-badge ${configurationReady ? '' : 'pending'}">${configurationReady ? '✓ Prêt' : 'Test requis'}</span></div>
+    ${gpuMining ? `<fieldset class="performance-modes"><legend>Puissance de minage</legend>
+      <label><input type="radio" name="performance-mode" value="eco" ${performanceMode === 'eco' ? 'checked' : ''}><strong>Éco</strong><span>33 %</span></label>
+      <label><input type="radio" name="performance-mode" value="balanced" ${performanceMode === 'balanced' ? 'checked' : ''}><strong>Équilibré</strong><span>66 %</span></label>
+      <label><input type="radio" name="performance-mode" value="full" ${performanceMode === 'full' ? 'checked' : ''}><strong>Pleine puissance</strong><span>100 %</span></label>
+      <small>La limite minimale NVIDIA de la carte reste prioritaire. La protection thermique arrête toujours le mineur à 85 °C.</small></fieldset>` : '<p class="cpu-mining-note">Ce profil XMR utilise le processeur sur cette machine ; les modes de puissance GPU ne s’appliquent pas.</p>'}
     <div class="configuration-fields"><label>Adresse du pool<input id="mining-pool" value="${escapeHtml(configurationMatches ? saved?.customPoolUrl ?? '' : '')}" placeholder="stratum+tls://pool.example.com:443" required></label>
     <label>Adresse du portefeuille ${escapeHtml(coin.symbol)}<input id="mining-wallet" value="${escapeHtml(configurationMatches ? saved?.walletAddress ?? '' : '')}" maxlength="192" required></label>
     <label>Nom de ce PC<input id="mining-worker" value="${escapeHtml(configurationMatches ? saved?.workerName ?? 'gpubnb-host' : 'gpubnb-host')}" maxlength="96" required></label></div>
@@ -389,6 +397,7 @@ const miningErrorMessage = (error: unknown): string => {
   if (value.includes('thermal_safety_review_required')) return 'Le redémarrage reste bloqué après un arrêt thermique. Laissez refroidir la carte puis cliquez sur « Vérifier et réarmer ».';
   if (value.includes('miner_temperature_still_too_high')) return 'La carte est encore trop chaude. Attendez qu’elle descende à 75 °C maximum.';
   if (value.includes('gpu_temperature_sensor_unavailable') || value.includes('gpu_temperature_sensor_invalid')) return 'Le capteur NVIDIA ne peut pas être vérifié. Le réarmement reste bloqué par sécurité.';
+  if (value.includes('gpu_power_limit_unavailable') || value.includes('gpu_power_limit_invalid')) return 'La limite de puissance NVIDIA n’est pas disponible sur cette carte. Le mineur reste arrêté.';
   return `Opération refusée : ${value}`;
 };
 
@@ -427,7 +436,9 @@ const bindMining = (
     const pool = document.querySelector<HTMLInputElement>('#mining-pool')?.value.trim() ?? '';
     const wallet = document.querySelector<HTMLInputElement>('#mining-wallet')?.value.trim() ?? '';
     const worker = document.querySelector<HTMLInputElement>('#mining-worker')?.value.trim() ?? '';
-    const candidate: MiningConfiguration = { enabled: true, autoMineWhenIdle: true, cryptocurrency: coin.symbol, minerProfileId: coin.profileId ?? '', poolMode: 'custom', customPoolUrl: pool, walletAddress: wallet, workerName: worker, poolCredentialRef: null };
+    const selectedMode = document.querySelector<HTMLInputElement>('input[name="performance-mode"]:checked')?.value;
+    const performanceMode = selectedMode === 'eco' || selectedMode === 'full' ? selectedMode : 'balanced';
+    const candidate: MiningConfiguration = { enabled: true, autoMineWhenIdle: true, performanceMode: coin.profileId?.startsWith('lolminer_') ? performanceMode : 'full', cryptocurrency: coin.symbol, minerProfileId: coin.profileId ?? '', poolMode: 'custom', customPoolUrl: pool, walletAddress: wallet, workerName: worker, poolCredentialRef: null };
     setMessage('Enregistrement sécurisé de la configuration…');
     void invoke('mining_configuration_save', { expectedRevision: configuration?.revision ?? 0, configuration: candidate })
       .then(() => { setMessage('Configuration enregistrée. Testez maintenant le pool.', 'success'); window.setTimeout(() => void refresh(), 400); })

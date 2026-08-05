@@ -1,6 +1,6 @@
 use crate::approved_miner_manifest::{approved_miner_release, validate_release_metadata};
 use crate::miner_paths;
-use crate::mining_configuration::MiningLaunchSpec;
+use crate::mining_configuration::{MiningLaunchSpec, MiningPerformanceMode};
 use crate::secure_launcher;
 use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
@@ -74,7 +74,8 @@ impl MinerProcessManager {
         }
 
         let executable = self.resolve_approved_executable(&spec.miner_profile_id)?;
-        let arguments = build_approved_arguments(spec)?;
+        let mut arguments = build_approved_arguments(spec)?;
+        append_gpu_power_limit(&mut arguments, spec)?;
         let (stdout_log, stderr_log) = self.prepare_logs()?;
         let mut child = Command::new(&executable)
             .args(&arguments)
@@ -338,6 +339,77 @@ fn build_approved_arguments(spec: &MiningLaunchSpec) -> Result<Vec<String>, &'st
     }
 }
 
+fn append_gpu_power_limit(
+    arguments: &mut Vec<String>,
+    spec: &MiningLaunchSpec,
+) -> Result<(), &'static str> {
+    if !spec.miner_profile_id.starts_with("lolminer_") {
+        return Ok(());
+    }
+    let output = Command::new("nvidia-smi")
+        .args([
+            "--query-gpu=power.default_limit,power.min_limit",
+            "--format=csv,noheader,nounits",
+        ])
+        .output()
+        .map_err(|_| "gpu_power_limit_unavailable")?;
+    if !output.status.success() {
+        return Err("gpu_power_limit_unavailable");
+    }
+    let limits = parse_gpu_power_limits(&String::from_utf8_lossy(&output.stdout))?;
+    let targets = limits
+        .into_iter()
+        .map(|(default, minimum)| {
+            calculate_gpu_power_limit(default, minimum, spec.performance_mode)
+                .map(|target| target.to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    arguments.extend(["--pl".into(), targets.join(",")]);
+    Ok(())
+}
+
+fn parse_gpu_power_limits(output: &str) -> Result<Vec<(f64, f64)>, &'static str> {
+    let limits = output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            let (default, minimum) = line
+                .split_once(',')
+                .ok_or("gpu_power_limit_invalid")?;
+            let default = default
+                .trim()
+                .parse::<f64>()
+                .map_err(|_| "gpu_power_limit_invalid")?;
+            let minimum = minimum
+                .trim()
+                .parse::<f64>()
+                .map_err(|_| "gpu_power_limit_invalid")?;
+            Ok((default, minimum))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    (!limits.is_empty())
+        .then_some(limits)
+        .ok_or("gpu_power_limit_invalid")
+}
+
+fn calculate_gpu_power_limit(
+    default_watts: f64,
+    minimum_watts: f64,
+    mode: MiningPerformanceMode,
+) -> Result<u32, &'static str> {
+    if !default_watts.is_finite()
+        || !minimum_watts.is_finite()
+        || default_watts <= 0.0
+        || minimum_watts <= 0.0
+        || minimum_watts > default_watts
+    {
+        return Err("gpu_power_limit_invalid");
+    }
+    let requested = default_watts * f64::from(mode.percent()) / 100.0;
+    Ok(requested.max(minimum_watts).min(default_watts).round() as u32)
+}
+
 fn validate_argument(value: &str) -> Result<(), &'static str> {
     if value.is_empty()
         || value.len() > MAX_ARGUMENT_LEN
@@ -356,6 +428,7 @@ mod tests {
         MiningLaunchSpec {
             cryptocurrency: "ALPH".into(),
             miner_profile_id: profile.into(),
+            performance_mode: MiningPerformanceMode::Balanced,
             pool_url: "stratum+tcp://pool.example.com:3333".into(),
             wallet_address: "wallet123".into(),
             worker_name: "worker01".into(),
@@ -393,6 +466,26 @@ mod tests {
             assert!(args.iter().any(|argument| argument == "--pool"));
             assert!(args.iter().any(|argument| argument == "--user"));
         }
+    }
+
+    #[test]
+    fn performance_modes_respect_the_hardware_power_floor() {
+        assert_eq!(calculate_gpu_power_limit(100.0, 20.0, MiningPerformanceMode::Eco), Ok(33));
+        assert_eq!(
+            calculate_gpu_power_limit(100.0, 20.0, MiningPerformanceMode::Balanced),
+            Ok(66)
+        );
+        assert_eq!(calculate_gpu_power_limit(100.0, 20.0, MiningPerformanceMode::Full), Ok(100));
+        assert_eq!(calculate_gpu_power_limit(50.0, 30.0, MiningPerformanceMode::Eco), Ok(30));
+    }
+
+    #[test]
+    fn parses_nvidia_power_limit_output_without_units() {
+        assert_eq!(
+            parse_gpu_power_limits("50.00, 30.00\n120.00, 60.00\n"),
+            Ok(vec![(50.0, 30.0), (120.0, 60.0)])
+        );
+        assert_eq!(parse_gpu_power_limits("N/A, 30.00\n"), Err("gpu_power_limit_invalid"));
     }
 
     #[test]

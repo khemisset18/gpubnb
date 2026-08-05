@@ -134,14 +134,20 @@ mod tests {
         assert_eq!(state.observe(84.9), Ok(false));
         assert_eq!(state.observe(85.0), Ok(true));
         assert_eq!(state.observe(93.0), Ok(false));
-        assert_eq!(state.ensure_start_allowed(), Err("thermal_safety_review_required"));
+        assert_eq!(
+            state.ensure_start_allowed(),
+            Err("thermal_safety_review_required")
+        );
     }
 
     #[test]
     fn requires_real_cooldown_before_rearming() {
         let state = MiningThermalSafetyState::default();
         state.observe(90.0).unwrap();
-        assert_eq!(state.acknowledge(75.1), Err("miner_temperature_still_too_high"));
+        assert_eq!(
+            state.acknowledge(75.1),
+            Err("miner_temperature_still_too_high")
+        );
         assert_eq!(state.acknowledge(75.0), Ok(()));
         assert_eq!(state.ensure_start_allowed(), Ok(()));
     }
@@ -150,7 +156,10 @@ mod tests {
     fn rejects_non_finite_sensor_values() {
         let state = MiningThermalSafetyState::default();
         assert_eq!(state.observe(f64::NAN), Ok(false));
-        assert_eq!(state.acknowledge(f64::INFINITY), Err("miner_temperature_still_too_high"));
+        assert_eq!(
+            state.acknowledge(f64::INFINITY),
+            Err("miner_temperature_still_too_high")
+        );
     }
 
     #[test]
@@ -160,6 +169,9 @@ mod tests {
             parse_max_temperature("not-a-temperature\n"),
             Err("gpu_temperature_sensor_invalid")
         );
-        assert_eq!(parse_max_temperature("\n"), Err("gpu_temperature_sensor_invalid"));
+        assert_eq!(
+            parse_max_temperature("\n"),
+            Err("gpu_temperature_sensor_invalid")
+        );
     }
 }

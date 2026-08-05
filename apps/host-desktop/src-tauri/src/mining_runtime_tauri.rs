@@ -204,10 +204,7 @@ impl MiningRuntimeState {
             .lock()
             .map_err(|_| "mining_runtime_state_unavailable")?
             .set_owner_consent(MiningConsent::Disabled)?;
-        let execution = self.execute_decision(
-            decision,
-            &MiningConfigurationState::in_memory(),
-        )?;
+        let execution = self.execute_decision(decision, &MiningConfigurationState::in_memory())?;
         let process_exited = execution.process.status != MinerProcessStatus::Running
             && execution.process.pid.is_none();
         self.controller

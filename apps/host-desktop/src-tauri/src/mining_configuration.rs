@@ -11,6 +11,25 @@ pub enum PoolMode {
     Custom,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MiningPerformanceMode {
+    Eco,
+    #[default]
+    Balanced,
+    Full,
+}
+
+impl MiningPerformanceMode {
+    pub const fn percent(self) -> u8 {
+        match self {
+            Self::Eco => 33,
+            Self::Balanced => 66,
+            Self::Full => 100,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MiningConfigurationActor {
     HostOwner,
@@ -24,6 +43,8 @@ pub enum MiningConfigurationActor {
 pub struct MiningConfiguration {
     pub enabled: bool,
     pub auto_mine_when_idle: bool,
+    #[serde(default)]
+    pub performance_mode: MiningPerformanceMode,
     pub cryptocurrency: String,
     pub miner_profile_id: String,
     pub pool_mode: PoolMode,
@@ -56,6 +77,7 @@ pub enum MiningConfigurationStatus {
 pub struct MiningLaunchSpec {
     pub cryptocurrency: String,
     pub miner_profile_id: String,
+    pub performance_mode: MiningPerformanceMode,
     pub pool_url: String,
     pub wallet_address: String,
     pub worker_name: String,
@@ -154,6 +176,7 @@ impl MiningConfiguration {
         Ok(Some(MiningLaunchSpec {
             cryptocurrency: self.cryptocurrency.clone(),
             miner_profile_id: self.miner_profile_id.clone(),
+            performance_mode: self.performance_mode,
             pool_url,
             wallet_address: self.wallet_address.clone(),
             worker_name: self.worker_name.clone(),
@@ -290,6 +313,7 @@ mod tests {
         MiningConfiguration {
             enabled: true,
             auto_mine_when_idle: true,
+            performance_mode: MiningPerformanceMode::Balanced,
             cryptocurrency: "KAS".into(),
             miner_profile_id: "lolminer_kaspa".into(),
             pool_mode: PoolMode::Custom,

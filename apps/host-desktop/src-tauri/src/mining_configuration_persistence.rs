@@ -192,6 +192,7 @@ mod tests {
         MiningConfiguration {
             enabled: true,
             auto_mine_when_idle: true,
+            performance_mode: crate::mining_configuration::MiningPerformanceMode::Balanced,
             cryptocurrency: "KAS".into(),
             miner_profile_id: "lolminer_kaspa".into(),
             pool_mode: PoolMode::Custom,

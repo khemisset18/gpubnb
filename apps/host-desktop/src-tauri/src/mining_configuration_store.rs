@@ -1,5 +1,6 @@
 use crate::mining_configuration::{
-    MiningConfiguration, MiningConfigurationStatus, PoolConnectionEvidence, PoolMode,
+    MiningConfiguration, MiningConfigurationStatus, MiningPerformanceMode, PoolConnectionEvidence,
+    PoolMode,
 };
 use crate::mining_configuration_commands::mining_configuration_persistence::PersistentMiningConfiguration;
 use serde::Serialize;
@@ -18,6 +19,7 @@ pub struct MiningConfigurationStore {
 pub struct MiningConfigurationPublic {
     pub enabled: bool,
     pub auto_mine_when_idle: bool,
+    pub performance_mode: MiningPerformanceMode,
     pub cryptocurrency: String,
     pub miner_profile_id: String,
     pub pool_mode: PoolMode,
@@ -32,6 +34,7 @@ impl From<&MiningConfiguration> for MiningConfigurationPublic {
         Self {
             enabled: configuration.enabled,
             auto_mine_when_idle: configuration.auto_mine_when_idle,
+            performance_mode: configuration.performance_mode,
             cryptocurrency: configuration.cryptocurrency.clone(),
             miner_profile_id: configuration.miner_profile_id.clone(),
             pool_mode: configuration.pool_mode,
@@ -176,6 +179,7 @@ mod tests {
         MiningConfiguration {
             enabled: true,
             auto_mine_when_idle: true,
+            performance_mode: MiningPerformanceMode::Balanced,
             cryptocurrency: "KAS".into(),
             miner_profile_id: "lolminer_kaspa".into(),
             pool_mode: PoolMode::Custom,

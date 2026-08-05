@@ -30,6 +30,15 @@ has been corrected.
 - A manual rearm is accepted only after a fresh native sensor reading is at or below 75 °C.
 - An unavailable or invalid sensor cannot clear the restart latch.
 
+## GPU performance modes
+
+- Eco targets 33% of the NVIDIA default power limit.
+- Balanced targets 66% and is the default for new GPU configurations.
+- Full targets 100% of the NVIDIA default power limit.
+- Every target is clamped to the minimum and default limits reported by the GPU firmware.
+- lolMiner receives the resulting per-GPU limits as structured `--pl` arguments; shell input is never used.
+- The modes do not apply to the validated XMR profile because that profile uses the CPU on the test machine.
+
 ## Display rules
 
 - Hashrate, temperature, power, uptime and shares are parsed from the local miner log.
