@@ -374,9 +374,7 @@ fn parse_gpu_power_limits(output: &str) -> Result<Vec<(f64, f64)>, &'static str>
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .map(|line| {
-            let (default, minimum) = line
-                .split_once(',')
-                .ok_or("gpu_power_limit_invalid")?;
+            let (default, minimum) = line.split_once(',').ok_or("gpu_power_limit_invalid")?;
             let default = default
                 .trim()
                 .parse::<f64>()
@@ -470,13 +468,22 @@ mod tests {
 
     #[test]
     fn performance_modes_respect_the_hardware_power_floor() {
-        assert_eq!(calculate_gpu_power_limit(100.0, 20.0, MiningPerformanceMode::Eco), Ok(33));
+        assert_eq!(
+            calculate_gpu_power_limit(100.0, 20.0, MiningPerformanceMode::Eco),
+            Ok(33)
+        );
         assert_eq!(
             calculate_gpu_power_limit(100.0, 20.0, MiningPerformanceMode::Balanced),
             Ok(66)
         );
-        assert_eq!(calculate_gpu_power_limit(100.0, 20.0, MiningPerformanceMode::Full), Ok(100));
-        assert_eq!(calculate_gpu_power_limit(50.0, 30.0, MiningPerformanceMode::Eco), Ok(30));
+        assert_eq!(
+            calculate_gpu_power_limit(100.0, 20.0, MiningPerformanceMode::Full),
+            Ok(100)
+        );
+        assert_eq!(
+            calculate_gpu_power_limit(50.0, 30.0, MiningPerformanceMode::Eco),
+            Ok(30)
+        );
     }
 
     #[test]
@@ -485,7 +492,10 @@ mod tests {
             parse_gpu_power_limits("50.00, 30.00\n120.00, 60.00\n"),
             Ok(vec![(50.0, 30.0), (120.0, 60.0)])
         );
-        assert_eq!(parse_gpu_power_limits("N/A, 30.00\n"), Err("gpu_power_limit_invalid"));
+        assert_eq!(
+            parse_gpu_power_limits("N/A, 30.00\n"),
+            Err("gpu_power_limit_invalid")
+        );
     }
 
     #[test]
