@@ -622,9 +622,11 @@ const bindActions = (status: HostStatus): void => {
   }));
 };
 
-async function refresh(): Promise<void> {
+async function refresh(showLoading = true): Promise<void> {
   if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
-  app.innerHTML = '<main class="loading"><div class="spinner"></div><p>Vérification sécurisée de votre ordinateur…</p></main>';
+  if (showLoading) {
+    app.innerHTML = '<main class="loading"><div class="spinner"></div><p>Vérification sécurisée de votre ordinateur…</p></main>';
+  }
   try {
     const selectedProfileId = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin)?.profileId;
     const [status, mining, installation, miningConfiguration, telemetry, thermalSafety] = await Promise.all([
@@ -676,8 +678,8 @@ async function refresh(): Promise<void> {
       const coin = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin);
       if (coin?.profileId) bindMining(coin, mining, installation, miningConfiguration);
     }
-    if (activeView === 'mining' && (mining.status?.process.status === 'running' || thermalSafety?.latched)) {
-      refreshTimer = window.setTimeout(() => void refresh(), 5_000);
+    if (activeView === 'mining' && mining.status?.process.status === 'running') {
+      refreshTimer = window.setTimeout(() => void refresh(false), 5_000);
     }
   } catch (error: unknown) {
     app.innerHTML = `<main class="error-state"><h1>Votre ordinateur reste protégé.</h1><p>${escapeHtml(String(error))}</p><button id="retry" class="primary large">Relancer</button></main>`;
