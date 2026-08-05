@@ -1,229 +1,159 @@
-import {
-  BookingStatus,
-  JobStatus,
-  JobType,
-  MachineWorkspaceState,
-  SessionTerminationReason,
-  WorkspaceRelease,
-  WorkspaceSessionStatus,
-  type Prisma,
-  type PrismaClient,
-} from '@prisma/client';
-import { requestPreparation, requestRentalStop } from './rental-delivery-service.js';
+import Fastify from 'fastify'; import helmet from '@fastify/helmet'; import rateLimit from '@fastify/rate-limit'; import cookie from '@fastify/cookie'; import fastifyStatic from '@fastify/static'; import path from 'node:path'; import fs from 'node:fs'; import fsp from 'node:fs/promises'; import { Transform } from 'node:stream';
+import { PrismaClient, MachineConnectivity, MachineOperational, ModerationStatus, ListingStatus, BookingStatus, PaymentStatus, JobStatus, JobType, MachineWorkspaceState, WorkspaceRelease, WorkspaceSessionStatus, SessionTerminationReason } from '@prisma/client';
+import { Redis } from 'ioredis'; import { z, ZodError } from 'zod'; import bs58 from 'bs58'; import nacl from 'tweetnacl'; import crypto from 'node:crypto';
+import { config } from './config.js'; import { createNonce,consumeNonce,issueSession,requireSession,revokeSession,walletKey } from './auth.js'; import { assertTrustedOrigin, constantTimeToken, verifyAgentRequest, verifyAgentRequestV2, recordSecurityFailure } from './security.js'; import {bookingEscrowExpiryUnix,calculateSettlement,bigintJson} from './settlement.js'; import { buildOpenEscrowTransaction, deriveEscrowAddresses, verifyOpenEscrowTransaction } from './solana.js'; import { PublicKey } from '@solana/web3.js';
+import { canTransitionJob } from './job-state.js';
+import { workspaceManifest, workspaceManifests } from './workspace-manifests.js';
+import { analyzeWorkspace } from './workspace-compatibility.js';
+import { validatedUsageIncrement } from './workspace-usage.js';
+import { sweepOfflineMachines } from './offline-sweep-service.js';
+import { processAcceleratorHeartbeat } from './accelerator-heartbeat-service.js';
+import { listOwnerMachineAccelerators, listPublicMachineAccelerators } from './accelerator-public-view.js';
+import { registerDeviceAuthorizationRoutes } from './device-authorization-routes.js';
+const app=Fastify({logger:{redact:['req.headers.authorization','req.headers.cookie','req.headers.x-agent-signature','res.headers.set-cookie']},trustProxy:config.TRUST_PROXY==='true',bodyLimit:config.MAX_BODY_BYTES,requestIdHeader:'x-request-id'}); const db=new PrismaClient(); const redis=new Redis(config.REDIS_URL,{maxRetriesPerRequest:2,enableReadyCheck:true});
+app.addHook('preParsing',(request,_reply,payload,done)=>{const chunks:Buffer[]=[];const capture=new Transform({transform(chunk:Buffer,_encoding,callback){chunks.push(Buffer.from(chunk));callback(null,chunk);}});capture.once('end',()=>{request.rawBody=Buffer.concat(chunks);});done(null,payload.pipe(capture));});
+redis.on('error',(err:Error)=>app.log.error({err},'redis_error'));
+await app.register(cookie); await app.register(helmet,{contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'",'https://cdn.jsdelivr.net'],styleSrc:["'self'"],imgSrc:["'self'",'data:','https:'],connectSrc:["'self'",'https:'],objectSrc:["'none'"],baseUri:["'self'"],frameAncestors:["'none'"],formAction:["'self'"]}}}); await app.register(rateLimit,{max:120,timeWindow:'1 minute'});
+app.addHook('onRequest',async(req,reply)=>{reply.header('cache-control','no-store');reply.header('x-request-id',req.id);if(!assertTrustedOrigin(req,reply,config.PUBLIC_APP_DOMAIN))return reply;});
+registerDeviceAuthorizationRoutes(app, db, redis);
+app.setErrorHandler((err,req,reply)=>{if(err instanceof ZodError)return reply.code(400).send({error:'invalid_request',issues:err.issues.map(x=>({path:x.path.join('.'),message:x.message}))}); req.log.error(err); return reply.code(500).send({error:'internal_error'});});
+app.get('/health',async()=>({ok:true,cluster:config.SOLANA_CLUSTER,mainnetEnabled:config.ALLOW_MAINNET==='true',escrowConfigured:config.ESCROW_PROGRAM_ID!=='NOT_DEPLOYED_YET'}));
+app.get('/ready',async(req,reply)=>{try{await db.$queryRaw`SELECT 1`;await redis.ping();return {ok:true}}catch(err){req.log.error(err);return reply.code(503).send({ok:false})}});
+app.post('/auth/nonce',{config:{rateLimit:{max:5,timeWindow:'15 minutes'}}},async(req)=>{const {wallet}=z.object({wallet:z.string()}).parse(req.body);return createNonce(redis,wallet,config.PUBLIC_APP_DOMAIN)});
+app.post('/auth/verify',{config:{rateLimit:{max:5,timeWindow:'15 minutes'}}},async(req,reply)=>{const b=z.object({wallet:z.string(),message:z.string().max(1000),signature:z.string().max(200)}).parse(req.body);if(!await consumeNonce(redis,b.wallet,b.message,b.signature))return reply.code(401).send({error:'invalid_or_replayed_signature'});const wallet=walletKey(b.wallet);const user=await db.user.upsert({where:{wallet},update:{lastLoginAt:new Date()},create:{wallet,pseudonym:`user-${crypto.randomBytes(4).toString('hex')}`,lastLoginAt:new Date()}});await issueSession(redis,reply,{userId:user.id,wallet,createdAt:new Date().toISOString()});return {ok:true,user:{id:user.id,pseudonym:user.pseudonym,walletMasked:`${wallet.slice(0,4)}…${wallet.slice(-4)}`}}});
+app.post('/auth/logout',async(req,reply)=>{const token=req.cookies[config.SESSION_COOKIE_NAME];if(token)await revokeSession(redis,token);reply.clearCookie(config.SESSION_COOKIE_NAME,{httpOnly:true,secure:config.NODE_ENV==='production',sameSite:'strict',path:'/'});return {ok:true}});
+app.post('/auth/supabase',{config:{rateLimit:{max:10,timeWindow:'15 minutes'}}},async(req,reply)=>{
+ if(!config.SUPABASE_URL||!config.SUPABASE_ANON_KEY)return reply.code(503).send({error:'supabase_not_configured'});
+ const {accessToken}=z.object({accessToken:z.string().min(20).max(5000)}).parse(req.body);
+ const response=await fetch(`${config.SUPABASE_URL}/auth/v1/user`,{headers:{authorization:`Bearer ${accessToken}`,apikey:config.SUPABASE_ANON_KEY}});
+ if(!response.ok)return reply.code(401).send({error:'invalid_supabase_session'});
+ const external=z.object({id:z.string().uuid(),email:z.string().email().optional(),user_metadata:z.record(z.string(),z.unknown()).optional()}).parse(await response.json());
+ const identity=`supabase:${external.id}`; const metadata=external.user_metadata??{};
+ const suggested=String(metadata.user_name||metadata.preferred_username||metadata.name||`user-${external.id.slice(0,8)}`).replace(/[^A-Za-z0-9_-]/g,'_').slice(0,32);
+ const fullName=String(metadata.full_name||metadata.name||'').trim().split(/\s+/); const firstName=String(metadata.given_name||fullName[0]||'').slice(0,80)||null; const lastName=String(metadata.family_name||fullName.slice(1).join(' ')||'').slice(0,80)||null;
+ let user=await db.user.findUnique({where:{wallet:identity}});
+ if(!user){let pseudonym=suggested.length>=3?suggested:`user-${crypto.randomBytes(4).toString('hex')}`;for(let i=0;i<5;i++){try{user=await db.user.create({data:{wallet:identity,pseudonym,...(external.email?{email:external.email.toLowerCase()}:{}),firstName,lastName,lastLoginAt:new Date(),profile:{create:{avatarUrl:typeof metadata.avatar_url==='string'?metadata.avatar_url:null}}}});break}catch{pseudonym=`${suggested.slice(0,23)}_${crypto.randomBytes(3).toString('hex')}`}}if(!user)return reply.code(409).send({error:'account_creation_failed'});}
+ else user=await db.user.update({where:{id:user.id},data:{...(user.email||!external.email?{}:{email:external.email.toLowerCase()}),firstName:user.firstName??firstName,lastName:user.lastName??lastName,lastLoginAt:new Date()}});
+ await issueSession(redis,reply,{userId:user.id,wallet:identity,createdAt:new Date().toISOString()});
+ return {ok:true,user:{id:user.id,pseudonym:user.pseudonym,provider:'supabase',needsOnboarding:!user.profileCompletedAt}};
+});
+app.get('/auth/me',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const user=await db.user.findUnique({where:{id:session.userId},select:{id:true,pseudonym:true,wallet:true,email:true,firstName:true,lastName:true,canRent:true,canHost:true,profileCompletedAt:true,profile:{select:{avatarUrl:true}}}});if(!user)return reply.code(401).send({error:'session_user_missing'});return {user:{...user,provider:user.wallet.startsWith('supabase:')?'supabase':'phantom',needsOnboarding:!user.profileCompletedAt}};});
 
-export type TransactionClient = Prisma.TransactionClient;
+const profileInput=z.object({
+ pseudonym:z.string().trim().min(3).max(32).regex(/^[A-Za-z0-9_-]+$/),
+ firstName:z.string().trim().min(1).max(80),
+ lastName:z.string().trim().min(1).max(80),
+ phone:z.string().trim().max(30).nullable().optional(),
+ countryCode:z.string().trim().regex(/^[A-Z]{2}$/),
+ language:z.enum(['fr','en']),
+ canRent:z.boolean(),
+ canHost:z.boolean(),
+ bio:z.string().trim().max(800).nullable().optional(),
+ companyName:z.string().trim().max(120).nullable().optional(),
+ websiteUrl:z.string().url().max(300).nullable().optional(),
+ avatarUrl:z.string().url().max(500).nullable().optional(),
+}).refine(x=>x.canRent||x.canHost,{message:'at_least_one_role_required',path:['canRent']});
+app.get('/profile',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const user=await db.user.findUnique({where:{id:session.userId},select:{id:true,pseudonym:true,email:true,firstName:true,lastName:true,phone:true,countryCode:true,language:true,canRent:true,canHost:true,profileCompletedAt:true,createdAt:true,profile:true}});if(!user)return reply.code(404).send({error:'profile_not_found'});return {user};});
+app.put('/profile',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const b=profileInput.parse(req.body);try{const user=await db.user.update({where:{id:session.userId},data:{pseudonym:b.pseudonym,firstName:b.firstName,lastName:b.lastName,phone:b.phone||null,countryCode:b.countryCode,language:b.language,canRent:b.canRent,canHost:b.canHost,profileCompletedAt:new Date(),profile:{upsert:{create:{bio:b.bio||null,companyName:b.companyName||null,websiteUrl:b.websiteUrl||null,avatarUrl:b.avatarUrl||null},update:{bio:b.bio||null,companyName:b.companyName||null,websiteUrl:b.websiteUrl||null,avatarUrl:b.avatarUrl||null}}}},select:{id:true,pseudonym:true,canRent:true,canHost:true,profileCompletedAt:true}});return {ok:true,user};}catch(err){if(typeof err==='object'&&err&&'code'in err&&(err as {code?:string}).code==='P2002')return reply.code(409).send({error:'pseudonym_unavailable'});throw err;}});
+app.get('/dashboard',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const user=await db.user.findUnique({where:{id:session.userId},select:{pseudonym:true,canRent:true,canHost:true,profileCompletedAt:true,bookings:{select:{id:true,status:true,startsAt:true,endsAt:true,quotedLamports:true,listing:{select:{title:true}}},orderBy:{createdAt:'desc'},take:10},jobs:{select:{id:true,bookingId:true,type:true,status:true,errorCode:true,createdAt:true,finishedAt:true},orderBy:{createdAt:'desc'},take:20},machines:{select:{id:true,gpuModel:true,connectivity:true,operational:true,lastHeartbeatAt:true},orderBy:{lastHeartbeatAt:'desc'},take:10},listings:{select:{id:true,title:true,status:true,hourlyLamports:true,createdAt:true},orderBy:{createdAt:'desc'},take:10}}});if(!user)return reply.code(404).send({error:'profile_not_found'});return {user:{pseudonym:user.pseudonym,canRent:user.canRent,canHost:user.canHost,needsOnboarding:!user.profileCompletedAt},tenant:{bookings:user.bookings.map(x=>({...x,quotedLamports:x.quotedLamports.toString()})),jobs:user.jobs},host:{machines:user.machines,listings:user.listings.map(x=>({...x,hourlyLamports:x.hourlyLamports.toString()}))}};});
+const agentKeySchema=z.string().min(32).max(64).refine(value=>{try{return bs58.decode(value).length===32}catch{return false}},{message:'invalid_agent_public_key'});
+const agentInventorySchema=z.object({
+ agentVersion:z.string().trim().min(1).max(40),
+ system:z.object({os:z.string().max(80),osVersion:z.string().max(300),cpu:z.string().max(300),cpuCount:z.number().int().min(1).max(1024).nullable().optional(),ramTotalMiB:z.number().int().min(1).max(100_000_000).nullable().optional(),diskTotalMiB:z.number().int().min(1).max(1_000_000_000),dockerAvailable:z.boolean(),nvidiaRuntimeAvailable:z.boolean().optional(),virtualizationAvailable:z.boolean().optional()}),
+ gpus:z.array(z.object({gpuModel:z.string().max(200),gpuUuid:z.string().max(200),vramMiB:z.number().int().positive().max(1_000_000),driverVersion:z.string().max(100),cudaVersion:z.string().max(50).nullable().optional(),gpuVendor:z.string().max(20).nullable().optional()})).max(16),
+});
+app.post('/machines/link-code',{config:{rateLimit:{max:5,timeWindow:'15 minutes'}}},async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const user=await db.user.findUnique({where:{id:session.userId},select:{canHost:true}});if(!user?.canHost)return reply.code(403).send({error:'provider_role_required'});const code=crypto.randomBytes(5).toString('hex').toUpperCase();const digest=crypto.createHash('sha256').update(code).digest('hex');await redis.set(`machine-link:${digest}`,session.userId,'EX',600,'NX');return {code,expiresIn:600};});
+app.post('/agent/link',{config:{rateLimit:{max:10,timeWindow:'15 minutes'}}},async(req,reply)=>{const b=z.object({code:z.string().trim().regex(/^[A-F0-9]{10}$/),publicKey:agentKeySchema,inventory:agentInventorySchema}).parse(req.body);const digest=crypto.createHash('sha256').update(b.code).digest('hex');const ownerId=await redis.getdel(`machine-link:${digest}`);if(!ownerId)return reply.code(409).send({error:'invalid_or_expired_link_code'});const existing=await db.machine.findUnique({where:{agentPublicKey:b.publicKey},select:{id:true,ownerId:true}});if(existing)return existing.ownerId===ownerId?{machineId:existing.id,linkedAt:new Date().toISOString()}:reply.code(409).send({error:'agent_key_already_registered'});const gpu=b.inventory.gpus[0];const machine=await db.machine.create({data:{ownerId,agentPublicKey:b.publicKey,agentVersion:b.inventory.agentVersion,operatingSystem:b.inventory.system.os,osVersion:b.inventory.system.osVersion,cpuModel:b.inventory.system.cpu,cpuCount:b.inventory.system.cpuCount??null,ramTotalMiB:b.inventory.system.ramTotalMiB??null,diskTotalMiB:b.inventory.system.diskTotalMiB,dockerAvailable:b.inventory.system.dockerAvailable,nvidiaRuntimeAvailable:b.inventory.system.nvidiaRuntimeAvailable??false,virtualizationAvailable:b.inventory.system.virtualizationAvailable??false,...(gpu?{gpuModel:gpu.gpuModel,gpuUuid:gpu.gpuUuid,vramMiB:gpu.vramMiB,driverVersion:gpu.driverVersion,cudaVersion:gpu.cudaVersion??null}:{})},select:{id:true,keyCreatedAt:true}});return reply.code(201).send({machineId:machine.id,linkedAt:machine.keyCreatedAt.toISOString()});});
+app.get('/machines/mine',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const rows=await db.machine.findMany({where:{ownerId:session.userId},select:{id:true,agentVersion:true,operatingSystem:true,osVersion:true,connectivity:true,operational:true,lastHeartbeatAt:true,gpuModel:true,vramMiB:true,driverVersion:true,cudaVersion:true,lastCudaProbeOk:true,verifiedAt:true,listings:{select:{id:true,status:true},take:1}},orderBy:{lastHeartbeatAt:'desc'}});return rows.map(machine=>{const publicationReadiness=!machine.lastHeartbeatAt?{ready:false,reason:'heartbeat_required'}:machine.connectivity!==MachineConnectivity.ONLINE?{ready:false,reason:'machine_offline'}:!machine.gpuModel?{ready:false,reason:'gpu_required'}:!machine.lastCudaProbeOk?{ready:false,reason:'diagnostic_required'}:!machine.verifiedAt?{ready:false,reason:'verification_required'}:{ready:true,reason:null};return {...machine,publicationReadiness}});});
+app.get('/machines/:machineId/accelerators/manage',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {machineId}=z.object({machineId:z.string().cuid()}).parse(req.params);const machine=await db.machine.findFirst({where:{id:machineId,ownerId:session.userId},select:{id:true}});if(!machine)return reply.code(404).send({error:'machine_not_found'});return {machineId,accelerators:await listOwnerMachineAccelerators(db,machineId,session.userId)};});
+app.get('/machines/:machineId/accelerators',async(req,reply)=>{const {machineId}=z.object({machineId:z.string().cuid()}).parse(req.params);const published=await db.machine.findFirst({where:{id:machineId,moderationStatus:ModerationStatus.CLEAR,listings:{some:{status:ListingStatus.ACTIVE}}},select:{id:true}});if(!published)return reply.code(404).send({error:'published_machine_not_found'});return {machineId,accelerators:await listPublicMachineAccelerators(db,machineId)};});
+app.post('/machines',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {agentPublicKey}=z.object({agentPublicKey:agentKeySchema}).parse(req.body);const existing=await db.machine.findUnique({where:{agentPublicKey},select:{id:true,ownerId:true}});if(existing)return existing.ownerId===session.userId?reply.code(200).send({id:existing.id}):reply.code(409).send({error:'agent_key_already_registered'});const machine=await db.machine.create({data:{ownerId:session.userId,agentPublicKey},select:{id:true}});return reply.code(201).send(machine);});
+app.post('/listings',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const b=z.object({machineId:z.string().cuid(),title:z.string().trim().min(5).max(120),description:z.string().trim().min(20).max(3000),hourlySol:z.number().positive().max(100)}).parse(req.body);const machine=await db.machine.findFirst({where:{id:b.machineId,ownerId:session.userId,moderationStatus:ModerationStatus.CLEAR}});if(!machine)return reply.code(404).send({error:'machine_not_found'});const fresh=machine.connectivity===MachineConnectivity.ONLINE&&machine.lastCudaProbeOk&&machine.lastHeartbeatAt&&machine.lastHeartbeatAt>=new Date(Date.now()-config.HEARTBEAT_OFFLINE_SECONDS*1000);const hourlyLamports=BigInt(Math.round(b.hourlySol*1_000_000_000));if(hourlyLamports<1n)return reply.code(400).send({error:'invalid_price'});const listing=await db.gpuListing.create({data:{ownerId:session.userId,machineId:machine.id,title:b.title,description:b.description,hourlyLamports,status:fresh?ListingStatus.ACTIVE:ListingStatus.PENDING_GPU_VERIFICATION},select:{id:true,status:true}});return reply.code(201).send(listing);});
 
-type Database = Pick<PrismaClient, '$transaction'>;
+const heartbeatSchema=z.object({machineId:z.string().cuid(),counter:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),challenge:z.string().min(16).max(200),timestamp:z.string().datetime(),gpuUuid:z.string().min(5).max(200),gpuModel:z.string().min(2).max(200),vramMiB:z.number().int().positive().max(1_000_000),driverVersion:z.string().max(100),cudaVersion:z.string().max(50).nullable().optional(),gpuVendor:z.string().max(20).nullable().optional(),gpuUtilization:z.number().int().min(0).max(100),memoryUsedMiB:z.number().int().min(0),temperatureC:z.number().int().min(-20).max(130),powerWatts:z.number().min(0).max(5000).nullable().optional(),cudaProbeOk:z.boolean(),sessionId:z.string().cuid().nullable(),signature:z.string().max(200),agentVersion:z.string().max(40).optional(),os:z.string().max(80).optional(),osVersion:z.string().max(300).optional(),cpu:z.string().max(300).optional(),cpuCount:z.number().int().min(1).max(1024).nullable().optional(),ramTotalMiB:z.number().int().min(1).max(100_000_000).nullable().optional(),diskTotalMiB:z.number().int().min(1).max(1_000_000_000).optional(),dockerAvailable:z.boolean().optional(),nvidiaRuntimeAvailable:z.boolean().optional(),hardwareChanged:z.boolean().optional(),telemetry:z.object({schemaVersion:z.literal(2),accelerators:z.unknown()}).passthrough().optional()});
+app.get('/agent/challenge/:machineId',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{const {machineId}=z.object({machineId:z.string().cuid()}).parse(req.params);const m=await db.machine.findUnique({where:{id:machineId},select:{id:true,agentPublicKey:true,moderationStatus:true,keyRevokedAt:true}});if(!m)return reply.code(404).send({error:'unknown_machine'});if(m.keyRevokedAt)return reply.code(403).send({error:'agent_key_revoked'});if(m.moderationStatus!==ModerationStatus.CLEAR)return reply.code(403).send({error:'machine_quarantined'});if(!await verifyAgentRequest(redis,machineId,m.agentPublicKey,'GET',`/agent/challenge/${machineId}`,req.headers['x-agent-timestamp'],req.headers['x-agent-signature'])){await recordSecurityFailure(redis,`agent:${machineId}`);return reply.code(401).send({error:'invalid_agent_request'});}const challenge=crypto.randomBytes(24).toString('base64url');await redis.set(`agent-challenge:${machineId}:${challenge}`,'1','EX',60,'NX');return {challenge,expiresIn:60}});
+app.post('/agent/heartbeat',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{const b=heartbeatSchema.parse(req.body);const m=await db.machine.findUnique({where:{id:b.machineId}});if(!m)return reply.code(404).send({error:'unknown_machine'});const age=Math.abs(Date.now()-Date.parse(b.timestamp));if(age>config.HEARTBEAT_MAX_AGE_SECONDS*1000)return reply.code(409).send({error:'stale_heartbeat'});if(!await redis.getdel(`agent-challenge:${b.machineId}:${b.challenge}`))return reply.code(409).send({error:'invalid_or_replayed_challenge'});if(BigInt(b.counter)<=m.lastCounter)return reply.code(409).send({error:'counter_replay'});if(b.telemetry){const bodyBytes=Buffer.from(JSON.stringify(req.body));const validV2=await verifyAgentRequestV2(redis,b.machineId,m.agentPublicKey,'POST','/agent/heartbeat',bodyBytes,{timestamp:req.headers['x-agent-timestamp'],nonce:req.headers['x-agent-nonce'],bodySha256:req.headers['x-agent-body-sha256'],signature:req.headers['x-agent-signature-v2'],version:req.headers['x-agent-signature-version']});if(!validV2){await recordSecurityFailure(redis,`agent-v2:${b.machineId}`,4);return reply.code(401).send({error:'invalid_agent_body_signature'});}}const canonical=[b.machineId,b.counter,b.challenge,b.timestamp,b.gpuUuid,b.gpuModel,b.vramMiB,b.driverVersion,b.gpuUtilization,b.memoryUsedMiB,b.temperatureC,b.cudaProbeOk,b.sessionId??''].join('|');let verified=false;try{verified=nacl.sign.detached.verify(new TextEncoder().encode(canonical),bs58.decode(b.signature),bs58.decode(m.agentPublicKey))}catch{}if(!verified){const quarantine=await recordSecurityFailure(redis,`agent:${b.machineId}`);if(quarantine)await db.machine.update({where:{id:b.machineId},data:{moderationStatus:ModerationStatus.QUARANTINED,connectivity:MachineConnectivity.OFFLINE,operational:MachineOperational.UNAVAILABLE}});return reply.code(401).send({error:'invalid_agent_signature'});}
+ if(b.memoryUsedMiB>b.vramMiB||(!b.cudaProbeOk&&b.gpuUtilization>10)){await recordSecurityFailure(redis,`telemetry:${b.machineId}`,4);return reply.code(409).send({error:'incoherent_telemetry'});}
+ let activeSession=false;if(b.sessionId){const active=await db.booking.findFirst({where:{id:b.sessionId,listing:{machineId:m.id},status:{in:[BookingStatus.FUNDED,BookingStatus.STARTING,BookingStatus.ACTIVE,BookingStatus.DEGRADED]},startsAt:{lte:new Date(Date.now()+5*60_000)},endsAt:{gte:new Date(Date.now()-5*60_000)}}});if(!active)return reply.code(409).send({error:'invalid_session_binding'});activeSession=true;}
+ const sameGpu=!m.gpuUuid||m.gpuUuid===b.gpuUuid;const legacyPublishable=m.moderationStatus===ModerationStatus.CLEAR&&sameGpu&&b.cudaProbeOk;const heartbeatResult=await db.$transaction(async tx=>{await tx.machine.update({where:{id:m.id},data:{connectivity:MachineConnectivity.ONLINE,operational:b.sessionId?MachineOperational.RUNNING:MachineOperational.AVAILABLE,lastHeartbeatAt:new Date(),keyLastUsedAt:new Date(),lastCounter:BigInt(b.counter),...(b.agentVersion?{agentVersion:b.agentVersion}:{}),...(b.os?{operatingSystem:b.os}:{}),...(b.osVersion?{osVersion:b.osVersion}:{}),...(b.cpu?{cpuModel:b.cpu}:{}),...(b.cpuCount!==undefined?{cpuCount:b.cpuCount}:{}),...(b.ramTotalMiB!==undefined?{ramTotalMiB:b.ramTotalMiB}:{}),...(b.diskTotalMiB!==undefined?{diskTotalMiB:b.diskTotalMiB}:{}),...(b.dockerAvailable!==undefined?{dockerAvailable:b.dockerAvailable}:{}),...(b.nvidiaRuntimeAvailable!==undefined?{nvidiaRuntimeAvailable:b.nvidiaRuntimeAvailable}:{}),...(b.cudaVersion!==undefined?{cudaVersion:b.cudaVersion}:{}),...(b.gpuVendor!==undefined?{gpuVendor:b.gpuVendor}:{}),gpuUuid:b.gpuUuid,gpuModel:b.gpuModel,vramMiB:b.vramMiB,driverVersion:b.driverVersion,lastCudaProbeOk:b.cudaProbeOk,verifiedAt:sameGpu&&b.cudaProbeOk?new Date():m.verifiedAt}});await tx.heartbeat.create({data:{machineId:m.id,counter:BigInt(b.counter),agentTimestamp:new Date(b.timestamp),gpuUtilization:b.gpuUtilization,memoryUsedMiB:b.memoryUsedMiB,temperatureC:b.temperatureC,cudaProbeOk:b.cudaProbeOk,sessionId:b.sessionId,signatureHash:crypto.createHash('sha256').update(b.signature).digest('hex')}});const accelerator=b.telemetry?await processAcceleratorHeartbeat(tx,{machineId:m.id,historicalGpuUuid:m.gpuUuid,sessionActive:activeSession,rawAccelerators:b.telemetry.accelerators}):null;const publishable=legacyPublishable&&(accelerator?.publishable??true);if(publishable)await tx.gpuListing.updateMany({where:{machineId:m.id,status:{in:[ListingStatus.HIDDEN_OFFLINE,ListingStatus.PENDING_GPU_VERIFICATION]}},data:{status:ListingStatus.ACTIVE}});return {publishable,accelerator};},{isolationLevel:'Serializable'});return {ok:true,publishable:heartbeatResult.publishable,acceleratorSecurity:heartbeatResult.accelerator?{severity:heartbeatResult.accelerator.decision.severity,reason:heartbeatResult.accelerator.decision.reason}:null};});
+const publicWorkspace=(item:(typeof workspaceManifests)[number])=>({...item,actionable:item.slug==='compute'&&item.release==='BETA'});
+app.get('/workspaces',async()=>({version:1,workspaces:workspaceManifests.map(publicWorkspace)}));
+app.get('/workspaces/:slug',async(req,reply)=>{const {slug}=z.object({slug:z.string().regex(/^[a-z0-9-]+$/)}).parse(req.params);const item=workspaceManifest(slug);return item?publicWorkspace(item):reply.code(404).send({error:'workspace_not_found'});});
+app.post('/machines/:machineId/workspaces/analyze',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {machineId}=z.object({machineId:z.string().cuid()}).parse(req.params);const machine=await db.machine.findFirst({where:{id:machineId,ownerId:session.userId},select:{id:true,ramTotalMiB:true,diskTotalMiB:true,vramMiB:true,cudaVersion:true,dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:true,virtualizationAvailable:true}});if(!machine)return reply.code(404).send({error:'machine_not_found'});const rows=[];for(const manifest of workspaceManifests){const definition=await db.workspaceDefinition.upsert({where:{slug:manifest.slug},update:{version:1,name:manifest.name,category:manifest.category,release:manifest.release as WorkspaceRelease,manifest:JSON.parse(JSON.stringify(manifest))},create:{slug:manifest.slug,version:1,name:manifest.name,category:manifest.category,release:manifest.release as WorkspaceRelease,manifest:JSON.parse(JSON.stringify(manifest))}});const result=analyzeWorkspace(machine,manifest);rows.push(await db.machineWorkspace.upsert({where:{machineId_workspaceId:{machineId,workspaceId:definition.id}},update:{compatibilityScore:result.score,state:result.state as MachineWorkspaceState,analysis:result,analyzedAt:new Date()},create:{machineId,workspaceId:definition.id,compatibilityScore:result.score,state:result.state as MachineWorkspaceState,analysis:result},include:{workspace:true}}));}return {machineId,workspaces:rows};});
+app.get('/machines/:machineId/workspaces/manage',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {machineId}=z.object({machineId:z.string().cuid()}).parse(req.params);const machine=await db.machine.findFirst({where:{id:machineId,ownerId:session.userId},select:{id:true,gpuModel:true,vramMiB:true,cpuModel:true,cpuCount:true,ramTotalMiB:true,diskTotalMiB:true,operatingSystem:true,cudaVersion:true,dockerAvailable:true,nvidiaRuntimeAvailable:true,virtualizationAvailable:true,workspaces:{include:{workspace:true},orderBy:{workspace:{name:'asc'}}}}});return machine??reply.code(404).send({error:'machine_not_found'});});
+app.patch('/machines/:machineId/workspaces/:slug',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {machineId,slug}=z.object({machineId:z.string().cuid(),slug:z.string().regex(/^[a-z0-9-]+$/)}).parse(req.params);const body=z.object({enabled:z.boolean(),hourlySol:z.number().positive().max(100).nullable().optional(),configuration:z.object({maxRamMiB:z.number().int().min(1024).max(1_000_000).optional(),maxCpuCores:z.number().int().min(1).max(1024).optional(),storageQuotaMiB:z.number().int().min(1024).max(10_000_000).optional(),networkAccess:z.enum(['NONE','RESTRICTED']).optional(),autoStopMinutes:z.number().int().min(5).max(1440).optional()}).strict().optional()}).parse(req.body);const row=await db.machineWorkspace.findFirst({where:{machineId,machine:{ownerId:session.userId},workspace:{slug}},include:{workspace:true}});if(!row)return reply.code(409).send({error:'analyze_workspaces_first'});if(body.enabled&&(row.workspace.release!==WorkspaceRelease.BETA||slug!=='compute'))return reply.code(409).send({error:'workspace_not_executable_yet',release:row.workspace.release});if(body.enabled&&row.state!==MachineWorkspaceState.READY&&row.state!==MachineWorkspaceState.LIMITED)return reply.code(409).send({error:'workspace_not_compatible',state:row.state});const hourlyLamports=body.hourlySol==null?undefined:BigInt(Math.round(body.hourlySol*1_000_000_000));const updated=await db.machineWorkspace.update({where:{id:row.id},data:{enabledByOwner:body.enabled,...(hourlyLamports===undefined?{}:{hourlyLamports}),...(body.configuration?{configuration:body.configuration}:{})},include:{workspace:true}});return {...updated,hourlyLamports:updated.hourlyLamports?.toString()??null};});
+app.get('/machines/:machineId/workspaces',async(req,reply)=>{const {machineId}=z.object({machineId:z.string().cuid()}).parse(req.params);const machine=await db.machine.findFirst({where:{id:machineId,listings:{some:{status:ListingStatus.ACTIVE}}},select:{id:true,gpuModel:true,vramMiB:true,cpuModel:true,cpuCount:true,ramTotalMiB:true,diskTotalMiB:true,operatingSystem:true,cudaVersion:true,dockerAvailable:true,nvidiaRuntimeAvailable:true,workspaces:{where:{enabledByOwner:true},include:{workspace:true}}}});if(!machine)return reply.code(404).send({error:'published_machine_not_found'});return {...machine,workspaces:machine.workspaces.map(row=>({...row,hourlyLamports:row.hourlyLamports?.toString()??null}))};});
 
-const ACTIVE_JOB_STATUSES: JobStatus[] = [
-  JobStatus.QUEUED,
-  JobStatus.ASSIGNED,
-  JobStatus.DOWNLOADING,
-  JobStatus.PREPARING,
-  JobStatus.RUNNING,
-  JobStatus.UPLOADING_RESULTS,
-];
-
-const PREPARABLE_BOOKING_STATUSES: BookingStatus[] = [
-  BookingStatus.FUNDED,
-  BookingStatus.STARTING,
-  BookingStatus.ACTIVE,
-];
-
-const STOPPABLE_SESSION_STATUSES: WorkspaceSessionStatus[] = [
-  WorkspaceSessionStatus.RESERVED,
-  WorkspaceSessionStatus.PREPARING,
-  WorkspaceSessionStatus.READY,
-  WorkspaceSessionStatus.RUNNING,
-  WorkspaceSessionStatus.STOP_REQUESTED,
-  WorkspaceSessionStatus.STOPPING,
-];
-
-export interface PreparationResult {
-  id: string;
-  status: WorkspaceSessionStatus;
-  expiresAt: Date;
-  resourceLimits: Prisma.JsonValue;
-  preparationProgress: number;
-  preparationStep: string | null;
+const activeJobBookings=[BookingStatus.FUNDED,BookingStatus.STARTING,BookingStatus.ACTIVE];
+async function ensureComputePreparation(bookingId:string,renterId:string){
+ const existing=await db.workspaceSession.findFirst({where:{bookingId},select:{id:true,status:true,expiresAt:true,resourceLimits:true,preparationProgress:true,preparationStep:true}});
+ if(existing)return existing;
+ const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:renterId,status:{in:activeJobBookings}},include:{listing:{select:{machineId:true}}}});
+ if(!booking)throw new Error('funded_booking_required');
+ const machineWorkspace=await db.machineWorkspace.findFirst({where:{machineId:booking.listing.machineId,enabledByOwner:true,workspace:{slug:'compute',release:WorkspaceRelease.BETA},state:{in:[MachineWorkspaceState.READY,MachineWorkspaceState.LIMITED]}}});
+ if(!machineWorkspace)throw new Error('compute_workspace_not_enabled');
+ const limits={maxRamMiB:512,maxCpuCores:1,storageQuotaMiB:1024,networkAccess:'NONE',autoStopMinutes:10};
+ return db.$transaction(async tx=>{
+  const created=await tx.workspaceSession.create({data:{bookingId,renterId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',resourceLimits:limits,preparationProgress:5,preparationStep:'RESERVATION_CONFIRMED',preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,events:{create:{actorType:'PLATFORM',action:'PREPARATION_REQUESTED',details:{target:'BEFORE_RENTER_ARRIVAL'}}}}});
+  const job=await tx.job.create({data:{bookingId,renterId,machineId:booking.listing.machineId,type:JobType.GPU_PROOF,parameters:{durationSeconds:Math.max(30,Math.min(600,booking.expectedSeconds)),workspaceSlug:'compute'}}});
+  return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,expiresAt:true,resourceLimits:true,preparationProgress:true,preparationStep:true}});
+ });
 }
-
-export async function prepareComputeRental(
-  db: Database,
-  bookingId: string,
-  renterId: string,
-): Promise<PreparationResult> {
-  return db.$transaction(async (tx) => {
-    const existing = await tx.workspaceSession.findUnique({
-      where: { bookingId },
-      select: {
-        id: true,
-        renterId: true,
-        status: true,
-        expiresAt: true,
-        resourceLimits: true,
-        preparationProgress: true,
-        preparationStep: true,
-      },
-    });
-
-    if (existing) {
-      if (existing.renterId !== renterId) throw new Error('workspace_session_forbidden');
-      return existing;
-    }
-
-    const booking = await tx.booking.findFirst({
-      where: {
-        id: bookingId,
-        buyerId: renterId,
-        status: { in: PREPARABLE_BOOKING_STATUSES },
-      },
-      include: { listing: { select: { id: true, machineId: true } } },
-    });
-    if (!booking) throw new Error('funded_booking_required');
-
-    const machineWorkspace = await tx.machineWorkspace.findFirst({
-      where: {
-        machineId: booking.listing.machineId,
-        enabledByOwner: true,
-        workspace: { slug: 'compute', release: WorkspaceRelease.BETA },
-        state: { in: [MachineWorkspaceState.READY, MachineWorkspaceState.LIMITED] },
-      },
-      select: { id: true, configuration: true },
-    });
-    if (!machineWorkspace) throw new Error('compute_workspace_not_enabled');
-
-    const resourceLimits = {
-      maxRamMiB: 512,
-      maxCpuCores: 1,
-      storageQuotaMiB: 1024,
-      networkAccess: 'NONE',
-      autoStopMinutes: 10,
-      ...(isPlainObject(machineWorkspace.configuration) ? machineWorkspace.configuration : {}),
-    } satisfies Prisma.InputJsonObject;
-
-    const created = await tx.workspaceSession.create({
-      data: {
-        bookingId,
-        renterId,
-        machineId: booking.listing.machineId,
-        machineWorkspaceId: machineWorkspace.id,
-        status: WorkspaceSessionStatus.PREPARING,
-        isolationType: 'DOCKER',
-        resourceLimits,
-        preparationProgress: 5,
-        preparationStep: 'RESERVATION_CONFIRMED',
-        preparationRequestedAt: new Date(),
-        readyDeadlineAt: new Date(Math.max(Date.now(), booking.startsAt.getTime() - 120_000)),
-        expiresAt: booking.endsAt,
-        preparationAttempts: 1,
-        events: {
-          create: {
-            actorType: 'PLATFORM',
-            action: 'PREPARATION_REQUESTED',
-            details: { target: 'BEFORE_RENTER_ARRIVAL' },
-          },
-        },
-      },
-      select: {
-        id: true,
-        status: true,
-        expiresAt: true,
-        resourceLimits: true,
-        preparationProgress: true,
-        preparationStep: true,
-      },
-    });
-
-    const job = await tx.job.create({
-      data: {
-        bookingId,
-        renterId,
-        machineId: booking.listing.machineId,
-        type: JobType.GPU_PROOF,
-        parameters: {
-          durationSeconds: Math.max(30, Math.min(600, booking.expectedSeconds)),
-          workspaceSlug: 'compute',
-        },
-      },
-      select: { id: true },
-    });
-
-    await tx.workspaceSession.update({ where: { id: created.id }, data: { jobId: job.id } });
-    await requestPreparation(tx, {
-      bookingId,
-      machineId: booking.listing.machineId,
-      renterId,
-      listingId: booking.listing.id,
-      sessionId: created.id,
-      startsAt: booking.startsAt,
-      endsAt: booking.endsAt,
-    });
-
-    return created;
-  }, { isolationLevel: 'Serializable' });
+const activeWorkspaceSessions:WorkspaceSessionStatus[]=[WorkspaceSessionStatus.RESERVED,WorkspaceSessionStatus.PREPARING,WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING];
+app.post('/bookings/:bookingId/workspace-sessions',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {bookingId}=z.object({bookingId:z.string().cuid()}).parse(req.params);z.object({workspaceSlug:z.literal('compute')}).parse(req.body);try{return await ensureComputePreparation(bookingId,session.userId)}catch(error){return reply.code(409).send({error:error instanceof Error?error.message:'workspace_preparation_failed'})}});
+app.post('/workspace-sessions/:id/start',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {id}=z.object({id:z.string().cuid()}).parse(req.params);const row=await db.workspaceSession.findFirst({where:{id,renterId:session.userId,status:WorkspaceSessionStatus.READY,booking:{startsAt:{lte:new Date(Date.now()+300_000)},endsAt:{gte:new Date()}},machine:{connectivity:MachineConnectivity.ONLINE,operational:{in:[MachineOperational.AVAILABLE,MachineOperational.RESERVED]},lastHeartbeatAt:{gte:new Date(Date.now()-60_000)}}},select:{id:true}});if(!row)return reply.code(409).send({error:'workspace_not_ready_or_machine_offline'});return db.workspaceSession.update({where:{id},data:{status:WorkspaceSessionStatus.RUNNING,startedAt:new Date(),preparationStep:'RENTER_CONNECTED',events:{create:{actorType:'RENTER',actorId:session.userId,action:'SESSION_STARTED'}}},select:{id:true,status:true,startedAt:true}});});
+app.get('/workspace-sessions/:id',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {id}=z.object({id:z.string().cuid()}).parse(req.params);const row=await db.workspaceSession.findFirst({where:{id,OR:[{renterId:session.userId},{machine:{ownerId:session.userId}}]},include:{booking:{select:{validSeconds:true,expectedSeconds:true,quotedLamports:true}},machineWorkspace:{include:{workspace:true}},metrics:{orderBy:{capturedAt:'desc'},take:120},events:{orderBy:{createdAt:'desc'},take:100},job:{select:{status:true,errorCode:true}}}});if(!row)return reply.code(404).send({error:'session_not_found'});return {...row,lastMetricCounter:row.lastMetricCounter.toString(),booking:{...row.booking,quotedLamports:row.booking.quotedLamports.toString()},metrics:row.metrics.map(metric=>({...metric,counter:metric.counter.toString(),networkRxBytes:metric.networkRxBytes.toString(),networkTxBytes:metric.networkTxBytes.toString()}))};});
+app.get('/workspace-sessions/:id/proof',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {id}=z.object({id:z.string().cuid()}).parse(req.params);const row=await db.workspaceSession.findFirst({where:{id,OR:[{renterId:session.userId},{machine:{ownerId:session.userId}}]},select:{id:true,status:true,job:{select:{type:true,status:true,result:true,errorCode:true,finishedAt:true}},booking:{select:{status:true,validSeconds:true,expectedSeconds:true}}}});if(!row)return reply.code(404).send({error:'session_not_found'});return row;});
+app.post('/workspace-sessions/:id/stop',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {id}=z.object({id:z.string().cuid()}).parse(req.params);const row=await db.workspaceSession.findFirst({where:{id,OR:[{renterId:session.userId},{machine:{ownerId:session.userId}}]},include:{machine:{select:{ownerId:true}}}});if(!row)return reply.code(404).send({error:'session_not_found'});if(!activeWorkspaceSessions.includes(row.status))return reply.code(409).send({error:'session_not_active',status:row.status});const ownerStop=row.machine.ownerId===session.userId;await db.$transaction(async tx=>{await tx.workspaceSession.update({where:{id},data:{status:WorkspaceSessionStatus.STOP_REQUESTED,terminationReason:ownerStop?SessionTerminationReason.OWNER_EMERGENCY_STOP:SessionTerminationReason.USER_STOP,events:{create:{actorType:ownerStop?'OWNER':'RENTER',actorId:session.userId,action:ownerStop?'EMERGENCY_STOP_REQUESTED':'STOP_REQUESTED'}}}});if(row.jobId)await tx.job.updateMany({where:{id:row.jobId,status:{in:[JobStatus.QUEUED,JobStatus.ASSIGNED,JobStatus.DOWNLOADING,JobStatus.PREPARING,JobStatus.RUNNING,JobStatus.UPLOADING_RESULTS]}},data:{status:JobStatus.CANCEL_REQUESTED,cancelRequestedAt:new Date()}})});return {id,status:WorkspaceSessionStatus.STOP_REQUESTED};});
+const metricInput=z.object({machineId:z.string().cuid(),counter:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),capturedAt:z.string().datetime(),intervalSeconds:z.number().int().min(5).max(60),gpuUtilization:z.number().int().min(0).max(100),memoryUsedMiB:z.number().int().nonnegative(),temperatureC:z.number().int().min(-20).max(130),cpuUtilization:z.number().int().min(0).max(100),ramUsedMiB:z.number().int().nonnegative(),diskUsedMiB:z.number().int().nonnegative(),networkRxBytes:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),networkTxBytes:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),available:z.boolean(),workloadProof:z.boolean()});
+app.post('/agent/workspace-sessions/:id/metrics',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{const {id}=z.object({id:z.string().cuid()}).parse(req.params);const body=metricInput.parse(req.body);const routePath=`/agent/workspace-sessions/${id}/metrics`;if(!await authenticatedAgent(body.machineId,'POST',routePath,req.headers))return reply.code(401).send({error:'invalid_agent_request'});const row=await db.workspaceSession.findFirst({where:{id,machineId:body.machineId,status:{in:[WorkspaceSessionStatus.PREPARING,WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]}},include:{booking:true,machine:true}});if(!row)return reply.code(404).send({error:'active_session_not_found'});if(BigInt(body.counter)<=row.lastMetricCounter)return reply.code(409).send({error:'metric_counter_replay'});if(Math.abs(Date.now()-Date.parse(body.capturedAt))>120_000)return reply.code(409).send({error:'stale_metric'});if((row.machine.vramMiB&&body.memoryUsedMiB>row.machine.vramMiB)||(row.machine.ramTotalMiB&&body.ramUsedMiB>row.machine.ramTotalMiB))return reply.code(409).send({error:'incoherent_metric'});const signature=String(req.headers['x-agent-signature']||'');const signatureHash=crypto.createHash('sha256').update(signature).digest('hex');const validIncrement=validatedUsageIncrement(row.booking.validSeconds,row.booking.expectedSeconds,body.intervalSeconds,body.available,body.workloadProof);await db.$transaction([db.workspaceMetric.create({data:{sessionId:id,counter:BigInt(body.counter),capturedAt:new Date(body.capturedAt),intervalSeconds:body.intervalSeconds,gpuUtilization:body.gpuUtilization,memoryUsedMiB:body.memoryUsedMiB,temperatureC:body.temperatureC,cpuUtilization:body.cpuUtilization,ramUsedMiB:body.ramUsedMiB,diskUsedMiB:body.diskUsedMiB,networkRxBytes:BigInt(body.networkRxBytes),networkTxBytes:BigInt(body.networkTxBytes),available:body.available,workloadProof:body.workloadProof,signatureHash}}),db.workspaceSession.update({where:{id},data:{lastMetricCounter:BigInt(body.counter),status:WorkspaceSessionStatus.RUNNING,...(row.startedAt?{}:{startedAt:new Date()}),events:{create:{actorType:'AGENT',actorId:body.machineId,action:'METRIC_ACCEPTED',details:{counter:body.counter,validIncrement}}}}}),db.booking.update({where:{id:row.bookingId},data:{validSeconds:{increment:validIncrement},status:BookingStatus.ACTIVE}})]);return {ok:true,validIncrement};});
+async function authenticatedAgent(machineId:string,method:string,routePath:string,headers:Record<string,unknown>){
+ const machine=await db.machine.findUnique({where:{id:machineId},select:{agentPublicKey:true,agentVersion:true,moderationStatus:true,keyRevokedAt:true}});
+ if(!machine||machine.keyRevokedAt||machine.moderationStatus!==ModerationStatus.CLEAR)return null;
+ const valid=await verifyAgentRequest(redis,machineId,machine.agentPublicKey,method,routePath,headers['x-agent-timestamp'] as string|string[]|undefined,headers['x-agent-signature'] as string|string[]|undefined);
+ return valid?machine:null;
 }
+app.post('/jobs',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const body=z.object({bookingId:z.string().cuid(),type:z.literal('GPU_DIAGNOSTIC'),parameters:z.object({timeoutSeconds:z.number().int().min(30).max(600).default(120)}).strict().default({timeoutSeconds:120})}).parse(req.body);const booking=await db.booking.findFirst({where:{id:body.bookingId,buyerId:session.userId,status:{in:activeJobBookings},startsAt:{lte:new Date(Date.now()+300_000)},endsAt:{gte:new Date()}},select:{id:true,listing:{select:{machineId:true}}}});if(!booking)return reply.code(409).send({error:'funded_active_booking_required'});const active=await db.job.findFirst({where:{bookingId:booking.id,status:{notIn:[JobStatus.COMPLETED,JobStatus.FAILED,JobStatus.CANCELLED,JobStatus.TIMED_OUT,JobStatus.REJECTED,JobStatus.QUARANTINED]}},select:{id:true}});if(active)return reply.code(409).send({error:'booking_already_has_active_job',jobId:active.id});return reply.code(201).send(await db.job.create({data:{bookingId:booking.id,renterId:session.userId,machineId:booking.listing.machineId,type:JobType.GPU_DIAGNOSTIC,parameters:body.parameters},select:{id:true,type:true,status:true,createdAt:true}}));});
+app.get('/jobs',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;return {jobs:await db.job.findMany({where:{renterId:session.userId},select:{id:true,bookingId:true,type:true,status:true,errorCode:true,startedAt:true,finishedAt:true,createdAt:true},orderBy:{createdAt:'desc'},take:50})};});
+app.get('/jobs/:id',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {id}=z.object({id:z.string().cuid()}).parse(req.params);const job=await db.job.findFirst({where:{id,renterId:session.userId},include:{logs:{orderBy:{createdAt:'asc'},take:500},attempts:{orderBy:{sequence:'asc'}}}});return job??reply.code(404).send({error:'job_not_found'});});
+app.post('/jobs/:id/cancel',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {id}=z.object({id:z.string().cuid()}).parse(req.params);const job=await db.job.findFirst({where:{id,renterId:session.userId},select:{status:true}});if(!job)return reply.code(404).send({error:'job_not_found'});const target=job.status===JobStatus.QUEUED?JobStatus.CANCELLED:JobStatus.CANCEL_REQUESTED;if(!canTransitionJob(job.status,target))return reply.code(409).send({error:'job_not_cancellable',status:job.status});return db.job.update({where:{id},data:{status:target,cancelRequestedAt:new Date(),...(target===JobStatus.CANCELLED?{finishedAt:new Date()}:{})},select:{id:true,status:true}});});
+app.get('/agent/jobs/next/:machineId',{config:{rateLimit:{max:60,timeWindow:'1 minute'}}},async(req,reply)=>{const {machineId}=z.object({machineId:z.string().cuid()}).parse(req.params);const routePath=`/agent/jobs/next/${machineId}`;const machine=await authenticatedAgent(machineId,'GET',routePath,req.headers);if(!machine)return reply.code(401).send({error:'invalid_agent_request'});const candidate=await db.job.findFirst({where:{machineId,status:JobStatus.QUEUED,booking:{status:{in:activeJobBookings},endsAt:{gte:new Date()}},OR:[{type:JobType.WORKSPACE_PREPARE},{booking:{startsAt:{lte:new Date(Date.now()+300_000)}}}]},orderBy:{createdAt:'asc'}});if(!candidate)return reply.code(204).send();const claimed=await db.$transaction(async tx=>{const changed=await tx.job.updateMany({where:{id:candidate.id,status:JobStatus.QUEUED},data:{status:JobStatus.ASSIGNED}});if(changed.count!==1)return null;const sequence=await tx.jobAttempt.count({where:{jobId:candidate.id}})+1;await tx.jobAttempt.create({data:{jobId:candidate.id,sequence,agentVersion:machine.agentVersion}});return tx.job.findUnique({where:{id:candidate.id},select:{id:true,bookingId:true,type:true,status:true,parameters:true,workspaceSession:{select:{id:true}}}});});return claimed??reply.code(204).send();});
+app.get('/agent/jobs/:id/control',{config:{rateLimit:{max:120,timeWindow:'1 minute'}}},async(req,reply)=>{const {id}=z.object({id:z.string().cuid()}).parse(req.params);const machineId=String(req.headers['x-agent-machine-id']||'');const routePath=`/agent/jobs/${id}/control`;if(!machineId||!await authenticatedAgent(machineId,'GET',routePath,req.headers))return reply.code(401).send({error:'invalid_agent_request'});const job=await db.job.findFirst({where:{id,machineId},select:{status:true,cancelRequestedAt:true}});if(!job)return reply.code(404).send({error:'job_not_found'});return {cancelRequested:job.status===JobStatus.CANCEL_REQUESTED||job.cancelRequestedAt!==null};});
+const jobProgress=z.enum(['DOWNLOADING','PREPARING','RUNNING','UPLOADING_RESULTS','CANCELLED','FAILED','TIMED_OUT','REJECTED','QUARANTINED']);
+app.post('/agent/jobs/:id/state',{config:{rateLimit:{max:120,timeWindow:'1 minute'}}},async(req,reply)=>{const {id}=z.object({id:z.string().cuid()}).parse(req.params);const body=z.object({machineId:z.string().cuid(),status:jobProgress,errorCode:z.string().max(100).optional()}).parse(req.body);const routePath=`/agent/jobs/${id}/state`;if(!await authenticatedAgent(body.machineId,'POST',routePath,req.headers))return reply.code(401).send({error:'invalid_agent_request'});const job=await db.job.findFirst({where:{id,machineId:body.machineId},select:{status:true,type:true}});if(!job)return reply.code(404).send({error:'job_not_found'});const next=body.status as JobStatus;if(!canTransitionJob(job.status,next))return reply.code(409).send({error:'invalid_job_transition',from:job.status,to:next});const terminal=next===JobStatus.CANCELLED||next===JobStatus.FAILED||next===JobStatus.TIMED_OUT||next===JobStatus.QUARANTINED||next===JobStatus.REJECTED;const updated=await db.$transaction(async tx=>{const result=await tx.job.update({where:{id},data:{status:next,...(body.errorCode?{errorCode:body.errorCode}:{}),...(next===JobStatus.RUNNING?{startedAt:new Date()}:{}) ,...(terminal?{finishedAt:new Date()}:{})},select:{id:true,status:true}});if(terminal){const sessionStatus=next===JobStatus.CANCELLED?WorkspaceSessionStatus.CANCELLED:next===JobStatus.TIMED_OUT?WorkspaceSessionStatus.TIMED_OUT:next===JobStatus.QUARANTINED?WorkspaceSessionStatus.QUARANTINED:WorkspaceSessionStatus.FAILED;const reason=next===JobStatus.TIMED_OUT?SessionTerminationReason.TIMEOUT:next===JobStatus.QUARANTINED?SessionTerminationReason.SECURITY_POLICY:SessionTerminationReason.EXECUTION_FAILED;await tx.workspaceSession.updateMany({where:{jobId:id},data:{status:sessionStatus,endedAt:new Date(),terminationReason:reason,preparationStep:body.errorCode||next}})}else if(job.type===JobType.WORKSPACE_PREPARE){const progress=next===JobStatus.DOWNLOADING?30:next===JobStatus.PREPARING?60:next===JobStatus.RUNNING?85:90;await tx.workspaceSession.updateMany({where:{jobId:id},data:{preparationProgress:progress,preparationStep:next,...(next===JobStatus.DOWNLOADING?{preparationStartedAt:new Date()}:{})}})}return result});return updated;});
+app.post('/agent/jobs/:id/logs',{config:{rateLimit:{max:120,timeWindow:'1 minute'}}},async(req,reply)=>{const {id}=z.object({id:z.string().cuid()}).parse(req.params);const body=z.object({machineId:z.string().cuid(),entries:z.array(z.object({level:z.enum(['DEBUG','INFO','WARN','ERROR']),message:z.string().trim().min(1).max(2000)})).min(1).max(50)}).parse(req.body);const routePath=`/agent/jobs/${id}/logs`;if(!await authenticatedAgent(body.machineId,'POST',routePath,req.headers))return reply.code(401).send({error:'invalid_agent_request'});if(!await db.job.findFirst({where:{id,machineId:body.machineId},select:{id:true}}))return reply.code(404).send({error:'job_not_found'});const count=await db.jobLog.count({where:{jobId:id}});if(count+body.entries.length>10_000)return reply.code(413).send({error:'job_log_limit_reached'});await db.jobLog.createMany({data:body.entries.map(entry=>({jobId:id,...entry}))});return {ok:true,accepted:body.entries.length};});
+app.post('/agent/jobs/:id/complete',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{const {id}=z.object({id:z.string().cuid()}).parse(req.params);const body=z.object({machineId:z.string().cuid(),result:z.object({gpuDetected:z.boolean(),summary:z.string().max(1000),metrics:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional()}).strict()}).parse(req.body);const routePath=`/agent/jobs/${id}/complete`;if(!await authenticatedAgent(body.machineId,'POST',routePath,req.headers))return reply.code(401).send({error:'invalid_agent_request'});const job=await db.job.findFirst({where:{id,machineId:body.machineId},select:{status:true,type:true}});if(!job)return reply.code(404).send({error:'job_not_found'});if(!canTransitionJob(job.status,JobStatus.COMPLETED))return reply.code(409).send({error:'invalid_job_transition',from:job.status,to:'COMPLETED'});const isPreparation=job.type===JobType.WORKSPACE_PREPARE;await db.$transaction([db.job.update({where:{id},data:{status:JobStatus.COMPLETED,result:body.result,finishedAt:new Date()}}),db.jobAttempt.updateMany({where:{jobId:id,finishedAt:null},data:{finishedAt:new Date(),exitCode:0}}),db.workspaceSession.updateMany({where:{jobId:id},data:isPreparation?{status:WorkspaceSessionStatus.READY,readyAt:new Date(),preparationProgress:100,preparationStep:'CONNECTION_READY',preparationCompletedAt:new Date()}:{status:WorkspaceSessionStatus.COMPLETED,endedAt:new Date(),terminationReason:SessionTerminationReason.COMPLETED}})]);return {id,status:JobStatus.COMPLETED,workspaceReady:isPreparation};});
+app.post('/agent/jobs/:id/finalize-proof',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{
+ const {id}=z.object({id:z.string().cuid()}).parse(req.params);
+ const body=z.object({machineId:z.string().cuid()}).parse(req.body);
+ const routePath=`/agent/jobs/${id}/finalize-proof`;
+ if(!await authenticatedAgent(body.machineId,'POST',routePath,req.headers))return reply.code(401).send({error:'invalid_agent_request'});
+ const job=await db.job.findFirst({where:{id,machineId:body.machineId,type:JobType.GPU_PROOF,status:JobStatus.COMPLETED},include:{booking:true,workspaceSession:{include:{metrics:{where:{workloadProof:true},select:{intervalSeconds:true}}}}}});
+ if(!job||!job.workspaceSession)return reply.code(409).send({error:'completed_gpu_proof_required'});
+ const result=job.result as {gpuDetected?:unknown;metrics?:{containerCleaned?:unknown}}|null;
+ if(result?.gpuDetected!==true||result.metrics?.containerCleaned!==true)return reply.code(409).send({error:'verified_gpu_proof_required'});
+ const provenSeconds=job.workspaceSession.metrics.reduce((total,metric)=>total+metric.intervalSeconds,0);
+ if(provenSeconds<1||job.booking.validSeconds<1)return reply.code(409).send({error:'signed_usage_proof_required'});
+ await db.$transaction([
+  db.booking.updateMany({where:{id:job.bookingId,status:{in:[BookingStatus.FUNDED,BookingStatus.STARTING,BookingStatus.ACTIVE]}},data:{status:BookingStatus.COMPLETED}}),
+  db.machine.update({where:{id:body.machineId},data:{operational:MachineOperational.AVAILABLE}}),
+ ]);
+ return {ok:true,bookingStatus:BookingStatus.COMPLETED,provenSeconds};
+});
+app.get('/listings',async()=>{const rows=await db.gpuListing.findMany({where:{status:ListingStatus.ACTIVE,machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR,lastCudaProbeOk:true,lastHeartbeatAt:{gte:new Date(Date.now()-config.HEARTBEAT_OFFLINE_SECONDS*1000)}}},select:{id:true,title:true,description:true,hourlyLamports:true,createdAt:true,machine:{select:{gpuModel:true,vramMiB:true,verifiedAt:true}},owner:{select:{pseudonym:true,profile:{select:{reliabilityScore:true,completedSessions:true}}}}},take:100,orderBy:{createdAt:'desc'}});return rows.map(r=>({...r,hourlyLamports:bigintJson(r.hourlyLamports)}))});
+app.post('/bookings',async(req,reply)=>{const s=await requireSession(req,reply,redis);if(!s)return;const b=z.object({listingId:z.string().cuid(),startsAt:z.string().datetime(),endsAt:z.string().datetime(),idempotencyKey:z.string().uuid()}).parse(req.body);const start=new Date(b.startsAt),end=new Date(b.endsAt);if(start.getTime()<Date.now()-60_000||start.getTime()>Date.now()+30*24*3600_000||end<=start||end.getTime()-start.getTime()>24*3600_000)return reply.code(400).send({error:'invalid_period'});const booking=await db.$transaction(async tx=>{const existing=await tx.booking.findUnique({where:{buyerId_idempotencyKey:{buyerId:s.userId,idempotencyKey:b.idempotencyKey}}});if(existing)return existing;const listing=await tx.gpuListing.findFirst({where:{id:b.listingId,status:ListingStatus.ACTIVE,machine:{connectivity:MachineConnectivity.ONLINE,lastCudaProbeOk:true}},select:{id:true,hourlyLamports:true,ownerId:true}});if(!listing||listing.ownerId===s.userId)throw new Error('listing_unavailable');const overlap=await tx.booking.count({where:{listingId:listing.id,status:{in:[BookingStatus.AWAITING_DEPOSIT,BookingStatus.FUNDED,BookingStatus.STARTING,BookingStatus.ACTIVE]},startsAt:{lt:end},endsAt:{gt:start}}});if(overlap)throw new Error('time_slot_unavailable');const expected=Math.ceil((end.getTime()-start.getTime())/1000);const quote=listing.hourlyLamports*BigInt(expected)/3600n;if(quote<=0n)throw new Error('quote_too_small');return tx.booking.create({data:{buyerId:s.userId,listingId:listing.id,startsAt:start,endsAt:end,quotedLamports:quote,expectedSeconds:expected,idempotencyKey:b.idempotencyKey,status:BookingStatus.AWAITING_DEPOSIT}})}).catch(e=>{const msg=e instanceof Error?e.message:'booking_failed';return reply.code(409).send({error:msg})});if(!('id'in booking))return booking;return {...booking,quotedLamports:bigintJson(booking.quotedLamports)}});
 
-export async function stopRentalSession(
-  db: Database,
-  sessionId: string,
-  actorId: string,
-): Promise<{ id: string; status: WorkspaceSessionStatus }> {
-  return db.$transaction(async (tx) => {
-    const session = await tx.workspaceSession.findFirst({
-      where: {
-        id: sessionId,
-        OR: [{ renterId: actorId }, { machine: { ownerId: actorId } }],
-      },
-      include: {
-        booking: { select: { id: true, listingId: true, startsAt: true, endsAt: true } },
-        machine: { select: { id: true, ownerId: true } },
-      },
-    });
-    if (!session) throw new Error('session_not_found');
-    if (!STOPPABLE_SESSION_STATUSES.includes(session.status)) throw new Error('session_not_active');
+app.post('/bookings/:id/payment-intent',async(req,reply)=>{const s=await requireSession(req,reply,redis);if(!s)return; if(config.ESCROW_PROGRAM_ID==='NOT_DEPLOYED_YET')return reply.code(503).send({error:'escrow_not_deployed'}); const {id}=z.object({id:z.string().cuid()}).parse(req.params); const b=await db.booking.findFirst({where:{id,buyerId:s.userId,status:BookingStatus.AWAITING_DEPOSIT},include:{buyer:true,listing:{include:{owner:true}}}}); if(!b)return reply.code(404).send({error:'booking_not_found'}); const programId=new PublicKey(config.ESCROW_PROGRAM_ID); const buyer=new PublicKey(b.buyer.wallet); const provider=new PublicKey(b.listing.owner.wallet); const expiresAtUnix=bookingEscrowExpiryUnix(b.endsAt); const built=await buildOpenEscrowTransaction({rpcUrl:config.SOLANA_RPC_URL,commitment:config.SOLANA_COMMITMENT,programId,buyer,provider,bookingId:b.id,amount:b.quotedLamports,expectedSeconds:b.expectedSeconds,expiresAtUnix}); await db.booking.update({where:{id:b.id},data:{escrowAddress:built.escrow.toBase58()}}); return {transactionBase64:built.transactionBase64,escrowAddress:built.escrow.toBase58(),programId:programId.toBase58(),amountLamports:b.quotedLamports.toString(),cluster:config.SOLANA_CLUSTER};});
+app.post('/bookings/:id/confirm-deposit',async(req,reply)=>{const s=await requireSession(req,reply,redis);if(!s)return; if(config.ESCROW_PROGRAM_ID==='NOT_DEPLOYED_YET')return reply.code(503).send({error:'escrow_not_deployed'}); const {id}=z.object({id:z.string().cuid()}).parse(req.params); const {signature}=z.object({signature:z.string().min(64).max(100)}).parse(req.body); const b=await db.booking.findFirst({where:{id,buyerId:s.userId},include:{buyer:true,listing:{include:{owner:true}}}}); if(!b)return reply.code(404).send({error:'booking_not_found'}); if(b.depositSignature&&b.depositSignature!==signature)return reply.code(409).send({error:'deposit_already_recorded'}); const programId=new PublicKey(config.ESCROW_PROGRAM_ID); const {escrow}=deriveEscrowAddresses(programId,b.id); const ok=await verifyOpenEscrowTransaction({rpcUrl:config.SOLANA_RPC_URL,commitment:config.SOLANA_COMMITMENT,programId,signature,buyer:new PublicKey(b.buyer.wallet),provider:new PublicKey(b.listing.owner.wallet),amount:b.quotedLamports,expectedSeconds:b.expectedSeconds,escrow}); if(!ok)return reply.code(409).send({error:'invalid_deposit_transaction'}); await db.$transaction([db.booking.update({where:{id:b.id},data:{status:BookingStatus.FUNDED,escrowAddress:escrow.toBase58(),depositSignature:signature}}),db.payment.upsert({where:{bookingId:b.id},update:{grossLamports:b.quotedLamports,status:PaymentStatus.ESCROW_FUNDED},create:{bookingId:b.id,grossLamports:b.quotedLamports,status:PaymentStatus.ESCROW_FUNDED}})]); let workspaceSession=null;try{workspaceSession=await ensureComputePreparation(b.id,s.userId)}catch(error){req.log.error({err:error,bookingId:b.id},'workspace_preparation_enqueue_failed')}return {ok:true,status:'FUNDED',signature,escrowAddress:escrow.toBase58(),workspaceSession};});
 
-    const ownerStop = session.machine.ownerId === actorId;
-    const status = WorkspaceSessionStatus.STOP_REQUESTED;
-
-    await tx.workspaceSession.update({
-      where: { id: session.id },
-      data: {
-        status,
-        terminationReason: ownerStop
-          ? SessionTerminationReason.OWNER_EMERGENCY_STOP
-          : SessionTerminationReason.USER_STOP,
-        events: {
-          create: {
-            actorType: ownerStop ? 'OWNER' : 'RENTER',
-            actorId,
-            action: ownerStop ? 'EMERGENCY_STOP_REQUESTED' : 'STOP_REQUESTED',
-          },
-        },
-      },
-    });
-
-    if (session.jobId) {
-      await tx.job.updateMany({
-        where: { id: session.jobId, status: { in: ACTIVE_JOB_STATUSES } },
-        data: { status: JobStatus.CANCEL_REQUESTED, cancelRequestedAt: new Date() },
-      });
-    }
-
-    await requestRentalStop(tx, {
-      bookingId: session.booking.id,
-      machineId: session.machine.id,
-      renterId: session.renterId,
-      listingId: session.booking.listingId,
-      sessionId: session.id,
-      startsAt: session.booking.startsAt,
-      endsAt: session.booking.endsAt,
-    }, ownerStop ? 'owner' : 'renter');
-
-    return { id: session.id, status };
-  }, { isolationLevel: 'Serializable' });
-}
-
-function isPlainObject(value: Prisma.JsonValue | null): value is Prisma.JsonObject {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
+app.get('/bookings/:id/settlement-preview',async(req,reply)=>{const s=await requireSession(req,reply,redis);if(!s)return;const {id}=z.object({id:z.string().cuid()}).parse(req.params);const b=await db.booking.findFirst({where:{id,OR:[{buyerId:s.userId},{listing:{ownerId:s.userId}}]},include:{payment:true}});if(!b||!b.payment)return reply.code(404).send({error:'not_found'});const x=calculateSettlement(b.payment.grossLamports,b.validSeconds,b.expectedSeconds,config.COMMISSION_BPS);return Object.fromEntries(Object.entries(x).map(([k,v])=>[k,typeof v==='bigint'?v.toString():v]))});
+app.post('/internal/sweep-offline',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{if(!constantTimeToken(req.headers.authorization?.replace(/^Bearer\s+/i,''),config.INTERNAL_SERVICE_TOKEN))return reply.code(401).send({error:'unauthorized'});const result=await sweepOfflineMachines(db,new Date(),config.HEARTBEAT_OFFLINE_SECONDS);req.log.info({...result,cutoff:result.cutoff.toISOString()},'offline_sweep_completed');return {...result,cutoff:result.cutoff.toISOString()}});
+const storageDir=path.resolve(config.FILE_STORAGE_DIR);fs.mkdirSync(storageDir,{recursive:true});
+app.post('/jobs/:id/artifacts',{config:{rateLimit:{max:20,timeWindow:'1 minute'},bodyLimit:config.MAX_ARTIFACT_BYTES}},async(req,reply)=>{const {id}=z.object({id:z.string().cuid()}).parse(req.params);const body=z.object({machineId:z.string().cuid(),kind:z.string().max(32).default('result'),sha256:z.string().regex(/^[a-f0-9]{64}$/),sizeBytes:z.number().int().min(1).max(config.MAX_ARTIFACT_BYTES)}).parse(req.query);const routePath=`/jobs/${id}/artifacts`;if(!await authenticatedAgent(body.machineId,'POST',routePath,req.headers))return reply.code(401).send({error:'invalid_agent_request'});const job=await db.job.findFirst({where:{id,machineId:body.machineId},select:{id:true,renterId:true}});if(!job)return reply.code(404).send({error:'job_not_found'});const data=await req.body;if(!Buffer.isBuffer(data)&&typeof data!=='string')return reply.code(400).send({error:'binary_body_required'});const buf=Buffer.from(data);if(buf.length>config.MAX_ARTIFACT_BYTES)return reply.code(413).send({error:'artifact_too_large'});const hash=crypto.createHash('sha256').update(buf).digest('hex');if(hash!==body.sha256)return reply.code(400).send({error:'integrity_check_failed'});const storageKey=`${id}/${body.kind}/${body.sha256}`;const filePath=path.join(storageDir,storageKey);await fsp.mkdir(path.dirname(filePath),{recursive:true});await fsp.writeFile(filePath,buf);const artifact=await db.jobArtifact.create({data:{jobId:id,kind:body.kind,sha256:body.sha256,sizeBytes:buf.length,storageKey}});return reply.code(201).send({id:artifact.id,sha256:body.sha256,sizeBytes:buf.length,storageKey});});
+app.get('/jobs/:id/artifacts',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {id}=z.object({id:z.string().cuid()}).parse(req.params);const job=await db.job.findFirst({where:{id,renterId:session.userId},select:{id:true}});if(!job)return reply.code(404).send({error:'job_not_found'});const artifacts=await db.jobArtifact.findMany({where:{jobId:id},select:{id:true,kind:true,sha256:true,sizeBytes:true,storageKey:true,createdAt:true},orderBy:{createdAt:'desc'}});return {artifacts};});
+app.get('/jobs/:id/artifacts/:artifactId',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {id,artifactId}=z.object({id:z.string().cuid(),artifactId:z.string().cuid()}).parse(req.params);const job=await db.job.findFirst({where:{id,renterId:session.userId},select:{id:true}});if(!job)return reply.code(404).send({error:'job_not_found'});const artifact=await db.jobArtifact.findFirst({where:{id:artifactId,jobId:id},select:{id:true,sha256:true,sizeBytes:true,storageKey:true,kind:true}});if(!artifact)return reply.code(404).send({error:'artifact_not_found'});const filePath=path.join(storageDir,artifact.storageKey);try{const data=await fsp.readFile(filePath);reply.header('content-type','application/octet-stream');reply.header('x-artifact-sha256',artifact.sha256);return reply.send(data);}catch{return reply.code(404).send({error:'file_not_found_on_disk'});}});
+await app.register(fastifyStatic,{root:path.resolve(process.cwd(),'../web'),prefix:'/'});
+app.setNotFoundHandler((req,reply)=>{if(req.method==='GET'&&!req.url.startsWith('/api/')&&!req.url.startsWith('/internal/'))return reply.sendFile('index.html');return reply.code(404).send({error:'not_found'})});
+const shutdown=async(signal:string)=>{app.log.info({signal},'shutdown');await app.close();await db.$disconnect();redis.disconnect();process.exit(0)};
+process.once('SIGTERM',()=>void shutdown('SIGTERM'));process.once('SIGINT',()=>void shutdown('SIGINT'));
+await app.listen({host:'0.0.0.0',port:config.PORT});
