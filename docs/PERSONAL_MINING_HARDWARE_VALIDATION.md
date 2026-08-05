@@ -19,8 +19,16 @@ guarantee identical performance on other machines.
 
 The ALPH run used the approved `ALEPH` algorithm identifier and a standard Alephium address. The
 observed hashrate varied from approximately 70 to 339 MH/s. Temperature reached 91–93 °C and the
-hashrate fell sharply, so this machine must not be used for another sustained run until cooling and
-thermal-stop protections have been verified.
+hashrate fell sharply, so this machine must not be used for another sustained run until its cooling
+has been corrected.
+
+## Thermal protection
+
+- The desktop backend reads the NVIDIA temperature sensor every five seconds while a miner runs.
+- A warning is displayed from 80 °C.
+- At 85 °C, mining is stopped, owner mining consent is disabled and a restart latch is set.
+- A manual rearm is accepted only after a fresh native sensor reading is at or below 75 °C.
+- An unavailable or invalid sensor cannot clear the restart latch.
 
 ## Display rules
 

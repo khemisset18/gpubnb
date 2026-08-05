@@ -16,6 +16,7 @@ mod mining_pool_probe;
 mod mining_runtime_controller;
 mod mining_runtime_tauri;
 mod mining_telemetry;
+mod mining_thermal_guard;
 mod orchestration_gateway;
 mod pairing;
 mod rental_mining_coordinator;
@@ -37,6 +38,8 @@ use mining_configuration_tauri::{
 #[cfg(test)]
 use mining_runtime_controller::MiningRuntimeController;
 use mining_runtime_tauri::{MiningRuntimeExecution, MiningRuntimeSnapshot, MiningRuntimeState};
+#[cfg(feature = "desktop-runtime")]
+use mining_thermal_guard::{MiningThermalSafetySnapshot, MiningThermalSafetyState};
 use orchestration_gateway::{
     ActorRole, AuthenticatedContext, CommandResult, OrchestrationCommand, OrchestrationGateway,
 };
@@ -48,7 +51,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Mutex,
 };
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const TOTAL_SETUP_STEPS: usize = 6;
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -495,10 +498,12 @@ fn start_idle_mining(
     state: tauri::State<'_, Mutex<AppState>>,
     mining: tauri::State<'_, MiningRuntimeState>,
     configuration: tauri::State<'_, MiningConfigurationState>,
+    thermal_safety: tauri::State<'_, MiningThermalSafetyState>,
 ) -> Result<MiningRuntimeExecution, &'static str> {
     let state = state.lock().map_err(|_| "state_unavailable")?;
     ensure_owner_mining_allowed(&state)?;
     drop(state);
+    thermal_safety.ensure_start_allowed()?;
     mining.start_idle_mining(&configuration)
 }
 
@@ -508,6 +513,47 @@ fn mining_telemetry_status(
     profile_id: String,
 ) -> Result<mining_telemetry::MiningTelemetry, &'static str> {
     mining_telemetry::read(&profile_id)
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
+fn mining_thermal_safety_status(
+    state: tauri::State<'_, MiningThermalSafetyState>,
+) -> Result<MiningThermalSafetySnapshot, &'static str> {
+    state.snapshot()
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
+fn acknowledge_mining_thermal_safety(
+    state: tauri::State<'_, MiningThermalSafetyState>,
+) -> Result<MiningThermalSafetySnapshot, &'static str> {
+    let temperature = mining_thermal_guard::read_native_temperature()?;
+    state.acknowledge(temperature)?;
+    state.snapshot()
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn start_mining_thermal_monitor(app: tauri::AppHandle) {
+    use tauri::Manager;
+
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(5));
+        let mining = app.state::<MiningRuntimeState>();
+        let Ok(process) = mining.process_snapshot() else {
+            continue;
+        };
+        if process.status != miner_process::MinerProcessStatus::Running {
+            continue;
+        }
+        let Ok(temperature) = mining_thermal_guard::read_native_temperature() else {
+            continue;
+        };
+        let thermal_safety = app.state::<MiningThermalSafetyState>();
+        if thermal_safety.observe(temperature) == Ok(true) {
+            let _ = mining.thermal_safety_stop();
+        }
+    });
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -657,6 +703,11 @@ pub fn run() {
         .manage(Mutex::new(create_gateway()))
         .manage(MiningRuntimeState::default())
         .manage(MiningConfigurationState::default())
+        .manage(MiningThermalSafetyState::default())
+        .setup(|app| {
+            start_mining_thermal_monitor(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             host_status,
             local_agent_status,
@@ -664,6 +715,8 @@ pub fn run() {
             orchestration_status,
             mining_runtime_status,
             mining_telemetry_status,
+            mining_thermal_safety_status,
+            acknowledge_mining_thermal_safety,
             approved_miner_status,
             install_approved_miner,
             set_idle_mining_mode,

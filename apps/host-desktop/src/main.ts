@@ -49,6 +49,13 @@ type MiningTelemetry = {
   uptimeSeconds?: number | null;
   poolConnected: boolean;
 };
+type MiningThermalSafety = {
+  latched: boolean;
+  lastTemperatureCelsius?: number | null;
+  warningCelsius: number;
+  stopCelsius: number;
+  rearmCelsius: number;
+};
 type MiningConfiguration = {
   enabled: boolean;
   autoMineWhenIdle: boolean;
@@ -313,7 +320,7 @@ const renderMiningTelemetry = (telemetry: MiningTelemetry | null): string => {
   const temperature = telemetry.temperatureCelsius;
   const thermalState = typeof temperature !== 'number' ? 'unknown' : temperature >= 85 ? 'danger' : temperature >= 80 ? 'warning' : 'safe';
   return `<section class="mining-performance ${thermalState}"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Tableau de minage</h2></div><span class="badge">Actualisation automatique</span></div>
-    ${thermalState === 'danger' ? '<div class="thermal-alert">Température excessive : arrêtez le minage et vérifiez le refroidissement.</div>' : ''}
+    ${thermalState === 'danger' ? '<div class="thermal-alert">Température excessive détectée. La protection native arrête automatiquement le minage à 85 °C.</div>' : ''}
     <dl class="performance-grid">
       <div><dt>Matériel</dt><dd>${escapeHtml(telemetry.deviceName ?? '—')}</dd></div>
       <div><dt>Hashrate</dt><dd>${formatMetric(telemetry.hashrate, telemetry.hashrateUnit ?? 'H/s')}</dd></div>
@@ -333,6 +340,7 @@ const renderMiningRuntime = (
   installationRead: MinerInstallationRead,
   configuration: MiningConfigurationView | null,
   telemetry: MiningTelemetry | null,
+  thermalSafety: MiningThermalSafety | null,
 ): string => {
   const installation = installationRead.status;
   const minerName = coin.profileId === 'xmrig_randomx' ? 'XMRig' : 'lolMiner';
@@ -353,6 +361,8 @@ const renderMiningRuntime = (
   const configurationMatches = saved?.cryptocurrency === coin.symbol
     && saved?.minerProfileId === coin.profileId;
   const configurationReady = configurationMatches && configuration?.status === 'ready';
+  const thermalLatched = thermalSafety?.latched === true;
+  const thermalPanel = thermalLatched ? `<div class="thermal-alert thermal-latched"><strong>Protection thermique déclenchée</strong><span>Le mineur a été arrêté automatiquement à ${formatMetric(thermalSafety?.lastTemperatureCelsius, '°C')}. Attendez que la carte descende à ${thermalSafety?.rearmCelsius ?? 75} °C maximum.</span><button id="acknowledge-thermal-safety" class="secondary" type="button">Vérifier et réarmer</button></div>` : '';
   const configurationPanel = installReady ? `<form id="mining-configuration" class="mining-configuration" novalidate>
     <div class="configuration-heading"><div><strong>Pool ${escapeHtml(coin.symbol)} personnel</strong><small>${configurationReady ? 'Connexion vérifiée. Le démarrage est autorisé.' : 'Enregistrez puis testez la connexion avant le démarrage.'}</small></div><span class="verification-badge ${configurationReady ? '' : 'pending'}">${configurationReady ? '✓ Prêt' : 'Test requis'}</span></div>
     <div class="configuration-fields"><label>Adresse du pool<input id="mining-pool" value="${escapeHtml(configurationMatches ? saved?.customPoolUrl ?? '' : '')}" placeholder="stratum+tls://pool.example.com:443" required></label>
@@ -363,8 +373,8 @@ const renderMiningRuntime = (
     <span class="status-pill ${running ? 'online' : ''}">${escapeHtml(processLabel)}</span></div>
     <dl class="runtime-details"><div><dt>Profil</dt><dd>${escapeHtml(process.profileId ?? 'Aucun')}</dd></div><div><dt>PID</dt><dd>${process.pid ?? '—'}</dd></div>
     <div><dt>Consentement</dt><dd>${escapeHtml(runtime.consent)}</dd></div><div><dt>Dernière sortie</dt><dd>${process.lastExitCode ?? '—'}</dd></div></dl>
-    ${runtime.lastError ? `<p class="runtime-error">${escapeHtml(runtime.lastError)}</p>` : ''}${renderMiningTelemetry(telemetry)}${installPanel}${configurationPanel}
-    <div class="mining-controls"><button id="start-mining" class="primary" ${installReady && configurationReady && !running ? '' : 'disabled'}>Démarrer le minage</button><button id="stop-mining" class="secondary" ${running ? '' : 'disabled'}>Arrêter le minage</button><button id="emergency-mining" class="danger-button">Arrêt d’urgence</button></div></section>`;
+    ${runtime.lastError ? `<p class="runtime-error">${escapeHtml(runtime.lastError)}</p>` : ''}${thermalPanel}${renderMiningTelemetry(telemetry)}${installPanel}${configurationPanel}
+    <div class="mining-controls"><button id="start-mining" class="primary" ${installReady && configurationReady && !running && !thermalLatched ? '' : 'disabled'}>Démarrer le minage</button><button id="stop-mining" class="secondary" ${running ? '' : 'disabled'}>Arrêter le minage</button><button id="emergency-mining" class="danger-button">Arrêt d’urgence</button></div></section>`;
 };
 
 const miningErrorMessage = (error: unknown): string => {
@@ -376,6 +386,9 @@ const miningErrorMessage = (error: unknown): string => {
   if (value.includes('mining_pool_connection_test_required')) return 'Testez la connexion au pool avant de démarrer.';
   if (value.includes('mining_configuration_missing')) return 'Enregistrez la configuration de minage.';
   if (value.includes('miner_binary_missing')) return 'Installez d’abord le mineur approuvé.';
+  if (value.includes('thermal_safety_review_required')) return 'Le redémarrage reste bloqué après un arrêt thermique. Laissez refroidir la carte puis cliquez sur « Vérifier et réarmer ».';
+  if (value.includes('miner_temperature_still_too_high')) return 'La carte est encore trop chaude. Attendez qu’elle descende à 75 °C maximum.';
+  if (value.includes('gpu_temperature_sensor_unavailable') || value.includes('gpu_temperature_sensor_invalid')) return 'Le capteur NVIDIA ne peut pas être vérifié. Le réarmement reste bloqué par sécurité.';
   return `Opération refusée : ${value}`;
 };
 
@@ -443,6 +456,12 @@ const bindMining = (
     setMessage('Arrêt d’urgence en cours…', 'error');
     void invoke('emergency_stop')
       .then(() => void refresh())
+      .catch((error: unknown) => setMessage(miningErrorMessage(error), 'error'));
+  });
+  document.querySelector<HTMLButtonElement>('#acknowledge-thermal-safety')?.addEventListener('click', () => {
+    setMessage('Vérification de la température avant réarmement…');
+    void invoke('acknowledge_mining_thermal_safety')
+      .then(() => { setMessage('Protection thermique réarmée. Le démarrage manuel est de nouveau disponible.', 'success'); window.setTimeout(() => void refresh(), 400); })
       .catch((error: unknown) => setMessage(miningErrorMessage(error), 'error'));
   });
   void runtime;
@@ -597,7 +616,7 @@ async function refresh(): Promise<void> {
   app.innerHTML = '<main class="loading"><div class="spinner"></div><p>Vérification sécurisée de votre ordinateur…</p></main>';
   try {
     const selectedProfileId = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin)?.profileId;
-    const [status, mining, installation, miningConfiguration, telemetry] = await Promise.all([
+    const [status, mining, installation, miningConfiguration, telemetry, thermalSafety] = await Promise.all([
       invoke<HostStatus>('host_status'),
       invoke<MiningRuntimeStatus>('mining_runtime_status')
         .then((runtime): MiningRuntimeRead => ({ status: runtime, error: null }))
@@ -613,6 +632,7 @@ async function refresh(): Promise<void> {
       selectedProfileId
         ? invoke<MiningTelemetry>('mining_telemetry_status', { profileId: selectedProfileId }).catch(() => null)
         : Promise.resolve(null),
+      invoke<MiningThermalSafety>('mining_thermal_safety_status').catch(() => null),
     ]);
     const progress = Math.round(Math.min(100, Math.max(0, status.progress)));
     const online = status.lifecycle === 'online';
@@ -632,7 +652,7 @@ async function refresh(): Promise<void> {
       ${renderMiningCatalog()}${(() => {
         const coin = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin);
         return coin?.profileId
-          ? renderMiningRuntime(coin, mining, installation, miningConfiguration, telemetry)
+          ? renderMiningRuntime(coin, mining, installation, miningConfiguration, telemetry, thermalSafety)
           : `<section class="mining-runtime unavailable"><div><p class="eyebrow">${escapeHtml(selectedMiningCoin)}</p><h2>Profil sélectionné</h2></div><div class="mining-controls"><button class="primary" disabled>Démarrer le minage</button></div></section>`;
       })()}<p id="action-status" class="action-status" aria-live="polite"></p></section>`;
     app.innerHTML = `<main class="layout">${sidebar}${activeView === 'host' ? hostPage : miningPage}</main>`;
@@ -645,7 +665,7 @@ async function refresh(): Promise<void> {
       const coin = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin);
       if (coin?.profileId) bindMining(coin, mining, installation, miningConfiguration);
     }
-    if (activeView === 'mining' && mining.status?.process.status === 'running') {
+    if (activeView === 'mining' && (mining.status?.process.status === 'running' || thermalSafety?.latched)) {
       refreshTimer = window.setTimeout(() => void refresh(), 5_000);
     }
   } catch (error: unknown) {

@@ -197,4 +197,23 @@ impl MiningRuntimeState {
             .emergency_stop(true)?;
         Ok(MiningRuntimeExecution { decision, process })
     }
+
+    pub fn thermal_safety_stop(&self) -> Result<MiningRuntimeExecution, &'static str> {
+        let decision = self
+            .controller
+            .lock()
+            .map_err(|_| "mining_runtime_state_unavailable")?
+            .set_owner_consent(MiningConsent::Disabled)?;
+        let execution = self.execute_decision(
+            decision,
+            &MiningConfigurationState::in_memory(),
+        )?;
+        let process_exited = execution.process.status != MinerProcessStatus::Running
+            && execution.process.pid.is_none();
+        self.controller
+            .lock()
+            .map_err(|_| "mining_runtime_state_unavailable")?
+            .owner_mining_stopped(process_exited)?;
+        Ok(execution)
+    }
 }
