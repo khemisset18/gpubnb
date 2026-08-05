@@ -21,8 +21,10 @@ from . import __version__
 from .client import ApiClient, agent_request, heartbeat
 from .runner import (
     cleanup_workspace,
+    gpu_proof_command,
     prepare_workspace,
     run_gpu_diagnostic,
+    run_gpu_proof_workspace,
     verify_protection_profile,
 )
 from .platform_info import find_nvidia_smi, find_rocm_smi, find_xpu_smi, gpu_inventory, system_inventory
@@ -328,7 +330,7 @@ def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, An
     if not job:
         return
     job_id = str(job["id"])
-    if job.get("type") not in {"GPU_DIAGNOSTIC", "WORKSPACE_PREPARE"}:
+    if job.get("type") not in {"GPU_DIAGNOSTIC", "WORKSPACE_PREPARE", "GPU_PROOF"}:
         update_job(api, key, machine_id, job_id, "REJECTED", "unsupported_job_type")
         return
     parameters = job.get("parameters") if isinstance(job.get("parameters"), dict) else {}
@@ -336,24 +338,50 @@ def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, An
     workspace_images = config.get("workspaceImages") if isinstance(config.get("workspaceImages"), dict) else {}
     image = str(workspace_images.get(workspace_slug) or config.get("diagnosticImage") or "")
     try:
-        if job.get("type") == "WORKSPACE_PREPARE":
+        if job.get("type") in {"WORKSPACE_PREPARE", "GPU_PROOF"}:
             update_job(api, key, machine_id, job_id, "DOWNLOADING")
         update_job(api, key, machine_id, job_id, "PREPARING")
         update_job(api, key, machine_id, job_id, "RUNNING")
-        if job.get("type") == "WORKSPACE_PREPARE":
+        if job.get("type") == "GPU_PROOF":
+            if not isinstance(session_value := job.get("workspaceSession"), dict) or not isinstance(session_value.get("id"), str):
+                raise RuntimeError("gpu_proof_session_missing")
+            metric_counter = 0
+            previous_elapsed = 0
+
+            def publish_sample(sample: dict[str, int]) -> None:
+                nonlocal metric_counter, previous_elapsed
+                metric_counter += 1
+                elapsed = sample["elapsedSeconds"]
+                interval = max(1, min(30, elapsed - previous_elapsed))
+                previous_elapsed = elapsed
+                send_session_metric(api, key, machine_id, session_value["id"], metric_counter, interval)
+                control = agent_request(api, key, machine_id, f"/agent/jobs/{job_id}/control")
+                if control.get("cancelRequested") is True:
+                    raise RuntimeError("rental_cancel_requested")
+
+            result = run_gpu_proof_workspace(
+                image,
+                int(parameters.get("durationSeconds", 60)),
+                publish_sample,
+            )
+        elif job.get("type") == "WORKSPACE_PREPARE":
             result = prepare_workspace(image, int(parameters.get("timeoutSeconds", 600)), workspace_slug)
         else:
             result = run_gpu_diagnostic(image, int(parameters.get("timeoutSeconds", 120)))
         session_value = job.get("workspaceSession")
         if job.get("type") == "GPU_DIAGNOSTIC" and isinstance(session_value, dict) and isinstance(session_value.get("id"), str):
-            send_session_metric(api, key, machine_id, session_value["id"], result)
+            send_session_metric(api, key, machine_id, session_value["id"], 1, 5)
         update_job(api, key, machine_id, job_id, "UPLOADING_RESULTS")
         complete_path = f"/agent/jobs/{job_id}/complete"
         agent_request(api, key, machine_id, complete_path, "POST", {"machineId": machine_id, "result": result})
+        if job.get("type") == "GPU_PROOF":
+            finalize_path = f"/agent/jobs/{job_id}/finalize-proof"
+            agent_request(api, key, machine_id, finalize_path, "POST", {"machineId": machine_id})
         print_json({"event": "job_completed", "jobId": job_id})
     except Exception as exc:
         try:
-            update_job(api, key, machine_id, job_id, "FAILED", str(exc)[:100])
+            cancelled = str(exc) == "rental_cancel_requested"
+            update_job(api, key, machine_id, job_id, "CANCELLED" if cancelled else "FAILED", str(exc)[:100])
         finally:
             print_json({"event": "job_failed", "jobId": job_id, "message": str(exc)[:300]})
 
@@ -366,7 +394,7 @@ def update_job(api: ApiClient, key: Any, machine_id: str, job_id: str, status: s
     return agent_request(api, key, machine_id, path, "POST", body)
 
 
-def send_session_metric(api: ApiClient, key: Any, machine_id: str, session_id: str, result: dict[str, Any]) -> dict[str, Any]:
+def send_session_metric(api: ApiClient, key: Any, machine_id: str, session_id: str, counter: int, interval_seconds: int) -> dict[str, Any]:
     system = system_inventory()
     gpus = gpu_inventory()
     gpu = gpus[0] if gpus else {}
@@ -375,15 +403,15 @@ def send_session_metric(api: ApiClient, key: Any, machine_id: str, session_id: s
     disk_total = int(system.get("diskTotalMiB") or 0)
     disk_available = int(system.get("diskAvailableMiB") or 0)
     payload = {
-        "machineId": machine_id, "counter": 1,
+        "machineId": machine_id, "counter": counter,
         "capturedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "intervalSeconds": 5, "gpuUtilization": int(gpu.get("gpuUtilization") or 0),
+        "intervalSeconds": interval_seconds, "gpuUtilization": int(gpu.get("gpuUtilization") or 0),
         "memoryUsedMiB": int(gpu.get("memoryUsedMiB") or 0),
         "temperatureC": int(gpu.get("temperatureC") or 0),
         "cpuUtilization": 0, "ramUsedMiB": max(0, ram_total - ram_available),
         "diskUsedMiB": max(0, disk_total - disk_available),
         "networkRxBytes": 0, "networkTxBytes": 0,
-        "available": bool(result.get("gpuDetected")), "workloadProof": bool(result.get("gpuDetected")),
+        "available": True, "workloadProof": True,
     }
     path = f"/agent/workspace-sessions/{session_id}/metrics"
     return agent_request(api, key, machine_id, path, "POST", payload)
@@ -523,7 +551,13 @@ def command_files_list(args: argparse.Namespace) -> int:
 
 def command_workspace_install(args: argparse.Namespace) -> int:
     config = load_config()
-    result = prepare_workspace(args.image, args.timeout, args.slug)
+    if args.slug == "compute":
+        # Validate the dedicated proof image allow-list without starting a GPU
+        # workload during installation, then check the container protections.
+        gpu_proof_command(args.image, 30, "gpubnb-proof-install-check")
+        result = verify_protection_profile(args.image)
+    else:
+        result = prepare_workspace(args.image, args.timeout, args.slug)
     images = config.get("workspaceImages")
     if not isinstance(images, dict):
         images = {}

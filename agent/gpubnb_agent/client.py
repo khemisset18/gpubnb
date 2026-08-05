@@ -123,6 +123,7 @@ def signed_headers(key: SigningKey, machine_id: str, method: str, path: str, bod
     v2_canonical = f"{method.upper()}|{path}|{machine_id}|{epoch}|{nonce}|{body_sha256}"
     v2_signature = base58.b58encode(key.sign(v2_canonical.encode()).signature).decode()
     return {
+        "x-agent-machine-id": machine_id,
         "x-agent-timestamp": str(epoch),
         "x-agent-signature": legacy_signature,
         "x-agent-signature-version": "2",

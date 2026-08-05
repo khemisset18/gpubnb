@@ -50,7 +50,7 @@ test('Compute session has protected lifecycle, metrics and emergency stop', () =
 test('Compute is prepared before renter arrival and access waits for READY', () => {
   const server = read('apps/api/src/server.ts');
   assert.match(server, /ensureComputePreparation/);
-  assert.match(server, /JobType\.WORKSPACE_PREPARE/);
+  assert.match(server, /JobType\.GPU_PROOF/);
   assert.match(server, /status:WorkspaceSessionStatus\.READY/);
   assert.match(server, /preparationProgress:100/);
   const script = read('apps/web/session.js');
