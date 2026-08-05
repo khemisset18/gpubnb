@@ -20,16 +20,6 @@ pub enum MiningPerformanceMode {
     Full,
 }
 
-impl MiningPerformanceMode {
-    pub const fn percent(self) -> u8 {
-        match self {
-            Self::Eco => 33,
-            Self::Balanced => 66,
-            Self::Full => 100,
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MiningConfigurationActor {
     HostOwner,

@@ -404,7 +404,12 @@ fn calculate_gpu_power_limit(
     {
         return Err("gpu_power_limit_invalid");
     }
-    let requested = default_watts * f64::from(mode.percent()) / 100.0;
+    let percent = match mode {
+        MiningPerformanceMode::Eco => 33,
+        MiningPerformanceMode::Balanced => 66,
+        MiningPerformanceMode::Full => 100,
+    };
+    let requested = default_watts * f64::from(percent) / 100.0;
     Ok(requested.max(minimum_watts).min(default_watts).round() as u32)
 }
 
