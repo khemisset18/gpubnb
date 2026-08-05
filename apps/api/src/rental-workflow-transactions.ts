@@ -140,8 +140,11 @@ export async function prepareComputeRental(
         bookingId,
         renterId,
         machineId: booking.listing.machineId,
-        type: JobType.WORKSPACE_PREPARE,
-        parameters: { timeoutSeconds: 600, workspaceSlug: 'compute' },
+        type: JobType.GPU_PROOF,
+        parameters: {
+          durationSeconds: Math.max(30, Math.min(600, booking.expectedSeconds)),
+          workspaceSlug: 'compute',
+        },
       },
       select: { id: true },
     });

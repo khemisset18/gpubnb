@@ -90,6 +90,7 @@ enum PaymentStatus {
 enum JobType {
   GPU_DIAGNOSTIC
   WORKSPACE_PREPARE
+  GPU_PROOF
 }
 
 enum JobStatus {

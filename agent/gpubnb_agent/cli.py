@@ -21,8 +21,10 @@ from . import __version__
 from .client import ApiClient, agent_request, heartbeat
 from .runner import (
     cleanup_workspace,
+    gpu_proof_command,
     prepare_workspace,
     run_gpu_diagnostic,
+    run_gpu_proof_workspace,
     verify_protection_profile,
 )
 from .platform_info import find_nvidia_smi, find_rocm_smi, find_xpu_smi, gpu_inventory, system_inventory
@@ -51,12 +53,12 @@ def command_setup(args: argparse.Namespace) -> int:
     if args.diagnostic_image:
         config["diagnosticImage"] = args.diagnostic_image
     save_config(config)
-    print("GPUbnb Agent est configuré.")
+    print("GPUbnb Agent est configur?.")
     print(f"Dossier : {directory}")
-    print(f"Clé : {'conservée' if key_existed else 'générée'}")
-    print(f"Clé publique : {public_key(key)}")
+    print(f"Cl? : {'conserv?e' if key_existed else 'g?n?r?e'}")
+    print(f"Cl? publique : {public_key(key)}")
     print(f"Fingerprint : {fingerprint(key)}")
-    print("\nÉtape suivante : ouvrez votre espace loueur, créez un code de liaison, puis :")
+    print("\n?tape suivante : ouvrez votre espace loueur, cr?ez un code de liaison, puis :")
     print("  gpubnb-agent link CODE")
     print("\nDiagnostic initial :")
     return command_diagnose(args)
@@ -75,17 +77,17 @@ def command_link(args: argparse.Namespace) -> int:
     result = client(config).link(args.code.strip().upper(), public_key(key), inventory)
     machine_id = result.get("machineId")
     if not isinstance(machine_id, str):
-        raise RuntimeError("Réponse de liaison invalide")
+        raise RuntimeError("R?ponse de liaison invalide")
     config.update({"machineId": machine_id, "linkedAt": result.get("linkedAt")})
     save_config(config)
-    print("Machine liée avec succès.")
+    print("Machine li?e avec succ?s.")
     print(f"Machine ID : {machine_id}")
     print("Lancez maintenant : gpubnb-agent start")
     return 0
 
 
 def command_show_key(_: argparse.Namespace) -> int:
-    print(f"Clé publique : {public_key()}")
+    print(f"Cl? publique : {public_key()}")
     print(f"Fingerprint : {fingerprint()}")
     return 0
 
@@ -99,8 +101,8 @@ def command_reset_key(args: argparse.Namespace) -> int:
     config.pop("machineId", None)
     config.pop("linkedAt", None)
     save_config(config)
-    print("Nouvelle clé générée. La machine doit être liée à nouveau.")
-    print(f"Clé publique : {public_key(key)}")
+    print("Nouvelle cl? g?n?r?e. La machine doit ?tre li?e ? nouveau.")
+    print(f"Cl? publique : {public_key(key)}")
     print(f"Fingerprint : {fingerprint(key)}")
     return 0
 
@@ -133,17 +135,17 @@ def command_diagnose(_: argparse.Namespace) -> int:
     report = diagnostic_report()
     print_json(report)
     if report["readyForHeartbeat"]:
-        print("\nRésultat : prêt à démarrer.")
+        print("\nR?sultat : pr?t ? d?marrer.")
         return 0
-    print("\nRésultat : configuration incomplète.")
+    print("\nR?sultat : configuration incompl?te.")
     if not report["gpuSmi"]:
         print("- Utilitaire GPU introuvable : installez nvidia-smi (NVIDIA), rocm-smi (AMD) ou xpu-smi (Intel).")
     if not report["keyPresent"]:
-        print("- Exécutez : gpubnb-agent setup")
+        print("- Ex?cutez : gpubnb-agent setup")
     if not report["machineLinked"]:
-        print("- Créez un code dans l'espace loueur puis exécutez : gpubnb-agent link CODE")
+        print("- Cr?ez un code dans l'espace loueur puis ex?cutez : gpubnb-agent link CODE")
     if not report["api"].get("reachable"):
-        print("- Vérifiez Internet, le pare-feu et l'URL API.")
+        print("- V?rifiez Internet, le pare-feu et l'URL API.")
     return 1
 
 
@@ -281,7 +283,7 @@ def heartbeat_loop(
     config = load_config()
     machine_id = config.get("machineId")
     if not isinstance(machine_id, str):
-        raise RuntimeError("Machine non liée. Exécutez : gpubnb-agent link CODE")
+        raise RuntimeError("Machine non li?e. Ex?cutez : gpubnb-agent link CODE")
     key = load_key()
     interval = max(5, min(60, int(config.get("intervalSeconds", 10))))
     failures = 0
@@ -313,7 +315,7 @@ def heartbeat_loop(
             else:
                 time.sleep(delay)
     except KeyboardInterrupt:
-        print("Agent arrêté.")
+        print("Agent arr?t?.")
         return 0
     finally:
         try:
@@ -328,7 +330,7 @@ def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, An
     if not job:
         return
     job_id = str(job["id"])
-    if job.get("type") not in {"GPU_DIAGNOSTIC", "WORKSPACE_PREPARE"}:
+    if job.get("type") not in {"GPU_DIAGNOSTIC", "WORKSPACE_PREPARE", "GPU_PROOF"}:
         update_job(api, key, machine_id, job_id, "REJECTED", "unsupported_job_type")
         return
     parameters = job.get("parameters") if isinstance(job.get("parameters"), dict) else {}
@@ -336,24 +338,50 @@ def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, An
     workspace_images = config.get("workspaceImages") if isinstance(config.get("workspaceImages"), dict) else {}
     image = str(workspace_images.get(workspace_slug) or config.get("diagnosticImage") or "")
     try:
-        if job.get("type") == "WORKSPACE_PREPARE":
+        if job.get("type") in {"WORKSPACE_PREPARE", "GPU_PROOF"}:
             update_job(api, key, machine_id, job_id, "DOWNLOADING")
         update_job(api, key, machine_id, job_id, "PREPARING")
         update_job(api, key, machine_id, job_id, "RUNNING")
-        if job.get("type") == "WORKSPACE_PREPARE":
+        if job.get("type") == "GPU_PROOF":
+            if not isinstance(session_value := job.get("workspaceSession"), dict) or not isinstance(session_value.get("id"), str):
+                raise RuntimeError("gpu_proof_session_missing")
+            metric_counter = 0
+            previous_elapsed = 0
+
+            def publish_sample(sample: dict[str, int]) -> None:
+                nonlocal metric_counter, previous_elapsed
+                metric_counter += 1
+                elapsed = sample["elapsedSeconds"]
+                interval = max(1, min(30, elapsed - previous_elapsed))
+                previous_elapsed = elapsed
+                send_session_metric(api, key, machine_id, session_value["id"], metric_counter, interval)
+                control = agent_request(api, key, machine_id, f"/agent/jobs/{job_id}/control")
+                if control.get("cancelRequested") is True:
+                    raise RuntimeError("rental_cancel_requested")
+
+            result = run_gpu_proof_workspace(
+                image,
+                int(parameters.get("durationSeconds", 60)),
+                publish_sample,
+            )
+        elif job.get("type") == "WORKSPACE_PREPARE":
             result = prepare_workspace(image, int(parameters.get("timeoutSeconds", 600)), workspace_slug)
         else:
             result = run_gpu_diagnostic(image, int(parameters.get("timeoutSeconds", 120)))
         session_value = job.get("workspaceSession")
         if job.get("type") == "GPU_DIAGNOSTIC" and isinstance(session_value, dict) and isinstance(session_value.get("id"), str):
-            send_session_metric(api, key, machine_id, session_value["id"], result)
+            send_session_metric(api, key, machine_id, session_value["id"], 1, 5)
         update_job(api, key, machine_id, job_id, "UPLOADING_RESULTS")
         complete_path = f"/agent/jobs/{job_id}/complete"
         agent_request(api, key, machine_id, complete_path, "POST", {"machineId": machine_id, "result": result})
+        if job.get("type") == "GPU_PROOF":
+            finalize_path = f"/agent/jobs/{job_id}/finalize-proof"
+            agent_request(api, key, machine_id, finalize_path, "POST", {"machineId": machine_id})
         print_json({"event": "job_completed", "jobId": job_id})
     except Exception as exc:
         try:
-            update_job(api, key, machine_id, job_id, "FAILED", str(exc)[:100])
+            cancelled = str(exc) == "rental_cancel_requested"
+            update_job(api, key, machine_id, job_id, "CANCELLED" if cancelled else "FAILED", str(exc)[:100])
         finally:
             print_json({"event": "job_failed", "jobId": job_id, "message": str(exc)[:300]})
 
@@ -366,7 +394,7 @@ def update_job(api: ApiClient, key: Any, machine_id: str, job_id: str, status: s
     return agent_request(api, key, machine_id, path, "POST", body)
 
 
-def send_session_metric(api: ApiClient, key: Any, machine_id: str, session_id: str, result: dict[str, Any]) -> dict[str, Any]:
+def send_session_metric(api: ApiClient, key: Any, machine_id: str, session_id: str, counter: int, interval_seconds: int) -> dict[str, Any]:
     system = system_inventory()
     gpus = gpu_inventory()
     gpu = gpus[0] if gpus else {}
@@ -375,15 +403,15 @@ def send_session_metric(api: ApiClient, key: Any, machine_id: str, session_id: s
     disk_total = int(system.get("diskTotalMiB") or 0)
     disk_available = int(system.get("diskAvailableMiB") or 0)
     payload = {
-        "machineId": machine_id, "counter": 1,
+        "machineId": machine_id, "counter": counter,
         "capturedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "intervalSeconds": 5, "gpuUtilization": int(gpu.get("gpuUtilization") or 0),
+        "intervalSeconds": interval_seconds, "gpuUtilization": int(gpu.get("gpuUtilization") or 0),
         "memoryUsedMiB": int(gpu.get("memoryUsedMiB") or 0),
         "temperatureC": int(gpu.get("temperatureC") or 0),
         "cpuUtilization": 0, "ramUsedMiB": max(0, ram_total - ram_available),
         "diskUsedMiB": max(0, disk_total - disk_available),
         "networkRxBytes": 0, "networkTxBytes": 0,
-        "available": bool(result.get("gpuDetected")), "workloadProof": bool(result.get("gpuDetected")),
+        "available": True, "workloadProof": True,
     }
     path = f"/agent/workspace-sessions/{session_id}/metrics"
     return agent_request(api, key, machine_id, path, "POST", payload)
@@ -393,7 +421,7 @@ def command_start(args: argparse.Namespace) -> int:
     if args.daemon:
         running_pid = _running_agent_pid()
         if running_pid is not None:
-            print(f"Agent déjà démarré (PID {running_pid}).")
+            print(f"Agent d?j? d?marr? (PID {running_pid}).")
             return 0
         handle = open(log_path(), "a", encoding="utf-8")
         try:
@@ -419,15 +447,15 @@ def command_start(args: argparse.Namespace) -> int:
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
             if process.poll() is not None:
-                print("L'agent n'a pas pu démarrer. Consultez les journaux.", file=sys.stderr)
+                print("L'agent n'a pas pu d?marrer. Consultez les journaux.", file=sys.stderr)
                 return 1
             if _running_agent_pid() == process.pid:
-                print(f"Agent démarré en arrière-plan (PID {process.pid}).")
+                print(f"Agent d?marr? en arri?re-plan (PID {process.pid}).")
                 return 0
             time.sleep(0.05)
         process.terminate()
         process.wait(timeout=5)
-        print("Le démarrage de l'agent n'a pas pu être confirmé.", file=sys.stderr)
+        print("Le d?marrage de l'agent n'a pas pu ?tre confirm?.", file=sys.stderr)
         return 1
     return heartbeat_loop()
 
@@ -439,13 +467,13 @@ def command_stop(_: argparse.Namespace) -> int:
             pid_path().unlink()
         except FileNotFoundError:
             pass
-        print("L'agent n'est pas démarré.")
+        print("L'agent n'est pas d?marr?.")
         return 1
     try:
         os.kill(pid, signal.SIGTERM)
-        print(f"Arrêt demandé au processus {pid}.")
+        print(f"Arr?t demand? au processus {pid}.")
     except ProcessLookupError:
-        print("Le processus était déjà arrêté.")
+        print("Le processus ?tait d?j? arr?t?.")
     return 0
 
 
@@ -474,7 +502,7 @@ def command_workspaces_list(_: argparse.Namespace) -> int:
 
 
 def command_workspaces_analyze(_: argparse.Namespace) -> int:
-    print_json({"system": system_inventory(), "gpus": gpu_inventory(), "note": "L’analyse persistée et l’activation se font depuis l’espace loueur authentifié."})
+    print_json({"system": system_inventory(), "gpus": gpu_inventory(), "note": "L?analyse persist?e et l?activation se font depuis l?espace loueur authentifi?."})
     return 0
 
 
@@ -483,7 +511,7 @@ def command_files_upload(args: argparse.Namespace) -> int:
     key = load_key()
     machine_id = config.get("machineId")
     if not isinstance(machine_id, str):
-        raise RuntimeError("Machine non liée. Exécutez : gpubnb-agent link CODE")
+        raise RuntimeError("Machine non li?e. Ex?cutez : gpubnb-agent link CODE")
     file_path = Path(args.path)
     if not file_path.is_file():
         raise RuntimeError(f"Fichier introuvable : {args.path}")
@@ -501,7 +529,7 @@ def command_files_download(args: argparse.Namespace) -> int:
     key = load_key()
     machine_id = config.get("machineId")
     if not isinstance(machine_id, str):
-        raise RuntimeError("Machine non liée. Exécutez : gpubnb-agent link CODE")
+        raise RuntimeError("Machine non li?e. Ex?cutez : gpubnb-agent link CODE")
     output = args.output or f"artifact_{args.artifact_id}"
     download_path = f"/jobs/{args.job_id}/artifacts/{args.artifact_id}"
     result = client(config).download_file(download_path, output, args.sha256)
@@ -514,7 +542,7 @@ def command_files_list(args: argparse.Namespace) -> int:
     key = load_key()
     machine_id = config.get("machineId")
     if not isinstance(machine_id, str):
-        raise RuntimeError("Machine non liée. Exécutez : gpubnb-agent link CODE")
+        raise RuntimeError("Machine non li?e. Ex?cutez : gpubnb-agent link CODE")
     list_path = f"/jobs/{args.job_id}/artifacts"
     result = agent_request(client(config), key, machine_id, list_path)
     print_json(result)
@@ -523,7 +551,13 @@ def command_files_list(args: argparse.Namespace) -> int:
 
 def command_workspace_install(args: argparse.Namespace) -> int:
     config = load_config()
-    result = prepare_workspace(args.image, args.timeout, args.slug)
+    if args.slug == "compute":
+        # Validate the dedicated proof image allow-list without starting a GPU
+        # workload during installation, then check the container protections.
+        gpu_proof_command(args.image, 30, "gpubnb-proof-install-check")
+        result = verify_protection_profile(args.image)
+    else:
+        result = prepare_workspace(args.image, args.timeout, args.slug)
     images = config.get("workspaceImages")
     if not isinstance(images, dict):
         images = {}
@@ -552,12 +586,12 @@ def command_service(args: argparse.Namespace) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    root = argparse.ArgumentParser(prog="gpubnb-agent", description="Agent local sécurisé GPUbnb")
+    root = argparse.ArgumentParser(prog="gpubnb-agent", description="Agent local s?curis? GPUbnb")
     commands = root.add_subparsers(dest="command", required=True)
-    setup = commands.add_parser("setup", help="préparer la machine et générer la clé")
+    setup = commands.add_parser("setup", help="pr?parer la machine et g?n?rer la cl?")
     setup.add_argument("--api-url", default=DEFAULT_API)
     setup.add_argument("--interval", type=int, default=10)
-    setup.add_argument("--diagnostic-image", help="image de diagnostic épinglée, au format registre/image@sha256:...")
+    setup.add_argument("--diagnostic-image", help="image de diagnostic ?pingl?e, au format registre/image@sha256:...")
     setup.set_defaults(handler=command_setup)
     login = commands.add_parser("login", help="ouvrir l'espace GPUbnb")
     login.add_argument("--site", default="https://gpubnb.netlify.app")
@@ -565,40 +599,40 @@ def parser() -> argparse.ArgumentParser:
     link = commands.add_parser("link", help="lier la machine avec un code temporaire")
     link.add_argument("code")
     link.set_defaults(handler=command_link)
-    start = commands.add_parser("start", help="démarrer les heartbeats")
+    start = commands.add_parser("start", help="d?marrer les heartbeats")
     start.add_argument("--daemon", action="store_true")
     start.set_defaults(handler=command_start)
     commands.add_parser("_run").set_defaults(handler=lambda _: heartbeat_loop())
-    commands.add_parser("stop", help="arrêter l'agent en arrière-plan").set_defaults(handler=command_stop)
-    commands.add_parser("status", help="afficher l'état local").set_defaults(handler=command_status)
+    commands.add_parser("stop", help="arr?ter l'agent en arri?re-plan").set_defaults(handler=command_stop)
+    commands.add_parser("status", help="afficher l'?tat local").set_defaults(handler=command_status)
     commands.add_parser("diagnose", help="tester GPU, Docker, API et liaison").set_defaults(handler=command_diagnose)
-    commands.add_parser("api-health", help="tester uniquement la connexion à l'API").set_defaults(handler=command_api_health)
+    commands.add_parser("api-health", help="tester uniquement la connexion ? l'API").set_defaults(handler=command_api_health)
     commands.add_parser("runtime-check", help=argparse.SUPPRESS).set_defaults(handler=command_runtime_check)
-    commands.add_parser("show-key", help="afficher uniquement la clé publique").set_defaults(handler=command_show_key)
-    reset = commands.add_parser("reset-key", help="régénérer la clé locale")
+    commands.add_parser("show-key", help="afficher uniquement la cl? publique").set_defaults(handler=command_show_key)
+    reset = commands.add_parser("reset-key", help="r?g?n?rer la cl? locale")
     reset.add_argument("--yes", action="store_true")
     reset.set_defaults(handler=command_reset_key)
     commands.add_parser("benchmark", help="lancer le diagnostic GPU local").set_defaults(handler=command_benchmark)
     logs = commands.add_parser("logs", help="afficher les derniers journaux")
     logs.add_argument("--lines", type=int, default=100)
     logs.set_defaults(handler=command_logs)
-    workspaces = commands.add_parser("workspaces", help="catalogue et capacités Workspace")
+    workspaces = commands.add_parser("workspaces", help="catalogue et capacit?s Workspace")
     workspace_commands = workspaces.add_subparsers(dest="workspace_command", required=True)
     workspace_commands.add_parser("list", help="afficher les 13 espaces du catalogue").set_defaults(handler=command_workspaces_list)
-    workspace_commands.add_parser("analyze", help="afficher les capacités locales utilisées pour la compatibilité").set_defaults(handler=command_workspaces_analyze)
-    install_workspace = workspace_commands.add_parser("install", help="télécharger et vérifier une image Workspace épinglée")
+    workspace_commands.add_parser("analyze", help="afficher les capacit?s locales utilis?es pour la compatibilit?").set_defaults(handler=command_workspaces_analyze)
+    install_workspace = workspace_commands.add_parser("install", help="t?l?charger et v?rifier une image Workspace ?pingl?e")
     install_workspace.add_argument("slug", choices=["compute", "developer"])
     install_workspace.add_argument("image", help="registre/image@sha256:digest")
     install_workspace.add_argument("--timeout", type=int, default=600)
     install_workspace.set_defaults(handler=command_workspace_install)
-    protections = commands.add_parser("protections", help="vérifier les protections du runtime")
+    protections = commands.add_parser("protections", help="v?rifier les protections du runtime")
     protection_commands = protections.add_subparsers(
         dest="protection_command", required=True
     )
     protection_commands.add_parser(
-        "verify", help="créer, inspecter et supprimer un conteneur de contrôle"
+        "verify", help="cr?er, inspecter et supprimer un conteneur de contr?le"
     ).set_defaults(handler=command_protections_verify)
-    service = commands.add_parser("service", help="gérer le service système Windows")
+    service = commands.add_parser("service", help="g?rer le service syst?me Windows")
     service.add_argument(
         "service_action", choices=["install", "remove", "start", "stop", "restart", "status"]
     )
@@ -608,18 +642,18 @@ def parser() -> argparse.ArgumentParser:
             "gpubnb_agent.windows_service", fromlist=["dispatch_service"]
         ).dispatch_service()
     )
-    files = commands.add_parser("files", help="transférer des fichiers de résultats")
+    files = commands.add_parser("files", help="transf?rer des fichiers de r?sultats")
     file_commands = files.add_subparsers(dest="file_command", required=True)
-    upload_cmd = file_commands.add_parser("upload", help="téléverser un fichier de résultat vers un job")
+    upload_cmd = file_commands.add_parser("upload", help="t?l?verser un fichier de r?sultat vers un job")
     upload_cmd.add_argument("job_id", help="identifiant du job")
-    upload_cmd.add_argument("path", help="chemin du fichier local à téléverser")
+    upload_cmd.add_argument("path", help="chemin du fichier local ? t?l?verser")
     upload_cmd.add_argument("--kind", default="result", help="type d'artefact (result, log, etc.)")
     upload_cmd.set_defaults(handler=command_files_upload)
-    download_cmd = file_commands.add_parser("download", help="télécharger un artefact depuis un job")
+    download_cmd = file_commands.add_parser("download", help="t?l?charger un artefact depuis un job")
     download_cmd.add_argument("job_id", help="identifiant du job")
     download_cmd.add_argument("artifact_id", help="identifiant de l'artefact")
     download_cmd.add_argument("--output", help="chemin de destination local")
-    download_cmd.add_argument("--sha256", help="empreinte attendue pour vérification d'intégrité")
+    download_cmd.add_argument("--sha256", help="empreinte attendue pour v?rification d'int?grit?")
     download_cmd.set_defaults(handler=command_files_download)
     list_cmd = file_commands.add_parser("list", help="lister les artefacts d'un job")
     list_cmd.add_argument("job_id", help="identifiant du job")
