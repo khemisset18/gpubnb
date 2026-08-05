@@ -36,6 +36,19 @@ type MinerInstallationStatus = {
   verificationError?: string | null;
 };
 type MinerInstallationRead = { status: MinerInstallationStatus | null; error: string | null };
+type MiningTelemetry = {
+  available: boolean;
+  deviceName?: string | null;
+  hashrate?: number | null;
+  hashrateUnit?: string | null;
+  acceptedShares?: number | null;
+  staleShares?: number | null;
+  hardwareErrors?: number | null;
+  temperatureCelsius?: number | null;
+  powerWatts?: number | null;
+  uptimeSeconds?: number | null;
+  poolConnected: boolean;
+};
 type MiningConfiguration = {
   enabled: boolean;
   autoMineWhenIdle: boolean;
@@ -71,6 +84,7 @@ type HostStatus = {
 
 type MessageTone = 'info' | 'success' | 'error';
 type AppView = 'host' | 'mining';
+type DisplayCurrency = 'USD' | 'EUR' | 'JPY' | 'GBP' | 'CNY';
 
 const OFFICIAL_ORIGINS = new Set(['https://gpubnb.com', 'https://app.gpubnb.com', 'https://gpubnb.netlify.app']);
 const MACHINE_ID_PATTERN = /^[A-Za-z0-9_-]{3,128}$/;
@@ -81,6 +95,12 @@ if (!root) throw new Error('missing_app_root');
 const app = root;
 let activeView: AppView = 'host';
 let selectedMiningCoin = 'XMR';
+const DISPLAY_CURRENCIES: DisplayCurrency[] = ['USD', 'EUR', 'JPY', 'GBP', 'CNY'];
+const savedCurrency = window.localStorage.getItem('gpubnb-mining-currency');
+let displayCurrency: DisplayCurrency = DISPLAY_CURRENCIES.includes(savedCurrency as DisplayCurrency)
+  ? savedCurrency as DisplayCurrency
+  : 'USD';
+let refreshTimer: number | undefined;
 
 const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (char) => ({
   '&': '&amp;',
@@ -251,12 +271,13 @@ type MiningCatalogEntry = {
   symbol: string;
   name: string;
   profileId?: string;
+  hardwareValidated?: boolean;
 };
 
 const MINING_CATALOG: MiningCatalogEntry[] = [
-  { symbol: 'XMR', name: 'Monero', profileId: 'xmrig_randomx' },
+  { symbol: 'XMR', name: 'Monero', profileId: 'xmrig_randomx', hardwareValidated: true },
   { symbol: 'PRL', name: 'Pearl' },
-  { symbol: 'ALPH', name: 'Alephium', profileId: 'lolminer_blake3' },
+  { symbol: 'ALPH', name: 'Alephium', profileId: 'lolminer_blake3', hardwareValidated: true },
   { symbol: 'KAS', name: 'Kaspa' },
   { symbol: 'ETC', name: 'Ethereum Classic', profileId: 'lolminer_etchash' },
   { symbol: 'CFX', name: 'Conflux', profileId: 'lolminer_octopus' },
@@ -265,19 +286,53 @@ const MINING_CATALOG: MiningCatalogEntry[] = [
 ];
 
 const renderMiningCatalog = (): string => `<section class="mining-catalog">
-  <div class="catalog-heading"><div><p class="eyebrow">Catalogue multi-crypto</p><h2>Choisissez votre cryptomonnaie</h2></div></div>
+  <div class="catalog-heading"><div><p class="eyebrow">Catalogue multi-crypto</p><h2>Choisissez votre cryptomonnaie</h2></div>
+    <label class="currency-selector">Devise<select id="mining-currency" aria-label="Devise d’affichage">${DISPLAY_CURRENCIES.map((currency) => `<option value="${currency}" ${currency === displayCurrency ? 'selected' : ''}>${currency}</option>`).join('')}</select></label></div>
   <div class="catalog-grid">${MINING_CATALOG.map((entry) => `<article class="catalog-card ${selectedMiningCoin === entry.symbol ? 'selected' : ''}">
-    <div class="catalog-card-heading"><div><span class="coin-symbol">${escapeHtml(entry.symbol)}</span><h3>${escapeHtml(entry.name)}</h3></div></div>
-    <div class="profit-estimate"><span>Rendement estimé</span><strong>— €/jour</strong><small>Calculé après le test réel de cette carte</small></div>
+    <div class="catalog-card-heading"><div><span class="coin-symbol">${escapeHtml(entry.symbol)}</span><h3>${escapeHtml(entry.name)}</h3></div>${entry.hardwareValidated ? '<span class="catalog-validation">✓ Test réel validé</span>' : ''}</div>
+    <div class="profit-estimate"><span>Rendement estimé</span><strong>— ${displayCurrency}/jour</strong><small>${entry.hardwareValidated ? 'Mesures disponibles · source de prix à raccorder' : 'Calculé après le test réel de cette carte'}</small></div>
     <button class="${selectedMiningCoin === entry.symbol ? 'primary' : 'secondary'} catalog-select" data-coin="${escapeHtml(entry.symbol)}">${selectedMiningCoin === entry.symbol ? 'Sélectionnée' : 'Sélectionner'}</button>
   </article>`).join('')}</div>
 </section>`;
+
+const formatDuration = (seconds?: number | null): string => {
+  if (typeof seconds !== 'number') return '—';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remaining = seconds % 60;
+  return `${hours} h ${minutes} min ${remaining} s`;
+};
+
+const formatMetric = (value: number | null | undefined, unit: string): string => (
+  typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(value < 10 ? 1 : 0)} ${unit}` : '—'
+);
+
+const renderMiningTelemetry = (telemetry: MiningTelemetry | null): string => {
+  if (!telemetry?.available) return `<section class="mining-performance unavailable"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Mesures en attente</h2></div><span class="badge">Aucune session mesurée</span></div>
+    <p>Le tableau sera alimenté automatiquement après le démarrage du mineur.</p></section>`;
+  const temperature = telemetry.temperatureCelsius;
+  const thermalState = typeof temperature !== 'number' ? 'unknown' : temperature >= 85 ? 'danger' : temperature >= 80 ? 'warning' : 'safe';
+  return `<section class="mining-performance ${thermalState}"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Tableau de minage</h2></div><span class="badge">Actualisation automatique</span></div>
+    ${thermalState === 'danger' ? '<div class="thermal-alert">Température excessive : arrêtez le minage et vérifiez le refroidissement.</div>' : ''}
+    <dl class="performance-grid">
+      <div><dt>Matériel</dt><dd>${escapeHtml(telemetry.deviceName ?? '—')}</dd></div>
+      <div><dt>Hashrate</dt><dd>${formatMetric(telemetry.hashrate, telemetry.hashrateUnit ?? 'H/s')}</dd></div>
+      <div><dt>Température</dt><dd>${formatMetric(temperature, '°C')}</dd></div>
+      <div><dt>Puissance</dt><dd>${formatMetric(telemetry.powerWatts, 'W')}</dd></div>
+      <div><dt>Parts A/S/Hw</dt><dd>${telemetry.acceptedShares ?? '—'} / ${telemetry.staleShares ?? '—'} / ${telemetry.hardwareErrors ?? '—'}</dd></div>
+      <div><dt>Durée mesurée</dt><dd>${formatDuration(telemetry.uptimeSeconds)}</dd></div>
+      <div><dt>Pool</dt><dd>${telemetry.poolConnected ? 'Connecté' : 'Non confirmé'}</dd></div>
+      <div><dt>Estimation</dt><dd>— ${displayCurrency}/jour</dd><small>Source de prix non raccordée</small></div>
+    </dl>
+    <p class="performance-note">Les parts et mesures sont réelles. Le montant restera vide tant que le rendement réseau et le cours ${displayCurrency} ne sont pas disponibles de façon fiable.</p></section>`;
+};
 
 const renderMiningRuntime = (
   coin: MiningCatalogEntry,
   read: MiningRuntimeRead,
   installationRead: MinerInstallationRead,
   configuration: MiningConfigurationView | null,
+  telemetry: MiningTelemetry | null,
 ): string => {
   const installation = installationRead.status;
   const minerName = coin.profileId === 'xmrig_randomx' ? 'XMRig' : 'lolMiner';
@@ -308,7 +363,7 @@ const renderMiningRuntime = (
     <span class="status-pill ${running ? 'online' : ''}">${escapeHtml(processLabel)}</span></div>
     <dl class="runtime-details"><div><dt>Profil</dt><dd>${escapeHtml(process.profileId ?? 'Aucun')}</dd></div><div><dt>PID</dt><dd>${process.pid ?? '—'}</dd></div>
     <div><dt>Consentement</dt><dd>${escapeHtml(runtime.consent)}</dd></div><div><dt>Dernière sortie</dt><dd>${process.lastExitCode ?? '—'}</dd></div></dl>
-    ${runtime.lastError ? `<p class="runtime-error">${escapeHtml(runtime.lastError)}</p>` : ''}${installPanel}${configurationPanel}
+    ${runtime.lastError ? `<p class="runtime-error">${escapeHtml(runtime.lastError)}</p>` : ''}${renderMiningTelemetry(telemetry)}${installPanel}${configurationPanel}
     <div class="mining-controls"><button id="start-mining" class="primary" ${installReady && configurationReady && !running ? '' : 'disabled'}>Démarrer le minage</button><button id="stop-mining" class="secondary" ${running ? '' : 'disabled'}>Arrêter le minage</button><button id="emergency-mining" class="danger-button">Arrêt d’urgence</button></div></section>`;
 };
 
@@ -403,6 +458,13 @@ const bindNavigation = (): void => {
 };
 
 const bindCatalog = (): void => {
+  document.querySelector<HTMLSelectElement>('#mining-currency')?.addEventListener('change', (event) => {
+    const currency = (event.currentTarget as HTMLSelectElement).value as DisplayCurrency;
+    if (!DISPLAY_CURRENCIES.includes(currency)) return;
+    displayCurrency = currency;
+    window.localStorage.setItem('gpubnb-mining-currency', currency);
+    void refresh();
+  });
   document.querySelectorAll<HTMLButtonElement>('.catalog-select').forEach((button) => button.addEventListener('click', () => {
     const coin = button.dataset.coin;
     if (!coin || !MINING_CATALOG.some((entry) => entry.symbol === coin)) return;
@@ -531,9 +593,11 @@ const bindActions = (status: HostStatus): void => {
 };
 
 async function refresh(): Promise<void> {
+  if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
   app.innerHTML = '<main class="loading"><div class="spinner"></div><p>Vérification sécurisée de votre ordinateur…</p></main>';
   try {
-    const [status, mining, installation, miningConfiguration] = await Promise.all([
+    const selectedProfileId = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin)?.profileId;
+    const [status, mining, installation, miningConfiguration, telemetry] = await Promise.all([
       invoke<HostStatus>('host_status'),
       invoke<MiningRuntimeStatus>('mining_runtime_status')
         .then((runtime): MiningRuntimeRead => ({ status: runtime, error: null }))
@@ -546,6 +610,9 @@ async function refresh(): Promise<void> {
           .catch((error: unknown): MinerInstallationRead => ({ status: null, error: String(error) }));
       })(),
       invoke<MiningConfigurationView>('mining_configuration_get').catch(() => null),
+      selectedProfileId
+        ? invoke<MiningTelemetry>('mining_telemetry_status', { profileId: selectedProfileId }).catch(() => null)
+        : Promise.resolve(null),
     ]);
     const progress = Math.round(Math.min(100, Math.max(0, status.progress)));
     const online = status.lifecycle === 'online';
@@ -565,7 +632,7 @@ async function refresh(): Promise<void> {
       ${renderMiningCatalog()}${(() => {
         const coin = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin);
         return coin?.profileId
-          ? renderMiningRuntime(coin, mining, installation, miningConfiguration)
+          ? renderMiningRuntime(coin, mining, installation, miningConfiguration, telemetry)
           : `<section class="mining-runtime unavailable"><div><p class="eyebrow">${escapeHtml(selectedMiningCoin)}</p><h2>Profil sélectionné</h2></div><div class="mining-controls"><button class="primary" disabled>Démarrer le minage</button></div></section>`;
       })()}<p id="action-status" class="action-status" aria-live="polite"></p></section>`;
     app.innerHTML = `<main class="layout">${sidebar}${activeView === 'host' ? hostPage : miningPage}</main>`;
@@ -577,6 +644,9 @@ async function refresh(): Promise<void> {
     } else {
       const coin = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin);
       if (coin?.profileId) bindMining(coin, mining, installation, miningConfiguration);
+    }
+    if (activeView === 'mining' && mining.status?.process.status === 'running') {
+      refreshTimer = window.setTimeout(() => void refresh(), 5_000);
     }
   } catch (error: unknown) {
     app.innerHTML = `<main class="error-state"><h1>Votre ordinateur reste protégé.</h1><p>${escapeHtml(String(error))}</p><button id="retry" class="primary large">Relancer</button></main>`;

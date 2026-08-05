@@ -97,6 +97,8 @@ h2 { margin-bottom: 0; font-size: 1.28rem; }
 .explanation { padding: 23px; }
 .mining-catalog { margin-top: 24px; padding: 23px; border: 1px solid #2e3c57; border-radius: 21px; background: linear-gradient(145deg, #121b2c, #0d1421); }
 .catalog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.currency-selector { display: grid; gap: 5px; color: #8997ae; font-size: .72rem; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; }
+.currency-selector select { min-width: 105px; padding: 9px 34px 9px 12px; border: 1px solid #405273; border-radius: 11px; background: #101a2a; color: #eef3ff; font: inherit; cursor: pointer; }
 .catalog-intro { max-width: 800px; margin: 12px 0 0; color: #a5b0c4; }
 .catalog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 20px; }
 .catalog-card { display: flex; min-width: 0; flex-direction: column; padding: 17px; border: 1px solid #29364f; border-radius: 17px; background: #0b121e; }
@@ -105,6 +107,7 @@ h2 { margin-bottom: 0; font-size: 1.28rem; }
 .catalog-card.limited { border-color: #594039; }
 .catalog-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .catalog-card-heading > div { display: flex; align-items: center; gap: 10px; }
+.catalog-validation { padding: 5px 8px; border-radius: 999px; background: #173b2b; color: #7be6ad; font-size: .68rem; font-weight: 900; white-space: nowrap; }
 .catalog-card h3 { margin: 0; font-size: 1.05rem; }
 .coin-symbol { display: grid; place-items: center; min-width: 45px; height: 34px; padding: 0 8px; border-radius: 10px; background: #263e6c; color: #d8e5ff; font-size: .75rem; font-weight: 900; }
 .catalog-state { padding: 5px 8px; border-radius: 999px; background: #263247; color: #bdc9dc; font-size: .7rem; font-weight: 900; white-space: nowrap; }
@@ -130,6 +133,18 @@ h2 { margin-bottom: 0; font-size: 1.28rem; }
 .runtime-details dt { color: #8997ae; font-size: .78rem; }
 .runtime-details dd { overflow: hidden; margin: 4px 0 0; color: #edf3ff; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .runtime-error { color: #ffac9a !important; }
+.mining-performance { margin-top: 18px; padding: 18px; border: 1px solid #2b3a53; border-radius: 16px; background: #0b121e; }
+.mining-performance.unavailable { border-color: #3d4658; }
+.mining-performance.warning { border-color: #70592f; }
+.mining-performance.danger { border-color: #8a4638; background: linear-gradient(145deg, #211617, #0b121e); }
+.performance-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.performance-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 16px 0 0; }
+.performance-grid > div { min-width: 0; padding: 12px; border-radius: 12px; background: #101a2a; }
+.performance-grid dt { color: #8997ae; font-size: .72rem; }
+.performance-grid dd { overflow: hidden; margin: 4px 0 0; color: #eef3ff; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.performance-grid small { display: block; margin-top: 3px; color: #8997ae; font-size: .68rem; }
+.performance-note, .mining-performance > p { margin: 13px 0 0; color: #8f9bb2; font-size: .78rem; }
+.thermal-alert { margin-top: 14px; padding: 11px 13px; border: 1px solid #8a4638; border-radius: 11px; background: #3a211d; color: #ffb09d; font-weight: 900; }
 .miner-installation { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; margin-top: 18px; padding: 16px; border: 1px solid #2b3a53; border-radius: 16px; background: #0b121e; }
 .miner-installation.required { border-color: #574434; background: #1b1717; }
 .miner-installation strong, .miner-installation small { display: block; }
@@ -199,6 +214,7 @@ h2 { margin-bottom: 0; font-size: 1.28rem; }
   .runtime-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .configuration-fields { grid-template-columns: 1fr; }
   .catalog-grid { grid-template-columns: 1fr; }
+  .performance-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 640px) {
@@ -220,4 +236,6 @@ h2 { margin-bottom: 0; font-size: 1.28rem; }
   .welcome-card { border-radius: 21px; }
   .catalog-heading { display: block; }
   .catalog-heading .badge { display: inline-block; margin-top: 12px; }
+  .currency-selector { margin-top: 14px; }
+  .performance-grid { grid-template-columns: 1fr; }
 }

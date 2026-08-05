@@ -15,6 +15,7 @@ mod mining_configuration_tauri;
 mod mining_pool_probe;
 mod mining_runtime_controller;
 mod mining_runtime_tauri;
+mod mining_telemetry;
 mod orchestration_gateway;
 mod pairing;
 mod rental_mining_coordinator;
@@ -503,6 +504,14 @@ fn start_idle_mining(
 
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
+fn mining_telemetry_status(
+    profile_id: String,
+) -> Result<mining_telemetry::MiningTelemetry, &'static str> {
+    mining_telemetry::read(&profile_id)
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
 fn account_pairing_configuration() -> PairingConfiguration {
     pairing_configuration()
 }
@@ -654,6 +663,7 @@ pub fn run() {
             link_local_agent,
             orchestration_status,
             mining_runtime_status,
+            mining_telemetry_status,
             approved_miner_status,
             install_approved_miner,
             set_idle_mining_mode,
@@ -778,6 +788,7 @@ mod tests {
             "link_local_agent",
             "orchestration_status",
             "mining_runtime_status",
+            "mining_telemetry_status",
             "set_idle_mining_mode",
             "start_idle_mining",
             "account_pairing_configuration",
