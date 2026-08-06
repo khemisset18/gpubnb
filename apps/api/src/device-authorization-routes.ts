@@ -16,7 +16,7 @@ const agentPublicKeySchema = z.string().min(32).max(64).regex(/^[1-9A-HJ-NP-Za-k
 const machineFingerprintSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
 const userCodeSchema = z.string().trim().toUpperCase().regex(/^[A-F0-9]{10}$/);
 
-const inventorySchema = z.object({
+export const inventorySchema = z.object({
   agentVersion: z.string().trim().min(1).max(40),
   system: z.object({
     os: z.string().max(80),
@@ -30,11 +30,14 @@ const inventorySchema = z.object({
     virtualizationAvailable: z.boolean().optional(),
   }),
   gpus: z.array(z.object({
-    gpuModel: z.string().max(200),
+    // Bounded to match Accelerator's actual column widths (schema.prisma), not just a
+    // generous-looking limit: a real GPU reporting a longer model/driver/CUDA string
+    // used to overflow the column and crash the pairing transaction with a raw 500.
+    gpuModel: z.string().max(160),
     gpuUuid: z.string().max(200),
     vramMiB: z.number().int().positive().max(1_000_000),
-    driverVersion: z.string().max(100),
-    cudaVersion: z.string().max(50).nullable().optional(),
+    driverVersion: z.string().max(80),
+    cudaVersion: z.string().max(40).nullable().optional(),
     gpuVendor: z.string().max(20).nullable().optional(),
   })).max(16),
 });
