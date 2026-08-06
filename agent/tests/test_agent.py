@@ -1,4 +1,5 @@
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -325,6 +326,30 @@ class RunnerTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "cleanup_unverified"):
             run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
+
+    @patch("gpubnb_agent.runner.cleanup_workspace")
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_diagnostic_container_hang_is_reported_as_a_timeout(self, run, mock_gpu, cleanup):
+        # RC1 Phase 5 Test 2: a container that never exits must not hang the agent
+        # forever or be silently swallowed — subprocess.run's own timeout must fire
+        # and be surfaced as a stable, documented error code. Reproduced live
+        # end-to-end too (real subprocess.run(timeout=30) against a stalling
+        # `docker run`, via a substituted docker executable on PATH): raised the
+        # exact same RuntimeError("diagnostic_timeout") after ~34s, twice.
+        mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        cleanup.return_value = {"cleaned": True, "container": "test"}
+
+        def raise_timeout(*args, **kwargs):
+            if args and args[0][:2] == ["docker", "run"]:
+                raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout", 30))
+            return type("Result", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+        run.side_effect = raise_timeout
+
+        with self.assertRaisesRegex(RuntimeError, "^diagnostic_timeout$"):
+            run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
+        cleanup.assert_called_once()
 
     @patch("gpubnb_agent.runner.cleanup_workspace")
     @patch("gpubnb_agent.runner.subprocess.run")

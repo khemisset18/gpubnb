@@ -41,6 +41,6 @@ Cases cochées uniquement sur preuve vérifiée dans cette campagne (voir le rap
 
 ## Avant 1.0
 
+- [x] Timeout de workload (Test 2) validé en conditions bout-en-bout réelles — voir `RISKS_RC1.md`.
 - [ ] Tout ce qui précède, en production depuis une durée significative sans incident non résolu.
-- [ ] Couverture complète du Test 2 (timeout de workload) en conditions bout-en-bout réelles, avec un environnement de test adapté (R5, `RISKS_RC1.md`).
 - [ ] Espace de travail interactif (`WORKSPACE_PREPARE`) validé en conditions réelles.

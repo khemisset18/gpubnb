@@ -21,7 +21,6 @@ Ce document liste ce que RC1 **n'a délibérément pas testé ou couvert**, dist
 
 ## Robustesse — couverture partielle
 
-- **Timeout de workload (Test 2, Phase 5)** : trois tentatives réelles distinctes, aucune concluante — voir `RISKS_RC1.md` R5 pour le détail. Le chemin de code correspondant (`subprocess.run(timeout=120)`) est correct par lecture de code et testé unitairement, mais pas prouvé en conditions bout-en-bout réelles.
 - **Perte de connexion réseau physique** (câble débranché, Wi-Fi coupé) n'a pas été testée — seules les coupures API/Docker/Redis ont été simulées, pas une coupure réseau au niveau OS.
 - **Redémarrage complet du PC hôte** n'a pas été testé (explicitement exclu par consigne pendant la Phase 5).
 

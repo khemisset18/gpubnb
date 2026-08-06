@@ -38,6 +38,10 @@ Toutes les entrées de ce fichier concernent la campagne RC1 menée sur la branc
 - **`2d1acf7`** — Aucune détection de staleness au niveau job : un job resté bloqué suite à une coupure API pouvait ne jamais atteindre d'état terminal même après le rétablissement complet de l'agent/machine. Ajout de `sweepStaleJobs`, indépendant du heartbeat machine.
 - **`d4b1698`** — Un rapport agent honnête de nettoyage de conteneur non vérifié (`diagnostic_cleanup_unverified`/`gpu_proof_cleanup_unverified`) n'empêchait pas le heartbeat suivant de remettre la machine `AVAILABLE`. La machine est désormais mise en quarantaine (`moderationStatus`), bloquant tout heartbeat ultérieur jusqu'à levée administrative contrôlée.
 
+### Ajouté — preuve et régression pour le Test 2 (timeout de workload)
+
+- **`agent/tests/test_agent.py::test_diagnostic_container_hang_is_reported_as_a_timeout`** — trois tentatives de chaos réseau/processus externes contre le vrai système avaient échoué à déclencher de façon concluante `subprocess.run(timeout=120)` (`runner.py`), pour des raisons structurelles documentées (workload officiel trop rapide à intercepter, pool d'IP GitHub, rejet instantané du pare-feu Windows). Résolu par une technique déterministe : substitution temporaire du binaire `docker` sur `PATH` (exécutable Rust compilé localement, n'interceptant que `docker run`) appelant directement `gpubnb_agent.runner.run_gpu_diagnostic` réel et non modifié. Résultat reproduit deux fois en direct : `RuntimeError('diagnostic_timeout')` après ~34s, zéro conteneur résiduel. Régression permanente ajoutée (mockée, rapide, ~ms en CI).
+
 ### Corrigé — vérification finale (bloquant CI, sans changement fonctionnel)
 
 - **`ad3f5ea`** — Violation `rustfmt` faisant échouer le job CI « rust tests and lint » sur les trois plateformes (macOS/Ubuntu/Windows) dès l'étape `cargo fmt --check`, avant même l'exécution des tests.

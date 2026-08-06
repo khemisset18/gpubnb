@@ -32,7 +32,7 @@ Un premier run réussi antérieur existe aussi (`cmsgz3mj60017icvk7aj7slji` / jo
 - `apps/api` : `npm test` → **149/149 verts**, 0 échec.
 - `agent` : `python -m unittest discover -s agent/tests` → **50/50 verts** (1 `skipped`, test de contrat spécifique non-Windows, attendu sur cette plateforme).
 
-> **Mise à jour post-Phase 5/6 (RC1) :** cette campagne s'est poursuivie par une Phase de tests de robustesse (10 scénarios de chaos réel/mocké) puis une clôture RC1. À la clôture, les suites de tests comptent **183/183** (`apps/api`), **54/54** (`agent`, 1 skip attendu), **440/440** (`apps/host-desktop`, Rust) et **7/7** (`programs/gpu_escrow`, Rust). Le détail complet — bugs supplémentaires trouvés et corrigés, résultats de robustesse, verdict de fusion — est dans `RC1_REPORT.md`, `CHANGELOG.md` et `RISKS_RC1.md` à la racine du dépôt.
+> **Mise à jour post-Phase 5/6 (RC1) :** cette campagne s'est poursuivie par une Phase de tests de robustesse (10 scénarios de chaos réel/mocké) puis une clôture RC1. À la clôture, les suites de tests comptent **183/183** (`apps/api`), **55/55** (`agent`, 1 skip attendu), **440/440** (`apps/host-desktop`, Rust) et **7/7** (`programs/gpu_escrow`, Rust). Le détail complet — bugs supplémentaires trouvés et corrigés, résultats de robustesse, verdict de fusion — est dans `RC1_REPORT.md`, `CHANGELOG.md` et `RISKS_RC1.md` à la racine du dépôt.
 
 ## Bugs réels trouvés et corrigés
 

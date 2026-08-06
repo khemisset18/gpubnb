@@ -88,8 +88,9 @@ Voir `RISKS_RC1.md` pour le détail complet avec preuve. Résumé :
 | R2 | IMPORTANT | Aucun ordonnanceur pour `/internal/sweep-offline` dans ce dépôt (route existe, rien ne l'appelle périodiquement) |
 | R3 | IMPORTANT | Aucune exclusivité GPU côté agent (sans conséquence pour `GPU_DIAGNOSTIC`, à traiter avant un job de calcul exclusif) |
 | R4 | MINEUR | Deux instances d'agent peuvent tourner en parallèle sans garde-fou |
-| R5 | MINEUR | Couverture incomplète du test de timeout de workload (limite d'environnement, pas un défaut de code) |
-| R6 | MINEUR | Couplage Docker/infrastructure spécifique au dev local (sans impact production) |
+| R5 | MINEUR | Couplage Docker/infrastructure spécifique au dev local (sans impact production) |
+
+Le timeout de workload (anciennement R5) est désormais **prouvé concluant** — voir section 8 et `RISKS_RC1.md`.
 
 ---
 
@@ -99,13 +100,13 @@ Voir `RISKS_RC1.md` pour le détail complet avec preuve. Résumé :
 |---|---|---|
 | `apps/api` (Node test runner) | **183/183** verts, 0 échec | `npm test` |
 | `apps/api` type-check | Propre, 0 erreur | `npx tsc --noEmit` |
-| Agent Python | **54/54** verts (1 `skipped`, contrat non-Windows attendu) | `python -m unittest discover -s tests` |
+| Agent Python | **55/55** verts (1 `skipped`, contrat non-Windows attendu) | `python -m unittest discover -s tests` |
 | `programs/gpu_escrow` (Rust) | **7/7** verts | `cargo test` |
 | `apps/host-desktop/src-tauri` (Rust) | **440/440** verts | `cargo test --locked -p gpubnb-host-desktop --all-targets` |
 | `cargo fmt --check` (host-desktop) | Propre (corrigé en Phase 6) | `cargo fmt -p gpubnb-host-desktop -- --check` |
 | `cargo clippy -D warnings` (host-desktop) | Propre, 0 warning | `cargo clippy --locked -p gpubnb-host-desktop --all-targets -- -D warnings` |
 
-**Total automatisé : 684 tests exécutés, 684 verts, 1 skip attendu, 0 échec**, tous exécutés en direct pendant cette session (pas de résultat réutilisé d'une exécution antérieure sans re-vérification).
+**Total automatisé : 685 tests exécutés, 685 verts, 1 skip attendu, 0 échec**, tous exécutés en direct pendant cette session (pas de résultat réutilisé d'une exécution antérieure sans re-vérification).
 
 ---
 
@@ -124,7 +125,7 @@ Voir `RISKS_RC1.md` pour le détail complet avec preuve. Résumé :
 | # | Scénario | Résultat |
 |---|---|---|
 | 1 | Workload échoue volontairement | ✅ Validé — `diagnostic_image_pull_failed`, booking `DEGRADED`, machine `AVAILABLE` |
-| 2 | Timeout de workload dépassé | ⚠️ Non concluant — 3 tentatives réelles, limite d'environnement (R5) |
+| 2 | Timeout de workload dépassé | ✅ Validé — 3 tentatives de chaos externe infructueuses (limite d'environnement), résolu par substitution du binaire `docker` sur `PATH` appelant la fonction agent réelle non modifiée ; `RuntimeError('diagnostic_timeout')` reproduit deux fois (~34s), régression permanente ajoutée |
 | 3 | Résultat/preuve invalide | ✅ Validé — 3 attaques réelles signées rejetées (401/400/409) |
 | 4 | GPU déjà occupé | ✅ Validé — job `COMPLETED` en concurrence avec un processus tiers réel |
 | 5 | Réservation concurrente | ✅ Validé + défaut corrigé (`9f3f03e`) — 5/5 essais post-correctif : 1 gagnant, 1 rejet propre, 0 fuite |
@@ -134,7 +135,7 @@ Voir `RISKS_RC1.md` pour le détail complet avec preuve. Résumé :
 | 9 | Arrêt contrôlé de Docker | ✅ Validé (2 constats documentés, R1/R6) |
 | 10 | Nettoyage impossible (mock + reproduction live) | ✅ Validé + défaut corrigé (`d4b1698`) — vérifié en direct, requête signée réelle |
 
-**7/10 pleinement validés sans réserve, 3/10 validés avec un défaut réel trouvé et corrigé, 0/10 échec non résolu.**
+**10/10 validés avec preuve.** 6/10 sans réserve, 3/10 avec un défaut réel trouvé et corrigé, 1/10 (Test 2) validé après changement de méthode suite à trois tentatives de chaos externe infructueuses. **0/10 test non concluant.**
 
 ---
 
@@ -234,7 +235,7 @@ Voir `CHECKLIST_RC1.md` pour la checklist complète et progressive (fusion / bê
 - [x] Aucun secret suivi
 - [x] Type-check propre
 - [x] 183/183 tests API
-- [x] 54/54 tests agent
+- [x] 55/55 tests agent
 - [x] 7/7 tests `gpu_escrow`
 - [x] 440/440 tests `host-desktop`
 - [x] `cargo fmt --check` propre
@@ -252,6 +253,6 @@ Voir `CHECKLIST_RC1.md` pour la checklist complète et progressive (fusion / bê
 
 **Bêta privée (accès restreint, hôtes/locataires de confiance) : ~80%.** Manque : ordonnanceur de sweep en production (R2), superviseur du Delivery Worker (R1), un cycle de paiement réel de bout en bout hors bypass dev.
 
-**Version 1.0 : ~35%.** Manque, en plus de ce qui précède : validation de `GPU_PROOF`/`WORKSPACE_PREPARE` en conditions réelles, test sur deux machines physiques distinctes, validation croisée matérielle (Linux natif, autre GPU), test de charge, couverture complète du scénario de timeout (R5), verrou d'exclusivité GPU si un job de calcul exclusif est introduit (R3).
+**Version 1.0 : ~37%.** Manque, en plus de ce qui précède : validation de `GPU_PROOF`/`WORKSPACE_PREPARE` en conditions réelles, test sur deux machines physiques distinctes, validation croisée matérielle (Linux natif, autre GPU), test de charge, verrou d'exclusivité GPU si un job de calcul exclusif est introduit (R3).
 
 Ces deux pourcentages sont des estimations qualitatives basées sur la liste de contrôle `CHECKLIST_RC1.md`, pas une mesure formelle.

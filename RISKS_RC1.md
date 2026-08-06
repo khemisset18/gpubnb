@@ -28,13 +28,7 @@ Chaque risque ci-dessous a été identifié par un test réel ou une lecture de 
 **Risque en production :** sans conséquence observée grâce au verrouillage atomique côté API sur la réclamation de job, mais reste un état non voulu, non détecté, non journalisé.
 **Correctif proposé :** verrou de fichier PID robuste ou détection explicite au démarrage de l'agent.
 
-### R5 — MINEUR — Couverture incomplète : timeout de workload (Test 2)
-**Trouvé :** Phase 5, Test 2, trois tentatives réelles distinctes, toutes documentées.
-**Preuve :** le workload officiel s'exécute en moins d'une seconde (indétectable pour un `docker pause` externe) ; le blocage réseau (IP unique puis plage CIDR entière) a soit été contourné par le pool d'IP GitHub, soit provoqué un rejet instantané côté pare-feu Windows plutôt qu'un vrai blocage réseau permettant d'atteindre le seuil de 120s.
-**Risque :** le chemin de code `subprocess.run(timeout=120)` (`runner.py`) est correct par lecture de code et déjà couvert par des tests unitaires existants, mais **n'a pas été exercé en conditions réellement bout-en-bout** dans cette campagne.
-**Correctif proposé :** aucun changement de code nécessaire ; si une preuve end-to-end est requise, prévoir un environnement de test avec blackhole réseau contrôlable (hors portée de cette machine de développement).
-
-### R6 — MINEUR — Couplage Docker/infrastructure spécifique au dev local
+### R5 — MINEUR — Couplage Docker/infrastructure spécifique au dev local
 **Trouvé :** Test 9a (Phase 5).
 **Preuve :** Postgres et Redis tournent eux-mêmes dans des conteneurs Docker sur cette machine de développement (`docker-compose.yml`) — arrêter Docker Desktop arrête donc toute l'API, pas seulement la capacité GPU de l'agent.
 **Risque :** aucun en production (Postgres/Redis y sont des services managés séparés, `render.yaml`) — ce risque n'existe que pour la reproduction locale des tests de cette campagne. Documenté pour éviter une confusion future lors d'une nouvelle session de test local.
@@ -44,6 +38,7 @@ Chaque risque ci-dessous a été identifié par un test réel ou une lecture de 
 - Fuite de message d'erreur Prisma brut + absence de retry sur `POST /bookings` sous contention (`9f3f03e`).
 - Absence de détection de staleness au niveau job, indépendante du heartbeat machine (`2d1acf7`).
 - Absence de quarantaine machine suite à un rapport agent de nettoyage non vérifié (`d4b1698`).
+- **Timeout de workload (ex-R5), désormais prouvé de façon concluante.** Les trois tentatives de chaos externe (pause de conteneur, blocage réseau) avaient échoué pour des raisons structurelles (le workload officiel s'exécute en moins d'une seconde, plus vite que toute interception externe possible). Résolu par une technique déterministe standard : substitution temporaire du binaire `docker` sur le `PATH` (un exécutable Rust compilé localement qui intercepte uniquement `docker run` et bloque volontairement, tout en laissant `pull`/`inspect`/`rm`/`container ls` passer vers le vrai démon), appelant directement la fonction réelle et non modifiée `gpubnb_agent.runner.run_gpu_diagnostic`. Résultat reproduit deux fois : `RuntimeError('diagnostic_timeout')` après ~34s (le seuil plancher de 30s + charge), zéro conteneur résiduel. Régression permanente ajoutée : `agent/tests/test_agent.py::RunnerTests::test_diagnostic_container_hang_is_reported_as_a_timeout` (`agent`, commit de la Phase 5 correctif documentation).
 - Voir `CHANGELOG.md` pour la liste complète des 18 défauts CRITIQUE (audit) et des 5 défauts trouvés pendant le premier parcours réel.
 
 ## Risques structurels non testés (hors périmètre RC1, pas des défauts trouvés)
