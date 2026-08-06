@@ -352,7 +352,10 @@ mod tests {
         // not on PATH on a plain Windows machine (only via Git Bash's bundled tools,
         // which happened to mask this on CI's windows-latest runner but not here).
         #[cfg(windows)]
-        let failing_status = std::process::Command::new("cmd").args(["/C", "exit 1"]).status().unwrap();
+        let failing_status = std::process::Command::new("cmd")
+            .args(["/C", "exit 1"])
+            .status()
+            .unwrap();
         #[cfg(not(windows))]
         let failing_status = std::process::Command::new("false").status().unwrap();
         let output = Output {
