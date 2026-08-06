@@ -49,3 +49,41 @@ services:
         value: 40
       - key: COMMISSION_BPS
         value: 500
+  - type: worker
+    name: gpubnb-delivery-worker
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    dockerCommand: node dist/delivery-worker.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PUBLIC_APP_DOMAIN
+        value: gpubnb.netlify.app
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: INTERNAL_SERVICE_TOKEN
+        generateValue: true
+      - key: PLATFORM_WALLET
+        value: B5WQmXWHL8R86wf3LHLRE4aQAuRdRSz1EXKcwNQDqj2e
+      - key: SOLANA_CLUSTER
+        value: devnet
+      - key: SOLANA_RPC_URL
+        value: https://api.devnet.solana.com
+      - key: ESCROW_PROGRAM_ID
+        value: NOT_DEPLOYED_YET
+      - key: ALLOW_MAINNET
+        value: "false"
+      - key: HEARTBEAT_MAX_AGE_SECONDS
+        value: 25
+      - key: HEARTBEAT_OFFLINE_SECONDS
+        value: 40
+      - key: COMMISSION_BPS
+        value: 500

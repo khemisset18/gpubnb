@@ -65,6 +65,11 @@ jobs:
           grep -Fq 'value: "false"' render.yaml
           grep -Fq 'prisma migrate deploy' apps/api/Dockerfile
           grep -Fq 'USER app' apps/api/Dockerfile
+          # The Delivery Worker must be deployed alongside the web service, or
+          # funded bookings and settlement can never actually progress in production.
+          grep -Fq 'type: worker' render.yaml
+          grep -Fq 'name: gpubnb-delivery-worker' render.yaml
+          grep -Fq 'dockerCommand: node dist/delivery-worker.js' render.yaml
       - name: Build API image
         run: docker build --file apps/api/Dockerfile --tag gpubnb-api:deployment-check .
       - name: Inspect non-root runtime
