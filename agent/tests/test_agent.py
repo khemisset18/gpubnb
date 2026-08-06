@@ -74,6 +74,21 @@ class KeyTests(unittest.TestCase):
             self.assertEqual(len(fingerprint().split(":")), 6)
             if os.name != "nt":
                 self.assertEqual(Path(directory, "agent.key").stat().st_mode & 0o777, 0o600)
+            else:
+                # C10: agent.key must not inherit ProgramData's default ACL, which grants
+                # the local Users group read access. Query the real, actual ACL icacls
+                # applied (not a mock) and confirm it excludes any broad Users/Everyone
+                # grant and includes the current user or SYSTEM.
+                import subprocess
+                result = subprocess.run(
+                    ["icacls", str(Path(directory, "agent.key"))],
+                    capture_output=True, text=True, shell=False, check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                output = result.stdout
+                self.assertNotIn("BUILTIN\\Users", output)
+                self.assertNotIn(":(R)", output)  # no bare broad read-only grant left over
+                self.assertTrue("SYSTEM" in output or os.environ.get("USERNAME", "") in output)
 
     def test_signed_headers_are_ed25519(self):
         key = SigningKey.generate()
