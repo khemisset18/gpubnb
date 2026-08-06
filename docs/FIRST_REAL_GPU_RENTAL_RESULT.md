@@ -27,10 +27,12 @@ Un premier run réussi antérieur existe aussi (`cmsgz3mj60017icvk7aj7slji` / jo
 
 **Machine** : `connectivity` `OFFLINE` → `ONLINE` ; `operational` `UNAVAILABLE` → `AVAILABLE` → `RESERVED` (pendant le job) → `AVAILABLE`.
 
-## Résultats des tests (depuis le commit courant)
+## Résultats des tests (au moment de ce run — voir RC1_REPORT.md pour les chiffres à la clôture de la campagne)
 
 - `apps/api` : `npm test` → **149/149 verts**, 0 échec.
 - `agent` : `python -m unittest discover -s agent/tests` → **50/50 verts** (1 `skipped`, test de contrat spécifique non-Windows, attendu sur cette plateforme).
+
+> **Mise à jour post-Phase 5/6 (RC1) :** cette campagne s'est poursuivie par une Phase de tests de robustesse (10 scénarios de chaos réel/mocké) puis une clôture RC1. À la clôture, les suites de tests comptent **183/183** (`apps/api`), **54/54** (`agent`, 1 skip attendu), **440/440** (`apps/host-desktop`, Rust) et **7/7** (`programs/gpu_escrow`, Rust). Le détail complet — bugs supplémentaires trouvés et corrigés, résultats de robustesse, verdict de fusion — est dans `RC1_REPORT.md`, `CHANGELOG.md` et `RISKS_RC1.md` à la racine du dépôt.
 
 ## Bugs réels trouvés et corrigés
 
@@ -84,5 +86,5 @@ Suivre le runbook officiel `docs/FIRST_GPU_RENTAL_E2E.md`, avec les précisions 
 - Un seul type de job testé : `GPU_DIAGNOSTIC` (sonde GPU isolée). Le parcours `GPU_PROOF` (charge CUDA réelle, plus proche d'un vrai usage locatif) et l'espace de travail interactif complet (`WORKSPACE_PREPARE`, code-server) n'ont pas été validés dans cette session.
 - Une seule configuration hôte testée : Windows 11 + Docker Desktop (backend WSL2) + GTX 1650. Le correctif de l'image `gpu-diagnostic` (bug 3 ci-dessus) est motivé par un raisonnement valable aussi sur Linux natif avec le NVIDIA Container Toolkit standard, mais cela n'a pas été vérifié indépendamment sur une machine Linux.
 - Hôte et locataire sur la même machine physique : le test ne couvre pas la latence réseau, le NAT, ni deux machines réellement distinctes (contrairement à ce que recommande le runbook officiel — « scénario testé sur deux machines distinctes »).
-- Un booking issu du débogage intermédiaire (`cmsgyhpzy0005icmw9v78r5y7`) reste orphelin en base (`STARTING`, job bloqué en `UPLOADING_RESULTS`) : sans conséquence sur les réservations suivantes (bug 5 corrigé), mais aucun mécanisme de purge des jobs bloqués n'existe — hors périmètre de cette session (aucune nouvelle fonctionnalité ajoutée).
+- Un booking issu du débogage intermédiaire (`cmsgyhpzy0005icmw9v78r5y7`) reste orphelin en base (`STARTING`, job bloqué en `UPLOADING_RESULTS`) : sans conséquence sur les réservations suivantes (bug 5 corrigé), mais aucun mécanisme de purge des jobs bloqués n'existe — hors périmètre de cette session (aucune nouvelle fonctionnalité ajoutée). **Résolu depuis :** la Phase 5 (tests de robustesse, Test 8) a mis en évidence ce même gap sous une forme plus grave (un job peut rester bloqué indéfiniment même après le rétablissement complet de l'agent) et l'a corrigé (`2d1acf7`, `sweepStaleJobs`, voir `CHANGELOG.md`).
 - `apps/host-desktop` (application Tauri) n'a pas été utilisée ; le rôle hôte repose entièrement sur l'agent CLI Python, seul composant du dépôt déjà fonctionnel pour ce rôle.
