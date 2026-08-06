@@ -134,7 +134,18 @@ def signed_headers(key: SigningKey, machine_id: str, method: str, path: str, bod
 
 
 def agent_request(client: ApiClient, key: SigningKey, machine_id: str, path: str, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
-    return client.request_with_retry(path, method, body, signed_headers(key, machine_id, method, path, body))
+    # Each attempt must carry its own signature: the server treats a signed
+    # request as single-use, so retrying with headers computed once up front
+    # gets every retry rejected as a replay instead of actually retrying.
+    last_error: Exception | None = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            return client.request(path, method, body, signed_headers(key, machine_id, method, path, body))
+        except (urllib.error.URLError, RuntimeError, TimeoutError, OSError) as exc:
+            last_error = exc
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(min(30, RETRY_BACKOFF ** attempt))
+    raise last_error  # type: ignore[misc]
 
 
 def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, Any]:

@@ -173,7 +173,7 @@ class RunnerTests(unittest.TestCase):
         result = run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
         self.assertTrue(result["gpuDetected"])
         self.assertEqual(result["metrics"]["gpuCount"], 1)
-        self.assertEqual(result["metrics"]["gpus"][0]["uuid"], "GPU-1")
+        self.assertEqual(result["metrics"]["firstGpuUuid"], "GPU-1")
 
     @patch("gpubnb_agent.runner.cleanup_workspace")
     @patch("gpubnb_agent.runner.gpu_inventory")
