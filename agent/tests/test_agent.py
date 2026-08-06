@@ -99,7 +99,7 @@ class HeartbeatTests(unittest.TestCase):
         }
 
         class Client:
-            def request_with_retry(self, path, method="GET", body=None, headers=None, timeout=12):
+            def request(self, path, method="GET", body=None, headers=None, timeout=12):
                 events.append("challenge" if path.startswith("/agent/challenge/") else "heartbeat")
                 return {"challenge": "challenge-value-long-enough"} if method == "GET" else {"ok": True}
 
@@ -115,6 +115,51 @@ class HeartbeatTests(unittest.TestCase):
             self.assertEqual(heartbeat(Client(), SigningKey.generate(), "machine-id"), {"ok": True})
 
         self.assertEqual(events, ["gpu", "system", "telemetry", "challenge", "heartbeat"])
+
+    def test_retry_after_a_transient_failure_uses_a_fresh_challenge_and_signature(self):
+        # C9: request_with_retry used to sign headers once outside its own retry loop,
+        # so every retry replayed an already-consumed challenge and an already-used
+        # signature — both single-use server-side — guaranteeing every retry failed.
+        # A retry must now fetch a brand new challenge and produce a different signature.
+        gpu = {
+            "gpuUuid": "GPU-test", "gpuModel": "NVIDIA Test", "vramMiB": 4096,
+            "memoryUsedMiB": 0, "driverVersion": "1", "cudaVersion": "1",
+            "temperatureC": 40, "gpuUtilization": 0, "powerWatts": 1.0, "gpuVendor": "NVIDIA",
+        }
+        calls = {"challenge": 0, "heartbeat_attempts": 0}
+        signatures: list[str] = []
+        challenges_issued: list[str] = []
+
+        class Client:
+            def request(self, path, method="GET", body=None, headers=None, timeout=12):
+                if path.startswith("/agent/challenge/"):
+                    calls["challenge"] += 1
+                    value = f"challenge-{calls['challenge']}-long-enough-value"
+                    challenges_issued.append(value)
+                    return {"challenge": value}
+                calls["heartbeat_attempts"] += 1
+                signatures.append(body["signature"])
+                if calls["heartbeat_attempts"] == 1:
+                    raise RuntimeError("simulated transient network failure")
+                return {"ok": True}
+
+        with (
+            patch("gpubnb_agent.client.gpu_inventory", return_value=[gpu]),
+            patch("gpubnb_agent.client.system_inventory", return_value={"machineFingerprint": "abc"}),
+            patch("gpubnb_agent.client.telemetry_snapshot", return_value={"schemaVersion": 2, "accelerators": []}),
+            patch("gpubnb_agent.client.detect_hardware_change", return_value=(False, None)),
+            patch("gpubnb_agent.client.save_machine_fingerprint"),
+            patch("gpubnb_agent.client.load_counter", return_value=0),
+            patch("gpubnb_agent.client.save_counter"),
+            patch("gpubnb_agent.client.time.sleep"),
+        ):
+            result = heartbeat(Client(), SigningKey.generate(), "machine-id")
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(calls["challenge"], 2, "each attempt must fetch its own fresh challenge")
+        self.assertEqual(calls["heartbeat_attempts"], 2)
+        self.assertEqual(len(challenges_issued), len(set(challenges_issued)), "challenges must not repeat")
+        self.assertEqual(len(signatures), len(set(signatures)), "a retry must never resend an identical signature")
 
 
 class RunnerTests(unittest.TestCase):

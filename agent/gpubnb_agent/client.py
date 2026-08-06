@@ -169,33 +169,50 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
     if hw_changed and previous_fp:
         print(f"AVERTISSEMENT: Empreinte matérielle modifiée (ancienne: {previous_fp[:16]}...)")
     challenge_path = f"/agent/challenge/{machine_id}"
-    challenge = client.request_with_retry(
-        challenge_path,
-        headers=signed_headers(key, machine_id, "GET", challenge_path),
-    )["challenge"]
     counter = load_counter() + 1
-    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    fields = [
-        machine_id, str(counter), challenge, timestamp, gpu["gpuUuid"], gpu["gpuModel"],
-        str(gpu["vramMiB"]), gpu["driverVersion"], str(gpu["gpuUtilization"]),
-        str(gpu["memoryUsedMiB"]), str(gpu["temperatureC"]), str(probe).lower(), "",
-    ]
-    signature = base58.b58encode(key.sign("|".join(fields).encode()).signature).decode()
-    payload = {
-        "machineId": machine_id,
-        "counter": counter,
-        "challenge": challenge,
-        "timestamp": timestamp,
-        **gpu,
-        "cudaProbeOk": probe,
-        "gpuVendor": gpu.get("gpuVendor"),
-        "sessionId": session_id,
-        "signature": signature,
-        "agentVersion": __version__,
-        "hardwareChanged": hw_changed,
-        "telemetry": telemetry,
-        **sys_info,
-    }
-    result = client.request_with_retry("/agent/heartbeat", "POST", payload, signed_headers(key, machine_id, "POST", "/agent/heartbeat", payload))
-    save_counter(counter)
-    return result
+    # Every attempt below is signed once and used once: the server-issued challenge
+    # is single-use (redis GETDEL) and every signature is anti-replay-locked on first
+    # use (verifyAgentRequest/V2). Reusing headers computed before a failed attempt —
+    # what request_with_retry does — gets every retry rejected instead of recovering
+    # from a transient failure. So a retry here means a fully fresh attempt: new
+    # challenge, new timestamp/nonce, new signature, not just a resend.
+    last_error: Exception | None = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            challenge = client.request(
+                challenge_path,
+                headers=signed_headers(key, machine_id, "GET", challenge_path),
+            )["challenge"]
+            timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            fields = [
+                machine_id, str(counter), challenge, timestamp, gpu["gpuUuid"], gpu["gpuModel"],
+                str(gpu["vramMiB"]), gpu["driverVersion"], str(gpu["gpuUtilization"]),
+                str(gpu["memoryUsedMiB"]), str(gpu["temperatureC"]), str(probe).lower(), "",
+            ]
+            signature = base58.b58encode(key.sign("|".join(fields).encode()).signature).decode()
+            payload = {
+                "machineId": machine_id,
+                "counter": counter,
+                "challenge": challenge,
+                "timestamp": timestamp,
+                **gpu,
+                "cudaProbeOk": probe,
+                "gpuVendor": gpu.get("gpuVendor"),
+                "sessionId": session_id,
+                "signature": signature,
+                "agentVersion": __version__,
+                "hardwareChanged": hw_changed,
+                "telemetry": telemetry,
+                **sys_info,
+            }
+            result = client.request(
+                "/agent/heartbeat", "POST", payload,
+                signed_headers(key, machine_id, "POST", "/agent/heartbeat", payload),
+            )
+            save_counter(counter)
+            return result
+        except (urllib.error.URLError, RuntimeError, TimeoutError, OSError) as exc:
+            last_error = exc
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(min(30, RETRY_BACKOFF ** attempt))
+    raise last_error  # type: ignore[misc]
