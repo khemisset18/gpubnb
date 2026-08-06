@@ -172,7 +172,7 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
     where: {
       type: JobType.GPU_DIAGNOSTIC,
       status: { in: TERMINAL_JOB_STATUSES },
-      booking: { status: { in: [BookingStatus.STARTING, BookingStatus.ACTIVE, BookingStatus.DEGRADED] } },
+      booking: { status: { in: [BookingStatus.STARTING, BookingStatus.ACTIVE] } },
     },
     select: { id: true, status: true, bookingId: true, machineId: true, result: true },
     take: 50,
@@ -188,7 +188,7 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
       const bookingUpdate = await tx.booking.updateMany({
         where: {
           id: job.bookingId,
-          status: { in: [BookingStatus.STARTING, BookingStatus.ACTIVE, BookingStatus.DEGRADED] },
+          status: { in: [BookingStatus.STARTING, BookingStatus.ACTIVE] },
         },
         data: { status: success ? BookingStatus.COMPLETED : BookingStatus.DEGRADED },
       });
