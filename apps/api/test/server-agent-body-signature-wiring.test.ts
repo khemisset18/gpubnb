@@ -20,6 +20,7 @@ test('every agent endpoint carrying a body requires the raw-body-bound V2 signat
     "app.post('/agent/jobs/:id/logs'",
     "app.post('/agent/jobs/:id/complete'",
     "app.post('/agent/jobs/:id/finalize-proof'",
+    "app.post('/jobs/:id/artifacts'", // C11: artifact bytes are the body — same tamper risk as any JSON body.
   ];
 
   for (const marker of bodyCarryingRoutes) {

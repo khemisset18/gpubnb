@@ -2,11 +2,12 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from nacl.signing import SigningKey
 
-from gpubnb_agent.client import heartbeat, signed_headers
+from gpubnb_agent.client import ApiClient, heartbeat, signed_headers
 from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available, machine_fingerprint
 from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key, load_machine_fingerprint, save_machine_fingerprint, detect_hardware_change
 from gpubnb_agent.runner import (
@@ -375,6 +376,54 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", command)
         self.assertIn("--network=none", command)
         self.assertIn("--read-only", command)
+
+
+class FileTransferSigningTests(unittest.TestCase):
+    def test_upload_file_signs_the_exact_uploaded_bytes(self):
+        # C11: upload_file() used to send no x-agent-signature headers at all —
+        # artifact upload was authenticated only by a guessable ID in the URL.
+        import hashlib
+        import base58 as base58_module
+        from nacl.signing import VerifyKey
+
+        key = SigningKey.generate()
+        machine_id = "machine-under-test"
+        content = b"real artifact bytes, not json"
+
+        with tempfile.TemporaryDirectory() as directory:
+            file_path = Path(directory, "artifact.bin")
+            file_path.write_bytes(content)
+
+            captured: dict[str, Any] = {}
+
+            class FakeResponse:
+                status = 201
+                def read(self, _n): return b'{"ok":true}'
+                def __enter__(self): return self
+                def __exit__(self, *args): return False
+
+            def fake_urlopen(request, timeout=None, context=None):
+                captured["headers"] = {k.lower(): v for k, v in request.header_items()}
+                captured["data"] = request.data
+                return FakeResponse()
+
+            client_instance = ApiClient("http://localhost:8787")
+            with patch("gpubnb_agent.client.urllib.request.urlopen", side_effect=fake_urlopen):
+                client_instance.upload_file("/jobs/job-1/artifacts?machineId=m", "job-1", str(file_path), key, machine_id)
+
+        headers = captured["headers"]
+        for name in ("x-agent-signature-v2", "x-agent-nonce", "x-agent-body-sha256", "x-agent-timestamp"):
+            self.assertIn(name, headers, f"missing {name}")
+
+        actual_body_sha256 = hashlib.sha256(captured["data"]).hexdigest()
+        self.assertEqual(headers["x-agent-body-sha256"], actual_body_sha256, "signed hash must match the bytes actually sent")
+
+        v2_canonical = (
+            f"POST|/jobs/job-1/artifacts?machineId=m|{machine_id}|"
+            f"{headers['x-agent-timestamp']}|{headers['x-agent-nonce']}|{actual_body_sha256}"
+        )
+        verify_key = VerifyKey(bytes(key.verify_key))
+        verify_key.verify(v2_canonical.encode(), base58_module.b58decode(headers["x-agent-signature-v2"]))
 
 
 if __name__ == "__main__":

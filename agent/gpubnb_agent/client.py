@@ -70,10 +70,15 @@ class ApiClient:
     def link(self, code: str, public_key: str, inventory: dict[str, Any]) -> dict[str, Any]:
         return self.request("/agent/link", "POST", {"code": code, "publicKey": public_key, "inventory": inventory})
 
-    def upload_file(self, path: str, job_id: str, file_path: str, kind: str = "result") -> dict[str, Any]:
+    def upload_file(self, path: str, job_id: str, file_path: str, key: SigningKey, machine_id: str, kind: str = "result") -> dict[str, Any]:
         data = Path(file_path).read_bytes()
         sha256 = hashlib.sha256(data).hexdigest()
-        headers = {"content-type": "application/octet-stream", "x-artifact-kind": kind, "x-artifact-sha256": sha256, "x-artifact-size": str(len(data))}
+        # Signed like every other agent-write endpoint (C11): an unsigned upload was
+        # authenticated only by a guessable job/artifact ID in the URL, letting anyone
+        # able to alter the request in flight substitute a different artifact body
+        # without invalidating anything — the server had no way to detect it.
+        signed = signed_headers_for_body_sha256(key, machine_id, "POST", path, sha256)
+        headers = {"content-type": "application/octet-stream", "x-artifact-kind": kind, "x-artifact-sha256": sha256, "x-artifact-size": str(len(data)), **signed}
         request = urllib.request.Request(self.api_url + path, data=data, method="POST", headers={"user-agent": f"gpubnb-agent/{__version__}", **headers})
         try:
             with urllib.request.urlopen(request, timeout=120, context=self.context) as response:
@@ -113,11 +118,12 @@ def request_body_sha256(body: dict[str, Any] | None) -> str:
     return hashlib.sha256(canonical_json_bytes(body)).hexdigest()
 
 
-def signed_headers(key: SigningKey, machine_id: str, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, str]:
-    """Build legacy and v2 signatures during the migration window."""
+def signed_headers_for_body_sha256(key: SigningKey, machine_id: str, method: str, path: str, body_sha256: str) -> dict[str, str]:
+    """Build legacy and v2 signatures given an already-computed body hash. Shared by
+    signed_headers (JSON bodies) and raw-bytes callers like artifact upload, which
+    can't reuse canonical_json_bytes since their payload was never a JSON dict."""
     epoch = int(time.time() * 1000)
     nonce = secrets.token_urlsafe(18)
-    body_sha256 = request_body_sha256(body)
     legacy_canonical = f"{method.upper()}|{path}|{machine_id}|{epoch}"
     legacy_signature = base58.b58encode(key.sign(legacy_canonical.encode()).signature).decode()
     v2_canonical = f"{method.upper()}|{path}|{machine_id}|{epoch}|{nonce}|{body_sha256}"
@@ -131,6 +137,11 @@ def signed_headers(key: SigningKey, machine_id: str, method: str, path: str, bod
         "x-agent-body-sha256": body_sha256,
         "x-agent-signature-v2": v2_signature,
     }
+
+
+def signed_headers(key: SigningKey, machine_id: str, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, str]:
+    """Build legacy and v2 signatures during the migration window."""
+    return signed_headers_for_body_sha256(key, machine_id, method, path, request_body_sha256(body))
 
 
 def agent_request(client: ApiClient, key: SigningKey, machine_id: str, path: str, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
