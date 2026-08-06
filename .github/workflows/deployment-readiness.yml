@@ -95,5 +95,10 @@ jobs:
           set -euo pipefail
           ! grep -Fq 'ALLOW_MAINNET=true' .env.example render.yaml
           grep -Fq 'ALLOW_MAINNET' render.yaml
+          # .env.example's documented REDIS_URL must match the password the local
+          # compose Redis actually requires, or following the README verbatim fails
+          # with NOAUTH on the very first command (C13).
+          grep -Fq '"--requirepass","change-me"' docker-compose.yml
+          grep -Fq 'REDIS_URL=redis://:change-me@localhost:6379' .env.example
           grep -Fq 'value: "false"' render.yaml
           ! grep -RInE '(DATABASE_URL|REDIS_URL|SESSION_SECRET|INTERNAL_SERVICE_TOKEN):[[:space:]]+[^[:space:]]+' render.yaml

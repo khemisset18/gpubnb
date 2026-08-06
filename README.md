@@ -54,6 +54,19 @@ npm run build
 npm start
 ```
 
+L'API seule ne suffit pas : sans le Delivery Worker, aucune réservation ne dépasse
+jamais `AWAITING_DEPOSIT` (financement, démarrage de job, règlement). Dans un
+second terminal :
+
+```bash
+npm run dev:delivery   # ou : npm run build && npm start:delivery
+```
+
+Pour reproduire une première location GPU réelle de bout en bout (y compris le
+mode `DEV_PAYMENT_BYPASS` en développement), suivre `docs/FIRST_GPU_RENTAL_E2E.md`.
+Un run complet, avec les bugs réellement rencontrés et corrigés, est documenté
+dans `docs/FIRST_REAL_GPU_RENTAL_RESULT.md`.
+
 ## Important
 
 Le dépôt est une **candidate production**, pas une garantie de sécurité financière. Un déploiement Mainnet exige un nouveau Program ID, des clés protégées, des tests Anchor exécutés, un RPC de production, une surveillance et un audit indépendant du binaire exact déployé. Voir `docs/MAINNET_GO_LIVE.md`.

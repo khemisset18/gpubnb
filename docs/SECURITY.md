@@ -11,6 +11,10 @@
 - Endpoint de maintenance protégé par secret de service.
 - Règlement testé avec invariant de conservation des lamports.
 
+## Signalement responsable
+
+Ne publiez pas de vulnérabilité exploitable dans une issue publique. Utilisez le signalement privé de vulnérabilité GitHub lorsqu'il est activé et fournissez le commit affecté, les étapes de reproduction, l'impact et une mitigation proposée. N'incluez jamais de vrais secrets, clés privées, données locataire ou fichiers personnels.
+
 ## Limites obligatoires avant Mainnet
 - Audit indépendant du programme Anchor compilé et de son ID réel.
 - Multisig pour admin, oracle et upgrade authority.
