@@ -1,7 +1,8 @@
 # Rapport RC1 — GPUbnb
 
 **Branche :** `feature/first-gpu-rental` · **PR :** [#44](https://github.com/khemisset18/gpubnb/pull/44) (draft, `MERGEABLE`, `main` ← `feature/first-gpu-rental`)
-**SHA final :** `ad3f5ea9a523dde09bca995aa1edc328fce42f2d`
+**SHA final (code) :** `ad3f5ea9a523dde09bca995aa1edc328fce42f2d` — dernier commit fonctionnel, celui vérifié par le CI vert décrit ci-dessous.
+**SHA HEAD (avec ce rapport) :** `c0a51eaf2d51d096d316bd5fbb0412886adc4066` — ajoute uniquement les artefacts RC1 (ce document et les 5 autres fichiers listés en section 11), aucun changement de code. Le CI n'a pas été re-déclenché sur ce commit précis (changement documentation uniquement, sans impact sur les tests/build).
 **Date de clôture :** 2026-08-07 (UTC)
 
 ---
