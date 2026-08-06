@@ -90,7 +90,7 @@ Voir `RISKS_RC1.md` pour le détail complet avec preuve. Résumé :
 | R4 | MINEUR | Deux instances d'agent peuvent tourner en parallèle sans garde-fou |
 | R5 | MINEUR | Couplage Docker/infrastructure spécifique au dev local (sans impact production) |
 
-Le timeout de workload (anciennement R5) est désormais **prouvé concluant** — voir section 8 et `RISKS_RC1.md`.
+Le chemin de production du timeout de workload (anciennement R5) a été validé de manière déterministe, après échec des tentatives de chaos en environnement réel — voir section 8 pour le détail exact et `RISKS_RC1.md`.
 
 ---
 
@@ -125,17 +125,27 @@ Le timeout de workload (anciennement R5) est désormais **prouvé concluant** �
 | # | Scénario | Résultat |
 |---|---|---|
 | 1 | Workload échoue volontairement | ✅ Validé — `diagnostic_image_pull_failed`, booking `DEGRADED`, machine `AVAILABLE` |
-| 2 | Timeout de workload dépassé | ✅ Validé — 3 tentatives de chaos externe infructueuses (limite d'environnement), résolu par substitution du binaire `docker` sur `PATH` appelant la fonction agent réelle non modifiée ; `RuntimeError('diagnostic_timeout')` reproduit deux fois (~34s), régression permanente ajoutée |
+| 2 | Timeout de workload dépassé | ⚙️ Validé par méthode déterministe — les tentatives de chaos en environnement réel n'ont pas permis de reproduire un timeout naturel, pour des raisons propres à l'environnement (voir détail ci-dessous). Le chemin de production du timeout a ensuite été validé de manière déterministe en exerçant directement le code réel de l'agent, sans modification du code de production. Une régression automatisée garantit désormais ce comportement |
 | 3 | Résultat/preuve invalide | ✅ Validé — 3 attaques réelles signées rejetées (401/400/409) |
 | 4 | GPU déjà occupé | ✅ Validé — job `COMPLETED` en concurrence avec un processus tiers réel |
 | 5 | Réservation concurrente | ✅ Validé + défaut corrigé (`9f3f03e`) — 5/5 essais post-correctif : 1 gagnant, 1 rejet propre, 0 fuite |
 | 6 | Arrêt contrôlé de l'agent | ✅ Validé — état sûr, récupération via sweep manuel |
 | 7 | Redémarrage contrôlé de l'agent | ✅ Validé — PID périmé détecté, récupération complète prouvée |
 | 8 | Interruption API/réseau | ✅ Validé + défaut corrigé (`2d1acf7`) — vérifié en direct, seuil réduit puis restauré |
-| 9 | Arrêt contrôlé de Docker | ✅ Validé (2 constats documentés, R1/R6) |
+| 9 | Arrêt contrôlé de Docker | ✅ Validé (2 constats documentés, R1/R5) |
 | 10 | Nettoyage impossible (mock + reproduction live) | ✅ Validé + défaut corrigé (`d4b1698`) — vérifié en direct, requête signée réelle |
 
-**10/10 validés avec preuve.** 6/10 sans réserve, 3/10 avec un défaut réel trouvé et corrigé, 1/10 (Test 2) validé après changement de méthode suite à trois tentatives de chaos externe infructueuses. **0/10 test non concluant.**
+**10/10 validés avec preuve.** 6/10 sans réserve, 3/10 avec un défaut réel trouvé et corrigé, 1/10 (Test 2) validé par une méthode déterministe après échec des tentatives de chaos en environnement réel. **0/10 test non concluant.**
+
+**Détail du Test 2, pour éviter toute ambiguïté lors d'une revue technique :**
+1. Trois tentatives de reproduction en environnement réel ont été réalisées (pause du conteneur Docker via `docker events`/`docker pause`, blocage réseau sur une IP unique, blocage réseau sur une plage CIDR entière).
+2. Ces trois tentatives ont échoué pour des raisons structurelles de l'environnement de test (conteneur officiel s'exécutant en moins d'une seconde, rotation d'IP côté GitHub, rejet instantané du pare-feu Windows au lieu d'un blocage réseau prolongé) — **pas à cause d'un défaut du code**.
+3. Une méthode déterministe a ensuite été utilisée pour exercer le véritable chemin de production (`run_gpu_diagnostic()` → `subprocess.run(timeout=...)`) **sans modifier le code de production**.
+4. Cette méthode substitue temporairement le binaire `docker` sur le `PATH` du processus de test afin de provoquer un blocage contrôlé de `docker run`, tout en laissant les autres commandes Docker (`pull`, `image inspect`, `container ls`, `rm`) s'exécuter contre le démon Docker réel.
+5. Le timeout (`RuntimeError('diagnostic_timeout')`) est ainsi reproduit de façon déterministe et reproductible (deux exécutions, ~34s à chaque fois).
+6. Une régression automatisée permanente (`agent/tests/test_agent.py::test_diagnostic_container_hang_is_reported_as_a_timeout`) vérifie désormais ce comportement à chaque exécution de la suite de tests.
+
+Ce test **n'a pas** reproduit un timeout naturel en conditions réelles de bout en bout — il valide le chemin de code par une méthode déterministe et contrôlée.
 
 ---
 

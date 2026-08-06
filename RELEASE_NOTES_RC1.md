@@ -26,7 +26,7 @@ Voir `KNOWN_LIMITATIONS_RC1.md` et `RISKS_RC1.md` pour le détail complet. En r�
 - Un seul type de job testé en conditions réelles (`GPU_DIAGNOSTIC`) ; `GPU_PROOF` et l'espace de travail interactif (`WORKSPACE_PREPARE`) ne le sont pas.
 - Hôte et locataire sur la même machine physique tout du long — aucune latence réseau, NAT, ou séparation physique réelle testée.
 - Une seule configuration matérielle (Windows 11 + Docker Desktop WSL2 + GTX 1650).
-- Le Test 2 de robustesse (timeout de workload) n'a pas pu être déclenché de façon concluante — limite d'environnement documentée, pas une garantie de code non vérifiée.
+- Le Test 2 de robustesse (timeout de workload) n'a pas reproduit de timeout naturel en environnement réel (limite structurelle de l'environnement de test, pas un défaut de code) ; le chemin de production a ensuite été validé de manière déterministe en exerçant directement le code réel de l'agent, sans modification du code de production — voir `RISKS_RC1.md` pour le détail.
 
 ## Verdict
 

@@ -41,6 +41,6 @@ Cases cochées uniquement sur preuve vérifiée dans cette campagne (voir le rap
 
 ## Avant 1.0
 
-- [x] Timeout de workload (Test 2) validé en conditions bout-en-bout réelles — voir `RISKS_RC1.md`.
+- [x] Timeout de workload (Test 2) : chemin de production validé de manière déterministe (code réel de l'agent exercé directement, sans modification), après échec des tentatives de chaos en environnement réel — voir `RISKS_RC1.md`.
 - [ ] Tout ce qui précède, en production depuis une durée significative sans incident non résolu.
 - [ ] Espace de travail interactif (`WORKSPACE_PREPARE`) validé en conditions réelles.
