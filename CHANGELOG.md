@@ -29,6 +29,7 @@ Toutes les entrées de ce fichier concernent la campagne RC1 menée sur la branc
 ### Corrigé — hors périmètre agent/API
 
 - **`e28dcc2` (C8)** — Autorisation du script CDN Supabase dans la CSP déployée.
+- **`edb0b4b`** — Correction d'un échec de test local Windows-only (`classifies_missing_key_as_setup_required` utilisait `Command::new("false")`, absent d'un Windows nu hors Git Bash) ; aucun code de production touché.
 - **`8c7b6a7`** — Correctifs de sécurité `postcss`/`vite` (host-desktop).
 - **`1d9f182`** — Arrêt de l'émission de fichiers `.js` parasites par `tsc` à côté des sources (host-desktop).
 

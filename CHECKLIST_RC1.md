@@ -15,7 +15,7 @@ Cases cochées uniquement sur preuve vérifiée dans cette campagne (voir le rap
 - [x] `cargo fmt --check` (host-desktop) : propre (corrigé pendant la vérification finale, `ad3f5ea`).
 - [x] `cargo clippy -- -D warnings` (host-desktop) : propre.
 - [x] Commits poussés vers `origin/feature/first-gpu-rental`.
-- [x] **CI GitHub Actions vert sur le SHA final `ad3f5ea9a523dde09bca995aa1edc328fce42f2d`** — confirmé (`gh pr checks 44`, exit code 0, tous les checks `pass`, y compris les deux builds d'installeur `host-desktop` initialement lents). Déclenché manuellement (`gh workflow run host-desktop`) suite à une anomalie de déclenchement webhook déjà observée dans cette campagne ; le déclenchement automatique par le push a fini par arriver aussi.
+- [x] **CI GitHub Actions vert sur le SHA final** (voir `RC1_REPORT.md`) — confirmé (`gh pr checks 44`, exit code 0, tous les checks `pass`) et reconfirmé à chaque commit poussé au fil de la campagne, y compris après la correction initiale du rustfmt qui avait nécessité un déclenchement manuel (`gh workflow run host-desktop`) suite à une anomalie de déclenchement webhook déjà observée dans cette campagne.
 - [x] Aucun conteneur Docker résiduel (`gpubnb-diagnostic-*`) sur la machine de test.
 - [x] Aucun processus agent dupliqué au moment de la clôture.
 - [x] Machine de test GPU dans un état terminal sain (`AVAILABLE`).

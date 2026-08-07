@@ -1,6 +1,6 @@
 # GPUbnb — Release Candidate 1 (RC1)
 
-**Branche :** `feature/first-gpu-rental` · **PR :** [#44](https://github.com/khemisset18/gpubnb/pull/44) (draft, non fusionnée) · **SHA final :** `ad3f5ea9a523dde09bca995aa1edc328fce42f2d`
+**Branche :** `feature/first-gpu-rental` · **PR :** [#44](https://github.com/khemisset18/gpubnb/pull/44) (draft, non fusionnée) · **SHA final :** voir `RC1_REPORT.md`
 
 ## Ce que RC1 valide
 

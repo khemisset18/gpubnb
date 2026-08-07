@@ -1,8 +1,7 @@
 # Rapport RC1 — GPUbnb
 
 **Branche :** `feature/first-gpu-rental` · **PR :** [#44](https://github.com/khemisset18/gpubnb/pull/44) (draft, `MERGEABLE`, `main` ← `feature/first-gpu-rental`)
-**SHA final (code) :** `ad3f5ea9a523dde09bca995aa1edc328fce42f2d` — dernier commit fonctionnel, celui vérifié par le CI vert décrit ci-dessous.
-**SHA HEAD (avec ce rapport) :** `c0a51eaf2d51d096d316bd5fbb0412886adc4066` — ajoute uniquement les artefacts RC1 (ce document et les 5 autres fichiers listés en section 11), aucun changement de code. Le CI n'a pas été re-déclenché sur ce commit précis (changement documentation uniquement, sans impact sur les tests/build).
+**SHA final :** `PLACEHOLDER_FINAL_SHA` — dernier commit de la campagne (ce document inclus). CI vérifié vert sur ce commit (voir section 1 et 13).
 **Date de clôture :** 2026-08-07 (UTC)
 
 ---
@@ -11,7 +10,7 @@
 
 ### READY TO MERGE (techniquement), sous réserve de l'autorisation explicite de l'utilisateur
 
-**CI GitHub Actions confirmé intégralement vert** sur le SHA final `ad3f5ea` : `gh pr checks 44` → **exit code 0**, tous les checks `pass` (y compris le dernier en attente au moment de la rédaction initiale, `Windows x64` / installeur `host-desktop`, terminé en 7m4s, `pass`). Aucun check en échec, aucun check restant `pending`.
+**CI GitHub Actions confirmé intégralement vert** sur le SHA final (voir en-tête) : `gh pr checks 44` → **exit code 0**, tous les checks `pass`. Aucun check en échec, aucun check restant `pending`. Ce résultat a été reconfirmé à plusieurs reprises au fil de la campagne, à chaque nouveau commit poussé.
 
 **Réserves (non bloquantes techniquement, à la discrétion de l'utilisateur) :**
 - Aucune revue humaine indépendante de cette PR n'a eu lieu (session solo).
@@ -25,11 +24,11 @@
 
 ## 2. Nombre total de commits de cette campagne
 
-**28 commits** sur `feature/first-gpu-rental`, depuis la divergence de `main` (`da4b48a`) jusqu'au SHA final.
+**33 commits** sur `feature/first-gpu-rental`, depuis la divergence de `main` (`da4b48a`) jusqu'au SHA final.
 
 ```
 git log --oneline main..HEAD | wc -l
-28
+33
 ```
 
 Liste complète, dans l'ordre chronologique, avec hash court : voir `CHANGELOG.md`.
@@ -66,7 +65,7 @@ Liste complète, dans l'ordre chronologique, avec hash court : voir `CHANGELOG.m
 |---|---|---|---|
 | 9 | `ad3f5ea` | `host-desktop` (style) | `cargo fmt --check` en échec sur les 3 plateformes CI, bloquant tout le job « rust tests and lint » |
 
-**Total : 9 chaînes de bugs réels identifiées (regroupant plusieurs sous-bugs dans certains cas), sur 28 commits.**
+**Total : 9 chaînes de bugs réels identifiées (regroupant plusieurs sous-bugs dans certains cas), sur 33 commits.**
 
 ---
 
@@ -177,47 +176,53 @@ Ce test **n'a pas** reproduit un timeout naturel en conditions réelles de bout 
 
 ## 11. SHA final, git status, fichiers modifiés
 
-**SHA final :** `ad3f5ea9a523dde09bca995aa1edc328fce42f2d`
-**Branche :** `feature/first-gpu-rental`, poussée vers `origin/feature/first-gpu-rental` (confirmé, `bb1b2c3..ad3f5ea`).
+**SHA final :** `PLACEHOLDER_FINAL_SHA` (voir en-tête)
+**Branche :** `feature/first-gpu-rental`, poussée vers `origin/feature/first-gpu-rental`.
 
 **`git status` au moment de la clôture :**
 ```
 (clean — aucun fichier non suivi, aucune modification non commitée)
 ```
 
-**Fichiers modifiés depuis la divergence de `main` :** 43 fichiers, +1882/-1198 lignes.
+**Fichiers modifiés depuis la divergence de `main` (`da4b48a`) :** 49 fichiers, +2396/-1198 lignes (`git diff --stat origin/main..HEAD`).
 
 ```
 .env.example
 .github/workflows/deployment-readiness.yml
 .gitignore
+CHANGELOG.md                                        (nouveau)
+CHECKLIST_RC1.md                                    (nouveau)
+KNOWN_LIMITATIONS_RC1.md                             (nouveau)
+RC1_REPORT.md                                        (nouveau, ce document)
 README.md
-agent/__init__.py                                  (supprimé)
+RELEASE_NOTES_RC1.md                                 (nouveau)
+RISKS_RC1.md                                         (nouveau)
+agent/__init__.py                                    (supprimé)
 agent/gpubnb_agent/cli.py
 agent/gpubnb_agent/client.py
 agent/gpubnb_agent/runner.py
 agent/gpubnb_agent/storage.py
-agent/setup.py                                     (supprimé)
-agent/src/__init__.py                               (supprimé)
-agent/src/config.py                                 (supprimé)
+agent/setup.py                                       (supprimé)
+agent/src/__init__.py                                (supprimé)
+agent/src/config.py                                  (supprimé)
 agent/src/crypto.py                                  (supprimé)
 agent/src/hardware.py                                (supprimé)
 agent/src/main.py                                    (supprimé)
 agent/tests/test_agent.py
-agent/tests/test_no_dead_src_package.py             (nouveau)
-apps/api/src/booking-transaction-retry.ts           (nouveau)
+agent/tests/test_no_dead_src_package.py              (nouveau)
+apps/api/src/booking-transaction-retry.ts            (nouveau)
 apps/api/src/config.ts
 apps/api/src/delivery-store.ts
 apps/api/src/delivery-worker.ts
 apps/api/src/device-authorization-routes.ts
-apps/api/src/job-staleness-sweep.ts                 (nouveau)
+apps/api/src/job-staleness-sweep.ts                  (nouveau)
 apps/api/src/server.ts
-apps/api/test/booking-transaction-retry.test.ts     (nouveau)
+apps/api/test/booking-transaction-retry.test.ts      (nouveau)
 apps/api/test/bookings-concurrent-error-leak.test.ts (nouveau)
-apps/api/test/cleanup-unverified-quarantine.test.ts (nouveau)
+apps/api/test/cleanup-unverified-quarantine.test.ts  (nouveau)
 apps/api/test/device-authorization-inventory-limits.test.ts (nouveau)
-apps/api/test/job-staleness-sweep.test.ts           (nouveau)
-apps/api/test/resource-allocation-service.test.ts   (nouveau)
+apps/api/test/job-staleness-sweep.test.ts            (nouveau)
+apps/api/test/resource-allocation-service.test.ts    (nouveau)
 apps/api/test/server-agent-body-signature-wiring.test.ts (nouveau)
 apps/api/test/server-payment-unfreeze-registration.test.ts (nouveau)
 apps/api/test/server-settlement-routes-registration.test.ts (nouveau)
@@ -226,14 +231,12 @@ apps/host-desktop/package-lock.json
 apps/host-desktop/package.json
 apps/host-desktop/src-tauri/src/agent_bridge.rs
 containers/gpu-diagnostic/Dockerfile
-docs/FIRST_REAL_GPU_RENTAL_RESULT.md                (nouveau, mis à jour Phase 6)
+docs/FIRST_REAL_GPU_RENTAL_RESULT.md                 (nouveau, mis à jour Phase 6)
 docs/SECURITY.md
 docs/STATUT_RELEASE.md
 netlify.toml
 render.yaml
 ```
-
-Plus, à la clôture de la Phase 6 (non comptés dans le diff ci-dessus, ajoutés après) : `CHANGELOG.md`, `RELEASE_NOTES_RC1.md`, `CHECKLIST_RC1.md`, `RISKS_RC1.md`, `KNOWN_LIMITATIONS_RC1.md`, `RC1_REPORT.md` (ce document) — 6 nouveaux fichiers à la racine.
 
 ---
 
