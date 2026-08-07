@@ -6,6 +6,8 @@ import hashlib
 import json
 import os
 import platform
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -26,10 +28,55 @@ def config_dir() -> Path:
     return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "gpubnb"
 
 
+def _windows_owner() -> str | None:
+    # USERDOMAIN/USERNAME env vars are not reliably set in every invocation context
+    # (services, some shells). `whoami` is the authoritative source Windows itself
+    # uses to resolve the running identity, so ask it instead of trusting the env.
+    try:
+        result = subprocess.run(["whoami"], capture_output=True, text=True, shell=False, check=False)
+        account = result.stdout.strip()
+        if result.returncode == 0 and account:
+            return account
+    except OSError:
+        pass
+    domain = os.environ.get("USERDOMAIN", "")
+    user = os.environ.get("USERNAME", "")
+    if not user:
+        return None
+    return f"{domain}\\{user}" if domain else user
+
+
+def _secure_windows_acl(path: Path) -> None:
+    # %PROGRAMDATA% inherits a default ACL that grants the local Users group read
+    # access. Without an explicit, non-inherited grant restricted to the current
+    # user and SYSTEM, any other unprivileged local account can read agent.key and
+    # sign requests as this machine. Best-effort: never crash the agent over this,
+    # but never stay silent either — icacls failing here is a real security gap.
+    owner = _windows_owner()
+    if not owner:
+        print("AVERTISSEMENT: impossible de déterminer l'utilisateur Windows courant "
+              f"pour restreindre les permissions de {path}", file=sys.stderr)
+        return
+    # (OI)(CI) (object-inherit/container-inherit) only make sense on a directory ACE,
+    # so they can only be applied to child objects — a plain file has none. Passing
+    # them on a file's own ACE produced a grant icacls accepted but Windows did not
+    # actually honor, silently locking the owner out. Use them for directories only.
+    rights = "(OI)(CI)F" if path.is_dir() else "F"
+    result = subprocess.run(
+        ["icacls", str(path), "/inheritance:r", "/grant:r", f"{owner}:{rights}", f"SYSTEM:{rights}"],
+        capture_output=True, text=True, shell=False, check=False,
+    )
+    if result.returncode != 0:
+        print(f"AVERTISSEMENT: échec de la restriction ACL Windows sur {path}: "
+              f"{result.stderr.strip()[:300]}", file=sys.stderr)
+
+
 def _secure_directory(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
     if os.name != "nt":
         path.chmod(0o700)
+    else:
+        _secure_windows_acl(path)
 
 
 def _atomic_write(path: Path, content: str) -> None:
@@ -45,6 +92,8 @@ def _atomic_write(path: Path, content: str) -> None:
         os.replace(temporary, path)
         if os.name != "nt":
             path.chmod(0o600)
+        else:
+            _secure_windows_acl(path)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)

@@ -348,8 +348,18 @@ mod tests {
 
     #[test]
     fn classifies_missing_key_as_setup_required() {
+        // Only needs *some* non-zero ExitStatus to build the fixture below; "false" is
+        // not on PATH on a plain Windows machine (only via Git Bash's bundled tools,
+        // which happened to mask this on CI's windows-latest runner but not here).
+        #[cfg(windows)]
+        let failing_status = std::process::Command::new("cmd")
+            .args(["/C", "exit 1"])
+            .status()
+            .unwrap();
+        #[cfg(not(windows))]
+        let failing_status = std::process::Command::new("false").status().unwrap();
         let output = Output {
-            status: std::process::Command::new("false").status().unwrap(),
+            status: failing_status,
             stdout: Vec::new(),
             stderr: "Clé absente. Exécutez d\'abord : gpubnb-agent setup"
                 .as_bytes()

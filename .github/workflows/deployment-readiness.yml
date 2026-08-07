@@ -45,6 +45,12 @@ jobs:
         run: |
           set -euo pipefail
           grep -Fq 'publish = "apps/web"' netlify.toml
+          # auth.html loads the Supabase SDK from this CDN for Google/e-mail login; the
+          # deployed CSP (this file, not apps/web/netlify.toml which Netlify never reads
+          # since no `base` redirects to it) must allow it or both login methods silently
+          # break in production while Phantom-only login keeps working.
+          grep -Eq "script-src [^;]*https://cdn\.jsdelivr\.net" netlify.toml
+          grep -Fq 'src="https://cdn.jsdelivr.net' apps/web/auth.html
           grep -Fq 'https://gpubnb.onrender.com/:splat' netlify.toml
           grep -Fq 'Content-Security-Policy' netlify.toml
           grep -Fq "frame-ancestors 'none'" netlify.toml
@@ -65,6 +71,11 @@ jobs:
           grep -Fq 'value: "false"' render.yaml
           grep -Fq 'prisma migrate deploy' apps/api/Dockerfile
           grep -Fq 'USER app' apps/api/Dockerfile
+          # The Delivery Worker must be deployed alongside the web service, or
+          # funded bookings and settlement can never actually progress in production.
+          grep -Fq 'type: worker' render.yaml
+          grep -Fq 'name: gpubnb-delivery-worker' render.yaml
+          grep -Fq 'dockerCommand: node dist/delivery-worker.js' render.yaml
       - name: Build API image
         run: docker build --file apps/api/Dockerfile --tag gpubnb-api:deployment-check .
       - name: Inspect non-root runtime
@@ -84,5 +95,10 @@ jobs:
           set -euo pipefail
           ! grep -Fq 'ALLOW_MAINNET=true' .env.example render.yaml
           grep -Fq 'ALLOW_MAINNET' render.yaml
+          # .env.example's documented REDIS_URL must match the password the local
+          # compose Redis actually requires, or following the README verbatim fails
+          # with NOAUTH on the very first command (C13).
+          grep -Fq '"--requirepass","change-me"' docker-compose.yml
+          grep -Fq 'REDIS_URL=redis://:change-me@localhost:6379' .env.example
           grep -Fq 'value: "false"' render.yaml
           ! grep -RInE '(DATABASE_URL|REDIS_URL|SESSION_SECRET|INTERNAL_SERVICE_TOKEN):[[:space:]]+[^[:space:]]+' render.yaml

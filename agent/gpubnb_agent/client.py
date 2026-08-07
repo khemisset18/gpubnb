@@ -70,10 +70,15 @@ class ApiClient:
     def link(self, code: str, public_key: str, inventory: dict[str, Any]) -> dict[str, Any]:
         return self.request("/agent/link", "POST", {"code": code, "publicKey": public_key, "inventory": inventory})
 
-    def upload_file(self, path: str, job_id: str, file_path: str, kind: str = "result") -> dict[str, Any]:
+    def upload_file(self, path: str, job_id: str, file_path: str, key: SigningKey, machine_id: str, kind: str = "result") -> dict[str, Any]:
         data = Path(file_path).read_bytes()
         sha256 = hashlib.sha256(data).hexdigest()
-        headers = {"content-type": "application/octet-stream", "x-artifact-kind": kind, "x-artifact-sha256": sha256, "x-artifact-size": str(len(data))}
+        # Signed like every other agent-write endpoint (C11): an unsigned upload was
+        # authenticated only by a guessable job/artifact ID in the URL, letting anyone
+        # able to alter the request in flight substitute a different artifact body
+        # without invalidating anything — the server had no way to detect it.
+        signed = signed_headers_for_body_sha256(key, machine_id, "POST", path, sha256)
+        headers = {"content-type": "application/octet-stream", "x-artifact-kind": kind, "x-artifact-sha256": sha256, "x-artifact-size": str(len(data)), **signed}
         request = urllib.request.Request(self.api_url + path, data=data, method="POST", headers={"user-agent": f"gpubnb-agent/{__version__}", **headers})
         try:
             with urllib.request.urlopen(request, timeout=120, context=self.context) as response:
@@ -113,11 +118,12 @@ def request_body_sha256(body: dict[str, Any] | None) -> str:
     return hashlib.sha256(canonical_json_bytes(body)).hexdigest()
 
 
-def signed_headers(key: SigningKey, machine_id: str, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, str]:
-    """Build legacy and v2 signatures during the migration window."""
+def signed_headers_for_body_sha256(key: SigningKey, machine_id: str, method: str, path: str, body_sha256: str) -> dict[str, str]:
+    """Build legacy and v2 signatures given an already-computed body hash. Shared by
+    signed_headers (JSON bodies) and raw-bytes callers like artifact upload, which
+    can't reuse canonical_json_bytes since their payload was never a JSON dict."""
     epoch = int(time.time() * 1000)
     nonce = secrets.token_urlsafe(18)
-    body_sha256 = request_body_sha256(body)
     legacy_canonical = f"{method.upper()}|{path}|{machine_id}|{epoch}"
     legacy_signature = base58.b58encode(key.sign(legacy_canonical.encode()).signature).decode()
     v2_canonical = f"{method.upper()}|{path}|{machine_id}|{epoch}|{nonce}|{body_sha256}"
@@ -133,8 +139,24 @@ def signed_headers(key: SigningKey, machine_id: str, method: str, path: str, bod
     }
 
 
+def signed_headers(key: SigningKey, machine_id: str, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, str]:
+    """Build legacy and v2 signatures during the migration window."""
+    return signed_headers_for_body_sha256(key, machine_id, method, path, request_body_sha256(body))
+
+
 def agent_request(client: ApiClient, key: SigningKey, machine_id: str, path: str, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
-    return client.request_with_retry(path, method, body, signed_headers(key, machine_id, method, path, body))
+    # Each attempt must carry its own signature: the server treats a signed
+    # request as single-use, so retrying with headers computed once up front
+    # gets every retry rejected as a replay instead of actually retrying.
+    last_error: Exception | None = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            return client.request(path, method, body, signed_headers(key, machine_id, method, path, body))
+        except (urllib.error.URLError, RuntimeError, TimeoutError, OSError) as exc:
+            last_error = exc
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(min(30, RETRY_BACKOFF ** attempt))
+    raise last_error  # type: ignore[misc]
 
 
 def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, Any]:
@@ -158,33 +180,50 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
     if hw_changed and previous_fp:
         print(f"AVERTISSEMENT: Empreinte matérielle modifiée (ancienne: {previous_fp[:16]}...)")
     challenge_path = f"/agent/challenge/{machine_id}"
-    challenge = client.request_with_retry(
-        challenge_path,
-        headers=signed_headers(key, machine_id, "GET", challenge_path),
-    )["challenge"]
     counter = load_counter() + 1
-    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    fields = [
-        machine_id, str(counter), challenge, timestamp, gpu["gpuUuid"], gpu["gpuModel"],
-        str(gpu["vramMiB"]), gpu["driverVersion"], str(gpu["gpuUtilization"]),
-        str(gpu["memoryUsedMiB"]), str(gpu["temperatureC"]), str(probe).lower(), "",
-    ]
-    signature = base58.b58encode(key.sign("|".join(fields).encode()).signature).decode()
-    payload = {
-        "machineId": machine_id,
-        "counter": counter,
-        "challenge": challenge,
-        "timestamp": timestamp,
-        **gpu,
-        "cudaProbeOk": probe,
-        "gpuVendor": gpu.get("gpuVendor"),
-        "sessionId": session_id,
-        "signature": signature,
-        "agentVersion": __version__,
-        "hardwareChanged": hw_changed,
-        "telemetry": telemetry,
-        **sys_info,
-    }
-    result = client.request_with_retry("/agent/heartbeat", "POST", payload, signed_headers(key, machine_id, "POST", "/agent/heartbeat", payload))
-    save_counter(counter)
-    return result
+    # Every attempt below is signed once and used once: the server-issued challenge
+    # is single-use (redis GETDEL) and every signature is anti-replay-locked on first
+    # use (verifyAgentRequest/V2). Reusing headers computed before a failed attempt —
+    # what request_with_retry does — gets every retry rejected instead of recovering
+    # from a transient failure. So a retry here means a fully fresh attempt: new
+    # challenge, new timestamp/nonce, new signature, not just a resend.
+    last_error: Exception | None = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            challenge = client.request(
+                challenge_path,
+                headers=signed_headers(key, machine_id, "GET", challenge_path),
+            )["challenge"]
+            timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            fields = [
+                machine_id, str(counter), challenge, timestamp, gpu["gpuUuid"], gpu["gpuModel"],
+                str(gpu["vramMiB"]), gpu["driverVersion"], str(gpu["gpuUtilization"]),
+                str(gpu["memoryUsedMiB"]), str(gpu["temperatureC"]), str(probe).lower(), "",
+            ]
+            signature = base58.b58encode(key.sign("|".join(fields).encode()).signature).decode()
+            payload = {
+                "machineId": machine_id,
+                "counter": counter,
+                "challenge": challenge,
+                "timestamp": timestamp,
+                **gpu,
+                "cudaProbeOk": probe,
+                "gpuVendor": gpu.get("gpuVendor"),
+                "sessionId": session_id,
+                "signature": signature,
+                "agentVersion": __version__,
+                "hardwareChanged": hw_changed,
+                "telemetry": telemetry,
+                **sys_info,
+            }
+            result = client.request(
+                "/agent/heartbeat", "POST", payload,
+                signed_headers(key, machine_id, "POST", "/agent/heartbeat", payload),
+            )
+            save_counter(counter)
+            return result
+        except (urllib.error.URLError, RuntimeError, TimeoutError, OSError) as exc:
+            last_error = exc
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(min(30, RETRY_BACKOFF ** attempt))
+    raise last_error  # type: ignore[misc]

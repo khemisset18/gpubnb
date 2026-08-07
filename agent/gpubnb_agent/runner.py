@@ -137,12 +137,19 @@ def run_gpu_diagnostic(image: str, timeout_seconds: int) -> dict[str, Any]:
         if result.returncode != 0:
             raise RuntimeError(f"diagnostic_container_failed:{result.returncode}:{stderr}")
         safe_gpus = _parse_report(stdout)
+        first_gpu = safe_gpus[0] if safe_gpus else None
         report = {
             "gpuDetected": bool(safe_gpus),
             "summary": "Diagnostic GPU officiel terminé." if safe_gpus else "Aucun GPU détecté dans le conteneur.",
             "metrics": {
-                "gpuCount": len(safe_gpus), "vendor": "NVIDIA", "gpus": safe_gpus,
-                "imageCacheHit": cache_hit,
+                # The API stores metrics as a flat map of scalars — no nested arrays/objects.
+                "gpuCount": len(safe_gpus), "vendor": "NVIDIA", "imageCacheHit": cache_hit,
+                **({
+                    "firstGpuName": first_gpu["name"], "firstGpuUuid": first_gpu["uuid"],
+                    "firstGpuMemoryTotalMiB": first_gpu["memoryTotalMiB"],
+                    "firstGpuMemoryUsedMiB": first_gpu["memoryUsedMiB"],
+                    "firstGpuTemperatureC": first_gpu["temperatureC"],
+                } if first_gpu else {}),
             },
         }
     except Exception:

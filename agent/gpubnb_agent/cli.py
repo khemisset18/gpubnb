@@ -519,7 +519,7 @@ def command_files_upload(args: argparse.Namespace) -> int:
     import hashlib
     sha256 = hashlib.sha256(file_path.read_bytes()).hexdigest()
     upload_path += f"&sha256={sha256}&sizeBytes={file_path.stat().st_size}"
-    result = client(config).upload_file(upload_path, args.job_id, args.path, args.kind)
+    result = client(config).upload_file(upload_path, args.job_id, args.path, key, machine_id, args.kind)
     print_json({"uploaded": True, "jobId": args.job_id, "artifact": result})
     return 0
 

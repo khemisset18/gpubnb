@@ -1,12 +1,14 @@
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from nacl.signing import SigningKey
 
-from gpubnb_agent.client import heartbeat, signed_headers
+from gpubnb_agent.client import ApiClient, heartbeat, signed_headers
 from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available, machine_fingerprint
 from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key, load_machine_fingerprint, save_machine_fingerprint, detect_hardware_change
 from gpubnb_agent.runner import (
@@ -74,6 +76,21 @@ class KeyTests(unittest.TestCase):
             self.assertEqual(len(fingerprint().split(":")), 6)
             if os.name != "nt":
                 self.assertEqual(Path(directory, "agent.key").stat().st_mode & 0o777, 0o600)
+            else:
+                # C10: agent.key must not inherit ProgramData's default ACL, which grants
+                # the local Users group read access. Query the real, actual ACL icacls
+                # applied (not a mock) and confirm it excludes any broad Users/Everyone
+                # grant and includes the current user or SYSTEM.
+                import subprocess
+                result = subprocess.run(
+                    ["icacls", str(Path(directory, "agent.key"))],
+                    capture_output=True, text=True, shell=False, check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                output = result.stdout
+                self.assertNotIn("BUILTIN\\Users", output)
+                self.assertNotIn(":(R)", output)  # no bare broad read-only grant left over
+                self.assertTrue("SYSTEM" in output or os.environ.get("USERNAME", "") in output)
 
     def test_signed_headers_are_ed25519(self):
         key = SigningKey.generate()
@@ -99,7 +116,7 @@ class HeartbeatTests(unittest.TestCase):
         }
 
         class Client:
-            def request_with_retry(self, path, method="GET", body=None, headers=None, timeout=12):
+            def request(self, path, method="GET", body=None, headers=None, timeout=12):
                 events.append("challenge" if path.startswith("/agent/challenge/") else "heartbeat")
                 return {"challenge": "challenge-value-long-enough"} if method == "GET" else {"ok": True}
 
@@ -115,6 +132,51 @@ class HeartbeatTests(unittest.TestCase):
             self.assertEqual(heartbeat(Client(), SigningKey.generate(), "machine-id"), {"ok": True})
 
         self.assertEqual(events, ["gpu", "system", "telemetry", "challenge", "heartbeat"])
+
+    def test_retry_after_a_transient_failure_uses_a_fresh_challenge_and_signature(self):
+        # C9: request_with_retry used to sign headers once outside its own retry loop,
+        # so every retry replayed an already-consumed challenge and an already-used
+        # signature — both single-use server-side — guaranteeing every retry failed.
+        # A retry must now fetch a brand new challenge and produce a different signature.
+        gpu = {
+            "gpuUuid": "GPU-test", "gpuModel": "NVIDIA Test", "vramMiB": 4096,
+            "memoryUsedMiB": 0, "driverVersion": "1", "cudaVersion": "1",
+            "temperatureC": 40, "gpuUtilization": 0, "powerWatts": 1.0, "gpuVendor": "NVIDIA",
+        }
+        calls = {"challenge": 0, "heartbeat_attempts": 0}
+        signatures: list[str] = []
+        challenges_issued: list[str] = []
+
+        class Client:
+            def request(self, path, method="GET", body=None, headers=None, timeout=12):
+                if path.startswith("/agent/challenge/"):
+                    calls["challenge"] += 1
+                    value = f"challenge-{calls['challenge']}-long-enough-value"
+                    challenges_issued.append(value)
+                    return {"challenge": value}
+                calls["heartbeat_attempts"] += 1
+                signatures.append(body["signature"])
+                if calls["heartbeat_attempts"] == 1:
+                    raise RuntimeError("simulated transient network failure")
+                return {"ok": True}
+
+        with (
+            patch("gpubnb_agent.client.gpu_inventory", return_value=[gpu]),
+            patch("gpubnb_agent.client.system_inventory", return_value={"machineFingerprint": "abc"}),
+            patch("gpubnb_agent.client.telemetry_snapshot", return_value={"schemaVersion": 2, "accelerators": []}),
+            patch("gpubnb_agent.client.detect_hardware_change", return_value=(False, None)),
+            patch("gpubnb_agent.client.save_machine_fingerprint"),
+            patch("gpubnb_agent.client.load_counter", return_value=0),
+            patch("gpubnb_agent.client.save_counter"),
+            patch("gpubnb_agent.client.time.sleep"),
+        ):
+            result = heartbeat(Client(), SigningKey.generate(), "machine-id")
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(calls["challenge"], 2, "each attempt must fetch its own fresh challenge")
+        self.assertEqual(calls["heartbeat_attempts"], 2)
+        self.assertEqual(len(challenges_issued), len(set(challenges_issued)), "challenges must not repeat")
+        self.assertEqual(len(signatures), len(set(signatures)), "a retry must never resend an identical signature")
 
 
 class RunnerTests(unittest.TestCase):
@@ -173,7 +235,7 @@ class RunnerTests(unittest.TestCase):
         result = run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
         self.assertTrue(result["gpuDetected"])
         self.assertEqual(result["metrics"]["gpuCount"], 1)
-        self.assertEqual(result["metrics"]["gpus"][0]["uuid"], "GPU-1")
+        self.assertEqual(result["metrics"]["firstGpuUuid"], "GPU-1")
 
     @patch("gpubnb_agent.runner.cleanup_workspace")
     @patch("gpubnb_agent.runner.gpu_inventory")
@@ -266,6 +328,30 @@ class RunnerTests(unittest.TestCase):
             run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
 
     @patch("gpubnb_agent.runner.cleanup_workspace")
+    @patch("gpubnb_agent.runner.gpu_inventory")
+    @patch("gpubnb_agent.runner.subprocess.run")
+    def test_diagnostic_container_hang_is_reported_as_a_timeout(self, run, mock_gpu, cleanup):
+        # RC1 Phase 5 Test 2: a container that never exits must not hang the agent
+        # forever or be silently swallowed — subprocess.run's own timeout must fire
+        # and be surfaced as a stable, documented error code. Reproduced live
+        # end-to-end too (real subprocess.run(timeout=30) against a stalling
+        # `docker run`, via a substituted docker executable on PATH): raised the
+        # exact same RuntimeError("diagnostic_timeout") after ~34s, twice.
+        mock_gpu.return_value = [{"gpuVendor": "NVIDIA"}]
+        cleanup.return_value = {"cleaned": True, "container": "test"}
+
+        def raise_timeout(*args, **kwargs):
+            if args and args[0][:2] == ["docker", "run"]:
+                raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout", 30))
+            return type("Result", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+        run.side_effect = raise_timeout
+
+        with self.assertRaisesRegex(RuntimeError, "^diagnostic_timeout$"):
+            run_gpu_diagnostic(OFFICIAL_IMAGE, 120)
+        cleanup.assert_called_once()
+
+    @patch("gpubnb_agent.runner.cleanup_workspace")
     @patch("gpubnb_agent.runner.subprocess.run")
     def test_protection_profile_uses_inspected_docker_state(self, run, cleanup):
         cleanup.return_value = {"cleaned": True, "container": "probe"}
@@ -315,6 +401,54 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", command)
         self.assertIn("--network=none", command)
         self.assertIn("--read-only", command)
+
+
+class FileTransferSigningTests(unittest.TestCase):
+    def test_upload_file_signs_the_exact_uploaded_bytes(self):
+        # C11: upload_file() used to send no x-agent-signature headers at all —
+        # artifact upload was authenticated only by a guessable ID in the URL.
+        import hashlib
+        import base58 as base58_module
+        from nacl.signing import VerifyKey
+
+        key = SigningKey.generate()
+        machine_id = "machine-under-test"
+        content = b"real artifact bytes, not json"
+
+        with tempfile.TemporaryDirectory() as directory:
+            file_path = Path(directory, "artifact.bin")
+            file_path.write_bytes(content)
+
+            captured: dict[str, Any] = {}
+
+            class FakeResponse:
+                status = 201
+                def read(self, _n): return b'{"ok":true}'
+                def __enter__(self): return self
+                def __exit__(self, *args): return False
+
+            def fake_urlopen(request, timeout=None, context=None):
+                captured["headers"] = {k.lower(): v for k, v in request.header_items()}
+                captured["data"] = request.data
+                return FakeResponse()
+
+            client_instance = ApiClient("http://localhost:8787")
+            with patch("gpubnb_agent.client.urllib.request.urlopen", side_effect=fake_urlopen):
+                client_instance.upload_file("/jobs/job-1/artifacts?machineId=m", "job-1", str(file_path), key, machine_id)
+
+        headers = captured["headers"]
+        for name in ("x-agent-signature-v2", "x-agent-nonce", "x-agent-body-sha256", "x-agent-timestamp"):
+            self.assertIn(name, headers, f"missing {name}")
+
+        actual_body_sha256 = hashlib.sha256(captured["data"]).hexdigest()
+        self.assertEqual(headers["x-agent-body-sha256"], actual_body_sha256, "signed hash must match the bytes actually sent")
+
+        v2_canonical = (
+            f"POST|/jobs/job-1/artifacts?machineId=m|{machine_id}|"
+            f"{headers['x-agent-timestamp']}|{headers['x-agent-nonce']}|{actual_body_sha256}"
+        )
+        verify_key = VerifyKey(bytes(key.verify_key))
+        verify_key.verify(v2_canonical.encode(), base58_module.b58decode(headers["x-agent-signature-v2"]))
 
 
 if __name__ == "__main__":

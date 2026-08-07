@@ -24,6 +24,7 @@ const schema = z.object({
   DEV_DIAGNOSTIC_IMAGE: z.string().regex(/^ghcr\.io\/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$/).optional(),
   HEARTBEAT_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(120).default(25),
   HEARTBEAT_OFFLINE_SECONDS: z.coerce.number().int().min(15).max(300).default(60),
+  JOB_STALE_AFTER_SECONDS: z.coerce.number().int().min(120).max(3600).default(900),
   COMMISSION_BPS: z.coerce.number().int().min(0).max(1000).default(500),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_ANON_KEY: z.string().min(20).optional(),

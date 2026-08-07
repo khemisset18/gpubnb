@@ -99,7 +99,7 @@ export async function claimOutboxEvents(
   const batch = clampBatchSize(requestedBatch, DELIVERY_LIMITS.outboxBatch);
   const lease = clampLeaseSeconds(requestedLeaseSeconds, DELIVERY_LIMITS.maxOutboxLeaseSeconds);
   return client.$queryRaw<ClaimedOutboxEvent[]>`
-    SELECT * FROM claim_outbox_events(${workerId}, ${batch}, ${lease})
+    SELECT * FROM claim_outbox_events(${workerId}, ${batch}::integer, ${lease}::integer)
   `;
 }
 
@@ -115,7 +115,7 @@ export async function claimMachineCommands(
   const batch = clampBatchSize(requestedBatch, DELIVERY_LIMITS.machineCommandBatch);
   const lease = clampLeaseSeconds(requestedLeaseSeconds, DELIVERY_LIMITS.maxCommandLeaseSeconds);
   return client.$queryRaw<ClaimedMachineCommand[]>`
-    SELECT * FROM claim_machine_commands(${machineId}, ${workerId}, ${batch}, ${lease})
+    SELECT * FROM claim_machine_commands(${machineId}, ${workerId}, ${batch}::integer, ${lease}::integer)
   `;
 }
 
