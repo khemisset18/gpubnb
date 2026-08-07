@@ -83,6 +83,82 @@ Vérifier : aucune double instance (Priorité 1, déjà prouvé en local — à 
 - `apps/host-desktop` (application Tauri) comme rôle hôte réel — ce protocole utilise l'agent CLI ; un protocole équivalent avec le binaire Tauri packagé doit être rejoué séparément avant d'ouvrir la bêta aux hôtes qui n'installeront que l'application graphique.
 - Argent réel (voir Priorité 6 / `BETA_PRIVATE_READINESS.md`).
 
+### 1.8 Checklist exacte, par catégorie
+
+Cette section reprend le protocole des sections 1.1 à 1.7 sous forme de checklist opérationnelle, organisée exactement par ce qu'un exécutant doit vérifier avant/pendant/après le test. **Aucune case ne doit être cochée sans exécution réelle** — voir aussi `BETA_PRIVATE_CHECKLIST.md`.
+
+#### PC hôte (PC A)
+- [ ] Windows 10/11 ou Ubuntu récent.
+- [ ] Pilote NVIDIA installé, `nvidia-smi` renvoie exactement un GPU.
+- [ ] Docker installé et démarré (Docker Desktop/WSL2 sous Windows, Docker Engine sous Linux) + NVIDIA Container Toolkit — vérifiés ensemble par `gpubnb-agent diagnose`.
+- [ ] Espace disque libre suffisant pour les images Docker tirées pendant le test (plusieurs Go — images de diagnostic/GPU-proof/workspace).
+- [ ] Python 3.10+ installé **si** test avec l'agent CLI (section « Installation agent » ci-dessous) ; sinon `GPUbnb Host` (portable ou installateur) **si** test du rôle hôte via l'application graphique.
+- [ ] Accès Internet sortant fonctionnel (aucune IP publique ni port entrant requis pour le flux actuel — voir « Réseau »/« Ports » ci-dessous).
+
+#### PC locataire (PC B)
+- [ ] Navigateur récent (pas de GPU, pas de Docker, pas d'agent requis).
+- [ ] Accès Internet sortant vers l'URL de l'API/dashboard de test.
+- [ ] Compte GPUbnb créé, rôle loueur activé.
+
+#### Réseau
+- [ ] PC A et PC B sur des réseaux physiquement distincts si possible (pas seulement deux fenêtres sur le même LAN) — c'est ce qui exerce un vrai NAT et une vraie latence, jamais testé jusqu'ici (une seule machine physique tout du long en RC1).
+- [ ] Latence réelle observée entre PC A et l'API, et entre PC B et l'API, notée dans le compte-rendu du test (pas seulement « ça marche »).
+- [ ] Aucune règle de pare-feu entrante spéciale requise côté PC A : l'agent (CLI ou via `host-desktop`) est **exclusivement un client HTTP sortant** vers l'API (sondage `GET /agent/jobs/next/:machineId`, heartbeats) — vérifié par lecture de code (`server.ts`, aucune route n'exige que l'API initie une connexion vers l'agent). C'est un point à confirmer expérimentalement, pas seulement à supposer, la première fois que ce protocole est réellement exécuté.
+- [ ] Le pare-feu de PC A ne bloque pas le trafic HTTPS sortant vers l'API **et** vers le registre d'images (GHCR/Docker Hub, nécessaire pour `docker pull`).
+
+#### Ports
+- [ ] PC A (hôte) : **aucun port entrant à ouvrir** pour le flux de réservation/job actuel (confirmé par lecture de code : `connectionType`/`connectionMetadata` du modèle `WorkspaceSession` existent en base mais ne sont écrits nulle part dans `server.ts` — aucun mécanisme de connexion directe locataire → hôte n'est implémenté aujourd'hui, tout passe par l'API).
+- [ ] PC B (locataire) : aucun port entrant.
+- [ ] API : port sortant 443 (HTTPS) atteignable depuis PC A et PC B. Si le test cible une instance locale plutôt que Render, documenter séparément le port du tunnel utilisé (ex. `ngrok`/`cloudflared`) — aucune solution n'est imposée par ce dépôt.
+- [ ] Si l'API testée tourne en local (pas Render) : Postgres (5432) et Redis (6379) ne doivent être exposés que sur la machine qui héberge l'API, jamais publiquement.
+
+#### Installation agent (PC A, CLI Python)
+- [ ] `python -m pip install -e agent`
+- [ ] `gpubnb-agent setup`
+- [ ] `gpubnb-agent diagnose` → GPU/Docker/runtime NVIDIA tous positifs avant de poursuivre.
+- [ ] `gpubnb-agent link CODE_RECU` (code créé côté PC B, transmis par un canal séparé).
+- [ ] `gpubnb-agent status` → confirme le PID réel détenteur du verrou d'instance (Priorité 1).
+
+#### host-desktop (PC A, application graphique — parcours séparé de la CLI)
+- [ ] Installation depuis l'exécutable portable (`GPUbnb-Host-Portable.exe` + `gpubnb-agent.exe` à côté) ou l'installateur (`gpubnb-host-windows-x64.exe`).
+- [ ] Aucune console n'est utilisée manuellement pendant ce test — le but est de vérifier le parcours 100 % graphique.
+- [ ] Application détecte le GPU, propose la liaison, affiche un état de connexion cohérent avec `gpubnb-agent status` en parallèle (vérification croisée).
+- [ ] **Jamais exécuté comme rôle hôte réel avant ce test** (`KNOWN_LIMITATIONS_RC1.md`) — premier passage réel.
+
+#### API
+- [ ] `curl -s https://<host>/health` → `ok:true`.
+- [ ] `curl -s https://<host>/ready` → `ok:true` (confirme DB + Redis atteignables par l'API elle-même).
+- [ ] Les trois processus tournent (API, Delivery Worker, Sweep Scheduler — voir `BETA_PRIVATE_OPERATIONS.md`).
+- [ ] Journaux `sweep_scheduler_started`/`delivery_worker_started` visibles au démarrage.
+
+#### Réservation (PC B)
+- [ ] Machine du PC A visible et « en ligne » dans le tableau de bord.
+- [ ] Réservation créée sur cette machine (parcours UI standard).
+- [ ] `DEV_PAYMENT_BYPASS=true` actif pour ce test (voir décision de périmètre, `BETA_PRIVATE_READINESS.md` section 2.6) — réservation financée automatiquement par la réconciliation de développement (`reconcileDevelopmentBookings`), pas de paiement réel.
+
+#### Exécution GPU (PC A exécute, PC B observe)
+- [ ] `GPU_DIAGNOSTIC` : transitions `QUEUED → ASSIGNED → DOWNLOADING/PREPARING → RUNNING → UPLOADING_RESULTS → COMPLETED` visibles.
+- [ ] `WORKSPACE_PREPARE` : idem — **premier test réel**, jamais exécuté avant.
+- [ ] `GPU_PROOF` : idem, avec échantillons de métriques signés envoyés pendant l'exécution (`send_session_metric` côté agent) — **premier test réel**.
+- [ ] Pendant l'exécution de chacun : tenter de réclamer un second job exclusif sur la même machine (ou la même `gpuUuid` de test, voir étape E) et confirmer qu'il reste `QUEUED`.
+
+#### Preuve
+- [ ] Pour chaque job : `result.gpuDetected=true`, résultat cohérent avec le matériel réel du PC A.
+- [ ] Pour `GPU_PROOF` : `finalize-proof` accepté, `provenSeconds >= 1`, réservation passée à `COMPLETED`.
+- [ ] Capture des journaux structurés pertinents (`sweep_cycle_completed`, `gpu_exclusivity_claim_deferred` le cas échéant) et des captures d'écran du tableau de bord PC B à chaque étape clé.
+- [ ] Résultat consigné dans un document `*_RESULT.md` séparé (même format que `docs/FIRST_REAL_GPU_RENTAL_RESULT.md`), pas seulement une case cochée sans trace.
+
+#### Nettoyage
+- [ ] `docker ps -a` sur PC A après chaque job : aucun conteneur résiduel (`gpubnb-diagnostic-*`/`gpubnb-gpu-proof-*`/équivalent workspace).
+- [ ] Aucune erreur `diagnostic_cleanup_unverified`/`gpu_proof_cleanup_unverified` dans les journaux — si l'une apparaît, **ne pas** lever manuellement la quarantaine qui en résulte sans vérification physique réelle (`BETA_PRIVATE_OPERATIONS.md` section 5).
+- [ ] `nvidia-smi` sur PC A confirme qu'aucun processus résiduel n'occupe le GPU après la fin du test.
+
+#### Retour `AVAILABLE`
+- [ ] `Machine.operational` repasse à `AVAILABLE` après un cycle réussi (visible côté tableau de bord PC B et/ou requête API).
+- [ ] `Machine.moderationStatus` reste `CLEAR` (aucune quarantaine déclenchée par un test réussi).
+- [ ] La machine peut immédiatement accepter une nouvelle réservation après ce retour — vérifié en tentant une seconde réservation de test.
+- [ ] Si un test échoue et laisse la machine quarantinée : suivre la procédure de levée manuelle (`BETA_PRIVATE_OPERATIONS.md` section 5) avant de considérer le protocole terminé.
+
 ## Partie 2 — Plan de test fonctionnel de la bêta privée
 
 À exécuter par l'équipe avant d'inviter le premier utilisateur externe, en plus du protocole deux machines ci-dessus.
