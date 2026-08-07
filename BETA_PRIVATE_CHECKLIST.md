@@ -4,21 +4,22 @@
 
 ## Code et tests
 
-- [ ] `apps/api` : suite complète verte (`npm test` dans `apps/api`) — dernier chiffre connu : voir le rapport de fin de tâche.
-- [ ] `agent` : suite complète verte (`python -m unittest discover -s tests`) — dernier chiffre connu : voir le rapport de fin de tâche.
-- [ ] `apps/host-desktop` : `cargo test --locked -p gpubnb-host-desktop --all-targets`, `cargo fmt -- --check`, `cargo clippy -- -D warnings` — tous verts.
-- [ ] `programs/gpu_escrow` : `cargo test` — vert (tests unitaires purs uniquement, programme non déployé).
-- [ ] CI verte sur le dernier commit de la branche à fusionner (`gh run list --branch feat/beta-readiness-hardening`).
-- [ ] Aucun `TODO`/`FIXME`/`HACK` dans le code de production touché par cette branche.
-- [ ] Aucun `console.log`/`print` de debug oublié dans le code de production touché par cette branche.
-- [ ] Aucun secret en clair dans le diff (`.gitleaks.toml` présent, revue manuelle du diff exact avec `main` effectuée).
+- [x] `apps/api` : suite complète verte (`npm test`) — **242/242**, `tsc --noEmit` propre.
+- [x] `agent` : suite complète verte (`python -m unittest discover -s tests`) — **68 tests, 1 skip attendu** (contrat non-Windows).
+- [x] `apps/host-desktop` : `cargo test --locked -p gpubnb-host-desktop --all-targets` (**440/440**), `cargo fmt -- --check`, `cargo clippy -- -D warnings` — tous verts.
+- [x] `programs/gpu_escrow` : `cargo test` — **7/7** verts (tests unitaires purs, programme non déployé).
+- [x] CI verte sur le dernier commit de la branche (`f29941e`).
+- [x] Aucun `TODO`/`FIXME`/`HACK` trouvé dans le code de production touché par cette branche.
+- [x] Aucun `console.log`/`print` de debug trouvé dans le code de production touché par cette branche.
+- [x] Aucun secret en clair détecté (gitleaks en CI, vert sur chaque commit ; revue manuelle du diff effectuée).
 
 ## Priorités techniques (cette branche)
 
-- [ ] Priorité 1 — instance unique de l'agent : commit `0b8ff74`, tests réels (verrou OS, pas de mock).
-- [ ] Priorité 2 — reprise contrôlée du Delivery Worker : commit `85a0e15`, 11 tests.
-- [ ] Priorité 3 — ordonnanceur du sweep : commit `3deaefb`, 21 tests (Redis réel).
-- [ ] Priorité 4 — exclusivité GPU : commit `513f1c7`, 15 tests.
+- [x] Priorité 1 — instance unique de l'agent : commit `0b8ff74`, tests réels (verrou OS, pas de mock).
+- [x] Priorité 2 — reprise contrôlée du Delivery Worker : commit `85a0e15`, 11 tests.
+- [x] Priorité 3 — ordonnanceur du sweep : commit `3deaefb`, 21 tests (Redis réel).
+- [x] Priorité 4 — exclusivité GPU : commit `513f1c7`, 15 tests.
+- [x] Priorité 6 (code) — vérification on-chain du règlement : commit `f29941e`, 20 tests.
 
 ## Documentation
 
@@ -40,9 +41,9 @@
 
 ## Paiement (voir `BETA_PRIVATE_READINESS.md` section 2)
 
-- [ ] Décision explicite prise et documentée : la bêta privée démarre-t-elle avec `DEV_PAYMENT_BYPASS=true` (aucun argent, même Devnet) ou avec un déploiement Devnet réel du programme `gpu_escrow` ?
-- [ ] Si Devnet réel choisi : programme déployé, `Anchor.toml`/`ESCROW_PROGRAM_ID` mis à jour, `anchor test` rejoué contre le déploiement réel.
-- [ ] Si Devnet réel choisi : lacune de vérification on-chain du règlement (`confirmSettlement`, section 2.2 de `BETA_PRIVATE_READINESS.md`) explicitement acceptée par un humain désigné, ou comblée avant ouverture.
+- [x] Vérification on-chain du règlement (`confirmSettlement`) comblée en code — commit `f29941e`, 20 tests. Reste non exercée contre un déploiement réel (aucun déploiement n'existe encore).
+- [ ] Décision provisoire (section 2.6 de `BETA_PRIVATE_READINESS.md` : aucun argent réel, aucun Mainnet, `DEV_PAYMENT_BYPASS` ou Devnet contrôlé uniquement) **reconfirmée explicitement** par le porteur du produit avant ouverture.
+- [ ] Si Devnet réel choisi : programme déployé, `Anchor.toml`/`ESCROW_PROGRAM_ID` mis à jour, `anchor test` rejoué contre le déploiement réel, et la vérification on-chain du règlement exercée au moins une fois contre une vraie transaction (pas seulement des fixtures de test).
 
 ## Exploitation
 
