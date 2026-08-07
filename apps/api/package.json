@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "dev:delivery": "tsx watch src/delivery-worker.ts",
+    "dev:sweep": "tsx watch src/sweep-scheduler.ts",
     "build": "prisma generate && tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "start:delivery": "node dist/delivery-worker.js",
+    "start:sweep": "node dist/sweep-scheduler.js",
     "test": "tsx --test test/*.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
