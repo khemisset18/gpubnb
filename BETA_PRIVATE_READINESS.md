@@ -66,20 +66,26 @@ Tests ajoutés dans cette branche : voir la section 7 (Revue finale) pour les ch
 4. Exécuter un cycle complet réel sur Devnet : dépôt signé par un vrai wallet Phantom Devnet, job réel, règlement (`finalize` ou `resolve_dispute` réellement invoqué), remboursement partiel et total — avec preuve (signatures, montants observés, et confirmation que `verifySettlementTransaction` accepte la transaction réelle).
 5. Avant Mainnet : suivre intégralement `docs/MAINNET_GO_LIVE.md` (audit externe, multisig, RPC privé, etc. — hors périmètre de cette branche).
 
-### 2.6 Décision de périmètre paiement pour la bêta privée (provisoire, prise dans le cadre de cette tâche)
+### 2.6 Décision de périmètre paiement pour la bêta privée — **CONFIRMÉE OFFICIELLEMENT**
 
-- **Aucun argent réel** pendant toute la durée de la bêta privée telle que couverte par ce document.
-- **Aucun Mainnet** — inchangé, `README.md`/`docs/MAINNET_GO_LIVE.md` restent la référence, cette décision ne les remplace pas.
-- Seuls deux modes sont autorisés pour la bêta privée : **`DEV_PAYMENT_BYPASS=true`** (aucune transaction Solana, comportement déjà exercé pendant toute la campagne RC1), **ou** un **Devnet contrôlé** (programme `gpu_escrow` réellement déployé sur Devnet, SOL de test uniquement, jamais de valeur réelle) une fois les étapes 1, 2 et 4 de la section 2.5 réalisées.
-- Cette décision est **provisoire** : à reconfirmer explicitement par le porteur du produit avant l'ouverture effective de la bêta (case dédiée dans `BETA_PRIVATE_CHECKLIST.md`).
+Confirmée explicitement par le porteur du produit (2026-08-07), remplace la décision provisoire précédente :
+
+- **Aucun argent réel**, pendant toute la durée de la bêta privée telle que couverte par ce document.
+- **Aucun Mainnet.**
+- **`DEV_PAYMENT_BYPASS=true` pour la première bêta privée.** C'est le seul mode autorisé au lancement — pas un choix parmi d'autres.
+- **Un Devnet réel (programme `gpu_escrow` effectivement déployé) ne pourra être introduit que dans une phase de test séparée**, ultérieure, distincte de cette première bêta privée — pas au lancement.
+- **Aucun paiement réel, même Devnet, tant que toute la chaîne de règlement on-chain n'a pas été validée avec preuves** — c'est-à-dire tant que l'étape 4 de la section 2.5 (cycle complet réel sur Devnet, avec preuve que `verifySettlementTransaction` accepte une transaction réelle, pas seulement des fixtures de test) n'a pas été exécutée et documentée avec preuve.
+- La correction de `confirmSettlement` (commit `f29941e`, section 2.2) est **acceptée sous réserve des tests déjà réalisés** (20 tests automatisés avec fixtures — voir section 4) : acceptée comme correction de code correcte et testée, mais explicitement **pas encore comme preuve qu'elle fonctionne contre une transaction Solana réelle**, ce qui reste à faire avant toute activation du mode Devnet réel.
+
+Cette décision n'est plus provisoire ; elle reste néanmoins strictement limitée à la première bêta privée. Toute évolution vers un Devnet réel ou, plus tard, Mainnet, nécessite une nouvelle décision explicite et documentée séparément, jamais une extension implicite de celle-ci.
 
 ## 3. Priorité 5 — Validation multi-machines
 
-Voir `BETA_PRIVATE_TEST_PLAN.md` pour le protocole complet. Résumé :
+**STATUT : `PENDING_PHYSICAL_VALIDATION`.** Le deuxième PC physique n'est pas encore disponible (confirmé 2026-08-07). Voir `BETA_PRIVATE_TEST_PLAN.md` §1.8-1.9 pour le protocole complet, la checklist exacte par catégorie, et la procédure de lancement dès que le deuxième PC sera disponible — vérifiée exécutable sans aucune modification de code. Résumé :
 
 - **Prouvé** (Phase 4/5 RC1) : liaison, heartbeat, `GPU_DIAGNOSTIC` réel, robustesse — mais toujours **sur une seule machine physique** jouant les deux rôles (`KNOWN_LIMITATIONS_RC1.md`, non modifié par cette branche).
 - **Non prouvé, protocole préparé dans cette branche** : deux machines physiques distinctes, réseau réel (NAT, latence), `apps/host-desktop` utilisé comme hôte réel, `GPU_PROOF`/`WORKSPACE_PREPARE` en conditions réelles, exclusivité GPU (Priorité 4) observée entre deux machines physiques partageant délibérément un même `gpuUuid` de test.
-- **Aucun de ces tests n'a été exécuté dans le cadre de cette tâche.** Une seule machine physique de développement a été utilisée pour tout le travail de code de cette branche.
+- **Aucun de ces tests n'a été exécuté dans le cadre de cette tâche, et ne le sera pas tant que le deuxième PC n'est pas disponible.** Une seule machine physique de développement a été utilisée pour tout le travail de code de cette branche. Ce statut ne doit être mis à jour qu'après une exécution réelle, avec preuves consignées dans un document `TWO_PC_BETA_RESULT.md` (voir `BETA_PRIVATE_TEST_PLAN.md` §1.9) — jamais par anticipation.
 
 ## 4. Revue finale — code, secrets, cohérence
 

@@ -1,8 +1,13 @@
 # GPUbnb — Plan de test bêta privée
 
+> **STATUT DE LA VALIDATION MULTI-MACHINE : `PENDING_PHYSICAL_VALIDATION`**
+> Le deuxième PC physique n'est pas encore disponible (2026-08-07). Toutes les cases de ce document et de `BETA_PRIVATE_CHECKLIST.md` restent **non cochées**. Aucune exécution, partielle ou totale, n'a eu lieu. Ce statut ne doit être changé en `PASSED` ou `FAILED` qu'après une exécution réelle, avec preuves — jamais par anticipation.
+
 Ce document a deux parties : (1) le protocole de validation entre deux machines physiques distinctes, exigé avant d'accepter le premier hôte externe réel en bêta privée, et (2) le plan de test fonctionnel plus large de la bêta.
 
 **Aucun test de ce document n'a été exécuté dans le cadre de cette tâche.** Une seule machine physique de développement (Windows 11, Docker Desktop WSL2, GTX 1650 — voir `KNOWN_LIMITATIONS_RC1.md`) a été utilisée pour produire le code de la branche `feat/beta-readiness-hardening`. Ce document remplace, pour la bêta privée, la portée de `docs/TWO_PC_TEST.md` (daté « Phase 1 », rédigé avant l'existence des jobs `GPU_PROOF`/`WORKSPACE_PREPARE`, du Delivery Worker, du sweep planifié et de l'exclusivité GPU).
+
+**Vérification de suffisance :** cette checklist a été relue pour confirmer qu'elle est exécutable telle quelle, sans aucune modification de code, dès que le deuxième PC sera disponible — toutes les commandes qu'elle référence existent déjà dans le dépôt actuel (`gpubnb-agent` CLI, routes API existantes, `docker`/`nvidia-smi` standards). Rien dans ce document ne dépend d'un développement futur.
 
 ## Partie 1 — Protocole deux machines physiques
 
@@ -158,6 +163,86 @@ Cette section reprend le protocole des sections 1.1 à 1.7 sous forme de checkli
 - [ ] `Machine.moderationStatus` reste `CLEAR` (aucune quarantaine déclenchée par un test réussi).
 - [ ] La machine peut immédiatement accepter une nouvelle réservation après ce retour — vérifié en tentant une seconde réservation de test.
 - [ ] Si un test échoue et laisse la machine quarantinée : suivre la procédure de levée manuelle (`BETA_PRIVATE_OPERATIONS.md` section 5) avant de considérer le protocole terminé.
+
+### 1.9 Comment lancer ce test quand le deuxième PC sera disponible
+
+Séquence exacte à suivre le jour du test, dans l'ordre. Les deux opérateurs (PC A et PC B peuvent être la même personne physiquement présente aux deux postes, ou deux personnes coordonnées par un canal séparé — vocal/texte, pas par l'application elle-même tant que la liaison n'est pas faite).
+
+**Avant de commencer :**
+1. Relire `BETA_PRIVATE_ROLLBACK.md` section B.4 (procédure spécifique en cas de doute sur l'exclusivité GPU) — à connaître avant, pas à découvrir pendant.
+2. Confirmer que l'API cible (Render ou instance locale + tunnel) répond : `curl -s https://<host>/health` et `/ready` depuis une machine tierce (pas PC A ni PC B), pour isoler un problème réseau propre à l'API d'un problème propre au protocole.
+3. Confirmer `DEV_PAYMENT_BYPASS=true` sur l'instance API cible (décision officielle, `BETA_PRIVATE_READINESS.md` section 2.6) — ne jamais lancer ce test contre une instance où ce n'est pas le cas.
+4. Décider à l'avance qui documente (captures, horodatages) pendant le test — ne pas reconstruire les preuves après coup.
+
+#### Commandes exactes — PC A (hôte)
+
+```bash
+# 1. Diagnostic local avant toute liaison
+nvidia-smi
+python -m pip install -e agent
+gpubnb-agent setup
+gpubnb-agent diagnose
+
+# 2. Liaison (après réception du code créé côté PC B, section suivante)
+gpubnb-agent link CODE_RECU
+gpubnb-agent status
+
+# 3. Démarrage en arrière-plan et surveillance
+gpubnb-agent start --daemon
+gpubnb-agent logs
+
+# 4. Après chaque job exécuté (voir Preuves ci-dessous) : nettoyage
+docker ps -a
+nvidia-smi
+
+# 5. Fin de session
+gpubnb-agent stop
+```
+
+#### Commandes exactes — PC B (locataire)
+
+Aucune commande shell requise — parcours 100 % navigateur :
+1. `https://gpubnb.netlify.app/dashboard.html` (ou l'URL de l'environnement de test), connexion.
+2. Activer le rôle loueur, créer un code de liaison, le transmettre à PC A par un canal séparé.
+3. Attendre que la machine du PC A apparaisse en ligne (délai attendu : voir `HEARTBEAT_MAX_AGE_SECONDS`/`HEARTBEAT_OFFLINE_SECONDS`, quelques dizaines de secondes maximum).
+4. Créer une réservation sur cette machine.
+5. Pour vérification API directe en parallèle de l'UI (optionnel, utile pour capturer une preuve brute) :
+   ```bash
+   curl -s https://<host>/health
+   curl -s https://<host>/ready
+   ```
+
+#### Preuves à récupérer (une fois, consolidées ici — voir aussi §1.8 « Preuve »)
+
+- Sortie complète de `gpubnb-agent diagnose` (PC A, avant liaison).
+- Sortie de `gpubnb-agent link`/`status` montrant le `machineId` réel.
+- Capture d'écran du tableau de bord PC B montrant la machine « en ligne ».
+- Pour chaque job (`GPU_DIAGNOSTIC`, `WORKSPACE_PREPARE`, `GPU_PROOF`) : la séquence complète de transitions de statut (capture ou export des logs), le résultat final (`gpuDetected`, `containerCleaned` pour `GPU_PROOF`), et la latence observée entre chaque transition.
+- Sortie de `docker ps -a` sur PC A immédiatement après chaque job — pour prouver l'absence de conteneur résiduel, pas juste l'affirmer.
+- Sortie de `nvidia-smi` sur PC A en fin de session.
+- Latence réseau observée (temps entre l'action côté PC B et sa visibilité côté PC A, et inversement) — noter la valeur, pas seulement « acceptable ».
+- Un nouveau document `TWO_PC_BETA_RESULT.md` (même format que `docs/FIRST_REAL_GPU_RENTAL_RESULT.md`) consolidant tout ce qui précède, écrit **après** le test, à partir des preuves réellement capturées — jamais avant.
+
+#### Critères d'échec immédiat — arrêter le test tout de suite
+
+N'importe lequel de ces signaux doit interrompre le test en cours, pas seulement être noté pour plus tard :
+
+- `gpubnb-agent diagnose` (PC A) rapporte autre chose qu'exactement un GPU réel, Docker disponible et runtime NVIDIA disponible.
+- Un job passe en `QUARANTINED` ou déclenche `diagnostic_cleanup_unverified`/`gpu_proof_cleanup_unverified`.
+- Deux jobs exclusifs apparaissent `RUNNING` simultanément sur la même machine (échec direct du correctif de Priorité 4 — voir aussi `BETA_PRIVATE_ROLLBACK.md` section B.4).
+- Toute température GPU rapportée ≥ 85 °C (même règle absolue que pendant les tests de robustesse RC1 — arrêt immédiat, refroidissement avant toute reprise).
+- `nvidia-smi` sur PC A montre un processus résiduel après la fin annoncée d'un job.
+- L'API renvoie une erreur 5xx de façon répétée (pas un 4xx isolé et attendu, comme un 409 de conflit normal).
+- Le mode `DEV_PAYMENT_BYPASS` s'avère désactivé sur l'instance testée en cours de test (ne jamais continuer à réserver dans ce cas — voir `BETA_PRIVATE_READINESS.md` section 2.6).
+
+#### Nettoyage et rollback après le test (réussi ou interrompu)
+
+1. `gpubnb-agent stop` sur PC A.
+2. `docker ps -a` et `docker rm` de tout conteneur résiduel constaté (ne devrait normalement rien trouver — voir critères d'échec ci-dessus si ce n'est pas le cas).
+3. Si une machine reste `QUARANTINED` : suivre `BETA_PRIVATE_OPERATIONS.md` section 5 (vérification physique du GPU avant toute levée manuelle — jamais automatique).
+4. Si le test a modifié temporairement un `gpuUuid` pour l'étape E (exclusivité croisée) : restaurer la valeur réelle rapportée par l'agent avant de considérer PC A prêt pour un usage normal — un `gpuUuid` de test laissé en place fausserait toute réservation ultérieure.
+5. Retour à l'état `AVAILABLE` confirmé (§1.8 « Retour AVAILABLE ») avant de clore la session de test.
+6. En cas d'incident dépassant ce protocole (donnée financière touchée, comportement inattendu non couvert par les critères d'échec ci-dessus) : basculer sur `BETA_PRIVATE_ROLLBACK.md` section B dans son ensemble, pas seulement ce nettoyage local.
 
 ## Partie 2 — Plan de test fonctionnel de la bêta privée
 

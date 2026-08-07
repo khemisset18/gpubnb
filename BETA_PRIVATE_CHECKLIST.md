@@ -29,7 +29,9 @@
 - [ ] `BETA_PRIVATE_OPERATIONS.md` — les trois processus (API, Delivery Worker, Sweep Scheduler) confirmés comme démarrant réellement dans l'environnement de déploiement cible.
 - [ ] `BETA_PRIVATE_ROLLBACK.md` — procédure lue et comprise par au moins deux personnes de l'équipe avant ouverture.
 
-## Validation multi-machines (Partie 1 de `BETA_PRIVATE_TEST_PLAN.md`) — AUCUNE case ne doit être cochée sans exécution réelle
+## Validation multi-machines (Partie 1 de `BETA_PRIVATE_TEST_PLAN.md`)
+
+**STATUT : `PENDING_PHYSICAL_VALIDATION`** — deuxième PC physique pas encore disponible (2026-08-07). Protocole et checklist exacte prêts (`BETA_PRIVATE_TEST_PLAN.md` §1.8-1.9), vérifiés exécutables sans aucune modification de code. **AUCUNE case ci-dessous ne doit être cochée sans exécution réelle.**
 
 - [ ] Étape A — diagnostic GPU réel sur PC A.
 - [ ] Étape B — liaison via code temporaire depuis PC B.
@@ -42,8 +44,8 @@
 ## Paiement (voir `BETA_PRIVATE_READINESS.md` section 2)
 
 - [x] Vérification on-chain du règlement (`confirmSettlement`) comblée en code — commit `f29941e`, 20 tests. Reste non exercée contre un déploiement réel (aucun déploiement n'existe encore).
-- [ ] Décision provisoire (section 2.6 de `BETA_PRIVATE_READINESS.md` : aucun argent réel, aucun Mainnet, `DEV_PAYMENT_BYPASS` ou Devnet contrôlé uniquement) **reconfirmée explicitement** par le porteur du produit avant ouverture.
-- [ ] Si Devnet réel choisi : programme déployé, `Anchor.toml`/`ESCROW_PROGRAM_ID` mis à jour, `anchor test` rejoué contre le déploiement réel, et la vérification on-chain du règlement exercée au moins une fois contre une vraie transaction (pas seulement des fixtures de test).
+- [x] Décision de périmètre **confirmée officiellement** par le porteur du produit (2026-08-07, section 2.6 de `BETA_PRIVATE_READINESS.md`) : `DEV_PAYMENT_BYPASS=true` pour la première bêta privée, aucun Devnet réel avant une phase de test séparée, aucun paiement réel (même Devnet) avant validation avec preuves de toute la chaîne de règlement on-chain.
+- [ ] Phase de test Devnet séparée (hors périmètre de la première bêta privée) : programme déployé, `Anchor.toml`/`ESCROW_PROGRAM_ID` mis à jour, `anchor test` rejoué contre le déploiement réel, et la vérification on-chain du règlement exercée au moins une fois contre une vraie transaction (pas seulement des fixtures de test) — à ne considérer qu'après la première bêta privée en mode bypass.
 
 ## Exploitation
 
