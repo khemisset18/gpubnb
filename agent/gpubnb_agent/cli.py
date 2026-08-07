@@ -19,6 +19,7 @@ from typing import Any
 
 from . import __version__
 from .client import ApiClient, agent_request, heartbeat
+from .instance_lock import acquire_instance_lock, query_lock_holder
 from .runner import (
     cleanup_workspace,
     gpu_proof_command,
@@ -194,85 +195,14 @@ def _agent_process_command() -> list[str]:
     return [sys.executable, "-m", "gpubnb_agent", "_run"]
 
 
-def _process_record() -> dict[str, Any] | None:
-    try:
-        value = json.loads(pid_path().read_text(encoding="ascii"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
-    if not isinstance(value, dict):
-        return None
-    pid = value.get("pid")
-    executable = value.get("executable")
-    mode = value.get("mode")
-    if (
-        not isinstance(pid, int)
-        or pid <= 0
-        or not isinstance(executable, str)
-        or not executable
-        or mode not in {"_run", "_service"}
-    ):
-        return None
-    return {"pid": pid, "executable": executable, "mode": mode}
-
-
-def _process_matches(pid: int, executable: str, mode: str) -> bool:
-    if mode not in {"_run", "_service"}:
-        return False
-    try:
-        if os.name == "nt":
-            command = (
-                f"$p=Get-CimInstance Win32_Process -Filter 'ProcessId={pid}';"
-                "if($p){@{ExecutablePath=$p.ExecutablePath;CommandLine=$p.CommandLine}"
-                "|ConvertTo-Json -Compress}"
-            )
-            result = subprocess.run(
-                ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                check=False,
-            )
-            if result.returncode != 0 or not result.stdout.strip():
-                return False
-            process = json.loads(result.stdout)
-            actual_executable = str(process.get("ExecutablePath") or "")
-            command_line = str(process.get("CommandLine") or "")
-            return (
-                os.path.normcase(os.path.abspath(actual_executable))
-                == os.path.normcase(os.path.abspath(executable))
-                and mode in command_line.split()
-            )
-
-        executable_path = Path(f"/proc/{pid}/exe")
-        command_line_path = Path(f"/proc/{pid}/cmdline")
-        if executable_path.exists() and command_line_path.exists():
-            actual_executable = str(executable_path.resolve())
-            command_line = command_line_path.read_bytes().replace(b"\0", b" ").decode(
-                "utf-8", errors="replace"
-            )
-            return os.path.samefile(actual_executable, executable) and mode in command_line.split()
-
-        result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "command="],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        return (
-            result.returncode == 0
-            and Path(executable).name in result.stdout
-            and mode in result.stdout.split()
-        )
-    except (json.JSONDecodeError, OSError, subprocess.SubprocessError):
-        return False
-
-
 def _running_agent_pid() -> int | None:
-    record = _process_record()
-    if record and _process_matches(record["pid"], record["executable"], record["mode"]):
-        return int(record["pid"])
-    return None
+    # Backed by the atomic OS-level lock (instance_lock.py), not a PID/
+    # executable heuristic: query_lock_holder() only reports a holder when a
+    # live process genuinely still owns the lock, which the kernel itself
+    # guarantees even across a hard kill of the previous instance.
+    holder = query_lock_holder()
+    pid = holder.get("pid") if holder else None
+    return int(pid) if isinstance(pid, int) else None
 
 
 def heartbeat_loop(
@@ -280,48 +210,36 @@ def heartbeat_loop(
 ) -> int:
     if process_mode not in {"_run", "_service"}:
         raise RuntimeError("invalid_agent_process_mode")
-    config = load_config()
-    machine_id = config.get("machineId")
-    if not isinstance(machine_id, str):
-        raise RuntimeError("Machine non liée. Exécutez : gpubnb-agent link CODE")
-    key = load_key()
-    interval = max(5, min(60, int(config.get("intervalSeconds", 10))))
-    failures = 0
-    pid_path().write_text(
-        json.dumps(
-            {
-                "pid": os.getpid(),
-                "executable": sys.executable,
-                "mode": process_mode,
-            }
-        ),
-        encoding="ascii",
-    )
-    if os.name != "nt":
-        pid_path().chmod(0o600)
-    try:
-        while stop_event is None or not stop_event.is_set():
-            try:
-                result = heartbeat(client(config), key, machine_id)
-                print_json({"event": "heartbeat", "result": result})
-                run_next_job(client(config), key, machine_id, config)
-                failures = 0
-            except Exception as exc:
-                failures = min(failures + 1, 8)
-                print_json({"event": "heartbeat_error", "type": type(exc).__name__, "message": str(exc)[:300]})
-            delay = min(300, interval * (2 ** failures)) if failures else interval
-            if stop_event is not None:
-                stop_event.wait(delay)
-            else:
-                time.sleep(delay)
-    except KeyboardInterrupt:
-        print("Agent arrêté.")
-        return 0
-    finally:
+    # Acquired first, before any other work: atomic and OS-enforced, so a
+    # second instance is rejected deterministically instead of racing on a
+    # read-then-write PID file. See instance_lock.py for why this also makes
+    # "stale lock" a non-issue at the OS level.
+    with acquire_instance_lock(process_mode):
+        config = load_config()
+        machine_id = config.get("machineId")
+        if not isinstance(machine_id, str):
+            raise RuntimeError("Machine non liée. Exécutez : gpubnb-agent link CODE")
+        key = load_key()
+        interval = max(5, min(60, int(config.get("intervalSeconds", 10))))
+        failures = 0
         try:
-            pid_path().unlink()
-        except FileNotFoundError:
-            pass
+            while stop_event is None or not stop_event.is_set():
+                try:
+                    result = heartbeat(client(config), key, machine_id)
+                    print_json({"event": "heartbeat", "result": result})
+                    run_next_job(client(config), key, machine_id, config)
+                    failures = 0
+                except Exception as exc:
+                    failures = min(failures + 1, 8)
+                    print_json({"event": "heartbeat_error", "type": type(exc).__name__, "message": str(exc)[:300]})
+                delay = min(300, interval * (2 ** failures)) if failures else interval
+                if stop_event is not None:
+                    stop_event.wait(delay)
+                else:
+                    time.sleep(delay)
+        except KeyboardInterrupt:
+            print("Agent arrêté.")
+            return 0
 
 
 def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, Any]) -> None:
@@ -449,8 +367,15 @@ def command_start(args: argparse.Namespace) -> int:
             if process.poll() is not None:
                 print("L'agent n'a pas pu démarrer. Consultez les journaux.", file=sys.stderr)
                 return 1
-            if _running_agent_pid() == process.pid:
-                print(f"Agent démarré en arrière-plan (PID {process.pid}).")
+            # Report the PID that actually holds the lock, not process.pid:
+            # on this Windows/venv launcher setup the two can legitimately
+            # differ (the venv python.exe launched here is not always the
+            # same OS process that ends up running _run and acquiring the
+            # lock). We already confirmed nothing held the lock before
+            # spawning, so any holder appearing now is this spawn's doing.
+            holder_pid = _running_agent_pid()
+            if holder_pid is not None:
+                print(f"Agent démarré en arrière-plan (PID {holder_pid}).")
                 return 0
             time.sleep(0.05)
         process.terminate()
