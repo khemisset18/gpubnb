@@ -18,13 +18,13 @@ export function isRetryableBookingTransactionError(e: unknown): boolean {
 export async function runBookingTransaction<T>(
   db: PrismaClient,
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
-  options: { maxAttempts?: number; baseDelayMs?: number } = {},
+  options: { maxAttempts?: number; baseDelayMs?: number; isolationLevel?: Prisma.TransactionIsolationLevel } = {},
 ): Promise<T> {
   const maxAttempts = options.maxAttempts ?? 3;
   const baseDelayMs = options.baseDelayMs ?? 25;
   for (let attempt = 1; ; attempt++) {
     try {
-      return await db.$transaction(fn);
+      return await db.$transaction(fn, options.isolationLevel ? { isolationLevel: options.isolationLevel } : undefined);
     } catch (e) {
       if (attempt >= maxAttempts || !isRetryableBookingTransactionError(e)) throw e;
       await new Promise(resolve => setTimeout(resolve, baseDelayMs * attempt + Math.floor(Math.random() * baseDelayMs)));

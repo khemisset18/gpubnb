@@ -96,3 +96,87 @@ export async function verifyOpenEscrowTransaction(input: {
   const secondsStored = account.data.readUInt32LE(112);
   return buyerStored.equals(input.buyer) && providerStored.equals(input.provider) && amountStored === input.amount && secondsStored === input.expectedSeconds;
 }
+
+/**
+ * Verifies a settlement (finalize/resolve_dispute) transaction actually happened
+ * on-chain, with the exact payout amounts computed off-chain — the counterpart to
+ * verifyOpenEscrowTransaction for the deposit side. Before this, confirmSettlement
+ * only checked that its `signature` argument looked like a base58 string; nothing
+ * proved the escrow was ever actually settled on-chain for that amount.
+ *
+ * settle() in the Anchor program (programs/gpu_escrow/src/lib.rs) closes the escrow
+ * PDA to the buyer (`close = buyer`), so unlike the deposit path this can't re-read
+ * the account's final state after the fact — the account no longer exists once
+ * settlement succeeds. Instead this reads the transaction's own balance deltas,
+ * which are recorded regardless of whether the account they belonged to still exists.
+ */
+export type ParsedSettlementTransaction = {
+  meta: { err: unknown; logMessages?: string[] | null; preBalances?: number[]; postBalances?: number[] } | null;
+  transaction: { message: { accountKeys: Array<{ pubkey: PublicKey; writable: boolean }> } };
+};
+
+/**
+ * The decision logic, factored out from the RPC fetch so it can be unit-tested with
+ * fixture transactions instead of a live Solana connection (verifyOpenEscrowTransaction
+ * predates this pattern and has no equivalent test — this function is what the
+ * on-chain settlement audit specifically required tests for).
+ */
+export function evaluateSettlementTransaction(
+  tx: ParsedSettlementTransaction | null,
+  input: {
+    programId: PublicKey;
+    escrow: PublicKey;
+    buyer: PublicKey;
+    provider: PublicKey;
+    platform: PublicKey;
+    providerLamports: bigint;
+    platformLamports: bigint;
+    refundLamports: bigint;
+  },
+): boolean {
+  if (!tx || tx.meta?.err) return false;
+  const keys = tx.transaction.message.accountKeys;
+  const programPresent = keys.some(k => k.pubkey.equals(input.programId));
+  const escrowPresent = keys.some(k => k.pubkey.equals(input.escrow) && k.writable);
+  const settled = tx.meta?.logMessages?.some(line => line.includes('Instruction: Finalize') || line.includes('Instruction: ResolveDispute')) ?? false;
+  if (!programPresent || !escrowPresent || !settled) return false;
+
+  const balanceDelta = (pubkey: PublicKey): bigint | null => {
+    const index = keys.findIndex(k => k.pubkey.equals(pubkey));
+    const post = tx.meta?.postBalances?.[index];
+    const pre = tx.meta?.preBalances?.[index];
+    if (index === -1 || post === undefined || pre === undefined) return null;
+    return BigInt(post) - BigInt(pre);
+  };
+  const providerDelta = balanceDelta(input.provider);
+  const platformDelta = balanceDelta(input.platform);
+  const buyerDelta = balanceDelta(input.buyer);
+  if (providerDelta === null || platformDelta === null || buyerDelta === null) return false;
+
+  // provider/platform are never the account being closed, so their balance in this
+  // transaction can only change by the settlement transfer: exact match required. The
+  // buyer additionally reclaims the escrow PDA's own rent-exempt reserve on top of
+  // their refund when the account closes (`close = buyer`), so only a lower bound is
+  // checked — a buyer can never be shorted, and the extra is provably their own rent
+  // coming back, never a diversion of provider/platform funds (those are already
+  // checked exactly above).
+  return providerDelta === input.providerLamports && platformDelta === input.platformLamports && buyerDelta >= input.refundLamports;
+}
+
+export async function verifySettlementTransaction(input: {
+  rpcUrl: string;
+  commitment: 'confirmed' | 'finalized';
+  programId: PublicKey;
+  signature: string;
+  escrow: PublicKey;
+  buyer: PublicKey;
+  provider: PublicKey;
+  platform: PublicKey;
+  providerLamports: bigint;
+  platformLamports: bigint;
+  refundLamports: bigint;
+}): Promise<boolean> {
+  const connection = new Connection(input.rpcUrl, input.commitment);
+  const tx = await connection.getParsedTransaction(input.signature, { commitment: input.commitment, maxSupportedTransactionVersion: 0 });
+  return evaluateSettlementTransaction(tx, input);
+}

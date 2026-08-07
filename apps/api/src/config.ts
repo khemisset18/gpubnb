@@ -25,6 +25,8 @@ const schema = z.object({
   HEARTBEAT_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(120).default(25),
   HEARTBEAT_OFFLINE_SECONDS: z.coerce.number().int().min(15).max(300).default(60),
   JOB_STALE_AFTER_SECONDS: z.coerce.number().int().min(120).max(3600).default(900),
+  SWEEP_INTERVAL_MS: z.coerce.number().int().min(5_000).max(3_600_000).default(30_000),
+  SWEEP_LOCK_TTL_MS: z.coerce.number().int().min(5_000).max(600_000).default(60_000),
   COMMISSION_BPS: z.coerce.number().int().min(0).max(1000).default(500),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_ANON_KEY: z.string().min(20).optional(),

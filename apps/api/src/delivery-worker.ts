@@ -18,6 +18,7 @@ import {
   type ClaimedOutboxEvent,
 } from './delivery-store.js';
 import { validateDeliveryKey } from './reliable-delivery.js';
+import { FailureTracker, connectWithRetry, interruptibleSleep } from './delivery-worker-resilience.js';
 
 const POLL_INTERVAL_MS = 250;
 const HEALTH_INTERVAL_MS = 15_000;
@@ -229,62 +230,99 @@ async function main(): Promise<void> {
   process.once('SIGINT', stop);
 
   try {
-    await redis.connect();
-    await db.$connect();
+    const connected = await connectWithRetry(
+      async () => { await redis.connect(); await db.$connect(); },
+      () => stopping,
+      (event) => console.error(JSON.stringify(event)),
+    );
+    if (connected === 'stopped') {
+      console.info(JSON.stringify({ level: 'info', message: 'delivery_worker_stopped_before_connect', workerId }));
+      return;
+    }
     console.info(JSON.stringify({ level: 'info', message: 'delivery_worker_started', workerId }));
 
+    const tracker = new FailureTracker();
     while (!stopping) {
-      const now = Date.now();
-      if (now - lastReconcileAt >= RECONCILE_INTERVAL_MS) {
-        try {
-          const reconciliation = await reconcileDevelopmentBookings(db, new Date(now));
-          if (Object.values(reconciliation).some((value) => value > 0)) {
-            console.info(JSON.stringify({ level: 'info', message: 'gpu_booking_reconciled', ...reconciliation }));
+      try {
+        const now = Date.now();
+        if (now - lastReconcileAt >= RECONCILE_INTERVAL_MS) {
+          // lastReconcileAt is updated before the attempt (not after a successful one),
+          // so a persistent failure is retried at the normal interval, never busy-looped.
+          lastReconcileAt = now;
+          try {
+            const reconciliation = await reconcileDevelopmentBookings(db, new Date(now));
+            if (Object.values(reconciliation).some((value) => value > 0)) {
+              console.info(JSON.stringify({ level: 'info', message: 'gpu_booking_reconciled', ...reconciliation }));
+            }
+          } catch (error) {
+            failed += 1;
+            console.error(JSON.stringify({
+              level: 'error',
+              message: 'gpu_booking_reconcile_failed',
+              error: error instanceof Error ? error.message.slice(0, 300) : 'unknown_error',
+            }));
+            // Rethrown deliberately: a reconcile-specific failure used to be swallowed
+            // here and never reached the FailureTracker below, so a persistently broken
+            // reconcile query (distinct from a general DB outage, which claimOutboxEvents
+            // would also hit) could fail forever without ever tripping the bounded-retry
+            // give-up/restart safety valve. Routing it through the same catch as
+            // claimOutboxEvents keeps exactly one place that decides backoff/give-up.
+            throw error;
           }
-        } catch (error) {
-          failed += 1;
-          console.error(JSON.stringify({
-            level: 'error',
-            message: 'gpu_booking_reconcile_failed',
-            error: error instanceof Error ? error.message.slice(0, 300) : 'unknown_error',
-          }));
         }
-        lastReconcileAt = now;
-      }
 
-      const events = await claimOutboxEvents(db, workerId, 500, 45);
-      inFlight = events.length;
-      if (events.length === 0) {
-        if (now - lastHealthAt >= HEALTH_INTERVAL_MS) {
-          const backlog = await deliveryBacklog(db);
-          console.info(JSON.stringify({
-            level: 'info', message: 'delivery_worker_health', workerId, published, failed, leaseLost,
-            backlog: Object.fromEntries(Object.entries(backlog).map(([key, value]) => [key, value.toString()])),
-          }));
-          lastHealthAt = now;
+        const events = await claimOutboxEvents(db, workerId, 500, 45);
+        inFlight = events.length;
+        if (events.length === 0) {
+          if (now - lastHealthAt >= HEALTH_INTERVAL_MS) {
+            const backlog = await deliveryBacklog(db);
+            console.info(JSON.stringify({
+              level: 'info', message: 'delivery_worker_health', workerId, published, failed, leaseLost,
+              backlog: Object.fromEntries(Object.entries(backlog).map(([key, value]) => [key, value.toString()])),
+            }));
+            lastHealthAt = now;
+          }
+          tracker.recordSuccess();
+          await interruptibleSleep(POLL_INTERVAL_MS, () => stopping);
+          continue;
         }
-        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-        continue;
-      }
 
-      await runBounded(events, MAX_IN_FLIGHT, async (event) => {
-        try {
-          await publish(redis, event);
-          const acknowledged = await markOutboxPublished(db, event.id, workerId);
-          if (acknowledged) published += 1;
-          else leaseLost += 1;
-        } catch (error) {
-          failed += 1;
-          const outcome = await rescheduleOutboxFailure(db, event, workerId, error);
-          if (outcome === 'LEASE_LOST') leaseLost += 1;
-          console.error(JSON.stringify({
-            level: 'error', message: 'outbox_publish_failed', workerId, eventId: event.id,
-            attempts: event.attempts, outcome,
-            error: error instanceof Error ? error.message.slice(0, 300) : 'unknown_error',
-          }));
+        await runBounded(events, MAX_IN_FLIGHT, async (event) => {
+          try {
+            await publish(redis, event);
+            const acknowledged = await markOutboxPublished(db, event.id, workerId);
+            if (acknowledged) published += 1;
+            else leaseLost += 1;
+          } catch (error) {
+            failed += 1;
+            const outcome = await rescheduleOutboxFailure(db, event, workerId, error);
+            if (outcome === 'LEASE_LOST') leaseLost += 1;
+            console.error(JSON.stringify({
+              level: 'error', message: 'outbox_publish_failed', workerId, eventId: event.id,
+              attempts: event.attempts, outcome,
+              error: error instanceof Error ? error.message.slice(0, 300) : 'unknown_error',
+            }));
+          }
+        });
+        inFlight = 0;
+        tracker.recordSuccess();
+      } catch (error) {
+        // A per-event publish failure is already caught and rescheduled
+        // above without reaching here — this only catches failures in the
+        // iteration's own plumbing (e.g. claimOutboxEvents/reconcile losing
+        // the DB/Redis connection outright), which used to crash the whole
+        // process immediately with no retry at all.
+        const decision = tracker.recordFailure();
+        console.error(JSON.stringify({
+          level: 'error', message: 'delivery_worker_iteration_failed', workerId,
+          consecutiveFailures: tracker.failureCount,
+          error: error instanceof Error ? error.message.slice(0, 300) : 'unknown_error',
+        }));
+        if (decision.action === 'give_up') {
+          throw new Error(`delivery_worker_giving_up_after_sustained_failures:${tracker.failureCount}`);
         }
-      });
-      inFlight = 0;
+        await interruptibleSleep(decision.delayMs, () => stopping);
+      }
     }
   } finally {
     const deadline = Date.now() + SHUTDOWN_GRACE_MS;

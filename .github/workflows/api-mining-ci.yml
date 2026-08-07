@@ -28,6 +28,7 @@ jobs:
         working-directory: apps/api
     env:
       DATABASE_URL: postgresql://gpubnb:gpubnb@localhost:5432/gpubnb_ci?schema=public
+      REDIS_URL: redis://localhost:6379
       NODE_ENV: test
     services:
       postgres:
@@ -40,6 +41,23 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U gpubnb -d gpubnb_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      # Required since feat/beta-readiness-hardening: sweep-lock.test.ts and
+      # sweep-cycle.test.ts exercise the real distributed lock (SET NX PX + a Lua
+      # release script) against a live Redis, deliberately not mocked — matching
+      # this repo's convention of testing locks against the real primitive (see
+      # agent/gpubnb_agent/instance_lock.py's own real-OS-lock tests). This
+      # workflow previously only provisioned Postgres because no test before this
+      # branch made a mandatory live Redis connection (ci.yml already provisions
+      # one; this workflow had simply never needed to).
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
