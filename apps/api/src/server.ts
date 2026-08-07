@@ -1,7 +1,7 @@
 import Fastify from 'fastify'; import helmet from '@fastify/helmet'; import rateLimit from '@fastify/rate-limit'; import cookie from '@fastify/cookie'; import fastifyStatic from '@fastify/static'; import path from 'node:path'; import fs from 'node:fs'; import fsp from 'node:fs/promises'; import { Transform } from 'node:stream';
 import { Prisma, PrismaClient, MachineConnectivity, MachineOperational, ModerationStatus, ListingStatus, BookingStatus, PaymentStatus, JobStatus, JobType, MachineWorkspaceState, WorkspaceRelease, WorkspaceSessionStatus, SessionTerminationReason } from '@prisma/client';
 import { Redis } from 'ioredis'; import { z, ZodError } from 'zod'; import bs58 from 'bs58'; import nacl from 'tweetnacl'; import crypto from 'node:crypto';
-import { config } from './config.js'; import { createNonce,consumeNonce,issueSession,requireSession,revokeSession,walletKey } from './auth.js'; import { assertTrustedOrigin, constantTimeToken, verifyAgentRequest, verifyAgentRequestV2, recordSecurityFailure } from './security.js'; import {bookingEscrowExpiryUnix,calculateSettlement,bigintJson} from './settlement.js'; import { buildOpenEscrowTransaction, deriveEscrowAddresses, verifyOpenEscrowTransaction } from './solana.js'; import { PublicKey } from '@solana/web3.js';
+import { config } from './config.js'; import { createNonce,consumeNonce,issueSession,requireSession,revokeSession,walletKey } from './auth.js'; import { assertTrustedOrigin, constantTimeToken, verifyAgentRequest, verifyAgentRequestV2, recordSecurityFailure } from './security.js'; import {bookingEscrowExpiryUnix,calculateSettlement,bigintJson} from './settlement.js'; import { buildOpenEscrowTransaction, deriveEscrowAddresses, verifyOpenEscrowTransaction, verifySettlementTransaction } from './solana.js'; import { PublicKey } from '@solana/web3.js';
 import { canTransitionJob } from './job-state.js';
 import { workspaceManifest, workspaceManifests } from './workspace-manifests.js';
 import { analyzeWorkspace } from './workspace-compatibility.js';
@@ -10,7 +10,7 @@ import { runSweepCycle } from './sweep-cycle.js';
 import { processAcceleratorHeartbeat } from './accelerator-heartbeat-service.js';
 import { listOwnerMachineAccelerators, listPublicMachineAccelerators } from './accelerator-public-view.js';
 import { registerDeviceAuthorizationRoutes } from './device-authorization-routes.js';
-import { requestSettlement, confirmSettlement } from './settlement-transactions.js';
+import { requestSettlement, confirmSettlement, previewSettlement } from './settlement-transactions.js';
 import { allocateBookingResources, ResourceAllocationError } from './resource-allocation-service.js';
 import { runBookingTransaction, BOOKING_BUSINESS_ERRORS } from './booking-transaction-retry.js';
 import { findGpuExclusivityConflict, isExclusiveJobType } from './gpu-exclusivity.js';
@@ -196,7 +196,30 @@ app.post('/internal/sweep-offline',{config:{rateLimit:{max:30,timeWindow:'1 minu
 });
 const settlementJson=(s:{[k:string]:unknown})=>Object.fromEntries(Object.entries(s).map(([k,v])=>[k,typeof v==='bigint'?v.toString():v]));
 app.post('/internal/bookings/:id/settlement/request',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{if(!constantTimeToken(req.headers.authorization?.replace(/^Bearer\s+/i,''),config.INTERNAL_SERVICE_TOKEN))return reply.code(401).send({error:'unauthorized'});const {id}=z.object({id:z.string().cuid()}).parse(req.params);try{const result=await requestSettlement(db,id);return {...result,settlement:settlementJson(result.settlement)}}catch(e){req.log.warn({err:e,bookingId:id},'settlement_request_failed');return reply.code(409).send({error:e instanceof Error?e.message:'settlement_request_failed'})}});
-app.post('/internal/bookings/:id/settlement/confirm',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{if(!constantTimeToken(req.headers.authorization?.replace(/^Bearer\s+/i,''),config.INTERNAL_SERVICE_TOKEN))return reply.code(401).send({error:'unauthorized'});const {id}=z.object({id:z.string().cuid()}).parse(req.params);const {signature}=z.object({signature:z.string().min(32).max(128)}).parse(req.body);try{const result=await confirmSettlement(db,id,signature);return {...result,settlement:settlementJson(result.settlement)}}catch(e){req.log.warn({err:e,bookingId:id},'settlement_confirm_failed');return reply.code(409).send({error:e instanceof Error?e.message:'settlement_confirm_failed'})}});
+app.post('/internal/bookings/:id/settlement/confirm',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{
+ if(!constantTimeToken(req.headers.authorization?.replace(/^Bearer\s+/i,''),config.INTERNAL_SERVICE_TOKEN))return reply.code(401).send({error:'unauthorized'});
+ const {id}=z.object({id:z.string().cuid()}).parse(req.params);
+ const {signature}=z.object({signature:z.string().min(32).max(128)}).parse(req.body);
+ // Bêta privée : aucun argent réel n'est jamais en jeu tant que DEV_PAYMENT_BYPASS reste actif
+ // (interdit en production par config.ts). Seul ce mode ou un Devnet contrôlé sont autorisés —
+ // voir BETA_PRIVATE_READINESS.md section 2. En dehors du bypass, une preuve on-chain réelle du
+ // règlement est exigée avant toute écriture DB ; en reprise idempotente (signature déjà
+ // enregistrée), confirmSettlement gère seul le cas, sans revérification on-chain inutile.
+ const bypass=config.NODE_ENV!=='production'&&config.DEV_PAYMENT_BYPASS==='true';
+ const alreadyRecorded=await db.payment.findUnique({where:{bookingId:id},select:{settlementSignature:true}});
+ if(!bypass&&!alreadyRecorded?.settlementSignature){
+  if(config.ESCROW_PROGRAM_ID==='NOT_DEPLOYED_YET')return reply.code(503).send({error:'escrow_not_deployed'});
+  const booking=await db.booking.findFirst({where:{id},include:{buyer:true,listing:{include:{owner:true}}}});
+  if(!booking)return reply.code(404).send({error:'booking_not_found'});
+  let preview;
+  try{preview=await previewSettlement(db,id)}catch(e){req.log.warn({err:e,bookingId:id},'settlement_confirm_preview_failed');return reply.code(409).send({error:e instanceof Error?e.message:'settlement_not_previewable'})}
+  const programId=new PublicKey(config.ESCROW_PROGRAM_ID);
+  const {escrow}=deriveEscrowAddresses(programId,id);
+  const verified=await verifySettlementTransaction({rpcUrl:config.SOLANA_RPC_URL,commitment:config.SOLANA_COMMITMENT,programId,signature,escrow,buyer:new PublicKey(booking.buyer.wallet),provider:new PublicKey(booking.listing.owner.wallet),platform:new PublicKey(config.PLATFORM_WALLET),providerLamports:preview.settlement.providerLamports,platformLamports:preview.settlement.platformLamports,refundLamports:preview.settlement.refundLamports});
+  if(!verified)return reply.code(409).send({error:'invalid_settlement_transaction'});
+ }
+ try{const result=await confirmSettlement(db,id,signature);return {...result,settlement:settlementJson(result.settlement)}}catch(e){req.log.warn({err:e,bookingId:id},'settlement_confirm_failed');return reply.code(409).send({error:e instanceof Error?e.message:'settlement_confirm_failed'})}
+});
 app.post('/internal/bookings/:id/payment/unfreeze',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{if(!constantTimeToken(req.headers.authorization?.replace(/^Bearer\s+/i,''),config.INTERNAL_SERVICE_TOKEN))return reply.code(401).send({error:'unauthorized'});const {id}=z.object({id:z.string().cuid()}).parse(req.params);const updated=await db.payment.updateMany({where:{bookingId:id,status:PaymentStatus.FROZEN},data:{status:PaymentStatus.ESCROW_FUNDED}});if(updated.count!==1)return reply.code(409).send({error:'payment_not_frozen'});req.log.warn({bookingId:id},'payment_manually_unfrozen');return {ok:true,bookingId:id,status:PaymentStatus.ESCROW_FUNDED};});
 const storageDir=path.resolve(config.FILE_STORAGE_DIR);fs.mkdirSync(storageDir,{recursive:true});
 app.post('/jobs/:id/artifacts',{config:{rateLimit:{max:20,timeWindow:'1 minute'},bodyLimit:config.MAX_ARTIFACT_BYTES}},async(req,reply)=>{const {id}=z.object({id:z.string().cuid()}).parse(req.params);const body=z.object({machineId:z.string().cuid(),kind:z.string().max(32).default('result'),sha256:z.string().regex(/^[a-f0-9]{64}$/),sizeBytes:z.number().int().min(1).max(config.MAX_ARTIFACT_BYTES)}).parse(req.query);const routePath=`/jobs/${id}/artifacts`;if(!await authenticatedAgentWithBody(body.machineId,'POST',routePath,req.headers,req.rawBody))return reply.code(401).send({error:'invalid_agent_request'});const job=await db.job.findFirst({where:{id,machineId:body.machineId},select:{id:true,renterId:true}});if(!job)return reply.code(404).send({error:'job_not_found'});const data=await req.body;if(!Buffer.isBuffer(data)&&typeof data!=='string')return reply.code(400).send({error:'binary_body_required'});const buf=Buffer.from(data);if(buf.length>config.MAX_ARTIFACT_BYTES)return reply.code(413).send({error:'artifact_too_large'});const hash=crypto.createHash('sha256').update(buf).digest('hex');if(hash!==body.sha256)return reply.code(400).send({error:'integrity_check_failed'});const storageKey=`${id}/${body.kind}/${body.sha256}`;const filePath=path.join(storageDir,storageKey);await fsp.mkdir(path.dirname(filePath),{recursive:true});await fsp.writeFile(filePath,buf);const artifact=await db.jobArtifact.create({data:{jobId:id,kind:body.kind,sha256:body.sha256,sizeBytes:buf.length,storageKey}});return reply.code(201).send({id:artifact.id,sha256:body.sha256,sizeBytes:buf.length,storageKey});});

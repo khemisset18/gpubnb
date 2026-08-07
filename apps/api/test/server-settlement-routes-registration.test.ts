@@ -5,10 +5,11 @@ import test from 'node:test';
 test('settlement finalization is reachable via internal, token-protected routes', async () => {
   const source = await readFile(new URL('../src/server.ts', import.meta.url), 'utf8');
 
-  assert.ok(
-    source.includes("import { requestSettlement, confirmSettlement } from './settlement-transactions.js';"),
-    'settlement-transactions functions must be imported',
-  );
+  const settlementImport = source.split('\n').find(line => line.includes("from './settlement-transactions.js'"));
+  assert.ok(settlementImport, 'settlement-transactions module must be imported');
+  for (const fn of ['requestSettlement', 'confirmSettlement', 'previewSettlement']) {
+    assert.ok(settlementImport!.includes(fn), `${fn} must be imported from settlement-transactions.js`);
+  }
 
   const requestRoute = source.indexOf("app.post('/internal/bookings/:id/settlement/request'");
   const confirmRoute = source.indexOf("app.post('/internal/bookings/:id/settlement/confirm'");
@@ -16,7 +17,10 @@ test('settlement finalization is reachable via internal, token-protected routes'
   assert.ok(confirmRoute >= 0, 'settlement confirm route must exist');
 
   const requestHandler = source.slice(requestRoute, source.indexOf('\n', requestRoute));
-  const confirmHandler = source.slice(confirmRoute, source.indexOf('\n', confirmRoute));
+  // confirm is multi-line since it gates on-chain settlement verification (see
+  // settlement-confirm-onchain-verification.test.ts) — grab a generous window rather
+  // than a single line, same convention as the existing finalize-proof route check.
+  const confirmHandler = source.slice(confirmRoute, confirmRoute + 2500);
 
   // Both routes must gate on the internal service token before touching the db,
   // same pattern as the existing /internal/sweep-offline route.
