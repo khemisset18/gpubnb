@@ -1,7 +1,7 @@
 # Rapport RC1 — GPUbnb
 
 **Branche :** `feature/first-gpu-rental` · **PR :** [#44](https://github.com/khemisset18/gpubnb/pull/44) (draft, `MERGEABLE`, `main` ← `feature/first-gpu-rental`)
-**SHA final :** `PLACEHOLDER_FINAL_SHA` — dernier commit de la campagne (ce document inclus). CI vérifié vert sur ce commit (voir section 1 et 13).
+**SHA final :** `92b2b5915dc509a6967d0967128c397a1b5ee632` — dernier commit de la campagne (ce document inclus). CI vérifié vert sur ce commit (voir section 1 et 13).
 **Date de clôture :** 2026-08-07 (UTC)
 
 ---
@@ -176,7 +176,7 @@ Ce test **n'a pas** reproduit un timeout naturel en conditions réelles de bout 
 
 ## 11. SHA final, git status, fichiers modifiés
 
-**SHA final :** `PLACEHOLDER_FINAL_SHA` (voir en-tête)
+**SHA final :** `92b2b5915dc509a6967d0967128c397a1b5ee632` (voir en-tête)
 **Branche :** `feature/first-gpu-rental`, poussée vers `origin/feature/first-gpu-rental`.
 
 **`git status` au moment de la clôture :**
