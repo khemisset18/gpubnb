@@ -246,6 +246,9 @@ async function main(): Promise<void> {
       try {
         const now = Date.now();
         if (now - lastReconcileAt >= RECONCILE_INTERVAL_MS) {
+          // lastReconcileAt is updated before the attempt (not after a successful one),
+          // so a persistent failure is retried at the normal interval, never busy-looped.
+          lastReconcileAt = now;
           try {
             const reconciliation = await reconcileDevelopmentBookings(db, new Date(now));
             if (Object.values(reconciliation).some((value) => value > 0)) {
@@ -258,8 +261,14 @@ async function main(): Promise<void> {
               message: 'gpu_booking_reconcile_failed',
               error: error instanceof Error ? error.message.slice(0, 300) : 'unknown_error',
             }));
+            // Rethrown deliberately: a reconcile-specific failure used to be swallowed
+            // here and never reached the FailureTracker below, so a persistently broken
+            // reconcile query (distinct from a general DB outage, which claimOutboxEvents
+            // would also hit) could fail forever without ever tripping the bounded-retry
+            // give-up/restart safety valve. Routing it through the same catch as
+            // claimOutboxEvents keeps exactly one place that decides backoff/give-up.
+            throw error;
           }
-          lastReconcileAt = now;
         }
 
         const events = await claimOutboxEvents(db, workerId, 500, 45);
