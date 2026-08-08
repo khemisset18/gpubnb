@@ -1,13 +1,6 @@
 import { hostname } from 'node:os';
 import process from 'node:process';
-import {
-  BookingStatus,
-  JobStatus,
-  JobType,
-  MachineOperational,
-  PaymentStatus,
-  PrismaClient,
-} from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { Redis } from 'ioredis';
 import { config } from './config.js';
 import {
@@ -18,20 +11,13 @@ import {
   type ClaimedOutboxEvent,
 } from './delivery-store.js';
 import { validateDeliveryKey } from './reliable-delivery.js';
+import { reconcileDevelopmentBookings } from './dev-booking-reconciler.js';
 
 const POLL_INTERVAL_MS = 250;
 const HEALTH_INTERVAL_MS = 15_000;
 const RECONCILE_INTERVAL_MS = 1_000;
 const SHUTDOWN_GRACE_MS = 20_000;
 const MAX_IN_FLIGHT = 32;
-const TERMINAL_JOB_STATUSES: JobStatus[] = [
-  JobStatus.COMPLETED,
-  JobStatus.FAILED,
-  JobStatus.CANCELLED,
-  JobStatus.TIMED_OUT,
-  JobStatus.REJECTED,
-  JobStatus.QUARANTINED,
-];
 
 function workerIdentity(): string {
   const suffix = process.env.DELIVERY_WORKER_ID ?? `${hostname()}_${process.pid}`;
@@ -73,139 +59,6 @@ async function runBounded<T>(items: T[], limit: number, task: (item: T) => Promi
     }
   });
   await Promise.all(workers);
-}
-
-export async function reconcileDevelopmentBookings(db: PrismaClient, now = new Date()): Promise<{
-  funded: number;
-  queued: number;
-  completed: number;
-  degraded: number;
-}> {
-  let funded = 0;
-  let queued = 0;
-  let completed = 0;
-  let degraded = 0;
-
-  if (config.NODE_ENV !== 'production' && config.DEV_PAYMENT_BYPASS === 'true') {
-    const waiting = await db.booking.findMany({
-      where: {
-        status: BookingStatus.AWAITING_DEPOSIT,
-        startsAt: { lte: new Date(now.getTime() + 5 * 60_000) },
-        endsAt: { gt: now },
-      },
-      select: { id: true, quotedLamports: true },
-      take: 25,
-      orderBy: { createdAt: 'asc' },
-    });
-    for (const booking of waiting) {
-      const changed = await db.$transaction(async (tx) => {
-        const update = await tx.booking.updateMany({
-          where: { id: booking.id, status: BookingStatus.AWAITING_DEPOSIT },
-          data: { status: BookingStatus.FUNDED, depositSignature: `dev-bypass:${booking.id}` },
-        });
-        if (update.count !== 1) return false;
-        await tx.payment.upsert({
-          where: { bookingId: booking.id },
-          update: { grossLamports: booking.quotedLamports, status: PaymentStatus.ESCROW_FUNDED },
-          create: { bookingId: booking.id, grossLamports: booking.quotedLamports, status: PaymentStatus.ESCROW_FUNDED },
-        });
-        return true;
-      });
-      if (changed) funded += 1;
-    }
-  }
-
-  const readyBookings = await db.booking.findMany({
-    where: {
-      status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING] },
-      startsAt: { lte: new Date(now.getTime() + 5 * 60_000) },
-      endsAt: { gt: now },
-      listing: {
-        machine: {
-          connectivity: 'ONLINE',
-          lastCudaProbeOk: true,
-          dockerAvailable: true,
-          nvidiaRuntimeAvailable: true,
-        },
-      },
-    },
-    select: { id: true, buyerId: true, listing: { select: { machineId: true } } },
-    take: 50,
-    orderBy: { startsAt: 'asc' },
-  });
-
-  for (const booking of readyBookings) {
-    const existing = await db.job.findFirst({
-      where: { bookingId: booking.id, type: JobType.GPU_DIAGNOSTIC },
-      select: { id: true },
-    });
-    if (existing) continue;
-    const created = await db.$transaction(async (tx) => {
-      const reserved = await tx.booking.updateMany({
-        where: { id: booking.id, status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING] } },
-        data: { status: BookingStatus.STARTING },
-      });
-      if (reserved.count !== 1) return false;
-      await tx.job.create({
-        data: {
-          bookingId: booking.id,
-          renterId: booking.buyerId,
-          machineId: booking.listing.machineId,
-          type: JobType.GPU_DIAGNOSTIC,
-          parameters: {
-            timeoutSeconds: 120,
-            purpose: 'FIRST_RENTAL_E2E',
-            ...(config.DEV_DIAGNOSTIC_IMAGE ? { diagnosticImage: config.DEV_DIAGNOSTIC_IMAGE } : {}),
-          },
-        },
-      });
-      await tx.machine.update({
-        where: { id: booking.listing.machineId },
-        data: { operational: MachineOperational.RESERVED },
-      });
-      return true;
-    });
-    if (created) queued += 1;
-  }
-
-  const finishedJobs = await db.job.findMany({
-    where: {
-      type: JobType.GPU_DIAGNOSTIC,
-      status: { in: TERMINAL_JOB_STATUSES },
-      booking: { status: { in: [BookingStatus.STARTING, BookingStatus.ACTIVE] } },
-    },
-    select: { id: true, status: true, bookingId: true, machineId: true, result: true },
-    take: 50,
-    orderBy: { finishedAt: 'asc' },
-  });
-
-  for (const job of finishedJobs) {
-    const success = job.status === JobStatus.COMPLETED
-      && typeof job.result === 'object'
-      && job.result !== null
-      && (job.result as { gpuDetected?: unknown }).gpuDetected === true;
-    const changed = await db.$transaction(async (tx) => {
-      const bookingUpdate = await tx.booking.updateMany({
-        where: {
-          id: job.bookingId,
-          status: { in: [BookingStatus.STARTING, BookingStatus.ACTIVE] },
-        },
-        data: { status: success ? BookingStatus.COMPLETED : BookingStatus.DEGRADED },
-      });
-      if (bookingUpdate.count !== 1) return false;
-      await tx.machine.update({
-        where: { id: job.machineId },
-        data: { operational: success ? MachineOperational.AVAILABLE : MachineOperational.DEGRADED },
-      });
-      return true;
-    });
-    if (changed) {
-      if (success) completed += 1;
-      else degraded += 1;
-    }
-  }
-
-  return { funded, queued, completed, degraded };
 }
 
 async function main(): Promise<void> {

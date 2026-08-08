@@ -17,6 +17,11 @@ services:
         value: gpubnb.netlify.app
       - key: TRUST_PROXY
         value: "true"
+      # Only meaningful while ESCROW_PROGRAM_ID is NOT_DEPLOYED_YET (see dev-booking-reconciler.ts).
+      # sync:false so a manual toggle in the Render dashboard survives future blueprint syncs.
+      - key: BETA_TEST_DEV_BYPASS
+        value: "false"
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL

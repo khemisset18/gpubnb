@@ -14,6 +14,7 @@ import { registerDeviceAuthorizationRoutes } from './device-authorization-routes
 import { requestSettlement, confirmSettlement } from './settlement-transactions.js';
 import { allocateBookingResources, ResourceAllocationError } from './resource-allocation-service.js';
 import { runBookingTransaction, BOOKING_BUSINESS_ERRORS } from './booking-transaction-retry.js';
+import { reconcileDevelopmentBookings } from './dev-booking-reconciler.js';
 const app=Fastify({logger:{redact:['req.headers.authorization','req.headers.cookie','req.headers.x-agent-signature','res.headers.set-cookie']},trustProxy:config.TRUST_PROXY==='true',bodyLimit:config.MAX_BODY_BYTES,requestIdHeader:'x-request-id'}); const db=new PrismaClient(); const redis=new Redis(config.REDIS_URL,{maxRetriesPerRequest:2,enableReadyCheck:true});
 app.addHook('preParsing',(request,_reply,payload,done)=>{const chunks:Buffer[]=[];const capture=new Transform({transform(chunk:Buffer,_encoding,callback){chunks.push(Buffer.from(chunk));callback(null,chunk);}});capture.once('end',()=>{request.rawBody=Buffer.concat(chunks);});done(null,payload.pipe(capture));});
 redis.on('error',(err:Error)=>app.log.error({err},'redis_error'));
@@ -186,6 +187,16 @@ app.get('/jobs/:id/artifacts',async(req,reply)=>{const session=await requireSess
 app.get('/jobs/:id/artifacts/:artifactId',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {id,artifactId}=z.object({id:z.string().cuid(),artifactId:z.string().cuid()}).parse(req.params);const job=await db.job.findFirst({where:{id,renterId:session.userId},select:{id:true}});if(!job)return reply.code(404).send({error:'job_not_found'});const artifact=await db.jobArtifact.findFirst({where:{id:artifactId,jobId:id},select:{id:true,sha256:true,sizeBytes:true,storageKey:true,kind:true}});if(!artifact)return reply.code(404).send({error:'artifact_not_found'});const filePath=path.join(storageDir,artifact.storageKey);try{const data=await fsp.readFile(filePath);reply.header('content-type','application/octet-stream');reply.header('x-artifact-sha256',artifact.sha256);return reply.send(data);}catch{return reply.code(404).send({error:'file_not_found_on_disk'});}});
 await app.register(fastifyStatic,{root:path.resolve(process.cwd(),'../web'),prefix:'/'});
 app.setNotFoundHandler((req,reply)=>{if(req.method==='GET'&&!req.url.startsWith('/api/')&&!req.url.startsWith('/internal/'))return reply.sendFile('index.html');return reply.code(404).send({error:'not_found'})});
-const shutdown=async(signal:string)=>{app.log.info({signal},'shutdown');await app.close();await db.$disconnect();redis.disconnect();process.exit(0)};
+// Render's free plan does not support the Background Worker service type (the delivery-worker
+// and sweep-scheduler processes defined in render.yaml fail to deploy on it — confirmed via a
+// failed blueprint sync: "service type is not available for this plan"). Until either a paid
+// plan or the two dedicated workers are available, the two reconciliation loops they'd normally
+// run run in-process here instead, on plain intervals (single process, so no distributed lock
+// is needed the way the dedicated sweep-scheduler needs one across multiple replicas).
+let reconciling=false;
+const reconcileIntervalId=setInterval(()=>{if(reconciling)return;reconciling=true;reconcileDevelopmentBookings(db,new Date()).then(result=>{if(Object.values(result).some(v=>v>0))app.log.info({...result},'gpu_booking_reconciled');}).catch(err=>app.log.error({err},'gpu_booking_reconcile_failed')).finally(()=>{reconciling=false});},10_000);
+let sweeping=false;
+const sweepIntervalId=setInterval(()=>{if(sweeping)return;sweeping=true;(async()=>{const offline=await sweepOfflineMachines(db,new Date(),config.HEARTBEAT_OFFLINE_SECONDS);const staleJobs=await sweepStaleJobs(db,new Date(),config.JOB_STALE_AFTER_SECONDS);if(offline.machinesOffline>0||staleJobs.jobsTimedOut>0||staleJobs.jobsFailed>0)app.log.info({offline:{...offline,cutoff:offline.cutoff.toISOString()},staleJobs:{...staleJobs,cutoff:staleJobs.cutoff.toISOString()}},'offline_sweep_completed');})().catch(err=>app.log.error({err},'offline_sweep_failed')).finally(()=>{sweeping=false});},Math.max(config.HEARTBEAT_OFFLINE_SECONDS,30)*1000);
+const shutdown=async(signal:string)=>{app.log.info({signal},'shutdown');clearInterval(reconcileIntervalId);clearInterval(sweepIntervalId);await app.close();await db.$disconnect();redis.disconnect();process.exit(0)};
 process.once('SIGTERM',()=>void shutdown('SIGTERM'));process.once('SIGINT',()=>void shutdown('SIGINT'));
 await app.listen({host:'0.0.0.0',port:config.PORT});

@@ -21,6 +21,12 @@ const schema = z.object({
   ESCROW_PROGRAM_ID: z.string().default('NOT_DEPLOYED_YET'),
   ALLOW_MAINNET: z.enum(['true', 'false']).default('false'),
   DEV_PAYMENT_BYPASS: z.enum(['true', 'false']).default('false'),
+  // Distinct from DEV_PAYMENT_BYPASS: allowed in production, but only ever has an effect
+  // while ESCROW_PROGRAM_ID is still the NOT_DEPLOYED_YET placeholder (checked at every use
+  // site, not just here), so it can never bypass a real payment once escrow is deployed.
+  // Exists to unblock the private-beta two-machine test protocol (BETA_PRIVATE_TEST_PLAN.md)
+  // without weakening the NODE_ENV==='production' guard on DEV_PAYMENT_BYPASS below.
+  BETA_TEST_DEV_BYPASS: z.enum(['true', 'false']).default('false'),
   DEV_DIAGNOSTIC_IMAGE: z.string().regex(/^ghcr\.io\/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$/).optional(),
   HEARTBEAT_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(120).default(25),
   HEARTBEAT_OFFLINE_SECONDS: z.coerce.number().int().min(15).max(300).default(60),
