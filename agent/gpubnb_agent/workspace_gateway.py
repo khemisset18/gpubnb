@@ -7,7 +7,6 @@ requests. The API remains the only Internet-facing endpoint.
 from __future__ import annotations
 
 import base64
-import json
 import re
 import subprocess
 import threading
@@ -15,6 +14,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 import websocket
@@ -116,10 +116,24 @@ class GatewaySupervisor:
             suffix = re.sub(r"[^a-zA-Z0-9]", "", session_id)[-16:] or "session"
             return self._cleanup_names(f"gpubnb-dev-{suffix}", f"gpubnb-workspace-{suffix}")
         for channel_id, ws in list(self.channels.items()):
-            try: ws.close()
-            except Exception: pass
+            try:
+                ws.close()
+            except Exception:
+                pass
             self.channels.pop(channel_id, None)
         return self._cleanup_names(runtime.container_name, runtime.volume_name)
+
+    @staticmethod
+    def _expired(value: object) -> bool:
+        if not isinstance(value, str):
+            return True
+        try:
+            expires = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return True
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        return expires <= datetime.now(timezone.utc)
 
     def _reconcile_sessions(self) -> None:
         desired = self._request(f"/agent/workspace-gateway/{self.machine_id}/desired")
@@ -127,7 +141,7 @@ class GatewaySupervisor:
             session_id = str(session.get("id") or "")
             status = str(session.get("status") or "")
             metadata = session.get("connectionMetadata") if isinstance(session.get("connectionMetadata"), dict) else {}
-            if status in {"STOP_REQUESTED", "STOPPING"}:
+            if status in {"STOP_REQUESTED", "STOPPING"} or self._expired(session.get("expiresAt")):
                 cleaned = self._stop_runtime(session_id)
                 self._request(f"/agent/workspace-gateway/{session_id}/stopped", "POST", {"machineId": self.machine_id, "cleaned": cleaned})
                 continue
@@ -177,37 +191,51 @@ class GatewaySupervisor:
             pass
         finally:
             self.channels.pop(channel_id, None)
-            try:self._request("/agent/workspace-gateway/ws-frame", "POST", {"machineId": self.machine_id, "channelId": channel_id, "close": True})
-            except Exception:pass
+            try:
+                self._request("/agent/workspace-gateway/ws-frame", "POST", {"machineId": self.machine_id, "channelId": channel_id, "close": True})
+            except Exception:
+                pass
 
     def _ws_open(self, item: dict[str, Any]) -> None:
-        runtime = self._runtime_for(str(item.get("sessionId") or ""));channel_id = str(item.get("channelId") or "");path = str(item.get("path") or "/")
-        if not channel_id or not path.startswith("/") or ".." in path:return
-        headers=[f"{k}: {v}" for k,v in (item.get("headers") or {}).items() if str(k).lower() not in {"host","origin","cookie","authorization","connection","upgrade","sec-websocket-key","sec-websocket-version","sec-websocket-extensions"}]
-        ws=websocket.create_connection(f"ws://127.0.0.1:{runtime.port}{path}",header=headers,origin=f"http://127.0.0.1:{runtime.port}",timeout=10,enable_multithread=True)
-        self.channels[channel_id]=ws
-        threading.Thread(target=self._ws_reader,args=(channel_id,ws),daemon=True,name=f"gpubnb-ws-{channel_id[:8]}").start()
+        runtime = self._runtime_for(str(item.get("sessionId") or ""))
+        channel_id = str(item.get("channelId") or "")
+        path = str(item.get("path") or "/")
+        if not channel_id or not path.startswith("/") or ".." in path:
+            return
+        headers = [f"{k}: {v}" for k, v in (item.get("headers") or {}).items() if str(k).lower() not in {"host", "origin", "cookie", "authorization", "connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"}]
+        ws = websocket.create_connection(f"ws://127.0.0.1:{runtime.port}{path}", header=headers, origin=f"http://127.0.0.1:{runtime.port}", timeout=10, enable_multithread=True)
+        self.channels[channel_id] = ws
+        threading.Thread(target=self._ws_reader, args=(channel_id, ws), daemon=True, name=f"gpubnb-ws-{channel_id[:8]}").start()
 
     def _handle(self, item: dict[str, Any]) -> None:
-        kind=item.get("kind")
-        if kind=="http":self._http(item)
-        elif kind=="ws_open":self._ws_open(item)
-        elif kind=="ws_send":
-            ws=self.channels.get(str(item.get("channelId") or ""));
+        kind = item.get("kind")
+        if kind == "http":
+            self._http(item)
+        elif kind == "ws_open":
+            self._ws_open(item)
+        elif kind == "ws_send":
+            ws = self.channels.get(str(item.get("channelId") or ""))
             if ws:
-                data=base64.b64decode(str(item.get("dataBase64") or ""));ws.send(data,opcode=websocket.ABNF.OPCODE_BINARY if item.get("binary") else websocket.ABNF.OPCODE_TEXT)
-        elif kind=="ws_close":
-            ws=self.channels.pop(str(item.get("channelId") or ""),None)
-            if ws:ws.close()
+                data = base64.b64decode(str(item.get("dataBase64") or ""))
+                if item.get("binary"):
+                    ws.send_binary(data)
+                else:
+                    ws.send(data.decode("utf-8"))
+        elif kind == "ws_close":
+            ws = self.channels.pop(str(item.get("channelId") or ""), None)
+            if ws:
+                ws.close()
 
     def run(self) -> None:
-        last_reconcile=0.0
+        last_reconcile = 0.0
         while not self.stop_event.is_set():
             try:
-                if time.monotonic()-last_reconcile>=1.0:
-                    self._reconcile_sessions();last_reconcile=time.monotonic()
-                item=self._request(f"/agent/workspace-gateway/{self.machine_id}/next")
-                if item:self._handle(item)
+                if time.monotonic() - last_reconcile >= 1.0:
+                    self._reconcile_sessions()
+                    last_reconcile = time.monotonic()
+                item = self._request(f"/agent/workspace-gateway/{self.machine_id}/next")
+                if item:
+                    self._handle(item)
             except Exception:
                 time.sleep(1)
             else:
@@ -215,7 +243,9 @@ class GatewaySupervisor:
 
 
 def run_workspace_gateway_forever() -> None:
-    config=load_config();machine_id=config.get("machineId")
-    if not isinstance(machine_id,str) or not machine_id:return
-    api=ApiClient(str(config.get("apiUrl") or "https://gpubnb.netlify.app/api"),config.get("caFile"))
-    GatewaySupervisor(api,load_key(),machine_id,config).run()
+    config = load_config()
+    machine_id = config.get("machineId")
+    if not isinstance(machine_id, str) or not machine_id:
+        return
+    api = ApiClient(str(config.get("apiUrl") or "https://gpubnb.netlify.app/api"), config.get("caFile"))
+    GatewaySupervisor(api, load_key(), machine_id, config).run()
