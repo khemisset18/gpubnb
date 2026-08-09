@@ -12,7 +12,7 @@ const MAX_AGENT_OUTPUT_BYTES: usize = 64 * 1024;
 const MAX_CONFIG_BYTES: u64 = 64 * 1024;
 const MAX_MACHINE_ID_LENGTH: usize = 128;
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentStatus {
     pub installed: bool,
