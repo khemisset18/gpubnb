@@ -12,47 +12,38 @@ The renter flow is:
 
 1. Reserve an eligible GPU.
 2. Wait while the existing `WORKSPACE_PREPARE` path prepares the immutable workspace image.
-3. See an explicit `PREPARING`, `READY`, `ACTIVE`, `STOPPING`, `TERMINATED`, or `FAILED` state.
+3. See an explicit `PREPARING`, `READY`, `RUNNING`, `STOP_REQUESTED`, `STOPPING`, `COMPLETED`, or failure state.
 4. Only when the session is `READY` and the booking time/heartbeat checks pass, receive an **Open workspace** action.
 5. Enter through a short-lived, booking-bound access grant. Never expose host IP, Windows credentials, Docker socket, agent key, or host filesystem paths to the renter.
 6. Work inside an isolated GPU environment.
 7. Stop the session or let the booking expire.
 8. Verify container/process/storage cleanup before the machine can return to `AVAILABLE`.
 
-## Beta workspace implementation
+## Implemented Developer beta path
 
-For the first usable beta, the interactive surface should be a browser workspace (JupyterLab or code-server) running inside the rental sandbox. Do not expose a raw host SSH service.
+The branch `feat/renter-secure-workspace` now implements the first interactive runtime path using the existing `workspaces/developer` code-server image.
 
-The workspace runtime must have:
+- The agent launches the runtime in an unprivileged Docker container.
+- The project directory is a dedicated Docker volume mounted at `/workspace`; there is no host-home bind mount and no Docker socket mount.
+- code-server is published only on an ephemeral `127.0.0.1` host port, never on a public host interface.
+- The host-side agent makes authenticated outbound requests to the GPUbnb API to receive relay work.
+- The browser never receives the local port, host IP, container ID, agent key or Windows credentials.
+- HTTP and WebSocket traffic is relayed through `/workspace-gateway/:sessionId/...`.
+- The bootstrap grant is random, short-lived, hash-only at rest in Redis and consumed once. It is exchanged for an HttpOnly/Secure/SameSite session cookie scoped to that workspace path.
+- Every agent relay write is authenticated with the existing body-bound signed request mechanism.
+- A failed cleanup quarantines the machine. Successful cleanup removes the container and workspace volume before the machine is released.
 
-- GPU assignment limited to the accelerator allocated to the booking;
-- non-root user;
-- no Docker socket;
-- no host home-directory mounts;
-- no access to Windows named pipes or host service credentials;
-- read-only base filesystem where practical;
-- dedicated ephemeral writable volume for `/workspace`;
-- CPU, RAM, PID and disk quotas;
-- network disabled by default; if package egress is later enabled, it must use an explicit policy and must not expose the host LAN;
-- an immutable image reference pinned by digest;
-- a random per-session runtime identifier that is not a secret;
-- a short-lived access token stored hashed server-side and scoped to exactly one renter + booking + workspace session;
-- access-token rotation/revocation on stop, expiry, renter logout, or booking cancellation;
-- cleanup verification before machine availability is restored.
+The gateway implementation is intentionally outbound-only from the owner machine so the host does not need a router port-forward or a public code-server port.
 
-## API contract to implement
+## Runtime families
 
-The API surface should expose renter-safe data only:
+For the first usable beta, Developer/AI/Data/Compute/API use the container family where compatible. Cloud Desktop/Creator/Video/CAD require the desktop VM family. Mobile and Security Lab require a stronger isolated VM family. Gaming and Audio remain latency-sensitive streaming VM work.
 
-- `GET /bookings/:bookingId/workspace` — renter/owner status view. Renter response contains session state, safe GPU metadata, start/end time and whether opening is allowed. It must not contain host address, agent key, internal container ID or host paths.
-- `POST /bookings/:bookingId/workspace/access` — renter only. Allowed only for the renter who owns the booking, a funded/active booking, a `READY` or `ACTIVE` session, fresh heartbeat, non-quarantined machine and current booking time. Returns a very short-lived one-time access grant or gateway URL.
-- `POST /bookings/:bookingId/workspace/stop` — renter or host emergency stop; idempotent.
-
-The access endpoint must be rate limited and auditable. Access grants must be random high-entropy values, persisted only as hashes, single-session scoped, short lived, and never logged.
+All runtime families share one lifecycle and one renter access contract. They must not become independent remote-access products.
 
 ## Agent protocol gate
 
-Before interactive beta, the API and agent must negotiate an explicit protocol version. The heartbeat/inventory payload must include `agentVersion` and `protocolVersion`. The API must reject an agent below `MIN_SUPPORTED_AGENT_PROTOCOL` with a clear incompatibility state instead of allowing a rental to fail halfway through.
+Before public interactive beta, the API and agent must negotiate an explicit protocol version. The heartbeat/inventory payload must include `agentVersion` and `protocolVersion`. The API must reject an agent below `MIN_SUPPORTED_AGENT_PROTOCOL` with a clear incompatibility state instead of allowing a rental to fail halfway through.
 
 Windows installation must use a versioned immutable release. Editable installs (`pip install -e`) are development-only and must not be part of the beta installation path.
 
@@ -60,7 +51,7 @@ Heartbeat collection must be decoupled from slow hardware probing: the signed li
 
 ## Thermal gate
 
-Interactive work can run much longer than `GPU_DIAGNOSTIC`. Before beta, the agent must enforce configurable warning and shutdown temperatures. A sustained critical temperature must terminate the workload safely, report a thermal termination reason and place the machine in cooldown/quarantine until it is safe.
+Interactive work can run much longer than `GPU_DIAGNOSTIC`. Before public beta, the agent must enforce configurable warning and shutdown temperatures. A sustained critical temperature must terminate the workload safely, report a thermal termination reason and place the machine in cooldown/quarantine until it is safe.
 
 ## Worker/deployment gate
 
@@ -79,21 +70,21 @@ PC A is the physical Windows host with NVIDIA GPU. PC B is the renter and must n
 Pass only if all of the following are observed:
 
 1. PC B creates the booking.
-2. `WORKSPACE_PREPARE` completes on PC A.
-3. PC B sees `Workspace ready` without manually operating PC A.
-4. PC B opens the workspace through the renter application/web UI.
-5. Inside the workspace, `nvidia-smi` (or equivalent approved diagnostic) sees only the allocated GPU.
-6. A small CUDA/PyTorch workload runs successfully.
-7. The renter can create a file in `/workspace` and retrieve an allowed output artifact.
+2. Developer `WORKSPACE_PREPARE` completes on PC A.
+3. PC A's agent starts code-server and registers the gateway without any router port-forward.
+4. PC B sees `Workspace ready` without manually operating PC A.
+5. PC B clicks **Open workspace** and VS Code Web loads through the GPUbnb gateway.
+6. Browser WebSocket reconnects and the integrated terminal remains usable.
+7. PC B can create/edit/run a small project in `/workspace`.
 8. The renter cannot read host personal files, reach the Docker socket, obtain host credentials, or directly administer Windows.
-9. Ending/expiring the rental revokes access immediately.
-10. Runtime/container/process and ephemeral credentials are removed; cleanup is verified.
+9. Ending/expiring the rental revokes access.
+10. Runtime/container and ephemeral credentials are removed; cleanup is verified.
 11. Only after verified cleanup does the machine return to `AVAILABLE`.
 12. Repeat after an agent restart and after a temporary network interruption.
 
 ## Release decision
 
 - Private diagnostic beta: allowed with current payment bypass controls.
-- Private interactive beta: blocked until the two-PC acceptance test above passes.
+- Private interactive Developer beta: code path implemented; physical two-PC validation is still required before claiming it works end-to-end.
 - Public beta: blocked until immutable agent distribution, protocol gating, thermal controls and durable worker operations are proven.
 - Real-money beta: blocked until real escrow/settlement is deployed and proven separately.
