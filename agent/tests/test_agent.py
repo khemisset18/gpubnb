@@ -402,6 +402,20 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("--network=none", command)
         self.assertIn("--read-only", command)
 
+    def test_developer_workspace_is_writable_without_a_host_bind(self):
+        # manifest.json declares /workspace as writable and forbids "ownerHomeMount".
+        # --read-only otherwise locks the image's baked-in /workspace directory too,
+        # so a real run of this command against the built image failed every single
+        # time with "not writable" before this test existed — nothing here caught it
+        # because the assertions above never looked past the entrypoint/isolation flags.
+        image = "registry.example/gpubnb/developer@sha256:" + ("b" * 64)
+        command = workspace_health_command(image, "developer")
+        self.assertIn("--tmpfs=/workspace:rw,nosuid,size=512m", command)
+        self.assertFalse(
+            any(flag in ("--volume", "-v") or flag.startswith(("--volume=", "-v=")) for flag in command),
+            "the developer workspace must never bind-mount a host path, including the owner's home directory",
+        )
+
 
 class FileTransferSigningTests(unittest.TestCase):
     def test_upload_file_signs_the_exact_uploaded_bytes(self):

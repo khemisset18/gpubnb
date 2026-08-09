@@ -249,7 +249,14 @@ def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
             "docker", "run", "--rm", "--network=none", "--read-only",
             "--cap-drop=ALL", "--security-opt=no-new-privileges",
             "--pids-limit=64", "--memory=512m", "--cpus=1",
-            "--tmpfs=/tmp:rw,noexec,nosuid,size=32m", *gpu_passthrough_flags(),
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=32m",
+            # The manifest declares /workspace as writable (workspaces/developer/manifest.json
+            # writablePaths), and the healthcheck requires it, but --read-only otherwise locks
+            # the whole image layer including the baked-in /workspace directory. A tmpfs here —
+            # not a host bind, so it satisfies the "no owner home mount" requirement — is what
+            # actually makes that manifest promise true instead of failing every run.
+            "--tmpfs=/workspace:rw,nosuid,size=512m",
+            *gpu_passthrough_flags(),
         ]
         return [*base, "--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", image]
     return diagnostic_command(image)
