@@ -7,6 +7,7 @@ import { requireSession } from './auth.js';
 import { config } from './config.js';
 import { evaluateWorkspaceAccess } from './workspace-access-policy.js';
 import { issueWorkspaceAccessGrant } from './workspace-access.js';
+import { registerWorkspaceGatewayRoutes } from './workspace-gateway.js';
 
 function safeConnection(metadata: unknown): { ready: boolean; gatewayPath: string | null } {
   if (!metadata || typeof metadata !== 'object') return { ready: false, gatewayPath: null };
@@ -19,6 +20,8 @@ function safeConnection(metadata: unknown): { ready: boolean; gatewayPath: strin
 const activeBookings=[BookingStatus.FUNDED,BookingStatus.STARTING,BookingStatus.ACTIVE];
 
 export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaClient, redis: Redis): void {
+  registerWorkspaceGatewayRoutes(app,db,redis);
+
   app.post('/machines/:machineId/workspaces/developer/enable-beta', async (request, reply) => {
     const session=await requireSession(request,reply,redis); if(!session)return;
     const machineId=String((request.params as {machineId?:string}).machineId||'');
