@@ -2,10 +2,11 @@ import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { MachineConnectivity, MachineOperational, ModerationStatus, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
-import WebSocket, { Server as WebSocketServer } from 'ws';
+import WebSocket from 'ws';
 import { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';
 import { consumeWorkspaceAccessGrant } from './workspace-access.js';
 
+const WebSocketServer=WebSocket.Server;
 const GATEWAY_COOKIE='gpubnb_workspace';
 const SESSION_TTL_SECONDS=3600;
 const RESPONSE_TIMEOUT_MS=30_000;
