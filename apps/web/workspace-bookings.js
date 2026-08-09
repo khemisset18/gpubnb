@@ -26,12 +26,20 @@
         try{return {booking,workspace:await request(`/bookings/${encodeURIComponent(booking.id)}/workspace`)}}catch(error){return {booking,error}}
       }));
       root.innerHTML=rows.map(({booking,workspace,error})=>{
-        if(error?.status===404)return `<article class="list-row"><div><strong>${escapeHTML(booking.listing?.title||'Réservation GPU')}</strong><div class="muted">Aucun workspace préparé pour cette réservation.</div></div><span class="badge warn">Non préparé</span></article>`;
+        if(error?.status===404){
+          const canPrepare=['FUNDED','STARTING','ACTIVE'].includes(booking.status);
+          return `<article class="list-row"><div><strong>${escapeHTML(booking.listing?.title||'Réservation GPU')}</strong><div class="muted">Aucun workspace préparé pour cette réservation.</div></div><div class="actions">${canPrepare?`<button class="button button-primary" type="button" data-prepare-developer="${escapeHTML(booking.id)}">Préparer Developer</button>`:''}<span class="badge warn">Non préparé</span></div></article>`;
+        }
         if(error)return `<article class="list-row"><div><strong>${escapeHTML(booking.listing?.title||'Réservation GPU')}</strong><div class="muted">État du workspace indisponible.</div></div><span class="badge warn">Erreur</span></article>`;
         const preparing=workspace.status==='PREPARING';
         const statusText=workspace.canOpen?'Prêt à ouvrir':preparing?`Préparation ${Number(workspace.preparation?.progress||0)} %`:(reason[workspace.blockedReason]||workspace.status);
         return `<article class="list-row"><div><strong>${escapeHTML(workspace.workspace?.name||'Workspace')}</strong><div class="muted">${escapeHTML(workspace.gpu?.model||'GPU distant')} · ${escapeHTML(statusText)}</div>${workspace.preparation?.step?`<div class="muted">Étape : ${escapeHTML(workspace.preparation.step)}</div>`:''}</div><div class="actions">${workspace.canOpen?`<button class="button button-primary" type="button" data-open-workspace="${escapeHTML(booking.id)}">Ouvrir mon espace</button>`:''}<span class="badge ${workspace.canOpen?'ok':'warn'}">${escapeHTML(workspace.status)}</span></div></article>`;
       }).join('');
+      root.querySelectorAll('[data-prepare-developer]').forEach(button=>button.addEventListener('click',async()=>{
+        button.disabled=true;button.textContent='Préparation…';
+        try{await request(`/bookings/${encodeURIComponent(button.dataset.prepareDeveloper)}/workspace/developer`,{method:'POST',body:'{}'});await render();}
+        catch(error){button.disabled=false;button.textContent='Préparer Developer';alert(error.code==='developer_workspace_not_enabled'?'Le propriétaire doit d’abord activer Developer Workspace sur cette machine.':(error.message||'Préparation impossible.'));}
+      }));
       root.querySelectorAll('[data-open-workspace]').forEach(button=>button.addEventListener('click',async()=>{
         button.disabled=true;button.textContent='Ouverture…';
         try{
