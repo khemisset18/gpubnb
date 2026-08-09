@@ -123,8 +123,13 @@ test('test release workflow publishes a verified Windows portable package',async
   assert.match(workflow,/branches:\s*\n\s*- main/);
   assert.match(workflow,/contents: write/);
   assert.match(workflow,/gpubnb-host-windows-x64\.exe/);
-  assert.match(workflow,/gpubnb-host-windows-x64\.zip/);
+  assert.match(workflow,/gpubnb-host-windows-x64-portable\.zip/);
   assert.match(workflow,/GPUbnb-Host-Portable\.exe/);
+  // The real NSIS installer (Start Menu shortcut, elevated service install, uninstaller)
+  // must actually reach the release: a prior version of this workflow staged it and then
+  // deleted it before upload, leaving every public download without a working GUI install.
+  assert.doesNotMatch(workflow,/Remove-Item[^\n]*gpubnb-host-windows-x64\.exe/);
+  assert.match(workflow,/test -s release-assets\/gpubnb-host-windows-x64\.exe/);
   assert.match(workflow,/pyinstaller .*--name gpubnb-agent/);
   assert.match(workflow,/tauri\.sidecar\.conf\.json/);
   assert.match(workflow,/Copy-Item 'dist\/gpubnb-agent\.exe'/);
