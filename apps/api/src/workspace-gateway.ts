@@ -1,0 +1,125 @@
+import crypto from 'node:crypto';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { MachineOperational, ModerationStatus, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
+import type { Redis } from 'ioredis';
+import { WebSocketServer, WebSocket } from 'ws';
+import { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';
+import { consumeWorkspaceAccessGrant } from './workspace-access.js';
+
+const GATEWAY_COOKIE='gpubnb_workspace';
+const SESSION_TTL_SECONDS=3600;
+const RESPONSE_TIMEOUT_MS=30_000;
+const SAFE_RESPONSE_HEADERS=new Set(['content-type','cache-control','etag','last-modified','content-length','content-disposition','location']);
+
+type RelayRequest={id:string;sessionId:string;kind:'http'|'ws_open'|'ws_send'|'ws_close';method?:string;path?:string;headers?:Record<string,string>;bodyBase64?:string;channelId?:string;dataBase64?:string;binary?:boolean};
+type RelayResponse={status:number;headers?:Record<string,string>;bodyBase64?:string;error?:string};
+
+const gatewaySessionKey=(token:string)=>`workspace-gateway-session:${crypto.createHash('sha256').update(token).digest('hex')}`;
+const machineQueue=(machineId:string)=>`workspace-gateway:machine:${machineId}`;
+const responseKey=(id:string)=>`workspace-gateway:response:${id}`;
+const wsInputKey=(channelId:string)=>`workspace-gateway:ws-input:${channelId}`;
+
+function parseCookie(header:string|undefined,name:string){
+  for(const part of (header||'').split(';')){const [key,...rest]=part.trim().split('=');if(key===name)return decodeURIComponent(rest.join('='));}
+  return null;
+}
+function safePath(value:string){return value.startsWith('/')&&!value.includes('..')&&value.length<=4096;}
+function relayHeaders(headers:Record<string,unknown>){
+  const allowed=['accept','accept-language','content-type','if-none-match','if-modified-since','range','user-agent'];
+  return Object.fromEntries(allowed.flatMap(name=>{const value=headers[name];return typeof value==='string'?[[name,value]]:[]}));
+}
+async function waitJson(redis:Redis,key:string,timeoutMs=RESPONSE_TIMEOUT_MS){
+  const deadline=Date.now()+timeoutMs;
+  while(Date.now()<deadline){const raw=await redis.getdel(key);if(raw)return JSON.parse(raw) as RelayResponse;await new Promise(resolve=>setTimeout(resolve,30));}
+  return null;
+}
+async function authenticateAgent(db:PrismaClient,redis:Redis,machineId:string,request:FastifyRequest,routePath:string,withBody=false){
+  const machine=await db.machine.findUnique({where:{id:machineId},select:{agentPublicKey:true,keyRevokedAt:true,moderationStatus:true}});
+  if(!machine||machine.keyRevokedAt||machine.moderationStatus!==ModerationStatus.CLEAR)return false;
+  const v1=await verifyAgentRequest(redis,machineId,machine.agentPublicKey,request.method,routePath,request.headers['x-agent-timestamp'],request.headers['x-agent-signature']);
+  if(!v1)return false;
+  if(!withBody)return true;
+  if(!request.rawBody)return false;
+  return verifyAgentRequestV2(redis,machineId,machine.agentPublicKey,request.method,routePath,request.rawBody,{timestamp:request.headers['x-agent-timestamp'],nonce:request.headers['x-agent-nonce'],bodySha256:request.headers['x-agent-body-sha256'],signature:request.headers['x-agent-signature-v2'],version:request.headers['x-agent-signature-version']});
+}
+async function activeGatewaySession(db:PrismaClient,sessionId:string){
+  return db.workspaceSession.findFirst({where:{id:sessionId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:'ONLINE',moderationStatus:ModerationStatus.CLEAR}},select:{id:true,renterId:true,machineId:true,status:true,expiresAt:true,connectionMetadata:true,machine:{select:{operational:true}},machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});
+}
+
+export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClient,redis:Redis):void{
+  app.get('/workspace-gateway/:sessionId',async(request,reply)=>{
+    const sessionId=String((request.params as {sessionId?:string}).sessionId||'');
+    const grant=String((request.query as {grant?:string}).grant||'');
+    const consumed=await consumeWorkspaceAccessGrant(redis,grant);
+    if(!consumed||consumed.sessionId!==sessionId)return reply.code(401).send({error:'invalid_workspace_grant'});
+    const row=await activeGatewaySession(db,sessionId);
+    if(!row||row.renterId!==consumed.userId)return reply.code(409).send({error:'workspace_not_available'});
+    const browserToken=crypto.randomBytes(32).toString('base64url');
+    const ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.floor((row.expiresAt.getTime()-Date.now())/1000)));
+    await redis.set(gatewaySessionKey(browserToken),JSON.stringify({userId:row.renterId,sessionId}), 'EX',ttl);
+    reply.setCookie(GATEWAY_COOKIE,browserToken,{httpOnly:true,secure:true,sameSite:'strict',path:`/workspace-gateway/${sessionId}`});
+    return reply.redirect(`/workspace-gateway/${sessionId}/`);
+  });
+
+  app.all('/workspace-gateway/:sessionId/*',async(request,reply)=>{
+    const sessionId=String((request.params as {sessionId?:string}).sessionId||'');
+    const token=parseCookie(request.headers.cookie,GATEWAY_COOKIE);if(!token)return reply.code(401).send({error:'workspace_auth_required'});
+    const raw=await redis.get(gatewaySessionKey(token));if(!raw)return reply.code(401).send({error:'workspace_session_expired'});
+    const browser=JSON.parse(raw) as {userId:string;sessionId:string};if(browser.sessionId!==sessionId)return reply.code(403).send({error:'workspace_session_mismatch'});
+    const row=await activeGatewaySession(db,sessionId);if(!row||row.renterId!==browser.userId)return reply.code(409).send({error:'workspace_not_available'});
+    const suffix='/' + String((request.params as {'*'?:string})['*']||'');const query=request.url.includes('?')?'?'+request.url.split('?').slice(1).join('?'):'';const targetPath=`${suffix}${query}`;
+    if(!safePath(targetPath))return reply.code(400).send({error:'invalid_gateway_path'});
+    const body=request.rawBody??Buffer.alloc(0);if(body.length>10*1024*1024)return reply.code(413).send({error:'gateway_body_too_large'});
+    const id=crypto.randomUUID();const relay:RelayRequest={id,sessionId,kind:'http',method:request.method,path:targetPath,headers:relayHeaders(request.headers as Record<string,unknown>),bodyBase64:body.toString('base64')};
+    await redis.lpush(machineQueue(row.machineId),JSON.stringify(relay));await redis.expire(machineQueue(row.machineId),120);
+    const result=await waitJson(redis,responseKey(id));if(!result)return reply.code(504).send({error:'workspace_gateway_timeout'});
+    for(const [name,value] of Object.entries(result.headers||{})){if(SAFE_RESPONSE_HEADERS.has(name.toLowerCase()))reply.header(name,value);}
+    if(result.error)return reply.code(502).send({error:'workspace_upstream_error'});
+    return reply.code(Math.max(100,Math.min(599,result.status||502))).send(Buffer.from(result.bodyBase64||'','base64'));
+  });
+
+  app.get('/agent/workspace-gateway/:machineId/desired',async(request,reply)=>{
+    const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/desired`;
+    if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});
+    const sessions=await db.workspaceSession.findMany({where:{machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,status:true,expiresAt:true,connectionMetadata:true}});
+    return {sessions};
+  });
+  app.get('/agent/workspace-gateway/:machineId/next',async(request,reply)=>{
+    const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/next`;
+    if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});
+    const raw=await redis.rpop(machineQueue(machineId));return raw?JSON.parse(raw):reply.code(204).send();
+  });
+  app.post('/agent/workspace-gateway/:sessionId/register',async(request,reply)=>{
+    const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;runtimeId?:string;localPort?:number};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/register`;
+    if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
+    if(!/^[a-zA-Z0-9_.-]{6,100}$/.test(String(body.runtimeId||''))||!Number.isInteger(body.localPort)||Number(body.localPort)<1024||Number(body.localPort)>65535)return reply.code(400).send({error:'invalid_runtime_registration'});
+    const updated=await db.workspaceSession.updateMany({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:'developer'}}},data:{connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort)},events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}});
+    return updated.count===1?{ok:true,gatewayPath:`/workspace-gateway/${sessionId}`}:reply.code(409).send({error:'workspace_not_registerable'});
+  });
+  app.post('/agent/workspace-gateway/respond',async(request,reply)=>{
+    const body=request.body as {machineId?:string;id?:string;status?:number;headers?:Record<string,string>;bodyBase64?:string;error?:string};const machineId=String(body.machineId||'');const route='/agent/workspace-gateway/respond';if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
+    if(!body.id)return reply.code(400).send({error:'response_id_required'});await redis.set(responseKey(body.id),JSON.stringify({status:body.status||502,headers:body.headers||{},bodyBase64:body.bodyBase64||'',error:body.error}), 'EX',60);return {ok:true};
+  });
+  app.post('/agent/workspace-gateway/ws-frame',async(request,reply)=>{
+    const body=request.body as {machineId?:string;channelId?:string;dataBase64?:string;binary?:boolean;close?:boolean};const machineId=String(body.machineId||'');const route='/agent/workspace-gateway/ws-frame';if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
+    if(!body.channelId)return reply.code(400).send({error:'channel_required'});await redis.lpush(wsInputKey(body.channelId),JSON.stringify({dataBase64:body.dataBase64||'',binary:!!body.binary,close:!!body.close}));await redis.expire(wsInputKey(body.channelId),120);return {ok:true};
+  });
+  app.post('/agent/workspace-gateway/:sessionId/stopped',async(request,reply)=>{
+    const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;cleaned?:boolean};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/stopped`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
+    if(body.cleaned!==true){await db.machine.update({where:{id:machineId},data:{moderationStatus:ModerationStatus.QUARANTINED,operational:MachineOperational.UNAVAILABLE}});await db.workspaceSession.updateMany({where:{id:sessionId,machineId},data:{status:WorkspaceSessionStatus.QUARANTINED,endedAt:new Date()}});return reply.code(409).send({error:'workspace_cleanup_unverified'});}
+    await db.$transaction([db.workspaceSession.updateMany({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.READY]}},data:{status:WorkspaceSessionStatus.COMPLETED,endedAt:new Date(),connectionMetadata:{},events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_CLEANUP_VERIFIED'}}}}),db.machine.update({where:{id:machineId},data:{operational:MachineOperational.AVAILABLE}})]);return {ok:true};
+  });
+
+  const wss=new WebSocketServer({noServer:true,maxPayload:4*1024*1024});
+  app.server.on('upgrade',async(request,socket,head)=>{
+    try{
+      const url=new URL(request.url||'/',`https://${request.headers.host||'localhost'}`);const match=url.pathname.match(/^\/workspace-gateway\/([^/]+)\/(.*)$/);if(!match)return;
+      const sessionId=match[1];const token=parseCookie(request.headers.cookie,GATEWAY_COOKIE);if(!token){socket.destroy();return;}const raw=await redis.get(gatewaySessionKey(token));if(!raw){socket.destroy();return;}const browser=JSON.parse(raw) as {userId:string;sessionId:string};if(browser.sessionId!==sessionId){socket.destroy();return;}const row=await activeGatewaySession(db,sessionId);if(!row||row.renterId!==browser.userId){socket.destroy();return;}
+      wss.handleUpgrade(request,socket,head,ws=>{const channelId=crypto.randomUUID();const targetPath='/' + match[2] + url.search;void redis.lpush(machineQueue(row.machineId),JSON.stringify({id:crypto.randomUUID(),sessionId,kind:'ws_open',channelId,path:targetPath,headers:relayHeaders(request.headers as Record<string,unknown>)} satisfies RelayRequest));
+        const pump=setInterval(async()=>{for(let i=0;i<50;i++){const frame=await redis.rpop(wsInputKey(channelId));if(!frame)break;const parsed=JSON.parse(frame) as {dataBase64:string;binary:boolean;close:boolean};if(parsed.close){ws.close();break;}if(ws.readyState===WebSocket.OPEN)ws.send(Buffer.from(parsed.dataBase64,'base64'),{binary:parsed.binary});}},20);
+        ws.on('message',(data,isBinary)=>void redis.lpush(machineQueue(row.machineId),JSON.stringify({id:crypto.randomUUID(),sessionId,kind:'ws_send',channelId,dataBase64:Buffer.from(data as Buffer).toString('base64'),binary:isBinary} satisfies RelayRequest)));
+        ws.on('close',()=>{clearInterval(pump);void redis.lpush(machineQueue(row.machineId),JSON.stringify({id:crypto.randomUUID(),sessionId,kind:'ws_close',channelId} satisfies RelayRequest));});
+      });
+    }catch{socket.destroy();}
+  });
+}
