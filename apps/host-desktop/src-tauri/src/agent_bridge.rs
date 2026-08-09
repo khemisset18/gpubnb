@@ -18,6 +18,13 @@ pub struct AgentStatus {
     pub installed: bool,
     pub linked: bool,
     pub running: bool,
+    /// Whether the Windows service is registered with the SCM — distinct from
+    /// `installed` (which only means the agent binary runs at all) and from
+    /// `running` (which is true for either the service or a foreground `start
+    /// --daemon`). Without this, "Revérifier" had no way to tell "service missing"
+    /// apart from "binary present but only ever run unelevated".
+    pub service_installed: bool,
+    pub service_running: bool,
     pub machine_id: Option<String>,
     pub detail: String,
 }
@@ -189,13 +196,31 @@ pub fn status() -> AgentStatus {
     let machine_id = parse_config().and_then(|value| value.machine_id);
     let linked = machine_id.is_some();
 
-    let running = installed
-        && run_agent(&["status"])
-            .ok()
-            .filter(|output| output.status.success())
-            .and_then(|output| serde_json::from_slice::<serde_json::Value>(&output.stdout).ok())
-            .and_then(|value| value.get("running").and_then(serde_json::Value::as_bool))
-            .unwrap_or(false);
+    let status_reply = installed
+        .then(|| run_agent(&["status"]).ok())
+        .flatten()
+        .filter(|output| output.status.success())
+        .and_then(|output| serde_json::from_slice::<serde_json::Value>(&output.stdout).ok());
+    let running = status_reply
+        .as_ref()
+        .and_then(|value| value.get("running").and_then(serde_json::Value::as_bool))
+        .unwrap_or(false);
+    let service_installed = status_reply
+        .as_ref()
+        .and_then(|value| {
+            value
+                .get("serviceInstalled")
+                .and_then(serde_json::Value::as_bool)
+        })
+        .unwrap_or(false);
+    let service_running = status_reply
+        .as_ref()
+        .and_then(|value| {
+            value
+                .get("serviceRunning")
+                .and_then(serde_json::Value::as_bool)
+        })
+        .unwrap_or(false);
 
     let detail = if !installed {
         "L’agent GPUbnb n’est pas encore installé sur cet ordinateur".to_owned()
@@ -203,14 +228,18 @@ pub fn status() -> AgentStatus {
         "L’agent est installé, mais cette machine n’est pas encore liée".to_owned()
     } else if running {
         "La machine est liée et l’agent fonctionne en arrière-plan".to_owned()
+    } else if service_installed {
+        "La machine est liée, mais le service GPUbnb doit encore être démarré".to_owned()
     } else {
-        "La machine est liée, mais l’agent doit encore être démarré".to_owned()
+        "La machine est liée, mais le service Windows GPUbnb n’est pas encore installé".to_owned()
     };
 
     AgentStatus {
         installed,
         linked,
         running,
+        service_installed,
+        service_running,
         machine_id,
         detail,
     }
@@ -238,6 +267,60 @@ pub fn start() -> Result<AgentStatus, String> {
         return Err(classify_agent_failure(&output).into());
     }
     Ok(status())
+}
+
+/// Builds the PowerShell script that launches `exe arguments...` elevated (UAC prompt)
+/// and waits for it, exiting with the elevated process's own exit code. Split out from
+/// `install_service_elevated` so the exact command can be asserted on in tests without
+/// ever triggering a real UAC prompt (impossible in CI, and undesirable in any
+/// automated run).
+fn elevated_launch_script(exe: &std::path::Path, arguments: &[&str]) -> String {
+    let quoted_exe = powershell_single_quote(&exe.to_string_lossy());
+    let quoted_arguments = arguments
+        .iter()
+        .map(|argument| powershell_single_quote(argument))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "$process = Start-Process -FilePath {quoted_exe} -ArgumentList {quoted_arguments} \
+         -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $process.ExitCode"
+    )
+}
+
+fn powershell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+/// Registers and starts the Windows service with the elevation the SCM requires,
+/// prompting the user with a single UAC dialog. Windows-only: the service model, and
+/// the reason a plain child-process spawn can never do this, are both Windows-specific.
+#[cfg(target_os = "windows")]
+pub fn install_service_elevated() -> Result<AgentStatus, String> {
+    let executable = bundled_agent_path()
+        .filter(|path| path.is_file())
+        .ok_or("agent_not_installed")?;
+    run_elevated(&executable, &["service", "install"])?;
+    run_elevated(&executable, &["service", "start"])?;
+    Ok(status())
+}
+
+#[cfg(target_os = "windows")]
+fn run_elevated(executable: &std::path::Path, arguments: &[&str]) -> Result<(), String> {
+    let script = elevated_launch_script(executable, arguments);
+    let output = Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .output()
+        .map_err(|_| "agent_elevation_failed".to_owned())?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err("agent_elevation_failed".to_owned())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn install_service_elevated() -> Result<AgentStatus, String> {
+    Err("service_installation_requires_windows".into())
 }
 
 fn classify_agent_failure(output: &Output) -> &'static str {
@@ -306,7 +389,7 @@ mod tests {
                 &path,
                 "@echo off\r\n\
                  if \"%1\"==\"--version\" (echo 0.1.0& exit /b 0)\r\n\
-                 if \"%1\"==\"status\" (echo {\"running\":true}& exit /b 0)\r\n\
+                 if \"%1\"==\"status\" (echo {\"running\":true,\"serviceInstalled\":true,\"serviceRunning\":true}& exit /b 0)\r\n\
                  if \"%1\"==\"setup\" exit /b 0\r\n\
                  if \"%1\"==\"link\" exit /b 0\r\n\
                  if \"%1\"==\"start\" exit /b 0\r\n\
@@ -325,7 +408,7 @@ mod tests {
                 "#!/bin/sh\n\
                  case \"$1\" in\n\
                  --version) echo 0.1.0 ;;\n\
-                 status) echo '{\"running\":true}' ;;\n\
+                 status) echo '{\"running\":true,\"serviceInstalled\":true,\"serviceRunning\":true}' ;;\n\
                  setup|link|start) ;;\n\
                  *) exit 9 ;;\n\
                  esac\n",
@@ -408,6 +491,8 @@ mod tests {
             assert!(setup_status.installed);
             assert!(setup_status.linked);
             assert!(setup_status.running);
+            assert!(setup_status.service_installed);
+            assert!(setup_status.service_running);
             assert_eq!(
                 link("A1B2C3D4E5")?.machine_id.as_deref(),
                 Some("machine_integration")
@@ -420,5 +505,107 @@ mod tests {
         std::env::remove_var("GPUBNB_CONFIG_DIR");
         let _ = fs::remove_dir_all(directory);
         result.unwrap();
+    }
+
+    // Reproduces this exact machine's real state after the NSIS `service install`
+    // hook never ran: the agent binary exists and answers `--version`/`status`, but
+    // no Windows service is registered. Before service_installed existed, `status()`
+    // had no way to represent this and the "agent" check just fell back to whatever
+    // `installed` said, which is true here — misreporting `ok: true`.
+    fn integration_fixture_without_service() -> (PathBuf, PathBuf) {
+        let (directory, executable) = integration_fixture();
+        #[cfg(target_os = "windows")]
+        fs::write(
+            &executable,
+            "@echo off\r\n\
+             if \"%1\"==\"--version\" (echo 0.1.0& exit /b 0)\r\n\
+             if \"%1\"==\"status\" (echo {\"running\":false,\"serviceInstalled\":false,\"serviceRunning\":false}& exit /b 0)\r\n\
+             if \"%1\"==\"setup\" exit /b 0\r\n\
+             if \"%1\"==\"link\" exit /b 0\r\n\
+             exit /b 9\r\n",
+        )
+        .unwrap();
+        #[cfg(not(target_os = "windows"))]
+        fs::write(
+            &executable,
+            "#!/bin/sh\n\
+             case \"$1\" in\n\
+             --version) echo 0.1.0 ;;\n\
+             status) echo '{\"running\":false,\"serviceInstalled\":false,\"serviceRunning\":false}' ;;\n\
+             setup|link) ;;\n\
+             *) exit 9 ;;\n\
+             esac\n",
+        )
+        .unwrap();
+        (directory, executable)
+    }
+
+    #[test]
+    fn status_tells_a_missing_service_apart_from_a_binary_that_merely_runs() {
+        let _guard = ENVIRONMENT_LOCK.lock().unwrap();
+        let (directory, executable) = integration_fixture_without_service();
+        let config_directory = directory.join("config");
+        fs::create_dir_all(&config_directory).unwrap();
+        fs::write(
+            config_directory.join("config.json"),
+            r#"{"machineId":"machine_no_service"}"#,
+        )
+        .unwrap();
+        std::env::set_var("GPUBNB_TEST_AGENT_EXECUTABLE", &executable);
+        std::env::set_var("GPUBNB_CONFIG_DIR", &config_directory);
+
+        let result = status();
+
+        std::env::remove_var("GPUBNB_TEST_AGENT_EXECUTABLE");
+        std::env::remove_var("GPUBNB_CONFIG_DIR");
+        let _ = fs::remove_dir_all(directory);
+
+        assert!(result.installed);
+        assert!(result.linked);
+        assert!(!result.running);
+        assert!(!result.service_installed);
+        assert!(!result.service_running);
+    }
+
+    #[test]
+    fn elevated_launch_script_requests_uac_and_propagates_the_real_exit_code() {
+        let script = elevated_launch_script(
+            std::path::Path::new(r"C:\Program Files\GPUbnb Host\gpubnb-agent.exe"),
+            &["service", "install"],
+        );
+        assert!(script.contains("-Verb RunAs"));
+        assert!(script.contains("-Wait"));
+        assert!(script.contains(r"'C:\Program Files\GPUbnb Host\gpubnb-agent.exe'"));
+        assert!(script.contains("-ArgumentList 'service','install'"));
+        assert!(script.contains("exit $process.ExitCode"));
+    }
+
+    #[test]
+    fn elevated_launch_script_escapes_single_quotes_in_the_executable_path() {
+        let script =
+            elevated_launch_script(std::path::Path::new("C:\\It's\\gpubnb-agent.exe"), &[]);
+        assert!(script.contains(r"'C:\It''s\gpubnb-agent.exe'"));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn install_service_elevated_fails_closed_off_windows() {
+        assert_eq!(
+            install_service_elevated(),
+            Err("service_installation_requires_windows".to_owned())
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn install_service_elevated_fails_closed_when_the_agent_binary_is_missing() {
+        let _guard = ENVIRONMENT_LOCK.lock().unwrap();
+        let missing = std::env::temp_dir().join("gpubnb-definitely-missing-agent.exe");
+        std::env::set_var("GPUBNB_TEST_AGENT_EXECUTABLE", &missing);
+
+        let result = install_service_elevated();
+
+        std::env::remove_var("GPUBNB_TEST_AGENT_EXECUTABLE");
+        assert_eq!(result.err().as_deref(), Some("agent_not_installed"));
     }
 }
