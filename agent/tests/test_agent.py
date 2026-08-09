@@ -178,6 +178,77 @@ class HeartbeatTests(unittest.TestCase):
         self.assertEqual(len(challenges_issued), len(set(challenges_issued)), "challenges must not repeat")
         self.assertEqual(len(signatures), len(set(signatures)), "a retry must never resend an identical signature")
 
+    def test_counter_replay_advances_and_persists_instead_of_looping_forever(self):
+        # A local counter file that fell behind the server's lastCounter (crash,
+        # uninstall wiping ProgramData before the last save landed, ...) used to be
+        # unrecoverable: `counter` was computed once before the retry loop, so every
+        # retry — and every subsequent heartbeat cycle, since save_counter() is only
+        # called on success — resent the exact same doomed value forever. The agent
+        # must now burn the rejected value, persist it so it's never reused, and try
+        # the next one until it catches up with the server.
+        gpu = {
+            "gpuUuid": "GPU-test", "gpuModel": "NVIDIA Test", "vramMiB": 4096,
+            "memoryUsedMiB": 0, "driverVersion": "1", "cudaVersion": "1",
+            "temperatureC": 40, "gpuUtilization": 0, "powerWatts": 1.0, "gpuVendor": "NVIDIA",
+        }
+        server_last_counter = 1607 + 3  # server is 3 heartbeats ahead of the local file
+        saved_counters: list[int] = []
+
+        class Client:
+            def request(self, path, method="GET", body=None, headers=None, timeout=12):
+                if path.startswith("/agent/challenge/"):
+                    return {"challenge": "challenge-value-long-enough"}
+                if body["counter"] <= server_last_counter:
+                    raise RuntimeError('API HTTP 409: {"error":"counter_replay"}')
+                return {"ok": True}
+
+        with (
+            patch("gpubnb_agent.client.gpu_inventory", return_value=[gpu]),
+            patch("gpubnb_agent.client.system_inventory", return_value={"machineFingerprint": "abc"}),
+            patch("gpubnb_agent.client.telemetry_snapshot", return_value={"schemaVersion": 2, "accelerators": []}),
+            patch("gpubnb_agent.client.detect_hardware_change", return_value=(False, None)),
+            patch("gpubnb_agent.client.save_machine_fingerprint"),
+            patch("gpubnb_agent.client.load_counter", return_value=1607),
+            patch("gpubnb_agent.client.save_counter", side_effect=saved_counters.append),
+        ):
+            result = heartbeat(Client(), SigningKey.generate(), "machine-id")
+
+        self.assertEqual(result, {"ok": True})
+        # Every burned attempt (1608, 1609, 1610) must be persisted, plus the final
+        # accepted one (1611) — never the same value reused, never a gap skipped.
+        self.assertEqual(saved_counters, [1608, 1609, 1610, 1611])
+
+    def test_counter_replay_gives_up_after_the_resync_limit_without_reusing_values(self):
+        from gpubnb_agent.client import COUNTER_REPLAY_RESYNC_LIMIT
+
+        gpu = {
+            "gpuUuid": "GPU-test", "gpuModel": "NVIDIA Test", "vramMiB": 4096,
+            "memoryUsedMiB": 0, "driverVersion": "1", "cudaVersion": "1",
+            "temperatureC": 40, "gpuUtilization": 0, "powerWatts": 1.0, "gpuVendor": "NVIDIA",
+        }
+        saved_counters: list[int] = []
+
+        class Client:
+            def request(self, path, method="GET", body=None, headers=None, timeout=12):
+                if path.startswith("/agent/challenge/"):
+                    return {"challenge": "challenge-value-long-enough"}
+                raise RuntimeError('API HTTP 409: {"error":"counter_replay"}')
+
+        with (
+            patch("gpubnb_agent.client.gpu_inventory", return_value=[gpu]),
+            patch("gpubnb_agent.client.system_inventory", return_value={"machineFingerprint": "abc"}),
+            patch("gpubnb_agent.client.telemetry_snapshot", return_value={"schemaVersion": 2, "accelerators": []}),
+            patch("gpubnb_agent.client.detect_hardware_change", return_value=(False, None)),
+            patch("gpubnb_agent.client.save_machine_fingerprint"),
+            patch("gpubnb_agent.client.load_counter", return_value=0),
+            patch("gpubnb_agent.client.save_counter", side_effect=saved_counters.append),
+        ):
+            with self.assertRaises(RuntimeError):
+                heartbeat(Client(), SigningKey.generate(), "machine-id")
+
+        self.assertEqual(saved_counters, list(range(1, COUNTER_REPLAY_RESYNC_LIMIT + 1)))
+        self.assertEqual(len(saved_counters), len(set(saved_counters)), "no burned counter may be reused")
+
 
 class RunnerTests(unittest.TestCase):
     def test_requires_digest_pinned_image(self):
