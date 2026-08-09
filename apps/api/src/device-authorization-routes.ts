@@ -11,6 +11,7 @@ import {
 import { RedisDeviceAuthorizationStore } from './device-authorization-store.js';
 import { registerMiningRoutes } from './mining-routes.js';
 import { syncMiningResourcesFromInventory } from './mining-resource-inventory.js';
+import { registerWorkspaceRenterRoutes } from './workspace-renter-routes.js';
 
 const agentPublicKeySchema = z.string().min(32).max(64).regex(/^[1-9A-HJ-NP-Za-km-z]+$/);
 const machineFingerprintSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
@@ -30,9 +31,6 @@ export const inventorySchema = z.object({
     virtualizationAvailable: z.boolean().optional(),
   }),
   gpus: z.array(z.object({
-    // Bounded to match Accelerator's actual column widths (schema.prisma), not just a
-    // generous-looking limit: a real GPU reporting a longer model/driver/CUDA string
-    // used to overflow the column and crash the pairing transaction with a raw 500.
     gpuModel: z.string().max(160),
     gpuUuid: z.string().max(200),
     vramMiB: z.number().int().positive().max(1_000_000),
@@ -65,6 +63,7 @@ export const registerDeviceAuthorizationRoutes = (
 ): void => {
   const store = new RedisDeviceAuthorizationStore(redis);
   registerMiningRoutes(app, db, redis);
+  registerWorkspaceRenterRoutes(app, db, redis);
 
   app.post('/agent/device-authorizations', {
     config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
