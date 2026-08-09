@@ -1,3 +1,7 @@
+#[path = "../src/approved_miner_manifest.rs"]
+mod approved_miner_manifest;
+#[path = "../src/miner_paths.rs"]
+mod miner_paths;
 #[path = "../src/mining_catalog.rs"]
 mod mining_catalog;
 #[path = "../src/mining_fee_policy.rs"]
@@ -8,6 +12,9 @@ mod mining_runtime_controller;
 mod mining_supervisor;
 #[path = "../src/rental_mining_coordinator.rs"]
 mod rental_mining_coordinator;
+#[path = "../src/startup_reconciliation.rs"]
+mod startup_reconciliation;
+use mining_catalog::secure_launcher;
 
 use mining_catalog::{approved_for_vendor, GpuVendor};
 use mining_fee_policy::{calculate_reward_split, MiningFeeMode};

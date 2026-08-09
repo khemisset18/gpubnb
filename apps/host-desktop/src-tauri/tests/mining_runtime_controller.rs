@@ -1,7 +1,15 @@
+#[path = "../src/approved_miner_manifest.rs"]
+mod approved_miner_manifest;
+#[path = "../src/miner_paths.rs"]
+mod miner_paths;
 #[path = "../src/mining_runtime_controller.rs"]
 mod mining_runtime_controller;
 #[path = "../src/rental_mining_coordinator.rs"]
 mod rental_mining_coordinator;
+#[path = "../src/mining_catalog/secure_launcher.rs"]
+mod secure_launcher;
+#[path = "../src/startup_reconciliation.rs"]
+mod startup_reconciliation;
 
 use mining_runtime_controller::{MiningRuntimeController, RuntimeOrder};
 use rental_mining_coordinator::{
