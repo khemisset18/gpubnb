@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.6 seconds
+Output:
 import argparse
 import io
 import json
@@ -24,6 +27,13 @@ class ProcessLifecycleTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.environment.stop()
         self.temporary_directory.cleanup()
+
+    def test_conventional_version_flag_is_supported(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output), self.assertRaises(SystemExit) as exit_context:
+            cli.parser().parse_args(["--version"])
+        self.assertEqual(exit_context.exception.code, 0)
+        self.assertEqual(output.getvalue().strip(), cli.__version__)
 
     def test_frozen_agent_relaunches_the_sidecar(self) -> None:
         executable = r"C:\Program Files\GPUbnb\gpubnb-agent.exe"
@@ -107,3 +117,4 @@ class ProcessLifecycleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
