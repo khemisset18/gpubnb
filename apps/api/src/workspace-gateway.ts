@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { MachineConnectivity, MachineOperational, ModerationStatus, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
+import { BookingStatus, MachineConnectivity, MachineOperational, ModerationStatus, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 import WebSocket from 'ws';
 import { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';
@@ -31,13 +31,17 @@ async function authenticateAgent(db:PrismaClient,redis:Redis,machineId:string,re
   if(!withBody)return true;if(!request.rawBody)return false;
   return verifyAgentRequestV2(redis,machineId,machine.agentPublicKey,request.method,routePath,request.rawBody,{timestamp:request.headers['x-agent-timestamp'],nonce:request.headers['x-agent-nonce'],bodySha256:request.headers['x-agent-body-sha256'],signature:request.headers['x-agent-signature-v2'],version:request.headers['x-agent-signature-version']});
 }
-async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.workspaceSession.findFirst({where:{id:sessionId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR}},select:{id:true,renterId:true,machineId:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});}
+async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.workspaceSession.findFirst({where:{id:sessionId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR}},select:{id:true,renterId:true,machineId:true,bookingId:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});}
 
 export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClient,redis:Redis):void{
   app.get('/workspace-gateway/:sessionId',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const grant=String((request.query as {grant?:string}).grant||'');const consumed=await consumeWorkspaceAccessGrant(redis,grant);
     if(!consumed||consumed.sessionId!==sessionId)return reply.code(401).send({error:'invalid_workspace_grant'});const row=await activeGatewaySession(db,sessionId);if(!row||row.renterId!==consumed.userId)return reply.code(409).send({error:'workspace_not_available'});
     const browserToken=crypto.randomBytes(32).toString('base64url');const ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.floor((row.expiresAt.getTime()-Date.now())/1000)));await redis.set(gatewaySessionKey(browserToken),JSON.stringify({userId:row.renterId,sessionId}),'EX',ttl);
+    // The renter actually opening the workspace - not just it being READY/RUNNING -
+    // is what STARTING -> ACTIVE means. Best-effort: a booking not currently STARTING
+    // (e.g. already ACTIVE from a reconnect) simply matches zero rows.
+    await db.booking.updateMany({where:{id:row.bookingId,status:BookingStatus.STARTING},data:{status:BookingStatus.ACTIVE}});
     reply.setCookie(GATEWAY_COOKIE,browserToken,{httpOnly:true,secure:true,sameSite:'strict',path:`/workspace-gateway/${sessionId}`});return reply.redirect(`/workspace-gateway/${sessionId}/`);
   });
   app.all('/workspace-gateway/:sessionId/*',async(request,reply)=>{
@@ -52,8 +56,18 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   app.get('/agent/workspace-gateway/:machineId/next',async(request,reply)=>{const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/next`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});const raw=await redis.rpop(machineQueue(machineId));return raw?JSON.parse(raw):reply.code(204).send();});
   app.post('/agent/workspace-gateway/:sessionId/register',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;runtimeId?:string;localPort?:number};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/register`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!/^[a-zA-Z0-9_.-]{6,100}$/.test(String(body.runtimeId||''))||!Number.isInteger(body.localPort)||Number(body.localPort)<1024||Number(body.localPort)>65535)return reply.code(400).send({error:'invalid_runtime_registration'});
-    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true}});if(!row)return reply.code(409).send({error:'workspace_not_registerable'});
-    await db.workspaceSession.update({where:{id:row.id},data:{connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort)},events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}});return {ok:true,gatewayPath:`/workspace-gateway/${sessionId}`};
+    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,status:true,bookingId:true,startedAt:true}});if(!row)return reply.code(409).send({error:'workspace_not_registerable'});
+    // First confirmed-healthy registration for this session is the real "the runtime
+    // is actually up" signal - READY only ever meant "prepared", not "running". This
+    // is also the STARTING transition point the booking lifecycle otherwise never
+    // reaches for Developer rentals (only /agent/workspace-sessions/:id/metrics moves
+    // a booking past FUNDED, and Developer sessions never call it).
+    const firstRegistration=row.status===WorkspaceSessionStatus.READY;
+    await db.$transaction([
+      db.workspaceSession.update({where:{id:row.id},data:{connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort)},...(firstRegistration?{status:WorkspaceSessionStatus.RUNNING,startedAt:row.startedAt??new Date()}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}}),
+      ...(firstRegistration?[db.booking.updateMany({where:{id:row.bookingId,status:BookingStatus.FUNDED},data:{status:BookingStatus.STARTING}})]:[]),
+    ]);
+    return {ok:true,gatewayPath:`/workspace-gateway/${sessionId}`};
   });
   app.post('/agent/workspace-gateway/respond',async(request,reply)=>{const body=request.body as {machineId?:string;id?:string;status?:number;headers?:Record<string,string>;bodyBase64?:string;error?:string};const machineId=String(body.machineId||'');const route='/agent/workspace-gateway/respond';if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!body.id)return reply.code(400).send({error:'response_id_required'});await redis.set(responseKey(body.id),JSON.stringify({status:body.status||502,headers:body.headers||{},bodyBase64:body.bodyBase64||'',error:body.error}),'EX',60);return {ok:true};});
   app.post('/agent/workspace-gateway/ws-frame',async(request,reply)=>{const body=request.body as {machineId?:string;channelId?:string;dataBase64?:string;binary?:boolean;close?:boolean};const machineId=String(body.machineId||'');const route='/agent/workspace-gateway/ws-frame';if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!body.channelId)return reply.code(400).send({error:'channel_required'});await redis.lpush(wsInputKey(body.channelId),JSON.stringify({dataBase64:body.dataBase64||'',binary:!!body.binary,close:!!body.close}));await redis.expire(wsInputKey(body.channelId),120);return {ok:true};});

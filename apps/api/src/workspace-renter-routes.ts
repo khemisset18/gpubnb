@@ -34,12 +34,16 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
   app.post('/bookings/:bookingId/workspace/developer', async (request, reply) => {
     const session=await requireSession(request,reply,redis); if(!session)return;
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
-    const existing=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId},select:{id:true,status:true}});
-    if(existing)return existing;
     const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings}},include:{listing:{select:{machineId:true}}}});
     if(!booking)return reply.code(409).send({error:'funded_booking_required'});
     const machineWorkspace=await db.machineWorkspace.findFirst({where:{machineId:booking.listing.machineId,enabledByOwner:true,workspace:{slug:'developer'},state:{in:[MachineWorkspaceState.READY,MachineWorkspaceState.LIMITED]}}});
     if(!machineWorkspace)return reply.code(409).send({error:'developer_workspace_not_enabled'});
+    // Scoped to this booking's *developer* machineWorkspace, not the booking alone: a
+    // booking can also carry a compute session created automatically on funding
+    // (ensureComputePreparation). Matching on bookingId alone would silently return
+    // that unrelated session and never create the Developer one the renter asked for.
+    const existing=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true}});
+    if(existing)return existing;
     try{
       return await db.$transaction(async tx=>{
         const created=await tx.workspaceSession.create({data:{
@@ -54,7 +58,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       });
     }catch(error){
-      const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
+      const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       if(raced)return raced;
       throw error;
     }
@@ -64,8 +68,12 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const session = await requireSession(request, reply, redis);
     if (!session) return;
     const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
+    // This route (and /workspace/access below) is the Developer surface specifically -
+    // a booking may separately carry an automatic compute session created on funding
+    // (ensureComputePreparation); scoping by workspace slug keeps that unrelated
+    // session from ever being returned here.
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId },
+      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'developer' } } },
       select: {
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         connectionType: true, connectionMetadata: true, readyAt: true, startedAt: true,
@@ -109,7 +117,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!session) return;
     const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId },
+      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'developer' } } },
       select: {
         id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },

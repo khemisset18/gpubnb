@@ -19,13 +19,13 @@ def _gpu_vendor() -> str:
     return str(gpus[0].get("gpuVendor", "NVIDIA")).upper() if gpus else "NVIDIA"
 
 
-def gpu_passthrough_flags() -> list[str]:
+def gpu_passthrough_flags(nvidia_capabilities: str = "utility") -> list[str]:
     vendor = _gpu_vendor()
     if vendor == "AMD":
         return ["--device=/dev/kfd", "--device=/dev/dri"]
     if vendor == "INTEL":
         return ["--device=/dev/dri"]
-    return ["--gpus=device=0", "--env=NVIDIA_DRIVER_CAPABILITIES=utility"]
+    return ["--gpus=device=0", f"--env=NVIDIA_DRIVER_CAPABILITIES={nvidia_capabilities}"]
 
 
 def _hardened_container_base(image: str, container_name: str | None = None) -> list[str]:

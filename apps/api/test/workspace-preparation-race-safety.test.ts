@@ -19,6 +19,12 @@ test('ensureComputePreparation is Serializable and recovers from the WorkspaceSe
     fnBody.includes("error.code==='P2002'") && fnBody.includes('db.workspaceSession.findFirst'),
     'a WorkspaceSession.bookingId unique-constraint collision must be treated as a race won by a concurrent caller, not a hard failure',
   );
+  assert.ok(
+    /existing=awaitdb\.workspaceSession\.findFirst\(\{where:\{bookingId,machineWorkspaceId:machineWorkspace\.id\}/.test(
+      fnBody.replace(/\s+/g, ''),
+    ),
+    "the existing-session lookup must be scoped to this booking's compute machineWorkspace, not the booking alone - WorkspaceSession is unique per (bookingId, machineWorkspaceId), so an unrelated Developer session for the same booking must never be returned here",
+  );
 });
 
 test('the workspace-sessions route never returns a raw Prisma error message to the client (C7)', async () => {

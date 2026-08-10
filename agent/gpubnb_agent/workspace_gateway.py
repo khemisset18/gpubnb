@@ -3,6 +3,11 @@
 The host never listens on a public interface. code-server is bound to 127.0.0.1
 through Docker and all renter traffic is relayed through authenticated GPUbnb API
 requests. The API remains the only Internet-facing endpoint.
+
+Mining/rental exclusivity, and surviving a crash or agent restart without ever
+running a miner and a renter's workspace at once, are both enforced here rather
+than left to the Tauri GUI - see mining_guard.py and _adopt_or_start_runtime /
+_sweep_orphaned_containers below for why.
 """
 from __future__ import annotations
 
@@ -15,15 +20,41 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable, Protocol
 
 import websocket
 
 from .client import ApiClient, agent_request
+from .mining_guard import ProcessInspector, WindowsProcessInspector, miner_install_root, stop_all_miners_and_verify
+from .runner import gpu_passthrough_flags
 from .storage import load_config, load_key
 
 PINNED_DEVELOPER_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpubnb-developer@sha256:[a-f0-9]{64}$")
 NETWORK_NAME = "gpubnb-workspace-internal"
+CONTAINER_PREFIX = "gpubnb-dev-"
+VOLUME_PREFIX = "gpubnb-workspace-"
+HEALTH_TIMEOUT_SECONDS = 30.0
+START_TIMEOUT_SECONDS = 120
+RECONCILE_INTERVAL_SECONDS = 1.0
+
+
+class DockerRunner(Protocol):
+    def __call__(self, args: list[str], timeout: int = 30, check: bool = True) -> "subprocess.CompletedProcess[str]": ...
+
+
+def _real_docker(args: list[str], timeout: int = 30, check: bool = True) -> "subprocess.CompletedProcess[str]":
+    result = subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout, check=False, shell=False)
+    if check and result.returncode != 0:
+        raise RuntimeError(f"workspace_docker_failed:{args[0]}:{result.returncode}:{result.stderr[:500].strip()}")
+    return result
+
+
+def _real_health_check(port: int) -> bool:
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=2) as response:
+            return 200 <= response.status < 500
+    except Exception:
+        return False
 
 
 @dataclass
@@ -34,24 +65,51 @@ class Runtime:
     port: int
 
 
+def names_for_session(session_id: str) -> tuple[str, str]:
+    suffix = re.sub(r"[^a-zA-Z0-9]", "", session_id)[-16:] or "session"
+    return f"{CONTAINER_PREFIX}{suffix}", f"{VOLUME_PREFIX}{suffix}"
+
+
 class GatewaySupervisor:
-    def __init__(self, api: ApiClient, key: Any, machine_id: str, config: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        api: ApiClient,
+        key: Any,
+        machine_id: str,
+        config: dict[str, Any],
+        docker_runner: DockerRunner | None = None,
+        process_inspector: ProcessInspector | None = None,
+        health_check: Callable[[int], bool] | None = None,
+        mining_guard: Callable[[], bool] | None = None,
+    ) -> None:
         self.api = api
         self.key = key
         self.machine_id = machine_id
         self.config = config
         self.runtimes: dict[str, Runtime] = {}
         self.channels: dict[str, websocket.WebSocket] = {}
+        self.session_channels: dict[str, set[str]] = {}
         self.stop_event = threading.Event()
+        self._docker_runner: DockerRunner = docker_runner or _real_docker
+        self._process_inspector: ProcessInspector = process_inspector or WindowsProcessInspector()
+        self._health_check: Callable[[int], bool] = health_check or _real_health_check
+        # A distinct injection point from process_inspector, not just a convenience:
+        # the real path resolves %LOCALAPPDATA%, which doesn't exist on the Linux/macOS
+        # CI runners this same package is tested on (see ci.yml's rust/host-desktop
+        # matrix - the Python agent has an equivalent one), so tests must be able to
+        # bypass path resolution entirely, not just the process backend.
+        self._mining_guard: Callable[[], bool] = mining_guard or (
+            lambda: stop_all_miners_and_verify(miner_install_root(), self._process_inspector)
+        )
 
     def _request(self, path: str, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
         return agent_request(self.api, self.key, self.machine_id, path, method, body)
 
-    def _docker(self, args: list[str], timeout: int = 30, check: bool = True) -> subprocess.CompletedProcess[str]:
-        result = subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout, check=False, shell=False)
-        if check and result.returncode != 0:
-            raise RuntimeError(f"workspace_docker_failed:{args[0]}:{result.returncode}:{result.stderr[:500].strip()}")
-        return result
+    def _docker(self, args: list[str], timeout: int = 30, check: bool = True) -> "subprocess.CompletedProcess[str]":
+        return self._docker_runner(args, timeout=timeout, check=check)
+
+    def _stop_mining_and_verify(self) -> bool:
+        return self._mining_guard()
 
     def _ensure_network(self) -> None:
         inspect = self._docker(["network", "inspect", NETWORK_NAME], check=False)
@@ -65,13 +123,18 @@ class GatewaySupervisor:
             raise RuntimeError("developer_workspace_image_must_be_official_and_digest_pinned")
         return image
 
-    def _start_runtime(self, session_id: str) -> Runtime:
-        self._ensure_network()
-        image = self._developer_image()
-        suffix = re.sub(r"[^a-zA-Z0-9]", "", session_id)[-16:] or "session"
-        container = f"gpubnb-dev-{suffix}"
-        volume = f"gpubnb-workspace-{suffix}"
-        self._docker(["volume", "create", volume])
+    def _container_running(self, container: str) -> bool:
+        inspect = self._docker(["inspect", "--format", "{{.State.Running}}", container], check=False)
+        return inspect.returncode == 0 and inspect.stdout.strip() == "true"
+
+    def _discover_port(self, container: str) -> int | None:
+        port_result = self._docker(["port", container, "3000/tcp"], check=False)
+        if port_result.returncode != 0:
+            return None
+        match = re.search(r"127\.0\.0\.1:(\d+)", port_result.stdout)
+        return int(match.group(1)) if match else None
+
+    def _launch_container(self, container: str, volume: str, image: str) -> None:
         self._docker([
             "run", "-d", "--rm", "--name", container,
             "--network", NETWORK_NAME,
@@ -81,27 +144,68 @@ class GatewaySupervisor:
             "--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
             "--tmpfs=/home/coder:rw,nosuid,size=512m",
             "--mount", f"type=volume,source={volume},target=/workspace",
+            # code-server serves the renter's own workloads (ML frameworks, CUDA code,
+            # not just nvidia-smi), so this needs "compute" - the healthcheck/diagnostic
+            # paths that share gpu_passthrough_flags() only need "utility" and keep the
+            # narrower default.
+            *gpu_passthrough_flags("compute,utility"),
             "--entrypoint", "code-server", image,
             "--bind-addr", "0.0.0.0:3000", "--auth", "none", "/workspace",
-        ], timeout=120)
-        port_result = self._docker(["port", container, "3000/tcp"])
-        match = re.search(r"127\.0\.0\.1:(\d+)", port_result.stdout)
-        if not match:
+        ], timeout=START_TIMEOUT_SECONDS)
+
+    def _wait_healthy(self, port: int, deadline: float | None = None) -> bool:
+        deadline = deadline if deadline is not None else time.time() + HEALTH_TIMEOUT_SECONDS
+        while time.time() < deadline:
+            if self._health_check(port):
+                return True
+            time.sleep(0.5)
+        return False
+
+    def _start_runtime(self, session_id: str) -> Runtime:
+        # Cheap, local, no side effects - reject a bad image before touching Docker
+        # or mining at all.
+        image = self._developer_image()
+        # Never start a Developer runtime while a miner might still hold the GPU - and
+        # never trust "no miner was in self.runtimes" for that, since self.runtimes is
+        # only ever populated by *this* process and a miner started by a previous
+        # process (or a previous session's cleanup that never ran) is invisible to it.
+        if not self._stop_mining_and_verify():
+            raise RuntimeError("workspace_start_blocked_mining_stop_unverified")
+        self._ensure_network()
+        container, volume = names_for_session(session_id)
+        self._docker(["volume", "create", volume])
+        self._launch_container(container, volume, image)
+        port = self._discover_port(container)
+        if port is None:
             self._cleanup_names(container, volume)
             raise RuntimeError("developer_workspace_loopback_port_missing")
-        port = int(match.group(1))
-        deadline = time.time() + 30
-        while time.time() < deadline:
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=2) as response:
-                    if 200 <= response.status < 500:
-                        runtime = Runtime(session_id, container, volume, port)
-                        self.runtimes[session_id] = runtime
-                        return runtime
-            except Exception:
-                time.sleep(0.5)
-        self._cleanup_names(container, volume)
-        raise RuntimeError("developer_workspace_health_timeout")
+        if not self._wait_healthy(port):
+            self._cleanup_names(container, volume)
+            raise RuntimeError("developer_workspace_health_timeout")
+        runtime = Runtime(session_id, container, volume, port)
+        self.runtimes[session_id] = runtime
+        return runtime
+
+    def _adopt_or_start_runtime(self, session_id: str) -> Runtime:
+        """Idempotent across an agent restart: if a container from a previous agent
+        process is already running for this exact session, adopt it (re-query its
+        real port) instead of trying to `docker run --name` a duplicate - which would
+        just fail on the name collision - or leaving it invisible to this process."""
+        container, volume = names_for_session(session_id)
+        if self._container_running(container):
+            port = self._discover_port(container)
+            if port is not None and self._health_check(port):
+                runtime = Runtime(session_id, container, volume, port)
+                self.runtimes[session_id] = runtime
+                return runtime
+            # Running but unhealthy/unreachable: don't adopt a broken container, and
+            # don't leave it behind either - replace it with a fresh one.
+            self._cleanup_names(container, volume)
+        else:
+            # Exists but not running (crashed; --rm may not have fired yet) - clear it
+            # before starting fresh so the name isn't taken.
+            self._docker(["rm", "-f", container], check=False)
+        return self._start_runtime(session_id)
 
     def _cleanup_names(self, container: str, volume: str) -> bool:
         self._docker(["rm", "-f", container], check=False)
@@ -110,18 +214,41 @@ class GatewaySupervisor:
         volume_inspect = self._docker(["volume", "inspect", volume], check=False)
         return inspect.returncode != 0 and volume_inspect.returncode != 0
 
+    def _close_session_channels(self, session_id: str) -> None:
+        for channel_id in self.session_channels.pop(session_id, set()):
+            ws = self.channels.pop(channel_id, None)
+            if ws is not None:
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+
     def _stop_runtime(self, session_id: str) -> bool:
+        self._close_session_channels(session_id)
         runtime = self.runtimes.pop(session_id, None)
         if runtime is None:
-            suffix = re.sub(r"[^a-zA-Z0-9]", "", session_id)[-16:] or "session"
-            return self._cleanup_names(f"gpubnb-dev-{suffix}", f"gpubnb-workspace-{suffix}")
-        for channel_id, ws in list(self.channels.items()):
-            try:
-                ws.close()
-            except Exception:
-                pass
-            self.channels.pop(channel_id, None)
+            container, volume = names_for_session(session_id)
+            return self._cleanup_names(container, volume)
         return self._cleanup_names(runtime.container_name, runtime.volume_name)
+
+    def _sweep_orphaned_containers(self, desired_session_ids: set[str]) -> None:
+        """Containers matching our own naming convention that correspond to no
+        session we were told about at all - not "ours but not adopted yet", but
+        genuinely nobody's. Left behind by e.g. a session the API already forgot
+        about while the agent was offline. Stopped and removed outright: unlike an
+        orphaned miner, there is no safe "leave it alone" option for a container that
+        is occupying the GPU and network namespace we need for a real rental."""
+        listing = self._docker(["ps", "-a", "--filter", f"name=^{CONTAINER_PREFIX}", "--format", "{{.Names}}"], check=False)
+        if listing.returncode != 0:
+            return
+        desired_containers = {names_for_session(session_id)[0] for session_id in desired_session_ids}
+        adopted_containers = {runtime.container_name for runtime in self.runtimes.values()}
+        for name in listing.stdout.splitlines():
+            name = name.strip()
+            if not name or name in desired_containers or name in adopted_containers:
+                continue
+            volume = VOLUME_PREFIX + name[len(CONTAINER_PREFIX):]
+            self._cleanup_names(name, volume)
 
     @staticmethod
     def _expired(value: object) -> bool:
@@ -137,7 +264,14 @@ class GatewaySupervisor:
 
     def _reconcile_sessions(self) -> None:
         desired = self._request(f"/agent/workspace-gateway/{self.machine_id}/desired")
-        for session in desired.get("sessions") or []:
+        sessions = desired.get("sessions") or []
+        keep_alive_ids = {
+            str(session.get("id") or "")
+            for session in sessions
+            if str(session.get("status") or "") in {"READY", "RUNNING"}
+        }
+        self._sweep_orphaned_containers(keep_alive_ids)
+        for session in sessions:
             session_id = str(session.get("id") or "")
             status = str(session.get("status") or "")
             metadata = session.get("connectionMetadata") if isinstance(session.get("connectionMetadata"), dict) else {}
@@ -148,8 +282,14 @@ class GatewaySupervisor:
             if status not in {"READY", "RUNNING"}:
                 continue
             existing = self.runtimes.get(session_id)
+            if existing is not None and not self._container_running(existing.container_name):
+                # Tracked but actually dead (e.g. it crashed since the last cycle,
+                # and --rm already reclaimed it) - drop the stale entry so the next
+                # branch below starts a real replacement instead of trusting a ghost.
+                self.runtimes.pop(session_id, None)
+                existing = None
             if existing is None:
-                existing = self._start_runtime(session_id)
+                existing = self._adopt_or_start_runtime(session_id)
             if metadata.get("runtimeId") != existing.container_name or metadata.get("localPort") != existing.port:
                 self._request(f"/agent/workspace-gateway/{session_id}/register", "POST", {"machineId": self.machine_id, "runtimeId": existing.container_name, "localPort": existing.port})
 
@@ -179,7 +319,7 @@ class GatewaySupervisor:
             payload = {"machineId": self.machine_id, "id": request_id, "status": 502, "error": str(exc)[:200]}
         self._request("/agent/workspace-gateway/respond", "POST", payload)
 
-    def _ws_reader(self, channel_id: str, ws: websocket.WebSocket) -> None:
+    def _ws_reader(self, session_id: str, channel_id: str, ws: websocket.WebSocket) -> None:
         try:
             while not self.stop_event.is_set():
                 opcode, data = ws.recv_data()
@@ -191,13 +331,15 @@ class GatewaySupervisor:
             pass
         finally:
             self.channels.pop(channel_id, None)
+            self.session_channels.get(session_id, set()).discard(channel_id)
             try:
                 self._request("/agent/workspace-gateway/ws-frame", "POST", {"machineId": self.machine_id, "channelId": channel_id, "close": True})
             except Exception:
                 pass
 
     def _ws_open(self, item: dict[str, Any]) -> None:
-        runtime = self._runtime_for(str(item.get("sessionId") or ""))
+        session_id = str(item.get("sessionId") or "")
+        runtime = self._runtime_for(session_id)
         channel_id = str(item.get("channelId") or "")
         path = str(item.get("path") or "/")
         if not channel_id or not path.startswith("/") or ".." in path:
@@ -205,7 +347,8 @@ class GatewaySupervisor:
         headers = [f"{k}: {v}" for k, v in (item.get("headers") or {}).items() if str(k).lower() not in {"host", "origin", "cookie", "authorization", "connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"}]
         ws = websocket.create_connection(f"ws://127.0.0.1:{runtime.port}{path}", header=headers, origin=f"http://127.0.0.1:{runtime.port}", timeout=10, enable_multithread=True)
         self.channels[channel_id] = ws
-        threading.Thread(target=self._ws_reader, args=(channel_id, ws), daemon=True, name=f"gpubnb-ws-{channel_id[:8]}").start()
+        self.session_channels.setdefault(session_id, set()).add(channel_id)
+        threading.Thread(target=self._ws_reader, args=(session_id, channel_id, ws), daemon=True, name=f"gpubnb-ws-{channel_id[:8]}").start()
 
     def _handle(self, item: dict[str, Any]) -> None:
         kind = item.get("kind")
@@ -230,7 +373,7 @@ class GatewaySupervisor:
         last_reconcile = 0.0
         while not self.stop_event.is_set():
             try:
-                if time.monotonic() - last_reconcile >= 1.0:
+                if time.monotonic() - last_reconcile >= RECONCILE_INTERVAL_SECONDS:
                     self._reconcile_sessions()
                     last_reconcile = time.monotonic()
                 item = self._request(f"/agent/workspace-gateway/{self.machine_id}/next")

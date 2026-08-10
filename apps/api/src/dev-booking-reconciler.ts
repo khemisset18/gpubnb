@@ -75,6 +75,12 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
           nvidiaRuntimeAvailable: true,
         },
       },
+      // A renter who requested a real Developer Workspace session is going through
+      // that lifecycle (workspace-renter-routes.ts), not this dev-bypass shortcut.
+      // Without this exclusion, this reconciler would run an unrelated GPU_DIAGNOSTIC
+      // job and mark the booking COMPLETED/DEGRADED out from under an in-progress or
+      // active Developer rental.
+      workspaceSessions: { none: { machineWorkspace: { workspace: { slug: 'developer' } } } },
     },
     select: { id: true, buyerId: true, listing: { select: { machineId: true } } },
     take: 50,

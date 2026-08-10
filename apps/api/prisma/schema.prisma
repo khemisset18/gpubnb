@@ -425,7 +425,7 @@ model MachineWorkspace {
 
 model WorkspaceSession {
   id String @id @default(cuid())
-  bookingId String @unique
+  bookingId String
   renterId String
   machineId String
   machineWorkspaceId String
@@ -457,6 +457,7 @@ model WorkspaceSession {
   job Job? @relation(fields: [jobId], references: [id], onDelete: SetNull)
   metrics WorkspaceMetric[]
   events WorkspaceSessionEvent[]
+  @@unique([bookingId, machineWorkspaceId])
   @@index([renterId, createdAt])
   @@index([machineId, status])
   @@index([bookingId])

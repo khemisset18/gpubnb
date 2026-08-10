@@ -128,12 +128,15 @@ export async function enforceAcceleratorSecurityDecision(
     });
     result.quarantinedSessions = sessions.count;
 
-    for (const bookingId of bookingIds) {
-      const session = await tx.workspaceSession.findUnique({
-        where: { bookingId },
-        select: { id: true },
-      });
-      if (!session) continue;
+    // A booking can now carry more than one WorkspaceSession (e.g. an automatic
+    // compute session alongside a renter-requested Developer one - see migration
+    // 20260810050000_workspace_session_per_machine_workspace), so this records one
+    // event per session, not one per booking.
+    const quarantinedSessions = await tx.workspaceSession.findMany({
+      where: { bookingId: { in: bookingIds }, terminationReason: SessionTerminationReason.SECURITY_POLICY, endedAt: now },
+      select: { id: true },
+    });
+    for (const session of quarantinedSessions) {
       await tx.workspaceSessionEvent.create({
         data: {
           id: `wse_${crypto.randomBytes(16).toString('hex')}`,
