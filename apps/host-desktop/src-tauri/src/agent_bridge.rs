@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.6 seconds
+Output:
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::{Child, Command, Output, Stdio};
@@ -192,7 +195,7 @@ fn run_agent(arguments: &[&str]) -> Result<Output, &'static str> {
 }
 
 pub fn status() -> AgentStatus {
-    let installed = run_agent(&["--version"]).is_ok_and(|output| output.status.success());
+    let installed = run_agent(&["version"]).is_ok_and(|output| output.status.success());
     let machine_id = parse_config().and_then(|value| value.machine_id);
     let linked = machine_id.is_some();
 
@@ -388,7 +391,7 @@ mod tests {
             fs::write(
                 &path,
                 "@echo off\r\n\
-                 if \"%1\"==\"--version\" (echo 0.1.0& exit /b 0)\r\n\
+                 if \"%1\"==\"version\" (echo 0.1.0& exit /b 0)\r\n\
                  if \"%1\"==\"status\" (echo {\"running\":true,\"serviceInstalled\":true,\"serviceRunning\":true}& exit /b 0)\r\n\
                  if \"%1\"==\"setup\" exit /b 0\r\n\
                  if \"%1\"==\"link\" exit /b 0\r\n\
@@ -407,7 +410,7 @@ mod tests {
                 &path,
                 "#!/bin/sh\n\
                  case \"$1\" in\n\
-                 --version) echo 0.1.0 ;;\n\
+                 version) echo 0.1.0 ;;\n\
                  status) echo '{\"running\":true,\"serviceInstalled\":true,\"serviceRunning\":true}' ;;\n\
                  setup|link|start) ;;\n\
                  *) exit 9 ;;\n\
@@ -508,7 +511,7 @@ mod tests {
     }
 
     // Reproduces this exact machine's real state after the NSIS `service install`
-    // hook never ran: the agent binary exists and answers `--version`/`status`, but
+    // hook never ran: the agent binary exists and answers `version`/`status`, but
     // no Windows service is registered. Before service_installed existed, `status()`
     // had no way to represent this and the "agent" check just fell back to whatever
     // `installed` said, which is true here — misreporting `ok: true`.
@@ -518,7 +521,7 @@ mod tests {
         fs::write(
             &executable,
             "@echo off\r\n\
-             if \"%1\"==\"--version\" (echo 0.1.0& exit /b 0)\r\n\
+             if \"%1\"==\"version\" (echo 0.1.0& exit /b 0)\r\n\
              if \"%1\"==\"status\" (echo {\"running\":false,\"serviceInstalled\":false,\"serviceRunning\":false}& exit /b 0)\r\n\
              if \"%1\"==\"setup\" exit /b 0\r\n\
              if \"%1\"==\"link\" exit /b 0\r\n\
@@ -530,7 +533,7 @@ mod tests {
             &executable,
             "#!/bin/sh\n\
              case \"$1\" in\n\
-             --version) echo 0.1.0 ;;\n\
+             version) echo 0.1.0 ;;\n\
              status) echo '{\"running\":false,\"serviceInstalled\":false,\"serviceRunning\":false}' ;;\n\
              setup|link) ;;\n\
              *) exit 9 ;;\n\
@@ -609,3 +612,4 @@ mod tests {
         assert_eq!(result.err().as_deref(), Some("agent_not_installed"));
     }
 }
+
