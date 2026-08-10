@@ -8,5 +8,10 @@ for tool in code-server git python3 node npm java go rustc cargo gcc g++; do
 done
 test "$(id -u)" -ne 0
 test -w /workspace
+# A production run mounts /workspace as a fresh tmpfs (required to make it writable
+# under --read-only; see runner.py), which starts empty, so these subdirectories
+# from the image layer are gone. Recreate them idempotently: a no-op against the
+# unsandboxed image used by CI, self-healing against the real hardened profile.
+mkdir -p /workspace/imports /workspace/output
 test -d /workspace/imports
 test -d /workspace/output
