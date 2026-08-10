@@ -80,6 +80,7 @@ class GatewaySupervisor:
         docker_runner: DockerRunner | None = None,
         process_inspector: ProcessInspector | None = None,
         health_check: Callable[[int], bool] | None = None,
+        mining_guard: Callable[[], bool] | None = None,
     ) -> None:
         self.api = api
         self.key = key
@@ -92,6 +93,14 @@ class GatewaySupervisor:
         self._docker_runner: DockerRunner = docker_runner or _real_docker
         self._process_inspector: ProcessInspector = process_inspector or WindowsProcessInspector()
         self._health_check: Callable[[int], bool] = health_check or _real_health_check
+        # A distinct injection point from process_inspector, not just a convenience:
+        # the real path resolves %LOCALAPPDATA%, which doesn't exist on the Linux/macOS
+        # CI runners this same package is tested on (see ci.yml's rust/host-desktop
+        # matrix - the Python agent has an equivalent one), so tests must be able to
+        # bypass path resolution entirely, not just the process backend.
+        self._mining_guard: Callable[[], bool] = mining_guard or (
+            lambda: stop_all_miners_and_verify(miner_install_root(), self._process_inspector)
+        )
 
     def _request(self, path: str, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
         return agent_request(self.api, self.key, self.machine_id, path, method, body)
@@ -100,7 +109,7 @@ class GatewaySupervisor:
         return self._docker_runner(args, timeout=timeout, check=check)
 
     def _stop_mining_and_verify(self) -> bool:
-        return stop_all_miners_and_verify(miner_install_root(), self._process_inspector)
+        return self._mining_guard()
 
     def _ensure_network(self) -> None:
         inspect = self._docker(["network", "inspect", NETWORK_NAME], check=False)

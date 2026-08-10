@@ -136,24 +136,6 @@ class NoMiners:
         return False
 
 
-class OneStubbornMiner:
-    """A miner that is running and never dies, no matter how many times it's told to
-    stop - simulates a hung/unkillable process for the fail-closed test."""
-
-    def __init__(self, path: str) -> None:
-        self._path = path
-        self.terminate_calls: list[int] = []
-
-    def running_processes(self) -> list[tuple[int, str]]:
-        return [(999, self._path)]
-
-    def terminate(self, pid: int) -> None:
-        self.terminate_calls.append(pid)
-
-    def is_running(self, pid: int) -> bool:
-        return True
-
-
 def make_supervisor(docker: FakeDocker, api: FakeApi, config: dict[str, Any] | None = None) -> GatewaySupervisor:
     supervisor = GatewaySupervisor(
         api=None, key=None, machine_id="machine-1",
@@ -161,6 +143,11 @@ def make_supervisor(docker: FakeDocker, api: FakeApi, config: dict[str, Any] | N
         docker_runner=docker,
         process_inspector=NoMiners(),
         health_check=lambda port: True,
+        # Bypasses real path resolution (%LOCALAPPDATA%, Windows-only) entirely, not
+        # just the process backend - these tests aren't about mining, and this same
+        # suite runs on Linux/macOS CI runners too. MiningExclusivityTests below
+        # overrides this per-test to actually exercise the gate.
+        mining_guard=lambda: True,
     )
     supervisor._request = api  # type: ignore[method-assign]
     return supervisor
@@ -374,28 +361,22 @@ class MiningExclusivityTests(unittest.TestCase):
         docker, api = FakeDocker(), FakeApi()
         api.sessions = [{"id": "sess-1", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}}]
         supervisor = make_supervisor(docker, api)
-        supervisor._process_inspector = OneStubbornMiner("C:\\miners\\xmrig\\xmrig.exe")  # type: ignore[assignment]
+        supervisor._mining_guard = lambda: False  # type: ignore[method-assign]
 
-        with patch(
-            "gpubnb_agent.workspace_gateway.miner_install_root",
-            return_value=__import__("pathlib").Path("C:\\miners\\xmrig"),
-        ), patch(
-            "gpubnb_agent.workspace_gateway.stop_all_miners_and_verify",
-            return_value=False,
-        ):
-            with self.assertRaises(RuntimeError) as ctx:
-                supervisor._start_runtime("sess-1")
+        with self.assertRaises(RuntimeError) as ctx:
+            supervisor._start_runtime("sess-1")
         self.assertIn("workspace_start_blocked_mining_stop_unverified", str(ctx.exception))
         self.assertEqual(docker.calls, [], "no docker command may run before mining stop is verified")
 
     def test_workspace_starts_once_mining_stop_is_verified(self) -> None:
         docker, api = FakeDocker(), FakeApi()
         supervisor = make_supervisor(docker, api)
+        stop_calls = []
+        supervisor._mining_guard = lambda: (stop_calls.append(1), True)[1]  # type: ignore[method-assign]
 
-        with patch("gpubnb_agent.workspace_gateway.stop_all_miners_and_verify", return_value=True) as stop_mock:
-            runtime = supervisor._start_runtime("sess-1")
+        runtime = supervisor._start_runtime("sess-1")
 
-        stop_mock.assert_called_once()
+        self.assertEqual(stop_calls, [1])
         self.assertIn(runtime.container_name, docker.containers)
 
 
