@@ -37,7 +37,21 @@ DEFAULT_API = "https://gpubnb.netlify.app/api"
 
 
 def print_json(value: Any) -> None:
-    print(json.dumps(value, ensure_ascii=False, indent=2, default=str), flush=True)
+    payload = json.dumps(value, ensure_ascii=False, indent=2, default=str)
+    # print() encodes through sys.stdout's text encoding, which on a real Windows
+    # console defaults to the legacy console codepage (e.g. cp1252 on this machine) -
+    # not UTF-8. Any non-ASCII content (the workspace catalog's emoji icons, accented
+    # French text) then raises UnicodeEncodeError and crashes the CLI outright, which
+    # is exactly what `gpubnb-agent workspaces list` did here. Writing UTF-8 bytes
+    # directly sidesteps the console codepage entirely. Falls back to plain print()
+    # when stdout has no .buffer (e.g. tests that redirect_stdout to an io.StringIO).
+    buffer = getattr(sys.stdout, "buffer", None)
+    if buffer is not None:
+        buffer.write(payload.encode("utf-8", errors="replace"))
+        buffer.write(b"\n")
+        buffer.flush()
+    else:
+        print(payload, flush=True)
 
 
 def client(config: dict[str, Any]) -> ApiClient:
