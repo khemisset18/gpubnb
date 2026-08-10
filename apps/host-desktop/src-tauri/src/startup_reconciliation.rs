@@ -24,7 +24,19 @@ use std::time::{Duration, Instant};
 
 use crate::rental_mining_coordinator::RentalMiningCoordinator;
 
-const GPUBNB_CONTAINER_PREFIX: &str = "gpubnb-";
+// Deliberately specific, not a bare "gpubnb-" prefix: this machine also runs unrelated
+// local dev infrastructure under that same loose prefix (docker-compose's default
+// "<project>-<service>-<n>" naming produces containers like "gpubnb-postgres-1" and
+// "gpubnb-redis-1" for the API's dev database). A broad prefix would quarantine the
+// host every time those happened to be running. These are the exact container-name
+// prefixes the agent's runner.py actually uses today (diagnostic/proof/protection-probe
+// containers); extend this list if a real long-lived rental workspace container gets
+// its own naming scheme.
+const GPUBNB_CONTAINER_PREFIXES: [&str; 3] = [
+    "gpubnb-diagnostic-",
+    "gpubnb-proof-",
+    "gpubnb-protection-probe-",
+];
 const TERMINATION_TIMEOUT: Duration = Duration::from_secs(10);
 const TERMINATION_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
@@ -102,7 +114,11 @@ pub fn reconcile(
         .collect();
     let orphaned_containers: Vec<String> = containers
         .into_iter()
-        .filter(|name| name.starts_with(GPUBNB_CONTAINER_PREFIX))
+        .filter(|name| {
+            GPUBNB_CONTAINER_PREFIXES
+                .iter()
+                .any(|prefix| name.starts_with(prefix))
+        })
         .collect();
 
     if orphaned_miners.is_empty() && orphaned_containers.is_empty() {
@@ -401,6 +417,23 @@ mod tests {
     }
 
     #[test]
+    fn unrelated_dev_infrastructure_sharing_the_gpubnb_prefix_is_not_a_workspace_orphan() {
+        // Reproduces this exact machine's docker-compose dev database containers
+        // (gpubnb-postgres-1, gpubnb-redis-1) — a bare "gpubnb-" prefix would have
+        // quarantined the host every time those happened to be running.
+        let inspector = FakeInspector::new(
+            Vec::new(),
+            vec!["gpubnb-postgres-1".into(), "gpubnb-redis-1".into()],
+        );
+        let (coordinator, outcome) = reconcile(&inspector, &[]);
+        assert_eq!(outcome, ReconciliationOutcome::Clean);
+        assert_eq!(
+            coordinator.snapshot().state,
+            crate::rental_mining_coordinator::CoordinatedGpuState::Idle
+        );
+    }
+
+    #[test]
     fn unidentified_processes_are_never_touched() {
         let approved = temp_binary("xmrig");
         let unrelated = temp_binary("notepad.exe");
@@ -436,14 +469,14 @@ mod tests {
 
     #[test]
     fn orphaned_rental_container_from_a_crash_during_rental_quarantines() {
-        let inspector = FakeInspector::new(Vec::new(), vec!["gpubnb-workspace-abc123".into()]);
+        let inspector = FakeInspector::new(Vec::new(), vec!["gpubnb-proof-abc123".into()]);
         let (coordinator, outcome) = reconcile(&inspector, &[]);
         assert_eq!(
             outcome,
             ReconciliationOutcome::Quarantined {
                 reason: "reconciliation_orphaned_rental_container",
                 orphaned_miners: Vec::new(),
-                orphaned_containers: vec!["gpubnb-workspace-abc123".into()],
+                orphaned_containers: vec!["gpubnb-proof-abc123".into()],
             }
         );
         assert_eq!(
@@ -455,10 +488,8 @@ mod tests {
     #[test]
     fn simultaneous_miner_and_rental_container_stops_the_miner_and_still_quarantines() {
         let approved = temp_binary("xmrig");
-        let inspector = FakeInspector::new(
-            vec![(7, approved.clone())],
-            vec!["gpubnb-workspace-xyz".into()],
-        );
+        let inspector =
+            FakeInspector::new(vec![(7, approved.clone())], vec!["gpubnb-proof-xyz".into()]);
         let (coordinator, outcome) = reconcile(&inspector, &[("xmrig_randomx".into(), approved)]);
         assert_eq!(inspector.terminated.lock().unwrap().as_slice(), &[7]);
         match outcome {
@@ -469,10 +500,7 @@ mod tests {
             } => {
                 assert_eq!(reason, "reconciliation_orphaned_miner_and_rental_container");
                 assert_eq!(orphaned_miners.len(), 1);
-                assert_eq!(
-                    orphaned_containers,
-                    vec!["gpubnb-workspace-xyz".to_string()]
-                );
+                assert_eq!(orphaned_containers, vec!["gpubnb-proof-xyz".to_string()]);
             }
             other => panic!("expected Quarantined, got {other:?}"),
         }
