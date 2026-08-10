@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - 'apps/host-desktop/**'
+      - 'agent/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/publish-host-test-release.yml'
