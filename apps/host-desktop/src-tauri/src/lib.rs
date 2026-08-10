@@ -304,7 +304,7 @@ fn build_status(
             ok: agent.running,
             blocking: true,
             detail: agent.detail.clone(),
-            action_label: (!agent.running).then_some(if agent.installed {
+            action_label: (!agent.running).then_some(if agent.service_installed {
                 "Démarrer le service"
             } else {
                 "Installer automatiquement"
@@ -657,13 +657,20 @@ fn run_setup_action(action_id: String) -> Result<String, String> {
             .ok_or_else(|| "pairing_service_not_configured".to_owned()),
         SetupAction::Agent => {
             let agent = agent_bridge::status();
-            if agent.linked {
-                agent_bridge::start()
-                    .map(|_| "agent_started".into())
-                    .map_err(|error| error)
-            } else {
+            if !agent.linked {
                 agent_bridge::setup()
                     .map(|_| "agent_setup_completed".into())
+                    .map_err(|error| error)
+            } else if !agent.service_installed {
+                // The Windows service can only be registered elevated (the SCM
+                // rejects it otherwise), so this is the one path that prompts UAC
+                // instead of spawning the agent unelevated like every other action.
+                agent_bridge::install_service_elevated()
+                    .map(|_| "agent_service_installed".into())
+                    .map_err(|error| error)
+            } else {
+                agent_bridge::start()
+                    .map(|_| "agent_started".into())
                     .map_err(|error| error)
             }
         }
@@ -758,6 +765,8 @@ mod tests {
             installed: true,
             linked: true,
             running: true,
+            service_installed: true,
+            service_running: true,
             machine_id: Some("machine_test".into()),
             detail: "ok".into(),
         }
