@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Choisissez un Workspace compatible avec le GPU sélectionné.">
+  <title>Choisir mon espace — GPUbnb</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="config.js"></script>
+  <script defer src="vendor/solana-web3.min.js"></script>
+  <script defer src="choose-workspace.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/"><span class="brand-mark">G</span><span>GPUbnb</span></a>
+    <a class="button button-secondary" href="/#market">Changer de GPU</a>
+  </header>
+  <main class="section shell">
+    <div class="section-heading">
+      <div>
+        <span class="eyebrow"><i></i> Étape 2 sur 2</span>
+        <h1>Choisissez votre espace de travail.</h1>
+        <p id="selectedGpu">Analyse automatique du GPU sélectionné…</p>
+      </div>
+    </div>
+    <div id="workspaceStatus" class="status-strip" aria-live="polite">Chargement des espaces compatibles…</div>
+    <div id="workspaceChoices" class="gpu-grid"></div>
+  </main>
+</body>
+</html>

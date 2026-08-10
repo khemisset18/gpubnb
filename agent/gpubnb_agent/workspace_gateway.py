@@ -28,6 +28,7 @@ from .client import ApiClient, agent_request
 from .mining_guard import ProcessInspector, WindowsProcessInspector, miner_install_root, stop_all_miners_and_verify
 from .runner import gpu_passthrough_flags
 from .storage import load_config, load_key
+from .runtime_images import workspace_image
 
 PINNED_DEVELOPER_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpubnb-developer@sha256:[a-f0-9]{64}$")
 NETWORK_NAME = "gpubnb-workspace-internal"
@@ -117,8 +118,7 @@ class GatewaySupervisor:
             self._docker(["network", "create", "--internal", NETWORK_NAME])
 
     def _developer_image(self) -> str:
-        images = self.config.get("workspaceImages") if isinstance(self.config.get("workspaceImages"), dict) else {}
-        image = str(images.get("developer") or "")
+        image = workspace_image(self.config, "developer")
         if not PINNED_DEVELOPER_IMAGE.fullmatch(image):
             raise RuntimeError("developer_workspace_image_must_be_official_and_digest_pinned")
         return image

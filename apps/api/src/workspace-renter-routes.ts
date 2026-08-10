@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { evaluateWorkspaceAccess } from './workspace-access-policy.js';
 import { issueWorkspaceAccessGrant } from './workspace-access.js';
 import { registerWorkspaceGatewayRoutes } from './workspace-gateway.js';
+import { ensureCompatibleMachineWorkspace } from './machine-workspace-catalog.js';
 
 function safeConnection(metadata: unknown): { ready: boolean; gatewayPath: string | null } {
   if (!metadata || typeof metadata !== 'object') return { ready: false, gatewayPath: null };
@@ -36,8 +37,12 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
     const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings}},include:{listing:{select:{machineId:true}}}});
     if(!booking)return reply.code(409).send({error:'funded_booking_required'});
-    const machineWorkspace=await db.machineWorkspace.findFirst({where:{machineId:booking.listing.machineId,enabledByOwner:true,workspace:{slug:'developer'},state:{in:[MachineWorkspaceState.READY,MachineWorkspaceState.LIMITED]}}});
-    if(!machineWorkspace)return reply.code(409).send({error:'developer_workspace_not_enabled'});
+    // Publishing an ACTIVE listing is the owner's global consent to secure rentals.
+    // The renter chooses the compatible workspace; there is no per-workspace owner
+    // installation/activation step in the booking path.
+    let machineWorkspace;
+    try { machineWorkspace=await ensureCompatibleMachineWorkspace(db,booking.listing.machineId,'developer'); }
+    catch(error){return reply.code(409).send({error:error instanceof Error?error.message:'developer_workspace_incompatible'});}
     // Scoped to this booking's *developer* machineWorkspace, not the booking alone: a
     // booking can also carry a compute session created automatically on funding
     // (ensureComputePreparation). Matching on bookingId alone would silently return
