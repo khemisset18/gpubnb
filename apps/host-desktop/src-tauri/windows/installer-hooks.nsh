@@ -14,6 +14,19 @@
   ${EndIf}
 !macroend
 
+!macro GPUbnbForceKillAgent
+  ; A graceful "sc stop" relies on the running agent noticing its stop event
+  ; between blocking calls. A heartbeat loop stuck inside a network call that
+  ; never returns (observed in practice) never checks it, so the process
+  ; outlives the stop request indefinitely and keeps gpubnb-agent.exe locked -
+  ; every subsequent File instruction then silently no-ops, leaving the old
+  ; build installed with no visible error (worse under /S, which has no
+  ; sharing-violation dialog to surface it at all). Force-kill by image name
+  ; as a fallback so an upgrade can never be blocked by a hung previous agent.
+  nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /IM gpubnb-agent.exe /T'
+  Pop $0
+!macroend
+
 !macro NSIS_HOOK_PREINSTALL
   Delete "$TEMP\gpubnb-installer.log"
   ; An existing service must release the sidecar before an upgrade can replace it.
@@ -23,6 +36,7 @@
   ${If} $0 == 0
     nsExec::ExecToLog '"$SYSDIR\sc.exe" stop GPUbnbAgent'
     Sleep 2000
+    !insertmacro GPUbnbForceKillAgent
     !insertmacro GPUbnbExecChecked '"$SYSDIR\sc.exe" delete GPUbnbAgent' "Unable to remove the previous GPUbnb service"
   ${EndIf}
 !macroend
@@ -58,5 +72,6 @@
 !macro NSIS_HOOK_PREUNINSTALL
   nsExec::ExecToLog '"$SYSDIR\sc.exe" stop GPUbnbAgent'
   Sleep 2000
+  !insertmacro GPUbnbForceKillAgent
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service remove' "Unable to remove the GPUbnb Windows service"
 !macroend
