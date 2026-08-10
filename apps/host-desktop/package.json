@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build --configLoader runner",
     "tauri": "tauri",
     "check": "tsc --noEmit",
     "tauri:dev": "tauri dev --features desktop-runtime",

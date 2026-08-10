@@ -47,7 +47,14 @@ class ProcessLifecycleTests(unittest.TestCase):
         )
         output = io.StringIO()
 
-        with patch.object(cli, "_process_matches", return_value=False), redirect_stdout(output):
+        with (
+            patch.object(cli, "_process_matches", return_value=False),
+            patch(
+                "gpubnb_agent.windows_service.service_status",
+                return_value={"installed": False, "running": False},
+            ),
+            redirect_stdout(output),
+        ):
             self.assertEqual(cli.command_status(argparse.Namespace()), 0)
 
         status = json.loads(output.getvalue())

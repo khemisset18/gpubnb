@@ -13,8 +13,8 @@ const context: RentalDeliveryContext = {
   renterId: 'cm8cdefghijklmnopqrstuvwx',
   listingId: 'cm8defghijklmnopqrstuvwxy',
   sessionId: 'cm8efghijklmnopqrstuvwxyz',
-  startsAt: new Date('2026-08-01T10:00:00.000Z'),
-  endsAt: new Date('2026-08-01T12:00:00.000Z'),
+  startsAt: new Date(Date.now() + 60 * 60_000),
+  endsAt: new Date(Date.now() + 3 * 60 * 60_000),
 };
 
 test('records a deterministic outbox event', async () => {

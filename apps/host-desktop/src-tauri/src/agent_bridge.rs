@@ -283,6 +283,18 @@ pub fn link(code: &str) -> Result<AgentStatus, String> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[cfg(target_os = "windows")]
+    fn failed_exit_status() -> std::process::ExitStatus {
+        use std::os::windows::process::ExitStatusExt;
+        std::process::ExitStatus::from_raw(1)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn failed_exit_status() -> std::process::ExitStatus {
+        use std::os::unix::process::ExitStatusExt;
+        std::process::ExitStatus::from_raw(1 << 8)
+    }
     use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -349,7 +361,7 @@ mod tests {
     #[test]
     fn classifies_missing_key_as_setup_required() {
         let output = Output {
-            status: std::process::Command::new("false").status().unwrap(),
+            status: failed_exit_status(),
             stdout: Vec::new(),
             stderr: "Clé absente. Exécutez d\'abord : gpubnb-agent setup"
                 .as_bytes()
