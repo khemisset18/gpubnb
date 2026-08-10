@@ -296,6 +296,18 @@ impl RentalMiningCoordinator {
         }
     }
 
+    /// Used only by startup reconciliation, before any operator interaction: lands a
+    /// freshly-constructed (therefore `Idle`-by-default) coordinator in `Quarantined`
+    /// instead, because this process has no memory of whether whatever ran before it
+    /// crashed mid-mining, mid-rental, or somewhere in between.
+    #[cfg_attr(not(feature = "desktop-runtime"), allow(dead_code))]
+    pub fn quarantine_from_reconciliation(&mut self, reason: &'static str) {
+        self.state = CoordinatedGpuState::Quarantined;
+        self.was_mining_before_reservation = false;
+        self.resume_requested = false;
+        self.last_error = Some(reason);
+    }
+
     pub fn snapshot(&self) -> CoordinatorSnapshot {
         CoordinatorSnapshot {
             state: self.state,

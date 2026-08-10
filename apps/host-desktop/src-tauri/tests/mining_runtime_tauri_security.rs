@@ -28,6 +28,8 @@ mod mining_runtime_tauri;
 mod rental_mining_coordinator;
 #[path = "../src/mining_catalog/secure_launcher.rs"]
 mod secure_launcher;
+#[path = "../src/startup_reconciliation.rs"]
+mod startup_reconciliation;
 
 use miner_process::{MinerProcessManager, MinerProcessStatus};
 use miner_runtime_executor::MinerRuntimeExecutor;

@@ -31,12 +31,12 @@ impl Default for MiningRuntimeState {
     fn default() -> Self {
         match MinerRuntimeExecutor::from_environment() {
             Ok(executor) => Self {
-                controller: Mutex::new(MiningRuntimeController::default()),
+                controller: Mutex::new(MiningRuntimeController::reconciled_at_startup()),
                 executor: Some(Mutex::new(executor)),
                 initialization_error: None,
             },
             Err(error) => Self {
-                controller: Mutex::new(MiningRuntimeController::default()),
+                controller: Mutex::new(MiningRuntimeController::reconciled_at_startup()),
                 executor: None,
                 initialization_error: Some(error),
             },

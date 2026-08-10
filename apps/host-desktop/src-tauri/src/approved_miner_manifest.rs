@@ -1,3 +1,9 @@
+// Not every integration test binary in this crate reaches every pinned-release
+// accessor below (some only need one profile's manifest), matching the same
+// per-binary dead-code shape the crate root already allows for outside the real
+// desktop-runtime build.
+#![cfg_attr(not(feature = "desktop-runtime"), allow(dead_code))]
+
 use super::secure_launcher::MinerBinaryManifest;
 
 pub const XMRIG_VERSION: &str = "6.26.0";

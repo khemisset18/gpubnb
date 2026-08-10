@@ -34,6 +34,40 @@ pub struct MiningRuntimeController {
 }
 
 impl MiningRuntimeController {
+    #[cfg_attr(not(feature = "desktop-runtime"), allow(dead_code))]
+    fn from_coordinator(coordinator: RentalMiningCoordinator) -> Self {
+        Self {
+            coordinator,
+            sequence: 0,
+            last_emitted: None,
+        }
+    }
+
+    /// Builds a controller whose starting state reflects what is actually running on
+    /// the machine right now, instead of trusting the in-memory default of `Idle`. See
+    /// `startup_reconciliation` for why: a crash mid-mining or mid-rental leaves no
+    /// memory of it, and a real orphaned miner or rental container can still be alive.
+    #[cfg_attr(not(feature = "desktop-runtime"), allow(dead_code))]
+    pub fn reconciled_at_startup() -> Self {
+        use crate::miner_paths;
+        use crate::startup_reconciliation::{
+            approved_binary_paths, reconcile, RealSystemInspector,
+        };
+
+        // Not knowing where our own approved binaries live is itself an inspection
+        // failure: without it we could not tell a real orphaned miner apart from an
+        // unrelated process, so we cannot claim a Clean boot either.
+        let Ok(approved_root) = miner_paths::approved_miner_root() else {
+            let mut coordinator = RentalMiningCoordinator::default();
+            coordinator.quarantine_from_reconciliation("reconciliation_approved_root_unavailable");
+            return Self::from_coordinator(coordinator);
+        };
+        let approved_binaries = approved_binary_paths(&approved_root);
+        let inspector = RealSystemInspector;
+        let (coordinator, _outcome) = reconcile(&inspector, &approved_binaries);
+        Self::from_coordinator(coordinator)
+    }
+
     pub fn set_owner_consent(
         &mut self,
         consent: MiningConsent,

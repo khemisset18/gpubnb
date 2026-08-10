@@ -23,6 +23,7 @@ mod rental_mining_coordinator;
 mod rental_orchestrator;
 #[path = "mining_catalog/secure_launcher.rs"]
 mod secure_launcher;
+mod startup_reconciliation;
 
 use agent_bridge::{AgentStatus, ProtectionStatus};
 use diagnostics::{collect_native_diagnostic, NativeDiagnostic};
