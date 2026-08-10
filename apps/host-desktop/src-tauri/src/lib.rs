@@ -185,6 +185,23 @@ struct HostStatus {
     checks: Vec<Check>,
 }
 
+fn storage_protection_detail(verified: bool) -> &'static str {
+    if verified {
+        "Le stockage locataire est isolé et son nettoyage a été vérifié"
+    } else {
+        "Le stockage locataire isolé et son nettoyage ne sont pas encore provisionnés"
+    }
+}
+
+fn network_filter_detail(verified: bool) -> &'static str {
+    if verified {
+        "La politique réseau locataire restrictive a été vérifiée"
+    } else {
+        "Aucune politique réseau locataire vérifiée n’est encore installée"
+    }
+}
+
+
 fn unix_seconds() -> Result<u64, &'static str> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -327,8 +344,7 @@ fn build_status(
             label: "Fichiers personnels protégés",
             ok: readiness.storage_protected,
             blocking: true,
-            detail: "Le stockage locataire isolé et son nettoyage ne sont pas encore provisionnés"
-                .into(),
+            detail: storage_protection_detail(readiness.storage_protected).into(),
             action_label: (!readiness.storage_protected).then_some("Vérifier"),
         },
         Check {
@@ -336,7 +352,7 @@ fn build_status(
             label: "Connexion locataire filtrée",
             ok: readiness.network_filtered,
             blocking: true,
-            detail: "Aucune politique réseau locataire vérifiée n’est encore installée".into(),
+            detail: network_filter_detail(readiness.network_filtered).into(),
             action_label: (!readiness.network_filtered).then_some("Configurer"),
         },
     ];
@@ -806,6 +822,14 @@ mod tests {
         let mut stopped = running_agent();
         stopped.running = false;
         assert!(!readiness.is_ready(&supported_diagnostic(), &stopped));
+    }
+
+    #[test]
+    fn verified_protections_never_render_failure_copy() {
+        assert!(!storage_protection_detail(true).contains("pas encore"));
+        assert!(!network_filter_detail(true).contains("Aucune politique"));
+        assert!(storage_protection_detail(false).contains("pas encore"));
+        assert!(network_filter_detail(false).contains("Aucune politique"));
     }
 
     #[test]
