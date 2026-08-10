@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1.6 seconds
-Output:
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::{Child, Command, Output, Stdio};
@@ -612,4 +609,3 @@ mod tests {
         assert_eq!(result.err().as_deref(), Some("agent_not_installed"));
     }
 }
-
