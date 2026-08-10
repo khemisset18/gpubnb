@@ -14,7 +14,7 @@ import { registerDeviceAuthorizationRoutes } from './device-authorization-routes
 import { requestSettlement, confirmSettlement } from './settlement-transactions.js';
 import { allocateBookingResources, ResourceAllocationError } from './resource-allocation-service.js';
 import { runBookingTransaction, BOOKING_BUSINESS_ERRORS } from './booking-transaction-retry.js';
-import { reconcileDevelopmentBookings } from './dev-booking-reconciler.js';
+import { reconcileDevelopmentBookings, reconcileStalledActivations } from './dev-booking-reconciler.js';
 const app=Fastify({logger:{redact:['req.headers.authorization','req.headers.cookie','req.headers.x-agent-signature','res.headers.set-cookie']},trustProxy:config.TRUST_PROXY==='true',bodyLimit:config.MAX_BODY_BYTES,requestIdHeader:'x-request-id'}); const db=new PrismaClient(); const redis=new Redis(config.REDIS_URL,{maxRetriesPerRequest:2,enableReadyCheck:true});
 app.addHook('preParsing',(request,_reply,payload,done)=>{const chunks:Buffer[]=[];const capture=new Transform({transform(chunk:Buffer,_encoding,callback){chunks.push(Buffer.from(chunk));callback(null,chunk);}});capture.once('end',()=>{request.rawBody=Buffer.concat(chunks);});done(null,payload.pipe(capture));});
 redis.on('error',(err:Error)=>app.log.error({err},'redis_error'));
@@ -205,7 +205,7 @@ app.setNotFoundHandler((req,reply)=>{if(req.method==='GET'&&!req.url.startsWith(
 // run run in-process here instead, on plain intervals (single process, so no distributed lock
 // is needed the way the dedicated sweep-scheduler needs one across multiple replicas).
 let reconciling=false;
-const reconcileIntervalId=setInterval(()=>{if(reconciling)return;reconciling=true;reconcileDevelopmentBookings(db,new Date()).then(result=>{if(Object.values(result).some(v=>v>0))app.log.info({...result},'gpu_booking_reconciled');}).catch(err=>app.log.error({err},'gpu_booking_reconcile_failed')).finally(()=>{reconciling=false});},10_000);
+const reconcileIntervalId=setInterval(()=>{if(reconciling)return;reconciling=true;const now=new Date();Promise.all([reconcileDevelopmentBookings(db,now).then(result=>{if(Object.values(result).some(v=>v>0))app.log.info({...result},'gpu_booking_reconciled');}).catch(err=>app.log.error({err},'gpu_booking_reconcile_failed')),reconcileStalledActivations(db,now).then(result=>{if(result.degraded>0)app.log.info({...result},'stalled_booking_activation_degraded');}).catch(err=>app.log.error({err},'stalled_activation_reconcile_failed'))]).finally(()=>{reconciling=false});},10_000);
 let sweeping=false;
 const sweepIntervalId=setInterval(()=>{if(sweeping)return;sweeping=true;(async()=>{const offline=await sweepOfflineMachines(db,new Date(),config.HEARTBEAT_OFFLINE_SECONDS);const staleJobs=await sweepStaleJobs(db,new Date(),config.JOB_STALE_AFTER_SECONDS);if(offline.machinesOffline>0||staleJobs.jobsTimedOut>0||staleJobs.jobsFailed>0)app.log.info({offline:{...offline,cutoff:offline.cutoff.toISOString()},staleJobs:{...staleJobs,cutoff:staleJobs.cutoff.toISOString()}},'offline_sweep_completed');})().catch(err=>app.log.error({err},'offline_sweep_failed')).finally(()=>{sweeping=false});},Math.max(config.HEARTBEAT_OFFLINE_SECONDS,30)*1000);
 const shutdown=async(signal:string)=>{app.log.info({signal},'shutdown');clearInterval(reconcileIntervalId);clearInterval(sweepIntervalId);await app.close();await db.$disconnect();redis.disconnect();process.exit(0)};

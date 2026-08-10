@@ -160,3 +160,45 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
 
   return { funded, queued, completed, degraded };
 }
+
+// A FUNDED/STARTING booking that never reaches ACTIVE is a stuck listing lock, not a
+// theoretical edge case - found live: a booking requesting a Developer Workspace is
+// deliberately excluded from reconcileDevelopmentBookings' GPU_DIAGNOSTIC path above (a
+// Developer rental has its own real lifecycle in workspace-gateway.ts, and this reconciler
+// must never race that). If the agent was offline/broken at the moment it should have picked
+// up the workspace preparation - exactly what happened during earlier installer/service
+// troubleshooting on the test machine - that booking's status simply never advances, and it
+// keeps counting against every future booking attempt on that listing (time_slot_unavailable)
+// for its entire original duration, which can be up to 24h. This is a plain safety-net
+// timeout, independent of BETA_TEST_DEV_BYPASS: any booking whose start time is long past
+// without ever reaching ACTIVE was never really active, so degrading it can never interrupt a
+// renter who is actually using their session.
+const STALLED_ACTIVATION_GRACE_MS = 20 * 60_000;
+
+export async function reconcileStalledActivations(db: PrismaClient, now = new Date()): Promise<{ degraded: number }> {
+  let degraded = 0;
+  const stalled = await db.booking.findMany({
+    where: {
+      status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING] },
+      startsAt: { lt: new Date(now.getTime() - STALLED_ACTIVATION_GRACE_MS) },
+    },
+    select: { id: true, listing: { select: { machineId: true } } },
+    take: 50,
+  });
+  for (const booking of stalled) {
+    const changed = await db.$transaction(async (tx) => {
+      const updated = await tx.booking.updateMany({
+        where: { id: booking.id, status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING] } },
+        data: { status: BookingStatus.DEGRADED },
+      });
+      if (updated.count !== 1) return false;
+      await tx.machine.updateMany({
+        where: { id: booking.listing.machineId, operational: MachineOperational.RESERVED },
+        data: { operational: MachineOperational.AVAILABLE },
+      });
+      return true;
+    });
+    if (changed) degraded += 1;
+  }
+  return { degraded };
+}
