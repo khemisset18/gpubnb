@@ -201,7 +201,6 @@ fn network_filter_detail(verified: bool) -> &'static str {
     }
 }
 
-
 fn unix_seconds() -> Result<u64, &'static str> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
