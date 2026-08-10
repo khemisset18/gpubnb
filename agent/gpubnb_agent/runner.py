@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import threading
 import uuid
 from typing import Any, Callable
 
@@ -12,6 +13,7 @@ from .platform_info import gpu_inventory
 PINNED_IMAGE = re.compile(r"^[a-z0-9._/-]+@sha256:[a-f0-9]{64}$")
 OFFICIAL_DIAGNOSTIC_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpu-diagnostic@sha256:[a-f0-9]{64}$")
 OFFICIAL_GPU_PROOF_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpu-proof-workspace@sha256:[a-f0-9]{64}$")
+_IMAGE_PULL_LOCK = threading.Lock()
 
 
 def _gpu_vendor() -> str:
@@ -105,18 +107,40 @@ def _parse_report(stdout: str) -> list[dict[str, object]]:
 
 
 def _pull_image(image: str, timeout: int) -> bool:
-    inspect = subprocess.run(
-        ["docker", "image", "inspect", image],
-        capture_output=True, text=True, timeout=30, check=False, shell=False,
-    )
-    cache_hit = inspect.returncode == 0
-    pull = subprocess.run(
-        ["docker", "pull", image],
-        capture_output=True, text=True, timeout=timeout, check=False, shell=False,
-    )
-    if pull.returncode != 0:
-        raise RuntimeError(f"diagnostic_image_pull_failed:{pull.returncode}:{pull.stderr[:1000].strip()}")
-    return cache_hit
+    # Digest-pinned images are content-addressed and immutable. If Docker can inspect
+    # this exact reference, re-pulling it adds latency without adding security. A
+    # process-wide lock also prevents heartbeat prewarming and a renter job from
+    # downloading the same layers concurrently.
+    with _IMAGE_PULL_LOCK:
+        inspect = subprocess.run(
+            ["docker", "image", "inspect", image],
+            capture_output=True, text=True, timeout=30, check=False, shell=False,
+        )
+        if inspect.returncode == 0:
+            return True
+        pull = subprocess.run(
+            ["docker", "pull", image],
+            capture_output=True, text=True, timeout=timeout, check=False, shell=False,
+        )
+        if pull.returncode != 0:
+            raise RuntimeError(f"diagnostic_image_pull_failed:{pull.returncode}:{pull.stderr[:1000].strip()}")
+        verify = subprocess.run(
+            ["docker", "image", "inspect", image],
+            capture_output=True, text=True, timeout=30, check=False, shell=False,
+        )
+        if verify.returncode != 0:
+            raise RuntimeError("diagnostic_image_digest_verification_failed")
+        return False
+
+
+def prewarm_workspace_image(image: str, timeout_seconds: int = 1200) -> dict[str, Any]:
+    """Fetch an official immutable Workspace image before a renter needs it."""
+    if not PINNED_IMAGE.fullmatch(image):
+        raise RuntimeError("workspace_prewarm_requires_digest_pinned_image")
+    if not image.startswith("ghcr.io/khemisset18/gpubnb-"):
+        raise RuntimeError("workspace_prewarm_requires_official_image")
+    cache_hit = _pull_image(image, max(30, min(1800, int(timeout_seconds))))
+    return {"image": image, "cacheHit": cache_hit, "ready": True}
 
 
 def run_gpu_diagnostic(image: str, timeout_seconds: int) -> dict[str, Any]:

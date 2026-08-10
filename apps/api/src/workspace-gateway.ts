@@ -41,7 +41,12 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     // The renter actually opening the workspace - not just it being READY/RUNNING -
     // is what STARTING -> ACTIVE means. Best-effort: a booking not currently STARTING
     // (e.g. already ACTIVE from a reconnect) simply matches zero rows.
-    await db.booking.updateMany({where:{id:row.bookingId,status:BookingStatus.STARTING},data:{status:BookingStatus.ACTIVE}});
+    const firstOpen=row.status===WorkspaceSessionStatus.READY;
+    await db.$transaction([
+      db.workspaceSession.updateMany({where:{id:row.id,status:WorkspaceSessionStatus.READY},data:{status:WorkspaceSessionStatus.RUNNING,preparationStep:'RENTER_CONNECTED'}}),
+      db.booking.updateMany({where:{id:row.bookingId,status:{in:[BookingStatus.FUNDED,BookingStatus.STARTING]}},data:{status:BookingStatus.ACTIVE}}),
+      ...(firstOpen?[db.workspaceSessionEvent.create({data:{sessionId:row.id,actorType:'RENTER',actorId:row.renterId,action:'SESSION_STARTED'}})]:[]),
+    ]);
     reply.setCookie(GATEWAY_COOKIE,browserToken,{httpOnly:true,secure:true,sameSite:'strict',path:`/workspace-gateway/${sessionId}`});return reply.redirect(`/workspace-gateway/${sessionId}/`);
   });
   app.all('/workspace-gateway/:sessionId/*',async(request,reply)=>{
@@ -56,18 +61,36 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   app.get('/agent/workspace-gateway/:machineId/next',async(request,reply)=>{const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/next`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});const raw=await redis.rpop(machineQueue(machineId));return raw?JSON.parse(raw):reply.code(204).send();});
   app.post('/agent/workspace-gateway/:sessionId/register',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;runtimeId?:string;localPort?:number};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/register`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!/^[a-zA-Z0-9_.-]{6,100}$/.test(String(body.runtimeId||''))||!Number.isInteger(body.localPort)||Number(body.localPort)<1024||Number(body.localPort)>65535)return reply.code(400).send({error:'invalid_runtime_registration'});
-    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,status:true,bookingId:true,startedAt:true}});if(!row)return reply.code(409).send({error:'workspace_not_registerable'});
-    // First confirmed-healthy registration for this session is the real "the runtime
-    // is actually up" signal - READY only ever meant "prepared", not "running". This
-    // is also the STARTING transition point the booking lifecycle otherwise never
-    // reaches for Developer rentals (only /agent/workspace-sessions/:id/metrics moves
-    // a booking past FUNDED, and Developer sessions never call it).
-    const firstRegistration=row.status===WorkspaceSessionStatus.READY;
+    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,status:true,bookingId:true,startedAt:true,booking:{select:{expectedSeconds:true}}}});if(!row)return reply.code(409).send({error:'workspace_not_registerable'});
+    // A healthy gateway means the workspace is READY and openable. This is the exact
+    // instant the purchased duration starts; image download and preparation remain free.
+    const firstRegistration=row.status===WorkspaceSessionStatus.READY;const readyAt=new Date();const rentalEndsAt=new Date(readyAt.getTime()+row.booking.expectedSeconds*1000);
     await db.$transaction([
-      db.workspaceSession.update({where:{id:row.id},data:{connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort)},...(firstRegistration?{status:WorkspaceSessionStatus.RUNNING,startedAt:row.startedAt??new Date()}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}}),
-      ...(firstRegistration?[db.booking.updateMany({where:{id:row.bookingId,status:BookingStatus.FUNDED},data:{status:BookingStatus.STARTING}})]:[]),
+      db.workspaceSession.update({where:{id:row.id},data:{connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort)},...(firstRegistration?{readyAt,startedAt:readyAt,expiresAt:rentalEndsAt,preparationProgress:100,preparationStep:'GATEWAY_READY'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}}),
+      ...(firstRegistration?[
+        db.booking.updateMany({where:{id:row.bookingId,status:BookingStatus.FUNDED},data:{status:BookingStatus.STARTING,startsAt:readyAt,endsAt:rentalEndsAt}}),
+        db.machineAllocation.updateMany({where:{bookingId:row.bookingId},data:{startsAt:readyAt,endsAt:rentalEndsAt}}),
+        db.acceleratorAllocation.updateMany({where:{bookingId:row.bookingId},data:{startsAt:readyAt,endsAt:rentalEndsAt}}),
+      ]:[]),
     ]);
     return {ok:true,gatewayPath:`/workspace-gateway/${sessionId}`};
+  });
+  app.post('/agent/workspace-gateway/:sessionId/usage',async(request,reply)=>{
+    const sessionId=String((request.params as {sessionId?:string}).sessionId||'');
+    const body=request.body as {machineId?:string;counter?:string;intervalSeconds?:number;available?:boolean};
+    const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/usage`;
+    if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
+    if(!/^\d{1,20}$/.test(String(body.counter||''))||!Number.isInteger(body.intervalSeconds)||Number(body.intervalSeconds)<1||Number(body.intervalSeconds)>30||body.available!==true)return reply.code(400).send({error:'invalid_usage_sample'});
+    const counter=BigInt(String(body.counter));
+    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},readyAt:{not:null},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,bookingId:true,lastMetricCounter:true,booking:{select:{status:true,validSeconds:true,expectedSeconds:true}}}});
+    if(!row||(row.booking.status!==BookingStatus.STARTING&&row.booking.status!==BookingStatus.ACTIVE))return reply.code(409).send({error:'workspace_not_billable'});
+    if(counter<=row.lastMetricCounter)return reply.code(409).send({error:'usage_counter_replay'});
+    const increment=Math.min(Number(body.intervalSeconds),Math.max(0,row.booking.expectedSeconds-row.booking.validSeconds));
+    await db.$transaction([
+      db.workspaceSession.update({where:{id:row.id},data:{lastMetricCounter:counter}}),
+      db.booking.update({where:{id:row.bookingId},data:{validSeconds:{increment}}}),
+    ]);
+    return {ok:true,validIncrement:increment};
   });
   app.post('/agent/workspace-gateway/respond',async(request,reply)=>{const body=request.body as {machineId?:string;id?:string;status?:number;headers?:Record<string,string>;bodyBase64?:string;error?:string};const machineId=String(body.machineId||'');const route='/agent/workspace-gateway/respond';if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!body.id)return reply.code(400).send({error:'response_id_required'});await redis.set(responseKey(body.id),JSON.stringify({status:body.status||502,headers:body.headers||{},bodyBase64:body.bodyBase64||'',error:body.error}),'EX',60);return {ok:true};});
   app.post('/agent/workspace-gateway/ws-frame',async(request,reply)=>{const body=request.body as {machineId?:string;channelId?:string;dataBase64?:string;binary?:boolean;close?:boolean};const machineId=String(body.machineId||'');const route='/agent/workspace-gateway/ws-frame';if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!body.channelId)return reply.code(400).send({error:'channel_required'});await redis.lpush(wsInputKey(body.channelId),JSON.stringify({dataBase64:body.dataBase64||'',binary:!!body.binary,close:!!body.close}));await redis.expire(wsInputKey(body.channelId),120);return {ok:true};});

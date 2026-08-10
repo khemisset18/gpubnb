@@ -8,7 +8,7 @@ import test from 'node:test';
 // that now give the flow real STARTING/RUNNING/ACTIVE signal, matching
 // booking FUNDED -> STARTING -> ... -> renter opens -> ACTIVE.
 
-test('the first successful runtime registration moves the session to RUNNING and the booking to STARTING', async () => {
+test('runtime registration starts the purchased duration exactly when it becomes openable', async () => {
   const source = await readFile(new URL('../src/workspace-gateway.ts', import.meta.url), 'utf8');
   const start = source.indexOf("app.post('/agent/workspace-gateway/:sessionId/register'");
   assert.ok(start >= 0);
@@ -20,14 +20,12 @@ test('the first successful runtime registration moves the session to RUNNING and
     /firstRegistration=row\.status===WorkspaceSessionStatus\.READY/,
     'must distinguish "first time this session is confirmed running" from a routine re-register (e.g. after an agent restart adopts the same container)',
   );
+  assert.doesNotMatch(body, /status:WorkspaceSessionStatus\.RUNNING/);
+  assert.match(body, /readyAt,startedAt:readyAt,expiresAt:rentalEndsAt/);
+  assert.match(body, /endsAt:rentalEndsAt/);
   assert.match(
     body,
-    /status:WorkspaceSessionStatus\.RUNNING/,
-    'READY only ever meant "prepared" - the runtime actually being up and healthy is what RUNNING should mean',
-  );
-  assert.match(
-    body,
-    /booking\.updateMany\(\{where:\{id:row\.bookingId,status:BookingStatus\.FUNDED\},data:\{status:BookingStatus\.STARTING\}/,
+    /booking\.updateMany\(\{where:\{id:row\.bookingId,status:BookingStatus\.FUNDED\},data:\{status:BookingStatus\.STARTING,startsAt:readyAt,endsAt:rentalEndsAt/,
     'the booking must advance out of FUNDED once the workspace is actually running, not stay there for the whole rental',
   );
 });
@@ -41,9 +39,26 @@ test('the renter actually opening the workspace moves the booking from STARTING 
 
   assert.match(
     body,
-    /booking\.updateMany\(\{where:\{id:row\.bookingId,status:BookingStatus\.STARTING\},data:\{status:BookingStatus\.ACTIVE\}/,
+    /status:WorkspaceSessionStatus\.RUNNING,preparationStep:'RENTER_CONNECTED'/,
+    'opening changes access state without resetting the clock that began at READY',
+  );
+  assert.match(
+    body,
+    /booking\.updateMany\(\{where:\{id:row\.bookingId,status:\{in:\[BookingStatus\.FUNDED,BookingStatus\.STARTING\]\}\},data:\{status:BookingStatus\.ACTIVE\}/,
     'ACTIVE should mean the renter is actually in their workspace, not merely that it was prepared',
   );
+});
+
+test('developer usage is accepted only after the workspace is ready and billable', async () => {
+  const source = await readFile(new URL('../src/workspace-gateway.ts', import.meta.url), 'utf8');
+  const start = source.indexOf("app.post('/agent/workspace-gateway/:sessionId/usage'");
+  assert.ok(start >= 0);
+  const end = source.indexOf('\n  });', start);
+  const body = source.slice(start, end).replace(/\s+/g, '');
+  assert.match(body, /status:\{in:\[WorkspaceSessionStatus\.READY,WorkspaceSessionStatus\.RUNNING\]\}/);
+  assert.match(body, /row\.booking\.status!==BookingStatus\.STARTING&&row\.booking\.status!==BookingStatus\.ACTIVE/);
+  assert.match(body, /usage_counter_replay/);
+  assert.match(body, /expectedSeconds-row\.booking\.validSeconds/);
 });
 
 test('the dev-bypass diagnostic reconciler never touches a booking with a real Developer session', async () => {

@@ -343,10 +343,15 @@ class RunnerTests(unittest.TestCase):
         run.side_effect = [
             type("Result", (), {"returncode": 1, "stderr": "missing"})(),
             type("Result", (), {"returncode": 0, "stderr": ""})(),
+            type("Result", (), {"returncode": 0, "stderr": ""})(),
             type("Result", (), {"returncode": 0, "stderr": "", "stdout": "{}"})(),
         ]
         result = prepare_workspace(OFFICIAL_IMAGE, 120)
+        self.assertEqual(run.call_count, 4)
+        self.assertEqual(run.call_args_list[0].args[0][:3], ["docker", "image", "inspect"])
         self.assertEqual(run.call_args_list[1].args[0][:2], ["docker", "pull"])
+        self.assertEqual(run.call_args_list[2].args[0][:3], ["docker", "image", "inspect"])
+        self.assertEqual(run.call_args_list[3].args[0], workspace_health_command(OFFICIAL_IMAGE, "compute"))
         self.assertTrue(result["gpuDetected"])
         self.assertFalse(result["metrics"]["cacheHit"])
 

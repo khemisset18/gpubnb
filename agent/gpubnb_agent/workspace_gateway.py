@@ -37,6 +37,7 @@ VOLUME_PREFIX = "gpubnb-workspace-"
 HEALTH_TIMEOUT_SECONDS = 30.0
 START_TIMEOUT_SECONDS = 120
 RECONCILE_INTERVAL_SECONDS = 1.0
+USAGE_REPORT_INTERVAL_SECONDS = 10.0
 
 
 class DockerRunner(Protocol):
@@ -90,6 +91,7 @@ class GatewaySupervisor:
         self.runtimes: dict[str, Runtime] = {}
         self.channels: dict[str, websocket.WebSocket] = {}
         self.session_channels: dict[str, set[str]] = {}
+        self.usage_last_report: dict[str, float] = {}
         self.stop_event = threading.Event()
         self._docker_runner: DockerRunner = docker_runner or _real_docker
         self._process_inspector: ProcessInspector = process_inspector or WindowsProcessInspector()
@@ -225,11 +227,35 @@ class GatewaySupervisor:
 
     def _stop_runtime(self, session_id: str) -> bool:
         self._close_session_channels(session_id)
+        self.usage_last_report.pop(session_id, None)
         runtime = self.runtimes.pop(session_id, None)
         if runtime is None:
             container, volume = names_for_session(session_id)
             return self._cleanup_names(container, volume)
         return self._cleanup_names(runtime.container_name, runtime.volume_name)
+
+    def _report_running_usage(self, runtime: Runtime) -> None:
+        """Bill only signed, healthy time after the workspace became openable."""
+        now = time.monotonic()
+        previous = self.usage_last_report.setdefault(runtime.session_id, now)
+        elapsed = int(now - previous)
+        if elapsed < USAGE_REPORT_INTERVAL_SECONDS:
+            return
+        if not self._container_running(runtime.container_name) or not self._health_check(runtime.port):
+            self.usage_last_report[runtime.session_id] = now
+            return
+        interval = max(1, min(30, elapsed))
+        self._request(
+            f"/agent/workspace-gateway/{runtime.session_id}/usage",
+            "POST",
+            {
+                "machineId": self.machine_id,
+                "counter": str(int(time.time() * 1000)),
+                "intervalSeconds": interval,
+                "available": True,
+            },
+        )
+        self.usage_last_report[runtime.session_id] = now
 
     def _sweep_orphaned_containers(self, desired_session_ids: set[str]) -> None:
         """Containers matching our own naming convention that correspond to no
@@ -292,6 +318,8 @@ class GatewaySupervisor:
                 existing = self._adopt_or_start_runtime(session_id)
             if metadata.get("runtimeId") != existing.container_name or metadata.get("localPort") != existing.port:
                 self._request(f"/agent/workspace-gateway/{session_id}/register", "POST", {"machineId": self.machine_id, "runtimeId": existing.container_name, "localPort": existing.port})
+            if status in {"READY", "RUNNING"}:
+                self._report_running_usage(existing)
 
     def _runtime_for(self, session_id: str) -> Runtime:
         runtime = self.runtimes.get(session_id)
