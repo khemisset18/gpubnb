@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.7 seconds
+Output:
 """Beginner-friendly GPUbnb Agent CLI."""
 from __future__ import annotations
 
@@ -601,6 +604,7 @@ def command_service(args: argparse.Namespace) -> int:
 
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="gpubnb-agent", description="Agent local sécurisé GPUbnb")
+    root.add_argument("--version", action="version", version=__version__)
     commands = root.add_subparsers(dest="command", required=True)
     setup = commands.add_parser("setup", help="préparer la machine et générer la clé")
     setup.add_argument("--api-url", default=DEFAULT_API)
@@ -683,3 +687,4 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         print(f"Erreur : {exc}", file=sys.stderr)
         return 1
+
