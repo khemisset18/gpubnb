@@ -32,6 +32,7 @@ from .storage import (
     config_dir, fingerprint, generate_key, key_path, load_config, load_key,
     log_path, pid_path, public_key, save_config,
 )
+from .runtime_images import DEFAULT_DEVELOPER_IMAGE, workspace_image
 
 DEFAULT_API = "https://gpubnb.netlify.app/api"
 
@@ -64,6 +65,9 @@ def command_setup(args: argparse.Namespace) -> int:
     key = generate_key()
     config = load_config()
     config.update({"apiUrl": args.api_url.rstrip("/"), "intervalSeconds": args.interval})
+    workspace_images = config.get("workspaceImages") if isinstance(config.get("workspaceImages"), dict) else {}
+    workspace_images.setdefault("developer", DEFAULT_DEVELOPER_IMAGE)
+    config["workspaceImages"] = workspace_images
     if args.diagnostic_image:
         config["diagnosticImage"] = args.diagnostic_image
     save_config(config)
@@ -349,8 +353,7 @@ def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, An
         return
     parameters = job.get("parameters") if isinstance(job.get("parameters"), dict) else {}
     workspace_slug = str(parameters.get("workspaceSlug") or "compute")
-    workspace_images = config.get("workspaceImages") if isinstance(config.get("workspaceImages"), dict) else {}
-    image = str(workspace_images.get(workspace_slug) or config.get("diagnosticImage") or "")
+    image = workspace_image(config, workspace_slug)
     try:
         if job.get("type") in {"WORKSPACE_PREPARE", "GPU_PROOF"}:
             update_job(api, key, machine_id, job_id, "DOWNLOADING")
