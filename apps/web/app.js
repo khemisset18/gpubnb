@@ -9,7 +9,22 @@ async function jsonFetch(url,options={}){const r=await fetch(`${API}${url}`,{cre
 async function authenticate(){const p=window.solana;if(!p?.isPhantom)throw new Error('Installez Phantom pour continuer.');await p.connect();const wallet=p.publicKey.toString();const n=await jsonFetch('/auth/nonce',{method:'POST',body:JSON.stringify({wallet})});const signed=await p.signMessage(new TextEncoder().encode(n.message),'utf8');await jsonFetch('/auth/verify',{method:'POST',body:JSON.stringify({wallet,message:n.message,signature:encode58(signed.signature)})});connectedWallet=wallet;if(accountButton)accountButton.textContent=`${wallet.slice(0,4)}…${wallet.slice(-4)}`;return p}
 async function rentGpuProof(listing){try{const provider=await authenticate();const startsAt=new Date(Date.now()+5*60_000);const endsAt=new Date(startsAt.getTime()+5*60_000);const booking=await jsonFetch('/bookings',{method:'POST',body:JSON.stringify({listingId:listing.id,startsAt:startsAt.toISOString(),endsAt:endsAt.toISOString(),idempotencyKey:crypto.randomUUID()})});const sol=(Number(booking.quotedLamports)/1e9).toFixed(6);if(!confirm(`Bloquer ${sol} SOL dans l'escrow Devnet pour un GPU Proof de 5 minutes ?`))return;const intent=await jsonFetch(`/bookings/${booking.id}/payment-intent`,{method:'POST',body:'{}'});const bytes=Uint8Array.from(atob(intent.transactionBase64),c=>c.charCodeAt(0));const tx=window.solanaWeb3.Transaction.from(bytes);const sent=await provider.signAndSendTransaction(tx);await provider.connection?.confirmTransaction?.(sent.signature);await jsonFetch(`/bookings/${booking.id}/confirm-deposit`,{method:'POST',body:JSON.stringify({signature:sent.signature})});alert(`GPU Proof financé. Le job CUDA démarrera automatiquement.\nTransaction : ${sent.signature}`)}catch(e){console.error(e);alert(`Impossible de terminer : ${e.message}`)}}
 async function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
-async function rentDeveloperWorkspace(listing){try{const minutesRaw=prompt('Durée de la session Developer Workspace, en minutes (5 à 1440) :','60');if(minutesRaw===null)return;const minutes=Math.max(5,Math.min(1440,parseInt(minutesRaw,10)||60));await authenticate();const startsAt=new Date(Date.now()+60_000);const endsAt=new Date(startsAt.getTime()+minutes*60_000);const booking=await jsonFetch('/bookings',{method:'POST',body:JSON.stringify({listingId:listing.id,startsAt:startsAt.toISOString(),endsAt:endsAt.toISOString(),idempotencyKey:crypto.randomUUID()})});
+async function createBookingClearingStaleHolds(listingId,startsAt,endsAt){
+  const create=()=>jsonFetch('/bookings',{method:'POST',body:JSON.stringify({listingId,startsAt:startsAt.toISOString(),endsAt:endsAt.toISOString(),idempotencyKey:crypto.randomUUID()})});
+  try{return await create()}
+  catch(e){
+    if(!/time_slot_unavailable/.test(e.message))throw e;
+    // A never-funded AWAITING_DEPOSIT booking from an earlier failed attempt (e.g. escrow
+    // unavailable) still counts against the overlap check indefinitely - clear our own stale
+    // holds on this listing, then retry once.
+    const dashboard=await jsonFetch('/dashboard');
+    const stale=(dashboard.tenant?.bookings||[]).filter(b=>b.listing?.id===listingId&&b.status==='AWAITING_DEPOSIT');
+    for(const b of stale)await jsonFetch(`/bookings/${b.id}/cancel`,{method:'POST',body:'{}'}).catch(()=>{});
+    if(!stale.length)throw e;
+    return create();
+  }
+}
+async function rentDeveloperWorkspace(listing){try{const minutesRaw=prompt('Durée de la session Developer Workspace, en minutes (5 à 1440) :','60');if(minutesRaw===null)return;const minutes=Math.max(5,Math.min(1440,parseInt(minutesRaw,10)||60));await authenticate();const startsAt=new Date(Date.now()+60_000);const endsAt=new Date(startsAt.getTime()+minutes*60_000);const booking=await createBookingClearingStaleHolds(listing.id,startsAt,endsAt);
   // Real Devnet escrow isn't deployed on this environment yet (payment-intent
   // returns escrow_not_deployed), so paid confirm-deposit can't run here. This
   // relies on the server's BETA_TEST_DEV_BYPASS reconciler instead, which
