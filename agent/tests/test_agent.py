@@ -408,9 +408,17 @@ class RunnerTests(unittest.TestCase):
         # so a real run of this command against the built image failed every single
         # time with "not writable" before this test existed — nothing here caught it
         # because the assertions above never looked past the entrypoint/isolation flags.
+        #
+        # uid=1000,gid=1000 is required too: a bare --tmpfs mount defaults to root:root
+        # mode 0700, which the image's non-root "coder" user (uid/gid 1000) can't write
+        # to either. That gap survived this test once already, since asserting the flag
+        # string is present doesn't prove the mount is actually usable — only running the
+        # real command against the published image against did.
         image = "registry.example/gpubnb/developer@sha256:" + ("b" * 64)
         command = workspace_health_command(image, "developer")
-        self.assertIn("--tmpfs=/workspace:rw,nosuid,size=512m", command)
+        self.assertIn(
+            "--tmpfs=/workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700", command
+        )
         self.assertFalse(
             any(flag in ("--volume", "-v") or flag.startswith(("--volume=", "-v=")) for flag in command),
             "the developer workspace must never bind-mount a host path, including the owner's home directory",

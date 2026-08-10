@@ -255,7 +255,13 @@ def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
             # the whole image layer including the baked-in /workspace directory. A tmpfs here —
             # not a host bind, so it satisfies the "no owner home mount" requirement — is what
             # actually makes that manifest promise true instead of failing every run.
-            "--tmpfs=/workspace:rw,nosuid,size=512m",
+            #
+            # Docker's tmpfs defaults to root:root mode 0700 when uid/gid/mode aren't given,
+            # which the image's own non-root "coder" user (uid/gid 1000, matching the
+            # codercom/code-server base image) can't write to either — confirmed against the
+            # published image, where the healthcheck failed on `test -w /workspace` even with
+            # the tmpfs mounted. Pin the tmpfs to that same uid/gid so it's actually usable.
+            "--tmpfs=/workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700",
             *gpu_passthrough_flags(),
         ]
         return [*base, "--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", image]
