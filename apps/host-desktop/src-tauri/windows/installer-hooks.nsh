@@ -5,7 +5,7 @@
   Pop $0
   Pop $1
   FileOpen $2 "$TEMP\gpubnb-installer.log" a
-  FileWrite $2 "${failureMessage}: exit code $0$\r$\n$1$\r$\n"
+  FileWrite $2 "Command exit code $0$\r$\n$1$\r$\n"
   FileClose $2
   ${If} $0 != 0
     DetailPrint "${failureMessage}: exit code $0"

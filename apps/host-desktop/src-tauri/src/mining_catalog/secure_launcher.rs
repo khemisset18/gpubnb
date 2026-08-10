@@ -196,14 +196,21 @@ fn sha256(input: &[u8]) -> [u8; 32] {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TEMP_ROOT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
     fn temp_root() -> PathBuf {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("gpubnb-miner-test-{nonce}"));
+        let sequence = TEMP_ROOT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "gpubnb-miner-test-{}-{nonce}-{sequence}",
+            std::process::id()
+        ));
         fs::create_dir_all(&root).expect("create test root");
         root
     }
