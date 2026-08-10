@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1.6 seconds
-Output:
 import argparse
 import io
 import json
@@ -117,4 +114,3 @@ class ProcessLifecycleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
