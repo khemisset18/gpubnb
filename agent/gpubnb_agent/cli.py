@@ -23,6 +23,7 @@ from .runner import (
     cleanup_workspace,
     gpu_proof_command,
     prepare_workspace,
+    prewarm_workspace_image,
     run_gpu_diagnostic,
     run_gpu_proof_workspace,
     verify_protection_profile,
@@ -305,6 +306,18 @@ def heartbeat_loop(
     key = load_key()
     interval = max(5, min(60, int(config.get("intervalSeconds", 10))))
     failures = 0
+    developer_image = workspace_image(config, "developer")
+
+    def prewarm() -> None:
+        try:
+            result = prewarm_workspace_image(developer_image)
+            print_json({"event": "workspace_image_ready", **result})
+        except Exception as exc:
+            # Prewarming is an optimization: heartbeat and normal job retry behavior
+            # must remain available if Docker is still starting or temporarily offline.
+            print_json({"event": "workspace_image_prewarm_failed", "message": str(exc)[:300]})
+
+    threading.Thread(target=prewarm, name="gpubnb-workspace-prewarm", daemon=True).start()
     pid_path().write_text(
         json.dumps(
             {

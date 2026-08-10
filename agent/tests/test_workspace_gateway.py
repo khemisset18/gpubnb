@@ -356,6 +356,33 @@ class CleanupFailureTests(unittest.TestCase):
         self.assertFalse(stopped_calls[0][2]["cleaned"])  # type: ignore[index]
 
 
+class UsageBillingTests(unittest.TestCase):
+    def test_first_ready_tick_establishes_baseline_without_billing_preparation(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        api.sessions = [{"id": "sess-1", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}}]
+        supervisor = make_supervisor(docker, api)
+
+        supervisor._reconcile_sessions()
+
+        self.assertFalse(any(call[0].endswith("/usage") for call in api.calls))
+
+    def test_running_healthy_workspace_reports_billable_intervals(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = make_supervisor(docker, api)
+        runtime = supervisor._start_runtime("sess-1")
+        supervisor.usage_last_report["sess-1"] = 0.0
+
+        with patch("gpubnb_agent.workspace_gateway.time.monotonic", return_value=11.0), patch(
+            "gpubnb_agent.workspace_gateway.time.time", return_value=1_800_000_000.0
+        ):
+            supervisor._report_running_usage(runtime)
+
+        usage = [call for call in api.calls if call[0].endswith("/usage")]
+        self.assertEqual(len(usage), 1)
+        self.assertEqual(usage[0][2]["intervalSeconds"], 11)  # type: ignore[index]
+        self.assertTrue(usage[0][2]["available"])  # type: ignore[index]
+
+
 class MiningExclusivityTests(unittest.TestCase):
     def test_workspace_refuses_to_start_while_a_miner_cannot_be_verified_stopped(self) -> None:
         docker, api = FakeDocker(), FakeApi()
