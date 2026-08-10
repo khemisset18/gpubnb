@@ -91,14 +91,20 @@ app.get('/machines/:machineId/workspaces',async(req,reply)=>{const {machineId}=z
 
 const activeJobBookings=[BookingStatus.FUNDED,BookingStatus.STARTING,BookingStatus.ACTIVE];
 async function ensureComputePreparation(bookingId:string,renterId:string){
- const existing=await db.workspaceSession.findFirst({where:{bookingId},select:{id:true,status:true,expiresAt:true,resourceLimits:true,preparationProgress:true,preparationStep:true}});
- if(existing)return existing;
  const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:renterId,status:{in:activeJobBookings}},include:{listing:{select:{machineId:true}}}});
  if(!booking)throw new Error('funded_booking_required');
  const machineWorkspace=await db.machineWorkspace.findFirst({where:{machineId:booking.listing.machineId,enabledByOwner:true,workspace:{slug:'compute',release:WorkspaceRelease.BETA},state:{in:[MachineWorkspaceState.READY,MachineWorkspaceState.LIMITED]}}});
  if(!machineWorkspace)throw new Error('compute_workspace_not_enabled');
- const limits={maxRamMiB:512,maxCpuCores:1,storageQuotaMiB:1024,networkAccess:'NONE',autoStopMinutes:10};
  const sessionSelect={id:true,status:true,expiresAt:true,resourceLimits:true,preparationProgress:true,preparationStep:true} as const;
+ // Scoped to this booking's *compute* machineWorkspace, not the booking alone: a
+ // booking can also carry a Developer session (WorkspaceSession is now unique per
+ // (bookingId, machineWorkspaceId), not per bookingId - see migration
+ // 20260810050000_workspace_session_per_machine_workspace). Matching on bookingId
+ // alone here would silently return that unrelated session instead of preparing
+ // compute.
+ const existing=await db.workspaceSession.findFirst({where:{bookingId,machineWorkspaceId:machineWorkspace.id},select:sessionSelect});
+ if(existing)return existing;
+ const limits={maxRamMiB:512,maxCpuCores:1,storageQuotaMiB:1024,networkAccess:'NONE',autoStopMinutes:10};
  try{
   return await db.$transaction(async tx=>{
    const created=await tx.workspaceSession.create({data:{bookingId,renterId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',resourceLimits:limits,preparationProgress:5,preparationStep:'RESERVATION_CONFIRMED',preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,events:{create:{actorType:'PLATFORM',action:'PREPARATION_REQUESTED',details:{target:'BEFORE_RENTER_ARRIVAL'}}}}});
@@ -106,11 +112,11 @@ async function ensureComputePreparation(bookingId:string,renterId:string){
    return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:sessionSelect});
   },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
  }catch(error){
-  // WorkspaceSession.bookingId is @unique: a near-simultaneous second call (the
+  // (bookingId, machineWorkspaceId) is @@unique: a near-simultaneous second call (the
   // confirm-deposit auto-trigger racing a manual client call) can both pass the
   // `existing` check above and collide here. Treat that race as success, not failure.
   if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002'){
-   const raced=await db.workspaceSession.findFirst({where:{bookingId},select:sessionSelect});
+   const raced=await db.workspaceSession.findFirst({where:{bookingId,machineWorkspaceId:machineWorkspace.id},select:sessionSelect});
    if(raced)return raced;
   }
   throw error;

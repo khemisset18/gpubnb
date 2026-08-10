@@ -18,7 +18,7 @@ test('prepareComputeRental writes session, job, outbox and machine command in on
   const endsAt = new Date(Date.now() + 3_600_000);
   const tx = {
     workspaceSession: {
-      findUnique: async () => null,
+      findFirst: async () => null,
       create: async () => ({
         id: ids.session,
         status: 'PREPARING',
@@ -62,6 +62,8 @@ test('prepareComputeRental writes session, job, outbox and machine command in on
 
 test('prepareComputeRental is idempotent for an existing renter session', async () => {
   let transactionWrites = 0;
+  const startsAt = new Date(Date.now() + 60_000);
+  const endsAt = new Date(Date.now() + 3_600_000);
   const existing = {
     id: ids.session,
     renterId: ids.renter,
@@ -71,7 +73,26 @@ test('prepareComputeRental is idempotent for an existing renter session', async 
     preparationProgress: 10,
     preparationStep: 'DOWNLOADING',
   };
-  const tx = { workspaceSession: { findUnique: async () => existing } };
+  const tx = {
+    // The machineWorkspace lookup now happens before the existing-session check (the
+    // check is scoped to it: one session per (booking, machineWorkspace), not per
+    // booking), so both must be mocked even though this test only exercises the
+    // "already exists" idempotency path.
+    booking: {
+      findFirst: async () => ({
+        id: ids.booking,
+        buyerId: ids.renter,
+        listingId: ids.listing,
+        startsAt,
+        endsAt,
+        listing: { id: ids.listing, machineId: ids.machine },
+      }),
+    },
+    machineWorkspace: {
+      findFirst: async () => ({ id: ids.workspace, configuration: null }),
+    },
+    workspaceSession: { findFirst: async () => existing },
+  };
   const db = {
     $transaction: async (handler: (value: typeof tx) => unknown) => {
       const result = await handler(tx);

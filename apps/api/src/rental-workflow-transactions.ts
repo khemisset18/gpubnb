@@ -54,24 +54,6 @@ export async function prepareComputeRental(
   renterId: string,
 ): Promise<PreparationResult> {
   return db.$transaction(async (tx) => {
-    const existing = await tx.workspaceSession.findUnique({
-      where: { bookingId },
-      select: {
-        id: true,
-        renterId: true,
-        status: true,
-        expiresAt: true,
-        resourceLimits: true,
-        preparationProgress: true,
-        preparationStep: true,
-      },
-    });
-
-    if (existing) {
-      if (existing.renterId !== renterId) throw new Error('workspace_session_forbidden');
-      return existing;
-    }
-
     const booking = await tx.booking.findFirst({
       where: {
         id: bookingId,
@@ -92,6 +74,27 @@ export async function prepareComputeRental(
       select: { id: true, configuration: true },
     });
     if (!machineWorkspace) throw new Error('compute_workspace_not_enabled');
+
+    // Scoped to this booking's *compute* machineWorkspace, not the booking alone - a
+    // booking may separately carry a Developer session (WorkspaceSession is unique
+    // per (bookingId, machineWorkspaceId), not per bookingId).
+    const existing = await tx.workspaceSession.findFirst({
+      where: { bookingId, machineWorkspaceId: machineWorkspace.id },
+      select: {
+        id: true,
+        renterId: true,
+        status: true,
+        expiresAt: true,
+        resourceLimits: true,
+        preparationProgress: true,
+        preparationStep: true,
+      },
+    });
+
+    if (existing) {
+      if (existing.renterId !== renterId) throw new Error('workspace_session_forbidden');
+      return existing;
+    }
 
     const resourceLimits = {
       maxRamMiB: 512,
