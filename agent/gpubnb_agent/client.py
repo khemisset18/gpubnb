@@ -24,6 +24,7 @@ from .telemetry import telemetry_snapshot
 MAX_RETRIES = 3
 RETRY_BACKOFF = 2.0
 EMPTY_BODY_SHA256 = hashlib.sha256(b"").hexdigest()
+COUNTER_REPLAY_RESYNC_LIMIT = 64
 
 
 class ApiClient:
@@ -180,7 +181,7 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
     if hw_changed and previous_fp:
         print(f"AVERTISSEMENT: Empreinte matérielle modifiée (ancienne: {previous_fp[:16]}...)")
     challenge_path = f"/agent/challenge/{machine_id}"
-    counter = load_counter() + 1
+    counter = load_counter()
     # Every attempt below is signed once and used once: the server-issued challenge
     # is single-use (redis GETDEL) and every signature is anti-replay-locked on first
     # use (verifyAgentRequest/V2). Reusing headers computed before a failed attempt —
@@ -188,7 +189,10 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
     # from a transient failure. So a retry here means a fully fresh attempt: new
     # challenge, new timestamp/nonce, new signature, not just a resend.
     last_error: Exception | None = None
-    for attempt in range(MAX_RETRIES):
+    network_attempt = 0
+    resync_attempt = 0
+    while network_attempt < MAX_RETRIES:
+        counter += 1
         try:
             challenge = client.request(
                 challenge_path,
@@ -224,6 +228,19 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
             return result
         except (urllib.error.URLError, RuntimeError, TimeoutError, OSError) as exc:
             last_error = exc
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(min(30, RETRY_BACKOFF ** attempt))
+            if "counter_replay" in str(exc) and resync_attempt < COUNTER_REPLAY_RESYNC_LIMIT:
+                # The local counter file fell behind the server's last accepted
+                # value (crash/uninstall wiped ProgramData before the last
+                # successful save could land, or two agent instances raced).
+                # `counter` is now burned — the server has already seen an
+                # equal-or-higher value for this key, so it can never be reused —
+                # persist it immediately and try the next value right away instead
+                # of retrying the exact same doomed counter forever, which is what
+                # left the agent stuck offline after every reinstall.
+                save_counter(counter)
+                resync_attempt += 1
+                continue
+            network_attempt += 1
+            if network_attempt < MAX_RETRIES:
+                time.sleep(min(30, RETRY_BACKOFF ** network_attempt))
     raise last_error  # type: ignore[misc]
