@@ -32,7 +32,7 @@ docker run -d --name "$container" \
   --read-only --cap-drop=ALL --security-opt=no-new-privileges \
   --pids-limit=512 --memory=4g --cpus=2 \
   --tmpfs /tmp:rw,noexec,nosuid,size=256m \
-  --tmpfs /home/coder:rw,nosuid,size=512m \
+  --tmpfs /home/coder:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700 \
   --mount "type=volume,source=$volume,target=/workspace" \
   --entrypoint code-server "$image" \
   --bind-addr 0.0.0.0:3000 --auth none /workspace >/dev/null
