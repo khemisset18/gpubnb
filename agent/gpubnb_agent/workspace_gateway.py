@@ -36,6 +36,7 @@ CONTAINER_PREFIX = "gpubnb-dev-"
 VOLUME_PREFIX = "gpubnb-workspace-"
 HEALTH_TIMEOUT_SECONDS = 30.0
 START_TIMEOUT_SECONDS = 120
+PORT_DISCOVERY_TIMEOUT_SECONDS = 10.0
 RECONCILE_INTERVAL_SECONDS = 1.0
 USAGE_REPORT_INTERVAL_SECONDS = 10.0
 
@@ -93,6 +94,8 @@ class GatewaySupervisor:
         self.channels: dict[str, websocket.WebSocket] = {}
         self.session_channels: dict[str, set[str]] = {}
         self.usage_last_report: dict[str, float] = {}
+        self.start_failures: dict[str, int] = {}
+        self.start_retry_at: dict[str, float] = {}
         self.stop_event = threading.Event()
         self._error_callback = error_callback
         self._last_error_signature: str | None = None
@@ -137,12 +140,34 @@ class GatewaySupervisor:
         port_result = self._docker(["port", container, "3000/tcp"], check=False)
         if port_result.returncode != 0:
             return None
-        match = re.search(r"127\.0\.0\.1:(\d+)", port_result.stdout)
+        # Docker normally returns only the endpoint, while some Engine/Desktop
+        # versions include the "3000/tcp ->" prefix. Accept IPv4 and IPv6
+        # loopback spellings, but deliberately reject wildcard or LAN bindings:
+        # the authenticated API relay is the only allowed remote entry point.
+        match = re.search(r"(?:127\.0\.0\.1|\[::1\]|::1):(\d+)", port_result.stdout)
         return int(match.group(1)) if match else None
+
+    @staticmethod
+    def _single_line(value: str, limit: int = 500) -> str:
+        return re.sub(r"[\x00-\x20\x7f]+", " ", value).strip()[:limit]
+
+    def _container_exit_error(self, container: str) -> RuntimeError:
+        state = self._docker([
+            "inspect", "--format",
+            "exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{.State.Error}}",
+            container,
+        ], check=False)
+        logs = self._docker(["logs", "--tail", "100", container], check=False)
+        state_text = self._single_line(state.stdout or state.stderr) or "state_unavailable"
+        log_text = self._single_line(f"{logs.stdout}\n{logs.stderr}") or "no_container_logs"
+        return RuntimeError(f"developer_workspace_container_exited:{state_text}:logs={log_text}")
 
     def _launch_container(self, container: str, volume: str, image: str) -> None:
         self._docker([
-            "run", "-d", "--rm", "--name", container,
+            # Keep an early-exited container just long enough to inspect its exit
+            # state and logs, then clean it explicitly. --rm erased the only useful
+            # evidence and misreported every early exit as a missing loopback port.
+            "run", "-d", "--name", container,
             "--network", NETWORK_NAME,
             "-p", "127.0.0.1::3000",
             "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
@@ -181,11 +206,25 @@ class GatewaySupervisor:
         container, volume = names_for_session(session_id)
         self._docker(["volume", "create", volume])
         self._launch_container(container, volume, image)
-        port = self._discover_port(container)
+        port = None
+        port_deadline = time.time() + PORT_DISCOVERY_TIMEOUT_SECONDS
+        while time.time() < port_deadline:
+            if not self._container_running(container):
+                error = self._container_exit_error(container)
+                self._cleanup_names(container, volume)
+                raise error
+            port = self._discover_port(container)
+            if port is not None:
+                break
+            time.sleep(0.2)
         if port is None:
             self._cleanup_names(container, volume)
             raise RuntimeError("developer_workspace_loopback_port_missing")
         if not self._wait_healthy(port):
+            if not self._container_running(container):
+                error = self._container_exit_error(container)
+                self._cleanup_names(container, volume)
+                raise error
             self._cleanup_names(container, volume)
             raise RuntimeError("developer_workspace_health_timeout")
         runtime = Runtime(session_id, container, volume, port)
@@ -232,6 +271,8 @@ class GatewaySupervisor:
     def _stop_runtime(self, session_id: str) -> bool:
         self._close_session_channels(session_id)
         self.usage_last_report.pop(session_id, None)
+        self.start_failures.pop(session_id, None)
+        self.start_retry_at.pop(session_id, None)
         runtime = self.runtimes.pop(session_id, None)
         if runtime is None:
             container, volume = names_for_session(session_id)
@@ -319,7 +360,22 @@ class GatewaySupervisor:
                 self.runtimes.pop(session_id, None)
                 existing = None
             if existing is None:
-                existing = self._adopt_or_start_runtime(session_id)
+                if time.monotonic() < self.start_retry_at.get(session_id, 0.0):
+                    continue
+                try:
+                    existing = self._adopt_or_start_runtime(session_id)
+                except Exception:
+                    failures = self.start_failures.get(session_id, 0) + 1
+                    self.start_failures[session_id] = failures
+                    # Avoid the Docker create/delete storm observed on the real host
+                    # while keeping reconciliation and heartbeats alive for recovery.
+                    self.start_retry_at[session_id] = time.monotonic() + min(
+                        60.0, 5.0 * (2 ** min(failures - 1, 4))
+                    )
+                    raise
+                else:
+                    self.start_failures.pop(session_id, None)
+                    self.start_retry_at.pop(session_id, None)
             if metadata.get("runtimeId") != existing.container_name or metadata.get("localPort") != existing.port:
                 self._request(f"/agent/workspace-gateway/{session_id}/register", "POST", {"machineId": self.machine_id, "runtimeId": existing.container_name, "localPort": existing.port})
             if status in {"READY", "RUNNING"}:
