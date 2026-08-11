@@ -444,5 +444,28 @@ class OrphanSweepTests(unittest.TestCase):
         self.assertIn("sess-1", supervisor.runtimes)
 
 
+class GatewayErrorVisibilityTests(unittest.TestCase):
+    def test_repeated_gateway_failure_is_reported_without_log_flooding(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        reported: list[str] = []
+        supervisor = GatewaySupervisor(
+            api=None,
+            key=None,
+            machine_id="machine-1",
+            config={"workspaceImages": {"developer": OFFICIAL_IMAGE}},
+            docker_runner=docker,
+            process_inspector=NoMiners(),
+            health_check=lambda _port: True,
+            mining_guard=lambda: True,
+            error_callback=lambda exc: reported.append(str(exc)),
+        )
+
+        supervisor._report_error(RuntimeError("api unavailable"))
+        supervisor._report_error(RuntimeError("api unavailable"))
+        supervisor._report_error(RuntimeError("docker unavailable"))
+
+        self.assertEqual(reported, ["api unavailable", "docker unavailable"])
+
+
 if __name__ == "__main__":
     unittest.main()
