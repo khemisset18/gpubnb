@@ -24,9 +24,14 @@ class ImagePrewarmTests(unittest.TestCase):
     @patch("gpubnb_agent.runner.subprocess.run")
     def test_missing_digest_is_pulled_once_then_verified(self, run):
         run.side_effect = [result(1), result(0), result(0)]
-        value = prewarm_workspace_image(IMAGE)
+        progress = []
+        value = prewarm_workspace_image(IMAGE, progress_callback=lambda step, elapsed: progress.append((step, elapsed)))
         self.assertFalse(value["cacheHit"])
         self.assertEqual([call.args[0][1] for call in run.call_args_list], ["image", "pull", "image"])
+        self.assertEqual(
+            [step for step, _ in progress],
+            ["WAITING_FOR_IMAGE_PULL", "CHECKING_IMAGE_CACHE", "PULLING_IMAGE", "VERIFYING_IMAGE_DIGEST", "IMAGE_CACHE_READY"],
+        )
 
     @patch("gpubnb_agent.runner.subprocess.run")
     def test_unofficial_image_is_rejected_before_docker(self, run):

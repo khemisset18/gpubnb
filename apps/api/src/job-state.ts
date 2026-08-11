@@ -2,7 +2,7 @@ import { JobStatus } from '@prisma/client';
 
 const transitions: Readonly<Record<JobStatus, readonly JobStatus[]>> = {
   DRAFT: [JobStatus.QUEUED, JobStatus.CANCELLED],
-  QUEUED: [JobStatus.ASSIGNED, JobStatus.CANCEL_REQUESTED, JobStatus.CANCELLED, JobStatus.REJECTED],
+  QUEUED: [JobStatus.ASSIGNED, JobStatus.CANCEL_REQUESTED, JobStatus.CANCELLED, JobStatus.TIMED_OUT, JobStatus.REJECTED],
   ASSIGNED: [JobStatus.DOWNLOADING, JobStatus.PREPARING, JobStatus.CANCEL_REQUESTED, JobStatus.FAILED, JobStatus.TIMED_OUT, JobStatus.QUARANTINED],
   DOWNLOADING: [JobStatus.PREPARING, JobStatus.CANCEL_REQUESTED, JobStatus.FAILED, JobStatus.TIMED_OUT, JobStatus.QUARANTINED],
   PREPARING: [JobStatus.RUNNING, JobStatus.CANCEL_REQUESTED, JobStatus.FAILED, JobStatus.TIMED_OUT, JobStatus.QUARANTINED],
