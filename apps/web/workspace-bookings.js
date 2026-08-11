@@ -3,6 +3,7 @@
   const API=(window.GPUBNB_API_URL||'').replace(/\/$/,'');
   const currentBookingStatuses=new Set(['CREATED','AWAITING_DEPOSIT','FUNDED','STARTING','ACTIVE']);
   const preparableBookingStatuses=new Set(['FUNDED','STARTING','ACTIVE']);
+  const failedWorkspaceStatuses=new Set(['FAILED','CANCELLED','TIMED_OUT','QUARANTINED']);
   const escapeHTML=value=>String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
   async function request(path,options={}){
     const headers={accept:'application/json',...(options.headers||{})};
@@ -19,6 +20,7 @@
   };
   const phaseLabel={
     WAITING_FOR_HOST:'En attente de prise en charge par l’agent hôte',
+    RECONNECTING_AGENT:'Reconnexion automatique de l’agent hôte',
     DOWNLOADING_IMAGE:'Téléchargement de l’image du workspace',
     VERIFYING_IMAGE:'Vérification du digest de l’image',
     VERIFYING_WORKSPACE:'Vérification du workspace isolé',
@@ -59,7 +61,11 @@
       }));
       const active=rows.filter(row=>currentBookingStatuses.has(row.booking.status));
       const history=rows.filter(row=>!currentBookingStatuses.has(row.booking.status));
-      root.innerHTML=`${active.length?active.map(row=>rowHTML(row)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row,true)).join('')}</details>`:''}`;
+      const latestFailure=history.find(row=>row.workspace&&failedWorkspaceStatuses.has(row.workspace.status));
+      const failureNotice=latestFailure
+        ?`<section class="workspace-latest-failure" role="alert"><h3>Dernière préparation interrompue</h3><p class="muted">Cette réservation reste visible pour expliquer l’échec. La correction ou une nouvelle tentative ne sera jamais masquée dans l’historique.</p>${rowHTML(latestFailure,true)}</section>`
+        :'';
+      root.innerHTML=`${active.length?active.map(row=>rowHTML(row)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row,true)).join('')}</details>`:''}`;
       root.querySelectorAll('[data-prepare-developer]').forEach(button=>button.addEventListener('click',async()=>{
         button.disabled=true;button.textContent='Préparation…';
         try{await request(`/bookings/${encodeURIComponent(button.dataset.prepareDeveloper)}/workspace/developer`,{method:'POST',body:'{}'});await render();}

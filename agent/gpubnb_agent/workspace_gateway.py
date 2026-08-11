@@ -83,6 +83,7 @@ class GatewaySupervisor:
         process_inspector: ProcessInspector | None = None,
         health_check: Callable[[int], bool] | None = None,
         mining_guard: Callable[[], bool] | None = None,
+        error_callback: Callable[[Exception], None] | None = None,
     ) -> None:
         self.api = api
         self.key = key
@@ -93,6 +94,9 @@ class GatewaySupervisor:
         self.session_channels: dict[str, set[str]] = {}
         self.usage_last_report: dict[str, float] = {}
         self.stop_event = threading.Event()
+        self._error_callback = error_callback
+        self._last_error_signature: str | None = None
+        self._last_error_reported_at = 0.0
         self._docker_runner: DockerRunner = docker_runner or _real_docker
         self._process_inspector: ProcessInspector = process_inspector or WindowsProcessInspector()
         self._health_check: Callable[[int], bool] = health_check or _real_health_check
@@ -397,6 +401,19 @@ class GatewaySupervisor:
             if ws:
                 ws.close()
 
+    def _report_error(self, error: Exception) -> None:
+        if self._error_callback is None:
+            return
+        now = time.monotonic()
+        signature = f"{type(error).__name__}:{str(error)[:300]}"
+        if (
+            signature != self._last_error_signature
+            or now - self._last_error_reported_at >= 30
+        ):
+            self._error_callback(error)
+            self._last_error_signature = signature
+            self._last_error_reported_at = now
+
     def run(self) -> None:
         last_reconcile = 0.0
         while not self.stop_event.is_set():
@@ -407,16 +424,30 @@ class GatewaySupervisor:
                 item = self._request(f"/agent/workspace-gateway/{self.machine_id}/next")
                 if item:
                     self._handle(item)
-            except Exception:
+            except Exception as exc:
+                self._report_error(exc)
                 time.sleep(1)
             else:
+                self._last_error_signature = None
                 time.sleep(0.05)
 
 
-def run_workspace_gateway_forever() -> None:
+def run_workspace_gateway_forever(
+    stop_event: threading.Event | None = None,
+    error_callback: Callable[[Exception], None] | None = None,
+) -> None:
     config = load_config()
     machine_id = config.get("machineId")
     if not isinstance(machine_id, str) or not machine_id:
-        return
+        raise RuntimeError("workspace_gateway_machine_not_linked")
     api = ApiClient(str(config.get("apiUrl") or "https://gpubnb.netlify.app/api"), config.get("caFile"))
-    GatewaySupervisor(api, load_key(), machine_id, config).run()
+    supervisor = GatewaySupervisor(
+        api,
+        load_key(),
+        machine_id,
+        config,
+        error_callback=error_callback,
+    )
+    if stop_event is not None:
+        supervisor.stop_event = stop_event
+    supervisor.run()

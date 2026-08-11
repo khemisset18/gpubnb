@@ -1,6 +1,7 @@
 """Windows Service Control Manager integration for the frozen GPUbnb agent."""
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -32,15 +33,30 @@ def _service_logger() -> Logger:
     return logger
 
 
+def _service_event_sink(logger: Logger):
+    def emit(event: dict[str, Any]) -> None:
+        logger.info(
+            "agent_event %s",
+            json.dumps(event, ensure_ascii=False, separators=(",", ":"), default=str),
+        )
+
+    return emit
+
+
 def supervise_heartbeat(
     stop_event: threading.Event,
     heartbeat: Any,
     logger: Logger,
 ) -> None:
     delay = RESTART_DELAY_SECONDS
+    event_sink = _service_event_sink(logger)
     while not stop_event.is_set():
         try:
-            exit_code = heartbeat(stop_event, process_mode="_service")
+            exit_code = heartbeat(
+                stop_event,
+                process_mode="_service",
+                event_sink=event_sink,
+            )
             if stop_event.is_set() and exit_code in (None, 0):
                 return
             raise RuntimeError(f"agent_service_exited:{exit_code}")

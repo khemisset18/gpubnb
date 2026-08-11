@@ -15,7 +15,7 @@ import time
 import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from . import __version__
 from .client import ApiClient, agent_request, heartbeat
@@ -295,10 +295,13 @@ def _running_agent_pid() -> int | None:
 
 
 def heartbeat_loop(
-    stop_event: threading.Event | None = None, process_mode: str = "_run"
+    stop_event: threading.Event | None = None,
+    process_mode: str = "_run",
+    event_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> int:
     if process_mode not in {"_run", "_service"}:
         raise RuntimeError("invalid_agent_process_mode")
+    emit = event_sink or print_json
     config = load_config()
     machine_id = config.get("machineId")
     if not isinstance(machine_id, str):
@@ -309,32 +312,67 @@ def heartbeat_loop(
     developer_image = workspace_image(config, "developer")
     job_thread: threading.Thread | None = None
 
+    def gateway_error(exc: Exception) -> None:
+        emit({
+            "event": "workspace_gateway_error",
+            "type": type(exc).__name__,
+            "message": str(exc)[:300],
+        })
+
+    def supervise_gateway() -> None:
+        from .workspace_gateway import run_workspace_gateway_forever
+
+        delay = 5
+        while stop_event is None or not stop_event.is_set():
+            try:
+                emit({"event": "workspace_gateway_starting"})
+                run_workspace_gateway_forever(
+                    stop_event=stop_event,
+                    error_callback=gateway_error,
+                )
+                if stop_event is not None and stop_event.is_set():
+                    return
+                raise RuntimeError("workspace_gateway_exited")
+            except Exception as exc:
+                gateway_error(exc)
+                if stop_event is not None:
+                    if stop_event.wait(delay):
+                        return
+                else:
+                    time.sleep(delay)
+                delay = min(60, delay * 2)
+
     def prewarm() -> None:
         try:
             result = prewarm_workspace_image(
                 developer_image,
-                progress_callback=lambda step, elapsed: print_json({
+                progress_callback=lambda step, elapsed: emit({
                     "event": "workspace_image_progress",
                     "step": step,
                     "elapsedSeconds": elapsed,
                 }),
             )
-            print_json({"event": "workspace_image_ready", **result})
+            emit({"event": "workspace_image_ready", **result})
         except Exception as exc:
             # Prewarming is an optimization: heartbeat and normal job retry behavior
             # must remain available if Docker is still starting or temporarily offline.
-            print_json({"event": "workspace_image_prewarm_failed", "message": str(exc)[:300]})
+            emit({"event": "workspace_image_prewarm_failed", "message": str(exc)[:300]})
 
     def poll_and_run_job() -> None:
         try:
             # The worker gets its own HTTP client. A Docker pull can take many minutes,
             # but it must never block the heartbeat loop or make the API mark this host
             # offline while useful preparation work is still progressing.
-            run_next_job(client(config), key, machine_id, config)
+            run_next_job(client(config), key, machine_id, config, event_sink=emit)
         except Exception as exc:
-            print_json({"event": "job_poll_error", "type": type(exc).__name__, "message": str(exc)[:300]})
+            emit({"event": "job_poll_error", "type": type(exc).__name__, "message": str(exc)[:300]})
 
     threading.Thread(target=prewarm, name="gpubnb-workspace-prewarm", daemon=True).start()
+    threading.Thread(
+        target=supervise_gateway,
+        name="gpubnb-workspace-gateway",
+        daemon=True,
+    ).start()
     pid_path().write_text(
         json.dumps(
             {
@@ -351,7 +389,7 @@ def heartbeat_loop(
         while stop_event is None or not stop_event.is_set():
             try:
                 result = heartbeat(client(config), key, machine_id)
-                print_json({"event": "heartbeat", "result": result})
+                emit({"event": "heartbeat", "result": result})
                 if job_thread is None or not job_thread.is_alive():
                     job_thread = threading.Thread(
                         target=poll_and_run_job,
@@ -362,7 +400,7 @@ def heartbeat_loop(
                 failures = 0
             except Exception as exc:
                 failures = min(failures + 1, 8)
-                print_json({"event": "heartbeat_error", "type": type(exc).__name__, "message": str(exc)[:300]})
+                emit({"event": "heartbeat_error", "type": type(exc).__name__, "message": str(exc)[:300]})
             delay = min(300, interval * (2 ** failures)) if failures else interval
             if stop_event is not None:
                 stop_event.wait(delay)
@@ -378,7 +416,14 @@ def heartbeat_loop(
             pass
 
 
-def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, Any]) -> None:
+def run_next_job(
+    api: ApiClient,
+    key: Any,
+    machine_id: str,
+    config: dict[str, Any],
+    event_sink: Callable[[dict[str, Any]], None] | None = None,
+) -> None:
+    emit = event_sink or print_json
     path = f"/agent/jobs/next/{machine_id}"
     job = agent_request(api, key, machine_id, path)
     if not job:
@@ -434,7 +479,7 @@ def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, An
                 except Exception as exc:
                     # Heartbeats and the actual Docker operation stay independent from
                     # an individual progress report. A later tick will retry reporting.
-                    print_json({
+                    emit({
                         "event": "job_progress_error",
                         "jobId": job_id,
                         "step": step,
@@ -460,13 +505,13 @@ def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, An
         if job.get("type") == "GPU_PROOF":
             finalize_path = f"/agent/jobs/{job_id}/finalize-proof"
             agent_request(api, key, machine_id, finalize_path, "POST", {"machineId": machine_id})
-        print_json({"event": "job_completed", "jobId": job_id})
+        emit({"event": "job_completed", "jobId": job_id})
     except Exception as exc:
         try:
             cancelled = str(exc) == "rental_cancel_requested"
             update_job(api, key, machine_id, job_id, "CANCELLED" if cancelled else "FAILED", str(exc)[:100])
         finally:
-            print_json({"event": "job_failed", "jobId": job_id, "message": str(exc)[:300]})
+            emit({"event": "job_failed", "jobId": job_id, "message": str(exc)[:300]})
 
 
 def update_job(api: ApiClient, key: Any, machine_id: str, job_id: str, status: str, error_code: str | None = None) -> dict[str, Any]:
