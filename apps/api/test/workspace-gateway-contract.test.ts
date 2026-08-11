@@ -12,6 +12,9 @@ test('gateway never returns a direct host endpoint to the renter',()=>{
   assert.match(api,/httpOnly:true/);
   assert.match(api,/secure:true/);
   assert.match(api,/sameSite:'lax'/);
+  assert.match(api,/bodyLimit:MAX_AGENT_RELAY_BODY_BYTES/);
+  assert.match(api,/['"]accept-encoding['"]/);
+  assert.match(api,/['"]content-encoding['"]/);
 });
 
 test('agent developer runtime binds only to loopback and has no host bind mount',()=>{
