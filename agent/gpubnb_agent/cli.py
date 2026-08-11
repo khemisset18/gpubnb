@@ -307,15 +307,32 @@ def heartbeat_loop(
     interval = max(5, min(60, int(config.get("intervalSeconds", 10))))
     failures = 0
     developer_image = workspace_image(config, "developer")
+    job_thread: threading.Thread | None = None
 
     def prewarm() -> None:
         try:
-            result = prewarm_workspace_image(developer_image)
+            result = prewarm_workspace_image(
+                developer_image,
+                progress_callback=lambda step, elapsed: print_json({
+                    "event": "workspace_image_progress",
+                    "step": step,
+                    "elapsedSeconds": elapsed,
+                }),
+            )
             print_json({"event": "workspace_image_ready", **result})
         except Exception as exc:
             # Prewarming is an optimization: heartbeat and normal job retry behavior
             # must remain available if Docker is still starting or temporarily offline.
             print_json({"event": "workspace_image_prewarm_failed", "message": str(exc)[:300]})
+
+    def poll_and_run_job() -> None:
+        try:
+            # The worker gets its own HTTP client. A Docker pull can take many minutes,
+            # but it must never block the heartbeat loop or make the API mark this host
+            # offline while useful preparation work is still progressing.
+            run_next_job(client(config), key, machine_id, config)
+        except Exception as exc:
+            print_json({"event": "job_poll_error", "type": type(exc).__name__, "message": str(exc)[:300]})
 
     threading.Thread(target=prewarm, name="gpubnb-workspace-prewarm", daemon=True).start()
     pid_path().write_text(
@@ -335,7 +352,13 @@ def heartbeat_loop(
             try:
                 result = heartbeat(client(config), key, machine_id)
                 print_json({"event": "heartbeat", "result": result})
-                run_next_job(client(config), key, machine_id, config)
+                if job_thread is None or not job_thread.is_alive():
+                    job_thread = threading.Thread(
+                        target=poll_and_run_job,
+                        name="gpubnb-job-worker",
+                        daemon=True,
+                    )
+                    job_thread.start()
                 failures = 0
             except Exception as exc:
                 failures = min(failures + 1, 8)
@@ -370,9 +393,12 @@ def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, An
     try:
         if job.get("type") in {"WORKSPACE_PREPARE", "GPU_PROOF"}:
             update_job(api, key, machine_id, job_id, "DOWNLOADING")
-        update_job(api, key, machine_id, job_id, "PREPARING")
-        update_job(api, key, machine_id, job_id, "RUNNING")
+        else:
+            update_job(api, key, machine_id, job_id, "PREPARING")
+            update_job(api, key, machine_id, job_id, "RUNNING")
         if job.get("type") == "GPU_PROOF":
+            update_job(api, key, machine_id, job_id, "PREPARING")
+            update_job(api, key, machine_id, job_id, "RUNNING")
             if not isinstance(session_value := job.get("workspaceSession"), dict) or not isinstance(session_value.get("id"), str):
                 raise RuntimeError("gpu_proof_session_missing")
             metric_counter = 0
@@ -395,7 +421,34 @@ def run_next_job(api: ApiClient, key: Any, machine_id: str, config: dict[str, An
                 publish_sample,
             )
         elif job.get("type") == "WORKSPACE_PREPARE":
-            result = prepare_workspace(image, int(parameters.get("timeoutSeconds", 600)), workspace_slug)
+            def publish_preparation_progress(step: str, elapsed_seconds: int) -> None:
+                try:
+                    report_job_progress(
+                        api,
+                        key,
+                        machine_id,
+                        job_id,
+                        step,
+                        elapsed_seconds,
+                    )
+                except Exception as exc:
+                    # Heartbeats and the actual Docker operation stay independent from
+                    # an individual progress report. A later tick will retry reporting.
+                    print_json({
+                        "event": "job_progress_error",
+                        "jobId": job_id,
+                        "step": step,
+                        "message": str(exc)[:300],
+                    })
+
+            result = prepare_workspace(
+                image,
+                int(parameters.get("timeoutSeconds", 1200)),
+                workspace_slug,
+                publish_preparation_progress,
+            )
+            update_job(api, key, machine_id, job_id, "PREPARING")
+            update_job(api, key, machine_id, job_id, "RUNNING")
         else:
             result = run_gpu_diagnostic(image, int(parameters.get("timeoutSeconds", 120)))
         session_value = job.get("workspaceSession")
@@ -422,6 +475,22 @@ def update_job(api: ApiClient, key: Any, machine_id: str, job_id: str, status: s
     if error_code:
         body["errorCode"] = error_code
     return agent_request(api, key, machine_id, path, "POST", body)
+
+
+def report_job_progress(
+    api: ApiClient,
+    key: Any,
+    machine_id: str,
+    job_id: str,
+    step: str,
+    elapsed_seconds: int,
+) -> dict[str, Any]:
+    path = f"/agent/jobs/{job_id}/progress"
+    return agent_request(api, key, machine_id, path, "POST", {
+        "machineId": machine_id,
+        "step": step,
+        "elapsedSeconds": max(0, int(elapsed_seconds)),
+    })
 
 
 def send_session_metric(api: ApiClient, key: Any, machine_id: str, session_id: str, counter: int, interval_seconds: int) -> dict[str, Any]:
@@ -587,7 +656,17 @@ def command_workspace_install(args: argparse.Namespace) -> int:
         gpu_proof_command(args.image, 30, "gpubnb-proof-install-check")
         result = verify_protection_profile(args.image)
     else:
-        result = prepare_workspace(args.image, args.timeout, args.slug)
+        result = prepare_workspace(
+            args.image,
+            args.timeout,
+            args.slug,
+            lambda step, elapsed: print_json({
+                "event": "workspace_install_progress",
+                "slug": args.slug,
+                "step": step,
+                "elapsedSeconds": elapsed,
+            }),
+        )
     images = config.get("workspaceImages")
     if not isinstance(images, dict):
         images = {}

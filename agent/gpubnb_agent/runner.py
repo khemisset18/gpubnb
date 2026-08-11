@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import threading
+import time
 import uuid
 from typing import Any, Callable
 
@@ -106,40 +107,87 @@ def _parse_report(stdout: str) -> list[dict[str, object]]:
     return safe_gpus
 
 
-def _pull_image(image: str, timeout: int) -> bool:
+def _pull_image(
+    image: str,
+    timeout: int,
+    progress_callback: Callable[[str, int], None] | None = None,
+) -> bool:
     # Digest-pinned images are content-addressed and immutable. If Docker can inspect
     # this exact reference, re-pulling it adds latency without adding security. A
     # process-wide lock also prevents heartbeat prewarming and a renter job from
     # downloading the same layers concurrently.
-    with _IMAGE_PULL_LOCK:
+    started = time.monotonic()
+
+    def progress(step: str) -> None:
+        if progress_callback is not None:
+            progress_callback(step, max(0, round(time.monotonic() - started)))
+
+    progress("WAITING_FOR_IMAGE_PULL")
+    while not _IMAGE_PULL_LOCK.acquire(timeout=5):
+        # Prewarming and a renter job can legitimately target the same image. The
+        # renter job stays observable and fresh while it waits for that one shared
+        # download instead of looking abandoned to the API.
+        progress("WAITING_FOR_IMAGE_PULL")
+    try:
+        progress("CHECKING_IMAGE_CACHE")
         inspect = subprocess.run(
             ["docker", "image", "inspect", image],
             capture_output=True, text=True, timeout=30, check=False, shell=False,
         )
         if inspect.returncode == 0:
+            progress("IMAGE_CACHE_READY")
             return True
-        pull = subprocess.run(
-            ["docker", "pull", image],
-            capture_output=True, text=True, timeout=timeout, check=False, shell=False,
+        pull_finished = threading.Event()
+
+        def report_pull_progress() -> None:
+            while not pull_finished.wait(5):
+                progress("PULLING_IMAGE")
+
+        progress("PULLING_IMAGE")
+        reporter = threading.Thread(
+            target=report_pull_progress,
+            name="gpubnb-image-pull-progress",
+            daemon=True,
         )
+        reporter.start()
+        try:
+            pull = subprocess.run(
+                ["docker", "pull", image],
+                capture_output=True, text=True, timeout=timeout, check=False, shell=False,
+            )
+        finally:
+            pull_finished.set()
+            reporter.join(timeout=1)
         if pull.returncode != 0:
             raise RuntimeError(f"diagnostic_image_pull_failed:{pull.returncode}:{pull.stderr[:1000].strip()}")
+        progress("VERIFYING_IMAGE_DIGEST")
         verify = subprocess.run(
             ["docker", "image", "inspect", image],
             capture_output=True, text=True, timeout=30, check=False, shell=False,
         )
         if verify.returncode != 0:
             raise RuntimeError("diagnostic_image_digest_verification_failed")
+        progress("IMAGE_CACHE_READY")
         return False
+    finally:
+        _IMAGE_PULL_LOCK.release()
 
 
-def prewarm_workspace_image(image: str, timeout_seconds: int = 1200) -> dict[str, Any]:
+def prewarm_workspace_image(
+    image: str,
+    timeout_seconds: int = 1200,
+    progress_callback: Callable[[str, int], None] | None = None,
+) -> dict[str, Any]:
     """Fetch an official immutable Workspace image before a renter needs it."""
     if not PINNED_IMAGE.fullmatch(image):
         raise RuntimeError("workspace_prewarm_requires_digest_pinned_image")
     if not image.startswith("ghcr.io/khemisset18/gpubnb-"):
         raise RuntimeError("workspace_prewarm_requires_official_image")
-    cache_hit = _pull_image(image, max(30, min(1800, int(timeout_seconds))))
+    cache_hit = _pull_image(
+        image,
+        max(30, min(1800, int(timeout_seconds))),
+        progress_callback,
+    )
     return {"image": image, "cacheHit": cache_hit, "ready": True}
 
 
@@ -292,17 +340,28 @@ def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
     return diagnostic_command(image)
 
 
-def prepare_workspace(image: str, timeout_seconds: int, workspace_slug: str = "compute") -> dict[str, Any]:
+def prepare_workspace(
+    image: str,
+    timeout_seconds: int,
+    workspace_slug: str = "compute",
+    progress_callback: Callable[[str, int], None] | None = None,
+) -> dict[str, Any]:
     if not PINNED_IMAGE.fullmatch(image):
         raise RuntimeError("diagnosticImage doit être une image Docker épinglée par digest sha256")
-    timeout = max(30, min(600, int(timeout_seconds)))
-    cache_hit = _pull_image(image, timeout)
+    started = time.monotonic()
+    timeout_limit = 1800 if workspace_slug == "developer" else 600
+    timeout = max(30, min(timeout_limit, int(timeout_seconds)))
+    cache_hit = _pull_image(image, timeout, progress_callback)
+    if progress_callback is not None:
+        progress_callback("VERIFYING_WORKSPACE", max(0, round(time.monotonic() - started)))
     health = subprocess.run(
         workspace_health_command(image, workspace_slug),
         capture_output=True, text=True, timeout=timeout, check=False, shell=False,
     )
     if health.returncode != 0:
         raise RuntimeError(f"workspace_health_check_failed:{health.returncode}:{health.stderr[:1000].strip()}")
+    if progress_callback is not None:
+        progress_callback("WORKSPACE_VERIFIED", max(0, round(time.monotonic() - started)))
     detected_gpus = gpu_inventory()
     return {
         "gpuDetected": bool(detected_gpus),

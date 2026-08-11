@@ -23,7 +23,9 @@ const STALE_JOB_ERROR_CODE = 'job_stale_timeout';
 // so FAILED (not TIMED_OUT) is the honest terminal status there. This also matches
 // job-state.ts: UPLOADING_RESULTS -> TIMED_OUT is not a legal transition.
 const STALE_JOB_TARGET_STATUS: Partial<Record<JobStatus, JobStatus>> = {
+  [JobStatus.QUEUED]: JobStatus.TIMED_OUT,
   [JobStatus.ASSIGNED]: JobStatus.TIMED_OUT,
+  [JobStatus.DOWNLOADING]: JobStatus.TIMED_OUT,
   [JobStatus.PREPARING]: JobStatus.TIMED_OUT,
   [JobStatus.RUNNING]: JobStatus.TIMED_OUT,
   [JobStatus.UPLOADING_RESULTS]: JobStatus.FAILED,
@@ -45,6 +47,7 @@ export type JobStalenessSweepResult = {
   jobsFailed: number;
   bookingsDegraded: number;
   sessionsTimedOut: number;
+  machinesReleased: number;
   machinesQuarantined: number;
   paymentsPendingSettlement: number;
 };
@@ -55,6 +58,7 @@ const EMPTY_RESULT = (cutoff: Date): JobStalenessSweepResult => ({
   jobsFailed: 0,
   bookingsDegraded: 0,
   sessionsTimedOut: 0,
+  machinesReleased: 0,
   machinesQuarantined: 0,
   paymentsPendingSettlement: 0,
 });
@@ -85,7 +89,7 @@ export async function sweepStaleJobs(
     const [timedOutUpdate, failedUpdate] = await Promise.all([
       timedOutIds.length
         ? tx.job.updateMany({
-            where: { id: { in: timedOutIds }, status: { in: [JobStatus.ASSIGNED, JobStatus.PREPARING, JobStatus.RUNNING] } },
+            where: { id: { in: timedOutIds }, status: { in: [JobStatus.QUEUED, JobStatus.ASSIGNED, JobStatus.DOWNLOADING, JobStatus.PREPARING, JobStatus.RUNNING] } },
             data: { status: JobStatus.TIMED_OUT, errorCode: STALE_JOB_ERROR_CODE, finishedAt: now },
           })
         : { count: 0 },
@@ -99,7 +103,9 @@ export async function sweepStaleJobs(
 
     const affectedJobIds = new Set([...timedOutIds, ...failedIds]);
     const affectedBookingIds = [...new Set(staleJobs.filter(job => affectedJobIds.has(job.id)).map(job => job.bookingId))];
-    const affectedMachineIds = [...new Set(staleJobs.filter(job => affectedJobIds.has(job.id)).map(job => job.machineId))];
+    const claimedMachineIds = [...new Set(staleJobs.filter(job => affectedJobIds.has(job.id) && job.status !== JobStatus.QUEUED).map(job => job.machineId))];
+    const claimedMachineIdSet = new Set(claimedMachineIds);
+    const unclaimedMachineIds = [...new Set(staleJobs.filter(job => affectedJobIds.has(job.id) && job.status === JobStatus.QUEUED && !claimedMachineIdSet.has(job.machineId)).map(job => job.machineId))];
 
     const bookingUpdate = affectedBookingIds.length
       ? await tx.booking.updateMany({
@@ -115,16 +121,27 @@ export async function sweepStaleJobs(
         })
       : { count: 0 };
 
-    // Whether the workload container was actually cleaned up on the physical host can
+    // A QUEUED job was never claimed by an agent, so it cannot have created a runtime
+    // container. Releasing that reservation is safe and prevents an abandoned 5%
+    // preparation from blocking every later booking on the listing.
+    const releasedMachineUpdate = unclaimedMachineIds.length
+      ? await tx.machine.updateMany({
+          where: { id: { in: unclaimedMachineIds }, moderationStatus: ModerationStatus.CLEAR, operational: MachineOperational.RESERVED },
+          data: { operational: MachineOperational.AVAILABLE },
+        })
+      : { count: 0 };
+
+    // Once an agent has claimed a job, whether the workload container was actually
+    // cleaned up on the physical host can
     // never be confirmed from this API process — there is no channel for the agent to
     // prove it after the fact. A stale job therefore NEVER returns its machine to
     // AVAILABLE on its own: it is quarantined (moderationStatus blocks all further
     // agent authentication, see authenticatedAgent() in server.ts) until a human
-    // verifies the host and clears it. This is the "sinon QUARANTINED" branch, taken
-    // unconditionally because proof of cleanup is not something this sweep can obtain.
-    const machineUpdate = affectedMachineIds.length
+    // verifies the host and clears it. This is the "sinon QUARANTINED" branch for
+    // every claimed job because proof of cleanup is not something this sweep can obtain.
+    const machineUpdate = claimedMachineIds.length
       ? await tx.machine.updateMany({
-          where: { id: { in: affectedMachineIds }, moderationStatus: ModerationStatus.CLEAR },
+          where: { id: { in: claimedMachineIds }, moderationStatus: ModerationStatus.CLEAR },
           data: { moderationStatus: ModerationStatus.QUARANTINED, operational: MachineOperational.UNAVAILABLE },
         })
       : { count: 0 };
@@ -145,6 +162,7 @@ export async function sweepStaleJobs(
       jobsFailed: failedUpdate.count,
       bookingsDegraded: bookingUpdate.count,
       sessionsTimedOut: sessionUpdate.count,
+      machinesReleased: releasedMachineUpdate.count,
       machinesQuarantined: machineUpdate.count,
       paymentsPendingSettlement: paymentUpdate.count,
     };

@@ -71,10 +71,10 @@ function fakeDb(seed: {
       },
     },
     machine: {
-      updateMany: async ({ where, data }: { where: { id: { in: string[] }; moderationStatus: ModerationStatus }; data: Record<string, unknown> }) => {
+      updateMany: async ({ where, data }: { where: { id: { in: string[] }; moderationStatus: ModerationStatus; operational?: MachineOperational }; data: Record<string, unknown> }) => {
         let count = 0;
         for (const m of machines) {
-          if (where.id.in.includes(m.id) && m.moderationStatus === where.moderationStatus) { Object.assign(m, data); count++; }
+          if (where.id.in.includes(m.id) && m.moderationStatus === where.moderationStatus && (!where.operational || m.operational === where.operational)) { Object.assign(m, data); count++; }
         }
         return { count };
       },
@@ -137,14 +137,14 @@ test('5) running the sweep twice in a row is idempotent: identical result, no do
   const first = await sweepStaleJobs(db, NOW, 900);
   const second = await sweepStaleJobs(db, NOW, 900);
   assert.equal(first.jobsTimedOut, 1);
-  assert.deepEqual(second, { ...first, jobsTimedOut: 0, jobsFailed: 0, bookingsDegraded: 0, sessionsTimedOut: 0, machinesQuarantined: 0, paymentsPendingSettlement: 0 });
+  assert.deepEqual(second, { ...first, jobsTimedOut: 0, jobsFailed: 0, bookingsDegraded: 0, sessionsTimedOut: 0, machinesReleased: 0, machinesQuarantined: 0, paymentsPendingSettlement: 0 });
   assert.equal(jobs[0].status, JobStatus.TIMED_OUT);
   assert.equal(bookings[0].status, BookingStatus.DEGRADED);
   assert.equal(machines[0].moderationStatus, ModerationStatus.QUARANTINED);
   assert.equal(payments[0].status, PaymentStatus.SETTLEMENT_PENDING);
 });
 
-test('6) cleanup can never be proven from the API process, so the machine is always quarantined, never left AVAILABLE', async () => {
+test('6) cleanup of a claimed job cannot be proven from the API process, so its machine is quarantined', async () => {
   const { db, machines } = fakeDb({
     jobs: [{ id: 'j6', status: JobStatus.PREPARING, bookingId: 'b6', machineId: 'm6', updatedAt: minutesAgo(45) }],
     machines: [{ id: 'm6', moderationStatus: ModerationStatus.CLEAR, operational: MachineOperational.RESERVED }],
@@ -172,4 +172,44 @@ test('a job just under the configured threshold is left alone (boundary)', async
   const result = await sweepStaleJobs(db, NOW, 900); // 900s = 15min threshold, job is 10min old
   assert.equal(result.jobsTimedOut, 0);
   assert.equal(jobs[0].status, JobStatus.RUNNING);
+});
+
+test('8) an abandoned QUEUED workspace job expires and releases its never-used machine without quarantine', async () => {
+  const { db, jobs, bookings, sessions, machines } = fakeDb({
+    jobs: [{ id: 'j9', status: JobStatus.QUEUED, bookingId: 'b9', machineId: 'm9', updatedAt: minutesAgo(20) }],
+    bookings: [{ id: 'b9', status: BookingStatus.STARTING }],
+    sessions: [{ id: 's9', bookingId: 'b9', status: WorkspaceSessionStatus.PREPARING }],
+    machines: [{ id: 'm9', moderationStatus: ModerationStatus.CLEAR, operational: MachineOperational.RESERVED }],
+  });
+  const result = await sweepStaleJobs(db, NOW, 900);
+  assert.equal(result.jobsTimedOut, 1);
+  assert.equal(result.machinesReleased, 1);
+  assert.equal(result.machinesQuarantined, 0);
+  assert.equal(jobs[0].status, JobStatus.TIMED_OUT);
+  assert.equal(bookings[0].status, BookingStatus.DEGRADED);
+  assert.equal(sessions[0].status, WorkspaceSessionStatus.TIMED_OUT);
+  assert.equal(machines[0].operational, MachineOperational.AVAILABLE);
+  assert.equal(machines[0].moderationStatus, ModerationStatus.CLEAR);
+});
+
+test('9) a DOWNLOADING job with recent progress remains active', async () => {
+  const { db, jobs } = fakeDb({
+    jobs: [{ id: 'j10', status: JobStatus.DOWNLOADING, bookingId: 'b10', machineId: 'm10', updatedAt: minutesAgo(1) }],
+  });
+  const result = await sweepStaleJobs(db, NOW, 900);
+  assert.equal(result.jobsTimedOut, 0);
+  assert.equal(jobs[0].status, JobStatus.DOWNLOADING);
+});
+
+test('10) a DOWNLOADING job without progress expires and quarantines the claimed machine', async () => {
+  const { db, jobs, machines } = fakeDb({
+    jobs: [{ id: 'j11', status: JobStatus.DOWNLOADING, bookingId: 'b11', machineId: 'm11', updatedAt: minutesAgo(20) }],
+    machines: [{ id: 'm11', moderationStatus: ModerationStatus.CLEAR, operational: MachineOperational.RESERVED }],
+  });
+  const result = await sweepStaleJobs(db, NOW, 900);
+  assert.equal(result.jobsTimedOut, 1);
+  assert.equal(result.machinesReleased, 0);
+  assert.equal(result.machinesQuarantined, 1);
+  assert.equal(jobs[0].status, JobStatus.TIMED_OUT);
+  assert.equal(machines[0].moderationStatus, ModerationStatus.QUARANTINED);
 });

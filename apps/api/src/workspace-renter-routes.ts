@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { BookingStatus, JobType, MachineWorkspaceState, WorkspaceSessionStatus } from '@prisma/client';
+import { BookingStatus, JobStatus, JobType, MachineWorkspaceState, WorkspaceSessionStatus } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 
@@ -18,7 +18,18 @@ function safeConnection(metadata: unknown): { ready: boolean; gatewayPath: strin
   return { ready: true, gatewayPath: path };
 }
 
-const activeBookings=[BookingStatus.FUNDED,BookingStatus.STARTING,BookingStatus.ACTIVE];
+const activeBookings: BookingStatus[]=[BookingStatus.FUNDED,BookingStatus.STARTING,BookingStatus.ACTIVE];
+const terminalJobs: JobStatus[]=[JobStatus.COMPLETED,JobStatus.FAILED,JobStatus.CANCELLED,JobStatus.TIMED_OUT,JobStatus.REJECTED,JobStatus.QUARANTINED];
+const retryableSessions: WorkspaceSessionStatus[]=[WorkspaceSessionStatus.FAILED,WorkspaceSessionStatus.CANCELLED,WorkspaceSessionStatus.TIMED_OUT];
+
+function preparationPhase(status: WorkspaceSessionStatus, step: string | null, jobStatus: JobStatus | null): string {
+  if (status !== WorkspaceSessionStatus.PREPARING) return status;
+  if (step === 'VERIFYING_WORKSPACE' || step === 'WORKSPACE_VERIFIED') return 'VERIFYING_WORKSPACE';
+  if (step === 'VERIFYING_IMAGE_DIGEST') return 'VERIFYING_IMAGE';
+  if (step === 'PULLING_IMAGE' || step === 'IMAGE_CACHE_READY' || jobStatus === JobStatus.DOWNLOADING) return 'DOWNLOADING_IMAGE';
+  if (jobStatus === JobStatus.PREPARING || jobStatus === JobStatus.RUNNING) return 'STARTING_WORKSPACE';
+  return 'WAITING_FOR_HOST';
+}
 
 export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaClient, redis: Redis): void {
   registerWorkspaceGatewayRoutes(app,db,redis);
@@ -59,7 +70,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
           preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,
           events:{create:{actorType:'RENTER',actorId:session.userId,action:'DEVELOPER_PREPARATION_REQUESTED'}},
         }});
-        const job=await tx.job.create({data:{bookingId,renterId:session.userId,machineId:booking.listing.machineId,type:JobType.WORKSPACE_PREPARE,parameters:{workspaceSlug:'developer',timeoutSeconds:600}}});
+        const job=await tx.job.create({data:{bookingId,renterId:session.userId,machineId:booking.listing.machineId,type:JobType.WORKSPACE_PREPARE,parameters:{workspaceSlug:'developer',timeoutSeconds:1200}}});
         return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       });
     }catch(error){
@@ -67,6 +78,28 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       if(raced)return raced;
       throw error;
     }
+  });
+
+  app.post('/bookings/:bookingId/workspace/retry', async (request, reply) => {
+    const session=await requireSession(request,reply,redis); if(!session)return;
+    const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
+    const row=await db.workspaceSession.findFirst({
+      where:{bookingId,renterId:session.userId,status:{in:retryableSessions},machineWorkspace:{workspace:{slug:'developer'}},booking:{status:{in:activeBookings},endsAt:{gt:new Date()}}},
+      select:{id:true,machineId:true,machineWorkspaceId:true,booking:{select:{endsAt:true}}},
+    });
+    if(!row)return reply.code(409).send({error:'workspace_retry_not_available'});
+    const active=await db.job.findFirst({where:{bookingId,type:JobType.WORKSPACE_PREPARE,status:{notIn:terminalJobs}},select:{id:true}});
+    if(active)return reply.code(409).send({error:'workspace_preparation_already_active',jobId:active.id});
+    const retried=await db.$transaction(async tx=>{
+      const reset=await tx.workspaceSession.updateMany({
+        where:{id:row.id,status:{in:retryableSessions}},
+        data:{status:WorkspaceSessionStatus.PREPARING,jobId:null,endedAt:null,terminationReason:null,readyAt:null,startedAt:null,connectionMetadata:{},preparationProgress:5,preparationStep:'RETRY_REQUESTED',preparationRequestedAt:new Date(),preparationStartedAt:null,preparationCompletedAt:null,preparationAttempts:{increment:1},expiresAt:row.booking.endsAt},
+      });
+      if(reset.count!==1)return null;
+      const job=await tx.job.create({data:{bookingId,renterId:session.userId,machineId:row.machineId,type:JobType.WORKSPACE_PREPARE,parameters:{workspaceSlug:'developer',timeoutSeconds:1200}}});
+      return tx.workspaceSession.update({where:{id:row.id},data:{jobId:job.id,events:{create:{actorType:'RENTER',actorId:session.userId,action:'DEVELOPER_PREPARATION_RETRIED'}}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
+    });
+    return retried??reply.code(409).send({error:'workspace_retry_raced'});
   });
 
   app.get('/bookings/:bookingId/workspace', async (request, reply) => {
@@ -81,7 +114,10 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'developer' } } },
       select: {
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
+        preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
+        preparationCompletedAt: true, endedAt: true, updatedAt: true,
         connectionType: true, connectionMetadata: true, readyAt: true, startedAt: true,
+        job: { select: { status: true, errorCode: true, createdAt: true, updatedAt: true, startedAt: true, finishedAt: true } },
         machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { id: true, status: true, startsAt: true, endsAt: true } },
         machineWorkspace: { select: { workspace: { select: { slug: true, name: true } } } },
@@ -101,6 +137,9 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
+    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null);
+    const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
+    const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
     return {
       sessionId: row.id,
       status: row.status,
@@ -109,7 +148,17 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       startsAt: row.booking.startsAt,
       endsAt: row.booking.endsAt,
       expiresAt: row.expiresAt,
-      preparation: { progress: row.preparationProgress, step: row.preparationStep },
+      preparation: {
+        progress: row.preparationProgress,
+        step: row.preparationStep,
+        phase,
+        attempts: row.preparationAttempts,
+        elapsedSeconds: Math.max(0,Math.round((preparationEnd.getTime()-preparationStart.getTime())/1000)),
+        updatedAt: row.job?.updatedAt ?? row.updatedAt,
+        jobStatus: row.job?.status ?? null,
+        errorCode: row.job?.errorCode ?? null,
+      },
+      retryable: activeBookings.includes(row.booking.status) && retryableSessions.includes(row.status),
       canOpen: policy.allowed && connection.ready,
       blockedReason: !policy.allowed ? policy.code : connection.ready ? null : 'GATEWAY_NOT_READY',
     };

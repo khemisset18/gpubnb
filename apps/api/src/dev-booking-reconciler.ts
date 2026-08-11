@@ -1,4 +1,4 @@
-import { BookingStatus, JobStatus, JobType, MachineOperational, PaymentStatus, PrismaClient } from '@prisma/client';
+import { BookingStatus, JobStatus, JobType, MachineOperational, PaymentStatus, PrismaClient, SessionTerminationReason, WorkspaceSessionStatus } from '@prisma/client';
 import { config } from './config.js';
 
 const TERMINAL_JOB_STATUSES: JobStatus[] = [
@@ -174,6 +174,15 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
 // without ever reaching ACTIVE was never really active, so degrading it can never interrupt a
 // renter who is actually using their session.
 const STALLED_ACTIVATION_GRACE_MS = 20 * 60_000;
+const ACTIVE_ACTIVATION_JOB_STATUSES = [
+  JobStatus.QUEUED,
+  JobStatus.ASSIGNED,
+  JobStatus.DOWNLOADING,
+  JobStatus.PREPARING,
+  JobStatus.RUNNING,
+  JobStatus.UPLOADING_RESULTS,
+  JobStatus.CANCEL_REQUESTED,
+];
 
 export async function reconcileStalledActivations(db: PrismaClient, now = new Date()): Promise<{ degraded: number }> {
   let degraded = 0;
@@ -181,6 +190,10 @@ export async function reconcileStalledActivations(db: PrismaClient, now = new Da
     where: {
       status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING] },
       startsAt: { lt: new Date(now.getTime() - STALLED_ACTIVATION_GRACE_MS) },
+      // A long first image pull is legitimate as long as the agent keeps refreshing
+      // the job's updatedAt through progress reports. Only an activation with no
+      // recently live job is abandoned.
+      jobs: { none: { status: { in: ACTIVE_ACTIVATION_JOB_STATUSES }, updatedAt: { gte: new Date(now.getTime() - STALLED_ACTIVATION_GRACE_MS) } } },
     },
     select: { id: true, listing: { select: { machineId: true } } },
     take: 50,
@@ -192,6 +205,14 @@ export async function reconcileStalledActivations(db: PrismaClient, now = new Da
         data: { status: BookingStatus.DEGRADED },
       });
       if (updated.count !== 1) return false;
+      await tx.job.updateMany({
+        where: { bookingId: booking.id, status: JobStatus.QUEUED },
+        data: { status: JobStatus.TIMED_OUT, errorCode: 'activation_stalled_timeout', finishedAt: now },
+      });
+      await tx.workspaceSession.updateMany({
+        where: { bookingId: booking.id, status: { in: [WorkspaceSessionStatus.RESERVED, WorkspaceSessionStatus.PREPARING] } },
+        data: { status: WorkspaceSessionStatus.TIMED_OUT, preparationStep: 'ACTIVATION_STALLED_TIMEOUT', endedAt: now, terminationReason: SessionTerminationReason.TIMEOUT },
+      });
       await tx.machine.updateMany({
         where: { id: booking.listing.machineId, operational: MachineOperational.RESERVED },
         data: { operational: MachineOperational.AVAILABLE },
