@@ -15,6 +15,7 @@ PINNED_IMAGE = re.compile(r"^[a-z0-9._/-]+@sha256:[a-f0-9]{64}$")
 OFFICIAL_DIAGNOSTIC_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpu-diagnostic@sha256:[a-f0-9]{64}$")
 OFFICIAL_GPU_PROOF_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpu-proof-workspace@sha256:[a-f0-9]{64}$")
 _IMAGE_PULL_LOCK = threading.Lock()
+PROGRESS_INTERVAL_SECONDS = 5.0
 
 
 def _gpu_vendor() -> str:
@@ -123,7 +124,7 @@ def _pull_image(
             progress_callback(step, max(0, round(time.monotonic() - started)))
 
     progress("WAITING_FOR_IMAGE_PULL")
-    while not _IMAGE_PULL_LOCK.acquire(timeout=5):
+    while not _IMAGE_PULL_LOCK.acquire(timeout=PROGRESS_INTERVAL_SECONDS):
         # Prewarming and a renter job can legitimately target the same image. The
         # renter job stays observable and fresh while it waits for that one shared
         # download instead of looking abandoned to the API.
@@ -140,7 +141,7 @@ def _pull_image(
         pull_finished = threading.Event()
 
         def report_pull_progress() -> None:
-            while not pull_finished.wait(5):
+            while not pull_finished.wait(PROGRESS_INTERVAL_SECONDS):
                 progress("PULLING_IMAGE")
 
         progress("PULLING_IMAGE")
@@ -352,12 +353,35 @@ def prepare_workspace(
     timeout_limit = 1800 if workspace_slug == "developer" else 600
     timeout = max(30, min(timeout_limit, int(timeout_seconds)))
     cache_hit = _pull_image(image, timeout, progress_callback)
+    health_finished = threading.Event()
+
+    def report_health_progress() -> None:
+        while not health_finished.wait(PROGRESS_INTERVAL_SECONDS):
+            if progress_callback is not None:
+                progress_callback(
+                    "VERIFYING_WORKSPACE",
+                    max(0, round(time.monotonic() - started)),
+                )
+
     if progress_callback is not None:
         progress_callback("VERIFYING_WORKSPACE", max(0, round(time.monotonic() - started)))
-    health = subprocess.run(
-        workspace_health_command(image, workspace_slug),
-        capture_output=True, text=True, timeout=timeout, check=False, shell=False,
-    )
+        health_reporter = threading.Thread(
+            target=report_health_progress,
+            name="gpubnb-workspace-health-progress",
+            daemon=True,
+        )
+        health_reporter.start()
+    else:
+        health_reporter = None
+    try:
+        health = subprocess.run(
+            workspace_health_command(image, workspace_slug),
+            capture_output=True, text=True, timeout=timeout, check=False, shell=False,
+        )
+    finally:
+        health_finished.set()
+        if health_reporter is not None:
+            health_reporter.join(timeout=1)
     if health.returncode != 0:
         raise RuntimeError(f"workspace_health_check_failed:{health.returncode}:{health.stderr[:1000].strip()}")
     if progress_callback is not None:
