@@ -44,3 +44,12 @@ test('the renter UI separates current reservations from collapsed history', asyn
   assert.match(source, /<details class="workspace-history">/, 'terminal reservations must be grouped in collapsed history');
   assert.match(source, /data-retry-workspace/, 'retryable failures must expose a recovery action');
 });
+
+
+test('the renter UI keeps the latest terminal preparation failure visible', async () => {
+  const source = await readFile(new URL('../../web/workspace-bookings.js', import.meta.url), 'utf8');
+  assert.match(source, /latestFailure/, 'the newest failed preparation must be promoted above collapsed history');
+  assert.match(source, /workspace-latest-failure/, 'the visible failure needs a stable UI surface');
+  assert.match(source, /role="alert"/, 'assistive technology must announce the terminal failure');
+  assert.match(source, /RECONNECTING_AGENT/, 'automatic host recovery must be explained to the renter');
+});
