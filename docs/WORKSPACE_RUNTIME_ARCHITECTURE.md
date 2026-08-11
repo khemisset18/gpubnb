@@ -55,6 +55,14 @@ Interactive runtimes must not publish arbitrary host ports to the Internet. A ga
 
 The gateway routes only to the runtime selected by the server-side session. The renter cannot provide an arbitrary upstream host/port.
 
+## Interactive readiness and billing
+
+`READY` means the isolated runtime and gateway are prepared; it does **not** mean the renter has received a usable desktop. The booking remains `STARTING`, usage samples add zero billable seconds, and the purchased duration has not begun.
+
+For browser IDE workspaces, the sole activation signal is the first signed frame returned by the host agent on the authenticated browser WebSocket channel. At that point, and only once, the session becomes `RUNNING`, the booking becomes `ACTIVE`, and `startsAt` / `endsAt` are reset to give the renter the full purchased duration.
+
+If no interactive frame arrives during the bounded connection window, cleanup remains fail-closed, the session is `TIMED_OUT`, the booking is `DEGRADED`, funded payment settlement is held for review/refund, and the incident must never appear as a successful completed workspace.
+
 ## Resource contract
 
 A workspace session records an immutable allocation snapshot: accelerator ID, VRAM expectation, CPU, RAM, disk quota, runtime family, workspace manifest version, runtime image/template digest and network policy. The agent must execute that snapshot rather than accepting arbitrary shell/Docker arguments from the renter.
@@ -79,6 +87,6 @@ A workspace must never be shown as runnable merely because its catalog card exis
 
 ## Definition of done for Developer beta
 
-From a second physical computer, a renter can reserve a compatible machine, wait for automatic preparation, click **Open workspace**, use VS Code in the browser, open a terminal, create/edit/run a small Python project in `/workspace`, observe the allocated remote GPU when applicable, export an allowed project artifact, end the rental, lose access immediately and observe the host return to `AVAILABLE` only after verified cleanup.
+From a second physical computer, a renter can reserve a compatible machine, wait for automatic preparation, click **Open workspace**, use VS Code in the browser, open a terminal, create/edit/run a small Python project in `/workspace`, observe the allocated remote GPU when applicable, export an allowed project artifact, end the rental, lose access immediately and observe the host return to `AVAILABLE` only after verified cleanup. The full purchased duration begins only after the browser IDE establishes its authenticated interactive WebSocket.
 
 No manual action on the host PC is allowed during this acceptance test.

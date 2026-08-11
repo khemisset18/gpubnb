@@ -15,6 +15,10 @@ test('gateway never returns a direct host endpoint to the renter',()=>{
   assert.match(api,/bodyLimit:MAX_AGENT_RELAY_BODY_BYTES/);
   assert.match(api,/['"]accept-encoding['"]/);
   assert.match(api,/['"]content-encoding['"]/);
+  assert.match(api,/workspace-gateway:ws-channel:/);
+  assert.match(api,/gateway_channel_machine_mismatch/);
+  assert.match(api,/INTERACTIVE_WORKSPACE_CONNECTED/);
+  assert.match(api,/validIncrement:0,pendingActivation:true/);
 });
 
 test('agent developer runtime binds only to loopback and has no host bind mount',()=>{
