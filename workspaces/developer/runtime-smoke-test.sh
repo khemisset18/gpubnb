@@ -43,7 +43,7 @@ for _ in $(seq 1 60); do
     echo "code-server exited before becoming healthy" >&2
     exit 1
   fi
-  port=$(docker port "$container" 3000/tcp 2>/dev/null | sed -nE 's/.*127\.0\.0\.1:([0-9]+).*/\1/p' | head -n1)
+  port=$(docker port "$container" 3000/tcp 2>/dev/null | sed -nE 's/.*127\.0\.0\.1:([0-9]+).*/\1/p' | head -n1 || true)
   if [[ -n "$port" ]] && curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:$port/healthz" >/dev/null; then
     echo "code-server hardened runtime is healthy on loopback"
     exit 0
