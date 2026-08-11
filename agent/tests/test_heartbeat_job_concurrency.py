@@ -25,6 +25,7 @@ class HeartbeatJobConcurrencyTests(unittest.TestCase):
         stop = FastStopEvent()
         job_started = threading.Event()
         release_job = threading.Event()
+        release_gateway = threading.Event()
         heartbeat_count = 0
         job_count = 0
 
@@ -37,7 +38,7 @@ class HeartbeatJobConcurrencyTests(unittest.TestCase):
                 release_job.set()
             return {"ok": True}
 
-        def fake_run_next_job(*_args):
+        def fake_run_next_job(*_args, **_kwargs):
             nonlocal job_count
             job_count += 1
             job_started.set()
@@ -52,8 +53,10 @@ class HeartbeatJobConcurrencyTests(unittest.TestCase):
              patch("gpubnb_agent.cli.client", return_value=object()), \
              patch("gpubnb_agent.cli.heartbeat", side_effect=fake_heartbeat), \
              patch("gpubnb_agent.cli.run_next_job", side_effect=fake_run_next_job), \
+             patch("gpubnb_agent.workspace_gateway.run_workspace_gateway_forever", side_effect=lambda **_kwargs: release_gateway.wait(1)), \
              patch("gpubnb_agent.cli.print_json"):
             heartbeat_loop(stop_event=stop)  # type: ignore[arg-type]
+            release_gateway.set()
 
         self.assertGreaterEqual(heartbeat_count, 2, "heartbeats must continue while a job is still running")
         self.assertEqual(job_count, 1, "only one job worker may run at a time")
