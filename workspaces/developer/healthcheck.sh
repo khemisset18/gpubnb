@@ -6,6 +6,8 @@ for tool in code-server git python3 node npm java go rustc cargo gcc g++; do
     exit 1
   }
 done
+code-server --version
+node --check /usr/local/lib/gpubnb/loopback-proxy.js
 test "$(id -u)" -ne 0
 test -w /workspace
 # A production run mounts /workspace as a fresh tmpfs (required to make it writable

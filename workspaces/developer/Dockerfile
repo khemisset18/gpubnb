@@ -51,6 +51,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* /root/.cache /usr/local/bin/fixuid \
  && install -d -o coder -g coder -m 700 /workspace /workspace/imports /workspace/output
 
+COPY --chmod=555 loopback-proxy.js /usr/local/lib/gpubnb/loopback-proxy.js
 COPY --chmod=755 healthcheck.sh /usr/local/bin/gpubnb-developer-healthcheck
 COPY --chown=coder:coder welcome.md /workspace/WELCOME.md
 
