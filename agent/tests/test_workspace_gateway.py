@@ -36,6 +36,7 @@ class FakeDocker:
         self.calls: list[list[str]] = []
         self._next_port = 41000
         self.fail_next_run = False
+        self.exit_next_run: tuple[int, str] | None = None
         self.volumes_that_wont_die: set[str] = set()
 
     def __call__(self, args: list[str], timeout: int = 30, check: bool = True) -> "subprocess.CompletedProcess[str]":
@@ -66,7 +67,15 @@ class FakeDocker:
                 return self._result(args, 1)
             port = self._next_port
             self._next_port += 1
-            self.containers[name] = {"running": True, "port": port, "healthy": True}
+            exit_code, logs = self.exit_next_run or (0, "")
+            self.exit_next_run = None
+            self.containers[name] = {
+                "running": exit_code == 0,
+                "port": port,
+                "healthy": exit_code == 0,
+                "exit_code": exit_code,
+                "logs": logs,
+            }
             return self._result(args, 0)
         if cmd == "port":
             info = self.containers.get(args[1])
@@ -79,8 +88,16 @@ class FakeDocker:
                 info = self.containers.get(name)
                 if info is None:
                     return self._result(args, 1)
-                return self._result(args, 0, stdout=("true" if info["running"] else "false") + "\n")
+                template = args[args.index("--format") + 1]
+                if ".State.Running" in template:
+                    return self._result(args, 0, stdout=("true" if info["running"] else "false") + "\n")
+                if ".State.ExitCode" in template:
+                    return self._result(args, 0, stdout=f"exit={info['exit_code']} oom=false error=\n")
+                return self._result(args, 0)
             return self._result(args, 0 if args[-1] in self.containers else 1)
+        if cmd == "logs":
+            info = self.containers.get(args[-1])
+            return self._result(args, 0 if info else 1, stdout=(info or {}).get("logs", ""))
         if cmd == "rm":
             name = args[-1]
             existed = name in self.containers
@@ -168,6 +185,39 @@ class StartNormalTests(unittest.TestCase):
         register_calls = [c for c in api.calls if c[0].endswith("/register")]
         self.assertEqual(len(register_calls), 1)
         self.assertEqual(register_calls[0][2]["runtimeId"], container)  # type: ignore[index]
+
+    def test_early_code_server_exit_preserves_diagnostics_then_cleans_up(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        docker.exit_next_run = (1, "EACCES: cannot create ~/.local/share/code-server")
+        supervisor = make_supervisor(docker, api)
+
+        with self.assertRaises(RuntimeError) as ctx:
+            supervisor._start_runtime("sess-early-exit")
+
+        self.assertIn("developer_workspace_container_exited", str(ctx.exception))
+        self.assertIn("exit=1", str(ctx.exception))
+        self.assertIn("EACCES", str(ctx.exception))
+        container, volume = names_for_session("sess-early-exit")
+        self.assertNotIn(container, docker.containers)
+        self.assertNotIn(volume, docker.volumes)
+        run_call = next(call for call in docker.calls if call[0] == "run")
+        self.assertNotIn("--rm", run_call)
+
+    def test_repeated_start_failure_is_backed_off_per_session(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        docker.exit_next_run = (1, "startup failed")
+        api.sessions = [{"id": "sess-1", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}}]
+        supervisor = make_supervisor(docker, api)
+
+        with self.assertRaises(RuntimeError):
+            supervisor._reconcile_sessions()
+        first_run_count = sum(1 for call in docker.calls if call[0] == "run")
+
+        supervisor._reconcile_sessions()
+        second_run_count = sum(1 for call in docker.calls if call[0] == "run")
+
+        self.assertEqual(first_run_count, 1)
+        self.assertEqual(second_run_count, 1, "backoff must prevent a Docker create/delete storm")
 
 
 class DoubleStartTests(unittest.TestCase):
