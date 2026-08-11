@@ -24,6 +24,7 @@ const retryableSessions: WorkspaceSessionStatus[]=[WorkspaceSessionStatus.FAILED
 
 function preparationPhase(status: WorkspaceSessionStatus, step: string | null, jobStatus: JobStatus | null): string {
   if (status !== WorkspaceSessionStatus.PREPARING) return status;
+  if (step === 'AGENT_RECONNECTING') return 'RECONNECTING_AGENT';
   if (step === 'VERIFYING_WORKSPACE' || step === 'WORKSPACE_VERIFIED') return 'VERIFYING_WORKSPACE';
   if (step === 'VERIFYING_IMAGE_DIGEST') return 'VERIFYING_IMAGE';
   if (step === 'PULLING_IMAGE' || step === 'IMAGE_CACHE_READY' || jobStatus === JobStatus.DOWNLOADING) return 'DOWNLOADING_IMAGE';
