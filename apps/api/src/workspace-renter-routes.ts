@@ -71,6 +71,15 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
           preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,
           events:{create:{actorType:'RENTER',actorId:session.userId,action:'DEVELOPER_PREPARATION_REQUESTED'}},
         }});
+        // Auto-funding may have queued the private-beta GPU diagnostic just before
+        // this Developer request. A queued diagnostic is now superseded; cancelling
+        // it here prevents it from delaying the real workspace job. An already
+        // running diagnostic is allowed to finish, while the reconciler's atomic
+        // Developer-session guard prevents it from closing this booking.
+        await tx.job.updateMany({
+          where:{bookingId,type:JobType.GPU_DIAGNOSTIC,status:JobStatus.QUEUED},
+          data:{status:JobStatus.CANCELLED,errorCode:'superseded_by_developer_workspace',finishedAt:new Date()},
+        });
         const job=await tx.job.create({data:{bookingId,renterId:session.userId,machineId:booking.listing.machineId,type:JobType.WORKSPACE_PREPARE,parameters:{workspaceSlug:'developer',timeoutSeconds:1200}}});
         return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       });
