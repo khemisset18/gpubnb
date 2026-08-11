@@ -11,7 +11,16 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import patch
 
-from gpubnb_agent.workspace_gateway import CONTAINER_PREFIX, VOLUME_PREFIX, GatewaySupervisor, names_for_session
+from gpubnb_agent.workspace_gateway import (
+    CONTAINER_PREFIX,
+    GATEWAY_NETWORK_NAME,
+    PROXY_PREFIX,
+    VOLUME_PREFIX,
+    GatewaySupervisor,
+    names_for_session,
+    network_name_for_session,
+    proxy_name_for_session,
+)
 
 OFFICIAL_IMAGE = "ghcr.io/khemisset18/gpubnb-developer@sha256:" + ("d" * 64)
 
@@ -48,6 +57,15 @@ class FakeDocker:
             if args[1] == "create":
                 self.networks.add(args[-1])
                 return self._result(args, 0)
+            if args[1] == "connect":
+                return self._result(args, 0)
+            if args[1] == "rm":
+                self.networks.discard(args[-1])
+                return self._result(args, 0)
+            if args[1] == "ls":
+                prefix = next(a for a in args if a.startswith("name=")).split("name=", 1)[1].lstrip("^")
+                names = [name for name in self.networks if name.startswith(prefix)]
+                return self._result(args, 0, stdout=("\n".join(names) + "\n") if names else "")
         if cmd == "volume":
             if args[1] == "create":
                 self.volumes.add(args[2])
@@ -58,6 +76,10 @@ class FakeDocker:
                 return self._result(args, 0)
             if args[1] == "inspect":
                 return self._result(args, 0 if args[-1] in self.volumes else 1)
+            if args[1] == "ls":
+                prefix = next(a for a in args if a.startswith("name=")).split("name=", 1)[1].lstrip("^")
+                names = [name for name in self.volumes if name.startswith(prefix)]
+                return self._result(args, 0, stdout=("\n".join(names) + "\n") if names else "")
         if cmd == "run":
             name = args[args.index("--name") + 1]
             if self.fail_next_run:
@@ -65,8 +87,10 @@ class FakeDocker:
                 if check:
                     raise RuntimeError("workspace_docker_failed:run:1:simulated failure")
                 return self._result(args, 1)
-            port = self._next_port
-            self._next_port += 1
+            publishes_port = "-p" in args or "--publish" in args
+            port = self._next_port if publishes_port else None
+            if publishes_port:
+                self._next_port += 1
             exit_code, logs = self.exit_next_run or (0, "")
             self.exit_next_run = None
             self.containers[name] = {
@@ -79,7 +103,7 @@ class FakeDocker:
             return self._result(args, 0)
         if cmd == "port":
             info = self.containers.get(args[1])
-            if not info or not info["running"]:
+            if not info or not info["running"] or info["port"] is None:
                 return self._result(args, 1, check=False)
             return self._result(args, 0, stdout=f"3000/tcp -> 127.0.0.1:{info['port']}\n")
         if cmd == "inspect":
@@ -179,8 +203,13 @@ class StartNormalTests(unittest.TestCase):
         supervisor._reconcile_sessions()
 
         container, volume = names_for_session("sess-1")
+        proxy = proxy_name_for_session("sess-1")
+        internal_network = network_name_for_session("sess-1")
         self.assertIn(container, docker.containers)
+        self.assertIn(proxy, docker.containers)
         self.assertIn(volume, docker.volumes)
+        self.assertIn(internal_network, docker.networks)
+        self.assertIn(GATEWAY_NETWORK_NAME, docker.networks)
         self.assertIn("sess-1", supervisor.runtimes)
         register_calls = [c for c in api.calls if c[0].endswith("/register")]
         self.assertEqual(len(register_calls), 1)
@@ -220,6 +249,64 @@ class StartNormalTests(unittest.TestCase):
         self.assertEqual(second_run_count, 1, "backoff must prevent a Docker create/delete storm")
 
 
+class SecurityTopologyTests(unittest.TestCase):
+    def test_workspace_has_no_published_port_and_proxy_has_no_gpu_or_volume(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = make_supervisor(docker, api)
+
+        supervisor._start_runtime("sess-1")
+
+        workspace = names_for_session("sess-1")[0]
+        proxy = proxy_name_for_session("sess-1")
+        internal = network_name_for_session("sess-1")
+        workspace_run = next(
+            call for call in docker.calls
+            if call[0] == "run" and call[call.index("--name") + 1] == workspace
+        )
+        proxy_run = next(
+            call for call in docker.calls
+            if call[0] == "run" and call[call.index("--name") + 1] == proxy
+        )
+
+        self.assertNotIn("-p", workspace_run)
+        self.assertNotIn("--publish", workspace_run)
+        self.assertEqual(workspace_run[workspace_run.index("--network") + 1], internal)
+        self.assertTrue(any(arg.startswith("--gpus") for arg in workspace_run))
+        self.assertIn("--mount", workspace_run)
+
+        self.assertEqual(proxy_run[proxy_run.index("-p") + 1], "127.0.0.1::3000")
+        self.assertEqual(proxy_run[proxy_run.index("--network") + 1], GATEWAY_NETWORK_NAME)
+        self.assertFalse(any(arg.startswith("--gpus") for arg in proxy_run))
+        self.assertNotIn("--mount", proxy_run)
+        self.assertIn("--no-healthcheck", proxy_run)
+        self.assertIn("--user=1000:1000", proxy_run)
+        self.assertIn(
+            ["network", "connect", internal, proxy],
+            docker.calls,
+        )
+
+
+class ProxyCrashTests(unittest.TestCase):
+    def test_proxy_crash_replaces_the_complete_runtime_pair(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        api.sessions = [{"id": "sess-1", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}}]
+        supervisor = make_supervisor(docker, api)
+        supervisor._reconcile_sessions()
+        workspace = names_for_session("sess-1")[0]
+        proxy = proxy_name_for_session("sess-1")
+        initial_runs = sum(1 for call in docker.calls if call[0] == "run")
+
+        docker.crash(proxy)
+        supervisor._reconcile_sessions()
+
+        self.assertTrue(docker.containers[workspace]["running"])
+        self.assertTrue(docker.containers[proxy]["running"])
+        self.assertEqual(
+            sum(1 for call in docker.calls if call[0] == "run"),
+            initial_runs + 2,
+        )
+
+
 class DoubleStartTests(unittest.TestCase):
     def test_double_start_never_creates_a_second_container(self) -> None:
         docker, api = FakeDocker(), FakeApi()
@@ -232,8 +319,8 @@ class DoubleStartTests(unittest.TestCase):
         supervisor._reconcile_sessions()
         run_calls_after_second = sum(1 for call in docker.calls if call[0] == "run")
 
-        self.assertEqual(run_calls_after_first, 1)
-        self.assertEqual(run_calls_after_second, 1, "a second reconcile pass must not start a second container")
+        self.assertEqual(run_calls_after_first, 2)
+        self.assertEqual(run_calls_after_second, 2, "a second reconcile pass must not start another workspace/proxy pair")
         self.assertEqual(len(supervisor.runtimes), 1)
 
 
@@ -244,13 +331,19 @@ class StopNormalTests(unittest.TestCase):
         supervisor = make_supervisor(docker, api)
         supervisor._reconcile_sessions()
         container, volume = names_for_session("sess-1")
+        proxy = proxy_name_for_session("sess-1")
+        internal = network_name_for_session("sess-1")
         self.assertIn(container, docker.containers)
+        self.assertIn(proxy, docker.containers)
 
         api.sessions = [{"id": "sess-1", "status": "STOP_REQUESTED", "expiresAt": _future(), "connectionMetadata": {}}]
         supervisor._reconcile_sessions()
 
         self.assertNotIn(container, docker.containers)
+        self.assertNotIn(proxy, docker.containers)
         self.assertNotIn(volume, docker.volumes)
+        self.assertNotIn(internal, docker.networks)
+        self.assertIn(GATEWAY_NETWORK_NAME, docker.networks)
         self.assertNotIn("sess-1", supervisor.runtimes)
         stopped_calls = [c for c in api.calls if c[0].endswith("/stopped")]
         self.assertEqual(len(stopped_calls), 1)
@@ -289,7 +382,8 @@ class AgentRestartTests(unittest.TestCase):
         # Simulate an agent restart: a brand new supervisor, empty self.runtimes,
         # against the SAME docker daemon where the container is still alive.
         second_api = FakeApi()
-        second_api.sessions = [{"id": "sess-1", "status": "READY", "expiresAt": _future(), "connectionMetadata": {"runtimeId": container, "localPort": docker.containers[container]["port"]}}]
+        proxy = proxy_name_for_session("sess-1")
+        second_api.sessions = [{"id": "sess-1", "status": "READY", "expiresAt": _future(), "connectionMetadata": {"runtimeId": container, "localPort": docker.containers[proxy]["port"]}}]
         second = make_supervisor(docker, second_api)
         self.assertEqual(second.runtimes, {})
 
