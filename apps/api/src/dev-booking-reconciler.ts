@@ -10,6 +10,26 @@ const TERMINAL_JOB_STATUSES: JobStatus[] = [
   JobStatus.QUARANTINED,
 ];
 
+const ACTIVE_DEVELOPER_SESSION_STATUSES: WorkspaceSessionStatus[] = [
+  WorkspaceSessionStatus.PREPARING,
+  WorkspaceSessionStatus.READY,
+  WorkspaceSessionStatus.RUNNING,
+];
+
+const ACTIVE_WORKSPACE_PREPARE_JOB_STATUSES: JobStatus[] = [
+  JobStatus.QUEUED,
+  JobStatus.ASSIGNED,
+  JobStatus.DOWNLOADING,
+  JobStatus.PREPARING,
+  JobStatus.RUNNING,
+  JobStatus.UPLOADING_RESULTS,
+  JobStatus.CANCEL_REQUESTED,
+];
+
+const DEVELOPER_SESSION_FILTER = {
+  machineWorkspace: { workspace: { slug: 'developer' } },
+} as const;
+
 // Whether AWAITING_DEPOSIT bookings get auto-funded without a real payment. Two independent
 // paths, both required to stay safe once a real escrow program is deployed:
 // - DEV_PAYMENT_BYPASS: local/dev only, forbidden outright in production (see config.ts).
@@ -27,11 +47,82 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
   queued: number;
   completed: number;
   degraded: number;
+  recoveredDeveloper: number;
 }> {
   let funded = 0;
   let queued = 0;
   let completed = 0;
   let degraded = 0;
+  let recoveredDeveloper = 0;
+
+  // A beta diagnostic can be queued in the short interval between auto-funding a
+  // booking and the renter creating the Developer session. If that diagnostic
+  // finishes after the Developer request, older code marked the whole booking
+  // COMPLETED and made the still-PREPARING workspace disappear from the active UI.
+  // Repair only that exact, auditable state: an unexpired Developer session with a
+  // live WORKSPACE_PREPARE job. Legitimately completed rentals have terminal
+  // workspace sessions and can never match this recovery query.
+  const racedDeveloperSessions = await db.workspaceSession.findMany({
+    where: {
+      status: { in: ACTIVE_DEVELOPER_SESSION_STATUSES },
+      expiresAt: { gt: now },
+      booking: { status: BookingStatus.COMPLETED },
+      ...DEVELOPER_SESSION_FILTER,
+      job: {
+        is: {
+          type: JobType.WORKSPACE_PREPARE,
+          status: { in: ACTIVE_WORKSPACE_PREPARE_JOB_STATUSES },
+        },
+      },
+    },
+    select: { id: true, bookingId: true, machineId: true },
+    take: 50,
+    orderBy: { createdAt: 'asc' },
+  });
+
+  for (const workspace of racedDeveloperSessions) {
+    const recovered = await db.$transaction(async (tx) => {
+      const booking = await tx.booking.updateMany({
+        where: {
+          id: workspace.bookingId,
+          status: BookingStatus.COMPLETED,
+          workspaceSessions: {
+            some: {
+              id: workspace.id,
+              status: { in: ACTIVE_DEVELOPER_SESSION_STATUSES },
+              ...DEVELOPER_SESSION_FILTER,
+              job: {
+                is: {
+                  type: JobType.WORKSPACE_PREPARE,
+                  status: { in: ACTIVE_WORKSPACE_PREPARE_JOB_STATUSES },
+                },
+              },
+            },
+          },
+        },
+        data: { status: BookingStatus.STARTING },
+      });
+      if (booking.count !== 1) return false;
+      await tx.machine.updateMany({
+        where: { id: workspace.machineId, operational: MachineOperational.AVAILABLE },
+        data: { operational: MachineOperational.RESERVED },
+      });
+      await tx.workspaceSession.update({
+        where: { id: workspace.id },
+        data: {
+          events: {
+            create: {
+              actorType: 'PLATFORM',
+              action: 'DIAGNOSTIC_COMPLETION_RACE_RECOVERED',
+              details: { bookingId: workspace.bookingId },
+            },
+          },
+        },
+      });
+      return true;
+    });
+    if (recovered) recoveredDeveloper += 1;
+  }
 
   if (devBypassActive()) {
     const waiting = await db.booking.findMany({
@@ -95,7 +186,11 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
     if (existing) continue;
     const created = await db.$transaction(async (tx) => {
       const reserved = await tx.booking.updateMany({
-        where: { id: booking.id, status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING] } },
+        where: {
+          id: booking.id,
+          status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING] },
+          workspaceSessions: { none: DEVELOPER_SESSION_FILTER },
+        },
         data: { status: BookingStatus.STARTING },
       });
       if (reserved.count !== 1) return false;
@@ -125,7 +220,10 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
     where: {
       type: JobType.GPU_DIAGNOSTIC,
       status: { in: TERMINAL_JOB_STATUSES },
-      booking: { status: { in: [BookingStatus.STARTING, BookingStatus.ACTIVE] } },
+      booking: {
+        status: { in: [BookingStatus.STARTING, BookingStatus.ACTIVE] },
+        workspaceSessions: { none: DEVELOPER_SESSION_FILTER },
+      },
     },
     select: { id: true, status: true, bookingId: true, machineId: true, result: true },
     take: 50,
@@ -142,6 +240,7 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
         where: {
           id: job.bookingId,
           status: { in: [BookingStatus.STARTING, BookingStatus.ACTIVE] },
+          workspaceSessions: { none: DEVELOPER_SESSION_FILTER },
         },
         data: { status: success ? BookingStatus.COMPLETED : BookingStatus.DEGRADED },
       });
@@ -158,7 +257,7 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
     }
   }
 
-  return { funded, queued, completed, degraded };
+  return { funded, queued, completed, degraded, recoveredDeveloper };
 }
 
 // A FUNDED/STARTING booking that never reaches ACTIVE is a stuck listing lock, not a
