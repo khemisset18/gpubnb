@@ -495,6 +495,9 @@ class RunnerTests(unittest.TestCase):
         self.assertIn(
             "--tmpfs=/workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700", command
         )
+        self.assertIn(
+            "--tmpfs=/home/coder:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700", command
+        )
         self.assertFalse(
             any(flag in ("--volume", "-v") or flag.startswith(("--volume=", "-v=")) for flag in command),
             "the developer workspace must never bind-mount a host path, including the owner's home directory",
