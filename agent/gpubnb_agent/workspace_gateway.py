@@ -173,7 +173,7 @@ class GatewaySupervisor:
             "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
             "--pids-limit=512", "--memory=4g", "--cpus=2",
             "--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
-            "--tmpfs=/home/coder:rw,nosuid,size=512m",
+            "--tmpfs=/home/coder:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700",
             "--mount", f"type=volume,source={volume},target=/workspace",
             # code-server serves the renter's own workloads (ML frameworks, CUDA code,
             # not just nvidia-smi), so this needs "compute" - the healthcheck/diagnostic
