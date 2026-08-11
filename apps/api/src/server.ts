@@ -17,13 +17,14 @@ import { allocateBookingResources, ResourceAllocationError } from './resource-al
 import { runBookingTransaction, BOOKING_BUSINESS_ERRORS } from './booking-transaction-retry.js';
 import { reconcileDevelopmentBookings, reconcileStalledActivations } from './dev-booking-reconciler.js';
 import { compatibleWorkspaceChoices, ensureCompatibleMachineWorkspace } from './machine-workspace-catalog.js';
+import { publicClientError } from './http-errors.js';
 const app=Fastify({logger:{redact:['req.headers.authorization','req.headers.cookie','req.headers.x-agent-signature','res.headers.set-cookie']},trustProxy:config.TRUST_PROXY==='true',bodyLimit:config.MAX_BODY_BYTES,requestIdHeader:'x-request-id'}); const db=new PrismaClient(); const redis=new Redis(config.REDIS_URL,{maxRetriesPerRequest:2,enableReadyCheck:true});
 app.addHook('preParsing',(request,_reply,payload,done)=>{const chunks:Buffer[]=[];const capture=new Transform({transform(chunk:Buffer,_encoding,callback){chunks.push(Buffer.from(chunk));callback(null,chunk);}});capture.once('end',()=>{request.rawBody=Buffer.concat(chunks);});done(null,payload.pipe(capture));});
 redis.on('error',(err:Error)=>app.log.error({err},'redis_error'));
 await app.register(cookie); await app.register(helmet,{contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'",'https://cdn.jsdelivr.net'],styleSrc:["'self'"],imgSrc:["'self'",'data:','https:'],connectSrc:["'self'",'https:'],objectSrc:["'none'"],baseUri:["'self'"],frameAncestors:["'none'"],formAction:["'self'"]}}}); await app.register(rateLimit,{max:120,timeWindow:'1 minute'});
 app.addHook('onRequest',async(req,reply)=>{reply.header('cache-control','no-store');reply.header('x-request-id',req.id);if(!assertTrustedOrigin(req,reply,config.PUBLIC_APP_DOMAIN))return reply;});
 registerDeviceAuthorizationRoutes(app, db, redis);
-app.setErrorHandler((err,req,reply)=>{if(err instanceof ZodError)return reply.code(400).send({error:'invalid_request',issues:err.issues.map(x=>({path:x.path.join('.'),message:x.message}))}); req.log.error(err); return reply.code(500).send({error:'internal_error'});});
+app.setErrorHandler((err,req,reply)=>{if(err instanceof ZodError)return reply.code(400).send({error:'invalid_request',issues:err.issues.map(x=>({path:x.path.join('.'),message:x.message}))});const clientError=publicClientError(err);if(clientError){req.log.warn({err},'client_request_error');return reply.code(clientError.statusCode).send({error:clientError.code});}req.log.error(err);return reply.code(500).send({error:'internal_error'});});
 app.get('/health',async()=>({ok:true,cluster:config.SOLANA_CLUSTER,mainnetEnabled:config.ALLOW_MAINNET==='true',escrowConfigured:config.ESCROW_PROGRAM_ID!=='NOT_DEPLOYED_YET'}));
 app.get('/ready',async(req,reply)=>{try{await db.$queryRaw`SELECT 1`;await redis.ping();return {ok:true}}catch(err){req.log.error(err);return reply.code(503).send({ok:false})}});
 app.post('/auth/nonce',{config:{rateLimit:{max:5,timeWindow:'15 minutes'}}},async(req)=>{const {wallet}=z.object({wallet:z.string()}).parse(req.body);return createNonce(redis,wallet,config.PUBLIC_APP_DOMAIN)});
