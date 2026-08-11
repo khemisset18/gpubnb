@@ -1,6 +1,7 @@
 'use strict';
 (() => {
   const API=(window.GPUBNB_API_URL||'').replace(/\/$/,'');
+  const GATEWAY_ORIGIN=new URL(window.GPUBNB_GATEWAY_URL||API||location.origin,location.origin).origin;
   const currentBookingStatuses=new Set(['CREATED','AWAITING_DEPOSIT','FUNDED','STARTING','ACTIVE']);
   const preparableBookingStatuses=new Set(['FUNDED','STARTING','ACTIVE']);
   const failedWorkspaceStatuses=new Set(['FAILED','CANCELLED','TIMED_OUT','QUARANTINED']);
@@ -30,6 +31,13 @@
     const value=Math.max(0,Number(seconds||0));
     if(value<60)return `${value} s`;
     return `${Math.floor(value/60)} min ${value%60} s`;
+  };
+  const workspaceOpenURL=value=>{
+    const path=String(value||'');
+    if(!path.startsWith('/workspace-gateway/')||path.startsWith('//')||path.includes('..'))throw new Error('invalid_workspace_gateway_path');
+    const url=new URL(path,`${GATEWAY_ORIGIN}/`);
+    if(url.origin!==GATEWAY_ORIGIN)throw new Error('invalid_workspace_gateway_origin');
+    return url.href;
   };
   function rowHTML({booking,workspace,error},history=false){
     const title=escapeHTML(booking.listing?.title||'Réservation GPU');
@@ -80,7 +88,9 @@
         button.disabled=true;button.textContent='Ouverture…';
         try{
           const result=await request(`/bookings/${encodeURIComponent(button.dataset.openWorkspace)}/workspace/access`,{method:'POST',body:'{}'});
-          location.href=`${API}${result.openPath}`;
+          // Do not keep the interactive gateway behind Netlify's /api rewrite:
+          // Render redirects without that prefix and code-server requires WebSockets.
+          location.assign(workspaceOpenURL(result.openPath));
         }catch(error){button.disabled=false;button.textContent='Ouvrir mon espace';alert(error.code==='workspace_gateway_not_ready'?'La connexion sécurisée au workspace n’est pas encore prête.':(error.message||'Ouverture impossible.'));}
       }));
     }catch(error){root.innerHTML=`<div class="empty-state"><p class="muted">${escapeHTML(error.message||'Impossible de charger les workspaces.')}</p></div>`;}
