@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gpubnb-agent"
-version = "0.5.3"
+version = "0.5.4"
 description = "GPUbnb local signed GPU agent"
 requires-python = ">=3.10"
 dependencies = [

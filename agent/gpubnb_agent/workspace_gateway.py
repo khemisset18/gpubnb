@@ -29,7 +29,7 @@ import websocket
 
 from .client import ApiClient, agent_request
 from .mining_guard import ProcessInspector, WindowsProcessInspector, miner_install_root, stop_all_miners_and_verify
-from .runner import gpu_passthrough_flags
+from .runner import DEVELOPER_HOME_TMPFS, gpu_passthrough_flags
 from .storage import load_config, load_key
 from .runtime_images import workspace_image
 
@@ -196,7 +196,7 @@ class GatewaySupervisor:
             "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
             "--pids-limit=512", "--memory=4g", "--cpus=2",
             "--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
-            "--tmpfs=/home/coder:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700",
+            DEVELOPER_HOME_TMPFS,
             "--mount", f"type=volume,source={volume},target=/workspace",
             # Only the workspace gets GPU access. The proxy below deliberately gets
             # neither GPU flags nor the renter's volume.
