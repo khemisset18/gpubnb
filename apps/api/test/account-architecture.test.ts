@@ -20,6 +20,15 @@ test('Netlify proxies same-origin API calls to Render', () => {
   assert.match(read('apps/web/config.js'), /GPUBNB_API_URL = .+ "\/api"/);
 });
 
+test('interactive Developer gateway leaves the Netlify API rewrite', () => {
+  const config = read('apps/web/config.js');
+  const script = read('apps/web/workspace-bookings.js');
+  assert.match(config, /GPUBNB_GATEWAY_URL = .+ "https:\/\/gpubnb\.onrender\.com"/);
+  assert.match(script, /location\.assign\(workspaceOpenURL\(result\.openPath\)\)/);
+  assert.match(script, /path\.startsWith\('\/workspace-gateway\/'\)/);
+  assert.doesNotMatch(script, /location\.href=`\$\{API\}\$\{result\.openPath\}`/);
+});
+
 test('professional account pages and protected API routes exist', () => {
   for (const page of ['apps/web/onboarding.html', 'apps/web/dashboard.html', 'apps/web/session.html']) {
     assert.match(read(page), /<title>/);
