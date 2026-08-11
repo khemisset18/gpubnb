@@ -1,8 +1,11 @@
 """Outbound-only Developer Workspace gateway.
 
-The host never listens on a public interface. code-server is bound to 127.0.0.1
-through Docker and all renter traffic is relayed through authenticated GPUbnb API
-requests. The API remains the only Internet-facing endpoint.
+The host never listens on a public interface. The renter workspace stays on a
+per-session Docker internal network with no Internet route. A separate hardened
+TCP proxy, which has neither the GPU nor the workspace volume, is the only
+container published on 127.0.0.1. All renter traffic is then relayed through
+authenticated GPUbnb API requests. The API remains the only Internet-facing
+endpoint.
 
 Mining/rental exclusivity, and surviving a crash or agent restart without ever
 running a miner and a renter's workspace at once, are both enforced here rather
@@ -31,9 +34,11 @@ from .storage import load_config, load_key
 from .runtime_images import workspace_image
 
 PINNED_DEVELOPER_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpubnb-developer@sha256:[a-f0-9]{64}$")
-NETWORK_NAME = "gpubnb-workspace-internal"
 CONTAINER_PREFIX = "gpubnb-dev-"
+PROXY_PREFIX = "gpubnb-dev-proxy-"
 VOLUME_PREFIX = "gpubnb-workspace-"
+INTERNAL_NETWORK_PREFIX = "gpubnb-workspace-internal-"
+GATEWAY_NETWORK_NAME = "gpubnb-workspace-gateway"
 HEALTH_TIMEOUT_SECONDS = 30.0
 START_TIMEOUT_SECONDS = 120
 PORT_DISCOVERY_TIMEOUT_SECONDS = 10.0
@@ -64,13 +69,27 @@ def _real_health_check(port: int) -> bool:
 class Runtime:
     session_id: str
     container_name: str
+    proxy_name: str
     volume_name: str
+    network_name: str
     port: int
 
 
+def _session_suffix(session_id: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9]", "", session_id)[-16:] or "session"
+
+
 def names_for_session(session_id: str) -> tuple[str, str]:
-    suffix = re.sub(r"[^a-zA-Z0-9]", "", session_id)[-16:] or "session"
+    suffix = _session_suffix(session_id)
     return f"{CONTAINER_PREFIX}{suffix}", f"{VOLUME_PREFIX}{suffix}"
+
+
+def proxy_name_for_session(session_id: str) -> str:
+    return f"{PROXY_PREFIX}{_session_suffix(session_id)}"
+
+
+def network_name_for_session(session_id: str) -> str:
+    return f"{INTERNAL_NETWORK_PREFIX}{_session_suffix(session_id)}"
 
 
 class GatewaySupervisor:
@@ -121,10 +140,15 @@ class GatewaySupervisor:
     def _stop_mining_and_verify(self) -> bool:
         return self._mining_guard()
 
-    def _ensure_network(self) -> None:
-        inspect = self._docker(["network", "inspect", NETWORK_NAME], check=False)
-        if inspect.returncode != 0:
-            self._docker(["network", "create", "--internal", NETWORK_NAME])
+    def _ensure_networks(self, internal_network: str) -> None:
+        internal = self._docker(["network", "inspect", internal_network], check=False)
+        if internal.returncode != 0:
+            self._docker(["network", "create", "--internal", internal_network])
+        gateway = self._docker(["network", "inspect", GATEWAY_NETWORK_NAME], check=False)
+        if gateway.returncode != 0:
+            # Only trusted proxy sidecars join this bridge. The renter workspace
+            # remains exclusively on its per-session internal network.
+            self._docker(["network", "create", GATEWAY_NETWORK_NAME])
 
     def _developer_image(self) -> str:
         image = workspace_image(self.config, "developer")
@@ -162,27 +186,45 @@ class GatewaySupervisor:
         log_text = self._single_line(f"{logs.stdout}\n{logs.stderr}") or "no_container_logs"
         return RuntimeError(f"developer_workspace_container_exited:{state_text}:logs={log_text}")
 
-    def _launch_container(self, container: str, volume: str, image: str) -> None:
+    def _launch_workspace_container(
+        self, container: str, volume: str, internal_network: str, image: str
+    ) -> None:
         self._docker([
-            # Keep an early-exited container just long enough to inspect its exit
-            # state and logs, then clean it explicitly. --rm erased the only useful
-            # evidence and misreported every early exit as a missing loopback port.
+            # Keep early-exited containers until their state and logs are captured.
             "run", "-d", "--name", container,
-            "--network", NETWORK_NAME,
-            "-p", "127.0.0.1::3000",
+            "--network", internal_network,
             "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
             "--pids-limit=512", "--memory=4g", "--cpus=2",
             "--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
             "--tmpfs=/home/coder:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700",
             "--mount", f"type=volume,source={volume},target=/workspace",
-            # code-server serves the renter's own workloads (ML frameworks, CUDA code,
-            # not just nvidia-smi), so this needs "compute" - the healthcheck/diagnostic
-            # paths that share gpu_passthrough_flags() only need "utility" and keep the
-            # narrower default.
+            # Only the workspace gets GPU access. The proxy below deliberately gets
+            # neither GPU flags nor the renter's volume.
             *gpu_passthrough_flags("compute,utility"),
             "--entrypoint", "code-server", image,
             "--bind-addr", "0.0.0.0:3000", "--auth", "none", "/workspace",
         ], timeout=START_TIMEOUT_SECONDS)
+
+    def _launch_proxy_container(
+        self, proxy: str, workspace: str, internal_network: str, image: str
+    ) -> None:
+        self._docker([
+            "run", "-d", "--name", proxy,
+            "--network", GATEWAY_NETWORK_NAME,
+            "-p", "127.0.0.1::3000",
+            "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
+            "--pids-limit=64", "--memory=128m", "--cpus=0.25",
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=16m,mode=1777",
+            "--user=1000:1000", "--no-healthcheck",
+            "--env", f"GPUBNB_TARGET={workspace}",
+            "--entrypoint", "node", image,
+            "/usr/local/lib/gpubnb/loopback-proxy.js",
+        ], timeout=START_TIMEOUT_SECONDS)
+        # Docker cannot publish a port for a container attached only to an
+        # --internal network. Connect the already loopback-published proxy to the
+        # workspace's isolated network instead; the workspace never joins the
+        # gateway bridge and therefore receives no Internet route.
+        self._docker(["network", "connect", internal_network, proxy])
 
     def _wait_healthy(self, port: int, deadline: float | None = None) -> bool:
         deadline = deadline if deadline is not None else time.time() + HEALTH_TIMEOUT_SECONDS
@@ -196,16 +238,25 @@ class GatewaySupervisor:
         # Cheap, local, no side effects - reject a bad image before touching Docker
         # or mining at all.
         image = self._developer_image()
-        # Never start a Developer runtime while a miner might still hold the GPU - and
-        # never trust "no miner was in self.runtimes" for that, since self.runtimes is
-        # only ever populated by *this* process and a miner started by a previous
-        # process (or a previous session's cleanup that never ran) is invisible to it.
+        # Never start a Developer runtime while a miner might still hold the GPU.
         if not self._stop_mining_and_verify():
             raise RuntimeError("workspace_start_blocked_mining_stop_unverified")
-        self._ensure_network()
         container, volume = names_for_session(session_id)
+        proxy = proxy_name_for_session(session_id)
+        internal_network = network_name_for_session(session_id)
+        self._ensure_networks(internal_network)
         self._docker(["volume", "create", volume])
-        self._launch_container(container, volume, image)
+        self._launch_workspace_container(container, volume, internal_network, image)
+        if not self._container_running(container):
+            error = self._container_exit_error(container)
+            self._cleanup_names(container, volume)
+            raise error
+        try:
+            self._launch_proxy_container(proxy, container, internal_network, image)
+        except Exception:
+            self._cleanup_names(container, volume)
+            raise
+
         port = None
         port_deadline = time.time() + PORT_DISCOVERY_TIMEOUT_SECONDS
         while time.time() < port_deadline:
@@ -213,51 +264,75 @@ class GatewaySupervisor:
                 error = self._container_exit_error(container)
                 self._cleanup_names(container, volume)
                 raise error
-            port = self._discover_port(container)
+            if not self._container_running(proxy):
+                error = self._container_exit_error(proxy)
+                self._cleanup_names(container, volume)
+                raise error
+            port = self._discover_port(proxy)
             if port is not None:
                 break
             time.sleep(0.2)
         if port is None:
             self._cleanup_names(container, volume)
-            raise RuntimeError("developer_workspace_loopback_port_missing")
+            raise RuntimeError("developer_workspace_loopback_proxy_port_missing")
         if not self._wait_healthy(port):
-            if not self._container_running(container):
-                error = self._container_exit_error(container)
+            failed = next(
+                (name for name in (container, proxy) if not self._container_running(name)),
+                None,
+            )
+            if failed is not None:
+                error = self._container_exit_error(failed)
                 self._cleanup_names(container, volume)
                 raise error
             self._cleanup_names(container, volume)
             raise RuntimeError("developer_workspace_health_timeout")
-        runtime = Runtime(session_id, container, volume, port)
+        runtime = Runtime(session_id, container, proxy, volume, internal_network, port)
         self.runtimes[session_id] = runtime
         return runtime
 
     def _adopt_or_start_runtime(self, session_id: str) -> Runtime:
-        """Idempotent across an agent restart: if a container from a previous agent
-        process is already running for this exact session, adopt it (re-query its
-        real port) instead of trying to `docker run --name` a duplicate - which would
-        just fail on the name collision - or leaving it invisible to this process."""
+        """Idempotent across an agent restart: adopt only a complete, healthy
+        workspace+proxy pair for this exact session. Any partial topology is cleaned
+        before replacement so a stale proxy, volume, or network cannot leak."""
         container, volume = names_for_session(session_id)
-        if self._container_running(container):
-            port = self._discover_port(container)
+        proxy = proxy_name_for_session(session_id)
+        internal_network = network_name_for_session(session_id)
+        if self._container_running(container) and self._container_running(proxy):
+            port = self._discover_port(proxy)
             if port is not None and self._health_check(port):
-                runtime = Runtime(session_id, container, volume, port)
+                runtime = Runtime(
+                    session_id, container, proxy, volume, internal_network, port
+                )
                 self.runtimes[session_id] = runtime
                 return runtime
-            # Running but unhealthy/unreachable: don't adopt a broken container, and
-            # don't leave it behind either - replace it with a fresh one.
-            self._cleanup_names(container, volume)
-        else:
-            # Exists but not running (crashed; --rm may not have fired yet) - clear it
-            # before starting fresh so the name isn't taken.
-            self._docker(["rm", "-f", container], check=False)
+        self._cleanup_names(container, volume)
         return self._start_runtime(session_id)
 
     def _cleanup_names(self, container: str, volume: str) -> bool:
+        suffix = container[len(CONTAINER_PREFIX):]
+        proxy = f"{PROXY_PREFIX}{suffix}"
+        internal_network = f"{INTERNAL_NETWORK_PREFIX}{suffix}"
+        # Stop the exposed loopback proxy before the workspace, then verify every
+        # per-session resource is actually gone before reporting cleaned=true.
+        self._docker(["rm", "-f", proxy], check=False)
         self._docker(["rm", "-f", container], check=False)
-        inspect = self._docker(["inspect", container], check=False)
+        proxy_inspect = self._docker(["inspect", proxy], check=False)
+        workspace_inspect = self._docker(["inspect", container], check=False)
         self._docker(["volume", "rm", "-f", volume], check=False)
         volume_inspect = self._docker(["volume", "inspect", volume], check=False)
-        return inspect.returncode != 0 and volume_inspect.returncode != 0
+        self._docker(["network", "rm", internal_network], check=False)
+        network_inspect = self._docker(
+            ["network", "inspect", internal_network], check=False
+        )
+        return all(
+            item.returncode != 0
+            for item in (
+                proxy_inspect,
+                workspace_inspect,
+                volume_inspect,
+                network_inspect,
+            )
+        )
 
     def _close_session_channels(self, session_id: str) -> None:
         for channel_id in self.session_channels.pop(session_id, set()):
@@ -286,7 +361,11 @@ class GatewaySupervisor:
         elapsed = int(now - previous)
         if elapsed < USAGE_REPORT_INTERVAL_SECONDS:
             return
-        if not self._container_running(runtime.container_name) or not self._health_check(runtime.port):
+        if (
+            not self._container_running(runtime.container_name)
+            or not self._container_running(runtime.proxy_name)
+            or not self._health_check(runtime.port)
+        ):
             self.usage_last_report[runtime.session_id] = now
             return
         interval = max(1, min(30, elapsed))
@@ -303,23 +382,96 @@ class GatewaySupervisor:
         self.usage_last_report[runtime.session_id] = now
 
     def _sweep_orphaned_containers(self, desired_session_ids: set[str]) -> None:
-        """Containers matching our own naming convention that correspond to no
-        session we were told about at all - not "ours but not adopted yet", but
-        genuinely nobody's. Left behind by e.g. a session the API already forgot
-        about while the agent was offline. Stopped and removed outright: unlike an
-        orphaned miner, there is no safe "leave it alone" option for a container that
-        is occupying the GPU and network namespace we need for a real rental."""
-        listing = self._docker(["ps", "-a", "--filter", f"name=^{CONTAINER_PREFIX}", "--format", "{{.Names}}"], check=False)
-        if listing.returncode != 0:
-            return
-        desired_containers = {names_for_session(session_id)[0] for session_id in desired_session_ids}
-        adopted_containers = {runtime.container_name for runtime in self.runtimes.values()}
-        for name in listing.stdout.splitlines():
-            name = name.strip()
-            if not name or name in desired_containers or name in adopted_containers:
-                continue
-            volume = VOLUME_PREFIX + name[len(CONTAINER_PREFIX):]
-            self._cleanup_names(name, volume)
+        """Remove every per-session container, volume, and internal network that no
+        desired or adopted session owns. Prefixes are fixed and all derived names
+        are sanitized, so this never touches user-created Docker resources."""
+        desired_workspaces = {
+            names_for_session(session_id)[0] for session_id in desired_session_ids
+        }
+        desired_proxies = {
+            proxy_name_for_session(session_id) for session_id in desired_session_ids
+        }
+        desired_volumes = {
+            names_for_session(session_id)[1] for session_id in desired_session_ids
+        }
+        desired_networks = {
+            network_name_for_session(session_id) for session_id in desired_session_ids
+        }
+        adopted_workspaces = {
+            runtime.container_name for runtime in self.runtimes.values()
+        }
+        adopted_proxies = {runtime.proxy_name for runtime in self.runtimes.values()}
+        adopted_volumes = {runtime.volume_name for runtime in self.runtimes.values()}
+        adopted_networks = {runtime.network_name for runtime in self.runtimes.values()}
+
+        listing = self._docker(
+            [
+                "ps", "-a", "--filter", f"name=^{CONTAINER_PREFIX}",
+                "--format", "{{.Names}}",
+            ],
+            check=False,
+        )
+        if listing.returncode == 0:
+            for name in listing.stdout.splitlines():
+                name = name.strip()
+                if not name or name.startswith(PROXY_PREFIX):
+                    continue
+                if name in desired_workspaces or name in adopted_workspaces:
+                    continue
+                volume = VOLUME_PREFIX + name[len(CONTAINER_PREFIX):]
+                self._cleanup_names(name, volume)
+
+        proxy_listing = self._docker(
+            [
+                "ps", "-a", "--filter", f"name=^{PROXY_PREFIX}",
+                "--format", "{{.Names}}",
+            ],
+            check=False,
+        )
+        if proxy_listing.returncode == 0:
+            for proxy in proxy_listing.stdout.splitlines():
+                proxy = proxy.strip()
+                if not proxy or proxy in desired_proxies or proxy in adopted_proxies:
+                    continue
+                suffix = proxy[len(PROXY_PREFIX):]
+                self._cleanup_names(
+                    f"{CONTAINER_PREFIX}{suffix}", f"{VOLUME_PREFIX}{suffix}"
+                )
+
+        volume_listing = self._docker(
+            [
+                "volume", "ls", "--filter", f"name=^{VOLUME_PREFIX}",
+                "--format", "{{.Name}}",
+            ],
+            check=False,
+        )
+        if volume_listing.returncode == 0:
+            for volume in volume_listing.stdout.splitlines():
+                volume = volume.strip()
+                if not volume or volume in desired_volumes or volume in adopted_volumes:
+                    continue
+                suffix = volume[len(VOLUME_PREFIX):]
+                self._cleanup_names(
+                    f"{CONTAINER_PREFIX}{suffix}", volume
+                )
+
+        network_listing = self._docker(
+            [
+                "network", "ls", "--filter", f"name=^{INTERNAL_NETWORK_PREFIX}",
+                "--format", "{{.Name}}",
+            ],
+            check=False,
+        )
+        if network_listing.returncode == 0:
+            for network in network_listing.stdout.splitlines():
+                network = network.strip()
+                if (
+                    not network
+                    or network in desired_networks
+                    or network in adopted_networks
+                ):
+                    continue
+                self._docker(["network", "rm", network], check=False)
 
     @staticmethod
     def _expired(value: object) -> bool:
@@ -353,10 +505,13 @@ class GatewaySupervisor:
             if status not in {"READY", "RUNNING"}:
                 continue
             existing = self.runtimes.get(session_id)
-            if existing is not None and not self._container_running(existing.container_name):
-                # Tracked but actually dead (e.g. it crashed since the last cycle,
-                # and --rm already reclaimed it) - drop the stale entry so the next
-                # branch below starts a real replacement instead of trusting a ghost.
+            if existing is not None and (
+                not self._container_running(existing.container_name)
+                or not self._container_running(existing.proxy_name)
+            ):
+                # A workspace is usable only while both halves of the isolated
+                # topology are alive. Drop the stale runtime so adoption cleans any
+                # survivor and starts a complete replacement.
                 self.runtimes.pop(session_id, None)
                 existing = None
             if existing is None:
