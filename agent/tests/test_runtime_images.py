@@ -18,6 +18,16 @@ class RuntimeImageDefaultsTests(unittest.TestCase):
             explicit,
         )
 
+    def test_retired_official_image_is_migrated_to_the_current_default(self):
+        retired = (
+            "ghcr.io/khemisset18/gpubnb-developer@sha256:"
+            "26700fdc955495b610bbcf8a912110395fc72181a236de2b70b539a0c02150b7"
+        )
+        self.assertEqual(
+            workspace_image({"workspaceImages": {"developer": retired}}, "developer"),
+            DEFAULT_DEVELOPER_IMAGE,
+        )
+
     def test_compute_keeps_using_the_configured_diagnostic_image(self):
         diagnostic = "ghcr.io/khemisset18/gpu-diagnostic@sha256:" + ("b" * 64)
         self.assertEqual(workspace_image({"diagnosticImage": diagnostic}, "compute"), diagnostic)
