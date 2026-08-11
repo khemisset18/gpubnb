@@ -16,6 +16,7 @@ OFFICIAL_DIAGNOSTIC_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpu-di
 OFFICIAL_GPU_PROOF_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpu-proof-workspace@sha256:[a-f0-9]{64}$")
 _IMAGE_PULL_LOCK = threading.Lock()
 PROGRESS_INTERVAL_SECONDS = 5.0
+DEVELOPER_HOME_TMPFS = "--tmpfs=/home/coder:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700"
 
 
 def _gpu_vendor() -> str:
@@ -323,6 +324,12 @@ def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
             "--cap-drop=ALL", "--security-opt=no-new-privileges",
             "--pids-limit=64", "--memory=512m", "--cpus=1",
             "--tmpfs=/tmp:rw,noexec,nosuid,size=32m",
+            # code-server writes its configuration below $HOME even for --version.
+            # The real Developer runtime mounts this same owner-only tmpfs because
+            # the container root is read-only. Keep preparation identical so it
+            # verifies the production storage profile instead of failing on the
+            # immutable image layer or relying on a host home-directory bind.
+            DEVELOPER_HOME_TMPFS,
             # The manifest declares /workspace as writable (workspaces/developer/manifest.json
             # writablePaths), and the healthcheck requires it, but --read-only otherwise locks
             # the whole image layer including the baked-in /workspace directory. A tmpfs here —
