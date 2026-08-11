@@ -48,7 +48,10 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       db.booking.updateMany({where:{id:row.bookingId,status:{in:[BookingStatus.FUNDED,BookingStatus.STARTING]}},data:{status:BookingStatus.ACTIVE}}),
       ...(firstOpen?[db.workspaceSessionEvent.create({data:{sessionId:row.id,actorType:'RENTER',actorId:row.renterId,action:'SESSION_STARTED'}})]:[]),
     ]);
-    reply.setCookie(GATEWAY_COOKIE,browserToken,{httpOnly:true,secure:true,sameSite:'strict',path:`/workspace-gateway/${sessionId}`});return reply.redirect(`/workspace-gateway/${sessionId}/`);
+    // Entry comes from the Netlify renter portal. Lax is required for the cookie
+    // to survive that top-level cross-site navigation and its same-origin redirect;
+    // HttpOnly, Secure and the per-session Path keep it scoped to this gateway.
+    reply.setCookie(GATEWAY_COOKIE,browserToken,{httpOnly:true,secure:true,sameSite:'lax',path:`/workspace-gateway/${sessionId}`});return reply.redirect(`/workspace-gateway/${sessionId}/`);
   });
   app.all('/workspace-gateway/:sessionId/*',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const token=parseCookie(request.headers.cookie,GATEWAY_COOKIE);if(!token)return reply.code(401).send({error:'workspace_auth_required'});const raw=await redis.get(gatewaySessionKey(token));if(!raw)return reply.code(401).send({error:'workspace_session_expired'});const browser=JSON.parse(raw) as {userId:string;sessionId:string};if(browser.sessionId!==sessionId)return reply.code(403).send({error:'workspace_session_mismatch'});const row=await activeGatewaySession(db,sessionId);if(!row||row.renterId!==browser.userId)return reply.code(409).send({error:'workspace_not_available'});
