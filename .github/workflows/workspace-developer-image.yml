@@ -22,6 +22,8 @@ jobs:
         run: docker build --pull=false --tag gpubnb-developer:candidate workspaces/developer
       - name: Verify tools and non-root execution
         run: docker run --rm --entrypoint /usr/local/bin/gpubnb-developer-healthcheck gpubnb-developer:candidate
+      - name: Verify hardened code-server startup
+        run: bash workspaces/developer/runtime-smoke-test.sh gpubnb-developer:candidate
       - name: Scan high and critical vulnerabilities
         run: |
           docker run --rm \
