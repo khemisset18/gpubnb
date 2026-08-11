@@ -38,8 +38,25 @@ class WindowsServiceTests(unittest.TestCase):
         with patch.object(stop_event, "wait", side_effect=stop_after_first_wait):
             windows_service.supervise_heartbeat(stop_event, heartbeat, logger)
 
-        heartbeat.assert_called_once_with(stop_event, process_mode="_service")
+        heartbeat.assert_called_once()
+        args, kwargs = heartbeat.call_args
+        self.assertEqual(args, (stop_event,))
+        self.assertEqual(kwargs["process_mode"], "_service")
+        self.assertTrue(callable(kwargs["event_sink"]))
         logger.exception.assert_called_once()
+
+    def test_service_event_sink_persists_structured_agent_events(self) -> None:
+        logger = MagicMock(spec=logging.Logger)
+        sink = windows_service._service_event_sink(logger)
+
+        sink({"event": "job_failed", "jobId": "job-1", "message": "échec"})
+
+        logger.info.assert_called_once()
+        template, payload = logger.info.call_args.args
+        self.assertEqual(template, "agent_event %s")
+        self.assertIn('"event":"job_failed"', payload)
+        self.assertIn('"jobId":"job-1"', payload)
+        self.assertIn("échec", payload)
 
     def test_service_status_reports_running_only_from_scm_evidence(self) -> None:
         win32service = MagicMock(SERVICE_RUNNING=4)
