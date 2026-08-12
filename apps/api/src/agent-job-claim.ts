@@ -24,6 +24,11 @@ const RECLAIMABLE_PREPARATION_STATUSES: JobStatus[] = [
   JobStatus.PREPARING,
 ];
 
+// Do not consume host CPU/RAM/Docker/GPU days before a scheduled rental. New work is
+// claimable only shortly before the paid window. Once a preparation has actually been
+// claimed, the lease-recovery path above remains authoritative and may resume it.
+const PREPARATION_LEAD_MS = 5 * 60_000;
+
 const AGENT_JOB_SELECT = {
   id: true,
   bookingId: true,
@@ -165,12 +170,9 @@ export async function claimNextAgentJobInTransaction(
       status: JobStatus.QUEUED,
       booking: {
         status: { in: ACTIVE_JOB_BOOKINGS },
+        startsAt: { lte: new Date(now.getTime() + PREPARATION_LEAD_MS) },
         endsAt: { gte: now },
       },
-      OR: [
-        { type: JobType.WORKSPACE_PREPARE },
-        { booking: { startsAt: { lte: new Date(now.getTime() + 300_000) } } },
-      ],
     },
     orderBy: { createdAt: 'asc' },
     select: { id: true },
