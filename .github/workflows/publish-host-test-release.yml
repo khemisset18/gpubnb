@@ -11,6 +11,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/publish-host-test-release.yml'
+      - 'scripts/verify-windows-release.ps1'
 
 permissions:
   contents: write
@@ -167,6 +168,11 @@ jobs:
           fs.writeFileSync(`${file}.sha256`, `${hash}  ${file.split('/').pop()}\n`);
           NODE
 
+      - name: Smoke test exact Windows release installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/verify-windows-release.ps1 -InstallerPath 'release-assets/gpubnb-host-windows-x64.exe'
+
       - name: Create verified Windows portable archive
         if: runner.os == 'Windows'
         shell: pwsh
@@ -182,12 +188,6 @@ jobs:
           if ($bytes.Length -lt 262144) { throw "Portable executable is unexpectedly small: $($bytes.Length) bytes." }
           if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Portable executable is not a valid Windows PE file (missing MZ header).' }
 
-          # This is a secondary, no-install fallback. The primary Windows asset is
-          # the real NSIS installer staged above (gpubnb-host-windows-x64.exe): it
-          # is the only path that registers the Start Menu shortcut, the Windows
-          # service (elevated), and an uninstaller. Do not delete it here — a
-          # previous version of this step did, which shipped every public release
-          # with no way to get a properly installed GUI, service, or uninstaller.
           $portableDir = 'windows-portable'
           New-Item -ItemType Directory -Path $portableDir -Force | Out-Null
           Copy-Item $portable "$portableDir/GPUbnb-Host-Portable.exe"
