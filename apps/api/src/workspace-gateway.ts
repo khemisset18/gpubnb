@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { Socket } from 'node:net';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { BookingStatus, MachineConnectivity, MachineOperational, ModerationStatus, PaymentStatus, SessionTerminationReason, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
@@ -12,6 +13,8 @@ const GATEWAY_COOKIE='gpubnb_workspace';
 const SESSION_TTL_SECONDS=3600;
 const INTERACTIVE_CONNECT_TIMEOUT_SECONDS=15*60;
 const RESPONSE_TIMEOUT_MS=30_000;
+const WS_UPSTREAM_FIRST_FRAME_TIMEOUT_MS=15_000;
+const WS_HEALTH_PATH='/ws-health';
 // The agent reads at most 10 MiB from code-server. Base64 expands that by
 // one third; 15 MiB leaves bounded room for the signed JSON envelope/headers
 // without weakening the API-wide 128 KiB request limit.
@@ -21,17 +24,31 @@ const SAFE_RESPONSE_HEADERS=new Set(['content-type','cache-control','etag','last
 type RelayRequest={id:string;sessionId:string;kind:'http'|'ws_open'|'ws_send'|'ws_close';method?:string;path?:string;headers?:Record<string,string>;bodyBase64?:string;channelId?:string;dataBase64?:string;binary?:boolean};
 type RelayResponse={status:number;headers?:Record<string,string>;bodyBase64?:string;error?:string};
 type GatewayChannelBinding={sessionId:string;machineId:string;browserSessionKey:string};
+type UpgradeStatus=401|403|404|409|500;
 
 const gatewaySessionKey=(token:string)=>`workspace-gateway-session:${crypto.createHash('sha256').update(token).digest('hex')}`;
 const machineQueue=(machineId:string)=>`workspace-gateway:machine:${machineId}`;
 const responseKey=(id:string)=>`workspace-gateway:response:${id}`;
 const wsInputKey=(channelId:string)=>`workspace-gateway:ws-input:${channelId}`;
 const wsChannelKey=(channelId:string)=>`workspace-gateway:ws-channel:${channelId}`;
+const wsUpstreamReadyKey=(channelId:string)=>`workspace-gateway:ws-upstream-ready:${channelId}`;
 
-function parseCookie(header:string|undefined,name:string){for(const part of (header||'').split(';')){const [key,...rest]=part.trim().split('=');if(key===name)return decodeURIComponent(rest.join('='));}return null;}
+function parseCookie(header:string|undefined,name:string){for(const part of (header||'').split(';')){const [key,...rest]=part.trim().split('=');if(key===name){try{return decodeURIComponent(rest.join('='));}catch{return null;}}}return null;}
 function safePath(value:string){return value.startsWith('/')&&!value.includes('..')&&value.length<=4096;}
 function relayHeaders(headers:Record<string,unknown>){const allowed=['accept','accept-language','accept-encoding','content-type','if-none-match','if-modified-since','range','user-agent'];return Object.fromEntries(allowed.flatMap(name=>{const value=headers[name];return typeof value==='string'?[[name,value]]:[]}));}
 async function waitJson(redis:Redis,key:string,timeoutMs=RESPONSE_TIMEOUT_MS){const deadline=Date.now()+timeoutMs;while(Date.now()<deadline){const raw=await redis.getdel(key);if(raw)return JSON.parse(raw) as RelayResponse;await new Promise(resolve=>setTimeout(resolve,30));}return null;}
+
+export function websocketUpgradeRejection(status:UpgradeStatus,error:string):Buffer{
+  const statusText:Record<UpgradeStatus,string>={401:'Unauthorized',403:'Forbidden',404:'Not Found',409:'Conflict',500:'Internal Server Error'};
+  const body=JSON.stringify({error});
+  return Buffer.from(`HTTP/1.1 ${status} ${statusText[status]}\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,'utf8');
+}
+
+function rejectWebSocketUpgrade(socket:Socket,status:UpgradeStatus,error:string):void{
+  if(socket.destroyed)return;
+  socket.end(websocketUpgradeRejection(status,error));
+}
+
 async function authenticateAgent(db:PrismaClient,redis:Redis,machineId:string,request:FastifyRequest,routePath:string,withBody=false){
   const machine=await db.machine.findUnique({where:{id:machineId},select:{agentPublicKey:true,keyRevokedAt:true,moderationStatus:true}});
   if(!machine||machine.keyRevokedAt||machine.moderationStatus!==ModerationStatus.CLEAR)return false;
@@ -135,10 +152,10 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     if(!body.close){
       const activation=await activateGatewaySession(db,binding.sessionId,machineId);if(!activation)return reply.code(409).send({error:'interactive_workspace_not_activatable'});
       const ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((activation.expiresAt.getTime()-Date.now())/1000)));
-      await redis.expire(binding.browserSessionKey,ttl);await redis.expire(wsChannelKey(channelId),ttl);
+      await redis.set(wsUpstreamReadyKey(channelId),'1','EX',ttl);await redis.expire(binding.browserSessionKey,ttl);await redis.expire(wsChannelKey(channelId),ttl);
     }
     await redis.lpush(wsInputKey(channelId),JSON.stringify({dataBase64:body.dataBase64||'',binary:!!body.binary,close:!!body.close}));await redis.expire(wsInputKey(channelId),120);
-    if(body.close)await redis.del(wsChannelKey(channelId));
+    if(body.close)await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId));
     return {ok:true};
   });
   app.post('/agent/workspace-gateway/:sessionId/stopped',async(request,reply)=>{
@@ -155,16 +172,51 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       db.machine.update({where:{id:machineId},data:{operational:MachineOperational.AVAILABLE}}),
     ]);return {ok:true,activated:!neverActivated};
   });
+
   const wss=new WebSocketServer({noServer:true,maxPayload:4*1024*1024});
-  app.server.on('upgrade',async(request,socket,head)=>{try{const url=new URL(request.url||'/',`https://${request.headers.host||'localhost'}`);const match=url.pathname.match(/^\/workspace-gateway\/([^/]+)\/(.*)$/);if(!match)return;const sessionId=match[1];const token=parseCookie(request.headers.cookie,GATEWAY_COOKIE);if(!token){socket.destroy();return;}const raw=await redis.get(gatewaySessionKey(token));if(!raw){socket.destroy();return;}const browser=JSON.parse(raw) as {userId:string;sessionId:string};if(browser.sessionId!==sessionId){socket.destroy();return;}const row=await activeGatewaySession(db,sessionId);if(!row||row.renterId!==browser.userId){socket.destroy();return;}
-    wss.handleUpgrade(request,socket as import('node:net').Socket,head,(ws:WebSocket)=>{
-      const channelId=crypto.randomUUID();const targetPath='/'+match[2]+url.search;const browserSessionKey=gatewaySessionKey(token);
-      const channelTtl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((row.expiresAt.getTime()-Date.now())/1000)));
-      const setup=(async()=>{await redis.set(wsChannelKey(channelId),JSON.stringify({sessionId,machineId:row.machineId,browserSessionKey} satisfies GatewayChannelBinding),'EX',channelTtl);await redis.lpush(machineQueue(row.machineId),JSON.stringify({id:crypto.randomUUID(),sessionId,kind:'ws_open',channelId,path:targetPath,headers:relayHeaders(request.headers as Record<string,unknown>)} satisfies RelayRequest));await redis.expire(machineQueue(row.machineId),120);})();
-      void setup.catch(()=>ws.close(1011,'gateway setup failed'));
-      const pump=setInterval(async()=>{for(let i=0;i<50;i++){const frame=await redis.rpop(wsInputKey(channelId));if(!frame)break;const parsed=JSON.parse(frame) as {dataBase64:string;binary:boolean;close:boolean};if(parsed.close){ws.close();break;}if(ws.readyState===WebSocket.OPEN)ws.send(Buffer.from(parsed.dataBase64,'base64'),{binary:parsed.binary});}},20);
-      ws.on('message',(data:WebSocket.Data,isBinary:boolean)=>void setup.then(()=>redis.lpush(machineQueue(row.machineId),JSON.stringify({id:crypto.randomUUID(),sessionId,kind:'ws_send',channelId,dataBase64:Buffer.from(data as Buffer).toString('base64'),binary:isBinary} satisfies RelayRequest))));
-      ws.on('close',()=>{clearInterval(pump);void setup.then(async()=>{await redis.lpush(machineQueue(row.machineId),JSON.stringify({id:crypto.randomUUID(),sessionId,kind:'ws_close',channelId} satisfies RelayRequest));await redis.del(wsChannelKey(channelId));});});
-    });
-  }catch{socket.destroy();}});
+  const healthWss=new WebSocketServer({noServer:true,maxPayload:1024});
+  app.server.on('upgrade',async(request,socket,head)=>{
+    let url:URL;
+    try{url=new URL(request.url||'/',`https://${request.headers.host||'localhost'}`);}catch{
+      app.log.warn({event:'workspace_gateway_upgrade_rejected',reason:'invalid_url'},'workspace gateway upgrade rejected');
+      rejectWebSocketUpgrade(socket as Socket,404,'websocket_route_not_found');return;
+    }
+
+    if(url.pathname===WS_HEALTH_PATH){
+      app.log.info({event:'workspace_gateway_health_upgrade'},'workspace gateway websocket health upgrade');
+      healthWss.handleUpgrade(request,socket as Socket,head,(ws:WebSocket)=>{ws.send('gpubnb-ws-ok',()=>ws.close(1000,'ok'));});
+      return;
+    }
+
+    const match=url.pathname.match(/^\/workspace-gateway\/([^/]+)\/(.*)$/);
+    if(!match){rejectWebSocketUpgrade(socket as Socket,404,'websocket_route_not_found');return;}
+    const sessionId=match[1];const token=parseCookie(request.headers.cookie,GATEWAY_COOKIE);
+    app.log.info({event:'workspace_gateway_upgrade_received',sessionId,hasWorkspaceCookie:!!token},'workspace gateway upgrade received');
+    if(!token){app.log.warn({event:'workspace_gateway_upgrade_rejected',sessionId,reason:'cookie_missing'},'workspace gateway upgrade rejected');rejectWebSocketUpgrade(socket as Socket,401,'workspace_auth_required');return;}
+
+    try{
+      const raw=await redis.get(gatewaySessionKey(token));
+      if(!raw){app.log.warn({event:'workspace_gateway_upgrade_rejected',sessionId,reason:'cookie_expired'},'workspace gateway upgrade rejected');rejectWebSocketUpgrade(socket as Socket,401,'workspace_session_expired');return;}
+      const browser=JSON.parse(raw) as {userId:string;sessionId:string};
+      if(browser.sessionId!==sessionId){app.log.warn({event:'workspace_gateway_upgrade_rejected',sessionId,reason:'session_mismatch'},'workspace gateway upgrade rejected');rejectWebSocketUpgrade(socket as Socket,403,'workspace_session_mismatch');return;}
+      const row=await activeGatewaySession(db,sessionId);
+      if(!row||row.renterId!==browser.userId){app.log.warn({event:'workspace_gateway_upgrade_rejected',sessionId,reason:'workspace_unavailable'},'workspace gateway upgrade rejected');rejectWebSocketUpgrade(socket as Socket,409,'workspace_not_available');return;}
+
+      wss.handleUpgrade(request,socket as Socket,head,(ws:WebSocket)=>{
+        const channelId=crypto.randomUUID();const channelLogId=channelId.slice(0,8);const targetPath='/'+match[2]+url.search;const browserSessionKey=gatewaySessionKey(token);
+        const channelTtl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((row.expiresAt.getTime()-Date.now())/1000)));
+        app.log.info({event:'workspace_gateway_browser_connected',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket connected');
+        const setup=(async()=>{await redis.set(wsChannelKey(channelId),JSON.stringify({sessionId,machineId:row.machineId,browserSessionKey} satisfies GatewayChannelBinding),'EX',channelTtl);await redis.lpush(machineQueue(row.machineId),JSON.stringify({id:crypto.randomUUID(),sessionId,kind:'ws_open',channelId,path:targetPath,headers:relayHeaders(request.headers as Record<string,unknown>)} satisfies RelayRequest));await redis.expire(machineQueue(row.machineId),120);})();
+        void setup.catch(error=>{app.log.error({err:error,event:'workspace_gateway_setup_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway setup failed');ws.close(1011,'gateway setup failed');});
+
+        const upstreamTimer=setTimeout(()=>{void redis.get(wsUpstreamReadyKey(channelId)).then(ready=>{if(!ready&&ws.readyState===WebSocket.OPEN){app.log.warn({event:'workspace_gateway_upstream_timeout',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway received no upstream frame');ws.close(1011,'workspace upstream unavailable');}}).catch(error=>{app.log.error({err:error,event:'workspace_gateway_upstream_check_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway upstream readiness check failed');if(ws.readyState===WebSocket.OPEN)ws.close(1011,'gateway readiness check failed');});},WS_UPSTREAM_FIRST_FRAME_TIMEOUT_MS);
+        const pump=setInterval(async()=>{try{for(let i=0;i<50;i++){const frame=await redis.rpop(wsInputKey(channelId));if(!frame)break;const parsed=JSON.parse(frame) as {dataBase64:string;binary:boolean;close:boolean};if(parsed.close){ws.close();break;}if(ws.readyState===WebSocket.OPEN)ws.send(Buffer.from(parsed.dataBase64,'base64'),{binary:parsed.binary});}}catch(error){app.log.error({err:error,event:'workspace_gateway_pump_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway websocket pump failed');if(ws.readyState===WebSocket.OPEN)ws.close(1011,'gateway relay failed');}},20);
+        ws.on('message',(data:WebSocket.Data,isBinary:boolean)=>void setup.then(()=>redis.lpush(machineQueue(row.machineId),JSON.stringify({id:crypto.randomUUID(),sessionId,kind:'ws_send',channelId,dataBase64:Buffer.from(data as Buffer).toString('base64'),binary:isBinary} satisfies RelayRequest))).catch(error=>{app.log.error({err:error,event:'workspace_gateway_send_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser frame relay failed');if(ws.readyState===WebSocket.OPEN)ws.close(1011,'gateway relay failed');}));
+        ws.on('close',()=>{clearTimeout(upstreamTimer);clearInterval(pump);app.log.info({event:'workspace_gateway_browser_closed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket closed');void setup.then(async()=>{await redis.lpush(machineQueue(row.machineId),JSON.stringify({id:crypto.randomUUID(),sessionId,kind:'ws_close',channelId} satisfies RelayRequest));await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId));}).catch(error=>app.log.error({err:error,event:'workspace_gateway_close_cleanup_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway close cleanup failed'));});
+      });
+    }catch(error){
+      app.log.error({err:error,event:'workspace_gateway_upgrade_failed',sessionId},'workspace gateway upgrade failed');
+      rejectWebSocketUpgrade(socket as Socket,500,'workspace_gateway_upgrade_failed');
+    }
+  });
 }
