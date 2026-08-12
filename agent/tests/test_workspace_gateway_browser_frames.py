@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import unittest
 
 import websocket
@@ -35,23 +36,28 @@ def _supervisor(ws: _FakeWebSocket) -> tuple[GatewaySupervisor, list[tuple[str, 
 
 
 class BrowserFrameRelayTests(unittest.TestCase):
-    def test_invalid_utf8_text_metadata_is_promoted_to_binary(self) -> None:
+    def test_live_sized_invalid_utf8_text_metadata_is_promoted_to_binary(self) -> None:
         ws = _FakeWebSocket()
         supervisor, traces = _supervisor(ws)
-        payload = b"management:\x00\x9b\xffpayload"
+        payload = bytearray(105)
+        payload[:12] = b"management!!"
+        payload[12] = 0x9B
+        payload[13:] = bytes((index % 251 for index in range(92)))
+        raw = bytes(payload)
+        digest = hashlib.sha256(raw).hexdigest()[:12]
 
         supervisor._handle({
             "kind": "ws_send",
             "sessionId": "session-1",
             "channelId": "channel-1",
-            "dataBase64": base64.b64encode(payload).decode("ascii"),
+            "dataBase64": base64.b64encode(raw).decode("ascii"),
             "binary": False,
         })
 
-        self.assertEqual(ws.sent, [("send", payload, websocket.ABNF.OPCODE_BINARY)])
+        self.assertEqual(ws.sent, [("send", raw, websocket.ABNF.OPCODE_BINARY)])
         self.assertFalse(ws.closed)
         self.assertIn(
-            ("ws_browser_text_promoted_binary", f"len={len(payload)}"),
+            ("ws_browser_text_promoted_binary", f"len=105:sha256={digest}"),
             traces,
         )
 
@@ -84,8 +90,26 @@ class BrowserFrameRelayTests(unittest.TestCase):
             "binary": True,
         })
 
-        self.assertEqual(ws.sent, [("binary", payload, websocket.ABNF.OPCODE_BINARY)])
+        self.assertEqual(ws.sent, [("send", payload, websocket.ABNF.OPCODE_BINARY)])
         self.assertFalse(ws.closed)
+
+    def test_invalid_base64_fails_closed(self) -> None:
+        ws = _FakeWebSocket()
+        supervisor, _ = _supervisor(ws)
+        errors: list[str] = []
+        supervisor._report_error = lambda error: errors.append(str(error))  # type: ignore[method-assign]
+
+        supervisor._handle({
+            "kind": "ws_send",
+            "sessionId": "session-1",
+            "channelId": "channel-1",
+            "dataBase64": "%%%not-base64%%%",
+            "binary": True,
+        })
+
+        self.assertTrue(ws.closed)
+        self.assertNotIn("channel-1", supervisor.channels)
+        self.assertEqual(errors, ["ws_browser_frame_invalid_base64"])
 
 
 if __name__ == "__main__":
