@@ -32,12 +32,50 @@ test('websocket upgrades fail explicitly and expose a minimal edge health probe'
   assert.doesNotMatch(api,/if\(!token\)\{socket\.destroy\(\)/);
 });
 
-test('browser websocket closes fail-closed when no signed upstream frame arrives',()=>{
-  assert.match(api,/WS_UPSTREAM_FIRST_FRAME_TIMEOUT_MS/);
-  assert.match(api,/workspace-gateway:ws-upstream-ready:/);
-  assert.match(api,/workspace_gateway_upstream_timeout/);
-  assert.match(api,/workspace upstream unavailable/);
-  assert.match(api,/redis\.set\(wsUpstreamReadyKey\(channelId\),'1'/);
+test('browser websocket consumes an explicit signed agent open acknowledgement',()=>{
+  assert.match(api,/WS_UPSTREAM_OPEN_TIMEOUT_MS/);
+  assert.match(api,/openRequestId=crypto\.randomUUID\(\)/);
+  assert.match(api,/waitJson\(redis,responseKey\(openRequestId\),WS_UPSTREAM_OPEN_TIMEOUT_MS\)/);
+  assert.match(api,/opened\.status!==101/);
+  assert.match(api,/workspace_gateway_upstream_opened/);
+  assert.match(api,/workspace_gateway_upstream_open_failed/);
+  assert.match(agent,/request_id = str\(item\.get\("id"\) or ""\)/);
+  assert.match(agent,/"status": 101/);
+  assert.match(agent,/"status": 502/);
+  assert.match(agent,/"\/agent\/workspace-gateway\/respond"/);
+  assert.doesNotMatch(api,/WS_UPSTREAM_FIRST_FRAME_TIMEOUT_MS/);
+});
+
+test('legacy agents retain first-upstream-frame readiness during rollout',()=>{
+  assert.match(api,/workspace_gateway_legacy_upstream_ready/);
+  assert.match(api,/const legacyReady=await redis\.get\(wsUpstreamReadyKey\(channelId\)\)/);
+  assert.match(api,/redis\.set\(wsUpstreamReadyKey\(channelId\),'1','EX',ttl\)/);
+  assert.match(api,/ws\.on\('message'/);
+});
+
+test('websocket tunnel has dedicated throughput and payload guards',()=>{
+  assert.match(api,/AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE=6000/);
+  assert.match(api,/AGENT_RESPONSE_RATE_LIMIT_PER_MINUTE=1200/);
+  assert.match(api,/WS_MAX_FRAME_BYTES=4\*1024\*1024/);
+  assert.match(api,/WS_MAX_BASE64_BYTES/);
+  assert.match(api,/workspace_ws_frame_too_large/);
+  assert.match(api,/ws-frame',\{bodyLimit:MAX_AGENT_RELAY_BODY_BYTES,config:\{rateLimit:/);
+  assert.match(api,/\/next',\{config:\{rateLimit:\{max:AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE/);
+});
+
+test('browser delivery pump is serialized and close-aware',()=>{
+  assert.match(api,/let pumpBusy=false/);
+  assert.match(api,/if\(pumpBusy\|\|browserClosed\)return/);
+  assert.match(api,/\.finally\(\(\)=>\{pumpBusy=false;\}\)/);
+  assert.match(api,/let browserSendChain:Promise<unknown>=setup/);
+  assert.match(api,/browserClosed=true;clearInterval\(pump\)/);
+  assert.match(api,/workspace_gateway_browser_socket_error/);
+});
+
+test('billing activation remains tied to a real upstream websocket frame',()=>{
+  assert.match(api,/app\.post\('\/agent\/workspace-gateway\/ws-frame'/);
+  assert.match(api,/activateGatewaySession\(db,binding\.sessionId,machineId\)/);
+  assert.match(api,/A real frame remains the billing activation signal/);
 });
 
 test('agent developer runtime binds only to loopback and has no host bind mount',()=>{

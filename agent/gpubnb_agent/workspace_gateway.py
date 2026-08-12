@@ -44,6 +44,7 @@ START_TIMEOUT_SECONDS = 120
 PORT_DISCOVERY_TIMEOUT_SECONDS = 10.0
 RECONCILE_INTERVAL_SECONDS = 1.0
 USAGE_REPORT_INTERVAL_SECONDS = 10.0
+WS_MAX_FRAME_BYTES = 4 * 1024 * 1024
 
 
 class DockerRunner(Protocol):
@@ -70,9 +71,6 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-# The relay must hand 3xx responses back to the browser untouched (relative
-# Location header included) instead of following them here: the browser owns
-# navigation state (URL bar, query string) for the workspace it's opening.
 _RELAY_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
@@ -133,11 +131,6 @@ class GatewaySupervisor:
         self._docker_runner: DockerRunner = docker_runner or _real_docker
         self._process_inspector: ProcessInspector = process_inspector or WindowsProcessInspector()
         self._health_check: Callable[[int], bool] = health_check or _real_health_check
-        # A distinct injection point from process_inspector, not just a convenience:
-        # the real path resolves %LOCALAPPDATA%, which doesn't exist on the Linux/macOS
-        # CI runners this same package is tested on (see ci.yml's rust/host-desktop
-        # matrix - the Python agent has an equivalent one), so tests must be able to
-        # bypass path resolution entirely, not just the process backend.
         self._mining_guard: Callable[[], bool] = mining_guard or (
             lambda: stop_all_miners_and_verify(miner_install_root(), self._process_inspector)
         )
@@ -157,8 +150,6 @@ class GatewaySupervisor:
             self._docker(["network", "create", "--internal", internal_network])
         gateway = self._docker(["network", "inspect", GATEWAY_NETWORK_NAME], check=False)
         if gateway.returncode != 0:
-            # Only trusted proxy sidecars join this bridge. The renter workspace
-            # remains exclusively on its per-session internal network.
             self._docker(["network", "create", GATEWAY_NETWORK_NAME])
 
     def _developer_image(self) -> str:
@@ -175,10 +166,6 @@ class GatewaySupervisor:
         port_result = self._docker(["port", container, "3000/tcp"], check=False)
         if port_result.returncode != 0:
             return None
-        # Docker normally returns only the endpoint, while some Engine/Desktop
-        # versions include the "3000/tcp ->" prefix. Accept IPv4 and IPv6
-        # loopback spellings, but deliberately reject wildcard or LAN bindings:
-        # the authenticated API relay is the only allowed remote entry point.
         match = re.search(r"(?:127\.0\.0\.1|\[::1\]|::1):(\d+)", port_result.stdout)
         return int(match.group(1)) if match else None
 
@@ -201,7 +188,6 @@ class GatewaySupervisor:
         self, container: str, volume: str, internal_network: str, image: str
     ) -> None:
         self._docker([
-            # Keep early-exited containers until their state and logs are captured.
             "run", "-d", "--name", container,
             "--network", internal_network,
             "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
@@ -209,8 +195,6 @@ class GatewaySupervisor:
             "--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
             DEVELOPER_HOME_TMPFS,
             "--mount", f"type=volume,source={volume},target=/workspace",
-            # Only the workspace gets GPU access. The proxy below deliberately gets
-            # neither GPU flags nor the renter's volume.
             *gpu_passthrough_flags("compute,utility"),
             "--entrypoint", "code-server", image,
             "--bind-addr", "0.0.0.0:3000", "--auth", "none", "/workspace",
@@ -231,10 +215,6 @@ class GatewaySupervisor:
             "--entrypoint", "node", image,
             "/usr/local/lib/gpubnb/loopback-proxy.js",
         ], timeout=START_TIMEOUT_SECONDS)
-        # Docker cannot publish a port for a container attached only to an
-        # --internal network. Connect the already loopback-published proxy to the
-        # workspace's isolated network instead; the workspace never joins the
-        # gateway bridge and therefore receives no Internet route.
         self._docker(["network", "connect", internal_network, proxy])
 
     def _wait_healthy(self, port: int, deadline: float | None = None) -> bool:
@@ -246,10 +226,7 @@ class GatewaySupervisor:
         return False
 
     def _start_runtime(self, session_id: str) -> Runtime:
-        # Cheap, local, no side effects - reject a bad image before touching Docker
-        # or mining at all.
         image = self._developer_image()
-        # Never start a Developer runtime while a miner might still hold the GPU.
         if not self._stop_mining_and_verify():
             raise RuntimeError("workspace_start_blocked_mining_stop_unverified")
         container, volume = names_for_session(session_id)
@@ -302,9 +279,6 @@ class GatewaySupervisor:
         return runtime
 
     def _adopt_or_start_runtime(self, session_id: str) -> Runtime:
-        """Idempotent across an agent restart: adopt only a complete, healthy
-        workspace+proxy pair for this exact session. Any partial topology is cleaned
-        before replacement so a stale proxy, volume, or network cannot leak."""
         container, volume = names_for_session(session_id)
         proxy = proxy_name_for_session(session_id)
         internal_network = network_name_for_session(session_id)
@@ -323,8 +297,6 @@ class GatewaySupervisor:
         suffix = container[len(CONTAINER_PREFIX):]
         proxy = f"{PROXY_PREFIX}{suffix}"
         internal_network = f"{INTERNAL_NETWORK_PREFIX}{suffix}"
-        # Stop the exposed loopback proxy before the workspace, then verify every
-        # per-session resource is actually gone before reporting cleaned=true.
         self._docker(["rm", "-f", proxy], check=False)
         self._docker(["rm", "-f", container], check=False)
         proxy_inspect = self._docker(["inspect", proxy], check=False)
@@ -366,7 +338,6 @@ class GatewaySupervisor:
         return self._cleanup_names(runtime.container_name, runtime.volume_name)
 
     def _report_running_usage(self, runtime: Runtime) -> None:
-        """Bill only signed, healthy time after the workspace became openable."""
         now = time.monotonic()
         previous = self.usage_last_report.setdefault(runtime.session_id, now)
         elapsed = int(now - previous)
@@ -393,9 +364,6 @@ class GatewaySupervisor:
         self.usage_last_report[runtime.session_id] = now
 
     def _sweep_orphaned_containers(self, desired_session_ids: set[str]) -> None:
-        """Remove every per-session container, volume, and internal network that no
-        desired or adopted session owns. Prefixes are fixed and all derived names
-        are sanitized, so this never touches user-created Docker resources."""
         desired_workspaces = {
             names_for_session(session_id)[0] for session_id in desired_session_ids
         }
@@ -520,9 +488,6 @@ class GatewaySupervisor:
                 not self._container_running(existing.container_name)
                 or not self._container_running(existing.proxy_name)
             ):
-                # A workspace is usable only while both halves of the isolated
-                # topology are alive. Drop the stale runtime so adoption cleans any
-                # survivor and starts a complete replacement.
                 self.runtimes.pop(session_id, None)
                 existing = None
             if existing is None:
@@ -533,8 +498,6 @@ class GatewaySupervisor:
                 except Exception:
                     failures = self.start_failures.get(session_id, 0) + 1
                     self.start_failures[session_id] = failures
-                    # Avoid the Docker create/delete storm observed on the real host
-                    # while keeping reconciliation and heartbeats alive for recovery.
                     self.start_retry_at[session_id] = time.monotonic() + min(
                         60.0, 5.0 * (2 ** min(failures - 1, 4))
                     )
@@ -580,10 +543,14 @@ class GatewaySupervisor:
                 opcode, data = ws.recv_data()
                 if opcode == websocket.ABNF.OPCODE_CLOSE:
                     break
+                raw = data.encode() if isinstance(data, str) else bytes(data)
+                if len(raw) > WS_MAX_FRAME_BYTES:
+                    raise RuntimeError(
+                        f"ws_frame_too_large:channel={channel_id[:8]}:len={len(raw)}:max={WS_MAX_FRAME_BYTES}"
+                    )
                 frame_count += 1
                 if frame_count == 1:
-                    self._report_error(RuntimeError(f"ws_channel_first_frame:channel={channel_id[:8]}:opcode={opcode}:len={len(data)}"))
-                raw = data.encode() if isinstance(data, str) else bytes(data)
+                    self._report_error(RuntimeError(f"ws_channel_first_frame:channel={channel_id[:8]}:opcode={opcode}:len={len(raw)}"))
                 self._request("/agent/workspace-gateway/ws-frame", "POST", {"machineId": self.machine_id, "channelId": channel_id, "dataBase64": base64.b64encode(raw).decode(), "binary": opcode == websocket.ABNF.OPCODE_BINARY})
         except Exception as exc:
             self._report_error(exc)
@@ -597,19 +564,74 @@ class GatewaySupervisor:
                 pass
 
     def _ws_open(self, item: dict[str, Any]) -> None:
+        request_id = str(item.get("id") or "")
         session_id = str(item.get("sessionId") or "")
         channel_id = str(item.get("channelId") or "")
         path = str(item.get("path") or "/")
-        if not channel_id or not path.startswith("/") or ".." in path:
-            self._report_error(RuntimeError(f"ws_channel_open_rejected:path={path[:80]!r}:channel_present={bool(channel_id)}"))
+        ws: websocket.WebSocket | None = None
+
+        def report_failure(error: Exception) -> None:
+            self._report_error(error)
+            if not request_id:
+                return
+            try:
+                self._request(
+                    "/agent/workspace-gateway/respond",
+                    "POST",
+                    {
+                        "machineId": self.machine_id,
+                        "id": request_id,
+                        "status": 502,
+                        "error": str(error)[:200],
+                    },
+                )
+            except Exception as report_exc:
+                self._report_error(report_exc)
+
+        try:
+            if not channel_id or not path.startswith("/") or ".." in path:
+                raise RuntimeError(
+                    f"ws_channel_open_rejected:path={path[:80]!r}:channel_present={bool(channel_id)}"
+                )
+            runtime = self._runtime_for(session_id)
+            headers = [f"{k}: {v}" for k, v in (item.get("headers") or {}).items() if str(k).lower() not in {"host", "origin", "cookie", "authorization", "connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"}]
+            ws = websocket.create_connection(f"ws://127.0.0.1:{runtime.port}{path}", header=headers, origin=f"http://127.0.0.1:{runtime.port}", timeout=10, enable_multithread=True)
+            self.channels[channel_id] = ws
+            self.session_channels.setdefault(session_id, set()).add(channel_id)
+            reader = threading.Thread(target=self._ws_reader, args=(session_id, channel_id, ws), daemon=True, name=f"gpubnb-ws-{channel_id[:8]}")
+            reader.start()
+        except Exception as exc:
+            self.channels.pop(channel_id, None)
+            self.session_channels.get(session_id, set()).discard(channel_id)
+            if ws is not None:
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+            report_failure(exc)
             return
-        runtime = self._runtime_for(session_id)
-        headers = [f"{k}: {v}" for k, v in (item.get("headers") or {}).items() if str(k).lower() not in {"host", "origin", "cookie", "authorization", "connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"}]
-        ws = websocket.create_connection(f"ws://127.0.0.1:{runtime.port}{path}", header=headers, origin=f"http://127.0.0.1:{runtime.port}", timeout=10, enable_multithread=True)
-        self.channels[channel_id] = ws
-        self.session_channels.setdefault(session_id, set()).add(channel_id)
+
         self._report_error(RuntimeError(f"ws_channel_opened:channel={channel_id[:8]}:path={path[:60]!r}"))
-        threading.Thread(target=self._ws_reader, args=(session_id, channel_id, ws), daemon=True, name=f"gpubnb-ws-{channel_id[:8]}").start()
+        if request_id:
+            def report_open_ack() -> None:
+                try:
+                    self._request(
+                        "/agent/workspace-gateway/respond",
+                        "POST",
+                        {"machineId": self.machine_id, "id": request_id, "status": 101},
+                    )
+                except Exception as exc:
+                    self._report_error(
+                        RuntimeError(
+                            f"ws_open_ack_report_failed:channel={channel_id[:8]}:{str(exc)[:180]}"
+                        )
+                    )
+
+            threading.Thread(
+                target=report_open_ack,
+                daemon=True,
+                name=f"gpubnb-ws-ack-{channel_id[:8]}",
+            ).start()
 
     def _handle(self, item: dict[str, Any]) -> None:
         kind = item.get("kind")
@@ -618,13 +640,23 @@ class GatewaySupervisor:
         elif kind == "ws_open":
             self._ws_open(item)
         elif kind == "ws_send":
-            ws = self.channels.get(str(item.get("channelId") or ""))
+            channel_id = str(item.get("channelId") or "")
+            ws = self.channels.get(channel_id)
             if ws:
-                data = base64.b64decode(str(item.get("dataBase64") or ""))
-                if item.get("binary"):
-                    ws.send_binary(data)
-                else:
-                    ws.send(data.decode("utf-8"))
+                try:
+                    data = base64.b64decode(str(item.get("dataBase64") or ""))
+                    if item.get("binary"):
+                        ws.send_binary(data)
+                    else:
+                        ws.send(data.decode("utf-8"))
+                except Exception as exc:
+                    self._report_error(exc)
+                    self.channels.pop(channel_id, None)
+                    self.session_channels.get(str(item.get("sessionId") or ""), set()).discard(channel_id)
+                    try:
+                        ws.close()
+                    except Exception:
+                        pass
         elif kind == "ws_close":
             ws = self.channels.pop(str(item.get("channelId") or ""), None)
             if ws:
