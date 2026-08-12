@@ -116,8 +116,9 @@ test('download helpers preserve instructions and detect platforms',async()=>{
   assert.equal(status.textContent,'Disponible');
 });
 
-test('test release workflow publishes a verified Windows portable package',async()=>{
+test('test release workflow publishes an immutable candidate then promotes only after verification',async()=>{
   const workflow=await readFile(path.join(repoRoot,'.github/workflows/publish-host-test-release.yml'),'utf8');
+  const verifier=await readFile(path.join(repoRoot,'.github/workflows/post-publish-host-windows-verify.yml'),'utf8');
   assert.match(workflow,/workflow_dispatch/);
   assert.match(workflow,/push:/);
   assert.match(workflow,/branches:\s*\n\s*- main/);
@@ -126,8 +127,7 @@ test('test release workflow publishes a verified Windows portable package',async
   assert.match(workflow,/gpubnb-host-windows-x64-portable\.zip/);
   assert.match(workflow,/GPUbnb-Host-Portable\.exe/);
   // The real NSIS installer (Start Menu shortcut, elevated service install, uninstaller)
-  // must actually reach the release: a prior version of this workflow staged it and then
-  // deleted it before upload, leaving every public download without a working GUI install.
+  // must actually reach the candidate: a prior version staged it and then deleted it.
   assert.doesNotMatch(workflow,/Remove-Item[^\n]*gpubnb-host-windows-x64\.exe/);
   assert.match(workflow,/test -s release-assets\/gpubnb-host-windows-x64\.exe/);
   assert.match(workflow,/pyinstaller .*--name gpubnb-agent/);
@@ -138,10 +138,24 @@ test('test release workflow publishes a verified Windows portable package',async
   assert.match(workflow,/Compress-Archive/);
   assert.match(workflow,/gpubnb-host-linux-x64\.deb/);
   assert.match(workflow,/gpubnb-host-macos-arm64\.dmg/);
-  assert.match(workflow,/gh release create host-test-latest/);
   assert.match(workflow,/host-v0\.2\.0-beta\./);
   assert.match(workflow,/SHA256SUMS\.txt/);
   assert.match(workflow,/sha256sum --check/);
+  assert.match(workflow,/Publish immutable test candidate/);
+  assert.doesNotMatch(workflow,/gh release create host-test-latest/);
+
+  // Promotion is intentionally separated onto a fresh runner and can happen only
+  // after downloading the immutable candidate, checking every checksum and proving
+  // the Windows installer/service lifecycle from those downloaded bytes.
+  assert.match(verifier,/workflow_run/);
+  assert.match(verifier,/publish-host-test-release/);
+  assert.match(verifier,/gh release download/);
+  assert.match(verifier,/SHA256SUMS\.txt/);
+  assert.match(verifier,/Get-FileHash/);
+  assert.match(verifier,/verify-windows-release\.ps1/);
+  assert.match(verifier,/Install, exercise service, and uninstall downloaded Windows candidate/);
+  assert.match(verifier,/Promote verified candidate to host-test-latest/);
+  assert.match(verifier,/gh release create host-test-latest/);
 });
 
 test('dashboard presents mining as configurable but not production-ready',async()=>{
