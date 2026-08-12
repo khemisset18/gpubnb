@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify-published-windows:
+  verify-and-promote:
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: windows-latest
     steps:
@@ -25,7 +25,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
 
-      - name: Download exact immutable release assets
+      - name: Download exact immutable candidate assets
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -33,50 +33,59 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force published-release | Out-Null
-          gh release download $env:VERSION_TAG --repo $env:GITHUB_REPOSITORY --dir published-release --pattern 'gpubnb-host-windows-x64.exe' --pattern 'SHA256SUMS.txt'
-          if (-not (Test-Path 'published-release/gpubnb-host-windows-x64.exe' -PathType Leaf)) {
-            throw 'Published Windows installer was not downloaded.'
-          }
-          if (-not (Test-Path 'published-release/SHA256SUMS.txt' -PathType Leaf)) {
-            throw 'Published SHA256SUMS.txt was not downloaded.'
+          gh release download $env:VERSION_TAG --repo $env:GITHUB_REPOSITORY --dir published-release
+          $required = @(
+            'gpubnb-host-windows-x64.exe',
+            'gpubnb-host-windows-x64-portable.zip',
+            'gpubnb-host-linux-x64.deb',
+            'gpubnb-host-macos-arm64.dmg',
+            'SHA256SUMS.txt'
+          )
+          foreach ($name in $required) {
+            if (-not (Test-Path (Join-Path 'published-release' $name) -PathType Leaf)) {
+              throw "Published candidate is missing $name"
+            }
           }
 
-      - name: Verify published installer checksum
+      - name: Verify all published candidate checksums
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $sumLine = Get-Content 'published-release/SHA256SUMS.txt' | Where-Object { $_ -match '\s+gpubnb-host-windows-x64\.exe$' } | Select-Object -First 1
-          if (-not $sumLine) { throw 'SHA256SUMS.txt does not contain the Windows installer.' }
-          $expected = ($sumLine -split '\s+')[0].ToLowerInvariant()
-          $actual = (Get-FileHash 'published-release/gpubnb-host-windows-x64.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actual -ne $expected) {
-            throw "Published Windows installer checksum mismatch: expected $expected, got $actual"
+          $sumLines = Get-Content 'published-release/SHA256SUMS.txt'
+          $expectedFiles = @(
+            'gpubnb-host-windows-x64.exe',
+            'gpubnb-host-windows-x64-portable.zip',
+            'gpubnb-host-linux-x64.deb',
+            'gpubnb-host-macos-arm64.dmg'
+          )
+          foreach ($file in $expectedFiles) {
+            $line = $sumLines | Where-Object { $_ -match ("\\s+" + [regex]::Escape($file) + '$') } | Select-Object -First 1
+            if (-not $line) { throw "SHA256SUMS.txt does not contain $file" }
+            $expected = ($line -split '\s+')[0].ToLowerInvariant()
+            $actual = (Get-FileHash (Join-Path 'published-release' $file) -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) {
+              throw "Checksum mismatch for ${file}: expected $expected, got $actual"
+            }
           }
-          Write-Host "Published Windows installer SHA-256 verified: $actual"
 
-      - name: Install, exercise service, and uninstall published Windows release
-        id: smoke
-        continue-on-error: true
+      - name: Install, exercise service, and uninstall downloaded Windows candidate
         shell: pwsh
         run: ./scripts/verify-windows-release.ps1 -InstallerPath 'published-release/gpubnb-host-windows-x64.exe'
 
-      - name: Quarantine mutable alias when published Windows smoke fails
-        if: steps.smoke.outcome != 'success'
+      - name: Promote verified candidate to host-test-latest
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          VERSION_TAG: host-v0.2.0-beta.${{ github.event.workflow_run.run_number }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $alias = gh release view host-test-latest --repo $env:GITHUB_REPOSITORY --json targetCommitish 2>$null | ConvertFrom-Json
-          if ($alias -and $alias.targetCommitish -eq $env:EXPECTED_SHA) {
-            Write-Host 'Removing host-test-latest because the published Windows artifact failed post-publication smoke.'
+          if (gh release view host-test-latest --repo $env:GITHUB_REPOSITORY *> $null) {
             gh release delete host-test-latest --repo $env:GITHUB_REPOSITORY --cleanup-tag --yes
-          } else {
-            Write-Host 'Alias no longer points to this commit; leaving it untouched.'
           }
-
-      - name: Enforce published Windows smoke result
-        if: steps.smoke.outcome != 'success'
-        shell: pwsh
-        run: throw 'Published Windows release failed installation/service/uninstall verification and has been quarantined.'
+          gh release create host-test-latest published-release/* `
+            --repo $env:GITHUB_REPOSITORY `
+            --target $env:EXPECTED_SHA `
+            --title "GPUbnb Host — VERIFIED alias of $env:VERSION_TAG" `
+            --notes "Alias promu uniquement après validation post-publication indépendante du candidat immuable $env:VERSION_TAG : checksums de tous les artefacts vérifiés, installation Windows réelle, Agent/runtime-check, service Windows et désinstallation validés." `
+            --prerelease
