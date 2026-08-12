@@ -205,7 +205,7 @@ class WebSocketFrameGuardTests(unittest.TestCase):
         errors: list[str] = []
         supervisor = make_supervisor(errors)
         ws = MagicMock()
-        ws.send_binary.side_effect = OSError("socket closed")
+        ws.send.side_effect = OSError("socket closed")
         supervisor.channels["channel-5"] = ws
         supervisor.session_channels["session-1"] = {"channel-5"}
 

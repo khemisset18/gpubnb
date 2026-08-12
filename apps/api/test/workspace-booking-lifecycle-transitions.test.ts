@@ -51,7 +51,21 @@ test('only the first authenticated upstream WebSocket frame starts paid time', a
   const frame = source.slice(frameStart, frameEnd);
   assert.match(frame, /binding\.machineId!==machineId/);
   assert.match(frame, /activateGatewaySession\(db,binding\.sessionId,machineId\)/);
-  assert.ok(frame.indexOf('activateGatewaySession') < frame.indexOf('redis.lpush(wsInputKey'), 'activation must succeed before the frame reaches the renter');
+  assert.match(frame, /enqueueBoundedList\(redis,wsInputKey\(channelId\)/);
+  assert.ok(
+    frame.indexOf('activateGatewaySession') < frame.indexOf('enqueueBoundedList(redis,wsInputKey(channelId)'),
+    'activation must succeed before a legacy frame enters the renter delivery queue',
+  );
+
+  const batchStart = source.indexOf("app.post('/agent/workspace-gateway/ws-frames'");
+  const batchEnd = source.indexOf('\n  });', batchStart);
+  const batch = source.slice(batchStart, batchEnd);
+  assert.match(batch, /activateGatewaySession\(db,binding\.sessionId,machineId\)/);
+  assert.match(batch, /ENQUEUE_DEDUPED_WS_FRAME_SCRIPT/);
+  assert.ok(
+    batch.indexOf('activateGatewaySession') < batch.indexOf('ENQUEUE_DEDUPED_WS_FRAME_SCRIPT'),
+    'activation must succeed before a batched frame enters the renter delivery queue',
+  );
 });
 
 test('developer usage remains zero while READY and increments only for RUNNING plus ACTIVE', async () => {

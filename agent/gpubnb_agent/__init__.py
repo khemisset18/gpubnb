@@ -1,6 +1,6 @@
 """GPUbnb Agent: local GPU inventory and signed control plane client."""
 
-__version__ = "0.5.7"
+__version__ = "0.5.8"
 
 # Install the high-throughput Developer Workspace transport before the CLI imports
 # workspace_gateway. The v2 supervisor subclasses the hardened lifecycle code and
@@ -10,3 +10,11 @@ from .workspace_gateway_v2 import install as _install_workspace_gateway_v2
 
 _install_workspace_gateway_v2()
 del _install_workspace_gateway_v2
+
+# Apply the live browser-frame compatibility fix after v2. This keeps all v2
+# transport behavior while preventing malformed text/binary metadata from forcing
+# an unsafe UTF-8 decode that tears down VS Code channels.
+from .workspace_gateway_v3 import install as _install_workspace_gateway_v3
+
+_install_workspace_gateway_v3()
+del _install_workspace_gateway_v3
