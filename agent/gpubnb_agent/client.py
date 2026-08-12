@@ -25,6 +25,24 @@ MAX_RETRIES = 3
 RETRY_BACKOFF = 2.0
 EMPTY_BODY_SHA256 = hashlib.sha256(b"").hexdigest()
 COUNTER_REPLAY_RESYNC_LIMIT = 64
+# Gateway command batches can legitimately carry base64 WebSocket payloads much
+# larger than the historical 1 MB JSON cap. Keep a hard bound instead of silently
+# truncating JSON: 64 MiB is enough for four maximum-size HTTP relay commands and
+# remains a finite fail-closed allocation if a server response is malformed.
+MAX_JSON_RESPONSE_BYTES = 64 * 1024 * 1024
+
+
+def _read_json_response(response: Any, max_bytes: int = MAX_JSON_RESPONSE_BYTES) -> dict[str, Any]:
+    data = response.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise RuntimeError(f"API response too large: max={max_bytes}")
+    try:
+        parsed = json.loads(data.decode())
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("API response is not valid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise RuntimeError("API response JSON must be an object")
+    return parsed
 
 
 class ApiClient:
@@ -46,7 +64,7 @@ class ApiClient:
             with urllib.request.urlopen(request, timeout=timeout, context=self.context) as response:
                 if response.status == 204:
                     return {}
-                return json.loads(response.read(1_000_000).decode())
+                return _read_json_response(response)
         except urllib.error.HTTPError as exc:
             detail = exc.read(4096).decode(errors="replace")
             raise RuntimeError(f"API HTTP {exc.code}: {detail}") from exc
