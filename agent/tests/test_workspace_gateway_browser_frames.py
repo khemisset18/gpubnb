@@ -3,10 +3,12 @@ from __future__ import annotations
 import base64
 import hashlib
 import unittest
+from unittest.mock import patch
 
 import websocket
 
 from gpubnb_agent import workspace_gateway as legacy
+from gpubnb_agent import workspace_gateway_v2 as transport
 from gpubnb_agent.workspace_gateway_v3 import (
     MAX_BROWSER_FRAME_BASE64_BYTES,
     GatewaySupervisor,
@@ -138,9 +140,6 @@ class BrowserFrameRelayTests(unittest.TestCase):
         )
 
     def test_decoded_frame_cannot_exceed_protocol_limit(self) -> None:
-        # Base64 for max+1 bytes can be the same encoded length as the rounded
-        # maximum, so the decoded-size guard must remain in addition to the early
-        # encoded-size guard.
         raw = b"x" * (legacy.WS_MAX_FRAME_BYTES + 1)
         encoded = base64.b64encode(raw).decode("ascii")
         if len(encoded) > MAX_BROWSER_FRAME_BASE64_BYTES:
@@ -162,6 +161,23 @@ class BrowserFrameRelayTests(unittest.TestCase):
             errors,
             [f"ws_browser_frame_too_large:len={len(raw)}:max={legacy.WS_MAX_FRAME_BYTES}"],
         )
+
+    def test_workspace_api_failure_includes_method_and_route(self) -> None:
+        supervisor = object.__new__(GatewaySupervisor)
+        with patch.object(
+            transport.GatewaySupervisor,
+            "_request",
+            side_effect=RuntimeError('API HTTP 500: {"error":"internal_error"}'),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"workspace_api_request_failed:POST:/agent/workspace-gateway/ws-frames:API HTTP 500",
+            ):
+                supervisor._request(
+                    "/agent/workspace-gateway/ws-frames",
+                    "POST",
+                    {"machineId": "machine-1", "frames": []},
+                )
 
 
 if __name__ == "__main__":
