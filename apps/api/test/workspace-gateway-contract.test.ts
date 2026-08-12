@@ -66,9 +66,12 @@ test('nonce-bound v2 auth is preferred for both GET and body relay traffic',()=>
 
 test('websocket tunnel batches both directions with bounded payloads',()=>{
   assert.match(api,/AGENT_NEXT_BATCH_MAX_ITEMS=64/);
+  assert.match(api,/AGENT_NEXT_BATCH_MAX_JSON_BYTES=16\*1024\*1024/);
   assert.match(api,/AGENT_WS_FRAME_BATCH_MAX_ITEMS=32/);
   assert.match(api,/AGENT_WS_FRAME_BATCH_MAX_BASE64_BYTES=8\*1024\*1024/);
   assert.match(api,/\/next-batch'/);
+  assert.match(api,/const candidateBytes=Buffer\.byteLength\(raw,'utf8'\)\+1/);
+  assert.match(api,/if\(batchBytes\+candidateBytes>AGENT_NEXT_BATCH_MAX_JSON_BYTES\)\{await redis\.rpush\(queueKey,raw\);break;\}/);
   assert.match(api,/\/ws-frames'/);
   assert.match(api,/workspace_ws_frame_batch_too_large/);
   assert.match(transport,/WS_OUTBOUND_QUEUE_MAX_ITEMS = 8/);
