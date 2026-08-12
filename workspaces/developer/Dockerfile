@@ -51,6 +51,13 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* /root/.cache /usr/local/bin/fixuid \
  && install -d -o coder -g coder -m 700 /workspace /workspace/imports /workspace/output
 
+# VS Code 1.130 loads these files from /stable-<commit>/static/node_modules/vsda/rust/web/.
+# A missing JS/WASM pair produces a 404 + text/plain MIME response in Chromium and
+# can prevent the remote workbench from progressing beyond the Management channel.
+# Fail the image build rather than publishing a runtime with incomplete web assets.
+RUN test -s /usr/lib/code-server/lib/vscode/node_modules/vsda/rust/web/vsda.js \
+ && test -s /usr/lib/code-server/lib/vscode/node_modules/vsda/rust/web/vsda_bg.wasm
+
 COPY --chmod=555 loopback-proxy.js /usr/local/lib/gpubnb/loopback-proxy.js
 COPY --chmod=755 healthcheck.sh /usr/local/bin/gpubnb-developer-healthcheck
 COPY --chown=coder:coder welcome.md /workspace/WELCOME.md
