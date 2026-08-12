@@ -106,24 +106,50 @@ test('websocket tunnel has dedicated throughput and payload guards',()=>{
   assert.match(api,/AGENT_RESPONSE_RATE_LIMIT_PER_MINUTE=1200/);
   assert.match(api,/WS_MAX_FRAME_BYTES=4\*1024\*1024/);
   assert.match(api,/WS_MAX_BASE64_BYTES/);
-  assert.match(api,/workspace_ws_frame_too_large/);
+  assert.match(api,/workspace_ws_frame_invalid_base64/);
+  assert.match(api,/workspace_ws_binary_metadata_required/);
   assert.match(api,/ws-frame',\{bodyLimit:MAX_AGENT_RELAY_BODY_BYTES,config:\{rateLimit:/);
   assert.match(api,/\/next',\{config:\{rateLimit:\{max:AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE/);
 });
 
-test('browser delivery pump is serialized and close-aware',()=>{
+test('browser delivery pump is serialized, bounded and close-aware',()=>{
   assert.match(api,/let pumpBusy=false/);
   assert.match(api,/if\(pumpBusy\|\|browserClosed\)return/);
   assert.match(api,/\.finally\(\(\)=>\{pumpBusy=false;\}\)/);
-  assert.match(api,/let browserSendChain:Promise<unknown>=setup/);
+  assert.match(api,/let browserSendChain:Promise<void>=setup\.then\(\(\)=>undefined\)/);
+  assert.match(api,/BrowserPendingBudget/);
+  assert.match(api,/WS_BROWSER_BUFFERED_HIGH_WATER_BYTES/);
+  assert.match(api,/WS_BROWSER_BACKPRESSURE_TIMEOUT_MS/);
+  assert.match(api,/websocketDataToBuffer\(data\)/);
+  assert.match(api,/browserSendChain\.then\(async\(\)=>\{/);
+  assert.match(api,/kind:'ws_close'/);
   assert.match(api,/browserClosed=true;clearInterval\(pump\)/);
   assert.match(api,/workspace_gateway_browser_socket_error/);
+});
+
+test('redis relay queues are bounded by item count, bytes and ttl',()=>{
+  assert.match(api,/ENQUEUE_BOUNDED_LIST_SCRIPT/);
+  assert.match(api,/MACHINE_QUEUE_MAX_ITEMS=512/);
+  assert.match(api,/WS_INPUT_MAX_ITEMS=512/);
+  assert.match(api,/WS_MACHINE_QUEUE_MAX_BYTES/);
+  assert.match(api,/WS_REDIS_INPUT_MAX_BYTES/);
+  assert.match(api,/machineQueueBytesKey/);
+  assert.match(api,/wsInputBytesKey/);
+  assert.match(api,/accountDequeuedBytes/);
+  assert.match(api,/workspace_gateway_backpressure/);
+  assert.match(api,/workspace_ws_browser_backpressure/);
 });
 
 test('billing activation remains tied to a real upstream websocket frame',()=>{
   assert.match(api,/app\.post\('\/agent\/workspace-gateway\/ws-frame'/);
   assert.match(api,/activateGatewaySession\(db,binding\.sessionId,machineId\)/);
   assert.match(api,/A real upstream frame remains the billing activation signal/);
+});
+
+test('concurrent websocket activation accepts the transaction winner',()=>{
+  assert.match(api,/if\(sessionUpdate\.count!==1\)\{/);
+  assert.match(api,/status:WorkspaceSessionStatus\.RUNNING,booking:\{status:BookingStatus\.ACTIVE\}/);
+  assert.match(api,/winner\?\{activated:false,expiresAt:winner\.expiresAt\}:null/);
 });
 
 test('session activation is cached away from repeated websocket frames',()=>{
