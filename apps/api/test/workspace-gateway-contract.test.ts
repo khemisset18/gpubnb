@@ -74,11 +74,22 @@ test('websocket tunnel batches both directions with bounded payloads',()=>{
   assert.match(api,/if\(batchBytes\+candidateBytes>AGENT_NEXT_BATCH_MAX_JSON_BYTES\)\{await redis\.rpush\(queueKey,raw\);break;\}/);
   assert.match(api,/\/ws-frames'/);
   assert.match(api,/workspace_ws_frame_batch_too_large/);
-  assert.match(transport,/WS_OUTBOUND_QUEUE_MAX_ITEMS = 8/);
+  assert.match(transport,/WS_OUTBOUND_QUEUE_MAX_ITEMS = 256/);
+  assert.match(transport,/WS_OUTBOUND_QUEUE_MAX_BYTES = 12 \* 1024 \* 1024/);
   assert.match(transport,/WS_FRAME_BATCH_MAX_ITEMS = 32/);
   assert.match(transport,/def _post_ws_frames/);
   assert.match(transport,/def _next_items/);
   assert.match(transport,/def _reconcile_loop/);
+});
+
+test('agent tunnel preserves long-lived websocket handshakes and absorbs startup bursts',()=>{
+  assert.match(transport,/LOCAL_WS_CONNECT_TIMEOUT_SECONDS = 10\.0/);
+  assert.match(transport,/set_timeout\(None\)/);
+  assert.match(transport,/subprotocols=subprotocols or None/);
+  assert.match(transport,/HTTP_RELAY_QUEUE_MAX_ITEMS = 128/);
+  assert.match(transport,/HTTP_RELAY_MAX_RESPONSE_BYTES = 10 \* 1024 \* 1024/);
+  assert.match(transport,/workspace_http_response_too_large/);
+  assert.match(transport,/workspace_trace:|workspace_trace:\{event\}/);
 });
 
 test('batched upstream frames are retry-idempotent before entering browser queue',()=>{
