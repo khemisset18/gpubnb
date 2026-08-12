@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -58,6 +59,47 @@ def make_supervisor(error_sink: list[str] | None = None) -> GatewaySupervisor:
         41000,
     )
     return supervisor
+
+
+class HttpRelaySchedulingTests(unittest.TestCase):
+    def test_slow_http_asset_does_not_block_extension_host_open(self) -> None:
+        supervisor = make_supervisor()
+        http_started = threading.Event()
+        release_http = threading.Event()
+        websocket_seen = threading.Event()
+
+        def slow_http(_item: dict) -> None:
+            http_started.set()
+            release_http.wait(2)
+
+        supervisor._http = slow_http  # type: ignore[method-assign]
+        supervisor._ws_open = lambda _item: websocket_seen.set()  # type: ignore[method-assign]
+
+        try:
+            supervisor._handle({
+                "id": "asset-1",
+                "kind": "http",
+                "sessionId": "session-1",
+                "path": "/stable/static/workbench.js",
+            })
+            self.assertTrue(http_started.wait(1), "HTTP worker never started")
+
+            # This is the critical startup ordering: VS Code opens the remote
+            # ExtensionHost while JS/CSS requests are still in flight. The
+            # supervisor loop must be free to handle ws_open immediately.
+            supervisor._handle({
+                "id": "extension-host-open",
+                "kind": "ws_open",
+                "sessionId": "session-1",
+                "channelId": "extension-host",
+                "path": "/stable",
+            })
+            self.assertTrue(
+                websocket_seen.wait(0.25),
+                "ws_open was serialized behind a slow HTTP asset",
+            )
+        finally:
+            release_http.set()
 
 
 class WebSocketOpenAckTests(unittest.TestCase):
