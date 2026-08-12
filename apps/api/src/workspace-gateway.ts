@@ -20,6 +20,7 @@ const WS_MAX_BASE64_BYTES=Math.ceil(WS_MAX_FRAME_BYTES/3)*4;
 const AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE=6000;
 const AGENT_RESPONSE_RATE_LIMIT_PER_MINUTE=1200;
 const AGENT_NEXT_BATCH_MAX_ITEMS=64;
+const AGENT_NEXT_BATCH_MAX_JSON_BYTES=16*1024*1024;
 const AGENT_WS_FRAME_BATCH_MAX_ITEMS=32;
 const AGENT_WS_FRAME_BATCH_MAX_BASE64_BYTES=8*1024*1024;
 const WS_FRAME_DEDUPE_TTL_SECONDS=180;
@@ -128,9 +129,14 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   app.get('/agent/workspace-gateway/:machineId/next',{config:{rateLimit:{max:AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE,timeWindow:'1 minute'}}},async(request,reply)=>{const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/next`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});const raw=await waitForGatewayQueueItem(redis,machineQueue(machineId));return raw?JSON.parse(raw):reply.code(204).send();});
   app.get('/agent/workspace-gateway/:machineId/next-batch',{config:{rateLimit:{max:AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE,timeWindow:'1 minute'}}},async(request,reply)=>{
     const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/next-batch`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});
-    const first=await waitForGatewayQueueItem(redis,machineQueue(machineId));if(!first)return reply.code(204).send();
-    const items:RelayRequest[]=[JSON.parse(first) as RelayRequest];
-    while(items.length<AGENT_NEXT_BATCH_MAX_ITEMS){const raw=await redis.rpop(machineQueue(machineId));if(!raw)break;items.push(JSON.parse(raw) as RelayRequest);}return {items};
+    const queueKey=machineQueue(machineId);const first=await waitForGatewayQueueItem(redis,queueKey);if(!first)return reply.code(204).send();
+    const items:RelayRequest[]=[JSON.parse(first) as RelayRequest];let batchBytes=Buffer.byteLength(first,'utf8');
+    while(items.length<AGENT_NEXT_BATCH_MAX_ITEMS){
+      const raw=await redis.rpop(queueKey);if(!raw)break;const candidateBytes=Buffer.byteLength(raw,'utf8')+1;
+      if(batchBytes+candidateBytes>AGENT_NEXT_BATCH_MAX_JSON_BYTES){await redis.rpush(queueKey,raw);break;}
+      items.push(JSON.parse(raw) as RelayRequest);batchBytes+=candidateBytes;
+    }
+    return {items};
   });
   app.post('/agent/workspace-gateway/:sessionId/register',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;runtimeId?:string;localPort?:number};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/register`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!/^[a-zA-Z0-9_.-]{6,100}$/.test(String(body.runtimeId||''))||!Number.isInteger(body.localPort)||Number(body.localPort)<1024||Number(body.localPort)>65535)return reply.code(400).send({error:'invalid_runtime_registration'});
