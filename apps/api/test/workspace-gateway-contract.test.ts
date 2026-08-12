@@ -32,12 +32,24 @@ test('websocket upgrades fail explicitly and expose a minimal edge health probe'
   assert.doesNotMatch(api,/if\(!token\)\{socket\.destroy\(\)/);
 });
 
-test('browser websocket closes fail-closed when no signed upstream frame arrives',()=>{
-  assert.match(api,/WS_UPSTREAM_FIRST_FRAME_TIMEOUT_MS/);
-  assert.match(api,/workspace-gateway:ws-upstream-ready:/);
-  assert.match(api,/workspace_gateway_upstream_timeout/);
-  assert.match(api,/workspace upstream unavailable/);
-  assert.match(api,/redis\.set\(wsUpstreamReadyKey\(channelId\),'1'/);
+test('browser websocket waits for an explicit signed agent open acknowledgement',()=>{
+  assert.match(api,/WS_UPSTREAM_OPEN_TIMEOUT_MS/);
+  assert.match(api,/openRequestId=crypto\.randomUUID\(\)/);
+  assert.match(api,/waitJson\(redis,responseKey\(openRequestId\),WS_UPSTREAM_OPEN_TIMEOUT_MS\)/);
+  assert.match(api,/opened\.status!==101/);
+  assert.match(api,/workspace_gateway_upstream_opened/);
+  assert.match(api,/workspace_gateway_upstream_open_failed/);
+  assert.match(agent,/request_id = str\(item\.get\("id"\) or ""\)/);
+  assert.match(agent,/"status": 101/);
+  assert.match(agent,/"status": 502/);
+  assert.match(agent,/"\/agent\/workspace-gateway\/respond"/);
+  assert.doesNotMatch(api,/WS_UPSTREAM_FIRST_FRAME_TIMEOUT_MS/);
+});
+
+test('billing activation remains tied to a real upstream websocket frame',()=>{
+  assert.match(api,/app\.post\('\/agent\/workspace-gateway\/ws-frame'/);
+  assert.match(api,/activateGatewaySession\(db,binding\.sessionId,machineId\)/);
+  assert.doesNotMatch(api,/ws-frame[\s\S]{0,1200}redis\.set\(wsUpstreamReadyKey\(channelId\),'1'/);
 });
 
 test('agent developer runtime binds only to loopback and has no host bind mount',()=>{
