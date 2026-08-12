@@ -1,0 +1,38 @@
+name: harden-gateway-machine-release
+
+on:
+  push:
+    branches:
+      - hardening/job-lease-fencing
+    paths:
+      - scripts/harden_gateway_machine_release.py
+      - .github/workflows/harden-gateway-machine-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hardening/job-lease-fencing
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/harden_gateway_machine_release.py
+      - run: |
+          git diff --check
+          grep -q "machineReleased:release" apps/api/src/workspace-gateway.ts
+          grep -q "workspaceSessions:{none:" apps/api/src/workspace-gateway.ts
+          test ! -e .github/workflows/harden-gateway-machine-release.yml
+          test ! -e scripts/harden_gateway_machine_release.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(api): guard Developer machine release after cleanup"
+          git push origin HEAD:hardening/job-lease-fencing
