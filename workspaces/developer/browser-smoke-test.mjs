@@ -145,11 +145,27 @@ const suspiciousScripts = scriptResponses.filter(row => {
   return Number(row.status) >= 400 || (!mime.includes('javascript') && !mime.includes('ecmascript') && !mime.includes('wasm'));
 });
 
+const criticalStaticFailures = failedResponses.filter(row => {
+  const url = String(row.url || '');
+  if (!/\/stable-[^/]+\/static\//.test(url)) return false;
+  return row.type === 'Script' || /\.(?:js|mjs|wasm|css)(?:[?#]|$)/i.test(url);
+});
+
+const criticalLoadingFailures = loadingFailures.filter(row => {
+  if (row.canceled) return false;
+  return ['Script', 'Stylesheet', 'WebSocket', 'Fetch', 'XHR'].includes(String(row.type || ''));
+});
+
+const handshakes = websocketEvents.filter(row => row.event === 'handshake');
+const badHandshakes = handshakes.filter(row => Number(row.status) !== 101);
+
 console.error('browser_state=' + JSON.stringify(state));
 console.error('script_responses=' + JSON.stringify(scriptResponses));
 console.error('suspicious_scripts=' + JSON.stringify(suspiciousScripts));
 console.error('failed_responses=' + JSON.stringify(failedResponses));
+console.error('critical_static_failures=' + JSON.stringify(criticalStaticFailures));
 console.error('loading_failures=' + JSON.stringify(loadingFailures));
+console.error('critical_loading_failures=' + JSON.stringify(criticalLoadingFailures));
 console.error('websocket_events=' + JSON.stringify(websocketEvents));
 console.error('browser_diagnostics=' + JSON.stringify(diagnostics));
 
@@ -157,5 +173,28 @@ socket.close();
 
 if (!state.monaco) {
   console.error('developer_workbench_monaco_not_rendered');
+  process.exit(1);
+}
+if (criticalStaticFailures.length > 0) {
+  console.error('developer_workbench_critical_static_asset_failed');
+  process.exit(1);
+}
+if (suspiciousScripts.length > 0) {
+  console.error('developer_workbench_script_status_or_mime_invalid');
+  process.exit(1);
+}
+if (criticalLoadingFailures.length > 0) {
+  console.error('developer_workbench_critical_network_load_failed');
+  process.exit(1);
+}
+if (badHandshakes.length > 0) {
+  console.error('developer_workbench_websocket_handshake_failed');
+  process.exit(1);
+}
+// A healthy remote workbench establishes at least the Management and
+// ExtensionHost WebSockets. Requiring two successful handshakes prevents the
+// historical false-positive where Monaco rendered but the page remained unusable.
+if (handshakes.length < 2) {
+  console.error(`developer_workbench_missing_remote_websockets:${handshakes.length}`);
   process.exit(1);
 }
