@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 const api=fs.readFileSync(new URL('../src/workspace-gateway.ts',import.meta.url),'utf8');
 const agent=fs.readFileSync(new URL('../../../agent/gpubnb_agent/workspace_gateway.py',import.meta.url),'utf8');
+const transport=fs.readFileSync(new URL('../../../agent/gpubnb_agent/workspace_gateway_v2.py',import.meta.url),'utf8');
 
 test('gateway never returns a direct host endpoint to the renter',()=>{
   assert.match(api,/\/workspace-gateway\/\$\{sessionId\}/);
@@ -19,6 +20,7 @@ test('gateway never returns a direct host endpoint to the renter',()=>{
   assert.match(api,/gateway_channel_machine_mismatch/);
   assert.match(api,/INTERACTIVE_WORKSPACE_CONNECTED/);
   assert.match(api,/validIncrement:0,pendingActivation:true/);
+  assert.doesNotMatch(api,/SAFE_RESPONSE_HEADERS=new Set\([^\n]*content-length/);
 });
 
 test('websocket upgrades fail explicitly and expose a minimal edge health probe',()=>{
@@ -53,10 +55,36 @@ test('legacy agents retain first-upstream-frame readiness during rollout',()=>{
   assert.match(api,/ws\.on\('message'/);
 });
 
-test('signed relay bodies use nonce-bound v2 auth without the legacy same-millisecond replay slot',()=>{
-  assert.match(api,/if\(withBody\)\{\s*if\(!request\.rawBody\)return false;\s*return verifyAgentRequestV2/);
-  assert.doesNotMatch(api,/const v1=await verifyAgentRequest/);
-  assert.match(api,/return verifyAgentRequest\(redis,machineId,machine\.agentPublicKey,request\.method,routePath/);
+test('nonce-bound v2 auth is preferred for both GET and body relay traffic',()=>{
+  assert.match(api,/const signatureVersion=Array\.isArray\(versionHeader\)\?versionHeader\[0\]:versionHeader/);
+  assert.match(api,/if\(signatureVersion==='2'\)\{/);
+  assert.match(api,/const bodyBytes=request\.rawBody\?\?Buffer\.alloc\(0\)/);
+  assert.match(api,/return verifyAgentRequestV2\(redis,machineId,machine\.agentPublicKey/);
+  assert.match(api,/if\(withBody\)return false/);
+  assert.match(api,/return verifyAgentRequest\(redis,machineId,machine\.agentPublicKey/);
+});
+
+test('websocket tunnel batches both directions with bounded payloads',()=>{
+  assert.match(api,/AGENT_NEXT_BATCH_MAX_ITEMS=64/);
+  assert.match(api,/AGENT_WS_FRAME_BATCH_MAX_ITEMS=32/);
+  assert.match(api,/AGENT_WS_FRAME_BATCH_MAX_BASE64_BYTES=8\*1024\*1024/);
+  assert.match(api,/\/next-batch'/);
+  assert.match(api,/\/ws-frames'/);
+  assert.match(api,/workspace_ws_frame_batch_too_large/);
+  assert.match(transport,/WS_OUTBOUND_QUEUE_MAX_ITEMS = 8/);
+  assert.match(transport,/WS_FRAME_BATCH_MAX_ITEMS = 32/);
+  assert.match(transport,/def _post_ws_frames/);
+  assert.match(transport,/def _next_items/);
+  assert.match(transport,/def _reconcile_loop/);
+});
+
+test('batched upstream frames are retry-idempotent before entering browser queue',()=>{
+  assert.match(api,/wsFrameSeenKey=\(machineId:string,frameId:string\)/);
+  assert.match(api,/ENQUEUE_DEDUPED_WS_FRAME_SCRIPT/);
+  assert.match(api,/redis\.call\('SET', KEYS\[1\], '1', 'EX', ARGV\[1\], 'NX'\)/);
+  assert.match(api,/redis\.call\('LPUSH', KEYS\[2\], ARGV\[3\]\)/);
+  assert.match(api,/frame_id_required/);
+  assert.match(transport,/"frameId": str\(uuid\.uuid4\(\)\)/);
 });
 
 test('websocket tunnel has dedicated throughput and payload guards',()=>{
@@ -92,6 +120,10 @@ test('session activation is cached away from repeated websocket frames',()=>{
   assert.match(api,/redis\.set\(activatedKey,'1','EX',ttl\)/);
   assert.match(api,/redis\.del\(wsSessionActivatedKey\(sessionId\)\)/);
   assert.match(api,/Channel readiness is intentionally separate from session activation/);
+});
+
+test('websocket subprotocol may cross the authenticated gateway',()=>{
+  assert.match(api,/['"]sec-websocket-protocol['"]/);
 });
 
 test('agent developer runtime binds only to loopback and has no host bind mount',()=>{
