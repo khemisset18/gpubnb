@@ -75,7 +75,17 @@ test('browser delivery pump is serialized and close-aware',()=>{
 test('billing activation remains tied to a real upstream websocket frame',()=>{
   assert.match(api,/app\.post\('\/agent\/workspace-gateway\/ws-frame'/);
   assert.match(api,/activateGatewaySession\(db,binding\.sessionId,machineId\)/);
-  assert.match(api,/A real frame remains the billing activation signal/);
+  assert.match(api,/A real upstream frame remains the billing activation signal/);
+});
+
+test('session activation is cached away from repeated websocket frames',()=>{
+  assert.match(api,/wsSessionActivatedKey=\(sessionId:string\)=>`workspace-gateway:ws-session-activated:\$\{sessionId\}`/);
+  assert.match(api,/const activatedKey=wsSessionActivatedKey\(binding\.sessionId\)/);
+  assert.match(api,/let ttl=await redis\.ttl\(activatedKey\)/);
+  assert.match(api,/if\(ttl<1\)\{\s*const activation=await activateGatewaySession/);
+  assert.match(api,/redis\.set\(activatedKey,'1','EX',ttl\)/);
+  assert.match(api,/redis\.del\(wsSessionActivatedKey\(sessionId\)\)/);
+  assert.match(api,/Channel readiness is intentionally separate from session activation/);
 });
 
 test('agent developer runtime binds only to loopback and has no host bind mount',()=>{
