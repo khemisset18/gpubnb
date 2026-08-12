@@ -45,6 +45,7 @@ PORT_DISCOVERY_TIMEOUT_SECONDS = 10.0
 RECONCILE_INTERVAL_SECONDS = 1.0
 USAGE_REPORT_INTERVAL_SECONDS = 10.0
 WS_MAX_FRAME_BYTES = 4 * 1024 * 1024
+HTTP_RELAY_MAX_CONCURRENCY = 12
 
 
 class DockerRunner(Protocol):
@@ -128,6 +129,7 @@ class GatewaySupervisor:
         self._error_callback = error_callback
         self._last_error_signature: str | None = None
         self._last_error_reported_at = 0.0
+        self._http_slots = threading.BoundedSemaphore(HTTP_RELAY_MAX_CONCURRENCY)
         self._docker_runner: DockerRunner = docker_runner or _real_docker
         self._process_inspector: ProcessInspector = process_inspector or WindowsProcessInspector()
         self._health_check: Callable[[int], bool] = health_check or _real_health_check
@@ -536,6 +538,47 @@ class GatewaySupervisor:
             payload = {"machineId": self.machine_id, "id": request_id, "status": 502, "error": str(exc)[:200]}
         self._request("/agent/workspace-gateway/respond", "POST", payload)
 
+    def _dispatch_http(self, item: dict[str, Any]) -> None:
+        """Relay browser HTTP without blocking WebSocket control traffic.
+
+        VS Code loads many assets in parallel and opens its Management and
+        ExtensionHost sockets during the same startup burst. Running _http inline
+        here serializes every asset ahead of ws_open and can make the API's 15s
+        upstream-open deadline expire even though code-server itself is healthy.
+        Keep the HTTP fan-out bounded while leaving the supervisor loop available
+        to process WebSocket open/send/close items immediately.
+        """
+        if not self._http_slots.acquire(blocking=False):
+            request_id = str(item.get("id") or "")
+            try:
+                self._request(
+                    "/agent/workspace-gateway/respond",
+                    "POST",
+                    {
+                        "machineId": self.machine_id,
+                        "id": request_id,
+                        "status": 503,
+                        "error": "workspace_http_relay_overloaded",
+                    },
+                )
+            except Exception as exc:
+                self._report_error(exc)
+            return
+
+        def worker() -> None:
+            try:
+                self._http(item)
+            except Exception as exc:
+                self._report_error(exc)
+            finally:
+                self._http_slots.release()
+
+        threading.Thread(
+            target=worker,
+            daemon=True,
+            name=f"gpubnb-http-{str(item.get('id') or '')[:8]}",
+        ).start()
+
     def _ws_reader(self, session_id: str, channel_id: str, ws: websocket.WebSocket) -> None:
         frame_count = 0
         try:
@@ -636,7 +679,7 @@ class GatewaySupervisor:
     def _handle(self, item: dict[str, Any]) -> None:
         kind = item.get("kind")
         if kind == "http":
-            self._http(item)
+            self._dispatch_http(item)
         elif kind == "ws_open":
             self._ws_open(item)
         elif kind == "ws_send":
