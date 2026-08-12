@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { Socket } from 'node:net';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { BookingStatus, MachineConnectivity, MachineOperational, ModerationStatus, PaymentStatus, SessionTerminationReason, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
+import { BookingStatus, JobStatus, MachineConnectivity, MachineOperational, ModerationStatus, PaymentStatus, Prisma, SessionTerminationReason, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 import WebSocket from 'ws';
 import { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';
@@ -163,14 +163,25 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     if(body.cleaned!==true){await db.machine.update({where:{id:machineId},data:{moderationStatus:ModerationStatus.QUARANTINED,operational:MachineOperational.UNAVAILABLE}});await db.workspaceSession.updateMany({where:{id:sessionId,machineId},data:{status:WorkspaceSessionStatus.QUARANTINED,endedAt:new Date()}});return reply.code(409).send({error:'workspace_cleanup_unverified'});}
     const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.READY]}},select:{id:true,bookingId:true,startedAt:true}});if(!row)return reply.code(409).send({error:'workspace_not_stoppable'});
     const neverActivated=row.startedAt===null;const endedAt=new Date();
-    await db.$transaction([
-      db.workspaceSession.update({where:{id:row.id},data:{status:neverActivated?WorkspaceSessionStatus.TIMED_OUT:WorkspaceSessionStatus.COMPLETED,endedAt,connectionMetadata:{},...(neverActivated?{terminationReason:SessionTerminationReason.TIMEOUT,preparationStep:'INTERACTIVE_CONNECTION_TIMEOUT'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:neverActivated?'INTERACTIVE_CONNECTION_NEVER_ESTABLISHED':'GATEWAY_CLEANUP_VERIFIED'}}}}),
-      ...(neverActivated?[
-        db.booking.updateMany({where:{id:row.bookingId,status:{in:[BookingStatus.FUNDED,BookingStatus.STARTING]}},data:{status:BookingStatus.DEGRADED}}),
-        db.payment.updateMany({where:{bookingId:row.bookingId,status:PaymentStatus.ESCROW_FUNDED},data:{status:PaymentStatus.SETTLEMENT_PENDING}}),
-      ]:[]),
-      db.machine.update({where:{id:machineId},data:{operational:MachineOperational.AVAILABLE}}),
-    ]);return {ok:true,activated:!neverActivated};
+    const release=await db.$transaction(async tx=>{
+      await tx.workspaceSession.update({where:{id:row.id},data:{status:neverActivated?WorkspaceSessionStatus.TIMED_OUT:WorkspaceSessionStatus.COMPLETED,endedAt,connectionMetadata:{},...(neverActivated?{terminationReason:SessionTerminationReason.TIMEOUT,preparationStep:'INTERACTIVE_CONNECTION_TIMEOUT'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:neverActivated?'INTERACTIVE_CONNECTION_NEVER_ESTABLISHED':'GATEWAY_CLEANUP_VERIFIED'}}}});
+      if(neverActivated){
+        await tx.booking.updateMany({where:{id:row.bookingId,status:{in:[BookingStatus.FUNDED,BookingStatus.STARTING]}},data:{status:BookingStatus.DEGRADED}});
+        await tx.payment.updateMany({where:{bookingId:row.bookingId,status:PaymentStatus.ESCROW_FUNDED},data:{status:PaymentStatus.SETTLEMENT_PENDING}});
+      }
+      const machineUpdate=await tx.machine.updateMany({
+        where:{
+          id:machineId,
+          moderationStatus:ModerationStatus.CLEAR,
+          workspaceSessions:{none:{id:{not:row.id},status:{in:[WorkspaceSessionStatus.RESERVED,WorkspaceSessionStatus.PREPARING,WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]}}},
+          jobs:{none:{status:{in:[JobStatus.ASSIGNED,JobStatus.DOWNLOADING,JobStatus.PREPARING,JobStatus.RUNNING,JobStatus.UPLOADING_RESULTS,JobStatus.CANCEL_REQUESTED]}}},
+          listings:{none:{bookings:{some:{id:{not:row.bookingId},status:{in:[BookingStatus.FUNDED,BookingStatus.STARTING,BookingStatus.ACTIVE,BookingStatus.DEGRADED]}}}}},
+        },
+        data:{operational:neverActivated?MachineOperational.DEGRADED:MachineOperational.AVAILABLE},
+      });
+      return machineUpdate.count===1;
+    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
+    return {ok:true,activated:!neverActivated,machineReleased:release};
   });
 
   const wss=new WebSocketServer({noServer:true,maxPayload:4*1024*1024});

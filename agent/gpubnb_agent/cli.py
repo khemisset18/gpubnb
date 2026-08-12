@@ -40,13 +40,6 @@ DEFAULT_API = "https://gpubnb.netlify.app/api"
 
 def print_json(value: Any) -> None:
     payload = json.dumps(value, ensure_ascii=False, indent=2, default=str)
-    # print() encodes through sys.stdout's text encoding, which on a real Windows
-    # console defaults to the legacy console codepage (e.g. cp1252 on this machine) -
-    # not UTF-8. Any non-ASCII content (the workspace catalog's emoji icons, accented
-    # French text) then raises UnicodeEncodeError and crashes the CLI outright, which
-    # is exactly what `gpubnb-agent workspaces list` did here. Writing UTF-8 bytes
-    # directly sidesteps the console codepage entirely. Falls back to plain print()
-    # when stdout has no .buffer (e.g. tests that redirect_stdout to an io.StringIO).
     buffer = getattr(sys.stdout, "buffer", None)
     if buffer is not None:
         buffer.write(payload.encode("utf-8", errors="replace"))
@@ -354,15 +347,10 @@ def heartbeat_loop(
             )
             emit({"event": "workspace_image_ready", **result})
         except Exception as exc:
-            # Prewarming is an optimization: heartbeat and normal job retry behavior
-            # must remain available if Docker is still starting or temporarily offline.
             emit({"event": "workspace_image_prewarm_failed", "message": str(exc)[:300]})
 
     def poll_and_run_job() -> None:
         try:
-            # The worker gets its own HTTP client. A Docker pull can take many minutes,
-            # but it must never block the heartbeat loop or make the API mark this host
-            # offline while useful preparation work is still progressing.
             run_next_job(client(config), key, machine_id, config, event_sink=emit)
         except Exception as exc:
             emit({"event": "job_poll_error", "type": type(exc).__name__, "message": str(exc)[:300]})
@@ -429,21 +417,55 @@ def run_next_job(
     if not job:
         return
     job_id = str(job["id"])
+    attempt_id = job.get("attemptId")
+    lease_token = job.get("leaseToken")
+    if not isinstance(attempt_id, str) or not attempt_id or not isinstance(lease_token, str) or len(lease_token) < 32:
+        raise RuntimeError("job_lease_credentials_missing")
     if job.get("type") not in {"GPU_DIAGNOSTIC", "WORKSPACE_PREPARE", "GPU_PROOF"}:
-        update_job(api, key, machine_id, job_id, "REJECTED", "unsupported_job_type")
+        update_job(api, key, machine_id, job_id, attempt_id, lease_token, "REJECTED", "unsupported_job_type")
         return
+    lease_stop = threading.Event()
+    lease_fenced = threading.Event()
+
+    def refresh_job_lease() -> None:
+        lease_path = f"/agent/jobs/{job_id}/lease"
+        while not lease_stop.wait(10):
+            try:
+                agent_request(api, key, machine_id, lease_path, "POST", {
+                    "machineId": machine_id,
+                    "attemptId": attempt_id,
+                    "leaseToken": lease_token,
+                })
+            except Exception as exc:
+                if "stale_job_attempt" in str(exc):
+                    lease_fenced.set()
+                    emit({"event": "job_fenced", "jobId": job_id, "attemptId": attempt_id})
+                    return
+                emit({
+                    "event": "job_lease_refresh_error",
+                    "jobId": job_id,
+                    "attemptId": attempt_id,
+                    "message": str(exc)[:300],
+                })
+
+    lease_thread = threading.Thread(
+        target=refresh_job_lease,
+        name=f"gpubnb-job-lease-{job_id[-8:]}",
+        daemon=True,
+    )
     parameters = job.get("parameters") if isinstance(job.get("parameters"), dict) else {}
     workspace_slug = str(parameters.get("workspaceSlug") or "compute")
     image = workspace_image(config, workspace_slug)
+    lease_thread.start()
     try:
         if job.get("type") in {"WORKSPACE_PREPARE", "GPU_PROOF"}:
-            update_job(api, key, machine_id, job_id, "DOWNLOADING")
+            update_job(api, key, machine_id, job_id, attempt_id, lease_token, "DOWNLOADING")
         else:
-            update_job(api, key, machine_id, job_id, "PREPARING")
-            update_job(api, key, machine_id, job_id, "RUNNING")
+            update_job(api, key, machine_id, job_id, attempt_id, lease_token, "PREPARING")
+            update_job(api, key, machine_id, job_id, attempt_id, lease_token, "RUNNING")
         if job.get("type") == "GPU_PROOF":
-            update_job(api, key, machine_id, job_id, "PREPARING")
-            update_job(api, key, machine_id, job_id, "RUNNING")
+            update_job(api, key, machine_id, job_id, attempt_id, lease_token, "PREPARING")
+            update_job(api, key, machine_id, job_id, attempt_id, lease_token, "RUNNING")
             if not isinstance(session_value := job.get("workspaceSession"), dict) or not isinstance(session_value.get("id"), str):
                 raise RuntimeError("gpu_proof_session_missing")
             metric_counter = 0
@@ -456,7 +478,12 @@ def run_next_job(
                 interval = max(1, min(30, elapsed - previous_elapsed))
                 previous_elapsed = elapsed
                 send_session_metric(api, key, machine_id, session_value["id"], metric_counter, interval)
-                control = agent_request(api, key, machine_id, f"/agent/jobs/{job_id}/control")
+                control_path = f"/agent/jobs/{job_id}/control"
+                control = agent_request(api, key, machine_id, control_path, "POST", {
+                    "machineId": machine_id,
+                    "attemptId": attempt_id,
+                    "leaseToken": lease_token,
+                })
                 if control.get("cancelRequested") is True:
                     raise RuntimeError("rental_cancel_requested")
 
@@ -467,21 +494,27 @@ def run_next_job(
             )
         elif job.get("type") == "WORKSPACE_PREPARE":
             def publish_preparation_progress(step: str, elapsed_seconds: int) -> None:
+                if lease_fenced.is_set():
+                    raise RuntimeError("stale_job_attempt")
                 try:
                     report_job_progress(
                         api,
                         key,
                         machine_id,
                         job_id,
+                        attempt_id,
+                        lease_token,
                         step,
                         elapsed_seconds,
                     )
                 except Exception as exc:
-                    # Heartbeats and the actual Docker operation stay independent from
-                    # an individual progress report. A later tick will retry reporting.
+                    if "stale_job_attempt" in str(exc):
+                        lease_fenced.set()
+                        raise
                     emit({
                         "event": "job_progress_error",
                         "jobId": job_id,
+                        "attemptId": attempt_id,
                         "step": step,
                         "message": str(exc)[:300],
                     })
@@ -492,31 +525,69 @@ def run_next_job(
                 workspace_slug,
                 publish_preparation_progress,
             )
-            update_job(api, key, machine_id, job_id, "PREPARING")
-            update_job(api, key, machine_id, job_id, "RUNNING")
+            update_job(api, key, machine_id, job_id, attempt_id, lease_token, "PREPARING")
+            update_job(api, key, machine_id, job_id, attempt_id, lease_token, "RUNNING")
         else:
             result = run_gpu_diagnostic(image, int(parameters.get("timeoutSeconds", 120)))
         session_value = job.get("workspaceSession")
         if job.get("type") == "GPU_DIAGNOSTIC" and isinstance(session_value, dict) and isinstance(session_value.get("id"), str):
             send_session_metric(api, key, machine_id, session_value["id"], 1, 5)
-        update_job(api, key, machine_id, job_id, "UPLOADING_RESULTS")
+        update_job(api, key, machine_id, job_id, attempt_id, lease_token, "UPLOADING_RESULTS")
         complete_path = f"/agent/jobs/{job_id}/complete"
-        agent_request(api, key, machine_id, complete_path, "POST", {"machineId": machine_id, "result": result})
+        agent_request(api, key, machine_id, complete_path, "POST", {
+            "machineId": machine_id,
+            "attemptId": attempt_id,
+            "leaseToken": lease_token,
+            "result": result,
+        })
         if job.get("type") == "GPU_PROOF":
             finalize_path = f"/agent/jobs/{job_id}/finalize-proof"
-            agent_request(api, key, machine_id, finalize_path, "POST", {"machineId": machine_id})
-        emit({"event": "job_completed", "jobId": job_id})
+            agent_request(api, key, machine_id, finalize_path, "POST", {
+                "machineId": machine_id,
+                "attemptId": attempt_id,
+                "leaseToken": lease_token,
+            })
+        emit({"event": "job_completed", "jobId": job_id, "attemptId": attempt_id})
     except Exception as exc:
+        if lease_fenced.is_set() or "stale_job_attempt" in str(exc):
+            emit({"event": "job_fenced", "jobId": job_id, "attemptId": attempt_id, "message": str(exc)[:300]})
+            return
         try:
             cancelled = str(exc) == "rental_cancel_requested"
-            update_job(api, key, machine_id, job_id, "CANCELLED" if cancelled else "FAILED", str(exc)[:100])
+            update_job(
+                api,
+                key,
+                machine_id,
+                job_id,
+                attempt_id,
+                lease_token,
+                "CANCELLED" if cancelled else "FAILED",
+                str(exc)[:100],
+            )
         finally:
-            emit({"event": "job_failed", "jobId": job_id, "message": str(exc)[:300]})
+            emit({"event": "job_failed", "jobId": job_id, "attemptId": attempt_id, "message": str(exc)[:300]})
+    finally:
+        lease_stop.set()
+        lease_thread.join(timeout=2)
 
 
-def update_job(api: ApiClient, key: Any, machine_id: str, job_id: str, status: str, error_code: str | None = None) -> dict[str, Any]:
+def update_job(
+    api: ApiClient,
+    key: Any,
+    machine_id: str,
+    job_id: str,
+    attempt_id: str,
+    lease_token: str,
+    status: str,
+    error_code: str | None = None,
+) -> dict[str, Any]:
     path = f"/agent/jobs/{job_id}/state"
-    body = {"machineId": machine_id, "status": status}
+    body = {
+        "machineId": machine_id,
+        "attemptId": attempt_id,
+        "leaseToken": lease_token,
+        "status": status,
+    }
     if error_code:
         body["errorCode"] = error_code
     return agent_request(api, key, machine_id, path, "POST", body)
@@ -527,12 +598,16 @@ def report_job_progress(
     key: Any,
     machine_id: str,
     job_id: str,
+    attempt_id: str,
+    lease_token: str,
     step: str,
     elapsed_seconds: int,
 ) -> dict[str, Any]:
     path = f"/agent/jobs/{job_id}/progress"
     return agent_request(api, key, machine_id, path, "POST", {
         "machineId": machine_id,
+        "attemptId": attempt_id,
+        "leaseToken": lease_token,
         "step": step,
         "elapsedSeconds": max(0, int(elapsed_seconds)),
     })
@@ -696,8 +771,6 @@ def command_files_list(args: argparse.Namespace) -> int:
 def command_workspace_install(args: argparse.Namespace) -> int:
     config = load_config()
     if args.slug == "compute":
-        # Validate the dedicated proof image allow-list without starting a GPU
-        # workload during installation, then check the container protections.
         gpu_proof_command(args.image, 30, "gpubnb-proof-install-check")
         result = verify_protection_profile(args.image)
     else:

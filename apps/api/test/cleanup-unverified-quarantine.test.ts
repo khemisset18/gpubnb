@@ -64,9 +64,15 @@ test('an unrelated errorCode never triggers automatic quarantine', async () => {
   assert.ok(!body.includes("errorCode==='diagnostic_timeout'") || !body.includes('QUARANTINED'), 'sanity: no other errorCode string should be wired to the quarantine block');
 });
 
-test('a job that is already terminal cannot be re-reported: canTransitionJob blocks it before the quarantine logic ever runs (no double event)', async () => {
+test('terminal re-reports are fenced: only the same attempt may retry the same terminal status without replaying side effects', async () => {
   const body = await routeBody();
-  assert.ok(body.includes('if(!canTransitionJob(job.status,next))return reply.code(409)'));
+  assert.ok(body.includes('if(terminalJobStatusSet.has(job.status)){'), 'terminal jobs need an explicit early replay gate');
+  assert.ok(body.includes('if(!terminalExecutionMatches(job,body))return {kind:\'stale\'} as const'), 'an obsolete attempt must be fenced before any side effect');
+  assert.ok(body.includes('if(job.status===next)return {kind:\'ok\',value:{id,status:job.status,duplicate:true}} as const'), 'a lost HTTP response may retry the exact same terminal result idempotently');
+  assert.ok(body.includes("if(outcome.kind==='stale')return reply.code(409).send({error:'stale_job_attempt'})"), 'stale workers must receive a stable 409 error');
+  const terminalGate = body.indexOf('if(terminalJobStatusSet.has(job.status)){');
+  const quarantineBlock = body.indexOf('if(cleanupUnverified){');
+  assert.ok(terminalGate >= 0 && quarantineBlock > terminalGate, 'terminal replay handling must run before cleanup/quarantine side effects');
 });
 
 test('nothing in server.ts silently clears a quarantine back to CLEAR: lifting it requires a controlled, out-of-band administrative action', async () => {
