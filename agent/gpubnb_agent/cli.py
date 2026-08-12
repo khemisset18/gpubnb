@@ -424,6 +424,36 @@ def run_next_job(
     if job.get("type") not in {"GPU_DIAGNOSTIC", "WORKSPACE_PREPARE", "GPU_PROOF"}:
         update_job(api, key, machine_id, job_id, attempt_id, lease_token, "REJECTED", "unsupported_job_type")
         return
+    lease_stop = threading.Event()
+    lease_fenced = threading.Event()
+
+    def refresh_job_lease() -> None:
+        lease_path = f"/agent/jobs/{job_id}/lease"
+        while not lease_stop.wait(10):
+            try:
+                agent_request(api, key, machine_id, lease_path, "POST", {
+                    "machineId": machine_id,
+                    "attemptId": attempt_id,
+                    "leaseToken": lease_token,
+                })
+            except Exception as exc:
+                if "stale_job_attempt" in str(exc):
+                    lease_fenced.set()
+                    emit({"event": "job_fenced", "jobId": job_id, "attemptId": attempt_id})
+                    return
+                emit({
+                    "event": "job_lease_refresh_error",
+                    "jobId": job_id,
+                    "attemptId": attempt_id,
+                    "message": str(exc)[:300],
+                })
+
+    lease_thread = threading.Thread(
+        target=refresh_job_lease,
+        name=f"gpubnb-job-lease-{job_id[-8:]}",
+        daemon=True,
+    )
+    lease_thread.start()
     parameters = job.get("parameters") if isinstance(job.get("parameters"), dict) else {}
     workspace_slug = str(parameters.get("workspaceSlug") or "compute")
     image = workspace_image(config, workspace_slug)
@@ -448,7 +478,12 @@ def run_next_job(
                 interval = max(1, min(30, elapsed - previous_elapsed))
                 previous_elapsed = elapsed
                 send_session_metric(api, key, machine_id, session_value["id"], metric_counter, interval)
-                control = agent_request(api, key, machine_id, f"/agent/jobs/{job_id}/control")
+                control_path = f"/agent/jobs/{job_id}/control"
+                control = agent_request(api, key, machine_id, control_path, "POST", {
+                    "machineId": machine_id,
+                    "attemptId": attempt_id,
+                    "leaseToken": lease_token,
+                })
                 if control.get("cancelRequested") is True:
                     raise RuntimeError("rental_cancel_requested")
 
@@ -459,6 +494,8 @@ def run_next_job(
             )
         elif job.get("type") == "WORKSPACE_PREPARE":
             def publish_preparation_progress(step: str, elapsed_seconds: int) -> None:
+                if lease_fenced.is_set():
+                    raise RuntimeError("stale_job_attempt")
                 try:
                     report_job_progress(
                         api,
@@ -471,6 +508,9 @@ def run_next_job(
                         elapsed_seconds,
                     )
                 except Exception as exc:
+                    if "stale_job_attempt" in str(exc):
+                        lease_fenced.set()
+                        raise
                     emit({
                         "event": "job_progress_error",
                         "jobId": job_id,
@@ -509,6 +549,9 @@ def run_next_job(
             })
         emit({"event": "job_completed", "jobId": job_id, "attemptId": attempt_id})
     except Exception as exc:
+        if lease_fenced.is_set() or "stale_job_attempt" in str(exc):
+            emit({"event": "job_fenced", "jobId": job_id, "attemptId": attempt_id, "message": str(exc)[:300]})
+            return
         try:
             cancelled = str(exc) == "rental_cancel_requested"
             update_job(
@@ -523,6 +566,9 @@ def run_next_job(
             )
         finally:
             emit({"event": "job_failed", "jobId": job_id, "attemptId": attempt_id, "message": str(exc)[:300]})
+    finally:
+        lease_stop.set()
+        lease_thread.join(timeout=2)
 
 
 def update_job(
