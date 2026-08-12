@@ -84,9 +84,6 @@ class HttpRelaySchedulingTests(unittest.TestCase):
             })
             self.assertTrue(http_started.wait(1), "HTTP worker never started")
 
-            # This is the critical startup ordering: VS Code opens the remote
-            # ExtensionHost while JS/CSS requests are still in flight. The
-            # supervisor loop must be free to handle ws_open immediately.
             supervisor._handle({
                 "id": "extension-host-open",
                 "kind": "ws_open",
@@ -174,8 +171,8 @@ class WebSocketFrameGuardTests(unittest.TestCase):
     def test_oversized_upstream_frame_is_never_posted_to_api(self) -> None:
         errors: list[str] = []
         supervisor = make_supervisor(errors)
-        calls: list[dict] = []
-        supervisor._request = lambda _path, _method="GET", body=None: (calls.append(body or {}), {"ok": True})[1]  # type: ignore[method-assign]
+        calls: list[tuple[str, dict]] = []
+        supervisor._request = lambda path, _method="GET", body=None: (calls.append((path, body or {})), {"ok": True})[1]  # type: ignore[method-assign]
         ws = MagicMock()
         ws.recv_data.return_value = (
             websocket.ABNF.OPCODE_BINARY,
@@ -186,10 +183,23 @@ class WebSocketFrameGuardTests(unittest.TestCase):
 
         supervisor._ws_reader("session-1", "channel-4", ws)
 
-        data_frames = [body for body in calls if "dataBase64" in body]
-        self.assertEqual(data_frames, [])
+        sent_frames = [
+            frame
+            for path, body in calls
+            if path.endswith("/ws-frames")
+            for frame in body.get("frames", [])
+            if frame.get("close") is not True
+        ]
+        self.assertEqual(sent_frames, [])
         self.assertTrue(any("ws_frame_too_large" in error for error in errors))
-        self.assertEqual(calls[-1].get("close"), True)
+        close_frames = [
+            frame
+            for path, body in calls
+            if path.endswith("/ws-frames")
+            for frame in body.get("frames", [])
+            if frame.get("close") is True
+        ]
+        self.assertEqual(len(close_frames), 1)
 
     def test_failed_browser_to_upstream_send_removes_stale_channel(self) -> None:
         errors: list[str] = []
@@ -211,6 +221,115 @@ class WebSocketFrameGuardTests(unittest.TestCase):
         self.assertNotIn("channel-5", supervisor.session_channels["session-1"])
         ws.close.assert_called_once()
         self.assertTrue(any("socket closed" in error for error in errors))
+
+
+class WebSocketBatchTransportTests(unittest.TestCase):
+    def test_reader_drains_local_socket_while_api_batch_is_slow(self) -> None:
+        supervisor = make_supervisor()
+        batch_started = threading.Event()
+        release_batch = threading.Event()
+        calls: list[dict] = []
+        ws = MagicMock()
+        ws.recv_data.side_effect = [
+            (websocket.ABNF.OPCODE_BINARY, b"first"),
+            (websocket.ABNF.OPCODE_BINARY, b"second"),
+            (websocket.ABNF.OPCODE_CLOSE, b""),
+        ]
+
+        def request(path, _method="GET", body=None):
+            if path.endswith("/ws-frames"):
+                calls.append(body or {})
+                batch_started.set()
+                release_batch.wait(2)
+            return {"ok": True}
+
+        supervisor._request = request  # type: ignore[method-assign]
+        reader = threading.Thread(
+            target=supervisor._ws_reader,
+            args=("session-1", "channel-batch", ws),
+            daemon=True,
+        )
+        reader.start()
+        try:
+            self.assertTrue(batch_started.wait(1), "batch sender never started")
+            self.assertEqual(
+                ws.recv_data.call_count,
+                3,
+                "local code-server reader blocked on the WAN/API request",
+            )
+        finally:
+            release_batch.set()
+            reader.join(timeout=2)
+
+        self.assertFalse(reader.is_alive())
+        frames = [frame for body in calls for frame in body.get("frames", [])]
+        self.assertEqual([frame.get("dataBase64") for frame in frames if not frame.get("close")], ["Zmlyc3Q=", "c2Vjb25k"])
+        self.assertEqual(sum(1 for frame in frames if frame.get("close") is True), 1)
+        self.assertTrue(all(frame.get("frameId") for frame in frames))
+
+    def test_batch_endpoint_falls_back_to_legacy_single_frame_route(self) -> None:
+        supervisor = make_supervisor()
+        paths: list[str] = []
+
+        def request(path, _method="GET", _body=None):
+            paths.append(path)
+            if path.endswith("/ws-frames"):
+                raise RuntimeError("API HTTP 404: not found")
+            return {"ok": True}
+
+        supervisor._request = request  # type: ignore[method-assign]
+        supervisor._post_ws_frames([{
+            "frameId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "channelId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "dataBase64": "eA==",
+            "binary": True,
+        }])
+
+        self.assertEqual(paths[-2:], [
+            "/agent/workspace-gateway/ws-frames",
+            "/agent/workspace-gateway/ws-frame",
+        ])
+
+
+class ControlLoopIsolationTests(unittest.TestCase):
+    def test_slow_reconciliation_does_not_block_control_messages(self) -> None:
+        supervisor = make_supervisor()
+        reconcile_calls = 0
+        reconcile_blocked = threading.Event()
+        release_reconcile = threading.Event()
+        handled = threading.Event()
+
+        def reconcile() -> None:
+            nonlocal reconcile_calls
+            reconcile_calls += 1
+            if reconcile_calls >= 2:
+                reconcile_blocked.set()
+                release_reconcile.wait(2)
+
+        def next_items() -> list[dict]:
+            self.assertTrue(reconcile_blocked.wait(1))
+            return [{"kind": "ws_close", "channelId": "unused"}]
+
+        def handle(_item: dict) -> None:
+            handled.set()
+            supervisor.stop_event.set()
+
+        supervisor._reconcile_sessions = reconcile  # type: ignore[method-assign]
+        supervisor._next_items = next_items  # type: ignore[method-assign]
+        supervisor._handle = handle  # type: ignore[method-assign]
+
+        runner = threading.Thread(target=supervisor.run, daemon=True)
+        runner.start()
+        try:
+            self.assertTrue(
+                handled.wait(0.5),
+                "control message was serialized behind Docker reconciliation",
+            )
+        finally:
+            release_reconcile.set()
+            runner.join(timeout=2)
+
+        self.assertFalse(runner.is_alive())
 
 
 if __name__ == "__main__":
