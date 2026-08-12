@@ -24,6 +24,7 @@ from . import workspace_gateway as legacy
 from . import workspace_gateway_v2 as transport
 
 MAX_BROWSER_FRAME_BASE64_BYTES = ((legacy.WS_MAX_FRAME_BYTES + 2) // 3) * 4
+WS_BACKPRESSURE_RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2, 0.4, 0.8, 1.6)
 
 
 class GatewaySupervisor(transport.GatewaySupervisor):
@@ -42,6 +43,31 @@ class GatewaySupervisor(transport.GatewaySupervisor):
             raise RuntimeError(
                 f"workspace_api_request_failed:{method.upper()}:{path}:{str(exc)[:220]}"
             ) from exc
+
+    def _post_ws_frames(self, frames: list[dict[str, Any]]) -> None:
+        """Retry temporary server backpressure without duplicating legacy frames.
+
+        Batched frames carry stable frameIds and are retry-idempotent on the API.
+        The legacy single-frame fallback has no frame-level dedupe, so it is never
+        retried here after a 429.
+        """
+        for attempt, delay in enumerate(WS_BACKPRESSURE_RETRY_DELAYS_SECONDS):
+            try:
+                return super()._post_ws_frames(frames)
+            except Exception as exc:
+                retryable = (
+                    self._supports_ws_frame_batch is not False
+                    and "API HTTP 429" in str(exc)
+                )
+                if not retryable or attempt == len(WS_BACKPRESSURE_RETRY_DELAYS_SECONDS) - 1:
+                    raise
+                self._trace(
+                    "ws_upstream_backpressure_retry",
+                    channel_id=str((frames[0] if frames else {}).get("channelId") or ""),
+                    detail=f"attempt={attempt + 1}:delay={delay:.2f}s",
+                )
+                if self.stop_event.wait(delay):
+                    raise RuntimeError("ws_backpressure_retry_interrupted") from exc
 
     @staticmethod
     def _decode_browser_payload(item: dict[str, Any]) -> bytes:
