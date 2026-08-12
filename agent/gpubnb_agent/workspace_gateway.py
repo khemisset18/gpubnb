@@ -65,6 +65,17 @@ def _real_health_check(port: int) -> bool:
         return False
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102
+        return None
+
+
+# The relay must hand 3xx responses back to the browser untouched (relative
+# Location header included) instead of following them here: the browser owns
+# navigation state (URL bar, query string) for the workspace it's opening.
+_RELAY_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 @dataclass
 class Runtime:
     session_id: str
@@ -553,7 +564,7 @@ class GatewaySupervisor:
             headers = {str(k): str(v) for k, v in (item.get("headers") or {}).items() if str(k).lower() not in {"host", "cookie", "authorization"}}
             req = urllib.request.Request(f"http://127.0.0.1:{runtime.port}{path}", data=body if body else None, method=str(item.get("method") or "GET"), headers=headers)
             try:
-                response = urllib.request.urlopen(req, timeout=25)
+                response = _RELAY_OPENER.open(req, timeout=25)
                 status, response_headers, data = response.status, dict(response.headers.items()), response.read(10 * 1024 * 1024)
             except urllib.error.HTTPError as exc:
                 status, response_headers, data = exc.code, dict(exc.headers.items()), exc.read(10 * 1024 * 1024)
@@ -563,16 +574,21 @@ class GatewaySupervisor:
         self._request("/agent/workspace-gateway/respond", "POST", payload)
 
     def _ws_reader(self, session_id: str, channel_id: str, ws: websocket.WebSocket) -> None:
+        frame_count = 0
         try:
             while not self.stop_event.is_set():
                 opcode, data = ws.recv_data()
                 if opcode == websocket.ABNF.OPCODE_CLOSE:
                     break
+                frame_count += 1
+                if frame_count == 1:
+                    self._report_error(RuntimeError(f"ws_channel_first_frame:channel={channel_id[:8]}:opcode={opcode}:len={len(data)}"))
                 raw = data.encode() if isinstance(data, str) else bytes(data)
                 self._request("/agent/workspace-gateway/ws-frame", "POST", {"machineId": self.machine_id, "channelId": channel_id, "dataBase64": base64.b64encode(raw).decode(), "binary": opcode == websocket.ABNF.OPCODE_BINARY})
-        except Exception:
-            pass
+        except Exception as exc:
+            self._report_error(exc)
         finally:
+            self._report_error(RuntimeError(f"ws_channel_closed:channel={channel_id[:8]}:frames={frame_count}"))
             self.channels.pop(channel_id, None)
             self.session_channels.get(session_id, set()).discard(channel_id)
             try:
@@ -582,15 +598,17 @@ class GatewaySupervisor:
 
     def _ws_open(self, item: dict[str, Any]) -> None:
         session_id = str(item.get("sessionId") or "")
-        runtime = self._runtime_for(session_id)
         channel_id = str(item.get("channelId") or "")
         path = str(item.get("path") or "/")
         if not channel_id or not path.startswith("/") or ".." in path:
+            self._report_error(RuntimeError(f"ws_channel_open_rejected:path={path[:80]!r}:channel_present={bool(channel_id)}"))
             return
+        runtime = self._runtime_for(session_id)
         headers = [f"{k}: {v}" for k, v in (item.get("headers") or {}).items() if str(k).lower() not in {"host", "origin", "cookie", "authorization", "connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"}]
         ws = websocket.create_connection(f"ws://127.0.0.1:{runtime.port}{path}", header=headers, origin=f"http://127.0.0.1:{runtime.port}", timeout=10, enable_multithread=True)
         self.channels[channel_id] = ws
         self.session_channels.setdefault(session_id, set()).add(channel_id)
+        self._report_error(RuntimeError(f"ws_channel_opened:channel={channel_id[:8]}:path={path[:60]!r}"))
         threading.Thread(target=self._ws_reader, args=(session_id, channel_id, ws), daemon=True, name=f"gpubnb-ws-{channel_id[:8]}").start()
 
     def _handle(self, item: dict[str, Any]) -> None:
