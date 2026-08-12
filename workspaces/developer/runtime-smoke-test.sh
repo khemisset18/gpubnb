@@ -14,9 +14,15 @@ gateway="gpubnb-developer-gateway-smoke-$suffix"
 volume="gpubnb-developer-smoke-$suffix"
 browser_dom="$(mktemp)"
 browser_log="$(mktemp)"
+browser_profile="$(mktemp -d)"
+browser_pid=""
 
 cleanup() {
   status=$?
+  if [[ -n "$browser_pid" ]]; then
+    kill "$browser_pid" >/dev/null 2>&1 || true
+    wait "$browser_pid" >/dev/null 2>&1 || true
+  fi
   if (( status != 0 )); then
     for container in "$workspace" "$proxy"; do
       echo "diagnostics for $container" >&2
@@ -32,6 +38,7 @@ cleanup() {
   docker volume rm -f "$volume" >/dev/null 2>&1 || true
   docker network rm "$internal" "$gateway" >/dev/null 2>&1 || true
   rm -f "$browser_dom" "$browser_log"
+  rm -rf "$browser_profile"
   exit "$status"
 }
 trap cleanup EXIT
@@ -90,9 +97,8 @@ fi
 curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:$port/healthz" >/dev/null
 
 # A healthy /healthz endpoint is not enough: a real rental needs the browser
-# workbench and the remote ExtensionHost. Boot the exact browser entrypoint and
-# fail image publication if Monaco never renders or the ExtensionHost never
-# establishes. This catches white-page regressions that HTTP health probes miss.
+# workbench and the remote ExtensionHost. Chrome is controlled through CDP so a
+# white page produces actionable JS/network/WebSocket diagnostics in CI.
 browser="${CHROME_BIN:-}"
 if [[ -z "$browser" ]]; then
   for candidate in google-chrome-stable google-chrome chromium chromium-browser; do
@@ -107,8 +113,8 @@ if [[ -z "$browser" ]]; then
   exit 1
 fi
 
-set +e
-timeout 30s "$browser" \
+debug_port=9222
+"$browser" \
   --headless=new \
   --no-sandbox \
   --disable-gpu \
@@ -118,17 +124,37 @@ timeout 30s "$browser" \
   --disable-default-apps \
   --disable-extensions \
   --no-first-run \
-  --virtual-time-budget=12000 \
-  --dump-dom "http://127.0.0.1:$port/?folder=/workspace" \
-  >"$browser_dom" 2>"$browser_log"
+  --remote-debugging-address=127.0.0.1 \
+  --remote-debugging-port="$debug_port" \
+  --user-data-dir="$browser_profile" \
+  about:blank >/dev/null 2>"$browser_log" &
+browser_pid=$!
+
+for _ in $(seq 1 50); do
+  if curl --fail --silent --max-time 1 "http://127.0.0.1:$debug_port/json/version" >/dev/null 2>&1; then
+    break
+  fi
+  if ! kill -0 "$browser_pid" >/dev/null 2>&1; then
+    echo "headless browser exited before CDP became available" >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+curl --fail --silent --max-time 1 "http://127.0.0.1:$debug_port/json/version" >/dev/null
+
+node_cmd=(node)
+if [[ "$(node -p 'typeof WebSocket')" != "function" ]]; then
+  node_cmd=(node --experimental-websocket)
+fi
+set +e
+"${node_cmd[@]}" workspaces/developer/browser-smoke-test.mjs \
+  "http://127.0.0.1:$debug_port" \
+  "http://127.0.0.1:$port/?folder=/workspace" \
+  "$browser_dom" >>"$browser_log" 2>&1
 browser_status=$?
 set -e
 if (( browser_status != 0 )); then
-  echo "headless browser failed to boot Developer workbench (exit $browser_status)" >&2
-  exit 1
-fi
-if ! grep -Eq 'monaco-workbench|monaco-grid-view|part editor' "$browser_dom"; then
-  echo "Developer workbench stayed blank: Monaco DOM was not rendered" >&2
+  echo "Developer workbench browser smoke failed (exit $browser_status)" >&2
   exit 1
 fi
 
