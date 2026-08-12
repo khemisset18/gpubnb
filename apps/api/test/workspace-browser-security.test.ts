@@ -56,3 +56,27 @@ test('workspace response overrides the strict API Helmet CSP with VS Code runtim
     await app.close();
   }
 });
+
+test('workspace absolute-path redirects remain inside the authenticated session prefix', async () => {
+  const app = Fastify();
+  registerWorkspaceBrowserSecurity(app);
+  app.get('/workspace-gateway/:sessionId/redirect', async (_request, reply) => {
+    return reply.redirect('/stable-abc/static/workbench.js');
+  });
+  app.get('/workspace-gateway/:sessionId/external', async (_request, reply) => {
+    return reply.redirect('https://example.com/x');
+  });
+
+  await app.ready();
+  try {
+    const local = await app.inject({ method: 'GET', url: '/workspace-gateway/session-1/redirect' });
+    assert.equal(local.statusCode, 302);
+    assert.equal(local.headers.location, '/workspace-gateway/session-1/stable-abc/static/workbench.js');
+
+    const external = await app.inject({ method: 'GET', url: '/workspace-gateway/session-1/external' });
+    assert.equal(external.statusCode, 302);
+    assert.equal(external.headers.location, 'https://example.com/x');
+  } finally {
+    await app.close();
+  }
+});
