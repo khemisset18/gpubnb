@@ -80,6 +80,24 @@ test('a cleaned workspace that never became interactive is recorded as a failure
   assert.match(body, /status:BookingStatus\.DEGRADED/);
   assert.match(body, /status:PaymentStatus\.SETTLEMENT_PENDING/);
   assert.match(body, /INTERACTIVE_CONNECTION_NEVER_ESTABLISHED/);
+  assert.match(body, /operational:neverActivated\?MachineOperational\.DEGRADED:MachineOperational\.AVAILABLE/);
+});
+
+test('verified Developer cleanup cannot release a machine while another runtime still owns it', async () => {
+  const source = await readFile(new URL('../src/workspace-gateway.ts', import.meta.url), 'utf8');
+  const start = source.indexOf("app.post('/agent/workspace-gateway/:sessionId/stopped'");
+  assert.ok(start >= 0);
+  const end = source.indexOf('\n  });', start);
+  const body = source.slice(start, end).replace(/\s+/g, '');
+
+  assert.match(body, /\$transaction\(asynctx=>/);
+  assert.match(body, /workspaceSessions:\{none:\{id:\{not:row\.id\},status:\{in:\[/, 'another active workspace must block release');
+  assert.match(body, /jobs:\{none:\{status:\{in:\[/, 'another active job must block release');
+  assert.match(body, /listings:\{none:\{bookings:\{some:\{id:\{not:row\.bookingId\},status:\{in:\[/, 'another resource-locking booking must block release');
+  assert.match(body, /moderationStatus:ModerationStatus\.CLEAR/, 'a quarantined machine must never be released');
+  assert.match(body, /isolationLevel:Prisma\.TransactionIsolationLevel\.Serializable/, 'cleanup/release must be serialized against competing writers');
+  assert.match(body, /machineReleased:release/, 'the response should expose whether the guarded release actually won');
+  assert.doesNotMatch(body, /db\.machine\.update\(\{where:\{id:machineId\},data:\{operational:MachineOperational\.AVAILABLE/, 'unguarded release must never return');
 });
 
 test('generic compute start and metrics routes cannot bypass the Developer billing gate', async () => {
