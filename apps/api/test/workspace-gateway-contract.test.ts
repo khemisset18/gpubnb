@@ -53,6 +53,12 @@ test('legacy agents retain first-upstream-frame readiness during rollout',()=>{
   assert.match(api,/ws\.on\('message'/);
 });
 
+test('signed relay bodies use nonce-bound v2 auth without the legacy same-millisecond replay slot',()=>{
+  assert.match(api,/if\(withBody\)\{\s*if\(!request\.rawBody\)return false;\s*return verifyAgentRequestV2/);
+  assert.doesNotMatch(api,/const v1=await verifyAgentRequest/);
+  assert.match(api,/return verifyAgentRequest\(redis,machineId,machine\.agentPublicKey,request\.method,routePath/);
+});
+
 test('websocket tunnel has dedicated throughput and payload guards',()=>{
   assert.match(api,/AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE=6000/);
   assert.match(api,/AGENT_RESPONSE_RATE_LIMIT_PER_MINUTE=1200/);
