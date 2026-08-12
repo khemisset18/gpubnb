@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { BookingStatus, JobStatus, JobType, MachineOperational, WorkspaceSessionStatus } from '@prisma/client';
+import { BookingStatus, JobStatus, JobType, MachineOperational, ModerationStatus, PaymentStatus, SessionTerminationReason, WorkspaceSessionStatus } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 
 process.env.NODE_ENV = 'test';
@@ -18,7 +18,7 @@ const { reconcileDevelopmentBookings } = await import('../src/dev-booking-reconc
 type Call = { area: string; args: Record<string, unknown> };
 
 function fakeReconcilerDb(options: {
-  racedSessions?: Array<{ id: string; bookingId: string; machineId: string }>;
+  racedSessions?: Array<{ id: string; bookingId: string; machineId: string; jobId: string | null }>;
   finishedJobs?: Array<Record<string, unknown>>;
   bookingUpdateCount?: number;
 } = {}): { db: PrismaClient; calls: Call[] } {
@@ -41,9 +41,31 @@ function fakeReconcilerDb(options: {
       },
     },
     workspaceSession: {
+      updateMany: async (args: Record<string, unknown>) => {
+        calls.push({ area: 'tx.workspaceSession.updateMany', args });
+        return { count: 1 };
+      },
       update: async (args: Record<string, unknown>) => {
         calls.push({ area: 'tx.workspaceSession.update', args });
         return {};
+      },
+    },
+    job: {
+      updateMany: async (args: Record<string, unknown>) => {
+        calls.push({ area: 'tx.job.updateMany', args });
+        return { count: 1 };
+      },
+    },
+    jobAttempt: {
+      updateMany: async (args: Record<string, unknown>) => {
+        calls.push({ area: 'tx.jobAttempt.updateMany', args });
+        return { count: 1 };
+      },
+    },
+    payment: {
+      updateMany: async (args: Record<string, unknown>) => {
+        calls.push({ area: 'tx.payment.updateMany', args });
+        return { count: 1 };
       },
     },
   };
@@ -61,6 +83,10 @@ function fakeReconcilerDb(options: {
       },
     },
     job: {
+      findFirst: async (args: Record<string, unknown>) => {
+        calls.push({ area: 'job.findFirst', args });
+        return null;
+      },
       findMany: async (args: Record<string, unknown>) => {
         calls.push({ area: 'job.findMany', args });
         return options.finishedJobs ?? [];
@@ -71,9 +97,9 @@ function fakeReconcilerDb(options: {
   return { db, calls };
 }
 
-test('recovers an unexpired Developer preparation misclassified as COMPLETED by the beta diagnostic', async () => {
+test('a completed booking with a live Developer runtime fails closed instead of resurrecting without allocation', async () => {
   const { db, calls } = fakeReconcilerDb({
-    racedSessions: [{ id: 'workspace-1', bookingId: 'booking-1', machineId: 'machine-1' }],
+    racedSessions: [{ id: 'workspace-1', bookingId: 'booking-1', machineId: 'machine-1', jobId: 'job-1' }],
   });
   const result = await reconcileDevelopmentBookings(db, new Date('2026-08-11T03:20:00Z'));
 
@@ -82,28 +108,41 @@ test('recovers an unexpired Developer preparation misclassified as COMPLETED by 
     queued: 0,
     completed: 0,
     degraded: 0,
-    recoveredDeveloper: 1,
+    quarantinedDeveloper: 1,
   });
-  const bookingUpdate = calls.find(call => call.area === 'tx.booking.updateMany');
-  assert.ok(bookingUpdate);
-  assert.equal((bookingUpdate.args.data as { status: BookingStatus }).status, BookingStatus.STARTING);
-  const bookingWhere = bookingUpdate.args.where as {
-    status: BookingStatus;
-    workspaceSessions: { some: { id: string; job: { is: { type: JobType; status: { in: JobStatus[] } } } } };
-  };
-  assert.equal(bookingWhere.status, BookingStatus.COMPLETED);
-  assert.equal(bookingWhere.workspaceSessions.some.id, 'workspace-1');
-  assert.equal(bookingWhere.workspaceSessions.some.job.is.type, JobType.WORKSPACE_PREPARE);
-  assert.ok(bookingWhere.workspaceSessions.some.job.is.status.in.includes(JobStatus.QUEUED));
+  assert.equal(
+    calls.some(call => call.area === 'tx.booking.updateMany'),
+    false,
+    'COMPLETED must never be moved backwards to STARTING after its allocation was released',
+  );
+
+  const sessionUpdate = calls.find(call => call.area === 'tx.workspaceSession.updateMany');
+  assert.ok(sessionUpdate);
+  assert.equal((sessionUpdate.args.data as { status: WorkspaceSessionStatus }).status, WorkspaceSessionStatus.QUARANTINED);
+  assert.equal(
+    (sessionUpdate.args.data as { terminationReason: SessionTerminationReason }).terminationReason,
+    SessionTerminationReason.SECURITY_POLICY,
+  );
+
+  const jobUpdate = calls.find(call => call.area === 'tx.job.updateMany');
+  assert.ok(jobUpdate);
+  assert.equal((jobUpdate.args.data as { status: JobStatus }).status, JobStatus.QUARANTINED);
+  assert.equal((jobUpdate.args.data as { leaseExpiresAt: null }).leaseExpiresAt, null);
+
+  const paymentUpdate = calls.find(call => call.area === 'tx.payment.updateMany');
+  assert.ok(paymentUpdate);
+  assert.equal((paymentUpdate.args.data as { status: PaymentStatus }).status, PaymentStatus.SETTLEMENT_PENDING);
 
   const machineUpdate = calls.find(call => call.area === 'tx.machine.updateMany');
   assert.ok(machineUpdate);
-  assert.equal((machineUpdate.args.data as { operational: MachineOperational }).operational, MachineOperational.RESERVED);
+  assert.equal((machineUpdate.args.data as { moderationStatus: ModerationStatus }).moderationStatus, ModerationStatus.QUARANTINED);
+  assert.equal((machineUpdate.args.data as { operational: MachineOperational }).operational, MachineOperational.UNAVAILABLE);
+
   const auditEvent = calls.find(call => call.area === 'tx.workspaceSession.update');
   assert.ok(auditEvent);
   assert.equal(
     (((auditEvent.args.data as { events: { create: { action: string } } }).events.create).action),
-    'DIAGNOSTIC_COMPLETION_RACE_RECOVERED',
+    'DIAGNOSTIC_COMPLETION_RACE_QUARANTINED',
   );
 });
 
@@ -116,8 +155,6 @@ test('a stale diagnostic result cannot close a booking after a Developer session
       machineId: 'machine-1',
       result: { gpuDetected: true },
     }],
-    // Simulates a Developer session being inserted after the read but before the
-    // atomic updateMany. The relation guard makes the update affect zero rows.
     bookingUpdateCount: 0,
   });
   const result = await reconcileDevelopmentBookings(db, new Date('2026-08-11T03:20:00Z'));
