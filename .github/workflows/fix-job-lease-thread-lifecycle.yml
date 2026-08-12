@@ -1,0 +1,36 @@
+name: fix-job-lease-thread-lifecycle
+
+on:
+  push:
+    branches:
+      - hardening/job-lease-fencing
+    paths:
+      - scripts/fix_job_lease_thread_lifecycle.py
+      - .github/workflows/fix-job-lease-thread-lifecycle.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hardening/job-lease-fencing
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/fix_job_lease_thread_lifecycle.py
+      - run: |
+          git diff --check
+          test ! -e .github/workflows/fix-job-lease-thread-lifecycle.yml
+          test ! -e scripts/fix_job_lease_thread_lifecycle.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(agent): bound job lease thread lifecycle"
+          git push origin HEAD:hardening/job-lease-fencing
