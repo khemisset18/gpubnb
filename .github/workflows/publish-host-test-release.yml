@@ -132,7 +132,19 @@ jobs:
           GPUBNB_RELEASE_CHANNEL: test
           GPUBNB_WEB_BASE_URL: https://gpubnb.netlify.app
           RUST_BACKTRACE: '1'
-        run: npm run tauri:build -- --bundles ${{ matrix.bundle }} ${{ matrix.tauri_config }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            echo "Tauri bundle attempt ${attempt}/3"
+            if npm run tauri:build -- --bundles ${{ matrix.bundle }} ${{ matrix.tauri_config }}; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Tauri bundle failed after ${attempt} attempts." >&2
+              exit 1
+            fi
+            sleep $((attempt * 15))
+          done
 
       - name: Stage predictable asset name
         shell: bash
