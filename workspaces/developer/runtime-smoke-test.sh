@@ -12,22 +12,48 @@ proxy="gpubnb-developer-proxy-smoke-$suffix"
 internal="gpubnb-developer-internal-smoke-$suffix"
 gateway="gpubnb-developer-gateway-smoke-$suffix"
 volume="gpubnb-developer-smoke-$suffix"
+browser_dom="$(mktemp)"
+browser_log="$(mktemp)"
+browser_profile="$(mktemp -d)"
+browser_pid=""
 
 cleanup() {
   status=$?
+  if [[ -n "$browser_pid" ]]; then
+    kill "$browser_pid" >/dev/null 2>&1 || true
+    wait "$browser_pid" >/dev/null 2>&1 || true
+  fi
   if (( status != 0 )); then
     for container in "$workspace" "$proxy"; do
       echo "diagnostics for $container" >&2
       docker inspect --format 'state={{json .State}} ports={{json .NetworkSettings.Ports}} networks={{json .NetworkSettings.Networks}}' "$container" 2>/dev/null || true
       docker logs --tail 200 "$container" 2>/dev/null || true
     done
+    echo "headless browser diagnostics" >&2
+    cat "$browser_log" >&2 2>/dev/null || true
+    echo "headless browser DOM tail" >&2
+    tail -c 20000 "$browser_dom" >&2 2>/dev/null || true
   fi
   docker rm -f "$proxy" "$workspace" >/dev/null 2>&1 || true
   docker volume rm -f "$volume" >/dev/null 2>&1 || true
   docker network rm "$internal" "$gateway" >/dev/null 2>&1 || true
+  rm -f "$browser_dom" "$browser_log"
+  rm -rf "$browser_profile"
   exit "$status"
 }
 trap cleanup EXIT
+
+wait_http() {
+  local url="$1"
+  local attempts="${2:-120}"
+  for _ in $(seq 1 "$attempts"); do
+    if curl --fail --silent --max-time 2 "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  return 1
+}
 
 docker network create --internal "$internal" >/dev/null
 docker network create "$gateway" >/dev/null
@@ -60,7 +86,7 @@ docker run -d --name "$proxy" \
 docker network connect "$internal" "$proxy"
 
 port=""
-for _ in $(seq 1 60); do
+for _ in $(seq 1 50); do
   for container in "$workspace" "$proxy"; do
     running=$(docker inspect --format '{{.State.Running}}' "$container" 2>/dev/null || true)
     if [[ "$running" != "true" ]]; then
@@ -70,17 +96,93 @@ for _ in $(seq 1 60); do
   done
   published=$(docker port "$proxy" 3000/tcp 2>/dev/null || true)
   port=$(printf '%s\n' "$published" | sed -nE 's/.*127\.0\.0\.1:([0-9]+).*/\1/p' | head -n1 || true)
-  if [[ -n "$port" ]] && curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:$port/healthz" >/dev/null; then
+  if [[ -n "$port" ]]; then
     break
   fi
-  sleep 0.5
+  sleep 0.2
 done
 
 if [[ -z "$port" ]]; then
-  echo "loopback proxy port was not published within 30 seconds" >&2
+  echo "loopback proxy port was not published within 10 seconds" >&2
   exit 1
 fi
-curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:$port/healthz" >/dev/null
+if ! wait_http "http://127.0.0.1:$port/healthz" 120; then
+  echo "Developer workspace did not become HTTP-ready within 30 seconds" >&2
+  exit 1
+fi
+
+# A healthy /healthz endpoint is not enough: a real rental needs the browser
+# workbench and the remote ExtensionHost. Chrome is controlled through CDP so a
+# white page produces actionable JS/network/WebSocket diagnostics in CI.
+browser="${CHROME_BIN:-}"
+if [[ -z "$browser" ]]; then
+  for candidate in google-chrome-stable google-chrome chromium chromium-browser; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      browser="$(command -v "$candidate")"
+      break
+    fi
+  done
+fi
+if [[ -z "$browser" ]]; then
+  echo "headless Chromium/Chrome is required for Developer workbench smoke testing" >&2
+  exit 1
+fi
+
+debug_port=9222
+"$browser" \
+  --headless=new \
+  --no-sandbox \
+  --disable-gpu \
+  --disable-dev-shm-usage \
+  --disable-background-networking \
+  --disable-component-update \
+  --disable-default-apps \
+  --disable-extensions \
+  --no-first-run \
+  --remote-debugging-address=127.0.0.1 \
+  --remote-debugging-port="$debug_port" \
+  --user-data-dir="$browser_profile" \
+  about:blank >/dev/null 2>"$browser_log" &
+browser_pid=$!
+
+if ! wait_http "http://127.0.0.1:$debug_port/json/version" 80; then
+  echo "headless browser did not expose CDP" >&2
+  exit 1
+fi
+
+node_cmd=(node)
+if [[ "$(node -p 'typeof WebSocket')" != "function" ]]; then
+  node_cmd=(node --experimental-websocket)
+fi
+set +e
+"${node_cmd[@]}" workspaces/developer/browser-smoke-test.mjs \
+  "http://127.0.0.1:$debug_port" \
+  "http://127.0.0.1:$port/?folder=/workspace" \
+  "$browser_dom" >>"$browser_log" 2>&1
+browser_status=$?
+set -e
+if (( browser_status != 0 )); then
+  echo "Developer workbench browser smoke failed (exit $browser_status)" >&2
+  exit 1
+fi
+
+extension_host_ready=false
+for _ in $(seq 1 40); do
+  runtime_logs="$(docker logs "$workspace" 2>&1 || true)"
+  if grep -Eq '\[ExtensionHostConnection\].*New connection established|Launched Extension Host Process' <<<"$runtime_logs"; then
+    extension_host_ready=true
+    break
+  fi
+  sleep 0.25
+done
+if [[ "$extension_host_ready" != "true" ]]; then
+  echo "Developer workbench opened but Remote ExtensionHost never established" >&2
+  exit 1
+fi
+if grep -Eq 'Extension Host Process exited with code: [1-9]|Converting circular structure to JSON' <<<"$runtime_logs"; then
+  echo "Remote ExtensionHost crashed during browser smoke test" >&2
+  exit 1
+fi
 
 test "$(docker network inspect --format '{{.Internal}}' "$internal")" = "true"
 test "$(docker network inspect --format '{{.Internal}}' "$gateway")" = "false"
@@ -106,4 +208,4 @@ if printf '%s\n' "$published" | grep -Eq '0\.0\.0\.0|\[::\]|:::'; then
   exit 1
 fi
 
-echo "code-server is healthy through an isolated loopback-only proxy"
+echo "code-server workbench and ExtensionHost are healthy through an isolated loopback-only proxy"
