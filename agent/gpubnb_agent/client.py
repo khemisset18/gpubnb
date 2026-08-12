@@ -74,11 +74,11 @@ class ApiClient:
     def upload_file(self, path: str, job_id: str, file_path: str, key: SigningKey, machine_id: str, kind: str = "result") -> dict[str, Any]:
         data = Path(file_path).read_bytes()
         sha256 = hashlib.sha256(data).hexdigest()
-        # Signed like every other agent-write endpoint (C11): an unsigned upload was
-        # authenticated only by a guessable job/artifact ID in the URL, letting anyone
-        # able to alter the request in flight substitute a different artifact body
-        # without invalidating anything — the server had no way to detect it.
-        signed = signed_headers_for_body_sha256(key, machine_id, "POST", path, sha256)
+        # The HTTP URL carries authenticated artifact metadata in its query string, but
+        # the API's request-signature protocol canonicalizes the registered route path.
+        # Sign only that route path while still sending the full URL below.
+        signature_path = path.split("?", 1)[0]
+        signed = signed_headers_for_body_sha256(key, machine_id, "POST", signature_path, sha256)
         headers = {"content-type": "application/octet-stream", "x-artifact-kind": kind, "x-artifact-sha256": sha256, "x-artifact-size": str(len(data)), **signed}
         request = urllib.request.Request(self.api_url + path, data=data, method="POST", headers={"user-agent": f"gpubnb-agent/{__version__}", **headers})
         try:

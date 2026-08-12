@@ -12,6 +12,7 @@ import { RedisDeviceAuthorizationStore } from './device-authorization-store.js';
 import { registerMiningRoutes } from './mining-routes.js';
 import { syncMiningResourcesFromInventory } from './mining-resource-inventory.js';
 import { registerWorkspaceRenterRoutes } from './workspace-renter-routes.js';
+import { registerArtifactTransportGuards } from './artifact-transport-guards.js';
 
 const agentPublicKeySchema = z.string().min(32).max(64).regex(/^[1-9A-HJ-NP-Za-km-z]+$/);
 const machineFingerprintSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
@@ -62,6 +63,7 @@ export const registerDeviceAuthorizationRoutes = (
   redis: Redis,
 ): void => {
   const store = new RedisDeviceAuthorizationStore(redis);
+  registerArtifactTransportGuards(app);
   registerMiningRoutes(app, db, redis);
   registerWorkspaceRenterRoutes(app, db, redis);
 
