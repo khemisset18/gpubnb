@@ -1,4 +1,4 @@
-import { BookingStatus, JobStatus, JobType, MachineOperational, ModerationStatus, PaymentStatus, PrismaClient, SessionTerminationReason, WorkspaceSessionStatus } from '@prisma/client';
+import { BookingStatus, JobStatus, JobType, MachineOperational, ModerationStatus, PaymentStatus, PrismaClient, ResourceAllocationStatus, SessionTerminationReason, WorkspaceSessionStatus } from '@prisma/client';
 import { config } from './config.js';
 
 const TERMINAL_JOB_STATUSES: JobStatus[] = [
@@ -24,6 +24,12 @@ const ACTIVE_WORKSPACE_PREPARE_JOB_STATUSES: JobStatus[] = [
   JobStatus.RUNNING,
   JobStatus.UPLOADING_RESULTS,
   JobStatus.CANCEL_REQUESTED,
+];
+
+const LIVE_ALLOCATION_STATUSES: ResourceAllocationStatus[] = [
+  ResourceAllocationStatus.HELD,
+  ResourceAllocationStatus.CONFIRMED,
+  ResourceAllocationStatus.ACTIVE,
 ];
 
 const DEVELOPER_SESSION_FILTER = {
@@ -342,6 +348,16 @@ export async function reconcileStalledActivations(db: PrismaClient, now = new Da
           data: { moderationStatus: ModerationStatus.QUARANTINED, operational: MachineOperational.UNAVAILABLE },
         });
       } else {
+        const releasedAt = now;
+        const allocationData = { status: ResourceAllocationStatus.RELEASED, releasedAt };
+        await tx.machineAllocation.updateMany({
+          where: { bookingId: booking.id, status: { in: LIVE_ALLOCATION_STATUSES } },
+          data: allocationData,
+        });
+        await tx.acceleratorAllocation.updateMany({
+          where: { bookingId: booking.id, status: { in: LIVE_ALLOCATION_STATUSES } },
+          data: allocationData,
+        });
         await tx.machine.updateMany({
           where: {
             id: booking.listing.machineId,
