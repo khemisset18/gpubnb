@@ -1,207 +1,192 @@
 from __future__ import annotations
 
-import base64
+import subprocess
 import threading
-import time
 import unittest
 from unittest.mock import MagicMock, patch
 
 import websocket
 
-from gpubnb_agent import workspace_gateway as legacy
-from gpubnb_agent.workspace_gateway_v2 import GatewaySupervisor
+from gpubnb_agent.workspace_gateway import (
+    WS_MAX_FRAME_BYTES,
+    GatewaySupervisor,
+    Runtime,
+)
 
 
-def make_supervisor(errors: list[str] | None = None) -> GatewaySupervisor:
-    supervisor = object.__new__(GatewaySupervisor)
-    supervisor.api = MagicMock()
-    supervisor.key = MagicMock()
-    supervisor.machine_id = "machine-1"
-    supervisor.config = {}
-    supervisor.runtimes = {}
-    supervisor.channels = {}
-    supervisor.session_channels = {}
-    supervisor.usage_last_report = {}
-    supervisor.start_failures = {}
-    supervisor.start_retry_at = {}
-    supervisor.stop_event = threading.Event()
-    supervisor._supports_ws_frame_batch = None
-    supervisor._supports_next_batch = None
-    supervisor._trace_started_at = time.monotonic()
-    supervisor._browser_frame_seen = set()
-    supervisor._http_queue = __import__("queue").Queue(maxsize=128)
-    supervisor._http_workers_lock = threading.Lock()
-    supervisor._http_workers_started = False
-    supervisor._last_error_signature = None
-    supervisor._last_error_reported_at = 0.0
-    supervisor._error_callback = (
-        (lambda exc: errors.append(str(exc))) if errors is not None else None
+class ImmediateThread:
+    def __init__(self, target, args=(), kwargs=None, **_options):
+        self.target = target
+        self.args = args
+        self.kwargs = kwargs or {}
+
+    def start(self) -> None:
+        self.target(*self.args, **self.kwargs)
+
+
+class DummyInspector:
+    def running_processes(self):
+        return []
+
+    def terminate(self, _pid):
+        return None
+
+    def is_running(self, _pid):
+        return False
+
+
+def make_supervisor(error_sink: list[str] | None = None) -> GatewaySupervisor:
+    def docker(args, timeout=30, check=True):
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    supervisor = GatewaySupervisor(
+        api=None,
+        key=None,
+        machine_id="machine-1",
+        config={},
+        docker_runner=docker,
+        process_inspector=DummyInspector(),
+        health_check=lambda _port: True,
+        mining_guard=lambda: True,
+        error_callback=(lambda exc: error_sink.append(str(exc))) if error_sink is not None else None,
+    )
+    supervisor.runtimes["session-1"] = Runtime(
+        "session-1",
+        "workspace",
+        "proxy",
+        "volume",
+        "network",
+        41000,
     )
     return supervisor
-
-
-class ControlLoopIsolationTests(unittest.TestCase):
-    def test_slow_reconciliation_does_not_block_control_messages(self) -> None:
-        supervisor = make_supervisor()
-        reconcile_started = threading.Event()
-        release_reconcile = threading.Event()
-        handled = threading.Event()
-        next_calls = 0
-
-        def reconcile() -> None:
-            reconcile_started.set()
-            release_reconcile.wait(timeout=2)
-
-        def next_items() -> list[dict[str, str]]:
-            nonlocal next_calls
-            next_calls += 1
-            if next_calls == 1:
-                return [{"kind": "ws_close", "channelId": "missing"}]
-            supervisor.stop_event.set()
-            return []
-
-        supervisor._reconcile_sessions = reconcile  # type: ignore[method-assign]
-        supervisor._next_items = next_items  # type: ignore[method-assign]
-        original_handle = supervisor._handle
-
-        def handle(item: dict[str, str]) -> None:
-            handled.set()
-            original_handle(item)
-
-        supervisor._handle = handle  # type: ignore[method-assign]
-        thread = threading.Thread(target=supervisor.run)
-        thread.start()
-        self.assertTrue(reconcile_started.wait(timeout=1))
-        self.assertTrue(handled.wait(timeout=1))
-        release_reconcile.set()
-        thread.join(timeout=2)
-        self.assertFalse(thread.is_alive())
 
 
 class HttpRelaySchedulingTests(unittest.TestCase):
     def test_slow_http_asset_does_not_block_extension_host_open(self) -> None:
         supervisor = make_supervisor()
-        first_http_started = threading.Event()
+        http_started = threading.Event()
         release_http = threading.Event()
-        ws_open_seen = threading.Event()
-        supervisor._ensure_http_workers = lambda: None  # type: ignore[method-assign]
+        websocket_seen = threading.Event()
 
-        def slow_http(_item: dict[str, str]) -> None:
-            first_http_started.set()
-            release_http.wait(timeout=2)
+        def slow_http(_item: dict) -> None:
+            http_started.set()
+            release_http.wait(2)
 
         supervisor._http = slow_http  # type: ignore[method-assign]
-        worker = threading.Thread(target=slow_http, args=({},), daemon=True)
-        worker.start()
-        self.assertTrue(first_http_started.wait(timeout=1))
+        supervisor._ws_open = lambda _item: websocket_seen.set()  # type: ignore[method-assign]
 
-        def open_ws(_item: dict[str, str]) -> None:
-            ws_open_seen.set()
+        try:
+            supervisor._handle({
+                "id": "asset-1",
+                "kind": "http",
+                "sessionId": "session-1",
+                "path": "/stable/static/workbench.js",
+            })
+            self.assertTrue(http_started.wait(1), "HTTP worker never started")
 
-        supervisor._ws_open = open_ws  # type: ignore[method-assign]
-        supervisor._handle({"kind": "ws_open"})
-        self.assertTrue(ws_open_seen.wait(timeout=1))
-        release_http.set()
-        worker.join(timeout=2)
+            supervisor._handle({
+                "id": "extension-host-open",
+                "kind": "ws_open",
+                "sessionId": "session-1",
+                "channelId": "extension-host",
+                "path": "/stable",
+            })
+            self.assertTrue(
+                websocket_seen.wait(0.25),
+                "ws_open was serialized behind a slow HTTP asset",
+            )
+        finally:
+            release_http.set()
 
 
 class WebSocketOpenAckTests(unittest.TestCase):
     def test_successful_local_open_reports_101(self) -> None:
-        calls: list[tuple[str, str, dict[str, object] | None]] = []
         supervisor = make_supervisor()
-        supervisor.runtimes["session-1"] = MagicMock(port=34567)
-        supervisor._request = lambda path, method="GET", body=None: calls.append((path, method, body)) or {}  # type: ignore[method-assign]
-        fake_ws = MagicMock()
-        fake_ws.subprotocol = None
+        calls: list[tuple[str, str, dict | None]] = []
+        supervisor._request = lambda path, method="GET", body=None: (calls.append((path, method, body)), {"ok": True})[1]  # type: ignore[method-assign]
+        ws = MagicMock()
 
-        with patch("gpubnb_agent.workspace_gateway_v2.websocket.create_connection", return_value=fake_ws):
+        with patch("gpubnb_agent.workspace_gateway.websocket.create_connection", return_value=ws), \
+             patch.object(supervisor, "_ws_reader"), \
+             patch("gpubnb_agent.workspace_gateway.threading.Thread", ImmediateThread):
             supervisor._ws_open({
-                "id": "request-1",
-                "kind": "ws_open",
+                "id": "open-1",
                 "sessionId": "session-1",
                 "channelId": "channel-1",
-                "path": "/socket",
+                "path": "/",
                 "headers": {},
             })
 
-        deadline = time.time() + 1
-        while not calls and time.time() < deadline:
-            time.sleep(0.01)
-        self.assertTrue(any(body and body.get("status") == 101 for _, _, body in calls))
-        supervisor.stop_event.set()
-        fake_ws.close()
-
-    def test_local_connect_failure_reports_502_and_keeps_no_channel(self) -> None:
-        calls: list[tuple[str, str, dict[str, object] | None]] = []
-        supervisor = make_supervisor()
-        supervisor.runtimes["session-1"] = MagicMock(port=34567)
-        supervisor._request = lambda path, method="GET", body=None: calls.append((path, method, body)) or {}  # type: ignore[method-assign]
-
-        with patch("gpubnb_agent.workspace_gateway_v2.websocket.create_connection", side_effect=OSError("refused")):
-            supervisor._ws_open({
-                "id": "request-2",
-                "kind": "ws_open",
-                "sessionId": "session-1",
-                "channelId": "channel-2",
-                "path": "/socket",
-                "headers": {},
-            })
-
-        self.assertNotIn("channel-2", supervisor.channels)
-        self.assertTrue(any(body and body.get("status") == 502 for _, _, body in calls))
+        ack = [body for path, method, body in calls if path.endswith("/respond") and method == "POST"]
+        self.assertEqual(ack, [{"machineId": "machine-1", "id": "open-1", "status": 101}])
+        self.assertIn("channel-1", supervisor.channels)
+        ws.close.assert_not_called()
 
     def test_lost_101_report_never_closes_a_healthy_local_socket(self) -> None:
         errors: list[str] = []
         supervisor = make_supervisor(errors)
-        supervisor.runtimes["session-1"] = MagicMock(port=34567)
-        fake_ws = MagicMock()
-        fake_ws.subprotocol = None
+        ws = MagicMock()
 
-        def request(_path: str, _method: str = "GET", body=None):
-            if body and body.get("status") == 101:
-                raise RuntimeError("network lost")
-            return {}
+        def request(path, method="GET", body=None):
+            if path.endswith("/respond") and body and body.get("status") == 101:
+                raise ConnectionError("simulated ack response loss")
+            return {"ok": True}
 
         supervisor._request = request  # type: ignore[method-assign]
-        with patch("gpubnb_agent.workspace_gateway_v2.websocket.create_connection", return_value=fake_ws):
+        with patch("gpubnb_agent.workspace_gateway.websocket.create_connection", return_value=ws), \
+             patch.object(supervisor, "_ws_reader"), \
+             patch("gpubnb_agent.workspace_gateway.threading.Thread", ImmediateThread):
             supervisor._ws_open({
-                "id": "request-3",
-                "kind": "ws_open",
+                "id": "open-2",
                 "sessionId": "session-1",
-                "channelId": "channel-3",
-                "path": "/socket",
+                "channelId": "channel-2",
+                "path": "/",
                 "headers": {},
             })
 
-        deadline = time.time() + 1
-        while not errors and time.time() < deadline:
-            time.sleep(0.01)
-        self.assertIn("channel-3", supervisor.channels)
-        self.assertFalse(fake_ws.close.called)
+        self.assertIn("channel-2", supervisor.channels)
+        ws.close.assert_not_called()
         self.assertTrue(any("ws_open_ack_report_failed" in error for error in errors))
-        supervisor.stop_event.set()
-        fake_ws.close()
+
+    def test_local_connect_failure_reports_502_and_keeps_no_channel(self) -> None:
+        supervisor = make_supervisor()
+        calls: list[dict] = []
+        supervisor._request = lambda _path, _method="GET", body=None: (calls.append(body or {}), {"ok": True})[1]  # type: ignore[method-assign]
+
+        with patch("gpubnb_agent.workspace_gateway.websocket.create_connection", side_effect=OSError("connect refused")):
+            supervisor._ws_open({
+                "id": "open-3",
+                "sessionId": "session-1",
+                "channelId": "channel-3",
+                "path": "/",
+                "headers": {},
+            })
+
+        self.assertNotIn("channel-3", supervisor.channels)
+        self.assertEqual(calls[-1]["status"], 502)
+        self.assertIn("connect refused", calls[-1]["error"])
 
 
 class WebSocketFrameGuardTests(unittest.TestCase):
     def test_oversized_upstream_frame_is_never_posted_to_api(self) -> None:
-        calls: list[tuple[str, dict[str, object]]] = []
         errors: list[str] = []
         supervisor = make_supervisor(errors)
-        supervisor._post_ws_frames = lambda frames: calls.append(("frames", {"frames": frames}))  # type: ignore[method-assign]
-        fake_ws = MagicMock()
-        fake_ws.recv_data.side_effect = [
-            (websocket.ABNF.OPCODE_BINARY, b"x" * (legacy.WS_MAX_FRAME_BYTES + 1)),
-            (websocket.ABNF.OPCODE_CLOSE, b""),
-        ]
-        supervisor.channels["channel-4"] = fake_ws
+        calls: list[tuple[str, dict]] = []
+        supervisor._request = lambda path, _method="GET", body=None: (calls.append((path, body or {})), {"ok": True})[1]  # type: ignore[method-assign]
+        ws = MagicMock()
+        ws.recv_data.return_value = (
+            websocket.ABNF.OPCODE_BINARY,
+            b"x" * (WS_MAX_FRAME_BYTES + 1),
+        )
+        supervisor.channels["channel-4"] = ws
         supervisor.session_channels["session-1"] = {"channel-4"}
 
-        supervisor._ws_reader("session-1", "channel-4", fake_ws)
+        supervisor._ws_reader("session-1", "channel-4", ws)
 
         sent_frames = [
             frame
-            for _, body in calls
+            for path, body in calls
+            if path.endswith("/ws-frames")
             for frame in body.get("frames", [])
             if frame.get("close") is not True
         ]
@@ -209,7 +194,8 @@ class WebSocketFrameGuardTests(unittest.TestCase):
         self.assertTrue(any("ws_frame_too_large" in error for error in errors))
         close_frames = [
             frame
-            for _, body in calls
+            for path, body in calls
+            if path.endswith("/ws-frames")
             for frame in body.get("frames", [])
             if frame.get("close") is True
         ]
@@ -217,18 +203,7 @@ class WebSocketFrameGuardTests(unittest.TestCase):
 
     def test_failed_browser_to_upstream_send_removes_stale_channel(self) -> None:
         errors: list[str] = []
-        # Import the installed public supervisor so this regression follows the
-        # active v3 browser-frame relay rather than testing the superseded v2 send.
-        from gpubnb_agent import workspace_gateway
-
-        supervisor = object.__new__(workspace_gateway.GatewaySupervisor)
-        supervisor.channels = {}
-        supervisor.session_channels = {}
-        supervisor._browser_frame_seen = set()
-        supervisor._error_callback = lambda exc: errors.append(str(exc))
-        supervisor._last_error_signature = None
-        supervisor._last_error_reported_at = 0.0
-        supervisor._trace_started_at = time.monotonic()
+        supervisor = make_supervisor(errors)
         ws = MagicMock()
         ws.send.side_effect = OSError("socket closed")
         supervisor.channels["channel-5"] = ws
@@ -253,60 +228,108 @@ class WebSocketBatchTransportTests(unittest.TestCase):
         supervisor = make_supervisor()
         batch_started = threading.Event()
         release_batch = threading.Event()
-        frames: list[dict[str, object]] = []
-
-        def slow_post(batch: list[dict[str, object]]) -> None:
-            batch_started.set()
-            release_batch.wait(timeout=2)
-            frames.extend(batch)
-
-        supervisor._post_ws_frames = slow_post  # type: ignore[method-assign]
-        fake_ws = MagicMock()
-        fake_ws.recv_data.side_effect = [
-            (websocket.ABNF.OPCODE_BINARY, b"one"),
-            (websocket.ABNF.OPCODE_BINARY, b"two"),
+        calls: list[dict] = []
+        ws = MagicMock()
+        ws.recv_data.side_effect = [
+            (websocket.ABNF.OPCODE_BINARY, b"first"),
+            (websocket.ABNF.OPCODE_BINARY, b"second"),
             (websocket.ABNF.OPCODE_CLOSE, b""),
         ]
-        supervisor.channels["channel-6"] = fake_ws
-        supervisor.session_channels["session-1"] = {"channel-6"}
 
-        reader = threading.Thread(target=supervisor._ws_reader, args=("session-1", "channel-6", fake_ws))
+        def request(path, _method="GET", body=None):
+            if path.endswith("/ws-frames"):
+                calls.append(body or {})
+                batch_started.set()
+                release_batch.wait(2)
+            return {"ok": True}
+
+        supervisor._request = request  # type: ignore[method-assign]
+        reader = threading.Thread(
+            target=supervisor._ws_reader,
+            args=("session-1", "channel-batch", ws),
+            daemon=True,
+        )
         reader.start()
-        self.assertTrue(batch_started.wait(timeout=1))
-        # The local reader should continue into the second frame while the Internet
-        # sender is deliberately blocked on the first batch.
-        deadline = time.time() + 1
-        while fake_ws.recv_data.call_count < 2 and time.time() < deadline:
-            time.sleep(0.01)
-        self.assertGreaterEqual(fake_ws.recv_data.call_count, 2)
-        release_batch.set()
-        reader.join(timeout=2)
+        try:
+            self.assertTrue(batch_started.wait(1), "batch sender never started")
+            self.assertEqual(
+                ws.recv_data.call_count,
+                3,
+                "local code-server reader blocked on the WAN/API request",
+            )
+        finally:
+            release_batch.set()
+            reader.join(timeout=2)
+
         self.assertFalse(reader.is_alive())
-        data_frames = [frame for frame in frames if not frame.get("close")]
-        self.assertEqual([base64.b64decode(str(frame["dataBase64"])) for frame in data_frames], [b"one", b"two"])
+        frames = [frame for body in calls for frame in body.get("frames", [])]
+        self.assertEqual([frame.get("dataBase64") for frame in frames if not frame.get("close")], ["Zmlyc3Q=", "c2Vjb25k"])
+        self.assertEqual(sum(1 for frame in frames if frame.get("close") is True), 1)
+        self.assertTrue(all(frame.get("frameId") for frame in frames))
 
     def test_batch_endpoint_falls_back_to_legacy_single_frame_route(self) -> None:
         supervisor = make_supervisor()
-        calls: list[tuple[str, str, dict[str, object] | None]] = []
+        paths: list[str] = []
 
-        def request(path: str, method: str = "GET", body=None):
-            calls.append((path, method, body))
+        def request(path, _method="GET", _body=None):
+            paths.append(path)
             if path.endswith("/ws-frames"):
-                raise RuntimeError('API HTTP 404: {"error":"Not Found"}')
-            return {}
+                raise RuntimeError("API HTTP 404: not found")
+            return {"ok": True}
 
         supervisor._request = request  # type: ignore[method-assign]
-        supervisor._post_ws_frames([
-            {
-                "frameId": "frame-1",
-                "channelId": "channel-7",
-                "dataBase64": "eA==",
-                "binary": True,
-            }
+        supervisor._post_ws_frames([{
+            "frameId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "channelId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "dataBase64": "eA==",
+            "binary": True,
+        }])
+
+        self.assertEqual(paths[-2:], [
+            "/agent/workspace-gateway/ws-frames",
+            "/agent/workspace-gateway/ws-frame",
         ])
 
-        self.assertFalse(supervisor._supports_ws_frame_batch)
-        self.assertTrue(any(path.endswith("/ws-frame") for path, _, _ in calls))
+
+class ControlLoopIsolationTests(unittest.TestCase):
+    def test_slow_reconciliation_does_not_block_control_messages(self) -> None:
+        supervisor = make_supervisor()
+        reconcile_calls = 0
+        reconcile_blocked = threading.Event()
+        release_reconcile = threading.Event()
+        handled = threading.Event()
+
+        def reconcile() -> None:
+            nonlocal reconcile_calls
+            reconcile_calls += 1
+            if reconcile_calls >= 2:
+                reconcile_blocked.set()
+                release_reconcile.wait(2)
+
+        def next_items() -> list[dict]:
+            self.assertTrue(reconcile_blocked.wait(1))
+            return [{"kind": "ws_close", "channelId": "unused"}]
+
+        def handle(_item: dict) -> None:
+            handled.set()
+            supervisor.stop_event.set()
+
+        supervisor._reconcile_sessions = reconcile  # type: ignore[method-assign]
+        supervisor._next_items = next_items  # type: ignore[method-assign]
+        supervisor._handle = handle  # type: ignore[method-assign]
+
+        runner = threading.Thread(target=supervisor.run, daemon=True)
+        runner.start()
+        try:
+            self.assertTrue(
+                handled.wait(0.5),
+                "control message was serialized behind Docker reconciliation",
+            )
+        finally:
+            release_reconcile.set()
+            runner.join(timeout=2)
+
+        self.assertFalse(runner.is_alive())
 
 
 if __name__ == "__main__":
