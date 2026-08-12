@@ -38,7 +38,7 @@ test('offline cancellation closes the explicit lease and unfinished attempt atom
   assert.match(normalized, /status:JobStatus\.CANCELLED,errorCode:'AGENT_OFFLINE',cancelRequestedAt:now,finishedAt:now,leaseExpiresAt:null/);
   assert.match(normalized, /if\(jobUpdate\.count>0\)\{awaittx\.jobAttempt\.updateMany/);
   assert.match(normalized, /jobId:\{in:plan\.cancelledJobIds\},finishedAt:null,job:\{status:JobStatus\.CANCELLED,errorCode:'AGENT_OFFLINE'\}/);
-  assert.match(normalized, /data:\{finishedAt:now,failureReason:'AGENT_OFFLINE'\}/);
+  assert.match(normalized, /data:\{finishedAt:now,failureReason:'AGENT_OFFLINE',?\}/);
   assert.match(normalized, /isolationLevel:'Serializable'/);
 });
 
