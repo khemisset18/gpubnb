@@ -16,9 +16,14 @@ browser_dom="$(mktemp)"
 browser_log="$(mktemp)"
 browser_profile="$(mktemp -d)"
 browser_pid=""
+gateway_shape_pid=""
 
 cleanup() {
   status=$?
+  if [[ -n "$gateway_shape_pid" ]]; then
+    kill "$gateway_shape_pid" >/dev/null 2>&1 || true
+    wait "$gateway_shape_pid" >/dev/null 2>&1 || true
+  fi
   if [[ -n "$browser_pid" ]]; then
     kill "$browser_pid" >/dev/null 2>&1 || true
     wait "$browser_pid" >/dev/null 2>&1 || true
@@ -47,8 +52,6 @@ docker network create --internal "$internal" >/dev/null
 docker network create "$gateway" >/dev/null
 docker volume create "$volume" >/dev/null
 
-# The renter-controlled workspace has no published port and no non-internal
-# network. CI has no GPU, so GPU passthrough is the only production flag omitted.
 docker run -d --name "$workspace" \
   --network "$internal" \
   --read-only --cap-drop=ALL --security-opt=no-new-privileges \
@@ -59,8 +62,6 @@ docker run -d --name "$workspace" \
   --entrypoint code-server "$image" \
   --bind-addr 0.0.0.0:3000 --auth none /workspace >/dev/null
 
-# Only this minimal proxy joins the ordinary bridge. It has no GPU and no renter
-# volume, and Docker publishes it on host loopback only.
 docker run -d --name "$proxy" \
   --network "$gateway" \
   --publish 127.0.0.1::3000 \
@@ -96,9 +97,6 @@ if [[ -z "$port" ]]; then
 fi
 curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:$port/healthz" >/dev/null
 
-# A healthy /healthz endpoint is not enough: a real rental needs the browser
-# workbench and the remote ExtensionHost. Chrome is controlled through CDP so a
-# white page produces actionable JS/network/WebSocket diagnostics in CI.
 browser="${CHROME_BIN:-}"
 if [[ -z "$browser" ]]; then
   for candidate in google-chrome-stable google-chrome chromium chromium-browser; do
@@ -146,15 +144,40 @@ node_cmd=(node)
 if [[ "$(node -p 'typeof WebSocket')" != "function" ]]; then
   node_cmd=(node --experimental-websocket)
 fi
-set +e
-"${node_cmd[@]}" workspaces/developer/browser-smoke-test.mjs \
-  "http://127.0.0.1:$debug_port" \
-  "http://127.0.0.1:$port/?folder=/workspace" \
-  "$browser_dom" >>"$browser_log" 2>&1
-browser_status=$?
-set -e
-if (( browser_status != 0 )); then
-  echo "Developer workbench browser smoke failed (exit $browser_status)" >&2
+
+run_browser_smoke() {
+  local url="$1"
+  : >"$browser_dom"
+  "${node_cmd[@]}" workspaces/developer/browser-smoke-test.mjs \
+    "http://127.0.0.1:$debug_port" "$url" "$browser_dom" >>"$browser_log" 2>&1
+}
+
+# Baseline: code-server through the host's loopback-only proxy must boot.
+if ! run_browser_smoke "http://127.0.0.1:$port/?folder=/workspace"; then
+  echo "Developer workbench failed through loopback-only proxy" >&2
+  exit 1
+fi
+
+# Re-run through a local proxy that copies the production gateway's path prefix,
+# browser CSP, request-header allowlist and response-header allowlist. If this
+# passes while a live rental fails, the remaining delta is the API/Redis/Agent
+# WebSocket transport rather than static paths or response headers.
+gateway_shape_port=39000
+node workspaces/developer/gateway-shape-proxy.mjs 127.0.0.1 "$port" "$gateway_shape_port" >>"$browser_log" 2>&1 &
+gateway_shape_pid=$!
+for _ in $(seq 1 50); do
+  if curl --fail --silent --max-time 1 "http://127.0.0.1:$gateway_shape_port/workspace-gateway/test-session/healthz" >/dev/null 2>&1; then
+    break
+  fi
+  if ! kill -0 "$gateway_shape_pid" >/dev/null 2>&1; then
+    echo "gateway-shape proxy exited before becoming ready" >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+curl --fail --silent --max-time 1 "http://127.0.0.1:$gateway_shape_port/workspace-gateway/test-session/healthz" >/dev/null
+if ! run_browser_smoke "http://127.0.0.1:$gateway_shape_port/workspace-gateway/test-session/?folder=/workspace"; then
+  echo "Developer workbench failed through GPUbnb gateway-shaped proxy" >&2
   exit 1
 fi
 
@@ -200,4 +223,4 @@ if printf '%s\n' "$published" | grep -Eq '0\.0\.0\.0|\[::\]|:::'; then
   exit 1
 fi
 
-echo "code-server workbench and ExtensionHost are healthy through an isolated loopback-only proxy"
+echo "code-server workbench is healthy through loopback and gateway-shaped browser paths"
