@@ -50,7 +50,26 @@ test('legacy agents retain first-upstream-frame readiness during rollout',()=>{
   assert.match(api,/workspace_gateway_legacy_upstream_ready/);
   assert.match(api,/const legacyReady=await redis\.get\(wsUpstreamReadyKey\(channelId\)\)/);
   assert.match(api,/redis\.set\(wsUpstreamReadyKey\(channelId\),'1','EX',ttl\)/);
-  assert.match(api,/ws\.on\('message'.*setup\.then\(/);
+  assert.match(api,/ws\.on\('message'/);
+});
+
+test('websocket tunnel has dedicated throughput and payload guards',()=>{
+  assert.match(api,/AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE=6000/);
+  assert.match(api,/AGENT_RESPONSE_RATE_LIMIT_PER_MINUTE=1200/);
+  assert.match(api,/WS_MAX_FRAME_BYTES=4\*1024\*1024/);
+  assert.match(api,/WS_MAX_BASE64_BYTES/);
+  assert.match(api,/workspace_ws_frame_too_large/);
+  assert.match(api,/ws-frame',\{bodyLimit:MAX_AGENT_RELAY_BODY_BYTES,config:\{rateLimit:/);
+  assert.match(api,/\/next',\{config:\{rateLimit:\{max:AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE/);
+});
+
+test('browser delivery pump is serialized and close-aware',()=>{
+  assert.match(api,/let pumpBusy=false/);
+  assert.match(api,/if\(pumpBusy\|\|browserClosed\)return/);
+  assert.match(api,/\.finally\(\(\)=>\{pumpBusy=false;\}\)/);
+  assert.match(api,/let browserSendChain:Promise<unknown>=setup/);
+  assert.match(api,/browserClosed=true;clearInterval\(pump\)/);
+  assert.match(api,/workspace_gateway_browser_socket_error/);
 });
 
 test('billing activation remains tied to a real upstream websocket frame',()=>{
