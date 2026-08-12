@@ -6,6 +6,11 @@ import {
   type PrismaClient,
   WorkspaceSessionStatus,
 } from '@prisma/client';
+import {
+  createJobLeaseToken,
+  hashJobLeaseToken,
+  jobLeaseExpiresAt,
+} from './job-execution-lease.js';
 
 const ACTIVE_JOB_BOOKINGS: BookingStatus[] = [
   BookingStatus.FUNDED,
@@ -44,32 +49,68 @@ async function createAttempt(
   tx: ClaimTransaction,
   jobId: string,
   agentVersion: string | null,
-): Promise<void> {
+) {
   const sequence = await tx.jobAttempt.count({ where: { jobId } }) + 1;
-  await tx.jobAttempt.create({ data: { jobId, sequence, agentVersion } });
+  return tx.jobAttempt.create({ data: { jobId, sequence, agentVersion } });
+}
+
+async function grantLease(
+  tx: ClaimTransaction,
+  jobId: string,
+  agentVersion: string | null,
+  now: Date,
+  leaseSeconds: number,
+) {
+  const attempt = await createAttempt(tx, jobId, agentVersion);
+  const leaseToken = createJobLeaseToken();
+  const leaseExpiresAt = jobLeaseExpiresAt(now, leaseSeconds);
+  await tx.job.update({
+    where: { id: jobId },
+    data: {
+      currentAttemptId: attempt.id,
+      leaseTokenHash: hashJobLeaseToken(leaseToken),
+      leaseExpiresAt,
+      lastAgentReportAt: now,
+      updatedAt: now,
+    },
+  });
+  const job = await tx.job.findUnique({
+    where: { id: jobId },
+    select: AGENT_JOB_SELECT,
+  });
+  return job ? { ...job, attemptId: attempt.id, leaseToken, leaseExpiresAt } : null;
 }
 
 /**
- * Claims one job for an agent. A stale Developer preparation is recovered before
- * a newer queued job because image preparation is immutable and idempotent, while
- * silently abandoning an already assigned job leaves the renter stuck forever.
- * GPU proof and diagnostic jobs are deliberately never reclaimed here.
+ * Claims one job for an agent. Every successful claim receives a unique attempt id
+ * plus an opaque lease token. The API stores only the token hash. A stale Developer
+ * preparation is recovered before a newer queued job; proof/diagnostic jobs remain
+ * deliberately non-reclaimable.
+ *
+ * During the nullable-column rollout, an old active row with no explicit lease can
+ * still be recovered using its legacy updatedAt cutoff. Every new/reclaimed claim is
+ * immediately converted to the explicit lease protocol.
  */
 export async function claimNextAgentJobInTransaction(
   tx: ClaimTransaction,
   options: AgentJobClaimOptions,
 ) {
   const now = options.now ?? new Date();
-  const reclaimCutoff = new Date(
-    now.getTime() - Math.max(30, options.reclaimAfterSeconds) * 1000,
-  );
+  const leaseSeconds = Math.max(30, options.reclaimAfterSeconds);
+  const legacyReclaimCutoff = new Date(now.getTime() - leaseSeconds * 1000);
+  const expiredLease = {
+    OR: [
+      { leaseExpiresAt: { lte: now } },
+      { leaseExpiresAt: null, updatedAt: { lte: legacyReclaimCutoff } },
+    ],
+  } satisfies Prisma.JobWhereInput;
 
   const abandoned = await tx.job.findFirst({
     where: {
       machineId: options.machineId,
       type: JobType.WORKSPACE_PREPARE,
       status: { in: RECLAIMABLE_PREPARATION_STATUSES },
-      updatedAt: { lte: reclaimCutoff },
+      ...expiredLease,
       booking: {
         status: { in: ACTIVE_JOB_BOOKINGS },
         endsAt: { gte: now },
@@ -84,7 +125,7 @@ export async function claimNextAgentJobInTransaction(
       where: {
         id: abandoned.id,
         status: abandoned.status,
-        updatedAt: { lte: reclaimCutoff },
+        ...expiredLease,
       },
       data: {
         status: JobStatus.ASSIGNED,
@@ -109,11 +150,13 @@ export async function claimNextAgentJobInTransaction(
         preparationStep: 'AGENT_RECONNECTING',
       },
     });
-    await createAttempt(tx, abandoned.id, options.agentVersion);
-    return tx.job.findUnique({
-      where: { id: abandoned.id },
-      select: AGENT_JOB_SELECT,
-    });
+    return grantLease(
+      tx,
+      abandoned.id,
+      options.agentVersion,
+      now,
+      leaseSeconds,
+    );
   }
 
   const queued = await tx.job.findFirst({
@@ -140,11 +183,13 @@ export async function claimNextAgentJobInTransaction(
   });
   if (claimed.count !== 1) return null;
 
-  await createAttempt(tx, queued.id, options.agentVersion);
-  return tx.job.findUnique({
-    where: { id: queued.id },
-    select: AGENT_JOB_SELECT,
-  });
+  return grantLease(
+    tx,
+    queued.id,
+    options.agentVersion,
+    now,
+    leaseSeconds,
+  );
 }
 
 export async function claimNextAgentJob(
