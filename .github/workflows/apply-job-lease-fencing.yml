@@ -1,0 +1,41 @@
+name: apply-job-lease-fencing
+
+on:
+  push:
+    branches:
+      - hardening/job-lease-fencing
+    paths:
+      - scripts/apply_job_lease_fencing_patch.py
+      - .github/workflows/apply-job-lease-fencing.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hardening/job-lease-fencing
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply deterministic patch
+        run: python scripts/apply_job_lease_fencing_patch.py
+      - name: Validate patch shape
+        run: |
+          git diff --check
+          grep -q "stale_job_attempt" apps/api/src/server.ts
+          grep -q "__version__ = \"0.5.5\"" agent/gpubnb_agent/__init__.py
+          test ! -e .github/workflows/apply-job-lease-fencing.yml
+          test ! -e scripts/apply_job_lease_fencing_patch.py
+      - name: Commit hardened integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: fence agent job execution attempts"
+          git push origin HEAD:hardening/job-lease-fencing
