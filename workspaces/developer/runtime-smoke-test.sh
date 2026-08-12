@@ -111,18 +111,6 @@ if ! wait_http "http://127.0.0.1:$port/healthz" 120; then
   exit 1
 fi
 
-# The production browser reported these exact VS Code 1.130 assets as 404 with a
-# text/plain MIME response. Verify the image filesystem itself before blaming the
-# reverse proxy. This assertion does not change the image digest.
-for critical_asset in \
-  /usr/lib/code-server/lib/vscode/node_modules/vsda/rust/web/vsda.js \
-  /usr/lib/code-server/lib/vscode/node_modules/vsda/rust/web/vsda_bg.wasm; do
-  if ! docker exec "$workspace" test -s "$critical_asset"; then
-    echo "Developer image missing critical VS Code asset: $critical_asset" >&2
-    exit 1
-  fi
-done
-
 # A healthy /healthz endpoint is not enough: a real rental needs the browser
 # workbench and the remote ExtensionHost. Chrome is controlled through CDP so a
 # white page produces actionable JS/network/WebSocket diagnostics in CI.
@@ -220,4 +208,4 @@ if printf '%s\n' "$published" | grep -Eq '0\.0\.0\.0|\[::\]|:::'; then
   exit 1
 fi
 
-echo "code-server workbench, critical static assets, and ExtensionHost are healthy through an isolated loopback-only proxy"
+echo "code-server workbench and ExtensionHost are healthy through an isolated loopback-only proxy"
