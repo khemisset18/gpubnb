@@ -395,7 +395,9 @@ class GatewaySupervisor(legacy.GatewaySupervisor):
             # not just the handshake. VS Code channels are long-lived and may be
             # legitimately silent for >10s, so remove the read deadline only
             # after the local handshake has succeeded.
-            ws.settimeout(None)
+            set_timeout = getattr(ws, "settimeout", None)
+            if callable(set_timeout):
+                set_timeout(None)
             handshake_ms = int((time.monotonic() - handshake_started) * 1000)
             self.channels[channel_id] = ws
             self.session_channels.setdefault(session_id, set()).add(channel_id)
