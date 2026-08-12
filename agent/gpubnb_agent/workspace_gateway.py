@@ -597,19 +597,52 @@ class GatewaySupervisor:
                 pass
 
     def _ws_open(self, item: dict[str, Any]) -> None:
+        request_id = str(item.get("id") or "")
         session_id = str(item.get("sessionId") or "")
         channel_id = str(item.get("channelId") or "")
         path = str(item.get("path") or "/")
-        if not channel_id or not path.startswith("/") or ".." in path:
-            self._report_error(RuntimeError(f"ws_channel_open_rejected:path={path[:80]!r}:channel_present={bool(channel_id)}"))
-            return
-        runtime = self._runtime_for(session_id)
-        headers = [f"{k}: {v}" for k, v in (item.get("headers") or {}).items() if str(k).lower() not in {"host", "origin", "cookie", "authorization", "connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"}]
-        ws = websocket.create_connection(f"ws://127.0.0.1:{runtime.port}{path}", header=headers, origin=f"http://127.0.0.1:{runtime.port}", timeout=10, enable_multithread=True)
-        self.channels[channel_id] = ws
-        self.session_channels.setdefault(session_id, set()).add(channel_id)
-        self._report_error(RuntimeError(f"ws_channel_opened:channel={channel_id[:8]}:path={path[:60]!r}"))
-        threading.Thread(target=self._ws_reader, args=(session_id, channel_id, ws), daemon=True, name=f"gpubnb-ws-{channel_id[:8]}").start()
+        ws: websocket.WebSocket | None = None
+        try:
+            if not channel_id or not path.startswith("/") or ".." in path:
+                raise RuntimeError(
+                    f"ws_channel_open_rejected:path={path[:80]!r}:channel_present={bool(channel_id)}"
+                )
+            runtime = self._runtime_for(session_id)
+            headers = [f"{k}: {v}" for k, v in (item.get("headers") or {}).items() if str(k).lower() not in {"host", "origin", "cookie", "authorization", "connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"}]
+            ws = websocket.create_connection(f"ws://127.0.0.1:{runtime.port}{path}", header=headers, origin=f"http://127.0.0.1:{runtime.port}", timeout=10, enable_multithread=True)
+            self.channels[channel_id] = ws
+            self.session_channels.setdefault(session_id, set()).add(channel_id)
+            self._report_error(RuntimeError(f"ws_channel_opened:channel={channel_id[:8]}:path={path[:60]!r}"))
+            if request_id:
+                self._request(
+                    "/agent/workspace-gateway/respond",
+                    "POST",
+                    {"machineId": self.machine_id, "id": request_id, "status": 101},
+                )
+            threading.Thread(target=self._ws_reader, args=(session_id, channel_id, ws), daemon=True, name=f"gpubnb-ws-{channel_id[:8]}").start()
+        except Exception as exc:
+            self._report_error(exc)
+            self.channels.pop(channel_id, None)
+            self.session_channels.get(session_id, set()).discard(channel_id)
+            if ws is not None:
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+            if request_id:
+                try:
+                    self._request(
+                        "/agent/workspace-gateway/respond",
+                        "POST",
+                        {
+                            "machineId": self.machine_id,
+                            "id": request_id,
+                            "status": 502,
+                            "error": str(exc)[:200],
+                        },
+                    )
+                except Exception as report_exc:
+                    self._report_error(report_exc)
 
     def _handle(self, item: dict[str, Any]) -> None:
         kind = item.get("kind")
