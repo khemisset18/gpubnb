@@ -453,10 +453,10 @@ def run_next_job(
         name=f"gpubnb-job-lease-{job_id[-8:]}",
         daemon=True,
     )
-    lease_thread.start()
     parameters = job.get("parameters") if isinstance(job.get("parameters"), dict) else {}
     workspace_slug = str(parameters.get("workspaceSlug") or "compute")
     image = workspace_image(config, workspace_slug)
+    lease_thread.start()
     try:
         if job.get("type") in {"WORKSPACE_PREPARE", "GPU_PROOF"}:
             update_job(api, key, machine_id, job_id, attempt_id, lease_token, "DOWNLOADING")
