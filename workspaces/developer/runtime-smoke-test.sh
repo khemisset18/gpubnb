@@ -12,6 +12,8 @@ proxy="gpubnb-developer-proxy-smoke-$suffix"
 internal="gpubnb-developer-internal-smoke-$suffix"
 gateway="gpubnb-developer-gateway-smoke-$suffix"
 volume="gpubnb-developer-smoke-$suffix"
+browser_dom="$(mktemp)"
+browser_log="$(mktemp)"
 
 cleanup() {
   status=$?
@@ -21,10 +23,15 @@ cleanup() {
       docker inspect --format 'state={{json .State}} ports={{json .NetworkSettings.Ports}} networks={{json .NetworkSettings.Networks}}' "$container" 2>/dev/null || true
       docker logs --tail 200 "$container" 2>/dev/null || true
     done
+    echo "headless browser diagnostics" >&2
+    cat "$browser_log" >&2 2>/dev/null || true
+    echo "headless browser DOM tail" >&2
+    tail -c 20000 "$browser_dom" >&2 2>/dev/null || true
   fi
   docker rm -f "$proxy" "$workspace" >/dev/null 2>&1 || true
   docker volume rm -f "$volume" >/dev/null 2>&1 || true
   docker network rm "$internal" "$gateway" >/dev/null 2>&1 || true
+  rm -f "$browser_dom" "$browser_log"
   exit "$status"
 }
 trap cleanup EXIT
@@ -82,6 +89,67 @@ if [[ -z "$port" ]]; then
 fi
 curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:$port/healthz" >/dev/null
 
+# A healthy /healthz endpoint is not enough: a real rental needs the browser
+# workbench and the remote ExtensionHost. Boot the exact browser entrypoint and
+# fail image publication if Monaco never renders or the ExtensionHost never
+# establishes. This catches white-page regressions that HTTP health probes miss.
+browser="${CHROME_BIN:-}"
+if [[ -z "$browser" ]]; then
+  for candidate in google-chrome-stable google-chrome chromium chromium-browser; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      browser="$(command -v "$candidate")"
+      break
+    fi
+  done
+fi
+if [[ -z "$browser" ]]; then
+  echo "headless Chromium/Chrome is required for Developer workbench smoke testing" >&2
+  exit 1
+fi
+
+set +e
+timeout 30s "$browser" \
+  --headless=new \
+  --no-sandbox \
+  --disable-gpu \
+  --disable-dev-shm-usage \
+  --disable-background-networking \
+  --disable-component-update \
+  --disable-default-apps \
+  --disable-extensions \
+  --no-first-run \
+  --virtual-time-budget=12000 \
+  --dump-dom "http://127.0.0.1:$port/?folder=/workspace" \
+  >"$browser_dom" 2>"$browser_log"
+browser_status=$?
+set -e
+if (( browser_status != 0 )); then
+  echo "headless browser failed to boot Developer workbench (exit $browser_status)" >&2
+  exit 1
+fi
+if ! grep -Eq 'monaco-workbench|monaco-grid-view|part editor' "$browser_dom"; then
+  echo "Developer workbench stayed blank: Monaco DOM was not rendered" >&2
+  exit 1
+fi
+
+extension_host_ready=false
+for _ in $(seq 1 40); do
+  runtime_logs="$(docker logs "$workspace" 2>&1 || true)"
+  if grep -Eq '\[ExtensionHostConnection\].*New connection established|Launched Extension Host Process' <<<"$runtime_logs"; then
+    extension_host_ready=true
+    break
+  fi
+  sleep 0.25
+done
+if [[ "$extension_host_ready" != "true" ]]; then
+  echo "Developer workbench opened but Remote ExtensionHost never established" >&2
+  exit 1
+fi
+if grep -Eq 'Extension Host Process exited with code: [1-9]|Converting circular structure to JSON' <<<"$runtime_logs"; then
+  echo "Remote ExtensionHost crashed during browser smoke test" >&2
+  exit 1
+fi
+
 test "$(docker network inspect --format '{{.Internal}}' "$internal")" = "true"
 test "$(docker network inspect --format '{{.Internal}}' "$gateway")" = "false"
 workspace_networks=$(docker inspect --format '{{json .NetworkSettings.Networks}}' "$workspace")
@@ -106,4 +174,4 @@ if printf '%s\n' "$published" | grep -Eq '0\.0\.0\.0|\[::\]|:::'; then
   exit 1
 fi
 
-echo "code-server is healthy through an isolated loopback-only proxy"
+echo "code-server workbench and ExtensionHost are healthy through an isolated loopback-only proxy"
