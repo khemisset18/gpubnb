@@ -39,6 +39,8 @@ const record = (kind, detail) => {
   diagnostics.push({ kind, detail });
 };
 
+const isOptionalVsda = url => /\/static\/node_modules\/vsda\/rust\/web\/vsda(?:_bg\.wasm|\.js)(?:[?#]|$)/.test(String(url || ''));
+
 socket.addEventListener('message', event => {
   const message = JSON.parse(String(event.data));
   if (message.id) {
@@ -141,12 +143,14 @@ fs.writeFileSync(domPath, state.html ?? '', 'utf8');
 delete state.html;
 
 const suspiciousScripts = scriptResponses.filter(row => {
+  if (isOptionalVsda(row.url)) return false;
   const mime = String(row.mimeType || '').toLowerCase();
   return Number(row.status) >= 400 || (!mime.includes('javascript') && !mime.includes('ecmascript') && !mime.includes('wasm'));
 });
 
 const criticalStaticFailures = failedResponses.filter(row => {
   const url = String(row.url || '');
+  if (isOptionalVsda(url)) return false;
   if (!/\/stable-[^/]+\/static\//.test(url)) return false;
   return row.type === 'Script' || /\.(?:js|mjs|wasm|css)(?:[?#]|$)/i.test(url);
 });
