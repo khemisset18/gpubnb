@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { rewriteWorkspaceLocation } from './workspace-gateway-transport.js';
 
 /**
  * VS Code's browser runtime uses inline bootstrap/style blocks, dynamic
@@ -25,15 +26,23 @@ export const WORKSPACE_BROWSER_CSP = [
   "form-action 'self'",
 ].join('; ');
 
-export const isWorkspaceBrowserPath = (url: string): boolean => {
+const workspaceSessionIdFromUrl = (url: string): string | null => {
   const path = url.split('?', 1)[0] || '';
-  return /^\/workspace-gateway\/[^/]+(?:\/|$)/.test(path);
+  const match = path.match(/^\/workspace-gateway\/([^/]+)(?:\/|$)/);
+  return match ? match[1] : null;
 };
+
+export const isWorkspaceBrowserPath = (url: string): boolean => workspaceSessionIdFromUrl(url) !== null;
 
 export const registerWorkspaceBrowserSecurity = (app: FastifyInstance): void => {
   app.addHook('onSend', (request, reply, payload, done) => {
-    if (isWorkspaceBrowserPath(request.url)) {
+    const sessionId = workspaceSessionIdFromUrl(request.url);
+    if (sessionId) {
       reply.header('content-security-policy', WORKSPACE_BROWSER_CSP);
+      const location = reply.getHeader('location');
+      if (typeof location === 'string') {
+        reply.header('location', rewriteWorkspaceLocation(location, sessionId));
+      }
     }
     done(null, payload);
   });
