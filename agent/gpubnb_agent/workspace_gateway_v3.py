@@ -29,6 +29,20 @@ MAX_BROWSER_FRAME_BASE64_BYTES = ((legacy.WS_MAX_FRAME_BYTES + 2) // 3) * 4
 class GatewaySupervisor(transport.GatewaySupervisor):
     """v2 supervisor with lossless, bounded browser-frame forwarding."""
 
+    def _request(
+        self,
+        path: str,
+        method: str = "GET",
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Keep the failing workspace endpoint visible in local diagnostics."""
+        try:
+            return super()._request(path, method, body)
+        except Exception as exc:
+            raise RuntimeError(
+                f"workspace_api_request_failed:{method.upper()}:{path}:{str(exc)[:220]}"
+            ) from exc
+
     @staticmethod
     def _decode_browser_payload(item: dict[str, Any]) -> bytes:
         encoded_value = item.get("dataBase64")
