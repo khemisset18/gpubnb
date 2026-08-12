@@ -32,7 +32,7 @@ test('websocket upgrades fail explicitly and expose a minimal edge health probe'
   assert.doesNotMatch(api,/if\(!token\)\{socket\.destroy\(\)/);
 });
 
-test('browser websocket waits for an explicit signed agent open acknowledgement',()=>{
+test('browser websocket consumes an explicit signed agent open acknowledgement',()=>{
   assert.match(api,/WS_UPSTREAM_OPEN_TIMEOUT_MS/);
   assert.match(api,/openRequestId=crypto\.randomUUID\(\)/);
   assert.match(api,/waitJson\(redis,responseKey\(openRequestId\),WS_UPSTREAM_OPEN_TIMEOUT_MS\)/);
@@ -46,10 +46,17 @@ test('browser websocket waits for an explicit signed agent open acknowledgement'
   assert.doesNotMatch(api,/WS_UPSTREAM_FIRST_FRAME_TIMEOUT_MS/);
 });
 
+test('legacy agents retain first-upstream-frame readiness during rollout',()=>{
+  assert.match(api,/workspace_gateway_legacy_upstream_ready/);
+  assert.match(api,/const legacyReady=await redis\.get\(wsUpstreamReadyKey\(channelId\)\)/);
+  assert.match(api,/redis\.set\(wsUpstreamReadyKey\(channelId\),'1','EX',ttl\)/);
+  assert.match(api,/ws\.on\('message'.*setup\.then\(/);
+});
+
 test('billing activation remains tied to a real upstream websocket frame',()=>{
   assert.match(api,/app\.post\('\/agent\/workspace-gateway\/ws-frame'/);
   assert.match(api,/activateGatewaySession\(db,binding\.sessionId,machineId\)/);
-  assert.doesNotMatch(api,/ws-frame[\s\S]{0,1200}redis\.set\(wsUpstreamReadyKey\(channelId\),'1'/);
+  assert.match(api,/A real frame remains the billing activation signal/);
 });
 
 test('agent developer runtime binds only to loopback and has no host bind mount',()=>{
