@@ -36,6 +36,7 @@ const responseKey=(id:string)=>`workspace-gateway:response:${id}`;
 const wsInputKey=(channelId:string)=>`workspace-gateway:ws-input:${channelId}`;
 const wsChannelKey=(channelId:string)=>`workspace-gateway:ws-channel:${channelId}`;
 const wsUpstreamReadyKey=(channelId:string)=>`workspace-gateway:ws-upstream-ready:${channelId}`;
+const wsSessionActivatedKey=(sessionId:string)=>`workspace-gateway:ws-session-activated:${sessionId}`;
 
 function parseCookie(header:string|undefined,name:string){for(const part of (header||'').split(';')){const [key,...rest]=part.trim().split('=');if(key===name){try{return decodeURIComponent(rest.join('='));}catch{return null;}}}return null;}
 function safePath(value:string){return value.startsWith('/')&&!value.includes('..')&&value.length<=4096;}
@@ -156,11 +157,20 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     const bindingRaw=await redis.get(wsChannelKey(channelId));if(!bindingRaw)return close?{ok:true,stale:true}:reply.code(409).send({error:'unknown_gateway_channel'});
     const binding=JSON.parse(bindingRaw) as GatewayChannelBinding;if(binding.machineId!==machineId)return reply.code(403).send({error:'gateway_channel_machine_mismatch'});
     if(!close){
-      // A real frame remains the billing activation signal and doubles as a
-      // compatibility readiness signal for agents that predate ws_open ACKs.
-      const activation=await activateGatewaySession(db,binding.sessionId,machineId);if(!activation)return reply.code(409).send({error:'interactive_workspace_not_activatable'});
-      const ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((activation.expiresAt.getTime()-Date.now())/1000)));
-      await redis.set(wsUpstreamReadyKey(channelId),'1','EX',ttl);await redis.expire(binding.browserSessionKey,ttl);await redis.expire(wsChannelKey(channelId),ttl);
+      // A real upstream frame remains the billing activation signal. Cache that
+      // session-level activation in Redis so the VS Code protocol hot path does
+      // not run a PostgreSQL transaction for every Management/ExtensionHost frame.
+      const activatedKey=wsSessionActivatedKey(binding.sessionId);
+      let ttl=await redis.ttl(activatedKey);
+      if(ttl<1){
+        const activation=await activateGatewaySession(db,binding.sessionId,machineId);if(!activation)return reply.code(409).send({error:'interactive_workspace_not_activatable'});
+        ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((activation.expiresAt.getTime()-Date.now())/1000)));
+        await redis.set(activatedKey,'1','EX',ttl);await redis.expire(binding.browserSessionKey,ttl);
+      }
+      // Channel readiness is intentionally separate from session activation:
+      // ws_open ACKs may prove a local socket exists, but only a real frame may
+      // activate billing. Legacy agents still use this first-frame readiness key.
+      await redis.set(wsUpstreamReadyKey(channelId),'1','EX',ttl);await redis.expire(wsChannelKey(channelId),ttl);
     }
     await redis.lpush(wsInputKey(channelId),JSON.stringify({dataBase64,binary:body.binary===true,close}));await redis.expire(wsInputKey(channelId),120);
     if(close)await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId));
@@ -189,6 +199,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       });
       return machineUpdate.count===1;
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
+    await redis.del(wsSessionActivatedKey(sessionId));
     return {ok:true,activated:!neverActivated,machineReleased:release};
   });
 
