@@ -185,9 +185,24 @@ export async function sweepOfflineMachines(
             errorCode: 'AGENT_OFFLINE',
             cancelRequestedAt: now,
             finishedAt: now,
+            leaseExpiresAt: null,
           },
         })
       : { count: 0 };
+
+    if (jobUpdate.count > 0) {
+      await tx.jobAttempt.updateMany({
+        where: {
+          jobId: { in: plan.cancelledJobIds },
+          finishedAt: null,
+          job: { status: JobStatus.CANCELLED, errorCode: 'AGENT_OFFLINE' },
+        },
+        data: {
+          finishedAt: now,
+          failureReason: 'AGENT_OFFLINE',
+        },
+      });
+    }
 
     const paymentUpdate = plan.degradedBookingIds.length
       ? await tx.payment.updateMany({
