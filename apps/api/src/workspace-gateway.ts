@@ -19,15 +19,29 @@ const WS_MAX_FRAME_BYTES=4*1024*1024;
 const WS_MAX_BASE64_BYTES=Math.ceil(WS_MAX_FRAME_BYTES/3)*4;
 const AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE=6000;
 const AGENT_RESPONSE_RATE_LIMIT_PER_MINUTE=1200;
+const AGENT_NEXT_BATCH_MAX_ITEMS=64;
+const AGENT_NEXT_BATCH_MAX_JSON_BYTES=16*1024*1024;
+const AGENT_WS_FRAME_BATCH_MAX_ITEMS=32;
+const AGENT_WS_FRAME_BATCH_MAX_BASE64_BYTES=8*1024*1024;
+const WS_FRAME_DEDUPE_TTL_SECONDS=180;
 // The agent reads at most 10 MiB from code-server. Base64 expands that by
 // one third; 15 MiB leaves bounded room for the signed JSON envelope/headers
 // without weakening the API-wide 128 KiB request limit.
 const MAX_AGENT_RELAY_BODY_BYTES=15*1024*1024;
-const SAFE_RESPONSE_HEADERS=new Set(['content-type','cache-control','etag','last-modified','content-length','content-disposition','content-encoding','vary','location']);
+const SAFE_RESPONSE_HEADERS=new Set(['content-type','cache-control','etag','last-modified','content-disposition','content-encoding','vary','location']);
+const ENQUEUE_DEDUPED_WS_FRAME_SCRIPT=`
+if redis.call('SET', KEYS[1], '1', 'EX', ARGV[1], 'NX') then
+  redis.call('LPUSH', KEYS[2], ARGV[3])
+  redis.call('EXPIRE', KEYS[2], ARGV[2])
+  return 1
+end
+return 0
+`;
 
 type RelayRequest={id:string;sessionId:string;kind:'http'|'ws_open'|'ws_send'|'ws_close';method?:string;path?:string;headers?:Record<string,string>;bodyBase64?:string;channelId?:string;dataBase64?:string;binary?:boolean};
 type RelayResponse={status:number;headers?:Record<string,string>;bodyBase64?:string;error?:string};
 type GatewayChannelBinding={sessionId:string;machineId:string;browserSessionKey:string};
+type AgentWsFrame={frameId?:string;channelId?:string;dataBase64?:string;binary?:boolean;close?:boolean};
 type UpgradeStatus=401|403|404|409|500;
 
 const gatewaySessionKey=(token:string)=>`workspace-gateway-session:${crypto.createHash('sha256').update(token).digest('hex')}`;
@@ -37,10 +51,11 @@ const wsInputKey=(channelId:string)=>`workspace-gateway:ws-input:${channelId}`;
 const wsChannelKey=(channelId:string)=>`workspace-gateway:ws-channel:${channelId}`;
 const wsUpstreamReadyKey=(channelId:string)=>`workspace-gateway:ws-upstream-ready:${channelId}`;
 const wsSessionActivatedKey=(sessionId:string)=>`workspace-gateway:ws-session-activated:${sessionId}`;
+const wsFrameSeenKey=(machineId:string,frameId:string)=>`workspace-gateway:ws-frame-seen:${machineId}:${frameId}`;
 
 function parseCookie(header:string|undefined,name:string){for(const part of (header||'').split(';')){const [key,...rest]=part.trim().split('=');if(key===name){try{return decodeURIComponent(rest.join('='));}catch{return null;}}}return null;}
 function safePath(value:string){return value.startsWith('/')&&!value.includes('..')&&value.length<=4096;}
-function relayHeaders(headers:Record<string,unknown>){const allowed=['accept','accept-language','accept-encoding','content-type','if-none-match','if-modified-since','range','user-agent'];return Object.fromEntries(allowed.flatMap(name=>{const value=headers[name];return typeof value==='string'?[[name,value]]:[]}));}
+function relayHeaders(headers:Record<string,unknown>){const allowed=['accept','accept-language','accept-encoding','content-type','if-none-match','if-modified-since','range','user-agent','sec-websocket-protocol'];return Object.fromEntries(allowed.flatMap(name=>{const value=headers[name];return typeof value==='string'?[[name,value]]:[]}));}
 async function waitJson(redis:Redis,key:string,timeoutMs=RESPONSE_TIMEOUT_MS){const deadline=Date.now()+timeoutMs;while(Date.now()<deadline){const raw=await redis.getdel(key);if(raw)return JSON.parse(raw) as RelayResponse;await new Promise(resolve=>setTimeout(resolve,30));}return null;}
 
 export function websocketUpgradeRejection(status:UpgradeStatus,error:string):Buffer{
@@ -57,10 +72,13 @@ function rejectWebSocketUpgrade(socket:Socket,status:UpgradeStatus,error:string)
 async function authenticateAgent(db:PrismaClient,redis:Redis,machineId:string,request:FastifyRequest,routePath:string,withBody=false){
   const machine=await db.machine.findUnique({where:{id:machineId},select:{agentPublicKey:true,keyRevokedAt:true,moderationStatus:true}});
   if(!machine||machine.keyRevokedAt||machine.moderationStatus!==ModerationStatus.CLEAR)return false;
-  if(withBody){
-    if(!request.rawBody)return false;
-    return verifyAgentRequestV2(redis,machineId,machine.agentPublicKey,request.method,routePath,request.rawBody,{timestamp:request.headers['x-agent-timestamp'],nonce:request.headers['x-agent-nonce'],bodySha256:request.headers['x-agent-body-sha256'],signature:request.headers['x-agent-signature-v2'],version:request.headers['x-agent-signature-version']});
+  const versionHeader=request.headers['x-agent-signature-version'];
+  const signatureVersion=Array.isArray(versionHeader)?versionHeader[0]:versionHeader;
+  if(signatureVersion==='2'){
+    const bodyBytes=request.rawBody??Buffer.alloc(0);
+    return verifyAgentRequestV2(redis,machineId,machine.agentPublicKey,request.method,routePath,bodyBytes,{timestamp:request.headers['x-agent-timestamp'],nonce:request.headers['x-agent-nonce'],bodySha256:request.headers['x-agent-body-sha256'],signature:request.headers['x-agent-signature-v2'],version:request.headers['x-agent-signature-version']});
   }
+  if(withBody)return false;
   return verifyAgentRequest(redis,machineId,machine.agentPublicKey,request.method,routePath,request.headers['x-agent-timestamp'],request.headers['x-agent-signature']);
 }
 async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.workspaceSession.findFirst({where:{id:sessionId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR}},select:{id:true,renterId:true,machineId:true,bookingId:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});}
@@ -109,6 +127,17 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     const sessions=await db.workspaceSession.findMany({where:{machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,status:true,expiresAt:true,connectionMetadata:true}});return {sessions};
   });
   app.get('/agent/workspace-gateway/:machineId/next',{config:{rateLimit:{max:AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE,timeWindow:'1 minute'}}},async(request,reply)=>{const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/next`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});const raw=await waitForGatewayQueueItem(redis,machineQueue(machineId));return raw?JSON.parse(raw):reply.code(204).send();});
+  app.get('/agent/workspace-gateway/:machineId/next-batch',{config:{rateLimit:{max:AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE,timeWindow:'1 minute'}}},async(request,reply)=>{
+    const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/next-batch`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});
+    const queueKey=machineQueue(machineId);const first=await waitForGatewayQueueItem(redis,queueKey);if(!first)return reply.code(204).send();
+    const items:RelayRequest[]=[JSON.parse(first) as RelayRequest];let batchBytes=Buffer.byteLength(first,'utf8');
+    while(items.length<AGENT_NEXT_BATCH_MAX_ITEMS){
+      const raw=await redis.rpop(queueKey);if(!raw)break;const candidateBytes=Buffer.byteLength(raw,'utf8')+1;
+      if(batchBytes+candidateBytes>AGENT_NEXT_BATCH_MAX_JSON_BYTES){await redis.rpush(queueKey,raw);break;}
+      items.push(JSON.parse(raw) as RelayRequest);batchBytes+=candidateBytes;
+    }
+    return {items};
+  });
   app.post('/agent/workspace-gateway/:sessionId/register',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;runtimeId?:string;localPort?:number};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/register`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!/^[a-zA-Z0-9_.-]{6,100}$/.test(String(body.runtimeId||''))||!Number.isInteger(body.localPort)||Number(body.localPort)<1024||Number(body.localPort)>65535)return reply.code(400).send({error:'invalid_runtime_registration'});
     const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,status:true,bookingId:true,connectionMetadata:true,booking:{select:{expectedSeconds:true}}}});if(!row)return reply.code(409).send({error:'workspace_not_registerable'});
@@ -150,6 +179,45 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     return {ok:true,validIncrement:increment,pendingActivation:false};
   });
   app.post('/agent/workspace-gateway/respond',{bodyLimit:MAX_AGENT_RELAY_BODY_BYTES,config:{rateLimit:{max:AGENT_RESPONSE_RATE_LIMIT_PER_MINUTE,timeWindow:'1 minute'}}},async(request,reply)=>{const body=request.body as {machineId?:string;id?:string;status?:number;headers?:Record<string,string>;bodyBase64?:string;error?:string};const machineId=String(body.machineId||'');const route='/agent/workspace-gateway/respond';if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!body.id)return reply.code(400).send({error:'response_id_required'});await redis.set(responseKey(body.id),JSON.stringify({status:body.status||502,headers:body.headers||{},bodyBase64:body.bodyBase64||'',error:body.error}),'EX',60);return {ok:true};});
+  app.post('/agent/workspace-gateway/ws-frames',{bodyLimit:MAX_AGENT_RELAY_BODY_BYTES,config:{rateLimit:{max:AGENT_RESPONSE_RATE_LIMIT_PER_MINUTE,timeWindow:'1 minute'}}},async(request,reply)=>{
+    const body=request.body as {machineId?:string;frames?:AgentWsFrame[]};const machineId=String(body.machineId||'');const route='/agent/workspace-gateway/ws-frames';
+    if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
+    if(!Array.isArray(body.frames)||body.frames.length<1||body.frames.length>AGENT_WS_FRAME_BATCH_MAX_ITEMS)return reply.code(400).send({error:'invalid_workspace_ws_frame_batch'});
+    let aggregateBase64Bytes=0;
+    for(const frame of body.frames){
+      const frameId=String(frame.frameId||'');const channelId=String(frame.channelId||'');const close=frame.close===true;const dataBase64=typeof frame.dataBase64==='string'?frame.dataBase64:'';
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(frameId))return reply.code(400).send({error:'frame_id_required'});
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(channelId))return reply.code(400).send({error:'channel_required'});
+      if(!close&&dataBase64.length>WS_MAX_BASE64_BYTES)return reply.code(413).send({error:'workspace_ws_frame_too_large'});
+      aggregateBase64Bytes+=dataBase64.length;if(aggregateBase64Bytes>AGENT_WS_FRAME_BATCH_MAX_BASE64_BYTES)return reply.code(413).send({error:'workspace_ws_frame_batch_too_large'});
+    }
+    let accepted=0;let duplicates=0;let stale=0;
+    for(const frame of body.frames){
+      const frameId=String(frame.frameId);const channelId=String(frame.channelId);const markerKey=wsFrameSeenKey(machineId,frameId);
+      if(await redis.exists(markerKey)){duplicates++;continue;}
+      const close=frame.close===true;const dataBase64=typeof frame.dataBase64==='string'?frame.dataBase64:'';
+      const bindingRaw=await redis.get(wsChannelKey(channelId));
+      if(!bindingRaw){
+        if(close){await redis.set(markerKey,'1','EX',WS_FRAME_DEDUPE_TTL_SECONDS,'NX');stale++;continue;}
+        return reply.code(409).send({error:'unknown_gateway_channel'});
+      }
+      const binding=JSON.parse(bindingRaw) as GatewayChannelBinding;if(binding.machineId!==machineId)return reply.code(403).send({error:'gateway_channel_machine_mismatch'});
+      let ttl=120;
+      if(!close){
+        const activatedKey=wsSessionActivatedKey(binding.sessionId);ttl=await redis.ttl(activatedKey);
+        if(ttl<1){
+          const activation=await activateGatewaySession(db,binding.sessionId,machineId);if(!activation)return reply.code(409).send({error:'interactive_workspace_not_activatable'});
+          ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((activation.expiresAt.getTime()-Date.now())/1000)));
+          await redis.set(activatedKey,'1','EX',ttl);await redis.expire(binding.browserSessionKey,ttl);
+        }
+        await redis.set(wsUpstreamReadyKey(channelId),'1','EX',ttl);await redis.expire(wsChannelKey(channelId),ttl);
+      }
+      const relayPayload=JSON.stringify({dataBase64,binary:frame.binary===true,close});
+      const enqueued=Number(await redis.eval(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,2,markerKey,wsInputKey(channelId),String(WS_FRAME_DEDUPE_TTL_SECONDS),'120',relayPayload));
+      if(enqueued===1){accepted++;if(close)await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId));}else{duplicates++;}
+    }
+    return {ok:true,accepted,duplicates,stale};
+  });
   app.post('/agent/workspace-gateway/ws-frame',{bodyLimit:MAX_AGENT_RELAY_BODY_BYTES,config:{rateLimit:{max:AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE,timeWindow:'1 minute'}}},async(request,reply)=>{
     const body=request.body as {machineId?:string;channelId?:string;dataBase64?:string;binary?:boolean;close?:boolean};const machineId=String(body.machineId||'');const route='/agent/workspace-gateway/ws-frame';
     if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
