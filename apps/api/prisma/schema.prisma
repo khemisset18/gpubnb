@@ -511,6 +511,10 @@ model Job {
   cancelRequestedAt DateTime?
   startedAt DateTime?
   finishedAt DateTime?
+  currentAttemptId String?
+  leaseTokenHash String? @db.VarChar(64)
+  leaseExpiresAt DateTime?
+  lastAgentReportAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -522,6 +526,8 @@ model Job {
   workspaceSession WorkspaceSession?
   @@index([renterId, createdAt])
   @@index([machineId, status, createdAt])
+  @@index([status, leaseExpiresAt])
+  @@index([machineId, currentAttemptId])
 }
 
 model JobAttempt {
