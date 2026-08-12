@@ -29,7 +29,7 @@ export const WORKSPACE_BROWSER_CSP = [
 const workspaceSessionIdFromUrl = (url: string): string | null => {
   const path = url.split('?', 1)[0] || '';
   const match = path.match(/^\/workspace-gateway\/([^/]+)(?:\/|$)/);
-  return match ? match[1] : null;
+  return match?.[1] ?? null;
 };
 
 export const isWorkspaceBrowserPath = (url: string): boolean => workspaceSessionIdFromUrl(url) !== null;
