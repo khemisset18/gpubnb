@@ -21,6 +21,25 @@ test('gateway never returns a direct host endpoint to the renter',()=>{
   assert.match(api,/validIncrement:0,pendingActivation:true/);
 });
 
+test('websocket upgrades fail explicitly and expose a minimal edge health probe',()=>{
+  assert.match(api,/WS_HEALTH_PATH='\/ws-health'/);
+  assert.match(api,/gpubnb-ws-ok/);
+  assert.match(api,/websocketUpgradeRejection/);
+  assert.match(api,/workspace_auth_required/);
+  assert.match(api,/workspace_session_expired/);
+  assert.match(api,/workspace_session_mismatch/);
+  assert.match(api,/workspace_gateway_upgrade_rejected/);
+  assert.doesNotMatch(api,/if\(!token\)\{socket\.destroy\(\)/);
+});
+
+test('browser websocket closes fail-closed when no signed upstream frame arrives',()=>{
+  assert.match(api,/WS_UPSTREAM_FIRST_FRAME_TIMEOUT_MS/);
+  assert.match(api,/workspace-gateway:ws-upstream-ready:/);
+  assert.match(api,/workspace_gateway_upstream_timeout/);
+  assert.match(api,/workspace upstream unavailable/);
+  assert.match(api,/redis\.set\(wsUpstreamReadyKey\(channelId\),'1'/);
+});
+
 test('agent developer runtime binds only to loopback and has no host bind mount',()=>{
   assert.match(agent,/127\.0\.0\.1::3000/);
   assert.match(agent,/--cap-drop=ALL/);
