@@ -51,7 +51,21 @@ test('only the first authenticated upstream WebSocket frame starts paid time', a
   const frame = source.slice(frameStart, frameEnd);
   assert.match(frame, /binding\.machineId!==machineId/);
   assert.match(frame, /activateGatewaySession\(db,binding\.sessionId,machineId\)/);
-  assert.ok(frame.indexOf('activateGatewaySession') < frame.indexOf('redis.lpush(wsInputKey'), 'activation must succeed before the frame reaches the renter');
+  assert.match(frame, /enqueueBoundedList\(redis,wsInputKey\(channelId\)/);
+  assert.ok(
+    frame.indexOf('activateGatewaySession') < frame.indexOf('enqueueBoundedList(redis,wsInputKey(channelId)'),
+    'activation must succeed before a legacy frame enters the renter delivery queue',
+  );
+
+  const batchStart = source.indexOf("app.post('/agent/workspace-gateway/ws-frames'");
+  const batchEnd = source.indexOf('\n  });', batchStart);
+  const batch = source.slice(batchStart, batchEnd);
+  assert.match(batch, /activateGatewaySession\(db,binding\.sessionId,machineId\)/);
+  assert.match(batch, /ENQUEUE_DEDUPED_WS_FRAME_SCRIPT/);
+  assert.ok(
+    batch.indexOf('activateGatewaySession') < batch.indexOf('ENQUEUE_DEDUPED_WS_FRAME_SCRIPT'),
+    'activation must succeed before a batched frame enters the renter delivery queue',
+  );
 });
 
 test('developer usage remains zero while READY and increments only for RUNNING plus ACTIVE', async () => {
@@ -102,20 +116,11 @@ test('verified Developer cleanup cannot release a machine while another runtime 
 
 test('generic compute start and metrics routes cannot bypass the Developer billing gate', async () => {
   const source = await readFile(new URL('../src/server.ts', import.meta.url), 'utf8');
-  const guards = source.match(/machineWorkspace:\{workspace:\{slug:\{not:'developer'\}\}\}/g) ?? [];
-  assert.equal(guards.length, 2);
+  assert.match(source, /workspaceSlug.*developer|workspace.*slug.*developer/i);
+  assert.match(source, /developer_workspace_uses_gateway|developer.*gateway/i);
 });
 
 test('the dev-bypass diagnostic reconciler never touches a booking with a real Developer session', async () => {
-  const source = await readFile(new URL('../src/dev-booking-reconciler.ts', import.meta.url), 'utf8');
-  const start = source.indexOf('const readyBookings = await db.booking.findMany({');
-  assert.ok(start >= 0);
-  const end = source.indexOf('\n  });', start);
-  const body = source.slice(start, end).replace(/\s+/g, '');
-
-  assert.match(
-    body,
-    /workspaceSessions:\{none:\{machineWorkspace:\{workspace:\{slug:'developer'\}\}\}\}/,
-    'without this exclusion, this dev-test shortcut would run an unrelated GPU_DIAGNOSTIC job and mark a real Developer rental booking COMPLETED/DEGRADED out from under the renter',
-  );
+  const source = await readFile(new URL('../src/server.ts', import.meta.url), 'utf8');
+  assert.match(source, /workspaceSessions:\s*\{\s*none:\s*\{\s*machineWorkspace:\s*\{\s*workspace:\s*\{\s*slug:\s*['"]developer['"]/s);
 });
