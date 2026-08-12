@@ -63,16 +63,18 @@ function parseVersion(value: string | null | undefined): [number, number, number
   if (!value) return null;
   const match = value.trim().match(/^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
   if (!match) return null;
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
+  const [, major, minor, patch] = match;
+  if (major === undefined || minor === undefined || patch === undefined) return null;
+  return [Number(major), Number(minor), Number(patch)];
 }
 
 export function supportsJobLeaseProtocol(agentVersion: string | null | undefined): boolean {
   const actual = parseVersion(agentVersion);
-  const required = parseVersion(JOB_LEASE_PROTOCOL_VERSION)!;
-  if (!actual) return false;
-  for (let index = 0; index < 3; index += 1) {
-    if (actual[index] > required[index]) return true;
-    if (actual[index] < required[index]) return false;
-  }
-  return true;
+  const required = parseVersion(JOB_LEASE_PROTOCOL_VERSION);
+  if (!actual || !required) return false;
+  const [actualMajor, actualMinor, actualPatch] = actual;
+  const [requiredMajor, requiredMinor, requiredPatch] = required;
+  if (actualMajor !== requiredMajor) return actualMajor > requiredMajor;
+  if (actualMinor !== requiredMinor) return actualMinor > requiredMinor;
+  return actualPatch >= requiredPatch;
 }
