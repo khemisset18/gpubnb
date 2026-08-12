@@ -545,7 +545,7 @@ class FileTransferSigningTests(unittest.TestCase):
         self.assertEqual(headers["x-agent-body-sha256"], actual_body_sha256, "signed hash must match the bytes actually sent")
 
         v2_canonical = (
-            f"POST|/jobs/job-1/artifacts?machineId=m|{machine_id}|"
+            f"POST|/jobs/job-1/artifacts|{machine_id}|"
             f"{headers['x-agent-timestamp']}|{headers['x-agent-nonce']}|{actual_body_sha256}"
         )
         verify_key = VerifyKey(bytes(key.verify_key))
