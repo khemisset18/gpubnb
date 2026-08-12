@@ -116,11 +116,20 @@ test('verified Developer cleanup cannot release a machine while another runtime 
 
 test('generic compute start and metrics routes cannot bypass the Developer billing gate', async () => {
   const source = await readFile(new URL('../src/server.ts', import.meta.url), 'utf8');
-  assert.match(source, /workspaceSlug.*developer|workspace.*slug.*developer/i);
-  assert.match(source, /developer_workspace_uses_gateway|developer.*gateway/i);
+  const guards = source.match(/machineWorkspace:\{workspace:\{slug:\{not:'developer'\}\}\}/g) ?? [];
+  assert.equal(guards.length, 2);
 });
 
 test('the dev-bypass diagnostic reconciler never touches a booking with a real Developer session', async () => {
-  const source = await readFile(new URL('../src/server.ts', import.meta.url), 'utf8');
-  assert.match(source, /workspaceSessions:\s*\{\s*none:\s*\{\s*machineWorkspace:\s*\{\s*workspace:\s*\{\s*slug:\s*['"]developer['"]/s);
+  const source = await readFile(new URL('../src/dev-booking-reconciler.ts', import.meta.url), 'utf8');
+  const start = source.indexOf('const readyBookings = await db.booking.findMany({');
+  assert.ok(start >= 0);
+  const end = source.indexOf('\n  });', start);
+  const body = source.slice(start, end).replace(/\s+/g, '');
+
+  assert.match(
+    body,
+    /workspaceSessions:\{none:\{machineWorkspace:\{workspace:\{slug:'developer'\}\}\}\}/,
+    'without this exclusion, this dev-test shortcut would run an unrelated GPU_DIAGNOSTIC job and mark a real Developer rental booking COMPLETED/DEGRADED out from under the renter',
+  );
 });
