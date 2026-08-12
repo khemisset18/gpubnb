@@ -405,7 +405,7 @@ class GatewaySupervisor(legacy.GatewaySupervisor):
                 "ws_local_connected",
                 session_id=session_id,
                 channel_id=channel_id,
-                detail=f"handshake={handshake_ms}ms:selected={bool(ws.subprotocol)}",
+                detail=f"handshake={handshake_ms}ms:selected={bool(getattr(ws, 'subprotocol', None))}",
             )
             reader = threading.Thread(
                 target=self._ws_reader,
