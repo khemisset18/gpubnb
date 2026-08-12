@@ -156,3 +156,18 @@ test('normal queued work receives one auditable attempt and one explicit lease',
   assert.equal(fake.jobWrites[0].data.currentAttemptId, 'attempt-1');
   assert.equal(fake.jobWrites[0].data.lastAgentReportAt, NOW);
 });
+
+test('every new queued rental job is gated to five minutes before startsAt', async () => {
+  const fake = fakeTransaction({ abandoned: null, queued: null });
+
+  await claimNextAgentJobInTransaction(fake.tx, claimOptions);
+
+  const queuedQuery = fake.findQueries[1];
+  assert.ok(queuedQuery, 'queued lookup should run after abandoned preparation lookup');
+  assert.equal(queuedQuery.where.OR, undefined, 'WORKSPACE_PREPARE must not bypass the rental start window');
+  assert.equal(
+    queuedQuery.where.booking.startsAt.lte.toISOString(),
+    '2026-08-11T00:05:00.000Z',
+  );
+  assert.equal(queuedQuery.where.booking.endsAt.gte, NOW);
+});
