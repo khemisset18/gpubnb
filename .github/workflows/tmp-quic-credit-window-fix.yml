@@ -1,3 +1,4 @@
+# Temporary exact-head validator; removed by its successful commit step.
 name: tmp-quic-credit-window-fix
 
 on:
