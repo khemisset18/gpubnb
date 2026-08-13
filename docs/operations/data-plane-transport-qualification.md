@@ -27,7 +27,8 @@ GPUbnb uses explicit transport bounds instead of Quinn defaults:
 
 | Resource | Default / limit | Rationale |
 |---|---:|---|
-| Remote bidi streams / connection | 64 | Matches `EdgeRegistry.max_streams_per_session` |
+| Remote bidi streams / connection | 65 | 1 authority/control stream + 64 workspace application streams |
+| Workspace application bidi streams / session | 64 | Matches `EdgeRegistry.max_streams_per_session` |
 | Remote uni streams | 0 | Protocol v1 does not use peer-initiated uni streams |
 | Stream receive window | 2 MiB | Below the 8 MiB application per-stream buffer ceiling |
 | Connection receive window | 8 MiB | Below the 16 MiB application per-session ceiling |
@@ -38,6 +39,8 @@ GPUbnb uses explicit transport bounds instead of Quinn defaults:
 | Application buffered-byte budget | 512 MiB | Existing `EdgeRegistry` global bound |
 | Idle timeout | 60 s | Reclaims dead/stalled connection state |
 | UDP socket buffer target | 16 MiB send + 16 MiB receive | Covers roughly the BDP of 1 Gbit/s at 100 ms RTT |
+
+The extra QUIC bidi stream is protocol control capacity, not an extra workspace stream. This avoids coupling the advertised 64-stream workspace limit to when QUIC returns credit for the short-lived authority stream. Application admission remains hard-bounded at 64 by `EdgeRegistry`.
 
 The transport memory figure is a conservative configuration envelope, not a claim that Quinn eagerly allocates the entire amount. Production node sizing MUST reserve the full configured transport envelope plus the 512 MiB application buffer ceiling and runtime/OS headroom. The default profile therefore requires at least 8 GiB RAM on an Edge node; larger connection caps require a correspondingly larger explicit `GPUBNB_EDGE_TRANSPORT_MEMORY_BUDGET_MIB` and node memory class.
 
@@ -84,7 +87,7 @@ The dedicated qualification job must prove, against the real Edge and Host binar
 
 1. **Idle/stalled pre-auth:** a completed QUIC/TLS handshake that sends no authority is reclaimed by the configured idle timeout.
 2. **Connection flood:** concurrent pre-auth handshakes hit Retry/capacity protection without process death or unbounded memory growth.
-3. **Stream pressure:** the 64-bidirectional-stream transport/application limit blocks additional work until capacity is released.
+3. **Stream pressure:** all 64 workspace application streams can be admitted concurrently after the authority/control stream, a 65th workspace stream is blocked, and released capacity becomes reusable.
 4. **Slow path / backpressure:** a routed file-transfer remains byte-identical under injected delay, jitter, packet loss and reordering with bounded QUIC windows.
 5. **Replay + crash/corruption:** consumed authorities remain rejected after restart and corrupted replay state quarantines/fails closed.
 6. **Drain:** Edge shutdown stops new admission and terminates existing QUIC state inside the qualification deadline.
