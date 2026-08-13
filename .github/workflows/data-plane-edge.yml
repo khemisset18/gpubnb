@@ -99,7 +99,7 @@ jobs:
       - name: Build Edge and E2E client
         run: cargo build --manifest-path services/edge/Cargo.toml --bin gpubnb-edge --example e2e_client
 
-      - name: Real QUIC authority, replay, reconnect and crash-restart E2E
+      - name: Real QUIC authority, replay, reconnect, idle and crash-restart E2E
         shell: bash
         run: |
           set -euo pipefail
@@ -129,8 +129,6 @@ jobs:
           }
           trap cleanup EXIT
 
-          # Use a real CA -> leaf chain. rustls correctly rejects a CA
-          # certificate reused as an end-entity server certificate.
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
             -keyout "$TMP/ca-key.pem" -out "$TMP/ca-cert.pem" \
             -subj '/CN=GPUbnb E2E Root' \
@@ -157,6 +155,8 @@ jobs:
           export GPUBNB_EDGE_ID='edge_e2e_1'
           export GPUBNB_EDGE_REPLAY_DIR="$TMP/replay"
           export GPUBNB_EDGE_AUTHORITY_PUBLIC_KEY_HEX="$(tr -d '\n' < "$TMP/authority-public.hex")"
+          export GPUBNB_EDGE_IDLE_TIMEOUT_MS='5000'
+          export GPUBNB_EDGE_MAX_CONNECTIONS='256'
 
           start_edge() {
             EDGE_RUN=$((EDGE_RUN + 1))
@@ -209,14 +209,20 @@ jobs:
           }
 
           start_edge
+          grep -q 'idle_timeout_ms=5000' "$EDGE_LOG"
+          grep -q 'max_connections=256' "$EDGE_LOG"
+
+          # A client completing QUIC/TLS but never presenting an authority must
+          # be reclaimed by the negotiated idle timeout.
+          services/edge/target/debug/examples/e2e_client \
+            127.0.0.1:4433 "$TMP/ca-cert.pem" expect-idle-timeout
+
           client expect-ok "$TMP/authority-1.json"
           client expect-reject "$TMP/authority-1.json"
           client expect-ok "$TMP/authority-2.json"
           assert_log_count 'edge_authority_replay_rejected' 1
           assert_log_count 'edge_session_authenticated' 2
 
-          # Simulate an ungraceful process loss. Replay state must already be
-          # durable before the successful session admission above.
           crash_edge
 
           start_edge
