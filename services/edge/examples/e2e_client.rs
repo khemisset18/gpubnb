@@ -201,7 +201,9 @@ async fn open_pressure_replacement(
     let mut attempt = 0_u32;
 
     loop {
-        attempt = attempt.checked_add(1).context("pressure retry counter overflow")?;
+        attempt = attempt
+            .checked_add(1)
+            .context("pressure retry counter overflow")?;
         let stream_id = 10_000_u32
             .checked_add(rotation.saturating_mul(1_000))
             .and_then(|value| value.checked_add(attempt))
