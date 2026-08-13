@@ -96,10 +96,10 @@ jobs:
         working-directory: apps/api
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Build Edge and E2E client
-        run: cargo build --manifest-path services/edge/Cargo.toml --bin gpubnb-edge --example e2e_client
+      - name: Build Edge, Host tunnel and E2E client
+        run: cargo build --manifest-path services/edge/Cargo.toml --bin gpubnb-edge --bin gpubnb-host-tunnel --example e2e_client
 
-      - name: Real QUIC authority, replay, reconnect, idle, capacity and crash-restart E2E
+      - name: Real QUIC replay, reconnect, workspace routing, idle, capacity and crash-restart E2E
         shell: bash
         run: |
           set -euo pipefail
@@ -107,22 +107,27 @@ jobs:
           mkdir -p "$TMP/replay"
           EDGE_PID=''
           HOLD_PID=''
+          HOST_PID=''
+          ECHO_PID=''
           EDGE_RUN=0
           EDGE_LOG=''
 
           cleanup() {
             status=$?
             set +e
-            if [[ -n "${HOLD_PID:-}" ]]; then
-              kill "$HOLD_PID" 2>/dev/null || true
-              wait "$HOLD_PID" 2>/dev/null || true
-            fi
+            for pid_name in HOLD_PID HOST_PID ECHO_PID; do
+              pid="${!pid_name:-}"
+              if [[ -n "$pid" ]]; then
+                kill -INT "$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+                wait "$pid" 2>/dev/null || true
+              fi
+            done
             if [[ -n "${EDGE_PID:-}" ]]; then
               kill -INT "$EDGE_PID" 2>/dev/null || true
               wait "$EDGE_PID" 2>/dev/null || true
             fi
             if (( status != 0 )); then
-              for log in "$TMP"/edge-*.log "$TMP"/hold.log; do
+              for log in "$TMP"/edge-*.log "$TMP"/hold.log "$TMP"/host.log "$TMP"/echo.log; do
                 [[ -f "$log" ]] || continue
                 echo "===== ${log##*/} ====="
                 cat "$log"
@@ -202,13 +207,14 @@ jobs:
           }
 
           assert_log_count() {
-            local event="$1"
-            local expected="$2"
+            local log="$1"
+            local event="$2"
+            local expected="$3"
             local actual
-            actual="$(grep -c "$event" "$EDGE_LOG" || true)"
+            actual="$(grep -c "$event" "$log" || true)"
             if [[ "$actual" -ne "$expected" ]]; then
-              echo "expected $expected occurrences of $event in ${EDGE_LOG##*/}, got $actual"
-              cat "$EDGE_LOG"
+              echo "expected $expected occurrences of $event in ${log##*/}, got $actual"
+              cat "$log"
               return 1
             fi
           }
@@ -223,16 +229,79 @@ jobs:
           client expect-ok "$TMP/authority-1.json"
           client expect-reject "$TMP/authority-1.json"
           client expect-ok "$TMP/authority-2.json"
-          assert_log_count 'edge_authority_replay_rejected' 1
-          assert_log_count 'edge_session_authenticated' 2
+          assert_log_count "$EDGE_LOG" 'edge_authority_replay_rejected' 1
+          assert_log_count "$EDGE_LOG" 'edge_session_authenticated' 2
 
           crash_edge
 
           start_edge
           client expect-reject "$TMP/authority-2.json"
           client expect-ok "$TMP/authority-3.json"
-          assert_log_count 'edge_authority_replay_rejected' 1
-          assert_log_count 'edge_session_authenticated' 1
+          assert_log_count "$EDGE_LOG" 'edge_authority_replay_rejected' 1
+          assert_log_count "$EDGE_LOG" 'edge_session_authenticated' 1
+
+          # Real renter-byte route: a loopback-only TCP target stands in for the
+          # code-server proxy. Host connects outbound to Edge, and Management +
+          # ExtensionHost must independently echo byte-identical payloads.
+          python3 -u - <<'PY' >"$TMP/echo.log" 2>&1 &
+          import socketserver
+
+          class Echo(socketserver.BaseRequestHandler):
+              def handle(self):
+                  while True:
+                      data = self.request.recv(65536)
+                      if not data:
+                          return
+                      self.request.sendall(data)
+
+          class Server(socketserver.ThreadingTCPServer):
+              allow_reuse_address = True
+              daemon_threads = True
+
+          with Server(("127.0.0.1", 39001), Echo) as server:
+              print("echo-ready", flush=True)
+              server.serve_forever()
+          PY
+          ECHO_PID=$!
+          for _ in $(seq 1 30); do
+            grep -q 'echo-ready' "$TMP/echo.log" && break
+            kill -0 "$ECHO_PID" 2>/dev/null || { cat "$TMP/echo.log"; exit 1; }
+            sleep 0.1
+          done
+          grep -q 'echo-ready' "$TMP/echo.log"
+
+          export GPUBNB_HOST_EDGE_ADDR='127.0.0.1:4433'
+          export GPUBNB_HOST_EDGE_SERVER_NAME='localhost'
+          export GPUBNB_HOST_EDGE_CA_CERT="$TMP/ca-cert.pem"
+          export GPUBNB_HOST_AUTHORITY="$TMP/authority-host.json"
+          export GPUBNB_HOST_WORKSPACE_PORT='39001'
+          services/edge/target/debug/gpubnb-host-tunnel >"$TMP/host.log" 2>&1 &
+          HOST_PID=$!
+          for _ in $(seq 1 50); do
+            grep -q 'host_tunnel_ready' "$TMP/host.log" && break
+            kill -0 "$HOST_PID" 2>/dev/null || { cat "$TMP/host.log"; exit 1; }
+            sleep 0.1
+          done
+          grep -q 'host_tunnel_ready' "$TMP/host.log"
+          grep -q 'edge_host_tunnel_ready' "$EDGE_LOG"
+
+          services/edge/target/debug/examples/e2e_client \
+            127.0.0.1:4433 "$TMP/ca-cert.pem" route-interactive "$TMP/authority-renter-route.json"
+          assert_log_count "$EDGE_LOG" 'edge_session_interactive_ready' 1
+          assert_log_count "$EDGE_LOG" 'edge_stream_closed' 2
+          assert_log_count "$TMP/host.log" 'host_stream_closed' 2
+
+          kill -INT "$HOST_PID"
+          wait "$HOST_PID"
+          HOST_PID=''
+          for _ in $(seq 1 30); do
+            grep -q 'edge_host_tunnel_closed' "$EDGE_LOG" && break
+            sleep 0.1
+          done
+          grep -q 'edge_host_tunnel_closed' "$EDGE_LOG"
+          kill "$ECHO_PID"
+          wait "$ECHO_PID" 2>/dev/null || true
+          ECHO_PID=''
           stop_edge
 
           # Runtime admission-cap proof: hold one fully handshaken pre-auth
@@ -252,7 +321,7 @@ jobs:
           grep -q 'preauth-connected' "$TMP/hold.log"
           services/edge/target/debug/examples/e2e_client \
             127.0.0.1:4433 "$TMP/ca-cert.pem" expect-capacity-reject
-          assert_log_count 'edge_connection_refused_capacity' 1
+          assert_log_count "$EDGE_LOG" 'edge_connection_refused_capacity' 1
           wait "$HOLD_PID"
           HOLD_PID=''
           stop_edge
