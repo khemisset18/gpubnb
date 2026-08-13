@@ -20,7 +20,8 @@ use wire::{
 };
 
 const CONTROL_RESPONSE_MAX_BYTES: usize = 8 * 1024;
-const ROUTED_RESPONSE_MAX_BYTES: usize = 1024 * 1024;
+const ROUTED_RESPONSE_MAX_BYTES: usize = 4 * 1024 * 1024;
+const PRESSURE_STREAMS: u32 = 64;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -230,6 +231,86 @@ async fn run_interactive_route_case(
     Ok(())
 }
 
+async fn run_large_route_case(
+    endpoint: &Endpoint,
+    addr: SocketAddr,
+    authority: &[u8],
+) -> Result<()> {
+    let connection = connect(endpoint, addr).await?;
+    authenticate(&connection, authority).await?;
+    let stream = open_routed_stream(&connection, 201, WireStreamKind::FileTransfer).await?;
+    let mut payload = vec![0_u8; 1024 * 1024];
+    for (index, byte) in payload.iter_mut().enumerate() {
+        *byte = ((index * 31 + 17) % 251) as u8;
+    }
+    tokio::time::timeout(Duration::from_secs(30), assert_echo(stream.0, stream.1, &payload))
+        .await
+        .context("large routed transfer exceeded bounded deadline")??;
+    connection.close(0_u8.into(), b"large routed E2E complete");
+    Ok(())
+}
+
+async fn run_stream_pressure_case(
+    endpoint: &Endpoint,
+    addr: SocketAddr,
+    authority: &[u8],
+) -> Result<()> {
+    let connection = connect(endpoint, addr).await?;
+    authenticate(&connection, authority).await?;
+
+    let mut streams = Vec::with_capacity(PRESSURE_STREAMS as usize);
+    for index in 0..PRESSURE_STREAMS {
+        streams.push(
+            open_routed_stream(
+                &connection,
+                1_000 + index,
+                WireStreamKind::Terminal,
+            )
+            .await
+            .with_context(|| format!("open pressure stream {index}"))?,
+        );
+    }
+
+    if tokio::time::timeout(Duration::from_millis(750), connection.open_bi())
+        .await
+        .is_ok()
+    {
+        bail!("65th bidirectional stream opened before capacity was released");
+    }
+
+    let (mut released_send, released_recv) = streams.remove(0);
+    released_send
+        .finish()
+        .context("finish released pressure stream")?;
+    drop(released_recv);
+
+    let (mut send, mut recv) = tokio::time::timeout(Duration::from_secs(5), connection.open_bi())
+        .await
+        .context("stream capacity was not released after closing one stream")??;
+    let frame = OpenStreamFrame {
+        message_type: "OPEN_STREAM".into(),
+        stream_id: 9_999,
+        kind: WireStreamKind::Terminal,
+        target_port: None,
+        resume_from_sequence: None,
+    };
+    write_json_frame(&mut send, &frame, STREAM_METADATA_MAX_BYTES).await?;
+    let status: StreamStatusFrame = read_json_frame(&mut recv, STREAM_STATUS_MAX_BYTES).await?;
+    status.validate_for(9_999)?;
+    if !status.is_accepted() {
+        bail!("replacement stream was rejected after capacity release");
+    }
+    send.finish().context("finish replacement pressure stream")?;
+    drop(recv);
+
+    for (mut send, recv) in streams {
+        let _ = send.finish();
+        drop(recv);
+    }
+    connection.close(0_u8.into(), b"stream pressure E2E complete");
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -266,12 +347,17 @@ async fn main() -> Result<()> {
             }
             run_hold_preauth_case(&endpoint, addr, hold_ms).await?;
         }
-        "route-interactive" => {
+        "route-interactive" | "route-large" | "stream-pressure" => {
             if args.len() != 5 {
-                bail!("route-interactive requires a RENTER authority path");
+                bail!("routed test mode requires a RENTER authority path");
             }
             let authority = std::fs::read(&args[4]).context("read renter route authority")?;
-            run_interactive_route_case(&endpoint, addr, &authority).await?;
+            match args[3].as_str() {
+                "route-interactive" => run_interactive_route_case(&endpoint, addr, &authority).await?,
+                "route-large" => run_large_route_case(&endpoint, addr, &authority).await?,
+                "stream-pressure" => run_stream_pressure_case(&endpoint, addr, &authority).await?,
+                _ => unreachable!(),
+            }
         }
         "expect-ok" | "expect-reject" => {
             if args.len() != 5 {
