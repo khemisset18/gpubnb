@@ -17,43 +17,70 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: feature/agent-host-tunnel-bootstrap
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-python@v6
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: apps/api/package-lock.json
-      - name: Apply exact route patch
+          python-version: '3.12'
+      - name: Apply exact Agent integration patch
         shell: python
         run: |
           from pathlib import Path
-          path = Path('apps/api/src/workspace-gateway.ts')
+          path = Path('agent/gpubnb_agent/workspace_gateway.py')
           text = path.read_text()
-          import_old = "import WebSocket from 'ws';\nimport { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';"
-          import_new = "import WebSocket from 'ws';\nimport { dataPlaneHostBootstrapEnabled, issueHostTunnelBootstrap, loadDataPlaneHostRuntimeConfig } from './data-plane-host-bootstrap.js';\nimport { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';"
-          if text.count(import_old) != 1:
-              raise SystemExit(f'import anchor count={text.count(import_old)}')
-          text = text.replace(import_old, import_new, 1)
 
-          desired_old = "const sessions=await db.workspaceSession.findMany({where:{machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,status:true,expiresAt:true,connectionMetadata:true}});return {sessions};\n  });\n  app.get('/agent/workspace-gateway/:machineId/next'"
-          desired_new = "const sessions=await db.workspaceSession.findMany({where:{machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,status:true,expiresAt:true,connectionMetadata:true}});return {sessions,dataPlane:{hostTunnelEnabled:dataPlaneHostBootstrapEnabled()}};\n  });\n  app.get('/agent/workspace-gateway/:machineId/sessions/:sessionId/data-plane-host',{config:{rateLimit:{max:120,timeWindow:'1 minute'}}},async(request,reply)=>{\n    const params=request.params as {machineId?:string;sessionId?:string};const machineId=String(params.machineId||'');const sessionId=String(params.sessionId||'');const route=`/agent/workspace-gateway/${machineId}/sessions/${sessionId}/data-plane-host`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});\n    const runtime=loadDataPlaneHostRuntimeConfig();if(!runtime)return reply.code(404).send({error:'data_plane_disabled'});\n    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,machineId:true,bookingId:true,renterId:true}});if(!row)return reply.code(404).send({error:'workspace_session_not_available'});\n    return issueHostTunnelBootstrap(runtime,{sessionId:row.id,machineId:row.machineId,bookingId:row.bookingId,renterUserId:row.renterId});\n  });\n  app.get('/agent/workspace-gateway/:machineId/next'"
-          if text.count(desired_old) != 1:
-              raise SystemExit(f'desired anchor count={text.count(desired_old)}')
-          text = text.replace(desired_old, desired_new, 1)
+          old = "from .client import ApiClient, agent_request\nfrom .mining_guard import"
+          new = "from .client import ApiClient, agent_request\nfrom .host_tunnel import HostTunnelSupervisor\nfrom .mining_guard import"
+          if text.count(old) != 1:
+              raise SystemExit(f'import anchor count={text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = "        self._http_slots = threading.BoundedSemaphore(HTTP_RELAY_MAX_CONCURRENCY)\n        self._docker_runner: DockerRunner = docker_runner or _real_docker"
+          new = "        self._http_slots = threading.BoundedSemaphore(HTTP_RELAY_MAX_CONCURRENCY)\n        self.host_tunnels = HostTunnelSupervisor(api, key, machine_id, config)\n        self._docker_runner: DockerRunner = docker_runner or _real_docker"
+          if text.count(old) != 1:
+              raise SystemExit(f'init anchor count={text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = "    def _stop_runtime(self, session_id: str) -> bool:\n        self._close_session_channels(session_id)"
+          new = "    def _stop_runtime(self, session_id: str) -> bool:\n        self.host_tunnels.stop(session_id)\n        self._close_session_channels(session_id)"
+          if text.count(old) != 1:
+              raise SystemExit(f'stop anchor count={text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = "        sessions = desired.get(\"sessions\") or []\n        keep_alive_ids = {"
+          new = "        sessions = desired.get(\"sessions\") or []\n        data_plane = desired.get(\"dataPlane\") if isinstance(desired.get(\"dataPlane\"), dict) else {}\n        host_tunnel_enabled = data_plane.get(\"hostTunnelEnabled\") is True\n        keep_alive_ids = {"
+          if text.count(old) != 1:
+              raise SystemExit(f'desired anchor count={text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = "        self._sweep_orphaned_containers(keep_alive_ids)\n        for session in sessions:"
+          new = "        self._sweep_orphaned_containers(keep_alive_ids)\n        self.host_tunnels.stop_except(keep_alive_ids)\n        for session in sessions:"
+          if text.count(old) != 1:
+              raise SystemExit(f'sweep anchor count={text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = "            if metadata.get(\"runtimeId\") != existing.container_name or metadata.get(\"localPort\") != existing.port:\n                self._request(f\"/agent/workspace-gateway/{session_id}/register\", \"POST\", {\"machineId\": self.machine_id, \"runtimeId\": existing.container_name, \"localPort\": existing.port})"
+          new = "            try:\n                self.host_tunnels.reconcile(session_id, existing.port, host_tunnel_enabled)\n            except Exception as exc:\n                # Data Plane is an additive path until canary qualification completes.\n                # Keep the proven legacy gateway alive while surfacing tunnel failures.\n                self._report_error(exc)\n            if metadata.get(\"runtimeId\") != existing.container_name or metadata.get(\"localPort\") != existing.port:\n                self._request(f\"/agent/workspace-gateway/{session_id}/register\", \"POST\", {\"machineId\": self.machine_id, \"runtimeId\": existing.container_name, \"localPort\": existing.port})"
+          if text.count(old) != 1:
+              raise SystemExit(f'reconcile anchor count={text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = "            else:\n                self._last_error_signature = None\n                time.sleep(0.05)\n\n\ndef run_workspace_gateway_forever("
+          new = "            else:\n                self._last_error_signature = None\n                time.sleep(0.05)\n        self.host_tunnels.stop_all()\n\n\ndef run_workspace_gateway_forever("
+          if text.count(old) != 1:
+              raise SystemExit(f'run anchor count={text.count(old)}')
+          text = text.replace(old, new, 1)
           path.write_text(text)
-      - name: Validate API
-        working-directory: apps/api
+      - name: Validate Agent syntax and tests
+        shell: bash
         run: |
-          npm ci --ignore-scripts --no-audit --no-fund
-          npx prisma generate
-          npx tsx --test test/data-plane-*.test.ts
-          npx tsc -p tsconfig.json --noEmit
-      - name: Commit validated patch
+          python -m compileall -q agent/gpubnb_agent
+          python -m unittest discover -s agent/tests -p 'test_*.py'
+      - name: Commit validated integration
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add apps/api/src/workspace-gateway.ts
-          git commit -m 'feat(api): issue authenticated Host tunnel bootstrap'
+          git add agent/gpubnb_agent/workspace_gateway.py
+          git commit -m 'feat(agent): auto-start Host tunnel with legacy fallback'
           git push origin HEAD:feature/agent-host-tunnel-bootstrap
