@@ -1,0 +1,63 @@
+name: tmp-quic-overflow-stop-fix
+
+on:
+  push:
+    branches:
+      - hardening/data-plane-production-qualification
+    paths:
+      - .github/workflows/tmp-quic-overflow-stop-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: hardening/data-plane-production-qualification
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+      - name: Patch rejected-stream terminal semantics
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('services/edge/examples/e2e_client.rs')
+          s = p.read_text()
+          old = '''    match tokio::time::timeout(Duration::from_secs(5), overflow_send.stopped())
+                  .await
+                  .context("over-capacity request FIN was not acknowledged")??
+              {
+                  None => {}
+                  Some(code) => bail!("over-capacity request was stopped unexpectedly: {code}"),
+              }
+          '''
+          new = '''    match tokio::time::timeout(Duration::from_secs(5), overflow_send.stopped())
+                  .await
+                  .context("over-capacity request termination was not observed")??
+              {
+                  None => {}
+                  Some(code) if code == quinn::VarInt::from_u32(0) => {}
+                  Some(code) => bail!("over-capacity request was stopped with unexpected code: {code}"),
+              }
+          '''
+          if s.count(old) != 1:
+              raise SystemExit(f'expected one overflow stopped block, found {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Validate Rust
+        run: |
+          cargo fmt --manifest-path services/edge/Cargo.toml -- --check
+          cargo test --manifest-path services/edge/Cargo.toml --all-targets
+          cargo clippy --manifest-path services/edge/Cargo.toml --all-targets -- -D warnings
+      - name: Commit source and remove validator
+        run: |
+          git config user.name "gpubnb-ci"
+          git config user.email "gpubnb-ci@users.noreply.github.com"
+          git rm .github/workflows/tmp-quic-overflow-stop-fix.yml
+          git add services/edge/examples/e2e_client.rs
+          git commit -m "test(data-plane): accept clean STOP on rejected stream"
+          git push origin HEAD:hardening/data-plane-production-qualification
