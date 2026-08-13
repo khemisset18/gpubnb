@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import time
@@ -26,6 +27,9 @@ BACKOFF_MAX_SECONDS = 30.0
 BACKOFF_JITTER_MIN = 0.75
 BACKOFF_JITTER_SPAN = 0.50
 PROCESS_STABLE_RESET_SECONDS = 30.0
+SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,160}$")
+SAFE_NONCE = re.compile(r"^[A-Fa-f0-9]{64}$")
+SAFE_SIGNATURE = re.compile(r"^[A-Fa-f0-9]{128}$")
 
 
 class ProcessLike(Protocol):
@@ -115,8 +119,9 @@ class HostTunnelSupervisor:
                 return candidate
         raise RuntimeError("host_tunnel_binary_missing")
 
-    @staticmethod
-    def _validate_bootstrap(value: dict[str, Any]) -> dict[str, Any]:
+    def _validate_bootstrap(
+        self, value: dict[str, Any], expected_session_id: str
+    ) -> dict[str, Any]:
         protocol = value.get("protocol")
         edge_id = value.get("edgeId")
         edge_addr = value.get("edgeAddr")
@@ -134,12 +139,42 @@ class HostTunnelSupervisor:
         ):
             if not isinstance(field, str) or not field.strip():
                 raise RuntimeError(f"host_tunnel_bootstrap_{name}_invalid")
+        if not isinstance(edge_id, str) or SAFE_ID.fullmatch(edge_id) is None:
+            raise RuntimeError("host_tunnel_bootstrap_edge_id_invalid")
+        if not isinstance(ca_cert, str) or "-----BEGIN CERTIFICATE-----" not in ca_cert:
+            raise RuntimeError("host_tunnel_bootstrap_ca_cert_invalid")
         if not isinstance(authority, dict) or authority.get("role") != "HOST":
             raise RuntimeError("host_tunnel_bootstrap_authority_invalid")
+        if authority.get("edgeId") != edge_id:
+            raise RuntimeError("host_tunnel_bootstrap_edge_scope_mismatch")
+        signature = authority.get("signatureHex")
+        if not isinstance(signature, str) or SAFE_SIGNATURE.fullmatch(signature) is None:
+            raise RuntimeError("host_tunnel_bootstrap_signature_invalid")
         binding = authority.get("binding")
-        if not isinstance(binding, dict) or not isinstance(binding.get("nonce"), str):
+        if not isinstance(binding, dict):
             raise RuntimeError("host_tunnel_bootstrap_binding_invalid")
-        if not isinstance(expires_at, int) or expires_at <= 0:
+        if binding.get("protocolVersion") != 1:
+            raise RuntimeError("host_tunnel_bootstrap_binding_protocol_invalid")
+        if binding.get("sessionId") != expected_session_id:
+            raise RuntimeError("host_tunnel_bootstrap_session_scope_mismatch")
+        if binding.get("machineId") != self.machine_id:
+            raise RuntimeError("host_tunnel_bootstrap_machine_scope_mismatch")
+        for field_name in ("sessionId", "machineId", "bookingId", "renterUserId"):
+            field = binding.get(field_name)
+            if not isinstance(field, str) or SAFE_ID.fullmatch(field) is None:
+                raise RuntimeError(f"host_tunnel_bootstrap_{field_name}_invalid")
+        nonce = binding.get("nonce")
+        if not isinstance(nonce, str) or SAFE_NONCE.fullmatch(nonce) is None:
+            raise RuntimeError("host_tunnel_bootstrap_nonce_invalid")
+        binding_expires = binding.get("expiresAtMs")
+        binding_issued = binding.get("issuedAtMs")
+        if (
+            not isinstance(binding_issued, int)
+            or not isinstance(binding_expires, int)
+            or binding_expires <= binding_issued
+        ):
+            raise RuntimeError("host_tunnel_bootstrap_binding_time_invalid")
+        if not isinstance(expires_at, int) or expires_at != binding_expires:
             raise RuntimeError("host_tunnel_bootstrap_expiry_invalid")
         serialized = json.dumps(value, separators=(",", ":"))
         if "PRIVATE KEY" in serialized:
@@ -151,7 +186,7 @@ class HostTunnelSupervisor:
             f"/agent/workspace-gateway/{self.machine_id}/sessions/"
             f"{session_id}/data-plane-host"
         )
-        return self._validate_bootstrap(self._request(path))
+        return self._validate_bootstrap(self._request(path), session_id)
 
     def _write_bootstrap_files(
         self, session_id: str, bootstrap: dict[str, Any]
