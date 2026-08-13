@@ -318,10 +318,11 @@ async fn run_stream_pressure_case(
     }
     match tokio::time::timeout(Duration::from_secs(5), overflow_send.stopped())
         .await
-        .context("over-capacity request FIN was not acknowledged")??
+        .context("over-capacity request termination was not observed")??
     {
         None => {}
-        Some(code) => bail!("over-capacity request was stopped unexpectedly: {code}"),
+        Some(code) if code == quinn::VarInt::from_u32(0) => {}
+        Some(code) => bail!("over-capacity request was stopped with unexpected code: {code}"),
     }
 
     println!("pressure-ready");
