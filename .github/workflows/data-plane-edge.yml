@@ -6,6 +6,7 @@ on:
       - 'services/edge/**'
       - 'apps/api/src/data-plane-*.ts'
       - 'apps/api/test/data-plane-*.test.ts'
+      - 'apps/api/test/data-plane-e2e-authority.ts'
       - 'docs/architecture/ADR-001-data-plane-v1.md'
       - 'docs/architecture/data-plane-threat-model.md'
       - 'docs/operations/data-plane-slo.md'
@@ -17,6 +18,7 @@ on:
       - 'services/edge/**'
       - 'apps/api/src/data-plane-*.ts'
       - 'apps/api/test/data-plane-*.test.ts'
+      - 'apps/api/test/data-plane-e2e-authority.ts'
       - '.github/workflows/data-plane-edge.yml'
   workflow_dispatch:
 
@@ -97,17 +99,56 @@ jobs:
       - name: Build Edge and E2E client
         run: cargo build --manifest-path services/edge/Cargo.toml --bin gpubnb-edge --example e2e_client
 
-      - name: Real QUIC authority, replay, reconnect and restart E2E
+      - name: Real QUIC authority, replay, reconnect and crash-restart E2E
         shell: bash
         run: |
           set -euo pipefail
           TMP="$(mktemp -d)"
           mkdir -p "$TMP/replay"
-          trap 'if [[ -n "${EDGE_PID:-}" ]]; then kill -INT "$EDGE_PID" 2>/dev/null || true; wait "$EDGE_PID" 2>/dev/null || true; fi; rm -rf "$TMP"' EXIT
+          EDGE_PID=''
+          EDGE_RUN=0
+          EDGE_LOG=''
 
+          cleanup() {
+            status=$?
+            set +e
+            if [[ -n "${EDGE_PID:-}" ]]; then
+              kill -INT "$EDGE_PID" 2>/dev/null || true
+              wait "$EDGE_PID" 2>/dev/null || true
+            fi
+            if (( status != 0 )); then
+              for log in "$TMP"/edge-*.log; do
+                [[ -f "$log" ]] || continue
+                echo "===== ${log##*/} ====="
+                cat "$log"
+              done
+            fi
+            rm -rf "$TMP"
+            trap - EXIT
+            exit "$status"
+          }
+          trap cleanup EXIT
+
+          # Use a real CA -> leaf chain. rustls correctly rejects a CA
+          # certificate reused as an end-entity server certificate.
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
-            -keyout "$TMP/tls-key.pem" -out "$TMP/tls-cert.pem" \
-            -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost' >/dev/null 2>&1
+            -keyout "$TMP/ca-key.pem" -out "$TMP/ca-cert.pem" \
+            -subj '/CN=GPUbnb E2E Root' \
+            -addext 'basicConstraints=critical,CA:TRUE,pathlen:0' \
+            -addext 'keyUsage=critical,keyCertSign,cRLSign' >/dev/null 2>&1
+          openssl req -newkey rsa:2048 -nodes \
+            -keyout "$TMP/tls-key.pem" -out "$TMP/tls.csr" \
+            -subj '/CN=localhost' >/dev/null 2>&1
+          cat >"$TMP/tls.ext" <<'EOF'
+          basicConstraints=critical,CA:FALSE
+          keyUsage=critical,digitalSignature,keyEncipherment
+          extendedKeyUsage=serverAuth
+          subjectAltName=DNS:localhost
+          EOF
+          openssl x509 -req -in "$TMP/tls.csr" \
+            -CA "$TMP/ca-cert.pem" -CAkey "$TMP/ca-key.pem" -CAcreateserial \
+            -days 1 -sha256 -extfile "$TMP/tls.ext" -out "$TMP/tls-cert.pem" >/dev/null 2>&1
+
           (cd apps/api && npx tsx test/data-plane-e2e-authority.ts "$TMP")
 
           export GPUBNB_EDGE_BIND='127.0.0.1:4433'
@@ -118,30 +159,69 @@ jobs:
           export GPUBNB_EDGE_AUTHORITY_PUBLIC_KEY_HEX="$(tr -d '\n' < "$TMP/authority-public.hex")"
 
           start_edge() {
-            services/edge/target/debug/gpubnb-edge >"$TMP/edge.log" 2>&1 &
+            EDGE_RUN=$((EDGE_RUN + 1))
+            EDGE_LOG="$TMP/edge-$EDGE_RUN.log"
+            services/edge/target/debug/gpubnb-edge >"$EDGE_LOG" 2>&1 &
             EDGE_PID=$!
-            sleep 1
-            kill -0 "$EDGE_PID"
+            for _ in $(seq 1 50); do
+              if grep -q 'edge_ready' "$EDGE_LOG"; then
+                return 0
+              fi
+              if ! kill -0 "$EDGE_PID" 2>/dev/null; then
+                echo 'Edge exited before readiness'
+                cat "$EDGE_LOG"
+                return 1
+              fi
+              sleep 0.1
+            done
+            echo 'Edge readiness timeout'
+            cat "$EDGE_LOG"
+            return 1
           }
+
           stop_edge() {
             kill -INT "$EDGE_PID"
             wait "$EDGE_PID"
             EDGE_PID=''
           }
+
+          crash_edge() {
+            kill -KILL "$EDGE_PID"
+            wait "$EDGE_PID" 2>/dev/null || true
+            EDGE_PID=''
+          }
+
           client() {
             services/edge/target/debug/examples/e2e_client \
-              127.0.0.1:4433 "$TMP/tls-cert.pem" "$1" "$2"
+              127.0.0.1:4433 "$TMP/ca-cert.pem" "$1" "$2"
+          }
+
+          assert_log_count() {
+            local event="$1"
+            local expected="$2"
+            local actual
+            actual="$(grep -c "$event" "$EDGE_LOG" || true)"
+            if [[ "$actual" -ne "$expected" ]]; then
+              echo "expected $expected occurrences of $event in ${EDGE_LOG##*/}, got $actual"
+              cat "$EDGE_LOG"
+              return 1
+            fi
           }
 
           start_edge
           client expect-ok "$TMP/authority-1.json"
           client expect-reject "$TMP/authority-1.json"
           client expect-ok "$TMP/authority-2.json"
-          stop_edge
+          assert_log_count 'edge_authority_replay_rejected' 1
+          assert_log_count 'edge_session_authenticated' 2
+
+          # Simulate an ungraceful process loss. Replay state must already be
+          # durable before the successful session admission above.
+          crash_edge
 
           start_edge
           client expect-reject "$TMP/authority-2.json"
           client expect-ok "$TMP/authority-3.json"
+          assert_log_count 'edge_authority_replay_rejected' 1
+          assert_log_count 'edge_session_authenticated' 1
           stop_edge
-
-          grep -q 'edge_authority_replay_rejected' "$TMP/edge.log"
