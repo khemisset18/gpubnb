@@ -7,7 +7,7 @@ services:
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: .
     healthCheckPath: /health
-    autoDeploy: true
+    autoDeployTrigger: checksPass
     envVars:
       - key: NODE_ENV
         value: production
@@ -17,6 +17,18 @@ services:
         value: gpubnb.netlify.app
       - key: TRUST_PROXY
         value: "true"
+      # Data Plane production routing is enabled only by reviewed configuration
+      # after the exact release SHA has passed the dedicated qualification gate.
+      - key: GPUBNB_DATA_PLANE_EDGE_ENABLED
+        value: "false"
+      - key: GPUBNB_DATA_PLANE_EDGE_QUIC
+        value: "false"
+      - key: GPUBNB_DATA_PLANE_DIRECT_QUIC
+        value: "false"
+      - key: GPUBNB_DATA_PLANE_BROWSER_WEBTRANSPORT
+        value: "false"
+      - key: GPUBNB_DATA_PLANE_CANARY_PERCENT
+        value: "0"
       # Only meaningful while ESCROW_PROGRAM_ID is NOT_DEPLOYED_YET (see dev-booking-reconciler.ts).
       # sync:false so a manual toggle in the Render dashboard survives future blueprint syncs.
       - key: BETA_TEST_DEV_BYPASS
@@ -33,7 +45,7 @@ services:
       - key: SUPABASE_URL
         value: https://ctifqdjpxdfdgdgbpzod.supabase.co
       - key: SUPABASE_ANON_KEY
-        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0aWZxZGpweGRmZGdkZ2Jwem9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1ODkxOTEsImV4cCI6MjEwMDE2NTE5MX0.ghl21WQ8tfcmEOqRfW1QF1Lt_revqkHHgkgAJqqaMhU # gitleaks:allow
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6ImN0aWZxZGpweGRmZGdkZ2Jwem9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1ODkxOTEsImV4cCI6MjEwMDE2NTE5MX0.ghl21WQ8tfcmEOqRfW1QF1Lt_revqkHHgkgAJqqaMhU # gitleaks:allow
       - key: SESSION_COOKIE_NAME
         value: gpubnb_session
       - key: SESSION_TTL_SECONDS
@@ -62,7 +74,7 @@ services:
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: .
     dockerCommand: node dist/delivery-worker.js
-    autoDeploy: true
+    autoDeployTrigger: checksPass
     envVars:
       - key: NODE_ENV
         value: production
