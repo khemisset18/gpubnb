@@ -124,7 +124,8 @@ async fn run_hold_preauth_case(endpoint: &Endpoint, addr: SocketAddr, hold_ms: u
 }
 
 async fn run_capacity_reject_case(endpoint: &Endpoint, addr: SocketAddr) -> Result<()> {
-    let result = tokio::time::timeout(Duration::from_secs(3), endpoint.connect(addr, "localhost")?.into_future())
+    let connecting = endpoint.connect(addr, "localhost")?;
+    let result = tokio::time::timeout(Duration::from_secs(3), connecting)
         .await
         .context("capacity refusal did not arrive within deadline")?;
     if let Ok(connection) = result {
@@ -138,9 +139,7 @@ async fn run_capacity_reject_case(endpoint: &Endpoint, addr: SocketAddr) -> Resu
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 4 {
-        bail!(
-            "usage: e2e_client <addr> <ca-cert.pem> <mode> [authority.json|hold-ms]"
-        );
+        bail!("usage: e2e_client <addr> <ca-cert.pem> <mode> [authority.json|hold-ms]");
     }
 
     let addr: SocketAddr = args[1].parse().context("parse Edge address")?;
