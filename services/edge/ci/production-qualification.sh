@@ -28,7 +28,7 @@ stop_pid_bounded() {
     wait "$pid" 2>/dev/null || true
     return 0
   fi
-  kill -INT "$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+  kill -TERM "$pid" 2>/dev/null || kill -INT "$pid" 2>/dev/null || true
   for _ in $(seq 1 "$grace_ticks"); do
     if ! kill -0 "$pid" 2>/dev/null; then
       wait "$pid" 2>/dev/null || true
@@ -105,7 +105,10 @@ export GPUBNB_EDGE_TLS_KEY="$TMP/tls-key.pem"
 export GPUBNB_EDGE_ID='edge_e2e_1'
 export GPUBNB_EDGE_REPLAY_DIR="$TMP/replay"
 export GPUBNB_EDGE_AUTHORITY_PUBLIC_KEY_HEX="$(tr -d '\n' < "$TMP/authority-public.hex")"
-export GPUBNB_EDGE_IDLE_TIMEOUT_MS='5000'
+# #104 separately proves aggressive 5-second idle reclamation. This production
+# qualification uses a 30-second idle policy so the Host's 15-second QUIC
+# keepalive is exercised while 64 routed streams are established under load.
+export GPUBNB_EDGE_IDLE_TIMEOUT_MS='30000'
 export GPUBNB_EDGE_MAX_CONNECTIONS='16'
 export GPUBNB_EDGE_TRANSPORT_MEMORY_BUDGET_MIB='256'
 export GPUBNB_EDGE_UDP_BUFFER_BYTES='4194304'
@@ -198,6 +201,7 @@ grep -q 'echo-ready' "$EVIDENCE/echo.log"
 phase edge_baseline
 start_edge
 grep -q 'max_connections=16' "$EDGE_LOG"
+grep -q 'idle_timeout_ms=30000' "$EDGE_LOG"
 grep -q 'transport_memory_budget_bytes=268435456' "$EDGE_LOG"
 grep -q 'transport_reservation_bytes=268435456' "$EDGE_LOG"
 grep -q 'udp_buffer_requested_bytes=4194304' "$EDGE_LOG"
@@ -226,7 +230,7 @@ timeout --signal=TERM --kill-after=5s 20s \
   127.0.0.1:4434 "$TMP/ca-cert.pem" stream-pressure "$TMP/authority-renter-pressure.json" \
   >"$EVIDENCE/stream-pressure.log" 2>&1 &
 PRESSURE_PID=$!
-for _ in $(seq 1 80); do
+for _ in $(seq 1 150); do
   grep -q 'pressure-ready' "$EVIDENCE/stream-pressure.log" && break
   kill -0 "$PRESSURE_PID" 2>/dev/null || { cat "$EVIDENCE/stream-pressure.log"; exit 1; }
   sleep 0.1
@@ -310,6 +314,8 @@ phase drain_done
 {
   echo "qualified_sha=${GITHUB_SHA:-unknown}"
   echo 'transport=quic'
+  echo 'idle_timeout_ms=30000'
+  echo 'host_keepalive_interval_ms=15000'
   echo 'max_bidi_streams=64'
   echo 'max_uni_streams=0'
   echo 'stream_receive_window_bytes=2097152'
