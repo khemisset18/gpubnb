@@ -1,21 +1,25 @@
 # GPUbnb Data Plane — production transport qualification
 
 Status: **required release gate**  
-Applies to: `gpubnb-dp/1`, regional Edge relays, `EDGE_QUIC` / `DIRECT_QUIC` rollout  
+Applies to: `gpubnb-dp/1`, regional Edge relays, Host bootstrap, `EDGE_QUIC` / `DIRECT_QUIC` rollout  
 Related: #95, #97, #98
 
 ## Non-negotiable release rule
 
-A production build MUST NOT enable `EDGE_QUIC`, `DIRECT_QUIC`, browser WebTransport, or a non-zero data-plane canary merely by setting a feature flag.
+A production build MUST NOT enable the Host Data Plane bootstrap, `EDGE_QUIC`, `DIRECT_QUIC`, browser WebTransport, or a non-zero data-plane canary merely by setting a feature flag.
 
-The API requires both:
+For generic deployments the API requires both:
 
 - `GPUBNB_RELEASE_SHA=<40-hex commit SHA>`
 - `GPUBNB_DATA_PLANE_QUALIFIED_SHA=<same 40-hex commit SHA>`
 
-If a new transport is requested and the SHAs are absent, malformed, or different, configuration fails closed. Qualification is therefore release-specific and cannot be carried silently across code changes.
+On Render, the release identity is taken from Render's immutable deployment metadata `RENDER_GIT_COMMIT`. If `GPUBNB_RELEASE_SHA` is also supplied, it must match `RENDER_GIT_COMMIT`. The qualified SHA must still match the actual deployed commit.
 
-The qualified SHA is set only after the exact release has passed the E2E, chaos/security, transport-resource, deployment-readiness, and platform packaging gates.
+If a new transport or Host bootstrap is requested and the release identity / qualified SHA is absent, malformed, or different, configuration fails closed. Qualification is therefore release-specific and cannot be carried silently across code changes.
+
+`render.yaml` keeps every Data Plane production flag explicitly disabled and uses `autoDeployTrigger: checksPass` for the API and worker. The dedicated `data-plane-production-qualification` workflow runs on every `main` commit, so a Render auto-deploy cannot start until the exact release's GitHub checks—including the transport qualification—have completed successfully. A later canary activation is a reviewed configuration promotion, not a dashboard-only flag flip.
+
+The qualified SHA is promoted only after the exact release has passed E2E, chaos/security, transport-resource, deployment-readiness, and platform packaging gates. Qualification evidence is uploaded as a GitHub Actions artifact named `data-plane-production-qualification-<sha>` and contains no authority, private key, nonce, booking identifier, or renter payload.
 
 ## Reviewed QUIC resource envelope
 
@@ -45,7 +49,7 @@ and refuses to start if the result exceeds `GPUBNB_EDGE_TRANSPORT_MEMORY_BUDGET_
 
 ## UDP socket buffers
 
-Quinn documents that a single endpoint uses one UDP socket and that high aggregate rates can require larger `SO_RCVBUF` / `SO_SNDBUF` values than common OS defaults. GPUbnb therefore requests and then reads back both socket buffer sizes before handing the socket to Quinn.
+A single Edge endpoint uses one UDP socket. GPUbnb requests and then reads back both `SO_RCVBUF` and `SO_SNDBUF` before handing the socket to Quinn, so production never silently assumes an OS buffer size.
 
 Production nodes MUST run with:
 
@@ -63,7 +67,7 @@ net.core.rmem_max=33554432
 net.core.wmem_max=33554432
 ```
 
-The larger kernel ceiling leaves room for platform-specific accounting around a 16 MiB requested socket buffer. Node qualification must verify the values after boot and after image/kernel upgrades.
+The larger kernel ceiling leaves room for platform-specific socket-buffer accounting around a 16 MiB requested target. Node qualification must verify the values after boot and after image/kernel upgrades.
 
 ## Address validation and abuse policy
 
@@ -74,25 +78,24 @@ The larger kernel ceiling leaves room for platform-specific accounting around a 
 - TLS/QUIC 0-RTT remains disabled.
 - Peer-initiated unidirectional streams remain disabled.
 
-This policy is intended to preserve QUIC anti-amplification semantics while keeping normal interactive latency low.
-
 ## Required chaos/security matrix
 
-The dedicated qualification job must prove, against the real Edge binary:
+The dedicated qualification job must prove, against the real Edge and Host binaries:
 
 1. **Idle/stalled pre-auth:** a completed QUIC/TLS handshake that sends no authority is reclaimed by the configured idle timeout.
-2. **Connection flood:** concurrent pre-auth handshakes hit Retry/capacity protection without process death or unbounded task growth.
+2. **Connection flood:** concurrent pre-auth handshakes hit Retry/capacity protection without process death or unbounded memory growth.
 3. **Stream pressure:** the 64-bidirectional-stream transport/application limit blocks additional work until capacity is released.
-4. **Slow path / backpressure:** interactive routed bytes remain byte-identical under delay/loss/reorder and bounded QUIC windows.
-5. **Replay + crash:** consumed authorities remain rejected after SIGKILL/restart and corrupted replay state fails closed/quarantines.
-6. **Drain:** Edge shutdown stops new admission and waits for existing QUIC state to drain.
-7. **Resource bound:** the test profile remains inside its declared transport-memory formula and the process stays alive throughout pressure tests.
+4. **Slow path / backpressure:** a routed file-transfer remains byte-identical under injected delay, jitter, packet loss and reordering with bounded QUIC windows.
+5. **Replay + crash/corruption:** consumed authorities remain rejected after restart and corrupted replay state quarantines/fails closed.
+6. **Drain:** Edge shutdown stops new admission and terminates existing QUIC state inside the qualification deadline.
+7. **Resource bound:** the test profile remains inside its declared transport-memory formula and measured process RSS remains below the qualification ceiling during stream and connection pressure.
+8. **Evidence:** effective socket buffers, memory observations and security/transport events are retained for the exact commit SHA.
 
 No test may treat TLS failure, inability to reach the Edge, or client timeout before application authentication as proof of a security rejection.
 
 ## Observability required before canary
 
-`edge_ready` exposes the effective policy and socket-buffer values. `edge_metrics` periodically reports:
+`edge_ready` exposes the effective policy, transport-memory reservation and socket-buffer values. `edge_metrics` periodically reports:
 
 - active QUIC connections;
 - active authenticated sessions;
@@ -104,7 +107,7 @@ Per-connection close metrics report RTT, congestion window, congestion events, p
 
 ## Canary sequence
 
-After the exact release SHA is qualified:
+After the exact release SHA is qualified and the qualification artifact has been reviewed:
 
 1. internal sessions only;
 2. 1%;
