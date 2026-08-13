@@ -1,7 +1,7 @@
 use std::{
     env,
     fs::File,
-    io::BufReader,
+    io::{BufReader, Write},
     net::SocketAddr,
     sync::Arc,
     time::Duration,
@@ -50,6 +50,13 @@ fn verify_success_response(response: &[u8]) -> Result<()> {
     Ok(())
 }
 
+async fn connect(endpoint: &Endpoint, addr: SocketAddr) -> Result<quinn::Connection> {
+    endpoint
+        .connect(addr, "localhost")?
+        .await
+        .context("QUIC/TLS connection failed")
+}
+
 async fn run_authority_case(
     endpoint: &Endpoint,
     addr: SocketAddr,
@@ -58,10 +65,7 @@ async fn run_authority_case(
 ) -> Result<()> {
     // Transport/TLS/ALPN must always succeed. A network or certificate failure
     // must never be accepted as proof that replay protection worked.
-    let connection = endpoint
-        .connect(addr, "localhost")?
-        .await
-        .context("QUIC/TLS connection failed")?;
+    let connection = connect(endpoint, addr).await?;
     let (mut send, mut recv) = connection
         .open_bi()
         .await
@@ -93,8 +97,7 @@ async fn run_authority_case(
 }
 
 async fn run_idle_timeout_case(endpoint: &Endpoint, addr: SocketAddr) -> Result<()> {
-    let connection = endpoint
-        .connect(addr, "localhost")?
+    let connection = connect(endpoint, addr)
         .await
         .context("QUIC/TLS connection failed before idle-timeout test")?;
 
@@ -109,12 +112,34 @@ async fn run_idle_timeout_case(endpoint: &Endpoint, addr: SocketAddr) -> Result<
     Ok(())
 }
 
+async fn run_hold_preauth_case(endpoint: &Endpoint, addr: SocketAddr, hold_ms: u64) -> Result<()> {
+    let connection = connect(endpoint, addr)
+        .await
+        .context("failed to establish held pre-auth QUIC connection")?;
+    println!("preauth-connected");
+    std::io::stdout().flush().context("flush readiness marker")?;
+    tokio::time::sleep(Duration::from_millis(hold_ms)).await;
+    connection.close(0_u8.into(), b"capacity probe complete");
+    Ok(())
+}
+
+async fn run_capacity_reject_case(endpoint: &Endpoint, addr: SocketAddr) -> Result<()> {
+    let result = tokio::time::timeout(Duration::from_secs(3), endpoint.connect(addr, "localhost")?.into_future())
+        .await
+        .context("capacity refusal did not arrive within deadline")?;
+    if let Ok(connection) = result {
+        connection.close(0_u8.into(), b"unexpected capacity admission");
+        bail!("expected Edge connection-cap refusal but QUIC handshake succeeded");
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 4 {
         bail!(
-            "usage: e2e_client <addr> <ca-cert.pem> <expect-ok|expect-reject|expect-idle-timeout> [authority.json]"
+            "usage: e2e_client <addr> <ca-cert.pem> <mode> [authority.json|hold-ms]"
         );
     }
 
@@ -125,9 +150,27 @@ async fn main() -> Result<()> {
     match args[3].as_str() {
         "expect-idle-timeout" => {
             if args.len() != 4 {
-                bail!("expect-idle-timeout does not accept an authority path");
+                bail!("expect-idle-timeout takes no extra argument");
             }
             run_idle_timeout_case(&endpoint, addr).await?;
+        }
+        "expect-capacity-reject" => {
+            if args.len() != 4 {
+                bail!("expect-capacity-reject takes no extra argument");
+            }
+            run_capacity_reject_case(&endpoint, addr).await?;
+        }
+        "hold-preauth" => {
+            if args.len() != 5 {
+                bail!("hold-preauth requires hold milliseconds");
+            }
+            let hold_ms = args[4]
+                .parse::<u64>()
+                .context("hold-preauth milliseconds must be an integer")?;
+            if !(100..=10_000).contains(&hold_ms) {
+                bail!("hold-preauth milliseconds must be between 100 and 10000");
+            }
+            run_hold_preauth_case(&endpoint, addr, hold_ms).await?;
         }
         "expect-ok" | "expect-reject" => {
             if args.len() != 5 {
