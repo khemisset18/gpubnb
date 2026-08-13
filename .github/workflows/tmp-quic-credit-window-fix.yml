@@ -28,6 +28,7 @@ jobs:
         run: |
           sed -i 's/stream_pressure=64_application_streams_then_explicit_65th_reject_then_release/stream_pressure=64_application_streams_65th_explicitly_rejected_then_capacity_reused/' .github/scripts/tmp_quic_credit_window_fix.py
           python3 .github/scripts/tmp_quic_credit_window_fix.py
+          sed -i 's/for rotation in 0\.\.10_u64/for rotation in 0..10_u32/' services/edge/examples/e2e_client.rs
 
       - name: Validate static gates
         run: |
