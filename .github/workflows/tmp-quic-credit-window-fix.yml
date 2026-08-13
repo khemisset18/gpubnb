@@ -25,7 +25,9 @@ jobs:
           components: rustfmt, clippy
 
       - name: Apply credit-window patch
-        run: python3 .github/scripts/tmp_quic_credit_window_fix.py
+        run: |
+          sed -i 's/stream_pressure=64_application_streams_then_explicit_65th_reject_then_release/stream_pressure=64_application_streams_65th_explicitly_rejected_then_capacity_reused/' .github/scripts/tmp_quic_credit_window_fix.py
+          python3 .github/scripts/tmp_quic_credit_window_fix.py
 
       - name: Validate static gates
         run: |
