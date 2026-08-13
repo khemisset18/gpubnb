@@ -3,9 +3,16 @@ use std::{env, fs::File, io::BufReader, net::SocketAddr, sync::Arc};
 use anyhow::{bail, Context, Result};
 use gpubnb_edge_core::ALPN;
 use quinn::{crypto::rustls::QuicClientConfig, ClientConfig, Endpoint};
+use serde::Deserialize;
 
 const CONTROL_RESPONSE_MAX_BYTES: usize = 8 * 1024;
-const OK_RESPONSE: &[u8] = br#"{\"ok\":true,\"protocol\":\"gpubnb-dp/1\"}"#;
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ControlResponse {
+    ok: bool,
+    protocol: String,
+}
 
 fn client_config(ca_cert_path: &str) -> Result<ClientConfig> {
     let mut reader = BufReader::new(File::open(ca_cert_path).context("open test CA certificate")?);
@@ -25,6 +32,15 @@ fn client_config(ca_cert_path: &str) -> Result<ClientConfig> {
     tls.alpn_protocols = vec![ALPN.as_bytes().to_vec()];
     let quic = QuicClientConfig::try_from(tls).context("QUIC client TLS config")?;
     Ok(ClientConfig::new(Arc::new(quic)))
+}
+
+fn verify_success_response(response: &[u8]) -> Result<()> {
+    let payload: ControlResponse =
+        serde_json::from_slice(response).context("parse Edge control response JSON")?;
+    if !payload.ok || payload.protocol != ALPN {
+        bail!("unexpected Edge control response: {payload:?}");
+    }
+    Ok(())
 }
 
 async fn run_case(
@@ -52,12 +68,7 @@ async fn run_case(
     match expectation {
         "expect-ok" => {
             let response = read_result.context("read Edge control response")?;
-            if response != OK_RESPONSE {
-                bail!(
-                    "unexpected Edge control response: {}",
-                    String::from_utf8_lossy(&response)
-                );
-            }
+            verify_success_response(&response)?;
         }
         "expect-reject" => {
             if let Ok(response) = read_result {
