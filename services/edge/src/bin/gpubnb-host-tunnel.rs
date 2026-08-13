@@ -38,9 +38,8 @@ const HOST_MAX_INCOMING_BIDI_STREAMS: u32 =
 // remote-stream window has been freed. Keep enough bounded transport-only
 // credit for stream churn while the Host still enforces loopback target policy
 // and the Edge keeps the application session limit at 64.
-const _: () = assert!(
-    HOST_STREAM_CREDIT_REPLENISHMENT_RESERVE > HOST_MAX_INCOMING_BIDI_STREAMS / 8
-);
+const _: () =
+    assert!(HOST_STREAM_CREDIT_REPLENISHMENT_RESERVE > HOST_MAX_INCOMING_BIDI_STREAMS / 8);
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
