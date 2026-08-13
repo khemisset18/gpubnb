@@ -1,4 +1,6 @@
-use gpubnb_edge_core::{EdgeError, EdgeRegistry, Limits, SessionBinding, StreamKind, PROTOCOL_VERSION};
+use gpubnb_edge_core::{
+    EdgeError, EdgeRegistry, Limits, SessionBinding, StreamKind, PROTOCOL_VERSION,
+};
 
 fn binding(id: &str) -> SessionBinding {
     SessionBinding {
@@ -15,7 +17,9 @@ fn binding(id: &str) -> SessionBinding {
 
 fn next(seed: &mut u64) -> u64 {
     // Deterministic LCG: this is a reproducible stress sequence, not cryptography.
-    *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *seed = seed
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     *seed
 }
 
@@ -24,6 +28,7 @@ fn randomized_buffer_operations_never_escape_global_budget_and_cleanup_returns_t
     let limits = Limits {
         max_sessions: 4,
         max_streams_per_session: 8,
+        max_buffered_bytes_per_stream: 512,
         max_buffered_bytes_per_session: 1024,
         max_total_buffered_bytes: 2048,
         max_session_lifetime_ms: 60_000,
@@ -33,7 +38,9 @@ fn randomized_buffer_operations_never_escape_global_budget_and_cleanup_returns_t
 
     for session_index in 0..4 {
         let session_id = format!("session_{session_index}");
-        registry.register_session(binding(&session_id), 1_001_000).unwrap();
+        registry
+            .register_session(binding(&session_id), 1_001_000)
+            .unwrap();
         for stream_index in 1..=4 {
             registry
                 .open_stream(
@@ -62,7 +69,11 @@ fn randomized_buffer_operations_never_escape_global_budget_and_cleanup_returns_t
         if value & 1 == 0 {
             match registry.reserve_buffer(&session_id, stream_index as u32, bytes) {
                 Ok(()) => reserved[session_index][stream_index] += bytes,
-                Err(EdgeError::SessionBackpressure | EdgeError::GlobalBackpressure) => {}
+                Err(
+                    EdgeError::StreamBackpressure
+                    | EdgeError::SessionBackpressure
+                    | EdgeError::GlobalBackpressure,
+                ) => {}
                 Err(other) => panic!("unexpected reserve error: {other:?}"),
             }
         } else {
@@ -95,7 +106,9 @@ fn duplicate_stream_open_does_not_consume_capacity_or_corrupt_readiness() {
         max_streams_per_session: 2,
         ..Limits::default()
     });
-    registry.register_session(binding("session_1"), 1_001_000).unwrap();
+    registry
+        .register_session(binding("session_1"), 1_001_000)
+        .unwrap();
     registry
         .open_stream(
             "session_1",
