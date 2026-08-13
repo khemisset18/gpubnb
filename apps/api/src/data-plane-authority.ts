@@ -5,8 +5,11 @@ import { GPUBNB_DATA_PLANE_VERSION, type DataPlaneSessionBinding } from './data-
 export const DATA_PLANE_AUTHORITY_MAX_TTL_MS = 60_000;
 export const DATA_PLANE_AUTHORITY_DEFAULT_TTL_MS = 30_000;
 
+export type DataPlaneAuthorityRole = 'HOST' | 'RENTER';
+
 export interface DataPlaneAuthorityEnvelope {
   edgeId: string;
+  role: DataPlaneAuthorityRole;
   binding: DataPlaneSessionBinding;
   signatureHex: string;
 }
@@ -15,6 +18,10 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,160}$/;
 
 function validateId(name: string, value: string): void {
   if (!SAFE_ID.test(value)) throw new Error(`data_plane_authority_${name}_invalid`);
+}
+
+function validateRole(role: DataPlaneAuthorityRole): void {
+  if (role !== 'HOST' && role !== 'RENTER') throw new Error('data_plane_authority_role_invalid');
 }
 
 function canonicalBindingObject(binding: DataPlaneSessionBinding) {
@@ -52,11 +59,14 @@ export function canonicalDataPlaneBinding(binding: DataPlaneSessionBinding): Buf
 
 export function canonicalDataPlaneAuthorityClaims(
   edgeId: string,
+  role: DataPlaneAuthorityRole,
   binding: DataPlaneSessionBinding,
 ): Buffer {
   validateId('edge_id', edgeId);
+  validateRole(role);
   const canonical = {
     edgeId,
+    role,
     binding: canonicalBindingObject(binding),
   };
   return Buffer.from(JSON.stringify(canonical), 'utf8');
@@ -64,6 +74,7 @@ export function canonicalDataPlaneAuthorityClaims(
 
 export function issueDataPlaneAuthority(input: {
   edgeId: string;
+  role: DataPlaneAuthorityRole;
   sessionId: string;
   machineId: string;
   bookingId: string;
@@ -79,6 +90,7 @@ export function issueDataPlaneAuthority(input: {
     throw new Error('data_plane_authority_ttl_invalid');
   }
   validateId('edge_id', input.edgeId);
+  validateRole(input.role);
 
   const binding: DataPlaneSessionBinding = {
     protocolVersion: GPUBNB_DATA_PLANE_VERSION,
@@ -90,10 +102,10 @@ export function issueDataPlaneAuthority(input: {
     expiresAtMs: nowMs + ttlMs,
     nonce: crypto.randomBytes(32).toString('hex'),
   };
-  const message = canonicalDataPlaneAuthorityClaims(input.edgeId, binding);
+  const message = canonicalDataPlaneAuthorityClaims(input.edgeId, input.role, binding);
   const signature = crypto.sign(null, message, input.privateKey);
   if (signature.length !== 64) throw new Error('data_plane_authority_signature_invalid');
-  return { edgeId: input.edgeId, binding, signatureHex: signature.toString('hex') };
+  return { edgeId: input.edgeId, role: input.role, binding, signatureHex: signature.toString('hex') };
 }
 
 export function verifyDataPlaneAuthorityForTest(
@@ -104,7 +116,7 @@ export function verifyDataPlaneAuthorityForTest(
   try {
     return crypto.verify(
       null,
-      canonicalDataPlaneAuthorityClaims(envelope.edgeId, envelope.binding),
+      canonicalDataPlaneAuthorityClaims(envelope.edgeId, envelope.role, envelope.binding),
       publicKey,
       Buffer.from(envelope.signatureHex, 'hex'),
     );

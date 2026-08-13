@@ -44,16 +44,21 @@ export interface DataPlaneStreamAccepted {
   initialSequence: number;
 }
 
+export type DataPlaneStreamRejectCode =
+  | 'UNAUTHORIZED'
+  | 'SESSION_EXPIRED'
+  | 'STREAM_LIMIT'
+  | 'INVALID_TARGET'
+  | 'UNSUPPORTED_KIND'
+  | 'RESUME_WINDOW_EXPIRED'
+  | 'HOST_UNAVAILABLE'
+  | 'TARGET_UNAVAILABLE'
+  | 'INTERNAL_ERROR';
+
 export interface DataPlaneStreamRejected {
   type: 'STREAM_REJECTED';
   streamId: number;
-  code:
-    | 'UNAUTHORIZED'
-    | 'SESSION_EXPIRED'
-    | 'STREAM_LIMIT'
-    | 'INVALID_TARGET'
-    | 'UNSUPPORTED_KIND'
-    | 'RESUME_WINDOW_EXPIRED';
+  code: DataPlaneStreamRejectCode;
 }
 
 export interface DataPlaneHeartbeat {

@@ -4,8 +4,12 @@
 mod authority;
 #[path = "../replay.rs"]
 mod replay;
+#[path = "../router.rs"]
+mod router;
 #[path = "../transport.rs"]
 mod transport;
+#[path = "../wire.rs"]
+mod wire;
 
 use std::{
     env,
@@ -17,11 +21,14 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
-use authority::{parse_verifying_key_hex, validate_edge_id, verify_authority};
+use authority::{
+    parse_verifying_key_hex, validate_edge_id, verify_authority, AuthorityRole, VerifiedAuthority,
+};
 use ed25519_dalek::VerifyingKey;
-use gpubnb_edge_core::{EdgeRegistry, Limits, ALPN};
+use gpubnb_edge_core::{EdgeError, EdgeRegistry, Limits, SessionBinding, StreamKind, ALPN};
 use quinn::{crypto::rustls::QuicServerConfig, Endpoint};
 use replay::{ReplayError, ReplayStore};
+use router::WorkspaceRouter;
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
@@ -29,6 +36,10 @@ use transport::{
     admission_action, configure_transport, AdmissionAction, RuntimeTransportPolicy,
     CONNECTION_RECEIVE_WINDOW_BYTES, CONNECTION_SEND_WINDOW_BYTES, MAX_BIDI_STREAMS,
     MAX_UNI_STREAMS, STREAM_RECEIVE_WINDOW_BYTES,
+};
+use wire::{
+    read_json_frame, write_json_frame, OpenStreamFrame, StreamRejectCode, StreamStatusFrame,
+    STREAM_METADATA_MAX_BYTES, STREAM_STATUS_MAX_BYTES,
 };
 
 const AUTHORITY_MAX_BYTES: usize = 16 * 1024;
@@ -102,9 +113,6 @@ fn load_server_config(
         .with_single_cert(certs, key)
         .context("TLS certificate/private key rejected")?;
     tls.alpn_protocols = vec![ALPN.as_bytes().to_vec()];
-    // GPUbnb has no replay-safe 0-RTT application profile. Keep early data and
-    // half-RTT responses explicitly disabled even though rustls currently
-    // defaults both settings to disabled.
     tls.max_early_data_size = 0;
     tls.send_half_rtt_data = false;
 
@@ -129,15 +137,13 @@ async fn write_control_response(send: &mut quinn::SendStream, payload: &[u8]) ->
     Ok(())
 }
 
-async fn handle_connection(
-    connection: quinn::Connection,
-    registry: Arc<Mutex<EdgeRegistry>>,
-    replay_store: Arc<Mutex<ReplayStore>>,
-    verifying_key: Arc<VerifyingKey>,
-    edge_id: Arc<String>,
-) -> Result<()> {
-    let remote = connection.remote_address();
-    let (mut send, mut recv) = connection
+async fn authenticate_connection(
+    connection: &quinn::Connection,
+    replay_store: &Arc<Mutex<ReplayStore>>,
+    verifying_key: &VerifyingKey,
+    edge_id: &str,
+) -> Result<(VerifiedAuthority, quinn::SendStream)> {
+    let (send, mut recv) = connection
         .accept_bi()
         .await
         .context("connection closed before authority stream")?;
@@ -146,17 +152,15 @@ async fn handle_connection(
         .await
         .context("failed to read authority stream")?;
     let authenticated_at_ms = now_ms()?;
-    let binding = verify_authority(&raw, &verifying_key, edge_id.as_str(), authenticated_at_ms)?;
-    let session_id = binding.session_id.clone();
-
+    let verified = verify_authority(&raw, verifying_key, edge_id, authenticated_at_ms)?;
     {
         let mut guard = replay_store.lock().await;
-        match guard.consume(&binding, authenticated_at_ms) {
+        match guard.consume(&verified.binding, authenticated_at_ms) {
             Ok(()) => {}
             Err(ReplayError::AlreadyConsumed) => {
                 warn!(
                     event = "edge_authority_replay_rejected",
-                    remote = %remote,
+                    remote = %connection.remote_address(),
                     "replayed data-plane authority rejected"
                 );
                 bail!("data-plane authority already consumed");
@@ -164,7 +168,7 @@ async fn handle_connection(
             Err(ReplayError::Capacity) => {
                 warn!(
                     event = "edge_replay_store_saturated",
-                    remote = %remote,
+                    remote = %connection.remote_address(),
                     "authority replay store capacity exhausted"
                 );
                 bail!("authority replay store capacity exhausted");
@@ -172,51 +176,384 @@ async fn handle_connection(
             Err(ReplayError::Persistence) => {
                 error!(
                     event = "edge_replay_store_persistence_failure",
-                    remote = %remote,
+                    remote = %connection.remote_address(),
                     "authority rejected because replay state could not be durably committed"
                 );
                 bail!("authority replay state persistence failed");
             }
         }
     }
+    Ok((verified, send))
+}
 
+fn connection_lease_binding(
+    binding: &SessionBinding,
+    authenticated_at_ms: u64,
+    max_session_lifetime_ms: u64,
+) -> Result<SessionBinding> {
+    let expires_at_ms = authenticated_at_ms
+        .checked_add(max_session_lifetime_ms)
+        .context("authenticated session lease expiry overflow")?;
+    let mut lease = binding.clone();
+    lease.issued_at_ms = authenticated_at_ms;
+    lease.expires_at_ms = expires_at_ms;
+    Ok(lease)
+}
+
+fn edge_reject_code(error: &EdgeError) -> StreamRejectCode {
+    match error {
+        EdgeError::StreamCapacity => StreamRejectCode::StreamLimit,
+        EdgeError::InvalidTargetPort | EdgeError::ForbiddenTargetPort => {
+            StreamRejectCode::InvalidTarget
+        }
+        EdgeError::SessionNotCurrent | EdgeError::InvalidLifetime => {
+            StreamRejectCode::SessionExpired
+        }
+        EdgeError::UnknownSession | EdgeError::NotAcceptingSessions => {
+            StreamRejectCode::HostUnavailable
+        }
+        _ => StreamRejectCode::InternalError,
+    }
+}
+
+async fn reject_renter_stream(
+    send: &mut quinn::SendStream,
+    stream_id: u32,
+    code: StreamRejectCode,
+) -> Result<()> {
+    write_json_frame(
+        send,
+        &StreamStatusFrame::rejected(stream_id, code),
+        STREAM_STATUS_MAX_BYTES,
+    )
+    .await?;
+    send.finish()
+        .context("failed to finish rejected renter stream")?;
+    Ok(())
+}
+
+async fn route_renter_stream(
+    mut renter_send: quinn::SendStream,
+    mut renter_recv: quinn::RecvStream,
+    renter_binding: SessionBinding,
+    router: Arc<Mutex<WorkspaceRouter>>,
+    registry: Arc<Mutex<EdgeRegistry>>,
+) -> Result<()> {
+    let frame: OpenStreamFrame =
+        read_json_frame(&mut renter_recv, STREAM_METADATA_MAX_BYTES).await?;
+    let stream_id = frame.stream_id;
+    let kind = match frame.validate() {
+        Ok(kind) => kind,
+        Err(error) => {
+            reject_renter_stream(&mut renter_send, stream_id, StreamRejectCode::InvalidTarget)
+                .await?;
+            return Err(error);
+        }
+    };
+    if kind == StreamKind::Control {
+        reject_renter_stream(
+            &mut renter_send,
+            stream_id,
+            StreamRejectCode::UnsupportedKind,
+        )
+        .await?;
+        return Ok(());
+    }
+    if frame
+        .resume_from_sequence
+        .is_some_and(|sequence| sequence != 0)
     {
+        reject_renter_stream(
+            &mut renter_send,
+            stream_id,
+            StreamRejectCode::ResumeWindowExpired,
+        )
+        .await?;
+        return Ok(());
+    }
+
+    let host = {
+        let guard = router.lock().await;
+        match guard.host_for(&renter_binding) {
+            Ok(host) => host,
+            Err(error) => {
+                reject_renter_stream(
+                    &mut renter_send,
+                    stream_id,
+                    StreamRejectCode::HostUnavailable,
+                )
+                .await?;
+                return Err(error);
+            }
+        }
+    };
+
+    let opened_at_ms = now_ms()?;
+    let became_interactive = {
         let mut guard = registry.lock().await;
-        guard
-            .register_session(binding, authenticated_at_ms)
-            .map_err(|error| anyhow!("session registration rejected: {error:?}"))?;
+        let was_interactive = guard
+            .interactive_ready(&renter_binding.session_id)
+            .unwrap_or(false);
+        if let Err(error) = guard.open_stream(
+            &renter_binding.session_id,
+            stream_id,
+            kind,
+            frame.target_port,
+            opened_at_ms,
+        ) {
+            let code = edge_reject_code(&error);
+            drop(guard);
+            reject_renter_stream(&mut renter_send, stream_id, code).await?;
+            return Err(anyhow!("Edge stream registry rejected route: {error:?}"));
+        }
+        !was_interactive
+            && guard
+                .interactive_ready(&renter_binding.session_id)
+                .unwrap_or(false)
+    };
+
+    if became_interactive {
+        info!(
+            event = "edge_session_interactive_ready",
+            session = %renter_binding.session_id,
+            "Management and ExtensionHost streams are both healthy"
+        );
+    }
+
+    let route_result = async {
+        let (mut host_send, mut host_recv) = host
+            .connection
+            .open_bi()
+            .await
+            .context("Host tunnel unavailable while opening routed stream")?;
+        write_json_frame(&mut host_send, &frame, STREAM_METADATA_MAX_BYTES).await?;
+        let status: StreamStatusFrame =
+            read_json_frame(&mut host_recv, STREAM_STATUS_MAX_BYTES).await?;
+        status.validate_for(stream_id)?;
+        write_json_frame(&mut renter_send, &status, STREAM_STATUS_MAX_BYTES).await?;
+        if !status.is_accepted() {
+            renter_send
+                .finish()
+                .context("failed to finish Host-rejected renter stream")?;
+            return Ok((0_u64, 0_u64));
+        }
+
+        let renter_to_host = async {
+            let bytes = tokio::io::copy(&mut renter_recv, &mut host_send)
+                .await
+                .context("renter-to-Host QUIC relay failed")?;
+            host_send
+                .finish()
+                .context("failed to finish Host request stream")?;
+            Result::<u64>::Ok(bytes)
+        };
+        let host_to_renter = async {
+            let bytes = tokio::io::copy(&mut host_recv, &mut renter_send)
+                .await
+                .context("Host-to-renter QUIC relay failed")?;
+            renter_send
+                .finish()
+                .context("failed to finish renter response stream")?;
+            Result::<u64>::Ok(bytes)
+        };
+        tokio::try_join!(renter_to_host, host_to_renter)
+    }
+    .await;
+
+    let became_noninteractive = {
+        let mut guard = registry.lock().await;
+        let was_interactive = guard
+            .interactive_ready(&renter_binding.session_id)
+            .unwrap_or(false);
+        let _ = guard.close_stream(&renter_binding.session_id, stream_id);
+        was_interactive
+            && !guard
+                .interactive_ready(&renter_binding.session_id)
+                .unwrap_or(false)
+    };
+    if became_noninteractive {
+        warn!(
+            event = "edge_session_interactive_degraded",
+            session = %renter_binding.session_id,
+            "Management or ExtensionHost stream closed"
+        );
+    }
+
+    let (bytes_up, bytes_down) = route_result?;
+    info!(
+        event = "edge_stream_closed",
+        session = %renter_binding.session_id,
+        stream_id,
+        kind = ?kind,
+        bytes_up,
+        bytes_down,
+        "routed data-plane stream completed"
+    );
+    Ok(())
+}
+
+async fn handle_host_connection(
+    connection: quinn::Connection,
+    binding: SessionBinding,
+    mut auth_send: quinn::SendStream,
+    router: Arc<Mutex<WorkspaceRouter>>,
+    registry: Arc<Mutex<EdgeRegistry>>,
+    max_session_lifetime_ms: u64,
+    edge_id: Arc<String>,
+) -> Result<()> {
+    let session_id = binding.session_id.clone();
+    let authenticated_at_ms = now_ms()?;
+    let lease_binding =
+        connection_lease_binding(&binding, authenticated_at_ms, max_session_lifetime_ms)?;
+
+    let (lease_id, previous_connection) = {
+        let mut router_guard = router.lock().await;
+        let mut registry_guard = registry.lock().await;
+        let (lease_id, previous_connection) =
+            router_guard.register_host(binding.clone(), connection.clone());
+        if previous_connection.is_some() {
+            let _ = registry_guard.remove_session(&session_id);
+        }
+        if let Err(error) = registry_guard.register_session(lease_binding, authenticated_at_ms) {
+            router_guard.remove_host(&session_id, lease_id);
+            bail!("Host session registration rejected: {error:?}");
+        }
+        (lease_id, previous_connection)
+    };
+    if let Some(previous) = previous_connection {
+        warn!(
+            event = "edge_host_tunnel_replaced",
+            session = %session_id,
+            "fresh authenticated Host tunnel replaced previous connection"
+        );
+        previous.close(1_u8.into(), b"Host tunnel superseded");
     }
 
     if let Err(error) =
-        write_control_response(&mut send, br#"{"ok":true,"protocol":"gpubnb-dp/1"}"#).await
+        write_control_response(&mut auth_send, br#"{"ok":true,"protocol":"gpubnb-dp/1"}"#).await
     {
-        let mut guard = registry.lock().await;
-        let _ = guard.remove_session(&session_id);
+        let mut router_guard = router.lock().await;
+        let mut registry_guard = registry.lock().await;
+        if router_guard.remove_host(&session_id, lease_id) {
+            let _ = registry_guard.remove_session(&session_id);
+        }
         return Err(error);
     }
 
     info!(
-        event = "edge_session_authenticated",
-        remote = %remote,
+        event = "edge_host_tunnel_ready",
+        remote = %connection.remote_address(),
         edge = %edge_id,
         session = %session_id,
-        "authenticated QUIC data-plane session"
+        "authenticated outbound Host tunnel registered"
+    );
+    let close = connection.closed().await;
+    let removed = {
+        let mut router_guard = router.lock().await;
+        let mut registry_guard = registry.lock().await;
+        let removed = router_guard.remove_host(&session_id, lease_id);
+        if removed {
+            let _ = registry_guard.remove_session(&session_id);
+        }
+        removed
+    };
+    if removed {
+        warn!(
+            event = "edge_host_tunnel_closed",
+            edge = %edge_id,
+            session = %session_id,
+            reason = ?close,
+            "Host tunnel disconnected and route was removed"
+        );
+    }
+    Ok(())
+}
+
+async fn handle_renter_connection(
+    connection: quinn::Connection,
+    binding: SessionBinding,
+    mut auth_send: quinn::SendStream,
+    router: Arc<Mutex<WorkspaceRouter>>,
+    registry: Arc<Mutex<EdgeRegistry>>,
+    edge_id: Arc<String>,
+) -> Result<()> {
+    write_control_response(&mut auth_send, br#"{"ok":true,"protocol":"gpubnb-dp/1"}"#).await?;
+    info!(
+        event = "edge_session_authenticated",
+        remote = %connection.remote_address(),
+        edge = %edge_id,
+        session = %binding.session_id,
+        role = "RENTER",
+        "authenticated renter data-plane connection"
     );
 
-    let close = connection.closed().await;
-    {
-        let mut guard = registry.lock().await;
-        let _ = guard.remove_session(&session_id);
+    loop {
+        match connection.accept_bi().await {
+            Ok((send, recv)) => {
+                let binding = binding.clone();
+                let router = Arc::clone(&router);
+                let registry = Arc::clone(&registry);
+                tokio::spawn(async move {
+                    if let Err(error) =
+                        route_renter_stream(send, recv, binding, router, registry).await
+                    {
+                        warn!(event = "edge_routed_stream_failed", error = %error, "routed renter stream failed");
+                    }
+                });
+            }
+            Err(error) => {
+                info!(
+                    event = "edge_session_closed",
+                    remote = %connection.remote_address(),
+                    edge = %edge_id,
+                    session = %binding.session_id,
+                    reason = ?error,
+                    "renter data-plane connection closed"
+                );
+                break;
+            }
+        }
     }
-    info!(
-        event = "edge_session_closed",
-        remote = %remote,
-        edge = %edge_id,
-        session = %session_id,
-        reason = ?close,
-        "QUIC data-plane session closed"
-    );
     Ok(())
+}
+
+async fn handle_connection(
+    connection: quinn::Connection,
+    registry: Arc<Mutex<EdgeRegistry>>,
+    router: Arc<Mutex<WorkspaceRouter>>,
+    replay_store: Arc<Mutex<ReplayStore>>,
+    verifying_key: Arc<VerifyingKey>,
+    edge_id: Arc<String>,
+    max_session_lifetime_ms: u64,
+) -> Result<()> {
+    let (verified, auth_send) =
+        authenticate_connection(&connection, &replay_store, &verifying_key, edge_id.as_str())
+            .await?;
+    match verified.role {
+        AuthorityRole::Host => {
+            handle_host_connection(
+                connection,
+                verified.binding,
+                auth_send,
+                router,
+                registry,
+                max_session_lifetime_ms,
+                edge_id,
+            )
+            .await
+        }
+        AuthorityRole::Renter => {
+            handle_renter_connection(
+                connection,
+                verified.binding,
+                auth_send,
+                router,
+                registry,
+                edge_id,
+            )
+            .await
+        }
+    }
 }
 
 #[tokio::main]
@@ -225,8 +562,6 @@ async fn main() -> Result<()> {
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
-        // Edge logs are consumed by CI, probes and operations automation. Keep
-        // them deterministic even when stderr/stdout is attached to a TTY.
         .with_ansi(false)
         .with_target(false)
         .compact()
@@ -251,7 +586,10 @@ async fn main() -> Result<()> {
         bind,
     )
     .context("failed to bind QUIC Edge endpoint")?;
-    let registry = Arc::new(Mutex::new(EdgeRegistry::new(Limits::default())));
+    let limits = Limits::default();
+    let max_session_lifetime_ms = limits.max_session_lifetime_ms;
+    let registry = Arc::new(Mutex::new(EdgeRegistry::new(limits)));
+    let router = Arc::new(Mutex::new(WorkspaceRouter::default()));
     let replay_store = ReplayStore::open(&replay_dir, replay_capacity, now_ms()?)
         .context("failed to initialize durable authority replay store")?;
     let replay_entries = replay_store.len();
@@ -322,6 +660,7 @@ async fn main() -> Result<()> {
                 }
 
                 let registry = Arc::clone(&registry);
+                let router = Arc::clone(&router);
                 let replay_store = Arc::clone(&replay_store);
                 let verifying_key = Arc::clone(&verifying_key);
                 let edge_id = Arc::clone(&edge_id);
@@ -331,9 +670,11 @@ async fn main() -> Result<()> {
                             if let Err(error) = handle_connection(
                                 connection,
                                 registry,
+                                router,
                                 replay_store,
                                 verifying_key,
                                 edge_id,
+                                max_session_lifetime_ms,
                             ).await {
                                 warn!(event = "edge_connection_rejected", error = %error, "QUIC connection rejected");
                             }

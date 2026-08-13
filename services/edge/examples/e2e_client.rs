@@ -1,3 +1,6 @@
+#[path = "../src/wire.rs"]
+mod wire;
+
 use std::{
     env,
     fs::File,
@@ -11,8 +14,13 @@ use anyhow::{bail, Context, Result};
 use gpubnb_edge_core::ALPN;
 use quinn::{crypto::rustls::QuicClientConfig, ClientConfig, ConnectionError, Endpoint};
 use serde::Deserialize;
+use wire::{
+    read_json_frame, write_json_frame, OpenStreamFrame, StreamStatusFrame, WireStreamKind,
+    STREAM_METADATA_MAX_BYTES, STREAM_STATUS_MAX_BYTES,
+};
 
 const CONTROL_RESPONSE_MAX_BYTES: usize = 8 * 1024;
+const ROUTED_RESPONSE_MAX_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -37,6 +45,7 @@ fn client_config(ca_cert_path: &str) -> Result<ClientConfig> {
         .with_root_certificates(roots)
         .with_no_client_auth();
     tls.alpn_protocols = vec![ALPN.as_bytes().to_vec()];
+    tls.enable_early_data = false;
     let quic = QuicClientConfig::try_from(tls).context("QUIC client TLS config")?;
     Ok(ClientConfig::new(Arc::new(quic)))
 }
@@ -55,6 +64,22 @@ async fn connect(endpoint: &Endpoint, addr: SocketAddr) -> Result<quinn::Connect
         .connect(addr, "localhost")?
         .await
         .context("QUIC/TLS connection failed")
+}
+
+async fn authenticate(connection: &quinn::Connection, authority: &[u8]) -> Result<()> {
+    let (mut send, mut recv) = connection
+        .open_bi()
+        .await
+        .context("open authority stream")?;
+    send.write_all(authority)
+        .await
+        .context("write authority envelope")?;
+    send.finish().context("finish authority stream")?;
+    let response = recv
+        .read_to_end(CONTROL_RESPONSE_MAX_BYTES)
+        .await
+        .context("read Edge control response")?;
+    verify_success_response(&response)
 }
 
 async fn run_authority_case(
@@ -101,8 +126,6 @@ async fn run_idle_timeout_case(endpoint: &Endpoint, addr: SocketAddr) -> Result<
         .await
         .context("QUIC/TLS connection failed before idle-timeout test")?;
 
-    // Send no authority stream. A malicious or broken pre-auth peer must not
-    // retain connection state indefinitely.
     let close = tokio::time::timeout(Duration::from_secs(8), connection.closed())
         .await
         .context("Edge did not reclaim idle pre-auth connection within test deadline")?;
@@ -134,6 +157,76 @@ async fn run_capacity_reject_case(endpoint: &Endpoint, addr: SocketAddr) -> Resu
         connection.close(0_u8.into(), b"unexpected capacity admission");
         bail!("expected Edge connection-cap refusal but QUIC handshake succeeded");
     }
+    Ok(())
+}
+
+async fn open_routed_stream(
+    connection: &quinn::Connection,
+    stream_id: u32,
+    kind: WireStreamKind,
+) -> Result<(quinn::SendStream, quinn::RecvStream)> {
+    let (mut send, mut recv) = connection
+        .open_bi()
+        .await
+        .context("open routed renter stream")?;
+    let frame = OpenStreamFrame {
+        message_type: "OPEN_STREAM".into(),
+        stream_id,
+        kind,
+        target_port: None,
+        resume_from_sequence: None,
+    };
+    write_json_frame(&mut send, &frame, STREAM_METADATA_MAX_BYTES).await?;
+    let status: StreamStatusFrame = read_json_frame(&mut recv, STREAM_STATUS_MAX_BYTES).await?;
+    status.validate_for(stream_id)?;
+    if !status.is_accepted() {
+        bail!(
+            "Edge/Host rejected routed stream {stream_id}: {:?}",
+            status.code
+        );
+    }
+    Ok((send, recv))
+}
+
+async fn assert_echo(
+    mut send: quinn::SendStream,
+    mut recv: quinn::RecvStream,
+    payload: &[u8],
+) -> Result<()> {
+    send.write_all(payload)
+        .await
+        .context("write routed E2E payload")?;
+    send.finish().context("finish routed E2E request")?;
+    let response = recv
+        .read_to_end(ROUTED_RESPONSE_MAX_BYTES)
+        .await
+        .context("read routed E2E response")?;
+    if response != payload {
+        bail!("routed E2E payload corruption detected");
+    }
+    Ok(())
+}
+
+async fn run_interactive_route_case(
+    endpoint: &Endpoint,
+    addr: SocketAddr,
+    authority: &[u8],
+) -> Result<()> {
+    let connection = connect(endpoint, addr).await?;
+    authenticate(&connection, authority).await?;
+
+    // Open both streams before closing either one. This proves the Edge's
+    // INTERACTIVE gate only becomes true when Management and ExtensionHost
+    // coexist as healthy independent routed streams.
+    let management = open_routed_stream(&connection, 101, WireStreamKind::VscodeManagement).await?;
+    let extension =
+        open_routed_stream(&connection, 102, WireStreamKind::VscodeExtensionHost).await?;
+
+    let management_echo = assert_echo(management.0, management.1, b"gpubnb-management-e2e");
+    let extension_echo = assert_echo(extension.0, extension.1, b"gpubnb-extension-host-e2e");
+    tokio::try_join!(management_echo, extension_echo)?;
+
+    connection.close(0_u8.into(), b"routed workspace E2E complete");
     Ok(())
 }
 
@@ -172,6 +265,13 @@ async fn main() -> Result<()> {
                 bail!("hold-preauth milliseconds must be between 100 and 10000");
             }
             run_hold_preauth_case(&endpoint, addr, hold_ms).await?;
+        }
+        "route-interactive" => {
+            if args.len() != 5 {
+                bail!("route-interactive requires a RENTER authority path");
+            }
+            let authority = std::fs::read(&args[4]).context("read renter route authority")?;
+            run_interactive_route_case(&endpoint, addr, &authority).await?;
         }
         "expect-ok" | "expect-reject" => {
             if args.len() != 5 {

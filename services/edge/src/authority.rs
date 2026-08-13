@@ -9,6 +9,13 @@ const MAX_AUTHORITY_TTL_MS: u64 = 60_000;
 const AUTHORITY_NONCE_HEX_LEN: usize = 64;
 const MAX_IDENTIFIER_BYTES: usize = 160;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AuthorityRole {
+    Host,
+    Renter,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct WireSessionBinding {
@@ -26,6 +33,7 @@ pub struct WireSessionBinding {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct AuthorityEnvelope {
     pub edge_id: String,
+    pub role: AuthorityRole,
     pub binding: WireSessionBinding,
     pub signature_hex: String,
 }
@@ -34,7 +42,14 @@ pub struct AuthorityEnvelope {
 #[serde(rename_all = "camelCase")]
 struct AuthorityClaims<'a> {
     edge_id: &'a str,
+    role: AuthorityRole,
     binding: &'a WireSessionBinding,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerifiedAuthority {
+    pub role: AuthorityRole,
+    pub binding: SessionBinding,
 }
 
 impl From<WireSessionBinding> for SessionBinding {
@@ -77,10 +92,15 @@ pub fn validate_edge_id(edge_id: &str) -> Result<()> {
 
 pub fn canonical_authority_claims_bytes(
     edge_id: &str,
+    role: AuthorityRole,
     binding: &WireSessionBinding,
 ) -> Result<Vec<u8>> {
-    serde_json::to_vec(&AuthorityClaims { edge_id, binding })
-        .context("failed to canonicalize authority claims")
+    serde_json::to_vec(&AuthorityClaims {
+        edge_id,
+        role,
+        binding,
+    })
+    .context("failed to canonicalize authority claims")
 }
 
 fn validate_authority_contract(edge_id: &str, binding: &WireSessionBinding) -> Result<()> {
@@ -117,7 +137,7 @@ pub fn verify_authority(
     key: &VerifyingKey,
     expected_edge_id: &str,
     now_ms: u64,
-) -> Result<SessionBinding> {
+) -> Result<VerifiedAuthority> {
     if raw.is_empty() || raw.len() > MAX_AUTHORITY_BYTES {
         bail!("authority envelope size invalid");
     }
@@ -134,7 +154,8 @@ pub fn verify_authority(
         hex::decode(&envelope.signature_hex).context("invalid authority signature hex")?;
     let signature =
         Signature::from_slice(&signature_bytes).context("invalid authority signature")?;
-    let message = canonical_authority_claims_bytes(&envelope.edge_id, &envelope.binding)?;
+    let message =
+        canonical_authority_claims_bytes(&envelope.edge_id, envelope.role, &envelope.binding)?;
     key.verify(&message, &signature)
         .context("authority signature verification failed")?;
 
@@ -144,7 +165,10 @@ pub fn verify_authority(
         bail!("authority is not current");
     }
 
-    Ok(envelope.binding.into())
+    Ok(VerifiedAuthority {
+        role: envelope.role,
+        binding: envelope.binding.into(),
+    })
 }
 
 #[cfg(test)]
@@ -170,12 +194,14 @@ mod tests {
     fn signed_envelope(
         signing: &SigningKey,
         edge_id: &str,
+        role: AuthorityRole,
         binding: WireSessionBinding,
     ) -> Vec<u8> {
-        let message = canonical_authority_claims_bytes(edge_id, &binding).unwrap();
+        let message = canonical_authority_claims_bytes(edge_id, role, &binding).unwrap();
         let signature = signing.sign(&message);
         serde_json::to_vec(&AuthorityEnvelope {
             edge_id: edge_id.into(),
+            role,
             binding,
             signature_hex: hex::encode(signature.to_bytes()),
         })
@@ -183,30 +209,31 @@ mod tests {
     }
 
     #[test]
-    fn valid_authority_verifies_and_preserves_scope() {
+    fn valid_authority_verifies_and_preserves_scope_and_role() {
         let signing = SigningKey::from_bytes(&[7; 32]);
-        let raw = signed_envelope(&signing, EDGE_ID, binding());
+        let raw = signed_envelope(&signing, EDGE_ID, AuthorityRole::Renter, binding());
         let verified =
             verify_authority(&raw, &signing.verifying_key(), EDGE_ID, 1_020_000).unwrap();
-        assert_eq!(verified.session_id, "session_1");
-        assert_eq!(verified.machine_id, "machine_1");
-        assert_eq!(verified.booking_id, "booking_1");
-        assert_eq!(verified.renter_user_id, "user_1");
+        assert_eq!(verified.role, AuthorityRole::Renter);
+        assert_eq!(verified.binding.session_id, "session_1");
+        assert_eq!(verified.binding.machine_id, "machine_1");
+        assert_eq!(verified.binding.booking_id, "booking_1");
+        assert_eq!(verified.binding.renter_user_id, "user_1");
     }
 
     #[test]
     fn authority_for_another_edge_is_rejected_even_with_a_valid_signature() {
         let signing = SigningKey::from_bytes(&[7; 32]);
-        let raw = signed_envelope(&signing, EDGE_ID, binding());
+        let raw = signed_envelope(&signing, EDGE_ID, AuthorityRole::Renter, binding());
         assert!(
             verify_authority(&raw, &signing.verifying_key(), "edge_london_1", 1_020_000).is_err()
         );
     }
 
     #[test]
-    fn tampering_edge_scope_or_binding_invalidates_the_signature() {
+    fn tampering_edge_role_or_binding_invalidates_the_signature() {
         let signing = SigningKey::from_bytes(&[7; 32]);
-        let raw = signed_envelope(&signing, EDGE_ID, binding());
+        let raw = signed_envelope(&signing, EDGE_ID, AuthorityRole::Renter, binding());
         let mut envelope: AuthorityEnvelope = serde_json::from_slice(&raw).unwrap();
         envelope.binding.machine_id = "machine_attacker".into();
         let tampered = serde_json::to_vec(&envelope).unwrap();
@@ -222,12 +249,17 @@ mod tests {
             1_020_000
         )
         .is_err());
+
+        let mut envelope: AuthorityEnvelope = serde_json::from_slice(&raw).unwrap();
+        envelope.role = AuthorityRole::Host;
+        let tampered = serde_json::to_vec(&envelope).unwrap();
+        assert!(verify_authority(&tampered, &signing.verifying_key(), EDGE_ID, 1_020_000).is_err());
     }
 
     #[test]
     fn expired_authority_is_rejected_even_with_a_valid_signature() {
         let signing = SigningKey::from_bytes(&[7; 32]);
-        let raw = signed_envelope(&signing, EDGE_ID, binding());
+        let raw = signed_envelope(&signing, EDGE_ID, AuthorityRole::Renter, binding());
         assert!(verify_authority(&raw, &signing.verifying_key(), EDGE_ID, 1_060_000).is_err());
     }
 
@@ -236,7 +268,7 @@ mod tests {
         let signing = SigningKey::from_bytes(&[7; 32]);
         let mut long_lived = binding();
         long_lived.expires_at_ms = long_lived.issued_at_ms + MAX_AUTHORITY_TTL_MS + 1;
-        let raw = signed_envelope(&signing, EDGE_ID, long_lived);
+        let raw = signed_envelope(&signing, EDGE_ID, AuthorityRole::Renter, long_lived);
         assert!(verify_authority(&raw, &signing.verifying_key(), EDGE_ID, 1_020_000).is_err());
     }
 
@@ -249,7 +281,7 @@ mod tests {
         ] {
             let mut invalid = binding();
             invalid.nonce = nonce.into();
-            let raw = signed_envelope(&signing, EDGE_ID, invalid);
+            let raw = signed_envelope(&signing, EDGE_ID, AuthorityRole::Renter, invalid);
             assert!(verify_authority(&raw, &signing.verifying_key(), EDGE_ID, 1_020_000).is_err());
         }
     }
@@ -257,7 +289,7 @@ mod tests {
     #[test]
     fn unknown_fields_are_rejected_instead_of_being_ignored() {
         let signing = SigningKey::from_bytes(&[7; 32]);
-        let raw = signed_envelope(&signing, EDGE_ID, binding());
+        let raw = signed_envelope(&signing, EDGE_ID, AuthorityRole::Renter, binding());
         let mut value: serde_json::Value = serde_json::from_slice(&raw).unwrap();
         value
             .as_object_mut()
@@ -274,11 +306,13 @@ mod tests {
 
     #[test]
     fn canonical_claim_order_matches_control_plane_contract() {
-        let raw = String::from_utf8(canonical_authority_claims_bytes(EDGE_ID, &binding()).unwrap())
-            .unwrap();
+        let raw = String::from_utf8(
+            canonical_authority_claims_bytes(EDGE_ID, AuthorityRole::Renter, &binding()).unwrap(),
+        )
+        .unwrap();
         assert_eq!(
             raw,
-            "{\"edgeId\":\"edge_paris_1\",\"binding\":{\"protocolVersion\":1,\"sessionId\":\"session_1\",\"machineId\":\"machine_1\",\"bookingId\":\"booking_1\",\"renterUserId\":\"user_1\",\"issuedAtMs\":1000000,\"expiresAtMs\":1060000,\"nonce\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"}}"
+            "{\"edgeId\":\"edge_paris_1\",\"role\":\"RENTER\",\"binding\":{\"protocolVersion\":1,\"sessionId\":\"session_1\",\"machineId\":\"machine_1\",\"bookingId\":\"booking_1\",\"renterUserId\":\"user_1\",\"issuedAtMs\":1000000,\"expiresAtMs\":1060000,\"nonce\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"}}"
         );
     }
 }
