@@ -15,8 +15,8 @@ use gpubnb_edge_core::ALPN;
 use quinn::{crypto::rustls::QuicClientConfig, ClientConfig, ConnectionError, Endpoint};
 use serde::Deserialize;
 use wire::{
-    read_json_frame, write_json_frame, OpenStreamFrame, StreamStatusFrame, WireStreamKind,
-    STREAM_METADATA_MAX_BYTES, STREAM_STATUS_MAX_BYTES,
+    read_json_frame, write_json_frame, OpenStreamFrame, StreamRejectCode, StreamStatusFrame,
+    WireStreamKind, STREAM_METADATA_MAX_BYTES, STREAM_STATUS_MAX_BYTES,
 };
 
 const CONTROL_RESPONSE_MAX_BYTES: usize = 8 * 1024;
@@ -271,11 +271,49 @@ async fn run_stream_pressure_case(
         );
     }
 
-    if tokio::time::timeout(Duration::from_millis(750), connection.open_bi())
-        .await
-        .is_ok()
+    // QUIC has one control-stream reserve beyond the 64 workspace-stream
+    // application budget. Saturation must therefore reach EdgeRegistry and
+    // return a deterministic STREAM_LIMIT, never masquerade as a network stall.
+    let (mut overflow_send, mut overflow_recv) =
+        tokio::time::timeout(Duration::from_secs(5), connection.open_bi())
+            .await
+            .context("65th workspace stream could not reach application admission")??;
+    let overflow_frame = OpenStreamFrame {
+        message_type: "OPEN_STREAM".into(),
+        stream_id: 9_998,
+        kind: WireStreamKind::Terminal,
+        target_port: None,
+        resume_from_sequence: None,
+    };
+    write_json_frame(
+        &mut overflow_send,
+        &overflow_frame,
+        STREAM_METADATA_MAX_BYTES,
+    )
+    .await?;
+    overflow_send
+        .finish()
+        .context("finish over-capacity workspace stream")?;
+    let overflow_status: StreamStatusFrame = tokio::time::timeout(
+        Duration::from_secs(5),
+        read_json_frame(&mut overflow_recv, STREAM_STATUS_MAX_BYTES),
+    )
+    .await
+    .context("65th workspace stream did not receive bounded application rejection")??;
+    overflow_status.validate_for(9_998)?;
+    if overflow_status.is_accepted() || overflow_status.code != Some(StreamRejectCode::StreamLimit)
     {
-        bail!("65th workspace stream transport slot opened before capacity was released");
+        bail!(
+            "65th workspace stream must be rejected explicitly with STREAM_LIMIT, got {:?}",
+            overflow_status.code
+        );
+    }
+    let trailing = overflow_recv
+        .read_to_end(ROUTED_RESPONSE_MAX_BYTES)
+        .await
+        .context("finish reading over-capacity rejection stream")?;
+    if !trailing.is_empty() {
+        bail!("over-capacity rejection carried unexpected payload bytes");
     }
 
     println!("pressure-ready");

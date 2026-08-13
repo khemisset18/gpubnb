@@ -463,6 +463,10 @@ async fn handle_host_connection(
         }
         return Err(error);
     }
+    // FIN alone does not release Quinn's concurrent-stream accounting while
+    // the SendStream handle remains live. Drop the completed one-shot auth
+    // control stream before the long-lived Host connection enters service.
+    drop(auth_send);
 
     info!(
         event = "edge_host_tunnel_ready",
@@ -503,6 +507,9 @@ async fn handle_renter_connection(
     edge_id: Arc<String>,
 ) -> Result<()> {
     write_control_response(&mut auth_send, br#"{"ok":true,"protocol":"gpubnb-dp/1"}"#).await?;
+    // The authenticated connection is long-lived; the one-shot auth stream is
+    // not. Release its transport credit before accepting workspace streams.
+    drop(auth_send);
     info!(
         event = "edge_session_authenticated",
         remote = %connection.remote_address(),
