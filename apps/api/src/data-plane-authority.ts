@@ -6,6 +6,7 @@ export const DATA_PLANE_AUTHORITY_MAX_TTL_MS = 60_000;
 export const DATA_PLANE_AUTHORITY_DEFAULT_TTL_MS = 30_000;
 
 export interface DataPlaneAuthorityEnvelope {
+  edgeId: string;
   binding: DataPlaneSessionBinding;
   signatureHex: string;
 }
@@ -16,7 +17,7 @@ function validateId(name: string, value: string): void {
   if (!SAFE_ID.test(value)) throw new Error(`data_plane_authority_${name}_invalid`);
 }
 
-export function canonicalDataPlaneBinding(binding: DataPlaneSessionBinding): Buffer {
+function canonicalBindingObject(binding: DataPlaneSessionBinding) {
   if (binding.protocolVersion !== GPUBNB_DATA_PLANE_VERSION) {
     throw new Error('data_plane_authority_version_invalid');
   }
@@ -33,7 +34,7 @@ export function canonicalDataPlaneBinding(binding: DataPlaneSessionBinding): Buf
     throw new Error('data_plane_authority_ttl_too_long');
   }
 
-  const canonical = {
+  return {
     protocolVersion: binding.protocolVersion,
     sessionId: binding.sessionId,
     machineId: binding.machineId,
@@ -43,10 +44,26 @@ export function canonicalDataPlaneBinding(binding: DataPlaneSessionBinding): Buf
     expiresAtMs: binding.expiresAtMs,
     nonce: binding.nonce.toLowerCase(),
   };
+}
+
+export function canonicalDataPlaneBinding(binding: DataPlaneSessionBinding): Buffer {
+  return Buffer.from(JSON.stringify(canonicalBindingObject(binding)), 'utf8');
+}
+
+export function canonicalDataPlaneAuthorityClaims(
+  edgeId: string,
+  binding: DataPlaneSessionBinding,
+): Buffer {
+  validateId('edge_id', edgeId);
+  const canonical = {
+    edgeId,
+    binding: canonicalBindingObject(binding),
+  };
   return Buffer.from(JSON.stringify(canonical), 'utf8');
 }
 
 export function issueDataPlaneAuthority(input: {
+  edgeId: string;
   sessionId: string;
   machineId: string;
   bookingId: string;
@@ -61,6 +78,7 @@ export function issueDataPlaneAuthority(input: {
   if (!Number.isInteger(ttlMs) || ttlMs < 1_000 || ttlMs > DATA_PLANE_AUTHORITY_MAX_TTL_MS) {
     throw new Error('data_plane_authority_ttl_invalid');
   }
+  validateId('edge_id', input.edgeId);
 
   const binding: DataPlaneSessionBinding = {
     protocolVersion: GPUBNB_DATA_PLANE_VERSION,
@@ -72,10 +90,10 @@ export function issueDataPlaneAuthority(input: {
     expiresAtMs: nowMs + ttlMs,
     nonce: crypto.randomBytes(32).toString('hex'),
   };
-  const message = canonicalDataPlaneBinding(binding);
+  const message = canonicalDataPlaneAuthorityClaims(input.edgeId, binding);
   const signature = crypto.sign(null, message, input.privateKey);
   if (signature.length !== 64) throw new Error('data_plane_authority_signature_invalid');
-  return { binding, signatureHex: signature.toString('hex') };
+  return { edgeId: input.edgeId, binding, signatureHex: signature.toString('hex') };
 }
 
 export function verifyDataPlaneAuthorityForTest(
@@ -86,7 +104,7 @@ export function verifyDataPlaneAuthorityForTest(
   try {
     return crypto.verify(
       null,
-      canonicalDataPlaneBinding(envelope.binding),
+      canonicalDataPlaneAuthorityClaims(envelope.edgeId, envelope.binding),
       publicKey,
       Buffer.from(envelope.signatureHex, 'hex'),
     );

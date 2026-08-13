@@ -15,7 +15,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
-use authority::{parse_verifying_key_hex, verify_authority};
+use authority::{parse_verifying_key_hex, validate_edge_id, verify_authority};
 use ed25519_dalek::VerifyingKey;
 use gpubnb_edge_core::{EdgeRegistry, Limits, ALPN};
 use quinn::{crypto::rustls::QuicServerConfig, Endpoint};
@@ -124,6 +124,7 @@ async fn handle_connection(
     registry: Arc<Mutex<EdgeRegistry>>,
     replay_cache: Arc<Mutex<ReplayCache>>,
     verifying_key: Arc<VerifyingKey>,
+    edge_id: Arc<String>,
 ) -> Result<()> {
     let remote = connection.remote_address();
     let (mut send, mut recv) = connection
@@ -135,7 +136,7 @@ async fn handle_connection(
         .await
         .context("failed to read authority stream")?;
     let authenticated_at_ms = now_ms()?;
-    let binding = verify_authority(&raw, &verifying_key, authenticated_at_ms)?;
+    let binding = verify_authority(&raw, &verifying_key, edge_id.as_str(), authenticated_at_ms)?;
     let session_id = binding.session_id.clone();
 
     {
@@ -179,6 +180,7 @@ async fn handle_connection(
     info!(
         event = "edge_session_authenticated",
         remote = %remote,
+        edge = %edge_id,
         session = %session_id,
         "authenticated QUIC data-plane session"
     );
@@ -191,6 +193,7 @@ async fn handle_connection(
     info!(
         event = "edge_session_closed",
         remote = %remote,
+        edge = %edge_id,
         session = %session_id,
         reason = ?close,
         "QUIC data-plane session closed"
@@ -214,6 +217,8 @@ async fn main() -> Result<()> {
     let cert_path = required_env("GPUBNB_EDGE_TLS_CERT")?;
     let key_path = required_env("GPUBNB_EDGE_TLS_KEY")?;
     let replay_capacity = replay_cache_capacity()?;
+    let edge_id = Arc::new(required_env("GPUBNB_EDGE_ID")?);
+    validate_edge_id(edge_id.as_str()).context("GPUBNB_EDGE_ID invalid")?;
     let verifying_key = Arc::new(parse_verifying_key_hex(&required_env(
         "GPUBNB_EDGE_AUTHORITY_PUBLIC_KEY_HEX",
     )?)?);
@@ -226,6 +231,7 @@ async fn main() -> Result<()> {
     info!(
         event = "edge_ready",
         bind = %endpoint.local_addr()?,
+        edge = %edge_id,
         alpn = ALPN,
         replay_cache_capacity = replay_capacity,
         "GPUbnb Edge ready"
@@ -238,6 +244,7 @@ async fn main() -> Result<()> {
                 let registry = Arc::clone(&registry);
                 let replay_cache = Arc::clone(&replay_cache);
                 let verifying_key = Arc::clone(&verifying_key);
+                let edge_id = Arc::clone(&edge_id);
                 tokio::spawn(async move {
                     match incoming.await {
                         Ok(connection) => {
@@ -246,6 +253,7 @@ async fn main() -> Result<()> {
                                 registry,
                                 replay_cache,
                                 verifying_key,
+                                edge_id,
                             ).await {
                                 warn!(event = "edge_connection_rejected", error = %error, "QUIC connection rejected");
                             }

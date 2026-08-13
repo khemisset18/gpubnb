@@ -4,14 +4,16 @@ import crypto from 'node:crypto';
 
 import {
   DATA_PLANE_AUTHORITY_MAX_TTL_MS,
+  canonicalDataPlaneAuthorityClaims,
   canonicalDataPlaneBinding,
   issueDataPlaneAuthority,
   verifyDataPlaneAuthorityForTest,
 } from '../src/data-plane-authority.js';
 
-test('control plane issues a short-lived Ed25519 authority scoped to one renter session', () => {
+test('control plane issues a short-lived Ed25519 authority scoped to one edge and renter session', () => {
   const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
   const envelope = issueDataPlaneAuthority({
+    edgeId: 'edge_paris_1',
     sessionId: 'session_1',
     machineId: 'machine_1',
     bookingId: 'booking_1',
@@ -21,6 +23,7 @@ test('control plane issues a short-lived Ed25519 authority scoped to one renter 
     ttlMs: 30_000,
   });
 
+  assert.equal(envelope.edgeId, 'edge_paris_1');
   assert.equal(envelope.binding.issuedAtMs, 1_000_000);
   assert.equal(envelope.binding.expiresAtMs, 1_030_000);
   assert.match(envelope.binding.nonce, /^[a-f0-9]{64}$/);
@@ -28,9 +31,10 @@ test('control plane issues a short-lived Ed25519 authority scoped to one renter 
   assert.equal(verifyDataPlaneAuthorityForTest(envelope, publicKey), true);
 });
 
-test('changing machine, booking or renter after signing invalidates authority', () => {
+test('changing edge, machine, booking or renter after signing invalidates authority', () => {
   const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
   const envelope = issueDataPlaneAuthority({
+    edgeId: 'edge_paris_1',
     sessionId: 'session_1',
     machineId: 'machine_1',
     bookingId: 'booking_1',
@@ -39,6 +43,10 @@ test('changing machine, booking or renter after signing invalidates authority', 
     nowMs: 1_000_000,
   });
 
+  assert.equal(
+    verifyDataPlaneAuthorityForTest({ ...envelope, edgeId: 'edge_london_1' }, publicKey),
+    false,
+  );
   for (const binding of [
     { ...envelope.binding, machineId: 'machine_2' },
     { ...envelope.binding, bookingId: 'booking_2' },
@@ -51,6 +59,7 @@ test('changing machine, booking or renter after signing invalidates authority', 
 test('authority TTL and identifiers are hard bounded', () => {
   const { privateKey } = crypto.generateKeyPairSync('ed25519');
   const base = {
+    edgeId: 'edge_paris_1',
     sessionId: 'session_1',
     machineId: 'machine_1',
     bookingId: 'booking_1',
@@ -62,12 +71,13 @@ test('authority TTL and identifiers are hard bounded', () => {
     () => issueDataPlaneAuthority({ ...base, ttlMs: DATA_PLANE_AUTHORITY_MAX_TTL_MS + 1 }),
     /ttl_invalid/,
   );
+  assert.throws(() => issueDataPlaneAuthority({ ...base, edgeId: '../escape' }), /edge_id_invalid/);
   assert.throws(() => issueDataPlaneAuthority({ ...base, sessionId: '../escape' }), /session_id_invalid/);
 });
 
 test('canonical binding property order is protocol-stable across runtimes', () => {
-  const raw = canonicalDataPlaneBinding({
-    protocolVersion: 1,
+  const binding = {
+    protocolVersion: 1 as const,
     sessionId: 'session_1',
     machineId: 'machine_1',
     bookingId: 'booking_1',
@@ -75,9 +85,14 @@ test('canonical binding property order is protocol-stable across runtimes', () =
     issuedAtMs: 1000,
     expiresAtMs: 2000,
     nonce: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-  }).toString('utf8');
+  };
+  const raw = canonicalDataPlaneBinding(binding).toString('utf8');
   assert.equal(
     raw,
     '{"protocolVersion":1,"sessionId":"session_1","machineId":"machine_1","bookingId":"booking_1","renterUserId":"user_1","issuedAtMs":1000,"expiresAtMs":2000,"nonce":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}',
+  );
+  assert.equal(
+    canonicalDataPlaneAuthorityClaims('edge_paris_1', binding).toString('utf8'),
+    '{"edgeId":"edge_paris_1","binding":{"protocolVersion":1,"sessionId":"session_1","machineId":"machine_1","bookingId":"booking_1","renterUserId":"user_1","issuedAtMs":1000,"expiresAtMs":2000,"nonce":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}',
   );
 });
