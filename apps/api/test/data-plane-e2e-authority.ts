@@ -41,3 +41,7 @@ for (let index = 1; index <= 3; index += 1) {
 }
 writeAuthority('authority-host.json', 'HOST');
 writeAuthority('authority-renter-route.json', 'RENTER');
+writeAuthority('authority-renter-pressure.json', 'RENTER');
+writeAuthority('authority-renter-large.json', 'RENTER');
+writeAuthority('authority-renter-corrupt.json', 'RENTER');
+writeAuthority('authority-renter-drain.json', 'RENTER');
