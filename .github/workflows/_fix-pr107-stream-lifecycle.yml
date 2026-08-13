@@ -20,137 +20,9 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Apply lifecycle fix
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          edge = Path('services/edge/src/bin/gpubnb-edge.rs')
-          text = edge.read_text()
-
-          host_old = '''    if let Err(error) =
-        write_control_response(&mut auth_send, br#"{\\"ok\\":true,\\"protocol\\":\\"gpubnb-dp/1\\"}"#).await
-    {
-        let mut router_guard = router.lock().await;
-'''
-          host_new = '''    if let Err(error) =
-        write_control_response(&mut auth_send, br#"{\\"ok\\":true,\\"protocol\\":\\"gpubnb-dp/1\\"}"#).await
-    {
-        let mut router_guard = router.lock().await;
-'''
-          if host_old not in text:
-              raise SystemExit('expected Host auth response block not found')
-          # The error path still owns auth_send. The successful path must drop it
-          # immediately after FIN so the client-initiated control stream no longer
-          # consumes concurrent bidi credit for the lifetime of the Host tunnel.
-          marker = '''        return Err(error);
-    }
-
-    info!(
-        event = "edge_host_tunnel_ready",
-'''
-          replacement = '''        return Err(error);
-    }
-    drop(auth_send);
-
-    info!(
-        event = "edge_host_tunnel_ready",
-'''
-          if marker not in text:
-              raise SystemExit('expected Host success marker not found')
-          text = text.replace(marker, replacement, 1)
-
-          renter_old = '''    write_control_response(&mut auth_send, br#"{\\"ok\\":true,\\"protocol\\":\\"gpubnb-dp/1\\"}"#).await?;
-    info!(
-        event = "edge_session_authenticated",
-'''
-          renter_new = '''    write_control_response(&mut auth_send, br#"{\\"ok\\":true,\\"protocol\\":\\"gpubnb-dp/1\\"}"#).await?;
-    drop(auth_send);
-    info!(
-        event = "edge_session_authenticated",
-'''
-          if renter_old not in text:
-              raise SystemExit('expected Renter auth response block not found')
-          text = text.replace(renter_old, renter_new, 1)
-          edge.write_text(text)
-
-          client = Path('services/edge/examples/e2e_client.rs')
-          text = client.read_text()
-          import_old = '''use wire::{
-    read_json_frame, write_json_frame, OpenStreamFrame, StreamStatusFrame, WireStreamKind,
-    STREAM_METADATA_MAX_BYTES, STREAM_STATUS_MAX_BYTES,
-};
-'''
-          import_new = '''use wire::{
-    read_json_frame, write_json_frame, OpenStreamFrame, StreamRejectCode, StreamStatusFrame,
-    WireStreamKind, STREAM_METADATA_MAX_BYTES, STREAM_STATUS_MAX_BYTES,
-};
-'''
-          if import_old not in text:
-              raise SystemExit('expected E2E wire import not found')
-          text = text.replace(import_old, import_new, 1)
-
-          old = '''    if tokio::time::timeout(Duration::from_millis(750), connection.open_bi())
-        .await
-        .is_ok()
-    {
-        bail!("65th workspace stream transport slot opened before capacity was released");
-    }
-
-    println!("pressure-ready");
-'''
-          new = '''    // Transport intentionally reserves one bidi slot beyond the 64-stream
-    // application budget so saturation is rejected by the signed application
-    // protocol instead of looking like an ambiguous QUIC/network timeout.
-    let (mut overflow_send, mut overflow_recv) =
-        tokio::time::timeout(Duration::from_secs(5), connection.open_bi())
-            .await
-            .context("65th workspace stream could not reach application admission")??;
-    let overflow_frame = OpenStreamFrame {
-        message_type: "OPEN_STREAM".into(),
-        stream_id: 9_998,
-        kind: WireStreamKind::Terminal,
-        target_port: None,
-        resume_from_sequence: None,
-    };
-    write_json_frame(
-        &mut overflow_send,
-        &overflow_frame,
-        STREAM_METADATA_MAX_BYTES,
-    )
-    .await?;
-    overflow_send
-        .finish()
-        .context("finish over-capacity workspace stream")?;
-    let overflow_status: StreamStatusFrame = tokio::time::timeout(
-        Duration::from_secs(5),
-        read_json_frame(&mut overflow_recv, STREAM_STATUS_MAX_BYTES),
-    )
-    .await
-    .context("65th workspace stream did not receive bounded application rejection")??;
-    overflow_status.validate_for(9_998)?;
-    if overflow_status.is_accepted() || overflow_status.code != Some(StreamRejectCode::StreamLimit) {
-        bail!(
-            "65th workspace stream must be rejected explicitly with STREAM_LIMIT, got {:?}",
-            overflow_status.code
-        );
-    }
-    let trailing = overflow_recv
-        .read_to_end(ROUTED_RESPONSE_MAX_BYTES)
-        .await
-        .context("finish reading over-capacity rejection stream")?;
-    if !trailing.is_empty() {
-        bail!("over-capacity rejection carried unexpected payload bytes");
-    }
-
-    println!("pressure-ready");
-'''
-          if old not in text:
-              raise SystemExit('expected old 65th-stream transport assertion not found')
-          text = text.replace(old, new, 1)
-          client.write_text(text)
-          PY
+        run: python3 services/edge/ci/apply-pr107-stream-lifecycle-fix.py
+      - name: Canonical format
+        run: cargo fmt --manifest-path services/edge/Cargo.toml
       - name: Validate Rust and E2E client
         shell: bash
         run: |
@@ -159,11 +31,11 @@ jobs:
           cargo test --manifest-path services/edge/Cargo.toml --all-targets
           cargo clippy --manifest-path services/edge/Cargo.toml --all-targets -- -D warnings
           cargo build --manifest-path services/edge/Cargo.toml --bin gpubnb-edge --bin gpubnb-host-tunnel --example e2e_client
-      - name: Commit validated fix and remove temporary workflow
+      - name: Commit validated fix and remove temporary tooling
         shell: bash
         run: |
           set -euo pipefail
-          git rm .github/workflows/_fix-pr107-stream-lifecycle.yml
+          git rm .github/workflows/_fix-pr107-stream-lifecycle.yml services/edge/ci/apply-pr107-stream-lifecycle-fix.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add services/edge/src/bin/gpubnb-edge.rs services/edge/examples/e2e_client.rs
