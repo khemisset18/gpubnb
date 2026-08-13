@@ -68,6 +68,9 @@ return nextBytes
 `;
 
 const ENQUEUE_DEDUPED_WS_FRAME_SCRIPT=`
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  return 0
+end
 local count = redis.call('LLEN', KEYS[2])
 local currentBytes = tonumber(redis.call('GET', KEYS[3]) or '0')
 local itemBytes = tonumber(ARGV[4])
