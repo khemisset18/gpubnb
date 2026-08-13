@@ -5,6 +5,7 @@ import {
   issueDataPlaneAuthority,
   type DataPlaneAuthorityEnvelope,
 } from './data-plane-authority.js';
+import { assertDataPlaneReleaseQualified } from './data-plane-flags.js';
 
 const SAFE_ID = /^[A-Za-z0-9_-]{1,160}$/;
 const SAFE_SERVER_NAME = /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
@@ -58,7 +59,13 @@ function validateEdgeAddress(value: string): void {
 }
 
 export function dataPlaneHostBootstrapEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.GPUBNB_DATA_PLANE_EDGE_ENABLED === 'true';
+  const raw = String(env.GPUBNB_DATA_PLANE_EDGE_ENABLED ?? '').trim().toLowerCase();
+  if (raw === '' || raw === 'false' || raw === '0' || raw === 'off' || raw === 'no') return false;
+  if (raw !== 'true' && raw !== '1' && raw !== 'on' && raw !== 'yes') {
+    throw new Error('GPUBNB_DATA_PLANE_EDGE_ENABLED_invalid_boolean');
+  }
+  assertDataPlaneReleaseQualified(env);
+  return true;
 }
 
 export function loadDataPlaneHostRuntimeConfig(
