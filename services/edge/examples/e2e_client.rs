@@ -1,8 +1,15 @@
-use std::{env, fs::File, io::BufReader, net::SocketAddr, sync::Arc};
+use std::{
+    env,
+    fs::File,
+    io::{BufReader, Write},
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::{bail, Context, Result};
 use gpubnb_edge_core::ALPN;
-use quinn::{crypto::rustls::QuicClientConfig, ClientConfig, Endpoint};
+use quinn::{crypto::rustls::QuicClientConfig, ClientConfig, ConnectionError, Endpoint};
 use serde::Deserialize;
 
 const CONTROL_RESPONSE_MAX_BYTES: usize = 8 * 1024;
@@ -43,7 +50,14 @@ fn verify_success_response(response: &[u8]) -> Result<()> {
     Ok(())
 }
 
-async fn run_case(
+async fn connect(endpoint: &Endpoint, addr: SocketAddr) -> Result<quinn::Connection> {
+    endpoint
+        .connect(addr, "localhost")?
+        .await
+        .context("QUIC/TLS connection failed")
+}
+
+async fn run_authority_case(
     endpoint: &Endpoint,
     addr: SocketAddr,
     authority: &[u8],
@@ -51,10 +65,7 @@ async fn run_case(
 ) -> Result<()> {
     // Transport/TLS/ALPN must always succeed. A network or certificate failure
     // must never be accepted as proof that replay protection worked.
-    let connection = endpoint
-        .connect(addr, "localhost")?
-        .await
-        .context("QUIC/TLS connection failed")?;
+    let connection = connect(endpoint, addr).await?;
     let (mut send, mut recv) = connection
         .open_bi()
         .await
@@ -78,26 +89,100 @@ async fn run_case(
                 );
             }
         }
-        other => bail!("unknown expectation {other}"),
+        other => bail!("unknown authority expectation {other}"),
     }
 
     connection.close(0_u8.into(), b"e2e complete");
     Ok(())
 }
 
+async fn run_idle_timeout_case(endpoint: &Endpoint, addr: SocketAddr) -> Result<()> {
+    let connection = connect(endpoint, addr)
+        .await
+        .context("QUIC/TLS connection failed before idle-timeout test")?;
+
+    // Send no authority stream. A malicious or broken pre-auth peer must not
+    // retain connection state indefinitely.
+    let close = tokio::time::timeout(Duration::from_secs(8), connection.closed())
+        .await
+        .context("Edge did not reclaim idle pre-auth connection within test deadline")?;
+    if close != ConnectionError::TimedOut {
+        bail!("expected QUIC idle timeout, got {close:?}");
+    }
+    Ok(())
+}
+
+async fn run_hold_preauth_case(endpoint: &Endpoint, addr: SocketAddr, hold_ms: u64) -> Result<()> {
+    let connection = connect(endpoint, addr)
+        .await
+        .context("failed to establish held pre-auth QUIC connection")?;
+    println!("preauth-connected");
+    std::io::stdout()
+        .flush()
+        .context("flush readiness marker")?;
+    tokio::time::sleep(Duration::from_millis(hold_ms)).await;
+    connection.close(0_u8.into(), b"capacity probe complete");
+    Ok(())
+}
+
+async fn run_capacity_reject_case(endpoint: &Endpoint, addr: SocketAddr) -> Result<()> {
+    let connecting = endpoint.connect(addr, "localhost")?;
+    let result = tokio::time::timeout(Duration::from_secs(3), connecting)
+        .await
+        .context("capacity refusal did not arrive within deadline")?;
+    if let Ok(connection) = result {
+        connection.close(0_u8.into(), b"unexpected capacity admission");
+        bail!("expected Edge connection-cap refusal but QUIC handshake succeeded");
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 5 {
-        bail!("usage: e2e_client <addr> <ca-cert.pem> <expect-ok|expect-reject> <authority.json>");
+    if args.len() < 4 {
+        bail!("usage: e2e_client <addr> <ca-cert.pem> <mode> [authority.json|hold-ms]");
     }
 
     let addr: SocketAddr = args[1].parse().context("parse Edge address")?;
     let mut endpoint = Endpoint::client("0.0.0.0:0".parse()?).context("create client endpoint")?;
     endpoint.set_default_client_config(client_config(&args[2])?);
-    let authority = std::fs::read(&args[4]).context("read authority envelope")?;
 
-    run_case(&endpoint, addr, &authority, &args[3]).await?;
+    match args[3].as_str() {
+        "expect-idle-timeout" => {
+            if args.len() != 4 {
+                bail!("expect-idle-timeout takes no extra argument");
+            }
+            run_idle_timeout_case(&endpoint, addr).await?;
+        }
+        "expect-capacity-reject" => {
+            if args.len() != 4 {
+                bail!("expect-capacity-reject takes no extra argument");
+            }
+            run_capacity_reject_case(&endpoint, addr).await?;
+        }
+        "hold-preauth" => {
+            if args.len() != 5 {
+                bail!("hold-preauth requires hold milliseconds");
+            }
+            let hold_ms = args[4]
+                .parse::<u64>()
+                .context("hold-preauth milliseconds must be an integer")?;
+            if !(100..=10_000).contains(&hold_ms) {
+                bail!("hold-preauth milliseconds must be between 100 and 10000");
+            }
+            run_hold_preauth_case(&endpoint, addr, hold_ms).await?;
+        }
+        "expect-ok" | "expect-reject" => {
+            if args.len() != 5 {
+                bail!("authority test mode requires an authority path");
+            }
+            let authority = std::fs::read(&args[4]).context("read authority envelope")?;
+            run_authority_case(&endpoint, addr, &authority, &args[3]).await?;
+        }
+        other => bail!("unknown E2E mode {other}"),
+    }
+
     endpoint.wait_idle().await;
     Ok(())
 }
