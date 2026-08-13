@@ -1,0 +1,197 @@
+use anyhow::{anyhow, bail, Context, Result};
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use serde::{Deserialize, Serialize};
+
+use gpubnb_edge_core::{SessionBinding, PROTOCOL_VERSION};
+
+const MAX_AUTHORITY_BYTES: usize = 16 * 1024;
+const MAX_AUTHORITY_TTL_MS: u64 = 60_000;
+const AUTHORITY_NONCE_HEX_LEN: usize = 64;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct WireSessionBinding {
+    pub protocol_version: u16,
+    pub session_id: String,
+    pub machine_id: String,
+    pub booking_id: String,
+    pub renter_user_id: String,
+    pub issued_at_ms: u64,
+    pub expires_at_ms: u64,
+    pub nonce: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct AuthorityEnvelope {
+    pub binding: WireSessionBinding,
+    pub signature_hex: String,
+}
+
+impl From<WireSessionBinding> for SessionBinding {
+    fn from(value: WireSessionBinding) -> Self {
+        Self {
+            protocol_version: value.protocol_version,
+            session_id: value.session_id,
+            machine_id: value.machine_id,
+            booking_id: value.booking_id,
+            renter_user_id: value.renter_user_id,
+            issued_at_ms: value.issued_at_ms,
+            expires_at_ms: value.expires_at_ms,
+            nonce: value.nonce,
+        }
+    }
+}
+
+pub fn parse_verifying_key_hex(raw: &str) -> Result<VerifyingKey> {
+    let decoded = hex::decode(raw.trim()).context("invalid Ed25519 public-key hex")?;
+    let bytes: [u8; 32] = decoded
+        .try_into()
+        .map_err(|_| anyhow!("Ed25519 public key must be exactly 32 bytes"))?;
+    VerifyingKey::from_bytes(&bytes).context("invalid Ed25519 public key")
+}
+
+pub fn canonical_binding_bytes(binding: &WireSessionBinding) -> Result<Vec<u8>> {
+    serde_json::to_vec(binding).context("failed to canonicalize session binding")
+}
+
+fn validate_authority_contract(binding: &WireSessionBinding) -> Result<()> {
+    if binding.protocol_version != PROTOCOL_VERSION {
+        bail!("authority protocol version mismatch");
+    }
+    if binding.expires_at_ms <= binding.issued_at_ms {
+        bail!("authority expiry must be after issuance");
+    }
+    if binding.expires_at_ms - binding.issued_at_ms > MAX_AUTHORITY_TTL_MS {
+        bail!("authority lifetime exceeds protocol maximum");
+    }
+    if binding.nonce.len() != AUTHORITY_NONCE_HEX_LEN
+        || !binding.nonce.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        bail!("authority nonce must be exactly 32 bytes encoded as hexadecimal");
+    }
+    Ok(())
+}
+
+pub fn verify_authority(raw: &[u8], key: &VerifyingKey, now_ms: u64) -> Result<SessionBinding> {
+    if raw.is_empty() || raw.len() > MAX_AUTHORITY_BYTES {
+        bail!("authority envelope size invalid");
+    }
+
+    let envelope: AuthorityEnvelope =
+        serde_json::from_slice(raw).context("invalid authority envelope JSON")?;
+    validate_authority_contract(&envelope.binding)?;
+
+    let signature_bytes =
+        hex::decode(&envelope.signature_hex).context("invalid authority signature hex")?;
+    let signature =
+        Signature::from_slice(&signature_bytes).context("invalid authority signature")?;
+    let message = canonical_binding_bytes(&envelope.binding)?;
+    key.verify(&message, &signature)
+        .context("authority signature verification failed")?;
+
+    if now_ms < envelope.binding.issued_at_ms.saturating_sub(30_000)
+        || now_ms >= envelope.binding.expires_at_ms
+    {
+        bail!("authority is not current");
+    }
+
+    Ok(envelope.binding.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+
+    fn binding() -> WireSessionBinding {
+        WireSessionBinding {
+            protocol_version: PROTOCOL_VERSION,
+            session_id: "session_1".into(),
+            machine_id: "machine_1".into(),
+            booking_id: "booking_1".into(),
+            renter_user_id: "user_1".into(),
+            issued_at_ms: 1_000_000,
+            expires_at_ms: 1_060_000,
+            nonce: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into(),
+        }
+    }
+
+    fn signed_envelope(signing: &SigningKey, binding: WireSessionBinding) -> Vec<u8> {
+        let message = canonical_binding_bytes(&binding).unwrap();
+        let signature = signing.sign(&message);
+        serde_json::to_vec(&AuthorityEnvelope {
+            binding,
+            signature_hex: hex::encode(signature.to_bytes()),
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn valid_authority_verifies_and_preserves_scope() {
+        let signing = SigningKey::from_bytes(&[7; 32]);
+        let raw = signed_envelope(&signing, binding());
+        let verified = verify_authority(&raw, &signing.verifying_key(), 1_020_000).unwrap();
+        assert_eq!(verified.session_id, "session_1");
+        assert_eq!(verified.machine_id, "machine_1");
+        assert_eq!(verified.booking_id, "booking_1");
+        assert_eq!(verified.renter_user_id, "user_1");
+    }
+
+    #[test]
+    fn tampering_any_binding_field_invalidates_the_signature() {
+        let signing = SigningKey::from_bytes(&[7; 32]);
+        let raw = signed_envelope(&signing, binding());
+        let mut envelope: AuthorityEnvelope = serde_json::from_slice(&raw).unwrap();
+        envelope.binding.machine_id = "machine_attacker".into();
+        let tampered = serde_json::to_vec(&envelope).unwrap();
+        assert!(verify_authority(&tampered, &signing.verifying_key(), 1_020_000).is_err());
+    }
+
+    #[test]
+    fn expired_authority_is_rejected_even_with_a_valid_signature() {
+        let signing = SigningKey::from_bytes(&[7; 32]);
+        let raw = signed_envelope(&signing, binding());
+        assert!(verify_authority(&raw, &signing.verifying_key(), 1_060_000).is_err());
+    }
+
+    #[test]
+    fn oversized_authority_lifetime_is_rejected_even_when_signed() {
+        let signing = SigningKey::from_bytes(&[7; 32]);
+        let mut long_lived = binding();
+        long_lived.expires_at_ms = long_lived.issued_at_ms + MAX_AUTHORITY_TTL_MS + 1;
+        let raw = signed_envelope(&signing, long_lived);
+        assert!(verify_authority(&raw, &signing.verifying_key(), 1_020_000).is_err());
+    }
+
+    #[test]
+    fn nonce_contract_matches_control_plane_exactly() {
+        let signing = SigningKey::from_bytes(&[7; 32]);
+        for nonce in [
+            "abcd",
+            "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
+        ] {
+            let mut invalid = binding();
+            invalid.nonce = nonce.into();
+            let raw = signed_envelope(&signing, invalid);
+            assert!(verify_authority(&raw, &signing.verifying_key(), 1_020_000).is_err());
+        }
+    }
+
+    #[test]
+    fn unknown_fields_are_rejected_instead_of_being_ignored() {
+        let signing = SigningKey::from_bytes(&[7; 32]);
+        let raw = signed_envelope(&signing, binding());
+        let mut value: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("admin".into(), true.into());
+        assert!(verify_authority(
+            &serde_json::to_vec(&value).unwrap(),
+            &signing.verifying_key(),
+            1_020_000
+        )
+        .is_err());
+    }
+}
