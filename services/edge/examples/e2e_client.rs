@@ -271,9 +271,10 @@ async fn run_stream_pressure_case(
         );
     }
 
-    // QUIC has one control-stream reserve beyond the 64 workspace-stream
-    // application budget. Saturation must therefore reach EdgeRegistry and
-    // return a deterministic STREAM_LIMIT, never masquerade as a network stall.
+    // Transport has bounded infrastructure/replenishment credit beyond the
+    // 64 workspace application budget. Saturation must therefore reach
+    // EdgeRegistry and return a deterministic STREAM_LIMIT, never masquerade as
+    // a transport-level stream-credit stall.
     let (mut overflow_send, mut overflow_recv) =
         tokio::time::timeout(Duration::from_secs(5), connection.open_bi())
             .await
@@ -315,6 +316,13 @@ async fn run_stream_pressure_case(
     if !trailing.is_empty() {
         bail!("over-capacity rejection carried unexpected payload bytes");
     }
+    match tokio::time::timeout(Duration::from_secs(5), overflow_send.stopped())
+        .await
+        .context("over-capacity request FIN was not acknowledged")??
+    {
+        None => {}
+        Some(code) => bail!("over-capacity request was stopped unexpectedly: {code}"),
+    }
 
     println!("pressure-ready");
     std::io::stdout()
@@ -322,42 +330,54 @@ async fn run_stream_pressure_case(
         .context("flush pressure readiness marker")?;
     tokio::time::sleep(PRESSURE_MEASUREMENT_WINDOW).await;
 
-    // A QUIC bidi stream is not reusable merely because one local handle was
-    // dropped. Complete both directions and observe the peer FIN before
-    // asserting MAX_STREAMS credit and application capacity are reusable.
-    let (mut released_send, mut released_recv) = streams.remove(0);
-    released_send
-        .finish()
-        .context("finish released pressure stream")?;
-    let released_response = tokio::time::timeout(
-        Duration::from_secs(5),
-        released_recv.read_to_end(ROUTED_RESPONSE_MAX_BYTES),
-    )
-    .await
-    .context("released pressure stream did not close bidirectionally")??;
-    if !released_response.is_empty() {
-        bail!("zero-byte pressure stream unexpectedly returned payload data");
-    }
-
-    let (mut send, mut recv) = tokio::time::timeout(Duration::from_secs(5), connection.open_bi())
+    // Quinn batches MAX_STREAMS updates until more than 1/8 of the advertised
+    // remote-stream window has been freed. Rotate ten workspace streams while
+    // keeping application concurrency at 64. This proves the bounded transport
+    // reserve carries churn until Quinn replenishes cumulative stream credit.
+    for rotation in 0..10_u32 {
+        let (mut released_send, mut released_recv) = streams.remove(0);
+        released_send
+            .finish()
+            .context("finish released pressure stream")?;
+        let released_response = tokio::time::timeout(
+            Duration::from_secs(5),
+            released_recv.read_to_end(ROUTED_RESPONSE_MAX_BYTES),
+        )
         .await
-        .context("stream capacity was not released after full stream closure")??;
-    let frame = OpenStreamFrame {
-        message_type: "OPEN_STREAM".into(),
-        stream_id: 9_999,
-        kind: WireStreamKind::Terminal,
-        target_port: None,
-        resume_from_sequence: None,
-    };
-    write_json_frame(&mut send, &frame, STREAM_METADATA_MAX_BYTES).await?;
-    let status: StreamStatusFrame = read_json_frame(&mut recv, STREAM_STATUS_MAX_BYTES).await?;
-    status.validate_for(9_999)?;
-    if !status.is_accepted() {
-        bail!("replacement stream was rejected after capacity release");
+        .context("released pressure stream did not receive peer FIN")??;
+        if !released_response.is_empty() {
+            bail!("zero-byte pressure stream unexpectedly returned payload data");
+        }
+        match tokio::time::timeout(Duration::from_secs(5), released_send.stopped())
+            .await
+            .context("released pressure request FIN was not acknowledged")??
+        {
+            None => {}
+            Some(code) => bail!("released pressure request was stopped unexpectedly: {code}"),
+        }
+
+        let (mut send, mut recv) =
+            tokio::time::timeout(Duration::from_secs(5), connection.open_bi())
+                .await
+                .with_context(|| {
+                    format!("stream credit was not replenished during churn rotation {rotation}")
+                })??;
+        let stream_id = 10_000 + rotation;
+        let frame = OpenStreamFrame {
+            message_type: "OPEN_STREAM".into(),
+            stream_id,
+            kind: WireStreamKind::Terminal,
+            target_port: None,
+            resume_from_sequence: None,
+        };
+        write_json_frame(&mut send, &frame, STREAM_METADATA_MAX_BYTES).await?;
+        let status: StreamStatusFrame = read_json_frame(&mut recv, STREAM_STATUS_MAX_BYTES).await?;
+        status.validate_for(stream_id)?;
+        if !status.is_accepted() {
+            bail!("replacement stream was rejected during churn rotation {rotation}");
+        }
+        streams.push((send, recv));
     }
-    send.finish()
-        .context("finish replacement pressure stream")?;
-    let _ = recv.read_to_end(ROUTED_RESPONSE_MAX_BYTES).await?;
 
     for (mut send, mut recv) in streams {
         let _ = send.finish();

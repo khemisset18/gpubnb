@@ -14,22 +14,25 @@ use crate::Limits;
 const KIB: usize = 1024;
 const MIB: usize = 1024 * KIB;
 
-// Protocol v1 has two transport-only concerns outside the workspace session
-// budget: the one-shot authority/control stream and one bounded admission slot.
-// The admission reserve lets an over-capacity workspace attempt reach
-// EdgeRegistry and receive an explicit STREAM_LIMIT instead of stalling at the
-// QUIC layer while all 64 application streams are live.
+// Protocol v1 keeps application capacity at 64 workspace streams. Quinn
+// deliberately batches MAX_STREAMS updates until more than 1/8 of the current
+// remote-stream window has been freed, so transport needs bounded spare credit
+// for auth, explicit over-capacity rejection, and normal stream churn while a
+// replenishment update is pending. With 75 transport credits, Quinn's threshold
+// is 9; a reserve of 10 guarantees progress until the next MAX_STREAMS update.
 pub const MAX_APPLICATION_BIDI_STREAMS: u32 = 64;
 pub const CONTROL_BIDI_STREAM_RESERVE: u32 = 1;
-pub const ADMISSION_BIDI_STREAM_RESERVE: u32 = 1;
-pub const MAX_BIDI_STREAMS: u32 =
-    MAX_APPLICATION_BIDI_STREAMS + CONTROL_BIDI_STREAM_RESERVE + ADMISSION_BIDI_STREAM_RESERVE;
+pub const STREAM_CREDIT_REPLENISHMENT_RESERVE: u32 = 10;
+pub const MAX_BIDI_STREAMS: u32 = MAX_APPLICATION_BIDI_STREAMS
+    + CONTROL_BIDI_STREAM_RESERVE
+    + STREAM_CREDIT_REPLENISHMENT_RESERVE;
 pub const MAX_UNI_STREAMS: u32 = 0;
 pub const STREAM_RECEIVE_WINDOW_BYTES: u32 = 2 * 1024 * 1024;
 pub const CONNECTION_RECEIVE_WINDOW_BYTES: u32 = 8 * 1024 * 1024;
 pub const CONNECTION_SEND_WINDOW_BYTES: u64 = 8 * 1024 * 1024;
 
 const _: () = assert!(STREAM_RECEIVE_WINDOW_BYTES <= CONNECTION_RECEIVE_WINDOW_BYTES);
+const _: () = assert!(STREAM_CREDIT_REPLENISHMENT_RESERVE > MAX_BIDI_STREAMS / 8);
 
 pub const DEFAULT_MAX_CONNECTIONS: usize = 256;
 pub const MAX_CONFIGURED_CONNECTIONS: usize = 4096;
@@ -320,12 +323,12 @@ mod tests {
             limits.max_streams_per_session
         );
         assert_eq!(CONTROL_BIDI_STREAM_RESERVE, 1);
-        assert_eq!(ADMISSION_BIDI_STREAM_RESERVE, 1);
+        assert_eq!(STREAM_CREDIT_REPLENISHMENT_RESERVE, 10);
         assert_eq!(
             MAX_BIDI_STREAMS,
             MAX_APPLICATION_BIDI_STREAMS
                 + CONTROL_BIDI_STREAM_RESERVE
-                + ADMISSION_BIDI_STREAM_RESERVE
+                + STREAM_CREDIT_REPLENISHMENT_RESERVE
         );
         assert!(STREAM_RECEIVE_WINDOW_BYTES as usize <= limits.max_buffered_bytes_per_stream);
         assert!(CONNECTION_RECEIVE_WINDOW_BYTES as usize <= limits.max_buffered_bytes_per_session);
