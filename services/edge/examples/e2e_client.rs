@@ -244,9 +244,12 @@ async fn run_large_route_case(
     for (index, byte) in payload.iter_mut().enumerate() {
         *byte = ((index * 31 + 17) % 251) as u8;
     }
-    tokio::time::timeout(Duration::from_secs(30), assert_echo(stream.0, stream.1, &payload))
-        .await
-        .context("large routed transfer exceeded bounded deadline")??;
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        assert_echo(stream.0, stream.1, &payload),
+    )
+    .await
+    .context("large routed transfer exceeded bounded deadline")??;
     connection.close(0_u8.into(), b"large routed E2E complete");
     Ok(())
 }
@@ -303,7 +306,8 @@ async fn run_stream_pressure_case(
     if !status.is_accepted() {
         bail!("replacement stream was rejected after capacity release");
     }
-    send.finish().context("finish replacement pressure stream")?;
+    send.finish()
+        .context("finish replacement pressure stream")?;
     drop(recv);
 
     for (mut send, recv) in streams {
