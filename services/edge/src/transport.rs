@@ -14,13 +14,17 @@ use crate::Limits;
 const KIB: usize = 1024;
 const MIB: usize = 1024 * KIB;
 
-// Protocol v1 uses one client-initiated bidi stream for authority/auth control
-// before application streams begin. Keep that protocol stream outside the
-// application session budget so EdgeRegistry can genuinely admit 64 workspace
-// streams without depending on transport credit reclamation timing.
+// Protocol v1 has two transport-only concerns outside the workspace session
+// budget: the one-shot authority/control stream and one bounded admission slot.
+// The admission reserve lets an over-capacity workspace attempt reach
+// EdgeRegistry and receive an explicit STREAM_LIMIT instead of stalling at the
+// QUIC layer while all 64 application streams are live.
 pub const MAX_APPLICATION_BIDI_STREAMS: u32 = 64;
 pub const CONTROL_BIDI_STREAM_RESERVE: u32 = 1;
-pub const MAX_BIDI_STREAMS: u32 = MAX_APPLICATION_BIDI_STREAMS + CONTROL_BIDI_STREAM_RESERVE;
+pub const ADMISSION_BIDI_STREAM_RESERVE: u32 = 1;
+pub const MAX_BIDI_STREAMS: u32 = MAX_APPLICATION_BIDI_STREAMS
+    + CONTROL_BIDI_STREAM_RESERVE
+    + ADMISSION_BIDI_STREAM_RESERVE;
 pub const MAX_UNI_STREAMS: u32 = 0;
 pub const STREAM_RECEIVE_WINDOW_BYTES: u32 = 2 * 1024 * 1024;
 pub const CONNECTION_RECEIVE_WINDOW_BYTES: u32 = 8 * 1024 * 1024;
@@ -317,9 +321,12 @@ mod tests {
             limits.max_streams_per_session
         );
         assert_eq!(CONTROL_BIDI_STREAM_RESERVE, 1);
+        assert_eq!(ADMISSION_BIDI_STREAM_RESERVE, 1);
         assert_eq!(
             MAX_BIDI_STREAMS,
-            MAX_APPLICATION_BIDI_STREAMS + CONTROL_BIDI_STREAM_RESERVE
+            MAX_APPLICATION_BIDI_STREAMS
+                + CONTROL_BIDI_STREAM_RESERVE
+                + ADMISSION_BIDI_STREAM_RESERVE
         );
         assert!(STREAM_RECEIVE_WINDOW_BYTES as usize <= limits.max_buffered_bytes_per_stream);
         assert!(CONNECTION_RECEIVE_WINDOW_BYTES as usize <= limits.max_buffered_bytes_per_session);
