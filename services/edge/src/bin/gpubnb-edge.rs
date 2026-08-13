@@ -136,12 +136,7 @@ async fn handle_connection(
         .await
         .context("failed to read authority stream")?;
     let authenticated_at_ms = now_ms()?;
-    let binding = verify_authority(
-        &raw,
-        &verifying_key,
-        edge_id.as_str(),
-        authenticated_at_ms,
-    )?;
+    let binding = verify_authority(&raw, &verifying_key, edge_id.as_str(), authenticated_at_ms)?;
     let session_id = binding.session_id.clone();
 
     {
