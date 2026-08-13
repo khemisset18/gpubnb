@@ -35,7 +35,9 @@ pub enum AdmissionAction {
 impl RuntimeTransportPolicy {
     pub fn from_env() -> Result<Self> {
         Ok(Self {
-            max_connections: parse_max_connections(env::var("GPUBNB_EDGE_MAX_CONNECTIONS").ok().as_deref())?,
+            max_connections: parse_max_connections(
+                env::var("GPUBNB_EDGE_MAX_CONNECTIONS").ok().as_deref(),
+            )?,
             idle_timeout_ms: parse_idle_timeout_ms(
                 env::var("GPUBNB_EDGE_IDLE_TIMEOUT_MS").ok().as_deref(),
             )?,
@@ -45,10 +47,7 @@ impl RuntimeTransportPolicy {
     pub fn retry_threshold(self) -> usize {
         // Require address validation only once the Edge is under sustained
         // connection pressure. Normal traffic avoids the extra Retry RTT.
-        self.max_connections
-            .saturating_mul(3)
-            .saturating_add(3)
-            / 4
+        self.max_connections.saturating_mul(3).saturating_add(3) / 4
     }
 }
 
@@ -61,9 +60,7 @@ pub fn parse_max_connections(raw: Option<&str>) -> Result<usize> {
         .parse::<usize>()
         .context("GPUBNB_EDGE_MAX_CONNECTIONS must be a positive integer")?;
     if !(1..=MAX_CONFIGURED_CONNECTIONS).contains(&value) {
-        bail!(
-            "GPUBNB_EDGE_MAX_CONNECTIONS must be between 1 and {MAX_CONFIGURED_CONNECTIONS}"
-        );
+        bail!("GPUBNB_EDGE_MAX_CONNECTIONS must be between 1 and {MAX_CONFIGURED_CONNECTIONS}");
     }
     Ok(value)
 }
@@ -131,7 +128,10 @@ mod tests {
 
     #[test]
     fn runtime_bounds_fail_closed() {
-        assert_eq!(parse_max_connections(None).unwrap(), DEFAULT_MAX_CONNECTIONS);
+        assert_eq!(
+            parse_max_connections(None).unwrap(),
+            DEFAULT_MAX_CONNECTIONS
+        );
         assert_eq!(parse_max_connections(Some("1")).unwrap(), 1);
         assert_eq!(
             parse_max_connections(Some(&MAX_CONFIGURED_CONNECTIONS.to_string())).unwrap(),
@@ -141,7 +141,10 @@ mod tests {
         assert!(parse_max_connections(Some("4097")).is_err());
         assert!(parse_max_connections(Some("not-a-number")).is_err());
 
-        assert_eq!(parse_idle_timeout_ms(None).unwrap(), DEFAULT_IDLE_TIMEOUT_MS);
+        assert_eq!(
+            parse_idle_timeout_ms(None).unwrap(),
+            DEFAULT_IDLE_TIMEOUT_MS
+        );
         assert_eq!(
             parse_idle_timeout_ms(Some(&MIN_IDLE_TIMEOUT_MS.to_string())).unwrap(),
             MIN_IDLE_TIMEOUT_MS
@@ -165,6 +168,9 @@ mod tests {
         assert_eq!(admission_action(75, false, policy), AdmissionAction::Retry);
         assert_eq!(admission_action(99, true, policy), AdmissionAction::Accept);
         assert_eq!(admission_action(100, true, policy), AdmissionAction::Refuse);
-        assert_eq!(admission_action(100, false, policy), AdmissionAction::Refuse);
+        assert_eq!(
+            admission_action(100, false, policy),
+            AdmissionAction::Refuse
+        );
     }
 }
