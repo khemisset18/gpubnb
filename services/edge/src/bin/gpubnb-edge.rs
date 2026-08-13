@@ -19,7 +19,7 @@ use authority::{parse_verifying_key_hex, validate_edge_id, verify_authority};
 use ed25519_dalek::VerifyingKey;
 use gpubnb_edge_core::{EdgeRegistry, Limits, ALPN};
 use quinn::{crypto::rustls::QuicServerConfig, Endpoint};
-use replay::{ReplayCache, ReplayError};
+use replay::{ReplayError, ReplayStore};
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
@@ -122,7 +122,7 @@ async fn write_control_response(send: &mut quinn::SendStream, payload: &[u8]) ->
 async fn handle_connection(
     connection: quinn::Connection,
     registry: Arc<Mutex<EdgeRegistry>>,
-    replay_cache: Arc<Mutex<ReplayCache>>,
+    replay_store: Arc<Mutex<ReplayStore>>,
     verifying_key: Arc<VerifyingKey>,
     edge_id: Arc<String>,
 ) -> Result<()> {
@@ -140,7 +140,7 @@ async fn handle_connection(
     let session_id = binding.session_id.clone();
 
     {
-        let mut guard = replay_cache.lock().await;
+        let mut guard = replay_store.lock().await;
         match guard.consume(&binding, authenticated_at_ms) {
             Ok(()) => {}
             Err(ReplayError::AlreadyConsumed) => {
@@ -153,11 +153,19 @@ async fn handle_connection(
             }
             Err(ReplayError::Capacity) => {
                 warn!(
-                    event = "edge_replay_cache_saturated",
+                    event = "edge_replay_store_saturated",
                     remote = %remote,
-                    "authority replay cache capacity exhausted"
+                    "authority replay store capacity exhausted"
                 );
-                bail!("authority replay cache capacity exhausted");
+                bail!("authority replay store capacity exhausted");
+            }
+            Err(ReplayError::Persistence) => {
+                error!(
+                    event = "edge_replay_store_persistence_failure",
+                    remote = %remote,
+                    "authority rejected because replay state could not be durably committed"
+                );
+                bail!("authority replay state persistence failed");
             }
         }
     }
@@ -217,6 +225,7 @@ async fn main() -> Result<()> {
     let cert_path = required_env("GPUBNB_EDGE_TLS_CERT")?;
     let key_path = required_env("GPUBNB_EDGE_TLS_KEY")?;
     let replay_capacity = replay_cache_capacity()?;
+    let replay_dir = required_env("GPUBNB_EDGE_REPLAY_DIR")?;
     let edge_id = Arc::new(required_env("GPUBNB_EDGE_ID")?);
     validate_edge_id(edge_id.as_str()).context("GPUBNB_EDGE_ID invalid")?;
     let verifying_key = Arc::new(parse_verifying_key_hex(&required_env(
@@ -226,14 +235,20 @@ async fn main() -> Result<()> {
     let endpoint = Endpoint::server(load_server_config(&cert_path, &key_path)?, bind)
         .context("failed to bind QUIC Edge endpoint")?;
     let registry = Arc::new(Mutex::new(EdgeRegistry::new(Limits::default())));
-    let replay_cache = Arc::new(Mutex::new(ReplayCache::new(replay_capacity)));
+    let replay_store = ReplayStore::open(&replay_dir, replay_capacity, now_ms()?)
+        .context("failed to initialize durable authority replay store")?;
+    let replay_entries = replay_store.len();
+    let replay_quarantined = replay_store.quarantined_markers();
+    let replay_store = Arc::new(Mutex::new(replay_store));
 
     info!(
         event = "edge_ready",
         bind = %endpoint.local_addr()?,
         edge = %edge_id,
         alpn = ALPN,
-        replay_cache_capacity = replay_capacity,
+        replay_store_capacity = replay_capacity,
+        replay_store_entries = replay_entries,
+        replay_store_quarantined = replay_quarantined,
         "GPUbnb Edge ready"
     );
 
@@ -242,7 +257,7 @@ async fn main() -> Result<()> {
             incoming = endpoint.accept() => {
                 let Some(incoming) = incoming else { break; };
                 let registry = Arc::clone(&registry);
-                let replay_cache = Arc::clone(&replay_cache);
+                let replay_store = Arc::clone(&replay_store);
                 let verifying_key = Arc::clone(&verifying_key);
                 let edge_id = Arc::clone(&edge_id);
                 tokio::spawn(async move {
@@ -251,7 +266,7 @@ async fn main() -> Result<()> {
                             if let Err(error) = handle_connection(
                                 connection,
                                 registry,
-                                replay_cache,
+                                replay_store,
                                 verifying_key,
                                 edge_id,
                             ).await {
