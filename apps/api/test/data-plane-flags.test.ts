@@ -75,6 +75,36 @@ test('EDGE_QUIC and DIRECT_QUIC cannot be enabled without exact-release qualific
   );
 });
 
+test('Render qualification is cryptographically scoped to the actual deployed commit id', () => {
+  assert.equal(
+    assertDataPlaneReleaseQualified({
+      RENDER: 'true',
+      RENDER_GIT_COMMIT: RELEASE_SHA,
+      GPUBNB_DATA_PLANE_QUALIFIED_SHA: RELEASE_SHA,
+    }),
+    RELEASE_SHA,
+  );
+  assert.throws(
+    () =>
+      assertDataPlaneReleaseQualified({
+        RENDER: 'true',
+        RENDER_GIT_COMMIT: RELEASE_SHA,
+        GPUBNB_RELEASE_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        GPUBNB_DATA_PLANE_QUALIFIED_SHA: RELEASE_SHA,
+      }),
+    /data_plane_release_sha_mismatch/,
+  );
+  assert.throws(
+    () =>
+      assertDataPlaneReleaseQualified({
+        RENDER: 'true',
+        RENDER_GIT_COMMIT: RELEASE_SHA,
+        GPUBNB_DATA_PLANE_QUALIFIED_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      }),
+    /data_plane_release_not_qualified/,
+  );
+});
+
 test('qualified release may enable a bounded canary and records the evidence SHA', () => {
   assert.deepEqual(
     readDataPlaneRolloutFlags({
