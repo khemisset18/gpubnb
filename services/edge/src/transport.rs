@@ -71,9 +71,8 @@ pub enum AdmissionAction {
 
 impl RuntimeTransportPolicy {
     pub fn from_env() -> Result<Self> {
-        let max_connections = parse_max_connections(
-            env::var("GPUBNB_EDGE_MAX_CONNECTIONS").ok().as_deref(),
-        )?;
+        let max_connections =
+            parse_max_connections(env::var("GPUBNB_EDGE_MAX_CONNECTIONS").ok().as_deref())?;
         let transport_memory_budget_mib = parse_transport_memory_budget_mib(
             env::var("GPUBNB_EDGE_TRANSPORT_MEMORY_BUDGET_MIB")
                 .ok()
@@ -240,7 +239,8 @@ pub fn bind_server_endpoint(
     bind: SocketAddr,
     policy: RuntimeTransportPolicy,
 ) -> Result<(Endpoint, UdpBufferState)> {
-    let socket = UdpSocket::bind(bind).with_context(|| format!("failed to bind QUIC UDP socket {bind}"))?;
+    let socket =
+        UdpSocket::bind(bind).with_context(|| format!("failed to bind QUIC UDP socket {bind}"))?;
     socket
         .set_nonblocking(true)
         .context("failed to configure QUIC UDP socket nonblocking mode")?;
@@ -315,7 +315,10 @@ mod tests {
 
     #[test]
     fn runtime_bounds_fail_closed() {
-        assert_eq!(parse_max_connections(None).unwrap(), DEFAULT_MAX_CONNECTIONS);
+        assert_eq!(
+            parse_max_connections(None).unwrap(),
+            DEFAULT_MAX_CONNECTIONS
+        );
         assert_eq!(parse_max_connections(Some("1")).unwrap(), 1);
         assert_eq!(
             parse_max_connections(Some(&MAX_CONFIGURED_CONNECTIONS.to_string())).unwrap(),
@@ -325,7 +328,10 @@ mod tests {
         assert!(parse_max_connections(Some("4097")).is_err());
         assert!(parse_max_connections(Some("not-a-number")).is_err());
 
-        assert_eq!(parse_idle_timeout_ms(None).unwrap(), DEFAULT_IDLE_TIMEOUT_MS);
+        assert_eq!(
+            parse_idle_timeout_ms(None).unwrap(),
+            DEFAULT_IDLE_TIMEOUT_MS
+        );
         assert_eq!(
             parse_idle_timeout_ms(Some(&MIN_IDLE_TIMEOUT_MS.to_string())).unwrap(),
             MIN_IDLE_TIMEOUT_MS
@@ -337,7 +343,10 @@ mod tests {
         assert!(parse_idle_timeout_ms(Some("4999")).is_err());
         assert!(parse_idle_timeout_ms(Some("300001")).is_err());
 
-        assert_eq!(parse_udp_buffer_bytes(None).unwrap(), DEFAULT_UDP_BUFFER_BYTES);
+        assert_eq!(
+            parse_udp_buffer_bytes(None).unwrap(),
+            DEFAULT_UDP_BUFFER_BYTES
+        );
         assert!(parse_udp_buffer_bytes(Some("1")).is_err());
         assert!(parse_udp_buffer_bytes(Some("67108865")).is_err());
 
@@ -368,6 +377,9 @@ mod tests {
         assert_eq!(admission_action(75, false, policy), AdmissionAction::Retry);
         assert_eq!(admission_action(99, true, policy), AdmissionAction::Accept);
         assert_eq!(admission_action(100, true, policy), AdmissionAction::Refuse);
-        assert_eq!(admission_action(100, false, policy), AdmissionAction::Refuse);
+        assert_eq!(
+            admission_action(100, false, policy),
+            AdmissionAction::Refuse
+        );
     }
 }

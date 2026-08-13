@@ -163,6 +163,13 @@ impl EdgeRegistry {
         self.total_buffered_bytes
     }
 
+    pub fn stream_count(&self) -> usize {
+        self.sessions
+            .values()
+            .map(|session| session.streams.len())
+            .sum()
+    }
+
     pub fn register_session(
         &mut self,
         binding: SessionBinding,

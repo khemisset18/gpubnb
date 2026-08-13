@@ -17,7 +17,7 @@ use std::{
     io::BufReader,
     net::SocketAddr,
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -26,16 +26,17 @@ use authority::{
 };
 use ed25519_dalek::VerifyingKey;
 use gpubnb_edge_core::{EdgeError, EdgeRegistry, Limits, SessionBinding, StreamKind, ALPN};
-use quinn::{crypto::rustls::QuicServerConfig, Endpoint};
+use quinn::crypto::rustls::QuicServerConfig;
 use replay::{ReplayError, ReplayStore};
 use router::WorkspaceRouter;
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use transport::{
-    admission_action, configure_transport, AdmissionAction, RuntimeTransportPolicy,
-    CONNECTION_RECEIVE_WINDOW_BYTES, CONNECTION_SEND_WINDOW_BYTES, MAX_BIDI_STREAMS,
-    MAX_UNI_STREAMS, STREAM_RECEIVE_WINDOW_BYTES,
+    admission_action, bind_server_endpoint, configure_transport, AdmissionAction,
+    RuntimeTransportPolicy, CONNECTION_RECEIVE_WINDOW_BYTES, CONNECTION_SEND_WINDOW_BYTES,
+    MAX_BIDI_STREAMS, MAX_UNI_STREAMS, PER_CONNECTION_TRANSPORT_BUDGET_BYTES,
+    STREAM_RECEIVE_WINDOW_BYTES,
 };
 use wire::{
     read_json_frame, write_json_frame, OpenStreamFrame, StreamRejectCode, StreamStatusFrame,
@@ -198,6 +199,29 @@ fn connection_lease_binding(
     lease.issued_at_ms = authenticated_at_ms;
     lease.expires_at_ms = expires_at_ms;
     Ok(lease)
+}
+
+fn log_connection_transport_metrics(connection: &quinn::Connection, role: &str, session_id: &str) {
+    let stats = connection.stats();
+    info!(
+        event = "edge_connection_transport_metrics",
+        session = %session_id,
+        role,
+        rtt_ms = stats.path.rtt.as_millis() as u64,
+        congestion_window_bytes = stats.path.cwnd,
+        congestion_events = stats.path.congestion_events,
+        lost_packets = stats.path.lost_packets,
+        lost_bytes = stats.path.lost_bytes,
+        sent_packets = stats.path.sent_packets,
+        black_holes_detected = stats.path.black_holes_detected,
+        mtu = stats.path.current_mtu,
+        tx_data_blocked = stats.frame_tx.data_blocked,
+        tx_stream_data_blocked = stats.frame_tx.stream_data_blocked,
+        tx_streams_blocked_bidi = stats.frame_tx.streams_blocked_bidi,
+        rx_data_blocked = stats.frame_rx.data_blocked,
+        rx_stream_data_blocked = stats.frame_rx.stream_data_blocked,
+        "QUIC connection transport metrics"
+    );
 }
 
 fn edge_reject_code(error: &EdgeError) -> StreamRejectCode {
@@ -448,6 +472,7 @@ async fn handle_host_connection(
         "authenticated outbound Host tunnel registered"
     );
     let close = connection.closed().await;
+    log_connection_transport_metrics(&connection, "HOST", &session_id);
     let removed = {
         let mut router_guard = router.lock().await;
         let mut registry_guard = registry.lock().await;
@@ -514,6 +539,7 @@ async fn handle_renter_connection(
             }
         }
     }
+    log_connection_transport_metrics(&connection, "RENTER", &binding.session_id);
     Ok(())
 }
 
@@ -581,11 +607,11 @@ async fn main() -> Result<()> {
         "GPUBNB_EDGE_AUTHORITY_PUBLIC_KEY_HEX",
     )?)?);
 
-    let endpoint = Endpoint::server(
+    let (endpoint, udp_buffers) = bind_server_endpoint(
         load_server_config(&cert_path, &key_path, transport_policy)?,
         bind,
-    )
-    .context("failed to bind QUIC Edge endpoint")?;
+        transport_policy,
+    )?;
     let limits = Limits::default();
     let max_session_lifetime_ms = limits.max_session_lifetime_ms;
     let registry = Arc::new(Mutex::new(EdgeRegistry::new(limits)));
@@ -612,11 +638,36 @@ async fn main() -> Result<()> {
         stream_receive_window_bytes = STREAM_RECEIVE_WINDOW_BYTES,
         connection_receive_window_bytes = CONNECTION_RECEIVE_WINDOW_BYTES,
         connection_send_window_bytes = CONNECTION_SEND_WINDOW_BYTES,
+        per_connection_transport_budget_bytes = PER_CONNECTION_TRANSPORT_BUDGET_BYTES,
+        transport_memory_budget_bytes = transport_policy.transport_memory_budget_bytes,
+        transport_reservation_bytes = transport_policy.transport_reservation_bytes()?,
+        udp_buffer_requested_bytes = udp_buffers.requested_bytes,
+        udp_receive_buffer_bytes = udp_buffers.receive_bytes,
+        udp_send_buffer_bytes = udp_buffers.send_bytes,
+        udp_buffer_strict = transport_policy.udp_buffer_strict,
         "GPUbnb Edge ready"
     );
 
+    let mut metrics_tick = tokio::time::interval(Duration::from_secs(15));
+    metrics_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
     loop {
         tokio::select! {
+            _ = metrics_tick.tick() => {
+                let stats = endpoint.stats();
+                let registry_guard = registry.lock().await;
+                info!(
+                    event = "edge_metrics",
+                    active_connections = endpoint.open_connections(),
+                    active_sessions = registry_guard.session_count(),
+                    active_streams = registry_guard.stream_count(),
+                    application_buffered_bytes = registry_guard.total_buffered_bytes(),
+                    accepted_handshakes = stats.accepted_handshakes,
+                    refused_handshakes = stats.refused_handshakes,
+                    ignored_handshakes = stats.ignored_handshakes,
+                    "Edge transport/resource snapshot"
+                );
+            }
             incoming = endpoint.accept() => {
                 let Some(incoming) = incoming else { break; };
                 let remote = incoming.remote_address();
