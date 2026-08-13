@@ -225,6 +225,9 @@ async fn main() -> Result<()> {
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
+        // Edge logs are consumed by CI, probes and operations automation. Keep
+        // them deterministic even when stderr/stdout is attached to a TTY.
+        .with_ansi(false)
         .with_target(false)
         .compact()
         .init();
