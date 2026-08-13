@@ -378,6 +378,16 @@ async fn route_renter_stream(
             renter_send
                 .finish()
                 .context("failed to finish renter response stream")?;
+            match renter_send
+                .stopped()
+                .await
+                .context("failed while waiting for renter response acknowledgement")?
+            {
+                None => {}
+                Some(code) => {
+                    bail!("renter stopped response stream before acknowledging FIN: {code}")
+                }
+            }
             Result::<u64>::Ok(bytes)
         };
         tokio::try_join!(renter_to_host, host_to_renter)
