@@ -23,11 +23,11 @@ if host_marker not in text:
     raise SystemExit("expected Host auth success marker not found")
 text = text.replace(host_marker, host_replacement, 1)
 
-renter_marker = '''    write_control_response(&mut auth_send, br#"{\\"ok\\":true,\\"protocol\\":\\"gpubnb-dp/1\\"}"#).await?;
+renter_marker = '''    write_control_response(&mut auth_send, br#"{"ok":true,"protocol":"gpubnb-dp/1"}"#).await?;
     info!(
         event = "edge_session_authenticated",
 '''
-renter_replacement = '''    write_control_response(&mut auth_send, br#"{\\"ok\\":true,\\"protocol\\":\\"gpubnb-dp/1\\"}"#).await?;
+renter_replacement = '''    write_control_response(&mut auth_send, br#"{"ok":true,"protocol":"gpubnb-dp/1"}"#).await?;
     // The authenticated connection is long-lived; the one-shot auth stream is
     // not. Release its transport credit before accepting workspace streams.
     drop(auth_send);
