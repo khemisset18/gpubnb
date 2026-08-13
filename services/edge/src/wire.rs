@@ -46,6 +46,11 @@ pub struct OpenStreamFrame {
     pub resume_from_sequence: Option<u64>,
 }
 
+// The wire source is intentionally shared by the Edge, Host tunnel and E2E
+// executable targets. Each target consumes a different subset of helpers, so
+// target-local dead-code analysis must not turn that deliberate sharing into a
+// build failure.
+#[allow(dead_code)]
 impl OpenStreamFrame {
     pub fn validate(&self) -> Result<StreamKind> {
         if self.message_type != "OPEN_STREAM" {
@@ -91,6 +96,7 @@ pub struct StreamStatusFrame {
     pub code: Option<StreamRejectCode>,
 }
 
+#[allow(dead_code)]
 impl StreamStatusFrame {
     pub fn accepted(stream_id: u32) -> Self {
         Self {
