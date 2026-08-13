@@ -33,10 +33,23 @@ function strictCommitSha(raw: string | undefined, name: string): string {
   return value.toLowerCase();
 }
 
+function resolveReleaseSha(env: Readonly<Record<string, string | undefined>>): string {
+  const onRender = strictBoolean(env.RENDER, 'RENDER', false);
+  if (!onRender) return strictCommitSha(env.GPUBNB_RELEASE_SHA, 'GPUBNB_RELEASE_SHA');
+
+  const renderSha = strictCommitSha(env.RENDER_GIT_COMMIT, 'RENDER_GIT_COMMIT');
+  const declared = env.GPUBNB_RELEASE_SHA?.trim();
+  if (declared) {
+    const declaredSha = strictCommitSha(declared, 'GPUBNB_RELEASE_SHA');
+    if (declaredSha !== renderSha) throw new Error('data_plane_release_sha_mismatch');
+  }
+  return renderSha;
+}
+
 export function assertDataPlaneReleaseQualified(
   env: Readonly<Record<string, string | undefined>>,
 ): string {
-  const releaseSha = strictCommitSha(env.GPUBNB_RELEASE_SHA, 'GPUBNB_RELEASE_SHA');
+  const releaseSha = resolveReleaseSha(env);
   const qualifiedSha = strictCommitSha(
     env.GPUBNB_DATA_PLANE_QUALIFIED_SHA,
     'GPUBNB_DATA_PLANE_QUALIFIED_SHA',
