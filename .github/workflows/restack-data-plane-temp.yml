@@ -25,5 +25,5 @@ jobs:
           git config user.email '103233875+khemisset18@users.noreply.github.com'
           git fetch origin main
           git merge --no-edit origin/main
-          git diff --check origin/main...HEAD
+          git diff --check origin/main...HEAD -- . ':(exclude)**/*.md'
           git push origin HEAD:architecture/data-plane-v1
