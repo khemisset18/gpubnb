@@ -55,6 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n services/edge/ci/production-qualification.sh
+          bash -n services/edge/ci/abuse-qualification.sh
           cargo fmt --manifest-path services/edge/Cargo.toml -- --check
           cargo test --manifest-path services/edge/Cargo.toml --all-targets
           cargo clippy --manifest-path services/edge/Cargo.toml --all-targets -- -D warnings
@@ -67,6 +68,10 @@ jobs:
       - name: QUIC resource, replay and network-chaos qualification
         shell: bash
         run: bash services/edge/ci/production-qualification.sh
+
+      - name: Slow I/O and runtime address-validation qualification
+        shell: bash
+        run: bash services/edge/ci/abuse-qualification.sh
 
       - name: Upload qualification evidence
         if: always()
