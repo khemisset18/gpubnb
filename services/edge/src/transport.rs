@@ -3,6 +3,7 @@ use std::{env, time::Duration};
 use anyhow::{bail, Context, Result};
 use quinn::{IdleTimeout, TransportConfig, VarInt};
 
+#[cfg(test)]
 use crate::Limits;
 
 const MIB: u64 = 1024 * 1024;
@@ -12,6 +13,8 @@ pub const MAX_UNI_STREAMS: u32 = 0;
 pub const STREAM_RECEIVE_WINDOW_BYTES: u32 = 2 * 1024 * 1024;
 pub const CONNECTION_RECEIVE_WINDOW_BYTES: u32 = 8 * 1024 * 1024;
 pub const CONNECTION_SEND_WINDOW_BYTES: u64 = 8 * MIB;
+
+const _: () = assert!(STREAM_RECEIVE_WINDOW_BYTES <= CONNECTION_RECEIVE_WINDOW_BYTES);
 
 pub const DEFAULT_MAX_CONNECTIONS: usize = 256;
 pub const MAX_CONFIGURED_CONNECTIONS: usize = 4096;
@@ -122,7 +125,6 @@ mod tests {
         assert_eq!(MAX_BIDI_STREAMS as usize, limits.max_streams_per_session);
         assert!(STREAM_RECEIVE_WINDOW_BYTES as usize <= limits.max_buffered_bytes_per_stream);
         assert!(CONNECTION_RECEIVE_WINDOW_BYTES as usize <= limits.max_buffered_bytes_per_session);
-        assert!(STREAM_RECEIVE_WINDOW_BYTES <= CONNECTION_RECEIVE_WINDOW_BYTES);
         assert_eq!(MAX_UNI_STREAMS, 0);
     }
 
