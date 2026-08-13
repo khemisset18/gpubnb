@@ -22,6 +22,7 @@ use wire::{
 const CONTROL_RESPONSE_MAX_BYTES: usize = 8 * 1024;
 const ROUTED_RESPONSE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const PRESSURE_STREAMS: u32 = 64;
+const PRESSURE_MEASUREMENT_WINDOW: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -261,13 +262,9 @@ async fn run_stream_pressure_case(
     let mut streams = Vec::with_capacity(PRESSURE_STREAMS as usize);
     for index in 0..PRESSURE_STREAMS {
         streams.push(
-            open_routed_stream(
-                &connection,
-                1_000 + index,
-                WireStreamKind::Terminal,
-            )
-            .await
-            .with_context(|| format!("open pressure stream {index}"))?,
+            open_routed_stream(&connection, 1_000 + index, WireStreamKind::Terminal)
+                .await
+                .with_context(|| format!("open pressure stream {index}"))?,
         );
     }
 
@@ -277,6 +274,12 @@ async fn run_stream_pressure_case(
     {
         bail!("65th bidirectional stream opened before capacity was released");
     }
+
+    println!("pressure-ready");
+    std::io::stdout()
+        .flush()
+        .context("flush pressure readiness marker")?;
+    tokio::time::sleep(PRESSURE_MEASUREMENT_WINDOW).await;
 
     let (mut released_send, released_recv) = streams.remove(0);
     released_send
@@ -353,7 +356,9 @@ async fn main() -> Result<()> {
             }
             let authority = std::fs::read(&args[4]).context("read renter route authority")?;
             match args[3].as_str() {
-                "route-interactive" => run_interactive_route_case(&endpoint, addr, &authority).await?,
+                "route-interactive" => {
+                    run_interactive_route_case(&endpoint, addr, &authority).await?
+                }
                 "route-large" => run_large_route_case(&endpoint, addr, &authority).await?,
                 "stream-pressure" => run_stream_pressure_case(&endpoint, addr, &authority).await?,
                 _ => unreachable!(),
