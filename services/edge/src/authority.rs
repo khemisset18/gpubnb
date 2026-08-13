@@ -167,7 +167,11 @@ mod tests {
         }
     }
 
-    fn signed_envelope(signing: &SigningKey, edge_id: &str, binding: WireSessionBinding) -> Vec<u8> {
+    fn signed_envelope(
+        signing: &SigningKey,
+        edge_id: &str,
+        binding: WireSessionBinding,
+    ) -> Vec<u8> {
         let message = canonical_authority_claims_bytes(edge_id, &binding).unwrap();
         let signature = signing.sign(&message);
         serde_json::to_vec(&AuthorityEnvelope {
@@ -182,7 +186,8 @@ mod tests {
     fn valid_authority_verifies_and_preserves_scope() {
         let signing = SigningKey::from_bytes(&[7; 32]);
         let raw = signed_envelope(&signing, EDGE_ID, binding());
-        let verified = verify_authority(&raw, &signing.verifying_key(), EDGE_ID, 1_020_000).unwrap();
+        let verified =
+            verify_authority(&raw, &signing.verifying_key(), EDGE_ID, 1_020_000).unwrap();
         assert_eq!(verified.session_id, "session_1");
         assert_eq!(verified.machine_id, "machine_1");
         assert_eq!(verified.booking_id, "booking_1");
@@ -193,13 +198,9 @@ mod tests {
     fn authority_for_another_edge_is_rejected_even_with_a_valid_signature() {
         let signing = SigningKey::from_bytes(&[7; 32]);
         let raw = signed_envelope(&signing, EDGE_ID, binding());
-        assert!(verify_authority(
-            &raw,
-            &signing.verifying_key(),
-            "edge_london_1",
-            1_020_000
-        )
-        .is_err());
+        assert!(
+            verify_authority(&raw, &signing.verifying_key(), "edge_london_1", 1_020_000).is_err()
+        );
     }
 
     #[test]
