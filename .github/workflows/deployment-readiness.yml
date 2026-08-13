@@ -6,16 +6,20 @@ on:
     paths:
       - 'apps/web/**'
       - 'apps/api/**'
+      - 'services/edge/**'
       - 'netlify.toml'
       - 'render.yaml'
       - '.github/workflows/deployment-readiness.yml'
+      - '.github/workflows/data-plane-production-qualification.yml'
   pull_request:
     paths:
       - 'apps/web/**'
       - 'apps/api/**'
+      - 'services/edge/**'
       - 'netlify.toml'
       - 'render.yaml'
       - '.github/workflows/deployment-readiness.yml'
+      - '.github/workflows/data-plane-production-qualification.yml'
   workflow_dispatch:
 
 permissions:
@@ -102,3 +106,27 @@ jobs:
           grep -Fq 'REDIS_URL=redis://:change-me@localhost:6379' .env.example
           grep -Fq 'value: "false"' render.yaml
           ! grep -RInE '(DATABASE_URL|REDIS_URL|SESSION_SECRET|INTERNAL_SERVICE_TOKEN):[[:space:]]+[^[:space:]]+' render.yaml
+      - name: Require CI-gated Data Plane deployment defaults
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(grep -c 'autoDeployTrigger: checksPass' render.yaml)" -eq 2
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          text = Path('render.yaml').read_text()
+          expected = {
+              'GPUBNB_DATA_PLANE_EDGE_ENABLED': 'false',
+              'GPUBNB_DATA_PLANE_EDGE_QUIC': 'false',
+              'GPUBNB_DATA_PLANE_DIRECT_QUIC': 'false',
+              'GPUBNB_DATA_PLANE_BROWSER_WEBTRANSPORT': 'false',
+              'GPUBNB_DATA_PLANE_CANARY_PERCENT': '0',
+          }
+          for key, value in expected.items():
+              pattern = rf'- key: {re.escape(key)}\n\s+value: "{re.escape(value)}"'
+              if re.search(pattern, text) is None:
+                  raise SystemExit(f'{key} must remain explicitly {value} in render.yaml')
+          PY
+          test -f .github/workflows/data-plane-production-qualification.yml
+          grep -Fq 'production-qualification:' .github/workflows/data-plane-production-qualification.yml
