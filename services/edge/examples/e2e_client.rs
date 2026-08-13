@@ -275,7 +275,7 @@ async fn run_stream_pressure_case(
         .await
         .is_ok()
     {
-        bail!("65th bidirectional stream opened before capacity was released");
+        bail!("65th workspace stream transport slot opened before capacity was released");
     }
 
     println!("pressure-ready");
@@ -284,15 +284,26 @@ async fn run_stream_pressure_case(
         .context("flush pressure readiness marker")?;
     tokio::time::sleep(PRESSURE_MEASUREMENT_WINDOW).await;
 
-    let (mut released_send, released_recv) = streams.remove(0);
+    // A QUIC bidi stream is not reusable merely because one local handle was
+    // dropped. Complete both directions and observe the peer FIN before
+    // asserting MAX_STREAMS credit and application capacity are reusable.
+    let (mut released_send, mut released_recv) = streams.remove(0);
     released_send
         .finish()
         .context("finish released pressure stream")?;
-    drop(released_recv);
+    let released_response = tokio::time::timeout(
+        Duration::from_secs(5),
+        released_recv.read_to_end(ROUTED_RESPONSE_MAX_BYTES),
+    )
+    .await
+    .context("released pressure stream did not close bidirectionally")??;
+    if !released_response.is_empty() {
+        bail!("zero-byte pressure stream unexpectedly returned payload data");
+    }
 
     let (mut send, mut recv) = tokio::time::timeout(Duration::from_secs(5), connection.open_bi())
         .await
-        .context("stream capacity was not released after closing one stream")??;
+        .context("stream capacity was not released after full stream closure")??;
     let frame = OpenStreamFrame {
         message_type: "OPEN_STREAM".into(),
         stream_id: 9_999,
@@ -308,11 +319,15 @@ async fn run_stream_pressure_case(
     }
     send.finish()
         .context("finish replacement pressure stream")?;
-    drop(recv);
+    let _ = recv.read_to_end(ROUTED_RESPONSE_MAX_BYTES).await?;
 
-    for (mut send, recv) in streams {
+    for (mut send, mut recv) in streams {
         let _ = send.finish();
-        drop(recv);
+        let _ = tokio::time::timeout(
+            Duration::from_secs(5),
+            recv.read_to_end(ROUTED_RESPONSE_MAX_BYTES),
+        )
+        .await;
     }
     connection.close(0_u8.into(), b"stream pressure E2E complete");
     Ok(())
