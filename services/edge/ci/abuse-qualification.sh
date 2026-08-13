@@ -57,6 +57,26 @@ client() {
     127.0.0.1:4435 "$TMP/ca-cert.pem" "$@"
 }
 
+start_hold_client() {
+  local index="$1"
+  timeout --signal=TERM --kill-after=3s 14s \
+    services/edge/target/debug/examples/e2e_client \
+    127.0.0.1:4435 "$TMP/ca-cert.pem" hold-preauth 10000 \
+    >"$EVIDENCE/abuse-hold-$index.log" 2>&1 &
+  HOLD_PIDS+=("$!")
+}
+
+wait_hold_connected() {
+  local index="$1"
+  for _ in $(seq 1 80); do
+    grep -q 'preauth-connected' "$EVIDENCE/abuse-hold-$index.log" && return 0
+    sleep 0.1
+  done
+  cat "$EVIDENCE/abuse-hold-$index.log"
+  echo "pre-auth client $index did not establish within qualification bound"
+  return 1
+}
+
 edge_rss_kib() {
   awk '/^VmRSS:/ {print $2}' "/proc/$EDGE_PID/status"
 }
@@ -212,24 +232,27 @@ stop_edge
 export GPUBNB_EDGE_MAX_CONNECTIONS='8'
 start_edge
 grep -q 'retry_threshold=6' "$EDGE_LOG"
-for index in $(seq 1 8); do
-  timeout --signal=TERM --kill-after=3s 12s \
-    services/edge/target/debug/examples/e2e_client \
-    127.0.0.1:4435 "$TMP/ca-cert.pem" hold-preauth 8000 \
-    >"$EVIDENCE/abuse-hold-$index.log" 2>&1 &
-  HOLD_PIDS+=("$!")
+
+# Establish exactly six live pre-auth connections first. The next fresh remote
+# address is therefore evaluated at the 75% pressure threshold instead of
+# racing with seven other simultaneous Incoming decisions.
+for index in $(seq 1 6); do
+  start_hold_client "$index"
+  wait_hold_connected "$index"
 done
-for index in $(seq 1 8); do
-  for _ in $(seq 1 80); do
-    grep -q 'preauth-connected' "$EVIDENCE/abuse-hold-$index.log" && break
-    sleep 0.1
-  done
-  grep -q 'preauth-connected' "$EVIDENCE/abuse-hold-$index.log"
-done
-# A client that receives Retry transparently reconnects with address validation.
-# Requiring all eight clients to become connected plus this event proves the
-# runtime Retry path, not merely the pure admission-policy unit test.
+
+# The seventh connection must be challenged with QUIC Retry and then still
+# complete successfully after Quinn validates the source address.
+start_hold_client 7
+wait_hold_connected 7
 grep -q 'edge_address_retry_required' "$EDGE_LOG"
+
+# Keep pressure above the threshold and prove a second challenged connection can
+# also establish without growing state beyond the declared cap.
+start_hold_client 8
+wait_hold_connected 8
+grep -q 'edge_address_retry_required' "$EDGE_LOG"
+
 client expect-capacity-reject
 grep -q 'edge_connection_refused_capacity' "$EDGE_LOG"
 assert_rss_below 'rss_address_validation_flood_kib' 524288
