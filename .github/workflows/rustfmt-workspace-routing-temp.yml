@@ -1,0 +1,39 @@
+name: rustfmt-workspace-routing-temp
+
+on:
+  push:
+    branches:
+      - feature/workspace-edge-routing
+    paths-ignore:
+      - '.github/workflows/rustfmt-workspace-routing-temp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/workspace-edge-routing
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt
+      - name: Canonical rustfmt
+        run: cargo fmt --manifest-path services/edge/Cargo.toml
+      - name: Commit only canonical formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No formatting changes required'
+            exit 0
+          fi
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add services/edge
+          git commit -m 'style(edge): apply canonical rustfmt'
+          git push origin HEAD:feature/workspace-edge-routing
