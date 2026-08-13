@@ -67,7 +67,7 @@ jobs:
           cache-dependency-path: apps/api/package-lock.json
 
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Data-plane policy and protocol tests
-        run: npx tsx --test test/data-plane-policy.test.ts test/data-plane-protocol.test.ts
+      - name: Data-plane contract tests
+        run: npx tsx --test test/data-plane-*.test.ts
       - name: TypeScript strict build
         run: npx tsc -p tsconfig.json --noEmit
