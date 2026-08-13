@@ -221,7 +221,7 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Publish test release
+    name: Publish immutable test candidate
     needs: build
     runs-on: ubuntu-24.04
     steps:
@@ -230,7 +230,7 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Publish stable prerelease URLs
+      - name: Publish immutable prerelease candidate
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -251,14 +251,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "GPUbnb Host v0.2.0-beta.${GITHUB_RUN_NUMBER}" \
-            --notes "Préversion immuable Devnet construite depuis ${GITHUB_SHA}. Installateur Windows recommandé : gpubnb-host-windows-x64.exe (raccourci menu Démarrer, service Windows, désinstalleur). Une archive portable sans installation est aussi fournie. Les sommes SHA-256 sont publiées dans SHA256SUMS.txt." \
-            --prerelease
-          if gh release view host-test-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete host-test-latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
-          fi
-          gh release create host-test-latest release-assets/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "GPUbnb Host — alias de $VERSION_TAG" \
-            --notes "Alias mutable vers $VERSION_TAG. Version de test non signée destinée à valider la détection GPU, la liaison machine et le parcours de location sur Devnet. Installateur Windows recommandé : gpubnb-host-windows-x64.exe (raccourci menu Démarrer, service Windows, désinstalleur). gpubnb-host-windows-x64-portable.zip est un secours sans installation (extraire puis lancer GPUbnb-Host-Portable.exe). Ne pas utiliser en production." \
+            --notes "CANDIDATE non promue. Préversion immuable Devnet construite depuis ${GITHUB_SHA}. Elle devient host-test-latest uniquement après vérification post-publication sur un runner Windows indépendant. Les sommes SHA-256 sont publiées dans SHA256SUMS.txt." \
             --prerelease
