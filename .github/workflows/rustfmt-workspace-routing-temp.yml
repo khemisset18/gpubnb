@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - feature/workspace-edge-routing
-    paths-ignore:
-      - '.github/workflows/rustfmt-workspace-routing-temp.yml'
   workflow_dispatch:
 
 permissions:
