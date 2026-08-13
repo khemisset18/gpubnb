@@ -44,7 +44,7 @@ jobs:
         run: |
           git config user.name "gpubnb-ci"
           git config user.email "gpubnb-ci@users.noreply.github.com"
-          git rm .github/scripts/tmp_quic_credit_window_fix.py .github/workflows/tmp-quic-credit-window-fix.yml
+          git rm -f .github/scripts/tmp_quic_credit_window_fix.py .github/scripts/sitecustomize.py .github/workflows/tmp-quic-credit-window-fix.yml
           git add services/edge/src/transport.rs services/edge/examples/e2e_client.rs services/edge/ci/production-qualification.sh
           git commit -m "fix(data-plane): reserve QUIC credit for batched stream replenishment"
           git push origin HEAD:hardening/data-plane-production-qualification
