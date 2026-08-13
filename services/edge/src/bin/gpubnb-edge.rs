@@ -2,6 +2,8 @@
 
 #[path = "../authority.rs"]
 mod authority;
+#[path = "../replay.rs"]
+mod replay;
 
 use std::{
     env,
@@ -17,12 +19,15 @@ use authority::{parse_verifying_key_hex, verify_authority};
 use ed25519_dalek::VerifyingKey;
 use gpubnb_edge_core::{EdgeRegistry, Limits, ALPN};
 use quinn::{crypto::rustls::QuicServerConfig, Endpoint};
+use replay::{ReplayCache, ReplayError};
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 const AUTHORITY_MAX_BYTES: usize = 16 * 1024;
 const CONTROL_RESPONSE_MAX_BYTES: usize = 8 * 1024;
+const DEFAULT_REPLAY_CACHE_CAPACITY: usize = 100_000;
+const MAX_REPLAY_CACHE_CAPACITY: usize = 1_000_000;
 
 fn now_ms() -> Result<u64> {
     let duration = SystemTime::now()
@@ -38,6 +43,27 @@ fn required_env(name: &str) -> Result<String> {
         bail!("required environment variable {name} is empty");
     }
     Ok(value)
+}
+
+fn replay_cache_capacity() -> Result<usize> {
+    match env::var("GPUBNB_EDGE_REPLAY_CACHE_CAPACITY") {
+        Ok(raw) => {
+            let capacity = raw
+                .trim()
+                .parse::<usize>()
+                .context("GPUBNB_EDGE_REPLAY_CACHE_CAPACITY must be a positive integer")?;
+            if !(1..=MAX_REPLAY_CACHE_CAPACITY).contains(&capacity) {
+                bail!(
+                    "GPUBNB_EDGE_REPLAY_CACHE_CAPACITY must be between 1 and {MAX_REPLAY_CACHE_CAPACITY}"
+                );
+            }
+            Ok(capacity)
+        }
+        Err(env::VarError::NotPresent) => Ok(DEFAULT_REPLAY_CACHE_CAPACITY),
+        Err(error) => Err(anyhow!(
+            "failed to read GPUBNB_EDGE_REPLAY_CACHE_CAPACITY: {error}"
+        )),
+    }
 }
 
 fn load_server_config(cert_path: &str, key_path: &str) -> Result<quinn::ServerConfig> {
@@ -96,6 +122,7 @@ async fn write_control_response(send: &mut quinn::SendStream, payload: &[u8]) ->
 async fn handle_connection(
     connection: quinn::Connection,
     registry: Arc<Mutex<EdgeRegistry>>,
+    replay_cache: Arc<Mutex<ReplayCache>>,
     verifying_key: Arc<VerifyingKey>,
 ) -> Result<()> {
     let remote = connection.remote_address();
@@ -107,13 +134,37 @@ async fn handle_connection(
         .read_to_end(AUTHORITY_MAX_BYTES)
         .await
         .context("failed to read authority stream")?;
-    let binding = verify_authority(&raw, &verifying_key, now_ms()?)?;
+    let authenticated_at_ms = now_ms()?;
+    let binding = verify_authority(&raw, &verifying_key, authenticated_at_ms)?;
     let session_id = binding.session_id.clone();
+
+    {
+        let mut guard = replay_cache.lock().await;
+        match guard.consume(&binding, authenticated_at_ms) {
+            Ok(()) => {}
+            Err(ReplayError::AlreadyConsumed) => {
+                warn!(
+                    event = "edge_authority_replay_rejected",
+                    remote = %remote,
+                    "replayed data-plane authority rejected"
+                );
+                bail!("data-plane authority already consumed");
+            }
+            Err(ReplayError::Capacity) => {
+                warn!(
+                    event = "edge_replay_cache_saturated",
+                    remote = %remote,
+                    "authority replay cache capacity exhausted"
+                );
+                bail!("authority replay cache capacity exhausted");
+            }
+        }
+    }
 
     {
         let mut guard = registry.lock().await;
         guard
-            .register_session(binding, now_ms()?)
+            .register_session(binding, authenticated_at_ms)
             .map_err(|error| anyhow!("session registration rejected: {error:?}"))?;
     }
 
@@ -162,6 +213,7 @@ async fn main() -> Result<()> {
         .context("GPUBNB_EDGE_BIND must be a socket address such as 0.0.0.0:4433")?;
     let cert_path = required_env("GPUBNB_EDGE_TLS_CERT")?;
     let key_path = required_env("GPUBNB_EDGE_TLS_KEY")?;
+    let replay_capacity = replay_cache_capacity()?;
     let verifying_key = Arc::new(parse_verifying_key_hex(&required_env(
         "GPUBNB_EDGE_AUTHORITY_PUBLIC_KEY_HEX",
     )?)?);
@@ -169,19 +221,32 @@ async fn main() -> Result<()> {
     let endpoint = Endpoint::server(load_server_config(&cert_path, &key_path)?, bind)
         .context("failed to bind QUIC Edge endpoint")?;
     let registry = Arc::new(Mutex::new(EdgeRegistry::new(Limits::default())));
+    let replay_cache = Arc::new(Mutex::new(ReplayCache::new(replay_capacity)));
 
-    info!(event = "edge_ready", bind = %endpoint.local_addr()?, alpn = ALPN, "GPUbnb Edge ready");
+    info!(
+        event = "edge_ready",
+        bind = %endpoint.local_addr()?,
+        alpn = ALPN,
+        replay_cache_capacity = replay_capacity,
+        "GPUbnb Edge ready"
+    );
 
     loop {
         tokio::select! {
             incoming = endpoint.accept() => {
                 let Some(incoming) = incoming else { break; };
                 let registry = Arc::clone(&registry);
+                let replay_cache = Arc::clone(&replay_cache);
                 let verifying_key = Arc::clone(&verifying_key);
                 tokio::spawn(async move {
                     match incoming.await {
                         Ok(connection) => {
-                            if let Err(error) = handle_connection(connection, registry, verifying_key).await {
+                            if let Err(error) = handle_connection(
+                                connection,
+                                registry,
+                                replay_cache,
+                                verifying_key,
+                            ).await {
                                 warn!(event = "edge_connection_rejected", error = %error, "QUIC connection rejected");
                             }
                         }
