@@ -1,0 +1,44 @@
+name: tmp-quic-credit-window-fix
+
+on:
+  push:
+    branches:
+      - hardening/data-plane-production-qualification
+    paths:
+      - .github/scripts/tmp_quic_credit_window_fix.py
+      - .github/workflows/tmp-quic-credit-window-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: hardening/data-plane-production-qualification
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - name: Apply credit-window patch
+        run: python3 .github/scripts/tmp_quic_credit_window_fix.py
+
+      - name: Validate static gates
+        run: |
+          bash -n services/edge/ci/production-qualification.sh
+          cargo fmt --manifest-path services/edge/Cargo.toml -- --check
+          cargo test --manifest-path services/edge/Cargo.toml --all-targets
+          cargo clippy --manifest-path services/edge/Cargo.toml --all-targets -- -D warnings
+
+      - name: Commit validated source only
+        run: |
+          git config user.name "gpubnb-ci"
+          git config user.email "gpubnb-ci@users.noreply.github.com"
+          git rm .github/scripts/tmp_quic_credit_window_fix.py .github/workflows/tmp-quic-credit-window-fix.yml
+          git add services/edge/src/transport.rs services/edge/examples/e2e_client.rs services/edge/ci/production-qualification.sh
+          git commit -m "fix(data-plane): reserve QUIC credit for batched stream replenishment"
+          git push origin HEAD:hardening/data-plane-production-qualification
