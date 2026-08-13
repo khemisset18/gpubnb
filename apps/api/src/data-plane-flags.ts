@@ -4,10 +4,12 @@ export interface DataPlaneRolloutFlags {
   browserWebTransportEnabled: boolean;
   legacyFallbackEnabled: boolean;
   canaryPercent: number;
+  qualifiedReleaseSha: string | null;
 }
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const FALSE_VALUES = new Set(['0', 'false', 'no', 'off']);
+const COMMIT_SHA = /^[a-f0-9]{40}$/i;
 
 function strictBoolean(raw: string | undefined, name: string, defaultValue = false): boolean {
   if (raw === undefined || raw.trim() === '') return defaultValue;
@@ -23,6 +25,24 @@ function strictPercent(raw: string | undefined, name: string): number {
   const value = Number(raw);
   if (!Number.isInteger(value) || value < 0 || value > 100) throw new Error(`${name}_invalid_percent`);
   return value;
+}
+
+function strictCommitSha(raw: string | undefined, name: string): string {
+  const value = raw?.trim() ?? '';
+  if (!COMMIT_SHA.test(value)) throw new Error(`${name}_invalid_sha`);
+  return value.toLowerCase();
+}
+
+export function assertDataPlaneReleaseQualified(
+  env: Readonly<Record<string, string | undefined>>,
+): string {
+  const releaseSha = strictCommitSha(env.GPUBNB_RELEASE_SHA, 'GPUBNB_RELEASE_SHA');
+  const qualifiedSha = strictCommitSha(
+    env.GPUBNB_DATA_PLANE_QUALIFIED_SHA,
+    'GPUBNB_DATA_PLANE_QUALIFIED_SHA',
+  );
+  if (releaseSha !== qualifiedSha) throw new Error('data_plane_release_not_qualified');
+  return qualifiedSha;
 }
 
 export function readDataPlaneRolloutFlags(
@@ -49,12 +69,17 @@ export function readDataPlaneRolloutFlags(
     throw new Error('browser_webtransport_requires_direct_quic');
   }
 
+  const newTransportRequested =
+    edgeQuicEnabled || directQuicEnabled || browserWebTransportEnabled || canaryPercent > 0;
+  const qualifiedReleaseSha = newTransportRequested ? assertDataPlaneReleaseQualified(env) : null;
+
   return {
     edgeQuicEnabled,
     directQuicEnabled,
     browserWebTransportEnabled,
     legacyFallbackEnabled,
     canaryPercent,
+    qualifiedReleaseSha,
   };
 }
 
