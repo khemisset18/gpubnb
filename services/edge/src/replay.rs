@@ -23,6 +23,7 @@ impl ReplayCache {
         }
     }
 
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.consumed_until_ms.len()
     }
