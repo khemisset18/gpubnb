@@ -1,4 +1,5 @@
 name: patch-data-plane-qualification-temp
+# Temporary runner: removed after the validated patch is committed.
 
 on:
   push:
