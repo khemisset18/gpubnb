@@ -154,11 +154,8 @@ pub fn verify_authority(
         hex::decode(&envelope.signature_hex).context("invalid authority signature hex")?;
     let signature =
         Signature::from_slice(&signature_bytes).context("invalid authority signature")?;
-    let message = canonical_authority_claims_bytes(
-        &envelope.edge_id,
-        envelope.role,
-        &envelope.binding,
-    )?;
+    let message =
+        canonical_authority_claims_bytes(&envelope.edge_id, envelope.role, &envelope.binding)?;
     key.verify(&message, &signature)
         .context("authority signature verification failed")?;
 
@@ -271,12 +268,7 @@ mod tests {
         let signing = SigningKey::from_bytes(&[7; 32]);
         let mut long_lived = binding();
         long_lived.expires_at_ms = long_lived.issued_at_ms + MAX_AUTHORITY_TTL_MS + 1;
-        let raw = signed_envelope(
-            &signing,
-            EDGE_ID,
-            AuthorityRole::Renter,
-            long_lived,
-        );
+        let raw = signed_envelope(&signing, EDGE_ID, AuthorityRole::Renter, long_lived);
         assert!(verify_authority(&raw, &signing.verifying_key(), EDGE_ID, 1_020_000).is_err());
     }
 
@@ -289,12 +281,7 @@ mod tests {
         ] {
             let mut invalid = binding();
             invalid.nonce = nonce.into();
-            let raw = signed_envelope(
-                &signing,
-                EDGE_ID,
-                AuthorityRole::Renter,
-                invalid,
-            );
+            let raw = signed_envelope(&signing, EDGE_ID, AuthorityRole::Renter, invalid);
             assert!(verify_authority(&raw, &signing.verifying_key(), EDGE_ID, 1_020_000).is_err());
         }
     }

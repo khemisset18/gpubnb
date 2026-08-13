@@ -206,8 +206,12 @@ fn edge_reject_code(error: &EdgeError) -> StreamRejectCode {
         EdgeError::InvalidTargetPort | EdgeError::ForbiddenTargetPort => {
             StreamRejectCode::InvalidTarget
         }
-        EdgeError::SessionNotCurrent | EdgeError::InvalidLifetime => StreamRejectCode::SessionExpired,
-        EdgeError::UnknownSession | EdgeError::NotAcceptingSessions => StreamRejectCode::HostUnavailable,
+        EdgeError::SessionNotCurrent | EdgeError::InvalidLifetime => {
+            StreamRejectCode::SessionExpired
+        }
+        EdgeError::UnknownSession | EdgeError::NotAcceptingSessions => {
+            StreamRejectCode::HostUnavailable
+        }
         _ => StreamRejectCode::InternalError,
     }
 }
@@ -223,7 +227,8 @@ async fn reject_renter_stream(
         STREAM_STATUS_MAX_BYTES,
     )
     .await?;
-    send.finish().context("failed to finish rejected renter stream")?;
+    send.finish()
+        .context("failed to finish rejected renter stream")?;
     Ok(())
 }
 
@@ -234,20 +239,30 @@ async fn route_renter_stream(
     router: Arc<Mutex<WorkspaceRouter>>,
     registry: Arc<Mutex<EdgeRegistry>>,
 ) -> Result<()> {
-    let frame: OpenStreamFrame = read_json_frame(&mut renter_recv, STREAM_METADATA_MAX_BYTES).await?;
+    let frame: OpenStreamFrame =
+        read_json_frame(&mut renter_recv, STREAM_METADATA_MAX_BYTES).await?;
     let stream_id = frame.stream_id;
     let kind = match frame.validate() {
         Ok(kind) => kind,
         Err(error) => {
-            reject_renter_stream(&mut renter_send, stream_id, StreamRejectCode::InvalidTarget).await?;
+            reject_renter_stream(&mut renter_send, stream_id, StreamRejectCode::InvalidTarget)
+                .await?;
             return Err(error);
         }
     };
     if kind == StreamKind::Control {
-        reject_renter_stream(&mut renter_send, stream_id, StreamRejectCode::UnsupportedKind).await?;
+        reject_renter_stream(
+            &mut renter_send,
+            stream_id,
+            StreamRejectCode::UnsupportedKind,
+        )
+        .await?;
         return Ok(());
     }
-    if frame.resume_from_sequence.is_some_and(|sequence| sequence != 0) {
+    if frame
+        .resume_from_sequence
+        .is_some_and(|sequence| sequence != 0)
+    {
         reject_renter_stream(
             &mut renter_send,
             stream_id,
@@ -511,13 +526,9 @@ async fn handle_connection(
     edge_id: Arc<String>,
     max_session_lifetime_ms: u64,
 ) -> Result<()> {
-    let (verified, auth_send) = authenticate_connection(
-        &connection,
-        &replay_store,
-        &verifying_key,
-        edge_id.as_str(),
-    )
-    .await?;
+    let (verified, auth_send) =
+        authenticate_connection(&connection, &replay_store, &verifying_key, edge_id.as_str())
+            .await?;
     match verified.role {
         AuthorityRole::Host => {
             handle_host_connection(

@@ -52,16 +52,25 @@ struct TargetPolicy {
 
 impl TargetPolicy {
     fn from_env() -> Result<Self> {
-        let workspace_port = parse_port("GPUBNB_HOST_WORKSPACE_PORT", &required_env("GPUBNB_HOST_WORKSPACE_PORT")?)?;
+        let workspace_port = parse_port(
+            "GPUBNB_HOST_WORKSPACE_PORT",
+            &required_env("GPUBNB_HOST_WORKSPACE_PORT")?,
+        )?;
         let jupyter_port = match env::var("GPUBNB_HOST_JUPYTER_PORT") {
-            Ok(raw) if !raw.trim().is_empty() => Some(parse_port("GPUBNB_HOST_JUPYTER_PORT", &raw)?),
+            Ok(raw) if !raw.trim().is_empty() => {
+                Some(parse_port("GPUBNB_HOST_JUPYTER_PORT", &raw)?)
+            }
             Ok(_) | Err(env::VarError::NotPresent) => None,
             Err(error) => return Err(anyhow!("failed to read GPUBNB_HOST_JUPYTER_PORT: {error}")),
         };
         let allowed_app_ports = match env::var("GPUBNB_HOST_ALLOWED_APP_PORTS") {
             Ok(raw) => parse_port_set(&raw)?,
             Err(env::VarError::NotPresent) => HashSet::new(),
-            Err(error) => return Err(anyhow!("failed to read GPUBNB_HOST_ALLOWED_APP_PORTS: {error}")),
+            Err(error) => {
+                return Err(anyhow!(
+                    "failed to read GPUBNB_HOST_ALLOWED_APP_PORTS: {error}"
+                ))
+            }
         };
         Ok(Self {
             workspace_port,
@@ -70,13 +79,19 @@ impl TargetPolicy {
         })
     }
 
-    fn target_for(&self, frame: &OpenStreamFrame, kind: StreamKind) -> Result<SocketAddr, StreamRejectCode> {
+    fn target_for(
+        &self,
+        frame: &OpenStreamFrame,
+        kind: StreamKind,
+    ) -> Result<SocketAddr, StreamRejectCode> {
         let port = match kind {
             StreamKind::VsCodeManagement
             | StreamKind::VsCodeExtensionHost
             | StreamKind::Terminal
             | StreamKind::FileTransfer => self.workspace_port,
-            StreamKind::Jupyter => self.jupyter_port.ok_or(StreamRejectCode::TargetUnavailable)?,
+            StreamKind::Jupyter => self
+                .jupyter_port
+                .ok_or(StreamRejectCode::TargetUnavailable)?,
             StreamKind::AppPort => {
                 let port = frame.target_port.ok_or(StreamRejectCode::InvalidTarget)?;
                 if !self.allowed_app_ports.contains(&port) {
@@ -91,7 +106,8 @@ impl TargetPolicy {
 }
 
 fn required_env(name: &str) -> Result<String> {
-    let value = env::var(name).with_context(|| format!("missing required environment variable {name}"))?;
+    let value =
+        env::var(name).with_context(|| format!("missing required environment variable {name}"))?;
     if value.trim().is_empty() {
         bail!("required environment variable {name} is empty");
     }
@@ -143,7 +159,8 @@ fn load_client_config(ca_cert_path: &str) -> Result<ClientConfig> {
         .with_no_client_auth();
     tls.alpn_protocols = vec![ALPN.as_bytes().to_vec()];
     tls.enable_early_data = false;
-    let quic = QuicClientConfig::try_from(tls).context("Host TLS configuration is not QUIC-compatible")?;
+    let quic =
+        QuicClientConfig::try_from(tls).context("Host TLS configuration is not QUIC-compatible")?;
     let mut client = ClientConfig::new(Arc::new(quic));
     let mut transport = TransportConfig::default();
     transport
@@ -155,11 +172,13 @@ fn load_client_config(ca_cert_path: &str) -> Result<ClientConfig> {
 }
 
 fn load_host_authority(path: &str) -> Result<Vec<u8>> {
-    let raw = std::fs::read(path).with_context(|| format!("failed to read Host authority {path}"))?;
+    let raw =
+        std::fs::read(path).with_context(|| format!("failed to read Host authority {path}"))?;
     if raw.is_empty() || raw.len() > AUTHORITY_MAX_BYTES {
         bail!("Host authority file size invalid");
     }
-    let probe: AuthorityRoleProbe = serde_json::from_slice(&raw).context("invalid Host authority JSON")?;
+    let probe: AuthorityRoleProbe =
+        serde_json::from_slice(&raw).context("invalid Host authority JSON")?;
     if probe.role != "HOST" {
         bail!("Host tunnel refuses a non-HOST authority");
     }
@@ -174,12 +193,14 @@ async fn authenticate_host(connection: &quinn::Connection, authority: &[u8]) -> 
     send.write_all(authority)
         .await
         .context("failed to write Host authority")?;
-    send.finish().context("failed to finish Host authority stream")?;
+    send.finish()
+        .context("failed to finish Host authority stream")?;
     let raw = recv
         .read_to_end(AUTH_RESPONSE_MAX_BYTES)
         .await
         .context("failed to read Edge Host authentication response")?;
-    let response: AuthResponse = serde_json::from_slice(&raw).context("invalid Edge authentication response")?;
+    let response: AuthResponse =
+        serde_json::from_slice(&raw).context("invalid Edge authentication response")?;
     if !response.ok || response.protocol != ALPN {
         bail!("Edge rejected Host data-plane authentication");
     }
@@ -197,7 +218,8 @@ async fn reject_stream(
         STREAM_STATUS_MAX_BYTES,
     )
     .await?;
-    send.finish().context("failed to finish rejected Host stream")?;
+    send.finish()
+        .context("failed to finish rejected Host stream")?;
     Ok(())
 }
 
@@ -221,7 +243,10 @@ async fn handle_routed_stream(
             return Err(error);
         }
     };
-    if frame.resume_from_sequence.is_some_and(|sequence| sequence != 0) {
+    if frame
+        .resume_from_sequence
+        .is_some_and(|sequence| sequence != 0)
+    {
         reject_stream(&mut send, stream_id, StreamRejectCode::ResumeWindowExpired).await?;
         return Ok(());
     }
@@ -241,12 +266,18 @@ async fn handle_routed_stream(
             return Ok(());
         }
         Err(_) => {
-            warn!(event = "host_target_connect_timeout", stream_id, target_port = target.port(), "workspace loopback target connect timed out");
+            warn!(
+                event = "host_target_connect_timeout",
+                stream_id,
+                target_port = target.port(),
+                "workspace loopback target connect timed out"
+            );
             reject_stream(&mut send, stream_id, StreamRejectCode::TargetUnavailable).await?;
             return Ok(());
         }
     };
-    tcp.set_nodelay(true).context("failed to configure workspace target TCP_NODELAY")?;
+    tcp.set_nodelay(true)
+        .context("failed to configure workspace target TCP_NODELAY")?;
     write_json_frame(
         &mut send,
         &StreamStatusFrame::accepted(stream_id),
@@ -269,7 +300,8 @@ async fn handle_routed_stream(
         let bytes = tokio::io::copy(&mut tcp_read, &mut send)
             .await
             .context("workspace-to-renter relay failed")?;
-        send.finish().context("failed to finish renter response stream")?;
+        send.finish()
+            .context("failed to finish renter response stream")?;
         Result::<u64>::Ok(bytes)
     };
     let (bytes_up, bytes_down) = tokio::try_join!(upstream, downstream)?;
@@ -305,7 +337,8 @@ async fn main() -> Result<()> {
     let policy = TargetPolicy::from_env()?;
     let authority = load_host_authority(&authority_path)?;
 
-    let mut endpoint = Endpoint::client("0.0.0.0:0".parse()?).context("failed to create Host QUIC endpoint")?;
+    let mut endpoint =
+        Endpoint::client("0.0.0.0:0".parse()?).context("failed to create Host QUIC endpoint")?;
     endpoint.set_default_client_config(load_client_config(&ca_cert)?);
     let connection = endpoint
         .connect(edge_addr, &server_name)

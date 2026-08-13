@@ -180,7 +180,10 @@ async fn open_routed_stream(
     let status: StreamStatusFrame = read_json_frame(&mut recv, STREAM_STATUS_MAX_BYTES).await?;
     status.validate_for(stream_id)?;
     if !status.is_accepted() {
-        bail!("Edge/Host rejected routed stream {stream_id}: {:?}", status.code);
+        bail!(
+            "Edge/Host rejected routed stream {stream_id}: {:?}",
+            status.code
+        );
     }
     Ok((send, recv))
 }
