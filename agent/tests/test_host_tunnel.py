@@ -91,6 +91,9 @@ class HostTunnelSupervisorTests(unittest.TestCase):
             random_func=lambda: random_value,
         )
 
+    def _bootstrap(self) -> dict:
+        return self._request(object(), object(), "machine_1", "/bootstrap", "GET", None)
+
     def test_start_uses_environment_paths_not_authority_on_command_line(self) -> None:
         supervisor = self._supervisor()
         with patch("gpubnb_agent.host_tunnel.config_dir", return_value=self.root / "config"):
@@ -105,6 +108,31 @@ class HostTunnelSupervisorTests(unittest.TestCase):
         self.assertTrue(authority_path.is_file())
         self.assertEqual(Path(env["GPUBNB_HOST_EDGE_CA_CERT"]).is_file(), True)
         self.assertEqual(spawn["shell"], False)
+
+    def test_bootstrap_scope_must_match_requested_session_machine_and_edge(self) -> None:
+        supervisor = self._supervisor()
+
+        wrong_session = self._bootstrap()
+        wrong_session["authority"]["binding"]["sessionId"] = "session_2"
+        with self.assertRaisesRegex(RuntimeError, "session_scope_mismatch"):
+            supervisor._validate_bootstrap(wrong_session, "session_1")
+
+        wrong_machine = self._bootstrap()
+        wrong_machine["authority"]["binding"]["machineId"] = "machine_2"
+        with self.assertRaisesRegex(RuntimeError, "machine_scope_mismatch"):
+            supervisor._validate_bootstrap(wrong_machine, "session_1")
+
+        wrong_edge = self._bootstrap()
+        wrong_edge["authority"]["edgeId"] = "edge_london_1"
+        with self.assertRaisesRegex(RuntimeError, "edge_scope_mismatch"):
+            supervisor._validate_bootstrap(wrong_edge, "session_1")
+
+    def test_bootstrap_expiry_must_match_signed_binding(self) -> None:
+        supervisor = self._supervisor()
+        bootstrap = self._bootstrap()
+        bootstrap["authorityExpiresAtMs"] += 1
+        with self.assertRaisesRegex(RuntimeError, "expiry_invalid"):
+            supervisor._validate_bootstrap(bootstrap, "session_1")
 
     def test_crash_fetches_fresh_authority_and_applies_backoff(self) -> None:
         supervisor = self._supervisor(random_value=0.0)
