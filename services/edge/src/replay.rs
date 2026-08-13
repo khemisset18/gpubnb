@@ -185,9 +185,7 @@ impl ReplayStore {
         let expired: Vec<String> = self
             .consumed_until_ms
             .iter()
-            .filter_map(|(nonce, expires_at_ms)| {
-                (*expires_at_ms <= now_ms).then(|| nonce.clone())
-            })
+            .filter_map(|(nonce, expires_at_ms)| (*expires_at_ms <= now_ms).then(|| nonce.clone()))
             .collect();
         if expired.is_empty() {
             return Ok(());
@@ -217,8 +215,7 @@ fn valid_nonce(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use std::{
-        env,
-        process,
+        env, process,
         sync::{
             atomic::{AtomicU64, Ordering},
             Arc,
