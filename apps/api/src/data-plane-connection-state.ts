@@ -1,4 +1,5 @@
-import type { DataPlaneStreamKind, DataPlaneTransport } from './data-plane-protocol.js';
+import type { DataPlaneTransport } from './data-plane-policy.js';
+import type { DataPlaneStreamKind } from './data-plane-protocol.js';
 
 export type DataPlaneConnectionPhase =
   | 'ALLOCATED'
