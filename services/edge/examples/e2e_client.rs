@@ -1,8 +1,15 @@
-use std::{env, fs::File, io::BufReader, net::SocketAddr, sync::Arc};
+use std::{
+    env,
+    fs::File,
+    io::BufReader,
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::{bail, Context, Result};
 use gpubnb_edge_core::ALPN;
-use quinn::{crypto::rustls::QuicClientConfig, ClientConfig, Endpoint};
+use quinn::{crypto::rustls::QuicClientConfig, ClientConfig, ConnectionError, Endpoint};
 use serde::Deserialize;
 
 const CONTROL_RESPONSE_MAX_BYTES: usize = 8 * 1024;
@@ -43,7 +50,7 @@ fn verify_success_response(response: &[u8]) -> Result<()> {
     Ok(())
 }
 
-async fn run_case(
+async fn run_authority_case(
     endpoint: &Endpoint,
     addr: SocketAddr,
     authority: &[u8],
@@ -78,26 +85,60 @@ async fn run_case(
                 );
             }
         }
-        other => bail!("unknown expectation {other}"),
+        other => bail!("unknown authority expectation {other}"),
     }
 
     connection.close(0_u8.into(), b"e2e complete");
     Ok(())
 }
 
+async fn run_idle_timeout_case(endpoint: &Endpoint, addr: SocketAddr) -> Result<()> {
+    let connection = endpoint
+        .connect(addr, "localhost")?
+        .await
+        .context("QUIC/TLS connection failed before idle-timeout test")?;
+
+    // Send no authority stream. A malicious or broken pre-auth peer must not
+    // retain connection state indefinitely.
+    let close = tokio::time::timeout(Duration::from_secs(8), connection.closed())
+        .await
+        .context("Edge did not reclaim idle pre-auth connection within test deadline")?;
+    if close != ConnectionError::TimedOut {
+        bail!("expected QUIC idle timeout, got {close:?}");
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 5 {
-        bail!("usage: e2e_client <addr> <ca-cert.pem> <expect-ok|expect-reject> <authority.json>");
+    if args.len() < 4 {
+        bail!(
+            "usage: e2e_client <addr> <ca-cert.pem> <expect-ok|expect-reject|expect-idle-timeout> [authority.json]"
+        );
     }
 
     let addr: SocketAddr = args[1].parse().context("parse Edge address")?;
     let mut endpoint = Endpoint::client("0.0.0.0:0".parse()?).context("create client endpoint")?;
     endpoint.set_default_client_config(client_config(&args[2])?);
-    let authority = std::fs::read(&args[4]).context("read authority envelope")?;
 
-    run_case(&endpoint, addr, &authority, &args[3]).await?;
+    match args[3].as_str() {
+        "expect-idle-timeout" => {
+            if args.len() != 4 {
+                bail!("expect-idle-timeout does not accept an authority path");
+            }
+            run_idle_timeout_case(&endpoint, addr).await?;
+        }
+        "expect-ok" | "expect-reject" => {
+            if args.len() != 5 {
+                bail!("authority test mode requires an authority path");
+            }
+            let authority = std::fs::read(&args[4]).context("read authority envelope")?;
+            run_authority_case(&endpoint, addr, &authority, &args[3]).await?;
+        }
+        other => bail!("unknown E2E mode {other}"),
+    }
+
     endpoint.wait_idle().await;
     Ok(())
 }
