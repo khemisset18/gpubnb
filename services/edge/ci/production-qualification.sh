@@ -202,7 +202,7 @@ phase edge_baseline
 start_edge
 grep -q 'max_connections=16' "$EDGE_LOG"
 grep -q 'idle_timeout_ms=30000' "$EDGE_LOG"
-grep -q 'max_bidi_streams=65' "$EDGE_LOG"
+grep -q 'max_bidi_streams=66' "$EDGE_LOG"
 grep -q 'transport_memory_budget_bytes=268435456' "$EDGE_LOG"
 grep -q 'transport_reservation_bytes=268435456' "$EDGE_LOG"
 grep -q 'udp_buffer_requested_bytes=4194304' "$EDGE_LOG"
@@ -317,9 +317,10 @@ phase drain_done
   echo 'transport=quic'
   echo 'idle_timeout_ms=30000'
   echo 'host_keepalive_interval_ms=15000'
-  echo 'remote_bidi_streams=65'
+  echo 'remote_bidi_streams=66'
   echo 'application_bidi_streams=64'
   echo 'control_bidi_stream_reserve=1'
+  echo 'admission_bidi_stream_reserve=1'
   echo 'max_uni_streams=0'
   echo 'stream_receive_window_bytes=2097152'
   echo 'connection_receive_window_bytes=8388608'
@@ -329,7 +330,7 @@ phase drain_done
   echo 'qualified_transport_memory_budget_bytes=268435456'
   echo 'udp_buffer_target_bytes=4194304'
   echo 'network_chaos=delay20ms_jitter5ms_loss1pct_reorder5pct'
-  echo 'stream_pressure=64_application_streams_then_release'
+  echo 'stream_pressure=64_application_streams_65th_explicitly_rejected_then_capacity_reused'
   echo 'connection_flood=8_open_then_9th_refused'
   echo 'replay_corrupt_store=quarantined_and_rejected'
   echo 'drain_bound_seconds=5'
