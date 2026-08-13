@@ -1,7 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isDataPlaneCanary, readDataPlaneRolloutFlags } from '../src/data-plane-flags.js';
+import {
+  assertDataPlaneReleaseQualified,
+  isDataPlaneCanary,
+  readDataPlaneRolloutFlags,
+} from '../src/data-plane-flags.js';
+
+const RELEASE_SHA = '0123456789abcdef0123456789abcdef01234567';
+
+const qualifiedEnv = {
+  GPUBNB_RELEASE_SHA: RELEASE_SHA,
+  GPUBNB_DATA_PLANE_QUALIFIED_SHA: RELEASE_SHA,
+};
 
 test('new transports default off while migration fallback stays on', () => {
   assert.deepEqual(readDataPlaneRolloutFlags({}), {
@@ -10,6 +21,7 @@ test('new transports default off while migration fallback stays on', () => {
     browserWebTransportEnabled: false,
     legacyFallbackEnabled: true,
     canaryPercent: 0,
+    qualifiedReleaseSha: null,
   });
 });
 
@@ -37,6 +49,79 @@ test('browser WebTransport cannot be enabled without the direct transport capabi
       }),
     /requires_direct_quic/,
   );
+});
+
+test('EDGE_QUIC and DIRECT_QUIC cannot be enabled without exact-release qualification', () => {
+  assert.throws(
+    () => readDataPlaneRolloutFlags({ GPUBNB_DATA_PLANE_EDGE_QUIC: 'true' }),
+    /GPUBNB_RELEASE_SHA_invalid_sha/,
+  );
+  assert.throws(
+    () =>
+      readDataPlaneRolloutFlags({
+        GPUBNB_DATA_PLANE_EDGE_QUIC: 'true',
+        GPUBNB_RELEASE_SHA: RELEASE_SHA,
+      }),
+    /GPUBNB_DATA_PLANE_QUALIFIED_SHA_invalid_sha/,
+  );
+  assert.throws(
+    () =>
+      readDataPlaneRolloutFlags({
+        GPUBNB_DATA_PLANE_EDGE_QUIC: 'true',
+        GPUBNB_RELEASE_SHA: RELEASE_SHA,
+        GPUBNB_DATA_PLANE_QUALIFIED_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      }),
+    /data_plane_release_not_qualified/,
+  );
+});
+
+test('Render qualification is cryptographically scoped to the actual deployed commit id', () => {
+  assert.equal(
+    assertDataPlaneReleaseQualified({
+      RENDER: 'true',
+      RENDER_GIT_COMMIT: RELEASE_SHA,
+      GPUBNB_DATA_PLANE_QUALIFIED_SHA: RELEASE_SHA,
+    }),
+    RELEASE_SHA,
+  );
+  assert.throws(
+    () =>
+      assertDataPlaneReleaseQualified({
+        RENDER: 'true',
+        RENDER_GIT_COMMIT: RELEASE_SHA,
+        GPUBNB_RELEASE_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        GPUBNB_DATA_PLANE_QUALIFIED_SHA: RELEASE_SHA,
+      }),
+    /data_plane_release_sha_mismatch/,
+  );
+  assert.throws(
+    () =>
+      assertDataPlaneReleaseQualified({
+        RENDER: 'true',
+        RENDER_GIT_COMMIT: RELEASE_SHA,
+        GPUBNB_DATA_PLANE_QUALIFIED_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      }),
+    /data_plane_release_not_qualified/,
+  );
+});
+
+test('qualified release may enable a bounded canary and records the evidence SHA', () => {
+  assert.deepEqual(
+    readDataPlaneRolloutFlags({
+      ...qualifiedEnv,
+      GPUBNB_DATA_PLANE_EDGE_QUIC: 'true',
+      GPUBNB_DATA_PLANE_CANARY_PERCENT: '5',
+    }),
+    {
+      edgeQuicEnabled: true,
+      directQuicEnabled: false,
+      browserWebTransportEnabled: false,
+      legacyFallbackEnabled: true,
+      canaryPercent: 5,
+      qualifiedReleaseSha: RELEASE_SHA,
+    },
+  );
+  assert.equal(assertDataPlaneReleaseQualified(qualifiedEnv), RELEASE_SHA);
 });
 
 test('canary assignment is stable, bounded and session-scoped', () => {

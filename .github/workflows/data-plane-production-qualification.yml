@@ -1,0 +1,78 @@
+name: data-plane-production-qualification
+
+on:
+  pull_request:
+    paths:
+      - 'services/edge/**'
+      - 'apps/api/src/data-plane-*.ts'
+      - 'apps/api/test/data-plane-*.ts'
+      - 'docs/operations/data-plane-*.md'
+      - '.github/workflows/data-plane-production-qualification.yml'
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-plane-production-qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  production-qualification:
+    name: Data Plane production qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+
+      - name: Initialize qualification evidence
+        run: |
+          mkdir -p qualification-evidence
+          printf 'qualification_sha=%s\nphase=initializing\n' "$GITHUB_SHA" > qualification-evidence/bootstrap.txt
+
+      - name: Install locked API dependencies and generate Prisma client
+        working-directory: apps/api
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx prisma generate
+
+      - name: Static qualification gates
+        run: |
+          set -euo pipefail
+          bash -n services/edge/ci/production-qualification.sh
+          cargo fmt --manifest-path services/edge/Cargo.toml -- --check
+          cargo test --manifest-path services/edge/Cargo.toml --all-targets
+          cargo clippy --manifest-path services/edge/Cargo.toml --all-targets -- -D warnings
+          (cd apps/api && npx tsx --test test/data-plane-*.test.ts)
+          (cd apps/api && npx tsc -p tsconfig.json --noEmit)
+
+      - name: Build exact qualification binaries
+        run: cargo build --manifest-path services/edge/Cargo.toml --bin gpubnb-edge --bin gpubnb-host-tunnel --example e2e_client
+
+      - name: QUIC resource, replay and network-chaos qualification
+        shell: bash
+        run: bash services/edge/ci/production-qualification.sh
+
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: data-plane-production-qualification-${{ github.sha }}
+          path: qualification-evidence
+          if-no-files-found: error
+          retention-days: 30

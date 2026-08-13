@@ -29,7 +29,17 @@ const AUTHORITY_MAX_BYTES: usize = 16 * 1024;
 const AUTH_RESPONSE_MAX_BYTES: usize = 8 * 1024;
 const TARGET_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const HOST_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(15);
-const HOST_MAX_INCOMING_BIDI_STREAMS: u32 = 64;
+const HOST_APPLICATION_BIDI_STREAMS: u32 = 64;
+const HOST_STREAM_CREDIT_REPLENISHMENT_RESERVE: u32 = 10;
+const HOST_MAX_INCOMING_BIDI_STREAMS: u32 =
+    HOST_APPLICATION_BIDI_STREAMS + HOST_STREAM_CREDIT_REPLENISHMENT_RESERVE;
+
+// Quinn batches MAX_STREAMS updates until more than one eighth of the current
+// remote-stream window has been freed. Keep enough bounded transport-only
+// credit for stream churn while the Host still enforces loopback target policy
+// and the Edge keeps the application session limit at 64.
+const _: () =
+    assert!(HOST_STREAM_CREDIT_REPLENISHMENT_RESERVE > HOST_MAX_INCOMING_BIDI_STREAMS / 8);
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -350,6 +360,9 @@ async fn main() -> Result<()> {
         event = "host_tunnel_ready",
         edge = %edge_addr,
         workspace_port = policy.workspace_port,
+        max_incoming_bidi_streams = HOST_MAX_INCOMING_BIDI_STREAMS,
+        application_bidi_streams = HOST_APPLICATION_BIDI_STREAMS,
+        stream_credit_replenishment_reserve = HOST_STREAM_CREDIT_REPLENISHMENT_RESERVE,
         "outbound Host QUIC tunnel authenticated"
     );
 
