@@ -65,6 +65,11 @@ fn load_server_config(cert_path: &str, key_path: &str) -> Result<quinn::ServerCo
         .with_single_cert(certs, key)
         .context("TLS certificate/private key rejected")?;
     tls.alpn_protocols = vec![ALPN.as_bytes().to_vec()];
+    // GPUbnb has no replay-safe 0-RTT application profile. Keep early data and
+    // half-RTT responses explicitly disabled even though rustls currently
+    // defaults both settings to disabled.
+    tls.max_early_data_size = 0;
+    tls.send_half_rtt_data = false;
 
     let crypto =
         QuicServerConfig::try_from(tls).context("TLS configuration is not QUIC-compatible")?;
