@@ -23,6 +23,9 @@ const CONTROL_RESPONSE_MAX_BYTES: usize = 8 * 1024;
 const ROUTED_RESPONSE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const PRESSURE_STREAMS: u32 = 64;
 const PRESSURE_MEASUREMENT_WINDOW: Duration = Duration::from_secs(2);
+const PRESSURE_REUSE_DEADLINE: Duration = Duration::from_secs(1);
+const PRESSURE_REUSE_RETRY_DELAY: Duration = Duration::from_millis(2);
+const PRESSURE_REUSE_IO_TIMEOUT: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -188,6 +191,103 @@ async fn open_routed_stream(
         );
     }
     Ok((send, recv))
+}
+
+async fn open_pressure_replacement(
+    connection: &quinn::Connection,
+    rotation: u32,
+) -> Result<(quinn::SendStream, quinn::RecvStream)> {
+    let deadline = tokio::time::Instant::now() + PRESSURE_REUSE_DEADLINE;
+    let mut attempt = 0_u32;
+
+    loop {
+        attempt = attempt.checked_add(1).context("pressure retry counter overflow")?;
+        let stream_id = 10_000_u32
+            .checked_add(rotation.saturating_mul(1_000))
+            .and_then(|value| value.checked_add(attempt))
+            .context("pressure replacement stream id overflow")?;
+
+        let (mut send, mut recv) = tokio::time::timeout(
+            PRESSURE_REUSE_IO_TIMEOUT,
+            connection.open_bi(),
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "transport stream credit stalled during churn rotation {rotation}, attempt {attempt}"
+            )
+        })??;
+
+        let frame = OpenStreamFrame {
+            message_type: "OPEN_STREAM".into(),
+            stream_id,
+            kind: WireStreamKind::Terminal,
+            target_port: None,
+            resume_from_sequence: None,
+        };
+        write_json_frame(&mut send, &frame, STREAM_METADATA_MAX_BYTES).await?;
+        let status: StreamStatusFrame = tokio::time::timeout(
+            PRESSURE_REUSE_IO_TIMEOUT,
+            read_json_frame(&mut recv, STREAM_STATUS_MAX_BYTES),
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "replacement admission response timed out during churn rotation {rotation}, attempt {attempt}"
+            )
+        })??;
+        status.validate_for(stream_id)?;
+
+        if status.is_accepted() {
+            return Ok((send, recv));
+        }
+        if status.code != Some(StreamRejectCode::StreamLimit) {
+            bail!(
+                "replacement stream received unexpected rejection during churn rotation {rotation}, attempt {attempt}: {:?}",
+                status.code
+            );
+        }
+
+        // A stream can close on both peers within sub-millisecond distance while
+        // the server still serializes EdgeRegistry cleanup. STREAM_LIMIT is
+        // therefore retryable only inside this explicit one-second reuse bound.
+        let _ = send.finish();
+        let trailing = tokio::time::timeout(
+            PRESSURE_REUSE_IO_TIMEOUT,
+            recv.read_to_end(ROUTED_RESPONSE_MAX_BYTES),
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "rejected replacement did not terminate during churn rotation {rotation}, attempt {attempt}"
+            )
+        })??;
+        if !trailing.is_empty() {
+            bail!("rejected replacement carried unexpected payload bytes");
+        }
+        match tokio::time::timeout(PRESSURE_REUSE_IO_TIMEOUT, send.stopped())
+            .await
+            .with_context(|| {
+                format!(
+                    "rejected replacement termination was not observed during churn rotation {rotation}, attempt {attempt}"
+                )
+            })??
+        {
+            None => {}
+            Some(code) if code == quinn::VarInt::from_u32(0) => {}
+            Some(code) => bail!(
+                "rejected replacement stopped with unexpected code during churn rotation {rotation}, attempt {attempt}: {code}"
+            ),
+        }
+
+        if tokio::time::Instant::now() >= deadline {
+            bail!(
+                "application stream capacity was not reusable within {:?} during churn rotation {rotation}",
+                PRESSURE_REUSE_DEADLINE
+            );
+        }
+        tokio::time::sleep(PRESSURE_REUSE_RETRY_DELAY).await;
+    }
 }
 
 async fn assert_echo(
@@ -357,27 +457,8 @@ async fn run_stream_pressure_case(
             Some(code) => bail!("released pressure request was stopped unexpectedly: {code}"),
         }
 
-        let (mut send, mut recv) =
-            tokio::time::timeout(Duration::from_secs(5), connection.open_bi())
-                .await
-                .with_context(|| {
-                    format!("stream credit was not replenished during churn rotation {rotation}")
-                })??;
-        let stream_id = 10_000 + rotation;
-        let frame = OpenStreamFrame {
-            message_type: "OPEN_STREAM".into(),
-            stream_id,
-            kind: WireStreamKind::Terminal,
-            target_port: None,
-            resume_from_sequence: None,
-        };
-        write_json_frame(&mut send, &frame, STREAM_METADATA_MAX_BYTES).await?;
-        let status: StreamStatusFrame = read_json_frame(&mut recv, STREAM_STATUS_MAX_BYTES).await?;
-        status.validate_for(stream_id)?;
-        if !status.is_accepted() {
-            bail!("replacement stream was rejected during churn rotation {rotation}");
-        }
-        streams.push((send, recv));
+        let replacement = open_pressure_replacement(&connection, rotation).await?;
+        streams.push(replacement);
     }
 
     for (mut send, mut recv) in streams {
