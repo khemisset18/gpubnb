@@ -1,0 +1,59 @@
+name: patch-host-bootstrap-temp
+
+on:
+  push:
+    branches: [feature/agent-host-tunnel-bootstrap]
+    paths:
+      - '.github/workflows/patch-host-bootstrap-temp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/agent-host-tunnel-bootstrap
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - name: Apply exact route patch
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('apps/api/src/workspace-gateway.ts')
+          text = path.read_text()
+          import_old = "import WebSocket from 'ws';\nimport { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';"
+          import_new = "import WebSocket from 'ws';\nimport { dataPlaneHostBootstrapEnabled, issueHostTunnelBootstrap, loadDataPlaneHostRuntimeConfig } from './data-plane-host-bootstrap.js';\nimport { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';"
+          if text.count(import_old) != 1:
+              raise SystemExit(f'import anchor count={text.count(import_old)}')
+          text = text.replace(import_old, import_new, 1)
+
+          desired_old = "const sessions=await db.workspaceSession.findMany({where:{machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,status:true,expiresAt:true,connectionMetadata:true}});return {sessions};\n  });\n  app.get('/agent/workspace-gateway/:machineId/next'"
+          desired_new = "const sessions=await db.workspaceSession.findMany({where:{machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,status:true,expiresAt:true,connectionMetadata:true}});return {sessions,dataPlane:{hostTunnelEnabled:dataPlaneHostBootstrapEnabled()}};\n  });\n  app.get('/agent/workspace-gateway/:machineId/sessions/:sessionId/data-plane-host',{config:{rateLimit:{max:120,timeWindow:'1 minute'}}},async(request,reply)=>{\n    const params=request.params as {machineId?:string;sessionId?:string};const machineId=String(params.machineId||'');const sessionId=String(params.sessionId||'');const route=`/agent/workspace-gateway/${machineId}/sessions/${sessionId}/data-plane-host`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});\n    const runtime=loadDataPlaneHostRuntimeConfig();if(!runtime)return reply.code(404).send({error:'data_plane_disabled'});\n    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machineWorkspace:{workspace:{slug:'developer'}}},select:{id:true,machineId:true,bookingId:true,renterId:true}});if(!row)return reply.code(404).send({error:'workspace_session_not_available'});\n    return issueHostTunnelBootstrap(runtime,{sessionId:row.id,machineId:row.machineId,bookingId:row.bookingId,renterUserId:row.renterId});\n  });\n  app.get('/agent/workspace-gateway/:machineId/next'"
+          if text.count(desired_old) != 1:
+              raise SystemExit(f'desired anchor count={text.count(desired_old)}')
+          text = text.replace(desired_old, desired_new, 1)
+          path.write_text(text)
+      - name: Validate API
+        working-directory: apps/api
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx prisma generate
+          npx tsx --test test/data-plane-*.test.ts
+          npx tsc -p tsconfig.json --noEmit
+      - name: Commit validated patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/api/src/workspace-gateway.ts
+          git commit -m 'feat(api): issue authenticated Host tunnel bootstrap'
+          git push origin HEAD:feature/agent-host-tunnel-bootstrap
