@@ -117,7 +117,9 @@ async fn run_hold_preauth_case(endpoint: &Endpoint, addr: SocketAddr, hold_ms: u
         .await
         .context("failed to establish held pre-auth QUIC connection")?;
     println!("preauth-connected");
-    std::io::stdout().flush().context("flush readiness marker")?;
+    std::io::stdout()
+        .flush()
+        .context("flush readiness marker")?;
     tokio::time::sleep(Duration::from_millis(hold_ms)).await;
     connection.close(0_u8.into(), b"capacity probe complete");
     Ok(())
