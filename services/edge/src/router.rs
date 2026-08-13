@@ -66,10 +66,6 @@ impl WorkspaceRouter {
         }
         should_remove
     }
-
-    pub fn host_count(&self) -> usize {
-        self.hosts.len()
-    }
 }
 
 pub fn same_session_scope(left: &SessionBinding, right: &SessionBinding) -> bool {
