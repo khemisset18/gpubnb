@@ -11,12 +11,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'services/edge/**'
-      - 'apps/api/src/data-plane-*.ts'
-      - 'apps/api/test/data-plane-*.ts'
-      - 'docs/operations/data-plane-*.md'
-      - '.github/workflows/data-plane-production-qualification.yml'
   workflow_dispatch:
 
 permissions:
@@ -28,6 +22,7 @@ concurrency:
 
 jobs:
   production-qualification:
+    name: Data Plane production qualification
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -273,9 +268,8 @@ jobs:
           HOST_PID=''
           stop_edge
 
-          # Connection-flood qualification uses a fresh replay directory but the
-          # same bounded memory policy. Eight pre-auth connections are held while
-          # a ninth must fail at the admission cap.
+          # Connection-flood qualification uses the same bounded memory policy.
+          # Eight pre-auth connections are held while a ninth must fail at the cap.
           export GPUBNB_EDGE_MAX_CONNECTIONS='8'
           export GPUBNB_EDGE_TRANSPORT_MEMORY_BUDGET_MIB='256'
           start_edge
