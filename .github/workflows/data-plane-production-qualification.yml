@@ -54,6 +54,7 @@ jobs:
       - name: Static qualification gates
         run: |
           set -euo pipefail
+          bash -n services/edge/ci/production-qualification.sh
           cargo fmt --manifest-path services/edge/Cargo.toml -- --check
           cargo test --manifest-path services/edge/Cargo.toml --all-targets
           cargo clippy --manifest-path services/edge/Cargo.toml --all-targets -- -D warnings
