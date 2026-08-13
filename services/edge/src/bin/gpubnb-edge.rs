@@ -4,6 +4,8 @@
 mod authority;
 #[path = "../replay.rs"]
 mod replay;
+#[path = "../transport.rs"]
+mod transport;
 
 use std::{
     env,
@@ -23,6 +25,11 @@ use replay::{ReplayError, ReplayStore};
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
+use transport::{
+    admission_action, configure_transport, AdmissionAction, RuntimeTransportPolicy,
+    CONNECTION_RECEIVE_WINDOW_BYTES, CONNECTION_SEND_WINDOW_BYTES, MAX_BIDI_STREAMS,
+    MAX_UNI_STREAMS, STREAM_RECEIVE_WINDOW_BYTES,
+};
 
 const AUTHORITY_MAX_BYTES: usize = 16 * 1024;
 const CONTROL_RESPONSE_MAX_BYTES: usize = 8 * 1024;
@@ -66,7 +73,11 @@ fn replay_cache_capacity() -> Result<usize> {
     }
 }
 
-fn load_server_config(cert_path: &str, key_path: &str) -> Result<quinn::ServerConfig> {
+fn load_server_config(
+    cert_path: &str,
+    key_path: &str,
+    transport_policy: RuntimeTransportPolicy,
+) -> Result<quinn::ServerConfig> {
     let mut cert_reader = BufReader::new(
         File::open(cert_path)
             .with_context(|| format!("failed to open TLS certificate {cert_path}"))?,
@@ -102,8 +113,7 @@ fn load_server_config(cert_path: &str, key_path: &str) -> Result<quinn::ServerCo
     let mut server = quinn::ServerConfig::with_crypto(Arc::new(crypto));
     let transport = Arc::get_mut(&mut server.transport)
         .ok_or_else(|| anyhow!("QUIC transport configuration unexpectedly shared"))?;
-    transport.max_concurrent_bidi_streams(64_u32.into());
-    transport.max_concurrent_uni_streams(0_u8.into());
+    configure_transport(transport, transport_policy)?;
     Ok(server)
 }
 
@@ -226,14 +236,18 @@ async fn main() -> Result<()> {
     let key_path = required_env("GPUBNB_EDGE_TLS_KEY")?;
     let replay_capacity = replay_cache_capacity()?;
     let replay_dir = required_env("GPUBNB_EDGE_REPLAY_DIR")?;
+    let transport_policy = RuntimeTransportPolicy::from_env()?;
     let edge_id = Arc::new(required_env("GPUBNB_EDGE_ID")?);
     validate_edge_id(edge_id.as_str()).context("GPUBNB_EDGE_ID invalid")?;
     let verifying_key = Arc::new(parse_verifying_key_hex(&required_env(
         "GPUBNB_EDGE_AUTHORITY_PUBLIC_KEY_HEX",
     )?)?);
 
-    let endpoint = Endpoint::server(load_server_config(&cert_path, &key_path)?, bind)
-        .context("failed to bind QUIC Edge endpoint")?;
+    let endpoint = Endpoint::server(
+        load_server_config(&cert_path, &key_path, transport_policy)?,
+        bind,
+    )
+    .context("failed to bind QUIC Edge endpoint")?;
     let registry = Arc::new(Mutex::new(EdgeRegistry::new(Limits::default())));
     let replay_store = ReplayStore::open(&replay_dir, replay_capacity, now_ms()?)
         .context("failed to initialize durable authority replay store")?;
@@ -249,6 +263,14 @@ async fn main() -> Result<()> {
         replay_store_capacity = replay_capacity,
         replay_store_entries = replay_entries,
         replay_store_quarantined = replay_quarantined,
+        max_connections = transport_policy.max_connections,
+        retry_threshold = transport_policy.retry_threshold(),
+        idle_timeout_ms = transport_policy.idle_timeout_ms,
+        max_bidi_streams = MAX_BIDI_STREAMS,
+        max_uni_streams = MAX_UNI_STREAMS,
+        stream_receive_window_bytes = STREAM_RECEIVE_WINDOW_BYTES,
+        connection_receive_window_bytes = CONNECTION_RECEIVE_WINDOW_BYTES,
+        connection_send_window_bytes = CONNECTION_SEND_WINDOW_BYTES,
         "GPUbnb Edge ready"
     );
 
@@ -256,6 +278,46 @@ async fn main() -> Result<()> {
         tokio::select! {
             incoming = endpoint.accept() => {
                 let Some(incoming) = incoming else { break; };
+                let remote = incoming.remote_address();
+                let open_connections = endpoint.open_connections();
+                match admission_action(
+                    open_connections,
+                    incoming.remote_address_validated(),
+                    transport_policy,
+                ) {
+                    AdmissionAction::Refuse => {
+                        warn!(
+                            event = "edge_connection_refused_capacity",
+                            remote = %remote,
+                            open_connections,
+                            max_connections = transport_policy.max_connections,
+                            "QUIC connection refused at Edge capacity"
+                        );
+                        incoming.refuse();
+                        continue;
+                    }
+                    AdmissionAction::Retry => {
+                        info!(
+                            event = "edge_address_retry_required",
+                            remote = %remote,
+                            open_connections,
+                            retry_threshold = transport_policy.retry_threshold(),
+                            "requiring QUIC address validation under connection pressure"
+                        );
+                        if let Err(error) = incoming.retry() {
+                            let incoming = error.into_incoming();
+                            warn!(
+                                event = "edge_address_retry_failed_closed",
+                                remote = %remote,
+                                "QUIC Retry unexpectedly unavailable; refusing connection"
+                            );
+                            incoming.refuse();
+                        }
+                        continue;
+                    }
+                    AdmissionAction::Accept => {}
+                }
+
                 let registry = Arc::clone(&registry);
                 let replay_store = Arc::clone(&replay_store);
                 let verifying_key = Arc::clone(&verifying_key);
