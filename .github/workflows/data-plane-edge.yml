@@ -67,6 +67,8 @@ jobs:
           cache-dependency-path: apps/api/package-lock.json
 
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client
+        run: npx prisma generate
       - name: Data-plane contract tests
         run: npx tsx --test test/data-plane-*.test.ts
       - name: TypeScript strict build
