@@ -78,9 +78,7 @@ async fn run_case(
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 5 {
-        bail!(
-            "usage: e2e_client <addr> <ca-cert.pem> <expect-ok|expect-reject> <authority.json>"
-        );
+        bail!("usage: e2e_client <addr> <ca-cert.pem> <expect-ok|expect-reject> <authority.json>");
     }
 
     let addr: SocketAddr = args[1].parse().context("parse Edge address")?;
