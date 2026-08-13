@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - agent/**
+      - services/edge/**
       - apps/host-desktop/**
       - Cargo.toml
       - Cargo.lock
@@ -102,6 +103,17 @@ jobs:
           New-Item -ItemType Directory -Force apps/host-desktop/src-tauri/binaries | Out-Null
           Copy-Item dist/gpubnb-agent.exe "apps/host-desktop/src-tauri/binaries/gpubnb-agent-$target.exe"
 
+      - name: Build Windows Host tunnel sidecar
+        shell: pwsh
+        run: |
+          cargo build --manifest-path services/edge/Cargo.toml --release --bin gpubnb-host-tunnel
+          $source = 'services/edge/target/release/gpubnb-host-tunnel.exe'
+          if (-not (Test-Path $source -PathType Leaf)) { throw 'Host tunnel sidecar was not generated.' }
+          $target = (rustc -vV | Select-String '^host:' | ForEach-Object { ($_ -split ':', 2)[1].Trim() })
+          if (-not $target) { throw 'Rust target triple could not be determined.' }
+          New-Item -ItemType Directory -Force apps/host-desktop/src-tauri/binaries | Out-Null
+          Copy-Item $source "apps/host-desktop/src-tauri/binaries/gpubnb-host-tunnel-$target.exe"
+
       - name: Verify standalone agent
         shell: pwsh
         run: |
@@ -124,14 +136,14 @@ jobs:
           cargo test --locked -p gpubnb-host-desktop --all-targets
           cargo clippy --locked -p gpubnb-host-desktop --all-targets -- -D warnings
 
-      - name: Build Windows installer with embedded agent
+      - name: Build Windows installer with embedded agent and Host tunnel
         working-directory: apps/host-desktop
         run: npm run tauri:build -- --bundles nsis --config src-tauri/tauri.sidecar.conf.json
         env:
           GPUBNB_RELEASE_CHANNEL: development
           RUST_BACKTRACE: '1'
 
-      - name: Verify installer and bundled sidecar
+      - name: Verify installer and bundled sidecars
         shell: pwsh
         run: |
           $installer = Get-ChildItem -Path target/release/bundle/nsis -Filter '*-setup.exe' -File -ErrorAction Stop
@@ -154,8 +166,15 @@ jobs:
           }
 
           $installedSidecar = Join-Path $installDirectory 'gpubnb-agent.exe'
+          $installedTunnel = Join-Path $installDirectory 'gpubnb-host-tunnel.exe'
           if (-not (Test-Path $installedSidecar -PathType Leaf)) {
             throw 'The installed application does not contain the gpubnb-agent sidecar.'
+          }
+          if (-not (Test-Path $installedTunnel -PathType Leaf)) {
+            throw 'The installed application does not contain the gpubnb-host-tunnel sidecar.'
+          }
+          if ((Get-Item $installedTunnel).Length -lt 262144) {
+            throw 'The installed Host tunnel sidecar is unexpectedly small.'
           }
           & $installedSidecar version
           if ($LASTEXITCODE -ne 0) { throw 'The installed agent sidecar is not executable.' }
@@ -215,6 +234,9 @@ jobs:
           if (Test-Path $installedSidecar) {
             throw 'The uninstaller left the agent sidecar behind.'
           }
+          if (Test-Path $installedTunnel) {
+            throw 'The uninstaller left the Host tunnel sidecar behind.'
+          }
           if (Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'") {
             throw 'The uninstaller left the GPUbnbAgent service registered.'
           }
@@ -223,6 +245,7 @@ jobs:
           New-Item -ItemType Directory -Force $artifactDirectory | Out-Null
           Copy-Item $installer.FullName $artifactDirectory
           Copy-Item dist/gpubnb-agent.exe (Join-Path $artifactDirectory 'gpubnb-agent.exe')
+          Copy-Item services/edge/target/release/gpubnb-host-tunnel.exe (Join-Path $artifactDirectory 'gpubnb-host-tunnel.exe')
 
           $payloads = Get-ChildItem $artifactDirectory -File
           $checksums = $payloads | Get-FileHash -Algorithm SHA256 |

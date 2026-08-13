@@ -28,6 +28,7 @@ from typing import Any, Callable, Protocol
 import websocket
 
 from .client import ApiClient, agent_request
+from .host_tunnel import HostTunnelSupervisor
 from .mining_guard import ProcessInspector, WindowsProcessInspector, miner_install_root, stop_all_miners_and_verify
 from .runner import DEVELOPER_HOME_TMPFS, gpu_passthrough_flags
 from .storage import load_config, load_key
@@ -130,6 +131,7 @@ class GatewaySupervisor:
         self._last_error_signature: str | None = None
         self._last_error_reported_at = 0.0
         self._http_slots = threading.BoundedSemaphore(HTTP_RELAY_MAX_CONCURRENCY)
+        self.host_tunnels = HostTunnelSupervisor(api, key, machine_id, config)
         self._docker_runner: DockerRunner = docker_runner or _real_docker
         self._process_inspector: ProcessInspector = process_inspector or WindowsProcessInspector()
         self._health_check: Callable[[int], bool] = health_check or _real_health_check
@@ -329,6 +331,7 @@ class GatewaySupervisor:
                     pass
 
     def _stop_runtime(self, session_id: str) -> bool:
+        self.host_tunnels.stop(session_id)
         self._close_session_channels(session_id)
         self.usage_last_report.pop(session_id, None)
         self.start_failures.pop(session_id, None)
@@ -469,12 +472,15 @@ class GatewaySupervisor:
     def _reconcile_sessions(self) -> None:
         desired = self._request(f"/agent/workspace-gateway/{self.machine_id}/desired")
         sessions = desired.get("sessions") or []
+        data_plane = desired.get("dataPlane") if isinstance(desired.get("dataPlane"), dict) else {}
+        host_tunnel_enabled = data_plane.get("hostTunnelEnabled") is True
         keep_alive_ids = {
             str(session.get("id") or "")
             for session in sessions
             if str(session.get("status") or "") in {"READY", "RUNNING"}
         }
         self._sweep_orphaned_containers(keep_alive_ids)
+        self.host_tunnels.stop_except(keep_alive_ids)
         for session in sessions:
             session_id = str(session.get("id") or "")
             status = str(session.get("status") or "")
@@ -507,6 +513,12 @@ class GatewaySupervisor:
                 else:
                     self.start_failures.pop(session_id, None)
                     self.start_retry_at.pop(session_id, None)
+            try:
+                self.host_tunnels.reconcile(session_id, existing.port, host_tunnel_enabled)
+            except Exception as exc:
+                # Data Plane is an additive path until canary qualification completes.
+                # Keep the proven legacy gateway alive while surfacing tunnel failures.
+                self._report_error(exc)
             if metadata.get("runtimeId") != existing.container_name or metadata.get("localPort") != existing.port:
                 self._request(f"/agent/workspace-gateway/{session_id}/register", "POST", {"machineId": self.machine_id, "runtimeId": existing.container_name, "localPort": existing.port})
             if status in {"READY", "RUNNING"}:
@@ -734,6 +746,7 @@ class GatewaySupervisor:
             else:
                 self._last_error_signature = None
                 time.sleep(0.05)
+        self.host_tunnels.stop_all()
 
 
 def run_workspace_gateway_forever(

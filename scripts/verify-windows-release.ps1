@@ -22,8 +22,19 @@ try {
     }
 
     $sidecar = Join-Path $installDirectory 'gpubnb-agent.exe'
+    $tunnel = Join-Path $installDirectory 'gpubnb-host-tunnel.exe'
     if (-not (Test-Path $sidecar -PathType Leaf)) {
         throw 'Published installer does not contain gpubnb-agent.exe.'
+    }
+    if (-not (Test-Path $tunnel -PathType Leaf)) {
+        throw 'Published installer does not contain gpubnb-host-tunnel.exe.'
+    }
+    if ((Get-Item $tunnel).Length -lt 262144) {
+        throw 'Installed Host tunnel sidecar is unexpectedly small.'
+    }
+    $tunnelBytes = [System.IO.File]::ReadAllBytes($tunnel)
+    if ($tunnelBytes[0] -ne 0x4D -or $tunnelBytes[1] -ne 0x5A) {
+        throw 'Installed Host tunnel sidecar is not a valid Windows PE file.'
     }
     & $sidecar version
     if ($LASTEXITCODE -ne 0) { throw 'Installed agent version command failed.' }
@@ -51,6 +62,7 @@ try {
         throw "Silent uninstall failed with exit code $($uninstallation.ExitCode)."
     }
     if (Test-Path $sidecar) { throw 'Uninstaller left gpubnb-agent.exe behind.' }
+    if (Test-Path $tunnel) { throw 'Uninstaller left gpubnb-host-tunnel.exe behind.' }
     if (Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'") {
         throw 'Uninstaller left GPUbnbAgent registered.'
     }
