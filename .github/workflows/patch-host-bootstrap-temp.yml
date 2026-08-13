@@ -1,4 +1,5 @@
 name: patch-host-bootstrap-temp
+# Temporary exact patch runner; removed after successful integration.
 
 on:
   push:
