@@ -53,18 +53,8 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Format generated source for validation
-        run: cargo fmt --manifest-path services/control-gateway/Cargo.toml
-
-      - name: Capture canonical rustfmt output
-        uses: actions/upload-artifact@v4
-        with:
-          name: control-gateway-rustfmt
-          path: |
-            services/control-gateway/src
-            services/control-gateway/tests
-          if-no-files-found: error
-          retention-days: 1
+      - name: Format
+        run: cargo fmt --manifest-path services/control-gateway/Cargo.toml -- --check
 
       - name: Unit and real-Redis contract tests
         run: cargo test --manifest-path services/control-gateway/Cargo.toml --all-targets
