@@ -24,6 +24,11 @@ export interface RankedRegionalGateway extends RegionalGatewayCandidate {
   score: number;
 }
 
+interface RegionalRankingEntry {
+  candidate: RankedRegionalGateway;
+  regionRank: number;
+}
+
 export function rankRegionalGateways(input: {
   machineId: string;
   candidates: readonly RegionalGatewayCandidate[];
@@ -36,32 +41,53 @@ export function rankRegionalGateways(input: {
     throw new Error('regional_routing_utilization_limit_invalid');
   }
   const preferredRegions = input.preferredRegions ?? [];
-  for (const region of preferredRegions) validateRegion(region);
+  const seenRegions = new Set<string>();
+  for (const region of preferredRegions) {
+    validateRegion(region);
+    if (seenRegions.has(region)) throw new Error('regional_routing_duplicate_preferred_region');
+    seenRegions.add(region);
+  }
 
-  return input.candidates
-    .map((candidate) => validateCandidate(candidate))
-    .filter((candidate) => candidate.state === 'READY')
-    .map((candidate): RankedRegionalGateway | null => {
-      const utilizationBps = Math.floor((candidate.activeConnections * 10_000) / candidate.maxConnections);
-      if (utilizationBps >= maxUtilizationBps || candidate.errorRateBps > MAX_GATEWAY_ERROR_RATE_BPS) return null;
-      const preferenceIndex = preferredRegions.indexOf(candidate.region);
-      const regionPenalty = preferredRegions.length === 0
-        ? 0
-        : preferenceIndex >= 0
-          ? preferenceIndex * 25_000
-          : 250_000;
-      const latencyPenalty = candidate.observedRttMs * 1_000;
-      const utilizationPenalty = utilizationBps * 20;
-      const errorPenalty = candidate.errorRateBps * 100;
-      const tieBreaker = stableTieBreaker(input.machineId, candidate.gatewayId);
-      return {
+  const ranked: RegionalRankingEntry[] = [];
+  for (const rawCandidate of input.candidates) {
+    const candidate = validateCandidate(rawCandidate);
+    if (candidate.state !== 'READY') continue;
+
+    const utilizationBps = gatewayUtilizationBps(candidate.activeConnections, candidate.maxConnections);
+    if (utilizationBps >= maxUtilizationBps || candidate.errorRateBps > MAX_GATEWAY_ERROR_RATE_BPS) continue;
+
+    const preferenceIndex = preferredRegions.indexOf(candidate.region);
+    // Region selection is intentionally lexicographic instead of mixing locality
+    // into one arbitrary numeric penalty. Once an operator supplies a preferred
+    // region order, every admitted gateway in the first healthy region must rank
+    // ahead of gateways in later/unlisted regions. Capacity and health gates still
+    // override locality before ranking, so a saturated/degraded local region safely
+    // falls through to the next region rather than receiving new connections.
+    const regionRank = preferredRegions.length === 0
+      ? 0
+      : preferenceIndex >= 0
+        ? preferenceIndex
+        : preferredRegions.length;
+    const latencyPenalty = candidate.observedRttMs * 1_000;
+    const utilizationPenalty = utilizationBps * 20;
+    const errorPenalty = candidate.errorRateBps * 100;
+    const tieBreaker = stableTieBreaker(input.machineId, candidate.gatewayId);
+
+    ranked.push({
+      regionRank,
+      candidate: {
         ...candidate,
         utilizationBps,
-        score: regionPenalty + latencyPenalty + utilizationPenalty + errorPenalty + tieBreaker,
-      };
-    })
-    .filter((candidate): candidate is RankedRegionalGateway => candidate !== null)
-    .sort((left, right) => left.score - right.score || left.gatewayId.localeCompare(right.gatewayId));
+        score: latencyPenalty + utilizationPenalty + errorPenalty + tieBreaker,
+      },
+    });
+  }
+
+  ranked.sort((left, right) =>
+    left.regionRank - right.regionRank
+    || left.candidate.score - right.candidate.score
+    || left.candidate.gatewayId.localeCompare(right.candidate.gatewayId));
+  return ranked.map((entry) => entry.candidate);
 }
 
 export function selectRegionalGateway(input: {
