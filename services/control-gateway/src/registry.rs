@@ -186,7 +186,10 @@ impl GatewayRegistry {
 
         let status = match state.connection.as_ref() {
             None => DispatchStatus::QueuedDisconnected,
-            Some(connection) => match connection.sender.try_send(GatewayMessage::Command { command }) {
+            Some(connection) => match connection
+                .sender
+                .try_send(GatewayMessage::Command { command })
+            {
                 Ok(()) => DispatchStatus::Delivered,
                 Err(mpsc::error::TrySendError::Full(_)) => DispatchStatus::QueuedBackpressure,
                 Err(mpsc::error::TrySendError::Closed(_)) => DispatchStatus::QueuedDisconnected,
@@ -299,7 +302,10 @@ fn prune_acked(journal: &mut VecDeque<CommandEnvelope>, last_acked_sequence: u64
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{protocol::{CommandKind, LeaseBinding}, CONTROL_GATEWAY_PROTOCOL_VERSION};
+    use crate::{
+        protocol::{CommandKind, LeaseBinding},
+        CONTROL_GATEWAY_PROTOCOL_VERSION,
+    };
     use serde_json::json;
 
     fn command(id: &str, sequence: u64) -> CommandEnvelope {
@@ -348,7 +354,10 @@ mod tests {
     fn disconnected_commands_are_journaled_and_replayed_after_resume() {
         let mut registry = registry();
         assert_eq!(
-            registry.dispatch(command("command_00000001", 1), 2_000).unwrap().status,
+            registry
+                .dispatch(command("command_00000001", 1), 2_000)
+                .unwrap()
+                .status,
             DispatchStatus::QueuedDisconnected
         );
         let (tx, _rx) = mpsc::channel(2);
@@ -362,8 +371,12 @@ mod tests {
     #[test]
     fn terminal_acks_are_ordered_and_prune_only_completed_commands() {
         let mut registry = registry();
-        registry.dispatch(command("command_00000001", 1), 2_000).unwrap();
-        registry.dispatch(command("command_00000002", 2), 2_001).unwrap();
+        registry
+            .dispatch(command("command_00000001", 1), 2_000)
+            .unwrap();
+        registry
+            .dispatch(command("command_00000002", 2), 2_001)
+            .unwrap();
         assert!(registry
             .acknowledge(
                 "machine_00000001",
