@@ -318,6 +318,7 @@ async fn run_authenticated_session(
                     AgentMessage::CommandAck { command_id, sequence, status, detail_code } => {
                         state.store.record_command_ack(
                             machine_id,
+                            connection_id,
                             &command_id,
                             sequence,
                             status,
