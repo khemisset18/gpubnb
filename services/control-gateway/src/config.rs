@@ -46,51 +46,21 @@ impl GatewayConfig {
             bail!("GPUBNB_CONTROL_INTERNAL_TOKEN must contain 32..=256 bytes");
         }
 
-        let max_connections = bounded_usize(
-            "GPUBNB_CONTROL_MAX_CONNECTIONS",
-            50_000,
-            1,
-            1_000_000,
-        )?;
-        let per_connection_queue = bounded_usize(
-            "GPUBNB_CONTROL_CONNECTION_QUEUE",
-            128,
-            8,
-            4_096,
-        )?;
-        let max_pending_commands_per_machine = bounded_usize(
-            "GPUBNB_CONTROL_PENDING_PER_MACHINE",
-            256,
-            1,
-            4_096,
-        )?;
-        let presence_ttl_seconds = bounded_u64(
-            "GPUBNB_CONTROL_PRESENCE_TTL_SECONDS",
-            60,
-            15,
-            300,
-        )?;
-        let heartbeat_timeout_seconds = bounded_u64(
-            "GPUBNB_CONTROL_HEARTBEAT_TIMEOUT_SECONDS",
-            45,
-            10,
-            300,
-        )?;
+        let max_connections =
+            bounded_usize("GPUBNB_CONTROL_MAX_CONNECTIONS", 50_000, 1, 1_000_000)?;
+        let per_connection_queue = bounded_usize("GPUBNB_CONTROL_CONNECTION_QUEUE", 128, 8, 4_096)?;
+        let max_pending_commands_per_machine =
+            bounded_usize("GPUBNB_CONTROL_PENDING_PER_MACHINE", 256, 1, 4_096)?;
+        let presence_ttl_seconds = bounded_u64("GPUBNB_CONTROL_PRESENCE_TTL_SECONDS", 60, 15, 300)?;
+        let heartbeat_timeout_seconds =
+            bounded_u64("GPUBNB_CONTROL_HEARTBEAT_TIMEOUT_SECONDS", 45, 10, 300)?;
         if heartbeat_timeout_seconds >= presence_ttl_seconds {
             bail!("heartbeat timeout must be lower than presence TTL");
         }
-        let auth_clock_skew_seconds = bounded_u64(
-            "GPUBNB_CONTROL_AUTH_CLOCK_SKEW_SECONDS",
-            30,
-            5,
-            120,
-        )?;
-        let command_retention_seconds = bounded_u64(
-            "GPUBNB_CONTROL_COMMAND_RETENTION_SECONDS",
-            300,
-            30,
-            3_600,
-        )?;
+        let auth_clock_skew_seconds =
+            bounded_u64("GPUBNB_CONTROL_AUTH_CLOCK_SKEW_SECONDS", 30, 5, 120)?;
+        let command_retention_seconds =
+            bounded_u64("GPUBNB_CONTROL_COMMAND_RETENTION_SECONDS", 300, 30, 3_600)?;
         let max_control_frame_bytes = bounded_usize(
             "GPUBNB_CONTROL_MAX_FRAME_BYTES",
             64 * 1024,
@@ -120,7 +90,8 @@ impl GatewayConfig {
 }
 
 fn required(name: &str) -> Result<String> {
-    let value = env::var(name).with_context(|| format!("missing required environment variable {name}"))?;
+    let value =
+        env::var(name).with_context(|| format!("missing required environment variable {name}"))?;
     let trimmed = value.trim();
     if trimmed.is_empty() {
         bail!("required environment variable {name} is empty");
@@ -130,12 +101,16 @@ fn required(name: &str) -> Result<String> {
 
 fn parse_addr(name: &str, default: &str) -> Result<SocketAddr> {
     let raw = env::var(name).unwrap_or_else(|_| default.to_owned());
-    raw.parse().with_context(|| format!("{name} must be a socket address"))
+    raw.parse()
+        .with_context(|| format!("{name} must be a socket address"))
 }
 
 fn bounded_usize(name: &str, default: usize, min: usize, max: usize) -> Result<usize> {
     let value = match env::var(name) {
-        Ok(raw) => raw.trim().parse::<usize>().with_context(|| format!("{name} must be an integer"))?,
+        Ok(raw) => raw
+            .trim()
+            .parse::<usize>()
+            .with_context(|| format!("{name} must be an integer"))?,
         Err(env::VarError::NotPresent) => default,
         Err(error) => return Err(error).with_context(|| format!("failed to read {name}")),
     };
@@ -147,7 +122,10 @@ fn bounded_usize(name: &str, default: usize, min: usize, max: usize) -> Result<u
 
 fn bounded_u64(name: &str, default: u64, min: u64, max: u64) -> Result<u64> {
     let value = match env::var(name) {
-        Ok(raw) => raw.trim().parse::<u64>().with_context(|| format!("{name} must be an integer"))?,
+        Ok(raw) => raw
+            .trim()
+            .parse::<u64>()
+            .with_context(|| format!("{name} must be an integer"))?,
         Err(env::VarError::NotPresent) => default,
         Err(error) => return Err(error).with_context(|| format!("failed to read {name}")),
     };
@@ -159,17 +137,16 @@ fn bounded_u64(name: &str, default: u64, min: u64, max: u64) -> Result<u64> {
 
 fn safe_id(value: &str) -> bool {
     (8..=160).contains(&value.len())
-        && value.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b':' | b'.')
-        })
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b':' | b'.'))
 }
 
 fn safe_region(value: &str) -> bool {
     (2..=32).contains(&value.len())
-        && value
-            .bytes()
-            .enumerate()
-            .all(|(index, byte)| byte.is_ascii_lowercase() || byte.is_ascii_digit() || (index > 0 && byte == b'-'))
+        && value.bytes().enumerate().all(|(index, byte)| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || (index > 0 && byte == b'-')
+        })
 }
 
 #[cfg(test)]
