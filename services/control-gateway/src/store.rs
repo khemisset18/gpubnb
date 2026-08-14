@@ -82,7 +82,13 @@ if tokenCmp == 0 then
   if not newSequence or not oldSequence then return {0, 'INVALID_SEQUENCE'} end
   if newSequence < oldSequence then return {0, 'STALE_PHASE_SEQUENCE'} end
   if newSequence == oldSequence then
-    if currentPhase == ARGV[4] then return {2, 'EXISTING'} end
+    if currentPhase == ARGV[4] then
+      redis.call('HSET', KEYS[1],
+        'phase', ARGV[4],
+        'phaseFenceToken', ARGV[2],
+        'phaseSequence', ARGV[3])
+      return {2, 'EXISTING'}
+    end
     return {0, 'PHASE_SEQUENCE_CONFLICT'}
   end
 end
@@ -94,10 +100,22 @@ return {1, 'UPDATED'}
 
 const RECORD_ACK_SCRIPT: &str = r#"
 local machineId = redis.call('HGET', KEYS[1], 'machineId')
+local currentStatus = redis.call('HGET', KEYS[1], 'status') or ''
 if machineId then
   local sequence = redis.call('HGET', KEYS[1], 'sequence') or ''
   if machineId ~= ARGV[1] or sequence ~= ARGV[2] then
     return {0, 'ACK_IDENTITY_CONFLICT'}
+  end
+  if currentStatus == ARGV[3] then
+    redis.call('EXPIRE', KEYS[1], ARGV[6])
+    return {2, 'EXISTING'}
+  end
+  if currentStatus ~= '' and currentStatus ~= 'ACCEPTED' then
+    if ARGV[3] == 'ACCEPTED' then
+      redis.call('EXPIRE', KEYS[1], ARGV[6])
+      return {2, 'TERMINAL_EXISTS'}
+    end
+    return {0, 'ACK_TERMINAL_CONFLICT'}
   end
 end
 redis.call('HSET', KEYS[1],
@@ -369,7 +387,7 @@ impl RedisStore {
             .invoke_async(&mut connection)
             .await
             .context("failed to persist command acknowledgement")?;
-        if result.0 != 1 {
+        if result.0 != 1 && result.0 != 2 {
             bail!("command acknowledgement rejected: {}", result.1);
         }
         Ok(())
