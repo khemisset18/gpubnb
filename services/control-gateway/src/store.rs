@@ -122,8 +122,13 @@ pub struct PresenceLease {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TouchOutcome {
-    Accepted { sequence: u64 },
-    Rejected { reason: String, current_sequence: Option<u64> },
+    Accepted {
+        sequence: u64,
+    },
+    Rejected {
+        reason: String,
+        current_sequence: Option<u64>,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -155,7 +160,11 @@ impl RedisStore {
         Ok(())
     }
 
-    pub async fn resolve_machine_key(&self, machine_id: &str, key_version: u32) -> Result<VerifyingKey> {
+    pub async fn resolve_machine_key(
+        &self,
+        machine_id: &str,
+        key_version: u32,
+    ) -> Result<VerifyingKey> {
         validate_id(machine_id, "machine_id")?;
         if key_version == 0 {
             bail!("key_version must be positive");
@@ -239,7 +248,10 @@ impl RedisStore {
             .await
             .context("failed to touch machine presence")?;
         if result.0 == 1 {
-            let accepted_sequence = result.2.parse::<u64>().context("Redis returned invalid presence sequence")?;
+            let accepted_sequence = result
+                .2
+                .parse::<u64>()
+                .context("Redis returned invalid presence sequence")?;
             return Ok(TouchOutcome::Accepted {
                 sequence: accepted_sequence,
             });
@@ -247,7 +259,12 @@ impl RedisStore {
         let current_sequence = if result.2.is_empty() {
             None
         } else {
-            Some(result.2.parse::<u64>().context("Redis returned invalid current presence sequence")?)
+            Some(
+                result
+                    .2
+                    .parse::<u64>()
+                    .context("Redis returned invalid current presence sequence")?,
+            )
         };
         Ok(TouchOutcome::Rejected {
             reason: result.1,
@@ -308,7 +325,10 @@ impl RedisStore {
             .hgetall(&key)
             .await
             .context("failed to read active resource lease")?;
-        let ttl_ms: i64 = connection.pttl(&key).await.context("failed to read resource lease TTL")?;
+        let ttl_ms: i64 = connection
+            .pttl(&key)
+            .await
+            .context("failed to read resource lease TTL")?;
         if ttl_ms <= 0 {
             bail!("resource lease missing or expired");
         }
@@ -382,13 +402,22 @@ mod tests {
 
     #[test]
     fn all_multi_key_machine_scripts_are_cluster_slot_safe() {
-        assert_eq!(hash_tag(&machine_presence_key("machine_00000001")), Some("machine_00000001"));
-        assert_eq!(hash_tag(&machine_phase_fence_key("machine_00000001")), Some("machine_00000001"));
+        assert_eq!(
+            hash_tag(&machine_presence_key("machine_00000001")),
+            Some("machine_00000001")
+        );
+        assert_eq!(
+            hash_tag(&machine_phase_fence_key("machine_00000001")),
+            Some("machine_00000001")
+        );
     }
 
     #[test]
     fn ack_keys_are_isolated_per_command() {
-        assert_ne!(command_ack_key("command_00000001"), command_ack_key("command_00000002"));
+        assert_ne!(
+            command_ack_key("command_00000001"),
+            command_ack_key("command_00000002")
+        );
     }
 
     fn hash_tag(key: &str) -> Option<&str> {
