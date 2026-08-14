@@ -1,9 +1,10 @@
 FROM rust:1.97-bookworm AS builder
 WORKDIR /build
 COPY services/control-gateway/Cargo.toml ./Cargo.toml
+COPY services/control-gateway/Cargo.lock ./Cargo.lock
 COPY services/control-gateway/src ./src
 COPY services/control-gateway/tests ./tests
-RUN cargo build --release --bin gpubnb-control-gateway
+RUN cargo build --locked --release --bin gpubnb-control-gateway
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
