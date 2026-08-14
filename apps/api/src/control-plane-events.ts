@@ -2,7 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { canonicalJson, validatePayload } from './reliable-delivery.js';
 import { stableShardFor } from './scalability.js';
 
-const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9:._-]{7,191}$/;
+// Keep partition keys within stableShardFor's 160-byte logical key limit.
+const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9:._-]{7,159}$/;
 const SAFE_REGION = /^[a-z0-9][a-z0-9-]{1,31}$/;
 
 export const CONTROL_PLANE_EVENT_SCHEMA_VERSION = 1;
