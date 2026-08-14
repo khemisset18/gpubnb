@@ -13,9 +13,7 @@ use tracing::{info, warn};
 use crate::{
     config::GatewayConfig,
     metrics::GatewayMetrics,
-    protocol::{
-        AgentMessage, FenceReason, GatewayMessage, ServerHello,
-    },
+    protocol::{AgentMessage, FenceReason, GatewayMessage, ServerHello},
     registry::{AckOutcome, GatewayRegistry},
     store::{RedisStore, TouchOutcome},
     wire::{read_json_frame, write_json_frame},
@@ -170,7 +168,10 @@ async fn handle_connection(connection: quinn::Connection, state: QuicState) -> R
     let registration = match registration {
         Ok(value) => value,
         Err(error) => {
-            let _ = state.store.release_presence(&machine_id, &connection_id).await;
+            let _ = state
+                .store
+                .release_presence(&machine_id, &connection_id)
+                .await;
             return Err(error).context("gateway registry rejected authenticated connection");
         }
     };
@@ -232,8 +233,16 @@ async fn handle_connection(connection: quinn::Connection, state: QuicState) -> R
     )
     .await;
 
-    let removed = state.registry.lock().await.unregister(&machine_id, &connection_id);
-    match state.store.release_presence(&machine_id, &connection_id).await {
+    let removed = state
+        .registry
+        .lock()
+        .await
+        .unregister(&machine_id, &connection_id);
+    match state
+        .store
+        .release_presence(&machine_id, &connection_id)
+        .await
+    {
         Ok(_) => {}
         Err(error) => {
             state.metrics.redis_error();
@@ -340,10 +349,12 @@ async fn run_authenticated_session(
 }
 
 fn load_server_config(config: &GatewayConfig) -> Result<quinn::ServerConfig> {
-    let mut cert_reader = BufReader::new(
-        File::open(&config.tls_cert)
-            .with_context(|| format!("failed to open TLS certificate {}", config.tls_cert.display()))?,
-    );
+    let mut cert_reader = BufReader::new(File::open(&config.tls_cert).with_context(|| {
+        format!(
+            "failed to open TLS certificate {}",
+            config.tls_cert.display()
+        )
+    })?);
     let certs = rustls_pemfile::certs(&mut cert_reader)
         .collect::<Result<Vec<_>, _>>()
         .context("failed to parse TLS certificate chain")?;
@@ -351,10 +362,12 @@ fn load_server_config(config: &GatewayConfig) -> Result<quinn::ServerConfig> {
         bail!("TLS certificate chain is empty");
     }
 
-    let mut key_reader = BufReader::new(
-        File::open(&config.tls_key)
-            .with_context(|| format!("failed to open TLS private key {}", config.tls_key.display()))?,
-    );
+    let mut key_reader = BufReader::new(File::open(&config.tls_key).with_context(|| {
+        format!(
+            "failed to open TLS private key {}",
+            config.tls_key.display()
+        )
+    })?);
     let key = rustls_pemfile::private_key(&mut key_reader)
         .context("failed to parse TLS private key")?
         .ok_or_else(|| anyhow!("TLS private key file contains no supported private key"))?;
@@ -367,7 +380,8 @@ fn load_server_config(config: &GatewayConfig) -> Result<quinn::ServerConfig> {
     tls.max_early_data_size = 0;
     tls.send_half_rtt_data = false;
 
-    let crypto = QuicServerConfig::try_from(tls).context("TLS configuration is not QUIC compatible")?;
+    let crypto =
+        QuicServerConfig::try_from(tls).context("TLS configuration is not QUIC compatible")?;
     let mut server = quinn::ServerConfig::with_crypto(Arc::new(crypto));
     let transport = Arc::get_mut(&mut server.transport)
         .ok_or_else(|| anyhow!("QUIC transport configuration unexpectedly shared"))?;
