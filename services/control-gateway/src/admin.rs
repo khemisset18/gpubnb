@@ -64,7 +64,10 @@ pub fn router(state: AdminState) -> Router {
         .route("/readyz", get(ready))
         .route("/metrics", get(metrics))
         .route("/v1/internal/commands/{machine_id}", post(dispatch_command))
-        .route("/v1/internal/presence/{machine_id}/phase", put(update_phase))
+        .route(
+            "/v1/internal/presence/{machine_id}/phase",
+            put(update_phase),
+        )
         .with_state(state)
 }
 
@@ -114,14 +117,22 @@ async fn dispatch_command(
         return (StatusCode::UNAUTHORIZED, Json(error_json("unauthorized"))).into_response();
     }
     if command.machine_id != machine_id {
-        return (StatusCode::BAD_REQUEST, Json(error_json("machine_id_mismatch"))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(error_json("machine_id_mismatch")),
+        )
+            .into_response();
     }
     let now_ms = match now_ms() {
         Ok(value) => value,
         Err(error) => return internal_error("clock_error", error),
     };
     if let Err(error) = command.validate(now_ms) {
-        return (StatusCode::BAD_REQUEST, Json(error_json(&error.to_string()))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(error_json(&error.to_string())),
+        )
+            .into_response();
     }
 
     if let Some(lease) = &command.lease {
@@ -134,7 +145,11 @@ async fn dispatch_command(
                 error = %error,
                 "command rejected because resource lease is not current"
             );
-            return (StatusCode::CONFLICT, Json(error_json("stale_or_missing_resource_lease"))).into_response();
+            return (
+                StatusCode::CONFLICT,
+                Json(error_json("stale_or_missing_resource_lease")),
+            )
+                .into_response();
         }
     }
 
@@ -174,7 +189,9 @@ async fn dispatch_command(
         Err(error) => {
             let code = if error.to_string().contains("capacity") {
                 StatusCode::TOO_MANY_REQUESTS
-            } else if error.to_string().contains("monotonic") || error.to_string().contains("conflict") {
+            } else if error.to_string().contains("monotonic")
+                || error.to_string().contains("conflict")
+            {
                 StatusCode::CONFLICT
             } else {
                 StatusCode::BAD_REQUEST
@@ -213,8 +230,14 @@ async fn update_phase(
 
     match outcome {
         PhaseUpdateOutcome::Updated | PhaseUpdateOutcome::Existing => {
-            if let Err(error) = state.registry.lock().await.set_phase(&machine_id, update.phase) {
-                return (StatusCode::CONFLICT, Json(error_json(&error.to_string()))).into_response();
+            if let Err(error) = state
+                .registry
+                .lock()
+                .await
+                .set_phase(&machine_id, update.phase)
+            {
+                return (StatusCode::CONFLICT, Json(error_json(&error.to_string())))
+                    .into_response();
             }
             let status = if matches!(outcome, PhaseUpdateOutcome::Updated) {
                 "UPDATED"
@@ -288,8 +311,14 @@ mod tests {
 
     #[test]
     fn internal_token_comparison_is_exact() {
-        assert!(constant_time_equal(b"abcdefghijklmnopqrstuvwxyz123456", b"abcdefghijklmnopqrstuvwxyz123456"));
-        assert!(!constant_time_equal(b"abcdefghijklmnopqrstuvwxyz123456", b"abcdefghijklmnopqrstuvwxyz123457"));
+        assert!(constant_time_equal(
+            b"abcdefghijklmnopqrstuvwxyz123456",
+            b"abcdefghijklmnopqrstuvwxyz123456"
+        ));
+        assert!(!constant_time_equal(
+            b"abcdefghijklmnopqrstuvwxyz123456",
+            b"abcdefghijklmnopqrstuvwxyz123457"
+        ));
         assert!(!constant_time_equal(b"short", b"longer"));
     }
 }
