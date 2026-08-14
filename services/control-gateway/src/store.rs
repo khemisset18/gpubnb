@@ -99,32 +99,40 @@ return {1, 'UPDATED'}
 "#;
 
 const RECORD_ACK_SCRIPT: &str = r#"
-local machineId = redis.call('HGET', KEYS[1], 'machineId')
-local currentStatus = redis.call('HGET', KEYS[1], 'status') or ''
+local currentConnection = redis.call('HGET', KEYS[1], 'connectionId')
+if not currentConnection then
+  return {0, 'MISSING_PRESENCE'}
+end
+if currentConnection ~= ARGV[1] then
+  return {0, 'STALE_CONNECTION'}
+end
+
+local machineId = redis.call('HGET', KEYS[2], 'machineId')
+local currentStatus = redis.call('HGET', KEYS[2], 'status') or ''
 if machineId then
-  local sequence = redis.call('HGET', KEYS[1], 'sequence') or ''
-  if machineId ~= ARGV[1] or sequence ~= ARGV[2] then
+  local sequence = redis.call('HGET', KEYS[2], 'sequence') or ''
+  if machineId ~= ARGV[2] or sequence ~= ARGV[3] then
     return {0, 'ACK_IDENTITY_CONFLICT'}
   end
-  if currentStatus == ARGV[3] then
-    redis.call('EXPIRE', KEYS[1], ARGV[6])
+  if currentStatus == ARGV[4] then
+    redis.call('EXPIRE', KEYS[2], ARGV[7])
     return {2, 'EXISTING'}
   end
   if currentStatus ~= '' and currentStatus ~= 'ACCEPTED' then
-    if ARGV[3] == 'ACCEPTED' then
-      redis.call('EXPIRE', KEYS[1], ARGV[6])
+    if ARGV[4] == 'ACCEPTED' then
+      redis.call('EXPIRE', KEYS[2], ARGV[7])
       return {2, 'TERMINAL_EXISTS'}
     end
     return {0, 'ACK_TERMINAL_CONFLICT'}
   end
 end
-redis.call('HSET', KEYS[1],
-  'machineId', ARGV[1],
-  'sequence', ARGV[2],
-  'status', ARGV[3],
-  'detailCode', ARGV[4],
-  'acknowledgedAtMs', ARGV[5])
-redis.call('EXPIRE', KEYS[1], ARGV[6])
+redis.call('HSET', KEYS[2],
+  'machineId', ARGV[2],
+  'sequence', ARGV[3],
+  'status', ARGV[4],
+  'detailCode', ARGV[5],
+  'acknowledgedAtMs', ARGV[6])
+redis.call('EXPIRE', KEYS[2], ARGV[7])
 return {1, 'OK'}
 "#;
 
@@ -362,6 +370,7 @@ impl RedisStore {
     pub async fn record_command_ack(
         &self,
         machine_id: &str,
+        connection_id: &str,
         command_id: &str,
         sequence: u64,
         status: CommandAckStatus,
@@ -369,6 +378,7 @@ impl RedisStore {
         acknowledged_at_ms: u64,
     ) -> Result<()> {
         validate_id(machine_id, "machine_id")?;
+        validate_id(connection_id, "connection_id")?;
         validate_id(command_id, "command_id")?;
         if sequence == 0 {
             bail!("command ack sequence must be positive");
@@ -377,7 +387,9 @@ impl RedisStore {
         let detail_code = detail_code.unwrap_or("");
         let mut connection = self.connection.clone();
         let result: (i64, String) = Script::new(RECORD_ACK_SCRIPT)
-            .key(command_ack_key(command_id))
+            .key(machine_presence_key(machine_id))
+            .key(command_ack_key(machine_id, command_id))
+            .arg(connection_id)
             .arg(machine_id)
             .arg(sequence.to_string())
             .arg(status)
@@ -410,8 +422,8 @@ pub fn resource_lease_key(resource_id: &str) -> String {
     format!("gpubnb:resource-lease:{{{resource_id}}}:v1")
 }
 
-pub fn command_ack_key(command_id: &str) -> String {
-    format!("gpubnb:command-ack:{{{command_id}}}:v1")
+pub fn command_ack_key(machine_id: &str, command_id: &str) -> String {
+    format!("gpubnb:command-ack:{{{machine_id}}}:{command_id}:v1")
 }
 
 #[cfg(test)]
@@ -428,13 +440,24 @@ mod tests {
             hash_tag(&machine_phase_fence_key("machine_00000001")),
             Some("machine_00000001")
         );
+        assert_eq!(
+            hash_tag(&command_ack_key(
+                "machine_00000001",
+                "command_00000001"
+            )),
+            Some("machine_00000001")
+        );
     }
 
     #[test]
-    fn ack_keys_are_isolated_per_command() {
+    fn ack_keys_are_isolated_per_command_and_machine() {
         assert_ne!(
-            command_ack_key("command_00000001"),
-            command_ack_key("command_00000002")
+            command_ack_key("machine_00000001", "command_00000001"),
+            command_ack_key("machine_00000001", "command_00000002")
+        );
+        assert_ne!(
+            command_ack_key("machine_00000001", "command_00000001"),
+            command_ack_key("machine_00000002", "command_00000001")
         );
     }
 
