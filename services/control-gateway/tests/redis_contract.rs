@@ -47,7 +47,10 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
         .await
         .unwrap();
     assert_eq!(
-        store.touch_presence(machine_id, &first.connection_id, 1, 1_100, 60).await.unwrap(),
+        store
+            .touch_presence(machine_id, &first.connection_id, 1, 1_100, 60)
+            .await
+            .unwrap(),
         TouchOutcome::Accepted { sequence: 1 }
     );
     assert!(matches!(
@@ -66,35 +69,65 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
 
     assert_eq!(
         store
-            .set_authoritative_phase(machine_id, &second.connection_id, "7", 1, MachinePhase::Reserved)
+            .set_authoritative_phase(
+                machine_id,
+                &second.connection_id,
+                "7",
+                1,
+                MachinePhase::Reserved
+            )
             .await
             .unwrap(),
         PhaseUpdateOutcome::Updated
     );
     assert_eq!(
         store
-            .set_authoritative_phase(machine_id, &second.connection_id, "6", 99, MachinePhase::Available)
+            .set_authoritative_phase(
+                machine_id,
+                &second.connection_id,
+                "6",
+                99,
+                MachinePhase::Available
+            )
             .await
             .unwrap(),
         PhaseUpdateOutcome::Rejected("STALE_FENCE".into())
     );
     assert_eq!(
         store
-            .set_authoritative_phase(machine_id, &second.connection_id, "7", 1, MachinePhase::Reserved)
+            .set_authoritative_phase(
+                machine_id,
+                &second.connection_id,
+                "7",
+                1,
+                MachinePhase::Reserved
+            )
             .await
             .unwrap(),
         PhaseUpdateOutcome::Existing
     );
     assert_eq!(
         store
-            .set_authoritative_phase(machine_id, &second.connection_id, "7", 1, MachinePhase::Rented)
+            .set_authoritative_phase(
+                machine_id,
+                &second.connection_id,
+                "7",
+                1,
+                MachinePhase::Rented
+            )
             .await
             .unwrap(),
         PhaseUpdateOutcome::Rejected("PHASE_SEQUENCE_CONFLICT".into())
     );
     assert_eq!(
         store
-            .set_authoritative_phase(machine_id, &second.connection_id, "7", 2, MachinePhase::Preparing)
+            .set_authoritative_phase(
+                machine_id,
+                &second.connection_id,
+                "7",
+                2,
+                MachinePhase::Preparing
+            )
             .await
             .unwrap(),
         PhaseUpdateOutcome::Updated
