@@ -168,9 +168,28 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
         .unwrap();
     assert_eq!(phase_after_resume, "PREPARING");
 
+    assert!(store
+        .record_command_ack(
+            machine_id,
+            &second.connection_id,
+            command_id,
+            1,
+            CommandAckStatus::Succeeded,
+            Some("stale_socket"),
+            1_399,
+        )
+        .await
+        .is_err());
+    let stale_ack_exists: bool = redis
+        .exists(command_ack_key(machine_id, command_id))
+        .await
+        .unwrap();
+    assert!(!stale_ack_exists);
+
     store
         .record_command_ack(
             machine_id,
+            &third.connection_id,
             command_id,
             1,
             CommandAckStatus::Succeeded,
@@ -182,6 +201,7 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
     store
         .record_command_ack(
             machine_id,
+            &third.connection_id,
             command_id,
             1,
             CommandAckStatus::Accepted,
@@ -191,13 +211,14 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
         .await
         .unwrap();
     let status_after_late_accepted: String = redis
-        .hget(command_ack_key(command_id), "status")
+        .hget(command_ack_key(machine_id, command_id), "status")
         .await
         .unwrap();
     assert_eq!(status_after_late_accepted, "SUCCEEDED");
     assert!(store
         .record_command_ack(
             machine_id,
+            &third.connection_id,
             command_id,
             1,
             CommandAckStatus::Failed,
@@ -207,7 +228,7 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
         .await
         .is_err());
     let status_after_conflict: String = redis
-        .hget(command_ack_key(command_id), "status")
+        .hget(command_ack_key(machine_id, command_id), "status")
         .await
         .unwrap();
     assert_eq!(status_after_conflict, "SUCCEEDED");
@@ -237,7 +258,7 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
         .arg(machine_auth_key(machine_id))
         .arg(machine_presence_key(machine_id))
         .arg(machine_phase_fence_key(machine_id))
-        .arg(command_ack_key(command_id))
+        .arg(command_ack_key(machine_id, command_id))
         .arg(lease_key)
         .query_async(&mut redis)
         .await
