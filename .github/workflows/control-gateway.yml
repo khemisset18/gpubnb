@@ -59,6 +59,14 @@ jobs:
       - name: Unit and real-Redis contract tests
         run: cargo test --manifest-path services/control-gateway/Cargo.toml --all-targets
 
+      - name: Capture resolved dependency lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: control-gateway-cargo-lock
+          path: services/control-gateway/Cargo.lock
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Clippy
         run: cargo clippy --manifest-path services/control-gateway/Cargo.toml --all-targets -- -D warnings
 
