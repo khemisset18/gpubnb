@@ -4,10 +4,10 @@ use std::env;
 
 use ed25519_dalek::SigningKey;
 use gpubnb_control_gateway::{
-    protocol::{LeaseBinding, MachinePhase},
+    protocol::{CommandAckStatus, LeaseBinding, MachinePhase},
     store::{
-        machine_auth_key, machine_phase_fence_key, machine_presence_key, resource_lease_key,
-        PhaseUpdateOutcome, RedisStore, TouchOutcome,
+        command_ack_key, machine_auth_key, machine_phase_fence_key, machine_presence_key,
+        resource_lease_key, PhaseUpdateOutcome, RedisStore, TouchOutcome,
     },
 };
 use redis::AsyncCommands;
@@ -24,6 +24,7 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
 
     let machine_id = "machine_redis_contract_0001";
     let resource_id = "resource_redis_contract_001";
+    let command_id = "command_redis_ack_0001";
     let signing = SigningKey::from_bytes(&[11_u8; 32]);
     let public_key = bs58::encode(signing.verifying_key().to_bytes()).into_string();
 
@@ -54,7 +55,10 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
         TouchOutcome::Accepted { sequence: 1 }
     );
     assert!(matches!(
-        store.touch_presence(machine_id, &first.connection_id, 1, 1_101, 60).await.unwrap(),
+        store
+            .touch_presence(machine_id, &first.connection_id, 1, 1_101, 60)
+            .await
+            .unwrap(),
         TouchOutcome::Rejected { ref reason, .. } if reason == "STALE_SEQUENCE"
     ));
 
@@ -63,7 +67,10 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
         .await
         .unwrap();
     assert!(matches!(
-        store.touch_presence(machine_id, &first.connection_id, 2, 1_201, 60).await.unwrap(),
+        store
+            .touch_presence(machine_id, &first.connection_id, 2, 1_201, 60)
+            .await
+            .unwrap(),
         TouchOutcome::Rejected { ref reason, .. } if reason == "STALE_CONNECTION"
     ));
 
@@ -74,7 +81,7 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
                 &second.connection_id,
                 "7",
                 1,
-                MachinePhase::Reserved
+                MachinePhase::Reserved,
             )
             .await
             .unwrap(),
@@ -87,7 +94,7 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
                 &second.connection_id,
                 "6",
                 99,
-                MachinePhase::Available
+                MachinePhase::Available,
             )
             .await
             .unwrap(),
@@ -100,7 +107,7 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
                 &second.connection_id,
                 "7",
                 1,
-                MachinePhase::Reserved
+                MachinePhase::Reserved,
             )
             .await
             .unwrap(),
@@ -113,7 +120,7 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
                 &second.connection_id,
                 "7",
                 1,
-                MachinePhase::Rented
+                MachinePhase::Rented,
             )
             .await
             .unwrap(),
@@ -126,12 +133,84 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
                 &second.connection_id,
                 "7",
                 2,
-                MachinePhase::Preparing
+                MachinePhase::Preparing,
             )
             .await
             .unwrap(),
         PhaseUpdateOutcome::Updated
     );
+
+    let third = store
+        .claim_presence(machine_id, "gateway_eu_0003", "eu-west-1", 1_300, 60)
+        .await
+        .unwrap();
+    let phase_before_resume: String = redis
+        .hget(machine_presence_key(machine_id), "phase")
+        .await
+        .unwrap();
+    assert_eq!(phase_before_resume, "DRAINING");
+    assert_eq!(
+        store
+            .set_authoritative_phase(
+                machine_id,
+                &third.connection_id,
+                "7",
+                2,
+                MachinePhase::Preparing,
+            )
+            .await
+            .unwrap(),
+        PhaseUpdateOutcome::Existing
+    );
+    let phase_after_resume: String = redis
+        .hget(machine_presence_key(machine_id), "phase")
+        .await
+        .unwrap();
+    assert_eq!(phase_after_resume, "PREPARING");
+
+    store
+        .record_command_ack(
+            machine_id,
+            command_id,
+            1,
+            CommandAckStatus::Succeeded,
+            Some("done"),
+            1_400,
+        )
+        .await
+        .unwrap();
+    store
+        .record_command_ack(
+            machine_id,
+            command_id,
+            1,
+            CommandAckStatus::Accepted,
+            None,
+            1_401,
+        )
+        .await
+        .unwrap();
+    let status_after_late_accepted: String = redis
+        .hget(command_ack_key(command_id), "status")
+        .await
+        .unwrap();
+    assert_eq!(status_after_late_accepted, "SUCCEEDED");
+    assert!(store
+        .record_command_ack(
+            machine_id,
+            command_id,
+            1,
+            CommandAckStatus::Failed,
+            Some("late_conflict"),
+            1_402,
+        )
+        .await
+        .is_err());
+    let status_after_conflict: String = redis
+        .hget(command_ack_key(command_id), "status")
+        .await
+        .unwrap();
+    assert_eq!(status_after_conflict, "SUCCEEDED");
 
     let lease = LeaseBinding {
         resource_id: resource_id.into(),
@@ -158,6 +237,7 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
         .arg(machine_auth_key(machine_id))
         .arg(machine_presence_key(machine_id))
         .arg(machine_phase_fence_key(machine_id))
+        .arg(command_ack_key(command_id))
         .arg(lease_key)
         .query_async(&mut redis)
         .await
