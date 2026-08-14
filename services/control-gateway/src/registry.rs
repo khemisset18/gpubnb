@@ -198,25 +198,30 @@ impl GatewayRegistry {
         Ok(DispatchOutcome { status })
     }
 
-    pub fn acknowledge(
-        &mut self,
+    pub fn validate_ack(
+        &self,
         machine_id: &str,
+        connection_id: &str,
         command_id: &str,
         sequence: u64,
         status: CommandAckStatus,
-    ) -> Result<AckOutcome> {
+    ) -> Result<()> {
         let state = self
             .machines
-            .get_mut(machine_id)
+            .get(machine_id)
             .ok_or_else(|| anyhow::anyhow!("unknown_machine_command_journal"))?;
-
-        if state
+        let connection = state
             .connection
             .as_ref()
-            .is_some_and(|connection| sequence <= connection.last_acked_sequence)
+            .ok_or_else(|| anyhow::anyhow!("machine_not_connected"))?;
+        if connection.connection_id != connection_id {
+            bail!("stale_connection_ack");
+        }
+
+        if sequence <= connection.last_acked_sequence
             && !state.journal.iter().any(|entry| entry.sequence == sequence)
         {
-            return Ok(AckOutcome::DuplicateTerminal);
+            return Ok(());
         }
 
         let entry = state
@@ -228,17 +233,45 @@ impl GatewayRegistry {
             bail!("command_ack_sequence_mismatch");
         }
 
-        if matches!(status, CommandAckStatus::Accepted) {
-            return Ok(AckOutcome::Recorded);
+        if !matches!(status, CommandAckStatus::Accepted) {
+            let front_sequence = state
+                .journal
+                .front()
+                .map(|entry| entry.sequence)
+                .ok_or_else(|| anyhow::anyhow!("unknown_command_ack"))?;
+            if sequence != front_sequence {
+                bail!("terminal_command_ack_out_of_order");
+            }
+        }
+        Ok(())
+    }
+
+    pub fn acknowledge(
+        &mut self,
+        machine_id: &str,
+        connection_id: &str,
+        command_id: &str,
+        sequence: u64,
+        status: CommandAckStatus,
+    ) -> Result<AckOutcome> {
+        self.validate_ack(machine_id, connection_id, command_id, sequence, status)?;
+        let state = self
+            .machines
+            .get_mut(machine_id)
+            .ok_or_else(|| anyhow::anyhow!("unknown_machine_command_journal"))?;
+        let connection = state
+            .connection
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("machine_not_connected"))?;
+
+        if sequence <= connection.last_acked_sequence
+            && !state.journal.iter().any(|entry| entry.sequence == sequence)
+        {
+            return Ok(AckOutcome::DuplicateTerminal);
         }
 
-        let front_sequence = state
-            .journal
-            .front()
-            .map(|entry| entry.sequence)
-            .ok_or_else(|| anyhow::anyhow!("unknown_command_ack"))?;
-        if sequence != front_sequence {
-            bail!("terminal_command_ack_out_of_order");
+        if matches!(status, CommandAckStatus::Accepted) {
+            return Ok(AckOutcome::Recorded);
         }
 
         state.journal.pop_front();
@@ -371,6 +404,10 @@ mod tests {
     #[test]
     fn terminal_acks_are_ordered_and_prune_only_completed_commands() {
         let mut registry = registry();
+        let (tx, _rx) = mpsc::channel(4);
+        registry
+            .register("machine_00000001", "conn_00000001".into(), tx, 0, 1_500)
+            .unwrap();
         registry
             .dispatch(command("command_00000001", 1), 2_000)
             .unwrap();
@@ -380,6 +417,7 @@ mod tests {
         assert!(registry
             .acknowledge(
                 "machine_00000001",
+                "conn_00000001",
                 "command_00000002",
                 2,
                 CommandAckStatus::Succeeded,
@@ -389,6 +427,7 @@ mod tests {
             registry
                 .acknowledge(
                     "machine_00000001",
+                    "conn_00000001",
                     "command_00000001",
                     1,
                     CommandAckStatus::Accepted,
@@ -400,11 +439,47 @@ mod tests {
         registry
             .acknowledge(
                 "machine_00000001",
+                "conn_00000001",
                 "command_00000001",
                 1,
                 CommandAckStatus::Succeeded,
             )
             .unwrap();
         assert_eq!(registry.stats().pending_commands, 1);
+    }
+
+    #[test]
+    fn stale_connections_and_unknown_commands_fail_before_ack_persistence() {
+        let mut registry = registry();
+        let (tx1, _rx1) = mpsc::channel(2);
+        registry
+            .register("machine_00000001", "conn_00000001".into(), tx1, 0, 1_000)
+            .unwrap();
+        registry
+            .dispatch(command("command_00000001", 1), 2_000)
+            .unwrap();
+        let (tx2, _rx2) = mpsc::channel(2);
+        registry
+            .register("machine_00000001", "conn_00000002".into(), tx2, 0, 2_001)
+            .unwrap();
+
+        assert!(registry
+            .validate_ack(
+                "machine_00000001",
+                "conn_00000001",
+                "command_00000001",
+                1,
+                CommandAckStatus::Succeeded,
+            )
+            .is_err());
+        assert!(registry
+            .validate_ack(
+                "machine_00000001",
+                "conn_00000002",
+                "command_unknown_0001",
+                1,
+                CommandAckStatus::Succeeded,
+            )
+            .is_err());
     }
 }
