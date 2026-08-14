@@ -37,6 +37,14 @@ const schema = z.object({
   SUPABASE_ANON_KEY: z.string().min(20).optional(),
   FILE_STORAGE_DIR: z.string().default('./data/artifacts'),
   MAX_ARTIFACT_BYTES: z.coerce.number().int().min(1024).max(500_000_000).default(104_857_600),
+
+  // Global control-plane migration. `legacy` keeps the current PostgreSQL-backed
+  // heartbeat path authoritative. `shadow` is reserved for dual-write validation,
+  // and `hot` for the later Redis/gateway cutover once parity gates pass.
+  CONTROL_PLANE_REGION: z.string().regex(/^[a-z0-9][a-z0-9-]{1,31}$/).default('local'),
+  MACHINE_PRESENCE_MODE: z.enum(['legacy', 'shadow', 'hot']).default('legacy'),
+  MACHINE_PRESENCE_TTL_SECONDS: z.coerce.number().int().min(15).max(300).default(60),
+  RESOURCE_LEASE_TTL_SECONDS: z.coerce.number().int().min(15).max(300).default(45),
 });
 
 export const config = schema.parse(process.env);
