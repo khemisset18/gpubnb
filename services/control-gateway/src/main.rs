@@ -28,7 +28,10 @@ async fn main() -> Result<()> {
 
     let config = Arc::new(GatewayConfig::from_env()?);
     let store = RedisStore::connect(&config.redis_url).await?;
-    store.ping().await.context("Redis is not ready at gateway startup")?;
+    store
+        .ping()
+        .await
+        .context("Redis is not ready at gateway startup")?;
 
     let registry = Arc::new(Mutex::new(GatewayRegistry::new(RegistryLimits {
         max_connections: config.max_connections,
@@ -38,7 +41,12 @@ async fn main() -> Result<()> {
     let metrics = Arc::new(GatewayMetrics::default());
     let admin_listener = tokio::net::TcpListener::bind(config.admin_bind)
         .await
-        .with_context(|| format!("failed to bind control-gateway admin listener {}", config.admin_bind))?;
+        .with_context(|| {
+            format!(
+                "failed to bind control-gateway admin listener {}",
+                config.admin_bind
+            )
+        })?;
 
     let admin_state = AdminState {
         config: Arc::clone(&config),
@@ -99,6 +107,9 @@ async fn main() -> Result<()> {
     tokio::time::timeout(Duration::from_secs(15), graceful)
         .await
         .context("control gateway graceful shutdown timed out")??;
-    info!(event = "control_gateway_stopped", "regional control gateway stopped cleanly");
+    info!(
+        event = "control_gateway_stopped",
+        "regional control gateway stopped cleanly"
+    );
     Ok(())
 }
