@@ -57,21 +57,13 @@ jobs:
         run: cargo fmt --manifest-path services/control-gateway/Cargo.toml -- --check
 
       - name: Unit and real-Redis contract tests
-        run: cargo test --manifest-path services/control-gateway/Cargo.toml --all-targets
-
-      - name: Capture resolved dependency lock
-        uses: actions/upload-artifact@v4
-        with:
-          name: control-gateway-cargo-lock
-          path: services/control-gateway/Cargo.lock
-          if-no-files-found: error
-          retention-days: 1
+        run: cargo test --locked --manifest-path services/control-gateway/Cargo.toml --all-targets
 
       - name: Clippy
-        run: cargo clippy --manifest-path services/control-gateway/Cargo.toml --all-targets -- -D warnings
+        run: cargo clippy --locked --manifest-path services/control-gateway/Cargo.toml --all-targets -- -D warnings
 
       - name: Release build
-        run: cargo build --release --manifest-path services/control-gateway/Cargo.toml --bin gpubnb-control-gateway
+        run: cargo build --locked --release --manifest-path services/control-gateway/Cargo.toml --bin gpubnb-control-gateway
 
   api-contract:
     runs-on: ubuntu-24.04
