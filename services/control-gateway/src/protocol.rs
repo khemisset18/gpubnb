@@ -58,7 +58,9 @@ impl ClientHello {
             bail!("key_version must be positive");
         }
         validate_nonce(&self.nonce)?;
-        if self.signature_hex.len() != 128 || !self.signature_hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        if self.signature_hex.len() != 128
+            || !self.signature_hex.bytes().all(|b| b.is_ascii_hexdigit())
+        {
             bail!("signature_hex must be a 64-byte Ed25519 signature");
         }
         let delta = now_ms.abs_diff(self.issued_at_ms);
@@ -244,7 +246,8 @@ impl AgentMessage {
                     if detail.is_empty()
                         || detail.len() > 96
                         || !detail.bytes().all(|byte| {
-                            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b':')
+                            byte.is_ascii_alphanumeric()
+                                || matches!(byte, b'_' | b'-' | b'.' | b':')
                         })
                     {
                         bail!("command ack detail_code invalid");
@@ -270,13 +273,8 @@ pub enum FenceReason {
 pub enum GatewayMessage {
     ServerHello { hello: ServerHello },
     Command { command: CommandEnvelope },
-    AckReceipt {
-        command_id: String,
-        sequence: u64,
-    },
-    Fence {
-        reason: FenceReason,
-    },
+    AckReceipt { command_id: String, sequence: u64 },
+    Fence { reason: FenceReason },
 }
 
 pub fn parse_agent_public_key_base58(value: &str) -> Result<VerifyingKey> {
@@ -294,9 +292,9 @@ pub fn parse_agent_public_key_base58(value: &str) -> Result<VerifyingKey> {
 
 pub fn validate_id(value: &str, field: &str) -> Result<()> {
     if !(8..=160).contains(&value.len())
-        || !value.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b':' | b'.')
-        })
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b':' | b'.'))
     {
         bail!("{field} invalid");
     }
