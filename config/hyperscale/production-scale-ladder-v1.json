@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "name": "production-scale-ladder-v1",
+  "stages": [
+    {
+      "id": "live_10k",
+      "targetConnections": 10000,
+      "holdSeconds": 900
+    },
+    {
+      "id": "live_50k",
+      "targetConnections": 50000,
+      "holdSeconds": 900
+    },
+    {
+      "id": "live_100k",
+      "targetConnections": 100000,
+      "holdSeconds": 1200
+    },
+    {
+      "id": "live_250k",
+      "targetConnections": 250000,
+      "holdSeconds": 1800
+    },
+    {
+      "id": "live_500k",
+      "targetConnections": 500000,
+      "holdSeconds": 1800
+    },
+    {
+      "id": "live_750k",
+      "targetConnections": 750000,
+      "holdSeconds": 2700
+    },
+    {
+      "id": "live_1m",
+      "targetConnections": 1000000,
+      "holdSeconds": 3600
+    }
+  ],
+  "requirements": {
+    "maxGatewayCpuBps": 8500,
+    "maxGatewayFdUtilizationBps": 8000,
+    "maxGatewayUdpErrorsDelta": 0,
+    "maxInjectorCpuBps": 8500,
+    "maxInjectorFdUtilizationBps": 8000,
+    "maxInjectorUdpErrorsDelta": 0,
+    "maxRedisCpuBps": 8500,
+    "maxRedisBlockedClients": 0,
+    "maxRedisEvictionsDelta": 0,
+    "minSoakSeconds": 14400,
+    "requireGatewayLoss": true,
+    "requireNetworkImpairment": true,
+    "requireRedisFailover": true,
+    "requireAllRegionLoss": true
+  }
+}

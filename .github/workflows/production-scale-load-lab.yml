@@ -1,0 +1,283 @@
+name: production-scale-load-lab
+
+on:
+  pull_request:
+    paths:
+      - 'services/control-gateway/src/production_lab.rs'
+      - 'services/control-gateway/src/bin/gpubnb-prod-labctl.rs'
+      - 'services/control-gateway/src/lib.rs'
+      - 'config/hyperscale/production-scale-ladder-v1.json'
+      - 'config/hyperscale/distributed-million-lab-v1.json'
+      - 'docs/architecture/PRODUCTION_SCALE_LOAD_LAB_V1.md'
+      - 'docs/operations/production-scale-load-lab-runbook.md'
+      - '.github/workflows/production-scale-load-lab.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-scale-load-lab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: services/control-gateway
+
+      - name: Strict Rust format
+        working-directory: services/control-gateway
+        run: cargo fmt -- --check
+
+      - name: Production scale contract tests
+        working-directory: services/control-gateway
+        run: cargo test --locked production_lab
+
+      - name: Strict production lab lint
+        working-directory: services/control-gateway
+        run: cargo clippy --locked --bin gpubnb-prod-labctl -- -D warnings
+
+      - name: Build locked lab tools
+        working-directory: services/control-gateway
+        run: |
+          cargo build --locked --release \
+            --bin gpubnb-labctl \
+            --bin gpubnb-prod-labctl
+
+      - name: Generate immutable distributed million manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gpubnb-prod-lab/evidence
+          services/control-gateway/target/release/gpubnb-labctl plan \
+            --profile config/hyperscale/distributed-million-lab-v1.json \
+            --run-id ci_prod_distributed \
+            --output /tmp/gpubnb-prod-lab/distributed-manifest.json \
+            --require-pass \
+            >/tmp/gpubnb-prod-lab/distributed-plan.stdout
+
+      - name: Freeze synthetic release identity for contract qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >/tmp/gpubnb-prod-lab/release-metadata.json <<'JSON'
+          {
+            "gitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "gatewayImageDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "injectorImageDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "configBundleSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "redisVersion": "7.4",
+            "redisTopology": "ci-contract-sentinel-3",
+            "osKernel": "linux-ci",
+            "instanceType": "ci-contract-runner",
+            "cpuCount": 32,
+            "memoryBytes": 68719476736,
+            "fdLimit": 1048576,
+            "nicMbps": 25000,
+            "regions": ["eu-west-1", "us-east-1", "ap-southeast-1"]
+          }
+          JSON
+
+      - name: Generate production promotion plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          services/control-gateway/target/release/gpubnb-prod-labctl plan \
+            --distributed-manifest /tmp/gpubnb-prod-lab/distributed-manifest.json \
+            --profile config/hyperscale/production-scale-ladder-v1.json \
+            --release-metadata /tmp/gpubnb-prod-lab/release-metadata.json \
+            --run-id ci_prod_release \
+            --output /tmp/gpubnb-prod-lab/production-plan.json \
+            --require-pass \
+            >/tmp/gpubnb-prod-lab/production-plan.stdout
+          python3 - <<'PY'
+          import json
+          plan = json.load(open('/tmp/gpubnb-prod-lab/production-plan.json'))
+          assert plan['distributedFleetSize'] == 1_000_000
+          assert plan['distributedSlo']['maxRedisP99Ms'] == 50
+          assert [stage['targetConnections'] for stage in plan['stages']] == [
+              10_000, 50_000, 100_000, 250_000, 500_000, 750_000, 1_000_000
+          ]
+          assert plan['stages'][0]['shards'][0]['connections'] == 10_000
+          assert len(plan['stages'][-1]['shards']) == 40
+          PY
+
+      - name: Generate complete synthetic evidence set
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          plan = json.load(open('/tmp/gpubnb-prod-lab/production-plan.json'))
+          out = '/tmp/gpubnb-prod-lab/evidence'
+          os.makedirs(out, exist_ok=True)
+          final = plan['stages'][-1]['id']
+          for stage in plan['stages']:
+              faults = []
+              if stage['id'] == final:
+                  faults = [
+                      {"kind":"gateway-loss","durationSeconds":120,"recovered":True,"duplicateOwnershipDetected":False,"manualIntervention":False},
+                      {"kind":"network-impairment","durationSeconds":300,"recovered":True,"duplicateOwnershipDetected":False,"manualIntervention":False},
+                      {"kind":"redis-failover","durationSeconds":180,"recovered":True,"duplicateOwnershipDetected":False,"manualIntervention":False},
+                      {"kind":"region-loss","targetRegion":"eu-west-1","durationSeconds":600,"recovered":True,"duplicateOwnershipDetected":False,"manualIntervention":False},
+                      {"kind":"region-loss","targetRegion":"us-east-1","durationSeconds":600,"recovered":True,"duplicateOwnershipDetected":False,"manualIntervention":False},
+                      {"kind":"region-loss","targetRegion":"ap-southeast-1","durationSeconds":600,"recovered":True,"duplicateOwnershipDetected":False,"manualIntervention":False},
+                      {"kind":"soak","durationSeconds":14400,"recovered":True,"duplicateOwnershipDetected":False,"manualIntervention":False},
+                  ]
+              evidence = {
+                  "schemaVersion": 1,
+                  "runId": plan['runId'],
+                  "stageId": stage['id'],
+                  "releaseGitSha": plan['release']['gitSha'],
+                  "gatewayImageDigest": plan['release']['gatewayImageDigest'],
+                  "injectorImageDigest": plan['release']['injectorImageDigest'],
+                  "configBundleSha256": plan['release']['configBundleSha256'],
+                  "targetConnections": stage['targetConnections'],
+                  "measuredPeakConnections": stage['targetConnections'],
+                  "sustainedSeconds": stage['holdSeconds'],
+                  "expectedShards": len(stage['shards']),
+                  "observedShards": len(stage['shards']),
+                  "connectionFailureBps": 0,
+                  "heartbeatFailureBps": 0,
+                  "presenceFailureBps": 0,
+                  "connectP99Ms": 100,
+                  "presenceP99Ms": 20,
+                  "gatewayPeakCpuBps": 7000,
+                  "gatewayPeakFdUtilizationBps": 6000,
+                  "gatewayUdpErrorsDelta": 0,
+                  "injectorPeakCpuBps": 7000,
+                  "injectorPeakFdUtilizationBps": 6000,
+                  "injectorUdpErrorsDelta": 0,
+                  "redisP99Ms": 20,
+                  "redisPeakCpuBps": 5000,
+                  "redisBlockedClientsPeak": 0,
+                  "redisEvictionsDelta": 0,
+                  "faults": faults,
+                  "evidenceBundleSha256": "e" * 64,
+                  "passed": True,
+              }
+              with open(f"{out}/{stage['id']}.json", 'w') as f:
+                  json.dump(evidence, f, indent=2)
+          PY
+
+      - name: Progressive promotion gate must not produce release claim early
+        shell: bash
+        run: |
+          set -euo pipefail
+          services/control-gateway/target/release/gpubnb-prod-labctl qualify \
+            --plan /tmp/gpubnb-prod-lab/production-plan.json \
+            --evidence-dir /tmp/gpubnb-prod-lab/evidence \
+            --through-stage live_10k \
+            --output /tmp/gpubnb-prod-lab/qualify-10k.json \
+            --require-pass \
+            >/tmp/gpubnb-prod-lab/qualify-10k.stdout
+          python3 - <<'PY'
+          import json
+          report = json.load(open('/tmp/gpubnb-prod-lab/qualify-10k.json'))
+          assert report['passed'] is True
+          assert report['releaseReady'] is False
+          assert report['oneMillionMeasured'] is False
+          assert report['measuredPeakConnections'] == 10_000
+          PY
+
+      - name: Full evidence may produce measured one-million claim
+        shell: bash
+        run: |
+          set -euo pipefail
+          services/control-gateway/target/release/gpubnb-prod-labctl qualify \
+            --plan /tmp/gpubnb-prod-lab/production-plan.json \
+            --evidence-dir /tmp/gpubnb-prod-lab/evidence \
+            --output /tmp/gpubnb-prod-lab/final-qualification.json \
+            --require-pass \
+            >/tmp/gpubnb-prod-lab/final-qualification.stdout
+          python3 - <<'PY'
+          import json
+          report = json.load(open('/tmp/gpubnb-prod-lab/final-qualification.json'))
+          assert report['passed'] is True
+          assert report['releaseReady'] is True
+          assert report['oneMillionMeasured'] is True
+          assert report['measuredPeakConnections'] == 1_000_000
+          assert all(item['passed'] for item in report['requiredFaultChecks'])
+          PY
+
+      - name: Missing region-loss evidence must block final release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a /tmp/gpubnb-prod-lab/evidence /tmp/gpubnb-prod-lab/evidence-missing-region
+          python3 - <<'PY'
+          import json
+          path = '/tmp/gpubnb-prod-lab/evidence-missing-region/live_1m.json'
+          data = json.load(open(path))
+          data['faults'] = [
+              fault for fault in data['faults']
+              if not (fault['kind'] == 'region-loss' and fault.get('targetRegion') == 'ap-southeast-1')
+          ]
+          with open(path, 'w') as f:
+              json.dump(data, f, indent=2)
+          PY
+          services/control-gateway/target/release/gpubnb-prod-labctl qualify \
+            --plan /tmp/gpubnb-prod-lab/production-plan.json \
+            --evidence-dir /tmp/gpubnb-prod-lab/evidence-missing-region \
+            --output /tmp/gpubnb-prod-lab/missing-region-qualification.json \
+            >/tmp/gpubnb-prod-lab/missing-region.stdout
+          python3 - <<'PY'
+          import json
+          report = json.load(open('/tmp/gpubnb-prod-lab/missing-region-qualification.json'))
+          assert report['passed'] is False
+          assert report['releaseReady'] is False
+          assert report['oneMillionMeasured'] is False
+          assert any(
+              item['name'] == 'region_loss:ap-southeast-1' and item['passed'] is False
+              for item in report['requiredFaultChecks']
+          )
+          PY
+
+      - name: Below-target measured peak must block one-million claim
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a /tmp/gpubnb-prod-lab/evidence /tmp/gpubnb-prod-lab/evidence-under-target
+          python3 - <<'PY'
+          import json
+          path = '/tmp/gpubnb-prod-lab/evidence-under-target/live_1m.json'
+          data = json.load(open(path))
+          data['measuredPeakConnections'] = 999_999
+          with open(path, 'w') as f:
+              json.dump(data, f, indent=2)
+          PY
+          services/control-gateway/target/release/gpubnb-prod-labctl qualify \
+            --plan /tmp/gpubnb-prod-lab/production-plan.json \
+            --evidence-dir /tmp/gpubnb-prod-lab/evidence-under-target \
+            --output /tmp/gpubnb-prod-lab/under-target-qualification.json \
+            >/tmp/gpubnb-prod-lab/under-target.stdout
+          python3 - <<'PY'
+          import json
+          report = json.load(open('/tmp/gpubnb-prod-lab/under-target-qualification.json'))
+          assert report['passed'] is False
+          assert report['releaseReady'] is False
+          assert report['oneMillionMeasured'] is False
+          PY
+
+      - name: Upload contract evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-scale-load-lab-contract
+          path: /tmp/gpubnb-prod-lab/
+          if-no-files-found: warn
+          retention-days: 14
