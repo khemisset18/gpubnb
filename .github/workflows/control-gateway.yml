@@ -1,0 +1,100 @@
+name: control-gateway
+
+on:
+  pull_request:
+    paths:
+      - 'services/control-gateway/**'
+      - 'apps/api/src/machine-auth-cache.ts'
+      - 'apps/api/src/device-authorization-routes.ts'
+      - 'apps/api/test/control-gateway-*.test.ts'
+      - 'docs/architecture/REGIONAL_CONNECTION_GATEWAY_V1.md'
+      - 'docs/operations/control-gateway-runbook.md'
+      - '.github/workflows/control-gateway.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/control-gateway/**'
+      - 'apps/api/src/machine-auth-cache.ts'
+      - 'apps/api/src/device-authorization-routes.ts'
+      - 'apps/api/test/control-gateway-*.test.ts'
+      - '.github/workflows/control-gateway.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: control-gateway-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gateway-core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+    env:
+      REDIS_URL: redis://127.0.0.1:6379
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - name: Format
+        run: cargo fmt --manifest-path services/control-gateway/Cargo.toml -- --check
+
+      - name: Unit and real-Redis contract tests
+        run: cargo test --locked --manifest-path services/control-gateway/Cargo.toml --all-targets
+
+      - name: Clippy
+        run: cargo clippy --locked --manifest-path services/control-gateway/Cargo.toml --all-targets -- -D warnings
+
+      - name: Release build
+        run: cargo build --locked --release --manifest-path services/control-gateway/Cargo.toml --bin gpubnb-control-gateway
+
+  api-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx prisma generate
+      - name: Control-gateway API contract tests
+        run: npx tsx --test test/control-gateway-*.test.ts
+      - name: Strict TypeScript
+        run: npx tsc -p tsconfig.json --noEmit
+
+  container-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build production container
+        run: docker build -f services/control-gateway/Dockerfile -t gpubnb-control-gateway:ci .

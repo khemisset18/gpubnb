@@ -14,6 +14,7 @@ import { syncMiningResourcesFromInventory } from './mining-resource-inventory.js
 import { registerWorkspaceRenterRoutes } from './workspace-renter-routes.js';
 import { registerArtifactTransportGuards } from './artifact-transport-guards.js';
 import { registerWorkspaceBrowserSecurity } from './workspace-browser-security.js';
+import { syncMachineAuthCache } from './machine-auth-cache.js';
 
 const agentPublicKeySchema = z.string().min(32).max(64).regex(/^[1-9A-HJ-NP-Za-km-z]+$/);
 const machineFingerprintSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
@@ -149,6 +150,11 @@ export const registerDeviceAuthorizationRoutes = (
       if (existing) {
         if (existing.ownerId !== authorization.ownerId) return reply.code(409).send({ error: 'agent_key_already_registered' });
         await syncMiningResourcesFromInventory(db, existing.id, miningInventory);
+        await syncMachineAuthCache(redis, {
+          machineId: existing.id,
+          agentPublicKey: authorization.publicKey,
+          keyVersion: 1,
+        });
         return { machineId: existing.id, linkedAt: existing.keyCreatedAt.toISOString() };
       }
 
@@ -180,6 +186,11 @@ export const registerDeviceAuthorizationRoutes = (
       });
 
       await syncMiningResourcesFromInventory(db, machine.id, miningInventory);
+      await syncMachineAuthCache(redis, {
+        machineId: machine.id,
+        agentPublicKey: authorization.publicKey,
+        keyVersion: 1,
+      });
       return reply.code(201).send({ machineId: machine.id, linkedAt: machine.keyCreatedAt.toISOString() });
     } catch (error) {
       if (error instanceof DeviceAuthorizationError) return sendAuthorizationError(reply, error);
