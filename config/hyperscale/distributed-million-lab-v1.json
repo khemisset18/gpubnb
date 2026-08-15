@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "name": "distributed-million-lab-v1",
+  "fleetSize": 1000000,
+  "machineIdStart": 1000000,
+  "connectionsPerInjector": 25000,
+  "seed": 424242,
+  "regions": [
+    {
+      "name": "eu-west-1",
+      "injectors": 14,
+      "gateways": 13,
+      "gatewayMaxConnections": 50000
+    },
+    {
+      "name": "us-east-1",
+      "injectors": 13,
+      "gateways": 13,
+      "gatewayMaxConnections": 50000
+    },
+    {
+      "name": "ap-southeast-1",
+      "injectors": 13,
+      "gateways": 13,
+      "gatewayMaxConnections": 50000
+    }
+  ],
+  "slo": {
+    "maxNormalUtilizationBps": 7000,
+    "maxFailoverUtilizationBps": 8000,
+    "maxReconnectsPerSecondPerGateway": 400,
+    "maxConnectionFailureBps": 100,
+    "maxHeartbeatFailureBps": 100,
+    "maxPresenceFailureBps": 100,
+    "maxConnectP99Ms": 5000,
+    "maxPresenceP99Ms": 2000,
+    "maxGatewayCpuBps": 8500,
+    "maxGatewayRssBytes": 8589934592,
+    "maxGatewayOpenFds": 120000,
+    "maxGatewayUdpErrors": 100,
+    "maxRedisP99Ms": 50
+  },
+  "stages": [
+    {
+      "name": "baseline-70pct-ceiling",
+      "kind": "baseline",
+      "durationSeconds": 900
+    },
+    {
+      "name": "reconnect-storm-120s-jitter",
+      "kind": "reconnect-storm",
+      "durationSeconds": 300,
+      "reconnectJitterSeconds": 120
+    },
+    {
+      "name": "single-gateway-loss",
+      "kind": "gateway-loss",
+      "durationSeconds": 300,
+      "targetGateways": 1,
+      "reconnectJitterSeconds": 120
+    },
+    {
+      "name": "eu-west-1-loss",
+      "kind": "region-loss",
+      "durationSeconds": 600,
+      "targetRegion": "eu-west-1",
+      "reconnectJitterSeconds": 120
+    },
+    {
+      "name": "us-east-1-loss",
+      "kind": "region-loss",
+      "durationSeconds": 600,
+      "targetRegion": "us-east-1",
+      "reconnectJitterSeconds": 120
+    },
+    {
+      "name": "ap-southeast-1-loss",
+      "kind": "region-loss",
+      "durationSeconds": 600,
+      "targetRegion": "ap-southeast-1",
+      "reconnectJitterSeconds": 120
+    },
+    {
+      "name": "wan-loss-latency",
+      "kind": "network-impairment",
+      "durationSeconds": 300,
+      "packetLossBps": 100,
+      "addedLatencyMs": 100
+    },
+    {
+      "name": "redis-outage",
+      "kind": "redis-outage",
+      "durationSeconds": 120
+    },
+    {
+      "name": "post-chaos-soak",
+      "kind": "soak",
+      "durationSeconds": 3600
+    }
+  ]
+}
