@@ -7,7 +7,7 @@ use gpubnb_control_gateway::{
     protocol::{CommandAckStatus, LeaseBinding, MachinePhase},
     store::{
         command_ack_key, machine_auth_key, machine_phase_fence_key, machine_presence_key,
-        resource_lease_key, PhaseUpdateOutcome, RedisStore, TouchOutcome,
+        resource_lease_key, CommandAckRecord, PhaseUpdateOutcome, RedisStore, TouchOutcome,
     },
 };
 use redis::AsyncCommands;
@@ -169,15 +169,15 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
     assert_eq!(phase_after_resume, "PREPARING");
 
     assert!(store
-        .record_command_ack(
+        .record_command_ack(CommandAckRecord {
             machine_id,
-            &second.connection_id,
+            connection_id: &second.connection_id,
             command_id,
-            1,
-            CommandAckStatus::Succeeded,
-            Some("stale_socket"),
-            1_399,
-        )
+            sequence: 1,
+            status: CommandAckStatus::Succeeded,
+            detail_code: Some("stale_socket"),
+            acknowledged_at_ms: 1_399,
+        })
         .await
         .is_err());
     let stale_ack_exists: bool = redis
@@ -187,27 +187,27 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
     assert!(!stale_ack_exists);
 
     store
-        .record_command_ack(
+        .record_command_ack(CommandAckRecord {
             machine_id,
-            &third.connection_id,
+            connection_id: &third.connection_id,
             command_id,
-            1,
-            CommandAckStatus::Succeeded,
-            Some("done"),
-            1_400,
-        )
+            sequence: 1,
+            status: CommandAckStatus::Succeeded,
+            detail_code: Some("done"),
+            acknowledged_at_ms: 1_400,
+        })
         .await
         .unwrap();
     store
-        .record_command_ack(
+        .record_command_ack(CommandAckRecord {
             machine_id,
-            &third.connection_id,
+            connection_id: &third.connection_id,
             command_id,
-            1,
-            CommandAckStatus::Accepted,
-            None,
-            1_401,
-        )
+            sequence: 1,
+            status: CommandAckStatus::Accepted,
+            detail_code: None,
+            acknowledged_at_ms: 1_401,
+        })
         .await
         .unwrap();
     let status_after_late_accepted: String = redis
@@ -216,15 +216,15 @@ async fn redis_presence_fencing_phase_fencing_and_lease_validation_are_atomic() 
         .unwrap();
     assert_eq!(status_after_late_accepted, "SUCCEEDED");
     assert!(store
-        .record_command_ack(
+        .record_command_ack(CommandAckRecord {
             machine_id,
-            &third.connection_id,
+            connection_id: &third.connection_id,
             command_id,
-            1,
-            CommandAckStatus::Failed,
-            Some("late_conflict"),
-            1_402,
-        )
+            sequence: 1,
+            status: CommandAckStatus::Failed,
+            detail_code: Some("late_conflict"),
+            acknowledged_at_ms: 1_402,
+        })
         .await
         .is_err());
     let status_after_conflict: String = redis
