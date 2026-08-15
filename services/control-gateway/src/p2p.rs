@@ -199,7 +199,10 @@ impl SignedRendezvousTicket {
     pub fn verify(&self, verifying_key: &VerifyingKey, now_ms: u64) -> Result<()> {
         self.claims.validate(now_ms)?;
         if self.signature_hex.len() != 128
-            || !self.signature_hex.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || !self
+                .signature_hex
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
         {
             bail!("P2P rendezvous signature must be a 64-byte Ed25519 signature");
         }
@@ -303,8 +306,7 @@ mod tests {
     #[test]
     fn signed_ticket_is_bound_to_current_fenced_lease() {
         let signing_key = SigningKey::from_bytes(&[7_u8; 32]);
-        let mut ticket =
-            SignedRendezvousTicket::issue(claims(), &signing_key, 1_000_010).unwrap();
+        let mut ticket = SignedRendezvousTicket::issue(claims(), &signing_key, 1_000_010).unwrap();
         ticket
             .verify(&signing_key.verifying_key(), 1_000_020)
             .unwrap();
@@ -335,11 +337,8 @@ mod tests {
     #[test]
     fn relay_is_only_a_fallback_and_never_the_only_host_path() {
         let mut relay_only = claims();
-        relay_only.host_candidates = vec![candidate(
-            CandidateKind::Relay,
-            "203.0.113.20:4433",
-            100,
-        )];
+        relay_only.host_candidates =
+            vec![candidate(CandidateKind::Relay, "203.0.113.20:4433", 100)];
         assert!(relay_only.validate(1_000_010).is_err());
 
         let mut direct_only = claims();
@@ -350,8 +349,7 @@ mod tests {
     #[test]
     fn serialized_ticket_contract_contains_no_product_pii_fields() {
         let signing_key = SigningKey::from_bytes(&[7_u8; 32]);
-        let ticket =
-            SignedRendezvousTicket::issue(claims(), &signing_key, 1_000_010).unwrap();
+        let ticket = SignedRendezvousTicket::issue(claims(), &signing_key, 1_000_010).unwrap();
         let encoded = serde_json::to_string(&ticket).unwrap();
         for forbidden in ["email", "ownerId", "payment", "card", "billing"] {
             assert!(!encoded.contains(forbidden));
@@ -361,7 +359,9 @@ mod tests {
     #[test]
     fn candidate_sets_are_bounded_and_deduplicated() {
         let mut duplicated = claims();
-        duplicated.host_candidates.push(duplicated.host_candidates[0].clone());
+        duplicated
+            .host_candidates
+            .push(duplicated.host_candidates[0].clone());
         assert!(duplicated.validate(1_000_010).is_err());
 
         let mut oversized = claims();
