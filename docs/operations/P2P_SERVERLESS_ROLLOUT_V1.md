@@ -19,6 +19,43 @@ The Host Agent and Renter client gather interface candidates and public UDP mapp
 
 A control-plane rendezvous response returns only the signed short-lived ticket needed to authenticate the peers and attempt connectivity.
 
+### Agent configuration and safety bounds
+
+STUN is disabled when `stunServers` is empty. Operators must provide an explicit
+list; the Agent contains no public default. The configuration object passed to
+candidate discovery has this shape:
+
+```json
+{
+  "stunServers": [{"host": "stun.region.internal", "port": 3478}],
+  "stunTimeoutMs": 1000,
+  "stunTotalTimeoutMs": 4000
+}
+```
+
+Hard bounds are four STUN servers, 3 seconds per server, 8 seconds total, 1200
+bytes per response and 12 candidates per peer. Invalid configuration fails closed.
+Individual unreachable or malformed STUN responses are ignored so HOST discovery
+can proceed; no endpoint is included in the resulting stable error code.
+
+The returned discovery object owns a bound UDP socket. Keep it alive until direct
+QUIC either adopts it or is abandoned. Closing it and binding another socket can
+change the NAT mapping and invalidates the server-reflexive candidate.
+
+### Operator checks and rollback
+
+Before enabling candidate publication:
+
+1. verify UDP egress and DNS resolution to each configured STUN service;
+2. run `python -m pytest -q agent/tests/test_p2p_connectivity.py`;
+3. confirm heartbeats and general telemetry contain neither `hostCandidates` nor
+   `renterCandidates`, `endpoint`, or discovered public addresses;
+4. confirm the existing `gpubnb-host-tunnel` process still starts normally.
+
+Roll back by disabling candidate publication or supplying an empty `stunServers`
+list. Do not remove or bypass ticket verification, fencing, TTL limits or the Edge
+tunnel. Candidate Discovery v1 alone does not alter the active data path.
+
 ## Phase 2 - direct QUIC canary
 
 Enable direct session establishment progressively: `0.1% -> 1% -> 5% -> 25% -> 50% -> 100%`.

@@ -70,11 +70,38 @@ The minimal control plane still owns the pieces that require global authority:
 
 It does **not** carry the GPU workload itself.
 
+## Agent Candidate Discovery v1
+
+`agent/gpubnb_agent/p2p_connectivity.py` implements the first Agent-side layer:
+
+- it binds one real UDP socket to an ephemeral port and returns ownership of that
+  live socket to the caller; future QUIC code must consume that socket rather than
+  bind a replacement port;
+- it filters loopback, unspecified, multicast and link-local interface addresses;
+- it sends bounded RFC 8489 Binding requests only to operator-configured STUN
+  servers and strictly validates the response header, transaction ID, cookie,
+  framing and IPv4/IPv6 `XOR-MAPPED-ADDRESS`;
+- it verifies the Control Gateway Ed25519 ticket using exactly the signing byte
+  sequence in `services/control-gateway/src/p2p.rs`, including candidate order;
+- it rejects stale or incorrectly scoped lease authority before exposing network
+  attempt targets and returns HOST, SERVER_REFLEXIVE, then RELAY attempts.
+
+Discovery results are session negotiation data. Public or private endpoints must
+not be copied into heartbeat, general telemetry, logs or exception messages.
+Only stable failure codes and candidate classes may be counted operationally.
+
+The implementation prefers one IPv6 dual-stack socket so IPv4 and IPv6 candidates
+share the same reserved port, and falls back to IPv4 when the platform cannot
+provide dual-stack UDP. The Direct QUIC phase must preserve that socket ownership.
+
 ## What this PR does not claim
 
 This v1 establishes the secure protocol contract and CI gates. It does not claim that real Internet NAT traversal is already complete.
 
-The next Agent layer must gather real HOST and SERVER_REFLEXIVE candidates, perform UDP hole punching/QUIC connection races, report which path won, and request a relay candidate only after direct attempts fail. Symmetric NAT, restrictive enterprise firewalls, IPv4 CGNAT, IPv6 and mobile networks must be qualified with real network tests before claiming a production direct-connect success rate.
+The Agent now gathers HOST and SERVER_REFLEXIVE candidates, but it does not yet
+perform UDP hole punching or a QUIC handshake. Symmetric NAT, restrictive
+enterprise firewalls, IPv4 CGNAT, IPv6 and mobile networks must be qualified with
+real NAT-to-NAT tests before claiming a production direct-connect success rate.
 
 ## Cost model
 
