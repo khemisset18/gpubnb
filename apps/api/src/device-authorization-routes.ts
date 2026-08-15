@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import type { PrismaClient } from '@prisma/client';
+import { ModerationStatus, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
@@ -15,6 +15,9 @@ import { registerWorkspaceRenterRoutes } from './workspace-renter-routes.js';
 import { registerArtifactTransportGuards } from './artifact-transport-guards.js';
 import { registerWorkspaceBrowserSecurity } from './workspace-browser-security.js';
 import { syncMachineAuthCache } from './machine-auth-cache.js';
+import { config } from './config.js';
+import { controlChannelAssignment } from './agent-control-channel.js';
+import { recordSecurityFailure, verifyAgentRequest } from './security.js';
 
 const agentPublicKeySchema = z.string().min(32).max(64).regex(/^[1-9A-HJ-NP-Za-km-z]+$/);
 const machineFingerprintSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
@@ -69,6 +72,41 @@ export const registerDeviceAuthorizationRoutes = (
   registerWorkspaceBrowserSecurity(app);
   registerMiningRoutes(app, db, redis);
   registerWorkspaceRenterRoutes(app, db, redis);
+
+  app.get('/agent/control-channel/:machineId', {
+    config: { rateLimit: { max: 12, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const { machineId } = z.object({ machineId: z.string().cuid() }).parse(request.params);
+    const machine = await db.machine.findUnique({
+      where: { id: machineId },
+      select: {
+        id: true,
+        agentPublicKey: true,
+        moderationStatus: true,
+        keyRevokedAt: true,
+      },
+    });
+    if (!machine) return reply.code(404).send({ error: 'unknown_machine' });
+    if (machine.keyRevokedAt) return reply.code(403).send({ error: 'agent_key_revoked' });
+    if (machine.moderationStatus !== ModerationStatus.CLEAR) {
+      return reply.code(403).send({ error: 'machine_quarantined' });
+    }
+    const routePath = `/agent/control-channel/${machineId}`;
+    const valid = await verifyAgentRequest(
+      redis,
+      machineId,
+      machine.agentPublicKey,
+      'GET',
+      routePath,
+      request.headers['x-agent-timestamp'],
+      request.headers['x-agent-signature'],
+    );
+    if (!valid) {
+      await recordSecurityFailure(redis, `agent-control:${machineId}`);
+      return reply.code(401).send({ error: 'invalid_agent_request' });
+    }
+    return controlChannelAssignment(machineId, config);
+  });
 
   app.post('/agent/device-authorizations', {
     config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },

@@ -1,6 +1,6 @@
 """Module entry point for ``python -m gpubnb_agent`` and frozen builds."""
 
-from gpubnb_agent.cli import main
+from gpubnb_agent.entrypoint import main
 
 
 if __name__ == "__main__":
