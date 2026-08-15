@@ -36,6 +36,7 @@ test('prepareComputeRental writes session, job, outbox and machine command in on
         listingId: ids.listing,
         startsAt,
         endsAt,
+        expectedSeconds: 1800,
         listing: { id: ids.listing, machineId: ids.machine },
       }),
     },
@@ -74,10 +75,6 @@ test('prepareComputeRental is idempotent for an existing renter session', async 
     preparationStep: 'DOWNLOADING',
   };
   const tx = {
-    // The machineWorkspace lookup now happens before the existing-session check (the
-    // check is scoped to it: one session per (booking, machineWorkspace), not per
-    // booking), so both must be mocked even though this test only exercises the
-    // "already exists" idempotency path.
     booking: {
       findFirst: async () => ({
         id: ids.booking,
@@ -85,6 +82,7 @@ test('prepareComputeRental is idempotent for an existing renter session', async 
         listingId: ids.listing,
         startsAt,
         endsAt,
+        expectedSeconds: 1800,
         listing: { id: ids.listing, machineId: ids.machine },
       }),
     },
@@ -106,8 +104,9 @@ test('prepareComputeRental is idempotent for an existing renter session', async 
   assert.equal(transactionWrites, 1);
 });
 
-test('stopRentalSession atomically requests cancellation and emits a stop command', async () => {
+test('stopRentalSession atomically requests cancellation and emits a runtime-bound stop command', async () => {
   const writes: string[] = [];
+  const values: unknown[] = [];
   const tx = {
     workspaceSession: {
       findFirst: async () => ({
@@ -122,6 +121,7 @@ test('stopRentalSession atomically requests cancellation and emits a stop comman
           endsAt: new Date(Date.now() + 60_000),
         },
         machine: { id: ids.machine, ownerId: 'cm000000000000000000099' },
+        machineWorkspace: { workspace: { slug: 'developer' } },
       }),
       update: async () => { writes.push('session.stop'); return {}; },
     },
@@ -129,8 +129,9 @@ test('stopRentalSession atomically requests cancellation and emits a stop comman
       updateMany: async () => { writes.push('job.cancel'); return { count: 1 }; },
     },
     $queryRaw: async () => [{ sequence: 2n }],
-    $executeRaw: async (parts: TemplateStringsArray) => {
+    $executeRaw: async (parts: TemplateStringsArray, ...parameters: unknown[]) => {
       const sql = parts.join('');
+      values.push(...parameters);
       writes.push(sql.includes('OutboxEvent') ? 'outbox' : sql.includes('MachineCommand') ? 'command' : 'sql');
       return 1;
     },
@@ -141,4 +142,5 @@ test('stopRentalSession atomically requests cancellation and emits a stop comman
 
   assert.equal(result.status, 'STOP_REQUESTED');
   assert.deepEqual(writes, ['session.stop', 'job.cancel', 'outbox', 'command']);
+  assert(values.some((value) => typeof value === 'string' && value.includes('developer')));
 });

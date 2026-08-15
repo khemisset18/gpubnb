@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type { Redis } from 'ioredis';
 import { allocateBookingResources, ResourceAllocationError } from '../src/resource-allocation-service.js';
+import { configureSchedulerPresence, resetSchedulerPresenceForTests } from '../src/scheduler-presence.js';
 
 const ids = {
   booking: 'cm000000000000000000001',
@@ -24,8 +26,8 @@ function fakeDb(booking: unknown) {
   return { db, writes };
 }
 
-test('allocateBookingResources creates a MachineAllocation for a FULL_MACHINE listing', async () => {
-  const { db, writes } = fakeDb({
+function fullMachineBooking() {
+  return {
     id: ids.booking,
     startsAt: new Date(),
     endsAt: new Date(Date.now() + 3_600_000),
@@ -40,7 +42,13 @@ test('allocateBookingResources creates a MachineAllocation for a FULL_MACHINE li
       machine: { moderationStatus: 'CLEAR', accelerators: [] },
       accelerators: [],
     },
-  });
+  };
+}
+
+test.afterEach(() => resetSchedulerPresenceForTests());
+
+test('allocateBookingResources creates a MachineAllocation for a FULL_MACHINE listing', async () => {
+  const { db, writes } = fakeDb(fullMachineBooking());
 
   const result = await allocateBookingResources(db as never, { bookingId: ids.booking, buyerId: ids.buyer });
 
@@ -49,22 +57,28 @@ test('allocateBookingResources creates a MachineAllocation for a FULL_MACHINE li
   assert.deepEqual(writes, ['advisory_lock', 'machineAllocation.create']);
 });
 
+test('hot presence canary blocks the real allocation before any allocation write', async () => {
+  const missingPresence = {
+    hgetall: async () => ({}),
+    pttl: async () => -2,
+  } as unknown as Redis;
+  configureSchedulerPresence(missingPresence, 'hot', {
+    AGENT_CONTROL_CHANNEL_ROLLOUT_BPS: '10000',
+    SCHEDULER_HOT_PRESENCE_ROLLOUT_BPS: '10000',
+  });
+  const { db, writes } = fakeDb(fullMachineBooking());
+
+  await assert.rejects(
+    allocateBookingResources(db as never, { bookingId: ids.booking, buyerId: ids.buyer }),
+    (error: unknown) => error instanceof ResourceAllocationError && error.code === 'machine_not_online',
+  );
+  assert.deepEqual(writes, []);
+});
+
 test('allocateBookingResources refuses to double-allocate an already-allocated booking', async () => {
   const { db } = fakeDb({
-    id: ids.booking,
-    startsAt: new Date(),
-    endsAt: new Date(Date.now() + 3_600_000),
+    ...fullMachineBooking(),
     machineAllocation: { id: 'existing' },
-    acceleratorAllocations: [],
-    listing: {
-      status: 'ACTIVE',
-      resourceMode: 'FULL_MACHINE',
-      minimumAccelerators: null,
-      maximumAccelerators: null,
-      machineId: ids.machine,
-      machine: { moderationStatus: 'CLEAR', accelerators: [] },
-      accelerators: [],
-    },
   });
 
   await assert.rejects(

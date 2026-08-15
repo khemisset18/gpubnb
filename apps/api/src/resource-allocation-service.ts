@@ -8,6 +8,11 @@ import {
   ResourceAllocationStatus,
 } from '@prisma/client';
 
+import {
+  SchedulerPresenceError,
+  assertSchedulerMachinePresence,
+} from './scheduler-presence.js';
+
 const RENTABLE_ACCELERATOR_STATUSES: AcceleratorOperationalStatus[] = [
   AcceleratorOperationalStatus.AVAILABLE,
   AcceleratorOperationalStatus.RESERVED,
@@ -32,6 +37,7 @@ export class ResourceAllocationError extends Error {
       | 'accelerator_selection_not_allowed'
       | 'accelerator_count_out_of_range'
       | 'accelerator_not_rentable'
+      | 'machine_not_online'
       | 'resource_conflict',
   ) {
     super(code);
@@ -121,6 +127,18 @@ async function allocateInTransaction(
     booking.listing.machine.moderationStatus !== ModerationStatus.CLEAR
   ) {
     throw new ResourceAllocationError('listing_not_available');
+  }
+
+  // Presence is connectivity authority only at this layer. Business availability
+  // remains owned by listings/allocations and the authoritative phase projector.
+  // In legacy/shadow or for machines outside the hot canary this is non-blocking.
+  try {
+    await assertSchedulerMachinePresence(booking.listing.machineId);
+  } catch (error) {
+    if (error instanceof SchedulerPresenceError) {
+      throw new ResourceAllocationError('machine_not_online');
+    }
+    throw error;
   }
 
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${booking.listing.machineId}, 0))`;

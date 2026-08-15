@@ -1,0 +1,116 @@
+name: rental-mining-presence
+
+on:
+  pull_request:
+    paths:
+      - 'agent/**'
+      - 'apps/api/src/control-command-dispatch.ts'
+      - 'apps/api/src/delivery-store.ts'
+      - 'apps/api/src/delivery-worker.ts'
+      - 'apps/api/src/gateway-command-store.ts'
+      - 'apps/api/src/scheduler-presence.ts'
+      - 'apps/api/src/resource-allocation-service.ts'
+      - 'apps/api/src/device-authorization-routes.ts'
+      - 'apps/api/src/rental-delivery-service.ts'
+      - 'apps/api/src/rental-workflow-transactions.ts'
+      - 'apps/api/src/workspace-stop-finalizer.ts'
+      - 'apps/api/test/control-command-dispatch.test.ts'
+      - 'apps/api/test/scheduler-presence.test.ts'
+      - 'apps/api/test/resource-allocation-service.test.ts'
+      - 'apps/api/test/rental-workflow-transactions.test.ts'
+      - 'apps/api/test/workspace-stop-finalizer.test.ts'
+      - '.env.example'
+      - 'docs/architecture/RENTAL_MINING_PRESENCE_V1.md'
+      - 'docs/operations/rental-mining-presence-runbook.md'
+      - '.github/workflows/rental-mining-presence.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'agent/**'
+      - 'apps/api/src/control-command-dispatch.ts'
+      - 'apps/api/src/delivery-store.ts'
+      - 'apps/api/src/delivery-worker.ts'
+      - 'apps/api/src/gateway-command-store.ts'
+      - 'apps/api/src/scheduler-presence.ts'
+      - 'apps/api/src/resource-allocation-service.ts'
+      - 'apps/api/src/device-authorization-routes.ts'
+      - 'apps/api/src/rental-delivery-service.ts'
+      - 'apps/api/src/rental-workflow-transactions.ts'
+      - 'apps/api/src/workspace-stop-finalizer.ts'
+      - 'apps/api/test/control-command-dispatch.test.ts'
+      - 'apps/api/test/scheduler-presence.test.ts'
+      - 'apps/api/test/resource-allocation-service.test.ts'
+      - 'apps/api/test/rental-workflow-transactions.test.ts'
+      - 'apps/api/test/workspace-stop-finalizer.test.ts'
+      - '.github/workflows/rental-mining-presence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rental-mining-presence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: agent/pyproject.toml
+      - name: Install agent
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./agent
+      - name: Compile package
+        run: python -m compileall -q agent/gpubnb_agent
+      - name: Direct execution and control protocol tests
+        run: |
+          python -m unittest discover -s agent/tests -p 'test_execution_control.py' -v
+          python -m unittest discover -s agent/tests -p 'test_control_channel.py' -v
+          python -m unittest discover -s agent/tests -p 'test_mining_guard.py' -v
+      - name: Complete historical Agent suite
+        run: python -m unittest discover -s agent/tests -v
+      - name: CLI smoke
+        run: |
+          gpubnb-agent version
+          python -m gpubnb_agent status
+          python -m gpubnb_agent runtime-check
+
+  api-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx prisma generate
+      - name: Durable command and presence contracts
+        run: |
+          npx tsx --test \
+            test/control-command-dispatch.test.ts \
+            test/scheduler-presence.test.ts \
+            test/resource-allocation-service.test.ts \
+            test/agent-control-channel.test.ts \
+            test/rental-delivery-service.test.ts \
+            test/rental-workflow-transactions.test.ts \
+            test/workspace-stop-finalizer.test.ts
+      - name: Strict TypeScript
+        run: npx tsc -p tsconfig.json --noEmit

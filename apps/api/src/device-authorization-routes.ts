@@ -17,6 +17,7 @@ import { registerWorkspaceBrowserSecurity } from './workspace-browser-security.j
 import { syncMachineAuthCache } from './machine-auth-cache.js';
 import { config } from './config.js';
 import { controlChannelAssignment } from './agent-control-channel.js';
+import { configureSchedulerPresence } from './scheduler-presence.js';
 import { recordSecurityFailure, verifyAgentRequest } from './security.js';
 
 const agentPublicKeySchema = z.string().min(32).max(64).regex(/^[1-9A-HJ-NP-Za-km-z]+$/);
@@ -68,6 +69,7 @@ export const registerDeviceAuthorizationRoutes = (
   redis: Redis,
 ): void => {
   const store = new RedisDeviceAuthorizationStore(redis);
+  configureSchedulerPresence(redis, config.MACHINE_PRESENCE_MODE);
   registerArtifactTransportGuards(app);
   registerWorkspaceBrowserSecurity(app);
   registerMiningRoutes(app, db, redis);
