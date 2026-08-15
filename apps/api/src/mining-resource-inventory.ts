@@ -18,6 +18,13 @@ export type MiningInventory = {
 
 type TransactionClient = Prisma.TransactionClient;
 
+/**
+ * Slot indexes are observation metadata, not identity. A driver/BIOS/PCI reorder
+ * must never move an owner's MiningConfiguration from one physical GPU to another.
+ */
+export const gpuMiningResourceKey = (machineId: string, hardwareUuid: string): string =>
+  `gpu:${machineId}:uuid:${hardwareUuid}`;
+
 const syncWithTransaction = async (
   tx: TransactionClient,
   machineId: string,
@@ -77,28 +84,49 @@ const syncWithTransaction = async (
       select: { id: true },
     });
 
-    const resourceKey = `gpu:${machineId}:${index}`;
+    const resourceKey = gpuMiningResourceKey(machineId, gpu.gpuUuid);
     activeKeys.push(resourceKey);
-    await tx.miningResource.upsert({
-      where: { machineId_resourceKey: { machineId, resourceKey } },
-      create: {
-        id: crypto.randomUUID(),
-        machineId,
-        kind: 'GPU',
-        resourceKey,
-        displayName: gpu.gpuModel,
-        acceleratorId: accelerator.id,
-        enabled: true,
-        quarantined: false,
-        lastSeenAt: new Date(),
-      },
-      update: {
-        displayName: gpu.gpuModel,
-        acceleratorId: accelerator.id,
-        enabled: true,
-        lastSeenAt: new Date(),
-      },
+
+    // `acceleratorId` is unique. Prefer it over the historical slot-based key so
+    // an existing resource keeps its primary key, configuration, events and audit
+    // history while its key is migrated to stable hardware identity.
+    const existing = await tx.miningResource.findUnique({
+      where: { acceleratorId: accelerator.id },
+      select: { id: true },
     });
+    if (existing) {
+      await tx.miningResource.update({
+        where: { id: existing.id },
+        data: {
+          resourceKey,
+          displayName: gpu.gpuModel,
+          acceleratorId: accelerator.id,
+          enabled: true,
+          lastSeenAt: new Date(),
+        },
+      });
+    } else {
+      await tx.miningResource.upsert({
+        where: { machineId_resourceKey: { machineId, resourceKey } },
+        create: {
+          id: crypto.randomUUID(),
+          machineId,
+          kind: 'GPU',
+          resourceKey,
+          displayName: gpu.gpuModel,
+          acceleratorId: accelerator.id,
+          enabled: true,
+          quarantined: false,
+          lastSeenAt: new Date(),
+        },
+        update: {
+          displayName: gpu.gpuModel,
+          acceleratorId: accelerator.id,
+          enabled: true,
+          lastSeenAt: new Date(),
+        },
+      });
+    }
   }
 
   await tx.miningResource.updateMany({

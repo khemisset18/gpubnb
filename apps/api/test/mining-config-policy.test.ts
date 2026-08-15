@@ -145,10 +145,10 @@ describe('mining configuration policy', () => {
     throwsMessage(() => authorizeMiningConfigurationUpdate(input, { ...validContext, gpuVendor: undefined }), 'mining_profile_not_approved');
   });
 
-  it('accepts a dual-vendor profile on AMD', () => {
+  it('accepts a pinned dual-vendor profile on AMD', () => {
     const input = miningConfigurationInputSchema.parse({
       ...validGpuInput,
-      profileId: 'lolminer_etc_etchash',
+      profileId: 'lolminer_etchash',
     });
     assert.doesNotThrow(() => authorizeMiningConfigurationUpdate(input, { ...validContext, gpuVendor: 'AMD' }));
   });

@@ -1,0 +1,132 @@
+name: resource-gpu-supervisor
+
+on:
+  pull_request:
+    paths:
+      - 'agent/gpubnb_agent/gpu_resource_supervisor.py'
+      - 'agent/gpubnb_agent/control_channel_runtime.py'
+      - 'agent/tests/test_gpu_resource_supervisor.py'
+      - 'agent/tests/test_resource_command_fence.py'
+      - 'apps/api/src/mining-resource-control.ts'
+      - 'apps/api/src/mining-resource-inventory.ts'
+      - 'apps/api/src/mining-profile-catalog.ts'
+      - 'apps/api/test/mining-resource-control.test.ts'
+      - 'apps/api/test/mining-resource-inventory-stability.test.ts'
+      - 'apps/api/test/mining-profile-runtime-parity.test.ts'
+      - 'apps/host-desktop/src-tauri/src/mining_catalog.rs'
+      - 'services/control-gateway/src/protocol.rs'
+      - 'docs/architecture/RESOURCE_GPU_SUPERVISOR_V1.md'
+      - 'docs/operations/resource-gpu-supervisor-runbook.md'
+      - '.github/workflows/resource-gpu-supervisor.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'agent/gpubnb_agent/gpu_resource_supervisor.py'
+      - 'agent/gpubnb_agent/control_channel_runtime.py'
+      - 'apps/api/src/mining-resource-control.ts'
+      - 'apps/api/src/mining-resource-inventory.ts'
+      - 'apps/api/src/mining-profile-catalog.ts'
+      - 'apps/host-desktop/src-tauri/src/mining_catalog.rs'
+      - 'services/control-gateway/src/protocol.rs'
+      - '.github/workflows/resource-gpu-supervisor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resource-gpu-supervisor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent-resource-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: agent/pyproject.toml
+      - name: Install Agent
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./agent
+      - name: Compile Agent
+        run: python -m compileall -q agent/gpubnb_agent
+      - name: Resource supervisor and fence contracts
+        run: |
+          python -m unittest discover -s agent/tests -p 'test_gpu_resource_supervisor.py' -v
+          python -m unittest discover -s agent/tests -p 'test_resource_command_fence.py' -v
+          python -m unittest discover -s agent/tests -p 'test_control_channel.py' -v
+      - name: Historical Agent regression suite
+        run: python -m unittest discover -s agent/tests -v
+      - name: CLI smoke
+        run: |
+          gpubnb-agent version
+          python -m gpubnb_agent status
+          python -m gpubnb_agent runtime-check
+
+  api-resource-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx prisma generate
+      - name: Stable GPU identity, fence and runtime provenance contracts
+        run: |
+          npx tsx --test \
+            test/mining-resource-control.test.ts \
+            test/mining-resource-inventory-stability.test.ts \
+            test/mining-profile-runtime-parity.test.ts
+      - name: Strict TypeScript
+        run: npx tsc -p tsconfig.json --noEmit
+
+  gateway-resource-fence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/control-gateway
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+      - name: Rust format
+        run: cargo fmt -- --check
+      - name: Protocol tests
+        run: cargo test --locked protocol::tests
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+  host-catalog-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/host-desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Host mining catalog tests
+        run: cargo test --locked mining_catalog

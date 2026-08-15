@@ -118,7 +118,10 @@ pub enum CommandKind {
 
 impl CommandKind {
     pub fn requires_active_lease(self) -> bool {
-        matches!(self, Self::PrepareRental | Self::StartRental)
+        matches!(
+            self,
+            Self::PrepareRental | Self::StartRental | Self::StartMining | Self::StopMining
+        )
     }
 }
 
@@ -360,19 +363,26 @@ mod tests {
     }
 
     #[test]
-    fn mutable_rental_commands_require_a_fenced_lease() {
-        let command = CommandEnvelope {
-            protocol_version: CONTROL_GATEWAY_PROTOCOL_VERSION,
-            command_id: "command_00000001".into(),
-            machine_id: "machine_00000001".into(),
-            sequence: 1,
-            kind: CommandKind::PrepareRental,
-            issued_at_ms: 10_000,
-            expires_at_ms: 20_000,
-            lease: None,
-            payload: Value::Null,
-        };
-        assert!(command.validate(11_000).is_err());
+    fn mutable_resource_commands_require_a_fenced_lease() {
+        for kind in [
+            CommandKind::PrepareRental,
+            CommandKind::StartRental,
+            CommandKind::StartMining,
+            CommandKind::StopMining,
+        ] {
+            let command = CommandEnvelope {
+                protocol_version: CONTROL_GATEWAY_PROTOCOL_VERSION,
+                command_id: "command_00000001".into(),
+                machine_id: "machine_00000001".into(),
+                sequence: 1,
+                kind,
+                issued_at_ms: 10_000,
+                expires_at_ms: 20_000,
+                lease: None,
+                payload: Value::Null,
+            };
+            assert!(command.validate(11_000).is_err());
+        }
     }
 
     #[test]
