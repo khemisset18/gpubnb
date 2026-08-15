@@ -19,12 +19,8 @@ from .control_channel import (
     ControlCommandResult,
     classify_command_action,
 )
-from .execution_control import (
-    ExecutionControlError,
-    start_mining,
-    stop_mining,
-    stop_rental,
-)
+from .execution_control import ExecutionControlError, stop_rental
+from .gpu_resource_supervisor import GpuResourceSupervisor
 from .storage import load_config
 
 ASSIGNMENT_REFRESH_SECONDS = 300
@@ -37,7 +33,9 @@ _POLICY_REJECTIONS = {
     "mining_command_payload_invalid",
     "mining_command_payload_unknown_field",
     "mining_resource_id_invalid",
-    "mining_profile_not_approved",
+    "mining_hardware_uuid_invalid",
+    "mining_command_id_invalid",
+    "mining_profile_not_resource_gpu_approved",
     "mining_pool_url_invalid",
     "mining_pool_credentials_not_allowed",
     "mining_pool_port_invalid",
@@ -46,10 +44,56 @@ _POLICY_REJECTIONS = {
     "mining_wallet_invalid",
     "mining_worker_invalid",
     "mining_performance_mode_invalid",
+    "mining_runtime_generation_invalid",
+    "mining_runtime_generation_stale",
+    "mining_runtime_generation_replay",
+    "mining_runtime_generation_future",
+    "mining_runtime_generation_fence_mismatch",
+    "mining_resource_lease_required",
+    "mining_resource_lease_mismatch",
+    "mining_resource_hardware_identity_conflict",
+    "mining_resource_quarantined",
+    "resource_gpu_nvidia_smi_unavailable",
+    "resource_gpu_inventory_unavailable",
+    "resource_gpu_pci_identity_invalid",
+    "resource_gpu_power_limits_invalid",
+    "resource_gpu_power_limits_unavailable",
+    "resource_gpu_identity_not_unique",
+    "resource_gpu_not_present",
+    "mining_stop_payload_invalid",
     "stop_rental_payload_invalid",
     "stop_rental_session_id_invalid",
     "stop_rental_workspace_not_direct",
 }
+
+
+def _validated_mining_payload(command: ControlCommand) -> dict[str, Any]:
+    if command.lease is None:
+        raise ExecutionControlError("mining_resource_lease_required")
+    if not isinstance(command.payload, dict):
+        raise ExecutionControlError("mining_command_payload_invalid")
+    resource_id = command.payload.get("resourceId")
+    generation = command.payload.get("runtimeGeneration")
+    if not isinstance(resource_id, str) or command.lease.get("resourceId") != resource_id:
+        raise ExecutionControlError("mining_resource_lease_mismatch")
+    fencing_token = command.lease.get("fencingToken")
+    if (
+        not isinstance(generation, str)
+        or not generation.isdigit()
+        or generation.startswith("0")
+        or len(generation) > 19
+        or not isinstance(fencing_token, str)
+        or fencing_token != generation
+    ):
+        raise ExecutionControlError("mining_runtime_generation_fence_mismatch")
+    numeric_generation = int(generation)
+    if numeric_generation <= 0 or numeric_generation > 9_223_372_036_854_775_807:
+        raise ExecutionControlError("mining_runtime_generation_fence_mismatch")
+    normalized = dict(command.payload)
+    # Python integers are arbitrary precision. Conversion happens only after the
+    # exact decimal string has matched the lease fence byte-for-byte.
+    normalized["runtimeGeneration"] = numeric_generation
+    return normalized
 
 
 class _Runtime:
@@ -71,10 +115,10 @@ class _Runtime:
         self.emit = emit
         self.config = load_config()
         self._job_lock = threading.Lock()
-        self._mutation_lock = threading.Lock()
         self._refresh_lock = threading.Lock()
         self._next_assignment_refresh = 0.0
         self._next_fallback_poll = 0.0
+        self.gpu_supervisor = GpuResourceSupervisor()
         self.supervisor = ControlChannelSupervisor(
             machine_id=machine_id,
             key=key,
@@ -127,38 +171,37 @@ class _Runtime:
             self._job_lock.release()
 
     def _run_mutation(self, command: ControlCommand) -> ControlCommandResult:
-        with self._mutation_lock:
-            try:
-                if command.kind == "STOP_RENTAL":
-                    if not isinstance(command.payload, dict) or command.payload.get("workspaceSlug") != "developer":
-                        raise ExecutionControlError("stop_rental_workspace_not_direct")
-                    result = stop_rental(command.payload)
-                elif command.kind == "STOP_MINING":
-                    result = stop_mining()
-                elif command.kind == "START_MINING":
-                    result = start_mining(command.payload, command.command_id)
-                else:
-                    return ControlCommandResult("REJECTED", "direct_mutation_not_supported")
-                self.emit({
-                    "event": "control_mutation_applied",
-                    "machineId": self.machine_id,
-                    "commandId": command.command_id,
-                    "kind": command.kind,
-                    "detailCode": result.detail_code,
-                })
-                return ControlCommandResult("SUCCEEDED", result.detail_code)
-            except ExecutionControlError as exc:
-                code = str(exc)[:96] or "execution_control_failed"
-                status = "REJECTED" if code in _POLICY_REJECTIONS else "FAILED"
-                self.emit({
-                    "event": "control_mutation_failed",
-                    "machineId": self.machine_id,
-                    "commandId": command.command_id,
-                    "kind": command.kind,
-                    "status": status,
-                    "detailCode": code,
-                })
-                return ControlCommandResult(status, code)
+        try:
+            if command.kind == "STOP_RENTAL":
+                if not isinstance(command.payload, dict) or command.payload.get("workspaceSlug") != "developer":
+                    raise ExecutionControlError("stop_rental_workspace_not_direct")
+                result = stop_rental(command.payload)
+            elif command.kind == "STOP_MINING":
+                result = self.gpu_supervisor.stop(_validated_mining_payload(command))
+            elif command.kind == "START_MINING":
+                result = self.gpu_supervisor.start(_validated_mining_payload(command), command.command_id)
+            else:
+                return ControlCommandResult("REJECTED", "direct_mutation_not_supported")
+            self.emit({
+                "event": "control_mutation_applied",
+                "machineId": self.machine_id,
+                "commandId": command.command_id,
+                "kind": command.kind,
+                "detailCode": result.detail_code,
+            })
+            return ControlCommandResult("SUCCEEDED", result.detail_code)
+        except ExecutionControlError as exc:
+            code = str(exc)[:96] or "execution_control_failed"
+            status = "REJECTED" if code in _POLICY_REJECTIONS else "FAILED"
+            self.emit({
+                "event": "control_mutation_failed",
+                "machineId": self.machine_id,
+                "commandId": command.command_id,
+                "kind": command.kind,
+                "status": status,
+                "detailCode": code,
+            })
+            return ControlCommandResult(status, code)
 
     def _handle_command(self, command: ControlCommand) -> ControlCommandResult:
         if command.kind in {"STOP_RENTAL", "START_MINING", "STOP_MINING"}:

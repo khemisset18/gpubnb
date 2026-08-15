@@ -11,30 +11,21 @@ export type MiningProfileDefinition = {
   gpuVendors?: readonly MiningGpuVendor[];
 };
 
-// Server-side allowlist. Keep identifiers aligned with the approved desktop
-// runtime profiles. Unknown, disabled, or hardware-incompatible profiles must
-// never reach execution.
+// Server-side allowlist. An enabled profile MUST have a pinned binary in
+// approved_miner_manifest.rs and an Agent execution adapter. Catalog ideas that
+// are not yet supply-chain-qualified remain visible but disabled.
 export const MINING_PROFILE_CATALOG: readonly MiningProfileDefinition[] = [
   {
-    id: 'trex_rvn_kawpow',
+    id: 'lolminer_blake3',
     resourceKind: 'GPU',
-    cryptocurrency: 'RVN',
-    algorithm: 'kawpow',
-    miner: 't-rex',
+    cryptocurrency: 'ALPH',
+    algorithm: 'blake3',
+    miner: 'lolminer',
     enabled: true,
-    gpuVendors: ['NVIDIA'],
+    gpuVendors: ['AMD', 'NVIDIA'],
   },
   {
-    id: 'teamredminer_rvn_kawpow',
-    resourceKind: 'GPU',
-    cryptocurrency: 'RVN',
-    algorithm: 'kawpow',
-    miner: 'teamredminer',
-    enabled: true,
-    gpuVendors: ['AMD'],
-  },
-  {
-    id: 'lolminer_etc_etchash',
+    id: 'lolminer_etchash',
     resourceKind: 'GPU',
     cryptocurrency: 'ETC',
     algorithm: 'etchash',
@@ -43,12 +34,59 @@ export const MINING_PROFILE_CATALOG: readonly MiningProfileDefinition[] = [
     gpuVendors: ['AMD', 'NVIDIA'],
   },
   {
+    id: 'lolminer_octopus',
+    resourceKind: 'GPU',
+    cryptocurrency: 'CFX',
+    algorithm: 'octopus',
+    miner: 'lolminer',
+    enabled: true,
+    gpuVendors: ['AMD', 'NVIDIA'],
+  },
+  {
+    id: 'xmrig_randomx',
+    resourceKind: 'CPU',
+    cryptocurrency: 'XMR',
+    algorithm: 'randomx',
+    miner: 'xmrig',
+    enabled: true,
+  },
+
+  // Not production-enabled until the corresponding executable provenance,
+  // arguments and per-resource selector are pinned and cross-language tested.
+  {
+    id: 'trex_rvn_kawpow',
+    resourceKind: 'GPU',
+    cryptocurrency: 'RVN',
+    algorithm: 'kawpow',
+    miner: 't-rex',
+    enabled: false,
+    gpuVendors: ['NVIDIA'],
+  },
+  {
+    id: 'teamredminer_rvn_kawpow',
+    resourceKind: 'GPU',
+    cryptocurrency: 'RVN',
+    algorithm: 'kawpow',
+    miner: 'teamredminer',
+    enabled: false,
+    gpuVendors: ['AMD'],
+  },
+  {
+    id: 'lolminer_etc_etchash',
+    resourceKind: 'GPU',
+    cryptocurrency: 'ETC',
+    algorithm: 'etchash',
+    miner: 'lolminer',
+    enabled: false,
+    gpuVendors: ['AMD', 'NVIDIA'],
+  },
+  {
     id: 'lolminer_erg_autolykos2',
     resourceKind: 'GPU',
     cryptocurrency: 'ERG',
     algorithm: 'autolykos2',
     miner: 'lolminer',
-    enabled: true,
+    enabled: false,
     gpuVendors: ['AMD', 'NVIDIA'],
   },
   {
@@ -57,7 +95,7 @@ export const MINING_PROFILE_CATALOG: readonly MiningProfileDefinition[] = [
     cryptocurrency: 'FLUX',
     algorithm: 'zelhash',
     miner: 'lolminer',
-    enabled: true,
+    enabled: false,
     gpuVendors: ['AMD', 'NVIDIA'],
   },
   {
@@ -77,14 +115,6 @@ export const MINING_PROFILE_CATALOG: readonly MiningProfileDefinition[] = [
     miner: 'lolminer',
     enabled: false,
     gpuVendors: ['AMD', 'NVIDIA'],
-  },
-  {
-    id: 'xmrig_randomx',
-    resourceKind: 'CPU',
-    cryptocurrency: 'XMR',
-    algorithm: 'randomx',
-    miner: 'xmrig',
-    enabled: true,
   },
 ] as const;
 

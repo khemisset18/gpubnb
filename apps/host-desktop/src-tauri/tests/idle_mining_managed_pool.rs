@@ -99,8 +99,10 @@ fn emergency_stop_is_fail_closed_until_all_workloads_are_confirmed_stopped() {
 }
 
 #[test]
-fn catalog_rejects_wrong_vendor_or_disabled_profile() {
-    assert!(approved_for_vendor("trex_rvn_kawpow", GpuVendor::Nvidia));
+fn catalog_rejects_unpinned_or_disabled_profiles() {
+    assert!(approved_for_vendor("lolminer_etchash", GpuVendor::Nvidia));
+    assert!(approved_for_vendor("lolminer_etchash", GpuVendor::Amd));
+    assert!(!approved_for_vendor("trex_rvn_kawpow", GpuVendor::Nvidia));
     assert!(!approved_for_vendor("trex_rvn_kawpow", GpuVendor::Amd));
     assert!(!approved_for_vendor(
         "lolminer_beam_beamhashiii",

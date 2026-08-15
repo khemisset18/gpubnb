@@ -117,10 +117,16 @@ class DirectMutationBridgeTests(unittest.TestCase):
         runtime.machine_id = "machine_00000001"
         runtime._mutation_lock = threading.Lock()
         runtime.emit = Mock()
+        runtime.gpu_supervisor = Mock()
         return runtime
 
     @staticmethod
-    def _command(kind: str, payload: object | None = None) -> ControlCommand:
+    def _command(
+        kind: str,
+        payload: object | None = None,
+        *,
+        lease: dict[str, object] | None = None,
+    ) -> ControlCommand:
         return ControlCommand(
             command_id="command_00000001",
             machine_id="machine_00000001",
@@ -128,19 +134,47 @@ class DirectMutationBridgeTests(unittest.TestCase):
             kind=kind,
             issued_at_ms=1,
             expires_at_ms=2,
-            lease=None,
+            lease=lease,
             payload={} if payload is None else payload,
         )
 
-    def test_stop_mining_returns_terminal_success_only_after_verified_adapter(self) -> None:
+    @classmethod
+    def _mining_command(cls, kind: str) -> ControlCommand:
+        payload = {
+            "resourceId": "resource_00000001",
+            "hardwareUuid": "GPU-aaaaaaaa",
+            "runtimeGeneration": "7",
+        }
+        if kind == "START_MINING":
+            payload.update({
+                "profileId": "lolminer_etchash",
+                "poolUrl": "stratum+tcp://1.1.1.1:4444",
+                "walletAddress": "wallet.example-123",
+                "workerName": "worker_1",
+                "performanceMode": "FULL",
+            })
+        return cls._command(
+            kind,
+            payload,
+            lease={
+                "resourceId": "resource_00000001",
+                "holderId": "holder_00000001",
+                "leaseId": "lease_00000001",
+                "fencingToken": "7",
+            },
+        )
+
+    def test_stop_mining_returns_terminal_success_only_after_verified_resource_adapter(self) -> None:
         runtime = self._runtime()
-        with patch(
-            "gpubnb_agent.control_channel_runtime.stop_mining",
-            return_value=ExecutionResult("mining_stop_verified"),
-        ):
-            result = runtime._run_mutation(self._command("STOP_MINING"))
+        runtime.gpu_supervisor.stop.return_value = ExecutionResult("mining_resource_stop_verified")
+        result = runtime._run_mutation(self._mining_command("STOP_MINING"))
         self.assertEqual(result.status, "SUCCEEDED")
-        self.assertEqual(result.detail_code, "mining_stop_verified")
+        self.assertEqual(result.detail_code, "mining_resource_stop_verified")
+        runtime.gpu_supervisor.stop.assert_called_once_with({
+            "resourceId": "resource_00000001",
+            "hardwareUuid": "GPU-aaaaaaaa",
+            "runtimeGeneration": 7,
+        })
 
     def test_stop_rental_rejects_compute_runtime_before_cleanup(self) -> None:
         runtime = self._runtime()
@@ -155,13 +189,13 @@ class DirectMutationBridgeTests(unittest.TestCase):
 
     def test_policy_failure_is_rejected_not_retried_as_execution_failure(self) -> None:
         runtime = self._runtime()
-        with patch(
-            "gpubnb_agent.control_channel_runtime.start_mining",
-            side_effect=ExecutionControlError("mining_profile_not_approved"),
-        ):
-            result = runtime._run_mutation(self._command("START_MINING"))
+        runtime.gpu_supervisor.start.side_effect = ExecutionControlError(
+            "mining_profile_not_resource_gpu_approved"
+        )
+        result = runtime._run_mutation(self._mining_command("START_MINING"))
         self.assertEqual(result.status, "REJECTED")
-        self.assertEqual(result.detail_code, "mining_profile_not_approved")
+        self.assertEqual(result.detail_code, "mining_profile_not_resource_gpu_approved")
+        runtime.gpu_supervisor.start.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -30,23 +30,15 @@ const AMD_AND_NVIDIA: &[GpuVendor] = &[GpuVendor::Amd, GpuVendor::Nvidia];
 
 pub const MINING_PROFILES: &[MiningProfile] = &[
     MiningProfile {
-        id: "trex_rvn_kawpow",
-        symbol: "RVN",
-        algorithm: "kawpow",
-        miner: "t-rex",
-        vendors: NVIDIA_ONLY,
+        id: "lolminer_blake3",
+        symbol: "ALPH",
+        algorithm: "blake3",
+        miner: "lolminer",
+        vendors: AMD_AND_NVIDIA,
         enabled: true,
     },
     MiningProfile {
-        id: "teamredminer_rvn_kawpow",
-        symbol: "RVN",
-        algorithm: "kawpow",
-        miner: "teamredminer",
-        vendors: &[GpuVendor::Amd],
-        enabled: true,
-    },
-    MiningProfile {
-        id: "lolminer_etc_etchash",
+        id: "lolminer_etchash",
         symbol: "ETC",
         algorithm: "etchash",
         miner: "lolminer",
@@ -54,12 +46,44 @@ pub const MINING_PROFILES: &[MiningProfile] = &[
         enabled: true,
     },
     MiningProfile {
+        id: "lolminer_octopus",
+        symbol: "CFX",
+        algorithm: "octopus",
+        miner: "lolminer",
+        vendors: AMD_AND_NVIDIA,
+        enabled: true,
+    },
+    MiningProfile {
+        id: "trex_rvn_kawpow",
+        symbol: "RVN",
+        algorithm: "kawpow",
+        miner: "t-rex",
+        vendors: NVIDIA_ONLY,
+        enabled: false,
+    },
+    MiningProfile {
+        id: "teamredminer_rvn_kawpow",
+        symbol: "RVN",
+        algorithm: "kawpow",
+        miner: "teamredminer",
+        vendors: &[GpuVendor::Amd],
+        enabled: false,
+    },
+    MiningProfile {
+        id: "lolminer_etc_etchash",
+        symbol: "ETC",
+        algorithm: "etchash",
+        miner: "lolminer",
+        vendors: AMD_AND_NVIDIA,
+        enabled: false,
+    },
+    MiningProfile {
         id: "lolminer_erg_autolykos2",
         symbol: "ERG",
         algorithm: "autolykos2",
         miner: "lolminer",
         vendors: AMD_AND_NVIDIA,
-        enabled: true,
+        enabled: false,
     },
     MiningProfile {
         id: "lolminer_flux_zelhash",
@@ -67,7 +91,7 @@ pub const MINING_PROFILES: &[MiningProfile] = &[
         algorithm: "zelhash",
         miner: "lolminer",
         vendors: AMD_AND_NVIDIA,
-        enabled: true,
+        enabled: false,
     },
     MiningProfile {
         id: "lolminer_beam_beamhashiii",
@@ -100,9 +124,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_enabled_profiles_are_approved() {
-        assert!(approved_for_vendor("trex_rvn_kawpow", GpuVendor::Nvidia));
-        assert!(!approved_for_vendor("trex_rvn_kawpow", GpuVendor::Amd));
+    fn only_pinned_runtime_profiles_are_approved() {
+        assert!(approved_for_vendor("lolminer_etchash", GpuVendor::Nvidia));
+        assert!(approved_for_vendor("lolminer_etchash", GpuVendor::Amd));
+        assert!(!approved_for_vendor("trex_rvn_kawpow", GpuVendor::Nvidia));
         assert!(!approved_for_vendor(
             "lolminer_beam_beamhashiii",
             GpuVendor::Nvidia
