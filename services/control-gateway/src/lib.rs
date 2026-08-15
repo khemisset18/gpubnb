@@ -4,6 +4,7 @@ pub mod admin;
 pub mod config;
 pub mod metrics;
 pub mod protocol;
+pub mod qualification;
 pub mod quic;
 pub mod registry;
 pub mod store;
