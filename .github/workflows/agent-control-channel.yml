@@ -1,0 +1,80 @@
+name: agent-control-channel
+
+on:
+  pull_request:
+    paths:
+      - 'agent/**'
+      - 'apps/api/src/agent-control-channel.ts'
+      - 'apps/api/src/config.ts'
+      - 'apps/api/src/device-authorization-routes.ts'
+      - 'apps/api/test/agent-control-channel.test.ts'
+      - 'docs/architecture/AGENT_CONTROL_CHANNEL_V1.md'
+      - 'docs/operations/agent-control-channel-runbook.md'
+      - '.github/workflows/agent-control-channel.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'agent/**'
+      - 'apps/api/src/agent-control-channel.ts'
+      - 'apps/api/src/config.ts'
+      - 'apps/api/src/device-authorization-routes.ts'
+      - 'apps/api/test/agent-control-channel.test.ts'
+      - '.github/workflows/agent-control-channel.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-control-channel-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent-protocol:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: agent/pyproject.toml
+      - name: Install agent and test runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./agent pytest==8.4.2
+      - name: Compile package
+        run: python -m compileall -q agent/gpubnb_agent
+      - name: Control-channel protocol tests
+        run: python -m pytest -q agent/tests/test_control_channel.py agent/tests/test_signed_protocol.py agent/tests/test_job_lease_protocol.py
+      - name: CLI entrypoint smoke
+        run: |
+          gpubnb-agent version
+          python -m gpubnb_agent status
+          python -m gpubnb_agent runtime-check
+
+  api-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx prisma generate
+      - name: Rollout contract tests
+        run: npx tsx --test test/agent-control-channel.test.ts
+      - name: Strict TypeScript
+        run: npx tsc -p tsconfig.json --noEmit

@@ -111,6 +111,10 @@ def counter_path() -> Path:
     return config_dir() / "counter"
 
 
+def control_channel_state_path() -> Path:
+    return config_dir() / "control-channel-state.json"
+
+
 def log_path() -> Path:
     return config_dir() / "agent.log"
 
@@ -131,6 +135,25 @@ def load_config() -> dict[str, Any]:
 
 def save_config(value: dict[str, Any]) -> None:
     _atomic_write(config_path(), json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+
+
+def load_control_channel_state() -> dict[str, Any]:
+    try:
+        value = json.loads(control_channel_state_path().read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise RuntimeError("État du canal de contrôle invalide")
+        return value
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"État du canal de contrôle corrompu : {exc}") from exc
+
+
+def save_control_channel_state(value: dict[str, Any]) -> None:
+    _atomic_write(
+        control_channel_state_path(),
+        json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n",
+    )
 
 
 def generate_key(force: bool = False) -> SigningKey:

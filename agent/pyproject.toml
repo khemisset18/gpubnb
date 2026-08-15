@@ -4,18 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gpubnb-agent"
-version = "0.5.9"
+version = "0.6.0"
 description = "GPUbnb local signed GPU agent"
 requires-python = ">=3.10"
 dependencies = [
   "PyNaCl==1.5.0",
   "base58==2.1.1",
+  "aioquic==1.3.0",
   "websocket-client==1.9.0",
   "pywin32==312; platform_system == 'Windows'",
 ]
 
 [project.scripts]
-gpubnb-agent = "gpubnb_agent.cli:main"
+gpubnb-agent = "gpubnb_agent.entrypoint:main"
 
 [tool.setuptools]
 packages = ["gpubnb_agent"]

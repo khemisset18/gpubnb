@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { PublicKey } from '@solana/web3.js';
 
+const publicGatewayHost = z.string().min(1).max(253).regex(/^[A-Za-z0-9.-]+$/);
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(8787),
@@ -45,6 +47,14 @@ const schema = z.object({
   MACHINE_PRESENCE_MODE: z.enum(['legacy', 'shadow', 'hot']).default('legacy'),
   MACHINE_PRESENCE_TTL_SECONDS: z.coerce.number().int().min(15).max(300).default(60),
   RESOURCE_LEASE_TTL_SECONDS: z.coerce.number().int().min(15).max(300).default(45),
+
+  // Persistent Host control-channel rollout. Keep rollout at zero until the
+  // regional gateway is deployed dark and synthetic qualification is green.
+  CONTROL_GATEWAY_PUBLIC_HOST: publicGatewayHost.optional(),
+  CONTROL_GATEWAY_PUBLIC_PORT: z.coerce.number().int().min(1).max(65535).default(4443),
+  CONTROL_GATEWAY_TLS_SERVER_NAME: publicGatewayHost.optional(),
+  AGENT_CONTROL_CHANNEL_ROLLOUT_BPS: z.coerce.number().int().min(0).max(10_000).default(0),
+  AGENT_CONTROL_FALLBACK_POLL_SECONDS: z.coerce.number().int().min(30).max(900).default(120),
 });
 
 export const config = schema.parse(process.env);
@@ -69,6 +79,19 @@ if (config.SOLANA_CLUSTER === 'mainnet-beta' && config.ALLOW_MAINNET !== 'true')
 }
 if (config.COMMISSION_BPS !== 500) throw new Error('Commission must remain 500 bps for this release');
 
+if (config.AGENT_CONTROL_CHANNEL_ROLLOUT_BPS > 0 && !config.CONTROL_GATEWAY_PUBLIC_HOST) {
+  throw new Error('CONTROL_GATEWAY_PUBLIC_HOST is required when the Agent Control Channel rollout is enabled');
+}
+if (config.CONTROL_GATEWAY_TLS_SERVER_NAME && !config.CONTROL_GATEWAY_PUBLIC_HOST) {
+  throw new Error('CONTROL_GATEWAY_TLS_SERVER_NAME requires CONTROL_GATEWAY_PUBLIC_HOST');
+}
+if (
+  config.NODE_ENV === 'production'
+  && config.AGENT_CONTROL_CHANNEL_ROLLOUT_BPS > 0
+  && /^(localhost|127\.|0\.0\.0\.0$)/i.test(config.CONTROL_GATEWAY_PUBLIC_HOST ?? '')
+) {
+  throw new Error('Production Agent Control Channel cannot target a loopback gateway');
+}
 if (config.NODE_ENV === 'production' && config.PUBLIC_APP_DOMAIN === 'localhost') throw new Error('PUBLIC_APP_DOMAIN must be configured in production');
 if (config.SOLANA_CLUSTER === 'mainnet-beta' && config.SOLANA_COMMITMENT !== 'finalized') throw new Error('Mainnet deposits must use finalized commitment');
 if (config.SOLANA_CLUSTER === 'mainnet-beta' && /api\.mainnet-beta\.solana\.com/.test(config.SOLANA_RPC_URL)) throw new Error('Use a private authenticated RPC endpoint for mainnet');
