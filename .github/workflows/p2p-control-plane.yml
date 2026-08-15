@@ -5,6 +5,8 @@ on:
     paths:
       - 'services/control-gateway/src/p2p.rs'
       - 'services/control-gateway/src/lib.rs'
+      - 'agent/gpubnb_agent/p2p_connectivity.py'
+      - 'agent/tests/test_p2p_connectivity.py'
       - 'config/p2p/**'
       - 'docs/architecture/P2P_SERVERLESS_CONTROL_PLANE_V1.md'
       - 'docs/operations/P2P_SERVERLESS_ROLLOUT_V1.md'
@@ -67,3 +69,24 @@ jobs:
           assert config['controlPlaneCarriesRenterFilesystem'] is False
           assert config['ticketContainsProductPii'] is False
           PY
+
+  agent-connectivity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: agent/pyproject.toml
+      - name: Install Agent and tests
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./agent pytest==8.4.2
+      - name: Compile P2P module
+        run: python -m py_compile agent/gpubnb_agent/p2p_connectivity.py
+      - name: Candidate discovery and ticket contract tests
+        run: python -m pytest -q agent/tests/test_p2p_connectivity.py
