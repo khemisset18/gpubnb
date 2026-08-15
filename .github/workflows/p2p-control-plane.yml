@@ -1,0 +1,69 @@
+name: p2p-control-plane
+
+on:
+  pull_request:
+    paths:
+      - 'services/control-gateway/src/p2p.rs'
+      - 'services/control-gateway/src/lib.rs'
+      - 'config/p2p/**'
+      - 'docs/architecture/P2P_SERVERLESS_CONTROL_PLANE_V1.md'
+      - 'docs/operations/P2P_SERVERLESS_ROLLOUT_V1.md'
+      - '.github/workflows/p2p-control-plane.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p2p-control-plane-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: services/control-gateway
+
+      - name: Strict Rust format
+        working-directory: services/control-gateway
+        run: cargo fmt -- --check
+
+      - name: P2P rendezvous contract tests
+        working-directory: services/control-gateway
+        run: cargo test --locked p2p
+
+      - name: Strict P2P library lint
+        working-directory: services/control-gateway
+        run: cargo clippy --locked --lib -- -D warnings
+
+      - name: Locked release build
+        working-directory: services/control-gateway
+        run: cargo build --locked --release --lib
+
+      - name: Enforce serverless/direct-first policy contract
+        run: |
+          python3 - <<'PY'
+          import json
+          config = json.load(open('config/p2p/p2p-control-plane-v1.json'))
+          assert config['directFirst'] is True
+          assert config['ticketTtlSeconds'] <= 120
+          assert config['maxCandidatesPerPeer'] <= 12
+          assert config['candidateAttemptOrder'] == ['HOST', 'SERVER_REFLEXIVE', 'RELAY']
+          assert config['relayPolicy'] == 'FALLBACK_ONLY'
+          assert config['controlPlaneCarriesGpuPayload'] is False
+          assert config['controlPlaneCarriesRenterFilesystem'] is False
+          assert config['ticketContainsProductPii'] is False
+          PY

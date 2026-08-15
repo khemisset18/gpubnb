@@ -4,6 +4,7 @@ pub mod admin;
 pub mod config;
 pub mod distributed_lab;
 pub mod metrics;
+pub mod p2p;
 pub mod production_lab;
 pub mod protocol;
 pub mod qualification;

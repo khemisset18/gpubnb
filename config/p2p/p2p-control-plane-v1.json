@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "transport": "QUIC_UDP",
+  "directFirst": true,
+  "ticketTtlSeconds": 120,
+  "maxCandidatesPerPeer": 12,
+  "candidateAttemptOrder": ["HOST", "SERVER_REFLEXIVE", "RELAY"],
+  "relayPolicy": "FALLBACK_ONLY",
+  "controlPlaneCarriesGpuPayload": false,
+  "controlPlaneCarriesRenterFilesystem": false,
+  "ticketContainsProductPii": false
+}
