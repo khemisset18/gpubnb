@@ -146,6 +146,17 @@ pub struct PresenceLease {
     pub connection_id: String,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct CommandAckRecord<'a> {
+    pub machine_id: &'a str,
+    pub connection_id: &'a str,
+    pub command_id: &'a str,
+    pub sequence: u64,
+    pub status: CommandAckStatus,
+    pub detail_code: Option<&'a str>,
+    pub acknowledged_at_ms: u64,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TouchOutcome {
     Accepted {
@@ -367,34 +378,25 @@ impl RedisStore {
         Ok(())
     }
 
-    pub async fn record_command_ack(
-        &self,
-        machine_id: &str,
-        connection_id: &str,
-        command_id: &str,
-        sequence: u64,
-        status: CommandAckStatus,
-        detail_code: Option<&str>,
-        acknowledged_at_ms: u64,
-    ) -> Result<()> {
-        validate_id(machine_id, "machine_id")?;
-        validate_id(connection_id, "connection_id")?;
-        validate_id(command_id, "command_id")?;
-        if sequence == 0 {
+    pub async fn record_command_ack(&self, record: CommandAckRecord<'_>) -> Result<()> {
+        validate_id(record.machine_id, "machine_id")?;
+        validate_id(record.connection_id, "connection_id")?;
+        validate_id(record.command_id, "command_id")?;
+        if record.sequence == 0 {
             bail!("command ack sequence must be positive");
         }
-        let status = format!("{status:?}").to_ascii_uppercase();
-        let detail_code = detail_code.unwrap_or("");
+        let status = format!("{:?}", record.status).to_ascii_uppercase();
+        let detail_code = record.detail_code.unwrap_or("");
         let mut connection = self.connection.clone();
         let result: (i64, String) = Script::new(RECORD_ACK_SCRIPT)
-            .key(machine_presence_key(machine_id))
-            .key(command_ack_key(machine_id, command_id))
-            .arg(connection_id)
-            .arg(machine_id)
-            .arg(sequence.to_string())
+            .key(machine_presence_key(record.machine_id))
+            .key(command_ack_key(record.machine_id, record.command_id))
+            .arg(record.connection_id)
+            .arg(record.machine_id)
+            .arg(record.sequence.to_string())
             .arg(status)
             .arg(detail_code)
-            .arg(acknowledged_at_ms.to_string())
+            .arg(record.acknowledged_at_ms.to_string())
             .arg(DEFAULT_ACK_TTL_SECONDS.to_string())
             .invoke_async(&mut connection)
             .await
@@ -441,10 +443,7 @@ mod tests {
             Some("machine_00000001")
         );
         assert_eq!(
-            hash_tag(&command_ack_key(
-                "machine_00000001",
-                "command_00000001"
-            )),
+            hash_tag(&command_ack_key("machine_00000001", "command_00000001")),
             Some("machine_00000001")
         );
     }
