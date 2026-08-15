@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "name": "distributed-lab-ci-v1",
+  "fleetSize": 384,
+  "machineIdStart": 5000000,
+  "connectionsPerInjector": 64,
+  "seed": 20260815,
+  "regions": [
+    {
+      "name": "ci-eu-1",
+      "injectors": 2,
+      "gateways": 1,
+      "gatewayMaxConnections": 512
+    },
+    {
+      "name": "ci-us-1",
+      "injectors": 2,
+      "gateways": 1,
+      "gatewayMaxConnections": 512
+    },
+    {
+      "name": "ci-ap-1",
+      "injectors": 2,
+      "gateways": 1,
+      "gatewayMaxConnections": 512
+    }
+  ],
+  "slo": {
+    "maxNormalUtilizationBps": 7000,
+    "maxFailoverUtilizationBps": 8000,
+    "maxReconnectsPerSecondPerGateway": 100,
+    "maxConnectionFailureBps": 100,
+    "maxHeartbeatFailureBps": 100,
+    "maxPresenceFailureBps": 100,
+    "maxConnectP99Ms": 5000,
+    "maxPresenceP99Ms": 2000,
+    "maxGatewayCpuBps": 9000,
+    "maxGatewayRssBytes": 2147483648,
+    "maxGatewayOpenFds": 20000,
+    "maxGatewayUdpErrors": 100,
+    "maxRedisP99Ms": 100
+  },
+  "stages": [
+    {
+      "name": "baseline",
+      "kind": "baseline",
+      "durationSeconds": 5
+    },
+    {
+      "name": "reconnect",
+      "kind": "reconnect-storm",
+      "durationSeconds": 5,
+      "reconnectJitterSeconds": 2
+    },
+    {
+      "name": "ci-eu-loss",
+      "kind": "region-loss",
+      "durationSeconds": 5,
+      "targetRegion": "ci-eu-1",
+      "reconnectJitterSeconds": 2
+    },
+    {
+      "name": "ci-us-loss",
+      "kind": "region-loss",
+      "durationSeconds": 5,
+      "targetRegion": "ci-us-1",
+      "reconnectJitterSeconds": 2
+    },
+    {
+      "name": "ci-ap-loss",
+      "kind": "region-loss",
+      "durationSeconds": 5,
+      "targetRegion": "ci-ap-1",
+      "reconnectJitterSeconds": 2
+    }
+  ]
+}

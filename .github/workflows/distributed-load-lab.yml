@@ -1,0 +1,422 @@
+name: distributed-load-lab
+
+on:
+  pull_request:
+    paths:
+      - 'services/control-gateway/src/distributed_lab.rs'
+      - 'services/control-gateway/src/bin/gpubnb-labctl.rs'
+      - 'services/control-gateway/src/bin/gpubnb-load-shard.rs'
+      - 'services/control-gateway/src/lib.rs'
+      - 'config/hyperscale/distributed-*.json'
+      - 'docs/architecture/DISTRIBUTED_LOAD_LAB_V1.md'
+      - 'docs/operations/distributed-load-lab-runbook.md'
+      - '.github/workflows/distributed-load-lab.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distributed-load-lab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract-and-multi-gateway-surrogate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: services/control-gateway
+
+      - name: Strict Rust format
+        working-directory: services/control-gateway
+        run: cargo fmt -- --check
+
+      - name: Distributed planning and aggregation unit tests
+        working-directory: services/control-gateway
+        run: cargo test --locked distributed_lab
+
+      - name: Strict distributed lab lint
+        working-directory: services/control-gateway
+        run: |
+          cargo clippy --locked --bin gpubnb-labctl --bin gpubnb-load-shard -- -D warnings
+
+      - name: Build locked Gateway and distributed lab tools
+        working-directory: services/control-gateway
+        run: |
+          cargo build --locked --release \
+            --bin gpubnb-control-gateway \
+            --bin gpubnb-labctl \
+            --bin gpubnb-load-shard
+
+      - name: Validate million-fleet distributed N+1 plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gpubnb-distributed
+          services/control-gateway/target/release/gpubnb-labctl plan \
+            --profile config/hyperscale/distributed-million-lab-v1.json \
+            --run-id ci_million_plan \
+            --output /tmp/gpubnb-distributed/million-manifest.json \
+            --require-pass
+
+      - name: Generate deterministic CI shard manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          services/control-gateway/target/release/gpubnb-labctl plan \
+            --profile config/hyperscale/distributed-lab-ci-v1.json \
+            --run-id ci_dist \
+            --output /tmp/gpubnb-distributed/ci-manifest.json \
+            --require-pass
+
+      - name: Generate isolated TLS CA and server identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 1 \
+            -keyout /tmp/gpubnb-distributed/ca.key \
+            -out /tmp/gpubnb-distributed/ca.crt \
+            -subj '/CN=GPUbnb Distributed Lab CI CA' \
+            -addext 'basicConstraints=critical,CA:TRUE,pathlen:0' \
+            -addext 'keyUsage=critical,keyCertSign,cRLSign'
+          openssl req -new -newkey rsa:2048 -sha256 -nodes \
+            -keyout /tmp/gpubnb-distributed/server.key \
+            -out /tmp/gpubnb-distributed/server.csr \
+            -subj '/CN=localhost'
+          cat >/tmp/gpubnb-distributed/server.ext <<'EOF'
+          basicConstraints=critical,CA:FALSE
+          keyUsage=critical,digitalSignature,keyEncipherment
+          extendedKeyUsage=serverAuth
+          subjectAltName=DNS:localhost
+          EOF
+          openssl x509 -req \
+            -in /tmp/gpubnb-distributed/server.csr \
+            -CA /tmp/gpubnb-distributed/ca.crt \
+            -CAkey /tmp/gpubnb-distributed/ca.key \
+            -CAcreateserial \
+            -out /tmp/gpubnb-distributed/server.crt \
+            -days 1 -sha256 \
+            -extfile /tmp/gpubnb-distributed/server.ext
+
+      - name: Start three isolated regional Gateways
+        shell: bash
+        run: |
+          set -euo pipefail
+          start_gateway() {
+            local id="$1" region="$2" quic="$3" admin="$4" log="$5" pidfile="$6"
+            env \
+              GPUBNB_CONTROL_GATEWAY_ID="$id" \
+              GPUBNB_CONTROL_REGION="$region" \
+              GPUBNB_CONTROL_QUIC_BIND="127.0.0.1:${quic}" \
+              GPUBNB_CONTROL_ADMIN_BIND="127.0.0.1:${admin}" \
+              GPUBNB_CONTROL_TLS_CERT=/tmp/gpubnb-distributed/server.crt \
+              GPUBNB_CONTROL_TLS_KEY=/tmp/gpubnb-distributed/server.key \
+              GPUBNB_CONTROL_REDIS_URL=redis://127.0.0.1:6379 \
+              GPUBNB_CONTROL_INTERNAL_TOKEN=ci-distributed-lab-internal-token-000000000001 \
+              GPUBNB_CONTROL_MAX_CONNECTIONS=512 \
+              GPUBNB_CONTROL_CONNECTION_QUEUE=64 \
+              GPUBNB_CONTROL_PENDING_PER_MACHINE=64 \
+              GPUBNB_CONTROL_PRESENCE_TTL_SECONDS=30 \
+              GPUBNB_CONTROL_HEARTBEAT_TIMEOUT_SECONDS=10 \
+              GPUBNB_CONTROL_AUTH_CLOCK_SKEW_SECONDS=30 \
+              GPUBNB_CONTROL_COMMAND_RETENTION_SECONDS=120 \
+              GPUBNB_CONTROL_MAX_FRAME_BYTES=65536 \
+              services/control-gateway/target/release/gpubnb-control-gateway >"$log" 2>&1 &
+            echo $! >"$pidfile"
+          }
+          start_gateway gateway_ci_eu_1 ci-eu-1 15443 19101 /tmp/gpubnb-distributed/eu.log /tmp/gpubnb-distributed/eu.pid
+          start_gateway gateway_ci_us_1 ci-us-1 15444 19102 /tmp/gpubnb-distributed/us.log /tmp/gpubnb-distributed/us.pid
+          start_gateway gateway_ci_ap_1 ci-ap-1 15445 19103 /tmp/gpubnb-distributed/ap.log /tmp/gpubnb-distributed/ap.pid
+          for admin in 19101 19102 19103; do
+            ready=0
+            for _ in $(seq 1 60); do
+              if curl --max-time 1 -fsS "http://127.0.0.1:${admin}/readyz" >/dev/null; then
+                ready=1
+                break
+              fi
+              sleep 0.25
+            done
+            if test "$ready" != 1; then
+              cat /tmp/gpubnb-distributed/*.log
+              exit 1
+            fi
+          done
+
+      - name: Run six concurrent isolated steady shards
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gpubnb-distributed/steady
+          python3 - <<'PY'
+          import json, subprocess
+          manifest = json.load(open('/tmp/gpubnb-distributed/ci-manifest.json'))
+          ports = {'ci-eu-1': 15443, 'ci-us-1': 15444, 'ci-ap-1': 15445}
+          procs = []
+          for shard in manifest['shards']:
+              report = f"/tmp/gpubnb-distributed/steady/{shard['shardId']}.json"
+              cmd = [
+                  'services/control-gateway/target/release/gpubnb-load-shard',
+                  '--run-id', manifest['runId'],
+                  '--shard-id', shard['shardId'],
+                  '--region', shard['region'],
+                  '--machine-id-start', str(shard['machineIdStart']),
+                  '--scenario', 'steady',
+                  '--gateway', f"127.0.0.1:{ports[shard['region']]}",
+                  '--server-name', 'localhost',
+                  '--ca-cert', '/tmp/gpubnb-distributed/ca.crt',
+                  '--redis-url', 'redis://127.0.0.1:6379',
+                  '--allow-test-auth-write',
+                  '--connections', str(shard['connections']),
+                  '--duration-seconds', '2',
+                  '--heartbeat-ms', '500',
+                  '--ramp-ms', '500',
+                  '--presence-sample-every', '8',
+                  '--seed', str(shard['seed']),
+                  '--max-connect-p99-ms', '5000',
+                  '--max-presence-p99-ms', '2000',
+                  '--max-failure-bps', '100',
+                  '--output', report,
+                  '--require-pass',
+              ]
+              procs.append((shard['shardId'], subprocess.Popen(cmd, stdout=subprocess.DEVNULL)))
+          failures = []
+          for name, proc in procs:
+              code = proc.wait()
+              if code != 0:
+                  failures.append((name, code))
+          if failures:
+              raise SystemExit(f'steady shard failures: {failures}')
+          PY
+
+      - name: Aggregate steady evidence conservatively
+        shell: bash
+        run: |
+          set -euo pipefail
+          services/control-gateway/target/release/gpubnb-labctl aggregate \
+            --manifest /tmp/gpubnb-distributed/ci-manifest.json \
+            --reports-dir /tmp/gpubnb-distributed/steady \
+            --scenario steady \
+            --output /tmp/gpubnb-distributed/steady-aggregate.json \
+            --require-pass
+
+      - name: Run six concurrent reconnect-storm shards
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gpubnb-distributed/reconnect
+          python3 - <<'PY'
+          import json, subprocess
+          manifest = json.load(open('/tmp/gpubnb-distributed/ci-manifest.json'))
+          ports = {'ci-eu-1': 15443, 'ci-us-1': 15444, 'ci-ap-1': 15445}
+          procs = []
+          for shard in manifest['shards']:
+              report = f"/tmp/gpubnb-distributed/reconnect/{shard['shardId']}.json"
+              cmd = [
+                  'services/control-gateway/target/release/gpubnb-load-shard',
+                  '--run-id', manifest['runId'],
+                  '--shard-id', shard['shardId'],
+                  '--region', shard['region'],
+                  '--machine-id-start', str(shard['machineIdStart']),
+                  '--scenario', 'reconnect-storm',
+                  '--gateway', f"127.0.0.1:{ports[shard['region']]}",
+                  '--server-name', 'localhost',
+                  '--ca-cert', '/tmp/gpubnb-distributed/ca.crt',
+                  '--redis-url', 'redis://127.0.0.1:6379',
+                  '--allow-test-auth-write',
+                  '--connections', str(shard['connections']),
+                  '--reconnect-cycles', '2',
+                  '--reconnect-jitter-ms', '1000',
+                  '--ramp-ms', '250',
+                  '--seed', str(shard['seed']),
+                  '--max-connect-p99-ms', '5000',
+                  '--max-presence-p99-ms', '2000',
+                  '--max-failure-bps', '100',
+                  '--output', report,
+                  '--require-pass',
+              ]
+              procs.append((shard['shardId'], subprocess.Popen(cmd, stdout=subprocess.DEVNULL)))
+          failures = []
+          for name, proc in procs:
+              code = proc.wait()
+              if code != 0:
+                  failures.append((name, code))
+          if failures:
+              raise SystemExit(f'reconnect shard failures: {failures}')
+          PY
+
+      - name: Aggregate reconnect evidence conservatively
+        shell: bash
+        run: |
+          set -euo pipefail
+          services/control-gateway/target/release/gpubnb-labctl aggregate \
+            --manifest /tmp/gpubnb-distributed/ci-manifest.json \
+            --reports-dir /tmp/gpubnb-distributed/reconnect \
+            --scenario reconnect-storm \
+            --output /tmp/gpubnb-distributed/reconnect-aggregate.json \
+            --require-pass
+
+      - name: Region-loss surrogate reclaims stale presence on survivor
+        shell: bash
+        run: |
+          set -euo pipefail
+          machine=load_machine_ci_failover_000009000000
+          presence="gpubnb:machine-presence:{${machine}}:v1"
+          redis_container="$(docker ps --filter ancestor=redis:7.4-alpine -q | head -n1)"
+          if test -z "$redis_container"; then
+            echo 'Redis service container not found' >&2
+            exit 1
+          fi
+          redis_hget() {
+            docker exec "$redis_container" redis-cli --raw HGET "$1" "$2"
+          }
+          redis_ttl() {
+            docker exec "$redis_container" redis-cli --raw TTL "$1"
+          }
+
+          services/control-gateway/target/release/gpubnb-load-shard \
+            --run-id ci_failover \
+            --shard-id failover_eu_source \
+            --region ci-eu-1 \
+            --machine-id-start 9000000 \
+            --scenario steady \
+            --gateway 127.0.0.1:15443 \
+            --server-name localhost \
+            --ca-cert /tmp/gpubnb-distributed/ca.crt \
+            --redis-url redis://127.0.0.1:6379 \
+            --allow-test-auth-write \
+            --connections 32 \
+            --duration-seconds 20 \
+            --heartbeat-ms 500 \
+            --ramp-ms 250 \
+            --presence-sample-every 8 \
+            --seed 777 \
+            --keep-test-auth \
+            --output /tmp/gpubnb-distributed/failover-source.json \
+            >/tmp/gpubnb-distributed/failover-source.stdout 2>&1 &
+          source_pid=$!
+          claimed=0
+          for _ in $(seq 1 40); do
+            if test "$(redis_hget "$presence" gatewayId)" = gateway_ci_eu_1; then
+              claimed=1
+              break
+            fi
+            sleep 0.25
+          done
+          test "$claimed" = 1
+
+          kill -9 "$(cat /tmp/gpubnb-distributed/eu.pid)"
+          stale_owner="$(redis_hget "$presence" gatewayId)"
+          stale_ttl="$(redis_ttl "$presence")"
+          if test "$stale_owner" != gateway_ci_eu_1 || test "$stale_ttl" -le 0; then
+            echo "expected live stale EU presence immediately after abrupt Gateway loss; owner=${stale_owner} ttl=${stale_ttl}" >&2
+            exit 1
+          fi
+          printf 'stale_owner=%s\nstale_ttl_seconds=%s\n' "$stale_owner" "$stale_ttl" \
+            > /tmp/gpubnb-distributed/failover-observation.txt
+
+          # The source load process owns no durable authority. Stop it abruptly so its
+          # local QUIC idle wait cannot consume the Redis presence TTL before recovery.
+          kill -9 "$source_pid" >/dev/null 2>&1 || true
+          wait "$source_pid" >/dev/null 2>&1 || true
+
+          services/control-gateway/target/release/gpubnb-load-shard \
+            --run-id ci_failover \
+            --shard-id failover_us_recovery \
+            --region ci-us-1 \
+            --machine-id-start 9000000 \
+            --scenario steady \
+            --gateway 127.0.0.1:15444 \
+            --server-name localhost \
+            --ca-cert /tmp/gpubnb-distributed/ca.crt \
+            --redis-url redis://127.0.0.1:6379 \
+            --allow-test-auth-write \
+            --connections 32 \
+            --duration-seconds 4 \
+            --heartbeat-ms 500 \
+            --ramp-ms 250 \
+            --presence-sample-every 8 \
+            --seed 777 \
+            --keep-test-auth \
+            --max-connect-p99-ms 5000 \
+            --max-presence-p99-ms 2000 \
+            --max-failure-bps 100 \
+            --output /tmp/gpubnb-distributed/failover-recovery.json \
+            --require-pass \
+            >/tmp/gpubnb-distributed/failover-recovery.stdout 2>&1 &
+          recovery_pid=$!
+          reclaimed=0
+          for _ in $(seq 1 40); do
+            if test "$(redis_hget "$presence" gatewayId)" = gateway_ci_us_1; then
+              reclaimed=1
+              break
+            fi
+            sleep 0.25
+          done
+          test "$reclaimed" = 1
+          reclaimed_owner="$(redis_hget "$presence" gatewayId)"
+          printf 'reclaimed_owner=%s\n' "$reclaimed_owner" \
+            >> /tmp/gpubnb-distributed/failover-observation.txt
+          test "$reclaimed_owner" = gateway_ci_us_1
+          wait "$recovery_pid"
+
+      - name: Capture Gateway metrics and process resource snapshots
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p /tmp/gpubnb-distributed
+          for pair in '19101 eu' '19102 us' '19103 ap'; do
+            set -- $pair
+            curl --max-time 2 -fsS "http://127.0.0.1:$1/metrics" >"/tmp/gpubnb-distributed/$2-metrics.prom" || true
+          done
+          for region in eu us ap; do
+            if test -f "/tmp/gpubnb-distributed/${region}.pid"; then
+              pid="$(cat "/tmp/gpubnb-distributed/${region}.pid")"
+              ps -o pid,pcpu,rss,nlwp,etime,cmd -p "$pid" >"/tmp/gpubnb-distributed/${region}-process.txt" 2>&1 || true
+              if test -d "/proc/$pid/fd"; then
+                find "/proc/$pid/fd" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l >"/tmp/gpubnb-distributed/${region}-fd-count.txt"
+              fi
+            fi
+          done
+          cat /proc/net/snmp > /tmp/gpubnb-distributed/proc-net-snmp.txt || true
+
+      - name: Stop remaining Gateways
+        if: always()
+        shell: bash
+        run: |
+          for region in eu us ap; do
+            if test -f "/tmp/gpubnb-distributed/${region}.pid"; then
+              kill "$(cat "/tmp/gpubnb-distributed/${region}.pid")" >/dev/null 2>&1 || true
+            fi
+          done
+
+      - name: Upload distributed qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: distributed-load-lab-evidence
+          path: /tmp/gpubnb-distributed/
+          if-no-files-found: error
+          retention-days: 14

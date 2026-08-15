@@ -2,6 +2,7 @@
 
 pub mod admin;
 pub mod config;
+pub mod distributed_lab;
 pub mod metrics;
 pub mod protocol;
 pub mod qualification;
