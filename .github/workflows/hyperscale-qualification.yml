@@ -1,0 +1,239 @@
+name: hyperscale-qualification
+
+on:
+  pull_request:
+    paths:
+      - 'services/control-gateway/src/qualification.rs'
+      - 'services/control-gateway/src/bin/gpubnb-hyperscale.rs'
+      - 'services/control-gateway/src/lib.rs'
+      - 'config/hyperscale/**'
+      - 'docs/architecture/HYPERSCALE_LOAD_CHAOS_V1.md'
+      - 'docs/operations/hyperscale-qualification-runbook.md'
+      - '.github/workflows/hyperscale-qualification.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hyperscale-qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  model-and-live-gateway:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: services/control-gateway
+
+      - name: Strict Rust format
+        working-directory: services/control-gateway
+        run: cargo fmt -- --check
+
+      - name: Qualification model unit tests
+        working-directory: services/control-gateway
+        run: cargo test --locked qualification
+
+      - name: Strict load injector lint
+        working-directory: services/control-gateway
+        run: cargo clippy --locked --bin gpubnb-hyperscale -- -D warnings
+
+      - name: Build locked production gateway and injector
+        working-directory: services/control-gateway
+        run: cargo build --locked --release --bin gpubnb-control-gateway --bin gpubnb-hyperscale
+
+      - name: Generate isolated CI TLS CA and server identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gpubnb-hyperscale
+          openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 1 \
+            -keyout /tmp/gpubnb-hyperscale/ca.key \
+            -out /tmp/gpubnb-hyperscale/ca.crt \
+            -subj '/CN=GPUbnb Hyperscale CI CA' \
+            -addext 'basicConstraints=critical,CA:TRUE,pathlen:0' \
+            -addext 'keyUsage=critical,keyCertSign,cRLSign'
+          openssl req -new -newkey rsa:2048 -sha256 -nodes \
+            -keyout /tmp/gpubnb-hyperscale/server.key \
+            -out /tmp/gpubnb-hyperscale/server.csr \
+            -subj '/CN=localhost'
+          cat >/tmp/gpubnb-hyperscale/server.ext <<'EOF'
+          basicConstraints=critical,CA:FALSE
+          keyUsage=critical,digitalSignature,keyEncipherment
+          extendedKeyUsage=serverAuth
+          subjectAltName=DNS:localhost
+          EOF
+          openssl x509 -req \
+            -in /tmp/gpubnb-hyperscale/server.csr \
+            -CA /tmp/gpubnb-hyperscale/ca.crt \
+            -CAkey /tmp/gpubnb-hyperscale/ca.key \
+            -CAcreateserial \
+            -out /tmp/gpubnb-hyperscale/server.crt \
+            -days 1 -sha256 \
+            -extfile /tmp/gpubnb-hyperscale/server.ext
+
+      - name: Start isolated regional gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GPUBNB_CONTROL_GATEWAY_ID=gateway_ci_load_0001
+          export GPUBNB_CONTROL_REGION=ci-local-1
+          export GPUBNB_CONTROL_QUIC_BIND=127.0.0.1:14443
+          export GPUBNB_CONTROL_ADMIN_BIND=127.0.0.1:19090
+          export GPUBNB_CONTROL_TLS_CERT=/tmp/gpubnb-hyperscale/server.crt
+          export GPUBNB_CONTROL_TLS_KEY=/tmp/gpubnb-hyperscale/server.key
+          export GPUBNB_CONTROL_REDIS_URL=redis://127.0.0.1:6379
+          export GPUBNB_CONTROL_INTERNAL_TOKEN=ci-hyperscale-internal-token-0000000000000001
+          export GPUBNB_CONTROL_MAX_CONNECTIONS=512
+          export GPUBNB_CONTROL_CONNECTION_QUEUE=64
+          export GPUBNB_CONTROL_PENDING_PER_MACHINE=64
+          export GPUBNB_CONTROL_PRESENCE_TTL_SECONDS=30
+          export GPUBNB_CONTROL_HEARTBEAT_TIMEOUT_SECONDS=10
+          export GPUBNB_CONTROL_AUTH_CLOCK_SKEW_SECONDS=30
+          export GPUBNB_CONTROL_COMMAND_RETENTION_SECONDS=120
+          export GPUBNB_CONTROL_MAX_FRAME_BYTES=65536
+          services/control-gateway/target/release/gpubnb-control-gateway \
+            >/tmp/gpubnb-hyperscale/gateway.log 2>&1 &
+          echo $! >/tmp/gpubnb-hyperscale/gateway.pid
+          for _ in $(seq 1 40); do
+            if curl --max-time 1 -fsS http://127.0.0.1:19090/readyz >/dev/null; then
+              exit 0
+            fi
+            sleep 0.25
+          done
+          cat /tmp/gpubnb-hyperscale/gateway.log
+          exit 1
+
+      - name: Million-fleet N+1 capacity model
+        shell: bash
+        run: |
+          set -euo pipefail
+          services/control-gateway/target/release/gpubnb-hyperscale model \
+            --profile config/hyperscale/million-fleet-v1.json \
+            --output /tmp/gpubnb-hyperscale/model.json \
+            --require-pass
+
+      - name: Live QUIC steady-state smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          services/control-gateway/target/release/gpubnb-hyperscale live \
+            --scenario steady \
+            --gateway 127.0.0.1:14443 \
+            --server-name localhost \
+            --ca-cert /tmp/gpubnb-hyperscale/ca.crt \
+            --redis-url redis://127.0.0.1:6379 \
+            --allow-test-auth-write \
+            --connections 128 \
+            --duration-seconds 3 \
+            --heartbeat-ms 500 \
+            --ramp-ms 1000 \
+            --presence-sample-every 8 \
+            --max-connect-p99-ms 5000 \
+            --max-failure-bps 100 \
+            --output /tmp/gpubnb-hyperscale/live-steady.json \
+            --require-pass
+
+      - name: Live reconnect storm smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          services/control-gateway/target/release/gpubnb-hyperscale live \
+            --scenario reconnect-storm \
+            --gateway 127.0.0.1:14443 \
+            --server-name localhost \
+            --ca-cert /tmp/gpubnb-hyperscale/ca.crt \
+            --redis-url redis://127.0.0.1:6379 \
+            --allow-test-auth-write \
+            --connections 128 \
+            --reconnect-cycles 3 \
+            --reconnect-jitter-ms 1000 \
+            --ramp-ms 500 \
+            --max-connect-p99-ms 5000 \
+            --max-failure-bps 100 \
+            --output /tmp/gpubnb-hyperscale/live-reconnect.json \
+            --require-pass
+
+      - name: Live replacement fencing smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          services/control-gateway/target/release/gpubnb-hyperscale live \
+            --scenario replacement-fence \
+            --gateway 127.0.0.1:14443 \
+            --server-name localhost \
+            --ca-cert /tmp/gpubnb-hyperscale/ca.crt \
+            --redis-url redis://127.0.0.1:6379 \
+            --allow-test-auth-write \
+            --connections 32 \
+            --ramp-ms 500 \
+            --max-connect-p99-ms 5000 \
+            --max-failure-bps 100 \
+            --output /tmp/gpubnb-hyperscale/live-fence.json \
+            --require-pass
+
+      - name: Redis outage must fail readiness closed and recover
+        shell: bash
+        run: |
+          set -euo pipefail
+          redis_id="$(docker ps --filter 'ancestor=redis:7.4-alpine' --format '{{.ID}}' | head -n1)"
+          test -n "$redis_id"
+          cleanup() { docker unpause "$redis_id" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker pause "$redis_id" >/dev/null
+          if curl --max-time 2 -fsS http://127.0.0.1:19090/readyz >/dev/null; then
+            echo 'readyz incorrectly stayed healthy while Redis was paused' >&2
+            exit 1
+          fi
+          docker unpause "$redis_id" >/dev/null
+          trap - EXIT
+          for _ in $(seq 1 40); do
+            if curl --max-time 1 -fsS http://127.0.0.1:19090/readyz >/dev/null; then
+              exit 0
+            fi
+            sleep 0.25
+          done
+          echo 'gateway readiness did not recover after Redis resumed' >&2
+          exit 1
+
+      - name: Capture gateway metrics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p /tmp/gpubnb-hyperscale
+          curl --max-time 2 -fsS http://127.0.0.1:19090/metrics \
+            >/tmp/gpubnb-hyperscale/gateway-metrics.prom || true
+          if test -f /tmp/gpubnb-hyperscale/gateway.pid; then
+            kill "$(cat /tmp/gpubnb-hyperscale/gateway.pid)" >/dev/null 2>&1 || true
+          fi
+
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hyperscale-qualification-evidence
+          path: /tmp/gpubnb-hyperscale/
+          if-no-files-found: error
+          retention-days: 14

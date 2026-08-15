@@ -1,0 +1,16 @@
+{
+  "name": "million-fleet-n-plus-one-v1",
+  "fleetSize": 1000000,
+  "regions": 3,
+  "gatewaysPerRegion": 13,
+  "gatewayMaxConnections": 50000,
+  "targetUtilizationBps": 7000,
+  "maxFailoverUtilizationBps": 8000,
+  "heartbeatIntervalSeconds": 15,
+  "reconnectJitterSeconds": 120,
+  "maxReconnectsPerSecondPerGateway": 400,
+  "maxHeartbeatWritesPerSecondPerGateway": 2500,
+  "commandFanoutPerSecond": 5000,
+  "maxCommandDispatchPerSecondPerGateway": 1000,
+  "seed": 42
+}
