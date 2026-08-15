@@ -11,6 +11,7 @@ import {
   platformFeeBasisPoints,
 } from './mining-config-policy.js';
 import { normalizeMiningGpuVendor } from './mining-profile-catalog.js';
+import { registerRentalResourceAuthorityRoutes } from './rental-resource-routes.js';
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
 
 const machineParamsSchema = z.object({ machineId: z.string().cuid() });
@@ -96,6 +97,8 @@ export const registerMiningRoutes = (
   db: PrismaClient,
   redis: Redis,
 ): void => {
+  registerRentalResourceAuthorityRoutes(app, db, redis);
+
   app.get('/machines/:machineId/mining-resources', async (request, reply) => {
     const session = await requireSession(request, reply, redis);
     if (!session) return;

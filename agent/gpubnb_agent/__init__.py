@@ -25,3 +25,11 @@ from .workspace_gateway_v4 import install as _install_workspace_gateway_v4
 
 _install_workspace_gateway_v4()
 del _install_workspace_gateway_v4
+
+# Add resource-scoped rental preemption after all transport/security layers.  v5
+# only replaces GPU ownership/lifecycle hooks: HTTP, WebSocket and QUIC behavior
+# continues to come from the already-qualified v4/v3/v2 stack.
+from .workspace_gateway_v5 import install as _install_workspace_gateway_v5
+
+_install_workspace_gateway_v5()
+del _install_workspace_gateway_v5
