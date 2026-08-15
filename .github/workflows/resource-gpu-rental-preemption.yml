@@ -1,0 +1,73 @@
+name: resource-gpu-rental-preemption
+
+on:
+  pull_request:
+    paths:
+      - 'agent/gpubnb_agent/gpu_rental_preemption.py'
+      - 'agent/gpubnb_agent/workspace_gateway_v5.py'
+      - 'agent/gpubnb_agent/__init__.py'
+      - 'agent/tests/test_gpu_rental_preemption.py'
+      - 'agent/tests/test_workspace_gateway_v5.py'
+      - 'apps/api/src/rental-resource-authority.ts'
+      - 'apps/api/src/rental-resource-routes.ts'
+      - 'apps/api/src/mining-routes.ts'
+      - 'apps/api/test/rental-resource-authority.test.ts'
+      - 'docs/architecture/RESOURCE_GPU_RENTAL_PREEMPTION_V1.md'
+      - 'docs/operations/resource-gpu-rental-preemption-runbook.md'
+      - '.github/workflows/resource-gpu-rental-preemption.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resource-gpu-rental-preemption-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent-resource-preemption:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: agent/pyproject.toml
+      - name: Install Agent
+        run: python -m pip install ./agent
+      - name: Compile Agent
+        run: python -m compileall -q agent/gpubnb_agent
+      - name: Resource-scoped rental contracts
+        run: |
+          python -m unittest discover -s agent/tests -p 'test_gpu_rental_preemption.py' -v
+          python -m unittest discover -s agent/tests -p 'test_workspace_gateway_v5.py' -v
+      - name: Historical Agent regression
+        run: python -m unittest discover -s agent/tests -v
+
+  api-rental-authority:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx prisma generate
+      - name: Rental authority contracts
+        run: npx tsx --test test/rental-resource-authority.test.ts
+      - name: Strict TypeScript
+        run: npx tsc -p tsconfig.json --noEmit
