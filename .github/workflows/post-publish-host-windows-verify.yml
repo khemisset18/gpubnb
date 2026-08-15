@@ -80,8 +80,12 @@ jobs:
           VERSION_TAG: host-v0.2.0-beta.${{ github.event.workflow_run.run_number }}
         run: |
           $ErrorActionPreference = 'Stop'
-          if (gh release view host-test-latest --repo $env:GITHUB_REPOSITORY *> $null) {
+          gh release view host-test-latest --repo $env:GITHUB_REPOSITORY *> $null
+          $releaseLookupExit = $LASTEXITCODE
+          if ($releaseLookupExit -notin @(0, 1)) { throw "Failed to inspect host-test-latest (exit $releaseLookupExit)." }
+          if ($releaseLookupExit -eq 0) {
             gh release delete host-test-latest --repo $env:GITHUB_REPOSITORY --cleanup-tag --yes
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to delete the previous host-test-latest release.' }
           }
           gh release create host-test-latest published-release/* `
             --repo $env:GITHUB_REPOSITORY `
