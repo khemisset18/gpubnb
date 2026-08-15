@@ -15,7 +15,7 @@ use crate::{
     metrics::GatewayMetrics,
     protocol::{AgentMessage, FenceReason, GatewayMessage, ServerHello},
     registry::{AckOutcome, GatewayRegistry},
-    store::{RedisStore, TouchOutcome},
+    store::{CommandAckRecord, RedisStore, TouchOutcome},
     wire::{read_json_frame, write_json_frame},
     CONTROL_GATEWAY_ALPN, CONTROL_GATEWAY_PROTOCOL_VERSION,
 };
@@ -316,17 +316,18 @@ async fn run_authenticated_session(
                         }
                     }
                     AgentMessage::CommandAck { command_id, sequence, status, detail_code } => {
-                        state.store.record_command_ack(
+                        state.store.record_command_ack(CommandAckRecord {
                             machine_id,
                             connection_id,
-                            &command_id,
+                            command_id: &command_id,
                             sequence,
                             status,
-                            detail_code.as_deref(),
-                            received_at_ms,
-                        ).await.context("failed to durably record command ack")?;
+                            detail_code: detail_code.as_deref(),
+                            acknowledged_at_ms: received_at_ms,
+                        }).await.context("failed to durably record command ack")?;
                         let ack = state.registry.lock().await.acknowledge(
                             machine_id,
+                            connection_id,
                             &command_id,
                             sequence,
                             status,
