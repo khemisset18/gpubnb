@@ -1,7 +1,9 @@
 """Safe migration bridge between the QUIC control channel and legacy HTTPS jobs.
 
-The bridge intentionally keeps HTTPS telemetry and durable job leases authoritative.
-QUIC commands wake those proven paths; they do not bypass them.
+The bridge keeps HTTPS telemetry and durable job leases authoritative for rental
+prepare/start while allowing a deliberately small set of idempotent local
+mutations to execute directly after the control-channel protocol has fenced and
+deduplicated them.
 """
 from __future__ import annotations
 
@@ -17,9 +19,37 @@ from .control_channel import (
     ControlCommandResult,
     classify_command_action,
 )
+from .execution_control import (
+    ExecutionControlError,
+    start_mining,
+    stop_mining,
+    stop_rental,
+)
 from .storage import load_config
 
 ASSIGNMENT_REFRESH_SECONDS = 300
+_POLICY_REJECTIONS = {
+    "approved_miner_platform_unsupported",
+    "approved_miner_binary_missing",
+    "approved_miner_binary_path_invalid",
+    "approved_miner_binary_hash_mismatch",
+    "miner_secret_resolution_required",
+    "mining_command_payload_invalid",
+    "mining_command_payload_unknown_field",
+    "mining_resource_id_invalid",
+    "mining_profile_not_approved",
+    "mining_pool_url_invalid",
+    "mining_pool_credentials_not_allowed",
+    "mining_pool_port_invalid",
+    "mining_pool_dns_resolution_failed",
+    "mining_pool_address_not_public",
+    "mining_wallet_invalid",
+    "mining_worker_invalid",
+    "mining_performance_mode_invalid",
+    "stop_rental_payload_invalid",
+    "stop_rental_session_id_invalid",
+    "stop_rental_workspace_not_direct",
+}
 
 
 class _Runtime:
@@ -41,6 +71,7 @@ class _Runtime:
         self.emit = emit
         self.config = load_config()
         self._job_lock = threading.Lock()
+        self._mutation_lock = threading.Lock()
         self._refresh_lock = threading.Lock()
         self._next_assignment_refresh = 0.0
         self._next_fallback_poll = 0.0
@@ -69,8 +100,6 @@ class _Runtime:
                 self.supervisor.update_assignment(assignment)
                 self._next_assignment_refresh = time.monotonic() + ASSIGNMENT_REFRESH_SECONDS
             except Exception as exc:
-                # Migration must fail back to the proven HTTPS path. Retry assignment
-                # sooner than the normal refresh cadence, but never tight-loop.
                 self._next_assignment_refresh = time.monotonic() + 30
                 self.emit({
                     "event": "control_channel_assignment_error",
@@ -97,7 +126,43 @@ class _Runtime:
         finally:
             self._job_lock.release()
 
+    def _run_mutation(self, command: ControlCommand) -> ControlCommandResult:
+        with self._mutation_lock:
+            try:
+                if command.kind == "STOP_RENTAL":
+                    if not isinstance(command.payload, dict) or command.payload.get("workspaceSlug") != "developer":
+                        raise ExecutionControlError("stop_rental_workspace_not_direct")
+                    result = stop_rental(command.payload)
+                elif command.kind == "STOP_MINING":
+                    result = stop_mining()
+                elif command.kind == "START_MINING":
+                    result = start_mining(command.payload, command.command_id)
+                else:
+                    return ControlCommandResult("REJECTED", "direct_mutation_not_supported")
+                self.emit({
+                    "event": "control_mutation_applied",
+                    "machineId": self.machine_id,
+                    "commandId": command.command_id,
+                    "kind": command.kind,
+                    "detailCode": result.detail_code,
+                })
+                return ControlCommandResult("SUCCEEDED", result.detail_code)
+            except ExecutionControlError as exc:
+                code = str(exc)[:96] or "execution_control_failed"
+                status = "REJECTED" if code in _POLICY_REJECTIONS else "FAILED"
+                self.emit({
+                    "event": "control_mutation_failed",
+                    "machineId": self.machine_id,
+                    "commandId": command.command_id,
+                    "kind": command.kind,
+                    "status": status,
+                    "detailCode": code,
+                })
+                return ControlCommandResult(status, code)
+
     def _handle_command(self, command: ControlCommand) -> ControlCommandResult:
+        if command.kind in {"STOP_RENTAL", "START_MINING", "STOP_MINING"}:
+            return self._run_mutation(command)
         action = classify_command_action(command)
         if action == "WAKE_JOB":
             self._run_job_serialized(
@@ -109,8 +174,6 @@ class _Runtime:
             )
             return ControlCommandResult("SUCCEEDED", "job_wake_processed")
         if action == "WAKE_HEARTBEAT":
-            # Call the original heartbeat, not the installed wrapper, so a push
-            # inventory refresh cannot recursively refresh its own channel assignment.
             self.original_heartbeat(self.api, self.key, self.machine_id)
             return ControlCommandResult("SUCCEEDED", "inventory_refresh_processed")
         return ControlCommandResult("REJECTED", "command_not_enabled_in_v1")

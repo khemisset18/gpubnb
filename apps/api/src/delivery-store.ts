@@ -119,6 +119,25 @@ export async function claimMachineCommands(
   `;
 }
 
+export async function dueMachineIds(
+  client: SqlClient,
+  requestedLimit = DELIVERY_LIMITS.machineCommandBatch,
+): Promise<string[]> {
+  const limit = clampBatchSize(requestedLimit, DELIVERY_LIMITS.machineCommandBatch);
+  const rows = await client.$queryRaw<Array<{ machineId: string }>>`
+    SELECT DISTINCT command."machineId"
+      FROM "MachineCommand" command
+     WHERE command."expiresAt" > CURRENT_TIMESTAMP
+       AND (
+         (command."status" = 'PENDING' AND command."availableAt" <= CURRENT_TIMESTAMP)
+         OR (command."status" = 'LEASED' AND command."leaseExpiresAt" <= CURRENT_TIMESTAMP)
+       )
+     ORDER BY command."machineId"
+     LIMIT ${limit}
+  `;
+  return rows.map((row) => row.machineId);
+}
+
 export async function markOutboxPublished(client: SqlClient, eventId: string, workerId: string): Promise<boolean> {
   validateDeliveryKey(eventId, 'outbox_id');
   validateDeliveryKey(workerId, 'worker_id');
@@ -169,6 +188,52 @@ export async function acknowledgeMachineCommand(
       AND "status" = 'LEASED' AND "leaseOwner" = ${workerId}
   `;
   return changed === 1;
+}
+
+export async function failMachineCommandTerminal(
+  client: SqlClient,
+  commandId: string,
+  machineId: string,
+  workerId: string,
+  error: unknown,
+): Promise<boolean> {
+  validateDeliveryKey(commandId, 'command_id');
+  validateDeliveryKey(machineId, 'command_machine_id');
+  validateDeliveryKey(workerId, 'worker_id');
+  const changed = await client.$executeRaw`
+    UPDATE "MachineCommand"
+       SET "status" = 'DEAD', "leaseOwner" = NULL, "leaseExpiresAt" = NULL,
+           "lastError" = ${sanitizeError(error)}
+     WHERE "id" = ${commandId} AND "machineId" = ${machineId}
+       AND "status" = 'LEASED' AND "leaseOwner" = ${workerId}
+  `;
+  return changed === 1;
+}
+
+export async function rescheduleMachineCommandFailure(
+  client: SqlClient,
+  command: Pick<ClaimedMachineCommand, 'id' | 'machineId' | 'attempts' | 'expiresAt'>,
+  workerId: string,
+  error: unknown,
+): Promise<'PENDING' | 'EXPIRED' | 'DEAD' | 'LEASE_LOST'> {
+  validateDeliveryKey(command.id, 'command_id');
+  validateDeliveryKey(command.machineId, 'command_machine_id');
+  validateDeliveryKey(workerId, 'worker_id');
+  const expired = command.expiresAt.getTime() <= Date.now();
+  const dead = !expired && shouldDeadLetter(command.attempts);
+  const delay = retryDelaySeconds(Math.max(1, command.attempts), command.id);
+  const target = expired ? 'EXPIRED' : dead ? 'DEAD' : 'PENDING';
+  const changed = await client.$executeRaw`
+    UPDATE "MachineCommand"
+       SET "status" = ${target},
+           "availableAt" = CURRENT_TIMESTAMP + make_interval(secs => ${delay}),
+           "leaseOwner" = NULL, "leaseExpiresAt" = NULL,
+           "lastError" = ${sanitizeError(error)}
+     WHERE "id" = ${command.id} AND "machineId" = ${command.machineId}
+       AND "status" = 'LEASED' AND "leaseOwner" = ${workerId}
+  `;
+  if (changed !== 1) return 'LEASE_LOST';
+  return target;
 }
 
 export async function recordConsumedMessage(

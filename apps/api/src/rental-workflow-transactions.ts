@@ -9,7 +9,7 @@ import {
   type Prisma,
   type PrismaClient,
 } from '@prisma/client';
-import { requestPreparation, requestRentalStop } from './rental-delivery-service.js';
+import { requestPreparation, requestRentalStop, type ExecutableRentalWorkspace } from './rental-delivery-service.js';
 
 export type TransactionClient = Prisma.TransactionClient;
 
@@ -48,6 +48,10 @@ export interface PreparationResult {
   preparationStep: string | null;
 }
 
+function executableWorkspace(value: string): ExecutableRentalWorkspace | undefined {
+  return value === 'compute' || value === 'developer' ? value : undefined;
+}
+
 export async function prepareComputeRental(
   db: Database,
   bookingId: string,
@@ -75,9 +79,6 @@ export async function prepareComputeRental(
     });
     if (!machineWorkspace) throw new Error('compute_workspace_not_enabled');
 
-    // Scoped to this booking's *compute* machineWorkspace, not the booking alone - a
-    // booking may separately carry a Developer session (WorkspaceSession is unique
-    // per (bookingId, machineWorkspaceId), not per bookingId).
     const existing = await tx.workspaceSession.findFirst({
       where: { bookingId, machineWorkspaceId: machineWorkspace.id },
       select: {
@@ -159,6 +160,7 @@ export async function prepareComputeRental(
       renterId,
       listingId: booking.listing.id,
       sessionId: created.id,
+      workspaceSlug: 'compute',
       startsAt: booking.startsAt,
       endsAt: booking.endsAt,
     });
@@ -181,6 +183,7 @@ export async function stopRentalSession(
       include: {
         booking: { select: { id: true, listingId: true, startsAt: true, endsAt: true } },
         machine: { select: { id: true, ownerId: true } },
+        machineWorkspace: { select: { workspace: { select: { slug: true } } } },
       },
     });
     if (!session) throw new Error('session_not_found');
@@ -219,6 +222,9 @@ export async function stopRentalSession(
       renterId: session.renterId,
       listingId: session.booking.listingId,
       sessionId: session.id,
+      ...(executableWorkspace(session.machineWorkspace.workspace.slug)
+        ? { workspaceSlug: executableWorkspace(session.machineWorkspace.workspace.slug) }
+        : {}),
       startsAt: session.booking.startsAt,
       endsAt: session.booking.endsAt,
     }, ownerStop ? 'owner' : 'renter');
