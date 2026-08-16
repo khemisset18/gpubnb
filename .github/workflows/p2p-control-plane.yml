@@ -6,7 +6,11 @@ on:
       - 'services/control-gateway/src/p2p.rs'
       - 'services/control-gateway/src/lib.rs'
       - 'agent/gpubnb_agent/p2p_connectivity.py'
+      - 'agent/gpubnb_agent/p2p_direct_quic.py'
+      - 'agent/gpubnb_agent/host_tunnel.py'
       - 'agent/tests/test_p2p_connectivity.py'
+      - 'agent/tests/test_p2p_direct_quic.py'
+      - 'agent/tools/p2p_direct_qualify.py'
       - 'config/p2p/**'
       - 'docs/architecture/P2P_SERVERLESS_CONTROL_PLANE_V1.md'
       - 'docs/operations/P2P_SERVERLESS_ROLLOUT_V1.md'
@@ -30,6 +34,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - uses: dtolnay/rust-toolchain@1.97.1
         with:
@@ -77,6 +82,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -85,8 +91,29 @@ jobs:
       - name: Install Agent and tests
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ./agent pytest==8.4.2
-      - name: Compile P2P module
-        run: python -m py_compile agent/gpubnb_agent/p2p_connectivity.py
-      - name: Candidate discovery and ticket contract tests
-        run: python -m pytest -q agent/tests/test_p2p_connectivity.py
+          python -m pip install ./agent pytest==8.4.2 ruff==0.12.12
+      - name: Compile Agent
+        run: python -m compileall -q agent/gpubnb_agent agent/tools
+      - name: Complete Agent unittest suite
+        run: python -m unittest discover -s agent/tests -v
+      - name: Direct QUIC and candidate tests
+        run: python -m pytest -q agent/tests/test_p2p_connectivity.py agent/tests/test_p2p_direct_quic.py
+      - name: Strict P2P Python lint
+        run: ruff check agent/gpubnb_agent/p2p_connectivity.py agent/gpubnb_agent/p2p_direct_quic.py agent/gpubnb_agent/host_tunnel.py agent/tests/test_p2p_connectivity.py agent/tests/test_p2p_direct_quic.py agent/tools/p2p_direct_qualify.py
+
+  diff-integrity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Reject whitespace errors
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git diff --check "${{ github.event.pull_request.base.sha }}..HEAD"
+          else
+            git diff --check HEAD^
+          fi

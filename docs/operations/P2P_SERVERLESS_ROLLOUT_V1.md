@@ -64,6 +64,51 @@ For every attempt record only operational counters needed for qualification: can
 
 Promotion requires no cross-lease connection, no stale fencing acceptance, no replay acceptance, and no regression in rental stop/revoke behavior.
 
+### Direct-session bounds and rollback
+
+- require mutual TLS with an operator trust root and ALPN `gpubnb-p2p-direct/1`;
+- allow at most eight direct attempts, five seconds per attempt and fifteen
+  seconds overall;
+- send at most three hole-punch hints to each signed direct candidate;
+- accept only a `VerifiedRendezvousTicket`, never an unchecked JSON ticket;
+- recheck expiry and current lease/fencing authority during the handshake;
+- emit candidate class, outcome code, latency, attempt count, reconnect outcome
+  and fallback-required only. Never emit an endpoint, IP, session or user ID.
+
+Rollback by disabling the direct-session rollout flag. The existing
+`gpubnb-host-tunnel` remains the fallback for `FALLBACK_ONLY` tickets. Do not turn
+fallback on for `DIRECT_ONLY`, and do not extend ticket expiry to hide connection
+failures.
+
+### Real NAT-to-NAT qualification
+
+The helper `agent/tools/p2p_direct_qualify.py` runs one peer per machine and prints
+only non-sensitive JSON metrics. Prepare two ACL-protected configuration files
+containing the already signed ticket, the local ephemeral private key, Control
+Gateway verifying key, operator CA, and peer certificates. Never pass private
+keys on the command line or commit these files.
+
+1. Place machine A and machine B on genuinely different networks and confirm no
+   shared LAN route exists.
+2. Run the Host first:
+   `python agent/tools/p2p_direct_qualify.py --config host-private.json`.
+3. Run the Renter on machine B with its own private file using the same command.
+4. Record only the emitted result (`DIRECT_HOST`,
+   `DIRECT_SERVER_REFLEXIVE`, `TIMEOUT`, `AUTH_FAILED`, or fallback required),
+   latency and attempt count.
+5. Repeat across home NAT, CGNAT, symmetric NAT, IPv6-only/dual-stack,
+   restrictive firewall, packet loss, endpoint change and fencing rotation.
+6. Destroy the short-lived private configuration files after the run and retain
+   only aggregate non-sensitive results.
+
+The ticket candidate port must equal the qualification socket's configured local
+port. The helper binds that exact port and performs STUN on that socket before
+handing it to QUIC. A bind failure is terminal; it never silently chooses another
+port.
+
+Do not report NAT-to-NAT success based on the CI loopback test. A production claim
+requires recorded successful runs from two separate real networks.
+
 ## Phase 3 - relay fallback
 
 Introduce relay capacity only for peers that fail direct attempts. The relay must:

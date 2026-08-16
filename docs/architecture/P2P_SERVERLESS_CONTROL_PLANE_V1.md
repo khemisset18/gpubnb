@@ -94,14 +94,42 @@ The implementation prefers one IPv6 dual-stack socket so IPv4 and IPv6 candidate
 share the same reserved port, and falls back to IPv4 when the platform cannot
 provide dual-stack UDP. The Direct QUIC phase must preserve that socket ownership.
 
+## Direct QUIC Session v1
+
+`agent/gpubnb_agent/p2p_direct_quic.py` explicitly adapts aioquic to the live
+Candidate Discovery socket. The high-level `aioquic.connect()` helper is not used
+because it always allocates and binds a new UDP socket. Both the renter client and
+Host listener instead call `create_datagram_endpoint(sock=reserved_socket)`, which
+transfers the exact socket and NAT mapping into aioquic without closing or
+rebinding it.
+
+QUIC TLS verification remains mandatory and uses operator-provided trust roots;
+`CERT_NONE`, `verify=False`, and implicit public CAs are rejected. Above TLS, a
+four-message `HELLO -> CHALLENGE -> FINISH -> READY` handshake authenticates the
+Host and Renter with their rendezvous Ed25519 keys. Every signature is domain
+separated and binds the protocol version, roles, ticket nonce, `sessionId`,
+`machineId`, `leaseId`, `fencingToken`, and both fresh challenges. The Host replay
+cache consumes the ticket/challenge pair until ticket expiry. No workload stream
+is exposed before `READY` is verified.
+
+Only signed HOST and SERVER_REFLEXIVE endpoints are punched or dialled. Attempts
+are bounded per candidate and globally, and preserve type order regardless of
+numeric priority. Lease/fencing authority is checked before each attempt and at
+each handshake transition. Reconnect uses the same path and therefore cannot
+revive an expired ticket or cross a fencing-token rotation.
+
+The Edge tunnel remains intact. `HostTunnelSupervisor.reconcile_after_direct()`
+starts it only after a terminal bounded direct failure and only when the signed
+relay policy permits fallback. `DIRECT_ONLY` never starts the tunnel.
+
 ## What this PR does not claim
 
-This v1 establishes the secure protocol contract and CI gates. It does not claim that real Internet NAT traversal is already complete.
-
-The Agent now gathers HOST and SERVER_REFLEXIVE candidates, but it does not yet
-perform UDP hole punching or a QUIC handshake. Symmetric NAT, restrictive
-enterprise firewalls, IPv4 CGNAT, IPv6 and mobile networks must be qualified with
-real NAT-to-NAT tests before claiming a production direct-connect success rate.
+This v1 includes a deterministic mutual-TLS QUIC loopback test, bounded signed
+candidate punching, and the authenticated application handshake. A loopback or
+simulated CI test does **not** prove that P2P works across the public Internet.
+Symmetric NAT, restrictive enterprise firewalls, IPv4 CGNAT, IPv6 and mobile
+networks still require the real two-network NAT-to-NAT qualification below before
+any production direct-connect success claim.
 
 ## Cost model
 
