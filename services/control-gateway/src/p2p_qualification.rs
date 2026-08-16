@@ -104,8 +104,8 @@ fn read_candidates(path: &Path, peer: &str) -> Result<Vec<P2pCandidate>> {
         bail!("{peer} candidate file is not a bounded regular file");
     }
     let bytes = fs::read(path).with_context(|| format!("failed to read {peer} candidate file"))?;
-    let value: CandidateFile = serde_json::from_slice(&bytes)
-        .with_context(|| format!("invalid {peer} candidate file"))?;
+    let value: CandidateFile =
+        serde_json::from_slice(&bytes).with_context(|| format!("invalid {peer} candidate file"))?;
     Ok(value.candidates)
 }
 
@@ -119,7 +119,8 @@ fn load_protected_signing_key(path: &Path) -> Result<SigningKey> {
 }
 
 fn validate_private_permissions(path: &Path) -> Result<()> {
-    let metadata = fs::metadata(path).context("qualification signing key is missing or unreadable")?;
+    let metadata =
+        fs::metadata(path).context("qualification signing key is missing or unreadable")?;
     if !metadata.is_file() {
         bail!("qualification signing key must be a regular file");
     }
@@ -127,7 +128,9 @@ fn validate_private_permissions(path: &Path) -> Result<()> {
     {
         use std::os::unix::fs::PermissionsExt;
         if metadata.permissions().mode() & 0o077 != 0 {
-            bail!("qualification signing key permissions are unsafe; require mode 0600 or stricter");
+            bail!(
+                "qualification signing key permissions are unsafe; require mode 0600 or stricter"
+            );
         }
     }
     #[cfg(windows)]
@@ -145,7 +148,12 @@ fn validate_windows_acl(path: &Path) -> Result<()> {
         bail!("failed to inspect qualification signing key ACL");
     }
     let acl = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();
-    for broad in ["everyone:", "builtin\\users:", "authenticated users:", "utilisateurs authentifiés:"] {
+    for broad in [
+        "everyone:",
+        "builtin\\users:",
+        "authenticated users:",
+        "utilisateurs authentifiés:",
+    ] {
         if acl.contains(broad) {
             bail!("qualification signing key permissions are unsafe; remove broad ACL entries");
         }
@@ -192,7 +200,9 @@ fn write_new_private_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = options.open(path).context("failed to create protected output file")?;
+    let mut file = options
+        .open(path)
+        .context("failed to create protected output file")?;
     file.write_all(bytes)?;
     file.sync_all()?;
     Ok(())
@@ -209,7 +219,9 @@ fn write_new_public_text(path: &Path, value: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn parse_options(arguments: impl IntoIterator<Item = String>) -> Result<BTreeMap<String, String>> {
+pub fn parse_options(
+    arguments: impl IntoIterator<Item = String>,
+) -> Result<BTreeMap<String, String>> {
     let mut values = BTreeMap::new();
     let mut arguments = arguments.into_iter();
     while let Some(flag) = arguments.next() {
@@ -249,7 +261,11 @@ mod tests {
                 priority: 100,
             })
             .collect();
-        fs::write(path, serde_json::json!({"candidates": candidates}).to_string()).unwrap();
+        fs::write(
+            path,
+            serde_json::json!({"candidates": candidates}).to_string(),
+        )
+        .unwrap();
     }
 
     fn request(directory: &Path) -> (IssueRequest, SigningKey) {
@@ -306,7 +322,10 @@ mod tests {
         assert!(fencing.verify(&signing.verifying_key(), 1_000_001).is_err());
         assert!(ticket.verify(&signing.verifying_key(), 1_060_000).is_err());
         assert!(ticket
-            .verify(&SigningKey::from_bytes(&[99; 32]).verifying_key(), 1_000_001)
+            .verify(
+                &SigningKey::from_bytes(&[99; 32]).verifying_key(),
+                1_000_001
+            )
             .is_err());
         fs::remove_dir_all(directory).unwrap();
     }
@@ -327,7 +346,8 @@ mod tests {
         {
             use std::os::unix::fs::PermissionsExt;
             candidate_file(&request.host_candidates, 1);
-            fs::set_permissions(&request.signing_key_file, fs::Permissions::from_mode(0o644)).unwrap();
+            fs::set_permissions(&request.signing_key_file, fs::Permissions::from_mode(0o644))
+                .unwrap();
             assert!(issue_to_file(&request, 1_000_000)
                 .unwrap_err()
                 .to_string()

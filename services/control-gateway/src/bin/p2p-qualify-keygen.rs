@@ -13,7 +13,10 @@ fn run() -> Result<()> {
         bail!("unknown qualification keygen option");
     }
     generate_qualification_key(&private, &public)?;
-    println!("qualification Ed25519 key created; public key written to {}", public.display());
+    println!(
+        "qualification Ed25519 key created; public key written to {}",
+        public.display()
+    );
     Ok(())
 }
 

@@ -40,7 +40,10 @@ fn run() -> Result<()> {
         bail!("unknown qualification ticket option");
     }
     issue_to_file(&request, now_ms()?)?;
-    println!("qualification rendezvous ticket written to {}", request.output.display());
+    println!(
+        "qualification rendezvous ticket written to {}",
+        request.output.display()
+    );
     Ok(())
 }
 
