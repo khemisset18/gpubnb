@@ -74,7 +74,7 @@ jobs:
         env:
           GPUBNB_P2P_QUALIFY_TICKET_BIN: ${{ github.workspace }}/services/control-gateway/target/debug/p2p-qualify-ticket
           GPUBNB_P2P_QUALIFY_KEYGEN_BIN: ${{ github.workspace }}/services/control-gateway/target/debug/p2p-qualify-keygen
-        run: python -m unittest agent.tests.test_p2p_qualification_ticket -v
+        run: python -m unittest discover -s agent/tests -p 'test_p2p_qualification_ticket.py' -v
 
       - name: Strict P2P library lint
         working-directory: services/control-gateway
