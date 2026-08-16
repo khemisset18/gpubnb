@@ -83,28 +83,34 @@ failures.
 ### Real NAT-to-NAT qualification
 
 The helper `agent/tools/p2p_direct_qualify.py` runs one peer per machine and prints
-only non-sensitive JSON metrics. Prepare two ACL-protected configuration files
-containing the already signed ticket, the local ephemeral private key, Control
-Gateway verifying key, operator CA, and peer certificates. Never pass private
-keys on the command line or commit these files.
+only non-sensitive JSON metrics. Each process first performs Candidate Discovery
+and keeps its returned socket open. It writes candidates to an ACL-protected
+exchange file, waits in the same process for the Control Plane (or a secured test
+harness) to write the signed ticket, verifies it, and transfers that exact socket
+object to QUIC. A pre-existing candidate or ticket file is rejected as stale.
+Never pass private keys on the command line or commit exchange files.
 
 1. Place machine A and machine B on genuinely different networks and confirm no
    shared LAN route exists.
-2. Run the Host first:
+2. Configure distinct `candidateOutputFile` and `ticketInputFile` paths under the
+   `rendezvous` section for each peer. Both paths must be absent before startup.
+3. Run the Host first:
    `python agent/tools/p2p_direct_qualify.py --config host-private.json`.
-3. Run the Renter on machine B with its own private file using the same command.
-4. Record only the emitted result (`DIRECT_HOST`,
+4. Publish the emitted private candidate file to the rendezvous issuer and write
+   its returned signed ticket to `ticketInputFile` while the process remains
+   alive. Repeat for the Renter on machine B.
+5. Record only the emitted result (`DIRECT_HOST`,
    `DIRECT_SERVER_REFLEXIVE`, `TIMEOUT`, `AUTH_FAILED`, or fallback required),
    latency and attempt count.
-5. Repeat across home NAT, CGNAT, symmetric NAT, IPv6-only/dual-stack,
+6. Repeat across home NAT, CGNAT, symmetric NAT, IPv6-only/dual-stack,
    restrictive firewall, packet loss, endpoint change and fencing rotation.
-6. Destroy the short-lived private configuration files after the run and retain
+7. Destroy the short-lived private configuration and exchange files and retain
    only aggregate non-sensitive results.
 
-The ticket candidate port must equal the qualification socket's configured local
-port. The helper binds that exact port and performs STUN on that socket before
-handing it to QUIC. A bind failure is terminal; it never silently chooses another
-port.
+The helper never closes and rebinds a port after receiving the ticket. Socket
+object identity and file descriptor are preserved from discovery, across ticket
+wait/verification, through QUIC adoption. Ticket wait is bounded to 120 seconds;
+failure is terminal and closes the reserved socket.
 
 Do not report NAT-to-NAT success based on the CI loopback test. A production claim
 requires recorded successful runs from two separate real networks.

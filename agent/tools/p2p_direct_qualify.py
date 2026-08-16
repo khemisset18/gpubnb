@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import ssl
 import sys
 import time
@@ -14,12 +15,11 @@ import base58
 from aioquic.quic.configuration import QuicConfiguration
 from nacl.signing import SigningKey
 
-from gpubnb_agent.p2p_connectivity import discover_candidates, verify_rendezvous_ticket_details
+from gpubnb_agent.p2p_connectivity import Candidate, discover_then_verify_ticket
 from gpubnb_agent.p2p_direct_quic import (
     DIRECT_ALPN,
     ReplayCache,
     connect_direct_quic_first,
-    host_handshake,
     listen_reserved_socket,
     punch_signed_candidates,
 )
@@ -54,63 +54,87 @@ def _tls(config: dict[str, Any], role: str) -> QuicConfiguration:
     return result
 
 
-def _verified(config: dict[str, Any]):
+def _identity(config: dict[str, Any]) -> dict[str, str]:
     identity = config.get("identity")
     if not isinstance(identity, dict):
         raise ValueError("qualification_identity_invalid")
-    return verify_rendezvous_ticket_details(
-        config["ticket"], config["controlVerifyingKeyBase58"],
-        session_id=identity["sessionId"], machine_id=identity["machineId"],
-        lease_id=identity["leaseId"], fencing_token=identity["fencingToken"],
-    )
+    return identity
+
+
+async def _file_ticket_provider(
+    config: dict[str, Any], candidates: tuple[Candidate, ...]
+) -> dict[str, Any]:
+    rendezvous = config.get("rendezvous")
+    if not isinstance(rendezvous, dict):
+        raise ValueError("qualification_rendezvous_invalid")
+    output = Path(rendezvous["candidateOutputFile"])
+    ticket_path = Path(rendezvous["ticketInputFile"])
+    timeout = float(rendezvous.get("waitTimeoutSeconds", 120))
+    poll = float(rendezvous.get("pollSeconds", 0.25))
+    if not 1 <= timeout <= 120 or not 0.05 <= poll <= 1:
+        raise ValueError("qualification_rendezvous_timeout_invalid")
+    if output.exists() or ticket_path.exists():
+        raise ValueError("qualification_rendezvous_stale_file")
+    payload = json.dumps(
+        {"candidates": [candidate.as_dict() for candidate in candidates]},
+        separators=(",", ":"),
+    ).encode()
+    descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    started = time.monotonic()
+    while time.monotonic() - started < timeout:
+        if ticket_path.is_file():
+            if ticket_path.stat().st_size > 64 * 1024:
+                raise ValueError("qualification_ticket_size_invalid")
+            value = json.loads(ticket_path.read_text(encoding="utf-8"))
+            if not isinstance(value, dict):
+                raise ValueError("qualification_ticket_invalid")
+            return value
+        await asyncio.sleep(poll)
+    raise TimeoutError("qualification_ticket_timeout")
 
 
 async def _run(config: dict[str, Any]) -> dict[str, Any]:
     role = config.get("role")
     if role not in {"HOST", "RENTER"}:
         raise ValueError("qualification_role_invalid")
-    ticket = _verified(config)
+    identity = _identity(config)
     signing_key = _key(config.get("ephemeralPrivateKeyBase58"))
     discovery_config = dict(config.get("discovery", {}))
-    local_candidates = ticket.host_candidates if role == "HOST" else ticket.renter_candidates
-    local_address, local_port = local_candidates[0].endpoint.rsplit(":", 1)
-    del local_address
-    discovery_config["bindPort"] = int(local_port)
-    discovery = discover_candidates(discovery_config)
+    discovery, ticket = await discover_then_verify_ticket(
+        discovery_config,
+        lambda active: _file_ticket_provider(config, active.candidates),
+        config["controlVerifyingKeyBase58"],
+        session_id=identity["sessionId"],
+        machine_id=identity["machineId"],
+        lease_id=identity["leaseId"],
+        fencing_token=identity["fencingToken"],
+    )
     started = time.monotonic()
     if role == "HOST":
         authenticated = asyncio.Event()
-        failure: list[str] = []
-        tasks: set[asyncio.Task[Any]] = set()
+        replay_cache = ReplayCache()
 
-        async def authenticate(reader, writer):
-            try:
-                await host_handshake(reader, writer, ticket, signing_key, ReplayCache(), lambda _l, _f: True)
-                authenticated.set()
-            except Exception:
-                failure.append("AUTH_FAILED")
-                authenticated.set()
-            finally:
-                writer.close()
-
-        def handler(reader, writer):
-            task = asyncio.create_task(authenticate(reader, writer))
-            tasks.add(task)
-            task.add_done_callback(tasks.discard)
+        def handler(_reader, writer):
+            authenticated.set()
+            writer.close()
 
         await punch_signed_candidates(discovery.socket, ticket, "HOST")
-        transport, server = await listen_reserved_socket(discovery.socket, _tls(config, role), handler)
+        transport, server = await listen_reserved_socket(
+            discovery.socket, _tls(config, role), ticket, signing_key,
+            replay_cache, lambda _l, _f: True, handler,
+        )
         try:
             await asyncio.wait_for(authenticated.wait(), float(config.get("totalTimeoutSeconds", 15)))
-            code = failure[0] if failure else "DIRECT_HOST"
-            return {"role": role, "result": code, "success": not failure, "latencyMs": int((time.monotonic() - started) * 1_000)}
+            return {"role": role, "result": "DIRECT_HOST", "success": True, "latencyMs": int((time.monotonic() - started) * 1_000)}
         except asyncio.TimeoutError:
             return {"role": role, "result": "TIMEOUT", "success": False, "latencyMs": int((time.monotonic() - started) * 1_000)}
         finally:
             server.close()
             transport.close()
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
 
     outcome = await connect_direct_quic_first(
         discovery.socket, ticket, _tls(config, role), signing_key,

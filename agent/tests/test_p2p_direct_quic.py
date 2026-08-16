@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import ipaddress
 import json
 import socket
 import ssl
+import struct
 import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import base58
 from aioquic.quic.configuration import QuicConfiguration
+from aioquic.asyncio.client import connect
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -24,16 +27,17 @@ from gpubnb_agent.p2p_connectivity import (
     Candidate,
     P2PError,
     P2P_TICKET_DOMAIN,
+    discover_then_verify_ticket,
     verify_rendezvous_ticket_details,
 )
 from gpubnb_agent.p2p_direct_quic import (
     DIRECT_ALPN,
+    AttemptQuicProtocol,
     DirectResultCode,
     ReplayCache,
     connect_direct_first,
     connect_direct_quic_first,
     connect_reserved_socket,
-    host_handshake,
     listen_reserved_socket,
 )
 
@@ -125,26 +129,21 @@ class P2PDirectQuicTests(unittest.IsolatedAsyncioTestCase):
         renter_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         renter_socket.bind(("127.0.0.1", 0))
         original_port = renter_socket.getsockname()[1]
+        original_fileno = renter_socket.fileno()
         ticket = _ticket(host_key, renter_key, host_socket.getsockname()[1])
         authenticated = asyncio.Event()
-        tasks: set[asyncio.Task] = set()
 
         with tempfile.TemporaryDirectory() as raw:
             server_config, client_config = _tls_configs(Path(raw))
 
-            async def accept(reader, writer):
-                try:
-                    await host_handshake(reader, writer, ticket, host_key, ReplayCache(), lambda _l, _f: True)
-                    authenticated.set()
-                finally:
-                    writer.close()
+            def handler(_reader, writer):
+                authenticated.set()
+                writer.close()
 
-            def handler(reader, writer):
-                task = asyncio.create_task(accept(reader, writer))
-                tasks.add(task)
-                task.add_done_callback(tasks.discard)
-
-            transport, server = await listen_reserved_socket(host_socket, server_config, handler)
+            transport, server = await listen_reserved_socket(
+                host_socket, server_config, ticket, host_key, ReplayCache(),
+                lambda _l, _f: True, handler,
+            )
             session = await asyncio.wait_for(connect_reserved_socket(
                 renter_socket, ticket.host_candidates[0], client_config, ticket, renter_key,
                 lambda _l, _f: True,
@@ -152,12 +151,15 @@ class P2PDirectQuicTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(authenticated.wait(), 2)
             self.assertTrue(session.authenticated)
             self.assertEqual(session.candidate_kind, "HOST")
+            self.assertIs(session.reserved_socket, renter_socket)
+            self.assertEqual(session.reserved_socket.fileno(), original_fileno)
+            self.assertEqual(
+                session.transport.get_extra_info("socket").fileno(), original_fileno
+            )
             self.assertEqual(session.transport.get_extra_info("sockname")[1], original_port)
             await session.close()
             server.close()
             transport.close()
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
 
     async def test_bad_ephemeral_key_fails_before_network(self):
         host_key, renter_key = SigningKey.generate(), SigningKey.generate()
@@ -169,6 +171,153 @@ class P2PDirectQuicTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(P2PError, "p2p_direct_local_key_mismatch"):
                 await connect_reserved_socket(sock, ticket.host_candidates[0], client, ticket, SigningKey.generate())
         sock.close()
+
+    async def test_workload_before_ready_never_reaches_application(self):
+        host_key, renter_key = SigningKey.generate(), SigningKey.generate()
+        host_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        host_socket.bind(("127.0.0.1", 0))
+        ticket = _ticket(host_key, renter_key, host_socket.getsockname()[1])
+        workload_called = asyncio.Event()
+        with tempfile.TemporaryDirectory() as raw:
+            server_config, client_config = _tls_configs(Path(raw))
+            transport, server = await listen_reserved_socket(
+                host_socket, server_config, ticket, host_key, ReplayCache(), None,
+                lambda _reader, _writer: workload_called.set(),
+            )
+            async with connect(
+                "127.0.0.1", host_socket.getsockname()[1], configuration=client_config
+            ) as protocol:
+                _reader, writer = await protocol.create_stream()
+                payload = json.dumps({"workload": "before-ready"}).encode()
+                writer.write(struct.pack("!I", len(payload)) + payload)
+                await writer.drain()
+                await asyncio.sleep(0.2)
+                writer.close()
+            self.assertFalse(workload_called.is_set())
+            server.close()
+            transport.close()
+
+    async def test_replayed_hello_is_rejected_across_quic_connections(self):
+        host_key, renter_key = SigningKey.generate(), SigningKey.generate()
+        host_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        host_socket.bind(("127.0.0.1", 0))
+        ticket = _ticket(host_key, renter_key, host_socket.getsockname()[1])
+        cache = ReplayCache()
+        workload_calls = 0
+        auth_failures = []
+        with tempfile.TemporaryDirectory() as raw:
+            server_config, client_config = _tls_configs(Path(raw))
+
+            def workload(_reader, writer):
+                nonlocal workload_calls
+                workload_calls += 1
+                writer.close()
+
+            transport, server = await listen_reserved_socket(
+                host_socket, server_config, ticket, host_key, cache, None, workload,
+                auth_failures.append,
+            )
+            with patch("gpubnb_agent.p2p_direct_quic.secrets.token_hex", return_value="ab" * 32):
+                first_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                first_socket.bind(("127.0.0.1", 0))
+                first = await connect_reserved_socket(
+                    first_socket, ticket.host_candidates[0], client_config,
+                    ticket, renter_key,
+                )
+                await first.close()
+                second_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                second_socket.bind(("127.0.0.1", 0))
+                with self.assertRaises((P2PError, ConnectionError, asyncio.IncompleteReadError)):
+                    await asyncio.wait_for(connect_reserved_socket(
+                        second_socket, ticket.host_candidates[0], client_config,
+                        ticket, renter_key,
+                    ), 3)
+            await asyncio.sleep(0.1)
+            self.assertEqual(workload_calls, 1)
+            self.assertIn("p2p_direct_replay", auth_failures)
+            server.close()
+            transport.close()
+
+    async def test_discovery_ticket_wait_and_quic_share_socket_identity(self):
+        host_key, renter_key = SigningKey.generate(), SigningKey.generate()
+        ticket = _ticket(host_key, renter_key, 4444)
+        observed: dict[str, object] = {}
+
+        async def provider(discovery):
+            observed["socket"] = discovery.socket
+            observed["fileno"] = discovery.socket.fileno()
+            return {"ignored": True}
+
+        with patch(
+            "gpubnb_agent.p2p_connectivity.verify_rendezvous_ticket_details",
+            return_value=ticket,
+        ):
+            discovery, verified = await discover_then_verify_ticket(
+                {"stunServers": [], "stunTimeoutMs": 10, "stunTotalTimeoutMs": 10},
+                provider,
+                bytes(SigningKey.generate().verify_key),
+                session_id="session_00000001", machine_id="machine_00000001",
+                lease_id="lease_00000001", fencing_token="42",
+                address_provider=lambda: [ipaddress.ip_address("10.0.0.8")],
+            )
+        original = observed["socket"]
+        original_fileno = observed["fileno"]
+
+        async def connector(active_socket, _candidate):
+            self.assertIs(active_socket, original)
+            self.assertEqual(active_socket.fileno(), original_fileno)
+            return Mock()
+
+        outcome = await connect_direct_first(discovery.socket, verified, connector)
+        self.assertIsNotNone(outcome.session)
+        discovery.close()
+
+    async def test_retired_attempt_timer_cannot_emit_on_shared_transport(self):
+        class FakeTransport:
+            def __init__(self):
+                self.sent = []
+                self.closed = False
+
+            def sendto(self, data, address):
+                self.sent.append((data, address))
+
+            def close(self):
+                self.closed = True
+
+        class FakeQuic:
+            def __init__(self, label):
+                self.label = label
+                self.timer = asyncio.get_running_loop().time() + 0.03
+                self.ready = False
+                self.sent = False
+
+            def datagrams_to_send(self, now):
+                if self.ready and not self.sent:
+                    self.sent = True
+                    return [(self.label, ("127.0.0.1", 9))]
+                return []
+
+            def get_timer(self):
+                return None if self.ready else self.timer
+
+            def handle_timer(self, now):
+                self.ready = True
+
+            def next_event(self):
+                return None
+
+        shared = FakeTransport()
+        old = AttemptQuicProtocol(FakeQuic(b"old"))
+        old.connection_made(shared)
+        old.transmit()
+        old.retire()
+        current = AttemptQuicProtocol(FakeQuic(b"current"))
+        current.connection_made(shared)
+        current.transmit()
+        await asyncio.sleep(0.08)
+        self.assertEqual([data for data, _addr in shared.sent], [b"current"])
+        self.assertFalse(shared.closed)
+        current.retire()
 
     async def test_same_socket_survives_host_failure_then_reflexive_success(self):
         host_key, renter_key = SigningKey.generate(), SigningKey.generate()
@@ -185,36 +334,30 @@ class P2PDirectQuicTests(unittest.IsolatedAsyncioTestCase):
             {"kind": "SERVER_REFLEXIVE", "endpoint": f"127.0.0.1:{server_socket.getsockname()[1]}", "priority": 90},
         ])
         ready = asyncio.Event()
-        tasks: set[asyncio.Task] = set()
         with tempfile.TemporaryDirectory() as raw:
             server_config, client_config = _tls_configs(Path(raw))
 
-            async def accept(reader, writer):
-                try:
-                    await host_handshake(reader, writer, ticket, host_key, ReplayCache())
-                    ready.set()
-                finally:
-                    writer.close()
+            def handler(_reader, writer):
+                ready.set()
+                writer.close()
 
-            def handler(reader, writer):
-                task = asyncio.create_task(accept(reader, writer))
-                tasks.add(task)
-                task.add_done_callback(tasks.discard)
-
-            transport, server = await listen_reserved_socket(server_socket, server_config, handler)
+            transport, server = await listen_reserved_socket(
+                server_socket, server_config, ticket, host_key, ReplayCache(),
+                None, handler,
+            )
             outcome = await connect_direct_quic_first(
                 client_socket, ticket, client_config, renter_key,
                 attempt_timeout_ms=1_000, total_timeout_ms=4_000,
             )
             self.assertEqual(outcome.code, DirectResultCode.DIRECT_SERVER_REFLEXIVE)
             self.assertEqual(outcome.metrics.attempts, 2)
+            self.assertIs(outcome.session.reserved_socket, client_socket)
+            self.assertEqual(outcome.session.reserved_socket.fileno(), client_socket.fileno())
             self.assertEqual(outcome.session.transport.get_extra_info("sockname")[1], client_port)
             await asyncio.wait_for(ready.wait(), 1)
             await outcome.session.close()
             server.close()
             transport.close()
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
         unused.close()
 
     async def test_endpoint_not_in_signed_ticket_is_rejected(self):

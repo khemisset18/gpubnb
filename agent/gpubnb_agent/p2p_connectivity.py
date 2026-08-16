@@ -12,6 +12,7 @@ import re
 import socket
 import struct
 import time
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -89,6 +90,46 @@ class VerifiedRendezvousTicket:
         if local_role == "RENTER":
             return self.host_candidates
         raise P2PError("p2p_role_invalid")
+
+
+TicketProvider = Callable[
+    [CandidateDiscovery], Mapping[str, Any] | Awaitable[Mapping[str, Any]]
+]
+
+
+async def discover_then_verify_ticket(
+    config: Mapping[str, Any],
+    ticket_provider: TicketProvider,
+    verifying_key: bytes | str | VerifyKey,
+    *,
+    session_id: str,
+    machine_id: str,
+    lease_id: str,
+    fencing_token: str,
+    **discovery_options: Any,
+) -> tuple[CandidateDiscovery, VerifiedRendezvousTicket]:
+    """Keep discovery UDP alive while candidates are exchanged for a ticket."""
+    discovery = discover_candidates(config, **discovery_options)
+    reserved = discovery.socket
+    original_fileno = reserved.fileno()
+    try:
+        ticket = ticket_provider(discovery)
+        if isinstance(ticket, Awaitable):
+            ticket = await ticket
+        if discovery.socket is not reserved or reserved.fileno() != original_fileno:
+            raise P2PError("p2p_socket_identity_changed")
+        verified = verify_rendezvous_ticket_details(
+            ticket,
+            verifying_key,
+            session_id=session_id,
+            machine_id=machine_id,
+            lease_id=lease_id,
+            fencing_token=fencing_token,
+        )
+        return discovery, verified
+    except BaseException:
+        discovery.close()
+        raise
 
 
 def _endpoint(address: ipaddress.IPv4Address | ipaddress.IPv6Address, port: int) -> str:

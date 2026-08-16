@@ -22,6 +22,7 @@ from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.asyncio.server import QuicServer
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import QuicConnection
+from aioquic.quic.events import ConnectionTerminated, HandshakeCompleted, QuicEvent
 from nacl.exceptions import BadSignatureError
 from nacl.signing import SigningKey, VerifyKey
 
@@ -264,6 +265,7 @@ class DirectQuicSession:
     reader: asyncio.StreamReader
     writer: asyncio.StreamWriter
     candidate_kind: str
+    reserved_socket: socket.socket
     authenticated: bool = True
 
     async def close(self) -> None:
@@ -277,12 +279,77 @@ class DirectQuicSession:
         self.transport.close()
 
 
+class AttemptQuicProtocol(QuicConnectionProtocol):
+    """Disposable aioquic 1.3.0 state over a shared UDP transport.
+
+    The pinned aioquic protocol normally couples connection and transport
+    lifetimes. This adapter owns explicit connection events and retires only the
+    per-attempt timer/transmit handles, leaving the hub's UDP transport intact.
+    """
+
+    def __init__(self, quic: QuicConnection) -> None:
+        super().__init__(quic)
+        self.connected_event = asyncio.Event()
+        self.terminated_event = asyncio.Event()
+        self.retired = False
+
+    def quic_event_received(self, event: QuicEvent) -> None:
+        if isinstance(event, HandshakeCompleted):
+            self.connected_event.set()
+        elif isinstance(event, ConnectionTerminated):
+            self.terminated_event.set()
+        super().quic_event_received(event)
+
+    async def wait_attempt_connected(self) -> None:
+        connected = asyncio.create_task(self.connected_event.wait())
+        terminated = asyncio.create_task(self.terminated_event.wait())
+        tasks = {connected, terminated}
+        try:
+            done, _pending = await asyncio.wait(
+                tasks, return_when=asyncio.FIRST_COMPLETED
+            )
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+        if terminated in done and not self.connected_event.is_set():
+            raise ConnectionError
+
+    def datagram_received(self, data: bytes, addr: tuple[Any, ...]) -> None:
+        if not self.retired:
+            super().datagram_received(data, addr)
+
+    def transmit(self) -> None:
+        if not self.retired:
+            super().transmit()
+
+    def _handle_timer(self) -> None:
+        if not self.retired:
+            super()._handle_timer()
+
+    def retire(self) -> None:
+        """Cancel every attempt callback without writing or closing shared UDP."""
+        if self.retired:
+            return
+        self.retired = True
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+        self._timer_at = None
+        if self._transmit_task is not None:
+            self._transmit_task.cancel()
+            self._transmit_task = None
+        self.connected_event.set()
+        self.terminated_event.set()
+
+
 class _ReservedClientHub(asyncio.DatagramProtocol):
     """Own one UDP transport while individual QUIC attempts come and go."""
 
     def __init__(self) -> None:
         self.transport: asyncio.DatagramTransport | None = None
-        self.active: QuicConnectionProtocol | None = None
+        self.active: AttemptQuicProtocol | None = None
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         self.transport = transport  # type: ignore[assignment]
@@ -306,6 +373,7 @@ class ReservedSocketQuicClient:
         renter_key: SigningKey,
         authority_check: AuthorityCheck | None,
         family: int,
+        reserved_socket: socket.socket,
     ) -> None:
         self._hub = hub
         self._transport = transport
@@ -314,6 +382,7 @@ class ReservedSocketQuicClient:
         self._renter_key = renter_key
         self._authority_check = authority_check
         self._family = family
+        self._reserved_socket = reserved_socket
         self._closed = False
 
     @classmethod
@@ -336,7 +405,10 @@ class ReservedSocketQuicClient:
         loop = asyncio.get_running_loop()
         hub = _ReservedClientHub()
         transport, _protocol = await loop.create_datagram_endpoint(lambda: hub, sock=reserved_socket)
-        return cls(hub, transport, configuration, ticket, renter_key, authority_check, family)  # type: ignore[arg-type]
+        return cls(
+            hub, transport, configuration, ticket, renter_key, authority_check,
+            family, reserved_socket,
+        )  # type: ignore[arg-type]
 
     async def attempt(self, _socket: socket.socket, candidate: Candidate) -> DirectQuicSession:
         if self._closed:
@@ -349,23 +421,25 @@ class ReservedSocketQuicClient:
         for _ in range(MAX_PUNCH_PACKETS):
             self._transport.sendto(PUNCH_PACKET, destination)
         quic = QuicConnection(configuration=self._configuration)
-        protocol = QuicConnectionProtocol(quic)
+        protocol = AttemptQuicProtocol(quic)
         protocol.connection_made(self._transport)
         self._hub.active = protocol
+        writer: asyncio.StreamWriter | None = None
         try:
             protocol.connect(destination)
-            await protocol.wait_connected()
+            await protocol.wait_attempt_connected()
             reader, writer = await protocol.create_stream()
             await renter_handshake(reader, writer, self._ticket, self._renter_key, self._authority_check)
-            return DirectQuicSession(protocol, self._transport, reader, writer, candidate.kind)
+            return DirectQuicSession(
+                protocol, self._transport, reader, writer, candidate.kind,
+                self._reserved_socket,
+            )
         except BaseException:
+            if writer is not None:
+                writer.close()
             if self._hub.active is protocol:
                 self._hub.active = None
-            waiter = protocol._connected_waiter
-            if waiter is not None:
-                protocol._connected_waiter = None
-                waiter.cancel()
-            protocol.close()
+            protocol.retire()
             raise
 
     def close(self) -> None:
@@ -427,6 +501,10 @@ async def connect_reserved_socket(
 
 Connector = Callable[[socket.socket, Candidate], Awaitable[DirectQuicSession]]
 Fallback = Callable[[], bool | Awaitable[bool]]
+WorkloadHandler = Callable[
+    [asyncio.StreamReader, asyncio.StreamWriter], None | Awaitable[None]
+]
+AuthFailureHandler = Callable[[str], None]
 
 
 @dataclass(frozen=True)
@@ -510,12 +588,87 @@ async def connect_direct_quic_first(
         raise
 
 
+class AuthenticatedHostProtocol(QuicConnectionProtocol):
+    """Gate every inbound stream behind the rendezvous application handshake."""
+
+    def __init__(
+        self,
+        quic: QuicConnection,
+        *,
+        ticket: VerifiedRendezvousTicket,
+        host_key: SigningKey,
+        replay_cache: ReplayCache,
+        authority_check: AuthorityCheck | None,
+        workload_handler: WorkloadHandler,
+        auth_failure_handler: AuthFailureHandler | None,
+    ) -> None:
+        self._auth_ticket = ticket
+        self._auth_host_key = host_key
+        self._auth_replay_cache = replay_cache
+        self._auth_authority_check = authority_check
+        self._workload_handler = workload_handler
+        self._auth_failure_handler = auth_failure_handler
+        self._auth_tasks: set[asyncio.Task[None]] = set()
+        super().__init__(quic, stream_handler=self._start_authentication)
+
+    def _start_authentication(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        task = asyncio.create_task(self._authenticate_then_dispatch(reader, writer))
+        self._auth_tasks.add(task)
+        task.add_done_callback(self._auth_tasks.discard)
+
+    async def _authenticate_then_dispatch(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        try:
+            await host_handshake(
+                reader,
+                writer,
+                self._auth_ticket,
+                self._auth_host_key,
+                self._auth_replay_cache,
+                self._auth_authority_check,
+            )
+            result = self._workload_handler(reader, writer)
+            if asyncio.iscoroutine(result):
+                await result
+        except P2PError as exc:
+            if self._auth_failure_handler is not None:
+                self._auth_failure_handler(exc.code)
+            writer.close()
+            self.close(error_code=0x100, reason_phrase="p2p_direct_auth_failed")
+        except (asyncio.IncompleteReadError, ConnectionError, OSError):
+            if self._auth_failure_handler is not None:
+                self._auth_failure_handler("p2p_direct_auth_failed")
+            writer.close()
+            self.close(error_code=0x100, reason_phrase="p2p_direct_auth_failed")
+        except Exception:
+            if self._auth_failure_handler is not None:
+                self._auth_failure_handler("p2p_direct_workload_handler_failed")
+            writer.close()
+            self.close(error_code=0x101, reason_phrase="p2p_direct_handler_failed")
+
+    def quic_event_received(self, event: QuicEvent) -> None:
+        if isinstance(event, ConnectionTerminated):
+            current = asyncio.current_task()
+            for task in tuple(self._auth_tasks):
+                if task is not current:
+                    task.cancel()
+        super().quic_event_received(event)
+
+
 async def listen_reserved_socket(
     reserved_socket: socket.socket,
     configuration: QuicConfiguration,
-    stream_handler: Callable[[asyncio.StreamReader, asyncio.StreamWriter], None],
+    ticket: VerifiedRendezvousTicket,
+    host_key: SigningKey,
+    replay_cache: ReplayCache,
+    authority_check: AuthorityCheck | None,
+    workload_handler: WorkloadHandler,
+    auth_failure_handler: AuthFailureHandler | None = None,
 ) -> tuple[asyncio.DatagramTransport, QuicServer]:
-    """Run the Host QUIC listener on the discovery socket without rebinding."""
+    """Run a Host listener that never exposes an unauthenticated stream."""
     if configuration.verify_mode is None or configuration.verify_mode == 0:
         raise P2PError("p2p_direct_tls_verification_required")
     if DIRECT_ALPN not in configuration.alpn_protocols:
@@ -523,7 +676,18 @@ async def listen_reserved_socket(
     reserved_socket.setblocking(False)
     loop = asyncio.get_running_loop()
     transport, server = await loop.create_datagram_endpoint(
-        lambda: QuicServer(configuration=configuration, stream_handler=stream_handler),
+        lambda: QuicServer(
+            configuration=configuration,
+            create_protocol=lambda quic, **_kwargs: AuthenticatedHostProtocol(
+                quic,
+                ticket=ticket,
+                host_key=host_key,
+                replay_cache=replay_cache,
+                authority_check=authority_check,
+                workload_handler=workload_handler,
+                auth_failure_handler=auth_failure_handler,
+            ),
+        ),
         sock=reserved_socket,
     )
     return transport, server  # type: ignore[return-value]

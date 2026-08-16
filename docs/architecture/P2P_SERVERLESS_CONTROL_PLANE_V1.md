@@ -112,11 +112,25 @@ separated and binds the protocol version, roles, ticket nonce, `sessionId`,
 cache consumes the ticket/challenge pair until ticket expiry. No workload stream
 is exposed before `READY` is verified.
 
+The Host API does not accept a raw aioquic stream callback. The listener owns the
+verified ticket, Host key, authority check and one replay cache shared by every
+connection and stream for that ticket. It closes the QUIC connection on any
+authentication failure and dispatches to the workload handler only after the
+complete handshake. Sending workload bytes in place of `HELLO` can therefore
+never reach application code.
+
 Only signed HOST and SERVER_REFLEXIVE endpoints are punched or dialled. Attempts
 are bounded per candidate and globally, and preserve type order regardless of
 numeric priority. Lease/fencing authority is checked before each attempt and at
 each handshake transition. Reconnect uses the same path and therefore cannot
 revive an expired ticket or cross a fencing-token rotation.
+
+Sequential client attempts use `AttemptQuicProtocol`, an explicit adapter for the
+pinned `aioquic==1.3.0` lifecycle. Retiring an attempt disables its receive and
+transmit paths and cancels its QUIC timer and queued transmit handle without
+closing the hub-owned UDP transport. Connection waiting uses adapter-owned events,
+not aioquic's private `_connected_waiter`. The next attempt is the only active
+recipient of UDP datagrams.
 
 The Edge tunnel remains intact. `HostTunnelSupervisor.reconcile_after_direct()`
 starts it only after a terminal bounded direct failure and only when the signed
