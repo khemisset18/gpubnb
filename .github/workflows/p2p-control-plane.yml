@@ -4,12 +4,17 @@ on:
   pull_request:
     paths:
       - 'services/control-gateway/src/p2p.rs'
+      - 'services/control-gateway/src/p2p_qualification.rs'
+      - 'services/control-gateway/src/bin/p2p-qualify-*.rs'
+      - 'services/control-gateway/Cargo.toml'
+      - 'services/control-gateway/Cargo.lock'
       - 'services/control-gateway/src/lib.rs'
       - 'agent/gpubnb_agent/p2p_connectivity.py'
       - 'agent/gpubnb_agent/p2p_direct_quic.py'
       - 'agent/gpubnb_agent/host_tunnel.py'
       - 'agent/tests/test_p2p_connectivity.py'
       - 'agent/tests/test_p2p_direct_quic.py'
+      - 'agent/tests/test_p2p_qualification_ticket.py'
       - 'agent/tools/p2p_direct_qualify.py'
       - 'config/p2p/**'
       - 'docs/architecture/P2P_SERVERLESS_CONTROL_PLANE_V1.md'
@@ -52,9 +57,32 @@ jobs:
         working-directory: services/control-gateway
         run: cargo test --locked p2p
 
+      - name: Build qualification-only ticket tools
+        working-directory: services/control-gateway
+        run: cargo build --locked --bin p2p-qualify-ticket --bin p2p-qualify-keygen
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: agent/pyproject.toml
+
+      - name: Install Agent for cross-language ticket verification
+        run: python -m pip install ./agent
+
+      - name: Verify Rust qualification ticket with Agent
+        env:
+          GPUBNB_P2P_QUALIFY_TICKET_BIN: ${{ github.workspace }}/services/control-gateway/target/debug/p2p-qualify-ticket
+          GPUBNB_P2P_QUALIFY_KEYGEN_BIN: ${{ github.workspace }}/services/control-gateway/target/debug/p2p-qualify-keygen
+        run: python -m unittest agent.tests.test_p2p_qualification_ticket -v
+
       - name: Strict P2P library lint
         working-directory: services/control-gateway
         run: cargo clippy --locked --lib -- -D warnings
+
+      - name: Strict qualification tool lint
+        working-directory: services/control-gateway
+        run: cargo clippy --locked --bin p2p-qualify-ticket --bin p2p-qualify-keygen -- -D warnings
 
       - name: Locked release build
         working-directory: services/control-gateway

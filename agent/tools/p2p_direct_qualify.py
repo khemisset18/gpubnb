@@ -39,6 +39,15 @@ def _key(value: Any) -> SigningKey:
     return SigningKey(raw)
 
 
+def _write_ephemeral_public_key(path: Path, signing_key: SigningKey) -> None:
+    public = base58.b58encode(bytes(signing_key.verify_key)) + b"\n"
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(public)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
 def _tls(config: dict[str, Any], role: str) -> QuicConfiguration:
     tls = config.get("tls")
     if not isinstance(tls, dict):
@@ -69,9 +78,11 @@ async def _file_ticket_provider(
         raise ValueError("qualification_rendezvous_invalid")
     output = Path(rendezvous["candidateOutputFile"])
     ticket_path = Path(rendezvous["ticketInputFile"])
-    timeout = float(rendezvous.get("waitTimeoutSeconds", 120))
+    # Qualification-only: keep the already reserved UDP socket alive while humans
+    # exchange candidate files. This does not relax the signed ticket's 120s TTL.
+    timeout = float(rendezvous.get("waitTimeoutSeconds", 600))
     poll = float(rendezvous.get("pollSeconds", 0.25))
-    if not 1 <= timeout <= 120 or not 0.05 <= poll <= 1:
+    if not 1 <= timeout <= 1800 or not 0.05 <= poll <= 1:
         raise ValueError("qualification_rendezvous_timeout_invalid")
     if output.exists() or ticket_path.exists():
         raise ValueError("qualification_rendezvous_stale_file")
@@ -150,9 +161,19 @@ async def _run(config: dict[str, Any]) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Qualify one side of a GPUbnb Direct QUIC session")
     parser.add_argument("--config", required=True, type=Path, help="ACL-protected JSON configuration; never logged")
+    parser.add_argument(
+        "--ephemeral-public-key-output", type=Path,
+        help="Create a Base58 public-only exchange file before discovery",
+    )
     args = parser.parse_args()
     try:
-        result = asyncio.run(_run(_load(args.config)))
+        config = _load(args.config)
+        if args.ephemeral_public_key_output is not None:
+            _write_ephemeral_public_key(
+                args.ephemeral_public_key_output,
+                _key(config.get("ephemeralPrivateKeyBase58")),
+            )
+        result = asyncio.run(_run(config))
     except Exception as exc:
         code = getattr(exc, "code", "QUALIFICATION_FAILED")
         print(json.dumps({"success": False, "result": code}, separators=(",", ":")))

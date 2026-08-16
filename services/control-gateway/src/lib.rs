@@ -5,6 +5,7 @@ pub mod config;
 pub mod distributed_lab;
 pub mod metrics;
 pub mod p2p;
+pub mod p2p_qualification;
 pub mod production_lab;
 pub mod protocol;
 pub mod qualification;
