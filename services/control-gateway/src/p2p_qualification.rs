@@ -47,12 +47,12 @@ pub struct IssueRequest {
 }
 
 pub fn now_ms() -> Result<u64> {
-    Ok(SystemTime::now()
+    SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .context("system clock is before Unix epoch")?
         .as_millis()
         .try_into()
-        .context("system clock value exceeds u64")?)
+        .context("system clock value exceeds u64")
 }
 
 pub fn issue_to_file(request: &IssueRequest, issued_at_ms: u64) -> Result<SignedRendezvousTicket> {
