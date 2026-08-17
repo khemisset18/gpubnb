@@ -8,7 +8,7 @@ from gpubnb_agent import cli
 
 class JobLeaseProtocolTests(unittest.TestCase):
     def test_agent_version_moves_with_the_job_lease_protocol(self):
-        self.assertEqual(gpubnb_agent.__version__, "0.6.0")
+        self.assertEqual(gpubnb_agent.__version__, "0.6.1")
 
     def test_state_update_sends_attempt_and_lease_token_inside_signed_body(self):
         captured = {}
