@@ -14,6 +14,14 @@ if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
     throw 'Windows installer is not a valid PE file (missing MZ header).'
 }
 
+$pyprojectPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'agent\pyproject.toml'
+$pyproject = Get-Content -LiteralPath $pyprojectPath -Raw -ErrorAction Stop
+$versionMatch = [regex]::Match($pyproject, '(?m)^version\s*=\s*"([^"]+)"\s*$')
+if (-not $versionMatch.Success) {
+    throw 'Unable to determine expected Agent version from agent/pyproject.toml.'
+}
+$expectedAgentVersion = $versionMatch.Groups[1].Value
+
 $installDirectory = Join-Path $env:RUNNER_TEMP ("gpubnb-release-smoke-" + [guid]::NewGuid().ToString('N'))
 try {
     $installation = Start-Process -FilePath $installer.FullName -ArgumentList '/S', "/D=$installDirectory" -Wait -PassThru
@@ -36,8 +44,13 @@ try {
     if ($tunnelBytes[0] -ne 0x4D -or $tunnelBytes[1] -ne 0x5A) {
         throw 'Installed Host tunnel sidecar is not a valid Windows PE file.'
     }
-    & $sidecar version
+
+    $installedAgentVersion = (& $sidecar version | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) { throw 'Installed agent version command failed.' }
+    if ($installedAgentVersion -ne $expectedAgentVersion) {
+        throw "Installed Agent version mismatch: expected $expectedAgentVersion, got $installedAgentVersion."
+    }
+
     & $sidecar runtime-check
     if ($LASTEXITCODE -ne 0) { throw 'Installed agent runtime-check failed.' }
 
