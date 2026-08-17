@@ -1,7 +1,11 @@
 import crypto from 'node:crypto';
 import { JobStatus, type Prisma } from '@prisma/client';
 
-export const JOB_LEASE_PROTOCOL_VERSION = '0.5.5';
+// Minimum Agent version qualified for the current fenced job protocol *and* the
+// private-beta Compute/GPU_PROOF runtime. Older 0.6.0 binaries can predate the
+// pinned proof image / pull-timeout fixes while still reporting the same version,
+// so fail closed until a distinctly versioned runtime is installed.
+export const JOB_LEASE_PROTOCOL_VERSION = '0.6.1';
 export const JOB_LEASE_TOKEN_BYTES = 32;
 export const JOB_LEASE_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 
