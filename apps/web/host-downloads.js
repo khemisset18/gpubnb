@@ -61,6 +61,7 @@
     status.textContent = 'Disponible';
     for (const [field, value] of Object.entries({
       version: metadata.version,
+      immutable: metadata.immutableVersion || 'Non publiée',
       published: metadata.publishedAt ? new Date(metadata.publishedAt).toLocaleDateString('fr-FR') : 'Inconnue',
       size: formatBytes(metadata.size),
       checksum: metadata.sha256 || 'Non publiée',
