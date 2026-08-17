@@ -17,7 +17,7 @@ class AgentVersionConsistencyTests(unittest.TestCase):
         )
         self.assertIsNotNone(match, "agent/pyproject.toml has no project version")
         self.assertEqual(match.group(1), gpubnb_agent.__version__)
-        self.assertEqual(gpubnb_agent.__version__, "0.6.0")
+        self.assertEqual(gpubnb_agent.__version__, "0.6.1")
 
 
 if __name__ == "__main__":
