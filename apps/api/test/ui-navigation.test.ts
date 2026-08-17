@@ -57,15 +57,18 @@ test('installer downloads are verified by the Netlify function',async()=>{
   const html=await readFile(path.join(webRoot,'host-install.html'),'utf8');
   const script=await readFile(path.join(webRoot,'host-downloads.js'),'utf8');
   assert.match(html,/host-downloads\.js/);
-  assert.match(html,/GPUbnb-Host-Portable\.exe/);
+  assert.match(html,/gpubnb-host-windows-x64\.exe/);
+  assert.match(html,/data-download-immutable/);
   assert.match(html,/data-download-instructions/);
   assert.match(html,/data-download-availability/);
   assert.doesNotMatch(html,/releases\/download\/host-test-latest/);
   assert.match(script,/\.netlify\/functions\/host-download/);
   assert.match(script,/AbortController/);
+  assert.match(script,/immutable: metadata\.immutableVersion/);
 
   const fn=await readFile(path.join(repoRoot,'netlify/functions/host-download.mjs'),'utf8');
   assert.match(fn,/host-test-latest/);
+  assert.match(fn,/gpubnb-host-windows-x64\.exe/);
   assert.match(fn,/SHA256SUMS\.txt/);
   assert.match(fn,/unsupported_platform/);
 });
