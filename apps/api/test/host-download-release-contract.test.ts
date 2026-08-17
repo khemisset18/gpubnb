@@ -45,3 +45,13 @@ test('Host download visibly exposes immutable release identity and checksum', as
   assert.match(installPage, /data-download-immutable/);
   assert.match(installPage, /data-download-checksum/);
 });
+
+test('Windows release smoke test rejects an installer with the wrong embedded Agent version', async () => {
+  const verifier = await read('scripts/verify-windows-release.ps1');
+
+  assert.match(verifier, /agent\\pyproject\.toml/);
+  assert.match(verifier, /\$expectedAgentVersion = \$versionMatch\.Groups\[1\]\.Value/);
+  assert.match(verifier, /\$installedAgentVersion = \(& \$sidecar version \| Out-String\)\.Trim\(\)/);
+  assert.match(verifier, /\$installedAgentVersion -ne \$expectedAgentVersion/);
+  assert.match(verifier, /Installed Agent version mismatch/);
+});
