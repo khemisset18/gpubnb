@@ -3,6 +3,7 @@ import { sanitizeAccelerators } from './accelerator-telemetry.js';
 import { syncMachineAccelerators } from './accelerator-inventory-store.js';
 import { decideAcceleratorSecurity } from './accelerator-security-policy.js';
 import { enforceAcceleratorSecurityDecision } from './accelerator-security-executor.js';
+import { syncGpuMiningResourcesFromAccelerators } from './mining-resource-inventory.js';
 
 export type AcceleratorHeartbeatContext = {
   machineId: string;
@@ -21,6 +22,9 @@ export async function processAcceleratorHeartbeat(
     context.machineId,
     accelerators,
   );
+
+  await syncGpuMiningResourcesFromAccelerators(tx, context.machineId, accelerators);
+
   const primaryGpu = accelerators.find((item) => item.kind === 'GPU' && item.available)
     ?? accelerators.find((item) => item.kind === 'GPU')
     ?? null;
