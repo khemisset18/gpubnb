@@ -58,11 +58,12 @@ test('terminal idempotence only accepts the same fenced attempt', () => {
   }), false);
 });
 
-test('fenced job protocol is fail-closed for old or malformed agents', () => {
-  assert.equal(supportsJobLeaseProtocol('0.5.4'), false);
-  assert.equal(supportsJobLeaseProtocol('0.5.5'), true);
-  assert.equal(supportsJobLeaseProtocol('0.5.6'), true);
-  assert.equal(supportsJobLeaseProtocol('0.6.0-beta.1'), true);
+test('qualified job protocol is fail-closed for pre-0.6.1 or malformed agents', () => {
+  assert.equal(supportsJobLeaseProtocol('0.5.5'), false);
+  assert.equal(supportsJobLeaseProtocol('0.6.0'), false);
+  assert.equal(supportsJobLeaseProtocol('0.6.1'), true);
+  assert.equal(supportsJobLeaseProtocol('0.6.2'), true);
+  assert.equal(supportsJobLeaseProtocol('0.7.0-beta.1'), true);
   assert.equal(supportsJobLeaseProtocol('garbage'), false);
   assert.equal(supportsJobLeaseProtocol(null), false);
 });
