@@ -3,7 +3,10 @@ from __future__ import annotations
 import unittest
 from unittest.mock import Mock, patch
 
+from nacl.signing import SigningKey
+
 from gpubnb_agent.cli import run_next_job
+from gpubnb_agent.client import agent_request
 from gpubnb_agent.runtime_images import DEFAULT_COMPUTE_IMAGE
 
 
@@ -93,7 +96,7 @@ class GpuProofJobFlowTests(unittest.TestCase):
             self.assertIs(body["workloadProof"], True)
 
         state_bodies = [
-            body for path, method, body in calls
+            body for _path, method, body in calls
             if method == "POST" and isinstance(body, dict) and "status" in body
         ]
         self.assertEqual(
@@ -121,6 +124,43 @@ class GpuProofJobFlowTests(unittest.TestCase):
 
         self.assertTrue(any(event.get("event") == "job_completed" for event in events))
         self.assertFalse(any(event.get("event") == "job_failed" for event in events))
+
+    def test_terminal_request_retries_with_a_fresh_signature_after_lost_response(self) -> None:
+        calls: list[dict[str, object]] = []
+        body = {
+            "machineId": "machine_test",
+            "attemptId": "attempt_test",
+            "leaseToken": "a" * 43,
+            "result": {"gpuDetected": True, "summary": "ok"},
+        }
+
+        class Client:
+            def request(self, path, method="GET", body=None, headers=None, timeout=12):
+                calls.append({"path": path, "method": method, "body": body, "headers": headers})
+                if len(calls) == 1:
+                    raise RuntimeError("API inaccessible: response_lost")
+                return {"id": "job_test", "status": "COMPLETED", "duplicate": True}
+
+        with patch("gpubnb_agent.client.time.sleep"):
+            result = agent_request(
+                Client(),
+                SigningKey.generate(),
+                "machine_test",
+                "/agent/jobs/job_test/complete",
+                "POST",
+                body,
+            )
+
+        self.assertEqual(result["status"], "COMPLETED")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0]["body"], calls[1]["body"])
+        first_headers = calls[0]["headers"]
+        second_headers = calls[1]["headers"]
+        self.assertIsInstance(first_headers, dict)
+        self.assertIsInstance(second_headers, dict)
+        assert isinstance(first_headers, dict) and isinstance(second_headers, dict)
+        self.assertNotEqual(first_headers["x-agent-nonce"], second_headers["x-agent-nonce"])
+        self.assertNotEqual(first_headers["x-agent-signature-v2"], second_headers["x-agent-signature-v2"])
 
 
 if __name__ == "__main__":
