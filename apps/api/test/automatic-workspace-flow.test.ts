@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,9 +52,11 @@ test('marketplace routes the renter through GPU then the registered Compute prep
   assert.match(marketplace,/choose-workspace\.html\?listing=/);
   assert.doesNotMatch(marketplace,/Réserver un Developer Workspace/);
   assert.match(chooserHtml,/Étape 2 sur 2/);
-  assert.match(chooser,/workspaces\.filter\(workspace=>workspace\.compatible\)/);
+  assert.match(chooser,/workspaces\.filter\(workspace=>workspace\.compatible&&workspace\.slug==='compute'\)/);
+  assert.match(chooser,/workspace\.slug!=='compute'/);
   assert.match(chooser,/workspace-sessions/);
   assert.match(chooser,/workspaceSlug:'compute'/);
+  assert.doesNotMatch(chooser,/workspace\/developer/);
   assert.match(chooser,/location\.href='bookings\.html'/);
 });
 
@@ -75,6 +78,12 @@ test('bookings page follows GPU_PROOF and never falls back to the unregistered D
   assert.match(bookings,/workspaceSlug:'compute'/);
   assert.doesNotMatch(bookings,/data-prepare-developer/);
   assert.doesNotMatch(bookings,/workspace\/developer/);
+});
+
+test('private-beta workspace browser scripts parse as valid JavaScript',()=>{
+  for(const file of ['choose-workspace.js','workspace-bookings.js']){
+    execFileSync(process.execPath,['--check',path.join(webRoot,file)],{stdio:'pipe'});
+  }
 });
 
 test('Developer remains internal until its renter route module is explicitly registered',async()=>{
