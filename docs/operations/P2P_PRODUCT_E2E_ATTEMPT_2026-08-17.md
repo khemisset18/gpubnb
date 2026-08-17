@@ -265,4 +265,6 @@ Until that physical evidence is captured, no claim of a fully functioning market
 
 ## Pull-request state
 
+The runtime/software qualification described above applies to commit `78f62043e067cce131659364ebd60081506710d7`. The first documentation-only commit after that runtime head was verified by compare to modify only this qualification document. Later documentation-only heads do not change the qualified runtime bytes.
+
 PR #125 remains stacked on PR #124, open, draft and intentionally unmerged. No PR in the #122-#125 qualification stack was merged as part of this work.
