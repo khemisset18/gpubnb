@@ -1,7 +1,7 @@
 const repository = process.env.GPUBNB_HOST_REPOSITORY || 'khemisset18/gpubnb';
 const channel = process.env.GPUBNB_HOST_RELEASE_CHANNEL || 'host-test-latest';
 const allowed = {
-  windows: { architecture: 'x64', filename: 'gpubnb-host-windows-x64.zip', format: 'ZIP portable' },
+  windows: { architecture: 'x64', filename: 'gpubnb-host-windows-x64.exe', format: 'Installeur Windows' },
   linux: { architecture: 'x64', filename: 'gpubnb-host-linux-x64.deb', format: 'Paquet DEB' },
   macos: { architecture: 'arm64', filename: 'gpubnb-host-macos-arm64.dmg', format: 'Image DMG' },
 };
