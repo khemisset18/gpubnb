@@ -14,6 +14,7 @@ process.env.DEV_PAYMENT_BYPASS = 'false';
 process.env.BETA_TEST_DEV_BYPASS = 'false';
 
 const { reconcileDevelopmentBookings } = await import('../src/dev-booking-reconciler.js');
+const { config } = await import('../src/config.js');
 
 type Call = { area: string; args: Record<string, unknown> };
 
@@ -174,6 +175,37 @@ test('a stale diagnostic result cannot close a booking after a Developer session
   };
   assert.equal(atomicWhere.workspaceSessions.none.machineWorkspace.workspace.slug, 'developer');
   assert.equal(calls.some(call => call.area === 'tx.machine.update'), false);
+});
+
+test('beta payment bypass skips the legacy GPU diagnostic queue', async () => {
+  const previousBeta = config.BETA_TEST_DEV_BYPASS;
+  const previousEscrow = config.ESCROW_PROGRAM_ID;
+  const previousDev = config.DEV_PAYMENT_BYPASS;
+
+  config.BETA_TEST_DEV_BYPASS = 'true';
+  config.ESCROW_PROGRAM_ID = 'NOT_DEPLOYED_YET';
+  config.DEV_PAYMENT_BYPASS = 'false';
+
+  try {
+    const { db, calls } = fakeReconcilerDb();
+    const result = await reconcileDevelopmentBookings(db, new Date('2026-08-17T03:00:00Z'));
+
+    assert.equal(result.queued, 0);
+    assert.equal(
+      calls.filter(call => call.area === 'booking.findMany').length,
+      1,
+      'beta bypass must query funding candidates but skip legacy diagnostic candidates',
+    );
+    assert.equal(
+      calls.some(call => call.area === 'job.findFirst'),
+      false,
+      'beta bypass must not inspect or enqueue legacy GPU_DIAGNOSTIC work',
+    );
+  } finally {
+    config.BETA_TEST_DEV_BYPASS = previousBeta;
+    config.ESCROW_PROGRAM_ID = previousEscrow;
+    config.DEV_PAYMENT_BYPASS = previousDev;
+  }
 });
 
 test('creating Developer cancels only a still-queued beta diagnostic before enqueuing WORKSPACE_PREPARE', async () => {

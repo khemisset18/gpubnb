@@ -122,7 +122,7 @@ test('generic compute start and metrics routes cannot bypass the Developer billi
 
 test('the dev-bypass diagnostic reconciler never touches a booking with a real Developer session', async () => {
   const source = await readFile(new URL('../src/dev-booking-reconciler.ts', import.meta.url), 'utf8');
-  const start = source.indexOf('const readyBookings = await db.booking.findMany({');
+  const start = source.indexOf('const readyBookings = betaTestDevBypassActive() ? [] : await db.booking.findMany({');
   assert.ok(start >= 0);
   const end = source.indexOf('\n  });', start);
   const body = source.slice(start, end).replace(/\s+/g, '');
