@@ -16,6 +16,7 @@ OFFICIAL_DIAGNOSTIC_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpu-di
 OFFICIAL_GPU_PROOF_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpu-proof-workspace@sha256:[a-f0-9]{64}$")
 _IMAGE_PULL_LOCK = threading.Lock()
 PROGRESS_INTERVAL_SECONDS = 5.0
+GPU_PROOF_IMAGE_PULL_TIMEOUT_SECONDS = 1200
 DEVELOPER_HOME_TMPFS = "--tmpfs=/home/coder:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700"
 
 
@@ -258,7 +259,7 @@ def run_gpu_proof_workspace(
 ) -> dict[str, Any]:
     duration = max(30, min(600, int(duration_seconds)))
     container_name = f"gpubnb-proof-{uuid.uuid4().hex[:12]}"
-    _pull_image(image, min(600, duration + 120))
+    _pull_image(image, GPU_PROOF_IMAGE_PULL_TIMEOUT_SECONDS)
     process: subprocess.Popen[str] | None = None
     final: dict[str, Any] | None = None
     try:

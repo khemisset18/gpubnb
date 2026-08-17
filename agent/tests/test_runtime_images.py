@@ -1,6 +1,6 @@
 import unittest
 
-from gpubnb_agent.runtime_images import DEFAULT_DEVELOPER_IMAGE, workspace_image
+from gpubnb_agent.runtime_images import DEFAULT_COMPUTE_IMAGE, DEFAULT_DEVELOPER_IMAGE, workspace_image
 
 
 class RuntimeImageDefaultsTests(unittest.TestCase):
@@ -28,9 +28,19 @@ class RuntimeImageDefaultsTests(unittest.TestCase):
             DEFAULT_DEVELOPER_IMAGE,
         )
 
-    def test_compute_keeps_using_the_configured_diagnostic_image(self):
-        diagnostic = "ghcr.io/khemisset18/gpu-diagnostic@sha256:" + ("b" * 64)
-        self.assertEqual(workspace_image({"diagnosticImage": diagnostic}, "compute"), diagnostic)
+    def test_fresh_host_has_an_official_digest_pinned_compute_image(self):
+        self.assertRegex(
+            DEFAULT_COMPUTE_IMAGE,
+            r"^ghcr\.io/khemisset18/gpu-proof-workspace@sha256:[a-f0-9]{64}$",
+        )
+        self.assertEqual(workspace_image({}, "compute"), DEFAULT_COMPUTE_IMAGE)
+
+    def test_explicit_compute_pin_remains_supported(self):
+        explicit = "ghcr.io/khemisset18/gpu-proof-workspace@sha256:" + ("b" * 64)
+        self.assertEqual(
+            workspace_image({"workspaceImages": {"compute": explicit}}, "compute"),
+            explicit,
+        )
 
 
 if __name__ == "__main__":
