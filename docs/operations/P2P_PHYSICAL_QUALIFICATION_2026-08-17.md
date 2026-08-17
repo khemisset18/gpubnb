@@ -84,9 +84,68 @@ Still to qualify separately:
 
 A `DIRECT_HOST` success across two independent Internet access networks is a valid proof of real direct Internet P2P connectivity, but it must not be described as universal NAT traversal coverage.
 
+## Test 3 — physical host GPU_PROOF runner qualification
+
+### Physical host
+
+- PC A physical GPU: `NVIDIA GeForce GTX 1650`
+- GPU UUID: `GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a`
+- VRAM: 4096 MiB
+- Docker Desktop Linux engine: `29.7.2`
+- NVIDIA container passthrough had already been verified successfully with an NVIDIA CUDA container.
+
+### Official immutable workload image
+
+```text
+ghcr.io/khemisset18/gpu-proof-workspace@sha256:8ac92e956dd7f6a0c55ef6f24165165d16d519e995e0847fd6f42a72ce1ea662
+```
+
+The initial uncached image acquisition exposed a runtime issue: for a 30-second proof, `run_gpu_proof_workspace()` gives `_pull_image()` a 150-second timeout, while the physical first pull on PC A required about 280 seconds. The image was therefore pre-fetched with the Agent image-pull implementation using a larger timeout before executing the workload.
+
+### Actual GPUbnb runner execution
+
+The real `gpubnb_agent.runner.run_gpu_proof_workspace()` path was executed for 30 seconds.
+
+Observed samples:
+
+```text
+elapsedSeconds=5  iterations=1259
+elapsedSeconds=10 iterations=2514
+elapsedSeconds=15 iterations=3743
+elapsedSeconds=20 iterations=4997
+elapsedSeconds=25 iterations=6220
+elapsedSeconds=30 iterations=7441
+```
+
+Final result:
+
+```json
+{
+  "gpuDetected": true,
+  "summary": "Calcul CUDA GPU Proof terminé et nettoyé.",
+  "metrics": {
+    "durationSeconds": 30,
+    "iterations": 7441,
+    "device": "NVIDIA GeForce GTX 1650",
+    "containerCleaned": true
+  }
+}
+```
+
+### Qualification conclusion
+
+This proves that the actual GPUbnb host runner executed a real CUDA workload on the physical GTX 1650 for 30 seconds and verified container cleanup.
+
+Two product-integration defects were exposed by the qualification:
+
+1. `workspaceSlug="compute"` currently falls back to `diagnosticImage` when `workspaceImages.compute` is absent, while `GPU_PROOF` requires the official pinned `gpu-proof-workspace` image.
+2. The first uncached GPU_PROOF image pull can exceed the current 150-second timeout for a 30-second proof workload.
+
+This host-side workload proof is separate from the direct-P2P transport qualification. It does **not** by itself prove that workload bytes traversed the direct P2P QUIC data path.
+
 ## Next product-level qualification
 
-The next milestone is a real end-to-end GPU workload over the qualified session:
+The next milestone is a real end-to-end GPU rental workload over the qualified system:
 
 1. create / acquire a valid reservation and lease;
 2. establish the signed direct P2P session;
@@ -98,4 +157,4 @@ The next milestone is a real end-to-end GPU workload over the qualified session:
 8. test failure/revocation behavior;
 9. repeat on at least one additional network/NAT topology.
 
-Only after that workload-level evidence should the project claim a fully functioning rental flow rather than only a functioning direct transport path.
+Only after that workload-level evidence should the project claim a fully functioning rental flow rather than only a functioning direct transport path plus a separately qualified physical GPU runner.
