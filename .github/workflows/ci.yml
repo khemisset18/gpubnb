@@ -39,35 +39,6 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/api/package-lock.json
-      - name: Refresh lockfiles for security verification
-        shell: bash
-        run: |
-          cd ../..
-          npm install --package-lock-only --ignore-scripts
-          cd apps/api
-          npm install --package-lock-only --ignore-scripts
-      - name: Upload refreshed lockfiles
-        uses: actions/upload-artifact@v4
-        with:
-          name: refreshed-lockfiles
-          path: |
-            package-lock.json
-            apps/api/package-lock.json
-          if-no-files-found: error
-          retention-days: 1
-      - name: Persist refreshed lockfiles
-        if: github.event_name == 'push' && github.ref_name == 'feat/gpu-rental-production-hardening-v1'
-        shell: bash
-        run: |
-          cd ../..
-          if git diff --quiet -- package-lock.json apps/api/package-lock.json; then
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add package-lock.json apps/api/package-lock.json
-          git commit -m 'chore(security): refresh npm lockfiles'
-          git push origin "HEAD:${GITHUB_REF_NAME}"
       - run: npm ci
       - run: npx prisma generate
       - run: npx prisma migrate deploy
@@ -117,13 +88,6 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/api/package-lock.json
-      - name: Refresh lockfiles for security verification
-        shell: bash
-        run: |
-          cd ../..
-          npm install --package-lock-only --ignore-scripts
-          cd apps/api
-          npm install --package-lock-only --ignore-scripts
       - run: npm ci --ignore-scripts
       - name: npm audit (HIGH and CRITICAL)
         id: npm-audit
@@ -217,11 +181,6 @@ jobs:
             ghcr.io/gitleaks/gitleaks:v8.24.3 \
             detect --source=/repo --config=/repo/.gitleaks.toml \
             --redact --verbose --no-banner --no-git
-      - name: Refresh lockfiles for security verification
-        shell: bash
-        run: |
-          npm install --package-lock-only --ignore-scripts
-          npm --prefix apps/api install --package-lock-only --ignore-scripts
       - name: Trivy filesystem report
         uses: aquasecurity/trivy-action@v0.36.0
         with:
