@@ -37,13 +37,16 @@ test('exact GPU rental routes are registered in the real API route graph', async
   assert.match(routes, /createExactGpuListing/);
 });
 
-test('legacy machine-level listing publication is fail-closed', async () => {
+test('legacy machine-level listing publication and booking are fail-closed', async () => {
   const routes = await readFile(path.join(sourceRoot, 'rental-marketplace-routes.ts'), 'utf8');
   assert.match(routes, /request\.method === 'POST'/);
   assert.match(routes, /pathname === '\/listings'/);
   assert.match(routes, /code\(410\)/);
   assert.match(routes, /legacy_listing_publication_disabled/);
   assert.match(routes, /replacement: '\/rental\/listings'/);
+  assert.match(routes, /pathname === '\/bookings'/);
+  assert.match(routes, /ListingResourceMode\.SELECTED_ACCELERATORS/);
+  assert.match(routes, /legacy_listing_not_rentable/);
 });
 
 test('new rental listing path is SELECTED_ACCELERATORS only', async () => {
