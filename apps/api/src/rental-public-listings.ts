@@ -35,20 +35,22 @@ function fresh(value: Date | null, now: Date, staleAfterSeconds: number): boolea
   return Boolean(value && value.getTime() >= now.getTime() - staleAfterSeconds * 1000);
 }
 
-function exactGpuHealthy(
-  accelerator: {
-    status: AcceleratorOperationalStatus;
-    moderationStatus: ModerationStatus;
-    isolationVerified: boolean;
-    verifiedAt: Date | null;
+export type PublicExactGpuHealthInput = {
+  status: AcceleratorOperationalStatus;
+  moderationStatus: ModerationStatus;
+  isolationVerified: boolean;
+  verifiedAt: Date | null;
+  lastSeenAt: Date | null;
+  miningResource: {
+    enabled: boolean;
+    quarantined: boolean;
+    runtimeState: MiningRuntimeState;
     lastSeenAt: Date | null;
-    miningResource: {
-      enabled: boolean;
-      quarantined: boolean;
-      runtimeState: MiningRuntimeState;
-      lastSeenAt: Date | null;
-    } | null;
-  },
+  } | null;
+};
+
+export function isExactGpuPubliclyHealthy(
+  accelerator: PublicExactGpuHealthInput,
   now: Date,
   staleAfterSeconds: number,
 ): boolean {
@@ -139,7 +141,7 @@ function projectListing(row: PublicListingRow, now: Date, staleAfterSeconds: num
   ) return null;
   if (row.accelerators.length !== 1) return null;
   const gpu = row.accelerators[0].accelerator;
-  if (!exactGpuHealthy(gpu, now, staleAfterSeconds)) return null;
+  if (!isExactGpuPubliclyHealthy(gpu, now, staleAfterSeconds)) return null;
 
   const active = row.bookings
     .filter((booking) => booking.endsAt > now)
