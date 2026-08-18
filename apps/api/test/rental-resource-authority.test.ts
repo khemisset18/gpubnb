@@ -213,7 +213,7 @@ describe('rental resource authority', () => {
     assert.equal(redis.leases.size, 0);
   });
 
-  it('rejects overlapping live sessions before creating a fencing war', async () =>
+  it('rejects overlapping live sessions before creating a fencing war', async () => {
     const redis = new FakeRedis();
     const first = selectedSession();
     const second = selectedSession();
