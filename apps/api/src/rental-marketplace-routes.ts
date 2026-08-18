@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
@@ -20,7 +20,7 @@ const listingInput = z.object({
   hourlySol: z.number().positive().max(100),
 }).strict();
 
-function sendListingError(reply: Parameters<Parameters<FastifyInstance['post']>[2]>[1], error: RentalListingError) {
+function sendListingError(reply: FastifyReply, error: RentalListingError) {
   const body = { error: error.code, ...(error.details ? { details: error.details } : {}) };
   switch (error.code) {
     case 'machine_not_found':
