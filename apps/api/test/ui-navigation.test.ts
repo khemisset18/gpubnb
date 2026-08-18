@@ -42,14 +42,19 @@ test('cross-origin GET requests remain simple and preserve error status',async()
   assert.match(portal,/errorState\(/);
 });
 
-test('listing publication requires a machine linked by Host',async()=>{
+test('listing publication requires a server-qualified exact GPU linked by Host',async()=>{
   const html=await readFile(path.join(webRoot,'publish.html'),'utf8');
   const script=await readFile(path.join(webRoot,'publish.js'),'utf8');
   assert.match(html,/Machine reliée/);
+  assert.match(html,/GPU à louer/);
+  assert.match(html,/name="acceleratorId"/);
   assert.match(html,/publishSubmit/);
   assert.doesNotMatch(html,/agentPublicKey/);
   assert.doesNotMatch(script,/api\('\/machines',\{method:'POST'/);
-  assert.match(script,/api\('\/machines\/mine'\)/);
+  assert.match(script,/api\('\/rental\/machines\/manage'\)/);
+  assert.match(script,/\/rental\/machines\/\$\{encodeURIComponent\(machineId\)\}\/gpus/);
+  assert.match(script,/api\('\/rental\/listings'/);
+  assert.match(script,/acceleratorId:gpuSelect\.value/);
   assert.match(script,/Reliez d’abord une machine/);
 });
 
