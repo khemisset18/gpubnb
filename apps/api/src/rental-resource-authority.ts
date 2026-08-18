@@ -17,6 +17,7 @@ import {
   releaseResourceLease,
   type ResourceLeaseSnapshot,
 } from './resource-lease.js';
+import { gpuMiningResourceKey } from './mining-resource-inventory.js';
 
 const LIVE_ALLOCATION_STATUSES: ResourceAllocationStatus[] = [
   ResourceAllocationStatus.HELD,
@@ -86,9 +87,25 @@ type CandidateGpu = {
   resourceId: string;
   hardwareUuid: string;
   vendor: string | null;
+  resourceEnabled: boolean;
   resourceQuarantined: boolean;
   acceleratorModeration: ModerationStatus;
   acceleratorStatus: AcceleratorOperationalStatus;
+};
+
+type AcceleratorForRental = {
+  id: string;
+  hardwareUuid: string;
+  model: string;
+  vendor: string | null;
+  moderationStatus: ModerationStatus;
+  status: AcceleratorOperationalStatus;
+  miningResource: {
+    id: string;
+    kind: 'CPU' | 'GPU';
+    enabled: boolean;
+    quarantined: boolean;
+  } | null;
 };
 
 function decodePriorityLease(
@@ -145,19 +162,76 @@ async function acquireRentalLease(
   return decodePriorityLease(raw, resourceId, holderId, idempotencyKey);
 }
 
-function candidateFromAccelerator(accelerator: {
-  hardwareUuid: string;
-  vendor: string | null;
-  moderationStatus: ModerationStatus;
-  status: AcceleratorOperationalStatus;
-  miningResource: { id: string; kind: 'CPU' | 'GPU'; quarantined: boolean } | null;
-}): CandidateGpu | null {
-  if (!accelerator.miningResource || accelerator.miningResource.kind !== 'GPU') return null;
+async function ensureMiningResourceMapping(
+  db: PrismaClient,
+  machineId: string,
+  accelerator: AcceleratorForRental,
+): Promise<NonNullable<AcceleratorForRental['miningResource']>> {
+  if (accelerator.miningResource) return accelerator.miningResource;
+
+  const resourceKey = gpuMiningResourceKey(machineId, accelerator.hardwareUuid);
+  const resource = await db.miningResource.upsert({
+    where: { machineId_resourceKey: { machineId, resourceKey } },
+    create: {
+      id: crypto.randomUUID(),
+      machineId,
+      kind: 'GPU',
+      resourceKey,
+      displayName: accelerator.model,
+      acceleratorId: accelerator.id,
+      enabled: true,
+      quarantined: false,
+      lastSeenAt: new Date(),
+    },
+    update: {
+      displayName: accelerator.model,
+      lastSeenAt: new Date(),
+    },
+    select: {
+      id: true,
+      acceleratorId: true,
+      kind: true,
+      enabled: true,
+      quarantined: true,
+    },
+  });
+
+  if (resource.kind !== 'GPU') throw new Error('rental_gpu_resource_mapping_conflict');
+  if (resource.acceleratorId && resource.acceleratorId !== accelerator.id) {
+    throw new Error('rental_gpu_resource_mapping_conflict');
+  }
+  if (!resource.acceleratorId) {
+    return db.miningResource.update({
+      where: { id: resource.id },
+      data: { acceleratorId: accelerator.id },
+      select: {
+        id: true,
+        kind: true,
+        enabled: true,
+        quarantined: true,
+      },
+    });
+  }
+
   return {
-    resourceId: accelerator.miningResource.id,
+    id: resource.id,
+    kind: resource.kind,
+    enabled: resource.enabled,
+    quarantined: resource.quarantined,
+  };
+}
+
+function candidateFromAccelerator(
+  accelerator: AcceleratorForRental,
+  miningResource: NonNullable<AcceleratorForRental['miningResource']>,
+): CandidateGpu | null {
+  if (miningResource.kind !== 'GPU') return null;
+  return {
+    resourceId: miningResource.id,
     hardwareUuid: accelerator.hardwareUuid,
     vendor: accelerator.vendor,
-    resourceQuarantined: accelerator.miningResource.quarantined,
+    resourceEnabled: miningResource.enabled,
+    resourceQuarantined: miningResource.quarantined,
     acceleratorModeration: accelerator.moderationStatus,
     acceleratorStatus: accelerator.status,
   };
@@ -168,6 +242,7 @@ function validateCandidates(candidates: CandidateGpu[]): string | undefined {
   for (const candidate of candidates) {
     if (candidate.vendor?.toUpperCase() !== 'NVIDIA') return 'rental_gpu_vendor_not_qualified';
     if (candidate.resourceQuarantined) return 'rental_gpu_resource_quarantined';
+    if (!candidate.resourceEnabled) return 'rental_gpu_resource_disabled';
     if (candidate.acceleratorModeration !== ModerationStatus.CLEAR) return 'rental_gpu_accelerator_not_clear';
     if (!RENTABLE_ACCELERATOR_STATUSES.includes(candidate.acceleratorStatus)) {
       return 'rental_gpu_accelerator_not_rentable';
@@ -198,11 +273,13 @@ export async function buildRentalResourceAuthority(
             select: {
               accelerator: {
                 select: {
+                  id: true,
                   hardwareUuid: true,
+                  model: true,
                   vendor: true,
                   moderationStatus: true,
                   status: true,
-                  miningResource: { select: { id: true, kind: true, quarantined: true } },
+                  miningResource: { select: { id: true, kind: true, enabled: true, quarantined: true } },
                 },
               },
             },
@@ -214,11 +291,13 @@ export async function buildRentalResourceAuthority(
                 select: {
                   accelerators: {
                     select: {
+                      id: true,
                       hardwareUuid: true,
+                      model: true,
                       vendor: true,
                       moderationStatus: true,
                       status: true,
-                      miningResource: { select: { id: true, kind: true, quarantined: true } },
+                      miningResource: { select: { id: true, kind: true, enabled: true, quarantined: true } },
                     },
                   },
                 },
@@ -235,7 +314,7 @@ export async function buildRentalResourceAuthority(
   const ownerByResource = new Map<string, string>();
 
   for (const session of sessions) {
-    let accelerators;
+    let accelerators: AcceleratorForRental[];
     if (session.booking.listing.resourceMode === ListingResourceMode.FULL_MACHINE) {
       const machineLive = session.booking.machineAllocation
         && LIVE_ALLOCATION_STATUSES.includes(session.booking.machineAllocation.status);
@@ -243,10 +322,15 @@ export async function buildRentalResourceAuthority(
     } else {
       accelerators = session.booking.acceleratorAllocations.map((row) => row.accelerator);
     }
-    const candidates = accelerators
-      .map(candidateFromAccelerator)
-      .filter((value): value is CandidateGpu => value !== null)
-      .sort((left, right) => left.resourceId.localeCompare(right.resourceId));
+
+    const candidates: CandidateGpu[] = [];
+    for (const accelerator of accelerators) {
+      const miningResource = await ensureMiningResourceMapping(db, machineId, accelerator);
+      const candidate = candidateFromAccelerator(accelerator, miningResource);
+      if (candidate) candidates.push(candidate);
+    }
+    candidates.sort((left, right) => left.resourceId.localeCompare(right.resourceId));
+
     let blockedReason = validateCandidates(candidates);
     if (!blockedReason && new Set(candidates.map((candidate) => candidate.resourceId)).size !== candidates.length) {
       blockedReason = 'rental_gpu_resource_duplicate';
