@@ -70,3 +70,23 @@ test('renter marketplace and workspace chooser use exact selected GPU routes', a
   assert.match(chooser, /\/rental\/listings\/\$\{encodeURIComponent\(listingId\)\}\/workspaces/);
   assert.match(chooser, /listing\.gpu\.model/);
 });
+
+test('owner machines and listings pages use server-authoritative rental views', async () => {
+  const machines = await readFile(path.join(webRoot, 'machines.html'), 'utf8');
+  const listings = await readFile(path.join(webRoot, 'listings.html'), 'utf8');
+  const owner = await readFile(path.join(webRoot, 'rental-owner.js'), 'utf8');
+
+  assert.match(machines, /rental-owner\.js/);
+  assert.match(machines, /data-rental-machines/);
+  assert.doesNotMatch(machines, /data-machines(?:\s|>)/);
+  assert.match(listings, /rental-owner\.js/);
+  assert.match(listings, /data-rental-listings/);
+  assert.doesNotMatch(listings, /data-listings(?:\s|>)/);
+  assert.match(owner, /rentalRequest\('\/rental\/machines\/manage'\)/);
+  assert.match(owner, /\/rental\/machines\/\$\{encodeURIComponent\(machineId\)\}\/gpus/);
+  assert.match(owner, /rentalRequest\('\/rental\/listings\/manage'\)/);
+  assert.match(owner, /health\.publiclyVisible/);
+  assert.match(owner, /gpu\.resourceRuntimeState/);
+  assert.doesNotMatch(owner, /\/machines\/mine/);
+  assert.doesNotMatch(owner, /\/dashboard/);
+});
