@@ -83,7 +83,7 @@ test('owner machines and listings pages use server-authoritative rental views', 
   assert.match(owner, /\/rental\/machines\/\$\{encodeURIComponent\(machineId\)\}\/gpus/);
   assert.match(owner, /rentalRequest\('\/rental\/listings\/manage'\)/);
   assert.match(owner, /health\.publiclyVisible/);
-  assert.match(owner, /gpu\.resourceRuntimeState/);
+  assert.match(owner, /gpu\?\.resourceRuntimeState/);
   assert.doesNotMatch(owner, /\/machines\/mine/);
   assert.doesNotMatch(owner, /\/dashboard/);
 });
