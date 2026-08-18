@@ -34,6 +34,8 @@ enum ListingStatus {
   ACTIVE
   RESERVED
   HIDDEN_OFFLINE
+  PAUSED
+  ARCHIVED
   SUSPENDED
 }
 
