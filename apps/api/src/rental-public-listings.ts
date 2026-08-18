@@ -140,7 +140,9 @@ function projectListing(row: PublicListingRow, now: Date, staleAfterSeconds: num
     !fresh(row.machine.lastHeartbeatAt, now, staleAfterSeconds)
   ) return null;
   if (row.accelerators.length !== 1) return null;
-  const gpu = row.accelerators[0].accelerator;
+  const selected = row.accelerators.at(0);
+  if (!selected) return null;
+  const gpu = selected.accelerator;
   if (!isExactGpuPubliclyHealthy(gpu, now, staleAfterSeconds)) return null;
 
   const active = row.bookings
@@ -177,8 +179,6 @@ function projectListing(row: PublicListingRow, now: Date, staleAfterSeconds: num
       nvidiaRuntimeAvailable: row.machine.nvidiaRuntimeAvailable,
       operatingSystem: row.machine.operatingSystem,
       virtualizationAvailable: row.machine.virtualizationAvailable,
-      // Backward-compatible capability aliases for workspace analysis. These are
-      // derived from the exact selected accelerator, never the Machine GPU summary.
       gpuModel: gpu.model,
       vramMiB: gpu.vramMiB,
       cudaVersion: gpu.cudaVersion,
