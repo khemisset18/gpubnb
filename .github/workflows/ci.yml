@@ -154,6 +154,9 @@ jobs:
       - run: node --check apps/web/config.js
       - run: node --check apps/web/account.js
       - run: node --check apps/web/workspaces.js
+      - run: node --check apps/web/publish.js
+      - run: node --check apps/web/choose-workspace.js
+      - run: node --check apps/web/rental-owner.js
       - run: node scripts/devnet-doctor.mjs
       - name: Validate Developer Workspace manifest and shell
         run: |
