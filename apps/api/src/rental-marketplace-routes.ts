@@ -11,6 +11,10 @@ import {
   createExactGpuListing,
   listOwnerRentalMachines,
 } from './rental-listing-service.js';
+import {
+  OwnerListingLifecycleError,
+  transitionOwnerExactGpuListing,
+} from './rental-listing-lifecycle.js';
 import { listOwnerExactGpuListings } from './rental-owner-listings.js';
 import {
   getPublicExactGpuListing,
@@ -25,7 +29,10 @@ const listingInput = z.object({
   description: z.string().trim().min(20).max(3000),
   hourlySol: z.number().positive().max(100),
 }).strict();
-
+const listingActionParams = z.object({
+  listingId: z.string().cuid(),
+  action: z.enum(['pause', 'resume', 'archive']),
+});
 const bookingListingInput = z.object({ listingId: z.string().cuid() }).passthrough();
 
 function sendListingError(reply: FastifyReply, error: RentalListingError) {
@@ -41,6 +48,12 @@ function sendListingError(reply: FastifyReply, error: RentalListingError) {
     case 'listing_conflict':
       return reply.code(409).send(body);
   }
+}
+
+function sendLifecycleError(reply: FastifyReply, error: OwnerListingLifecycleError) {
+  const body = { error: error.code, ...(error.details ? { details: error.details } : {}) };
+  if (error.code === 'listing_not_found') return reply.code(404).send(body);
+  return reply.code(409).send(body);
 }
 
 export function registerRentalMarketplaceRoutes(
@@ -108,6 +121,32 @@ export function registerRentalMarketplaceRoutes(
     };
   });
 
+  app.post('/rental/listings/:listingId/actions/:action', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const user = await db.user.findUnique({
+      where: { id: session.userId },
+      select: { canHost: true },
+    });
+    if (!user?.canHost) return reply.code(403).send({ error: 'provider_role_required' });
+    const params = listingActionParams.parse(request.params);
+    try {
+      return await transitionOwnerExactGpuListing(
+        db,
+        session.userId,
+        params.listingId,
+        params.action,
+        new Date(),
+        config.HEARTBEAT_OFFLINE_SECONDS,
+      );
+    } catch (error) {
+      if (error instanceof OwnerListingLifecycleError) return sendLifecycleError(reply, error);
+      throw error;
+    }
+  });
+
   app.get('/rental/machines/manage', async (request, reply) => {
     const session = await requireSession(request, reply, redis);
     if (!session) return;
@@ -116,7 +155,6 @@ export function registerRentalMarketplaceRoutes(
       select: { canHost: true },
     });
     if (!user?.canHost) return reply.code(403).send({ error: 'provider_role_required' });
-
     return {
       machines: await listOwnerRentalMachines(
         db,
@@ -152,7 +190,6 @@ export function registerRentalMarketplaceRoutes(
       select: { canHost: true },
     });
     if (!user?.canHost) return reply.code(403).send({ error: 'provider_role_required' });
-
     const body = listingInput.parse(request.body);
     try {
       const listing = await createExactGpuListing(db, {
