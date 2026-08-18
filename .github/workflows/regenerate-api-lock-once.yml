@@ -7,6 +7,12 @@ on:
     paths:
       - apps/api/package.json
       - .github/workflows/regenerate-api-lock-once.yml
+  pull_request:
+    branches:
+      - fix/beta-gpu-proof-flow
+    paths:
+      - apps/api/package.json
+      - .github/workflows/regenerate-api-lock-once.yml
 
 permissions:
   contents: write
