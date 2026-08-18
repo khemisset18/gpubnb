@@ -203,8 +203,8 @@ export async function createExactGpuListing(
           hourlyLamports,
           status: ListingStatus.ACTIVE,
           resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
-          minimumAccelerators: 1,
-          maximumAccelerators: 1,
+          // SELECTED_ACCELERATORS cardinality is represented by ListingAccelerator
+          // rows. The DB reserves minimum/maximumAccelerators for COMPUTE_POOL only.
           accelerators: { create: { acceleratorId: input.acceleratorId } },
         },
         select: {
