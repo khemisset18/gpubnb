@@ -29,10 +29,21 @@ test('exact GPU rental routes are registered in the real API route graph', async
   const routes = await readFile(path.join(sourceRoot, 'rental-marketplace-routes.ts'), 'utf8');
 
   assert.match(root, /registerRentalMarketplaceRoutes\(app, db, redis\)/);
+  assert.match(routes, /app\.get\('\/rental\/listings'/);
+  assert.match(routes, /app\.get\('\/rental\/listings\/:listingId\/workspaces'/);
   assert.match(routes, /app\.get\('\/rental\/machines\/manage'/);
   assert.match(routes, /app\.get\('\/rental\/machines\/:machineId\/gpus'/);
   assert.match(routes, /app\.post\('\/rental\/listings'/);
   assert.match(routes, /createExactGpuListing/);
+});
+
+test('legacy machine-level listing publication is fail-closed', async () => {
+  const routes = await readFile(path.join(sourceRoot, 'rental-marketplace-routes.ts'), 'utf8');
+  assert.match(routes, /request\.method === 'POST'/);
+  assert.match(routes, /pathname === '\/listings'/);
+  assert.match(routes, /code\(410\)/);
+  assert.match(routes, /legacy_listing_publication_disabled/);
+  assert.match(routes, /replacement: '\/rental\/listings'/);
 });
 
 test('new rental listing path is SELECTED_ACCELERATORS only', async () => {
@@ -43,4 +54,14 @@ test('new rental listing path is SELECTED_ACCELERATORS only', async () => {
   assert.doesNotMatch(service, /maximumAccelerators:\s*1/);
   assert.match(service, /pg_advisory_xact_lock/);
   assert.match(service, /Prisma\.TransactionIsolationLevel\.Serializable/);
+});
+
+test('renter marketplace and workspace chooser use exact selected GPU routes', async () => {
+  const app = await readFile(path.join(webRoot, 'app.js'), 'utf8');
+  const chooser = await readFile(path.join(webRoot, 'choose-workspace.js'), 'utf8');
+  assert.match(app, /jsonFetch\('\/rental\/listings'\)/);
+  assert.match(app, /x\.gpu\.model/);
+  assert.doesNotMatch(app, /remote=await jsonFetch\('\/listings'\)/);
+  assert.match(chooser, /\/rental\/listings\/\$\{encodeURIComponent\(listingId\)\}\/workspaces/);
+  assert.match(chooser, /listing\.gpu\.model/);
 });
