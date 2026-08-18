@@ -40,6 +40,21 @@ const committedBookingStatuses = [
   BookingStatus.DISPUTED,
 ] as const;
 
+const pausableStatuses = new Set<ListingStatus>([
+  ListingStatus.ACTIVE,
+  ListingStatus.RESERVED,
+  ListingStatus.HIDDEN_OFFLINE,
+]);
+
+const archivableStatuses = new Set<ListingStatus>([
+  ListingStatus.DRAFT,
+  ListingStatus.PENDING_GPU_VERIFICATION,
+  ListingStatus.ACTIVE,
+  ListingStatus.RESERVED,
+  ListingStatus.HIDDEN_OFFLINE,
+  ListingStatus.PAUSED,
+]);
+
 const lifecycleSelect = {
   id: true,
   machineId: true,
@@ -120,7 +135,7 @@ function assertTransition(
   }
 
   if (action === 'pause') {
-    if (![ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.HIDDEN_OFFLINE].includes(listing.status)) {
+    if (!pausableStatuses.has(listing.status)) {
       throw new OwnerListingLifecycleError('invalid_listing_transition', { from: listing.status, action });
     }
     return;
@@ -139,7 +154,7 @@ function assertTransition(
     return;
   }
 
-  if (![ListingStatus.DRAFT, ListingStatus.PENDING_GPU_VERIFICATION, ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.HIDDEN_OFFLINE, ListingStatus.PAUSED].includes(listing.status)) {
+  if (!archivableStatuses.has(listing.status)) {
     throw new OwnerListingLifecycleError('invalid_listing_transition', { from: listing.status, action });
   }
   if (hasLiveCommitment(listing)) {
