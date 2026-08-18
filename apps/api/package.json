@@ -37,6 +37,7 @@
   },
   "overrides": {
     "brace-expansion": "5.0.9",
+    "deepmerge-ts": "8.0.0",
     "fast-uri": "3.1.5",
     "fast-json-stringify": {
       "fast-uri": "4.1.2"
