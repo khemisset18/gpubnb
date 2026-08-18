@@ -1,5 +1,4 @@
 import {
-  AcceleratorOperationalStatus,
   ListingResourceMode,
   ListingStatus,
   ModerationStatus,
@@ -8,16 +7,12 @@ import {
   ResourceAllocationStatus,
 } from '@prisma/client';
 
+import { config } from './config.js';
+import { isExactGpuPubliclyHealthy } from './rental-public-listings.js';
 import {
   SchedulerPresenceError,
   assertSchedulerMachinePresence,
 } from './scheduler-presence.js';
-
-const RENTABLE_ACCELERATOR_STATUSES: AcceleratorOperationalStatus[] = [
-  AcceleratorOperationalStatus.AVAILABLE,
-  AcceleratorOperationalStatus.RESERVED,
-  AcceleratorOperationalStatus.RUNNING,
-];
 
 const LIVE_ALLOCATION_STATUSES: ResourceAllocationStatus[] = [
   ResourceAllocationStatus.HELD,
@@ -107,6 +102,17 @@ async function allocateInTransaction(
                   status: true,
                   moderationStatus: true,
                   isolationVerified: true,
+                  verifiedAt: true,
+                  lastSeenAt: true,
+                  miningResource: {
+                    select: {
+                      enabled: true,
+                      quarantined: true,
+                      runtimeState: true,
+                      activeRentalId: true,
+                      lastSeenAt: true,
+                    },
+                  },
                 },
               },
             },
@@ -185,13 +191,13 @@ async function allocateInTransaction(
 
   if (selectedIds.length === 0) throw new ResourceAllocationError('accelerator_count_out_of_range');
 
+  const now = new Date();
   for (const acceleratorId of selectedIds) {
     const accelerator = machineAccelerators.get(acceleratorId);
     if (
       !accelerator ||
-      !RENTABLE_ACCELERATOR_STATUSES.includes(accelerator.status) ||
-      accelerator.moderationStatus !== ModerationStatus.CLEAR ||
-      !accelerator.isolationVerified
+      !isExactGpuPubliclyHealthy(accelerator, now, config.HEARTBEAT_OFFLINE_SECONDS) ||
+      accelerator.miningResource?.activeRentalId
     ) {
       throw new ResourceAllocationError('accelerator_not_rentable');
     }
