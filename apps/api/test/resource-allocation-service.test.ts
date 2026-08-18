@@ -45,6 +45,48 @@ function fullMachineBooking() {
   };
 }
 
+function healthySelectedBooking(overrides: Record<string, unknown> = {}) {
+  const acceleratorId = 'cm000000000000000000009';
+  const recent = new Date();
+  return {
+    acceleratorId,
+    booking: {
+      id: ids.booking,
+      startsAt: new Date(),
+      endsAt: new Date(Date.now() + 3_600_000),
+      machineAllocation: null,
+      acceleratorAllocations: [],
+      listing: {
+        status: 'ACTIVE',
+        resourceMode: 'SELECTED_ACCELERATORS',
+        minimumAccelerators: null,
+        maximumAccelerators: null,
+        machineId: ids.machine,
+        machine: {
+          moderationStatus: 'CLEAR',
+          accelerators: [{
+            id: acceleratorId,
+            status: 'AVAILABLE',
+            moderationStatus: 'CLEAR',
+            isolationVerified: true,
+            verifiedAt: recent,
+            lastSeenAt: recent,
+            miningResource: {
+              enabled: true,
+              quarantined: false,
+              runtimeState: 'IDLE',
+              activeRentalId: null,
+              lastSeenAt: recent,
+            },
+            ...overrides,
+          }],
+        },
+        accelerators: [{ acceleratorId }],
+      },
+    },
+  };
+}
+
 test.afterEach(() => resetSchedulerPresenceForTests());
 
 test('allocateBookingResources creates a MachineAllocation for a FULL_MACHINE listing', async () => {
@@ -87,30 +129,62 @@ test('allocateBookingResources refuses to double-allocate an already-allocated b
   );
 });
 
-test('allocateBookingResources rejects a selected accelerator that is not rentable', async () => {
-  const acceleratorId = 'cm000000000000000000009';
-  const { db } = fakeDb({
-    id: ids.booking,
-    startsAt: new Date(),
-    endsAt: new Date(Date.now() + 3_600_000),
-    machineAllocation: null,
-    acceleratorAllocations: [],
-    listing: {
-      status: 'ACTIVE',
-      resourceMode: 'SELECTED_ACCELERATORS',
-      minimumAccelerators: null,
-      maximumAccelerators: null,
-      machineId: ids.machine,
-      machine: {
-        moderationStatus: 'CLEAR',
-        accelerators: [{ id: acceleratorId, status: 'MAINTENANCE', moderationStatus: 'CLEAR', isolationVerified: true }],
-      },
-      accelerators: [{ acceleratorId }],
-    },
+test('allocateBookingResources allocates the exact verified GPU linked to the listing', async () => {
+  const { acceleratorId, booking } = healthySelectedBooking();
+  const { db, writes } = fakeDb(booking);
+
+  const result = await allocateBookingResources(db as never, {
+    bookingId: ids.booking,
+    buyerId: ids.buyer,
   });
+
+  assert.equal(result.mode, 'SELECTED_ACCELERATORS');
+  assert.deepEqual(result.acceleratorIds, [acceleratorId]);
+  assert.deepEqual(writes, ['advisory_lock', 'acceleratorAllocation.createMany:1']);
+});
+
+test('allocateBookingResources rejects a selected accelerator that is not rentable', async () => {
+  const { acceleratorId, booking } = healthySelectedBooking({ status: 'MAINTENANCE' });
+  const { db } = fakeDb(booking);
 
   await assert.rejects(
     allocateBookingResources(db as never, { bookingId: ids.booking, buyerId: ids.buyer, acceleratorIds: [acceleratorId] }),
+    (error: unknown) => error instanceof ResourceAllocationError && error.code === 'accelerator_not_rentable',
+  );
+});
+
+test('allocation fails closed when the exact GPU MiningResource authority is missing', async () => {
+  const { acceleratorId, booking } = healthySelectedBooking({ miningResource: null });
+  const { db, writes } = fakeDb(booking);
+
+  await assert.rejects(
+    allocateBookingResources(db as never, { bookingId: ids.booking, buyerId: ids.buyer, acceleratorIds: [acceleratorId] }),
+    (error: unknown) => error instanceof ResourceAllocationError && error.code === 'accelerator_not_rentable',
+  );
+  assert.deepEqual(writes, ['advisory_lock']);
+});
+
+test('allocation fails closed when exact GPU authority is stale or already bound to a rental', async () => {
+  const stale = new Date(Date.now() - 3_600_000);
+  const staleCase = healthySelectedBooking({ lastSeenAt: stale });
+  const staleDb = fakeDb(staleCase.booking);
+  await assert.rejects(
+    allocateBookingResources(staleDb.db as never, { bookingId: ids.booking, buyerId: ids.buyer }),
+    (error: unknown) => error instanceof ResourceAllocationError && error.code === 'accelerator_not_rentable',
+  );
+
+  const boundCase = healthySelectedBooking({
+    miningResource: {
+      enabled: true,
+      quarantined: false,
+      runtimeState: 'IDLE',
+      activeRentalId: 'unexpected-existing-rental',
+      lastSeenAt: new Date(),
+    },
+  });
+  const boundDb = fakeDb(boundCase.booking);
+  await assert.rejects(
+    allocateBookingResources(boundDb.db as never, { bookingId: ids.booking, buyerId: ids.buyer }),
     (error: unknown) => error instanceof ResourceAllocationError && error.code === 'accelerator_not_rentable',
   );
 });
