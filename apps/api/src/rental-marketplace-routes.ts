@@ -11,6 +11,7 @@ import {
   createExactGpuListing,
   listOwnerRentalMachines,
 } from './rental-listing-service.js';
+import { listOwnerExactGpuListings } from './rental-owner-listings.js';
 import {
   getPublicExactGpuListing,
   listPublicExactGpuListings,
@@ -47,9 +48,6 @@ export function registerRentalMarketplaceRoutes(
   db: PrismaClient,
   redis: Redis,
 ): void {
-  // Product migration guard. Historical source routes remain readable for old
-  // clients/audit history, but all new publication and booking authority is exact-GPU.
-  // This root hook is registered before the historical routes in server.ts.
   app.addHook('preHandler', async (request, reply) => {
     const pathname = request.url.split('?', 1)[0];
     if (request.method === 'POST' && pathname === '/listings') {
@@ -89,6 +87,24 @@ export function registerRentalMarketplaceRoutes(
     return {
       ...listing,
       workspaces: compatibleWorkspaceChoices(listing.machine),
+    };
+  });
+
+  app.get('/rental/listings/manage', async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const user = await db.user.findUnique({
+      where: { id: session.userId },
+      select: { canHost: true },
+    });
+    if (!user?.canHost) return reply.code(403).send({ error: 'provider_role_required' });
+    return {
+      listings: await listOwnerExactGpuListings(
+        db,
+        session.userId,
+        new Date(),
+        config.HEARTBEAT_OFFLINE_SECONDS,
+      ),
     };
   });
 
