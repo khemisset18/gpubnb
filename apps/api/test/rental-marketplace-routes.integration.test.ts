@@ -3,7 +3,14 @@ import test from 'node:test';
 import Fastify from 'fastify';
 import { ListingResourceMode } from '@prisma/client';
 
-import { registerRentalMarketplaceRoutes } from '../src/rental-marketplace-routes.js';
+process.env.NODE_ENV ??= 'test';
+process.env.DATABASE_URL ??= 'postgresql://postgres:postgres@localhost:5432/gpubnb';
+process.env.REDIS_URL ??= 'redis://localhost:6379';
+process.env.SESSION_SECRET ??= 'test-session-secret-0123456789abcdef';
+process.env.INTERNAL_SERVICE_TOKEN ??= 'test-internal-token-0123456789abcdef';
+process.env.PLATFORM_WALLET ??= '11111111111111111111111111111111';
+
+const { registerRentalMarketplaceRoutes } = await import('../src/rental-marketplace-routes.js');
 
 async function rentalRouteApp(resourceMode: ListingResourceMode | null) {
   const app = Fastify();
