@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import type { PrismaClient } from '@prisma/client';
+import { ListingResourceMode, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
@@ -25,6 +25,8 @@ const listingInput = z.object({
   hourlySol: z.number().positive().max(100),
 }).strict();
 
+const bookingListingInput = z.object({ listingId: z.string().cuid() }).passthrough();
+
 function sendListingError(reply: FastifyReply, error: RentalListingError) {
   const body = { error: error.code, ...(error.details ? { details: error.details } : {}) };
   switch (error.code) {
@@ -45,10 +47,9 @@ export function registerRentalMarketplaceRoutes(
   db: PrismaClient,
   redis: Redis,
 ): void {
-  // Migration guard: the historical machine-level POST /listings route remains in
-  // server.ts for compatibility with old source history, but must not create any
-  // new rental listing. New publication is exact-GPU only through /rental/listings.
-  // This root hook is registered before the historical route is declared.
+  // Product migration guard. Historical source routes remain readable for old
+  // clients/audit history, but all new publication and booking authority is exact-GPU.
+  // This root hook is registered before the historical routes in server.ts.
   app.addHook('preHandler', async (request, reply) => {
     const pathname = request.url.split('?', 1)[0];
     if (request.method === 'POST' && pathname === '/listings') {
@@ -56,6 +57,17 @@ export function registerRentalMarketplaceRoutes(
         error: 'legacy_listing_publication_disabled',
         replacement: '/rental/listings',
       });
+    }
+    if (request.method === 'POST' && pathname === '/bookings') {
+      const parsed = bookingListingInput.safeParse(request.body);
+      if (!parsed.success) return;
+      const listing = await db.gpuListing.findUnique({
+        where: { id: parsed.data.listingId },
+        select: { resourceMode: true },
+      });
+      if (listing && listing.resourceMode !== ListingResourceMode.SELECTED_ACCELERATORS) {
+        return reply.code(409).send({ error: 'legacy_listing_not_rentable' });
+      }
     }
   });
 
