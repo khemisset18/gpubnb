@@ -7,8 +7,8 @@ import {
   ResourceAllocationStatus,
 } from '@prisma/client';
 
-import { config } from './config.js';
 import { isExactGpuPubliclyHealthy } from './rental-public-listings.js';
+import { rentalHeartbeatOfflineSeconds } from './rental-runtime-policy.js';
 import {
   SchedulerPresenceError,
   assertSchedulerMachinePresence,
@@ -192,11 +192,12 @@ async function allocateInTransaction(
   if (selectedIds.length === 0) throw new ResourceAllocationError('accelerator_count_out_of_range');
 
   const now = new Date();
+  const heartbeatStaleAfterSeconds = rentalHeartbeatOfflineSeconds();
   for (const acceleratorId of selectedIds) {
     const accelerator = machineAccelerators.get(acceleratorId);
     if (
       !accelerator ||
-      !isExactGpuPubliclyHealthy(accelerator, now, config.HEARTBEAT_OFFLINE_SECONDS) ||
+      !isExactGpuPubliclyHealthy(accelerator, now, heartbeatStaleAfterSeconds) ||
       accelerator.miningResource?.activeRentalId
     ) {
       throw new ResourceAllocationError('accelerator_not_rentable');
