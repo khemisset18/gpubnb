@@ -58,11 +58,14 @@ const unsafeResourceStates = new Set<MiningRuntimeState>([
   MiningRuntimeState.EMERGENCY_STOPPED,
 ]);
 
+// PAUSED still owns the accelerator identity: pausing an advert must not allow
+// the owner to create a duplicate advert for the same physical GPU.
 const reservableListingStatuses = [
   ListingStatus.PENDING_GPU_VERIFICATION,
   ListingStatus.ACTIVE,
   ListingStatus.RESERVED,
   ListingStatus.HIDDEN_OFFLINE,
+  ListingStatus.PAUSED,
 ];
 
 const liveAllocationStatuses = [
