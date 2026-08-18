@@ -31,6 +31,8 @@ test('exact GPU rental routes are registered in the real API route graph', async
   assert.match(root, /registerRentalMarketplaceRoutes\(app, db, redis\)/);
   assert.match(routes, /app\.get\('\/rental\/listings'/);
   assert.match(routes, /app\.get\('\/rental\/listings\/:listingId\/workspaces'/);
+  assert.match(routes, /app\.get\('\/rental\/listings\/manage'/);
+  assert.match(routes, /listOwnerExactGpuListings/);
   assert.match(routes, /app\.get\('\/rental\/machines\/manage'/);
   assert.match(routes, /app\.get\('\/rental\/machines\/:machineId\/gpus'/);
   assert.match(routes, /app\.post\('\/rental\/listings'/);
