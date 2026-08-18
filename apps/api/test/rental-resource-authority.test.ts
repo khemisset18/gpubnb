@@ -73,7 +73,9 @@ class FakeRedis {
 }
 
 const gpu = (resourceId: string, hardwareUuid: string) => ({
+  id: `accelerator_${resourceId}`,
   hardwareUuid,
+  model: 'NVIDIA Test GPU',
   vendor: 'NVIDIA',
   moderationStatus: ModerationStatus.CLEAR,
   status: AcceleratorOperationalStatus.AVAILABLE,
@@ -157,7 +159,8 @@ describe('rental resource authority', () => {
   it('repairs a missing GPU resource mapping from stable hardware identity', async () => {
     const redis = new FakeRedis();
     const session = selectedSession();
-    session.booking.acceleratorAllocations[0]!.accelerator.miningResource = null;
+    const accelerator = session.booking.acceleratorAllocations[0]!.accelerator;
+    accelerator.miningResource = null;
     let upsertCalls = 0;
     const db = {
       workspaceSession: {
@@ -173,7 +176,7 @@ describe('rental resource authority', () => {
           upsertCalls += 1;
           return {
             id: 'resource_repaired_01',
-            acceleratorId: 'accelerator_00000001',
+            acceleratorId: accelerator.id,
             kind: MiningResourceKind.GPU,
             enabled: true,
             quarantined: false,
@@ -210,7 +213,7 @@ describe('rental resource authority', () => {
     assert.equal(redis.leases.size, 0);
   });
 
-  it('rejects overlapping live sessions before creating a fencing war', async () => {
+  it('rejects overlapping live sessions before creating a fencing war', async () =>
     const redis = new FakeRedis();
     const first = selectedSession();
     const second = selectedSession();
