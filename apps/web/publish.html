@@ -20,31 +20,32 @@
   <main class="publish-page shell">
     <section class="publish-intro">
       <span class="eyebrow"><i></i> Publication authentifiée · Devnet</span>
-      <h1>Publiez votre GPU.</h1>
-      <p>Une annonce doit être reliée à une machine déjà connectée avec GPUbnb Host. Elle devient visible uniquement lorsque la machine est vérifiée et en ligne.</p>
+      <h1>Publiez un GPU précis.</h1>
+      <p>GPUbnb vérifie côté serveur la machine, le GPU physique, son isolation et son autorité de ressource avant d’autoriser une annonce. Une annonce correspond à un seul GPU vérifié.</p>
       <div class="demo-notice"><strong id="accountState">Vérification du compte…</strong><span id="machineState">Chargement des machines reliées…</span></div>
     </section>
     <section class="publish-layout">
       <form id="publishForm" class="publish-form" novalidate>
-        <div class="form-heading"><span>Nouvelle annonce</span><b>1 / 1</b></div>
+        <div class="form-heading"><span>Nouvelle annonce GPU</span><b>GPU vérifié</b></div>
         <div class="field-grid">
           <label class="field field-wide"><span>Machine reliée</span><select name="machineId" required><option value="">Chargement…</option></select></label>
-          <label class="field field-wide"><span>Titre de l’annonce</span><input name="title" required minlength="5" maxlength="120" placeholder="Ex. RTX 4090 optimisée pour LLM"></label>
+          <label class="field field-wide"><span>GPU à louer</span><select name="acceleratorId" required disabled><option value="">Choisissez d’abord une machine</option></select><small id="gpuState">Le serveur vérifiera le GPU exact avant publication.</small></label>
+          <label class="field field-wide"><span>Titre de l’annonce</span><input name="title" required minlength="5" maxlength="120" placeholder="Ex. GTX 1650 · 4 Go · calcul CUDA"></label>
           <label class="field"><span>Prix horaire</span><div class="input-suffix"><input name="hourlySol" type="number" required min="0.000000001" max="100" step="0.000000001" placeholder="0.025"><span>SOL/h</span></div></label>
-          <label class="field field-wide"><span>Description</span><textarea name="description" required minlength="20" maxlength="3000" rows="7" placeholder="Décrivez la machine, les workloads adaptés et les conditions de disponibilité."></textarea><small><output id="descriptionCount">0</output>/3000</small></label>
+          <label class="field field-wide"><span>Description</span><textarea name="description" required minlength="20" maxlength="3000" rows="7" placeholder="Décrivez les workloads adaptés et les conditions de disponibilité. Les caractéristiques matérielles du GPU sont vérifiées automatiquement par GPUbnb Host."></textarea><small><output id="descriptionCount">0</output>/3000</small></label>
         </div>
         <div id="formMessage" class="form-message" role="status" aria-live="polite"></div>
-        <div class="form-actions"><button id="publishSubmit" class="button button-primary button-large" type="submit" disabled>Publier l’annonce</button><button id="resetForm" class="button button-secondary button-large" type="button">Réinitialiser</button></div>
+        <div class="form-actions"><button id="publishSubmit" class="button button-primary button-large" type="submit" disabled>Publier ce GPU</button><button id="resetForm" class="button button-secondary button-large" type="button">Réinitialiser</button></div>
       </form>
       <aside class="local-listings-panel">
-        <div class="panel-heading"><div><span class="eyebrow"><i></i> GPUbnb Host</span><h2>Machine obligatoire</h2></div></div>
-        <p>Installez GPUbnb Host, créez un code de liaison puis attendez le premier heartbeat signé avant de publier.</p>
-        <p>Une machine hors ligne peut recevoir une annonce en attente, mais l’annonce reste masquée jusqu’au retour d’un heartbeat valide.</p>
+        <div class="panel-heading"><div><span class="eyebrow"><i></i> Contrôle GPUbnb</span><h2>Publication fail-closed</h2></div></div>
+        <p>Le navigateur ne décide pas qu’un GPU est prêt. L’API exige un heartbeat récent, un diagnostic CUDA valide, une isolation vérifiée et une ressource GPU cohérente avant publication.</p>
+        <p>Un GPU déjà réservé, déjà publié, en quarantaine ou avec une autorité de ressource incomplète ne peut pas recevoir une nouvelle annonce.</p>
         <a class="button button-primary" href="host-install.html">Installer et relier Host</a>
         <a class="button button-secondary" href="machines.html">Vérifier mes machines</a>
       </aside>
     </section>
   </main>
-  <footer><div class="shell footer-inner"><a class="brand" href="index.html"><span class="brand-mark">G</span><span>GPUbnb</span></a><p>Publication liée au compte et vérifiée par agent.</p><span>Devnet · Mainnet désactivé</span></div></footer>
+  <footer><div class="shell footer-inner"><a class="brand" href="index.html"><span class="brand-mark">G</span><span>GPUbnb</span></a><p>Publication liée au compte et au GPU physique vérifié.</p><span>Devnet · Mainnet désactivé</span></div></footer>
 </body>
 </html>
