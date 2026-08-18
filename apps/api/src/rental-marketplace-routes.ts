@@ -11,6 +11,11 @@ import {
   createExactGpuListing,
   listOwnerRentalMachines,
 } from './rental-listing-service.js';
+import {
+  getPublicExactGpuListing,
+  listPublicExactGpuListings,
+} from './rental-public-listings.js';
+import { compatibleWorkspaceChoices } from './machine-workspace-catalog.js';
 
 const listingInput = z.object({
   machineId: z.string().cuid(),
@@ -40,6 +45,41 @@ export function registerRentalMarketplaceRoutes(
   db: PrismaClient,
   redis: Redis,
 ): void {
+  // Migration guard: the historical machine-level POST /listings route remains in
+  // server.ts for compatibility with old source history, but must not create any
+  // new rental listing. New publication is exact-GPU only through /rental/listings.
+  // This root hook is registered before the historical route is declared.
+  app.addHook('preHandler', async (request, reply) => {
+    const pathname = request.url.split('?', 1)[0];
+    if (request.method === 'POST' && pathname === '/listings') {
+      return reply.code(410).send({
+        error: 'legacy_listing_publication_disabled',
+        replacement: '/rental/listings',
+      });
+    }
+  });
+
+  app.get('/rental/listings', async () => listPublicExactGpuListings(
+    db,
+    new Date(),
+    config.HEARTBEAT_OFFLINE_SECONDS,
+  ));
+
+  app.get('/rental/listings/:listingId/workspaces', async (request, reply) => {
+    const { listingId } = z.object({ listingId: z.string().cuid() }).parse(request.params);
+    const listing = await getPublicExactGpuListing(
+      db,
+      listingId,
+      new Date(),
+      config.HEARTBEAT_OFFLINE_SECONDS,
+    );
+    if (!listing) return reply.code(404).send({ error: 'listing_unavailable' });
+    return {
+      ...listing,
+      workspaces: compatibleWorkspaceChoices(listing.machine),
+    };
+  });
+
   app.get('/rental/machines/manage', async (request, reply) => {
     const session = await requireSession(request, reply, redis);
     if (!session) return;
