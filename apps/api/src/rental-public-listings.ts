@@ -6,6 +6,7 @@ import {
   MachineConnectivity,
   MiningRuntimeState,
   ModerationStatus,
+  Prisma,
   type PrismaClient,
 } from '@prisma/client';
 
@@ -120,18 +121,16 @@ const publicListingSelect = {
     },
   },
   bookings: {
-    where: {
-      status: { in: liveBookingStatuses },
-    },
+    where: { status: { in: liveBookingStatuses } },
     select: { status: true, startsAt: true, endsAt: true },
-    orderBy: { endsAt: 'desc' as const },
+    orderBy: { endsAt: 'desc' },
     take: 20,
   },
-} as const;
+} satisfies Prisma.GpuListingSelect;
 
-type PublicListingRow = Awaited<ReturnType<PrismaClient['gpuListing']['findFirst']>>;
+type PublicListingRow = Prisma.GpuListingGetPayload<{ select: typeof publicListingSelect }>;
 
-function projectListing(row: any, now: Date, staleAfterSeconds: number) {
+function projectListing(row: PublicListingRow, now: Date, staleAfterSeconds: number) {
   if (row.resourceMode !== ListingResourceMode.SELECTED_ACCELERATORS) return null;
   if (
     row.machine.connectivity !== MachineConnectivity.ONLINE ||
@@ -143,13 +142,13 @@ function projectListing(row: any, now: Date, staleAfterSeconds: number) {
   if (!exactGpuHealthy(gpu, now, staleAfterSeconds)) return null;
 
   const active = row.bookings
-    .filter((booking: { startsAt: Date; endsAt: Date }) => booking.endsAt > now)
-    .sort((a: { endsAt: Date }, b: { endsAt: Date }) => b.endsAt.getTime() - a.endsAt.getTime())[0];
+    .filter((booking) => booking.endsAt > now)
+    .sort((a, b) => b.endsAt.getTime() - a.endsAt.getTime())[0];
   const availability = !active
-    ? { state: 'AVAILABLE', label: 'Disponible', availableAt: null }
+    ? { state: 'AVAILABLE' as const, label: 'Disponible', availableAt: null }
     : active.status === BookingStatus.ACTIVE
-      ? { state: 'WORKING', label: 'En travail', availableAt: active.endsAt }
-      : { state: 'RENTED', label: 'En location', availableAt: active.endsAt };
+      ? { state: 'WORKING' as const, label: 'En travail', availableAt: active.endsAt }
+      : { state: 'RENTED' as const, label: 'En location', availableAt: active.endsAt };
 
   return {
     id: row.id,
@@ -176,8 +175,8 @@ function projectListing(row: any, now: Date, staleAfterSeconds: number) {
       nvidiaRuntimeAvailable: row.machine.nvidiaRuntimeAvailable,
       operatingSystem: row.machine.operatingSystem,
       virtualizationAvailable: row.machine.virtualizationAvailable,
-      // Backward-compatible capability aliases for UI/workspace analysis. These
-      // are derived from the exact selected accelerator, never the Machine GPU summary.
+      // Backward-compatible capability aliases for workspace analysis. These are
+      // derived from the exact selected accelerator, never the Machine GPU summary.
       gpuModel: gpu.model,
       vramMiB: gpu.vramMiB,
       cudaVersion: gpu.cudaVersion,
