@@ -5,8 +5,8 @@ import {
   MiningResourceKind,
   MiningRuntimeState,
   ModerationStatus,
+  Prisma,
   ResourceAllocationStatus,
-  type PrismaClient,
 } from '@prisma/client';
 
 export type RentalGpuBlockingReason =
@@ -47,6 +47,8 @@ export type RentalGpuReadiness = {
   publishable: boolean;
   blockingReason: RentalGpuBlockingReason | null;
 };
+
+type RentalGpuDb = Pick<Prisma.TransactionClient, 'machine'>;
 
 const unsafeResourceStates = new Set<MiningRuntimeState>([
   MiningRuntimeState.PREEMPTING,
@@ -127,7 +129,7 @@ export function computeRentalGpuReadiness(
 }
 
 export async function listOwnerRentalGpus(
-  db: PrismaClient,
+  db: RentalGpuDb,
   machineId: string,
   ownerId: string,
   now: Date,
@@ -221,7 +223,7 @@ export async function listOwnerRentalGpus(
 }
 
 export async function requirePublishableRentalGpu(
-  db: PrismaClient,
+  db: RentalGpuDb,
   machineId: string,
   ownerId: string,
   acceleratorId: string,
