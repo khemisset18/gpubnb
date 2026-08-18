@@ -80,6 +80,7 @@ const gpu = (resourceId: string, hardwareUuid: string) => ({
   miningResource: {
     id: resourceId,
     kind: MiningResourceKind.GPU,
+    enabled: true,
     quarantined: false,
   },
 });
@@ -151,6 +152,62 @@ describe('rental resource authority', () => {
       authority.sessions[0]!.resources.map((resource) => resource.resourceId),
       ['resource_00000001', 'resource_00000002'],
     );
+  });
+
+  it('repairs a missing GPU resource mapping from stable hardware identity', async () => {
+    const redis = new FakeRedis();
+    const session = selectedSession();
+    session.booking.acceleratorAllocations[0]!.accelerator.miningResource = null;
+    let upsertCalls = 0;
+    const db = {
+      workspaceSession: {
+        findMany: async () => [session],
+        findFirst: async () => ({
+          id: 'session_00000001',
+          status: WorkspaceSessionStatus.STOPPING,
+          expiresAt: new Date(Date.now() + 60_000),
+        }),
+      },
+      miningResource: {
+        upsert: async () => {
+          upsertCalls += 1;
+          return {
+            id: 'resource_repaired_01',
+            acceleratorId: 'accelerator_00000001',
+            kind: MiningResourceKind.GPU,
+            enabled: true,
+            quarantined: false,
+          };
+        },
+        update: async () => ({
+          id: 'resource_repaired_01',
+          kind: MiningResourceKind.GPU,
+          enabled: true,
+          quarantined: false,
+        }),
+      },
+    } as unknown as PrismaClient;
+
+    const authority = await buildRentalResourceAuthority(db, redis as unknown as Redis, 'machine_00000001');
+    assert.equal(upsertCalls, 1);
+    assert.deepEqual(
+      authority.sessions[0]!.resources.map((resource) => resource.resourceId),
+      ['resource_repaired_01'],
+    );
+  });
+
+  it('fails closed when an existing GPU resource is disabled', async () => {
+    const redis = new FakeRedis();
+    const session = selectedSession();
+    session.booking.acceleratorAllocations[0]!.accelerator.miningResource!.enabled = false;
+    const authority = await buildRentalResourceAuthority(
+      databaseWithSessions([session]),
+      redis as unknown as Redis,
+      'machine_00000001',
+    );
+    assert.equal(authority.sessions[0]!.blockedReason, 'rental_gpu_resource_disabled');
+    assert.equal(authority.sessions[0]!.resources.length, 0);
+    assert.equal(redis.leases.size, 0);
   });
 
   it('rejects overlapping live sessions before creating a fencing war', async () => {
