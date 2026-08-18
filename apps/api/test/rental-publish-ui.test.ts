@@ -38,9 +38,9 @@ test('exact GPU rental routes are registered in the real API route graph', async
 test('new rental listing path is SELECTED_ACCELERATORS only', async () => {
   const service = await readFile(path.join(sourceRoot, 'rental-listing-service.ts'), 'utf8');
   assert.match(service, /ListingResourceMode\.SELECTED_ACCELERATORS/);
-  assert.match(service, /minimumAccelerators: 1/);
-  assert.match(service, /maximumAccelerators: 1/);
   assert.match(service, /accelerators: \{ create: \{ acceleratorId: input\.acceleratorId \} \}/);
+  assert.doesNotMatch(service, /minimumAccelerators:\s*1/);
+  assert.doesNotMatch(service, /maximumAccelerators:\s*1/);
   assert.match(service, /pg_advisory_xact_lock/);
   assert.match(service, /Prisma\.TransactionIsolationLevel\.Serializable/);
 });
