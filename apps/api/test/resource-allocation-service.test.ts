@@ -26,9 +26,10 @@ function fakeDb(booking: unknown) {
   return { db, writes };
 }
 
-function fullMachineBooking() {
+function fullMachineBooking(overrides: Record<string, unknown> = {}) {
   return {
     id: ids.booking,
+    status: 'AWAITING_DEPOSIT',
     startsAt: new Date(),
     endsAt: new Date(Date.now() + 3_600_000),
     machineAllocation: null,
@@ -42,20 +43,23 @@ function fullMachineBooking() {
       machine: { moderationStatus: 'CLEAR', accelerators: [] },
       accelerators: [],
     },
+    ...overrides,
   };
 }
 
-function healthySelectedBooking(overrides: Record<string, unknown> = {}) {
+function healthySelectedBooking(overrides: Record<string, unknown> = {}, bookingOverrides: Record<string, unknown> = {}) {
   const acceleratorId = 'cm000000000000000000009';
   const recent = new Date();
   return {
     acceleratorId,
     booking: {
       id: ids.booking,
+      status: 'AWAITING_DEPOSIT',
       startsAt: new Date(),
       endsAt: new Date(Date.now() + 3_600_000),
       machineAllocation: null,
       acceleratorAllocations: [],
+      ...bookingOverrides,
       listing: {
         status: 'ACTIVE',
         resourceMode: 'SELECTED_ACCELERATORS',
@@ -187,4 +191,26 @@ test('allocation fails closed when exact GPU authority is stale or already bound
     allocateBookingResources(boundDb.db as never, { bookingId: ids.booking, buyerId: ids.buyer }),
     (error: unknown) => error instanceof ResourceAllocationError && error.code === 'accelerator_not_rentable',
   );
+});
+
+// Regression: a stale/delayed allocation attempt racing a booking that has since moved
+// on (most concretely, one the orphaned-deposit reconciler already cancelled for having
+// no allocation - see dev-booking-reconciler.ts) must never be allowed to create a live
+// resource lock for it. Covers both product paths since either could carry a
+// late-arriving retry.
+test('allocateBookingResources never allocates a resource for a booking that is no longer AWAITING_DEPOSIT', async () => {
+  const { db: fullMachineDb, writes: fullMachineWrites } = fakeDb(fullMachineBooking({ status: 'CANCELLED' }));
+  await assert.rejects(
+    allocateBookingResources(fullMachineDb as never, { bookingId: ids.booking, buyerId: ids.buyer }),
+    (error: unknown) => error instanceof ResourceAllocationError && error.code === 'booking_not_awaiting_deposit',
+  );
+  assert.deepEqual(fullMachineWrites, [], 'no advisory lock or allocation write may happen before the booking-state check');
+
+  const { booking } = healthySelectedBooking({}, { status: 'CANCELLED' });
+  const { db: selectedDb, writes: selectedWrites } = fakeDb(booking);
+  await assert.rejects(
+    allocateBookingResources(selectedDb as never, { bookingId: ids.booking, buyerId: ids.buyer }),
+    (error: unknown) => error instanceof ResourceAllocationError && error.code === 'booking_not_awaiting_deposit',
+  );
+  assert.deepEqual(selectedWrites, []);
 });

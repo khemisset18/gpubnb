@@ -1,4 +1,5 @@
 import {
+  BookingStatus,
   ListingResourceMode,
   ListingStatus,
   ModerationStatus,
@@ -24,6 +25,7 @@ export class ResourceAllocationError extends Error {
   constructor(
     public readonly code:
       | 'booking_not_found'
+      | 'booking_not_awaiting_deposit'
       | 'listing_not_available'
       | 'invalid_booking_period'
       | 'allocation_already_exists'
@@ -124,6 +126,16 @@ async function allocateInTransaction(
   });
 
   if (!booking) throw new ResourceAllocationError('booking_not_found');
+  // A booking only ever gets its first allocation attempt from AWAITING_DEPOSIT (see
+  // POST /bookings in server.ts). Anything else reaching here is a stale/delayed
+  // request racing a booking that has since moved on - most concretely, an
+  // AWAITING_DEPOSIT booking the orphaned-deposit reconciler already cancelled for
+  // having no allocation (dev-booking-reconciler.ts). Without this check a
+  // late-arriving allocation call would silently create a live resource lock for an
+  // already-CANCELLED booking.
+  if (booking.status !== BookingStatus.AWAITING_DEPOSIT) {
+    throw new ResourceAllocationError('booking_not_awaiting_deposit');
+  }
   if (booking.endsAt <= booking.startsAt) throw new ResourceAllocationError('invalid_booking_period');
   if (booking.machineAllocation || booking.acceleratorAllocations.length > 0) {
     throw new ResourceAllocationError('allocation_already_exists');
