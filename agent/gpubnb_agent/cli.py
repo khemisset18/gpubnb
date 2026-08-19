@@ -19,6 +19,7 @@ from typing import Any, Callable
 
 from . import __version__
 from .client import ApiClient, agent_request, heartbeat
+from .gpu_rental_preemption import parse_rental_authority_sessions, resolve_session_resources
 from .runner import (
     cleanup_workspace,
     gpu_proof_command,
@@ -468,6 +469,21 @@ def run_next_job(
             update_job(api, key, machine_id, job_id, attempt_id, lease_token, "RUNNING")
             if not isinstance(session_value := job.get("workspaceSession"), dict) or not isinstance(session_value.get("id"), str):
                 raise RuntimeError("gpu_proof_session_missing")
+            session_id = session_value["id"]
+            # Resolve the exact hardware UUID the rental resource authority leased
+            # for this session before touching Docker. GPU_PROOF is a renter-billed
+            # workload: it must never guess a fixed device index (see runner.py's
+            # gpu_proof_command). This fails closed - rental_resource_authority_missing_for_session,
+            # a blockedReason such as rental_gpu_resource_mapping_missing, or an
+            # empty/ambiguous resource set all abort the job before any container runs.
+            authority_payload = agent_request(
+                api, key, machine_id, f"/agent/mining/{machine_id}/rental-authority",
+            )
+            authority = parse_rental_authority_sessions(authority_payload)
+            specs = resolve_session_resources(authority, session_id)
+            if len(specs) != 1:
+                raise RuntimeError("gpu_proof_requires_exactly_one_accelerator")
+            gpu_uuid = specs[0].hardware_uuid
             metric_counter = 0
             previous_elapsed = 0
 
@@ -490,6 +506,7 @@ def run_next_job(
             result = run_gpu_proof_workspace(
                 image,
                 int(parameters.get("durationSeconds", 60)),
+                gpu_uuid,
                 publish_sample,
             )
         elif job.get("type") == "WORKSPACE_PREPARE":

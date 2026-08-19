@@ -17,10 +17,9 @@ from .gpu_rental_preemption import (
     RentalPreemptionSupervisor,
     RentalResourceSpec,
     install_rental_mining_guard,
-    parse_rental_resource,
+    parse_rental_authority_sessions,
+    resolve_session_resources,
 )
-
-RENTAL_AUTHORITY_PROTOCOL_VERSION = 1
 
 
 class GatewaySupervisor(strict_http.GatewaySupervisor):
@@ -42,8 +41,7 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
             self._rental_authority = {}
             self._report_error(exc)
             return
-        protocol_version = payload.get("protocolVersion")
-        if protocol_version is None:
+        if payload.get("protocolVersion") is None:
             # Older API deployments (and the historical gateway contract) have no
             # rental-authority protocol at all. Missing protocol is therefore an
             # explicit compatibility signal, not permission to infer ownership.
@@ -51,51 +49,16 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
             self._rental_authority_available = False
             self._rental_authority = {}
             return
-        if protocol_version != RENTAL_AUTHORITY_PROTOCOL_VERSION:
-            # Once a server advertises this protocol, an unexpected version is a
-            # real contract violation and must fail closed rather than downgrade.
-            raise RuntimeError("rental_resource_authority_protocol_invalid")
-        raw_sessions = payload.get("sessions")
-        if not isinstance(raw_sessions, list) or len(raw_sessions) > 32:
-            raise RuntimeError("rental_resource_authority_sessions_invalid")
-        authority: dict[str, dict[str, Any]] = {}
-        resource_owners: dict[str, str] = {}
-        for raw in raw_sessions:
-            if not isinstance(raw, dict):
-                raise RuntimeError("rental_resource_authority_session_invalid")
-            session_id = str(raw.get("sessionId") or "")
-            if not session_id or session_id in authority:
-                raise RuntimeError("rental_resource_authority_session_duplicate")
-            resources = raw.get("resources")
-            if not isinstance(resources, list) or len(resources) > 16:
-                raise RuntimeError("rental_resource_authority_resources_invalid")
-            parsed = [parse_rental_resource(session_id, resource) for resource in resources]
-            for spec in parsed:
-                previous = resource_owners.get(spec.resource_id)
-                if previous is not None and previous != session_id:
-                    raise RuntimeError("rental_resource_authority_overlap")
-                resource_owners[spec.resource_id] = session_id
-            authority[session_id] = {
-                "status": str(raw.get("status") or ""),
-                "blockedReason": str(raw.get("blockedReason") or ""),
-                "resources": parsed,
-            }
+        # parse_rental_authority_sessions fails closed (raises) on an unexpected
+        # protocol version or any structural violation - a real contract breach
+        # once the server advertises this protocol, not a downgrade signal.
+        self._rental_authority = parse_rental_authority_sessions(payload)
         self._rental_authority_available = True
-        self._rental_authority = authority
 
     def _session_specs(self, session_id: str) -> list[RentalResourceSpec] | None:
         if not self._rental_authority_available:
             return None
-        entry = self._rental_authority.get(session_id)
-        if entry is None:
-            raise RuntimeError("rental_resource_authority_missing_for_session")
-        blocked = str(entry.get("blockedReason") or "")
-        if blocked:
-            raise RuntimeError(blocked)
-        specs = entry.get("resources")
-        if not isinstance(specs, list) or not specs:
-            raise RuntimeError("rental_resource_authority_empty")
-        return list(specs)
+        return resolve_session_resources(self._rental_authority, session_id)
 
     def _reconcile_sessions(self) -> None:
         self._refresh_rental_authority()

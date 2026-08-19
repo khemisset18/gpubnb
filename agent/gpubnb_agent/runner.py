@@ -14,6 +14,10 @@ from .platform_info import gpu_inventory
 PINNED_IMAGE = re.compile(r"^[a-z0-9._/-]+@sha256:[a-f0-9]{64}$")
 OFFICIAL_DIAGNOSTIC_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpu-diagnostic@sha256:[a-f0-9]{64}$")
 OFFICIAL_GPU_PROOF_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpu-proof-workspace@sha256:[a-f0-9]{64}$")
+# Mirrors gpu_resource_supervisor.SAFE_GPU_ID. Duplicated (not imported) to avoid a
+# circular import: gpu_resource_supervisor -> execution_control -> workspace_gateway
+# -> runner.
+SAFE_GPU_ID = re.compile(r"^[A-Za-z0-9_.:-]{8,200}$")
 _IMAGE_PULL_LOCK = threading.Lock()
 PROGRESS_INTERVAL_SECONDS = 5.0
 GPU_PROOF_IMAGE_PULL_TIMEOUT_SECONDS = 1200
@@ -238,16 +242,23 @@ def run_gpu_diagnostic(image: str, timeout_seconds: int) -> dict[str, Any]:
     return report
 
 
-def gpu_proof_command(image: str, duration_seconds: int, container_name: str) -> list[str]:
+def gpu_proof_command(image: str, duration_seconds: int, container_name: str, gpu_uuid: str) -> list[str]:
     if not OFFICIAL_GPU_PROOF_IMAGE.fullmatch(image):
         raise RuntimeError("gpu_proof_image_not_official_or_pinned")
+    # gpu_uuid must be the exact hardware UUID the rental resource authority leased
+    # for this session (see resolve_session_gpu_uuids). A renter-billed GPU_PROOF
+    # workload must never fall back to a fixed Docker device index: on a multi-GPU
+    # host that would silently attach whichever physical GPU happens to be index 0,
+    # regardless of which accelerator the renter actually booked and paid for.
+    if not SAFE_GPU_ID.fullmatch(gpu_uuid):
+        raise RuntimeError("gpu_proof_invalid_target_gpu")
     duration = max(30, min(600, int(duration_seconds)))
     return [
         "docker", "run", "--rm", "--name", container_name,
         "--network=none", "--read-only", "--cap-drop=ALL",
         "--security-opt=no-new-privileges", "--pids-limit=64",
         "--memory=512m", "--cpus=1", "--tmpfs=/tmp:rw,noexec,nosuid,size=16m",
-        "--gpus=device=0", "--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility",
+        f"--gpus=device={gpu_uuid}", "--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility",
         image, "--duration-seconds", str(duration),
     ]
 
@@ -255,6 +266,7 @@ def gpu_proof_command(image: str, duration_seconds: int, container_name: str) ->
 def run_gpu_proof_workspace(
     image: str,
     duration_seconds: int,
+    gpu_uuid: str,
     on_sample: Callable[[dict[str, int]], None] | None = None,
 ) -> dict[str, Any]:
     duration = max(30, min(600, int(duration_seconds)))
@@ -264,7 +276,7 @@ def run_gpu_proof_workspace(
     final: dict[str, Any] | None = None
     try:
         process = subprocess.Popen(
-            gpu_proof_command(image, duration, container_name),
+            gpu_proof_command(image, duration, container_name, gpu_uuid),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=False,
         )
         if process.stdout is None:
