@@ -60,7 +60,7 @@ async function api(path,options={}){
 }
 function show(text,error=false){message.textContent=text;message.className=`form-message ${error?'error':'success'}`}
 function value(name){return String(form.elements[name].value||'').trim()}
-function updateSubmitReady(){submitButton.disabled=!(machineSelect.value&&gpuSelect.value)}
+function updateSubmitReady(){submitButton.classList.toggle('is-not-ready',!(machineSelect.value&&gpuSelect.value))}
 function humanMachineState(machine){return MACHINE_STATE[machine?.state?.state]||machine?.state?.state||'état inconnu'}
 function humanGpuBlock(reason){return BLOCKING_REASON[reason]||reason||'GPU non publiable'}
 function gpuMemory(vramMiB){return Number.isFinite(vramMiB)?`${Math.max(1,Math.round(vramMiB/1024))} Go`:'VRAM inconnue'}
