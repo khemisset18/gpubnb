@@ -260,7 +260,14 @@ export async function buildRentalResourceAuthority(
     where: {
       machineId,
       status: { in: LIVE_SESSION_STATUSES },
-      machineWorkspace: { workspace: { slug: 'developer' } },
+      // Every currently BETA-executable workspace routes GPU access through this
+      // authority: Developer (workspace-gateway v5) and Compute/GPU_PROOF (the
+      // active private-beta product path). This used to be hardcoded to
+      // 'developer' only, which meant `/agent/mining/:machineId/rental-authority`
+      // could never resolve a Compute session and always answered
+      // rental_resource_authority_missing_for_session for the one path renters
+      // actually use.
+      machineWorkspace: { workspace: { slug: { in: ['developer', 'compute'] } } },
     },
     select: {
       id: true,
