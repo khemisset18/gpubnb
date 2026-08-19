@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ListingResourceMode, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
@@ -35,7 +35,17 @@ const listingActionParams = z.object({
 });
 const bookingListingInput = z.object({ listingId: z.string().cuid() }).passthrough();
 
-function sendListingError(reply: FastifyReply, error: RentalListingError) {
+function sendListingError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: RentalListingError,
+  context: Record<string, unknown>,
+) {
+  // Structured so machineId/acceleratorId/ownerId + the exact blocking reason
+  // (e.g. RESOURCE_AUTHORITY_MISSING, the readiness-gate form of
+  // rental_gpu_resource_mapping_missing) are traceable from server logs alone,
+  // without needing the client's HTTP response body.
+  request.log.warn({ ...context, code: error.code, ...(error.details ?? {}) }, 'rental_listing_publication_blocked');
   const body = { error: error.code, ...(error.details ? { details: error.details } : {}) };
   switch (error.code) {
     case 'machine_not_found':
@@ -50,7 +60,13 @@ function sendListingError(reply: FastifyReply, error: RentalListingError) {
   }
 }
 
-function sendLifecycleError(reply: FastifyReply, error: OwnerListingLifecycleError) {
+function sendLifecycleError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: OwnerListingLifecycleError,
+  context: Record<string, unknown>,
+) {
+  request.log.warn({ ...context, code: error.code, ...(error.details ?? {}) }, 'rental_listing_lifecycle_blocked');
   const body = { error: error.code, ...(error.details ? { details: error.details } : {}) };
   if (error.code === 'listing_not_found') return reply.code(404).send(body);
   return reply.code(409).send(body);
@@ -142,7 +158,13 @@ export function registerRentalMarketplaceRoutes(
         config.HEARTBEAT_OFFLINE_SECONDS,
       );
     } catch (error) {
-      if (error instanceof OwnerListingLifecycleError) return sendLifecycleError(reply, error);
+      if (error instanceof OwnerListingLifecycleError) {
+        return sendLifecycleError(request, reply, error, {
+          listingId: params.listingId,
+          action: params.action,
+          ownerId: session.userId,
+        });
+      }
       throw error;
     }
   });
@@ -204,7 +226,13 @@ export function registerRentalMarketplaceRoutes(
       });
       return reply.code(201).send(listing);
     } catch (error) {
-      if (error instanceof RentalListingError) return sendListingError(reply, error);
+      if (error instanceof RentalListingError) {
+        return sendListingError(request, reply, error, {
+          machineId: body.machineId,
+          acceleratorId: body.acceleratorId,
+          ownerId: session.userId,
+        });
+      }
       throw error;
     }
   });

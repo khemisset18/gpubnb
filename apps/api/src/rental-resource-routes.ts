@@ -66,9 +66,23 @@ export function registerRentalResourceAuthorityRoutes(
       return reply.code(401).send({ error: 'invalid_agent_request' });
     }
     try {
-      return await buildRentalResourceAuthority(db, redis, machineId);
+      const authority = await buildRentalResourceAuthority(db, redis, machineId);
+      for (const session of authority.sessions) {
+        if (session.blockedReason) {
+          // Traces the exact reason a session's GPU resource authority is blocked
+          // (e.g. rental_gpu_resource_mapping_missing, rental_gpu_resource_disabled,
+          // rental_gpu_resource_quarantined) with the full machineId -> sessionId
+          // chain, without needing to reproduce the failure to understand it.
+          request.log.warn(
+            { machineId, sessionId: session.sessionId, blockedReason: session.blockedReason },
+            'rental_resource_authority_session_blocked',
+          );
+        }
+      }
+      return authority;
     } catch (error) {
       const code = error instanceof Error ? error.message : 'rental_resource_authority_failed';
+      request.log.warn({ machineId, code }, 'rental_resource_authority_failed');
       return reply.code(code.endsWith('_conflict') ? 409 : 503).send({ error: code });
     }
   });
