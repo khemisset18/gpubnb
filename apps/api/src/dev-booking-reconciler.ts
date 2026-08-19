@@ -382,3 +382,57 @@ export async function reconcileStalledActivations(db: PrismaClient, now = new Da
   }
   return { degraded };
 }
+
+// POST /bookings creates the Booking row and calls allocateBookingResources() as two
+// separate transactions (see server.ts) - deliberately, so a client retry with the same
+// idempotencyKey can find and re-allocate an existing unallocated booking (Booking is
+// looked up by (buyerId, idempotencyKey) before allocation runs either way). That retry
+// is the normal recovery path. This reconciler only exists for the case nothing retries:
+// the API process crashes/restarts between the two transactions and the original client
+// never comes back (closed tab, abandoned request) with zero allocation ever created.
+// booking_no_overlap (migration 0001_initial) EXCLUDEs on (listingId, [startsAt,endsAt))
+// for AWAITING_DEPOSIT and later statuses, so an orphan like this blocks its listing's
+// exact time slot forever until something cancels it.
+//
+// The grace period is not an arbitrary guess: allocateBookingResources()'s own
+// transaction budget (maxWait 5s + timeout 10s, see resource-allocation-service.ts) is
+// the maximum time a *legitimate* in-flight allocation attempt can take, even under
+// contention. This grace period is a large, safe multiple of that bound, not a tuned
+// product-facing deposit deadline - it only has to be long enough that it can never be
+// confused with a request still genuinely in flight.
+const ORPHANED_DEPOSIT_ALLOCATION_GRACE_MS = 2 * 60_000;
+
+export async function reconcileOrphanedDepositBookings(db: PrismaClient, now = new Date()): Promise<{ cancelled: number }> {
+  let cancelled = 0;
+  const cutoff = new Date(now.getTime() - ORPHANED_DEPOSIT_ALLOCATION_GRACE_MS);
+  const orphaned = await db.booking.findMany({
+    where: {
+      status: BookingStatus.AWAITING_DEPOSIT,
+      createdAt: { lt: cutoff },
+      machineAllocation: { is: null },
+      acceleratorAllocations: { none: {} },
+    },
+    select: { id: true, listingId: true, createdAt: true },
+    take: 50,
+    orderBy: { createdAt: 'asc' },
+  });
+
+  for (const booking of orphaned) {
+    // Re-check both the status and the absence of any allocation inside the same
+    // conditional update: a concurrent request could have allocated (or a concurrent
+    // reconciler tick already cancelled) this exact booking between the read above and
+    // this write. count !== 1 means we lost that race, not an error - idempotent no-op.
+    const updated = await db.booking.updateMany({
+      where: {
+        id: booking.id,
+        status: BookingStatus.AWAITING_DEPOSIT,
+        machineAllocation: { is: null },
+        acceleratorAllocations: { none: {} },
+      },
+      data: { status: BookingStatus.CANCELLED },
+    });
+    if (updated.count === 1) cancelled += 1;
+  }
+
+  return { cancelled };
+}
