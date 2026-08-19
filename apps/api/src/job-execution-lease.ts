@@ -5,7 +5,16 @@ import { JobStatus, type Prisma } from '@prisma/client';
 // private-beta Compute/GPU_PROOF runtime. Older 0.6.0 binaries can predate the
 // pinned proof image / pull-timeout fixes while still reporting the same version,
 // so fail closed until a distinctly versioned runtime is installed.
-export const JOB_LEASE_PROTOCOL_VERSION = '0.6.1';
+//
+// 0.6.1 -> 0.6.2: gpu_proof_command() no longer hardcodes --gpus=device=0 for the
+// renter-billed GPU_PROOF workload; it now requires and attaches the exact
+// hardwareUuid the signed rental resource authority leased for the session (see
+// runner.py/cli.py). No 0.6.1-labeled Host installer has ever been published (the
+// last public release still embeds 0.6.0), so this is precautionary, not a
+// rollback of a shipped build - but the same reasoning that forced the 0.6.0 ->
+// 0.6.1 bump applies here: version must distinguish runtime behavior, not just
+// track intent, so any binary built before this fix is provably rejected.
+export const JOB_LEASE_PROTOCOL_VERSION = '0.6.2';
 export const JOB_LEASE_TOKEN_BYTES = 32;
 export const JOB_LEASE_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 

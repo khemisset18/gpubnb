@@ -58,10 +58,13 @@ test('terminal idempotence only accepts the same fenced attempt', () => {
   }), false);
 });
 
-test('qualified job protocol is fail-closed for pre-0.6.1 or malformed agents', () => {
+test('qualified job protocol is fail-closed for pre-0.6.2 or malformed agents', () => {
   assert.equal(supportsJobLeaseProtocol('0.5.5'), false);
   assert.equal(supportsJobLeaseProtocol('0.6.0'), false);
-  assert.equal(supportsJobLeaseProtocol('0.6.1'), true);
+  // 0.6.1 predates the exact-GPU-by-hardwareUuid fix (runner.py's gpu_proof_command
+  // no longer defaults to --gpus=device=0) and must now be rejected the same way
+  // 0.6.0 was rejected for predating the pinned proof image fix.
+  assert.equal(supportsJobLeaseProtocol('0.6.1'), false);
   assert.equal(supportsJobLeaseProtocol('0.6.2'), true);
   assert.equal(supportsJobLeaseProtocol('0.7.0-beta.1'), true);
   assert.equal(supportsJobLeaseProtocol('garbage'), false);
