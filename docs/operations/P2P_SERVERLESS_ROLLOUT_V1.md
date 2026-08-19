@@ -109,8 +109,86 @@ Never pass private keys on the command line or commit exchange files.
 
 The helper never closes and rebinds a port after receiving the ticket. Socket
 object identity and file descriptor are preserved from discovery, across ticket
-wait/verification, through QUIC adoption. Ticket wait is bounded to 120 seconds;
-failure is terminal and closes the reserved socket.
+wait/verification, through QUIC adoption. Qualification-only ticket wait defaults
+to 600 seconds and is bounded to 1800 seconds so a manual two-PC exchange can
+complete while the reserved socket remains alive. This does not relax the signed
+ticket lifetime: it remains bounded to 120 seconds. A wait failure is terminal
+and closes the reserved socket.
+
+#### Qualification-only ticket issuer
+
+`p2p-qualify-ticket` is not a production rendezvous service. It reads the two
+bounded candidate files, loads an ACL-protected raw 32-byte Ed25519 key, and calls
+the Control Gateway's real `SignedRendezvousTicket::issue()` implementation. It
+permits only `DIRECT_ONLY`, never prints private material, creates rather than
+overwrites its output, and retains the 12-candidate and 120-second ticket bounds.
+`p2p-qualify-keygen` creates that temporary private key with a restricted ACL and
+exports only its Base58 verification key to a separate public file.
+
+Build and create the temporary Control key on the signing machine:
+
+```powershell
+Set-Location C:\Users\hicha\gpubnb\services\control-gateway
+cargo build --locked --release --bin p2p-qualify-keygen --bin p2p-qualify-ticket
+New-Item -ItemType Directory -Force C:\Users\hicha\gpubnb\qualify | Out-Null
+& .\target\release\p2p-qualify-keygen.exe `
+  --private-key-output C:\Users\hicha\gpubnb\qualify\control-signing.key `
+  --public-key-output C:\Users\hicha\gpubnb\qualify\control-signing.pub
+```
+
+Transfer only `control-signing.pub`. Configure its Base58 text as
+`controlVerifyingKeyBase58` on both peers before startup. Both protected Agent
+configs must share the same session, machine, lease and fencing values, contain
+their existing TLS/private ephemeral key material, set `waitTimeoutSeconds` to
+600, and use these rendezvous paths:
+
+- PC A HOST: `C:\Users\hicha\gpubnb\qualify\host-candidates.json` and
+  `C:\Users\hicha\gpubnb\qualify\ticket.json`;
+- PC B RENTER: `C:\Users\k\gpubnb\qualify\renter-candidates.json` and
+  `C:\Users\k\gpubnb\qualify\ticket.json`.
+
+Start each process and leave its terminal running:
+
+```powershell
+# PC A
+Set-Location C:\Users\hicha\gpubnb
+& .\.venv\Scripts\python.exe agent\tools\p2p_direct_qualify.py `
+  --config .\qualify\host-private.json `
+  --ephemeral-public-key-output .\qualify\host-ephemeral.pub
+
+# PC B
+Set-Location C:\Users\k\gpubnb
+& .\.venv\Scripts\python.exe agent\tools\p2p_direct_qualify.py `
+  --config .\qualify\renter-private.json `
+  --ephemeral-public-key-output .\qualify\renter-ephemeral.pub
+```
+
+After both candidate files and both ephemeral **public** Base58 values have been
+transferred to PC A, issue the short-lived ticket last:
+
+```powershell
+Set-Location C:\Users\hicha\gpubnb\services\control-gateway
+$HostPublic = (Get-Content C:\Users\hicha\gpubnb\qualify\host-ephemeral.pub -Raw).Trim()
+$RenterPublic = (Get-Content C:\Users\hicha\gpubnb\qualify\renter-ephemeral.pub -Raw).Trim()
+& .\target\release\p2p-qualify-ticket.exe `
+  --host-candidates C:\Users\hicha\gpubnb\qualify\host-candidates.json `
+  --renter-candidates C:\Users\hicha\gpubnb\qualify\renter-candidates.json `
+  --host-ephemeral-public-key $HostPublic `
+  --renter-ephemeral-public-key $RenterPublic `
+  --session-id session_qualification_01 `
+  --machine-id machine_qualification_01 `
+  --lease-id lease_qualification_01 `
+  --fencing-token 42 `
+  --relay-policy DIRECT_ONLY `
+  --ttl-seconds 120 `
+  --signing-key-file C:\Users\hicha\gpubnb\qualify\control-signing.key `
+  --output C:\Users\hicha\gpubnb\qualify\ticket.json
+```
+
+Copy that exact `ticket.json` to
+`C:\Users\k\gpubnb\qualify\ticket.json` immediately. The already-running peers
+then continue automatically. Never transfer a private Agent config, TLS private
+key, ephemeral private key, or `control-signing.key`.
 
 Do not report NAT-to-NAT success based on the CI loopback test. A production claim
 requires recorded successful runs from two separate real networks.
