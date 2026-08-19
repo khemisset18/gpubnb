@@ -1,6 +1,11 @@
 import unittest
+from unittest.mock import patch
 
-from gpubnb_agent.runner import gpu_proof_command
+from gpubnb_agent.runner import (
+    GPU_PROOF_IMAGE_PULL_TIMEOUT_SECONDS,
+    gpu_proof_command,
+    run_gpu_proof_workspace,
+)
 
 
 OFFICIAL_PROOF_IMAGE = "ghcr.io/khemisset18/gpu-proof-workspace@sha256:" + ("a" * 64)
@@ -16,6 +21,18 @@ class GpuProofCommandTests(unittest.TestCase):
         self.assertNotIn("--privileged", command)
         self.assertFalse(any(value.startswith("--volume") or value.startswith("--mount") for value in command))
         self.assertEqual(command[-3:], [OFFICIAL_PROOF_IMAGE, "--duration-seconds", "300"])
+
+    @patch("gpubnb_agent.runner.cleanup_workspace", return_value={"cleaned": True})
+    @patch("gpubnb_agent.runner.subprocess.Popen", side_effect=RuntimeError("stop_after_pull"))
+    @patch("gpubnb_agent.runner._pull_image")
+    def test_gpu_proof_allows_long_uncached_image_pull(self, pull, _popen, _cleanup):
+        self.assertGreaterEqual(GPU_PROOF_IMAGE_PULL_TIMEOUT_SECONDS, 600)
+        with self.assertRaisesRegex(RuntimeError, "stop_after_pull"):
+            run_gpu_proof_workspace(OFFICIAL_PROOF_IMAGE, 30)
+        pull.assert_called_once_with(
+            OFFICIAL_PROOF_IMAGE,
+            GPU_PROOF_IMAGE_PULL_TIMEOUT_SECONDS,
+        )
 
     def test_duration_is_clamped_and_untrusted_images_are_rejected(self):
         command = gpu_proof_command(OFFICIAL_PROOF_IMAGE, 9999, "gpubnb-proof-test")
