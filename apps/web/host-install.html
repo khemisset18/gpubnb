@@ -20,9 +20,9 @@
     <article class="card download-card" data-download-platform="windows">
       <span class="badge ok" data-recommended hidden>Recommandé pour votre appareil</span>
       <h2>Windows 64 bits</h2>
-      <p data-download-instructions>Créez un nouveau dossier, extrayez entièrement le ZIP, puis lancez GPUbnb-Host-Portable.exe. Ne lancez jamais l’exécutable depuis l’archive.</p>
+      <p data-download-instructions>Téléchargez l’installeur EXE, vérifiez sa somme SHA-256, puis lancez <code>gpubnb-host-windows-x64.exe</code>. Cette préversion peut déclencher l’avertissement Windows SmartScreen car elle n’est pas encore signée.</p>
       <p class="muted"><strong>Disponibilité :</strong> <span data-download-availability>Vérification du fichier…</span></p>
-      <p class="muted">Archive ZIP portable · Version : <span data-download-version>—</span> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature : non signée</p>
+      <p class="muted">Installeur Windows · Version : <span data-download-version>—</span> · Commit : <code data-download-immutable>—</code> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature : non signée</p>
       <details><summary>Vérifier l’intégrité</summary><p>Comparez la somme fournie avec celle calculée sur votre fichier.</p><code data-download-checksum>—</code></details>
       <a class="button button-primary" data-download-button aria-disabled="true">Vérification…</a>
       <details><summary>« Windows protège votre ordinateur »</summary><p>Vérifiez que le fichier provient de la release officielle et consultez ses propriétés. Ne désactivez pas globalement Microsoft Defender.</p></details>
@@ -32,7 +32,7 @@
       <h2>Linux x86-64</h2>
       <p data-download-instructions>Installez le paquet avec <code>sudo apt install ./gpubnb-host-linux-x64.deb</code>. Un pilote NVIDIA fonctionnel et <code>nvidia-smi</code> sont nécessaires pour héberger une charge CUDA.</p>
       <p class="muted"><strong>Disponibilité :</strong> <span data-download-availability>Vérification du fichier…</span></p>
-      <p class="muted">Paquet DEB · Version : <span data-download-version>—</span> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature : non signée</p>
+      <p class="muted">Paquet DEB · Version : <span data-download-version>—</span> · Commit : <code data-download-immutable>—</code> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature : non signée</p>
       <details><summary>Vérifier l’intégrité</summary><code data-download-checksum>—</code></details>
       <a class="button button-primary" data-download-button aria-disabled="true">Vérification…</a>
     </article>
@@ -41,7 +41,7 @@
       <h2>macOS Apple Silicon</h2>
       <p data-download-instructions>Compatible uniquement avec les Mac Apple Silicon dans cette préversion. Cette version permet de tester l’application, mais elle ne permet pas d’héberger une charge CUDA NVIDIA.</p>
       <p class="muted"><strong>Disponibilité :</strong> <span data-download-availability>Vérification du fichier…</span></p>
-      <p class="muted">Image DMG · Version : <span data-download-version>—</span> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature : non signée</p>
+      <p class="muted">Image DMG · Version : <span data-download-version>—</span> · Commit : <code data-download-immutable>—</code> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature : non signée</p>
       <details><summary>Vérifier l’intégrité</summary><code data-download-checksum>—</code></details>
       <a class="button button-primary" data-download-button aria-disabled="true">Vérification…</a>
     </article>
@@ -50,8 +50,8 @@
   <section class="hero-row" style="margin-top:18px">
     <article class="panel">
       <h2>Parcours en sept étapes</h2>
-      <ol><li>Activer l’espace propriétaire</li><li>Télécharger GPUbnb Host</li><li>Installer ou extraire l’application</li><li>Lancer GPUbnb Host</li><li>Créer et copier le code de liaison</li><li>Saisir le code dans GPUbnb Host</li><li>Vérifier la machine et publier l’annonce</li></ol>
-      <div class="card"><strong>Limite actuelle</strong><p class="muted">Fonction testable : location avec diagnostic GPU contrôlé. Les sessions CUDA interactives, Jupyter, Blender et l’accès distant arbitraire ne sont pas encore disponibles.</p></div>
+      <ol><li>Activer l’espace propriétaire</li><li>Télécharger GPUbnb Host</li><li>Installer l’application</li><li>Lancer GPUbnb Host</li><li>Créer et copier le code de liaison</li><li>Saisir le code dans GPUbnb Host</li><li>Vérifier la machine et publier l’annonce</li></ol>
+      <div class="card"><strong>Limite actuelle</strong><p class="muted">Fonction testable en bêta privée : réservation Compute avec preuve de charge GPU contrôlée. Les sessions CUDA interactives, Jupyter, Blender et l’accès distant arbitraire ne sont pas encore qualifiés par ce parcours.</p></div>
     </article>
     <aside class="panel"><h2>Lier une machine</h2><p class="muted">Le code est à usage unique et expire après dix minutes.</p><button class="button button-primary" type="button" data-create-link>Créer un code de liaison</button><div data-link-result role="status" style="margin-top:18px"></div><a class="button" style="margin-top:12px" href="machines.html">Vérifier mes machines</a></aside>
   </section>

@@ -11,8 +11,13 @@ export function isExecutableWorkspaceSlug(value: string): value is ExecutableWor
 }
 
 export function compatibleWorkspaceChoices(machine: MachineCapabilities) {
+  // Private-beta marketplace safety boundary: only expose the Compute flow that is
+  // registered in server.ts and creates GPU_PROOF. Developer remains a valid internal
+  // workspace slug for its dedicated module, but it must not be offered to renters
+  // until that module is explicitly registered in the main server and covered by a
+  // real route-level integration test.
   return workspaceManifests
-    .filter((manifest) => manifest.release === 'BETA' && isExecutableWorkspaceSlug(manifest.slug))
+    .filter((manifest) => manifest.release === 'BETA' && manifest.slug === 'compute')
     .map((manifest) => {
       const compatibility = analyzeWorkspace(machine, manifest);
       return {

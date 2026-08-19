@@ -1,10 +1,8 @@
 'use strict';
 (() => {
   const API=(window.GPUBNB_API_URL||'').replace(/\/$/,'');
-  const GATEWAY_ORIGIN=new URL(window.GPUBNB_GATEWAY_URL||API||location.origin,location.origin).origin;
   const currentBookingStatuses=new Set(['CREATED','AWAITING_DEPOSIT','FUNDED','STARTING','ACTIVE']);
   const preparableBookingStatuses=new Set(['FUNDED','STARTING','ACTIVE']);
-  const failedWorkspaceStatuses=new Set(['FAILED','CANCELLED','TIMED_OUT','QUARANTINED']);
   const escapeHTML=value=>String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
   async function request(path,options={}){
     const headers={accept:'application/json',...(options.headers||{})};
@@ -14,86 +12,81 @@
     if(!response.ok)throw Object.assign(new Error(data.error||`HTTP ${response.status}`),{status:response.status,code:data.error});
     return data;
   }
-  const reason={
-    GATEWAY_NOT_READY:'Connexion sécurisée en préparation',WORKSPACE_NOT_READY:'Workspace encore en préparation',
-    HEARTBEAT_STALE:'Machine temporairement indisponible',MACHINE_OFFLINE:'Machine hors ligne',
-    MACHINE_BLOCKED:'Machine indisponible pour sécurité',BOOKING_NOT_ACTIVE:'Réservation non active',SESSION_EXPIRED:'Session terminée'
+  const jobLabel={
+    QUEUED:'En attente de prise en charge par l’agent hôte',
+    ASSIGNED:'Pris en charge par l’agent hôte',
+    DOWNLOADING:'Téléchargement de l’image GPU Proof',
+    PREPARING:'Préparation du workload GPU',
+    RUNNING:'GPU Proof en cours',
+    UPLOADING_RESULTS:'Envoi et vérification des résultats',
+    COMPLETED:'GPU Proof terminé',
+    FAILED:'GPU Proof échoué',
+    CANCEL_REQUESTED:'Arrêt demandé',
+    CANCELLED:'GPU Proof annulé',
+    TIMED_OUT:'GPU Proof expiré',
+    REJECTED:'GPU Proof refusé',
+    QUARANTINED:'Machine mise en quarantaine'
   };
-  const phaseLabel={
-    WAITING_FOR_HOST:'En attente de prise en charge par l’agent hôte',
-    RECONNECTING_AGENT:'Reconnexion automatique de l’agent hôte',
-    DOWNLOADING_IMAGE:'Téléchargement de l’image du workspace',
-    VERIFYING_IMAGE:'Vérification du digest de l’image',
-    VERIFYING_WORKSPACE:'Vérification du workspace isolé',
-    STARTING_WORKSPACE:'Démarrage du workspace sécurisé'
-  };
-  const elapsedLabel=seconds=>{
-    const value=Math.max(0,Number(seconds||0));
-    if(value<60)return `${value} s`;
-    return `${Math.floor(value/60)} min ${value%60} s`;
-  };
-  const workspaceOpenURL=value=>{
-    const path=String(value||'');
-    if(!path.startsWith('/workspace-gateway/')||path.startsWith('//')||path.includes('..'))throw new Error('invalid_workspace_gateway_path');
-    const url=new URL(path,`${GATEWAY_ORIGIN}/`);
-    if(url.origin!==GATEWAY_ORIGIN)throw new Error('invalid_workspace_gateway_origin');
-    return url.href;
-  };
-  function rowHTML({booking,workspace,error},history=false){
+  const terminalOk=new Set(['COMPLETED']);
+  const terminalFailure=new Set(['FAILED','CANCELLED','TIMED_OUT','REJECTED','QUARANTINED']);
+
+  function rowHTML(booking,job,history=false){
     const title=escapeHTML(booking.listing?.title||'Réservation GPU');
-    if(error?.status===404){
+    if(!job){
+      if(booking.status==='AWAITING_DEPOSIT'){
+        return `<article class="list-row"><div><strong>${title}</strong><div class="muted">Financement bêta en cours. Compute démarrera uniquement après le passage à FUNDED.</div></div><span class="badge warn">AWAITING_DEPOSIT</span></article>`;
+      }
       const canPrepare=!history&&preparableBookingStatuses.has(booking.status);
-      return `<article class="list-row"><div><strong>${title}</strong><div class="muted">Aucun workspace préparé pour cette réservation.</div></div><div class="actions">${canPrepare?`<button class="button button-primary" type="button" data-prepare-developer="${escapeHTML(booking.id)}">Préparer Developer</button>`:''}<span class="badge ${history?'':'warn'}">${history?'Terminée':'Non préparé'}</span></div></article>`;
+      return `<article class="list-row"><div><strong>${title}</strong><div class="muted">Aucun GPU_PROOF Compute n’est encore associé à cette réservation.</div></div><div class="actions">${canPrepare?`<button class="button button-primary" type="button" data-prepare-compute="${escapeHTML(booking.id)}">Préparer Compute</button>`:''}<span class="badge ${history?'':'warn'}">${escapeHTML(booking.status)}</span></div></article>`;
     }
-    if(error)return `<article class="list-row"><div><strong>${title}</strong><div class="muted">État du workspace indisponible.</div></div><span class="badge warn">Erreur</span></article>`;
-    const preparing=workspace.status==='PREPARING';
-    const phase=phaseLabel[workspace.preparation?.phase]||workspace.preparation?.step;
-    const statusText=workspace.canOpen
-      ?'Prêt à ouvrir'
-      :preparing
-        ?`${phase||'Préparation en cours'} · ${Number(workspace.preparation?.progress||0)} % · ${elapsedLabel(workspace.preparation?.elapsedSeconds)}`
-        :(reason[workspace.blockedReason]||workspace.status);
-    const errorText=workspace.preparation?.errorCode?`<div class="muted">Motif : ${escapeHTML(workspace.preparation.errorCode)}</div>`:'';
-    const retry=workspace.retryable&&!history?`<button class="button button-primary" type="button" data-retry-workspace="${escapeHTML(booking.id)}">Réessayer proprement</button>`:'';
-    return `<article class="list-row"><div><strong>${escapeHTML(workspace.workspace?.name||'Workspace')}</strong><div class="muted">${escapeHTML(workspace.gpu?.model||'GPU distant')} · ${escapeHTML(statusText)}</div>${errorText}</div><div class="actions">${workspace.canOpen?`<button class="button button-primary" type="button" data-open-workspace="${escapeHTML(booking.id)}">Ouvrir mon espace</button>`:''}${retry}<span class="badge ${workspace.canOpen?'ok':'warn'}">${escapeHTML(workspace.status)}</span></div></article>`;
+    const label=jobLabel[job.status]||job.status;
+    const errorText=job.errorCode?`<div class="muted">Motif : ${escapeHTML(job.errorCode)}</div>`:'';
+    const badgeClass=terminalOk.has(job.status)?'ok':terminalFailure.has(job.status)?'warn':'';
+    return `<article class="list-row"><div><strong>Compute · ${title}</strong><div class="muted">${escapeHTML(label)}</div>${errorText}</div><div class="actions"><span class="badge ${badgeClass}">${escapeHTML(job.status)}</span></div></article>`;
   }
+
   async function render(){
     const root=document.querySelector('[data-workspace-bookings]');
     if(!root)return;
     try{
       const dashboard=await request('/dashboard');
       const bookings=dashboard.tenant?.bookings||[];
-      if(!bookings.length){root.innerHTML='<div class="empty-state"><p class="muted">Aucun workspace lié à une réservation.</p></div>';return;}
-      const rows=await Promise.all(bookings.map(async booking=>{
-        try{return {booking,workspace:await request(`/bookings/${encodeURIComponent(booking.id)}/workspace`)}}catch(error){return {booking,error}}
-      }));
+      const jobs=dashboard.tenant?.jobs||[];
+      if(!bookings.length){root.innerHTML='<div class="empty-state"><p class="muted">Aucune réservation GPU.</p></div>';return;}
+
+      // /dashboard returns jobs newest-first. Keep the newest GPU_PROOF for each
+      // booking so the bookings page follows the registered Compute flow instead of
+      // probing the separate Developer-only renter routes.
+      const latestGpuProofByBooking=new Map();
+      for(const job of jobs){
+        if(job.type==='GPU_PROOF'&&job.bookingId&&!latestGpuProofByBooking.has(job.bookingId)){
+          latestGpuProofByBooking.set(job.bookingId,job);
+        }
+      }
+
+      const rows=bookings.map(booking=>({booking,job:latestGpuProofByBooking.get(booking.id)||null}));
       const active=rows.filter(row=>currentBookingStatuses.has(row.booking.status));
       const history=rows.filter(row=>!currentBookingStatuses.has(row.booking.status));
-      const latestFailure=history.find(row=>row.workspace&&failedWorkspaceStatuses.has(row.workspace.status));
+      const latestFailure=history.find(row=>row.job&&terminalFailure.has(row.job.status));
       const failureNotice=latestFailure
-        ?`<section class="workspace-latest-failure" role="alert"><h3>Dernière préparation interrompue</h3><p class="muted">Cette réservation reste visible pour expliquer l’échec. La correction ou une nouvelle tentative ne sera jamais masquée dans l’historique.</p>${rowHTML(latestFailure,true)}</section>`
+        ?`<section class="workspace-latest-failure" role="alert"><h3>Dernier GPU Proof interrompu</h3><p class="muted">La réservation reste visible avec le code d’erreur réel. Aucun basculement automatique vers Developer n’est effectué.</p>${rowHTML(latestFailure.booking,latestFailure.job,true)}</section>`
         :'';
-      root.innerHTML=`${active.length?active.map(row=>rowHTML(row)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row,true)).join('')}</details>`:''}`;
-      root.querySelectorAll('[data-prepare-developer]').forEach(button=>button.addEventListener('click',async()=>{
-        button.disabled=true;button.textContent='Préparation…';
-        try{await request(`/bookings/${encodeURIComponent(button.dataset.prepareDeveloper)}/workspace/developer`,{method:'POST',body:'{}'});await render();}
-        catch(error){button.disabled=false;button.textContent='Préparer Developer';alert(error.code==='developer_workspace_not_enabled'?'Le propriétaire doit d’abord activer Developer Workspace sur cette machine.':(error.message||'Préparation impossible.'));}
-      }));
-      root.querySelectorAll('[data-retry-workspace]').forEach(button=>button.addEventListener('click',async()=>{
-        button.disabled=true;button.textContent='Nouvelle tentative…';
-        try{await request(`/bookings/${encodeURIComponent(button.dataset.retryWorkspace)}/workspace/retry`,{method:'POST',body:'{}'});await render();}
-        catch(error){button.disabled=false;button.textContent='Réessayer proprement';alert(error.message||'Nouvelle tentative impossible.');}
-      }));
-      root.querySelectorAll('[data-open-workspace]').forEach(button=>button.addEventListener('click',async()=>{
-        button.disabled=true;button.textContent='Ouverture…';
+      root.innerHTML=`${active.length?active.map(row=>rowHTML(row.booking,row.job)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row.booking,row.job,true)).join('')}</details>`:''}`;
+
+      root.querySelectorAll('[data-prepare-compute]').forEach(button=>button.addEventListener('click',async()=>{
+        button.disabled=true;button.textContent='Préparation Compute…';
         try{
-          const result=await request(`/bookings/${encodeURIComponent(button.dataset.openWorkspace)}/workspace/access`,{method:'POST',body:'{}'});
-          // Do not keep the interactive gateway behind Netlify's /api rewrite:
-          // Render redirects without that prefix and code-server requires WebSockets.
-          location.assign(workspaceOpenURL(result.openPath));
-        }catch(error){button.disabled=false;button.textContent='Ouvrir mon espace';alert(error.code==='workspace_gateway_not_ready'?'La connexion sécurisée au workspace n’est pas encore prête.':(error.message||'Ouverture impossible.'));}
+          await request(`/bookings/${encodeURIComponent(button.dataset.prepareCompute)}/workspace-sessions`,{
+            method:'POST',
+            body:JSON.stringify({workspaceSlug:'compute'})
+          });
+          await render();
+        }catch(error){
+          button.disabled=false;button.textContent='Préparer Compute';
+          alert(error.code==='funded_booking_required'?'Le financement bêta n’est pas encore terminé.':(error.message||'Préparation Compute impossible.'));
+        }
       }));
-    }catch(error){root.innerHTML=`<div class="empty-state"><p class="muted">${escapeHTML(error.message||'Impossible de charger les workspaces.')}</p></div>`;}
+    }catch(error){root.innerHTML=`<div class="empty-state"><p class="muted">${escapeHTML(error.message||'Impossible de charger les réservations GPU.')}</p></div>`;}
   }
   window.addEventListener('DOMContentLoaded',()=>{void render();setInterval(()=>void render(),10000)});
 })();

@@ -15,10 +15,10 @@ test('workspace progress reports are authenticated, fenced and refresh the expli
   assert.match(body, /preparationStep:body\.step/, 'the renter-visible preparation condition must be updated');
 });
 
-test('workspace retry is restricted to terminal sessions and creates one new immutable attempt', async () => {
+test('Developer workspace retry remains restricted to terminal sessions and creates one new immutable attempt', async () => {
   const source = await readFile(new URL('../src/workspace-renter-routes.ts', import.meta.url), 'utf8');
   const start = source.indexOf("app.post('/bookings/:bookingId/workspace/retry'");
-  assert.ok(start >= 0, 'the renter retry endpoint must exist');
+  assert.ok(start >= 0, 'the renter retry endpoint must exist in the Developer module');
   const body = source.slice(start, source.indexOf("app.get('/bookings/:bookingId/workspace'", start));
   assert.match(body, /status:\{in:retryableSessions\}/, 'retry must never duplicate an active preparation');
   assert.match(body, /status:\{notIn:terminalJobs\}/, 'an active job must block retry');
@@ -26,7 +26,7 @@ test('workspace retry is restricted to terminal sessions and creates one new imm
   assert.match(body, /type:JobType\.WORKSPACE_PREPARE/, 'retry must create a real agent job');
 });
 
-test('workspace status exposes phase, elapsed time, last activity and terminal error', async () => {
+test('Developer workspace status module still exposes phase, elapsed time, last activity and terminal error', async () => {
   const source = await readFile(new URL('../src/workspace-renter-routes.ts', import.meta.url), 'utf8');
   const start = source.indexOf("app.get('/bookings/:bookingId/workspace'");
   const body = source.slice(start, source.indexOf("app.post('/bookings/:bookingId/workspace/access'", start));
@@ -40,17 +40,19 @@ test('workspace status exposes phase, elapsed time, last activity and terminal e
   for (const [field, pattern] of Object.entries(fields)) assert.match(body, pattern, `preparation status must expose ${field}`);
 });
 
-test('the renter UI separates current reservations from collapsed history', async () => {
+test('private-beta renter UI separates current Compute reservations from collapsed history', async () => {
   const source = await readFile(new URL('../../web/workspace-bookings.js', import.meta.url), 'utf8');
   assert.match(source, /currentBookingStatuses/, 'current reservations need an explicit classification');
   assert.match(source, /<details class="workspace-history">/, 'terminal reservations must be grouped in collapsed history');
-  assert.match(source, /data-retry-workspace/, 'retryable failures must expose a recovery action');
+  assert.match(source, /data-prepare-compute/, 'funded reservations without a proof job must expose Compute preparation');
+  assert.doesNotMatch(source, /data-prepare-developer/, 'private-beta recovery must not silently switch the renter to Developer');
 });
 
-test('the renter UI keeps the latest terminal preparation failure visible', async () => {
+test('private-beta renter UI keeps the latest terminal GPU_PROOF failure visible', async () => {
   const source = await readFile(new URL('../../web/workspace-bookings.js', import.meta.url), 'utf8');
-  assert.match(source, /latestFailure/, 'the newest failed preparation must be promoted above collapsed history');
+  assert.match(source, /latestFailure/, 'the newest failed GPU proof must be promoted above collapsed history');
   assert.match(source, /workspace-latest-failure/, 'the visible failure needs a stable UI surface');
   assert.match(source, /role="alert"/, 'assistive technology must announce the terminal failure');
-  assert.match(source, /RECONNECTING_AGENT/, 'automatic host recovery must be explained to the renter');
+  assert.match(source, /errorCode/, 'the real GPU_PROOF error code must stay visible to the renter');
+  assert.match(source, /Aucun basculement automatique vers Developer/, 'the UI must explain that it does not silently change workspace type');
 });

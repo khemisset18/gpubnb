@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
+import type { AcceleratorTelemetry } from './accelerator-telemetry.js';
 
 export type MiningInventory = {
   system: {
@@ -24,6 +25,93 @@ type TransactionClient = Prisma.TransactionClient;
  */
 export const gpuMiningResourceKey = (machineId: string, hardwareUuid: string): string =>
   `gpu:${machineId}:uuid:${hardwareUuid}`;
+
+export const syncGpuMiningResourcesFromAccelerators = async (
+  tx: TransactionClient,
+  machineId: string,
+  accelerators: readonly AcceleratorTelemetry[],
+): Promise<void> => {
+  const activeKeys: string[] = [];
+  const gpus = accelerators.filter((item) => item.kind === 'GPU');
+
+  for (const [index, gpu] of gpus.entries()) {
+    const accelerator = await tx.accelerator.upsert({
+      where: { machineId_hardwareUuid: { machineId, hardwareUuid: gpu.deviceId } },
+      create: {
+        machineId,
+        hardwareUuid: gpu.deviceId,
+        slotIndex: index,
+        vendor: gpu.vendor,
+        model: gpu.model,
+        vramMiB: gpu.memoryTotalMiB ?? 0,
+        driverVersion: gpu.driverVersion ?? '',
+        cudaVersion: gpu.runtimeVersion ?? null,
+        lastSeenAt: new Date(),
+      },
+      update: {
+        slotIndex: index,
+        vendor: gpu.vendor,
+        model: gpu.model,
+        vramMiB: gpu.memoryTotalMiB ?? 0,
+        driverVersion: gpu.driverVersion ?? '',
+        cudaVersion: gpu.runtimeVersion ?? null,
+        lastSeenAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    const resourceKey = gpuMiningResourceKey(machineId, gpu.deviceId);
+    activeKeys.push(resourceKey);
+
+    const existing = await tx.miningResource.findUnique({
+      where: { acceleratorId: accelerator.id },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await tx.miningResource.update({
+        where: { id: existing.id },
+        data: {
+          resourceKey,
+          displayName: gpu.model,
+          acceleratorId: accelerator.id,
+          enabled: true,
+          lastSeenAt: new Date(),
+        },
+      });
+    } else {
+      await tx.miningResource.upsert({
+        where: { machineId_resourceKey: { machineId, resourceKey } },
+        create: {
+          id: crypto.randomUUID(),
+          machineId,
+          kind: 'GPU',
+          resourceKey,
+          displayName: gpu.model,
+          acceleratorId: accelerator.id,
+          enabled: true,
+          quarantined: false,
+          lastSeenAt: new Date(),
+        },
+        update: {
+          displayName: gpu.model,
+          acceleratorId: accelerator.id,
+          enabled: true,
+          lastSeenAt: new Date(),
+        },
+      });
+    }
+  }
+
+  await tx.miningResource.updateMany({
+    where: {
+      machineId,
+      kind: 'GPU',
+      ...(activeKeys.length ? { resourceKey: { notIn: activeKeys } } : {}),
+    },
+    data: { enabled: false },
+  });
+};
 
 const syncWithTransaction = async (
   tx: TransactionClient,

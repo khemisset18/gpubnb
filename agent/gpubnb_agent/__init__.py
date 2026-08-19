@@ -1,6 +1,6 @@
 """GPUbnb Agent: local GPU inventory and signed control plane client."""
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 # Install the high-throughput Developer Workspace transport before the CLI imports
 # workspace_gateway. The v2 supervisor subclasses the hardened lifecycle code and

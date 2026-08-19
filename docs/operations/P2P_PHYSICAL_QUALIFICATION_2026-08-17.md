@@ -141,7 +141,77 @@ Two product-integration defects were exposed by the qualification:
 1. `workspaceSlug="compute"` currently falls back to `diagnosticImage` when `workspaceImages.compute` is absent, while `GPU_PROOF` requires the official pinned `gpu-proof-workspace` image.
 2. The first uncached GPU_PROOF image pull can exceed the current 150-second timeout for a 30-second proof workload.
 
+These two host-runtime defects were corrected by the stacked GPU proof runtime qualification change before the product-level E2E attempt.
+
 This host-side workload proof is separate from the direct-P2P transport qualification. It does **not** by itself prove that workload bytes traversed the direct P2P QUIC data path.
+
+## Test 4 — private-beta payment-to-GPU_PROOF routing regression qualification
+
+### Integration defect found before the physical product E2E
+
+The private-beta payment bypass and the historical first-rental diagnostic shared the same development reconciler. With `BETA_TEST_DEV_BYPASS=true` and `ESCROW_PROGRAM_ID=NOT_DEPLOYED_YET`, one reconciliation pass could both:
+
+1. move an `AWAITING_DEPOSIT` booking to `FUNDED` and mark its payment `ESCROW_FUNDED`; and
+2. immediately select that same booking for the legacy `GPU_DIAGNOSTIC` path.
+
+That behavior conflicts with the current product flow, where the authenticated renter requests the `compute` workspace and `ensureComputePreparation()` creates the `GPU_PROOF` job. There is no reliable manual timing window between the funding and legacy diagnostic steps because they occur in the same reconciler invocation.
+
+### Corrective change
+
+Commit `48ac4fc` (`fix(api): route beta bypass to compute proof flow`) separates detection of the bounded private-beta bypass from the historical development bypass.
+
+For the private-beta bypass only:
+
+- funding still occurs only while `ESCROW_PROGRAM_ID` is the `NOT_DEPLOYED_YET` placeholder;
+- the booking can still transition from `AWAITING_DEPOSIT` to `FUNDED` with `ESCROW_FUNDED` payment state;
+- the reconciler skips the legacy `GPU_DIAGNOSTIC` queue;
+- the real authenticated `POST /bookings/:bookingId/workspace-sessions` route with `{"workspaceSlug":"compute"}` remains the entry point for `ensureComputePreparation()` and `GPU_PROOF` creation;
+- the historical non-production `DEV_PAYMENT_BYPASS` diagnostic behavior remains unchanged.
+
+### Regression evidence
+
+Targeted reconciler/race tests:
+
+```text
+tests 4
+pass 4
+fail 0
+skipped 0
+```
+
+The added regression explicitly verifies that the bounded beta bypass does not inspect or enqueue legacy `GPU_DIAGNOSTIC` work.
+
+Developer lifecycle regression file after adapting its source marker to the guarded `readyBookings` expression:
+
+```text
+tests 8
+pass 8
+fail 0
+skipped 0
+```
+
+Full API suite:
+
+```text
+tests 374
+pass 374
+fail 0
+skipped 0
+```
+
+API build:
+
+```text
+prisma generate && tsc -p tsconfig.json
+```
+
+completed successfully with no TypeScript error.
+
+### Qualification conclusion and caveat
+
+This software qualification removes the deterministic conflict between the private-beta funding shortcut and the intended `compute`/`GPU_PROOF` preparation route without weakening the real-escrow guard.
+
+It is **not** yet a physical end-to-end rental proof. At this point PC B has not been used for the product-level booking flow, and this evidence does not prove that an installed Host Agent service is executing the newly qualified branch code. Those items must be checked in the physical E2E before claiming a completed rental flow.
 
 ## Next product-level qualification
 

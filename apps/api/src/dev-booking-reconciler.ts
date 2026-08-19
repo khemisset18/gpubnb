@@ -36,10 +36,17 @@ const DEVELOPER_SESSION_FILTER = {
   machineWorkspace: { workspace: { slug: 'developer' } },
 } as const;
 
+function betaTestDevBypassActive(): boolean {
+  return (
+    config.BETA_TEST_DEV_BYPASS === 'true' &&
+    config.ESCROW_PROGRAM_ID === 'NOT_DEPLOYED_YET'
+  );
+}
+
 function devBypassActive(): boolean {
   return (
     (config.NODE_ENV !== 'production' && config.DEV_PAYMENT_BYPASS === 'true') ||
-    (config.BETA_TEST_DEV_BYPASS === 'true' && config.ESCROW_PROGRAM_ID === 'NOT_DEPLOYED_YET')
+    betaTestDevBypassActive()
   );
 }
 
@@ -174,7 +181,7 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
     }
   }
 
-  const readyBookings = await db.booking.findMany({
+  const readyBookings = betaTestDevBypassActive() ? [] : await db.booking.findMany({
     where: {
       status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING] },
       startsAt: { lte: new Date(now.getTime() + 5 * 60_000) },

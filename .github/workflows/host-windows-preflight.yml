@@ -88,9 +88,18 @@ jobs:
           python -m pip install ./agent pyinstaller==6.16.0
 
       - name: Test agent CLI
+        shell: pwsh
         run: |
           python -m compileall -q agent/gpubnb_agent
-          gpubnb-agent version
+          $pyproject = Get-Content 'agent/pyproject.toml' -Raw
+          $versionMatch = [regex]::Match($pyproject, '(?m)^version\s*=\s*"([^"]+)"\s*$')
+          if (-not $versionMatch.Success) { throw 'Unable to determine expected Agent version.' }
+          $expectedAgentVersion = $versionMatch.Groups[1].Value
+          $cliVersion = (gpubnb-agent version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Agent version command failed.' }
+          if ($cliVersion -ne $expectedAgentVersion) {
+            throw "Agent CLI version mismatch: expected $expectedAgentVersion, got $cliVersion."
+          }
           python -m gpubnb_agent status
 
       - name: Build standalone agent
@@ -117,8 +126,15 @@ jobs:
       - name: Verify standalone agent
         shell: pwsh
         run: |
-          & ./dist/gpubnb-agent.exe version
+          $pyproject = Get-Content 'agent/pyproject.toml' -Raw
+          $versionMatch = [regex]::Match($pyproject, '(?m)^version\s*=\s*"([^"]+)"\s*$')
+          if (-not $versionMatch.Success) { throw 'Unable to determine expected Agent version.' }
+          $expectedAgentVersion = $versionMatch.Groups[1].Value
+          $standaloneVersion = (& ./dist/gpubnb-agent.exe version | Out-String).Trim()
           if ($LASTEXITCODE -ne 0) { throw 'Standalone agent version command failed.' }
+          if ($standaloneVersion -ne $expectedAgentVersion) {
+            throw "Standalone Agent version mismatch: expected $expectedAgentVersion, got $standaloneVersion."
+          }
           & ./dist/gpubnb-agent.exe status
           if ($LASTEXITCODE -ne 0) { throw 'Standalone agent status command failed.' }
           & ./dist/gpubnb-agent.exe runtime-check
@@ -176,8 +192,15 @@ jobs:
           if ((Get-Item $installedTunnel).Length -lt 262144) {
             throw 'The installed Host tunnel sidecar is unexpectedly small.'
           }
-          & $installedSidecar version
+          $pyproject = Get-Content 'agent/pyproject.toml' -Raw
+          $versionMatch = [regex]::Match($pyproject, '(?m)^version\s*=\s*"([^"]+)"\s*$')
+          if (-not $versionMatch.Success) { throw 'Unable to determine expected Agent version.' }
+          $expectedAgentVersion = $versionMatch.Groups[1].Value
+          $installedAgentVersion = (& $installedSidecar version | Out-String).Trim()
           if ($LASTEXITCODE -ne 0) { throw 'The installed agent sidecar is not executable.' }
+          if ($installedAgentVersion -ne $expectedAgentVersion) {
+            throw "Installed Agent version mismatch: expected $expectedAgentVersion, got $installedAgentVersion."
+          }
           $service = Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
           if (-not $service) { throw 'The installer did not register the GPUbnbAgent service.' }
           if ($service.StartMode -ne 'Auto') {
