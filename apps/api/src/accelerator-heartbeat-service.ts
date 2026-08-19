@@ -4,6 +4,8 @@ import { syncMachineAccelerators } from './accelerator-inventory-store.js';
 import { decideAcceleratorSecurity } from './accelerator-security-policy.js';
 import { enforceAcceleratorSecurityDecision } from './accelerator-security-executor.js';
 import { syncGpuMiningResourcesFromAccelerators } from './mining-resource-inventory.js';
+import { reactivateHealthyOfflineListings } from './rental-listing-recovery.js';
+import { rentalHeartbeatOfflineSeconds } from './rental-runtime-policy.js';
 
 export type AcceleratorHeartbeatContext = {
   machineId: string;
@@ -42,13 +44,24 @@ export async function processAcceleratorHeartbeat(
     decision,
   );
 
+  const publishable = decision.publishable && Boolean(primaryGpu?.available);
+  const recoveredListings = publishable
+    ? await reactivateHealthyOfflineListings(
+      tx,
+      context.machineId,
+      new Date(),
+      rentalHeartbeatOfflineSeconds(),
+    )
+    : [];
+
   return {
     accelerators,
     primaryGpu,
     sync,
     decision,
     enforcement,
-    publishable: decision.publishable && Boolean(primaryGpu?.available),
+    recoveredListings,
+    publishable,
   };
 }
 

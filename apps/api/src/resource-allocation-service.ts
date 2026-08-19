@@ -1,5 +1,5 @@
 import {
-  AcceleratorOperationalStatus,
+  BookingStatus,
   ListingResourceMode,
   ListingStatus,
   ModerationStatus,
@@ -8,16 +8,12 @@ import {
   ResourceAllocationStatus,
 } from '@prisma/client';
 
+import { isExactGpuPubliclyHealthy } from './rental-public-listings.js';
+import { rentalHeartbeatOfflineSeconds } from './rental-runtime-policy.js';
 import {
   SchedulerPresenceError,
   assertSchedulerMachinePresence,
 } from './scheduler-presence.js';
-
-const RENTABLE_ACCELERATOR_STATUSES: AcceleratorOperationalStatus[] = [
-  AcceleratorOperationalStatus.AVAILABLE,
-  AcceleratorOperationalStatus.RESERVED,
-  AcceleratorOperationalStatus.RUNNING,
-];
 
 const LIVE_ALLOCATION_STATUSES: ResourceAllocationStatus[] = [
   ResourceAllocationStatus.HELD,
@@ -29,6 +25,7 @@ export class ResourceAllocationError extends Error {
   constructor(
     public readonly code:
       | 'booking_not_found'
+      | 'booking_not_awaiting_deposit'
       | 'listing_not_available'
       | 'invalid_booking_period'
       | 'allocation_already_exists'
@@ -107,6 +104,17 @@ async function allocateInTransaction(
                   status: true,
                   moderationStatus: true,
                   isolationVerified: true,
+                  verifiedAt: true,
+                  lastSeenAt: true,
+                  miningResource: {
+                    select: {
+                      enabled: true,
+                      quarantined: true,
+                      runtimeState: true,
+                      activeRentalId: true,
+                      lastSeenAt: true,
+                    },
+                  },
                 },
               },
             },
@@ -118,6 +126,30 @@ async function allocateInTransaction(
   });
 
   if (!booking) throw new ResourceAllocationError('booking_not_found');
+  // A booking only ever gets its first allocation attempt from AWAITING_DEPOSIT (see
+  // POST /bookings in server.ts). Anything else reaching here is a stale/delayed
+  // request racing a booking that has since moved on - most concretely, an
+  // AWAITING_DEPOSIT booking the orphaned-deposit reconciler already cancelled for
+  // having no allocation (dev-booking-reconciler.ts). Without this check a
+  // late-arriving allocation call would silently create a live resource lock for an
+  // already-CANCELLED booking.
+  if (booking.status !== BookingStatus.AWAITING_DEPOSIT) {
+    throw new ResourceAllocationError('booking_not_awaiting_deposit');
+  }
+  // The findFirst above is a plain read: by itself it only rules out a booking that was
+  // *already* cancelled before this transaction's snapshot started, not one the
+  // reconciler cancels concurrently, mid-transaction. A self-referential conditional
+  // update takes a real row lock on the booking, the same one the reconciler's own
+  // conditional UPDATE (dev-booking-reconciler.ts) needs to cancel it - ordinary Postgres
+  // row-lock queueing then makes the two mutually exclusive regardless of isolation
+  // level: whichever UPDATE statement runs first wins, and the second blocks, then
+  // re-evaluates its WHERE clause against the now-committed result once the first
+  // commits. A plain read can never provide that guarantee no matter how it's timed.
+  const guarded = await tx.booking.updateMany({
+    where: { id: booking.id, status: BookingStatus.AWAITING_DEPOSIT },
+    data: { status: BookingStatus.AWAITING_DEPOSIT },
+  });
+  if (guarded.count !== 1) throw new ResourceAllocationError('booking_not_awaiting_deposit');
   if (booking.endsAt <= booking.startsAt) throw new ResourceAllocationError('invalid_booking_period');
   if (booking.machineAllocation || booking.acceleratorAllocations.length > 0) {
     throw new ResourceAllocationError('allocation_already_exists');
@@ -185,13 +217,14 @@ async function allocateInTransaction(
 
   if (selectedIds.length === 0) throw new ResourceAllocationError('accelerator_count_out_of_range');
 
+  const now = new Date();
+  const heartbeatStaleAfterSeconds = rentalHeartbeatOfflineSeconds();
   for (const acceleratorId of selectedIds) {
     const accelerator = machineAccelerators.get(acceleratorId);
     if (
       !accelerator ||
-      !RENTABLE_ACCELERATOR_STATUSES.includes(accelerator.status) ||
-      accelerator.moderationStatus !== ModerationStatus.CLEAR ||
-      !accelerator.isolationVerified
+      !isExactGpuPubliclyHealthy(accelerator, now, heartbeatStaleAfterSeconds) ||
+      accelerator.miningResource?.activeRentalId
     ) {
       throw new ResourceAllocationError('accelerator_not_rentable');
     }

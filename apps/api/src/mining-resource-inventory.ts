@@ -1,5 +1,11 @@
 import crypto from 'node:crypto';
-import type { Prisma, PrismaClient } from '@prisma/client';
+import {
+  AcceleratorOperationalStatus,
+  MachineOperational,
+  ModerationStatus,
+  type Prisma,
+  type PrismaClient,
+} from '@prisma/client';
 import type { AcceleratorTelemetry } from './accelerator-telemetry.js';
 
 export type MiningInventory = {
@@ -26,12 +32,43 @@ type TransactionClient = Prisma.TransactionClient;
 export const gpuMiningResourceKey = (machineId: string, hardwareUuid: string): string =>
   `gpu:${machineId}:uuid:${hardwareUuid}`;
 
+function legacyGpuStatus(
+  available: boolean,
+  moderationStatus: ModerationStatus,
+  operational: MachineOperational,
+): AcceleratorOperationalStatus {
+  if (moderationStatus === ModerationStatus.QUARANTINED) {
+    return AcceleratorOperationalStatus.QUARANTINED;
+  }
+  if (available) return AcceleratorOperationalStatus.AVAILABLE;
+  if (operational === MachineOperational.RESERVED) return AcceleratorOperationalStatus.RESERVED;
+  if (operational === MachineOperational.RUNNING) return AcceleratorOperationalStatus.RUNNING;
+  return AcceleratorOperationalStatus.DEGRADED;
+}
+
 export const syncGpuMiningResourcesFromAccelerators = async (
   tx: TransactionClient,
   machineId: string,
   accelerators: readonly AcceleratorTelemetry[],
 ): Promise<void> => {
+  const machine = await tx.machine.findUnique({
+    where: { id: machineId },
+    select: {
+      moderationStatus: true,
+      operational: true,
+      nvidiaRuntimeAvailable: true,
+      virtualizationAvailable: true,
+      lastCudaProbeOk: true,
+      verifiedAt: true,
+    },
+  });
+  if (!machine) throw new Error('machine_not_found_during_gpu_resource_sync');
+
+  const now = new Date();
+  const isolationVerified = machine.nvidiaRuntimeAvailable && machine.virtualizationAvailable;
+  const verifiedAt = machine.lastCudaProbeOk ? machine.verifiedAt : null;
   const activeKeys: string[] = [];
+  const activeAcceleratorIds: string[] = [];
   const gpus = accelerators.filter((item) => item.kind === 'GPU');
 
   for (const [index, gpu] of gpus.entries()) {
@@ -43,22 +80,31 @@ export const syncGpuMiningResourcesFromAccelerators = async (
         slotIndex: index,
         vendor: gpu.vendor,
         model: gpu.model,
-        vramMiB: gpu.memoryTotalMiB ?? 0,
+        vramMiB: gpu.memoryTotalMiB ?? 1,
         driverVersion: gpu.driverVersion ?? '',
         cudaVersion: gpu.runtimeVersion ?? null,
-        lastSeenAt: new Date(),
+        status: legacyGpuStatus(gpu.available, machine.moderationStatus, machine.operational),
+        moderationStatus: machine.moderationStatus,
+        isolationVerified,
+        verifiedAt,
+        lastSeenAt: now,
       },
       update: {
         slotIndex: index,
         vendor: gpu.vendor,
         model: gpu.model,
-        vramMiB: gpu.memoryTotalMiB ?? 0,
+        vramMiB: gpu.memoryTotalMiB ?? 1,
         driverVersion: gpu.driverVersion ?? '',
         cudaVersion: gpu.runtimeVersion ?? null,
-        lastSeenAt: new Date(),
+        status: legacyGpuStatus(gpu.available, machine.moderationStatus, machine.operational),
+        moderationStatus: machine.moderationStatus,
+        isolationVerified,
+        verifiedAt,
+        lastSeenAt: now,
       },
       select: { id: true },
     });
+    activeAcceleratorIds.push(accelerator.id);
 
     const resourceKey = gpuMiningResourceKey(machineId, gpu.deviceId);
     activeKeys.push(resourceKey);
@@ -76,7 +122,7 @@ export const syncGpuMiningResourcesFromAccelerators = async (
           displayName: gpu.model,
           acceleratorId: accelerator.id,
           enabled: true,
-          lastSeenAt: new Date(),
+          lastSeenAt: now,
         },
       });
     } else {
@@ -91,13 +137,13 @@ export const syncGpuMiningResourcesFromAccelerators = async (
           acceleratorId: accelerator.id,
           enabled: true,
           quarantined: false,
-          lastSeenAt: new Date(),
+          lastSeenAt: now,
         },
         update: {
           displayName: gpu.model,
           acceleratorId: accelerator.id,
           enabled: true,
-          lastSeenAt: new Date(),
+          lastSeenAt: now,
         },
       });
     }
@@ -110,6 +156,18 @@ export const syncGpuMiningResourcesFromAccelerators = async (
       ...(activeKeys.length ? { resourceKey: { notIn: activeKeys } } : {}),
     },
     data: { enabled: false },
+  });
+
+  await tx.accelerator.updateMany({
+    where: {
+      machineId,
+      ...(activeAcceleratorIds.length ? { id: { notIn: activeAcceleratorIds } } : {}),
+      status: { not: AcceleratorOperationalStatus.QUARANTINED },
+    },
+    data: {
+      status: AcceleratorOperationalStatus.MISSING,
+      isolationVerified: false,
+    },
   });
 };
 

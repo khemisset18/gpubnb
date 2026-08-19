@@ -17,6 +17,8 @@ class GpuProofJobFlowTests(unittest.TestCase):
         attempt_id = "attempt_test"
         session_id = "session_test"
         lease_token = "a" * 43
+        resource_id = "resource_test01"
+        expected_gpu_uuid = "GPU-11111111-2222-3333-4444-555555555555"
         calls: list[tuple[str, str, object | None]] = []
         events: list[dict[str, object]] = []
 
@@ -27,6 +29,26 @@ class GpuProofJobFlowTests(unittest.TestCase):
             "leaseToken": lease_token,
             "parameters": {"durationSeconds": 30, "workspaceSlug": "compute"},
             "workspaceSession": {"id": session_id},
+        }
+
+        rental_authority = {
+            "protocolVersion": 1,
+            "leaseTtlSeconds": 45,
+            "sessions": [{
+                "sessionId": session_id,
+                "status": "READY",
+                "resources": [{
+                    "resourceId": resource_id,
+                    "hardwareUuid": expected_gpu_uuid,
+                    "vendor": "NVIDIA",
+                    "lease": {
+                        "resourceId": resource_id,
+                        "holderId": f"rental:{session_id}",
+                        "leaseId": "lease_test0000001",
+                        "fencingToken": "1",
+                    },
+                }],
+            }],
         }
 
         def fake_agent_request(
@@ -44,11 +66,17 @@ class GpuProofJobFlowTests(unittest.TestCase):
                 return job
             if path == f"/agent/jobs/{job_id}/control":
                 return {"cancelRequested": False}
+            if path == f"/agent/mining/{machine_id}/rental-authority":
+                return rental_authority
             return {"ok": True}
 
-        def fake_gpu_proof(image: str, duration: int, on_sample):
+        def fake_gpu_proof(image: str, duration: int, gpu_uuid: str, on_sample):
             self.assertEqual(image, DEFAULT_COMPUTE_IMAGE)
             self.assertEqual(duration, 30)
+            # Regression: the container must be launched against the exact hardware
+            # UUID the rental resource authority leased for this session, not a
+            # guessed/fixed device index.
+            self.assertEqual(gpu_uuid, expected_gpu_uuid)
             on_sample({"elapsedSeconds": 5, "iterations": 100})
             on_sample({"elapsedSeconds": 10, "iterations": 200})
             return {
@@ -124,6 +152,59 @@ class GpuProofJobFlowTests(unittest.TestCase):
 
         self.assertTrue(any(event.get("event") == "job_completed" for event in events))
         self.assertFalse(any(event.get("event") == "job_failed" for event in events))
+
+    def test_gpu_proof_job_fails_closed_without_touching_docker_when_authority_has_no_session(self) -> None:
+        # Regression for the reported `rental_resource_authority_missing_for_session`
+        # failure: before this fix, /agent/mining/:machineId/rental-authority only
+        # ever returned Developer-workspace sessions, so a Compute/GPU_PROOF session
+        # could never be found there. The job must fail closed - it must never fall
+        # back to launching the container against a guessed GPU.
+        machine_id = "machine_test"
+        job_id = "job_test"
+        attempt_id = "attempt_test"
+        session_id = "session_test"
+        lease_token = "a" * 43
+        events: list[dict[str, object]] = []
+
+        job = {
+            "id": job_id,
+            "type": "GPU_PROOF",
+            "attemptId": attempt_id,
+            "leaseToken": lease_token,
+            "parameters": {"durationSeconds": 30, "workspaceSlug": "compute"},
+            "workspaceSession": {"id": session_id},
+        }
+
+        def fake_agent_request(
+            _api: object,
+            _key: object,
+            _machine_id: str,
+            path: str,
+            method: str = "GET",
+            body: object | None = None,
+            *_args: object,
+            **_kwargs: object,
+        ) -> object:
+            if path == f"/agent/jobs/next/{machine_id}":
+                return job
+            if path == f"/agent/mining/{machine_id}/rental-authority":
+                # A well-formed authority payload that simply has no entry for this
+                # session - exactly what a stale/mismatched workspace-slug filter
+                # would have produced server-side.
+                return {"protocolVersion": 1, "leaseTtlSeconds": 45, "sessions": []}
+            return {"ok": True}
+
+        with (
+            patch("gpubnb_agent.cli.agent_request", side_effect=fake_agent_request),
+            patch("gpubnb_agent.cli.run_gpu_proof_workspace") as gpu_proof_mock,
+        ):
+            run_next_job(Mock(), object(), machine_id, {}, event_sink=events.append)
+
+        gpu_proof_mock.assert_not_called()
+        failed = [event for event in events if event.get("event") == "job_failed"]
+        self.assertEqual(len(failed), 1)
+        self.assertIn("rental_resource_authority_missing_for_session", str(failed[0]["message"]))
+        self.assertFalse(any(event.get("event") == "job_completed" for event in events))
 
     def test_terminal_request_retries_with_a_fresh_signature_after_lost_response(self) -> None:
         calls: list[dict[str, object]] = []

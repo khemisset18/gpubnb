@@ -311,6 +311,69 @@ def parse_rental_resource(session_id: str, value: Any) -> RentalResourceSpec:
     )
 
 
+RENTAL_AUTHORITY_PROTOCOL_VERSION = 1
+
+
+def parse_rental_authority_sessions(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Validate a raw /agent/mining/:machineId/rental-authority payload.
+
+    Shared by every workspace kind that resolves a GPU from the rental resource
+    authority (Developer's workspace-gateway v5 and the Compute/GPU_PROOF job
+    path). Returns {sessionId: {"status", "blockedReason", "resources": [RentalResourceSpec]}}.
+    Raises RuntimeError on any structural violation instead of guessing.
+    """
+    protocol_version = payload.get("protocolVersion")
+    if protocol_version != RENTAL_AUTHORITY_PROTOCOL_VERSION:
+        raise RuntimeError("rental_resource_authority_protocol_invalid")
+    raw_sessions = payload.get("sessions")
+    if not isinstance(raw_sessions, list) or len(raw_sessions) > 32:
+        raise RuntimeError("rental_resource_authority_sessions_invalid")
+    authority: dict[str, dict[str, Any]] = {}
+    resource_owners: dict[str, str] = {}
+    for raw in raw_sessions:
+        if not isinstance(raw, dict):
+            raise RuntimeError("rental_resource_authority_session_invalid")
+        session_id = str(raw.get("sessionId") or "")
+        if not session_id or session_id in authority:
+            raise RuntimeError("rental_resource_authority_session_duplicate")
+        resources = raw.get("resources")
+        if not isinstance(resources, list) or len(resources) > 16:
+            raise RuntimeError("rental_resource_authority_resources_invalid")
+        parsed = [parse_rental_resource(session_id, resource) for resource in resources]
+        for spec in parsed:
+            previous = resource_owners.get(spec.resource_id)
+            if previous is not None and previous != session_id:
+                raise RuntimeError("rental_resource_authority_overlap")
+            resource_owners[spec.resource_id] = session_id
+        authority[session_id] = {
+            "status": str(raw.get("status") or ""),
+            "blockedReason": str(raw.get("blockedReason") or ""),
+            "resources": parsed,
+        }
+    return authority
+
+
+def resolve_session_resources(
+    authority: dict[str, dict[str, Any]], session_id: str
+) -> list[RentalResourceSpec]:
+    """Look up the exact leased GPU resource(s) for one live session.
+
+    Fails closed: a session absent from the authority (wrong workspace kind,
+    allocation not live, mapping missing) or carrying a blockedReason never
+    yields a resource list - the caller must not fall back to guessing a GPU.
+    """
+    entry = authority.get(session_id)
+    if entry is None:
+        raise RuntimeError("rental_resource_authority_missing_for_session")
+    blocked = str(entry.get("blockedReason") or "")
+    if blocked:
+        raise RuntimeError(blocked)
+    specs = entry.get("resources")
+    if not isinstance(specs, list) or not specs:
+        raise RuntimeError("rental_resource_authority_empty")
+    return list(specs)
+
+
 def _record_identity(record: RuntimeRecord) -> ProcessIdentity | None:
     if record.pid is None or not record.executable_path or not record.process_creation_token:
         return None
