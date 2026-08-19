@@ -308,6 +308,29 @@ class HostTunnelSupervisor:
         self.runtimes[session_id] = runtime
         return True
 
+    def reconcile_after_direct(
+        self,
+        session_id: str,
+        workspace_port: int,
+        direct_result: str,
+        relay_policy: str,
+    ) -> bool:
+        """Keep Edge strictly behind a completed bounded direct attempt."""
+        if direct_result in {"DIRECT_HOST", "DIRECT_SERVER_REFLEXIVE"}:
+            self.stop(session_id)
+            return False
+        if direct_result not in {"DIRECT_FAILED", "AUTH_FAILED", "TIMEOUT", "REVOKED"}:
+            raise RuntimeError("host_tunnel_direct_result_invalid")
+        if direct_result == "REVOKED":
+            self.stop(session_id)
+            return False
+        if relay_policy == "DIRECT_ONLY":
+            self.stop(session_id)
+            return False
+        if relay_policy != "FALLBACK_ONLY":
+            raise RuntimeError("host_tunnel_relay_policy_invalid")
+        return self.reconcile(session_id, workspace_port, True)
+
     @staticmethod
     def _stop_process(process: ProcessLike) -> None:
         if process.poll() is not None:

@@ -64,6 +64,57 @@ For every attempt record only operational counters needed for qualification: can
 
 Promotion requires no cross-lease connection, no stale fencing acceptance, no replay acceptance, and no regression in rental stop/revoke behavior.
 
+### Direct-session bounds and rollback
+
+- require mutual TLS with an operator trust root and ALPN `gpubnb-p2p-direct/1`;
+- allow at most eight direct attempts, five seconds per attempt and fifteen
+  seconds overall;
+- send at most three hole-punch hints to each signed direct candidate;
+- accept only a `VerifiedRendezvousTicket`, never an unchecked JSON ticket;
+- recheck expiry and current lease/fencing authority during the handshake;
+- emit candidate class, outcome code, latency, attempt count, reconnect outcome
+  and fallback-required only. Never emit an endpoint, IP, session or user ID.
+
+Rollback by disabling the direct-session rollout flag. The existing
+`gpubnb-host-tunnel` remains the fallback for `FALLBACK_ONLY` tickets. Do not turn
+fallback on for `DIRECT_ONLY`, and do not extend ticket expiry to hide connection
+failures.
+
+### Real NAT-to-NAT qualification
+
+The helper `agent/tools/p2p_direct_qualify.py` runs one peer per machine and prints
+only non-sensitive JSON metrics. Each process first performs Candidate Discovery
+and keeps its returned socket open. It writes candidates to an ACL-protected
+exchange file, waits in the same process for the Control Plane (or a secured test
+harness) to write the signed ticket, verifies it, and transfers that exact socket
+object to QUIC. A pre-existing candidate or ticket file is rejected as stale.
+Never pass private keys on the command line or commit exchange files.
+
+1. Place machine A and machine B on genuinely different networks and confirm no
+   shared LAN route exists.
+2. Configure distinct `candidateOutputFile` and `ticketInputFile` paths under the
+   `rendezvous` section for each peer. Both paths must be absent before startup.
+3. Run the Host first:
+   `python agent/tools/p2p_direct_qualify.py --config host-private.json`.
+4. Publish the emitted private candidate file to the rendezvous issuer and write
+   its returned signed ticket to `ticketInputFile` while the process remains
+   alive. Repeat for the Renter on machine B.
+5. Record only the emitted result (`DIRECT_HOST`,
+   `DIRECT_SERVER_REFLEXIVE`, `TIMEOUT`, `AUTH_FAILED`, or fallback required),
+   latency and attempt count.
+6. Repeat across home NAT, CGNAT, symmetric NAT, IPv6-only/dual-stack,
+   restrictive firewall, packet loss, endpoint change and fencing rotation.
+7. Destroy the short-lived private configuration and exchange files and retain
+   only aggregate non-sensitive results.
+
+The helper never closes and rebinds a port after receiving the ticket. Socket
+object identity and file descriptor are preserved from discovery, across ticket
+wait/verification, through QUIC adoption. Ticket wait is bounded to 120 seconds;
+failure is terminal and closes the reserved socket.
+
+Do not report NAT-to-NAT success based on the CI loopback test. A production claim
+requires recorded successful runs from two separate real networks.
+
 ## Phase 3 - relay fallback
 
 Introduce relay capacity only for peers that fail direct attempts. The relay must:

@@ -1,8 +1,8 @@
 """Bounded P2P candidate discovery and rendezvous-ticket verification.
 
-This module deliberately stops before establishing a peer session.  The reserved
-UDP socket is returned to the caller so a future QUIC implementation can reuse
-the exact NAT mapping discovered here.
+The reserved UDP socket and a typed, verified rendezvous value are returned to
+the direct-session layer.  Keeping these capabilities typed prevents callers
+from accidentally feeding unverified ticket dictionaries to the network path.
 """
 from __future__ import annotations
 
@@ -12,7 +12,9 @@ import re
 import socket
 import struct
 import time
+from collections.abc import Awaitable
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import base58
@@ -72,6 +74,62 @@ class CandidateDiscovery:
 
     def __exit__(self, *_args: object) -> None:
         self.close()
+
+
+@dataclass(frozen=True)
+class VerifiedRendezvousTicket:
+    """Authority-checked ticket details safe for direct-session consumption."""
+
+    claims: Mapping[str, Any]
+    host_candidates: tuple[Candidate, ...]
+    renter_candidates: tuple[Candidate, ...]
+
+    def candidates_for_peer(self, local_role: str) -> tuple[Candidate, ...]:
+        if local_role == "HOST":
+            return self.renter_candidates
+        if local_role == "RENTER":
+            return self.host_candidates
+        raise P2PError("p2p_role_invalid")
+
+
+TicketProvider = Callable[
+    [CandidateDiscovery], Mapping[str, Any] | Awaitable[Mapping[str, Any]]
+]
+
+
+async def discover_then_verify_ticket(
+    config: Mapping[str, Any],
+    ticket_provider: TicketProvider,
+    verifying_key: bytes | str | VerifyKey,
+    *,
+    session_id: str,
+    machine_id: str,
+    lease_id: str,
+    fencing_token: str,
+    **discovery_options: Any,
+) -> tuple[CandidateDiscovery, VerifiedRendezvousTicket]:
+    """Keep discovery UDP alive while candidates are exchanged for a ticket."""
+    discovery = discover_candidates(config, **discovery_options)
+    reserved = discovery.socket
+    original_fileno = reserved.fileno()
+    try:
+        ticket = ticket_provider(discovery)
+        if isinstance(ticket, Awaitable):
+            ticket = await ticket
+        if discovery.socket is not reserved or reserved.fileno() != original_fileno:
+            raise P2PError("p2p_socket_identity_changed")
+        verified = verify_rendezvous_ticket_details(
+            ticket,
+            verifying_key,
+            session_id=session_id,
+            machine_id=machine_id,
+            lease_id=lease_id,
+            fencing_token=fencing_token,
+        )
+        return discovery, verified
+    except BaseException:
+        discovery.close()
+        raise
 
 
 def _endpoint(address: ipaddress.IPv4Address | ipaddress.IPv6Address, port: int) -> str:
@@ -192,11 +250,14 @@ def discover_candidates(
     servers = _parse_stun_servers(config)
     timeout_ms = config.get("stunTimeoutMs", 1_000)
     total_timeout_ms = config.get("stunTotalTimeoutMs", 4_000)
+    bind_port = config.get("bindPort", 0)
     if (
         not isinstance(timeout_ms, int) or isinstance(timeout_ms, bool)
         or not 1 <= timeout_ms <= MAX_STUN_TIMEOUT_MS
         or not isinstance(total_timeout_ms, int) or isinstance(total_timeout_ms, bool)
         or not timeout_ms <= total_timeout_ms <= MAX_STUN_TOTAL_TIMEOUT_MS
+        or not isinstance(bind_port, int) or isinstance(bind_port, bool)
+        or not 0 <= bind_port <= 65535
     ):
         raise P2PError("p2p_stun_config_invalid")
 
@@ -204,7 +265,7 @@ def discover_candidates(
     try:
         reserved = socket_factory(socket.AF_INET6, socket.SOCK_DGRAM)
         reserved.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-        reserved.bind(("::", 0))
+        reserved.bind(("::", bind_port))
         dual_stack = True
     except OSError:
         try:
@@ -213,7 +274,7 @@ def discover_candidates(
             pass
         try:
             reserved = socket_factory(socket.AF_INET, socket.SOCK_DGRAM)
-            reserved.bind(("0.0.0.0", 0))
+            reserved.bind(("0.0.0.0", bind_port))
         except OSError as exc:
             try:
                 reserved.close()
@@ -353,6 +414,28 @@ def verify_rendezvous_ticket(
     now_ms: int | None = None,
 ) -> tuple[Candidate, ...]:
     """Verify all authority and path invariants before returning peer attempts."""
+    return verify_rendezvous_ticket_details(
+        ticket,
+        verifying_key,
+        session_id=session_id,
+        machine_id=machine_id,
+        lease_id=lease_id,
+        fencing_token=fencing_token,
+        now_ms=now_ms,
+    ).host_candidates
+
+
+def verify_rendezvous_ticket_details(
+    ticket: Mapping[str, Any],
+    verifying_key: bytes | str | VerifyKey,
+    *,
+    session_id: str,
+    machine_id: str,
+    lease_id: str,
+    fencing_token: str,
+    now_ms: int | None = None,
+) -> VerifiedRendezvousTicket:
+    """Verify a ticket and retain both signed peer candidate sets."""
     if not isinstance(ticket, Mapping) or set(ticket) != {"claims", "signatureHex"}:
         raise P2PError("p2p_ticket_structure_invalid")
     claims = ticket["claims"]
@@ -422,4 +505,11 @@ def verify_rendezvous_ticket(
         raise P2PError("p2p_ticket_signature_invalid") from exc
 
     rank = {"HOST": 0, "SERVER_REFLEXIVE": 1, "RELAY": 2}
-    return tuple(sorted(host, key=lambda item: (rank[item.kind], -item.priority, item.endpoint)))
+    ordered_host = tuple(sorted(host, key=lambda item: (rank[item.kind], -item.priority, item.endpoint)))
+    ordered_renter = tuple(sorted(renter, key=lambda item: (rank[item.kind], -item.priority, item.endpoint)))
+    immutable_claims = MappingProxyType({
+        key: value
+        for key, value in claims.items()
+        if key not in {"hostCandidates", "renterCandidates"}
+    })
+    return VerifiedRendezvousTicket(immutable_claims, ordered_host, ordered_renter)
