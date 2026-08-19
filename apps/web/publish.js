@@ -10,6 +10,9 @@ const submitButton=document.querySelector('#publishSubmit');
 const machineState=document.querySelector('#machineState');
 const gpuState=document.querySelector('#gpuState');
 let machines=[];
+const presetParams=new URLSearchParams(location.search);
+const presetMachineId=presetParams.get('machineId')||'';
+const presetGpuUuid=presetParams.get('gpuUuid')||'';
 
 const BLOCKING_REASON={
   ACCELERATOR_NOT_AVAILABLE:'GPU temporairement indisponible',
@@ -85,6 +88,10 @@ async function loadGpus(machineId){
       gpuSelect.add(option);
       if(gpu.publishable)available+=1;
     }
+    if(presetGpuUuid){
+      const preset=(data.gpus||[]).find(gpu=>gpu.hardwareUuid===presetGpuUuid);
+      if(preset)gpuSelect.value=preset.id;
+    }
     if(!(data.gpus||[]).length){
       gpuSelect.add(new Option('Aucun GPU inventorié',''));
       gpuState.textContent='Aucun GPU physique n’est encore disponible dans l’inventaire de location.';
@@ -139,7 +146,13 @@ async function loadAccount(){
       ?`${eligible} machine${eligible>1?'s':''} prête${eligible>1?'s':''} pour sélectionner un GPU.`
       :'Aucune machine ne passe actuellement les contrôles de publication.';
     if(!eligible)show('Corrigez l’état du Host avant de publier un GPU.',true);
-    await loadGpus('');
+    const preselectMachineId=presetMachineId&&machines.some(m=>m.id===presetMachineId)?presetMachineId:'';
+    if(preselectMachineId){
+      machineSelect.value=preselectMachineId;
+      const machine=machines.find(item=>item.id===preselectMachineId);
+      if(machine)machineState.textContent=`${machine.gpuModel||'Machine'} · ${humanMachineState(machine)}`;
+    }
+    await loadGpus(preselectMachineId);
   }catch(e){
     if(e.status===401){location.href='/auth.html?next=publish';return}
     machineSelect.replaceChildren(new Option('Machines indisponibles',''));

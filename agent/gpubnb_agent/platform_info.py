@@ -272,8 +272,15 @@ def board_bios_info() -> dict[str, str | None]:
 
 def virtualization_available() -> bool:
     if platform.system() == "Windows":
-        result = run_command(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty VirtualizationFirmwareEnabled)"])
-        return result.returncode == 0 and result.stdout.strip().lower() == "true"
+        # VirtualizationFirmwareEnabled becomes unreliable (often falsely False) once a
+        # hypervisor (Hyper-V/WSL2, which Docker Desktop relies on) has already claimed the
+        # CPU's virtualization extensions. HypervisorPresent is then the trustworthy signal
+        # that virtualization is actually enabled and in use.
+        firmware = run_command(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty VirtualizationFirmwareEnabled)"])
+        if firmware.returncode == 0 and firmware.stdout.strip().lower() == "true":
+            return True
+        hypervisor = run_command(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "(Get-CimInstance Win32_ComputerSystem | Select-Object -First 1 -ExpandProperty HypervisorPresent)"])
+        return hypervisor.returncode == 0 and hypervisor.stdout.strip().lower() == "true"
     try:
         cpuinfo = Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="ignore").lower()
         return " vmx " in f" {cpuinfo} " or " svm " in f" {cpuinfo} "

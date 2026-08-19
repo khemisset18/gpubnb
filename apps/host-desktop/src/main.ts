@@ -211,7 +211,7 @@ const listingUrl = (baseUrl: string, machineId: string, gpuUuid: string): URL | 
   if (!MACHINE_ID_PATTERN.test(machineId) || !GPU_UUID_PATTERN.test(gpuUuid)) return null;
   const url = officialUrl(baseUrl);
   if (!url) return null;
-  url.pathname = '/host/listings/new';
+  url.pathname = '/publish.html';
   url.search = '';
   url.searchParams.set('machineId', machineId);
   url.searchParams.set('gpuUuid', gpuUuid);
