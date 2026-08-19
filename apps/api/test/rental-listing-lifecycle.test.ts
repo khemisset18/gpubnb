@@ -3,15 +3,20 @@ import assert from 'node:assert/strict';
 import {
   AcceleratorOperationalStatus,
   BookingStatus,
+  JobStatus,
   ListingResourceMode,
   ListingStatus,
   MachineConnectivity,
   MiningRuntimeState,
   ModerationStatus,
+  PaymentStatus,
+  ResourceAllocationStatus,
+  WorkspaceSessionStatus,
 } from '@prisma/client';
 
 import {
   OwnerListingLifecycleError,
+  archiveLegacyFullMachineListing,
   transitionOwnerExactGpuListing,
 } from '../src/rental-listing-lifecycle.js';
 
@@ -153,4 +158,168 @@ test('security-suspended listing cannot be owner-resumed or owner-archived', asy
       (error: unknown) => error instanceof OwnerListingLifecycleError && error.code === 'invalid_listing_transition',
     );
   }
+});
+
+function legacyListing(status: ListingStatus, overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'legacy-listing-1',
+    machineId: 'machine-1',
+    status,
+    resourceMode: ListingResourceMode.FULL_MACHINE,
+    bookings: [],
+    ...overrides,
+  };
+}
+
+function booking(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'booking-1',
+    status: BookingStatus.COMPLETED,
+    machineAllocation: null,
+    acceleratorAllocations: [],
+    jobs: [],
+    workspaceSessions: [],
+    payment: null,
+    ...overrides,
+  };
+}
+
+test('legacy FULL_MACHINE listing with no dependency is archived', async () => {
+  const row = legacyListing(ListingStatus.ACTIVE);
+  const { db, updates } = fakeDb(row);
+
+  const result = await archiveLegacyFullMachineListing(db as never, 'owner-1', row.id);
+
+  assert.equal(result.previousStatus, ListingStatus.ACTIVE);
+  assert.equal(result.status, ListingStatus.ARCHIVED);
+  assert.equal(result.alreadyArchived, false);
+  assert.equal(updates.length, 1);
+});
+
+test('legacy archive refuses a listing with an active booking', async () => {
+  const row = legacyListing(ListingStatus.ACTIVE, {
+    bookings: [booking({ status: BookingStatus.ACTIVE })],
+  });
+
+  await assert.rejects(
+    archiveLegacyFullMachineListing(fakeDb(row).db as never, 'owner-1', row.id),
+    (error: unknown) => error instanceof OwnerListingLifecycleError && error.code === 'listing_has_live_booking',
+  );
+});
+
+test('legacy archive refuses a listing with a live machine allocation', async () => {
+  const row = legacyListing(ListingStatus.ACTIVE, {
+    bookings: [booking({
+      status: BookingStatus.COMPLETED,
+      machineAllocation: { id: 'alloc-1', status: ResourceAllocationStatus.ACTIVE, releasedAt: null },
+    })],
+  });
+
+  await assert.rejects(
+    archiveLegacyFullMachineListing(fakeDb(row).db as never, 'owner-1', row.id),
+    (error: unknown) => error instanceof OwnerListingLifecycleError && error.code === 'listing_has_live_allocation',
+  );
+});
+
+test('legacy archive refuses a listing with a live accelerator allocation', async () => {
+  const row = legacyListing(ListingStatus.ACTIVE, {
+    bookings: [booking({
+      status: BookingStatus.COMPLETED,
+      acceleratorAllocations: [{ id: 'aa-1', status: ResourceAllocationStatus.HELD, releasedAt: null }],
+    })],
+  });
+
+  await assert.rejects(
+    archiveLegacyFullMachineListing(fakeDb(row).db as never, 'owner-1', row.id),
+    (error: unknown) => error instanceof OwnerListingLifecycleError && error.code === 'listing_has_live_allocation',
+  );
+});
+
+test('a released allocation does not block legacy archive', async () => {
+  const row = legacyListing(ListingStatus.ACTIVE, {
+    bookings: [booking({
+      status: BookingStatus.COMPLETED,
+      machineAllocation: { id: 'alloc-1', status: ResourceAllocationStatus.RELEASED, releasedAt: now },
+    })],
+  });
+  const { db } = fakeDb(row);
+
+  const result = await archiveLegacyFullMachineListing(db as never, 'owner-1', row.id);
+  assert.equal(result.status, ListingStatus.ARCHIVED);
+});
+
+test('legacy archive refuses a listing with a live job', async () => {
+  const row = legacyListing(ListingStatus.ACTIVE, {
+    bookings: [booking({
+      status: BookingStatus.COMPLETED,
+      jobs: [{ id: 'job-1', status: JobStatus.RUNNING }],
+    })],
+  });
+
+  await assert.rejects(
+    archiveLegacyFullMachineListing(fakeDb(row).db as never, 'owner-1', row.id),
+    (error: unknown) => error instanceof OwnerListingLifecycleError && error.code === 'listing_has_live_job',
+  );
+});
+
+test('legacy archive refuses a listing with a live workspace session (lease)', async () => {
+  const row = legacyListing(ListingStatus.ACTIVE, {
+    bookings: [booking({
+      status: BookingStatus.COMPLETED,
+      workspaceSessions: [{ id: 'ws-1', status: WorkspaceSessionStatus.RUNNING }],
+    })],
+  });
+
+  await assert.rejects(
+    archiveLegacyFullMachineListing(fakeDb(row).db as never, 'owner-1', row.id),
+    (error: unknown) => error instanceof OwnerListingLifecycleError && error.code === 'listing_has_live_session',
+  );
+});
+
+test('legacy archive refuses a listing with an unsettled payment', async () => {
+  const row = legacyListing(ListingStatus.ACTIVE, {
+    bookings: [booking({
+      status: BookingStatus.COMPLETED,
+      payment: { id: 'pay-1', status: PaymentStatus.SETTLEMENT_PENDING },
+    })],
+  });
+
+  await assert.rejects(
+    archiveLegacyFullMachineListing(fakeDb(row).db as never, 'owner-1', row.id),
+    (error: unknown) => error instanceof OwnerListingLifecycleError && error.code === 'listing_has_live_payment',
+  );
+});
+
+test('legacy archive is a no-op success when the listing is already archived (idempotent)', async () => {
+  const row = legacyListing(ListingStatus.ARCHIVED);
+  const { db, updates } = fakeDb(row);
+
+  const result = await archiveLegacyFullMachineListing(db as never, 'owner-1', row.id);
+
+  assert.equal(result.status, ListingStatus.ARCHIVED);
+  assert.equal(result.alreadyArchived, true);
+  assert.equal(updates.length, 0, 'idempotent replay must not write anything');
+});
+
+test('legacy archive never touches a SELECTED_ACCELERATORS listing', async () => {
+  const row = listing(ListingStatus.ACTIVE);
+
+  await assert.rejects(
+    archiveLegacyFullMachineListing(fakeDb(row).db as never, 'owner-1', row.id),
+    (error: unknown) => error instanceof OwnerListingLifecycleError && error.code === 'invalid_listing_mode',
+  );
+});
+
+test('archiving one legacy listing leaves a sibling legacy listing on the same machine untouched', async () => {
+  const targetRow = legacyListing(ListingStatus.ACTIVE, { id: 'legacy-listing-1', machineId: 'machine-1' });
+  const siblingRow = legacyListing(ListingStatus.ACTIVE, { id: 'legacy-listing-2', machineId: 'machine-1' });
+  const { db, updates } = fakeDb(targetRow);
+
+  const result = await archiveLegacyFullMachineListing(db as never, 'owner-1', targetRow.id);
+
+  assert.equal(result.status, ListingStatus.ARCHIVED);
+  assert.equal(updates.length, 1);
+  const [updateArgs] = updates as [{ where: { id: string } }];
+  assert.equal(updateArgs.where.id, targetRow.id);
+  assert.notEqual(updateArgs.where.id, siblingRow.id);
 });

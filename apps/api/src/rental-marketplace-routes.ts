@@ -13,6 +13,7 @@ import {
 } from './rental-listing-service.js';
 import {
   OwnerListingLifecycleError,
+  archiveLegacyFullMachineListing,
   transitionOwnerExactGpuListing,
 } from './rental-listing-lifecycle.js';
 import { listOwnerExactGpuListings } from './rental-owner-listings.js';
@@ -164,6 +165,35 @@ export function registerRentalMarketplaceRoutes(
           action: params.action,
           ownerId: session.userId,
         });
+      }
+      throw error;
+    }
+  });
+
+  // Narrowly-scoped retirement path for pre-marketplace-redesign FULL_MACHINE
+  // listings: transitionOwnerExactGpuListing (above) categorically rejects any
+  // non-SELECTED_ACCELERATORS listing before it even checks bookings, so those
+  // legacy rows have no lifecycle route at all today and permanently block
+  // per-GPU publication of their machine (FULL_MACHINE_LISTING_ACTIVE). This
+  // route only ever flips status -> ARCHIVED (never a delete) and only after
+  // archiveLegacyFullMachineListing has verified there is no live booking,
+  // allocation, job, workspace session, or open payment still depending on it.
+  app.post('/rental/listings/:listingId/actions/archive-legacy', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const user = await db.user.findUnique({
+      where: { id: session.userId },
+      select: { canHost: true },
+    });
+    if (!user?.canHost) return reply.code(403).send({ error: 'provider_role_required' });
+    const { listingId } = z.object({ listingId: z.string().cuid() }).parse(request.params);
+    try {
+      return await archiveLegacyFullMachineListing(db, session.userId, listingId);
+    } catch (error) {
+      if (error instanceof OwnerListingLifecycleError) {
+        return sendLifecycleError(request, reply, error, { listingId, ownerId: session.userId });
       }
       throw error;
     }
