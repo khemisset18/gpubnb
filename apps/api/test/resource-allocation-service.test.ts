@@ -10,10 +10,17 @@ const ids = {
   machine: 'cm000000000000000000003',
 };
 
-function fakeDb(booking: unknown) {
+function fakeDb(booking: unknown, options: { guardUpdateCount?: number } = {}) {
   const writes: string[] = [];
   const tx = {
-    booking: { findFirst: async () => booking },
+    booking: {
+      findFirst: async () => booking,
+      updateMany: async () => {
+        const count = options.guardUpdateCount ?? 1;
+        writes.push(`booking.updateMany:${count}`);
+        return { count };
+      },
+    },
     $executeRaw: async () => { writes.push('advisory_lock'); return 1; },
     machineAllocation: {
       create: async (args: { data: Record<string, unknown> }) => { writes.push('machineAllocation.create'); return args.data; },
@@ -100,7 +107,7 @@ test('allocateBookingResources creates a MachineAllocation for a FULL_MACHINE li
 
   assert.equal(result.mode, 'FULL_MACHINE');
   assert.deepEqual(result.acceleratorIds, []);
-  assert.deepEqual(writes, ['advisory_lock', 'machineAllocation.create']);
+  assert.deepEqual(writes, ['booking.updateMany:1', 'advisory_lock', 'machineAllocation.create']);
 });
 
 test('hot presence canary blocks the real allocation before any allocation write', async () => {
@@ -118,7 +125,7 @@ test('hot presence canary blocks the real allocation before any allocation write
     allocateBookingResources(db as never, { bookingId: ids.booking, buyerId: ids.buyer }),
     (error: unknown) => error instanceof ResourceAllocationError && error.code === 'machine_not_online',
   );
-  assert.deepEqual(writes, []);
+  assert.deepEqual(writes, ['booking.updateMany:1']);
 });
 
 test('allocateBookingResources refuses to double-allocate an already-allocated booking', async () => {
@@ -144,7 +151,7 @@ test('allocateBookingResources allocates the exact verified GPU linked to the li
 
   assert.equal(result.mode, 'SELECTED_ACCELERATORS');
   assert.deepEqual(result.acceleratorIds, [acceleratorId]);
-  assert.deepEqual(writes, ['advisory_lock', 'acceleratorAllocation.createMany:1']);
+  assert.deepEqual(writes, ['booking.updateMany:1', 'advisory_lock', 'acceleratorAllocation.createMany:1']);
 });
 
 test('allocateBookingResources rejects a selected accelerator that is not rentable', async () => {
@@ -165,7 +172,7 @@ test('allocation fails closed when the exact GPU MiningResource authority is mis
     allocateBookingResources(db as never, { bookingId: ids.booking, buyerId: ids.buyer, acceleratorIds: [acceleratorId] }),
     (error: unknown) => error instanceof ResourceAllocationError && error.code === 'accelerator_not_rentable',
   );
-  assert.deepEqual(writes, ['advisory_lock']);
+  assert.deepEqual(writes, ['booking.updateMany:1', 'advisory_lock']);
 });
 
 test('allocation fails closed when exact GPU authority is stale or already bound to a rental', async () => {
@@ -213,4 +220,21 @@ test('allocateBookingResources never allocates a resource for a booking that is 
     (error: unknown) => error instanceof ResourceAllocationError && error.code === 'booking_not_awaiting_deposit',
   );
   assert.deepEqual(selectedWrites, []);
+});
+
+// Regression for the narrower TOCTOU the above check alone cannot close: the initial
+// findFirst only sees writes committed before this transaction's snapshot started, so a
+// booking that reads as AWAITING_DEPOSIT can still be cancelled by a concurrent
+// orphaned-deposit reconciler tick (dev-booking-reconciler.ts) before this transaction
+// commits. The guard update is a real row-lock-taking UPDATE that contends with the
+// reconciler's own conditional UPDATE on the exact same row, so it must run - and be
+// checked - before any allocation write, even though the earlier plain-read check saw
+// AWAITING_DEPOSIT.
+test('allocateBookingResources fails closed when it loses the row-lock race for a booking the reconciler cancels mid-transaction', async () => {
+  const { db, writes } = fakeDb(fullMachineBooking(), { guardUpdateCount: 0 });
+  await assert.rejects(
+    allocateBookingResources(db as never, { bookingId: ids.booking, buyerId: ids.buyer }),
+    (error: unknown) => error instanceof ResourceAllocationError && error.code === 'booking_not_awaiting_deposit',
+  );
+  assert.deepEqual(writes, ['booking.updateMany:0'], 'must stop at the lost guard update - no advisory lock or allocation write');
 });

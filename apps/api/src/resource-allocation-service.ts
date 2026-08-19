@@ -136,6 +136,20 @@ async function allocateInTransaction(
   if (booking.status !== BookingStatus.AWAITING_DEPOSIT) {
     throw new ResourceAllocationError('booking_not_awaiting_deposit');
   }
+  // The findFirst above is a plain read: by itself it only rules out a booking that was
+  // *already* cancelled before this transaction's snapshot started, not one the
+  // reconciler cancels concurrently, mid-transaction. A self-referential conditional
+  // update takes a real row lock on the booking, the same one the reconciler's own
+  // conditional UPDATE (dev-booking-reconciler.ts) needs to cancel it - ordinary Postgres
+  // row-lock queueing then makes the two mutually exclusive regardless of isolation
+  // level: whichever UPDATE statement runs first wins, and the second blocks, then
+  // re-evaluates its WHERE clause against the now-committed result once the first
+  // commits. A plain read can never provide that guarantee no matter how it's timed.
+  const guarded = await tx.booking.updateMany({
+    where: { id: booking.id, status: BookingStatus.AWAITING_DEPOSIT },
+    data: { status: BookingStatus.AWAITING_DEPOSIT },
+  });
+  if (guarded.count !== 1) throw new ResourceAllocationError('booking_not_awaiting_deposit');
   if (booking.endsAt <= booking.startsAt) throw new ResourceAllocationError('invalid_booking_period');
   if (booking.machineAllocation || booking.acceleratorAllocations.length > 0) {
     throw new ResourceAllocationError('allocation_already_exists');
