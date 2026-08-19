@@ -31,19 +31,35 @@ import { buildRentalResourceAuthority, type RentalResourceAuthority } from '../s
 // always rolled back (never committed), so this test leaves zero footprint in a
 // shared local/CI database regardless of pass or fail.
 //
-// Skips cleanly if no local Postgres is reachable, instead of reporting a false
-// pass or a confusing connection-refused failure.
+// Skips cleanly if no local Postgres/Redis is reachable, instead of reporting a
+// false pass or a confusing connection-refused failure. Some CI workflows (e.g.
+// api-mining-ci.yml) provision Postgres but not Redis for this suite, so both
+// must be checked independently - DATABASE_URL being set says nothing about
+// Redis reachability.
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 const ROLLBACK = Symbol('deliberate-test-rollback');
 
 test('buildRentalResourceAuthority resolves a real Compute/GPU_PROOF session (rental_resource_authority_missing_for_session regression)', { skip: !hasDb }, async (t) => {
   const prisma = new PrismaClient();
-  const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
+  const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+    connectTimeout: 2_000,
+  });
   try {
     await prisma.$connect();
   } catch (error) {
     t.skip(`no reachable local Postgres for this integration test: ${(error as Error).message}`);
+    await prisma.$disconnect().catch(() => {});
+    redis.disconnect();
+    return;
+  }
+  redis.on('error', () => {}); // avoid noisy "Unhandled error event" logs; the connect() rejection below is what we act on
+  try {
+    await redis.connect();
+  } catch (error) {
+    t.skip(`no reachable local Redis for this integration test: ${(error as Error).message}`);
     await prisma.$disconnect().catch(() => {});
     redis.disconnect();
     return;
