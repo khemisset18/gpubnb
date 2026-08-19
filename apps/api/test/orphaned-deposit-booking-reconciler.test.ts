@@ -12,7 +12,20 @@ import {
   ResourceAllocationStatus,
 } from '@prisma/client';
 
-import { reconcileOrphanedDepositBookings } from '../src/dev-booking-reconciler.js';
+// dev-booking-reconciler.ts imports config.ts, which validates process.env at module
+// load time (see config.ts's top-level schema.parse). Some CI workflows (e.g.
+// api-mining-ci.yml) only provision DATABASE_URL for this suite, not the rest of the
+// required config - a plain top-level `import` would be hoisted above any env var
+// this file sets, so the module (and this whole test file) must be loaded dynamically,
+// after harmless fallback values are in place. Mirrors the pattern already used by
+// rental-marketplace-routes.integration.test.ts.
+process.env.NODE_ENV ??= 'test';
+process.env.REDIS_URL ??= 'redis://localhost:6379';
+process.env.SESSION_SECRET ??= 'test-session-secret-0123456789abcdef';
+process.env.INTERNAL_SERVICE_TOKEN ??= 'test-internal-token-0123456789abcdef';
+process.env.PLATFORM_WALLET ??= '11111111111111111111111111111111';
+
+const { reconcileOrphanedDepositBookings } = await import('../src/dev-booking-reconciler.js');
 
 // Real-database regression for the crash-orphan gap identified in the previous audit
 // pass: POST /bookings creates the Booking row and calls allocateBookingResources() as
