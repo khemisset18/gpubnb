@@ -1,7 +1,21 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { devBypassSettlementSignature } from '../src/dev-booking-reconciler.js';
+
+// dev-booking-reconciler.ts imports config.ts, which validates process.env at module
+// load time (see config.ts's top-level schema.parse). Some CI workflows (e.g.
+// api-mining-ci.yml) only provision DATABASE_URL for this suite, not the rest of the
+// required config - a plain top-level `import` would be hoisted above any env var
+// this file sets, so the module (and this whole test file) must be loaded dynamically,
+// after harmless fallback values are in place. Mirrors the pattern already used by
+// orphaned-deposit-booking-reconciler.test.ts.
+process.env.NODE_ENV ??= 'test';
+process.env.REDIS_URL ??= 'redis://localhost:6379';
+process.env.SESSION_SECRET ??= 'test-session-secret-0123456789abcdef';
+process.env.INTERNAL_SERVICE_TOKEN ??= 'test-internal-token-0123456789abcdef';
+process.env.PLATFORM_WALLET ??= '11111111111111111111111111111111';
+
+const { devBypassSettlementSignature } = await import('../src/dev-booking-reconciler.js');
 
 // Without a deployed escrow program, a DEGRADED/COMPLETED booking could never reach a
 // real settlement (requestSettlement/confirmSettlement are otherwise only driven by the
