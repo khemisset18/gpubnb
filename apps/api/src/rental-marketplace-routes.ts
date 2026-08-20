@@ -16,6 +16,7 @@ import {
   archiveLegacyFullMachineListing,
   transitionOwnerExactGpuListing,
 } from './rental-listing-lifecycle.js';
+import { betaTestDevBypassActive } from './dev-booking-reconciler.js';
 import { listOwnerExactGpuListings } from './rental-owner-listings.js';
 import {
   getPublicExactGpuListing,
@@ -136,6 +137,21 @@ export function registerRentalMarketplaceRoutes(
         config.HEARTBEAT_OFFLINE_SECONDS,
       ),
     };
+  });
+
+  // Read-only diagnostic for the beta-test dev-bypass reconcilers (funding + settlement):
+  // exposes only the boolean gate they share, never any config value or secret, so an
+  // owner debugging a stuck listing can tell whether the bypass is even active without
+  // needing DB/shell access.
+  app.get('/rental/dev-bypass-status', async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const user = await db.user.findUnique({
+      where: { id: session.userId },
+      select: { canHost: true },
+    });
+    if (!user?.canHost) return reply.code(403).send({ error: 'provider_role_required' });
+    return { betaTestDevBypassActive: betaTestDevBypassActive() };
   });
 
   app.post('/rental/listings/:listingId/actions/:action', {

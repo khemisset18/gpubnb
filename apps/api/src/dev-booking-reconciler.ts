@@ -37,7 +37,7 @@ const DEVELOPER_SESSION_FILTER = {
   machineWorkspace: { workspace: { slug: 'developer' } },
 } as const;
 
-function betaTestDevBypassActive(): boolean {
+export function betaTestDevBypassActive(): boolean {
   return (
     config.BETA_TEST_DEV_BYPASS === 'true' &&
     config.ESCROW_PROGRAM_ID === 'NOT_DEPLOYED_YET'
