@@ -35,8 +35,9 @@ test('reconcileDevBypassSettlements only ever runs while the dev-bypass gate is 
   );
   assert.match(
     body,
-    /payment:\{status:PaymentStatus\.ESCROW_FUNDED\}/,
-    'must only ever touch a booking with an actual open dev-bypass payment to resolve',
+    /notIn:\[.*PaymentStatus\.RELEASED.*PaymentStatus\.FULLY_REFUNDED.*PaymentStatus\.FROZEN.*\]/s,
+    'must exclude only already-terminal or FROZEN payments, not require one specific non-terminal status - ' +
+    'reconcileStalledActivations already moves a degrading booking to SETTLEMENT_PENDING before this runs',
   );
   assert.match(body, /awaitrequestSettlement\(db,booking\.id\)/, 'must go through the real settlement request path, not a shortcut');
   assert.match(body, /awaitconfirmSettlement\(db,booking\.id,/, 'must go through the real settlement confirmation path, not a shortcut');

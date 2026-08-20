@@ -309,7 +309,21 @@ export async function reconcileDevBypassSettlements(db: PrismaClient, now = new 
     where: {
       status: { in: [BookingStatus.DEGRADED, BookingStatus.COMPLETED] },
       endsAt: { lt: now },
-      payment: { status: PaymentStatus.ESCROW_FUNDED },
+      // Not just ESCROW_FUNDED: reconcileStalledActivations already moves a degrading
+      // booking's payment to SETTLEMENT_PENDING before this ever sees it (see above), so
+      // matching only ESCROW_FUNDED would silently skip the exact bookings this exists
+      // for. Exclude only what requestSettlement itself would reject anyway (already
+      // terminal, or FROZEN pending a security review) - mirrors its own guard, not a
+      // separate judgment call.
+      payment: {
+        status: {
+          notIn: [
+            PaymentStatus.RELEASED,
+            PaymentStatus.FULLY_REFUNDED,
+            PaymentStatus.FROZEN,
+          ],
+        },
+      },
     },
     select: { id: true },
     take: 25,
