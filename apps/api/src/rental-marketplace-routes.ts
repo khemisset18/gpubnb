@@ -16,7 +16,7 @@ import {
   archiveLegacyFullMachineListing,
   transitionOwnerExactGpuListing,
 } from './rental-listing-lifecycle.js';
-import { betaTestDevBypassActive } from './dev-booking-reconciler.js';
+import { betaTestDevBypassActive, findDevBypassSettlementCandidates } from './dev-booking-reconciler.js';
 import { listOwnerExactGpuListings } from './rental-owner-listings.js';
 import {
   getPublicExactGpuListing,
@@ -151,7 +151,15 @@ export function registerRentalMarketplaceRoutes(
       select: { canHost: true },
     });
     if (!user?.canHost) return reply.code(403).send({ error: 'provider_role_required' });
-    return { betaTestDevBypassActive: betaTestDevBypassActive() };
+    const now = new Date();
+    const candidates = betaTestDevBypassActive()
+      ? await findDevBypassSettlementCandidates(db, now)
+      : [];
+    return {
+      betaTestDevBypassActive: betaTestDevBypassActive(),
+      now: now.toISOString(),
+      candidates: candidates.map((c) => ({ ...c, endsAt: c.endsAt.toISOString() })),
+    };
   });
 
   app.post('/rental/listings/:listingId/actions/:action', {

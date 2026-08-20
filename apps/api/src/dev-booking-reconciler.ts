@@ -301,30 +301,26 @@ export function devBypassSettlementSignature(bookingId: string): string {
 // check for any listing carrying one. Only ever touches a booking whose time window has
 // fully elapsed, and only while betaTestDevBypassActive() (becomes a no-op the instant real
 // escrow is configured, exactly like the funding bypass it mirrors).
-export async function reconcileDevBypassSettlements(db: PrismaClient, now = new Date()): Promise<{
-  settled: number;
-  failed: Array<{ bookingId: string; error: string }>;
-}> {
-  let settled = 0;
-  const failed: Array<{ bookingId: string; error: string }> = [];
-  if (!betaTestDevBypassActive()) return { settled, failed };
+// Not just ESCROW_FUNDED: reconcileStalledActivations already moves a degrading booking's
+// payment to SETTLEMENT_PENDING before this ever sees it, so matching only ESCROW_FUNDED
+// would silently skip the exact bookings this exists for. Exclude only what
+// requestSettlement itself would reject anyway (already terminal, or FROZEN pending a
+// security review) - mirrors its own guard, not a separate judgment call.
+const openPayment = {
+  status: {
+    notIn: [
+      PaymentStatus.RELEASED,
+      PaymentStatus.FULLY_REFUNDED,
+      PaymentStatus.FROZEN,
+    ],
+  },
+};
 
-  // Not just ESCROW_FUNDED: reconcileStalledActivations already moves a degrading
-  // booking's payment to SETTLEMENT_PENDING before this ever sees it (see above), so
-  // matching only ESCROW_FUNDED would silently skip the exact bookings this exists for.
-  // Exclude only what requestSettlement itself would reject anyway (already terminal, or
-  // FROZEN pending a security review) - mirrors its own guard, not a separate judgment call.
-  const openPayment = {
-    status: {
-      notIn: [
-        PaymentStatus.RELEASED,
-        PaymentStatus.FULLY_REFUNDED,
-        PaymentStatus.FROZEN,
-      ],
-    },
-  };
-
-  const candidates = await db.booking.findMany({
+// Read-only: separated out from reconcileDevBypassSettlements so a diagnostic route can
+// show exactly what the reconciler would act on right now, without needing to trigger a
+// write or wait for the next interval tick.
+export async function findDevBypassSettlementCandidates(db: PrismaClient, now = new Date()) {
+  return db.booking.findMany({
     where: {
       payment: openPayment,
       OR: [
@@ -340,10 +336,21 @@ export async function reconcileDevBypassSettlements(db: PrismaClient, now = new 
         { status: BookingStatus.DEGRADED, endsAt: { lt: now } },
       ],
     },
-    select: { id: true },
+    select: { id: true, status: true, endsAt: true },
     take: 25,
     orderBy: { endsAt: 'asc' },
   });
+}
+
+export async function reconcileDevBypassSettlements(db: PrismaClient, now = new Date()): Promise<{
+  settled: number;
+  failed: Array<{ bookingId: string; error: string }>;
+}> {
+  let settled = 0;
+  const failed: Array<{ bookingId: string; error: string }> = [];
+  if (!betaTestDevBypassActive()) return { settled, failed };
+
+  const candidates = await findDevBypassSettlementCandidates(db, now);
 
   for (const booking of candidates) {
     try {

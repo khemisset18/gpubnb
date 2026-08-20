@@ -11,7 +11,41 @@ import { devBypassSettlementSignature } from '../src/dev-booking-reconciler.js';
 // carrying one. This is the dev-bypass-only symmetric counterpart to the existing
 // AWAITING_DEPOSIT -> FUNDED bypass.
 
-test('reconcileDevBypassSettlements only ever runs while the dev-bypass gate is active', async () => {
+test('findDevBypassSettlementCandidates matches COMPLETED regardless of endsAt, and DEGRADED only once endsAt has elapsed', async () => {
+  const source = await readFile(new URL('../src/dev-booking-reconciler.ts', import.meta.url), 'utf8');
+  const start = source.indexOf('export async function findDevBypassSettlementCandidates');
+  assert.ok(start >= 0, 'the candidate query must exist');
+  const end = source.indexOf('\n}', start);
+  const body = source.slice(start, end).replace(/\s+/g, '');
+
+  assert.match(
+    body,
+    /\{status:BookingStatus\.COMPLETED\}/,
+    'COMPLETED already proves the workload finished successfully - must be settleable regardless of the nominal endsAt',
+  );
+  assert.match(
+    body,
+    /\{status:BookingStatus\.DEGRADED,endsAt:\{lt:now\}\}/,
+    'DEGRADED may still be resolvable within its own window - must only touch one whose time window has fully elapsed',
+  );
+});
+
+test('the dev-bypass open-payment filter excludes only already-terminal or FROZEN payments', async () => {
+  const source = await readFile(new URL('../src/dev-booking-reconciler.ts', import.meta.url), 'utf8');
+  const start = source.indexOf('const openPayment');
+  assert.ok(start >= 0, 'the shared open-payment filter must exist');
+  const end = source.indexOf('};', start) + 2;
+  const body = source.slice(start, end).replace(/\s+/g, '');
+
+  assert.match(
+    body,
+    /notIn:\[.*PaymentStatus\.RELEASED.*PaymentStatus\.FULLY_REFUNDED.*PaymentStatus\.FROZEN.*\]/s,
+    'must exclude only already-terminal or FROZEN payments, not require one specific non-terminal status - ' +
+    'reconcileStalledActivations already moves a degrading booking to SETTLEMENT_PENDING before this runs',
+  );
+});
+
+test('reconcileDevBypassSettlements only ever runs while the dev-bypass gate is active, and surfaces per-booking failures', async () => {
   const source = await readFile(new URL('../src/dev-booking-reconciler.ts', import.meta.url), 'utf8');
   const start = source.indexOf('export async function reconcileDevBypassSettlements');
   assert.ok(start >= 0, 'the dev-bypass settlement reconciler must exist');
@@ -27,22 +61,6 @@ test('reconcileDevBypassSettlements only ever runs while the dev-bypass gate is 
     body,
     /failed\.push\(\{bookingId:booking\.id,error:/,
     'a per-booking failure must be surfaced in the result, not swallowed silently - otherwise a persistent bug here is invisible from outside the process',
-  );
-  assert.match(
-    body,
-    /\{status:BookingStatus\.COMPLETED\}/,
-    'COMPLETED already proves the workload finished successfully - must be settleable regardless of the nominal endsAt',
-  );
-  assert.match(
-    body,
-    /\{status:BookingStatus\.DEGRADED,endsAt:\{lt:now\}\}/,
-    'DEGRADED may still be resolvable within its own window - must only touch one whose time window has fully elapsed',
-  );
-  assert.match(
-    body,
-    /notIn:\[.*PaymentStatus\.RELEASED.*PaymentStatus\.FULLY_REFUNDED.*PaymentStatus\.FROZEN.*\]/s,
-    'must exclude only already-terminal or FROZEN payments, not require one specific non-terminal status - ' +
-    'reconcileStalledActivations already moves a degrading booking to SETTLEMENT_PENDING before this runs',
   );
   assert.match(body, /awaitrequestSettlement\(db,booking\.id\)/, 'must go through the real settlement request path, not a shortcut');
   assert.match(body, /awaitconfirmSettlement\(db,booking\.id,/, 'must go through the real settlement confirmation path, not a shortcut');
