@@ -54,7 +54,7 @@ use std::sync::{
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const TOTAL_SETUP_STEPS: usize = 6;
+const TOTAL_SETUP_STEPS: usize = 7;
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
@@ -69,6 +69,7 @@ enum HostLifecycle {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SetupAction {
+    Docker,
     Account,
     Agent,
     Isolation,
@@ -79,6 +80,7 @@ enum SetupAction {
 impl SetupAction {
     const fn id(self) -> &'static str {
         match self {
+            Self::Docker => "docker",
             Self::Account => "account",
             Self::Agent => "agent",
             Self::Isolation => "isolation",
@@ -93,6 +95,7 @@ impl TryFrom<&str> for SetupAction {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
+            "docker" => Ok(Self::Docker),
             "account" => Ok(Self::Account),
             "agent" => Ok(Self::Agent),
             "isolation" => Ok(Self::Isolation),
@@ -130,8 +133,13 @@ impl Readiness {
             && self.network_filtered
     }
 
-    fn next_action(&self, agent: &AgentStatus) -> Option<SetupAction> {
-        if !agent.linked {
+    fn next_action(&self, diagnostic: &NativeDiagnostic, agent: &AgentStatus) -> Option<SetupAction> {
+        if !diagnostic.docker_installed
+            || !diagnostic.docker_daemon_reachable
+            || !diagnostic.nvidia_runtime_available
+        {
+            Some(SetupAction::Docker)
+        } else if !agent.linked {
             Some(SetupAction::Account)
         } else if !agent.running {
             Some(SetupAction::Agent)
@@ -289,6 +297,19 @@ fn build_status(
         "Le service de connexion doit être configuré avant l'installation publique".into()
     };
 
+    let docker_ready = diagnostic.docker_installed
+        && diagnostic.docker_daemon_reachable
+        && diagnostic.nvidia_runtime_available;
+    let docker_detail = if !diagnostic.docker_installed {
+        "Docker n'est pas installé sur cette machine".to_owned()
+    } else if !diagnostic.docker_daemon_reachable {
+        "Docker est installé, mais son service n'est pas connecté".to_owned()
+    } else if !diagnostic.nvidia_runtime_available {
+        "Le runtime NVIDIA pour conteneurs n'est pas disponible dans Docker".to_owned()
+    } else {
+        "Docker est connecté et prêt à héberger des locations".to_owned()
+    };
+
     let checks = vec![
         Check {
             id: "platform",
@@ -305,6 +326,14 @@ fn build_status(
                 "Ce système ne peut pas héberger une location sécurisée".into()
             },
             action_label: None,
+        },
+        Check {
+            id: "docker",
+            label: "Docker connecté",
+            ok: docker_ready,
+            blocking: true,
+            detail: docker_detail,
+            action_label: (!docker_ready).then_some("Connecter Docker"),
         },
         Check {
             id: "account",
@@ -395,7 +424,7 @@ fn build_status(
         blocking_count,
         summary,
         next_action_id: (!emergency_stopped)
-            .then(|| readiness.next_action(&agent).map(SetupAction::id))
+            .then(|| readiness.next_action(&diagnostic, &agent).map(SetupAction::id))
             .flatten(),
         pairing,
         agent,
@@ -666,6 +695,9 @@ fn run_setup_action(action_id: String) -> Result<String, String> {
         return Err("invalid_setup_action".into());
     }
     match SetupAction::try_from(action_id.as_str()).map_err(str::to_owned)? {
+        SetupAction::Docker => diagnostics::attempt_docker_connect()
+            .map(|_| "docker_connected".into())
+            .map_err(str::to_owned),
         SetupAction::Account => pairing_configuration()
             .configured
             .then(|| "open_secure_pairing".into())
@@ -769,6 +801,9 @@ mod tests {
             architecture_supported: true,
             isolation_backend: diagnostics::IsolationBackend::Kvm,
             requires_administrator: true,
+            docker_installed: true,
+            docker_daemon_reachable: true,
+            nvidia_runtime_available: true,
             can_host: true,
             reason: "native_checks_pending",
             gpus: Vec::new(),
@@ -833,8 +868,20 @@ mod tests {
 
     #[test]
     fn setup_actions_are_allowlisted() {
+        assert_eq!(SetupAction::try_from("docker"), Ok(SetupAction::Docker));
         assert_eq!(SetupAction::try_from("account"), Ok(SetupAction::Account));
         assert_eq!(SetupAction::try_from("shell"), Err("unknown_setup_action"));
+    }
+
+    #[test]
+    fn docker_disconnection_is_the_first_reported_blocker() {
+        let mut diagnostic = supported_diagnostic();
+        diagnostic.docker_daemon_reachable = false;
+        let readiness = fully_ready();
+        assert_eq!(
+            readiness.next_action(&diagnostic, &running_agent()),
+            Some(SetupAction::Docker)
+        );
     }
 
     #[test]

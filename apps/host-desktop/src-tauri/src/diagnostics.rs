@@ -46,6 +46,9 @@ pub struct NativeDiagnostic {
     pub architecture_supported: bool,
     pub isolation_backend: IsolationBackend,
     pub requires_administrator: bool,
+    pub docker_installed: bool,
+    pub docker_daemon_reachable: bool,
+    pub nvidia_runtime_available: bool,
     pub can_host: bool,
     pub reason: &'static str,
     pub gpus: Vec<GpuDevice>,
@@ -230,10 +233,61 @@ fn evaluate(os: &str, architecture: &str, evidence: ProbeEvidence) -> NativeDiag
         architecture_supported,
         isolation_backend,
         requires_administrator: matches!(os, "windows" | "linux"),
+        docker_installed: evidence.docker_installed,
+        docker_daemon_reachable: evidence.docker_reachable,
+        nvidia_runtime_available: evidence.nvidia_runtime_available,
         can_host: reason == "native_prerequisites_ready",
         reason,
         gpus: evidence.gpus,
     }
+}
+
+const DOCKER_CONNECT_POLL_INTERVAL: Duration = Duration::from_millis(750);
+const DOCKER_CONNECT_TIMEOUT: Duration = Duration::from_secs(25);
+
+fn launch_docker_desktop(os: &str) -> bool {
+    match os {
+        "windows" => {
+            const CANDIDATES: [&str; 1] = [r"C:\Program Files\Docker\Docker\Docker Desktop.exe"];
+            CANDIDATES
+                .iter()
+                .find(|candidate| Path::new(candidate).exists())
+                .is_some_and(|candidate| Command::new(candidate).spawn().is_ok())
+        }
+        "macos" => Command::new("open").args(["-a", "Docker"]).spawn().is_ok(),
+        "linux" => Command::new("systemctl")
+            .args(["start", "docker"])
+            .spawn()
+            .is_ok(),
+        _ => false,
+    }
+}
+
+/// Brings the local Docker Engine online for the owner with a single click and blocks
+/// until it is actually reachable, or `DOCKER_CONNECT_TIMEOUT` elapses. Every branch is
+/// re-derived from a fresh `docker_evidence()` probe rather than assumed from the
+/// launch call succeeding, so this can never report a connection that isn't real - the
+/// same fail-closed evidence discipline the rest of this module relies on.
+pub fn attempt_docker_connect() -> Result<(), &'static str> {
+    let (installed, reachable, _) = docker_evidence();
+    if !installed {
+        return Err("docker_not_installed");
+    }
+    if reachable {
+        return Ok(());
+    }
+    if !launch_docker_desktop(std::env::consts::OS) {
+        return Err("docker_launch_failed");
+    }
+    let deadline = Instant::now() + DOCKER_CONNECT_TIMEOUT;
+    while Instant::now() < deadline {
+        thread::sleep(DOCKER_CONNECT_POLL_INTERVAL);
+        let (_, reachable, _) = docker_evidence();
+        if reachable {
+            return Ok(());
+        }
+    }
+    Err("docker_still_starting")
 }
 
 #[cfg(test)]
@@ -290,6 +344,11 @@ mod tests {
         assert!(parse_gpu_inventory("GPU-1, RTX, driver, 0, 0").is_empty());
         assert!(parse_gpu_inventory("GPU-1, RTX, driver, 2000001, 0").is_empty());
         assert!(parse_gpu_inventory("not-a-gpu, RTX, driver, 24576, 0").is_empty());
+    }
+
+    #[test]
+    fn unsupported_os_never_attempts_to_launch_docker() {
+        assert!(!launch_docker_desktop("unknown"));
     }
 
     #[test]

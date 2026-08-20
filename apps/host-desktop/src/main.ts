@@ -149,6 +149,9 @@ const pairingErrorMessage = (error: unknown): string => {
   if (value.includes('agent_link_failed')) return 'Le code a été refusé, a expiré ou a déjà été utilisé.';
   if (value.includes('storage_protection_unverified')) return 'Docker n’a pas confirmé le stockage isolé et sans montage hôte. La mise en ligne reste bloquée.';
   if (value.includes('network_filter_unverified')) return 'Docker n’a pas confirmé la coupure réseau du conteneur de contrôle. La mise en ligne reste bloquée.';
+  if (value.includes('docker_not_installed')) return 'Docker n’est pas installé sur cette machine. Installez Docker Desktop puis cliquez de nouveau sur « Connecter Docker ».';
+  if (value.includes('docker_launch_failed')) return 'Docker n’a pas pu être démarré automatiquement. Ouvrez Docker Desktop manuellement puis réessayez.';
+  if (value.includes('docker_still_starting')) return 'Docker démarre encore. Patientez quelques secondes puis cliquez de nouveau sur « Connecter Docker ».';
   if (value.includes('agent_command_failed')) return 'Le service GPUbnb n’a pas pu exécuter la commande demandée.';
   return 'La liaison ou la configuration n’a pas abouti. La machine reste hors ligne.';
 };
@@ -570,6 +573,10 @@ const handleSetupResult = async (result: string): Promise<void> => {
     setMessage('Service GPUbnb démarré. Vérification en cours…', 'success');
     return;
   }
+  if (result === 'docker_connected') {
+    setMessage('Docker est connecté et prêt.', 'success');
+    return;
+  }
   if (result === 'open_secure_pairing') {
     setMessage('Ouvrez GPUbnb dans le navigateur pour créer le code.', 'success');
     return;
@@ -577,8 +584,53 @@ const handleSetupResult = async (result: string): Promise<void> => {
   throw new Error('agent_command_failed');
 };
 
+const MAX_CONNECT_ALL_STEPS = 8;
+
+// Walks the same next-action sequence the backend uses to decide what still blocks
+// publication, running each fixable step automatically. Stops at the first step that
+// needs the owner in the browser (account linking) or that fails outright, so this
+// never silently claims the machine is ready when it isn't.
+const connectAll = async (): Promise<void> => {
+  for (let step = 0; step < MAX_CONNECT_ALL_STEPS; step += 1) {
+    const status = await invoke<HostStatus>('host_status');
+    const nextId = status.nextActionId;
+    if (!nextId) {
+      setMessage('Toutes les vérifications sont réussies. Vous pouvez publier votre annonce.', 'success');
+      return;
+    }
+    if (nextId === 'account') {
+      const target = status.pairing.browserUrl ? officialUrl(status.pairing.browserUrl) : null;
+      if (!target) {
+        setMessage('L’adresse officielle de connexion est invalide ou absente.', 'error');
+        return;
+      }
+      openOfficialUrl(target, 'Le site officiel GPUbnb a été ouvert.');
+      setMessage('Reliez votre compte dans le navigateur, puis cliquez de nouveau sur « Tout connecter automatiquement ».');
+      return;
+    }
+    const stepLabel = status.checks.find((check) => check.id === nextId)?.label ?? nextId;
+    setMessage(`Connexion automatique : ${stepLabel}…`);
+    try {
+      const result = await invoke<string>('run_setup_action', { actionId: nextId });
+      await handleSetupResult(result);
+    } catch (error: unknown) {
+      setMessage(pairingErrorMessage(error), 'error');
+      return;
+    }
+  }
+  setMessage('Certaines vérifications nécessitent encore une action manuelle ci-dessous.', 'error');
+};
+
 const bindActions = (status: HostStatus): void => {
   document.querySelector<HTMLButtonElement>('#refresh')?.addEventListener('click', () => void refresh());
+  document.querySelector<HTMLButtonElement>('#connect-all')?.addEventListener('click', () => {
+    const button = document.querySelector<HTMLButtonElement>('#connect-all');
+    if (button) button.disabled = true;
+    void connectAll().finally(() => {
+      if (button) button.disabled = false;
+      window.setTimeout(() => void refresh(), 300);
+    });
+  });
   document.querySelector<HTMLButtonElement>('#publish')?.addEventListener('click', () => {
     void invoke('request_publish')
       .then(() => void refresh())
@@ -657,7 +709,9 @@ async function refresh(showLoading = true): Promise<void> {
       <div class="status-stack"><span class="status-pill ${status.lifecycle}">${lifecycleLabel(status.lifecycle)}</span><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
       ${stopped ? '<section class="alert-card danger"><strong>Arrêt d’urgence actif</strong></section>' : ''}
       <section class="progress-card"><div class="progress-heading"><div><p class="eyebrow">État de préparation</p><h2>${escapeHtml(status.summary)}</h2></div><strong>${progress}%</strong></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div></section>
-      ${renderPairing(status)}${renderGpuInventory(status)}<p id="action-status" class="action-status" aria-live="polite"></p><ul class="checks">${renderChecks(status.checks)}</ul>
+      ${renderPairing(status)}${renderGpuInventory(status)}<p id="action-status" class="action-status" aria-live="polite"></p>
+      <div class="checklist-actions"><button id="connect-all" class="secondary large" ${status.blockingCount > 0 && !stopped ? '' : 'disabled'}>Tout connecter automatiquement</button></div>
+      <ul class="checks">${renderChecks(status.checks)}</ul>
       <div class="actions"><button id="refresh" class="secondary large">Revérifier</button><button id="publish" class="primary large" ${status.ready && !stopped && !online ? '' : 'disabled'}>${online ? 'Machine déjà en ligne' : 'Mettre en ligne'}</button></div></section>`;
     const miningPage = `<section class="content mining-page"><header class="topbar"><div><p class="eyebrow">Minage personnel</p><h1>Choisissez une cryptomonnaie.</h1><p class="lead">Le minage personnel est indépendant de la publication GPUbnb. Le rendement sera calculé à partir du test réel de cette machine.</p></div>
       <div class="status-stack"><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
