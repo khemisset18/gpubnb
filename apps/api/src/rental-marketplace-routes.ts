@@ -155,10 +155,23 @@ export function registerRentalMarketplaceRoutes(
     const candidates = betaTestDevBypassActive()
       ? await findDevBypassSettlementCandidates(db, now)
       : [];
+    const { listingId } = z.object({ listingId: z.string().cuid().optional() }).parse(request.query ?? {});
+    const blockingBookings = listingId
+      ? await db.booking.findMany({
+        where: { listingId },
+        select: { id: true, status: true, endsAt: true, payment: { select: { status: true } } },
+      })
+      : [];
     return {
       betaTestDevBypassActive: betaTestDevBypassActive(),
       now: now.toISOString(),
       candidates: candidates.map((c) => ({ ...c, endsAt: c.endsAt.toISOString() })),
+      blockingBookings: blockingBookings.map((b) => ({
+        id: b.id,
+        status: b.status,
+        endsAt: b.endsAt.toISOString(),
+        paymentStatus: b.payment?.status ?? null,
+      })),
     };
   });
 
