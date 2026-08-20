@@ -1,5 +1,6 @@
 import { BookingStatus, JobStatus, JobType, MachineOperational, ModerationStatus, PaymentStatus, PrismaClient, ResourceAllocationStatus, SessionTerminationReason, WorkspaceSessionStatus } from '@prisma/client';
 import { config } from './config.js';
+import { confirmSettlement, requestSettlement } from './settlement-transactions.js';
 
 const TERMINAL_JOB_STATUSES: JobStatus[] = [
   JobStatus.COMPLETED,
@@ -281,6 +282,52 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
   }
 
   return { funded, queued, completed, degraded, quarantinedDeveloper };
+}
+
+// Base58 excludes 0/O/I/l (see settlement-transactions.ts SIGNATURE_PATTERN), but a
+// booking cuid can contain '0' or 'l' - substitute them with other allowed characters so
+// the id can double as a synthetic settlement signature. Only ever used by the dev-bypass
+// path below, never presented as a real Solana transaction signature.
+export function devBypassSettlementSignature(bookingId: string): string {
+  const sanitized = bookingId.replace(/0/g, '8').replace(/l/g, 'k');
+  return `devBypassRefundAuto${sanitized}`;
+}
+
+// Symmetric counterpart to the AWAITING_DEPOSIT -> FUNDED dev-bypass above: without a
+// deployed escrow program, a DEGRADED/COMPLETED booking can never reach a real settlement
+// either (requestSettlement/confirmSettlement are otherwise only driven by the internal
+// settlement service with a real signed Solana transaction), so it stayed stuck forever -
+// which in turn permanently tripped archiveLegacyFullMachineListing's listing_has_live_booking
+// check for any listing carrying one. Only ever touches a booking whose time window has
+// fully elapsed, and only while betaTestDevBypassActive() (becomes a no-op the instant real
+// escrow is configured, exactly like the funding bypass it mirrors).
+export async function reconcileDevBypassSettlements(db: PrismaClient, now = new Date()): Promise<{ settled: number }> {
+  let settled = 0;
+  if (!betaTestDevBypassActive()) return { settled };
+
+  const candidates = await db.booking.findMany({
+    where: {
+      status: { in: [BookingStatus.DEGRADED, BookingStatus.COMPLETED] },
+      endsAt: { lt: now },
+      payment: { status: PaymentStatus.ESCROW_FUNDED },
+    },
+    select: { id: true },
+    take: 25,
+    orderBy: { endsAt: 'asc' },
+  });
+
+  for (const booking of candidates) {
+    try {
+      await requestSettlement(db, booking.id);
+      await confirmSettlement(db, booking.id, devBypassSettlementSignature(booking.id));
+      settled += 1;
+    } catch {
+      // Lost a race with another tick, or the booking's state moved on since the query
+      // above (e.g. a real settlement request landed first) - safe to skip, not an error.
+    }
+  }
+
+  return { settled };
 }
 
 const STALLED_ACTIVATION_GRACE_MS = 20 * 60_000;
