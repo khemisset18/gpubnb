@@ -221,11 +221,18 @@ const liveWorkspaceSessionStatuses = new Set<WorkspaceSessionStatus>([
   WorkspaceSessionStatus.STOPPING,
 ]);
 
+// PARTIALLY_REFUNDED is deliberately absent: confirmSettlement (settlement-transactions.ts)
+// sets it, alongside BookingStatus.SETTLED and a recorded settlementSignature, as one of
+// three mutually exclusive terminal outcomes (full release / full refund / mixed release+
+// refund) for a booking whose window ended partway through - nothing in the codebase ever
+// transitions a payment onward from there. Treating it as still "open" here made any legacy
+// FULL_MACHINE listing whose last booking settled with a partial refund permanently
+// unarchivable (confirmed against production: cmskhoviy0047dx0uuv7am07o blocked by booking
+// cmsp5vcwo... at PARTIALLY_REFUNDED, endsAt 9 days in the past).
 const openPaymentStatuses = new Set<PaymentStatus>([
   PaymentStatus.ESCROW_PENDING,
   PaymentStatus.ESCROW_FUNDED,
   PaymentStatus.SETTLEMENT_PENDING,
-  PaymentStatus.PARTIALLY_REFUNDED,
 ]);
 
 const legacyArchiveSelect = {

@@ -290,6 +290,25 @@ test('legacy archive refuses a listing with an unsettled payment', async () => {
   );
 });
 
+test('legacy archive allows a SETTLED booking whose payment was PARTIALLY_REFUNDED', async () => {
+  // confirmSettlement (settlement-transactions.ts) sets exactly this pair - SETTLED status
+  // plus PARTIALLY_REFUNDED payment - as one of three terminal settlement outcomes (mixed
+  // release+refund), never transitioning the payment onward afterwards. Regression test for
+  // treating it as still "open" and permanently blocking the archive.
+  const row = legacyListing(ListingStatus.ACTIVE, {
+    bookings: [booking({
+      status: BookingStatus.SETTLED,
+      payment: { id: 'pay-1', status: PaymentStatus.PARTIALLY_REFUNDED },
+    })],
+  });
+  const { db, updates } = fakeDb(row);
+
+  const result = await archiveLegacyFullMachineListing(db as never, 'owner-1', row.id);
+
+  assert.equal(result.status, ListingStatus.ARCHIVED);
+  assert.equal(updates.length, 1);
+});
+
 test('legacy archive is a no-op success when the listing is already archived (idempotent)', async () => {
   const row = legacyListing(ListingStatus.ARCHIVED);
   const { db, updates } = fakeDb(row);
