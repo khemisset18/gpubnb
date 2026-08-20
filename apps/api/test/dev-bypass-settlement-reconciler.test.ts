@@ -25,13 +25,13 @@ test('reconcileDevBypassSettlements only ever runs while the dev-bypass gate is 
   );
   assert.match(
     body,
-    /status:\{in:\[BookingStatus\.DEGRADED,BookingStatus\.COMPLETED\]\}/,
-    'must only ever touch bookings already in a settleable terminal-ish state',
+    /\{status:BookingStatus\.COMPLETED\}/,
+    'COMPLETED already proves the workload finished successfully - must be settleable regardless of the nominal endsAt',
   );
   assert.match(
     body,
-    /endsAt:\{lt:now\}/,
-    'must only ever touch a booking whose time window has fully elapsed',
+    /\{status:BookingStatus\.DEGRADED,endsAt:\{lt:now\}\}/,
+    'DEGRADED may still be resolvable within its own window - must only touch one whose time window has fully elapsed',
   );
   assert.match(
     body,

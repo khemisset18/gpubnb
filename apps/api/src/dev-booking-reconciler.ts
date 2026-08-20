@@ -305,25 +305,36 @@ export async function reconcileDevBypassSettlements(db: PrismaClient, now = new 
   let settled = 0;
   if (!betaTestDevBypassActive()) return { settled };
 
+  // Not just ESCROW_FUNDED: reconcileStalledActivations already moves a degrading
+  // booking's payment to SETTLEMENT_PENDING before this ever sees it (see above), so
+  // matching only ESCROW_FUNDED would silently skip the exact bookings this exists for.
+  // Exclude only what requestSettlement itself would reject anyway (already terminal, or
+  // FROZEN pending a security review) - mirrors its own guard, not a separate judgment call.
+  const openPayment = {
+    status: {
+      notIn: [
+        PaymentStatus.RELEASED,
+        PaymentStatus.FULLY_REFUNDED,
+        PaymentStatus.FROZEN,
+      ],
+    },
+  };
+
   const candidates = await db.booking.findMany({
     where: {
-      status: { in: [BookingStatus.DEGRADED, BookingStatus.COMPLETED] },
-      endsAt: { lt: now },
-      // Not just ESCROW_FUNDED: reconcileStalledActivations already moves a degrading
-      // booking's payment to SETTLEMENT_PENDING before this ever sees it (see above), so
-      // matching only ESCROW_FUNDED would silently skip the exact bookings this exists
-      // for. Exclude only what requestSettlement itself would reject anyway (already
-      // terminal, or FROZEN pending a security review) - mirrors its own guard, not a
-      // separate judgment call.
-      payment: {
-        status: {
-          notIn: [
-            PaymentStatus.RELEASED,
-            PaymentStatus.FULLY_REFUNDED,
-            PaymentStatus.FROZEN,
-          ],
-        },
-      },
+      payment: openPayment,
+      OR: [
+        // COMPLETED already means the diagnostic proved the workload finished
+        // successfully (see reconcileDevelopmentBookings' finishedJobs handling above) -
+        // that can land well before the booking's nominal endsAt, and nothing further is
+        // "live" about it from that point on, so there is no reason to also wait out the
+        // wall-clock window before settling.
+        { status: BookingStatus.COMPLETED },
+        // DEGRADED can mean something is still resolvable within its own window (e.g. a
+        // stalled activation degraded 20 minutes in on an hour-long booking) - keep the
+        // extra safety margin of only ever touching one whose window has fully elapsed.
+        { status: BookingStatus.DEGRADED, endsAt: { lt: now } },
+      ],
     },
     select: { id: true },
     take: 25,
