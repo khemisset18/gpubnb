@@ -301,9 +301,13 @@ export function devBypassSettlementSignature(bookingId: string): string {
 // check for any listing carrying one. Only ever touches a booking whose time window has
 // fully elapsed, and only while betaTestDevBypassActive() (becomes a no-op the instant real
 // escrow is configured, exactly like the funding bypass it mirrors).
-export async function reconcileDevBypassSettlements(db: PrismaClient, now = new Date()): Promise<{ settled: number }> {
+export async function reconcileDevBypassSettlements(db: PrismaClient, now = new Date()): Promise<{
+  settled: number;
+  failed: Array<{ bookingId: string; error: string }>;
+}> {
   let settled = 0;
-  if (!betaTestDevBypassActive()) return { settled };
+  const failed: Array<{ bookingId: string; error: string }> = [];
+  if (!betaTestDevBypassActive()) return { settled, failed };
 
   // Not just ESCROW_FUNDED: reconcileStalledActivations already moves a degrading
   // booking's payment to SETTLEMENT_PENDING before this ever sees it (see above), so
@@ -346,13 +350,17 @@ export async function reconcileDevBypassSettlements(db: PrismaClient, now = new 
       await requestSettlement(db, booking.id);
       await confirmSettlement(db, booking.id, devBypassSettlementSignature(booking.id));
       settled += 1;
-    } catch {
-      // Lost a race with another tick, or the booking's state moved on since the query
-      // above (e.g. a real settlement request landed first) - safe to skip, not an error.
+    } catch (error) {
+      // Could be losing a race with another tick, or the booking's state moving on since
+      // the query above (e.g. a real settlement request landing first) - not necessarily a
+      // bug. But swallowing this with zero visibility made a real, persistent failure here
+      // indistinguishable from that from outside the process, so surface it instead of
+      // just continuing silently.
+      failed.push({ bookingId: booking.id, error: error instanceof Error ? error.message : String(error) });
     }
   }
 
-  return { settled };
+  return { settled, failed };
 }
 
 const STALLED_ACTIVATION_GRACE_MS = 20 * 60_000;

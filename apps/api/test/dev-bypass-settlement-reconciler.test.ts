@@ -15,13 +15,18 @@ test('reconcileDevBypassSettlements only ever runs while the dev-bypass gate is 
   const source = await readFile(new URL('../src/dev-booking-reconciler.ts', import.meta.url), 'utf8');
   const start = source.indexOf('export async function reconcileDevBypassSettlements');
   assert.ok(start >= 0, 'the dev-bypass settlement reconciler must exist');
-  const end = source.indexOf('\n}', source.indexOf('return { settled }', start + 1));
+  const end = source.indexOf('\n}', source.indexOf('return { settled, failed }', start + 1));
   const body = source.slice(start, end).replace(/\s+/g, '');
 
   assert.match(
     body,
-    /if\(!betaTestDevBypassActive\(\)\)return\{settled\}/,
+    /if\(!betaTestDevBypassActive\(\)\)return\{settled,failed\}/,
     'must fail closed (no-op) unless betaTestDevBypassActive() - never runs once real escrow is configured',
+  );
+  assert.match(
+    body,
+    /failed\.push\(\{bookingId:booking\.id,error:/,
+    'a per-booking failure must be surfaced in the result, not swallowed silently - otherwise a persistent bug here is invisible from outside the process',
   );
   assert.match(
     body,
