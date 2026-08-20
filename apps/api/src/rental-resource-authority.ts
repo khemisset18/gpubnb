@@ -25,7 +25,17 @@ const LIVE_ALLOCATION_STATUSES: ResourceAllocationStatus[] = [
   ResourceAllocationStatus.ACTIVE,
 ];
 
+// PREPARING is included: ensureComputePreparation (rental-workflow-transactions.ts)
+// creates the GPU_PROOF job directly, with no WORKSPACE_PREPARE job ahead of it - so a
+// Compute session never reaches READY (only a completed WORKSPACE_PREPARE job does that,
+// and this flow never runs one) before the GPU_PROOF job itself needs to resolve its
+// leased GPU. The accelerator allocation this authority reads from is created at booking
+// time (allocateBookingResources, independent of session/job status), so the resource is
+// already genuinely leased while PREPARING - excluding it made every GPU_PROOF job fail
+// closed with rental_resource_authority_missing_for_session before running anything
+// (confirmed against production: cmt14q1ro... on cmsiggruy0004df0tn669f6bn).
 const LIVE_SESSION_STATUSES: WorkspaceSessionStatus[] = [
+  WorkspaceSessionStatus.PREPARING,
   WorkspaceSessionStatus.READY,
   WorkspaceSessionStatus.RUNNING,
   WorkspaceSessionStatus.STOP_REQUESTED,

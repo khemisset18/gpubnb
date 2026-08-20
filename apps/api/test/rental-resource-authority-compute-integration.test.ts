@@ -175,7 +175,12 @@ test('buildRentalResourceAuthority resolves a real Compute/GPU_PROOF session (re
           renterId: renter.id,
           machineId: machine.id,
           machineWorkspaceId: machineWorkspace.id,
-          status: WorkspaceSessionStatus.READY,
+          // PREPARING, not READY: ensureComputePreparation creates the GPU_PROOF job
+          // directly with no WORKSPACE_PREPARE job ahead of it, so this is the actual
+          // status a Compute session is in when the agent's GPU_PROOF job needs to
+          // resolve its leased GPU - a READY session here would let this test pass
+          // while the real bug (LIVE_SESSION_STATUSES excluding PREPARING) stayed live.
+          status: WorkspaceSessionStatus.PREPARING,
           isolationType: 'DOCKER',
           resourceLimits: {},
           expiresAt: booking.endsAt,
