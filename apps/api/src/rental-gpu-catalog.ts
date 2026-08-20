@@ -46,6 +46,10 @@ export type RentalGpuReadinessInput = {
 export type RentalGpuReadiness = {
   publishable: boolean;
   blockingReason: RentalGpuBlockingReason | null;
+  // Only ever set alongside blockingReason === 'FULL_MACHINE_LISTING_ACTIVE', so the
+  // owner can retire it via POST /rental/listings/:listingId/actions/archive-legacy
+  // without needing DB access to find the id first.
+  blockingListingId?: string;
 };
 
 type RentalGpuDb = Pick<Prisma.TransactionClient, 'machine'>;
@@ -194,7 +198,8 @@ export async function listOwnerRentalGpus(
   });
 
   if (!machine) return null;
-  const hasFullMachineListing = machine.listings.length > 0;
+  const fullMachineListingId = machine.listings[0]?.id;
+  const hasFullMachineListing = fullMachineListingId !== undefined;
 
   return machine.accelerators.map((gpu) => {
     const readiness = computeRentalGpuReadiness({
@@ -208,6 +213,9 @@ export async function listOwnerRentalGpus(
       hasReservableListing: gpu.listings.length > 0,
       hasFullMachineListing,
     }, now, staleAfterSeconds);
+    if (readiness.blockingReason === 'FULL_MACHINE_LISTING_ACTIVE' && fullMachineListingId) {
+      readiness.blockingListingId = fullMachineListingId;
+    }
 
     return {
       id: gpu.id,
