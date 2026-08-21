@@ -10,11 +10,24 @@ import {
   ResourceAllocationStatus,
 } from '@prisma/client';
 
-import { completeGpuProofJob } from '../src/gpu-proof-completion.js';
-import { allocateBookingResources } from '../src/resource-allocation-service.js';
-import { syncGpuMiningResourcesFromAccelerators } from '../src/mining-resource-inventory.js';
-import { createExactGpuListing } from '../src/rental-listing-service.js';
-import { ensureCompatibleMachineWorkspace } from '../src/machine-workspace-catalog.js';
+// config.ts validates PLATFORM_WALLET (and friends) as required at import time.
+// ci.yml only generates SESSION_SECRET/INTERNAL_SERVICE_TOKEN for the api job, so
+// give every other module under test the same defensive fallback already used by
+// rental-marketplace-routes.integration.test.ts. Static imports are hoisted before
+// any other top-level statement, so every import that transitively reaches
+// config.ts must be dynamic here, evaluated after these fallbacks are in place.
+process.env.NODE_ENV ??= 'test';
+process.env.DATABASE_URL ??= 'postgresql://postgres:postgres@localhost:5432/gpubnb';
+process.env.REDIS_URL ??= 'redis://localhost:6379';
+process.env.SESSION_SECRET ??= 'test-session-secret-0123456789abcdef';
+process.env.INTERNAL_SERVICE_TOKEN ??= 'test-internal-token-0123456789abcdef';
+process.env.PLATFORM_WALLET ??= '11111111111111111111111111111111';
+
+const { completeGpuProofJob } = await import('../src/gpu-proof-completion.js');
+const { allocateBookingResources } = await import('../src/resource-allocation-service.js');
+const { syncGpuMiningResourcesFromAccelerators } = await import('../src/mining-resource-inventory.js');
+const { createExactGpuListing } = await import('../src/rental-listing-service.js');
+const { ensureCompatibleMachineWorkspace } = await import('../src/machine-workspace-catalog.js');
 import type { AcceleratorTelemetry } from '../src/accelerator-telemetry.js';
 
 // Real-DB integration tests for completeGpuProofJob (called from
