@@ -330,8 +330,18 @@ def run_gpu_proof_workspace(
     return final
 
 
-def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
+def workspace_health_command(image: str, workspace_slug: str, gpu_uuid: str | None = None) -> list[str]:
     if workspace_slug == "developer":
+        # Renter-billed, like GPU_PROOF: must attach the exact hardwareUuid the
+        # rental resource authority leased for this session (resolved by the
+        # caller in cli.py, the same way run_gpu_proof_workspace's gpu_uuid is).
+        # Never fall back to gpu_passthrough_flags()'s device=0 here - on a
+        # multi-GPU host that would silently verify (and, if this healthcheck
+        # command were ever reused for the live container, serve) whichever
+        # physical GPU happens to be index 0, regardless of which accelerator
+        # the renter actually booked and paid for.
+        if not SAFE_GPU_ID.fullmatch(gpu_uuid or ""):
+            raise RuntimeError("developer_workspace_invalid_target_gpu")
         base = [
             "docker", "run", "--rm", "--network=none", "--read-only",
             "--cap-drop=ALL", "--security-opt=no-new-privileges",
@@ -355,7 +365,7 @@ def workspace_health_command(image: str, workspace_slug: str) -> list[str]:
             # published image, where the healthcheck failed on `test -w /workspace` even with
             # the tmpfs mounted. Pin the tmpfs to that same uid/gid so it's actually usable.
             "--tmpfs=/workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700",
-            *gpu_passthrough_flags(),
+            f"--gpus=device={gpu_uuid}", "--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility",
         ]
         return [*base, "--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", image]
     return diagnostic_command(image)
@@ -366,6 +376,7 @@ def prepare_workspace(
     timeout_seconds: int,
     workspace_slug: str = "compute",
     progress_callback: Callable[[str, int], None] | None = None,
+    gpu_uuid: str | None = None,
 ) -> dict[str, Any]:
     if not PINNED_IMAGE.fullmatch(image):
         raise RuntimeError("diagnosticImage doit être une image Docker épinglée par digest sha256")
@@ -395,7 +406,7 @@ def prepare_workspace(
         health_reporter = None
     try:
         health = subprocess.run(
-            workspace_health_command(image, workspace_slug),
+            workspace_health_command(image, workspace_slug, gpu_uuid),
             capture_output=True, text=True, timeout=timeout, check=False, shell=False,
         )
     finally:
