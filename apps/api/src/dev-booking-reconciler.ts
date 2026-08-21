@@ -370,7 +370,10 @@ export async function reconcileDevBypassSettlements(db: PrismaClient, now = new 
   return { settled, failed };
 }
 
-const STALLED_ACTIVATION_GRACE_MS = 20 * 60_000;
+// Exported: also used by /agent/jobs/:id/finalize-proof (server.ts) to size the
+// safety window a booking gets to request its Developer workspace after GPU_PROOF
+// completes, so both sides of that handoff agree on a single grace period.
+export const STALLED_ACTIVATION_GRACE_MS = 20 * 60_000;
 const ACTIVE_ACTIVATION_JOB_STATUSES = [
   JobStatus.QUEUED,
   JobStatus.ASSIGNED,
