@@ -69,15 +69,21 @@ test('Compute server route creates GPU_PROOF through ensureComputePreparation',a
   assert.match(server,/workspaceSlug:'compute'/);
 });
 
-test('bookings page follows GPU_PROOF and never falls back to the unregistered Developer flow',async()=>{
+test('bookings page follows GPU_PROOF, then offers the registered Developer workspace once it completes',async()=>{
   const bookings=await readFile(path.join(webRoot,'workspace-bookings.js'),'utf8');
   assert.match(bookings,/dashboard\.tenant\?\.jobs/);
   assert.match(bookings,/job\.type==='GPU_PROOF'/);
   assert.match(bookings,/data-prepare-compute/);
   assert.match(bookings,/workspace-sessions/);
   assert.match(bookings,/workspaceSlug:'compute'/);
-  assert.doesNotMatch(bookings,/data-prepare-developer/);
-  assert.doesNotMatch(bookings,/workspace\/developer/);
+  // The Developer workspace surface only ever activates for a booking whose
+  // GPU_PROOF job already reached COMPLETED (see workspace-developer-flow.js);
+  // it is never offered as an alternative to, or before, Compute/GPU_PROOF.
+  assert.match(bookings,/job\.status==='COMPLETED'/);
+  assert.match(bookings,/workspace\/developer/);
+  assert.match(bookings,/workspace\/access/);
+  assert.match(bookings,/data-create-developer/);
+  assert.match(bookings,/data-open-developer/);
 });
 
 test('private-beta workspace browser scripts parse as valid JavaScript',()=>{
@@ -86,10 +92,19 @@ test('private-beta workspace browser scripts parse as valid JavaScript',()=>{
   }
 });
 
-test('Developer remains internal until its renter route module is explicitly registered',async()=>{
+test('Developer renter routes are registered (via device-authorization-routes) and reachable, but the marketplace still only lists Compute',async()=>{
+  // registerWorkspaceRenterRoutes is not called directly from server.ts - it is
+  // wired in indirectly through registerDeviceAuthorizationRoutes, which server.ts
+  // does call. A plain string search on server.ts alone would miss that and wrongly
+  // conclude the Developer routes are dormant; assert the real chain instead.
   const server=await readFile(path.join(sourceRoot,'server.ts'),'utf8');
+  const deviceAuthRoutes=await readFile(path.join(sourceRoot,'device-authorization-routes.ts'),'utf8');
   const renterRoutes=await readFile(path.join(sourceRoot,'workspace-renter-routes.ts'),'utf8');
-  assert.doesNotMatch(server,/registerWorkspaceRenterRoutes/);
+  assert.match(server,/registerDeviceAuthorizationRoutes\(app, ?db, ?redis\)/);
+  assert.match(deviceAuthRoutes,/registerWorkspaceRenterRoutes\(app, ?db, ?redis\)/);
   assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'developer'\)/);
+  // The initial "choose a workspace for a new booking" marketplace still only
+  // offers Compute: Developer is unlocked from bookings.html after GPU_PROOF
+  // completes (see the test above), never chosen upfront alongside Compute.
   assert.deepEqual(compatibleWorkspaceChoices(compatiblePrivateBetaMachine).map(item=>item.slug),['compute']);
 });
