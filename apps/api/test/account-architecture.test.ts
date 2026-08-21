@@ -20,14 +20,16 @@ test('Netlify proxies same-origin API calls to Render', () => {
   assert.match(read('apps/web/config.js'), /GPUBNB_API_URL = .+ "\/api"/);
 });
 
-test('private-beta bookings stay on the registered Compute API path', () => {
+test('private-beta bookings stay on the registered Compute API path, with Developer unlocked only after GPU_PROOF completes', () => {
   const script = read('apps/web/workspace-bookings.js');
   assert.match(script, /workspace-sessions/);
   assert.match(script, /workspaceSlug:'compute'/);
   assert.match(script, /GPU_PROOF/);
-  assert.doesNotMatch(script, /data-prepare-developer/);
-  assert.doesNotMatch(script, /workspace-gateway/);
-  assert.doesNotMatch(script, /workspace\/access/);
+  // Never fabricated client-side: the page only ever navigates to the exact
+  // gatewayBase + openPath returned by POST .../workspace/access.
+  assert.doesNotMatch(script, /workspace-gateway\//);
+  assert.match(script, /workspace\/access/);
+  assert.match(script, /resolveWorkspaceOpenUrl/);
 });
 
 test('professional account pages and protected API routes exist', () => {

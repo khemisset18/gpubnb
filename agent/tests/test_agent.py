@@ -473,7 +473,7 @@ class RunnerTests(unittest.TestCase):
 
     def test_developer_healthcheck_is_inside_hardened_container(self):
         image = "registry.example/gpubnb/developer@sha256:" + ("b" * 64)
-        command = workspace_health_command(image, "developer")
+        command = workspace_health_command(image, "developer", "GPU-11111111-2222-3333-4444-555555555555")
         self.assertIn("--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", command)
         self.assertIn("--network=none", command)
         self.assertIn("--read-only", command)
@@ -491,7 +491,7 @@ class RunnerTests(unittest.TestCase):
         # string is present doesn't prove the mount is actually usable — only running the
         # real command against the published image against did.
         image = "registry.example/gpubnb/developer@sha256:" + ("b" * 64)
-        command = workspace_health_command(image, "developer")
+        command = workspace_health_command(image, "developer", "GPU-11111111-2222-3333-4444-555555555555")
         self.assertIn(
             "--tmpfs=/workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700", command
         )

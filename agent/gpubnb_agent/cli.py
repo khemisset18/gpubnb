@@ -405,6 +405,37 @@ def heartbeat_loop(
             pass
 
 
+def resolve_developer_workspace_gpu_uuid(
+    api: ApiClient, key: Any, machine_id: str, session_id: str,
+) -> str:
+    """Resolve the exact hardware UUID the rental resource authority leased for
+    this Developer session, before any Docker command runs.
+
+    Mirrors the GPU_PROOF resolution above (same official mechanism: signed
+    rental-authority -> parse_rental_authority_sessions -> resolve_session_resources),
+    kept as its own function rather than sharing code with the GPU_PROOF path so a
+    change here can never affect that already-verified workflow. Fails closed on
+    every step - no step here may silently fall back to a fixed device index:
+      - rental authority request/parse failure -> propagates (RuntimeError)
+      - session absent from the authority or blocked -> rental_resource_authority_missing_for_session / blockedReason
+      - more than one leased accelerator -> developer_workspace_requires_exactly_one_accelerator
+      - leased UUID not present in this host's own current GPU inventory,
+        or present only under a different case/format -> developer_workspace_gpu_uuid_not_found_locally
+    """
+    authority_payload = agent_request(
+        api, key, machine_id, f"/agent/mining/{machine_id}/rental-authority",
+    )
+    authority = parse_rental_authority_sessions(authority_payload)
+    specs = resolve_session_resources(authority, session_id)
+    if len(specs) != 1:
+        raise RuntimeError("developer_workspace_requires_exactly_one_accelerator")
+    gpu_uuid = specs[0].hardware_uuid
+    local_uuids = {str(gpu.get("gpuUuid") or "").casefold() for gpu in gpu_inventory()}
+    if gpu_uuid.casefold() not in local_uuids:
+        raise RuntimeError("developer_workspace_gpu_uuid_not_found_locally")
+    return gpu_uuid
+
+
 def run_next_job(
     api: ApiClient,
     key: Any,
@@ -510,6 +541,12 @@ def run_next_job(
                 publish_sample,
             )
         elif job.get("type") == "WORKSPACE_PREPARE":
+            developer_gpu_uuid: str | None = None
+            if workspace_slug == "developer":
+                if not isinstance(session_value := job.get("workspaceSession"), dict) or not isinstance(session_value.get("id"), str):
+                    raise RuntimeError("developer_workspace_session_missing")
+                developer_gpu_uuid = resolve_developer_workspace_gpu_uuid(api, key, machine_id, session_value["id"])
+
             def publish_preparation_progress(step: str, elapsed_seconds: int) -> None:
                 if lease_fenced.is_set():
                     raise RuntimeError("stale_job_attempt")
@@ -541,6 +578,7 @@ def run_next_job(
                 int(parameters.get("timeoutSeconds", 1200)),
                 workspace_slug,
                 publish_preparation_progress,
+                developer_gpu_uuid,
             )
             update_job(api, key, machine_id, job_id, attempt_id, lease_token, "PREPARING")
             update_job(api, key, machine_id, job_id, attempt_id, lease_token, "RUNNING")
