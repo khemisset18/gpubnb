@@ -48,7 +48,13 @@ test('proof finalization cannot be replayed by an obsolete attempt', async () =>
   const body = routeSlice(source, "app.post('/agent/jobs/:id/finalize-proof'", "app.get('/listings'");
   assert.match(body, /terminalExecutionMatches/);
   assert.match(body, /stale_job_attempt/);
-  assert.match(body, /moderationStatus:ModerationStatus\.CLEAR/);
+  // The booking-completion/machine-release decision itself now lives in
+  // completeGpuProofJob (gpu-proof-completion.ts) so it can be exercised directly
+  // against a real database in gpu-proof-completion.test.ts, instead of being
+  // re-simulated in a test that only reads server.ts's source text.
+  assert.match(body, /completeGpuProofJob\(db,job\.bookingId,body\.machineId\)/);
+  const completion = await readFile(new URL('../src/gpu-proof-completion.ts', import.meta.url), 'utf8');
+  assert.match(completion, /moderationStatus:\s*ModerationStatus\.CLEAR/);
 });
 
 test('heartbeat derives availability from server-owned runtime state', async () => {
