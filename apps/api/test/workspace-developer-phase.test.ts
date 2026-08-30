@@ -1,7 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WorkspaceSessionStatus, JobStatus } from '@prisma/client';
-import { preparationPhase, safeConnection } from '../src/workspace-renter-routes.js';
+
+// config.ts validates PLATFORM_WALLET (and friends) as required at import time.
+// ci.yml only generates SESSION_SECRET/INTERNAL_SERVICE_TOKEN for the api job, so
+// give every other module under test the same defensive fallback already used by
+// rental-marketplace-routes.integration.test.ts. Static imports are hoisted before
+// any other top-level statement, so every import that transitively reaches
+// config.ts must be dynamic here, evaluated after these fallbacks are in place.
+process.env.NODE_ENV ??= 'test';
+process.env.DATABASE_URL ??= 'postgresql://postgres:postgres@localhost:5432/gpubnb';
+process.env.REDIS_URL ??= 'redis://localhost:6379';
+process.env.SESSION_SECRET ??= 'test-session-secret-0123456789abcdef';
+process.env.INTERNAL_SERVICE_TOKEN ??= 'test-internal-token-0123456789abcdef';
+process.env.PLATFORM_WALLET ??= '11111111111111111111111111111111';
+
+const { preparationPhase, safeConnection } = await import('../src/workspace-renter-routes.js');
 
 // Regression coverage for the incident where the frontend displayed a
 // "READY"-looking state for a Developer workspace whose gateway tunnel had

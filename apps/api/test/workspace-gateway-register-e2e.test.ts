@@ -16,9 +16,22 @@ import {
   WorkspaceSessionStatus,
 } from '@prisma/client';
 
-import { ensureCompatibleMachineWorkspace } from '../src/machine-workspace-catalog.js';
-import { registerWorkspaceRenterRoutes } from '../src/workspace-renter-routes.js';
-import { config } from '../src/config.js';
+// config.ts validates PLATFORM_WALLET (and friends) as required at import time.
+// ci.yml only generates SESSION_SECRET/INTERNAL_SERVICE_TOKEN for the api job, so
+// give every other module under test the same defensive fallback already used by
+// rental-marketplace-routes.integration.test.ts. Static imports are hoisted before
+// any other top-level statement, so every import that transitively reaches
+// config.ts must be dynamic here, evaluated after these fallbacks are in place.
+process.env.NODE_ENV ??= 'test';
+process.env.DATABASE_URL ??= 'postgresql://postgres:postgres@localhost:5432/gpubnb';
+process.env.REDIS_URL ??= 'redis://localhost:6379';
+process.env.SESSION_SECRET ??= 'test-session-secret-0123456789abcdef';
+process.env.INTERNAL_SERVICE_TOKEN ??= 'test-internal-token-0123456789abcdef';
+process.env.PLATFORM_WALLET ??= '11111111111111111111111111111111';
+
+const { ensureCompatibleMachineWorkspace } = await import('../src/machine-workspace-catalog.js');
+const { registerWorkspaceRenterRoutes } = await import('../src/workspace-renter-routes.js');
+const { config } = await import('../src/config.js');
 
 // Full API-level regression test for the two incidents fixed in this repo:
 //   1. A WorkspaceSession could read status=READY (and the renter-facing phase
