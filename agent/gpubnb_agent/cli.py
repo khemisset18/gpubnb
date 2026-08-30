@@ -42,6 +42,16 @@ from .runtime_images import DEFAULT_DEVELOPER_IMAGE, workspace_image
 
 DEFAULT_API = "https://gpubnb.netlify.app/api"
 
+# The spawned daemon must load config/key, resolve its workspace image, and start
+# its background threads before it writes its own pid record - and on Windows,
+# each confirmation poll below verifies that pid via a real `Get-CimInstance`
+# PowerShell subprocess (~0.3-1.5s per call depending on system load). A 5-second
+# budget was measured to fail intermittently on an otherwise-healthy machine
+# under ordinary load (e.g. right after other Docker/npm activity); 20s gives
+# enough margin for a handful of slow polls without masking a genuinely hung
+# child (which still fails fast via `process.poll()`).
+DAEMON_START_CONFIRM_TIMEOUT_SECONDS = 20
+
 # Human-readable explanations for the quiescence-probe reasons that
 # gpu_rental_preemption.py treats as transient (see TRANSIENT_QUIESCENCE_REASONS):
 # these retry automatically, so the log should say so instead of surfacing a bare
@@ -749,7 +759,7 @@ def command_start(args: argparse.Namespace) -> int:
                 )
         finally:
             handle.close()
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + DAEMON_START_CONFIRM_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 print("L'agent n'a pas pu démarrer. Consultez les journaux.", file=sys.stderr)

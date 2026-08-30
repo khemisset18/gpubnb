@@ -201,6 +201,38 @@ class RentalClaimStore:
                 raise
 
 
+def _is_windows_desktop_compositor_path(process_name: str) -> bool:
+    """True for the OS's own always-on desktop compositor/shell components.
+
+    On Windows (WDDM), `nvidia-smi --query-compute-apps` reports every process
+    holding a GPU context - including the desktop compositor (dwm.exe), the
+    shell (explorer.exe), and various built-in shell-experience helpers (e.g.
+    TextInputHost.exe under `%SystemRoot%\\SystemApps\\...`), all of which are
+    attached to the display GPU on essentially every ordinary Windows desktop
+    session, all the time, whether or not a rental is active. Treating their
+    mere presence as a "foreign compute process" makes quiescence unprovable
+    on a normal Windows host: this is not a security signal, it is baseline OS
+    behavior for whichever GPU is driving the display.
+
+    Rather than hardcode the (version- and locale-dependent) set of shell
+    helper executables, this excludes anything reported as running from inside
+    `%SystemRoot%` itself - reported by NVML via nvidia-smi from the OS's own
+    process metadata, not something the process can self-report or spoof. A
+    real foreign workload (a game, a miner, a benchmark) runs from a different
+    path (Program Files, a user profile, a temp directory, ...) and is still
+    correctly treated as blocking; an attacker cannot relocate their workload
+    into the Windows installation directory without a level of system
+    compromise this check was never meant to defend against. Does not apply on
+    non-Windows platforms, where compute-apps reporting does not include the
+    compositor.
+    """
+    if os.name != "nt" or not process_name:
+        return False
+    system_root = os.path.normcase(os.environ.get("SystemRoot", r"C:\Windows"))
+    normalized = os.path.normcase(process_name)
+    return normalized == system_root or normalized.startswith(system_root + os.sep)
+
+
 class NvidiaGpuQuiescenceProbe:
     def sample(self, hardware_uuid: str) -> GpuQuiescenceSample:
         if SAFE_GPU_ID.fullmatch(hardware_uuid) is None:
@@ -237,7 +269,7 @@ class NvidiaGpuQuiescenceProbe:
         compute = run_command(
             [
                 executable,
-                "--query-compute-apps=gpu_uuid,pid,used_gpu_memory",
+                "--query-compute-apps=gpu_uuid,pid,used_gpu_memory,process_name",
                 "--format=csv,noheader,nounits",
             ],
             timeout=12,
@@ -247,13 +279,13 @@ class NvidiaGpuQuiescenceProbe:
         pids: set[int] = set()
         for row in csv.reader(line for line in compute.stdout.splitlines() if line.strip()):
             values = [field.strip() for field in row]
-            if len(values) < 2 or values[0].casefold() != hardware_uuid.casefold():
+            if len(values) < 4 or values[0].casefold() != hardware_uuid.casefold():
                 continue
             try:
                 pid = int(values[1])
             except ValueError as exc:
                 raise ExecutionControlError("rental_gpu_compute_process_query_invalid") from exc
-            if pid > 0:
+            if pid > 0 and not _is_windows_desktop_compositor_path(values[3]):
                 pids.add(pid)
         return GpuQuiescenceSample(
             hardware_uuid=hardware_uuid,

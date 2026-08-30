@@ -14,9 +14,15 @@ stop → real cleanup → GPU released → a second rental proven possible
 
 Nothing here is mocked or simulated: every step calls the actual production
 route or the actual production service function, over real HTTP or a real
-Prisma connection. It was built and exercised successfully against this
-exact repository state — see `RESULTS.md` for the real run this harness is
-based on, and the caveat about the sandbox this was developed in.
+Prisma connection. `./run.sh` has been run **unattended, end to end, twice in
+a row** against this exact repository state — see `RESULTS.md` for the full
+evidence, including the real bugs found and fixed to get there.
+
+A second, separate harness, `recovery-agent-restart.sh`, proves a real
+recovery scenario: it gets a workspace to the same `READY`/gateway-registered
+state, then genuinely kills the real agent OS process (simulating a crash)
+and verifies the system recovers - real heartbeats resume after restart, no
+GPU double-booking, and a normal stop/cleanup still completes.
 
 ## Prerequisites
 
@@ -53,6 +59,14 @@ The script is idempotent to re-run: it tears down and recreates its own
 disposable Postgres/Redis containers and isolated agent config directory
 each time, and never touches anything outside of names prefixed
 `gpubnb-e2e-`.
+
+To run the recovery scenario instead (uses its own disposable resources,
+prefixed `gpubnb-recovery-`, so it can run independently of `run.sh`):
+
+```bash
+cd e2e
+./recovery-agent-restart.sh
+```
 
 ## Known environment-specific timing notes
 

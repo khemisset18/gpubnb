@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 import unittest
@@ -16,6 +17,7 @@ from gpubnb_agent.gpu_rental_preemption import (
     RentalClaimStore,
     RentalPreemptionSupervisor,
     RentalResourceSpec,
+    _is_windows_desktop_compositor_path,
 )
 from gpubnb_agent.gpu_resource_supervisor import (
     GpuBinding,
@@ -91,7 +93,7 @@ class NvidiaQuiescenceProbeTests(unittest.TestCase):
         compute = subprocess.CompletedProcess(
             ["nvidia-smi"],
             0,
-            "GPU-bbbbbbbb, 9001, 8192\nGPU-aaaaaaaa, 0, 0\n",
+            "GPU-bbbbbbbb, 9001, 8192, /usr/bin/some-miner\nGPU-aaaaaaaa, 0, 0, \n",
             "",
         )
         with (
@@ -110,6 +112,62 @@ class NvidiaQuiescenceProbeTests(unittest.TestCase):
         with patch.object(probe, "sample", return_value=sample):
             with self.assertRaisesRegex(ExecutionControlError, "rental_gpu_compute_processes_present"):
                 probe.prove("GPU-aaaaaaaa")
+
+    def test_windows_desktop_compositor_never_blocks_quiescence(self) -> None:
+        # Regression for a real failure: on Windows (WDDM), nvidia-smi reports the
+        # desktop compositor (dwm.exe), the shell (explorer.exe), and built-in shell
+        # helpers (e.g. TextInputHost.exe) as "compute apps" on the display GPU at
+        # all times, on every ordinary desktop session - reproduced live (8/8
+        # consecutive samples, 2s apart). Without this exclusion, quiescence can
+        # never be proven on a normal Windows host with a display attached.
+        inventory = subprocess.CompletedProcess(["nvidia-smi"], 0, "GPU-aaaaaaaa, 0, 0, 4096\n", "")
+        compute = subprocess.CompletedProcess(
+            ["nvidia-smi"],
+            0,
+            "GPU-aaaaaaaa, 4724, 0, C:\\Windows\\explorer.exe\n"
+            "GPU-aaaaaaaa, 1888, 0, C:\\Windows\\System32\\dwm.exe\n"
+            "GPU-aaaaaaaa, 19608, 0, C:\\Windows\\SystemApps\\Shell.Host_cw5n1h2txyewy\\TextInputHost.exe\n",
+            "",
+        )
+        with (
+            patch("gpubnb_agent.gpu_rental_preemption.os.name", "nt"),
+            patch.dict(os.environ, {"SystemRoot": "C:\\Windows"}),
+            patch("gpubnb_agent.gpu_rental_preemption.find_nvidia_smi", return_value="nvidia-smi"),
+            patch("gpubnb_agent.gpu_rental_preemption.run_command", side_effect=[inventory, compute]),
+        ):
+            sample = NvidiaGpuQuiescenceProbe().sample("GPU-aaaaaaaa")
+        self.assertEqual(sample.compute_pids, ())
+
+    def test_genuine_foreign_process_outside_windows_directory_still_blocks(self) -> None:
+        inventory = subprocess.CompletedProcess(["nvidia-smi"], 0, "GPU-aaaaaaaa, 0, 0, 4096\n", "")
+        compute = subprocess.CompletedProcess(
+            ["nvidia-smi"],
+            0,
+            "GPU-aaaaaaaa, 4242, 512, C:\\Program Files\\Epic Games\\Launcher\\EpicGamesLauncher.exe\n",
+            "",
+        )
+        with (
+            patch("gpubnb_agent.gpu_rental_preemption.os.name", "nt"),
+            patch.dict(os.environ, {"SystemRoot": "C:\\Windows"}),
+            patch("gpubnb_agent.gpu_rental_preemption.find_nvidia_smi", return_value="nvidia-smi"),
+            patch("gpubnb_agent.gpu_rental_preemption.run_command", side_effect=[inventory, compute]),
+        ):
+            sample = NvidiaGpuQuiescenceProbe().sample("GPU-aaaaaaaa")
+        self.assertEqual(sample.compute_pids, (4242,))
+
+    def test_compositor_path_helper_is_windows_only_and_prefix_scoped(self) -> None:
+        with patch("gpubnb_agent.gpu_rental_preemption.os.name", "nt"), patch.dict(
+            os.environ, {"SystemRoot": "C:\\Windows"}
+        ):
+            self.assertTrue(_is_windows_desktop_compositor_path("C:\\Windows\\explorer.exe"))
+            self.assertTrue(_is_windows_desktop_compositor_path("c:\\windows\\system32\\dwm.exe"))
+            # A path that merely starts with the same characters but isn't actually
+            # inside the Windows directory must not be treated as OS-owned.
+            self.assertFalse(_is_windows_desktop_compositor_path("C:\\WindowsFakeMiner\\evil.exe"))
+            self.assertFalse(_is_windows_desktop_compositor_path("C:\\Program Files\\Game\\game.exe"))
+            self.assertFalse(_is_windows_desktop_compositor_path(""))
+        with patch("gpubnb_agent.gpu_rental_preemption.os.name", "posix"):
+            self.assertFalse(_is_windows_desktop_compositor_path("C:\\Windows\\explorer.exe"))
 
 
 class RentalPreemptionTests(unittest.TestCase):

@@ -13,3 +13,5 @@ agent/__pycache__/
 .DS_Store
 apps/web/_redirects
 apps/api/data/
+e2e/.agent-config/
+e2e/.api.pid

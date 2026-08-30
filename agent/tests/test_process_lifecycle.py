@@ -84,6 +84,39 @@ class ProcessLifecycleTests(unittest.TestCase):
         self.assertEqual(popen.call_args.args[0][-1], "_run")
         self.assertIn("PID 4242", output.getvalue())
 
+    def test_daemon_start_tolerates_a_slow_but_real_confirmation(self) -> None:
+        # Regression for a real failure: on Windows, each confirmation poll below
+        # verifies the child's identity via a `Get-CimInstance` PowerShell
+        # subprocess, individually measured at ~0.3-1.5s under ordinary load. A
+        # child that is genuinely starting (not hung) but takes several slow
+        # polls to confirm must not be killed by too tight a deadline - that
+        # exact scenario (9 simulated seconds to confirm) was reproduced live and
+        # would have failed the previous 5-second budget.
+        process = MagicMock(pid=4242)
+        process.poll.return_value = None
+        output = io.StringIO()
+
+        clock = {"value": 0.0}
+
+        def fake_monotonic() -> float:
+            clock["value"] += 1.0
+            return clock["value"]
+
+        # Not-yet-confirmed for 8 slow polls (~8s elapsed), matches on the 9th.
+        pid_side_effect = [None, *([None] * 8), 4242]
+
+        with (
+            patch.object(cli, "_running_agent_pid", side_effect=pid_side_effect),
+            patch.object(cli.subprocess, "Popen", return_value=process),
+            patch.object(cli.time, "monotonic", side_effect=fake_monotonic),
+            patch.object(cli.time, "sleep"),
+            redirect_stdout(output),
+        ):
+            self.assertEqual(cli.command_start(argparse.Namespace(daemon=True)), 0)
+
+        self.assertIn("PID 4242", output.getvalue())
+        process.terminate.assert_not_called()
+
     def test_stop_never_signals_an_unverified_pid(self) -> None:
         cli.pid_path().write_text(
             json.dumps({"pid": 4242, "executable": "/opt/gpubnb-agent", "mode": "_run"}),

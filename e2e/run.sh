@@ -14,7 +14,15 @@ REDIS_URL="redis://:change-me@localhost:${REDIS_PORT}"
 
 cleanup() {
   echo "--- cleanup ---"
-  [ -n "${API_PID:-}" ] && kill "$API_PID" 2>/dev/null || true
+  if [ -n "${API_PID:-}" ]; then
+    # On Windows, `npx tsx src/server.ts &` is a chain of 3-4 processes (a cmd.exe
+    # npx shim, node, and tsx's own loader child); a plain `kill $API_PID` only
+    # ever reached one of them and left the rest running, holding a lock on the
+    # Prisma query engine DLL that broke the next run's `prisma generate`.
+    # `taskkill /T` kills the whole tree rooted at $API_PID; fall back to `kill`
+    # where taskkill doesn't exist (Linux/macOS).
+    taskkill //F //T //PID "$API_PID" 2>/dev/null || kill "$API_PID" 2>/dev/null || true
+  fi
   GPUBNB_CONFIG_DIR="$CONFIG_DIR" gpubnb-agent stop 2>/dev/null || true
   docker rm -f gpubnb-e2e-pg gpubnb-e2e-redis 2>/dev/null || true
   docker ps -a --format '{{.Names}}' | grep '^gpubnb-dev-' | xargs -r docker rm -f 2>/dev/null || true
@@ -34,16 +42,25 @@ echo "--- 2b. build (run.cjs requires apps/api/dist/*.js) ---"
 (cd "$API_DIR" && npm run build >/dev/null)
 
 echo "--- 3. real API server ---"
+# Under Git Bash on Windows, `$!` after backgrounding a compound command is an
+# MSYS-internal PID that doesn't correspond to any real Windows PID (confirmed:
+# neither `tasklist` nor `taskkill` can find it) - it cannot be used to kill the
+# process later. The real, native Windows PID is only discoverable once the
+# server actually binds its port, via netstat.
 (cd "$API_DIR" && DATABASE_URL="$DATABASE_URL" REDIS_URL="$REDIS_URL" PORT="$API_PORT" nohup npx tsx src/server.ts > /tmp/gpubnb-e2e-api.log 2>&1 &)
-sleep 1
-API_PID=$(netstat -ano 2>/dev/null | grep ":${API_PORT}" | grep LISTENING | awk '{print $NF}' | head -1 || true)
 for i in $(seq 1 30); do curl -sf "http://localhost:${API_PORT}/ready" >/dev/null 2>&1 && break; sleep 1; done
+API_PID=$(netstat -ano 2>/dev/null | grep ":${API_PORT}" | grep LISTENING | awk '{print $NF}' | head -1 || true)
 curl -sf "http://localhost:${API_PORT}/ready" || { echo "API never became ready — see /tmp/gpubnb-e2e-api.log"; exit 1; }
 
 echo "--- 4. real isolated agent, real GPU/Docker detection ---"
 rm -rf "$CONFIG_DIR" && mkdir -p "$CONFIG_DIR"
 export GPUBNB_CONFIG_DIR="$CONFIG_DIR"
-gpubnb-agent setup --api-url "http://localhost:${API_PORT}" >/dev/null
+# `setup` ends by running the same diagnostic as `gpubnb-agent diagnose`, which
+# intentionally exits 1 whenever the machine isn't linked yet (readyForHeartbeat
+# is false until `link` succeeds) - true on every fresh config dir, by design.
+# The real readiness gate is `node run.cjs setup` below (link + start + wait for
+# publishable), so a bare `setup` exit code of 1 here is expected, not a failure.
+gpubnb-agent setup --api-url "http://localhost:${API_PORT}" >/dev/null || true
 
 echo "--- 5. real wallet auth, pairing, link, agent start ---"
 node run.cjs setup "http://localhost:${API_PORT}" "$DATABASE_URL"
