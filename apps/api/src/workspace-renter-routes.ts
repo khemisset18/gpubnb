@@ -10,7 +10,7 @@ import { issueWorkspaceAccessGrant } from './workspace-access.js';
 import { registerWorkspaceGatewayRoutes } from './workspace-gateway.js';
 import { ensureCompatibleMachineWorkspace } from './machine-workspace-catalog.js';
 
-function safeConnection(metadata: unknown): { ready: boolean; gatewayPath: string | null } {
+export function safeConnection(metadata: unknown): { ready: boolean; gatewayPath: string | null } {
   if (!metadata || typeof metadata !== 'object') return { ready: false, gatewayPath: null };
   const value = metadata as Record<string, unknown>;
   const path = typeof value.gatewayPath === 'string' ? value.gatewayPath : null;
@@ -22,7 +22,13 @@ const activeBookings: BookingStatus[]=[BookingStatus.FUNDED,BookingStatus.STARTI
 const terminalJobs: JobStatus[]=[JobStatus.COMPLETED,JobStatus.FAILED,JobStatus.CANCELLED,JobStatus.TIMED_OUT,JobStatus.REJECTED,JobStatus.QUARANTINED];
 const retryableSessions: WorkspaceSessionStatus[]=[WorkspaceSessionStatus.FAILED,WorkspaceSessionStatus.CANCELLED,WorkspaceSessionStatus.TIMED_OUT];
 
-function preparationPhase(status: WorkspaceSessionStatus, step: string | null, jobStatus: JobStatus | null): string {
+export function preparationPhase(status: WorkspaceSessionStatus, step: string | null, jobStatus: JobStatus | null, connectionReady: boolean): string {
+  // The container/runtime finishing (status READY) is not the same fact as the
+  // gateway tunnel being registered and openable (connectionReady). Reporting
+  // raw "READY" here when the workspace cannot actually be opened yet is
+  // exactly the misleading state this phase exists to prevent - callers must
+  // see a distinct, still-preparing phase until both are true.
+  if (status === WorkspaceSessionStatus.READY && !connectionReady) return 'GATEWAY_NOT_READY';
   if (status !== WorkspaceSessionStatus.PREPARING) return status;
   if (step === 'AGENT_RECONNECTING') return 'RECONNECTING_AGENT';
   if (step === 'VERIFYING_WORKSPACE' || step === 'WORKSPACE_VERIFIED') return 'VERIFYING_WORKSPACE';
@@ -147,7 +153,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
-    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null);
+    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
     const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
     const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
     return {

@@ -38,6 +38,19 @@ QUIESCENCE_MAX_UTILIZATION_PERCENT = 5
 QUIESCENCE_MIN_MEMORY_THRESHOLD_MIB = 256
 QUIESCENCE_MAX_MEMORY_THRESHOLD_MIB = 512
 
+# A foreign process, transient utilization, or leftover memory footprint on the
+# GPU is environmental noise a reconciliation retry can resolve on its own once
+# that process finishes - it is not evidence of a security incident. Only these
+# specific quiescence-probe reasons are treated as transient; every other
+# preemption failure (fencing, miner identity, telemetry tooling) still
+# quarantines the resource, since those indicate a state the Agent cannot
+# safely reason about without a human/operator looking at it.
+TRANSIENT_QUIESCENCE_REASONS = frozenset({
+    "rental_gpu_compute_processes_present",
+    "rental_gpu_utilization_not_quiescent",
+    "rental_gpu_memory_not_quiescent",
+})
+
 _RESOURCE_LOCKS_GUARD = threading.Lock()
 _RESOURCE_LOCKS: dict[str, threading.RLock] = {}
 
@@ -516,6 +529,12 @@ class RentalPreemptionSupervisor:
                 self.mining.binding_resolver(spec.hardware_uuid)
                 proof = self.probe.prove(spec.hardware_uuid)
             except ExecutionControlError as exc:
+                if str(exc) in TRANSIENT_QUIESCENCE_REASONS:
+                    # Leave the claim at PREEMPTING (already written above): the
+                    # next reconciliation tick calls preempt_for_rental again and
+                    # re-proves quiescence from scratch, instead of latching a
+                    # permanent QUARANTINED state that no retry could ever clear.
+                    raise
                 self._quarantine(spec, str(exc))
 
             self._write_claim(spec, "QUIESCENT", proof.verified_at_ms)

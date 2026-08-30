@@ -65,6 +65,19 @@ test('stays PREPARING while the developer session exists but is not openable yet
   assert.equal(phase, DeveloperPhase.PREPARING);
 });
 
+// Regression test for the incident where the raw session status was already
+// READY (the container/runtime finished preparing) but the gateway tunnel had
+// not registered yet (connectionMetadata still null) - the UI must never
+// treat that as openable just because the underlying status string is READY.
+test('stays PREPARING when status is READY but the gateway has not registered (canOpen false)', () => {
+  const phase = deriveDeveloperPhase({
+    bookingStatus: 'ACTIVE',
+    gpuProofJob: { status: 'COMPLETED' },
+    workspaceDetail: { status: 'READY', canOpen: false, retryable: false },
+  });
+  assert.equal(phase, DeveloperPhase.PREPARING);
+});
+
 test('offers RETRY when the developer session failed but is still retryable', () => {
   const phase = deriveDeveloperPhase({
     bookingStatus: 'ACTIVE',
@@ -110,6 +123,10 @@ test('preparationLabel falls back to a generic message for unknown/missing phase
   assert.equal(preparationLabel({ preparation: { phase: 'DOWNLOADING_IMAGE' } }), 'Téléchargement de l’image…');
   assert.equal(preparationLabel({ preparation: { phase: 'SOMETHING_NEW' } }), 'Préparation en cours…');
   assert.equal(preparationLabel(null), 'Préparation en cours…');
+});
+
+test('preparationLabel describes GATEWAY_NOT_READY distinctly from a generic message', () => {
+  assert.equal(preparationLabel({ preparation: { phase: 'GATEWAY_NOT_READY' } }), 'Connexion de l’espace de travail…');
 });
 
 // D. "Ouvrir mon espace" utilise l'URL réellement retournée par l'API.
