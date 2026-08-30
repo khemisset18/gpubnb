@@ -11,11 +11,16 @@ export function isExecutableWorkspaceSlug(value: string): value is ExecutableWor
 }
 
 export function compatibleWorkspaceChoices(machine: MachineCapabilities) {
-  // Private-beta marketplace safety boundary: only expose the Compute flow that is
-  // registered in server.ts and creates GPU_PROOF. Developer remains a valid internal
-  // workspace slug for its dedicated module, but it must not be offered to renters
-  // until that module is explicitly registered in the main server and covered by a
-  // real route-level integration test.
+  // This is the pre-booking "which workspace could this machine run" listing, used
+  // before a rental exists. Developer is intentionally excluded here: it is not an
+  // initial choice but a post-booking upgrade offered on top of an active Compute
+  // rental (POST /bookings/:bookingId/workspace/developer, wired in
+  // workspace-renter-routes.ts and exposed by its own dedicated UI control) - the
+  // renter always starts on Compute/GPU_PROOF and may add a Developer workspace
+  // once the booking is funded. That path is covered end-to-end by
+  // test/workspace-gateway-register-e2e.test.ts (real Postgres+Redis, real signed
+  // agent requests) and by test/workspace-developer-phase.test.ts, so this filter
+  // is a deliberate information-architecture choice, not a placeholder.
   return workspaceManifests
     .filter((manifest) => manifest.release === 'BETA' && manifest.slug === 'compute')
     .map((manifest) => {

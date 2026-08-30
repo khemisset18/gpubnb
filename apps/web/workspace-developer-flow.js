@@ -45,6 +45,7 @@ const PREPARATION_PHASE_LABEL = {
   DOWNLOADING_IMAGE: 'Téléchargement de l’image…',
   STARTING_WORKSPACE: 'Démarrage de l’espace…',
   WAITING_FOR_HOST: 'En attente de l’hôte…',
+  GATEWAY_NOT_READY: 'Connexion de l’espace de travail…',
 };
 
 export function preparationLabel(workspaceDetail) {

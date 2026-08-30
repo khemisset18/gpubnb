@@ -29,16 +29,16 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
   const jobLabel={
     QUEUED:'En attente de prise en charge par l’agent hôte',
     ASSIGNED:'Pris en charge par l’agent hôte',
-    DOWNLOADING:'Téléchargement de l’image GPU Proof',
+    DOWNLOADING:'Téléchargement de l’image de vérification',
     PREPARING:'Préparation du workload GPU',
-    RUNNING:'GPU Proof en cours',
+    RUNNING:'Vérification GPU en cours',
     UPLOADING_RESULTS:'Envoi et vérification des résultats',
-    COMPLETED:'GPU Proof terminé',
-    FAILED:'GPU Proof échoué',
+    COMPLETED:'Vérification GPU terminée',
+    FAILED:'Vérification GPU échouée',
     CANCEL_REQUESTED:'Arrêt demandé',
-    CANCELLED:'GPU Proof annulé',
-    TIMED_OUT:'GPU Proof expiré',
-    REJECTED:'GPU Proof refusé',
+    CANCELLED:'Vérification GPU annulée',
+    TIMED_OUT:'Vérification GPU expirée',
+    REJECTED:'Vérification GPU refusée',
     QUARANTINED:'Machine mise en quarantaine'
   };
   const terminalOk=new Set(['COMPLETED']);
@@ -54,7 +54,13 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
       action=`<button class="button button-primary" type="button" data-create-developer="${escapeHTML(booking.id)}">Créer mon espace de travail</button>`;
       badge='';
     }else if(phase===DeveloperPhase.PREPARING){
+      // Never surface the raw session status here: it can legitimately read
+      // "READY" (the container/runtime finished) while the gateway tunnel is
+      // still not registered - i.e. the workspace is not actually openable
+      // yet. preparationLabel() reflects the fine-grained phase instead,
+      // which distinguishes that case (GATEWAY_NOT_READY) from real READY.
       action=`<span class="muted">${escapeHTML(preparationLabel(detail))}</span>`;
+      badge='';
     }else if(phase===DeveloperPhase.OPEN){
       action=`<button class="button button-primary" type="button" data-open-developer="${escapeHTML(booking.id)}">Ouvrir mon espace</button>`;
       badge='<span class="badge ok">PRÊT</span>';
@@ -71,10 +77,10 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
     const title=escapeHTML(booking.listing?.title||'Réservation GPU');
     if(!job){
       if(booking.status==='AWAITING_DEPOSIT'){
-        return `<article class="list-row"><div><strong>${title}</strong><div class="muted">Financement bêta en cours. Compute démarrera uniquement après le passage à FUNDED.</div></div><span class="badge warn">AWAITING_DEPOSIT</span></article>`;
+        return `<article class="list-row"><div><strong>${title}</strong><div class="muted">Financement en cours. Compute démarrera uniquement après le passage à FUNDED.</div></div><span class="badge warn">AWAITING_DEPOSIT</span></article>`;
       }
       const canPrepare=!history&&preparableBookingStatuses.has(booking.status);
-      return `<article class="list-row"><div><strong>${title}</strong><div class="muted">Aucun GPU_PROOF Compute n’est encore associé à cette réservation.</div></div><div class="actions">${canPrepare?`<button class="button button-primary" type="button" data-prepare-compute="${escapeHTML(booking.id)}">Préparer Compute</button>`:''}<span class="badge ${history?'':'warn'}">${escapeHTML(booking.status)}</span></div></article>`;
+      return `<article class="list-row"><div><strong>${title}</strong><div class="muted">Aucune vérification Compute n’est encore associée à cette réservation.</div></div><div class="actions">${canPrepare?`<button class="button button-primary" type="button" data-prepare-compute="${escapeHTML(booking.id)}">Préparer Compute</button>`:''}<span class="badge ${history?'':'warn'}">${escapeHTML(booking.status)}</span></div></article>`;
     }
     const label=jobLabel[job.status]||job.status;
     const errorText=job.errorCode?`<div class="muted">Motif : ${escapeHTML(job.errorCode)}</div>`:'';
@@ -106,7 +112,7 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
       const history=rows.filter(row=>!currentBookingStatuses.has(row.booking.status));
       const latestFailure=history.find(row=>row.job&&terminalFailure.has(row.job.status));
       const failureNotice=latestFailure
-        ?`<section class="workspace-latest-failure" role="alert"><h3>Dernier GPU Proof interrompu</h3><p class="muted">La réservation reste visible avec le code d’erreur réel. Aucun basculement automatique vers Developer n’est effectué.</p>${rowHTML(latestFailure.booking,latestFailure.job,true)}</section>`
+        ?`<section class="workspace-latest-failure" role="alert"><h3>Dernière vérification interrompue</h3><p class="muted">La réservation reste visible avec le code d’erreur réel. Aucun basculement automatique vers Developer n’est effectué.</p>${rowHTML(latestFailure.booking,latestFailure.job,true)}</section>`
         :'';
 
       // Only bookings whose GPU_PROOF just completed are eligible for a Developer

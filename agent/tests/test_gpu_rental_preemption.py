@@ -230,7 +230,7 @@ class RentalPreemptionTests(unittest.TestCase):
         self.assertEqual(self.runtime_store.load()["resource_00000001"].state, "QUARANTINED")
         self.assertEqual(self.claim_store.load()["resource_00000001"].state, "QUARANTINED")
 
-    def test_quiescence_failure_blocks_only_target_resource(self) -> None:
+    def test_transient_quiescence_failure_blocks_only_target_resource_without_quarantine(self) -> None:
         one, two = self._seed_two_miners()
         self.probe.fail_for.add("GPU-aaaaaaaa")
         with self.assertRaisesRegex(ExecutionControlError, "rental_gpu_compute_processes_present"):
@@ -239,8 +239,41 @@ class RentalPreemptionTests(unittest.TestCase):
         self.assertEqual(self.inspector.terminated, [one])
         self.assertEqual(self.inspector.identities[two.pid], two)
         records = self.runtime_store.load()
-        self.assertEqual(records["resource_00000001"].state, "QUARANTINED")
+        # A foreign compute process is environmental noise, not a security
+        # incident: the mining runtime record is left STOPPED (not QUARANTINED)
+        # and the rental claim stays PREEMPTING so the next reconciliation tick
+        # can retry, instead of a permanent, unrecoverable lock.
+        self.assertEqual(records["resource_00000001"].state, "STOPPED")
         self.assertEqual(records["resource_00000002"].state, "MINING")
+        self.assertEqual(self.claim_store.load()["resource_00000001"].state, "PREEMPTING")
+
+    def test_transient_quiescence_failure_self_heals_on_next_retry(self) -> None:
+        self._seed_two_miners()
+        rental = spec("resource_00000001", "GPU-aaaaaaaa", 9)
+        self.probe.fail_for.add("GPU-aaaaaaaa")
+        with self.assertRaisesRegex(ExecutionControlError, "rental_gpu_compute_processes_present"):
+            self.supervisor.preempt_for_rental(rental)
+
+        # The interfering process (e.g. an unrelated local application) is gone
+        # by the time the reconciliation loop retries.
+        self.probe.fail_for.discard("GPU-aaaaaaaa")
+        proof = self.supervisor.preempt_for_rental(rental)
+
+        self.assertEqual(proof.hardware_uuid, "GPU-aaaaaaaa")
+        self.assertEqual(self.claim_store.load()["resource_00000001"].state, "QUIESCENT")
+        self.assertEqual(self.runtime_store.load()["resource_00000001"].state, "STOPPED")
+
+    def test_miner_identity_mismatch_still_quarantines_despite_transient_fix(self) -> None:
+        # Regression guard: the transient-failure carve-out must never widen to
+        # cover genuine security-relevant failures.
+        one, two = self._seed_two_miners()
+        self.inspector.identities[one.pid] = ProcessIdentity(one.pid, one.executable_path, "reused")
+
+        with self.assertRaisesRegex(ExecutionControlError, "rental_miner_process_identity_mismatch"):
+            self.supervisor.preempt_for_rental(spec("resource_00000001", "GPU-aaaaaaaa", 9))
+
+        self.assertEqual(self.claim_store.load()["resource_00000001"].state, "QUARANTINED")
+        self.assertEqual(self.inspector.identities[two.pid], two)
 
     def test_cleanup_releases_claim_after_second_target_only_quiescence_proof(self) -> None:
         self._seed_two_miners()

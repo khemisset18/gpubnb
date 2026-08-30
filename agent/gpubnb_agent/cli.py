@@ -19,7 +19,11 @@ from typing import Any, Callable
 
 from . import __version__
 from .client import ApiClient, agent_request, heartbeat
-from .gpu_rental_preemption import parse_rental_authority_sessions, resolve_session_resources
+from .gpu_rental_preemption import (
+    TRANSIENT_QUIESCENCE_REASONS,
+    parse_rental_authority_sessions,
+    resolve_session_resources,
+)
 from .runner import (
     cleanup_workspace,
     gpu_proof_command,
@@ -37,6 +41,28 @@ from .storage import (
 from .runtime_images import DEFAULT_DEVELOPER_IMAGE, workspace_image
 
 DEFAULT_API = "https://gpubnb.netlify.app/api"
+
+# Human-readable explanations for the quiescence-probe reasons that
+# gpu_rental_preemption.py treats as transient (see TRANSIENT_QUIESCENCE_REASONS):
+# these retry automatically, so the log should say so instead of surfacing a bare
+# exception name. Anything not listed here (fencing conflicts, miner identity
+# mismatches, tooling failures) keeps the raw message - those are not retried
+# silently and deserve an operator's attention.
+_GATEWAY_ERROR_EXPLANATIONS: dict[str, str] = {
+    "rental_gpu_compute_processes_present": (
+        "GPU rental startup delayed: another program on this machine is currently "
+        "using the GPU. Retrying automatically once it is free."
+    ),
+    "rental_gpu_utilization_not_quiescent": (
+        "GPU rental startup delayed: GPU utilization has not settled yet. "
+        "Retrying automatically."
+    ),
+    "rental_gpu_memory_not_quiescent": (
+        "GPU rental startup delayed: GPU memory is still occupied by another "
+        "process. Retrying automatically once it is released."
+    ),
+}
+assert set(_GATEWAY_ERROR_EXPLANATIONS) == set(TRANSIENT_QUIESCENCE_REASONS)
 
 
 def print_json(value: Any) -> None:
@@ -307,11 +333,16 @@ def heartbeat_loop(
     job_thread: threading.Thread | None = None
 
     def gateway_error(exc: Exception) -> None:
-        emit({
+        message = str(exc)[:300]
+        event: dict[str, Any] = {
             "event": "workspace_gateway_error",
             "type": type(exc).__name__,
-            "message": str(exc)[:300],
-        })
+            "message": message,
+        }
+        detail = _GATEWAY_ERROR_EXPLANATIONS.get(message)
+        if detail is not None:
+            event["detail"] = detail
+        emit(event)
 
     def supervise_gateway() -> None:
         from .workspace_gateway import run_workspace_gateway_forever
