@@ -298,17 +298,167 @@ Do not unlink/reconfigure the production agent to make this pass.
   all are real, evidenced, currently-unresolved blockers, not untested
   guesses.
 
+## 8. Technical plans for the 4 remaining workspaces — RESEARCH ONLY, nothing built or claimed working
+
+None of this was implemented or tested this session - no Linux GPU host is
+available here. Grounded in verified facts (NVIDIA's own container-toolkit
+docs, Selkies' own docs, Sunshine/Moonlight's own docs - see the web search
+results in this session's transcript), not assumptions. Do not build any of
+this without the user's explicit go-ahead, and do not claim it works before
+it is actually proven on real hardware per the validation plans below.
+
+### Creator / Cloud Desktop / CAD (grouped: same underlying architecture)
+
+These three need the same thing - a real GPU-accelerated Linux desktop,
+streamed to a browser - just different application software on top
+(Blender / a general desktop / FreeCAD). One infrastructure investment
+unlocks all three.
+
+1. **Linux infrastructure needed**: a real Linux host (bare-metal or a
+   Linux VM with real GPU passthrough - NOT WSL2) running Docker Engine +
+   the NVIDIA Container Toolkit, with the NVIDIA proprietary driver
+   installed at the OS level. That driver install is what populates
+   `/dev/dri/renderD128` and enables OpenGL/Vulkan - confirmed via NVIDIA's
+   own container-toolkit docs that `NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute`
+   (or `all`) is what exposes `/dev/dri` and graphics APIs inside a
+   container on a real Linux host; this capability set is unavailable under
+   WSL2 (only `/dev/dxg`, compute-only), which is the entire reason this is
+   blocked here and not a code problem. `agent/gpubnb_agent` is already
+   plain cross-platform Python (its own test suite already runs on
+   Linux/macOS CI) - no agent rewrite needed, just a real Linux deployment
+   target for it to run on.
+2. **Images/runtime**: `linuxserver/webtop` (Selkies-GStreamer based,
+   several desktop-environment flavors, actively maintained, real) as the
+   base for Cloud Desktop; the already-identified `linuxserver/blender`
+   (same Selkies/EGL base) for Creator; for CAD, the same pattern already
+   proven twice this session (Mobile: Android SDK layered onto Developer;
+   Security Lab: tshark/YARA/radare2 layered onto Developer) - a real,
+   open-source FreeCAD `apt`-installed onto the same Selkies-based desktop
+   image, not a fabricated one.
+3. **Hardware needed**: any NVIDIA GPU (consumer or datacenter) with a real
+   proprietary driver on the Linux host, giving working OpenGL 4.x/Vulkan
+   1.x via EGL and NVENC hardware encoding (Selkies uses NVENC when
+   available, falls back to software H.264/VP8/VP9 otherwise per its own
+   docs).
+4. **How the renter accesses the desktop**: browser-based, same "Ouvrir"
+   button pattern every GPUbnb workspace already uses - Selkies serves an
+   HTML5/WebRTC client, keyboard/mouse relayed over the same connection.
+5. **How the GPU is transmitted**: `--gpus device={exact_leased_hardware_uuid}
+   -e NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute` - reuses
+   the exact same exact-leased-GPU-UUID pattern already implemented for
+   Developer/AI/Video (`GPU_ATTACHED_WORKSPACE_SLUGS`, never a fixed device
+   index), just with `graphics,display` added to the capability set.
+6. **Security/isolation**: same hardening pattern as every workspace here
+   (`--read-only`, `--cap-drop=ALL`, `--security-opt=no-new-privileges`,
+   isolated internal Docker network) - but the exact minimal capability set
+   Selkies' EGL rendering actually needs under that hardening can only be
+   determined by testing on real hardware, not assumed; document it once
+   proven, don't guess it into the Dockerfile now.
+7. **Integration with GPUbnb - the one genuinely new piece**: the existing
+   `loopback-proxy.js` is a dumb raw-TCP byte relay to a fixed port; that
+   pattern is NOT sufficient for WebRTC media (which needs ICE/STUN/TURN
+   negotiation, not a blind byte forward). Selkies' own docs confirm a
+   TCP-only fallback path exists and is a documented, standards-based
+   WebRTC mechanism: "External TURN with TCP" for UDP-blocked networks,
+   where all media is relayed through the TURN server. This means Creator/
+   Cloud Desktop/CAD do **not** strictly need new UDP capability from
+   GPUbnb's network layer, unlike Gaming below - a self-hosted TURN server
+   (e.g. `coturn`, real, open source, BSD-3) configured TCP-only, reachable
+   through the same "never expose the host directly, always relay through
+   an authenticated channel" security model GPUbnb already uses, would be
+   the new component. Honest caveat from the same research: Selkies' own
+   docs do not comprehensively confirm full end-to-end TCP-only media in
+   all cases - this needs prototyping (step 4 below), not just trusting the
+   docs. Booking/session/routes themselves need no architectural change -
+   they'd reuse `workspace-renter-routes.ts`/`workspace-gateway.ts`/
+   `rental-resource-authority.ts`/`executableWorkspaceSlugs` exactly as the
+   9 existing workspaces already do.
+
+**Validation plan required before claiming any of this works:**
+1. Get access to a real Linux host with a real NVIDIA GPU (a Linux GPU VM,
+   or a dedicated Linux workstation with the driver actually installed).
+2. Install Docker + NVIDIA Container Toolkit; confirm `/dev/dri/renderD128`
+   exists and a test container's `glxinfo`/`vulkaninfo` show real
+   NVIDIA-backed rendering (not `llvmpipe`/Mesa software fallback).
+3. Run `linuxserver/webtop` or `linuxserver/blender` with `--gpus`; confirm
+   the browser client shows a real GPU-rendered desktop.
+4. Stand up `coturn` configured TCP-only, deliberately firewall off UDP on
+   the test network (simulating GPUbnb's real routing constraints), and
+   confirm a real WebRTC session still negotiates and streams through it -
+   this is the step that actually proves the hypothesis, not just citing
+   docs.
+5. Only after 1-4 are all proven, wire into the agent/API/frontend
+   following the exact same pattern the 9 already-built workspaces use.
+
+### Gaming
+
+**Key strategic finding**: Gaming's real underlying problem - GPU-accelerated,
+low-latency desktop/application streaming to a browser - is the *same*
+problem Creator/Cloud Desktop/CAD have. Two real architecture options exist,
+with very different risk profiles:
+
+- **Option A - reuse the Selkies-based foundation above, run a game
+  launcher (e.g. Steam) inside it instead of Blender/FreeCAD.** Selkies
+  already handles low-latency WebRTC GPU streaming and keyboard/mouse/
+  gamepad input relay (gamepad support is a documented feature - Selkies'
+  own lineage traces back to cloud-gaming reference projects). This shares
+  one infrastructure investment (the TURN-over-TCP path above) across all
+  four remaining workspaces instead of building Gaming-specific
+  infrastructure. **Honest tradeoff**: Selkies/WebRTC's typical latency in
+  cloud deployments is not the same tier as Sunshine/Moonlight's
+  purpose-built protocol - acceptable for many games, likely noticeably
+  worse for fast-paced/competitive titles. This is a product-positioning
+  decision, not a technical one.
+- **Option B - real Sunshine/Moonlight.** Re-confirmed via web search (not
+  just prior-session claims): "Sunshine needs both TCP and UDP, and
+  video/audio streaming specifically rides on the UDP ports... Sunshine
+  requires TCP ports 47984,47989,47990,48010 and UDP ports
+  47998-48000,48002" - and critically, Sunshine has **no TCP-only fallback
+  at all** ("a TCP-only forward will pair successfully but never actually
+  show video"), unlike Selkies/WebRTC's TURN-over-TCP path. Moonlight is
+  also normally a *native* client app, not a browser client - fitting it
+  into GPUbnb's all-in-browser product model would need either asking
+  renters to install a native Moonlight client (a real product-model
+  change) or building a custom, unproven WebRTC-to-Sunshine bridge (a much
+  larger, riskier engineering project than anything built this session).
+
+**Recommendation**: Option A (share the Selkies/TURN-over-TCP investment
+with Creator/Cloud Desktop/CAD) is the lower-risk, lower-effort path, but
+the latency tradeoff is a real product decision only the user can make -
+this is not a technical call to make unilaterally.
+
+- **Components needed**: same as Creator/Cloud Desktop/CAD (Linux GPU host,
+  Selkies-based image, `coturn` TURN-over-TCP) plus Steam itself and
+  gamepad-input-relay verification specifically.
+- **Modifications needed in GPUbnb**: same as Creator/Cloud Desktop/CAD -
+  the new TURN relay component, no changes to booking/routing architecture.
+- **Risks**: latency/experience quality for competitive gaming (Option A);
+  Steam's own per-renter login is real and unavoidable either way; running
+  a general-purpose game launcher inside a rented, internet-isolated
+  session is a smaller abuse-surface than Security Lab's tool category, but
+  worth a deliberate policy decision (e.g. which games/content are
+  permitted) rather than an unstated default.
+- **Difficulty**: Medium-High if Option A shares the Creator/Cloud
+  Desktop/CAD TURN-over-TCP work; Very High/not recommended for Option B
+  without a much larger, separate infrastructure project and a
+  native-client product-model change.
+- **Test plan**: same validation plan as Creator/Cloud Desktop/CAD above,
+  plus a real gamepad-input latency/round-trip check once the TURN-over-TCP
+  path is proven, before claiming Gaming works.
+
 ## NEXT ACTION
 
 Compute, Developer, Data, AI, Video, Audio, API, Mobile, Security Lab are all
-real and done (9 of 13). Remaining 4, in the user's stated priority order:
-1. **Creator, Cloud Desktop, CAD**: blocked by missing `/dev/dri` on this
-   Windows/Docker-Desktop/WSL2 host. Needs either a real Linux host to test
-   GPU rendering on, or a user decision to accept CPU-only software
-   rendering as a documented limitation.
-2. **Gaming**: hard architectural blocker - Sunshine/Moonlight need UDP,
-   this relay is TCP-only end to end. Needs a new UDP/WebRTC tunneling
-   infrastructure project, not a workspace-level task.
+real and done (9 of 13), all re-verified green this session (agent 337
+passed, apps/api 479 passed, working tree clean, no regressions). Remaining
+4 are genuinely blocked by real infrastructure this session cannot provide
+(no Linux GPU host, no UDP tunneling infra) - see section 8 for the
+researched, evidence-grounded technical plans. Do not build any of it
+without the user's explicit go-ahead: it needs either real infrastructure
+investment (a Linux GPU host + a new TURN relay component) or a product
+decision (accept CPU-only rendering? accept Selkies-tier gaming latency? a
+native Moonlight client instead of all-in-browser?) that isn't a call to
+make unilaterally.
 
 Do not commit without re-running the full three test suites first. Do not
 push without explicit authorization.
