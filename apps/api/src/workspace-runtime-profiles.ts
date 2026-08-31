@@ -43,7 +43,13 @@ export const workspaceRuntimeProfiles:Readonly<Record<string,WorkspaceRuntimePro
   mobile:{slug:'mobile',runtime:'ISOLATED_VM',surface:'DESKTOP',category:'MOBILE',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   'security-lab':{slug:'security-lab',runtime:'ISOLATED_VM',surface:'DESKTOP',category:'SECURITY',entrypoint:'isolated-lab-gateway',network:'NONE',persistentWorkspace:false,hostAccess:false,dockerSocket:false,privileged:false},
   gaming:{slug:'gaming',runtime:'STREAMING_VM',surface:'STREAM',category:'GAMING',entrypoint:'stream-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
-  audio:{slug:'audio',runtime:'STREAMING_VM',surface:'STREAM',category:'AUDIO',entrypoint:'stream-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  // Delivered as CONTAINER/NOTEBOOK (JupyterLab + real ffmpeg audio DSP -
+  // loudnorm, acompressor, equalizer), not the STREAMING_VM this originally
+  // assumed: no streaming infrastructure (Sunshine/Moonlight-class UDP/WebRTC
+  // tunneling) exists in this codebase, and the relay is TCP-only end to end.
+  // An interactive Ardour/Audacity GUI would need the same broken-on-this-
+  // host desktop-streaming path as Creator's Blender - see docs/SESSION_RESUME.md.
+  audio:{slug:'audio',runtime:'CONTAINER',surface:'NOTEBOOK',category:'AUDIO',entrypoint:'jupyterlab',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
 });
 
 export function workspaceRuntimeProfile(slug:string){return workspaceRuntimeProfiles[slug];}

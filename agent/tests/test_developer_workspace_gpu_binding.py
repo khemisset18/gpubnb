@@ -54,6 +54,30 @@ class DataWorkspaceHealthCommandTests(unittest.TestCase):
         self.assertEqual(command[-3], self.IMAGE)
 
 
+class AudioWorkspaceHealthCommandTests(unittest.TestCase):
+    IMAGE = "quay.io/jupyter/datascience-notebook@sha256:" + ("6" * 64)
+
+    def test_audio_workspace_never_requests_a_gpu(self):
+        # Audio DSP has no hardware-codec equivalent to Video's NVENC - this
+        # workspace legitimately needs no GPU at all, same precedent as Data.
+        command = workspace_health_command(self.IMAGE, "audio")
+        self.assertFalse(any(part.startswith("--gpus") for part in command))
+        self.assertFalse(any("NVIDIA_DRIVER_CAPABILITIES" in part for part in command))
+
+    def test_audio_workspace_no_gpu_uuid_required(self):
+        command = workspace_health_command(self.IMAGE, "audio", None)
+        self.assertEqual(command[-3], self.IMAGE)
+
+    def test_healthcheck_performs_a_real_loudnorm_pass_not_just_a_filter_list_check(self):
+        command = workspace_health_command(self.IMAGE, "audio")
+        self.assertEqual(command[-2], "-c")
+        self.assertEqual(command[-3], self.IMAGE)
+        script = command[-1]
+        self.assertIn("loudnorm", script)
+        self.assertIn("ffmpeg", script)
+        self.assertIn("/home/jovyan/work", script)
+
+
 class AiWorkspaceHealthCommandTests(unittest.TestCase):
     IMAGE = "quay.io/jupyter/pytorch-notebook@sha256:" + ("f" * 64)
 

@@ -62,6 +62,17 @@ VIDEO_WORKSPACE_HEALTHCHECK_SCRIPT = (
     "-c:v h264_nvenc -preset p1 -f null - >/tmp/gpubnb-nvenc-check.log 2>&1; "
     "echo gpubnb_video_workspace_ok"
 )
+# No GPU involved (audio DSP has no hardware-codec equivalent to NVENC) -
+# runs a real (tiny, discarded) loudnorm pass, not just a filter-list check,
+# proving the ffmpeg build can actually process audio, not merely that the
+# filter is registered.
+AUDIO_WORKSPACE_HEALTHCHECK_SCRIPT = (
+    "set -e; "
+    "mkdir -p /home/jovyan/work && touch /home/jovyan/work/.gpubnb-healthcheck; "
+    "ffmpeg -y -f lavfi -i sine=frequency=440:duration=1 "
+    "-af loudnorm=I=-16:LRA=11:TP=-1.5 -f null - >/tmp/gpubnb-audio-check.log 2>&1; "
+    "echo gpubnb_audio_workspace_ok"
+)
 
 
 def _gpu_vendor() -> str:
@@ -456,6 +467,17 @@ def workspace_health_command(image: str, workspace_slug: str, gpu_uuid: str | No
             "--entrypoint", "python3", image,
             "-c", DATA_WORKSPACE_HEALTHCHECK_SCRIPT,
         ]
+    if workspace_slug == "audio":
+        # No GPU: no exact-UUID requirement, unlike Developer/AI/Video.
+        return [
+            "docker", "run", "--rm", "--network=none", "--read-only",
+            "--cap-drop=ALL", "--security-opt=no-new-privileges",
+            "--pids-limit=64", "--memory=1g", "--cpus=1",
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+            DATA_HOME_TMPFS,
+            "--entrypoint", "bash", image,
+            "-c", AUDIO_WORKSPACE_HEALTHCHECK_SCRIPT,
+        ]
     return diagnostic_command(image)
 
 
@@ -472,7 +494,7 @@ def prepare_workspace(
     # Both real workspace images (code-server, and the multi-gigabyte Jupyter
     # data-science stack) are far larger than the diagnostic/GPU-proof images
     # this default otherwise guards; give both the same extended pull budget.
-    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video"} else 600
+    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video", "audio"} else 600
     timeout = max(30, min(timeout_limit, int(timeout_seconds)))
     cache_hit = _pull_image(image, timeout, progress_callback)
     health_finished = threading.Event()

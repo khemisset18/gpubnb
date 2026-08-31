@@ -35,23 +35,27 @@ from .storage import load_config, load_key
 from .runtime_images import workspace_image
 
 PINNED_DEVELOPER_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpubnb-developer@sha256:[a-f0-9]{64}$")
-# Official upstream images, not GPUbnb-built ones - see runtime_images.DEFAULT_DATA_IMAGE / DEFAULT_AI_IMAGE / DEFAULT_VIDEO_IMAGE.
+# Official upstream images, not GPUbnb-built ones - see runtime_images.DEFAULT_DATA_IMAGE / DEFAULT_AI_IMAGE / DEFAULT_VIDEO_IMAGE / DEFAULT_AUDIO_IMAGE.
 PINNED_DATA_IMAGE = re.compile(r"^quay\.io/jupyter/datascience-notebook@sha256:[a-f0-9]{64}$")
 PINNED_AI_IMAGE = re.compile(r"^quay\.io/jupyter/pytorch-notebook@sha256:[a-f0-9]{64}$")
 # Same image family as Data (see runtime_images.DEFAULT_VIDEO_IMAGE) - its
 # already-present ffmpeg build has real h264_nvenc/hevc_nvenc/av1_nvenc.
 PINNED_VIDEO_IMAGE = re.compile(r"^quay\.io/jupyter/datascience-notebook@sha256:[a-f0-9]{64}$")
+# Same image family again (see runtime_images.DEFAULT_AUDIO_IMAGE) - its
+# ffmpeg build has real audio DSP filters (loudnorm, acompressor, equalizer).
+PINNED_AUDIO_IMAGE = re.compile(r"^quay\.io/jupyter/datascience-notebook@sha256:[a-f0-9]{64}$")
 # Every workspace surface this gateway runs listens on this port inside its
 # container; the loopback proxy (workspaces/developer/loopback-proxy.js, reused
 # unmodified for every slug) forwards to exactly this port, so a new workspace
 # surface must be configured to bind here rather than its tool's own default.
 WORKSPACE_ENTRY_PORT = 3000
-GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai", "video"})
+GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai", "video", "audio"})
 # Workspaces whose container genuinely needs the GPU attached (--gpus), scoped
 # to the exact hardware UUID the rental resource authority leased for that
-# session - never a fixed device index. Data intentionally excluded: its
-# container never touches the GPU even though its booking still reserves one
-# for exclusivity/billing (see rental-resource-authority.ts).
+# session - never a fixed device index. Data and Audio intentionally
+# excluded: neither container ever touches the GPU (audio DSP has no
+# hardware-codec equivalent to Video's NVENC), even though their bookings
+# still reserve one for exclusivity/billing (see rental-resource-authority.ts).
 GPU_ATTACHED_WORKSPACE_SLUGS = frozenset({"developer", "ai", "video"})
 CONTAINER_PREFIX = "gpubnb-dev-"
 PROXY_PREFIX = "gpubnb-dev-proxy-"
@@ -204,6 +208,10 @@ class GatewaySupervisor:
             if not PINNED_VIDEO_IMAGE.fullmatch(image):
                 raise RuntimeError("video_workspace_image_must_be_official_and_digest_pinned")
             return image
+        if workspace_slug == "audio":
+            if not PINNED_AUDIO_IMAGE.fullmatch(image):
+                raise RuntimeError("audio_workspace_image_must_be_official_and_digest_pinned")
+            return image
         raise RuntimeError(f"unsupported_gateway_workspace_slug:{workspace_slug}")
 
     def _container_running(self, container: str) -> bool:
@@ -236,8 +244,8 @@ class GatewaySupervisor:
         self, container: str, volume: str, internal_network: str, image: str,
         workspace_slug: str = "developer",
     ) -> None:
-        if workspace_slug in ("data", "ai", "video"):
-            # All three are jupyter/docker-stacks images (same jovyan/uid-1000/
+        if workspace_slug in ("data", "ai", "video", "audio"):
+            # All four are jupyter/docker-stacks images (same jovyan/uid-1000/
             # gid-100/tini+start-notebook.py conventions) - only GPU
             # passthrough and the memory budget differ. This is the legacy
             # (no rental-resource-authority) path: falls back to

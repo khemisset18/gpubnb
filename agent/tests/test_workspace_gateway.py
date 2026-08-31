@@ -498,6 +498,53 @@ class VideoWorkspaceLaunchTests(unittest.TestCase):
         self.assertIn(VIDEO_IMAGE, run)
 
 
+AUDIO_IMAGE = "quay.io/jupyter/datascience-notebook@sha256:" + ("5" * 64)
+
+
+class AudioWorkspaceLaunchTests(unittest.TestCase):
+    def _supervisor(self, docker: FakeDocker, api: FakeApi) -> GatewaySupervisor:
+        return make_supervisor(docker, api, {
+            "workspaceImages": {"developer": OFFICIAL_IMAGE, "audio": AUDIO_IMAGE},
+        })
+
+    def test_audio_workspace_container_runs_the_official_image_with_no_gpu(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-audio-1", "audio")
+
+        workspace = names_for_session("sess-audio-1")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(AUDIO_IMAGE, run)
+        self.assertFalse(any(arg.startswith("--gpus") for arg in run))
+        self.assertIn("start-notebook.py", run)
+        self.assertIn("--ServerApp.port=3000", run)
+        mount_arg = run[run.index("--mount") + 1]
+        self.assertIn("target=/home/jovyan/work", mount_arg)
+
+    def test_audio_workspace_proxy_still_uses_the_trusted_developer_image(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-audio-1", "audio")
+
+        proxy = proxy_name_for_session("sess-audio-1")
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == proxy)
+        self.assertIn(OFFICIAL_IMAGE, run)
+        self.assertNotIn(AUDIO_IMAGE, run)
+
+    def test_reconcile_reads_audio_workspace_slug_and_launches_the_right_image(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        api.sessions = [{"id": "sess-audio-2", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}, "workspaceSlug": "audio"}]
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._reconcile_sessions()
+
+        workspace = names_for_session("sess-audio-2")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(AUDIO_IMAGE, run)
+
+
 class ProxyCrashTests(unittest.TestCase):
     def test_proxy_crash_replaces_the_complete_runtime_pair(self) -> None:
         docker, api = FakeDocker(), FakeApi()

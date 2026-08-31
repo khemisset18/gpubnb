@@ -48,6 +48,18 @@ DEFAULT_VIDEO_IMAGE = (
     "quay.io/jupyter/datascience-notebook@sha256:"
     "20cbe280416d58b27e5fa1353a6ab849853103eca05f9e310608370f266c3dc4"
 )
+# Same exact image/digest again, own named constant for the same reason as
+# Video. Confirmed live: its ffmpeg build has real audio DSP filters
+# (loudnorm EBU R128 normalization, acompressor, equalizer/superequalizer/
+# firequalizer) - a real loudnorm pass on a real sine-wave test signal ran
+# successfully. No GPU needed for audio DSP (unlike Video's NVENC), matching
+# Data's existing no-GPU precedent on this GPU-rental platform. No Ardour or
+# Audacity GUI is included (both need the same broken-on-this-host desktop-
+# streaming path as Creator's Blender) - see workspace-manifests.ts.
+DEFAULT_AUDIO_IMAGE = (
+    "quay.io/jupyter/datascience-notebook@sha256:"
+    "20cbe280416d58b27e5fa1353a6ab849853103eca05f9e310608370f266c3dc4"
+)
 LEGACY_DEVELOPER_IMAGES = {
     "ghcr.io/khemisset18/gpubnb-developer@sha256:"
     "26700fdc955495b610bbcf8a912110395fc72181a236de2b70b539a0c02150b7",
@@ -69,4 +81,6 @@ def workspace_image(config: dict, slug: str) -> str:
         return DEFAULT_AI_IMAGE
     if slug == "video":
         return DEFAULT_VIDEO_IMAGE
+    if slug == "audio":
+        return DEFAULT_AUDIO_IMAGE
     return str(config.get("diagnosticImage") or "")

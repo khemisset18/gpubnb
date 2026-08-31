@@ -34,7 +34,14 @@ export const workspaceManifests:readonly WorkspaceManifest[]=Object.freeze([
  manifest({slug:'security-lab',name:'Security Lab',icon:'🛡️',category:'SECURITY',release:'EXPERIMENTAL',summary:'Laboratoire défensif très isolé',technologies:['Kali','Wireshark','Burp Suite','CTF'],license:'MIXED',minimum:{ramMiB:16384,diskMiB:51200,virtualization:true},recommended:{ramMiB:32768,diskMiB:102400}}),
  manifest({slug:'cad',name:'CAD Workspace',icon:'📐',category:'CAD',release:'UPCOMING',summary:'CAO, simulation et ingénierie',technologies:['FreeCAD','Blender','AutoCAD','Fusion 360'],license:'USER_LICENSE_REQUIRED',minimum:{ramMiB:16384,diskMiB:61440,vramMiB:6144},recommended:{ramMiB:32768,diskMiB:122880,vramMiB:12288}}),
  manifest({slug:'gaming',name:'Gaming Workspace',icon:'🎮',category:'GAMING',release:'EXPERIMENTAL',summary:'Jeu distant sous licences utilisateur',technologies:['Sunshine','Moonlight','Steam','WebRTC'],license:'USER_ACCOUNT_REQUIRED',minimum:{ramMiB:16384,diskMiB:102400,vramMiB:8192,virtualization:true},recommended:{ramMiB:32768,diskMiB:204800,vramMiB:12288}}),
- manifest({slug:'audio',name:'Audio Workspace',icon:'🎧',category:'AUDIO',release:'UPCOMING',summary:'Production et traitement audio',technologies:['Ardour','Audacity','PipeWire','VST'],license:'MIXED',minimum:{ramMiB:8192,diskMiB:40960},recommended:{ramMiB:16384,diskMiB:102400}}),
+ // An interactive Ardour/Audacity GUI and VST plugin hosting are
+ // intentionally absent from `technologies`: both need the same
+ // containerized-remote-desktop runtime this platform doesn't have working
+ // GPU rendering support for yet (see docs/SESSION_RESUME.md). What's real:
+ // JupyterLab with an ffmpeg build that has genuine audio DSP filters
+ // (loudnorm EBU R128 normalization, acompressor, multi-band equalizers),
+ // confirmed live with a real processed .wav file. No GPU is used or needed.
+ manifest({slug:'audio',name:'Audio Workspace',icon:'🎧',category:'AUDIO',release:'BETA',summary:'Traitement et normalisation audio par script',technologies:['FFmpeg','JupyterLab','Python'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:8192,diskMiB:40960,docker:true},recommended:{ramMiB:16384,diskMiB:102400}}),
 ]);
 
 export function workspaceManifest(slug:string){return workspaceManifests.find(item=>item.slug===slug);}

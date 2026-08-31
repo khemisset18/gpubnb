@@ -18,7 +18,8 @@ by these commits (local only, not pushed):
 - `5b595fe` feat(agent,api,web): real Data Workspace runtime + full 13-workspace catalogue
 - `1acebf8` docs: update session-resume note for Data Workspace completion
 - `68134b4` feat(agent,api,web): real AI Workspace runtime with real GPU passthrough
-- (pending commit this session) feat: real Video Workspace runtime (FFmpeg/NVENC)
+- `1e36b72` feat(agent,api,web): real Video Workspace runtime (FFmpeg/NVENC)
+- (pending commit this session) feat: real Audio Workspace runtime (FFmpeg DSP, no GPU)
 
 Working tree is otherwise clean except this file. `main`/`origin/main` is
 untouched (PR #133's merge commit). PR #134 (this branch → main) is still
@@ -28,103 +29,115 @@ open, not merged.
 
 `executableWorkspaceSlugs` in `apps/api/src/machine-workspace-catalog.ts` is
 the one gate the whole system checks for `bookable`: **`compute`,
-`developer`, `data`, `ai`, `video`**. Do not add anything else to this list
-without the same rigor documented below for each.
+`developer`, `data`, `ai`, `video`, `audio`**. Do not add anything else to
+this list without the same rigor documented below for each.
 
 - **Compute / Developer**: pre-existing, proven via the original E2E harness.
 - **Data**: real JupyterLab (`quay.io/jupyter/datascience-notebook`, official
-  image, no GPU). Known gap: no PostgreSQL client tooling (image doesn't ship
-  psycopg2/psql; documented in the manifest's `technologies`, not silently
-  overclaimed).
-- **AI**: real JupyterLab + PyTorch + CUDA (`quay.io/jupyter/pytorch-notebook`,
-  official image), with real `--gpus` passthrough scoped to the exact leased
-  hardware UUID (same mechanism Developer already used -
-  `GPU_ATTACHED_WORKSPACE_SLUGS` in `workspace_gateway.py`). Live-verified: a
-  hardened (`--read-only --cap-drop=ALL --network=none`) container's PyTorch
-  sees the real GPU (`torch.cuda.get_device_name(0)` → "NVIDIA GeForce GTX
-  1650"), and the *running session container* (not just the healthcheck) does
-  too.
-- **Video**: real JupyterLab (same `quay.io/jupyter/datascience-notebook`
-  image as Data - its ffmpeg build already has genuine hardware
-  h264_nvenc/hevc_nvenc/av1_nvenc, confirmed live, no new image needed) with
-  real `--gpus` passthrough. **Important, verified live**: NVENC requires
-  `NVIDIA_DRIVER_CAPABILITIES` to include `video`, not just `compute,utility`
-  - without it, ffmpeg fails closed ("Cannot load libnvidia-encode.so.1"),
-    it does not silently fall back to software encoding. Handled in both
-  `workspace_gateway.py`'s legacy path and v5's exact-UUID path. Healthcheck
-  performs a *real* NVENC encode (not just a codec-list check). Live-verified
-  end-to-end: a real `h264_nvenc` encode run inside the *running session
-  container* (not just at healthcheck time), writing a real .mp4 to the
-  persistent `/home/jovyan/work` volume.
-  Known gap, documented in the manifest: no DaVinci Resolve (no official
-  freely-redistributable Linux container exists) and no interactive Blender
-  GUI (see Creator/DRI finding below) - `workspace-runtime-profiles.ts`'s
-  `video` entry was corrected from `DESKTOP_VM` to `CONTAINER`/`NOTEBOOK` to
-  match what's actually delivered.
+  image, no GPU). Known gap: no PostgreSQL client tooling.
+- **AI**: real JupyterLab + PyTorch + CUDA (`quay.io/jupyter/pytorch-notebook`),
+  real `--gpus` passthrough scoped to the exact leased hardware UUID.
+  Live-verified: `torch.cuda.get_device_name(0)` → real GPU name, inside the
+  *running session container*.
+- **Video**: real JupyterLab (same image as Data - its ffmpeg build already
+  has real hardware h264_nvenc/hevc_nvenc/av1_nvenc), real `--gpus`
+  passthrough. **Important, verified live**: NVENC needs
+  `NVIDIA_DRIVER_CAPABILITIES` to include `video`, not just
+  `compute,utility` - without it ffmpeg fails closed, no silent
+  software fallback. Live-verified: a real h264_nvenc encode inside the
+  *running session container*, written to the persistent volume.
+- **Audio** (new this session): real JupyterLab (same image again - its
+  ffmpeg build has real audio DSP filters: loudnorm EBU R128 normalization,
+  acompressor, multi-band equalizers), **no GPU needed or attached**
+  (confirmed live: `HostConfig.DeviceRequests` is `null` on the real
+  container) - audio DSP has no hardware-codec equivalent to Video's NVENC,
+  same no-GPU precedent Data already set. Live-verified: a real loudnorm
+  pass inside the *running session container*, producing a real .wav file
+  on the persistent volume.
+  Known gap, documented in the manifest: no interactive Ardour/Audacity GUI
+  or VST hosting (needs the same broken-on-this-host desktop-streaming path
+  as Creator) - `workspace-runtime-profiles.ts`'s `audio` entry corrected
+  from `STREAMING_VM` to `CONTAINER`/`NOTEBOOK`.
 - This machine's own GPU (GTX 1650, 4GB VRAM) is below AI's/Video's manifest
-  minimums (8GB/6GB), so both correctly show `INSUFFICIENT_VRAM` in the
-  compatibility engine even though both runtimes are proven working.
+  minimums (8GB/6GB), so both correctly show `INSUFFICIENT_VRAM` even though
+  both runtimes are proven working. Audio needs no VRAM at all.
 
-All of Data/AI/Video: real booking/status/access routes
-(`POST /bookings/:id/workspace/{data,ai,video}`, `GET .../status`, `POST
-.../access`), real buttons on `apps/web/workspace-bookings.js`, real cleanup
-verified (container/proxy/volume/network all confirmed gone after stop, GPU
-memory back to 0 MiB after AI/Video).
+All of Data/AI/Video/Audio: real booking/status/access routes
+(`POST /bookings/:id/workspace/{data,ai,video,audio}`, `GET .../status`,
+`POST .../access`), real buttons on `apps/web/workspace-bookings.js`, real
+cleanup verified (container/proxy/volume/network all confirmed gone after
+stop, GPU memory back to 0 MiB where GPU was used).
 
 **Real bugs found and fixed via live testing** (not by any prior unit test):
 1. `_real_health_check` in `workspace_gateway.py` used plain `urlopen()`,
-   which raises `HTTPError` for any non-2xx/3xx response instead of
-   returning it — its documented "200 ≤ status < 500 counts as healthy"
-   contract silently never worked for a real 4xx. Fixed by catching
-   `HTTPError` and checking `.code`. Regression tests: `RealHealthCheckTests`
-   in `test_workspace_gateway.py`.
-2. NVENC's `video` driver-capability requirement above - would have shipped
-   a "Video Workspace" whose GPU encoding silently didn't work, if only
-   detection (`ffmpeg -encoders | grep nvenc`) had been checked instead of a
-   real encode.
+   raising `HTTPError` for any non-2xx/3xx response instead of returning it.
+   Fixed by catching `HTTPError` and checking `.code`.
+2. NVENC's `video` driver-capability requirement (Video Workspace) - a
+   detection-only healthcheck (`ffmpeg -encoders | grep nvenc`) would have
+   missed this; the real-encode healthcheck caught it.
 
-## 3. Creator Workspace / containerized-desktop research — real finding, not yet buildable here
+## 3. Containerized-desktop research — real findings across 5 workspaces, none buildable on THIS host
 
-Researched whether a containerized (non-VM) noVNC desktop could unlock
-Creator/Cloud Desktop/CAD using the existing container+proxy+gateway
-architecture. Found a strong candidate: `linuxserver/blender` (Docker Hub,
-pulled and inspected this session, real digest
-`linuxserver/blender@sha256:ebf57305c6c32245107916cf1eeda7d675fe6c5c52ac6d41d0241c75fc127237`) -
-actively maintained, WebSocket-based Selkies streaming (matches the existing
-single-port TCP-relay proxy architecture), no licensing red flags.
+Researched whether a containerized (non-VM) desktop/streaming approach could
+unlock Creator, Mobile, Security Lab, Gaming, and Audio's *full* GUI
+experience, reusing the existing container+proxy+gateway architecture. All
+five hit real, evidenced blockers specific to this exact host or this
+codebase's current infrastructure - not guesses:
 
-**But GPU rendering for it needs `/dev/dri/renderD128` (DRI/DRM render-node
-passthrough), which does NOT exist on this Windows/Docker-Desktop/WSL2 host**
-- confirmed live: `ls /dev/dri/` fails inside a container here; only
-`/dev/dxg` (the WSL2 CUDA-compute passthrough device, which is what makes
-`--gpus` work for AI/Video) is present. This is a real, host-platform-specific
-limitation, not a guess - a native Linux host would very likely expose
-`/dev/dri` normally. **Do not build Creator Workspace on this machine without
-either (a) testing on a real Linux host, or (b) accepting CPU-only software
-rendering as a documented, degraded `COMPATIBLE_WITH_LIMITATIONS` mode** -
-shipping a "GPU rental" product whose GPU rendering silently doesn't work
-would be exactly the kind of dishonest workspace this mission forbids.
+- **Creator (Blender)**: `linuxserver/blender` is a real, actively-maintained
+  candidate (digest recorded, pulled and inspected) but needs
+  `/dev/dri/renderD128` for GPU rendering, which **does not exist** on this
+  Windows/Docker-Desktop/WSL2 host (only `/dev/dxg`, the CUDA-compute-only
+  passthrough that made AI/Video/Data's `--gpus` work).
+- **Mobile (Android emulator)**: same class of gap - `/dev/kvm` confirmed
+  absent on this host (`docker run --device=/dev/kvm` fails at Docker's own
+  device pre-flight check). `budtmo/docker-android` hard-requires it, no
+  software fallback. **A real reduced MVP exists but wasn't built this
+  session** (deprioritized in favor of Audio - genuinely ready first):
+  `mobiledevops/android-sdk-image:36.1.0` (Docker Hub, ~1.9GB, actively
+  maintained) - headless Gradle/Android-SDK builds, no visual emulator, would
+  pair with the Developer Workspace's code-server pattern rather than Jupyter's.
+- **Security Lab (Kali)**: **not** a platform/protocol limitation - all 5
+  official `kalilinux/*` Docker Hub images are confirmed bare (pulled
+  `kali-rolling`, `nmap`/`sqlmap`/`hydra`/`tshark`/`msfconsole` all absent).
+  Getting real tools needs `apt install kali-linux-headless`, but the
+  internal session network is `--network=none` for every workspace, always -
+  there is no network-available provisioning window anywhere in this
+  architecture. Blocked by needing either a custom-published image (no
+  registry credentials) or a new provisioning mechanism (separate
+  infrastructure project) - **not** attempted.
+- **Gaming (Sunshine/Moonlight)**: a **confirmed hard architectural
+  blocker**, not a licensing/GPU issue - Sunshine's real data plane needs
+  UDP (documented ports 47998-48010; Sunshine's own docs flag TCP-only
+  setups as producing a black screen). This session's entire relay
+  (browser WebSocket → API → agent → raw TCP) is TCP-only end to end, no
+  UDP/ICE/WebRTC anywhere (confirmed by reading `loopback-proxy.js` and
+  `workspace-gateway.ts`). Steam's own per-renter login is also real and
+  unavoidable, but moot given the deeper blocker.
+- **Audio's own interactive DAW GUI**: same desktop-streaming gap as
+  Creator - not pursued; the real, honest reduced-scope MVP (FFmpeg DSP via
+  Jupyter) was built instead (see section 2).
 
 ## 4. Other workspaces — real audit, not yet touched
 
 | Workspace | Runtime needed | State |
 |---|---|---|
-| API | Unclear — no product definition exists anywhere in the codebase for what "API Workspace" concretely gives a renter (REST access to what, exactly?). **Do not build this without a real product decision** - inventing one myself risks exactly the fake-functionality the mission forbids. |
-| Cloud Desktop, Creator, CAD | `DESKTOP_VM` in `workspace-runtime-profiles.ts` - see section 3: a real containerized-desktop candidate exists (`linuxserver/blender`) but its GPU rendering path isn't testable on this Windows host. |
-| Mobile, Security Lab | `ISOLATED_VM` - needs real isolation (Android emulation / hardened VM), bigger lift than the above, not investigated yet. |
-| Gaming | `STREAMING_VM` + `REQUIRES_USER_LICENSE` (Steam account) - needs streaming infra (Sunshine/Moonlight) that doesn't exist, plus real licensing UX. Not investigated. |
-| Audio | `STREAMING_VM` - needs streaming infra that doesn't exist. Not investigated. |
+| API | Unclear — no product definition exists anywhere in the codebase for what "API Workspace" concretely gives a renter. **Do not build this without a real product decision from the user.** |
+| Cloud Desktop, Creator, CAD | `DESKTOP_VM` - blocked on this host by missing `/dev/dri` (section 3). A real candidate image exists (`linuxserver/blender`); untestable here. |
+| Mobile | `ISOLATED_VM` - full emulator blocked by missing `/dev/kvm`; a real headless-build MVP (`mobiledevops/android-sdk-image:36.1.0`) is buildable but not yet built. |
+| Security Lab | `ISOLATED_VM`, `network:NONE` - blocked by no pre-tooled official Kali image + no network-available provisioning window in this architecture (section 3). |
+| Gaming | `STREAMING_VM` - **hard architectural blocker**, confirmed: Sunshine/Moonlight need UDP, this relay is TCP-only (section 3). Would need a new tunneling infrastructure project. |
 
-## 5. Test status (all re-run and green as of the Video Workspace changes)
+## 5. Test status (all re-run and green as of the Audio Workspace changes)
 
-- `pytest agent/tests` → 298 passed, 2 skipped.
-- `npm test` in `apps/api` → 470 passed, 0 failed, 10 skipped (need a local
+- `pytest agent/tests` → 306 passed, 2 skipped.
+- `npm test` in `apps/api` → 471 passed, 0 failed, 10 skipped (need a local
   Postgres/Redis this machine doesn't have running — environmental).
 - `cargo test --features desktop-runtime` → not re-checked this round since
   nothing in host-desktop changed this session; last checked 106 passed, 1
   pre-existing failure (see section 6).
-- `docker ps -a` / `docker volume ls` / `nvidia-smi` checked clean after all
-  live testing — no orphaned containers, 0 MiB GPU memory in use.
+- `docker ps -a` / `docker volume ls` checked clean after all live testing —
+  no orphaned containers.
 
 ## 6. Known pre-existing issue — do not "fix" by touching production state
 
@@ -140,29 +153,32 @@ Do not unlink/reconfigure the production agent to make this pass.
 - Do not fabricate a "bookable" workspace slug without a real runtime behind
   it — see section 2's rigor bar for every entry in `executableWorkspaceSlugs`.
 - Do not build/publish a custom GPUbnb container image without the user's
-  explicit go-ahead (registry credentials, CI trigger) — every workspace so
-  far deliberately used an official, already-published image instead.
+  explicit go-ahead — every workspace so far deliberately used an official,
+  already-published image instead.
 - Do not invent a product definition for API Workspace unilaterally.
-- Do not claim Creator/Cloud Desktop/CAD GPU rendering works on this machine
-  - it's unverified and the DRI device isn't even present here.
+- Do not claim Creator/Cloud Desktop/CAD GPU rendering, Mobile's visual
+  emulator, Security Lab's tools, or Gaming's streaming work on this machine
+  or with this architecture as it stands - all four are real, evidenced,
+  currently-unresolved blockers, not untested guesses.
 
 ## NEXT ACTION
 
-Compute, Developer, Data, AI, Video are all real and done. Remaining honest
-options, in rough order of tractability:
-1. Get a real product definition for API Workspace from the user, then build
-   it with the same rigor.
-2. Test the `linuxserver/blender` containerized-desktop path on a real Linux
-   host (not available in this session) to see if Creator Workspace becomes
-   genuinely buildable there.
-3. Accept CPU-only software rendering as a documented limitation and ship
-   Creator Workspace in a clearly labeled degraded mode, if that's an
-   acceptable product tradeoff (ask the user - this is a product decision,
-   not a purely technical one).
-4. Mobile/Security Lab/Gaming/Audio all need infrastructure categories
-   (Android emulation, hardened isolation, streaming) that don't exist yet
-   and haven't been investigated - do that research before writing any code
-   for them, same discipline as this session applied to Creator/Video.
+Compute, Developer, Data, AI, Video, Audio are all real and done (6 of 13).
+Remaining honest options, in rough order of tractability:
+1. Build Mobile Workspace's real reduced MVP: headless Android SDK/Gradle
+   builds via `mobiledevops/android-sdk-image:36.1.0`, no emulator, likely
+   paired with the Developer Workspace's code-server pattern (not Jupyter,
+   since this is a build/IDE tool, not a notebook use case) - genuinely
+   buildable now with the same rigor as the other six.
+2. Get a real product definition for API Workspace from the user.
+3. Security Lab needs either a custom-published tooled image or a new
+   "provision-then-isolate" mechanism - both are separate infrastructure
+   decisions, not something to improvise.
+4. Creator/Cloud Desktop/CAD need a real Linux host to test GPU rendering,
+   or a user decision to accept CPU-only software rendering as a documented
+   limitation.
+5. Gaming needs new UDP/WebRTC tunneling infrastructure - a large, separate
+   project, not a workspace-level task.
 
 Do not commit without re-running the full three test suites first. Do not
 push without explicit authorization.
