@@ -298,14 +298,109 @@ Do not unlink/reconfigure the production agent to make this pass.
   all are real, evidenced, currently-unresolved blockers, not untested
   guesses.
 
-## 8. Technical plans for the 4 remaining workspaces — RESEARCH ONLY, nothing built or claimed working
+## 8. Technical plans for the 4 remaining workspaces — implementation now started (compatibility gating), runtime still NOT built/proven
 
-None of this was implemented or tested this session - no Linux GPU host is
-available here. Grounded in verified facts (NVIDIA's own container-toolkit
-docs, Selkies' own docs, Sunshine/Moonlight's own docs - see the web search
-results in this session's transcript), not assumptions. Do not build any of
-this without the user's explicit go-ahead, and do not claim it works before
-it is actually proven on real hardware per the validation plans below.
+Grounded in verified facts (NVIDIA's own container-toolkit docs, Selkies'
+own docs, Sunshine/Moonlight's own docs), not assumptions. **None of
+Creator/Cloud Desktop/CAD/Gaming is REAL_WORKING or bookable** - none is in
+`executableWorkspaceSlugs` - and nothing here claims GPU rendering works on
+this host. What changed since the plan was first written: real,
+tested, honest **hardware-compatibility detection** now exists end to end
+(see 8a below), so a future real Linux GPU host will report itself
+correctly instead of this being purely a plan on paper. The actual desktop
+runtime (Selkies-based container, WebRTC/TURN integration) is still not
+built or provable - no Linux GPU host is available on this session.
+
+### 8a. What's real now: hardware-compatibility detection (implemented, tested)
+
+- **Agent**: `agent/gpubnb_agent/platform_info.py`'s
+  `desktop_gpu_rendering_available()` - a real, cheap, static check: real
+  Linux (explicitly excludes WSL2, which reports `platform.system()=="Linux"`
+  too and must never be assumed away), a real `/dev/dri/render*` node, and
+  the NVIDIA Container Toolkit registered with Docker. Wired into
+  `system_inventory()`, so it is now part of every heartbeat/link payload.
+  Live-tested with a genuine negative-case assertion on this real host
+  (confirmed `False`, matching every other live check this session), plus
+  mocked positive/negative branches. This is deliberately independent from
+  `nvidiaRuntimeAvailable`/`cudaVersion`: this host has real, working CUDA
+  compute passthrough (AI/Video/Developer/Mobile's `--gpus` all work) but
+  no `/dev/dri` - proving desktop-GPU-rendering capability is genuinely not
+  implied by CUDA compute capability, and confirming why this needed its
+  own dedicated, independently-measured field rather than being inferred.
+- **API**: `desktopGpuRenderingAvailable` is now a real column on `Machine`
+  (migration `20260831193253_add_desktop_gpu_rendering_available`), flows
+  through both machine-linking paths (`/agent/link`,
+  `device-authorization-routes.ts`'s device-code flow) and the heartbeat
+  handler, and is selected everywhere a `MachineCapabilities`-shaped object
+  is built (workspace analyze/manage routes, `ensureCompatibleMachineWorkspace`,
+  the public listing + full-catalogue routes). `analyzeWorkspace()` gates
+  Creator/Cloud Desktop/CAD on it exactly like every other required-flag
+  check (CUDA/Docker/NVIDIA Container Toolkit/virtualization) - no redesign
+  of the existing 4-state compatibility model. Tested: a real
+  CUDA-compute-capable-but-no-`/dev/dri` machine (mirroring this exact dev
+  host) is never `READY` for any of the three; a machine with a real
+  `/dev/dri` + NVIDIA Container Toolkit is compatible.
+- **Manifests corrected** to the real planned architecture: Creator/Cloud
+  Desktop/CAD now list `Selkies-GStreamer`/`WebRTC` plus Blender/FreeCAD
+  respectively (not the previous RDP/noVNC/Guacamole/AutoCAD/Fusion 360,
+  none of which was ever actually planned), require
+  `desktopGpuRendering:true`, and no longer require `virtualization`
+  (this is planned as a container, not a VM). `license` corrected to
+  `INCLUDED_OPEN_SOURCE` (Blender/FreeCAD/Selkies are all real, free, open
+  source - AutoCAD/Fusion 360 were never realistically plannable here and
+  are dropped entirely, not just delicensed).
+- **Runtime profiles corrected**: `DESKTOP_VM` → `CONTAINER` for all three
+  (no VM/hypervisor infrastructure exists in this codebase, and the real
+  planned architecture needs none), `entrypoint` corrected from the
+  fictional `desktop-gateway` to `selkies-gstreamer`.
+- **`scripts/preflight-linux-gpu-desktop.sh`**: a standalone, read-only
+  preflight a future Linux host operator can run before even installing
+  the GPUbnb agent. Mirrors the same real checks as
+  `desktop_gpu_rendering_available()`, plus one further real test this
+  script alone performs: launches a real throwaway container with
+  `--gpus all -e NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute`
+  and checks whether `/dev/dri` is visible *inside* it - the closest
+  thing to a real GPU_PROOF-style check obtainable without a full desktop
+  image. Live-tested on this real host: correctly reports `FAIL` for the
+  Linux-kernel check, the `/dev/dri` check, and the in-container check,
+  `OK` for Docker/NVIDIA-driver/NVIDIA-Container-Toolkit (all genuinely
+  present here), overall verdict `NOT READY`, exit code 1 - exactly
+  matching this host's real, already-established status.
+
+### 8b. What's still not real: the actual desktop runtime
+
+`workspaces/cloud-desktop/Dockerfile` builds `FROM linuxserver/webtop`
+(real, official, actively-maintained Selkies-GStreamer-based image, digest
+`sha256:49a08b1e871aa300829d206141dc932459c7db2866269120ad79ec9d959ccbed`,
+resolved via the Docker Hub API 2026-08-31) - see
+`workspaces/cloud-desktop/NOT_YET_WORKING.md` for the full detail. **Live
+end-to-end tested on this host, honestly scoped to what doesn't need a
+GPU**:
+- Real container start, real HTTP 200 with the real Selkies HTML client on
+  port 3000 - confirmed live that port 3000 is webtop's own documented
+  plain-HTTP reverse-proxy port, so this platform's `WORKSPACE_ENTRY_PORT=3000`
+  convention needs no remapping for this image.
+- **The real `loopback-proxy.js` relay** - the exact same script every
+  REAL_WORKING workspace's Gateway already depends on - correctly relays a
+  full request through to this image, using the exact same two-network
+  pattern (proxy container on the gateway network + published port,
+  separately `docker network connect`ed to the session's internal network)
+  `_launch_proxy_container()` already uses in production. Real 200, real
+  relayed HTML content, confirmed live.
+- Real gamepad support confirmed live in the container's own startup logs
+  (Selkies initializes 4 persistent gamepad instances) - relevant to the
+  Gaming Workspace plan below too, not just Creator/Cloud Desktop/CAD.
+- Real stop/cleanup confirmed (containers and networks all gone after).
+- **Confirmed NOT provable here**: `/dev/dri` is absent both on this host
+  and inside this exact image's own container (checked live) - there is
+  nothing to test GPU rendering against, and nothing here claims it works.
+
+Creator/CAD would layer real Blender/FreeCAD onto this same base (the
+identical low-risk pattern already proven for Mobile/Security Lab) but
+have no Dockerfile of their own yet - building a second and third
+untestable variant of the same open question (does GPU rendering work at
+all in this architecture) isn't worth doing before the first one is
+answered on real hardware.
 
 ### Creator / Cloud Desktop / CAD (grouped: same underlying architecture)
 
@@ -449,16 +544,25 @@ this is not a technical call to make unilaterally.
 ## NEXT ACTION
 
 Compute, Developer, Data, AI, Video, Audio, API, Mobile, Security Lab are all
-real and done (9 of 13), all re-verified green this session (agent 337
-passed, apps/api 479 passed, working tree clean, no regressions). Remaining
-4 are genuinely blocked by real infrastructure this session cannot provide
-(no Linux GPU host, no UDP tunneling infra) - see section 8 for the
-researched, evidence-grounded technical plans. Do not build any of it
-without the user's explicit go-ahead: it needs either real infrastructure
-investment (a Linux GPU host + a new TURN relay component) or a product
-decision (accept CPU-only rendering? accept Selkies-tier gaming latency? a
-native Moonlight client instead of all-in-browser?) that isn't a call to
-make unilaterally.
+real and done (9 of 13), all re-verified green this session (agent 344
+passed, apps/api 501 passed, working tree clean, no regressions). Remaining
+4 are still not REAL_WORKING and not bookable, but real progress was made
+on the common Creator/Cloud Desktop/CAD infrastructure this session (see
+section 8): real, tested hardware-compatibility detection end to end
+(agent + API + DB), a real preflight script for a future host operator, and
+a live-tested `linuxserver/webtop` base image proving the container/HTTP/
+Gateway-relay/stop/cleanup path works, with GPU rendering itself still
+correctly unproven (no Linux GPU host available). Next concrete step once
+a real Linux GPU host is available: run `scripts/preflight-linux-gpu-desktop.sh`
+on it, then follow section 8's validation plan. Gaming was not yet
+revisited this session (Priority 2, after this common infrastructure) - see
+section 8's existing plan; the gamepad support just confirmed live in
+Selkies is a real, positive data point for that when it's picked up.
+Do not build the remaining GPU-rendering proof or the TURN-over-TCP
+component without the user's explicit go-ahead: it needs real
+infrastructure investment (a Linux GPU host) or a product decision (accept
+CPU-only rendering? accept Selkies-tier gaming latency instead of native
+Sunshine/Moonlight?) that isn't a call to make unilaterally.
 
 Do not commit without re-running the full three test suites first. Do not
 push without explicit authorization.
