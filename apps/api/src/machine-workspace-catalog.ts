@@ -3,13 +3,15 @@ import { MachineWorkspaceState, WorkspaceRelease, type PrismaClient } from '@pri
 import { analyzeWorkspace, type MachineCapabilities } from './workspace-compatibility.js';
 import { workspaceManifest, workspaceManifests, type WorkspaceManifest } from './workspace-manifests.js';
 
-// 'data' joined this list once a real runtime existed behind it: agent-side
-// container launch (workspace_gateway.py, official quay.io/jupyter image),
-// API gateway wiring (workspace-gateway.ts, rental-resource-authority.ts) and
-// renter routes (workspace-renter-routes.ts) - see docs/SESSION_RESUME.md for
-// the verification evidence. Never add a slug here on the strength of its
-// manifest/catalogue entry alone.
-export const executableWorkspaceSlugs = ['compute', 'developer', 'data'] as const;
+// 'data' and 'ai' joined this list once a real runtime existed behind each:
+// agent-side container launch (workspace_gateway.py, official quay.io/jupyter
+// image), API gateway wiring (workspace-gateway.ts, rental-resource-
+// authority.ts) and renter routes (workspace-renter-routes.ts) - see
+// docs/SESSION_RESUME.md for the verification evidence, including AI's real
+// GPU passthrough proven live (torch.cuda.is_available() inside the real
+// running container, not just at healthcheck time). Never add a slug here on
+// the strength of its manifest/catalogue entry alone.
+export const executableWorkspaceSlugs = ['compute', 'developer', 'data', 'ai'] as const;
 export type ExecutableWorkspaceSlug = typeof executableWorkspaceSlugs[number];
 
 export function isExecutableWorkspaceSlug(value: string): value is ExecutableWorkspaceSlug {

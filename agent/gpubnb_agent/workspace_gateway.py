@@ -35,14 +35,21 @@ from .storage import load_config, load_key
 from .runtime_images import workspace_image
 
 PINNED_DEVELOPER_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpubnb-developer@sha256:[a-f0-9]{64}$")
-# Official upstream image, not a GPUbnb-built one - see runtime_images.DEFAULT_DATA_IMAGE.
+# Official upstream images, not GPUbnb-built ones - see runtime_images.DEFAULT_DATA_IMAGE / DEFAULT_AI_IMAGE.
 PINNED_DATA_IMAGE = re.compile(r"^quay\.io/jupyter/datascience-notebook@sha256:[a-f0-9]{64}$")
+PINNED_AI_IMAGE = re.compile(r"^quay\.io/jupyter/pytorch-notebook@sha256:[a-f0-9]{64}$")
 # Every workspace surface this gateway runs listens on this port inside its
 # container; the loopback proxy (workspaces/developer/loopback-proxy.js, reused
 # unmodified for every slug) forwards to exactly this port, so a new workspace
 # surface must be configured to bind here rather than its tool's own default.
 WORKSPACE_ENTRY_PORT = 3000
-GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data"})
+GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai"})
+# Workspaces whose container genuinely needs the GPU attached (--gpus), scoped
+# to the exact hardware UUID the rental resource authority leased for that
+# session - never a fixed device index. Data intentionally excluded: its
+# container never touches the GPU even though its booking still reserves one
+# for exclusivity/billing (see rental-resource-authority.ts).
+GPU_ATTACHED_WORKSPACE_SLUGS = frozenset({"developer", "ai"})
 CONTAINER_PREFIX = "gpubnb-dev-"
 PROXY_PREFIX = "gpubnb-dev-proxy-"
 VOLUME_PREFIX = "gpubnb-workspace-"
@@ -186,6 +193,10 @@ class GatewaySupervisor:
             if not PINNED_DATA_IMAGE.fullmatch(image):
                 raise RuntimeError("data_workspace_image_must_be_official_and_digest_pinned")
             return image
+        if workspace_slug == "ai":
+            if not PINNED_AI_IMAGE.fullmatch(image):
+                raise RuntimeError("ai_workspace_image_must_be_official_and_digest_pinned")
+            return image
         raise RuntimeError(f"unsupported_gateway_workspace_slug:{workspace_slug}")
 
     def _container_running(self, container: str) -> bool:
@@ -218,12 +229,19 @@ class GatewaySupervisor:
         self, container: str, volume: str, internal_network: str, image: str,
         workspace_slug: str = "developer",
     ) -> None:
-        if workspace_slug == "data":
-            self._docker([
+        if workspace_slug in ("data", "ai"):
+            # Both are jupyter/docker-stacks images (same jovyan/uid-1000/
+            # gid-100/tini+start-notebook.py conventions) - only GPU
+            # passthrough and the memory budget differ. This is the legacy
+            # (no rental-resource-authority) path: falls back to
+            # gpu_passthrough_flags()'s device=0, exactly like Developer's
+            # own legacy branch below - v5's override replaces this with the
+            # exact leased GPU UUID whenever the protocol is available.
+            args = [
                 "run", "-d", "--name", container,
                 "--network", internal_network,
                 "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
-                "--pids-limit=512", "--memory=4g", "--cpus=2",
+                "--pids-limit=512", "--memory=8g" if workspace_slug == "ai" else "--memory=4g", "--cpus=2",
                 "--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
                 DATA_HOME_TMPFS,
                 # The official image bakes /home/jovyan/work in as jovyan:users
@@ -231,13 +249,18 @@ class GatewaySupervisor:
                 # ownership on first use - confirmed live (no separate chown
                 # step needed, unlike a path Docker has to create from scratch).
                 "--mount", f"type=volume,source={volume},target=/home/jovyan/work",
+            ]
+            if workspace_slug == "ai":
+                args += gpu_passthrough_flags("compute,utility")
+            args += [
                 image,
                 "start-notebook.py",
-                f"--ServerApp.ip=0.0.0.0", f"--ServerApp.port={WORKSPACE_ENTRY_PORT}",
+                "--ServerApp.ip=0.0.0.0", f"--ServerApp.port={WORKSPACE_ENTRY_PORT}",
                 "--ServerApp.token=", "--ServerApp.password=",
                 "--ServerApp.root_dir=/home/jovyan/work",
                 "--ServerApp.allow_remote_access=True",
-            ], timeout=START_TIMEOUT_SECONDS)
+            ]
+            self._docker(args, timeout=START_TIMEOUT_SECONDS)
             return
         self._docker([
             "run", "-d", "--name", container,

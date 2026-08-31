@@ -24,6 +24,9 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
   const dataActionInFlight=new Set();
   const dataErrors=new Map();
   const dataDetailByBooking=new Map();
+  const aiActionInFlight=new Set();
+  const aiErrors=new Map();
+  const aiDetailByBooking=new Map();
 
   async function request(path,options={}){
     const headers={accept:'application/json',...(options.headers||{})};
@@ -104,6 +107,30 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
     return `<article class="list-row" data-data-row="${escapeHTML(booking.id)}"><div><strong>Espace Data · ${title}</strong>${errorHTML}</div><div class="actions">${action}${badge}</div></article>`;
   }
 
+  function aiBlockHTML(booking,job,detail,errorMessage){
+    const phase=deriveDeveloperPhase({bookingStatus:booking.status,gpuProofJob:job,workspaceDetail:detail});
+    if(phase===DeveloperPhase.HIDDEN)return '';
+    const title=escapeHTML(booking.listing?.title||'Réservation GPU');
+    const errorHTML=errorMessage?`<div class="muted">${escapeHTML(errorMessage)}</div>`:'';
+    let action='';let badge=`<span class="badge">${escapeHTML(detail?.status||'')}</span>`;
+    if(phase===DeveloperPhase.CREATE){
+      action=`<button class="button button-primary" type="button" data-create-ai="${escapeHTML(booking.id)}">Créer mon espace IA</button>`;
+      badge='';
+    }else if(phase===DeveloperPhase.PREPARING){
+      action=`<span class="muted">${escapeHTML(preparationLabel(detail))}</span>`;
+      badge='';
+    }else if(phase===DeveloperPhase.OPEN){
+      action=`<button class="button button-primary" type="button" data-open-ai="${escapeHTML(booking.id)}">Ouvrir JupyterLab (GPU)</button>`;
+      badge='<span class="badge ok">PRÊT</span>';
+    }else if(phase===DeveloperPhase.RETRY){
+      action=`<button class="button" type="button" data-retry-ai="${escapeHTML(booking.id)}">Réessayer</button>`;
+      badge=`<span class="badge warn">${escapeHTML(detail?.preparation?.errorCode||detail?.status||'ÉCHEC')}</span>`;
+    }else if(phase===DeveloperPhase.ENDED){
+      badge=`<span class="badge">${escapeHTML(detail?.status||'TERMINÉ')}</span>`;
+    }
+    return `<article class="list-row" data-ai-row="${escapeHTML(booking.id)}"><div><strong>Espace IA · ${title}</strong>${errorHTML}</div><div class="actions">${action}${badge}</div></article>`;
+  }
+
   function rowHTML(booking,job,history=false){
     const title=escapeHTML(booking.listing?.title||'Réservation GPU');
     if(!job){
@@ -180,7 +207,20 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
         row.booking,row.job,dataDetailByBooking.get(row.booking.id)||null,dataErrors.get(row.booking.id),
       )).join('');
 
-      root.innerHTML=`${active.length?active.map(row=>rowHTML(row.booking,row.job)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${developerHTML}${dataHTML}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row.booking,row.job,true)).join('')}</details>`:''}`;
+      await Promise.all(eligible.filter(row=>!aiActionInFlight.has(row.booking.id)).map(async row=>{
+        try{
+          const detail=await request(`/bookings/${encodeURIComponent(row.booking.id)}/workspace/ai/status`);
+          aiDetailByBooking.set(row.booking.id,detail);
+        }catch(error){
+          if(error.status===404){aiDetailByBooking.set(row.booking.id,null);}
+        }
+      }));
+
+      const aiHTML=eligible.map(row=>aiBlockHTML(
+        row.booking,row.job,aiDetailByBooking.get(row.booking.id)||null,aiErrors.get(row.booking.id),
+      )).join('');
+
+      root.innerHTML=`${active.length?active.map(row=>rowHTML(row.booking,row.job)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${developerHTML}${dataHTML}${aiHTML}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row.booking,row.job,true)).join('')}</details>`:''}`;
 
       root.querySelectorAll('[data-prepare-compute]').forEach(button=>button.addEventListener('click',async()=>{
         button.disabled=true;button.textContent='Préparation Compute…';
@@ -271,6 +311,46 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
         const bookingId=button.dataset.openData;
         runDataAction(bookingId,button,'Ouverture…',async()=>{
           const access=await request(`/bookings/${encodeURIComponent(bookingId)}/workspace/data/access`,{method:'POST'});
+          const url=resolveWorkspaceOpenUrl(GATEWAY,access);
+          window.open(url,'_blank','noopener');
+        });
+      }));
+
+      async function runAiAction(bookingId,button,busyText,run){
+        if(aiActionInFlight.has(bookingId))return;
+        aiActionInFlight.add(bookingId);
+        button.disabled=true;const originalText=button.textContent;button.textContent=busyText;
+        aiErrors.delete(bookingId);
+        try{
+          await run();
+          aiActionInFlight.delete(bookingId);
+          await render();
+        }catch(error){
+          aiActionInFlight.delete(bookingId);
+          aiErrors.set(bookingId,error.message||'Action impossible.');
+          button.disabled=false;button.textContent=originalText;
+          await render();
+        }
+      }
+
+      root.querySelectorAll('[data-create-ai]').forEach(button=>button.addEventListener('click',()=>{
+        const bookingId=button.dataset.createAi;
+        runAiAction(bookingId,button,'Création…',()=>
+          request(`/bookings/${encodeURIComponent(bookingId)}/workspace/ai`,{method:'POST'}),
+        );
+      }));
+
+      root.querySelectorAll('[data-retry-ai]').forEach(button=>button.addEventListener('click',()=>{
+        const bookingId=button.dataset.retryAi;
+        runAiAction(bookingId,button,'Nouvelle tentative…',()=>
+          request(`/bookings/${encodeURIComponent(bookingId)}/workspace/retry`,{method:'POST'}),
+        );
+      }));
+
+      root.querySelectorAll('[data-open-ai]').forEach(button=>button.addEventListener('click',()=>{
+        const bookingId=button.dataset.openAi;
+        runAiAction(bookingId,button,'Ouverture…',async()=>{
+          const access=await request(`/bookings/${encodeURIComponent(bookingId)}/workspace/ai/access`,{method:'POST'});
           const url=resolveWorkspaceOpenUrl(GATEWAY,access);
           window.open(url,'_blank','noopener');
         });

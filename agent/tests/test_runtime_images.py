@@ -1,6 +1,7 @@
 import unittest
 
 from gpubnb_agent.runtime_images import (
+    DEFAULT_AI_IMAGE,
     DEFAULT_COMPUTE_IMAGE,
     DEFAULT_DATA_IMAGE,
     DEFAULT_DEVELOPER_IMAGE,
@@ -58,6 +59,20 @@ class RuntimeImageDefaultsTests(unittest.TestCase):
         explicit = "quay.io/jupyter/datascience-notebook@sha256:" + ("c" * 64)
         self.assertEqual(
             workspace_image({"workspaceImages": {"data": explicit}}, "data"),
+            explicit,
+        )
+
+    def test_fresh_host_has_an_official_digest_pinned_ai_image(self):
+        self.assertRegex(
+            DEFAULT_AI_IMAGE,
+            r"^quay\.io/jupyter/pytorch-notebook@sha256:[a-f0-9]{64}$",
+        )
+        self.assertEqual(workspace_image({}, "ai"), DEFAULT_AI_IMAGE)
+
+    def test_explicit_ai_pin_remains_supported(self):
+        explicit = "quay.io/jupyter/pytorch-notebook@sha256:" + ("e" * 64)
+        self.assertEqual(
+            workspace_image({"workspaceImages": {"ai": explicit}}, "ai"),
             explicit,
         )
 

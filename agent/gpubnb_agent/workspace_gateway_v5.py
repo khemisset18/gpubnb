@@ -86,11 +86,31 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
         # Data Workspace never attaches --gpus, even when a GPU is nominally
         # reserved for this session's exclusivity/billing (see
         # rental-resource-authority.ts: every executable workspace routes
-        # through the same authority now, not just GPU-attaching ones) - only
-        # Developer's container actually needs the device passed through.
-        if specs is None or workspace_slug != "developer":
+        # through the same authority now, not just GPU-attaching ones) -
+        # only Developer's and AI's containers actually need the device
+        # passed through (legacy.GPU_ATTACHED_WORKSPACE_SLUGS).
+        if specs is None or workspace_slug not in legacy.GPU_ATTACHED_WORKSPACE_SLUGS:
             return super()._launch_workspace_container(container, volume, internal_network, image, workspace_slug)
         gpu_uuids = self._expected_gpu_uuids(specs)
+        if workspace_slug == "ai":
+            self._docker([
+                "run", "-d", "--name", container,
+                "--network", internal_network,
+                "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
+                "--pids-limit=512", "--memory=8g", "--cpus=2",
+                "--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
+                legacy.DATA_HOME_TMPFS,
+                "--mount", f"type=volume,source={volume},target=/home/jovyan/work",
+                "--gpus", f"device={','.join(gpu_uuids)}",
+                "--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility",
+                image,
+                "start-notebook.py",
+                "--ServerApp.ip=0.0.0.0", f"--ServerApp.port={legacy.WORKSPACE_ENTRY_PORT}",
+                "--ServerApp.token=", "--ServerApp.password=",
+                "--ServerApp.root_dir=/home/jovyan/work",
+                "--ServerApp.allow_remote_access=True",
+            ], timeout=legacy.START_TIMEOUT_SECONDS)
+            return
         self._docker([
             "run", "-d", "--name", container,
             "--network", internal_network,
@@ -142,11 +162,12 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
         finally:
             self._resource_start_context = None
         try:
-            # The GPU-device-request binding proof only applies to Developer:
+            # The GPU-device-request binding proof only applies to workspaces
+            # that actually attach the GPU (legacy.GPU_ATTACHED_WORKSPACE_SLUGS):
             # Data's container deliberately carries no device requests at all
             # (see _launch_workspace_container), so `actual` would never equal
             # `expected` there even on a perfectly correct launch.
-            if workspace_slug == "developer":
+            if workspace_slug in legacy.GPU_ATTACHED_WORKSPACE_SLUGS:
                 actual = self._container_gpu_uuids(runtime.container_name)
                 expected = set(self._expected_gpu_uuids(specs))
                 if actual != expected:
@@ -166,7 +187,7 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
         proxy = legacy.proxy_name_for_session(session_id)
         if self._container_running(container) and self._container_running(proxy):
             adoptable = self.rental_preemption.can_adopt_active(specs)
-            if workspace_slug == "developer":
+            if workspace_slug in legacy.GPU_ATTACHED_WORKSPACE_SLUGS:
                 expected = set(self._expected_gpu_uuids(specs))
                 actual = self._container_gpu_uuids(container)
                 adoptable = adoptable and actual == expected

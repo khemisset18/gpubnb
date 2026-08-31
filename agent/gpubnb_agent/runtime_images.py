@@ -23,6 +23,17 @@ DEFAULT_DATA_IMAGE = (
     "quay.io/jupyter/datascience-notebook@sha256:"
     "20cbe280416d58b27e5fa1353a6ab849853103eca05f9e310608370f266c3dc4"
 )
+# Same publisher/project as DEFAULT_DATA_IMAGE (jupyter/docker-stacks), a
+# variant that additionally bundles CUDA + PyTorch. Digest is the multi-arch
+# manifest-list digest for tag cuda12-pytorch-2.11.0, resolved via the
+# quay.io API (https://quay.io/api/v1/repository/jupyter/pytorch-notebook/tag/?specificTag=cuda12-pytorch-2.11.0).
+# Same jovyan/uid-1000/gid-100/tini+start-notebook.py conventions as Data's
+# image, so workspace_gateway.py's launch args are shared between the two -
+# only GPU passthrough differs. No GPUbnb-built image exists for this either.
+DEFAULT_AI_IMAGE = (
+    "quay.io/jupyter/pytorch-notebook@sha256:"
+    "de7e7da7ba3e66cd2720ff9e72c93c43d24cb83478a032862acb7520fa8b2200"
+)
 LEGACY_DEVELOPER_IMAGES = {
     "ghcr.io/khemisset18/gpubnb-developer@sha256:"
     "26700fdc955495b610bbcf8a912110395fc72181a236de2b70b539a0c02150b7",
@@ -40,4 +51,6 @@ def workspace_image(config: dict, slug: str) -> str:
         return DEFAULT_COMPUTE_IMAGE
     if slug == "data":
         return DEFAULT_DATA_IMAGE
+    if slug == "ai":
+        return DEFAULT_AI_IMAGE
     return str(config.get("diagnosticImage") or "")

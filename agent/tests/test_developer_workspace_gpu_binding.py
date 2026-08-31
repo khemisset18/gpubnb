@@ -54,6 +54,32 @@ class DataWorkspaceHealthCommandTests(unittest.TestCase):
         self.assertEqual(command[-3], self.IMAGE)
 
 
+class AiWorkspaceHealthCommandTests(unittest.TestCase):
+    IMAGE = "quay.io/jupyter/pytorch-notebook@sha256:" + ("f" * 64)
+
+    def test_command_attaches_the_exact_leased_gpu_by_hardware_uuid(self):
+        # Same rationale as Developer: renter-billed GPU compute, never
+        # device=0 on a multi-GPU host.
+        command = workspace_health_command(self.IMAGE, "ai", GPU_UUID)
+        self.assertIn(f"--gpus=device={GPU_UUID}", command)
+        self.assertNotIn("--gpus=device=0", command)
+
+    def test_rejects_missing_or_malformed_target_gpu(self):
+        for invalid in (None, "", "short", "device=0; rm -rf /", "0"):
+            with self.assertRaisesRegex(RuntimeError, "ai_workspace_invalid_target_gpu"):
+                workspace_health_command(self.IMAGE, "ai", invalid)
+
+    def test_verifies_torch_actually_sees_cuda_not_just_that_it_imports(self):
+        command = workspace_health_command(self.IMAGE, "ai", GPU_UUID)
+        self.assertEqual(command[-2], "-c")
+        self.assertEqual(command[-3], self.IMAGE)
+        script = command[-1]
+        self.assertIn("torch", script)
+        self.assertIn("torch.cuda.is_available()", script)
+        self.assertIn("torch.cuda.device_count()", script)
+        self.assertIn("/home/jovyan/work", script)
+
+
 class ResolveDeveloperWorkspaceGpuUuidTests(unittest.TestCase):
     def _authority(self, session_id, hardware_uuid, resource_id="resource_test01"):
         return {

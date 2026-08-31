@@ -71,6 +71,37 @@ class WorkspaceGatewayV5Tests(unittest.TestCase):
         self.assertNotIn("--gpus", command)
         self.assertIn("start-notebook.py", command)
 
+    def test_ai_workspace_attaches_only_the_exact_leased_gpu_uuids(self) -> None:
+        # Same rationale as Developer: renter-billed GPU compute, never a
+        # fixed device index on a multi-GPU host - just launched via the
+        # Jupyter/PyTorch entrypoint instead of code-server.
+        supervisor = GatewaySupervisor.__new__(GatewaySupervisor)
+        supervisor._resource_start_context = [
+            spec("resource_00000001", "GPU-aaaaaaaa"),
+            spec("resource_00000003", "GPU-cccccccc"),
+        ]
+        calls: list[list[str]] = []
+
+        def docker(args: list[str], timeout: int = 30, check: bool = True):
+            calls.append(list(args))
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        supervisor._docker = docker  # type: ignore[method-assign]
+        supervisor._launch_workspace_container(
+            "gpubnb-workspace-test",
+            "gpubnb-volume-test",
+            "gpubnb-internal-test",
+            "quay.io/jupyter/pytorch-notebook@sha256:" + "b" * 64,
+            "ai",
+        )
+
+        command = calls[-1]
+        self.assertIn("--gpus", command)
+        self.assertEqual(command[command.index("--gpus") + 1], "device=GPU-aaaaaaaa,GPU-cccccccc")
+        self.assertNotIn("device=0", " ".join(command))
+        self.assertIn("start-notebook.py", command)
+        self.assertIn("/home/jovyan/work", " ".join(command))
+
     def test_container_adoption_requires_exact_device_request_set(self) -> None:
         supervisor = GatewaySupervisor.__new__(GatewaySupervisor)
 

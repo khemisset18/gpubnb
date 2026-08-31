@@ -399,6 +399,57 @@ class DataWorkspaceLaunchTests(unittest.TestCase):
         self.assertIn(OFFICIAL_IMAGE, run)
 
 
+AI_IMAGE = "quay.io/jupyter/pytorch-notebook@sha256:" + ("9" * 64)
+
+
+class AiWorkspaceLaunchTests(unittest.TestCase):
+    def _supervisor(self, docker: FakeDocker, api: FakeApi) -> GatewaySupervisor:
+        return make_supervisor(docker, api, {
+            "workspaceImages": {"developer": OFFICIAL_IMAGE, "ai": AI_IMAGE},
+        })
+
+    def test_ai_workspace_container_runs_the_official_image_with_gpu_passthrough(self) -> None:
+        # No rental-resource-authority protocol in this plain FakeApi test -
+        # legacy fallback path, same device=0 behavior Developer's own legacy
+        # branch already uses (v5's real-hardware-UUID override is tested
+        # separately in test_workspace_gateway_v5.py).
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-ai-1", "ai")
+
+        workspace = names_for_session("sess-ai-1")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(AI_IMAGE, run)
+        self.assertTrue(any(arg.startswith("--gpus") for arg in run))
+        self.assertIn("start-notebook.py", run)
+        self.assertIn("--ServerApp.port=3000", run)
+        mount_arg = run[run.index("--mount") + 1]
+        self.assertIn("target=/home/jovyan/work", mount_arg)
+
+    def test_ai_workspace_proxy_still_uses_the_trusted_developer_image(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-ai-1", "ai")
+
+        proxy = proxy_name_for_session("sess-ai-1")
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == proxy)
+        self.assertIn(OFFICIAL_IMAGE, run)
+        self.assertNotIn(AI_IMAGE, run)
+
+    def test_reconcile_reads_ai_workspace_slug_and_launches_the_right_image(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        api.sessions = [{"id": "sess-ai-2", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}, "workspaceSlug": "ai"}]
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._reconcile_sessions()
+
+        workspace = names_for_session("sess-ai-2")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(AI_IMAGE, run)
+
+
 class ProxyCrashTests(unittest.TestCase):
     def test_proxy_crash_replaces_the_complete_runtime_pair(self) -> None:
         docker, api = FakeDocker(), FakeApi()

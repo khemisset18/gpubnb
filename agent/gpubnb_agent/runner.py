@@ -35,6 +35,19 @@ DATA_WORKSPACE_HEALTHCHECK_SCRIPT = (
     "open('/home/jovyan/work/.gpubnb-healthcheck', 'w').close(); "
     "print('gpubnb_data_workspace_ok')"
 )
+# Unlike Data, this must prove CUDA is actually usable from inside the
+# container, not just that the packages import - a container that starts
+# but can't see the GPU is exactly the failure this workspace exists to rule
+# out before a renter is billed for it.
+AI_WORKSPACE_HEALTHCHECK_SCRIPT = (
+    "import os; "
+    "import jupyterlab, torch; "
+    "assert torch.cuda.is_available(), 'cuda_not_available_in_container'; "
+    "assert torch.cuda.device_count() >= 1, 'no_cuda_device_visible'; "
+    "os.makedirs('/home/jovyan/work', exist_ok=True); "
+    "open('/home/jovyan/work/.gpubnb-healthcheck', 'w').close(); "
+    "print('gpubnb_ai_workspace_ok', torch.cuda.get_device_name(0))"
+)
 
 
 def _gpu_vendor() -> str:
@@ -381,6 +394,21 @@ def workspace_health_command(image: str, workspace_slug: str, gpu_uuid: str | No
             f"--gpus=device={gpu_uuid}", "--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility",
         ]
         return [*base, "--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", image]
+    if workspace_slug == "ai":
+        # Same exact-GPU-UUID rationale as Developer above (renter-billed,
+        # never guess device=0 on a multi-GPU host).
+        if not SAFE_GPU_ID.fullmatch(gpu_uuid or ""):
+            raise RuntimeError("ai_workspace_invalid_target_gpu")
+        return [
+            "docker", "run", "--rm", "--network=none", "--read-only",
+            "--cap-drop=ALL", "--security-opt=no-new-privileges",
+            "--pids-limit=64", "--memory=2g", "--cpus=1",
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+            DATA_HOME_TMPFS,
+            f"--gpus=device={gpu_uuid}", "--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility",
+            "--entrypoint", "python3", image,
+            "-c", AI_WORKSPACE_HEALTHCHECK_SCRIPT,
+        ]
     if workspace_slug == "data":
         return [
             "docker", "run", "--rm", "--network=none", "--read-only",
@@ -413,7 +441,7 @@ def prepare_workspace(
     # Both real workspace images (code-server, and the multi-gigabyte Jupyter
     # data-science stack) are far larger than the diagnostic/GPU-proof images
     # this default otherwise guards; give both the same extended pull budget.
-    timeout_limit = 1800 if workspace_slug in {"developer", "data"} else 600
+    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai"} else 600
     timeout = max(30, min(timeout_limit, int(timeout_seconds)))
     cache_hit = _pull_image(image, timeout, progress_callback)
     health_finished = threading.Event()
