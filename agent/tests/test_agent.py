@@ -10,7 +10,7 @@ from nacl.signing import SigningKey
 
 from gpubnb_agent.client import ApiClient, heartbeat, signed_headers
 from gpubnb_agent import platform_info
-from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available, machine_fingerprint, docker_info
+from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available, machine_fingerprint, docker_info, desktop_gpu_rendering_available
 from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key, load_machine_fingerprint, save_machine_fingerprint, detect_hardware_change
 from gpubnb_agent.runner import (
     cleanup_workspace,
@@ -38,6 +38,57 @@ class PlatformTests(unittest.TestCase):
 
     def test_virtualization_probe_returns_boolean(self):
         self.assertIsInstance(virtualization_available(), bool)
+
+    def test_desktop_gpu_rendering_probe_returns_boolean(self):
+        self.assertIsInstance(desktop_gpu_rendering_available(), bool)
+
+    def test_desktop_gpu_rendering_is_honestly_false_on_this_real_windows_host(self):
+        # A real, live, negative-case test: this host genuinely has no
+        # /dev/dri (confirmed live throughout this session, e.g. Creator
+        # Workspace's own earlier research), even though it has real,
+        # working CUDA compute passthrough (AI/Video/Developer's --gpus
+        # already works here) - proving these two capabilities are
+        # genuinely different, not inferred from one another.
+        self.assertFalse(desktop_gpu_rendering_available())
+
+    def test_desktop_gpu_rendering_false_on_non_linux(self):
+        with patch("gpubnb_agent.platform_info.platform.system", return_value="Windows"):
+            self.assertFalse(desktop_gpu_rendering_available())
+
+    def test_desktop_gpu_rendering_excludes_wsl2_even_though_it_reports_as_linux(self):
+        # platform.system() alone can't tell WSL2 apart from a real Linux host -
+        # both report "Linux" - so this must be checked explicitly, never assumed.
+        with (
+            patch("gpubnb_agent.platform_info.platform.system", return_value="Linux"),
+            patch("gpubnb_agent.platform_info.Path.read_text", return_value="Linux version 5.15.90.1-microsoft-standard-WSL2"),
+        ):
+            self.assertFalse(desktop_gpu_rendering_available())
+
+    def test_desktop_gpu_rendering_false_when_no_dri_render_node(self):
+        with (
+            patch("gpubnb_agent.platform_info.platform.system", return_value="Linux"),
+            patch("gpubnb_agent.platform_info.Path.read_text", return_value="Linux version 6.8.0-generic"),
+            patch("gpubnb_agent.platform_info.Path.glob", return_value=[]),
+        ):
+            self.assertFalse(desktop_gpu_rendering_available())
+
+    def test_desktop_gpu_rendering_false_when_dri_present_but_no_nvidia_container_toolkit(self):
+        with (
+            patch("gpubnb_agent.platform_info.platform.system", return_value="Linux"),
+            patch("gpubnb_agent.platform_info.Path.read_text", return_value="Linux version 6.8.0-generic"),
+            patch("gpubnb_agent.platform_info.Path.glob", return_value=[Path("/dev/dri/renderD128")]),
+            patch("gpubnb_agent.platform_info.docker_info", return_value={"nvidiaRuntime": False}),
+        ):
+            self.assertFalse(desktop_gpu_rendering_available())
+
+    def test_desktop_gpu_rendering_true_when_everything_real_is_present(self):
+        with (
+            patch("gpubnb_agent.platform_info.platform.system", return_value="Linux"),
+            patch("gpubnb_agent.platform_info.Path.read_text", return_value="Linux version 6.8.0-generic"),
+            patch("gpubnb_agent.platform_info.Path.glob", return_value=[Path("/dev/dri/renderD128")]),
+            patch("gpubnb_agent.platform_info.docker_info", return_value={"nvidiaRuntime": True}),
+        ):
+            self.assertTrue(desktop_gpu_rendering_available())
 
     def test_docker_info_gives_the_runtime_probe_extra_time(self):
         # Regression for a real failure: `docker info` (unlike `docker version`)

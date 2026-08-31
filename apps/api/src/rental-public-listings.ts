@@ -91,6 +91,7 @@ const publicListingSelect = {
       nvidiaRuntimeAvailable: true,
       operatingSystem: true,
       virtualizationAvailable: true,
+      desktopGpuRenderingAvailable: true,
     },
   },
   accelerators: {
@@ -179,6 +180,7 @@ function projectListing(row: PublicListingRow, now: Date, staleAfterSeconds: num
       nvidiaRuntimeAvailable: row.machine.nvidiaRuntimeAvailable,
       operatingSystem: row.machine.operatingSystem,
       virtualizationAvailable: row.machine.virtualizationAvailable,
+      desktopGpuRenderingAvailable: row.machine.desktopGpuRenderingAvailable,
       gpuModel: gpu.model,
       vramMiB: gpu.vramMiB,
       cudaVersion: gpu.cudaVersion,

@@ -256,6 +256,7 @@ model Machine {
   dockerAvailable Boolean @default(false)
   nvidiaRuntimeAvailable Boolean @default(false)
   virtualizationAvailable Boolean @default(false)
+  desktopGpuRenderingAvailable Boolean @default(false)
   connectivity MachineConnectivity @default(OFFLINE)
   operational MachineOperational @default(UNAVAILABLE)
   moderationStatus ModerationStatus @default(CLEAR)

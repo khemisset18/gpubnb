@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import { analyzeWorkspace } from '../src/workspace-compatibility.js';import { workspaceManifest } from '../src/workspace-manifests.js';
-const capable={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'12.8',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true};
+const capable={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'12.8',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true,desktopGpuRenderingAvailable:true};
 test('high-end machine receives an explainable AI score',()=>{const result=analyzeWorkspace(capable,workspaceManifest('ai')!);assert.equal(result.score,100);assert.equal(result.state,'READY');assert.ok(result.reasons.some(x=>x.includes('CUDA')))});
 test('missing requirements produce explicit incompatibility',()=>{const result=analyzeWorkspace({...capable,ramTotalMiB:4096,vramMiB:2048,cudaVersion:null},workspaceManifest('ai')!);assert.equal(result.state,'INCOMPATIBLE');assert.ok(result.missing.length>=3)});
 test('catalogue contains exactly thirteen unique workspaces',async()=>{const {workspaceManifests}=await import('../src/workspace-manifests.js');assert.equal(workspaceManifests.length,13);assert.equal(new Set(workspaceManifests.map(x=>x.slug)).size,13)});
@@ -90,3 +90,30 @@ test('a workspace with no GPU requirement at all is never blocked by GPU fields,
   const result=analyzeWorkspace({...capable,vramMiB:null,cudaVersion:null,nvidiaRuntimeAvailable:false},workspaceManifest('audio')!);
   assert.ok(!result.missing.some(x=>x.includes('VRAM')||x.includes('CUDA')));
 });
+
+// Creator/Cloud Desktop/CAD Workspaces - real, evidence-grounded gate for
+// GPU-accelerated Linux desktop rendering (docs/SESSION_RESUME.md section 8).
+// Deliberately independent of CUDA/nvidiaRuntime: this exact platform's own
+// dev host has real, working CUDA compute (AI/Video/Developer's --gpus
+// works) but NO /dev/dri, confirmed live throughout this project - proving
+// desktop-GPU-rendering capability must never be inferred from CUDA/compute
+// capability, only measured on its own terms.
+for(const slug of ['creator','cloud-desktop','cad'] as const){
+  test(`${slug} Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY`,()=>{
+    // Mirrors this exact real dev host: real CUDA compute, real NVIDIA
+    // Container Toolkit, but no /dev/dri render node. Same assertion style
+    // as the existing CUDA/Docker negative-path tests above (a single
+    // missing hard requirement scores INSTALL_REQUIRED, not INCOMPATIBLE,
+    // in this engine's existing 4-state model - not redesigned here).
+    const cudaCapableButNoDesktopGpu={...capable,desktopGpuRenderingAvailable:false};
+    const result=analyzeWorkspace(cudaCapableButNoDesktopGpu,workspaceManifest(slug)!);
+    assert.notEqual(result.state,'READY',`${slug} must not be reachable via CUDA capability alone`);
+    assert.ok(result.missing.some(x=>x.includes('Rendu GPU desktop')));
+  });
+
+  test(`${slug} Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit`,()=>{
+    const realLinuxGpuDesktopHost={...capable,operatingSystem:'Linux',desktopGpuRenderingAvailable:true};
+    const result=analyzeWorkspace(realLinuxGpuDesktopHost,workspaceManifest(slug)!);
+    assert.notEqual(result.state,'INCOMPATIBLE');
+  });
+}

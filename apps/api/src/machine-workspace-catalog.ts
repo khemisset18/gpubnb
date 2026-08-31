@@ -85,6 +85,7 @@ export async function ensureCompatibleMachineWorkspace(
       id: true, ramTotalMiB: true, diskTotalMiB: true, vramMiB: true,
       cudaVersion: true, dockerAvailable: true, nvidiaRuntimeAvailable: true,
       operatingSystem: true, virtualizationAvailable: true,
+      desktopGpuRenderingAvailable: true,
     },
   });
   if (!machine) throw new Error('machine_not_found');

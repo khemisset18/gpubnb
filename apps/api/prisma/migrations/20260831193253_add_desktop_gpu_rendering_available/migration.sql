@@ -1,0 +1,13 @@
+-- Hand-written, not `prisma migrate dev`-generated: schema.prisma is
+-- currently out of sync with the real migration history (it does not
+-- declare ConsumedMessage/MachineAccelerator/MachineAcceleratorEvent/
+-- MachineCommand/MachineCommandSequence/OutboxEvent, all created by the
+-- already-applied 20260724231000_reliable_delivery migration), so
+-- `prisma migrate dev`'s auto-diff tried to DROP all six of those real
+-- tables. That attempt failed safely (a real Postgres FK dependency
+-- blocked it) and rolled back with no data loss - confirmed live - but it
+-- must never be allowed to run for real. This migration contains only the
+-- single, deliberate, additive change actually intended; the schema/
+-- migration drift itself is a separate, pre-existing issue, not touched
+-- here - see docs/SESSION_RESUME.md.
+ALTER TABLE "Machine" ADD COLUMN "desktopGpuRenderingAvailable" BOOLEAN NOT NULL DEFAULT false;

@@ -295,6 +295,41 @@ def virtualization_available() -> bool:
         return False
 
 
+def desktop_gpu_rendering_available() -> bool:
+    """Real, honest, cheap static signal for a GPU-accelerated Linux desktop
+    surface (Creator/Cloud Desktop/CAD Workspaces - not built yet, see
+    docs/SESSION_RESUME.md). This is deliberately NOT the same thing as
+    nvidiaRuntimeAvailable/cudaVersion: this host has real, working CUDA
+    compute passthrough (--gpus works for AI/Video/Developer) but NO
+    /dev/dri, confirmed live - proving those two capabilities are genuinely
+    different and one must never be inferred from the other. Windows and
+    WSL2 (which reports platform.system()=="Linux" too, so it must be
+    excluded explicitly rather than assumed away) never have a real
+    /dev/dri render node under Docker Desktop - only a real native Linux
+    Docker host does. This is a cheap static check only (real Linux, a
+    real /dev/dri/render* node, the NVIDIA Container Toolkit registered)
+    - it does NOT prove OpenGL/Vulkan rendering actually works end to end
+    inside a container; that needs a real one-shot container-based proof
+    (mirroring GPU_PROOF's pattern) once there is an actual image to run
+    it against, which there is not yet on this host.
+    """
+    if platform.system() != "Linux":
+        return False
+    try:
+        version = Path("/proc/version").read_text(encoding="utf-8", errors="ignore").lower()
+        if "microsoft" in version or "wsl" in version:
+            return False
+    except OSError:
+        pass
+    try:
+        render_nodes = list(Path("/dev/dri").glob("render*"))
+    except OSError:
+        render_nodes = []
+    if not render_nodes:
+        return False
+    return docker_info()["nvidiaRuntime"]
+
+
 def configured_disk_root() -> str:
     return os.environ.get("SystemDrive", "C:") + "\\" if platform.system() == "Windows" else "/"
 
@@ -324,5 +359,7 @@ def system_inventory() -> dict[str, Any]:
         "diskTotalMiB": disk.total // (1024 * 1024), "diskAvailableMiB": disk.free // (1024 * 1024),
         "dockerAvailable": docker["available"], "dockerDaemonReachable": docker["daemonReachable"],
         "dockerVersion": docker["version"], "nvidiaRuntimeAvailable": docker["nvidiaRuntime"],
-        "virtualizationAvailable": virtualization_available(), "machineFingerprint": machine_fingerprint(),
+        "virtualizationAvailable": virtualization_available(),
+        "desktopGpuRenderingAvailable": desktop_gpu_rendering_available(),
+        "machineFingerprint": machine_fingerprint(),
     }

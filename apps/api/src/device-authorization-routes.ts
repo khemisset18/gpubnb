@@ -37,6 +37,7 @@ export const inventorySchema = z.object({
     dockerAvailable: z.boolean(),
     nvidiaRuntimeAvailable: z.boolean().optional(),
     virtualizationAvailable: z.boolean().optional(),
+    desktopGpuRenderingAvailable: z.boolean().optional(),
   }),
   gpus: z.array(z.object({
     gpuModel: z.string().max(160),
@@ -215,6 +216,7 @@ export const registerDeviceAuthorizationRoutes = (
           dockerAvailable: body.inventory.system.dockerAvailable,
           nvidiaRuntimeAvailable: body.inventory.system.nvidiaRuntimeAvailable ?? false,
           virtualizationAvailable: body.inventory.system.virtualizationAvailable ?? false,
+          desktopGpuRenderingAvailable: body.inventory.system.desktopGpuRenderingAvailable ?? false,
           ...(gpu ? {
             gpuModel: gpu.gpuModel,
             gpuUuid: gpu.gpuUuid,

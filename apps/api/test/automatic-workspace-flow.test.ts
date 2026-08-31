@@ -20,6 +20,7 @@ const compatiblePrivateBetaMachine={
   nvidiaRuntimeAvailable:true,
   operatingSystem:'Windows',
   virtualizationAvailable:false,
+  desktopGpuRenderingAvailable:false,
 };
 
 test('private-beta marketplace exposes only the registered Compute workspace',()=>{
@@ -116,7 +117,7 @@ test('the full workspace catalogue always covers all thirteen manifests, once ea
 });
 
 test('the catalogue only marks a workspace bookable when it is both compatible and executable, never from compatibility alone',()=>{
-  const highEndMachine={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'13.1',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true};
+  const highEndMachine={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'13.1',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true,desktopGpuRenderingAvailable:true};
   const catalogue=allWorkspaceCompatibility(highEndMachine);
   const bySlug=Object.fromEntries(catalogue.map(item=>[item.slug,item]));
   // A 24GB card clears every manifest's requirements, so every workspace is
@@ -259,7 +260,7 @@ test('API Workspace has its own real booking, status and access routes, parallel
 });
 
 test('API Workspace is compatible even with a modest CPU-only-capable machine - no vram/cuda minimum by design',()=>{
-  const modestMachine={ramTotalMiB:8192,diskTotalMiB:51200,vramMiB:0,cudaVersion:null,dockerAvailable:true,nvidiaRuntimeAvailable:false,operatingSystem:'Windows',virtualizationAvailable:false};
+  const modestMachine={ramTotalMiB:8192,diskTotalMiB:51200,vramMiB:0,cudaVersion:null,dockerAvailable:true,nvidiaRuntimeAvailable:false,operatingSystem:'Windows',virtualizationAvailable:false,desktopGpuRenderingAvailable:false};
   const catalogue=allWorkspaceCompatibility(modestMachine);
   const api=catalogue.find(item=>item.slug==='api')!;
   assert.equal(api.compatible,true,'API Workspace must stay usable on machines with no GPU at all');
@@ -282,14 +283,14 @@ test('Mobile Workspace has its own real booking, status and access routes, paral
 });
 
 test('Mobile Workspace no longer requires virtualization - it is a plain container, not a VM',()=>{
-  const noVirtualizationMachine={ramTotalMiB:32768,diskTotalMiB:200000,vramMiB:0,cudaVersion:null,dockerAvailable:true,nvidiaRuntimeAvailable:false,operatingSystem:'Windows',virtualizationAvailable:false};
+  const noVirtualizationMachine={ramTotalMiB:32768,diskTotalMiB:200000,vramMiB:0,cudaVersion:null,dockerAvailable:true,nvidiaRuntimeAvailable:false,operatingSystem:'Windows',virtualizationAvailable:false,desktopGpuRenderingAvailable:false};
   const catalogue=allWorkspaceCompatibility(noVirtualizationMachine);
   const mobile=catalogue.find(item=>item.slug==='mobile')!;
   assert.equal(mobile.compatible,true,'a real headless Android build container needs no hardware virtualization at all');
 });
 
 test('Mobile Workspace is bookable now that its real runtime has been built, tested and live-validated',()=>{
-  const highEndMachine={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'13.1',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true};
+  const highEndMachine={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'13.1',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true,desktopGpuRenderingAvailable:true};
   const catalogue=allWorkspaceCompatibility(highEndMachine);
   const mobile=catalogue.find(item=>item.slug==='mobile')!;
   assert.equal(mobile.compatible,true);
@@ -312,14 +313,14 @@ test('Security Lab Workspace has its own real booking, status and access routes,
 });
 
 test('Security Lab Workspace no longer requires virtualization - it is a plain container, not a VM',()=>{
-  const noVirtualizationMachine={ramTotalMiB:16384,diskTotalMiB:100000,vramMiB:0,cudaVersion:null,dockerAvailable:true,nvidiaRuntimeAvailable:false,operatingSystem:'Windows',virtualizationAvailable:false};
+  const noVirtualizationMachine={ramTotalMiB:16384,diskTotalMiB:100000,vramMiB:0,cudaVersion:null,dockerAvailable:true,nvidiaRuntimeAvailable:false,operatingSystem:'Windows',virtualizationAvailable:false,desktopGpuRenderingAvailable:false};
   const catalogue=allWorkspaceCompatibility(noVirtualizationMachine);
   const securityLab=catalogue.find(item=>item.slug==='security-lab')!;
   assert.equal(securityLab.compatible,true,'a real defensive analysis container needs no hardware virtualization at all');
 });
 
 test('Security Lab Workspace is bookable now that its real runtime has been built, tested and live-validated',()=>{
-  const highEndMachine={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'13.1',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true};
+  const highEndMachine={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'13.1',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true,desktopGpuRenderingAvailable:true};
   const catalogue=allWorkspaceCompatibility(highEndMachine);
   const securityLab=catalogue.find(item=>item.slug==='security-lab')!;
   assert.equal(securityLab.compatible,true);

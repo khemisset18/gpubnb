@@ -1,6 +1,13 @@
 import type { WorkspaceManifest } from './workspace-manifests.js';
 
-export type MachineCapabilities={ramTotalMiB:number|null;diskTotalMiB:number|null;vramMiB:number|null;cudaVersion:string|null;dockerAvailable:boolean;nvidiaRuntimeAvailable:boolean;operatingSystem:string|null;virtualizationAvailable:boolean};
+// desktopGpuRenderingAvailable is deliberately a separate, independently-measured
+// field from cudaVersion/nvidiaRuntimeAvailable: this platform's own dev host has
+// real, working CUDA compute passthrough (AI/Video/Developer's --gpus works) but
+// NO /dev/dri render node - confirmed live - proving GPU-accelerated desktop
+// rendering capability is genuinely not implied by CUDA compute capability, and
+// must never be inferred from it. See agent/gpubnb_agent/platform_info.py's
+// desktop_gpu_rendering_available() for how this is actually measured.
+export type MachineCapabilities={ramTotalMiB:number|null;diskTotalMiB:number|null;vramMiB:number|null;cudaVersion:string|null;dockerAvailable:boolean;nvidiaRuntimeAvailable:boolean;operatingSystem:string|null;virtualizationAvailable:boolean;desktopGpuRenderingAvailable:boolean};
 export type CompatibilityResult={score:number;state:'READY'|'LIMITED'|'INSTALL_REQUIRED'|'INCOMPATIBLE';reasons:string[];missing:string[]};
 
 export function analyzeWorkspace(machine:MachineCapabilities,manifest:WorkspaceManifest):CompatibilityResult{
@@ -8,7 +15,7 @@ export function analyzeWorkspace(machine:MachineCapabilities,manifest:WorkspaceM
  const check=(actual:number|null,minimum:number,recommended:number,label:string)=>{if(actual===null){score-=20;missing.push(`${label} non mesuré`)}else if(actual<minimum){score-=45;missing.push(`${label}: ${actual} < ${minimum} MiB`)}else if(actual<recommended){score-=12;reasons.push(`${label} suffisant mais inférieur au niveau recommandé`)}else reasons.push(`${label} au niveau recommandé`)};
  check(machine.ramTotalMiB,min.ramMiB,rec.ramMiB,'RAM');check(machine.diskTotalMiB,min.diskMiB,rec.diskMiB,'Stockage');
  if(min.vramMiB)check(machine.vramMiB,min.vramMiB,rec.vramMiB??min.vramMiB,'VRAM');
- const flags:Array<[boolean|undefined,boolean,string]>=[[min.cuda,Boolean(machine.cudaVersion),'CUDA'],[min.docker,machine.dockerAvailable,'Docker'],[min.nvidiaRuntime,machine.nvidiaRuntimeAvailable,'NVIDIA Container Toolkit'],[min.virtualization,machine.virtualizationAvailable,'Virtualisation']];
+ const flags:Array<[boolean|undefined,boolean,string]>=[[min.cuda,Boolean(machine.cudaVersion),'CUDA'],[min.docker,machine.dockerAvailable,'Docker'],[min.nvidiaRuntime,machine.nvidiaRuntimeAvailable,'NVIDIA Container Toolkit'],[min.virtualization,machine.virtualizationAvailable,'Virtualisation'],[min.desktopGpuRendering,machine.desktopGpuRenderingAvailable,'Rendu GPU desktop (/dev/dri + NVIDIA Container Toolkit)']];
  for(const [required,available,label] of flags)if(required&&!available){score-=30;missing.push(`${label} requis`)}else if(required)reasons.push(`${label} disponible`);
  score=Math.max(0,Math.min(100,score));const hardMissing=missing.some(item=>!item.includes('non mesuré'));
  const state=score<45||hardMissing&&score<70?'INCOMPATIBLE':missing.length?'INSTALL_REQUIRED':score<85?'LIMITED':'READY';

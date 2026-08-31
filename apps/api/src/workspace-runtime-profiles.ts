@@ -34,8 +34,15 @@ export const workspaceRuntimeProfiles:Readonly<Record<string,WorkspaceRuntimePro
   // and docs/SESSION_RESUME.md.
   api:{slug:'api',runtime:'CONTAINER',surface:'API',category:'API',entrypoint:'jupyter-server-api',network:'GATEWAY_ONLY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   data:{slug:'data',runtime:'CONTAINER',surface:'NOTEBOOK',category:'DATA',entrypoint:'jupyterlab',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
-  'cloud-desktop':{slug:'cloud-desktop',runtime:'DESKTOP_VM',surface:'DESKTOP',category:'DESKTOP',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
-  creator:{slug:'creator',runtime:'DESKTOP_VM',surface:'DESKTOP',category:'CREATION',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  // Planned architecture, NOT built/tested yet - no Linux GPU host available
+  // (see docs/SESSION_RESUME.md section 8). CONTAINER, not DESKTOP_VM: no
+  // VM/hypervisor infrastructure exists in this codebase, and the planned
+  // real architecture (Selkies-GStreamer in a container, GPU passed through
+  // via --gpus like every other GPU-attached workspace here) needs none.
+  // entrypoint corrected from the fictional 'desktop-gateway' to what would
+  // actually run.
+  'cloud-desktop':{slug:'cloud-desktop',runtime:'CONTAINER',surface:'DESKTOP',category:'DESKTOP',entrypoint:'selkies-gstreamer',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  creator:{slug:'creator',runtime:'CONTAINER',surface:'DESKTOP',category:'CREATION',entrypoint:'selkies-gstreamer',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   // Delivered as CONTAINER/NOTEBOOK (JupyterLab + real GPU-accelerated FFmpeg/
   // NVENC), not the DESKTOP_VM this originally assumed: no VM/hypervisor
   // infrastructure exists in this codebase, and no official DaVinci Resolve
@@ -43,7 +50,9 @@ export const workspaceRuntimeProfiles:Readonly<Record<string,WorkspaceRuntimePro
   // publishing a custom image (see docs/SESSION_RESUME.md). This profile is
   // corrected to match what's actually real, not what was first envisioned.
   video:{slug:'video',runtime:'CONTAINER',surface:'NOTEBOOK',category:'VIDEO',entrypoint:'jupyterlab',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
-  cad:{slug:'cad',runtime:'DESKTOP_VM',surface:'DESKTOP',category:'CAD',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  // Same correction as Cloud Desktop/Creator above - planned CONTAINER, not
+  // built/tested yet.
+  cad:{slug:'cad',runtime:'CONTAINER',surface:'DESKTOP',category:'CAD',entrypoint:'selkies-gstreamer',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   // Delivered as CONTAINER/CODE (code-server + a real Android SDK/Gradle
   // install, same surface as Developer), not the ISOLATED_VM/DESKTOP this
   // originally assumed: no VM/hypervisor infrastructure exists in this

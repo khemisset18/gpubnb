@@ -3,7 +3,7 @@ export type WorkspaceRelease = 'BETA'|'UPCOMING'|'EXPERIMENTAL';
 export type WorkspaceManifest = {
   slug:string; name:string; icon:string; category:WorkspaceCategory; release:WorkspaceRelease;
   summary:string; technologies:string[]; license:'INCLUDED_OPEN_SOURCE'|'USER_ACCOUNT_REQUIRED'|'USER_LICENSE_REQUIRED'|'MIXED';
-  minimum:{ramMiB:number;diskMiB:number;vramMiB?:number;cuda?:boolean;docker?:boolean;virtualization?:boolean;nvidiaRuntime?:boolean};
+  minimum:{ramMiB:number;diskMiB:number;vramMiB?:number;cuda?:boolean;docker?:boolean;virtualization?:boolean;nvidiaRuntime?:boolean;desktopGpuRendering?:boolean};
   recommended:{ramMiB:number;diskMiB:number;vramMiB?:number};
 };
 
@@ -11,7 +11,16 @@ const manifest=(value:WorkspaceManifest)=>Object.freeze(value);
 export const workspaceManifests:readonly WorkspaceManifest[]=Object.freeze([
  manifest({slug:'ai',name:'AI Workspace',icon:'🤖',category:'AI',release:'BETA',summary:'IA, modèles et génération',technologies:['Python','CUDA','PyTorch','JupyterLab'],license:'MIXED',minimum:{ramMiB:16384,diskMiB:30720,vramMiB:8192,cuda:true,docker:true,nvidiaRuntime:true},recommended:{ramMiB:32768,diskMiB:102400,vramMiB:16384}}),
  manifest({slug:'developer',name:'Developer Workspace',icon:'💻',category:'DEVELOPMENT',release:'BETA',summary:'Développement complet à distance',technologies:['VS Code','Git','Node.js','Python'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:8192,diskMiB:20480,docker:true,cuda:true,nvidiaRuntime:true},recommended:{ramMiB:16384,diskMiB:51200}}),
- manifest({slug:'cloud-desktop',name:'Cloud Desktop',icon:'☁️',category:'DESKTOP',release:'UPCOMING',summary:'Bureau distant isolé',technologies:['WebRTC','RDP','noVNC','Guacamole'],license:'MIXED',minimum:{ramMiB:8192,diskMiB:40960,virtualization:true},recommended:{ramMiB:16384,diskMiB:81920}}),
+ // 'RDP', 'noVNC' and 'Guacamole' intentionally absent from `technologies`:
+ // none is the real planned architecture. What's real (researched, not yet
+ // built - no Linux GPU host to build/test it on, see
+ // docs/SESSION_RESUME.md section 8): a Selkies-GStreamer-based image
+ // (e.g. linuxserver/webtop), a real GPU-accelerated Linux desktop
+ // streamed over WebRTC, not a VM (`virtualization` dropped - this is
+ // planned as a CONTAINER, see workspace-runtime-profiles.ts). Requires a
+ // real /dev/dri render node + the NVIDIA Container Toolkit - see
+ // `desktopGpuRendering` below and platform_info.desktop_gpu_rendering_available().
+ manifest({slug:'cloud-desktop',name:'Cloud Desktop',icon:'☁️',category:'DESKTOP',release:'UPCOMING',summary:'Bureau Linux distant avec rendu GPU réel (architecture prête, aucun hôte Linux GPU disponible pour le valider)',technologies:['Selkies-GStreamer','WebRTC'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:8192,diskMiB:40960,vramMiB:2048,docker:true,nvidiaRuntime:true,desktopGpuRendering:true},recommended:{ramMiB:16384,diskMiB:81920,vramMiB:4096}}),
  manifest({slug:'compute',name:'Compute Workspace',icon:'⚡',category:'COMPUTE',release:'BETA',summary:'Tâches contrôlées sans bureau',technologies:['Docker','GPU','Batch','Logs'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:4096,diskMiB:10240,docker:true},recommended:{ramMiB:16384,diskMiB:51200,vramMiB:8192}}),
  // 'SDK' and 'Webhooks' intentionally absent from `technologies`: GPUbnb
  // ships no SDK and no webhook mechanism. What's real: the official
@@ -24,7 +33,13 @@ export const workspaceManifests:readonly WorkspaceManifest[]=Object.freeze([
  // WebSocket channel and returns the real result). CPU-only by design - see
  // runtime_images.DEFAULT_API_IMAGE and docs/SESSION_RESUME.md.
  manifest({slug:'api',name:'API Workspace',icon:'🔌',category:'API',release:'BETA',summary:'Exécution de code à distance via une API REST/WebSocket, sans interface graphique',technologies:['REST','WebSocket','Jupyter Server API','Python'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:4096,diskMiB:10240,docker:true},recommended:{ramMiB:16384,diskMiB:30720}}),
- manifest({slug:'creator',name:'Creator Workspace',icon:'🎨',category:'CREATION',release:'UPCOMING',summary:'Graphisme et création 3D',technologies:['Blender','Krita','GIMP','Inkscape'],license:'MIXED',minimum:{ramMiB:16384,diskMiB:40960,vramMiB:6144},recommended:{ramMiB:32768,diskMiB:102400,vramMiB:12288}}),
+ // 'Krita', 'GIMP' and 'Inkscape' intentionally absent from `technologies`:
+ // not confirmed bundled in the real candidate image
+ // (`linuxserver/blender`, digest recorded and inspected earlier this
+ // session - only Blender itself was verified). Same Selkies-based
+ // architecture as Cloud Desktop, not yet buildable/testable here - see
+ // docs/SESSION_RESUME.md section 8.
+ manifest({slug:'creator',name:'Creator Workspace',icon:'🎨',category:'CREATION',release:'UPCOMING',summary:'Blender avec rendu GPU réel en environnement isolé (architecture prête, aucun hôte Linux GPU disponible pour le valider)',technologies:['Blender','Selkies-GStreamer','WebRTC'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:16384,diskMiB:40960,vramMiB:6144,docker:true,nvidiaRuntime:true,desktopGpuRendering:true},recommended:{ramMiB:32768,diskMiB:102400,vramMiB:12288}}),
  // DaVinci Resolve and an interactive Blender desktop are intentionally
  // absent from `technologies`: no official freely-redistributable Linux
  // container exists for DaVinci, and a GPU-accelerated Blender desktop needs
@@ -69,7 +84,15 @@ export const workspaceManifests:readonly WorkspaceManifest[]=Object.freeze([
  // ELF binary. `virtualization` dropped from `minimum` too - this runs as a
  // plain container, not a VM - see docs/SESSION_RESUME.md.
  manifest({slug:'security-lab',name:'Security Lab',icon:'🛡️',category:'SECURITY',release:'BETA',summary:'Analyse forensique et rétro-ingénierie en environnement isolé (pas d\'accès réseau live)',technologies:['Wireshark','YARA','radare2','VS Code'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:8192,diskMiB:20480,docker:true},recommended:{ramMiB:16384,diskMiB:51200}}),
- manifest({slug:'cad',name:'CAD Workspace',icon:'📐',category:'CAD',release:'UPCOMING',summary:'CAO, simulation et ingénierie',technologies:['FreeCAD','Blender','AutoCAD','Fusion 360'],license:'USER_LICENSE_REQUIRED',minimum:{ramMiB:16384,diskMiB:61440,vramMiB:6144},recommended:{ramMiB:32768,diskMiB:122880,vramMiB:12288}}),
+ // 'AutoCAD' and 'Fusion 360' intentionally absent from `technologies`:
+ // both are proprietary, Windows/licensed-cloud software with no real
+ // redistributable Linux container path - never actually plannable here.
+ // What's real: FreeCAD (GPL, real, `apt`-installable) layered onto the
+ // same Selkies-based desktop image as Cloud Desktop/Creator - the exact
+ // pattern already proven twice this session (Mobile: Android SDK onto
+ // Developer; Security Lab: tshark/YARA/radare2 onto Developer). Not yet
+ // buildable/testable here - see docs/SESSION_RESUME.md section 8.
+ manifest({slug:'cad',name:'CAD Workspace',icon:'📐',category:'CAD',release:'UPCOMING',summary:'FreeCAD avec rendu GPU réel en environnement isolé (architecture prête, aucun hôte Linux GPU disponible pour le valider)',technologies:['FreeCAD','Selkies-GStreamer','WebRTC'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:16384,diskMiB:61440,vramMiB:6144,docker:true,nvidiaRuntime:true,desktopGpuRendering:true},recommended:{ramMiB:32768,diskMiB:122880,vramMiB:12288}}),
  manifest({slug:'gaming',name:'Gaming Workspace',icon:'🎮',category:'GAMING',release:'EXPERIMENTAL',summary:'Jeu distant sous licences utilisateur',technologies:['Sunshine','Moonlight','Steam','WebRTC'],license:'USER_ACCOUNT_REQUIRED',minimum:{ramMiB:16384,diskMiB:102400,vramMiB:8192,virtualization:true},recommended:{ramMiB:32768,diskMiB:204800,vramMiB:12288}}),
  // An interactive Ardour/Audacity GUI and VST plugin hosting are
  // intentionally absent from `technologies`: both need the same
