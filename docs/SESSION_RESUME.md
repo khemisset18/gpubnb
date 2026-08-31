@@ -92,11 +92,22 @@ codebase's current infrastructure - not guesses:
 - **Mobile (Android emulator)**: same class of gap - `/dev/kvm` confirmed
   absent on this host (`docker run --device=/dev/kvm` fails at Docker's own
   device pre-flight check). `budtmo/docker-android` hard-requires it, no
-  software fallback. **A real reduced MVP exists but wasn't built this
-  session** (deprioritized in favor of Audio - genuinely ready first):
-  `mobiledevops/android-sdk-image:36.1.0` (Docker Hub, ~1.9GB, actively
-  maintained) - headless Gradle/Android-SDK builds, no visual emulator, would
-  pair with the Developer Workspace's code-server pattern rather than Jupyter's.
+  software fallback. A headless-build fallback was investigated as a reduced
+  MVP (no emulator, just Gradle/Android-SDK CLI builds) using
+  `mobiledevops/android-sdk-image:36.1.0` (Docker Hub, digest
+  `sha256:679b9b29374719ec1160515911d674292d5b00bbb47408eb623a5cbbde57ceb2`,
+  amd64 `sha256:af970bbcf86bdbdb2ebb41ceb66aabcd388dd6bb4e43b6ee4e84c033cb210722`,
+  pulled and inspected live, then removed after inspection). **This is a dead
+  end, not a reduced MVP**: `docker inspect` shows `Entrypoint=null
+  Cmd=["/bin/bash"] User= ExposedPorts=null` (runs as root, no exposed
+  port), and a live shell into the image found none of `code-server`,
+  `ttyd`, `gotty`, `jupyter` on PATH - only `sshd` and `python3`. There is no
+  HTTP/WebSocket-servable interface anywhere in this image, and this
+  architecture's gateway (`workspace_gateway.py` / `loopback-proxy.js` /
+  `workspace-gateway.ts`) only relays HTTP/WS to a fixed port - it cannot
+  expose a bare CLI/SSH tool. This is the exact same "no interactive surface
+  without a custom-published image" blocker as Security Lab below, not a
+  buildable-now MVP as an earlier pass in this session concluded.
 - **Security Lab (Kali)**: **not** a platform/protocol limitation - all 5
   official `kalilinux/*` Docker Hub images are confirmed bare (pulled
   `kali-rolling`, `nmap`/`sqlmap`/`hydra`/`tshark`/`msfconsole` all absent).
@@ -124,7 +135,7 @@ codebase's current infrastructure - not guesses:
 |---|---|---|
 | API | Unclear — no product definition exists anywhere in the codebase for what "API Workspace" concretely gives a renter. **Do not build this without a real product decision from the user.** |
 | Cloud Desktop, Creator, CAD | `DESKTOP_VM` - blocked on this host by missing `/dev/dri` (section 3). A real candidate image exists (`linuxserver/blender`); untestable here. |
-| Mobile | `ISOLATED_VM` - full emulator blocked by missing `/dev/kvm`; a real headless-build MVP (`mobiledevops/android-sdk-image:36.1.0`) is buildable but not yet built. |
+| Mobile | `ISOLATED_VM` - full emulator blocked by missing `/dev/kvm`; the headless-build fallback (`mobiledevops/android-sdk-image:36.1.0`) is also blocked, same pattern as Security Lab: bare CLI image, root user, no HTTP/WS-servable interface, cannot plug into this gateway architecture without a custom-published image (section 3). |
 | Security Lab | `ISOLATED_VM`, `network:NONE` - blocked by no pre-tooled official Kali image + no network-available provisioning window in this architecture (section 3). |
 | Gaming | `STREAMING_VM` - **hard architectural blocker**, confirmed: Sunshine/Moonlight need UDP, this relay is TCP-only (section 3). Would need a new tunneling infrastructure project. |
 
@@ -156,29 +167,35 @@ Do not unlink/reconfigure the production agent to make this pass.
   explicit go-ahead — every workspace so far deliberately used an official,
   already-published image instead.
 - Do not invent a product definition for API Workspace unilaterally.
-- Do not claim Creator/Cloud Desktop/CAD GPU rendering, Mobile's visual
-  emulator, Security Lab's tools, or Gaming's streaming work on this machine
-  or with this architecture as it stands - all four are real, evidenced,
-  currently-unresolved blockers, not untested guesses.
+- Do not claim Creator/Cloud Desktop/CAD GPU rendering, Mobile's emulator or
+  headless-build interface, Security Lab's tools, or Gaming's streaming work
+  on this machine or with this architecture as it stands - all are real,
+  evidenced, currently-unresolved blockers, not untested guesses.
 
 ## NEXT ACTION
 
 Compute, Developer, Data, AI, Video, Audio are all real and done (6 of 13).
-Remaining honest options, in rough order of tractability:
-1. Build Mobile Workspace's real reduced MVP: headless Android SDK/Gradle
-   builds via `mobiledevops/android-sdk-image:36.1.0`, no emulator, likely
-   paired with the Developer Workspace's code-server pattern (not Jupyter,
-   since this is a build/IDE tool, not a notebook use case) - genuinely
-   buildable now with the same rigor as the other six.
-2. Get a real product definition for API Workspace from the user.
-3. Security Lab needs either a custom-published tooled image or a new
-   "provision-then-isolate" mechanism - both are separate infrastructure
-   decisions, not something to improvise.
-4. Creator/Cloud Desktop/CAD need a real Linux host to test GPU rendering,
-   or a user decision to accept CPU-only software rendering as a documented
-   limitation.
-5. Gaming needs new UDP/WebRTC tunneling infrastructure - a large, separate
-   project, not a workspace-level task.
+All 7 remaining workspaces are now confirmed blocked, each requiring a
+decision only the user can make - none is a quick technical win:
+1. **API**: no product definition exists anywhere in the codebase for what
+   it concretely gives a renter. Needs a real product decision from the
+   user, not an invented scope.
+2. **Mobile, Security Lab**: same root blocker - no pre-built image exposes
+   an HTTP/WS-servable interface, and the internal session network is
+   always `--network=none` so there is no runtime provisioning window
+   either. Needs either a custom-published GPUbnb image (registry
+   credentials + user go-ahead) or a new provisioning mechanism - a real
+   infrastructure investment, not a workspace-level task.
+3. **Creator, Cloud Desktop, CAD**: blocked by missing `/dev/dri` on this
+   Windows/Docker-Desktop/WSL2 host. Needs either a real Linux host to test
+   GPU rendering on, or a user decision to accept CPU-only software
+   rendering as a documented limitation.
+4. **Gaming**: hard architectural blocker - Sunshine/Moonlight need UDP,
+   this relay is TCP-only end to end. Needs a new UDP/WebRTC tunneling
+   infrastructure project, not a workspace-level task.
 
+Do not build further workspace scope without the user picking one of these
+paths - continuing without that would mean either fabricating functionality
+or making a product/infrastructure decision that isn't Claude's to make.
 Do not commit without re-running the full three test suites first. Do not
 push without explicit authorization.
