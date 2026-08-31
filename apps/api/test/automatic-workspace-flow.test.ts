@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { compatibleWorkspaceChoices } from '../src/machine-workspace-catalog.js';
+import { allWorkspaceCompatibility, compatibleWorkspaceChoices } from '../src/machine-workspace-catalog.js';
 
 const apiRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const webRoot=path.resolve(apiRoot,'../web');
@@ -107,4 +107,81 @@ test('Developer renter routes are registered (via device-authorization-routes) a
   // offers Compute: Developer is unlocked from bookings.html after GPU_PROOF
   // completes (see the test above), never chosen upfront alongside Compute.
   assert.deepEqual(compatibleWorkspaceChoices(compatiblePrivateBetaMachine).map(item=>item.slug),['compute']);
+});
+
+test('the full workspace catalogue always covers all thirteen manifests, once each',()=>{
+  const catalogue=allWorkspaceCompatibility(compatiblePrivateBetaMachine);
+  assert.equal(catalogue.length,13);
+  assert.equal(new Set(catalogue.map(item=>item.slug)).size,13);
+});
+
+test('the catalogue only marks a workspace bookable when it is both compatible and executable, never from compatibility alone',()=>{
+  const highEndMachine={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'13.1',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true};
+  const catalogue=allWorkspaceCompatibility(highEndMachine);
+  const bySlug=Object.fromEntries(catalogue.map(item=>[item.slug,item]));
+  // A 24GB card clears every manifest's requirements, so every workspace is
+  // compatible here - this isolates the executable-slug gate as the only
+  // reason the remaining, still-catalogue-only workspaces stay unbookable.
+  assert.ok(catalogue.every(item=>item.compatible),'every workspace must be compatible on this high-end machine, or the test fixture is wrong');
+  assert.equal(bySlug.compute.bookable,true);
+  assert.equal(bySlug.developer.bookable,true);
+  assert.equal(bySlug.data.bookable,true);
+  for(const slug of catalogue.map(item=>item.slug))if(slug!=='compute'&&slug!=='developer'&&slug!=='data')assert.equal(bySlug[slug].bookable,false,`${slug} must not be bookable yet even though it is compatible`);
+});
+
+test('an incompatible workspace in the full catalogue is explained, not silently hidden',()=>{
+  const catalogue=allWorkspaceCompatibility(compatiblePrivateBetaMachine);
+  const ai=catalogue.find(item=>item.slug==='ai')!;
+  assert.equal(ai.compatible,false);
+  assert.equal(ai.bookable,false);
+  assert.ok(ai.compatibility.missing.length>0);
+});
+
+test('the workspace-catalogue route is wired to the full thirteen-workspace engine, separately from the booking route',async()=>{
+  const routes=await readFile(path.join(sourceRoot,'rental-marketplace-routes.ts'),'utf8');
+  assert.match(routes,/\/rental\/listings\/:listingId\/workspace-catalogue/);
+  assert.match(routes,/workspaces: ?allWorkspaceCompatibility\(listing\.machine\)/);
+  assert.match(routes,/\/rental\/listings\/:listingId\/workspaces/);
+  assert.match(routes,/workspaces: ?compatibleWorkspaceChoices\(listing\.machine\)/);
+});
+
+test('Data Workspace has its own real booking, status and access routes, parallel to Developer\'s',async()=>{
+  const renterRoutes=await readFile(path.join(sourceRoot,'workspace-renter-routes.ts'),'utf8');
+  assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/data'/);
+  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'data'\)/);
+  assert.match(renterRoutes,/type:JobType\.WORKSPACE_PREPARE,parameters:\{workspaceSlug:'data'/);
+  assert.match(renterRoutes,/app\.get\('\/bookings\/:bookingId\/workspace\/data\/status'/);
+  assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/data\/access'/);
+  // Both new routes must scope their lookup to slug:'data', not accidentally
+  // reuse or fall through to the Developer-scoped query above them.
+  const dataStatusStart=renterRoutes.indexOf("app.get('/bookings/:bookingId/workspace/data/status'");
+  const dataAccessStart=renterRoutes.indexOf("app.post('/bookings/:bookingId/workspace/data/access'");
+  const developerStatusStart=renterRoutes.indexOf("app.get('/bookings/:bookingId/workspace'");
+  assert.ok(dataStatusStart>=0&&dataAccessStart>dataStatusStart&&developerStatusStart>dataAccessStart);
+  assert.match(renterRoutes.slice(dataStatusStart,dataAccessStart),/slug: 'data'/);
+  assert.match(renterRoutes.slice(dataAccessStart,developerStatusStart),/slug: 'data'/);
+});
+
+test('retry is not scoped to a single workspace slug, and re-enqueues using the session\'s own slug',async()=>{
+  const renterRoutes=await readFile(path.join(sourceRoot,'workspace-renter-routes.ts'),'utf8');
+  const start=renterRoutes.indexOf("app.post('/bookings/:bookingId/workspace/retry'");
+  const end=renterRoutes.indexOf("app.post('/bookings/:bookingId/workspace/data'",start);
+  assert.ok(start>=0&&end>start);
+  const body=renterRoutes.slice(start,end);
+  assert.match(body,/slug:\{in:\['developer','data'\]\}/);
+  assert.match(body,/workspaceSlug=row\.machineWorkspace\.workspace\.slug/);
+  assert.doesNotMatch(body,/workspaceSlug:'developer'/);
+});
+
+test('the workspace-gateway route filters and the executable-slug gate all agree on which slugs run through the persistent gateway',async()=>{
+  const gateway=await readFile(path.join(sourceRoot,'workspace-gateway.ts'),'utf8');
+  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data'\]/);
+  const matches=gateway.match(/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/g)??[];
+  assert.equal(matches.length,5,'all five agent-facing gateway routes (activate, desired, data-plane-host, register, usage) must use the shared slug list');
+  const { executableWorkspaceSlugs }=await import('../src/machine-workspace-catalog.js');
+  assert.ok(executableWorkspaceSlugs.includes('data'));
+  assert.ok(executableWorkspaceSlugs.includes('developer'));
+  // 'compute' is executable but never runs through this gateway (one-shot batch
+  // job, not a persistent browser session) - the two lists are related, not equal.
+  assert.ok(executableWorkspaceSlugs.includes('compute'));
 });

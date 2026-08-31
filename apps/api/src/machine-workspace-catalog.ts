@@ -3,7 +3,13 @@ import { MachineWorkspaceState, WorkspaceRelease, type PrismaClient } from '@pri
 import { analyzeWorkspace, type MachineCapabilities } from './workspace-compatibility.js';
 import { workspaceManifest, workspaceManifests, type WorkspaceManifest } from './workspace-manifests.js';
 
-export const executableWorkspaceSlugs = ['compute', 'developer'] as const;
+// 'data' joined this list once a real runtime existed behind it: agent-side
+// container launch (workspace_gateway.py, official quay.io/jupyter image),
+// API gateway wiring (workspace-gateway.ts, rental-resource-authority.ts) and
+// renter routes (workspace-renter-routes.ts) - see docs/SESSION_RESUME.md for
+// the verification evidence. Never add a slug here on the strength of its
+// manifest/catalogue entry alone.
+export const executableWorkspaceSlugs = ['compute', 'developer', 'data'] as const;
 export type ExecutableWorkspaceSlug = typeof executableWorkspaceSlugs[number];
 
 export function isExecutableWorkspaceSlug(value: string): value is ExecutableWorkspaceSlug {
@@ -31,6 +37,27 @@ export function compatibleWorkspaceChoices(machine: MachineCapabilities) {
         compatible: compatibility.state === 'READY' || compatibility.state === 'LIMITED',
       };
     });
+}
+
+export function allWorkspaceCompatibility(machine: MachineCapabilities) {
+  // Unlike compatibleWorkspaceChoices (booking-availability, deliberately
+  // restricted to 'compute' - see the comment above), this is the full
+  // thirteen-workspace catalogue view: every manifest gets a real,
+  // machine-specific compatibility verdict from the same analyzeWorkspace
+  // engine, whether or not that workspace can actually be booked yet. A
+  // workspace is only ever `bookable` when it is both compatible AND in
+  // executableWorkspaceSlugs - a catalogue card is never proof that a
+  // runtime exists to back it.
+  return workspaceManifests.map((manifest) => {
+    const compatibility = analyzeWorkspace(machine, manifest);
+    const compatible = compatibility.state === 'READY' || compatibility.state === 'LIMITED';
+    return {
+      ...manifest,
+      compatibility,
+      compatible,
+      bookable: compatible && isExecutableWorkspaceSlug(manifest.slug),
+    };
+  });
 }
 
 export async function ensureCompatibleMachineWorkspace(

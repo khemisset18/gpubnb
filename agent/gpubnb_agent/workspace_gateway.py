@@ -30,11 +30,19 @@ import websocket
 from .client import ApiClient, agent_request
 from .host_tunnel import HostTunnelSupervisor
 from .mining_guard import ProcessInspector, WindowsProcessInspector, miner_install_root, stop_all_miners_and_verify
-from .runner import DEVELOPER_HOME_TMPFS, gpu_passthrough_flags
+from .runner import DATA_HOME_TMPFS, DEVELOPER_HOME_TMPFS, gpu_passthrough_flags
 from .storage import load_config, load_key
 from .runtime_images import workspace_image
 
 PINNED_DEVELOPER_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpubnb-developer@sha256:[a-f0-9]{64}$")
+# Official upstream image, not a GPUbnb-built one - see runtime_images.DEFAULT_DATA_IMAGE.
+PINNED_DATA_IMAGE = re.compile(r"^quay\.io/jupyter/datascience-notebook@sha256:[a-f0-9]{64}$")
+# Every workspace surface this gateway runs listens on this port inside its
+# container; the loopback proxy (workspaces/developer/loopback-proxy.js, reused
+# unmodified for every slug) forwards to exactly this port, so a new workspace
+# surface must be configured to bind here rather than its tool's own default.
+WORKSPACE_ENTRY_PORT = 3000
+GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data"})
 CONTAINER_PREFIX = "gpubnb-dev-"
 PROXY_PREFIX = "gpubnb-dev-proxy-"
 VOLUME_PREFIX = "gpubnb-workspace-"
@@ -61,9 +69,18 @@ def _real_docker(args: list[str], timeout: int = 30, check: bool = True) -> "sub
 
 
 def _real_health_check(port: int) -> bool:
+    # A 4xx here (e.g. code-server or Jupyter's Tornado router 404ing an
+    # unknown /healthz path) means the app is genuinely up and answering HTTP
+    # requests - urlopen() raises HTTPError for any non-2xx/3xx status instead
+    # of returning it, so without this except branch the "200 <= status < 500
+    # counts as healthy" contract below silently never fired for any real 4xx
+    # response. Confirmed live: Jupyter's real 404 on /healthz was being
+    # treated as connection failure and looped until developer_workspace_health_timeout.
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=2) as response:
             return 200 <= response.status < 500
+    except urllib.error.HTTPError as exc:
+        return 200 <= exc.code < 500
     except Exception:
         return False
 
@@ -157,17 +174,26 @@ class GatewaySupervisor:
             self._docker(["network", "create", GATEWAY_NETWORK_NAME])
 
     def _developer_image(self) -> str:
-        image = workspace_image(self.config, "developer")
-        if not PINNED_DEVELOPER_IMAGE.fullmatch(image):
-            raise RuntimeError("developer_workspace_image_must_be_official_and_digest_pinned")
-        return image
+        return self._workspace_image("developer")
+
+    def _workspace_image(self, workspace_slug: str) -> str:
+        image = workspace_image(self.config, workspace_slug)
+        if workspace_slug == "developer":
+            if not PINNED_DEVELOPER_IMAGE.fullmatch(image):
+                raise RuntimeError("developer_workspace_image_must_be_official_and_digest_pinned")
+            return image
+        if workspace_slug == "data":
+            if not PINNED_DATA_IMAGE.fullmatch(image):
+                raise RuntimeError("data_workspace_image_must_be_official_and_digest_pinned")
+            return image
+        raise RuntimeError(f"unsupported_gateway_workspace_slug:{workspace_slug}")
 
     def _container_running(self, container: str) -> bool:
         inspect = self._docker(["inspect", "--format", "{{.State.Running}}", container], check=False)
         return inspect.returncode == 0 and inspect.stdout.strip() == "true"
 
     def _discover_port(self, container: str) -> int | None:
-        port_result = self._docker(["port", container, "3000/tcp"], check=False)
+        port_result = self._docker(["port", container, f"{WORKSPACE_ENTRY_PORT}/tcp"], check=False)
         if port_result.returncode != 0:
             return None
         match = re.search(r"(?:127\.0\.0\.1|\[::1\]|::1):(\d+)", port_result.stdout)
@@ -189,8 +215,30 @@ class GatewaySupervisor:
         return RuntimeError(f"developer_workspace_container_exited:{state_text}:logs={log_text}")
 
     def _launch_workspace_container(
-        self, container: str, volume: str, internal_network: str, image: str
+        self, container: str, volume: str, internal_network: str, image: str,
+        workspace_slug: str = "developer",
     ) -> None:
+        if workspace_slug == "data":
+            self._docker([
+                "run", "-d", "--name", container,
+                "--network", internal_network,
+                "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
+                "--pids-limit=512", "--memory=4g", "--cpus=2",
+                "--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
+                DATA_HOME_TMPFS,
+                # The official image bakes /home/jovyan/work in as jovyan:users
+                # already, so a fresh volume mounted here inherits that
+                # ownership on first use - confirmed live (no separate chown
+                # step needed, unlike a path Docker has to create from scratch).
+                "--mount", f"type=volume,source={volume},target=/home/jovyan/work",
+                image,
+                "start-notebook.py",
+                f"--ServerApp.ip=0.0.0.0", f"--ServerApp.port={WORKSPACE_ENTRY_PORT}",
+                "--ServerApp.token=", "--ServerApp.password=",
+                "--ServerApp.root_dir=/home/jovyan/work",
+                "--ServerApp.allow_remote_access=True",
+            ], timeout=START_TIMEOUT_SECONDS)
+            return
         self._docker([
             "run", "-d", "--name", container,
             "--network", internal_network,
@@ -201,12 +249,18 @@ class GatewaySupervisor:
             "--mount", f"type=volume,source={volume},target=/workspace",
             *gpu_passthrough_flags("compute,utility"),
             "--entrypoint", "code-server", image,
-            "--bind-addr", "0.0.0.0:3000", "--auth", "none", "/workspace",
+            "--bind-addr", f"0.0.0.0:{WORKSPACE_ENTRY_PORT}", "--auth", "none", "/workspace",
         ], timeout=START_TIMEOUT_SECONDS)
 
     def _launch_proxy_container(
         self, proxy: str, workspace: str, internal_network: str, image: str
     ) -> None:
+        # Always the Developer image, regardless of which workspace_slug is being
+        # served: loopback-proxy.js is a dumb TCP relay to WORKSPACE_ENTRY_PORT,
+        # not specific to code-server, and only the Developer image is a
+        # GPUbnb-built artifact known to carry it. Reusing it here means adding a
+        # new workspace surface never requires building/publishing a new image
+        # just to get this relay - see _start_runtime.
         self._docker([
             "run", "-d", "--name", proxy,
             "--network", GATEWAY_NETWORK_NAME,
@@ -229,8 +283,8 @@ class GatewaySupervisor:
             time.sleep(0.5)
         return False
 
-    def _start_runtime(self, session_id: str) -> Runtime:
-        image = self._developer_image()
+    def _start_runtime(self, session_id: str, workspace_slug: str = "developer") -> Runtime:
+        image = self._workspace_image(workspace_slug)
         if not self._stop_mining_and_verify():
             raise RuntimeError("workspace_start_blocked_mining_stop_unverified")
         container, volume = names_for_session(session_id)
@@ -238,13 +292,14 @@ class GatewaySupervisor:
         internal_network = network_name_for_session(session_id)
         self._ensure_networks(internal_network)
         self._docker(["volume", "create", volume])
-        self._launch_workspace_container(container, volume, internal_network, image)
+        self._launch_workspace_container(container, volume, internal_network, image, workspace_slug)
         if not self._container_running(container):
             error = self._container_exit_error(container)
             self._cleanup_names(container, volume)
             raise error
         try:
-            self._launch_proxy_container(proxy, container, internal_network, image)
+            # Always the Developer image for the proxy - see _launch_proxy_container.
+            self._launch_proxy_container(proxy, container, internal_network, self._developer_image())
         except Exception:
             self._cleanup_names(container, volume)
             raise
@@ -282,7 +337,7 @@ class GatewaySupervisor:
         self.runtimes[session_id] = runtime
         return runtime
 
-    def _adopt_or_start_runtime(self, session_id: str) -> Runtime:
+    def _adopt_or_start_runtime(self, session_id: str, workspace_slug: str = "developer") -> Runtime:
         container, volume = names_for_session(session_id)
         proxy = proxy_name_for_session(session_id)
         internal_network = network_name_for_session(session_id)
@@ -295,7 +350,7 @@ class GatewaySupervisor:
                 self.runtimes[session_id] = runtime
                 return runtime
         self._cleanup_names(container, volume)
-        return self._start_runtime(session_id)
+        return self._start_runtime(session_id, workspace_slug)
 
     def _cleanup_names(self, container: str, volume: str) -> bool:
         suffix = container[len(CONTAINER_PREFIX):]
@@ -484,6 +539,13 @@ class GatewaySupervisor:
         for session in sessions:
             session_id = str(session.get("id") or "")
             status = str(session.get("status") or "")
+            # Missing/unrecognized workspaceSlug defaults to "developer": every
+            # session this endpoint returned before workspaceSlug existed was a
+            # Developer one, and the API's /desired filter (workspace-gateway.ts)
+            # only ever returns slugs this gateway actually knows how to run.
+            workspace_slug = str(session.get("workspaceSlug") or "developer")
+            if workspace_slug not in GATEWAY_WORKSPACE_SLUGS:
+                workspace_slug = "developer"
             metadata = session.get("connectionMetadata") if isinstance(session.get("connectionMetadata"), dict) else {}
             if status in {"STOP_REQUESTED", "STOPPING"} or self._expired(session.get("expiresAt")):
                 cleaned = self._stop_runtime(session_id)
@@ -502,7 +564,7 @@ class GatewaySupervisor:
                 if time.monotonic() < self.start_retry_at.get(session_id, 0.0):
                     continue
                 try:
-                    existing = self._adopt_or_start_runtime(session_id)
+                    existing = self._adopt_or_start_runtime(session_id, workspace_slug)
                 except Exception:
                     failures = self.start_failures.get(session_id, 0) + 1
                     self.start_failures[session_id] = failures

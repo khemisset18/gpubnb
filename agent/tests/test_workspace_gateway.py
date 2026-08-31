@@ -5,8 +5,10 @@ scenarios in the accompanying PR description for what each test below proves.
 """
 from __future__ import annotations
 
+import io
 import subprocess
 import unittest
+import urllib.error
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import patch
@@ -17,6 +19,7 @@ from gpubnb_agent.workspace_gateway import (
     PROXY_PREFIX,
     VOLUME_PREFIX,
     GatewaySupervisor,
+    _real_health_check,
     names_for_session,
     network_name_for_session,
     proxy_name_for_session,
@@ -194,6 +197,39 @@ def make_supervisor(docker: FakeDocker, api: FakeApi, config: dict[str, Any] | N
     return supervisor
 
 
+class RealHealthCheckTests(unittest.TestCase):
+    """Regression coverage for a real bug caught by live Docker testing (not by
+    any prior unit test - every test above mocks health_check out entirely):
+    urlopen() raises HTTPError for any non-2xx/3xx response instead of
+    returning it, so a plain `response.status` check never actually saw a 4xx.
+    This only surfaced against a real Data Workspace container because
+    Jupyter's Tornado router genuinely 404s /healthz, unlike code-server."""
+
+    def test_a_real_4xx_still_counts_as_healthy(self) -> None:
+        error = urllib.error.HTTPError("http://127.0.0.1:1/healthz", 404, "Not Found", {}, io.BytesIO(b""))
+        with patch("urllib.request.urlopen", side_effect=error):
+            self.assertTrue(_real_health_check(1))
+
+    def test_a_real_5xx_is_not_healthy(self) -> None:
+        error = urllib.error.HTTPError("http://127.0.0.1:1/healthz", 500, "Internal Server Error", {}, io.BytesIO(b""))
+        with patch("urllib.request.urlopen", side_effect=error):
+            self.assertFalse(_real_health_check(1))
+
+    def test_a_connection_failure_is_not_healthy(self) -> None:
+        with patch("urllib.request.urlopen", side_effect=OSError("connection refused")):
+            self.assertFalse(_real_health_check(1))
+
+    def test_a_real_2xx_is_healthy(self) -> None:
+        class FakeResponse:
+            status = 200
+            def __enter__(self):
+                return self
+            def __exit__(self, *args: object) -> bool:
+                return False
+        with patch("urllib.request.urlopen", return_value=FakeResponse()):
+            self.assertTrue(_real_health_check(1))
+
+
 class StartNormalTests(unittest.TestCase):
     def test_start_normal_creates_container_and_registers(self) -> None:
         docker, api = FakeDocker(), FakeApi()
@@ -284,6 +320,83 @@ class SecurityTopologyTests(unittest.TestCase):
             ["network", "connect", internal, proxy],
             docker.calls,
         )
+
+
+DATA_IMAGE = "quay.io/jupyter/datascience-notebook@sha256:" + ("e" * 64)
+
+
+class DataWorkspaceLaunchTests(unittest.TestCase):
+    def _supervisor(self, docker: FakeDocker, api: FakeApi) -> GatewaySupervisor:
+        return make_supervisor(docker, api, {
+            "workspaceImages": {"developer": OFFICIAL_IMAGE, "data": DATA_IMAGE},
+        })
+
+    def test_data_workspace_container_runs_the_official_image_with_no_gpu(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-data-1", "data")
+
+        workspace = names_for_session("sess-data-1")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(DATA_IMAGE, run)
+        self.assertFalse(any(arg.startswith("--gpus") for arg in run))
+        self.assertIn("start-notebook.py", run)
+        self.assertIn("--ServerApp.port=3000", run)
+        self.assertIn("--mount", run)
+        mount_arg = run[run.index("--mount") + 1]
+        self.assertIn("target=/home/jovyan/work", mount_arg)
+
+    def test_data_workspace_proxy_still_uses_the_trusted_developer_image(self) -> None:
+        # loopback-proxy.js only ships in the Developer image - decoupling the
+        # proxy from the workspace image is what lets Data use an official,
+        # unmodified third-party image at all (see _launch_proxy_container).
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-data-1", "data")
+
+        proxy = proxy_name_for_session("sess-data-1")
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == proxy)
+        self.assertIn(OFFICIAL_IMAGE, run)
+        self.assertNotIn(DATA_IMAGE, run)
+
+    def test_reconcile_reads_workspace_slug_and_launches_the_right_image(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        api.sessions = [{"id": "sess-data-2", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}, "workspaceSlug": "data"}]
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._reconcile_sessions()
+
+        workspace = names_for_session("sess-data-2")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(DATA_IMAGE, run)
+
+    def test_missing_workspace_slug_still_defaults_to_developer(self) -> None:
+        # Backward compatibility: sessions from before workspaceSlug existed (or
+        # a server that hasn't rolled it out yet) must keep behaving exactly as
+        # they did before this field was introduced.
+        docker, api = FakeDocker(), FakeApi()
+        api.sessions = [{"id": "sess-legacy-1", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}}]
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._reconcile_sessions()
+
+        workspace = names_for_session("sess-legacy-1")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(OFFICIAL_IMAGE, run)
+        self.assertIn("code-server", run)
+
+    def test_unrecognized_workspace_slug_fails_closed_to_developer_rather_than_crash(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        api.sessions = [{"id": "sess-weird-1", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}, "workspaceSlug": "some-future-workspace-this-agent-does-not-know"}]
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._reconcile_sessions()
+
+        workspace = names_for_session("sess-weird-1")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(OFFICIAL_IMAGE, run)
 
 
 class ProxyCrashTests(unittest.TestCase):

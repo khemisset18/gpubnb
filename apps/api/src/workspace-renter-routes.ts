@@ -99,11 +99,17 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
   app.post('/bookings/:bookingId/workspace/retry', async (request, reply) => {
     const session=await requireSession(request,reply,redis); if(!session)return;
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
+    // Not scoped to a single slug: a booking can carry a Developer session, a
+    // Data session, or (Developer specifically) both alongside its Compute one -
+    // retry just needs to find whichever gateway-backed session on this booking
+    // is actually retryable right now, then re-enqueue WORKSPACE_PREPARE for
+    // that same workspace.
     const row=await db.workspaceSession.findFirst({
-      where:{bookingId,renterId:session.userId,status:{in:retryableSessions},machineWorkspace:{workspace:{slug:'developer'}},booking:{status:{in:activeBookings},endsAt:{gt:new Date()}}},
-      select:{id:true,machineId:true,machineWorkspaceId:true,booking:{select:{endsAt:true}}},
+      where:{bookingId,renterId:session.userId,status:{in:retryableSessions},machineWorkspace:{workspace:{slug:{in:['developer','data']}}},booking:{status:{in:activeBookings},endsAt:{gt:new Date()}}},
+      select:{id:true,machineId:true,machineWorkspaceId:true,booking:{select:{endsAt:true}},machineWorkspace:{select:{workspace:{select:{slug:true}}}}},
     });
     if(!row)return reply.code(409).send({error:'workspace_retry_not_available'});
+    const workspaceSlug=row.machineWorkspace.workspace.slug;
     const active=await db.job.findFirst({where:{bookingId,type:JobType.WORKSPACE_PREPARE,status:{notIn:terminalJobs}},select:{id:true}});
     if(active)return reply.code(409).send({error:'workspace_preparation_already_active',jobId:active.id});
     const retried=await db.$transaction(async tx=>{
@@ -112,10 +118,138 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         data:{status:WorkspaceSessionStatus.PREPARING,jobId:null,endedAt:null,terminationReason:null,readyAt:null,startedAt:null,connectionMetadata:{},preparationProgress:5,preparationStep:'RETRY_REQUESTED',preparationRequestedAt:new Date(),preparationStartedAt:null,preparationCompletedAt:null,preparationAttempts:{increment:1},expiresAt:row.booking.endsAt},
       });
       if(reset.count!==1)return null;
-      const job=await tx.job.create({data:{bookingId,renterId:session.userId,machineId:row.machineId,type:JobType.WORKSPACE_PREPARE,parameters:{workspaceSlug:'developer',timeoutSeconds:1200}}});
+      const job=await tx.job.create({data:{bookingId,renterId:session.userId,machineId:row.machineId,type:JobType.WORKSPACE_PREPARE,parameters:{workspaceSlug,timeoutSeconds:1200}}});
       return tx.workspaceSession.update({where:{id:row.id},data:{jobId:job.id,events:{create:{actorType:'RENTER',actorId:session.userId,action:'DEVELOPER_PREPARATION_RETRIED'}}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
     });
     return retried??reply.code(409).send({error:'workspace_retry_raced'});
+  });
+
+  app.post('/bookings/:bookingId/workspace/data', async (request, reply) => {
+    const session=await requireSession(request,reply,redis); if(!session)return;
+    const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
+    const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings}},include:{listing:{select:{machineId:true}}}});
+    if(!booking)return reply.code(409).send({error:'funded_booking_required'});
+    let machineWorkspace;
+    try { machineWorkspace=await ensureCompatibleMachineWorkspace(db,booking.listing.machineId,'data'); }
+    catch(error){return reply.code(409).send({error:error instanceof Error?error.message:'data_workspace_incompatible'});}
+    const existing=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true}});
+    if(existing)return existing;
+    try{
+      return await db.$transaction(async tx=>{
+        const created=await tx.workspaceSession.create({data:{
+          bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
+          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',
+          resourceLimits:{maxRamMiB:4096,maxCpuCores:2,storageQuotaMiB:10240,networkAccess:'RESTRICTED',autoStopMinutes:60},
+          connectionType:'GPUBNB_GATEWAY',preparationProgress:5,preparationStep:'DATA_REQUESTED',
+          preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,
+          events:{create:{actorType:'RENTER',actorId:session.userId,action:'DATA_PREPARATION_REQUESTED'}},
+        }});
+        // Larger requested budget than Developer's default: the official Jupyter
+        // data-science image is several GB (see runtime_images.DEFAULT_DATA_IMAGE),
+        // capped server-side by prepare_workspace's own 1800s ceiling regardless.
+        const job=await tx.job.create({data:{bookingId,renterId:session.userId,machineId:booking.listing.machineId,type:JobType.WORKSPACE_PREPARE,parameters:{workspaceSlug:'data',timeoutSeconds:1800}}});
+        return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
+      });
+    }catch(error){
+      const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
+      if(raced)return raced;
+      throw error;
+    }
+  });
+
+  app.get('/bookings/:bookingId/workspace/data/status', async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
+    // Mirrors GET /bookings/:bookingId/workspace below, scoped to the Data
+    // surface instead of Developer - kept as a parallel route (not a shared
+    // :slug param) so neither surface's locked behavior can regress the other.
+    const row = await db.workspaceSession.findFirst({
+      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'data' } } },
+      select: {
+        id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
+        preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
+        preparationCompletedAt: true, endedAt: true, updatedAt: true,
+        connectionType: true, connectionMetadata: true, readyAt: true, startedAt: true,
+        job: { select: { status: true, errorCode: true, createdAt: true, updatedAt: true, startedAt: true, finishedAt: true } },
+        machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
+        booking: { select: { id: true, status: true, startsAt: true, endsAt: true } },
+        machineWorkspace: { select: { workspace: { select: { slug: true, name: true } } } },
+      },
+    });
+    if (!row) return reply.code(404).send({ error: 'workspace_session_not_found' });
+    const policy = evaluateWorkspaceAccess({
+      authenticatedUserId: session.userId,
+      renterId: session.userId,
+      bookingStatus: row.booking.status,
+      sessionStatus: row.status,
+      expiresAt: row.expiresAt,
+      machineConnectivity: row.machine.connectivity,
+      machineOperational: row.machine.operational,
+      moderationStatus: row.machine.moderationStatus,
+      lastHeartbeatAt: row.machine.lastHeartbeatAt,
+      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+    });
+    const connection = safeConnection(row.connectionMetadata);
+    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
+    const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
+    const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
+    return {
+      sessionId: row.id,
+      status: row.status,
+      workspace: row.machineWorkspace.workspace,
+      gpu: { model: row.machine.gpuModel, vramMiB: row.machine.vramMiB },
+      startsAt: row.booking.startsAt,
+      endsAt: row.booking.endsAt,
+      expiresAt: row.expiresAt,
+      preparation: {
+        progress: row.preparationProgress,
+        step: row.preparationStep,
+        phase,
+        attempts: row.preparationAttempts,
+        elapsedSeconds: Math.max(0,Math.round((preparationEnd.getTime()-preparationStart.getTime())/1000)),
+        updatedAt: row.job?.updatedAt ?? row.updatedAt,
+        jobStatus: row.job?.status ?? null,
+        errorCode: row.job?.errorCode ?? null,
+      },
+      retryable: activeBookings.includes(row.booking.status) && retryableSessions.includes(row.status),
+      canOpen: policy.allowed && connection.ready,
+      blockedReason: !policy.allowed ? policy.code : connection.ready ? null : 'GATEWAY_NOT_READY',
+    };
+  });
+
+  app.post('/bookings/:bookingId/workspace/data/access', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
+    const row = await db.workspaceSession.findFirst({
+      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'data' } } },
+      select: {
+        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true,
+        machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
+        booking: { select: { status: true } },
+      },
+    });
+    if (!row) return reply.code(404).send({ error: 'workspace_session_not_found' });
+    const policy = evaluateWorkspaceAccess({
+      authenticatedUserId: session.userId,
+      renterId: row.renterId,
+      bookingStatus: row.booking.status,
+      sessionStatus: row.status,
+      expiresAt: row.expiresAt,
+      machineConnectivity: row.machine.connectivity,
+      machineOperational: row.machine.operational,
+      moderationStatus: row.machine.moderationStatus,
+      lastHeartbeatAt: row.machine.lastHeartbeatAt,
+      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+    });
+    if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
+    const connection = safeConnection(row.connectionMetadata);
+    if (!connection.ready || !connection.gatewayPath) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
+    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
+    return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
 
   app.get('/bookings/:bookingId/workspace', async (request, reply) => {

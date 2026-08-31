@@ -46,6 +46,31 @@ class WorkspaceGatewayV5Tests(unittest.TestCase):
         self.assertNotIn("GPU-bbbbbbbb", " ".join(command))
         self.assertNotIn("device=0", " ".join(command))
 
+    def test_data_workspace_never_attaches_gpus_even_with_an_active_resource_spec(self) -> None:
+        # A Data session's booking still reserves a real GPU for exclusivity, so
+        # _resource_start_context can be non-empty here too - but the container
+        # itself must never receive --gpus, unlike Developer's.
+        supervisor = GatewaySupervisor.__new__(GatewaySupervisor)
+        supervisor._resource_start_context = [spec("resource_00000001", "GPU-aaaaaaaa")]
+        calls: list[list[str]] = []
+
+        def docker(args: list[str], timeout: int = 30, check: bool = True):
+            calls.append(list(args))
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        supervisor._docker = docker  # type: ignore[method-assign]
+        supervisor._launch_workspace_container(
+            "gpubnb-workspace-test",
+            "gpubnb-volume-test",
+            "gpubnb-internal-test",
+            "quay.io/jupyter/datascience-notebook@sha256:" + "f" * 64,
+            "data",
+        )
+
+        command = calls[-1]
+        self.assertNotIn("--gpus", command)
+        self.assertIn("start-notebook.py", command)
+
     def test_container_adoption_requires_exact_device_request_set(self) -> None:
         supervisor = GatewaySupervisor.__new__(GatewaySupervisor)
 

@@ -22,7 +22,7 @@ import {
   getPublicExactGpuListing,
   listPublicExactGpuListings,
 } from './rental-public-listings.js';
-import { compatibleWorkspaceChoices } from './machine-workspace-catalog.js';
+import { allWorkspaceCompatibility, compatibleWorkspaceChoices } from './machine-workspace-catalog.js';
 
 const listingInput = z.object({
   machineId: z.string().cuid(),
@@ -118,6 +118,27 @@ export function registerRentalMarketplaceRoutes(
     return {
       ...listing,
       workspaces: compatibleWorkspaceChoices(listing.machine),
+    };
+  });
+
+  // Full thirteen-workspace catalogue for this specific machine: every
+  // manifest gets a real compatibility verdict (READY/LIMITED/INSTALL_REQUIRED/
+  // INCOMPATIBLE) plus whether it can actually be booked yet. This is the
+  // "Choisissez votre espace de travail" browsing view; booking itself still
+  // goes through the /rental/listings/:listingId/workspaces + workspace-sessions
+  // path above, which stays restricted to executableWorkspaceSlugs.
+  app.get('/rental/listings/:listingId/workspace-catalogue', async (request, reply) => {
+    const { listingId } = z.object({ listingId: z.string().cuid() }).parse(request.params);
+    const listing = await getPublicExactGpuListing(
+      db,
+      listingId,
+      new Date(),
+      config.HEARTBEAT_OFFLINE_SECONDS,
+    );
+    if (!listing) return reply.code(404).send({ error: 'listing_unavailable' });
+    return {
+      ...listing,
+      workspaces: allWorkspaceCompatibility(listing.machine),
     };
   });
 

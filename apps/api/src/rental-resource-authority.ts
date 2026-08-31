@@ -270,14 +270,17 @@ export async function buildRentalResourceAuthority(
     where: {
       machineId,
       status: { in: LIVE_SESSION_STATUSES },
-      // Every currently BETA-executable workspace routes GPU access through this
-      // authority: Developer (workspace-gateway v5) and Compute/GPU_PROOF (the
-      // active private-beta product path). This used to be hardcoded to
-      // 'developer' only, which meant `/agent/mining/:machineId/rental-authority`
-      // could never resolve a Compute session and always answered
+      // Every executable workspace routes exclusivity/preemption through this
+      // authority, even Data (which never attaches --gpus to its container -
+      // see workspace_gateway.py's slug-conditional launch): every booking on
+      // this marketplace still reserves a specific accelerator for its
+      // duration, and only this authority tracks that lease/fencing state.
+      // This used to be hardcoded to 'developer' only, which meant
+      // `/agent/mining/:machineId/rental-authority` could never resolve a
+      // Compute session and always answered
       // rental_resource_authority_missing_for_session for the one path renters
       // actually use.
-      machineWorkspace: { workspace: { slug: { in: ['developer', 'compute'] } } },
+      machineWorkspace: { workspace: { slug: { in: ['developer', 'compute', 'data'] } } },
     },
     select: {
       id: true,

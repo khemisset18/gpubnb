@@ -79,11 +79,17 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
         return values
 
     def _launch_workspace_container(
-        self, container: str, volume: str, internal_network: str, image: str
+        self, container: str, volume: str, internal_network: str, image: str,
+        workspace_slug: str = "developer",
     ) -> None:
         specs = self._resource_start_context
-        if specs is None:
-            return super()._launch_workspace_container(container, volume, internal_network, image)
+        # Data Workspace never attaches --gpus, even when a GPU is nominally
+        # reserved for this session's exclusivity/billing (see
+        # rental-resource-authority.ts: every executable workspace routes
+        # through the same authority now, not just GPU-attaching ones) - only
+        # Developer's container actually needs the device passed through.
+        if specs is None or workspace_slug != "developer":
+            return super()._launch_workspace_container(container, volume, internal_network, image, workspace_slug)
         gpu_uuids = self._expected_gpu_uuids(specs)
         self._docker([
             "run", "-d", "--name", container,
@@ -96,7 +102,7 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
             "--gpus", f"device={','.join(gpu_uuids)}",
             "--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility",
             "--entrypoint", "code-server", image,
-            "--bind-addr", "0.0.0.0:3000", "--auth", "none", "/workspace",
+            "--bind-addr", f"0.0.0.0:{legacy.WORKSPACE_ENTRY_PORT}", "--auth", "none", "/workspace",
         ], timeout=legacy.START_TIMEOUT_SECONDS)
 
     def _container_gpu_uuids(self, container: str) -> set[str] | None:
@@ -124,22 +130,27 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
                 device_ids.update(str(value) for value in ids if isinstance(value, str))
         return device_ids
 
-    def _start_runtime(self, session_id: str) -> legacy.Runtime:
+    def _start_runtime(self, session_id: str, workspace_slug: str = "developer") -> legacy.Runtime:
         specs = self._session_specs(session_id)
         if specs is None:
-            return super()._start_runtime(session_id)
+            return super()._start_runtime(session_id, workspace_slug)
         for spec in specs:
             self.rental_preemption.preempt_for_rental(spec)
         self._resource_start_context = specs
         try:
-            runtime = super()._start_runtime(session_id)
+            runtime = super()._start_runtime(session_id, workspace_slug)
         finally:
             self._resource_start_context = None
         try:
-            actual = self._container_gpu_uuids(runtime.container_name)
-            expected = set(self._expected_gpu_uuids(specs))
-            if actual != expected:
-                raise RuntimeError("rental_workspace_gpu_binding_mismatch")
+            # The GPU-device-request binding proof only applies to Developer:
+            # Data's container deliberately carries no device requests at all
+            # (see _launch_workspace_container), so `actual` would never equal
+            # `expected` there even on a perfectly correct launch.
+            if workspace_slug == "developer":
+                actual = self._container_gpu_uuids(runtime.container_name)
+                expected = set(self._expected_gpu_uuids(specs))
+                if actual != expected:
+                    raise RuntimeError("rental_workspace_gpu_binding_mismatch")
             for spec in specs:
                 self.rental_preemption.mark_rental_active(spec)
         except Exception:
@@ -147,17 +158,20 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
             raise
         return runtime
 
-    def _adopt_or_start_runtime(self, session_id: str) -> legacy.Runtime:
+    def _adopt_or_start_runtime(self, session_id: str, workspace_slug: str = "developer") -> legacy.Runtime:
         specs = self._session_specs(session_id)
         if specs is None:
-            return super()._adopt_or_start_runtime(session_id)
+            return super()._adopt_or_start_runtime(session_id, workspace_slug)
         container, volume = legacy.names_for_session(session_id)
         proxy = legacy.proxy_name_for_session(session_id)
         if self._container_running(container) and self._container_running(proxy):
-            expected = set(self._expected_gpu_uuids(specs))
-            actual = self._container_gpu_uuids(container)
-            if actual == expected and self.rental_preemption.can_adopt_active(specs):
-                return super()._adopt_or_start_runtime(session_id)
+            adoptable = self.rental_preemption.can_adopt_active(specs)
+            if workspace_slug == "developer":
+                expected = set(self._expected_gpu_uuids(specs))
+                actual = self._container_gpu_uuids(container)
+                adoptable = adoptable and actual == expected
+            if adoptable:
+                return super()._adopt_or_start_runtime(session_id, workspace_slug)
         # Ambiguous adoption after an Agent crash is deliberately not trusted.
         # Remove stale workspace resources first. A persisted PREEMPTING claim is
         # not cleanup state: it is resumed under the same lease/fence by
@@ -167,7 +181,7 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
         claims = self.rental_preemption.claims_for_session(session_id)
         if claims and not any(claim.state == "PREEMPTING" for claim in claims):
             self.rental_preemption.release_after_cleanup(session_id)
-        return self._start_runtime(session_id)
+        return self._start_runtime(session_id, workspace_slug)
 
     def _release_server_leases(self, session_id: str, claims: list[Any]) -> None:
         if not claims:

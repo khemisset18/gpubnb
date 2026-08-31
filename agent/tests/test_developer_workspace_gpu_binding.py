@@ -29,6 +29,31 @@ class DeveloperWorkspaceHealthCommandTests(unittest.TestCase):
         self.assertEqual(command[-1], diagnostic_image)
 
 
+class DataWorkspaceHealthCommandTests(unittest.TestCase):
+    IMAGE = "quay.io/jupyter/datascience-notebook@sha256:" + ("d" * 64)
+
+    def test_data_workspace_never_requests_a_gpu(self):
+        # No vramMiB minimum on the Data manifest - the health command (and the
+        # real runtime launch it mirrors) must never attach --gpus.
+        command = workspace_health_command(self.IMAGE, "data")
+        self.assertFalse(any(part.startswith("--gpus") for part in command))
+        self.assertFalse(any("NVIDIA_DRIVER_CAPABILITIES" in part for part in command))
+
+    def test_data_workspace_verifies_the_real_python_data_stack_and_a_writable_home(self):
+        command = workspace_health_command(self.IMAGE, "data")
+        self.assertEqual(command[-2], "-c")
+        self.assertEqual(command[-3], self.IMAGE)
+        script = command[-1]
+        for module in ("jupyterlab", "notebook", "pandas", "numpy", "scipy", "sklearn"):
+            self.assertIn(module, script)
+        self.assertIn("/home/jovyan/work", script)
+
+    def test_data_workspace_no_gpu_uuid_required(self):
+        # Unlike Developer, omitting gpu_uuid must not raise for Data.
+        command = workspace_health_command(self.IMAGE, "data", None)
+        self.assertEqual(command[-3], self.IMAGE)
+
+
 class ResolveDeveloperWorkspaceGpuUuidTests(unittest.TestCase):
     def _authority(self, session_id, hardware_uuid, resource_id="resource_test01"):
         return {

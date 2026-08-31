@@ -22,6 +22,19 @@ _IMAGE_PULL_LOCK = threading.Lock()
 PROGRESS_INTERVAL_SECONDS = 5.0
 GPU_PROOF_IMAGE_PULL_TIMEOUT_SECONDS = 1200
 DEVELOPER_HOME_TMPFS = "--tmpfs=/home/coder:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700"
+# jupyter/docker-stacks images run as the non-root "jovyan" user (uid/gid 1000).
+DATA_HOME_TMPFS = "--tmpfs=/home/jovyan:rw,nosuid,size=512m,uid=1000,gid=100,mode=0700"
+# Verifies the interpreter the real workspace container runs under can actually
+# import the tools the manifest promises (Python/data-science stack). Kept as an
+# inline script (not a baked-in health binary like Developer's) because Data
+# Workspace uses the official upstream image directly - see runtime_images.py.
+DATA_WORKSPACE_HEALTHCHECK_SCRIPT = (
+    "import os; "
+    "import jupyterlab, notebook, pandas, numpy, scipy, sklearn; "
+    "os.makedirs('/home/jovyan/work', exist_ok=True); "
+    "open('/home/jovyan/work/.gpubnb-healthcheck', 'w').close(); "
+    "print('gpubnb_data_workspace_ok')"
+)
 
 
 def _gpu_vendor() -> str:
@@ -368,6 +381,22 @@ def workspace_health_command(image: str, workspace_slug: str, gpu_uuid: str | No
             f"--gpus=device={gpu_uuid}", "--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility",
         ]
         return [*base, "--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", image]
+    if workspace_slug == "data":
+        return [
+            "docker", "run", "--rm", "--network=none", "--read-only",
+            "--cap-drop=ALL", "--security-opt=no-new-privileges",
+            "--pids-limit=64", "--memory=1g", "--cpus=1",
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+            # The real runtime mounts a persistent volume at /home/jovyan/work
+            # (see workspace_gateway.py); the image bakes that directory in as
+            # jovyan:users already, so a plain tmpfs here (no separate mount
+            # needed for the nested path) exercises the same writability the
+            # manifest promises without needing a throwaway volume just for
+            # this check.
+            DATA_HOME_TMPFS,
+            "--entrypoint", "python3", image,
+            "-c", DATA_WORKSPACE_HEALTHCHECK_SCRIPT,
+        ]
     return diagnostic_command(image)
 
 
@@ -381,7 +410,10 @@ def prepare_workspace(
     if not PINNED_IMAGE.fullmatch(image):
         raise RuntimeError("diagnosticImage doit être une image Docker épinglée par digest sha256")
     started = time.monotonic()
-    timeout_limit = 1800 if workspace_slug == "developer" else 600
+    # Both real workspace images (code-server, and the multi-gigabyte Jupyter
+    # data-science stack) are far larger than the diagnostic/GPU-proof images
+    # this default otherwise guards; give both the same extended pull budget.
+    timeout_limit = 1800 if workspace_slug in {"developer", "data"} else 600
     timeout = max(30, min(timeout_limit, int(timeout_seconds)))
     cache_hit = _pull_image(image, timeout, progress_callback)
     health_finished = threading.Event()
