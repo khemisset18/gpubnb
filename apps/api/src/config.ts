@@ -6,6 +6,13 @@ const publicGatewayHost = z.string().min(1).max(253).regex(/^[A-Za-z0-9.-]+$/);
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(8787),
+  // Default preserved as 0.0.0.0 because the production deployment runs the
+  // API inside a container (Render) - Docker's own port publishing requires
+  // the process inside to bind all interfaces, not just loopback, regardless
+  // of what sits in front of it. Set to 127.0.0.1 for a local reverse-proxy
+  // setup (e.g. Caddy on the same host terminating TLS) where the API itself
+  // must never be reachable directly from the LAN.
+  API_BIND_HOST: z.string().min(1).default('0.0.0.0'),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().regex(/^rediss?:\/\//),
   SESSION_COOKIE_NAME: z.string().default('gpubnb_session'),

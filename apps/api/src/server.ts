@@ -246,4 +246,4 @@ let sweeping=false;
 const sweepIntervalId=setInterval(()=>{if(sweeping)return;sweeping=true;(async()=>{const offline=await sweepOfflineMachines(db,new Date(),config.HEARTBEAT_OFFLINE_SECONDS);const staleJobs=await sweepStaleJobs(db,new Date(),config.JOB_STALE_AFTER_SECONDS);if(offline.machinesOffline>0||staleJobs.jobsTimedOut>0||staleJobs.jobsFailed>0)app.log.info({offline:{...offline,cutoff:offline.cutoff.toISOString()},staleJobs:{...staleJobs,cutoff:staleJobs.cutoff.toISOString()}},'offline_sweep_completed');})().catch(err=>app.log.error({err},'offline_sweep_failed')).finally(()=>{sweeping=false});},Math.max(config.HEARTBEAT_OFFLINE_SECONDS,30)*1000);
 const shutdown=async(signal:string)=>{app.log.info({signal},'shutdown');clearInterval(reconcileIntervalId);clearInterval(sweepIntervalId);await app.close();await db.$disconnect();redis.disconnect();process.exit(0)};
 process.once('SIGTERM',()=>void shutdown('SIGTERM'));process.once('SIGINT',()=>void shutdown('SIGINT'));
-await app.listen({host:'0.0.0.0',port:config.PORT});
+await app.listen({host:config.API_BIND_HOST,port:config.PORT});
