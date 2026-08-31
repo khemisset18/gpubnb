@@ -1,10 +1,19 @@
 # Session Resume — read this first if you are a new Claude Code session
 
 **Purpose**: continuity note across sessions on this machine. Read top to
-bottom before doing anything else.
+bottom before doing anything else. For a clean, non-session-log reference
+on workspace status, see `docs/WORKSPACES_OVERVIEW.md` (13-workspace table,
+what's real, what's blocked and why) and
+`docs/WORKSPACE_RUNTIME_ARCHITECTURE.md` (how the runtime actually works).
+This document's own section 9 has the step-by-step Linux GPU host
+validation checklist, and section 10 has the full this-machine feasibility
+study.
 
-**Do not push anything until the user explicitly authorizes it.** Commits are
-authorized and have been made (see section 1); pushing is not.
+**Do not push anything until the user explicitly authorizes it each time.**
+This branch's work was reviewed, merged into `main`, and pushed to
+`origin/main` with the user's explicit authorization on 2026-08-31 — see
+the Git section of that session's final report. Treat that authorization as
+scoped to that push, not as standing/blanket consent for any future one.
 
 ---
 

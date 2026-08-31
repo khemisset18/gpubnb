@@ -21,8 +21,34 @@ Le frontend peut créer une réservation d'une heure, demander à l'API une tran
 - `apps/web` : interface web statique et bundle Solana local.
 - `apps/api` : API Fastify, Prisma, Redis et vérification on-chain.
 - `programs/gpu_escrow` : contrat Anchor SOL.
-- `agent` : agent de preuve GPU signé.
+- `agent` : agent de preuve GPU signé, et superviseur des sessions Workspace.
+- `workspaces/` : Dockerfiles et healthchecks de chaque Workspace.
 - `docs` : procédures de déploiement et limites de production.
+
+## Workspaces
+
+Au-delà de la location GPU brute, GPUbnb fournit des environnements de
+travail prêts à l'emploi ("Workspaces") : IDE distant, notebook IA, montage
+vidéo/audio accéléré, build Android, laboratoire de sécurité, etc. Sur les
+**13 Workspaces du catalogue, 9 sont réellement fonctionnels
+(REAL_WORKING)** — testés de bout en bout (réservation réelle → conteneur
+réel → accès via le Gateway → arrêt/cleanup vérifié) : **Compute, Developer,
+Data, AI, Video, Audio, API, Mobile, Security Lab**.
+
+Les **4 Workspaces à rendu de bureau GPU (Creator, Cloud Desktop, CAD,
+Gaming) sont honnêtement bloqués** : leur architecture, leurs images
+Docker et leur code de lancement sont réels et prêts, mais la machine de
+développement actuelle (Windows/WSL2) ne peut pas exposer de rendu GPU
+desktop réel (`/dev/dri`) — voir la distinction entre calcul CUDA et rendu
+GPU desktop ci-dessous. Ils ne sont **jamais** présentés comme réservables
+tant que ce n'est pas réellement validé sur un hôte Linux + GPU NVIDIA.
+
+Voir `docs/WORKSPACES_OVERVIEW.md` pour l'état détaillé des 13 Workspaces
+(tableau, ce qui a été testé, raison exacte du blocage), et
+`docs/WORKSPACE_RUNTIME_ARCHITECTURE.md` pour l'architecture technique
+(lancement, compatibilité matérielle, healthchecks, arrêt/cleanup).
+`docs/SESSION_RESUME.md` contient la checklist complète pour reprendre le
+développement des 4 Workspaces bloqués sur une vraie machine Linux GPU.
 
 ## GPUbnb Agent
 
