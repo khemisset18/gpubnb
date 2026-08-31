@@ -243,26 +243,40 @@ infrastructure - not guesses:
   Creator - not pursued; the real, honest reduced-scope MVP (FFmpeg DSP via
   Jupyter) was built instead (see section 2).
 
-## 4. Other workspaces — real audit, not yet touched
+## 4. Other workspaces — architecture prepared, still blocked on hardware
 
 | Workspace | Runtime needed | State |
 |---|---|---|
-| Cloud Desktop, Creator, CAD, Gaming | `CONTAINER` (Selkies-GStreamer, corrected from the originally-assumed `DESKTOP_VM`/`STREAMING_VM` - see workspace-runtime-profiles.ts) - blocked on this host by missing `/dev/dri` (section 3), not by networking (see section 8's WebSocket-transport correction). Real, live-tested candidate images and, for Gaming, a real Steam install/bootstrap - see section 8. |
+| Cloud Desktop, Creator, CAD, Gaming | `CONTAINER` (Selkies-GStreamer, corrected from the originally-assumed `DESKTOP_VM`/`STREAMING_VM` - see workspace-runtime-profiles.ts) - blocked on this host by missing `/dev/dri` (section 3), not by networking (see section 8's WebSocket-transport correction). All four now have real, built, digest-pinned, live-tested images sharing one common base and one shared agent-side launch profile - see section 8b. Deliberately NOT in `executableWorkspaceSlugs`/`GATEWAY_WORKSPACE_SLUGS` - see section 9 for the validation procedure that must pass before that changes. |
 
-## 5. Test status (all re-run and green as of the Security Lab Workspace changes)
+## 5. Test status (re-run as of this session's final "prepare the 4 blocked workspaces" pass)
 
-- `pytest agent/tests` → 337 passed, 2 skipped. (One run also showed
-  `test_long_health_check_keeps_reporting_progress` failing - a pre-existing,
-  purely timing-based test unrelated to any change this session, patched to
-  a 0.01s progress interval; confirmed flaky under load, not a regression:
-  passes in isolation and on every other full-suite run.)
-- `npm test` in `apps/api` → 489 tests, 479 passed, 0 failed, 10 skipped (need
-  a local Postgres/Redis this machine doesn't have running — environmental).
-- `cargo test --features desktop-runtime` → not re-checked this round since
-  nothing in host-desktop changed this session; last checked 106 passed, 1
-  pre-existing failure (see section 6).
-- `docker ps -a` / `docker volume ls` checked clean after all live testing —
-  no orphaned containers.
+- `pytest agent/tests` → **356 passed, 2 skipped**, 21 subtests passed, 0
+  failed. Includes the new/extended tests for Creator/Cloud
+  Desktop/CAD/Gaming's shared launch code (see section 8b). The 2 skips
+  are pre-existing and unrelated to this session's changes.
+- `npm test` in `apps/api` → **502 passed, 1 failed, 0 skipped** (503
+  total). The 1 failure (`GPU_PROOF-only booking (no compatible Developer
+  workspace) completes and releases the machine exactly as before`,
+  `ResourceAllocationError: resource_conflict` in
+  `test/gpu-proof-completion.test.ts`) is the **same accumulated-local-
+  fixture-data pattern already documented earlier this session** - this
+  session made zero changes to any `apps/api` TypeScript/Prisma source
+  file, and re-running that exact test file in isolation
+  (`npx tsx --test test/gpu-proof-completion.test.ts`) passes clean, 5/5
+  - confirming a leftover row from an earlier full-suite run against this
+  same long-lived local dev Postgres container, not a real regression.
+  Not reset this time (no fresh explicit user consent requested for a
+  third `prisma migrate reset --force` this session, and the API test
+  suite compatibility results for the four new workspace slugs - see
+  section 8a - already ran and passed within this same run).
+- `cargo test --features desktop-runtime` (host-desktop) → not re-run this
+  session (nothing in `host-desktop`/Rust changed); last checked 106
+  passed, 1 pre-existing failure (see section 6).
+- `docker ps -a` / `docker volume ls` checked clean after every live
+  container test this session (Cloud Desktop, Creator, CAD, Gaming, the
+  preflight script's own throwaway containers) - no orphaned containers
+  or volumes left behind.
 
 ## 6. Known pre-existing issue — do not "fix" by touching production state
 
@@ -279,21 +293,25 @@ Do not unlink/reconfigure the production agent to make this pass.
   it — see section 2's rigor bar for every entry in `executableWorkspaceSlugs`.
 - Compute/Developer/Data/AI/Video/Audio/API all deliberately used an
   official, already-published image, never a custom one. Mobile and
-  Security Lab are the two exceptions: custom GPUbnb images, built
+  Security Lab were the first two exceptions: custom GPUbnb images, built
   **locally** on this dev/test host only (`workspaces/mobile/Dockerfile`,
   `workspaces/security-lab/Dockerfile`), each per its own scoped
   authorization from the user (Mobile: "si les outils et dépendances
   nécessaires sont réellement disponibles"; Security Lab: an explicit
   `AskUserQuestion` decision on tool scope before any Dockerfile was
-  written). This is still **not** published to any registry (ghcr.io, no
-  credentials, not requested) - both are therefore only actually runnable
-  on a host machine that has run their exact `docker build` itself. Do not
-  push/publish any image to a registry without a separate, explicit
-  go-ahead, and do not build a NEW custom image for another workspace
-  without checking whether a scoped authorization already covers it, or
-  asking first - Security Lab's authorization in particular came with an
-  explicit product-scope decision (defensive-analysis-only, no offensive
-  tools, no Burp Suite) that must not be silently expanded later.
+  written). Cloud Desktop/Creator/CAD/Gaming's four images
+  (`workspaces/{cloud-desktop,creator,cad,gaming}/Dockerfile`) are the
+  same "local-only, never published" status, built per this session's own
+  explicit governing instruction (the "OBJECTIF FINAL DE CETTE SESSION"
+  message authorizing exactly this preparation work) - **but none of the
+  four is wired into a bookable slug list**, unlike Mobile/Security Lab,
+  which are. Do not push/publish any image to a registry without a
+  separate, explicit go-ahead, and do not build a NEW custom image for
+  another workspace without checking whether a scoped authorization
+  already covers it, or asking first - Security Lab's authorization in
+  particular came with an explicit product-scope decision
+  (defensive-analysis-only, no offensive tools, no Burp Suite) that must
+  not be silently expanded later.
 - Do not claim Creator/Cloud Desktop/CAD GPU rendering, a graphical Android
   emulator for Mobile (headless SDK/Gradle is real; the emulator specifically
   is not and is not offered), offensive pentesting capability for Security
@@ -311,9 +329,11 @@ Creator/Cloud Desktop/CAD/Gaming is REAL_WORKING or bookable** - none is in
 `executableWorkspaceSlugs` - and nothing here claims GPU rendering works on
 this host. What changed since the plan was first written: real, tested,
 honest **hardware-compatibility detection** now exists end to end for all
-four (see 8a below), a real Selkies-based image was live-tested (container/
-HTTP/Gateway-relay/gamepad/audio all confirmed, see 8b), and a real Steam
-feasibility test was performed for Gaming (see the Gaming section below).
+four (see 8a below), all four now have real, built, digest-pinned,
+live-tested Selkies-based images sharing one common base and one shared
+agent-side launch profile (container/HTTP/Gateway-relay/gamepad/audio all
+confirmed, see 8b), and a real Steam feasibility test was performed for
+Gaming (see the Gaming section below).
 **Corrected finding**: Selkies' default transport is plain WebSocket, not
 WebRTC, so - contrary to this plan's own earlier assumption - no new
 TURN/WebRTC infrastructure is needed for a first working version; this
@@ -366,52 +386,170 @@ session.
   fictional `desktop-gateway` to `selkies-gstreamer`.
 - **`scripts/preflight-linux-gpu-desktop.sh`**: a standalone, read-only
   preflight a future Linux host operator can run before even installing
-  the GPUbnb agent. Mirrors the same real checks as
-  `desktop_gpu_rendering_available()`, plus one further real test this
-  script alone performs: launches a real throwaway container with
-  `--gpus all -e NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute`
-  and checks whether `/dev/dri` is visible *inside* it - the closest
-  thing to a real GPU_PROOF-style check obtainable without a full desktop
-  image. Live-tested on this real host: correctly reports `FAIL` for the
-  Linux-kernel check, the `/dev/dri` check, and the in-container check,
-  `OK` for Docker/NVIDIA-driver/NVIDIA-Container-Toolkit (all genuinely
-  present here), overall verdict `NOT READY`, exit code 1 - exactly
-  matching this host's real, already-established status.
+  the GPUbnb agent - never installs, modifies, or configures anything on
+  the host itself (the one exception is a throwaway `--rm` test
+  container, always removed, no image ever kept). Checks, in order:
+  platform (real Linux kernel, not WSL2, Docker installed/reachable);
+  **1) CUDA compute capability** (NVIDIA driver present, NVIDIA Container
+  Toolkit registered, real VRAM via `nvidia-smi`); **2) GPU desktop
+  rendering capability** - the one this dev host lacks - real
+  `/dev/dri/render*` on the host, a throwaway container's own visibility
+  of `/dev/dri` via `--gpus all -e
+  NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute`, a real
+  OpenGL hardware-acceleration proof (installs `mesa-utils` in a
+  throwaway container, runs `glxinfo -B`, and explicitly checks the
+  *renderer string* excludes `llvmpipe`/`softpipe`/`swrast` - a
+  zero-exit-code-only check would false-positive on a silent CPU
+  software-rendering fallback), and a real NVENC hardware-encode check
+  (installs `ffmpeg`, runs a real `h264_nvenc` encode - warn-only, since
+  Selkies falls back to software encoding per its own docs, so this isn't
+  strictly required); resources (RAM/disk, warn-only). The script's own
+  header explicitly explains the CUDA-vs-GPU-desktop-rendering
+  distinction so an operator understands why a machine can pass one and
+  fail the other. **Live-tested end to end on this real host**: correctly
+  `FAIL`s the Linux-kernel check (this is a Windows/Git-Bash shell) and
+  all three GPU-desktop-rendering checks (no `/dev/dri` anywhere), `OK`s
+  Docker/NVIDIA-driver/NVIDIA-Container-Toolkit/VRAM-detection (all
+  genuinely present here - real GTX 1650, 4096 MiB) and, notably, `OK`s
+  the NVENC check (this card's real hardware encoder does work, even
+  though its GL/DRI desktop-rendering path does not - a second live,
+  concrete proof that CUDA/NVENC compute capability and GPU-desktop-
+  rendering capability are genuinely independent), `WARN`s on free disk
+  (below the recommended 40GB on this dev host), overall verdict `NOT
+  READY`, exit code 1 - exactly matching this host's real,
+  already-established status. Final verdict text (both the ready and
+  not-ready paths) explicitly lists what a passing run still would NOT
+  prove: the actual Selkies image running correctly with real `--gpus`
+  end to end, the exact minimal container-capability set (since
+  `--cap-drop=ALL`/`--read-only` are both confirmed not to work as
+  shipped), and, for Gaming specifically, real gamepad/audio round-trips
+  through a real browser session.
 
 ### 8b. What's still not real: the actual desktop runtime
 
-`workspaces/cloud-desktop/Dockerfile` builds `FROM linuxserver/webtop`
-(real, official, actively-maintained Selkies-GStreamer-based image, digest
-`sha256:49a08b1e871aa300829d206141dc932459c7db2866269120ad79ec9d959ccbed`,
-resolved via the Docker Hub API 2026-08-31) - see
-`workspaces/cloud-desktop/NOT_YET_WORKING.md` for the full detail. **Live
-end-to-end tested on this host, honestly scoped to what doesn't need a
-GPU**:
-- Real container start, real HTTP 200 with the real Selkies HTML client on
-  port 3000 - confirmed live that port 3000 is webtop's own documented
-  plain-HTTP reverse-proxy port, so this platform's `WORKSPACE_ENTRY_PORT=3000`
-  convention needs no remapping for this image.
-- **The real `loopback-proxy.js` relay** - the exact same script every
-  REAL_WORKING workspace's Gateway already depends on - correctly relays a
-  full request through to this image, using the exact same two-network
-  pattern (proxy container on the gateway network + published port,
-  separately `docker network connect`ed to the session's internal network)
-  `_launch_proxy_container()` already uses in production. Real 200, real
-  relayed HTML content, confirmed live.
-- Real gamepad support confirmed live in the container's own startup logs
-  (Selkies initializes 4 persistent gamepad instances) - relevant to the
-  Gaming Workspace plan below too, not just Creator/Cloud Desktop/CAD.
-- Real stop/cleanup confirmed (containers and networks all gone after).
-- **Confirmed NOT provable here**: `/dev/dri` is absent both on this host
-  and inside this exact image's own container (checked live) - there is
-  nothing to test GPU rendering against, and nothing here claims it works.
+**All four now have real, built, digest-pinned, live-tested images** (this
+was "Cloud Desktop only, others not started" as of the previous revision of
+this doc - now complete for all four). All four share one base image and
+one shared launch profile - the "runtime commun" the user asked for -
+rather than four separate implementations:
 
-Creator/CAD would layer real Blender/FreeCAD onto this same base (the
-identical low-risk pattern already proven for Mobile/Security Lab) but
-have no Dockerfile of their own yet - building a second and third
-untestable variant of the same open question (does GPU rendering work at
-all in this architecture) isn't worth doing before the first one is
-answered on real hardware.
+- **Shared base**: `linuxserver/webtop`, `ubuntu-xfce` tag (glibc-based,
+  not the default Alpine tag - Alpine has no Steam package at all,
+  confirmed live), digest
+  `sha256:1bd141d5d7aaf3e98e47b7d9665f50657d1628617b4ef47bc3bbd43d726fd77e`.
+- **`workspaces/cloud-desktop/Dockerfile`** - the bare base image, no
+  extra app layered on. Built as `gpubnb-cloud-desktop-workspace:local`,
+  real digest `sha256:c3d3cba63692d8bfb1ffd5510328460393c952beb2c649a5990a0807757e713b`.
+- **`workspaces/creator/Dockerfile`** - same base + real Blender (official
+  Ubuntu `universe` package, GPL). Built as `gpubnb-creator-workspace:local`,
+  real digest `sha256:b17566e9a7be21700cd993ae18f356efde55bf8278bb8694c9d0ba70f50bcacf`.
+  Live-tested: real HTTP 200, real `blender --version` → "Blender 5.0.1"
+  inside the running container, clean stop/cleanup.
+- **`workspaces/cad/Dockerfile`** - same base + real FreeCAD. **Not** from
+  Ubuntu's own official repo - the base image already has the well-known,
+  actively-maintained third-party `xtradeb` PPA configured, which is where
+  the installable FreeCAD 1.1.3 candidate comes from - a real, meaningfully
+  different trust level versus Blender's/Steam's own official-Ubuntu-repo
+  packages, documented, not hidden. Built as `gpubnb-cad-workspace:local`,
+  real digest `sha256:f6f4d0c72247cf1252d8f37edf84d136cea7e5bacbcf5b97254d7e51b2908c57`.
+  Live-tested: real HTTP 200, real `freecadcmd --version` (the headless
+  console binary - the GUI one needs a real display, avoided for this
+  smoke test) → "FreeCAD 1.1.3 Revision: 20260725", clean stop/cleanup.
+- **`workspaces/gaming/Dockerfile`** - same base + the real, official
+  Ubuntu multiverse `steam-installer` package (needs
+  `dpkg --add-architecture i386` first). Built as
+  `gpubnb-gaming-workspace:local`, real digest
+  `sha256:4b2dda2b810447164cdafffe7db9c7cf8d004f9dc64e0f14f32295b3aa2e86b2`.
+  Live-tested: real HTTP 200, `/usr/games/steam` present and executable
+  inside the running container, clean stop/cleanup. (A separate, earlier
+  manual test on the bare base image had already proven the real launcher
+  genuinely bootstraps - creates `~/.steam/debian-installation` - inside a
+  live running Xvfb display; not re-run against this derived image since
+  it changes nothing about that code path.)
+
+All four builds' digests are real, content-addressed, and confirmed live
+via `docker inspect --format='{{json .RepoDigests}}'` - not asserted. All
+are **local-only, never pushed to any registry** (same status as Mobile's
+and Security Lab's images) - only a host that runs the exact `docker
+build` can use them.
+
+**Real, live-confirmed, common to all four - the shared "runtime commun"
+security finding**: unlike every other workspace image in this codebase,
+this image tolerates neither the standard `--read-only` nor
+`--cap-drop=ALL` hardening:
+- `--read-only` fails because the image self-configures nginx, an SSL
+  cert, and copies Selkies' own web assets into several different paths
+  at container **startup**, not at build time - confirmed via repeated
+  real tests, each adding more tmpfs mounts, still failing with a new
+  missing-file/permission error each time.
+- `--cap-drop=ALL` fails because s6-overlay's init needs real Linux
+  capabilities to remap PUID/PGID at startup - confirmed via real
+  `chown: Operation not permitted` and `s6-applyuidgid: fatal: unable to
+  set supplementary group list: Operation not permitted` errors.
+- **Confirmed working instead** (live-tested cleanly: real HTTP 200, real
+  `/config` volume populated with genuine `Desktop`/`ssl` subdirectories,
+  clean stop/cleanup): `--security-opt=no-new-privileges --pids-limit
+  --memory --cpus --tmpfs=/tmp:rw,exec,nosuid`, a real writable volume at
+  `/config` (this image's own persistent-data convention, not
+  `/workspace`), `-e PUID=1000 -e PGID=1000`. This is a real, honest,
+  **reduced** hardening profile versus the other 9 workspaces - an open
+  question, not hidden: either further real-hardware capability-by-
+  capability testing could find a true minimal safe set, or a custom
+  Dockerfile that pre-bakes the nginx/SSL/web-asset self-configuration at
+  **build** time (so the container never needs to chown/write outside
+  `/config`/`/tmp` at runtime) could restore the standard hardening -
+  neither attempted this session (would be guessing without hardware to
+  verify against, and the user's current instruction is to stop inventing
+  workarounds for what genuinely needs the missing hardware).
+- Real gamepad support confirmed live in every variant's startup logs
+  (Selkies initializes 4 persistent "Microsoft X-Box 360 pad" instances).
+- Real stop/cleanup confirmed for every container tested (containers and
+  any anonymous volumes all gone after `docker rm -f`).
+- **Confirmed NOT provable here, for all four**: `/dev/dri` is absent both
+  on this host and inside every one of these images' own containers
+  (checked live) - there is nothing to test GPU rendering against, and
+  nothing here claims it works.
+
+**Shared agent-side launch code** (the "runtime commun" implementation,
+not just the shared base image) - real, unit-tested, but **not wired into
+any slug-gating list**, so it stays unreachable in production:
+- `agent/gpubnb_agent/runtime_images.py`: `DEFAULT_CLOUD_DESKTOP_IMAGE`,
+  `DEFAULT_CREATOR_IMAGE`, `DEFAULT_CAD_IMAGE`, `DEFAULT_GAMING_IMAGE` -
+  the four real digests above, each with a `workspace_image()` branch.
+- `agent/gpubnb_agent/workspace_gateway.py`: `PINNED_CLOUD_DESKTOP_IMAGE`/
+  `PINNED_CREATOR_IMAGE`/`PINNED_CAD_IMAGE`/`PINNED_GAMING_IMAGE` regexes
+  (same digest-pinning discipline as every other workspace);
+  `_workspace_image()` branches for all four; one shared, parameterized
+  `_launch_workspace_container()` branch for `workspace_slug in
+  ("cloud-desktop", "creator", "cad", "gaming")` using the confirmed
+  reduced-hardening profile above, plus
+  `--gpus=device=0 -e NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute`
+  (legacy fallback path - not compute-only like the other GPU-attached
+  workspaces, because Selkies needs the `graphics`/`display` driver
+  capabilities for OpenGL/EGL/DRI, not just CUDA compute).
+  `GPU_ATTACHED_WORKSPACE_SLUGS` extended to include all four (safe/inert:
+  this set is only consulted for slugs already in `GATEWAY_WORKSPACE_SLUGS`,
+  which these four are deliberately **not** in).
+- `agent/gpubnb_agent/workspace_gateway_v5.py`: a matching branch giving
+  these four slugs the exact-leased-GPU-UUID substitution (mirroring the
+  existing `ai`/`video` pattern) instead of falling through to Developer's
+  generic branch, once/if a rental-resource authority is active for a
+  session using one of them.
+- **The actual gate that keeps all four non-bookable in production**:
+  none of the four slugs is in `GATEWAY_WORKSPACE_SLUGS` (agent) or
+  `executableWorkspaceSlugs` (API, `apps/api/src/machine-workspace-catalog.ts`
+  - unchanged this session, still exactly the 9 real ones). A session
+  claiming one of these four slugs falls back to `"developer"` in
+  `_reconcile_sessions()`, the exact same path every other unrecognized
+  slug already takes - live-tested (`test_reconcile_does_not_yet_launch_
+  any_desktop_workspace_slug` in `test_workspace_gateway.py`).
+- New/extended tests, all passing: `test_runtime_images.py` (8 new cases -
+  default-digest format + explicit-pin-override for all four slugs),
+  `test_workspace_gateway.py` (`DesktopWorkspaceFamilyLaunchTests` - 3
+  cases covering all four slugs via `subTest`, proving the shared launch
+  args, the reduced hardening profile, the trusted-Developer-image proxy,
+  and the reconcile non-bookability gate), `test_workspace_gateway_v5.py`
+  (1 new case covering all four slugs' exact-leased-GPU-UUID override).
 
 ### Creator / Cloud Desktop / CAD (grouped: same underlying architecture)
 
@@ -578,35 +716,98 @@ worth an explicit decision before this goes live, not an unstated default.
   input round-trips correctly through a real browser session, confirm
   real audio streams correctly - before claiming Gaming works.
 
+## 9. Linux GPU host validation checklist (follow this, in order, once a real Linux GPU host is available)
+
+None of this has been run - there is no Linux GPU host this session. This
+is the concrete, ordered procedure for whoever (human or a future session)
+gets one.
+
+1. **Preflight the host itself.**
+   `bash scripts/preflight-linux-gpu-desktop.sh`. Must print `PREFLIGHT:
+   all real checks passed` and exit 0. If it fails, fix what it reports
+   (driver, Container Toolkit, `/dev/dri`, etc.) before continuing - do
+   not skip ahead.
+2. **Install the GPUbnb agent on that host** the normal way, link it to
+   the platform, and confirm the new `desktopGpuRenderingAvailable`
+   field actually reaches the API as `true` in its heartbeat/link payload
+   (check the `Machine` row, or the machine-detail admin view) - this is
+   the same real field `analyzeWorkspace()` already gates on (section 8a).
+3. **Build all four images on that host**: `docker build -t
+   gpubnb-cloud-desktop-workspace:local workspaces/cloud-desktop/`,
+   `.../creator/`, `.../cad/`, `.../gaming/`. Record each real digest
+   (`docker inspect --format='{{json .RepoDigests}}'`) - it will differ
+   from the ones recorded in section 8b (those are this Windows host's
+   own local build; a from-scratch Linux build is a legitimate, expected,
+   different digest, same as Mobile's/Security Lab's own precedent).
+4. **Run each image manually first, with real `--gpus`**, before touching
+   any GPUbnb code path - confirm with your own eyes, in a real browser:
+   ```
+   docker run -d --security-opt=no-new-privileges --pids-limit=1024 \
+     --memory=8g --cpus=4 --tmpfs=/tmp:rw,exec,nosuid,size=1024m \
+     -v gpubnb-manual-test:/config -e PUID=1000 -e PGID=1000 \
+     --gpus all -e NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute \
+     -p 3000:3000 gpubnb-cloud-desktop-workspace:local
+   ```
+   Open `http://<host>:3000` in a real browser. Confirm: the desktop
+   renders, and its own diagnostic (`glxinfo`/Selkies' own logs) shows a
+   real NVIDIA GL renderer, not `llvmpipe`/software. This is the one
+   thing nothing this session could test.
+5. **Confirm real interaction** in that same manual session: keyboard,
+   mouse, and (Gaming specifically) a real gamepad all work through the
+   browser; audio plays and, if relevant, a microphone round-trips.
+6. **Confirm real app-level function** inside that manual session:
+   Blender's viewport actually uses GPU rendering (Creator), FreeCAD's
+   3D view does too (CAD), Steam can actually log in and launch a
+   renter-owned game with playable performance (Gaming).
+7. **Only after 4-6 all pass**, wire it into GPUbnb for real: update
+   `runtime_images.py`'s four `DEFAULT_*_IMAGE` constants to the new
+   Linux-built digests; add `"creator", "cloud-desktop", "cad", "gaming"`
+   to `GATEWAY_WORKSPACE_SLUGS` in `workspace_gateway.py`; add the same
+   four slugs to `executableWorkspaceSlugs` in
+   `apps/api/src/machine-workspace-catalog.ts`. This is the one, single,
+   deliberate "flip" this whole session avoided - do it only once 4-6
+   are genuinely proven, not before.
+8. **Re-run the exact booking→launch→access→stop→cleanup cycle** through
+   the real platform (not a manual `docker run`) for at least one full
+   session per workspace, exactly like every one of the 9 REAL_WORKING
+   workspaces was proven in section 2: real booking, real `GET .../status`
+   polling to `READY`, real `POST .../access` opening a real browser
+   session through the real Gateway relay, real interactive use, real
+   stop, and a real `docker ps -a`/`docker volume ls`/`docker network ls`
+   check confirming full cleanup - the same rigor bar as every other
+   entry in `executableWorkspaceSlugs`, no exceptions.
+9. **Update the manifests' `release` field** (currently `UPCOMING` for
+   Creator/Cloud Desktop/CAD, `EXPERIMENTAL` for Gaming, in
+   `apps/api/src/workspace-manifests.ts`) once genuinely validated, and
+   update this document's section 2/8 to move these four out of "blocked"
+   and into the real-workspaces list, following the exact structure
+   already used for the 9 above.
+10. **For Gaming specifically, decide the content/policy question** this
+    session deliberately left open (which games/content are acceptable
+    to install in a rented session) before enabling bookings - not an
+    unstated default (see the Gaming subsection above).
+
 ## NEXT ACTION
 
-Compute, Developer, Data, AI, Video, Audio, API, Mobile, Security Lab are all
-real and done (9 of 13), all re-verified green this session (agent 344
-passed, apps/api 501+ passed, working tree clean, no regressions - re-run
-counts after Gaming's own changes are in section 5/the final report).
-Remaining 4 are still not REAL_WORKING and not bookable, but real progress
-was made on their common infrastructure this session (see section 8): real,
-tested hardware-compatibility detection end to end (agent + API + DB) for
-all four including Gaming, a real preflight script for a future host
-operator, a live-tested `linuxserver/webtop` base image proving the
-container/HTTP/Gateway-relay/gamepad/audio/stop/cleanup path works, and (for
-Gaming specifically) a real, live-tested Steam install/bootstrap on the
-Ubuntu-based Selkies image. **Corrected finding that removes what was
-thought to be the biggest remaining infrastructure gap**: Selkies' default
-transport is plain WebSocket, not WebRTC, so no new TURN/coturn component
-is needed for a first working version of any of the four - this platform's
-existing Gateway already relays real WebSocket traffic in production
-(Developer Workspace's own terminal). The one thing genuinely still not
-built or provable for any of the four: real GPU-accelerated rendering
-itself - no Linux GPU host is available this session. Next concrete step
-once a real Linux GPU host is available: run
-`scripts/preflight-linux-gpu-desktop.sh` on it, then follow section 8's
-validation plans (Creator/Cloud Desktop/CAD and Gaming share the same
-plan). Do not build the remaining GPU-rendering proof without the user's
-explicit go-ahead: it needs a real Linux GPU host, or a product decision
-(accept CPU-only rendering? accept Selkies-tier gaming latency instead of
-native Sunshine/Moonlight? what game/content policy for Gaming?) that isn't
-a call to make unilaterally.
+Compute, Developer, Data, AI, Video, Audio, API, Mobile, Security Lab remain
+the 9 real, done, REAL_WORKING workspaces (unchanged this session - see
+section 2). Creator, Cloud Desktop, CAD, Gaming remain the 4 blocked
+workspaces - **still correctly, honestly NOT REAL_WORKING and NOT bookable**
+(not in `GATEWAY_WORKSPACE_SLUGS` or `executableWorkspaceSlugs`) - but this
+session finished preparing their shared "runtime commun" architecture end to
+end (see section 8b): all four images are now real, built, digest-pinned,
+and live-tested (container start, real app binary/version, HTTP 200 through
+the real `loopback-proxy.js` relay, gamepad/audio subsystems present, clean
+stop/cleanup); the shared agent-side launch code (image selection, the
+reduced-hardening launch profile, the exact-leased-GPU-UUID override) is
+written, unit-tested, and deliberately left unreachable in production; the
+preflight script now also proves OpenGL hardware-acceleration and NVENC,
+live-tested end to end on this host. The one thing genuinely still not built
+or provable for any of the four: real GPU-accelerated rendering itself - no
+Linux GPU host is available this session. **This session's own explicit
+instruction going forward: stop here.** Do not invent further workarounds
+for the missing hardware. The next concrete step is section 9's checklist,
+run on a real Linux GPU host, by whoever has access to one next.
 
 Do not commit without re-running the full three test suites first. Do not
 push without explicit authorization.
