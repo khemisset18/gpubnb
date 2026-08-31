@@ -460,6 +460,24 @@ fn link_local_agent(code: String) -> Result<AgentStatus, String> {
     agent_bridge::link(&code)
 }
 
+/// Lists what currently holds a context on the machine's GPU, classified by
+/// the agent (system/GPUbnb/user application/unknown). Read-only: this never
+/// closes anything on its own.
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
+fn gpu_release_list() -> Result<serde_json::Value, String> {
+    agent_bridge::gpu_release_list()
+}
+
+/// Asks exactly one process the user explicitly picked to close itself. Never
+/// escalates to a forced termination - see gpu_process_release.py for the
+/// full protection and revalidation logic this delegates to.
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
+fn gpu_release_close(pid: u32) -> Result<serde_json::Value, String> {
+    agent_bridge::gpu_release_close(pid)
+}
+
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
 fn orchestration_status(
@@ -735,6 +753,8 @@ pub fn run() {
             host_status,
             local_agent_status,
             link_local_agent,
+            gpu_release_list,
+            gpu_release_close,
             orchestration_status,
             mining_runtime_status,
             mining_telemetry_status,

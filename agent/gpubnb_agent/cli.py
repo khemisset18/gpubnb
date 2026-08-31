@@ -902,6 +902,26 @@ def command_protections_verify(_: argparse.Namespace) -> int:
     return 0
 
 
+def command_gpu_processes_list(args: argparse.Namespace) -> int:
+    from .gpu_process_release import list_gpu_processes
+
+    hardware_uuid = args.gpu_uuid
+    if not hardware_uuid:
+        gpus = gpu_inventory()
+        if not gpus:
+            raise RuntimeError("no_gpu_detected")
+        hardware_uuid = gpus[0]["gpuUuid"]
+    print_json(list_gpu_processes(hardware_uuid))
+    return 0
+
+
+def command_gpu_processes_close(args: argparse.Namespace) -> int:
+    from .gpu_process_release import close_gpu_process
+
+    print_json(close_gpu_process(args.pid))
+    return 0
+
+
 def command_service(args: argparse.Namespace) -> int:
     from .windows_service import manage_service
 
@@ -956,6 +976,20 @@ def parser() -> argparse.ArgumentParser:
     protection_commands.add_parser(
         "verify", help="créer, inspecter et supprimer un conteneur de contrôle"
     ).set_defaults(handler=command_protections_verify)
+    gpu_processes = commands.add_parser(
+        "gpu-processes", help="détecter et libérer proprement le GPU avant une location"
+    )
+    gpu_process_commands = gpu_processes.add_subparsers(dest="gpu_process_command", required=True)
+    gpu_list_cmd = gpu_process_commands.add_parser(
+        "list", help="lister les processus qui utilisent actuellement le GPU"
+    )
+    gpu_list_cmd.add_argument("--gpu-uuid", help="UUID matériel ciblé (par défaut : premier GPU détecté)")
+    gpu_list_cmd.set_defaults(handler=command_gpu_processes_list)
+    gpu_close_cmd = gpu_process_commands.add_parser(
+        "close", help="demander à un seul processus utilisateur de se fermer proprement"
+    )
+    gpu_close_cmd.add_argument("--pid", type=int, required=True)
+    gpu_close_cmd.set_defaults(handler=command_gpu_processes_close)
     service = commands.add_parser("service", help="gérer le service système Windows")
     service.add_argument(
         "service_action", choices=["install", "remove", "start", "stop", "restart", "status"]

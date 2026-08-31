@@ -34,8 +34,35 @@
 .gpu-card .create-listing { width: 100%; }
 .gpu-card .create-listing:disabled { cursor: not-allowed; opacity: .45; }
 
+.gpu-release { margin-top: 22px; padding: 22px; border: 1px solid #283955; border-radius: 20px; background: #101827; }
+.gpu-release-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+.gpu-release-heading h2 { margin: 4px 0 0; }
+.gpu-release-status { padding: 12px 16px; margin-bottom: 14px; border-radius: 14px; font-weight: 800; }
+.gpu-release-status.ok { border: 1px solid rgba(63, 142, 99, .55); background: rgba(19, 54, 39, .55); color: #9cccb1; }
+.gpu-release-status.blocked { border: 1px solid rgba(210, 121, 104, .55); background: rgba(58, 27, 22, .55); color: #ffb09d; }
+.gpu-release-message { margin: 0 0 14px; color: #aeb9cc; }
+.gpu-release-message[data-tone="success"] { color: #83e2ae; }
+.gpu-release-message[data-tone="error"] { color: #ffac9a; }
+.gpu-process-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.gpu-process { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid #273249; border-radius: 15px; background: #0b1320; }
+.gpu-process-info { display: grid; gap: 2px; min-width: 0; }
+.gpu-process-info small { color: #8f9db4; }
+.gpu-process-badge { padding: 6px 10px; border: 1px solid #34415b; border-radius: 999px; background: #131b2b; color: #c9d5ed; font-size: .75rem; font-weight: 800; white-space: nowrap; }
+.gpu-process.user-application .gpu-process-badge { border-color: rgba(120, 156, 255, .55); color: #b7c6ff; }
+.gpu-process.system-protected .gpu-process-badge, .gpu-process.gpubnb-protected .gpu-process-badge { border-color: rgba(63, 142, 99, .55); color: #9cccb1; }
+.gpu-process.unknown .gpu-process-badge { border-color: rgba(210, 121, 104, .55); color: #ffb09d; }
+.gpu-process-locked { color: #8f9db4; font-size: .82rem; white-space: nowrap; }
+.gpu-process-confirm { display: grid; gap: 8px; text-align: right; }
+.gpu-process-confirm span { color: #ffb09d; font-size: .82rem; }
+.gpu-process-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.gpu-process-empty { padding: 14px; color: #8f9db4; text-align: center; }
+
 @media (max-width: 640px) {
   .pairing-controls { grid-template-columns: 1fr; }
   .inventory-heading { display: grid; }
   .gpu-grid { grid-template-columns: 1fr; }
+  .gpu-release-heading { display: grid; }
+  .gpu-process { grid-template-columns: 1fr; }
+  .gpu-process-confirm { text-align: left; }
+  .gpu-process-confirm-actions { justify-content: flex-start; }
 }

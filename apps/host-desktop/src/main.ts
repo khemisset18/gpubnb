@@ -10,6 +10,25 @@ type PairingConfiguration = { configured: boolean; browserUrl?: string | null; s
 type AgentStatus = { installed: boolean; linked: boolean; running: boolean; machineId?: string | null; detail: string };
 type GpuDevice = { index: number; uuid: string; model: string; driverVersion: string; vramMib: number };
 type NativeDiagnostic = { canHost: boolean; reason: string; gpus?: GpuDevice[] };
+type GpuProcessClassification = 'SYSTEM_PROTECTED' | 'GPUBNB_PROTECTED' | 'USER_APPLICATION' | 'UNKNOWN';
+type GpuProcessEntry = {
+  pid: number;
+  processName: string;
+  executablePath?: string | null;
+  usedGpuMemoryMib?: number | null;
+  classification: GpuProcessClassification;
+  blocksRental: boolean;
+  hasVisibleWindow: boolean;
+  closable: boolean;
+  reason?: string | null;
+};
+type GpuProcessListResult = {
+  hardwareUuid: string;
+  gpuReadyForRental: boolean;
+  blockingReasonIfAny: string | null;
+  processes: GpuProcessEntry[];
+};
+type GpuProcessCloseResult = { pid: number; result: string; waitedMs: number; stillRunning: boolean };
 type MiningRuntimeStatus = {
   runtime: {
     state: string;
@@ -109,6 +128,23 @@ let displayCurrency: DisplayCurrency = DISPLAY_CURRENCIES.includes(savedCurrency
   ? savedCurrency as DisplayCurrency
   : 'USD';
 let refreshTimer: number | undefined;
+
+type GpuReleaseUiState = {
+  loading: boolean;
+  result: GpuProcessListResult | null;
+  error: string | null;
+  confirmingPid: number | null;
+  closingPid: number | null;
+  lastCloseMessage: { tone: MessageTone; text: string } | null;
+};
+let gpuReleaseState: GpuReleaseUiState = {
+  loading: false,
+  result: null,
+  error: null,
+  confirmingPid: null,
+  closingPid: null,
+  lastCloseMessage: null,
+};
 
 const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (char) => ({
   '&': '&amp;',
@@ -260,6 +296,79 @@ const renderGpuInventory = (status: HostStatus): string => {
         <button class="primary create-listing" data-gpu-uuid="${escapeHtml(gpu.uuid)}" ${canCreateListing && valid ? '' : 'disabled'}>Nouvelle annonce</button>
       </article>`;
     }).join('')}</div></section>`;
+};
+
+const gpuClassificationLabel = (classification: GpuProcessClassification): string => ({
+  SYSTEM_PROTECTED: 'Protégé · système Windows',
+  GPUBNB_PROTECTED: 'Protégé · GPUbnb',
+  USER_APPLICATION: 'Application utilisateur',
+  UNKNOWN: 'Inconnu · protégé par prudence',
+})[classification];
+
+const gpuCloseResultMessage = (result: GpuProcessCloseResult): string => ({
+  closed_gracefully: `Le processus (PID ${result.pid}) s’est fermé proprement en ${result.waitedMs} ms.`,
+  did_not_close_in_time: `Le processus (PID ${result.pid}) n’a pas répondu à la demande de fermeture et continue de tourner. Aucune fermeture forcée n’a été effectuée.`,
+  refused_protected: `Ce processus (PID ${result.pid}) est protégé et ne peut pas être fermé depuis cet écran.`,
+  refused_pid_mismatch: `Ce processus (PID ${result.pid}) n’existe plus — la liste a changé entre-temps.`,
+  refused_no_graceful_method: `Ce processus (PID ${result.pid}) n’a pas de fenêtre visible : aucune fermeture propre n’est possible depuis cet écran.`,
+}[result.result] ?? `Résultat : ${result.result}`);
+
+const gpuReleaseErrorMessage = (error: unknown): string => {
+  const value = String(error);
+  if (value.includes('rental_gpu_nvidia_smi_unavailable')) return 'nvidia-smi est introuvable : impossible de lister les processus GPU.';
+  if (value.includes('rental_gpu_compute_process_query_failed')) return 'La requête GPU a échoué. Réessayez.';
+  if (value.includes('invalid_pid')) return 'Identifiant de processus invalide.';
+  if (value.includes('no_gpu_detected')) return 'Aucun GPU n’a été détecté sur cette machine.';
+  if (value.includes('agent_not_installed') || value.includes('agent_not_linked')) return 'Le service GPUbnb doit être installé et relié avant de vérifier le GPU.';
+  return `La vérification du GPU a échoué : ${value}`;
+};
+
+const renderGpuRelease = (status: HostStatus): string => {
+  if ((status.diagnostic.gpus ?? []).length === 0) return '';
+  const state = gpuReleaseState;
+  const header = `<div class="gpu-release-heading"><div><p class="eyebrow">Avant la mise en location</p><h2>Détecter et libérer le GPU</h2></div>
+    <button id="gpu-release-detect" class="secondary" type="button" ${state.loading ? 'disabled' : ''}>${state.loading ? 'Détection…' : state.result ? 'Redétecter' : 'Détecter les processus GPU'}</button></div>`;
+
+  if (state.loading && !state.result) {
+    return `<section class="gpu-release">${header}<p>Interrogation du GPU en cours…</p></section>`;
+  }
+  if (state.error) {
+    return `<section class="gpu-release">${header}<p class="runtime-error">${escapeHtml(state.error)}</p></section>`;
+  }
+  if (!state.result) {
+    return `<section class="gpu-release">${header}<p>Vérifiez quels programmes utilisent actuellement le GPU avant de mettre cette machine en location. Rien n’est fermé automatiquement.</p></section>`;
+  }
+
+  const { result } = state;
+  const blockers = result.processes.filter((process) => process.blocksRental);
+  const statusBanner = result.gpuReadyForRental
+    ? '<div class="gpu-release-status ok">✓ GPU prêt pour la location — aucun processus bloquant.</div>'
+    : `<div class="gpu-release-status blocked">⚠ GPU occupé — ${blockers.length} processus bloque${blockers.length > 1 ? 'nt' : ''} la location.</div>`;
+  const closeMessage = state.lastCloseMessage
+    ? `<p class="gpu-release-message" data-tone="${state.lastCloseMessage.tone}">${escapeHtml(state.lastCloseMessage.text)}</p>`
+    : '';
+
+  const rows = result.processes.map((process) => {
+    const isConfirming = state.confirmingPid === process.pid;
+    const isClosing = state.closingPid === process.pid;
+    let action: string;
+    if (process.closable) {
+      action = isConfirming
+        ? `<div class="gpu-process-confirm"><span>Fermer ${escapeHtml(process.processName)} (PID ${process.pid}) comme si vous cliquiez sur sa croix de fermeture ?</span>
+            <div class="gpu-process-confirm-actions"><button class="danger-button gpu-process-confirm-yes" type="button" data-pid="${process.pid}" ${isClosing ? 'disabled' : ''}>${isClosing ? 'Fermeture…' : 'Confirmer la fermeture'}</button>
+            <button class="secondary gpu-process-confirm-no" type="button" data-pid="${process.pid}" ${isClosing ? 'disabled' : ''}>Annuler</button></div></div>`
+        : `<button class="secondary gpu-process-close" type="button" data-pid="${process.pid}">Fermer proprement…</button>`;
+    } else {
+      action = `<span class="gpu-process-locked" title="${escapeHtml(process.reason ?? '')}">🔒 Non modifiable</span>`;
+    }
+    return `<li class="gpu-process ${process.classification.toLowerCase().replace(/_/g, '-')}">
+      <div class="gpu-process-info"><strong>${escapeHtml(process.processName)}</strong><small>PID ${process.pid}${typeof process.usedGpuMemoryMib === 'number' ? ` · ${process.usedGpuMemoryMib} Mio VRAM` : ''}</small></div>
+      <span class="gpu-process-badge">${escapeHtml(gpuClassificationLabel(process.classification))}</span>
+      <div class="gpu-process-action">${action}</div>
+    </li>`;
+  }).join('');
+
+  return `<section class="gpu-release">${header}${statusBanner}${closeMessage}<ul class="gpu-process-list">${rows || '<li class="gpu-process-empty">Aucun processus actif sur le GPU.</li>'}</ul></section>`;
 };
 
 const miningStateLabel = (state: string): string => ({
@@ -622,6 +731,53 @@ const bindActions = (status: HostStatus): void => {
   }));
 };
 
+const performGpuDetection = async (): Promise<void> => {
+  gpuReleaseState = { ...gpuReleaseState, loading: true, error: null };
+  await refresh(false);
+  try {
+    const result = await invoke<GpuProcessListResult>('gpu_release_list');
+    gpuReleaseState = { loading: false, result, error: null, confirmingPid: null, closingPid: null, lastCloseMessage: gpuReleaseState.lastCloseMessage };
+  } catch (error: unknown) {
+    gpuReleaseState = { ...gpuReleaseState, loading: false, result: null, error: gpuReleaseErrorMessage(error) };
+  }
+  await refresh(false);
+};
+
+const performGpuClose = async (pid: number): Promise<void> => {
+  gpuReleaseState = { ...gpuReleaseState, closingPid: pid };
+  await refresh(false);
+  try {
+    const result = await invoke<GpuProcessCloseResult>('gpu_release_close', { pid });
+    const tone: MessageTone = result.result === 'closed_gracefully' ? 'success' : 'error';
+    gpuReleaseState = { ...gpuReleaseState, closingPid: null, confirmingPid: null, lastCloseMessage: { tone, text: gpuCloseResultMessage(result) } };
+    // Nouvelle détection automatique après une fermeture, pour refléter l'état réel du GPU.
+    await performGpuDetection();
+    return;
+  } catch (error: unknown) {
+    gpuReleaseState = { ...gpuReleaseState, closingPid: null, lastCloseMessage: { tone: 'error', text: gpuReleaseErrorMessage(error) } };
+  }
+  await refresh(false);
+};
+
+const bindGpuRelease = (): void => {
+  document.querySelector<HTMLButtonElement>('#gpu-release-detect')?.addEventListener('click', () => void performGpuDetection());
+  document.querySelectorAll<HTMLButtonElement>('.gpu-process-close').forEach((button) => button.addEventListener('click', () => {
+    const pid = Number(button.dataset.pid);
+    if (!Number.isInteger(pid)) return;
+    gpuReleaseState = { ...gpuReleaseState, confirmingPid: pid, lastCloseMessage: null };
+    void refresh(false);
+  }));
+  document.querySelectorAll<HTMLButtonElement>('.gpu-process-confirm-no').forEach((button) => button.addEventListener('click', () => {
+    gpuReleaseState = { ...gpuReleaseState, confirmingPid: null };
+    void refresh(false);
+  }));
+  document.querySelectorAll<HTMLButtonElement>('.gpu-process-confirm-yes').forEach((button) => button.addEventListener('click', () => {
+    const pid = Number(button.dataset.pid);
+    if (!Number.isInteger(pid)) return;
+    void performGpuClose(pid);
+  }));
+};
+
 async function refresh(showLoading = true): Promise<void> {
   if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
   if (showLoading) {
@@ -657,7 +813,7 @@ async function refresh(showLoading = true): Promise<void> {
       <div class="status-stack"><span class="status-pill ${status.lifecycle}">${lifecycleLabel(status.lifecycle)}</span><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
       ${stopped ? '<section class="alert-card danger"><strong>Arrêt d’urgence actif</strong></section>' : ''}
       <section class="progress-card"><div class="progress-heading"><div><p class="eyebrow">État de préparation</p><h2>${escapeHtml(status.summary)}</h2></div><strong>${progress}%</strong></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div></section>
-      ${renderPairing(status)}${renderGpuInventory(status)}<p id="action-status" class="action-status" aria-live="polite"></p><ul class="checks">${renderChecks(status.checks)}</ul>
+      ${renderPairing(status)}${renderGpuInventory(status)}${renderGpuRelease(status)}<p id="action-status" class="action-status" aria-live="polite"></p><ul class="checks">${renderChecks(status.checks)}</ul>
       <div class="actions"><button id="refresh" class="secondary large">Revérifier</button><button id="publish" class="primary large" ${status.ready && !stopped && !online ? '' : 'disabled'}>${online ? 'Machine déjà en ligne' : 'Mettre en ligne'}</button></div></section>`;
     const miningPage = `<section class="content mining-page"><header class="topbar"><div><p class="eyebrow">Minage personnel</p><h1>Choisissez une cryptomonnaie.</h1><p class="lead">Le minage personnel est indépendant de la publication GPUbnb. Le rendement sera calculé à partir du test réel de cette machine.</p></div>
       <div class="status-stack"><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
@@ -674,6 +830,7 @@ async function refresh(showLoading = true): Promise<void> {
     if (activeView === 'host') {
       bindPairing();
       bindActions(status);
+      bindGpuRelease();
     } else {
       const coin = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin);
       if (coin?.profileId) bindMining(coin, mining, installation, miningConfiguration);

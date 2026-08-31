@@ -8,6 +8,12 @@ const STATUS_TIMEOUT: Duration = Duration::from_secs(10);
 const MUTATION_TIMEOUT: Duration = Duration::from_secs(30);
 const SETUP_TIMEOUT: Duration = Duration::from_secs(120);
 const PROTECTION_TIMEOUT: Duration = Duration::from_secs(120);
+// A single nvidia-smi query, generous enough for a loaded machine without
+// blocking the UI indefinitely if the GPU tooling itself is unresponsive.
+const GPU_PROCESS_LIST_TIMEOUT: Duration = Duration::from_secs(15);
+// Mirrors gpu_process_release.CLOSE_WAIT_TIMEOUT_SECONDS (5s) plus headroom for
+// the WMI lookups the agent performs before and after asking the window to close.
+const GPU_PROCESS_CLOSE_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_AGENT_OUTPUT_BYTES: usize = 64 * 1024;
 const MAX_CONFIG_BYTES: u64 = 64 * 1024;
 const MAX_MACHINE_ID_LENGTH: usize = 128;
@@ -150,6 +156,8 @@ fn command_timeout(arguments: &[&str]) -> Duration {
         ["setup", ..] => SETUP_TIMEOUT,
         ["protections", "verify", ..] => PROTECTION_TIMEOUT,
         ["link", ..] | ["start", ..] => MUTATION_TIMEOUT,
+        ["gpu-processes", "list", ..] => GPU_PROCESS_LIST_TIMEOUT,
+        ["gpu-processes", "close", ..] => GPU_PROCESS_CLOSE_TIMEOUT,
         _ => STATUS_TIMEOUT,
     }
 }
@@ -251,6 +259,40 @@ pub fn protections() -> ProtectionStatus {
         .filter(|output| output.status.success())
         .and_then(|output| serde_json::from_slice(&output.stdout).ok())
         .unwrap_or_default()
+}
+
+fn valid_pid(pid: u32) -> bool {
+    // Windows PIDs are always multiples of 4; the upper bound matches what a
+    // 32-bit PID field can hold. This is a shape check only - the agent itself
+    // re-resolves and re-classifies the PID before touching anything, so a
+    // valid-looking but stale or wrong PID still cannot cause a forced close.
+    pid > 0 && pid <= u32::MAX / 2
+}
+
+/// Lists what currently holds a context on the machine's GPU, classified as
+/// system/GPUbnb/user/unknown by the agent - never by this bridge, and never
+/// with any process closed as a side effect of listing.
+pub fn gpu_release_list() -> Result<serde_json::Value, String> {
+    let output = run_agent(&["gpu-processes", "list"]).map_err(str::to_owned)?;
+    if !output.status.success() {
+        return Err(classify_agent_failure(&output).into());
+    }
+    serde_json::from_slice(&output.stdout).map_err(|_| "agent_response_invalid".to_owned())
+}
+
+/// Asks exactly one process to close itself. This never forces termination:
+/// the agent only sends a WM_CLOSE-equivalent request and reports whether the
+/// process honoured it within a bounded wait - see gpu_process_release.py.
+pub fn gpu_release_close(pid: u32) -> Result<serde_json::Value, String> {
+    if !valid_pid(pid) {
+        return Err("invalid_pid".to_owned());
+    }
+    let pid_argument = pid.to_string();
+    let output = run_agent(&["gpu-processes", "close", "--pid", &pid_argument]).map_err(str::to_owned)?;
+    if !output.status.success() {
+        return Err(classify_agent_failure(&output).into());
+    }
+    serde_json::from_slice(&output.stdout).map_err(|_| "agent_response_invalid".to_owned())
 }
 
 pub fn setup() -> Result<AgentStatus, String> {
@@ -470,6 +512,111 @@ mod tests {
             command_timeout(&["protections", "verify"]),
             PROTECTION_TIMEOUT
         );
+        assert_eq!(
+            command_timeout(&["gpu-processes", "list"]),
+            GPU_PROCESS_LIST_TIMEOUT
+        );
+        assert_eq!(
+            command_timeout(&["gpu-processes", "close", "--pid", "1234"]),
+            GPU_PROCESS_CLOSE_TIMEOUT
+        );
+    }
+
+    #[test]
+    fn pid_shape_validation_rejects_zero_and_accepts_a_real_looking_pid() {
+        assert!(!valid_pid(0));
+        assert!(valid_pid(22684));
+        assert!(valid_pid(4));
+    }
+
+    #[test]
+    fn gpu_release_close_refuses_an_invalid_pid_before_ever_invoking_the_agent() {
+        // No GPUBNB_TEST_AGENT_EXECUTABLE is set for this test: if the invalid-pid
+        // check were bypassed, run_agent would fail to find a real "gpubnb-agent"
+        // on PATH and return agent_not_installed instead of invalid_pid, which
+        // would prove the shape check never ran.
+        let _guard = ENVIRONMENT_LOCK.lock().unwrap();
+        assert_eq!(gpu_release_close(0), Err("invalid_pid".to_owned()));
+    }
+
+    fn gpu_processes_fixture() -> (PathBuf, PathBuf) {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "gpubnb-gpu-processes-bridge-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        #[cfg(target_os = "windows")]
+        let executable = {
+            let path = directory.join("gpubnb-agent.cmd");
+            fs::write(
+                &path,
+                "@echo off\r\n\
+                 if \"%1\"==\"gpu-processes\" if \"%2\"==\"list\" (echo {\"hardwareUuid\":\"GPU-test\",\"gpuReadyForRental\":false,\"blockingReasonIfAny\":\"rental_gpu_compute_processes_present\",\"processes\":[{\"pid\":22684,\"processName\":\"EpicGamesLauncher.exe\",\"classification\":\"USER_APPLICATION\",\"blocksRental\":true,\"closable\":true}]}& exit /b 0)\r\n\
+                 if \"%1\"==\"gpu-processes\" if \"%2\"==\"close\" (echo {\"pid\":22684,\"result\":\"closed_gracefully\",\"waitedMs\":250,\"stillRunning\":false}& exit /b 0)\r\n\
+                 exit /b 9\r\n",
+            )
+            .unwrap();
+            path
+        };
+        #[cfg(not(target_os = "windows"))]
+        let executable = {
+            use std::os::unix::fs::PermissionsExt;
+            let path = directory.join("gpubnb-agent");
+            fs::write(
+                &path,
+                "#!/bin/sh\n\
+                 if [ \"$1\" = \"gpu-processes\" ] && [ \"$2\" = \"list\" ]; then\n\
+                 echo '{\"hardwareUuid\":\"GPU-test\",\"gpuReadyForRental\":false,\"blockingReasonIfAny\":\"rental_gpu_compute_processes_present\",\"processes\":[{\"pid\":22684,\"processName\":\"EpicGamesLauncher.exe\",\"classification\":\"USER_APPLICATION\",\"blocksRental\":true,\"closable\":true}]}'\n\
+                 exit 0\n\
+                 fi\n\
+                 if [ \"$1\" = \"gpu-processes\" ] && [ \"$2\" = \"close\" ]; then\n\
+                 echo '{\"pid\":22684,\"result\":\"closed_gracefully\",\"waitedMs\":250,\"stillRunning\":false}'\n\
+                 exit 0\n\
+                 fi\n\
+                 exit 9\n",
+            )
+            .unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+            path
+        };
+        (directory, executable)
+    }
+
+    #[test]
+    fn gpu_release_list_parses_the_agents_real_json_shape() {
+        let _guard = ENVIRONMENT_LOCK.lock().unwrap();
+        let (directory, executable) = gpu_processes_fixture();
+        std::env::set_var("GPUBNB_TEST_AGENT_EXECUTABLE", &executable);
+
+        let result = gpu_release_list();
+
+        std::env::remove_var("GPUBNB_TEST_AGENT_EXECUTABLE");
+        let _ = fs::remove_dir_all(directory);
+
+        let value = result.expect("gpu_release_list should succeed against a healthy agent");
+        assert_eq!(value["gpuReadyForRental"], false);
+        assert_eq!(value["processes"][0]["pid"], 22684);
+        assert_eq!(value["processes"][0]["classification"], "USER_APPLICATION");
+    }
+
+    #[test]
+    fn gpu_release_close_parses_the_agents_real_json_shape() {
+        let _guard = ENVIRONMENT_LOCK.lock().unwrap();
+        let (directory, executable) = gpu_processes_fixture();
+        std::env::set_var("GPUBNB_TEST_AGENT_EXECUTABLE", &executable);
+
+        let result = gpu_release_close(22684);
+
+        std::env::remove_var("GPUBNB_TEST_AGENT_EXECUTABLE");
+        let _ = fs::remove_dir_all(directory);
+
+        let value = result.expect("gpu_release_close should succeed against a healthy agent");
+        assert_eq!(value["result"], "closed_gracefully");
+        assert_eq!(value["stillRunning"], false);
     }
 
     #[test]
