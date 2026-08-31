@@ -787,6 +787,107 @@ gets one.
     to install in a rented session) before enabling bookings - not an
     unstated default (see the Gaming subsection above).
 
+## 10. This-machine GPU-desktop feasibility study (real, empirical, negative result)
+
+A later session asked, before accepting "need another Linux machine" as
+final: can *this* Windows 11 Home / WSL2 / Docker Desktop machine itself be
+turned into a real Linux GPU desktop host? Real investigation was done -
+no `/dev/dri` was fabricated, no software rendering was presented as real
+GPU rendering. **Conclusion: no, not with this exact OS/driver/hardware
+combination as it stands today - real, reproducible, kernel-level evidence
+below, not a guess.**
+
+**What was audited (all real, live commands on this exact host):**
+- OS: Windows 11 **Home** ("Famille"), build 10.0.26200.9168. Home edition
+  has **no Hyper-V** at all (`Get-WindowsOptionalFeature -FeatureName
+  Microsoft-Hyper-V-All` returns nothing - the feature doesn't exist on
+  this SKU, confirmed live) - only `VirtualMachinePlatform` (WSL2's own
+  lightweight hypervisor subset) is present.
+- GPU: real NVIDIA GeForce GTX 1650, 4096 MiB, driver 592.82 (WDDM),
+  CUDA 13.1 - confirmed via `nvidia-smi` on the Windows host, inside
+  native WSL2 Ubuntu, and inside a `--gpus` Docker container - all three
+  see the real card. A secondary Intel UHD Graphics iGPU also exists
+  (`Get-CimInstance Win32_VideoController`).
+- WSL2: version 2.7.12.0, kernel `6.18.33.2-microsoft-standard-WSL2`,
+  WSLg 1.0.73.2, Direct3D 1.611.1, DXCore 10.0.26100.1.
+- `/dev/dxg` (DXCore compute device): present in native WSL2 Ubuntu, in
+  Docker Desktop containers via `--gpus`, real, working (this is exactly
+  what already makes AI/Video/Developer/Mobile's CUDA passthrough real).
+- `/dev/dri` (DRM render node, what OpenGL/Vulkan/EGL/GBM/Selkies need):
+  **absent everywhere tested** - native WSL2 Ubuntu, Docker Desktop
+  containers, and `/sys/class/drm/` itself is **empty** (only a generic
+  `version` file, no `card0`/`renderD128` registered anywhere in the
+  kernel's own DRM subsystem) - this is a kernel-level fact, not a
+  missing device file/udev-rule/permissions issue that a config change
+  could fix.
+- `dmesg` shows *why*: `dxgkrnl` (the real Microsoft driver that creates
+  `/dev/dxg`) loads and registers as a **misc device**, not a DRM device
+  - and its own adapter-info queries genuinely fail live
+  (`dxgkio_query_adapter_info: Ioctl failed: -22`, dozens of real
+  occurrences, reproduced on demand by the tests below) - plus a real
+  kernel warning/bug trace (`memcpy: detected field-spanning write`,
+  `dxgvmb_send_wait_sync_object_gpu`) when something tries to use it more
+  deeply. This is a genuine incompatibility/bug in this exact WSL2
+  kernel build's `dxgkrnl`, not something this session could patch.
+- **Mesa's real D3D12 Gallium driver** (`d3d12_dri.so`, Ubuntu's own
+  official `mesa-utils`/`libgl1-mesa-dri` package, genuinely installed
+  and present - not fabricated) is the one real, supported Linux OpenGL
+  path for WSL2's GPU-PV mechanism. Tested live: `eglinfo`'s GBM/Wayland/
+  X11 EGL platforms all fail (`eglInitialize failed`); forcing
+  `GALLIUM_DRIVER=d3d12` explicitly fails with `failed to create dri2
+  screen` - because this driver's DRI2/GBM winsys requires exactly the
+  `/dev/dri` this system doesn't have. The **only** EGL platform that
+  succeeds is `Surfaceless`, and its own self-reported `EGL driver name`
+  is `swrast` - Mesa's **CPU software rasterizer** - explicitly not
+  claimed as GPU rendering here, exactly the trap the user asked not to
+  fall into.
+- **NVIDIA's own separate, proprietary WSL2 OpenGL/Vulkan path**
+  (`libEGL_nvidia.so`/`libGLX_nvidia.so`/`libvulkan_nvidia.so`/
+  `nvidia_icd.json` - a real, different, non-Mesa mechanism NVIDIA has
+  documented for some WSL2 driver channels) was also checked for:
+  **none of these files exist anywhere on this host's WSL driver
+  store** - this driver build only ships the compute-oriented libraries
+  (`libcuda`, `libnvidia-ml`, `libnvidia-encode`, `libnvidia-gpucomp`,
+  `libnvwgf2umx`, `libnvdxdlkernels`), not the graphics ICDs.
+- **Docker Desktop containers get an even narrower view than native
+  WSL2**: `nvidia-container-toolkit` only bind-mounts the CUDA-compute
+  library subset (`libcuda`, `libnvidia-ml`, `ptxjitcompiler`,
+  `libnvdxgdmal`, `nvidia-smi`) via its 9p driver-store mount, even with
+  `NVIDIA_DRIVER_CAPABILITIES=all` - confirming the actual GPUbnb product
+  path (Docker containers) is blocked at least as hard as raw WSL2.
+- **Hyper-V/VMware/VirtualBox DDA-style full GPU passthrough to a real
+  Linux VM**: analyzed, not empirically attempted (would require
+  disabling the host's only discrete GPU access and, on Windows Home,
+  installing a feature that doesn't exist on this SKU at all - both
+  disruptive and against this session's explicit non-destructive/no-
+  unnecessary-Windows-changes instruction). Real, externally documented,
+  independently-verifiable reasons this would not have helped anyway:
+  Windows 11 Home has no Hyper-V (confirmed above, so Hyper-V DDA is not
+  even installable here without upgrading the Windows edition), and
+  NVIDIA's consumer GeForce driver is well known to detect and disable
+  itself in most passthrough/virtualized configurations ("Code 43"), a
+  restriction that applies to third-party hypervisors on this same
+  hardware too, not just Hyper-V.
+
+**Verdict**: this exact machine's current OS build + WSL2/WSLg version +
+NVIDIA driver 592.82 combination provides real, working GPU **compute**
+passthrough (`/dev/dxg`, already proven for AI/Video/Developer/Mobile) but
+**no real path to `/dev/dri`/GPU-accelerated OpenGL/Vulkan/EGL** for either
+native WSL2 or Docker containers - confirmed at the kernel level
+(`/sys/class/drm` empty), not just "not configured yet." Nothing here rules
+out that a **different** NVIDIA driver release, a future WSL2/WSLg update
+that fixes `dxgkrnl`'s DRM registration, or a Windows edition change
+(Home → Pro, enabling real Hyper-V DDA) could change this later - but as
+of this audit, on this machine, right now, it does not work, and section 9
+(a real Linux GPU host) remains the only proven path to validate Creator/
+Cloud Desktop/CAD/Gaming. No `/dev/dri` was fabricated, no software
+rendering was presented as GPU rendering, and none of Creator/Cloud
+Desktop/CAD/Gaming's compatibility gating or bookability was touched by
+this investigation - it was read-only/diagnostic (temporary `apt-get
+install` of standard Mesa diagnostic packages inside a throwaway `--rm`-
+adjacent Docker container, cleaned up after; no persistent change to
+Windows, WSL2, or any of the 9 REAL_WORKING workspaces).
+
 ## NEXT ACTION
 
 Compute, Developer, Data, AI, Video, Audio, API, Mobile, Security Lab remain
