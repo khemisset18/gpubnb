@@ -5,7 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -116,6 +116,38 @@ class ProcessLifecycleTests(unittest.TestCase):
 
         self.assertIn("PID 4242", output.getvalue())
         process.terminate.assert_not_called()
+
+    def test_daemon_start_still_terminates_a_genuinely_unconfirmed_child(self) -> None:
+        # The longer deadline (20s) must not turn into "never gives up": a child
+        # that never confirms identity within the budget (a real hang, not just
+        # a slow poll) must still be terminated and reported as a failure -
+        # exactly as it was at the old 5s deadline, just with more patience
+        # first. This is the orphan-process safety net: without it, raising the
+        # timeout could leave a truly stuck child running unbounded.
+        process = MagicMock(pid=4242)
+        process.poll.return_value = None  # never exits on its own
+        output = io.StringIO()
+        errors = io.StringIO()
+
+        clock = {"value": 0.0}
+
+        def fake_monotonic() -> float:
+            clock["value"] += 1.0
+            return clock["value"]
+
+        with (
+            patch.object(cli, "_running_agent_pid", return_value=None),  # never matches, ever
+            patch.object(cli.subprocess, "Popen", return_value=process),
+            patch.object(cli.time, "monotonic", side_effect=fake_monotonic),
+            patch.object(cli.time, "sleep"),
+            redirect_stdout(output),
+            redirect_stderr(errors),
+        ):
+            self.assertEqual(cli.command_start(argparse.Namespace(daemon=True)), 1)
+
+        process.terminate.assert_called_once()
+        process.wait.assert_called_once_with(timeout=5)
+        self.assertIn("n'a pas pu être confirmé", errors.getvalue())
 
     def test_stop_never_signals_an_unverified_pid(self) -> None:
         cli.pid_path().write_text(

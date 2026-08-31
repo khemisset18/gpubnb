@@ -9,7 +9,8 @@ from unittest.mock import patch
 from nacl.signing import SigningKey
 
 from gpubnb_agent.client import ApiClient, heartbeat, signed_headers
-from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available, machine_fingerprint
+from gpubnb_agent import platform_info
+from gpubnb_agent.platform_info import parse_nvidia_csv, virtualization_available, machine_fingerprint, docker_info
 from gpubnb_agent.storage import fingerprint, generate_key, load_key, public_key, load_machine_fingerprint, save_machine_fingerprint, detect_hardware_change
 from gpubnb_agent.runner import (
     cleanup_workspace,
@@ -37,6 +38,50 @@ class PlatformTests(unittest.TestCase):
 
     def test_virtualization_probe_returns_boolean(self):
         self.assertIsInstance(virtualization_available(), bool)
+
+    def test_docker_info_gives_the_runtime_probe_extra_time(self):
+        # Regression for a real failure: `docker info` (unlike `docker version`)
+        # enumerates the full daemon state and was measured taking up to ~14s on
+        # a real Windows/Docker Desktop host under contention (e.g. right after
+        # other Docker activity), well past run_command's default 8s timeout. A
+        # false timeout there reports nvidiaRuntimeAvailable=False on a host
+        # where the NVIDIA Container Toolkit is genuinely installed, which then
+        # fails every Developer-workspace compatibility check downstream.
+        calls: list[tuple[list[str], int]] = []
+
+        def fake_run_command(command: list[str], timeout: int = 8) -> subprocess.CompletedProcess[str]:
+            calls.append((command, timeout))
+            if command[1] == "info":
+                return subprocess.CompletedProcess(command, 0, '{"nvidia":{}}\n', "")
+            return subprocess.CompletedProcess(command, 0, '"27.3.1"', "")
+
+        with patch.object(platform_info.shutil, "which", return_value="/usr/bin/docker"), patch.object(
+            platform_info, "run_command", side_effect=fake_run_command
+        ):
+            result = docker_info()
+
+        self.assertTrue(result["nvidiaRuntime"])
+        info_calls = [timeout for command, timeout in calls if command[1] == "info"]
+        version_calls = [timeout for command, timeout in calls if command[1] == "version"]
+        self.assertEqual(info_calls, [20], "the info probe must request the longer, proven-necessary timeout")
+        self.assertEqual(version_calls, [8], "the cheaper version probe is unaffected - still uses the default")
+
+    def test_docker_info_still_reports_false_on_a_genuine_timeout(self):
+        # The longer timeout must not turn into "never times out": a daemon that
+        # genuinely never answers within 20s must still report nvidiaRuntime as
+        # unavailable, not hang the caller (heartbeat loop) indefinitely.
+        def fake_run_command(command: list[str], timeout: int = 8) -> subprocess.CompletedProcess[str]:
+            if command[1] == "info":
+                return subprocess.CompletedProcess(command, 127, "", "command unavailable")
+            return subprocess.CompletedProcess(command, 0, '"27.3.1"', "")
+
+        with patch.object(platform_info.shutil, "which", return_value="/usr/bin/docker"), patch.object(
+            platform_info, "run_command", side_effect=fake_run_command
+        ):
+            result = docker_info()
+
+        self.assertFalse(result["nvidiaRuntime"])
+        self.assertTrue(result["daemonReachable"])
 
     def test_machine_fingerprint_is_stable(self):
         fp1 = machine_fingerprint()

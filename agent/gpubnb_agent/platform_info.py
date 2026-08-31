@@ -199,7 +199,14 @@ def docker_info() -> dict[str, Any]:
     if not executable:
         return {"available": False, "daemonReachable": False, "nvidiaRuntime": False, "version": None}
     version_result = run_command([executable, "version", "--format", "{{json .Server.Version}}"])
-    info_result = run_command([executable, "info", "--format", "{{json .Runtimes}}"])
+    # `docker info` enumerates the full daemon state (not just a version string);
+    # under real contention (e.g. right after other Docker activity: pulling an
+    # image, building, starting containers) it was measured taking up to ~14s on
+    # a real Windows/Docker Desktop host, well past the default 8s run_command
+    # timeout - a false timeout here reports nvidiaRuntimeAvailable=False on a
+    # host where the NVIDIA Container Toolkit is genuinely installed, which then
+    # makes every Developer-workspace compatibility check fail.
+    info_result = run_command([executable, "info", "--format", "{{json .Runtimes}}"], timeout=20)
     return {
         "available": True,
         "daemonReachable": version_result.returncode == 0,
