@@ -58,12 +58,28 @@ exact same live FAIL this session recorded.
    `executableWorkspaceSlugs`, and given real booking/status/access routes
    (mirroring the exact pattern the 9 already-REAL_WORKING workspaces use).
 
-## Creator / CAD
+## Real security finding: this image needs a DIFFERENT hardening profile
 
-Same base image, same unresolved GPU-rendering question. The plan (not yet
-built - no point building an untestable second/third variant of the same
-open question) is: Creator = this image + real Blender (`apt-get install
-blender`, GPL, same low-risk pattern as Mobile's Android SDK/Security
-Lab's tshark-YARA-radare2 layered onto Developer); CAD = this image + real
-FreeCAD (`apt-get install freecad`, GPL). Neither has its own Dockerfile
-yet since it would face the exact same untestable-here blocker as this one.
+Confirmed live (real, repeated tests, not guessed): this image does **not**
+tolerate `--read-only` (it self-configures nginx/SSL/web-assets at
+startup, into several different paths - not baked in at build time) or
+`--cap-drop=ALL` (its s6-overlay init needs real capabilities to remap
+PUID/PGID - `chown`/`s6-applyuidgid` both fail with "Operation not
+permitted" otherwise). **Confirmed working**: `--security-opt=no-new-privileges`,
+`--pids-limit`, `--memory`, `--cpus`, `--tmpfs=/tmp`, and a real writable
+volume at `/config`. This is a real, reduced hardening profile compared to
+the other 9 workspaces here - not a silent gap, a documented open question
+for follow-up work (either find the exact minimal capability set on real
+hardware, or pre-bake the self-configuration at build time so the
+container never needs to chown/write outside `/config`/`/tmp` at all).
+
+## Creator / CAD / Gaming
+
+Same shared base image (see `workspaces/creator/`, `workspaces/cad/`,
+`workspaces/gaming/`), same unresolved GPU-rendering *and* hardening
+questions - real Dockerfiles now exist for all three (Blender/FreeCAD/
+Steam respectively, each confirmed live to install and, for Steam, to
+genuinely bootstrap - see `workspaces/gaming/NOT_YET_WORKING.md`), sharing
+this exact same base and the same open questions documented above. None
+has its own separate finding beyond what's documented here and in its own
+directory.
