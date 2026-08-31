@@ -545,6 +545,63 @@ class AudioWorkspaceLaunchTests(unittest.TestCase):
         self.assertIn(AUDIO_IMAGE, run)
 
 
+API_IMAGE = "quay.io/jupyter/datascience-notebook@sha256:" + ("6" * 64)
+
+
+class ApiWorkspaceLaunchTests(unittest.TestCase):
+    def _supervisor(self, docker: FakeDocker, api: FakeApi) -> GatewaySupervisor:
+        return make_supervisor(docker, api, {
+            "workspaceImages": {"developer": OFFICIAL_IMAGE, "api": API_IMAGE},
+        })
+
+    def test_api_workspace_container_runs_headless_with_no_gpu(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-api-1", "api")
+
+        workspace = names_for_session("sess-api-1")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(API_IMAGE, run)
+        self.assertFalse(any(arg.startswith("--gpus") for arg in run))
+        self.assertIn("start-notebook.py", run)
+        self.assertIn("--ServerApp.port=3000", run)
+        # The whole point of this workspace: no notebook/lab GUI, only the
+        # jupyter_server REST/WS kernel API, and callable without a
+        # browser-cookie/XSRF handshake first.
+        self.assertIn("--env", run)
+        self.assertIn("DOCKER_STACKS_JUPYTER_CMD=server", run)
+        self.assertIn("--ServerApp.disable_check_xsrf=True", run)
+        jpserver_extensions_arg = next(arg for arg in run if arg.startswith("--ServerApp.jpserver_extensions="))
+        self.assertIn('"jupyterlab": False', jpserver_extensions_arg)
+        self.assertIn('"notebook": False', jpserver_extensions_arg)
+        self.assertIn('"nbclassic": False', jpserver_extensions_arg)
+        mount_arg = run[run.index("--mount") + 1]
+        self.assertIn("target=/home/jovyan/work", mount_arg)
+
+    def test_api_workspace_proxy_still_uses_the_trusted_developer_image(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-api-1", "api")
+
+        proxy = proxy_name_for_session("sess-api-1")
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == proxy)
+        self.assertIn(OFFICIAL_IMAGE, run)
+        self.assertNotIn(API_IMAGE, run)
+
+    def test_reconcile_reads_api_workspace_slug_and_launches_the_right_image(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        api.sessions = [{"id": "sess-api-2", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}, "workspaceSlug": "api"}]
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._reconcile_sessions()
+
+        workspace = names_for_session("sess-api-2")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(API_IMAGE, run)
+
+
 class ProxyCrashTests(unittest.TestCase):
     def test_proxy_crash_replaces_the_complete_runtime_pair(self) -> None:
         docker, api = FakeDocker(), FakeApi()

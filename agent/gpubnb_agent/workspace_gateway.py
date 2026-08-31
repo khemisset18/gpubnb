@@ -44,18 +44,25 @@ PINNED_VIDEO_IMAGE = re.compile(r"^quay\.io/jupyter/datascience-notebook@sha256:
 # Same image family again (see runtime_images.DEFAULT_AUDIO_IMAGE) - its
 # ffmpeg build has real audio DSP filters (loudnorm, acompressor, equalizer).
 PINNED_AUDIO_IMAGE = re.compile(r"^quay\.io/jupyter/datascience-notebook@sha256:[a-f0-9]{64}$")
+# Same image family again (see runtime_images.DEFAULT_API_IMAGE) - launched
+# headless (DOCKER_STACKS_JUPYTER_CMD=server, every UI extension disabled),
+# exposing only jupyter_server's own REST + WebSocket kernel API.
+PINNED_API_IMAGE = re.compile(r"^quay\.io/jupyter/datascience-notebook@sha256:[a-f0-9]{64}$")
 # Every workspace surface this gateway runs listens on this port inside its
 # container; the loopback proxy (workspaces/developer/loopback-proxy.js, reused
 # unmodified for every slug) forwards to exactly this port, so a new workspace
 # surface must be configured to bind here rather than its tool's own default.
 WORKSPACE_ENTRY_PORT = 3000
-GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai", "video", "audio"})
+GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai", "video", "audio", "api"})
 # Workspaces whose container genuinely needs the GPU attached (--gpus), scoped
 # to the exact hardware UUID the rental resource authority leased for that
-# session - never a fixed device index. Data and Audio intentionally
-# excluded: neither container ever touches the GPU (audio DSP has no
-# hardware-codec equivalent to Video's NVENC), even though their bookings
-# still reserve one for exclusivity/billing (see rental-resource-authority.ts).
+# session - never a fixed device index. Data, Audio and API intentionally
+# excluded: none of their containers ever touch the GPU (audio DSP has no
+# hardware-codec equivalent to Video's NVENC; API Workspace is a CPU-only
+# headless code-execution surface by design), even though their bookings
+# still reserve the machine's GPU for exclusivity/billing purposes, same as
+# every other workspace on this platform (see rental-resource-authority.ts) -
+# the renter is still renting the whole machine.
 GPU_ATTACHED_WORKSPACE_SLUGS = frozenset({"developer", "ai", "video"})
 CONTAINER_PREFIX = "gpubnb-dev-"
 PROXY_PREFIX = "gpubnb-dev-proxy-"
@@ -212,6 +219,10 @@ class GatewaySupervisor:
             if not PINNED_AUDIO_IMAGE.fullmatch(image):
                 raise RuntimeError("audio_workspace_image_must_be_official_and_digest_pinned")
             return image
+        if workspace_slug == "api":
+            if not PINNED_API_IMAGE.fullmatch(image):
+                raise RuntimeError("api_workspace_image_must_be_official_and_digest_pinned")
+            return image
         raise RuntimeError(f"unsupported_gateway_workspace_slug:{workspace_slug}")
 
     def _container_running(self, container: str) -> bool:
@@ -244,6 +255,42 @@ class GatewaySupervisor:
         self, container: str, volume: str, internal_network: str, image: str,
         workspace_slug: str = "developer",
     ) -> None:
+        if workspace_slug == "api":
+            # Same official image as Data/Video/Audio, but launched headless:
+            # DOCKER_STACKS_JUPYTER_CMD=server (not the default "lab") plus
+            # every UI extension explicitly disabled via
+            # --ServerApp.jpserver_extensions, leaving only jupyter_server's
+            # own REST + WebSocket kernel API (confirmed live: /lab and /tree
+            # both 404; /api/kernels plus a real kernel execute round-trip
+            # both work). disable_check_xsrf matches the trust model every
+            # other workspace already uses here - jupyter's own token/password
+            # auth is off too, because the real security boundary is the
+            # GPUbnb-authenticated relay in front of this container, not
+            # anything jupyter itself enforces - so a renter's own script can
+            # call the REST API directly without first performing a
+            # browser-only cookie/XSRF handshake. No GPU: CPU-only by design,
+            # so this workspace stays usable on machines without one.
+            self._docker([
+                "run", "-d", "--name", container,
+                "--network", internal_network,
+                "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
+                "--pids-limit=512", "--memory=4g", "--cpus=2",
+                "--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
+                DATA_HOME_TMPFS,
+                "--mount", f"type=volume,source={volume},target=/home/jovyan/work",
+                "--env", "DOCKER_STACKS_JUPYTER_CMD=server",
+                image,
+                "start-notebook.py",
+                "--ServerApp.ip=0.0.0.0", f"--ServerApp.port={WORKSPACE_ENTRY_PORT}",
+                "--ServerApp.token=", "--ServerApp.password=",
+                "--ServerApp.disable_check_xsrf=True",
+                "--ServerApp.root_dir=/home/jovyan/work",
+                "--ServerApp.allow_remote_access=True",
+                "--ServerApp.jpserver_extensions="
+                '{"jupyterlab": False, "notebook": False, "nbclassic": False, '
+                '"jupyterlab_git": False, "nbdime": False}',
+            ], timeout=START_TIMEOUT_SECONDS)
+            return
         if workspace_slug in ("data", "ai", "video", "audio"):
             # All four are jupyter/docker-stacks images (same jovyan/uid-1000/
             # gid-100/tini+start-notebook.py conventions) - only GPU

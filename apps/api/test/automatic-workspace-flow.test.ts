@@ -129,7 +129,8 @@ test('the catalogue only marks a workspace bookable when it is both compatible a
   assert.equal(bySlug.ai.bookable,true);
   assert.equal(bySlug.video.bookable,true);
   assert.equal(bySlug.audio.bookable,true);
-  for(const slug of catalogue.map(item=>item.slug))if(slug!=='compute'&&slug!=='developer'&&slug!=='data'&&slug!=='ai'&&slug!=='video'&&slug!=='audio')assert.equal(bySlug[slug].bookable,false,`${slug} must not be bookable yet even though it is compatible`);
+  assert.equal(bySlug.api.bookable,true);
+  for(const slug of catalogue.map(item=>item.slug))if(slug!=='compute'&&slug!=='developer'&&slug!=='data'&&slug!=='ai'&&slug!=='video'&&slug!=='audio'&&slug!=='api')assert.equal(bySlug[slug].bookable,false,`${slug} must not be bookable yet even though it is compatible`);
 });
 
 test('an incompatible workspace in the full catalogue is explained, not silently hidden',()=>{
@@ -171,14 +172,14 @@ test('retry is not scoped to a single workspace slug, and re-enqueues using the 
   const end=renterRoutes.indexOf("app.post('/bookings/:bookingId/workspace/data'",start);
   assert.ok(start>=0&&end>start);
   const body=renterRoutes.slice(start,end);
-  assert.match(body,/slug:\{in:\['developer','data','ai','video','audio'\]\}/);
+  assert.match(body,/slug:\{in:\['developer','data','ai','video','audio','api'\]\}/);
   assert.match(body,/workspaceSlug=row\.machineWorkspace\.workspace\.slug/);
   assert.doesNotMatch(body,/workspaceSlug:'developer'/);
 });
 
 test('the workspace-gateway route filters and the executable-slug gate all agree on which slugs run through the persistent gateway',async()=>{
   const gateway=await readFile(path.join(sourceRoot,'workspace-gateway.ts'),'utf8');
-  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai','video','audio'\]/);
+  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai','video','audio','api'\]/);
   const matches=gateway.match(/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/g)??[];
   assert.equal(matches.length,5,'all five agent-facing gateway routes (activate, desired, data-plane-host, register, usage) must use the shared slug list');
   const { executableWorkspaceSlugs }=await import('../src/machine-workspace-catalog.js');
@@ -190,6 +191,7 @@ test('the workspace-gateway route filters and the executable-slug gate all agree
   assert.ok(executableWorkspaceSlugs.includes('ai'));
   assert.ok(executableWorkspaceSlugs.includes('video'));
   assert.ok(executableWorkspaceSlugs.includes('audio'));
+  assert.ok(executableWorkspaceSlugs.includes('api'));
 });
 
 test('AI Workspace has its own real booking, status and access routes, parallel to Data\'s',async()=>{
@@ -235,4 +237,27 @@ test('Audio Workspace has its own real booking, status and access routes, parall
   assert.ok(audioStatusStart>=0&&audioAccessStart>audioStatusStart&&developerStatusStart>audioAccessStart);
   assert.match(renterRoutes.slice(audioStatusStart,audioAccessStart),/slug: 'audio'/);
   assert.match(renterRoutes.slice(audioAccessStart,developerStatusStart),/slug: 'audio'/);
+});
+
+test('API Workspace has its own real booking, status and access routes, parallel to Audio\'s',async()=>{
+  const renterRoutes=await readFile(path.join(sourceRoot,'workspace-renter-routes.ts'),'utf8');
+  assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/api'/);
+  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'api'/);
+  assert.match(renterRoutes,/type:JobType\.WORKSPACE_PREPARE,parameters:\{workspaceSlug:'api'/);
+  assert.match(renterRoutes,/app\.get\('\/bookings\/:bookingId\/workspace\/api\/status'/);
+  assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/api\/access'/);
+  const apiStatusStart=renterRoutes.indexOf("app.get('/bookings/:bookingId/workspace/api/status'");
+  const apiAccessStart=renterRoutes.indexOf("app.post('/bookings/:bookingId/workspace/api/access'");
+  const developerStatusStart=renterRoutes.indexOf("app.get('/bookings/:bookingId/workspace'");
+  assert.ok(apiStatusStart>=0&&apiAccessStart>apiStatusStart&&developerStatusStart>apiAccessStart);
+  assert.match(renterRoutes.slice(apiStatusStart,apiAccessStart),/slug: 'api'/);
+  assert.match(renterRoutes.slice(apiAccessStart,developerStatusStart),/slug: 'api'/);
+});
+
+test('API Workspace is compatible even with a modest CPU-only-capable machine - no vram/cuda minimum by design',()=>{
+  const modestMachine={ramTotalMiB:8192,diskTotalMiB:51200,vramMiB:0,cudaVersion:null,dockerAvailable:true,nvidiaRuntimeAvailable:false,operatingSystem:'Windows',virtualizationAvailable:false};
+  const catalogue=allWorkspaceCompatibility(modestMachine);
+  const api=catalogue.find(item=>item.slug==='api')!;
+  assert.equal(api.compatible,true,'API Workspace must stay usable on machines with no GPU at all');
+  assert.equal(api.bookable,true);
 });

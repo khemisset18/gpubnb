@@ -60,6 +60,21 @@ DEFAULT_AUDIO_IMAGE = (
     "quay.io/jupyter/datascience-notebook@sha256:"
     "20cbe280416d58b27e5fa1353a6ab849853103eca05f9e310608370f266c3dc4"
 )
+# Same exact image/digest again. API Workspace does not run JupyterLab or any
+# notebook GUI at all - workspace_gateway.py launches this image with
+# DOCKER_STACKS_JUPYTER_CMD=server and every UI extension (jupyterlab,
+# notebook, nbclassic, jupyterlab_git, nbdime) explicitly disabled via
+# --ServerApp.jpserver_extensions, leaving only jupyter_server's own
+# documented REST + WebSocket kernel API (confirmed live: /lab and /tree both
+# 404, /api/kernels and a real kernel execute round-trip both work). This is a
+# genuinely different product surface from Data/Video/Audio, not a relabeled
+# notebook - a renter calls it from their own scripts/CI, not by clicking
+# around in a browser. No GPU: CPU-only code execution, matching the original
+# manifest's minimum (no vramMiB/cuda) - see workspace-manifests.ts.
+DEFAULT_API_IMAGE = (
+    "quay.io/jupyter/datascience-notebook@sha256:"
+    "20cbe280416d58b27e5fa1353a6ab849853103eca05f9e310608370f266c3dc4"
+)
 LEGACY_DEVELOPER_IMAGES = {
     "ghcr.io/khemisset18/gpubnb-developer@sha256:"
     "26700fdc955495b610bbcf8a912110395fc72181a236de2b70b539a0c02150b7",
@@ -83,4 +98,6 @@ def workspace_image(config: dict, slug: str) -> str:
         return DEFAULT_VIDEO_IMAGE
     if slug == "audio":
         return DEFAULT_AUDIO_IMAGE
+    if slug == "api":
+        return DEFAULT_API_IMAGE
     return str(config.get("diagnosticImage") or "")

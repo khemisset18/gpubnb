@@ -2,6 +2,7 @@ import unittest
 
 from gpubnb_agent.runtime_images import (
     DEFAULT_AI_IMAGE,
+    DEFAULT_API_IMAGE,
     DEFAULT_AUDIO_IMAGE,
     DEFAULT_COMPUTE_IMAGE,
     DEFAULT_DATA_IMAGE,
@@ -103,6 +104,20 @@ class RuntimeImageDefaultsTests(unittest.TestCase):
         explicit = "quay.io/jupyter/datascience-notebook@sha256:" + ("9" * 64)
         self.assertEqual(
             workspace_image({"workspaceImages": {"audio": explicit}}, "audio"),
+            explicit,
+        )
+
+    def test_fresh_host_has_an_official_digest_pinned_api_image(self):
+        self.assertRegex(
+            DEFAULT_API_IMAGE,
+            r"^quay\.io/jupyter/datascience-notebook@sha256:[a-f0-9]{64}$",
+        )
+        self.assertEqual(workspace_image({}, "api"), DEFAULT_API_IMAGE)
+
+    def test_explicit_api_pin_remains_supported(self):
+        explicit = "quay.io/jupyter/datascience-notebook@sha256:" + ("1" * 64)
+        self.assertEqual(
+            workspace_image({"workspaceImages": {"api": explicit}}, "api"),
             explicit,
         )
 

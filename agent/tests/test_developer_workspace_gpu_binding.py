@@ -78,6 +78,35 @@ class AudioWorkspaceHealthCommandTests(unittest.TestCase):
         self.assertIn("/home/jovyan/work", script)
 
 
+class ApiWorkspaceHealthCommandTests(unittest.TestCase):
+    IMAGE = "quay.io/jupyter/datascience-notebook@sha256:" + ("7" * 64)
+
+    def test_api_workspace_never_requests_a_gpu(self):
+        # CPU-only headless code-execution surface by design - must stay
+        # usable on machines with no GPU at all, same precedent as Data/Audio.
+        command = workspace_health_command(self.IMAGE, "api")
+        self.assertFalse(any(part.startswith("--gpus") for part in command))
+        self.assertFalse(any("NVIDIA_DRIVER_CAPABILITIES" in part for part in command))
+
+    def test_api_workspace_no_gpu_uuid_required(self):
+        command = workspace_health_command(self.IMAGE, "api", None)
+        self.assertEqual(command[-3], self.IMAGE)
+
+    def test_healthcheck_drives_a_real_rest_and_websocket_kernel_round_trip(self):
+        # Not just "the process starts": proves the actual REST+WS API surface
+        # this workspace exists to sell actually executes code and returns
+        # the real result, mirroring what a renter's own script would do.
+        command = workspace_health_command(self.IMAGE, "api")
+        self.assertEqual(command[-2], "-c")
+        self.assertEqual(command[-3], self.IMAGE)
+        script = command[-1]
+        self.assertIn("jupyter", script)
+        self.assertIn("/api/kernels", script)
+        self.assertIn("execute_request", script)
+        self.assertIn("disable_check_xsrf", script)
+        self.assertIn('"jupyterlab": False', script)
+
+
 class AiWorkspaceHealthCommandTests(unittest.TestCase):
     IMAGE = "quay.io/jupyter/pytorch-notebook@sha256:" + ("f" * 64)
 

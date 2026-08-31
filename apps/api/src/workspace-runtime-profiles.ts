@@ -28,7 +28,11 @@ export const workspaceRuntimeProfiles:Readonly<Record<string,WorkspaceRuntimePro
   compute:{slug:'compute',runtime:'CONTAINER',surface:'BATCH',category:'COMPUTE',entrypoint:'job',network:'NONE',persistentWorkspace:false,hostAccess:false,dockerSocket:false,privileged:false},
   developer:{slug:'developer',runtime:'CONTAINER',surface:'CODE',category:'DEVELOPMENT',entrypoint:'code-server',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   ai:{slug:'ai',runtime:'CONTAINER',surface:'NOTEBOOK',category:'AI',entrypoint:'jupyterlab',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
-  api:{slug:'api',runtime:'CONTAINER',surface:'API',category:'API',entrypoint:'gateway',network:'GATEWAY_ONLY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  // Real entrypoint: the official jupyter/docker-stacks image launched
+  // headless (jupyter_server with every notebook/lab UI extension disabled),
+  // exposing only its REST + WebSocket kernel API - see workspace-manifests.ts
+  // and docs/SESSION_RESUME.md.
+  api:{slug:'api',runtime:'CONTAINER',surface:'API',category:'API',entrypoint:'jupyter-server-api',network:'GATEWAY_ONLY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   data:{slug:'data',runtime:'CONTAINER',surface:'NOTEBOOK',category:'DATA',entrypoint:'jupyterlab',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   'cloud-desktop':{slug:'cloud-desktop',runtime:'DESKTOP_VM',surface:'DESKTOP',category:'DESKTOP',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   creator:{slug:'creator',runtime:'DESKTOP_VM',surface:'DESKTOP',category:'CREATION',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},

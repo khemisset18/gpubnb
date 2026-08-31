@@ -13,7 +13,17 @@ export const workspaceManifests:readonly WorkspaceManifest[]=Object.freeze([
  manifest({slug:'developer',name:'Developer Workspace',icon:'💻',category:'DEVELOPMENT',release:'BETA',summary:'Développement complet à distance',technologies:['VS Code','Git','Node.js','Python'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:8192,diskMiB:20480,docker:true,cuda:true,nvidiaRuntime:true},recommended:{ramMiB:16384,diskMiB:51200}}),
  manifest({slug:'cloud-desktop',name:'Cloud Desktop',icon:'☁️',category:'DESKTOP',release:'UPCOMING',summary:'Bureau distant isolé',technologies:['WebRTC','RDP','noVNC','Guacamole'],license:'MIXED',minimum:{ramMiB:8192,diskMiB:40960,virtualization:true},recommended:{ramMiB:16384,diskMiB:81920}}),
  manifest({slug:'compute',name:'Compute Workspace',icon:'⚡',category:'COMPUTE',release:'BETA',summary:'Tâches contrôlées sans bureau',technologies:['Docker','GPU','Batch','Logs'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:4096,diskMiB:10240,docker:true},recommended:{ramMiB:16384,diskMiB:51200,vramMiB:8192}}),
- manifest({slug:'api',name:'API Workspace',icon:'🔌',category:'API',release:'UPCOMING',summary:'Ressources accessibles par API',technologies:['REST','WebSocket','SDK','Webhooks'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:4096,diskMiB:10240,docker:true},recommended:{ramMiB:16384,diskMiB:30720}}),
+ // 'SDK' and 'Webhooks' intentionally absent from `technologies`: GPUbnb
+ // ships no SDK and no webhook mechanism. What's real: the official
+ // quay.io/jupyter/datascience-notebook image launched headless
+ // (DOCKER_STACKS_JUPYTER_CMD=server, every notebook/lab UI extension
+ // disabled), exposing only jupyter_server's own documented REST + WebSocket
+ // kernel API - a renter creates a kernel and executes code from their own
+ // script/CI, not by clicking around in a browser (confirmed live: /lab and
+ // /tree both 404, a real REST-created kernel executes real code over its
+ // WebSocket channel and returns the real result). CPU-only by design - see
+ // runtime_images.DEFAULT_API_IMAGE and docs/SESSION_RESUME.md.
+ manifest({slug:'api',name:'API Workspace',icon:'🔌',category:'API',release:'BETA',summary:'Exécution de code à distance via une API REST/WebSocket, sans interface graphique',technologies:['REST','WebSocket','Jupyter Server API','Python'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:4096,diskMiB:10240,docker:true},recommended:{ramMiB:16384,diskMiB:30720}}),
  manifest({slug:'creator',name:'Creator Workspace',icon:'🎨',category:'CREATION',release:'UPCOMING',summary:'Graphisme et création 3D',technologies:['Blender','Krita','GIMP','Inkscape'],license:'MIXED',minimum:{ramMiB:16384,diskMiB:40960,vramMiB:6144},recommended:{ramMiB:32768,diskMiB:102400,vramMiB:12288}}),
  // DaVinci Resolve and an interactive Blender desktop are intentionally
  // absent from `technologies`: no official freely-redistributable Linux

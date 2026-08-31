@@ -73,6 +73,98 @@ AUDIO_WORKSPACE_HEALTHCHECK_SCRIPT = (
     "-af loudnorm=I=-16:LRA=11:TP=-1.5 -f null - >/tmp/gpubnb-audio-check.log 2>&1; "
     "echo gpubnb_audio_workspace_ok"
 )
+# Proves the actual product surface end to end, not just that the process
+# starts: launches the real headless jupyter_server (same flags as the real
+# runtime, see workspace_gateway.py's "api" launch branch), waits for it to
+# answer, creates a real kernel via the REST API, drives a real execute
+# request over the kernel WebSocket channel, and checks the real returned
+# output - confirmed live under the exact same --network=none/--read-only
+# constraints this healthcheck actually runs under (loopback still works
+# inside a single container's own network namespace even with no external
+# route). A container that starts jupyter_server but whose REST/WS surface
+# doesn't actually execute code is exactly the failure this exists to catch
+# before a renter is billed for it.
+API_WORKSPACE_HEALTHCHECK_SCRIPT = """
+import json, os, subprocess, sys, time, uuid
+import requests, websocket
+
+os.makedirs("/home/jovyan/work", exist_ok=True)
+PORT = 3000
+BASE = f"http://127.0.0.1:{PORT}"
+WS_BASE = f"ws://127.0.0.1:{PORT}"
+
+proc = subprocess.Popen([
+    "jupyter", "server",
+    "--ServerApp.ip=0.0.0.0", f"--ServerApp.port={PORT}",
+    "--ServerApp.token=", "--ServerApp.password=",
+    "--ServerApp.disable_check_xsrf=True",
+    "--ServerApp.root_dir=/home/jovyan/work",
+    "--ServerApp.allow_remote_access=True",
+    "--ServerApp.jpserver_extensions="
+    '{"jupyterlab": False, "notebook": False, "nbclassic": False, '
+    '"jupyterlab_git": False, "nbdime": False}',
+], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+deadline = time.monotonic() + 30
+ready = False
+while time.monotonic() < deadline:
+    try:
+        if requests.get(f"{BASE}/api/status", timeout=2).status_code == 200:
+            ready = True
+            break
+    except requests.exceptions.RequestException:
+        pass
+    if proc.poll() is not None:
+        break
+    time.sleep(0.5)
+if not ready:
+    proc.terminate()
+    print((proc.stdout.read() if proc.stdout else "")[-2000:])
+    sys.exit("gpubnb_api_workspace_server_not_ready")
+
+try:
+    r = requests.post(f"{BASE}/api/kernels", json={"name": "python3"}, timeout=10)
+    r.raise_for_status()
+    kid = r.json()["id"]
+    session_id = str(uuid.uuid4())
+    ws = websocket.create_connection(
+        f"{WS_BASE}/api/kernels/{kid}/channels?session_id={session_id}", timeout=10
+    )
+    msg_id = str(uuid.uuid4())
+    ws.send(json.dumps({
+        "header": {"msg_id": msg_id, "username": "gpubnb-healthcheck", "session": session_id,
+                   "msg_type": "execute_request", "version": "5.3"},
+        "parent_header": {}, "metadata": {},
+        "content": {"code": "print(2 + 2)", "silent": False, "store_history": False,
+                    "user_expressions": {}, "allow_stdin": False},
+        "buffers": [], "channel": "shell",
+    }))
+    result, idle = "", False
+    exec_deadline = time.monotonic() + 15
+    while not idle and time.monotonic() < exec_deadline:
+        m = json.loads(ws.recv())
+        if m.get("parent_header", {}).get("msg_id") != msg_id:
+            continue
+        mtype = m["header"]["msg_type"]
+        if mtype == "stream":
+            result += m["content"]["text"]
+        elif mtype == "error":
+            raise RuntimeError("kernel_execute_error:" + "|".join(m["content"]["traceback"]))
+        elif mtype == "status" and m["content"]["execution_state"] == "idle":
+            idle = True
+    ws.close()
+    if result.strip() != "4":
+        raise RuntimeError(f"unexpected_kernel_output:{result!r}")
+    requests.delete(f"{BASE}/api/kernels/{kid}", timeout=10)
+finally:
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+print("gpubnb_api_workspace_ok")
+"""
 
 
 def _gpu_vendor() -> str:
@@ -478,6 +570,20 @@ def workspace_health_command(image: str, workspace_slug: str, gpu_uuid: str | No
             "--entrypoint", "bash", image,
             "-c", AUDIO_WORKSPACE_HEALTHCHECK_SCRIPT,
         ]
+    if workspace_slug == "api":
+        # No GPU: no exact-UUID requirement. Slightly larger memory budget
+        # than Audio/Data's healthcheck (1g) because a real jupyter_server
+        # process (not just an ffmpeg/python one-liner) has to actually start
+        # and answer HTTP+WebSocket requests within this same container.
+        return [
+            "docker", "run", "--rm", "--network=none", "--read-only",
+            "--cap-drop=ALL", "--security-opt=no-new-privileges",
+            "--pids-limit=128", "--memory=1g", "--cpus=1",
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+            DATA_HOME_TMPFS,
+            "--entrypoint", "python3", image,
+            "-c", API_WORKSPACE_HEALTHCHECK_SCRIPT,
+        ]
     return diagnostic_command(image)
 
 
@@ -494,7 +600,7 @@ def prepare_workspace(
     # Both real workspace images (code-server, and the multi-gigabyte Jupyter
     # data-science stack) are far larger than the diagnostic/GPU-proof images
     # this default otherwise guards; give both the same extended pull budget.
-    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video", "audio"} else 600
+    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video", "audio", "api"} else 600
     timeout = max(30, min(timeout_limit, int(timeout_seconds)))
     cache_hit = _pull_image(image, timeout, progress_callback)
     health_finished = threading.Event()

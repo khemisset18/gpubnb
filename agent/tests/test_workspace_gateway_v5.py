@@ -71,6 +71,35 @@ class WorkspaceGatewayV5Tests(unittest.TestCase):
         self.assertNotIn("--gpus", command)
         self.assertIn("start-notebook.py", command)
 
+    def test_api_workspace_never_attaches_gpus_even_with_an_active_resource_spec(self) -> None:
+        # Same rationale as Data: the booking still reserves a real GPU for
+        # exclusivity/billing, so _resource_start_context can be non-empty -
+        # but v5 doesn't intercept "api" at all (only "ai"/"video" get the
+        # exact-leased-GPU-UUID override), so this falls through to legacy's
+        # headless-jupyter_server branch untouched, and must never attach
+        # --gpus.
+        supervisor = GatewaySupervisor.__new__(GatewaySupervisor)
+        supervisor._resource_start_context = [spec("resource_00000001", "GPU-aaaaaaaa")]
+        calls: list[list[str]] = []
+
+        def docker(args: list[str], timeout: int = 30, check: bool = True):
+            calls.append(list(args))
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        supervisor._docker = docker  # type: ignore[method-assign]
+        supervisor._launch_workspace_container(
+            "gpubnb-workspace-test",
+            "gpubnb-volume-test",
+            "gpubnb-internal-test",
+            "quay.io/jupyter/datascience-notebook@sha256:" + "9" * 64,
+            "api",
+        )
+
+        command = calls[-1]
+        self.assertNotIn("--gpus", command)
+        self.assertIn("start-notebook.py", command)
+        self.assertIn("DOCKER_STACKS_JUPYTER_CMD=server", command)
+
     def test_ai_workspace_attaches_only_the_exact_leased_gpu_uuids(self) -> None:
         # Same rationale as Developer: renter-billed GPU compute, never a
         # fixed device index on a multi-GPU host - just launched via the
