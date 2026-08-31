@@ -34,6 +34,20 @@ DEFAULT_AI_IMAGE = (
     "quay.io/jupyter/pytorch-notebook@sha256:"
     "de7e7da7ba3e66cd2720ff9e72c93c43d24cb83478a032862acb7520fa8b2200"
 )
+# Same exact image/digest as DEFAULT_DATA_IMAGE, deliberately kept as its own
+# named constant (not a shared reference) so Video's image can be reconfigured
+# independently of Data's later. Confirmed live: this image's ffmpeg build
+# already includes real hardware h264_nvenc/hevc_nvenc/av1_nvenc encoders
+# (Debian's ffmpeg package, not something GPUbnb added) - a real encode test
+# (--gpus=device=0, testsrc -> h264_nvenc) produced a genuine 444KB mp4 at
+# 32fps, not a software-encoder fallback. No DaVinci Resolve or Blender GUI
+# is included (no official free-redistributable Linux container exists for
+# DaVinci; Blender's GUI needs a desktop-streaming runtime this doesn't have
+# - see workspace-manifests.ts's technologies list, updated to not overclaim).
+DEFAULT_VIDEO_IMAGE = (
+    "quay.io/jupyter/datascience-notebook@sha256:"
+    "20cbe280416d58b27e5fa1353a6ab849853103eca05f9e310608370f266c3dc4"
+)
 LEGACY_DEVELOPER_IMAGES = {
     "ghcr.io/khemisset18/gpubnb-developer@sha256:"
     "26700fdc955495b610bbcf8a912110395fc72181a236de2b70b539a0c02150b7",
@@ -53,4 +67,6 @@ def workspace_image(config: dict, slug: str) -> str:
         return DEFAULT_DATA_IMAGE
     if slug == "ai":
         return DEFAULT_AI_IMAGE
+    if slug == "video":
+        return DEFAULT_VIDEO_IMAGE
     return str(config.get("diagnosticImage") or "")

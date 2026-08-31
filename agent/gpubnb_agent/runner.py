@@ -48,6 +48,20 @@ AI_WORKSPACE_HEALTHCHECK_SCRIPT = (
     "open('/home/jovyan/work/.gpubnb-healthcheck', 'w').close(); "
     "print('gpubnb_ai_workspace_ok', torch.cuda.get_device_name(0))"
 )
+# Runs a real (tiny, discarded) hardware encode rather than only checking that
+# h264_nvenc is registered as a codec: confirmed live that ffmpeg registers
+# h264_nvenc either way, but it only actually *works* with
+# NVIDIA_DRIVER_CAPABILITIES including "video" (without it: "Cannot load
+# libnvidia-encode.so.1", a clean failure, not a silent software fallback) -
+# this healthcheck is what would have caught that misconfiguration before a
+# renter is billed for a workspace whose GPU encoding doesn't actually work.
+VIDEO_WORKSPACE_HEALTHCHECK_SCRIPT = (
+    "set -e; "
+    "mkdir -p /home/jovyan/work && touch /home/jovyan/work/.gpubnb-healthcheck; "
+    "ffmpeg -y -f lavfi -i testsrc=duration=1:size=320x240:rate=10 "
+    "-c:v h264_nvenc -preset p1 -f null - >/tmp/gpubnb-nvenc-check.log 2>&1; "
+    "echo gpubnb_video_workspace_ok"
+)
 
 
 def _gpu_vendor() -> str:
@@ -409,6 +423,23 @@ def workspace_health_command(image: str, workspace_slug: str, gpu_uuid: str | No
             "--entrypoint", "python3", image,
             "-c", AI_WORKSPACE_HEALTHCHECK_SCRIPT,
         ]
+    if workspace_slug == "video":
+        # Same exact-GPU-UUID rationale as Developer/AI above.
+        if not SAFE_GPU_ID.fullmatch(gpu_uuid or ""):
+            raise RuntimeError("video_workspace_invalid_target_gpu")
+        return [
+            "docker", "run", "--rm", "--network=none", "--read-only",
+            "--cap-drop=ALL", "--security-opt=no-new-privileges",
+            "--pids-limit=64", "--memory=1g", "--cpus=1",
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=128m",
+            DATA_HOME_TMPFS,
+            # NVENC needs the "video" driver capability, not just
+            # compute,utility - without it ffmpeg fails closed
+            # ("Cannot load libnvidia-encode.so.1"), confirmed live.
+            f"--gpus=device={gpu_uuid}", "--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility,video",
+            "--entrypoint", "bash", image,
+            "-c", VIDEO_WORKSPACE_HEALTHCHECK_SCRIPT,
+        ]
     if workspace_slug == "data":
         return [
             "docker", "run", "--rm", "--network=none", "--read-only",
@@ -441,7 +472,7 @@ def prepare_workspace(
     # Both real workspace images (code-server, and the multi-gigabyte Jupyter
     # data-science stack) are far larger than the diagnostic/GPU-proof images
     # this default otherwise guards; give both the same extended pull budget.
-    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai"} else 600
+    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video"} else 600
     timeout = max(30, min(timeout_limit, int(timeout_seconds)))
     cache_hit = _pull_image(image, timeout, progress_callback)
     health_finished = threading.Event()

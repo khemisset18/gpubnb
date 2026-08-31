@@ -280,7 +280,7 @@ export async function buildRentalResourceAuthority(
       // Compute session and always answered
       // rental_resource_authority_missing_for_session for the one path renters
       // actually use.
-      machineWorkspace: { workspace: { slug: { in: ['developer', 'compute', 'data', 'ai'] } } },
+      machineWorkspace: { workspace: { slug: { in: ['developer', 'compute', 'data', 'ai', 'video'] } } },
     },
     select: {
       id: true,

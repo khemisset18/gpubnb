@@ -92,7 +92,12 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
         if specs is None or workspace_slug not in legacy.GPU_ATTACHED_WORKSPACE_SLUGS:
             return super()._launch_workspace_container(container, volume, internal_network, image, workspace_slug)
         gpu_uuids = self._expected_gpu_uuids(specs)
-        if workspace_slug == "ai":
+        if workspace_slug in ("ai", "video"):
+            # NVENC needs the "video" driver capability in addition to
+            # compute,utility - confirmed live it fails closed
+            # ("Cannot load libnvidia-encode.so.1") without it, not a silent
+            # software fallback.
+            capabilities = "compute,utility,video" if workspace_slug == "video" else "compute,utility"
             self._docker([
                 "run", "-d", "--name", container,
                 "--network", internal_network,
@@ -102,7 +107,7 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
                 legacy.DATA_HOME_TMPFS,
                 "--mount", f"type=volume,source={volume},target=/home/jovyan/work",
                 "--gpus", f"device={','.join(gpu_uuids)}",
-                "--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility",
+                f"--env=NVIDIA_DRIVER_CAPABILITIES={capabilities}",
                 image,
                 "start-notebook.py",
                 "--ServerApp.ip=0.0.0.0", f"--ServerApp.port={legacy.WORKSPACE_ENTRY_PORT}",

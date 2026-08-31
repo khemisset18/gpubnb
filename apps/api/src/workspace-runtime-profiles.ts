@@ -32,7 +32,13 @@ export const workspaceRuntimeProfiles:Readonly<Record<string,WorkspaceRuntimePro
   data:{slug:'data',runtime:'CONTAINER',surface:'NOTEBOOK',category:'DATA',entrypoint:'jupyterlab',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   'cloud-desktop':{slug:'cloud-desktop',runtime:'DESKTOP_VM',surface:'DESKTOP',category:'DESKTOP',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   creator:{slug:'creator',runtime:'DESKTOP_VM',surface:'DESKTOP',category:'CREATION',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
-  video:{slug:'video',runtime:'DESKTOP_VM',surface:'DESKTOP',category:'VIDEO',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  // Delivered as CONTAINER/NOTEBOOK (JupyterLab + real GPU-accelerated FFmpeg/
+  // NVENC), not the DESKTOP_VM this originally assumed: no VM/hypervisor
+  // infrastructure exists in this codebase, and no official DaVinci Resolve
+  // or GPU-accelerated Blender-desktop container was viable to build without
+  // publishing a custom image (see docs/SESSION_RESUME.md). This profile is
+  // corrected to match what's actually real, not what was first envisioned.
+  video:{slug:'video',runtime:'CONTAINER',surface:'NOTEBOOK',category:'VIDEO',entrypoint:'jupyterlab',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   cad:{slug:'cad',runtime:'DESKTOP_VM',surface:'DESKTOP',category:'CAD',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   mobile:{slug:'mobile',runtime:'ISOLATED_VM',surface:'DESKTOP',category:'MOBILE',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   'security-lab':{slug:'security-lab',runtime:'ISOLATED_VM',surface:'DESKTOP',category:'SECURITY',entrypoint:'isolated-lab-gateway',network:'NONE',persistentWorkspace:false,hostAccess:false,dockerSocket:false,privileged:false},

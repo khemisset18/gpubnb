@@ -102,6 +102,32 @@ class WorkspaceGatewayV5Tests(unittest.TestCase):
         self.assertIn("start-notebook.py", command)
         self.assertIn("/home/jovyan/work", " ".join(command))
 
+    def test_video_workspace_attaches_only_the_exact_leased_gpu_uuids_and_requests_video_capability(self) -> None:
+        supervisor = GatewaySupervisor.__new__(GatewaySupervisor)
+        supervisor._resource_start_context = [
+            spec("resource_00000001", "GPU-aaaaaaaa"),
+        ]
+        calls: list[list[str]] = []
+
+        def docker(args: list[str], timeout: int = 30, check: bool = True):
+            calls.append(list(args))
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        supervisor._docker = docker  # type: ignore[method-assign]
+        supervisor._launch_workspace_container(
+            "gpubnb-workspace-test",
+            "gpubnb-volume-test",
+            "gpubnb-internal-test",
+            "quay.io/jupyter/datascience-notebook@sha256:" + "c" * 64,
+            "video",
+        )
+
+        command = calls[-1]
+        self.assertIn("--gpus", command)
+        self.assertEqual(command[command.index("--gpus") + 1], "device=GPU-aaaaaaaa")
+        self.assertIn("--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility,video", command)
+        self.assertIn("start-notebook.py", command)
+
     def test_container_adoption_requires_exact_device_request_set(self) -> None:
         supervisor = GatewaySupervisor.__new__(GatewaySupervisor)
 

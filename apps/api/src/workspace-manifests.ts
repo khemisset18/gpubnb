@@ -15,7 +15,15 @@ export const workspaceManifests:readonly WorkspaceManifest[]=Object.freeze([
  manifest({slug:'compute',name:'Compute Workspace',icon:'⚡',category:'COMPUTE',release:'BETA',summary:'Tâches contrôlées sans bureau',technologies:['Docker','GPU','Batch','Logs'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:4096,diskMiB:10240,docker:true},recommended:{ramMiB:16384,diskMiB:51200,vramMiB:8192}}),
  manifest({slug:'api',name:'API Workspace',icon:'🔌',category:'API',release:'UPCOMING',summary:'Ressources accessibles par API',technologies:['REST','WebSocket','SDK','Webhooks'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:4096,diskMiB:10240,docker:true},recommended:{ramMiB:16384,diskMiB:30720}}),
  manifest({slug:'creator',name:'Creator Workspace',icon:'🎨',category:'CREATION',release:'UPCOMING',summary:'Graphisme et création 3D',technologies:['Blender','Krita','GIMP','Inkscape'],license:'MIXED',minimum:{ramMiB:16384,diskMiB:40960,vramMiB:6144},recommended:{ramMiB:32768,diskMiB:102400,vramMiB:12288}}),
- manifest({slug:'video',name:'Video Workspace',icon:'🎬',category:'VIDEO',release:'UPCOMING',summary:'Montage, rendu et encodage',technologies:['FFmpeg','DaVinci','Blender','NVENC'],license:'MIXED',minimum:{ramMiB:16384,diskMiB:102400,vramMiB:6144},recommended:{ramMiB:32768,diskMiB:204800,vramMiB:12288}}),
+ // DaVinci Resolve and an interactive Blender desktop are intentionally
+ // absent from `technologies`: no official freely-redistributable Linux
+ // container exists for DaVinci, and a GPU-accelerated Blender desktop needs
+ // a containerized-remote-desktop runtime this platform doesn't have working
+ // GPU rendering support for yet (DRI/DRM passthrough isn't exposed the same
+ // way under Windows/WSL2 Docker Desktop - see docs/SESSION_RESUME.md).
+ // What's real: JupyterLab with an ffmpeg build that has genuine hardware
+ // h264_nvenc/hevc_nvenc/av1_nvenc encoders, GPU-passthrough-verified live.
+ manifest({slug:'video',name:'Video Workspace',icon:'🎬',category:'VIDEO',release:'BETA',summary:'Encodage et transcodage vidéo accélérés par GPU',technologies:['FFmpeg','NVENC','JupyterLab','Python'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:16384,diskMiB:102400,vramMiB:6144,docker:true,nvidiaRuntime:true},recommended:{ramMiB:32768,diskMiB:204800,vramMiB:12288}}),
  // PostgreSQL intentionally absent from `technologies`: the real runtime is the
  // official quay.io/jupyter/datascience-notebook image used as-is (no
  // GPUbnb-built/published image exists to add psycopg2/postgresql-client to -

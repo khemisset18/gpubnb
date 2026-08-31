@@ -3,15 +3,17 @@ import { MachineWorkspaceState, WorkspaceRelease, type PrismaClient } from '@pri
 import { analyzeWorkspace, type MachineCapabilities } from './workspace-compatibility.js';
 import { workspaceManifest, workspaceManifests, type WorkspaceManifest } from './workspace-manifests.js';
 
-// 'data' and 'ai' joined this list once a real runtime existed behind each:
-// agent-side container launch (workspace_gateway.py, official quay.io/jupyter
-// image), API gateway wiring (workspace-gateway.ts, rental-resource-
-// authority.ts) and renter routes (workspace-renter-routes.ts) - see
-// docs/SESSION_RESUME.md for the verification evidence, including AI's real
-// GPU passthrough proven live (torch.cuda.is_available() inside the real
-// running container, not just at healthcheck time). Never add a slug here on
-// the strength of its manifest/catalogue entry alone.
-export const executableWorkspaceSlugs = ['compute', 'developer', 'data', 'ai'] as const;
+// 'data', 'ai' and 'video' joined this list once a real runtime existed
+// behind each: agent-side container launch (workspace_gateway.py, official
+// quay.io/jupyter image), API gateway wiring (workspace-gateway.ts, rental-
+// resource-authority.ts) and renter routes (workspace-renter-routes.ts) -
+// see docs/SESSION_RESUME.md for the verification evidence, including AI's
+// and Video's real GPU passthrough each proven live inside the actual
+// running container (not just at healthcheck time): AI via
+// torch.cuda.is_available(), Video via a real h264_nvenc hardware encode
+// written to the persistent volume. Never add a slug here on the strength of
+// its manifest/catalogue entry alone.
+export const executableWorkspaceSlugs = ['compute', 'developer', 'data', 'ai', 'video'] as const;
 export type ExecutableWorkspaceSlug = typeof executableWorkspaceSlugs[number];
 
 export function isExecutableWorkspaceSlug(value: string): value is ExecutableWorkspaceSlug {

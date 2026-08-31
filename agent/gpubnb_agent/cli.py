@@ -583,11 +583,11 @@ def run_next_job(
             )
         elif job.get("type") == "WORKSPACE_PREPARE":
             developer_gpu_uuid: str | None = None
-            if workspace_slug in ("developer", "ai"):
-                # AI Workspace is renter-billed and GPU-compute just like
-                # Developer - same rationale, same resolver: never fall back
-                # to a fixed device index for a workload the renter is paying
-                # for a specific accelerator's worth of.
+            if workspace_slug in ("developer", "ai", "video"):
+                # AI and Video Workspaces are renter-billed and GPU-compute
+                # just like Developer - same rationale, same resolver: never
+                # fall back to a fixed device index for a workload the renter
+                # is paying for a specific accelerator's worth of.
                 if not isinstance(session_value := job.get("workspaceSession"), dict) or not isinstance(session_value.get("id"), str):
                     raise RuntimeError("developer_workspace_session_missing")
                 developer_gpu_uuid = resolve_developer_workspace_gpu_uuid(api, key, machine_id, session_value["id"])

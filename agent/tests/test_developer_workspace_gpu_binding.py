@@ -80,6 +80,35 @@ class AiWorkspaceHealthCommandTests(unittest.TestCase):
         self.assertIn("/home/jovyan/work", script)
 
 
+class VideoWorkspaceHealthCommandTests(unittest.TestCase):
+    IMAGE = "quay.io/jupyter/datascience-notebook@sha256:" + ("7" * 64)
+
+    def test_command_attaches_the_exact_leased_gpu_by_hardware_uuid(self):
+        command = workspace_health_command(self.IMAGE, "video", GPU_UUID)
+        self.assertIn(f"--gpus=device={GPU_UUID}", command)
+        self.assertNotIn("--gpus=device=0", command)
+
+    def test_rejects_missing_or_malformed_target_gpu(self):
+        for invalid in (None, "", "short", "device=0; rm -rf /", "0"):
+            with self.assertRaisesRegex(RuntimeError, "video_workspace_invalid_target_gpu"):
+                workspace_health_command(self.IMAGE, "video", invalid)
+
+    def test_requests_the_video_driver_capability_nvenc_actually_needs(self):
+        # Confirmed live: NVENC fails closed ("Cannot load libnvidia-encode.so.1")
+        # with only compute,utility - "video" must be included too.
+        command = workspace_health_command(self.IMAGE, "video", GPU_UUID)
+        self.assertIn("--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility,video", command)
+
+    def test_healthcheck_performs_a_real_nvenc_encode_not_just_a_codec_list_check(self):
+        command = workspace_health_command(self.IMAGE, "video", GPU_UUID)
+        self.assertEqual(command[-2], "-c")
+        self.assertEqual(command[-3], self.IMAGE)
+        script = command[-1]
+        self.assertIn("h264_nvenc", script)
+        self.assertIn("ffmpeg", script)
+        self.assertIn("/home/jovyan/work", script)
+
+
 class ResolveDeveloperWorkspaceGpuUuidTests(unittest.TestCase):
     def _authority(self, session_id, hardware_uuid, resource_id="resource_test01"):
         return {

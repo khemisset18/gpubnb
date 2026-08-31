@@ -5,6 +5,7 @@ from gpubnb_agent.runtime_images import (
     DEFAULT_COMPUTE_IMAGE,
     DEFAULT_DATA_IMAGE,
     DEFAULT_DEVELOPER_IMAGE,
+    DEFAULT_VIDEO_IMAGE,
     workspace_image,
 )
 
@@ -73,6 +74,20 @@ class RuntimeImageDefaultsTests(unittest.TestCase):
         explicit = "quay.io/jupyter/pytorch-notebook@sha256:" + ("e" * 64)
         self.assertEqual(
             workspace_image({"workspaceImages": {"ai": explicit}}, "ai"),
+            explicit,
+        )
+
+    def test_fresh_host_has_an_official_digest_pinned_video_image(self):
+        self.assertRegex(
+            DEFAULT_VIDEO_IMAGE,
+            r"^quay\.io/jupyter/datascience-notebook@sha256:[a-f0-9]{64}$",
+        )
+        self.assertEqual(workspace_image({}, "video"), DEFAULT_VIDEO_IMAGE)
+
+    def test_explicit_video_pin_remains_supported(self):
+        explicit = "quay.io/jupyter/datascience-notebook@sha256:" + ("f" * 64)
+        self.assertEqual(
+            workspace_image({"workspaceImages": {"video": explicit}}, "video"),
             explicit,
         )
 

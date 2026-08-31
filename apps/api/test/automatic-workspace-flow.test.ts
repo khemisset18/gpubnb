@@ -127,7 +127,8 @@ test('the catalogue only marks a workspace bookable when it is both compatible a
   assert.equal(bySlug.developer.bookable,true);
   assert.equal(bySlug.data.bookable,true);
   assert.equal(bySlug.ai.bookable,true);
-  for(const slug of catalogue.map(item=>item.slug))if(slug!=='compute'&&slug!=='developer'&&slug!=='data'&&slug!=='ai')assert.equal(bySlug[slug].bookable,false,`${slug} must not be bookable yet even though it is compatible`);
+  assert.equal(bySlug.video.bookable,true);
+  for(const slug of catalogue.map(item=>item.slug))if(slug!=='compute'&&slug!=='developer'&&slug!=='data'&&slug!=='ai'&&slug!=='video')assert.equal(bySlug[slug].bookable,false,`${slug} must not be bookable yet even though it is compatible`);
 });
 
 test('an incompatible workspace in the full catalogue is explained, not silently hidden',()=>{
@@ -169,14 +170,14 @@ test('retry is not scoped to a single workspace slug, and re-enqueues using the 
   const end=renterRoutes.indexOf("app.post('/bookings/:bookingId/workspace/data'",start);
   assert.ok(start>=0&&end>start);
   const body=renterRoutes.slice(start,end);
-  assert.match(body,/slug:\{in:\['developer','data','ai'\]\}/);
+  assert.match(body,/slug:\{in:\['developer','data','ai','video'\]\}/);
   assert.match(body,/workspaceSlug=row\.machineWorkspace\.workspace\.slug/);
   assert.doesNotMatch(body,/workspaceSlug:'developer'/);
 });
 
 test('the workspace-gateway route filters and the executable-slug gate all agree on which slugs run through the persistent gateway',async()=>{
   const gateway=await readFile(path.join(sourceRoot,'workspace-gateway.ts'),'utf8');
-  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai'\]/);
+  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai','video'\]/);
   const matches=gateway.match(/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/g)??[];
   assert.equal(matches.length,5,'all five agent-facing gateway routes (activate, desired, data-plane-host, register, usage) must use the shared slug list');
   const { executableWorkspaceSlugs }=await import('../src/machine-workspace-catalog.js');
@@ -186,6 +187,7 @@ test('the workspace-gateway route filters and the executable-slug gate all agree
   // job, not a persistent browser session) - the two lists are related, not equal.
   assert.ok(executableWorkspaceSlugs.includes('compute'));
   assert.ok(executableWorkspaceSlugs.includes('ai'));
+  assert.ok(executableWorkspaceSlugs.includes('video'));
 });
 
 test('AI Workspace has its own real booking, status and access routes, parallel to Data\'s',async()=>{
@@ -201,4 +203,19 @@ test('AI Workspace has its own real booking, status and access routes, parallel 
   assert.ok(aiStatusStart>=0&&aiAccessStart>aiStatusStart&&developerStatusStart>aiAccessStart);
   assert.match(renterRoutes.slice(aiStatusStart,aiAccessStart),/slug: 'ai'/);
   assert.match(renterRoutes.slice(aiAccessStart,developerStatusStart),/slug: 'ai'/);
+});
+
+test('Video Workspace has its own real booking, status and access routes, parallel to AI\'s',async()=>{
+  const renterRoutes=await readFile(path.join(sourceRoot,'workspace-renter-routes.ts'),'utf8');
+  assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/video'/);
+  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'video'/);
+  assert.match(renterRoutes,/type:JobType\.WORKSPACE_PREPARE,parameters:\{workspaceSlug:'video'/);
+  assert.match(renterRoutes,/app\.get\('\/bookings\/:bookingId\/workspace\/video\/status'/);
+  assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/video\/access'/);
+  const videoStatusStart=renterRoutes.indexOf("app.get('/bookings/:bookingId/workspace/video/status'");
+  const videoAccessStart=renterRoutes.indexOf("app.post('/bookings/:bookingId/workspace/video/access'");
+  const developerStatusStart=renterRoutes.indexOf("app.get('/bookings/:bookingId/workspace'");
+  assert.ok(videoStatusStart>=0&&videoAccessStart>videoStatusStart&&developerStatusStart>videoAccessStart);
+  assert.match(renterRoutes.slice(videoStatusStart,videoAccessStart),/slug: 'video'/);
+  assert.match(renterRoutes.slice(videoAccessStart,developerStatusStart),/slug: 'video'/);
 });
