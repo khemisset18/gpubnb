@@ -528,7 +528,18 @@ def run_next_job(
     )
     parameters = job.get("parameters") if isinstance(job.get("parameters"), dict) else {}
     workspace_slug = str(parameters.get("workspaceSlug") or "compute")
-    image = workspace_image(config, workspace_slug)
+    if job.get("type") == "GPU_DIAGNOSTIC":
+        # The official diagnostic image (ghcr.io/khemisset18/gpu-diagnostic) is a
+        # separate, minimal image from the Compute workspace's own
+        # gpu-proof-workspace image - resolving via workspace_image(config,
+        # "compute") here would silently probe with the wrong image and fail
+        # diagnostic_command()'s official-image check. The server always sends
+        # the real pinned diagnostic image in parameters.diagnosticImage
+        # (dev-booking-reconciler.ts); only fall back to local config for a
+        # renter-triggered re-run job that predates this parameter.
+        image = str(parameters.get("diagnosticImage") or config.get("diagnosticImage") or "")
+    else:
+        image = workspace_image(config, workspace_slug)
     lease_thread.start()
     try:
         if job.get("type") in {"WORKSPACE_PREPARE", "GPU_PROOF"}:
