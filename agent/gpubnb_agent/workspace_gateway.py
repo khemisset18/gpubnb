@@ -61,6 +61,13 @@ PINNED_MOBILE_IMAGE = re.compile(r"^gpubnb-mobile-workspace@sha256:[a-f0-9]{64}$
 # Same "local-only, never pushed" status as PINNED_MOBILE_IMAGE - see its
 # comment and runtime_images.DEFAULT_SECURITY_LAB_IMAGE.
 PINNED_SECURITY_LAB_IMAGE = re.compile(r"^gpubnb-security-lab-workspace@sha256:[a-f0-9]{64}$")
+# Same "local-only, never pushed" status again. NOT REAL_WORKING, NOT
+# bookable - see runtime_images.DEFAULT_CLOUD_DESKTOP_IMAGE/
+# DEFAULT_CREATOR_IMAGE and docs/SESSION_RESUME.md section 8/9.
+PINNED_CLOUD_DESKTOP_IMAGE = re.compile(r"^gpubnb-cloud-desktop-workspace@sha256:[a-f0-9]{64}$")
+PINNED_CREATOR_IMAGE = re.compile(r"^gpubnb-creator-workspace@sha256:[a-f0-9]{64}$")
+PINNED_CAD_IMAGE = re.compile(r"^gpubnb-cad-workspace@sha256:[a-f0-9]{64}$")
+PINNED_GAMING_IMAGE = re.compile(r"^gpubnb-gaming-workspace@sha256:[a-f0-9]{64}$")
 # Every workspace surface this gateway runs listens on this port inside its
 # container; the loopback proxy (workspaces/developer/loopback-proxy.js, reused
 # unmodified for every slug) forwards to exactly this port, so a new workspace
@@ -80,7 +87,17 @@ GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai", "video", "audio"
 # machine's GPU for exclusivity/billing purposes, same as every other
 # workspace on this platform (see rental-resource-authority.ts) - the
 # renter is still renting the whole machine.
-GPU_ATTACHED_WORKSPACE_SLUGS = frozenset({"developer", "ai", "video"})
+#
+# Creator/Cloud Desktop/CAD/Gaming ARE included here (real GPU-accelerated
+# desktop rendering genuinely needs the device attached) even though none
+# of the four is REAL_WORKING or in GATEWAY_WORKSPACE_SLUGS yet - this is
+# prepared, unit-tested-with-mocks code, unreachable in production until a
+# real Linux GPU host validates it and that slug is deliberately added to
+# GATEWAY_WORKSPACE_SLUGS too. See docs/SESSION_RESUME.md section 8/9.
+GPU_ATTACHED_WORKSPACE_SLUGS = frozenset({
+    "developer", "ai", "video",
+    "creator", "cloud-desktop", "cad", "gaming",
+})
 CONTAINER_PREFIX = "gpubnb-dev-"
 PROXY_PREFIX = "gpubnb-dev-proxy-"
 VOLUME_PREFIX = "gpubnb-workspace-"
@@ -248,6 +265,27 @@ class GatewaySupervisor:
             if not PINNED_SECURITY_LAB_IMAGE.fullmatch(image):
                 raise RuntimeError("security_lab_workspace_image_must_be_locally_built_and_digest_pinned")
             return image
+        # Creator / Cloud Desktop / CAD / Gaming - NOT REAL_WORKING, NOT
+        # bookable (not in GATEWAY_WORKSPACE_SLUGS - see that constant's
+        # comment). This branch exists only so the launch logic below is
+        # real and unit-testable with mocks ahead of a future Linux GPU
+        # host validating it - see docs/SESSION_RESUME.md section 8/9.
+        if workspace_slug == "cloud-desktop":
+            if not PINNED_CLOUD_DESKTOP_IMAGE.fullmatch(image):
+                raise RuntimeError("cloud_desktop_workspace_image_must_be_locally_built_and_digest_pinned")
+            return image
+        if workspace_slug == "creator":
+            if not PINNED_CREATOR_IMAGE.fullmatch(image):
+                raise RuntimeError("creator_workspace_image_must_be_locally_built_and_digest_pinned")
+            return image
+        if workspace_slug == "cad":
+            if not PINNED_CAD_IMAGE.fullmatch(image):
+                raise RuntimeError("cad_workspace_image_must_be_locally_built_and_digest_pinned")
+            return image
+        if workspace_slug == "gaming":
+            if not PINNED_GAMING_IMAGE.fullmatch(image):
+                raise RuntimeError("gaming_workspace_image_must_be_locally_built_and_digest_pinned")
+            return image
         raise RuntimeError(f"unsupported_gateway_workspace_slug:{workspace_slug}")
 
     def _container_running(self, container: str) -> bool:
@@ -396,6 +434,41 @@ class GatewaySupervisor:
                 "--mount", f"type=volume,source={volume},target=/workspace",
                 "--entrypoint", "code-server", image,
                 "--bind-addr", f"0.0.0.0:{WORKSPACE_ENTRY_PORT}", "--auth", "none", "/workspace",
+            ], timeout=START_TIMEOUT_SECONDS)
+            return
+        if workspace_slug in ("cloud-desktop", "creator", "cad", "gaming"):
+            # NOT REAL_WORKING, NOT bookable - unreachable in production
+            # because none of these four slugs is in
+            # GATEWAY_WORKSPACE_SLUGS. Prepared ahead of a future Linux GPU
+            # host per docs/SESSION_RESUME.md section 8/9. All four share
+            # one real, live-confirmed launch profile (linuxserver/webtop,
+            # ubuntu-xfce base): deliberately NO --read-only and NO
+            # --cap-drop=ALL - both confirmed live to break this image (it
+            # self-configures nginx/SSL/web assets into several paths at
+            # container startup, and its s6-overlay init needs real Linux
+            # capabilities to remap PUID/PGID) - see
+            # workspaces/cloud-desktop/NOT_YET_WORKING.md for the exact
+            # errors. --security-opt=no-new-privileges plus a real /config
+            # volume (this image's own persistent-data convention, not
+            # /workspace) is the confirmed-working reduced hardening
+            # profile instead. GPU passthrough uses "graphics,display,
+            # utility,compute" (not the compute-only capability set every
+            # other GPU workspace here uses) because Selkies needs the
+            # "graphics"/"display" driver capabilities for
+            # OpenGL/EGL/DRI, not just CUDA compute - untested end-to-end
+            # without a real /dev/dri host (see the preflight script).
+            self._docker([
+                "run", "-d", "--name", container,
+                "--network", internal_network,
+                "--security-opt=no-new-privileges",
+                "--pids-limit=1024",
+                "--memory=8g" if workspace_slug in ("creator", "cad", "gaming") else "--memory=4g",
+                "--cpus=4" if workspace_slug in ("creator", "cad", "gaming") else "--cpus=2",
+                "--tmpfs=/tmp:rw,exec,nosuid,size=1024m",
+                "--mount", f"type=volume,source={volume},target=/config",
+                "--env", "PUID=1000", "--env", "PGID=1000",
+                *gpu_passthrough_flags("graphics,display,utility,compute"),
+                image,
             ], timeout=START_TIMEOUT_SECONDS)
             return
         self._docker([

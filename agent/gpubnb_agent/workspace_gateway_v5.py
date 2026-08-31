@@ -116,6 +116,31 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
                 "--ServerApp.allow_remote_access=True",
             ], timeout=legacy.START_TIMEOUT_SECONDS)
             return
+        if workspace_slug in ("cloud-desktop", "creator", "cad", "gaming"):
+            # NOT REAL_WORKING, NOT bookable - unreachable in production
+            # (none of these four slugs is in GATEWAY_WORKSPACE_SLUGS).
+            # Mirrors legacy._launch_workspace_container's own
+            # cloud-desktop/creator/cad/gaming branch exactly (same
+            # deliberate absence of --read-only/--cap-drop=ALL, same
+            # /config volume, same "graphics,display,utility,compute"
+            # capability set), except --gpus names the exact leased GPU
+            # UUID(s) from the signed rental authority instead of falling
+            # back to device=0.
+            self._docker([
+                "run", "-d", "--name", container,
+                "--network", internal_network,
+                "--security-opt=no-new-privileges",
+                "--pids-limit=1024",
+                "--memory=8g" if workspace_slug in ("creator", "cad", "gaming") else "--memory=4g",
+                "--cpus=4" if workspace_slug in ("creator", "cad", "gaming") else "--cpus=2",
+                "--tmpfs=/tmp:rw,exec,nosuid,size=1024m",
+                "--mount", f"type=volume,source={volume},target=/config",
+                "--env", "PUID=1000", "--env", "PGID=1000",
+                "--gpus", f"device={','.join(gpu_uuids)}",
+                "--env=NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute",
+                image,
+            ], timeout=legacy.START_TIMEOUT_SECONDS)
+            return
         self._docker([
             "run", "-d", "--name", container,
             "--network", internal_network,

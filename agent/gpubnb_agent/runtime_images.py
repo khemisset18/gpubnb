@@ -119,6 +119,76 @@ DEFAULT_SECURITY_LAB_IMAGE = (
     "gpubnb-security-lab-workspace@sha256:"
     "c7e647638b34934d27a04516b702df23e238325e8d2490144e5bb84d7bf2c379"
 )
+# ---------------------------------------------------------------------------
+# Creator / Cloud Desktop / CAD / Gaming - NOT REAL_WORKING, NOT bookable.
+# Not in executableWorkspaceSlugs. These four images are built (real,
+# tested where the lack of a Linux GPU host allows), but the workspaces
+# themselves are not wired into GATEWAY_WORKSPACE_SLUGS - the launch code
+# that references these constants is prepared and unit-tested with mocks,
+# but never reachable in production, and MUST NOT be trusted as proven
+# until validated on a real Linux GPU host per
+# docs/SESSION_RESUME.md section 8/9's checklist. All four share the exact
+# same base image (linuxserver/webtop, `ubuntu-xfce` tag - glibc-based, not
+# the default Alpine tag, needed because Gaming's Steam has no Alpine
+# package at all - confirmed live), each adding at most one real app on
+# top. Real, important, live-confirmed limitation shared by all four: this
+# image tolerates neither `--read-only` (self-configures nginx/SSL/web
+# assets into several different paths at container startup, not baked in
+# at build time) nor `--cap-drop=ALL` (its s6-overlay init needs real
+# capabilities - likely CAP_CHOWN/CAP_SETUID/CAP_SETGID/CAP_DAC_OVERRIDE -
+# to remap PUID/PGID at startup; confirmed live via real "Operation not
+# permitted" errors, not guessed). Confirmed working instead:
+# --security-opt=no-new-privileges, --pids-limit, --memory, --cpus,
+# --tmpfs=/tmp, and a real writable volume at /config (this image's own
+# persistent-data convention, not /workspace) - a real, reduced hardening
+# profile versus every other workspace here, documented, not hidden. See
+# workspaces/cloud-desktop/NOT_YET_WORKING.md for the full detail.
+DEFAULT_CLOUD_DESKTOP_IMAGE = (
+    "gpubnb-cloud-desktop-workspace@sha256:"
+    "c3d3cba63692d8bfb1ffd5510328460393c952beb2c649a5990a0807757e713b"
+)
+# Same base as DEFAULT_CLOUD_DESKTOP_IMAGE plus real Blender (official
+# Ubuntu `universe` package, GPL, confirmed live to install cleanly and to
+# run - `blender --version` reports a real "Blender 5.0.1" inside the
+# built image). GPU-accelerated rendering itself not provable here - see
+# workspaces/creator/NOT_YET_WORKING.md.
+DEFAULT_CREATOR_IMAGE = (
+    "gpubnb-creator-workspace@sha256:"
+    "b17566e9a7be21700cd993ae18f356efde55bf8278bb8694c9d0ba70f50bcacf"
+)
+# Same base as DEFAULT_CLOUD_DESKTOP_IMAGE plus real FreeCAD (GPL). NOT
+# from Ubuntu's own official repo - confirmed live this exact base image
+# already has the well-known, actively-maintained third-party `xtradeb`
+# PPA configured, which is where the installable FreeCAD 1.1.3 candidate
+# comes from - a real, meaningfully different trust level versus
+# Blender's/Steam's own official-Ubuntu-repo packages, not hidden. Real,
+# live-confirmed working: `freecadcmd --version` (the headless console
+# binary, not the GUI one, to avoid needing a real display for this
+# smoke test) reports a real "FreeCAD 1.1.3". GPU-accelerated 3D viewport
+# rendering itself not provable here - see workspaces/cad/NOT_YET_WORKING.md.
+DEFAULT_CAD_IMAGE = (
+    "gpubnb-cad-workspace@sha256:"
+    "f6f4d0c72247cf1252d8f37edf84d136cea7e5bacbcf5b97254d7e51b2908c57"
+)
+# Same base as DEFAULT_CLOUD_DESKTOP_IMAGE plus the real, official Ubuntu
+# multiverse `steam-installer` package (not third-party/pirated) - needs
+# `dpkg --add-architecture i386` first for its i386 Mesa/GL dependencies.
+# GPUbnb redistributes no game and no Steam content - the renter brings
+# their own Steam account and already-owned games, see
+# workspaces/gaming/NOT_YET_WORKING.md. Real, live-confirmed working:
+# `/usr/games/steam` is present and executable in the built image; a
+# separate, earlier manual test already proved the real launcher
+# genuinely bootstraps (creates ~/.steam/debian-installation) inside a
+# live running instance of this exact base image's real Xvfb display.
+# Real gamepad support (Selkies auto-initializes 4 persistent "Xbox 360
+# pad" instances) and real audio support (audio_enabled/
+# microphone_enabled, pulseaudio present) both confirmed live in Selkies'
+# own startup config. GPU-accelerated game rendering itself not provable
+# here - see workspaces/gaming/NOT_YET_WORKING.md.
+DEFAULT_GAMING_IMAGE = (
+    "gpubnb-gaming-workspace@sha256:"
+    "4b2dda2b810447164cdafffe7db9c7cf8d004f9dc64e0f14f32295b3aa2e86b2"
+)
 LEGACY_DEVELOPER_IMAGES = {
     "ghcr.io/khemisset18/gpubnb-developer@sha256:"
     "26700fdc955495b610bbcf8a912110395fc72181a236de2b70b539a0c02150b7",
@@ -148,4 +218,12 @@ def workspace_image(config: dict, slug: str) -> str:
         return DEFAULT_MOBILE_IMAGE
     if slug == "security-lab":
         return DEFAULT_SECURITY_LAB_IMAGE
+    if slug == "cloud-desktop":
+        return DEFAULT_CLOUD_DESKTOP_IMAGE
+    if slug == "creator":
+        return DEFAULT_CREATOR_IMAGE
+    if slug == "cad":
+        return DEFAULT_CAD_IMAGE
+    if slug == "gaming":
+        return DEFAULT_GAMING_IMAGE
     return str(config.get("diagnosticImage") or "")

@@ -708,6 +708,103 @@ class SecurityLabWorkspaceLaunchTests(unittest.TestCase):
         self.assertIn(SECURITY_LAB_IMAGE, run)
 
 
+CLOUD_DESKTOP_IMAGE = "gpubnb-cloud-desktop-workspace@sha256:" + ("c" * 64)
+CREATOR_IMAGE = "gpubnb-creator-workspace@sha256:" + ("e" * 64)
+CAD_IMAGE = "gpubnb-cad-workspace@sha256:" + ("a" * 64)
+GAMING_IMAGE = "gpubnb-gaming-workspace@sha256:" + ("b" * 64)
+
+
+class DesktopWorkspaceFamilyLaunchTests(unittest.TestCase):
+    """Creator / Cloud Desktop / CAD / Gaming - NOT REAL_WORKING, NOT
+    bookable (not in GATEWAY_WORKSPACE_SLUGS/executableWorkspaceSlugs).
+    These tests prove the shared launch code this session prepared ahead
+    of a future Linux GPU host is real and correct in isolation - they do
+    NOT, and cannot, prove GPU desktop rendering works. See
+    docs/SESSION_RESUME.md section 8/9."""
+
+    def _supervisor(self, docker: FakeDocker, api: FakeApi) -> GatewaySupervisor:
+        return make_supervisor(docker, api, {
+            "workspaceImages": {
+                "developer": OFFICIAL_IMAGE,
+                "cloud-desktop": CLOUD_DESKTOP_IMAGE,
+                "creator": CREATOR_IMAGE,
+                "cad": CAD_IMAGE,
+                "gaming": GAMING_IMAGE,
+            },
+        })
+
+    def test_each_desktop_slug_launches_its_own_image_with_the_shared_reduced_hardening_profile(self) -> None:
+        for slug, image in (
+            ("cloud-desktop", CLOUD_DESKTOP_IMAGE),
+            ("creator", CREATOR_IMAGE),
+            ("cad", CAD_IMAGE),
+            ("gaming", GAMING_IMAGE),
+        ):
+            with self.subTest(slug=slug):
+                docker, api = FakeDocker(), FakeApi()
+                supervisor = self._supervisor(docker, api)
+
+                supervisor._start_runtime(f"sess-{slug}-1", slug)
+
+                workspace = names_for_session(f"sess-{slug}-1")[0]
+                run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+                self.assertIn(image, run)
+                # Confirmed live this exact base image tolerates neither flag
+                # (self-configures nginx/SSL/web assets at startup; s6-overlay
+                # needs real capabilities to remap PUID/PGID) - see
+                # workspaces/cloud-desktop/NOT_YET_WORKING.md.
+                self.assertNotIn("--read-only", run)
+                self.assertNotIn("--cap-drop=ALL", run)
+                self.assertIn("--security-opt=no-new-privileges", run)
+                mount_arg = run[run.index("--mount") + 1]
+                self.assertIn("target=/config", mount_arg)
+                self.assertIn("PUID=1000", run)
+                self.assertIn("PGID=1000", run)
+                self.assertIn("--gpus=device=0", run)
+                self.assertIn(
+                    "--env=NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute", run,
+                )
+
+    def test_desktop_workspace_proxy_still_uses_the_trusted_developer_image(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-creator-1", "creator")
+
+        proxy = proxy_name_for_session("sess-creator-1")
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == proxy)
+        self.assertIn(OFFICIAL_IMAGE, run)
+        self.assertNotIn(CREATOR_IMAGE, run)
+
+    def test_reconcile_does_not_yet_launch_any_desktop_workspace_slug(self) -> None:
+        # The deliberate, current-session "prepare but don't enable" gate:
+        # none of these four slugs is in GATEWAY_WORKSPACE_SLUGS yet, so a
+        # session claiming one must silently fall back to "developer" via
+        # the exact same unrecognized-slug path every other unknown slug
+        # takes - not be launched with its own image. This is what actually
+        # keeps these four workspaces non-bookable in production right now.
+        for slug, image in (
+            ("cloud-desktop", CLOUD_DESKTOP_IMAGE),
+            ("creator", CREATOR_IMAGE),
+            ("cad", CAD_IMAGE),
+            ("gaming", GAMING_IMAGE),
+        ):
+            with self.subTest(slug=slug):
+                docker, api = FakeDocker(), FakeApi()
+                api.sessions = [{
+                    "id": f"sess-{slug}-2", "status": "READY", "expiresAt": _future(),
+                    "connectionMetadata": {}, "workspaceSlug": slug,
+                }]
+                supervisor = self._supervisor(docker, api)
+
+                supervisor._reconcile_sessions()
+
+                workspace = names_for_session(f"sess-{slug}-2")[0]
+                run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+                self.assertIn(OFFICIAL_IMAGE, run)
+                self.assertNotIn(image, run)
+
+
 class ProxyCrashTests(unittest.TestCase):
     def test_proxy_crash_replaces_the_complete_runtime_pair(self) -> None:
         docker, api = FakeDocker(), FakeApi()

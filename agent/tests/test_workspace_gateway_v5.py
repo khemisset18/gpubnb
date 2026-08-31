@@ -157,6 +157,44 @@ class WorkspaceGatewayV5Tests(unittest.TestCase):
         self.assertIn("--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility,video", command)
         self.assertIn("start-notebook.py", command)
 
+    def test_desktop_workspace_family_attaches_only_the_exact_leased_gpu_uuids(self) -> None:
+        # Creator / Cloud Desktop / CAD / Gaming - NOT REAL_WORKING, NOT
+        # bookable (not in GATEWAY_WORKSPACE_SLUGS). Proves only that the
+        # exact-leased-GPU-UUID override this session prepared is real and
+        # correct in isolation - not that GPU desktop rendering works. See
+        # docs/SESSION_RESUME.md section 8/9.
+        for slug in ("cloud-desktop", "creator", "cad", "gaming"):
+            with self.subTest(slug=slug):
+                supervisor = GatewaySupervisor.__new__(GatewaySupervisor)
+                supervisor._resource_start_context = [
+                    spec("resource_00000001", "GPU-aaaaaaaa"),
+                ]
+                calls: list[list[str]] = []
+
+                def docker(args: list[str], timeout: int = 30, check: bool = True):
+                    calls.append(list(args))
+                    return subprocess.CompletedProcess(args, 0, "", "")
+
+                supervisor._docker = docker  # type: ignore[method-assign]
+                supervisor._launch_workspace_container(
+                    "gpubnb-workspace-test",
+                    "gpubnb-volume-test",
+                    "gpubnb-internal-test",
+                    f"gpubnb-{slug}-workspace@sha256:" + "d" * 64,
+                    slug,
+                )
+
+                command = calls[-1]
+                self.assertIn("--gpus", command)
+                self.assertEqual(command[command.index("--gpus") + 1], "device=GPU-aaaaaaaa")
+                self.assertIn(
+                    "--env=NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute", command,
+                )
+                self.assertNotIn("--read-only", command)
+                self.assertNotIn("--cap-drop=ALL", command)
+                mount_arg = command[command.index("--mount") + 1]
+                self.assertIn("target=/config", mount_arg)
+
     def test_container_adoption_requires_exact_device_request_set(self) -> None:
         supervisor = GatewaySupervisor.__new__(GatewaySupervisor)
 

@@ -4,9 +4,13 @@ from gpubnb_agent.runtime_images import (
     DEFAULT_AI_IMAGE,
     DEFAULT_API_IMAGE,
     DEFAULT_AUDIO_IMAGE,
+    DEFAULT_CAD_IMAGE,
+    DEFAULT_CLOUD_DESKTOP_IMAGE,
     DEFAULT_COMPUTE_IMAGE,
+    DEFAULT_CREATOR_IMAGE,
     DEFAULT_DATA_IMAGE,
     DEFAULT_DEVELOPER_IMAGE,
+    DEFAULT_GAMING_IMAGE,
     DEFAULT_MOBILE_IMAGE,
     DEFAULT_SECURITY_LAB_IMAGE,
     DEFAULT_VIDEO_IMAGE,
@@ -151,6 +155,69 @@ class RuntimeImageDefaultsTests(unittest.TestCase):
         explicit = "gpubnb-security-lab-workspace@sha256:" + ("5" * 64)
         self.assertEqual(
             workspace_image({"workspaceImages": {"security-lab": explicit}}, "security-lab"),
+            explicit,
+        )
+
+    # Creator / Cloud Desktop / CAD / Gaming - NOT REAL_WORKING, NOT
+    # bookable (not in executableWorkspaceSlugs/GATEWAY_WORKSPACE_SLUGS).
+    # These tests only prove the image-selection logic itself is correct
+    # and real-digest-pinned, same as every other workspace here - they do
+    # not, and cannot, prove GPU desktop rendering works. See
+    # docs/SESSION_RESUME.md section 8/9.
+
+    def test_cloud_desktop_image_is_a_real_content_addressed_local_digest(self):
+        self.assertRegex(
+            DEFAULT_CLOUD_DESKTOP_IMAGE,
+            r"^gpubnb-cloud-desktop-workspace@sha256:[a-f0-9]{64}$",
+        )
+        self.assertEqual(workspace_image({}, "cloud-desktop"), DEFAULT_CLOUD_DESKTOP_IMAGE)
+
+    def test_explicit_cloud_desktop_pin_remains_supported(self):
+        explicit = "gpubnb-cloud-desktop-workspace@sha256:" + ("3" * 64)
+        self.assertEqual(
+            workspace_image({"workspaceImages": {"cloud-desktop": explicit}}, "cloud-desktop"),
+            explicit,
+        )
+
+    def test_creator_image_is_a_real_content_addressed_local_digest(self):
+        self.assertRegex(
+            DEFAULT_CREATOR_IMAGE,
+            r"^gpubnb-creator-workspace@sha256:[a-f0-9]{64}$",
+        )
+        self.assertEqual(workspace_image({}, "creator"), DEFAULT_CREATOR_IMAGE)
+
+    def test_explicit_creator_pin_remains_supported(self):
+        explicit = "gpubnb-creator-workspace@sha256:" + ("4" * 64)
+        self.assertEqual(
+            workspace_image({"workspaceImages": {"creator": explicit}}, "creator"),
+            explicit,
+        )
+
+    def test_cad_image_is_a_real_content_addressed_local_digest(self):
+        self.assertRegex(
+            DEFAULT_CAD_IMAGE,
+            r"^gpubnb-cad-workspace@sha256:[a-f0-9]{64}$",
+        )
+        self.assertEqual(workspace_image({}, "cad"), DEFAULT_CAD_IMAGE)
+
+    def test_explicit_cad_pin_remains_supported(self):
+        explicit = "gpubnb-cad-workspace@sha256:" + ("6" * 64)
+        self.assertEqual(
+            workspace_image({"workspaceImages": {"cad": explicit}}, "cad"),
+            explicit,
+        )
+
+    def test_gaming_image_is_a_real_content_addressed_local_digest(self):
+        self.assertRegex(
+            DEFAULT_GAMING_IMAGE,
+            r"^gpubnb-gaming-workspace@sha256:[a-f0-9]{64}$",
+        )
+        self.assertEqual(workspace_image({}, "gaming"), DEFAULT_GAMING_IMAGE)
+
+    def test_explicit_gaming_pin_remains_supported(self):
+        explicit = "gpubnb-gaming-workspace@sha256:" + ("7" * 64)
+        self.assertEqual(
+            workspace_image({"workspaceImages": {"gaming": explicit}}, "gaming"),
             explicit,
         )
 
