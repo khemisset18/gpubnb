@@ -535,13 +535,19 @@ class RunnerTests(unittest.TestCase):
         # to either. That gap survived this test once already, since asserting the flag
         # string is present doesn't prove the mount is actually usable — only running the
         # real command against the published image against did.
+        #
+        # `exec` is required too, on this same "the string alone doesn't prove it works"
+        # basis: this host's --tmpfs mounts come up noexec by default unless exec is
+        # explicit, which silently broke a renter's own chmod +x script - confirmed live
+        # (exit 126) against the real image, not caught by any earlier version of this
+        # test either. See DEVELOPER_HOME_TMPFS's comment in runner.py.
         image = "registry.example/gpubnb/developer@sha256:" + ("b" * 64)
         command = workspace_health_command(image, "developer", "GPU-11111111-2222-3333-4444-555555555555")
         self.assertIn(
-            "--tmpfs=/workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700", command
+            "--tmpfs=/workspace:rw,exec,nosuid,size=512m,uid=1000,gid=1000,mode=0700", command
         )
         self.assertIn(
-            "--tmpfs=/home/coder:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700", command
+            "--tmpfs=/home/coder:rw,exec,nosuid,size=512m,uid=1000,gid=1000,mode=0700", command
         )
         self.assertFalse(
             any(flag in ("--volume", "-v") or flag.startswith(("--volume=", "-v=")) for flag in command),

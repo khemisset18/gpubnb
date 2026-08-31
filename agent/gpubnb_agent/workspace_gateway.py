@@ -30,7 +30,7 @@ import websocket
 from .client import ApiClient, agent_request
 from .host_tunnel import HostTunnelSupervisor
 from .mining_guard import ProcessInspector, WindowsProcessInspector, miner_install_root, stop_all_miners_and_verify
-from .runner import DATA_HOME_TMPFS, DEVELOPER_HOME_TMPFS, gpu_passthrough_flags
+from .runner import DATA_HOME_TMPFS, DEVELOPER_HOME_TMPFS, MOBILE_HOME_TMPFS, gpu_passthrough_flags
 from .storage import load_config, load_key
 from .runtime_images import workspace_image
 
@@ -48,21 +48,34 @@ PINNED_AUDIO_IMAGE = re.compile(r"^quay\.io/jupyter/datascience-notebook@sha256:
 # headless (DOCKER_STACKS_JUPYTER_CMD=server, every UI extension disabled),
 # exposing only jupyter_server's own REST + WebSocket kernel API.
 PINNED_API_IMAGE = re.compile(r"^quay\.io/jupyter/datascience-notebook@sha256:[a-f0-9]{64}$")
+# Not a registry image: this custom GPUbnb image (workspaces/mobile/Dockerfile)
+# is built and tagged LOCALLY on this dev/test host only, never pushed
+# anywhere - see runtime_images.DEFAULT_MOBILE_IMAGE. Still a genuine
+# content-addressed digest reference though: Docker records a local
+# `RepoDigests` entry for a locally-built, locally-tagged image too
+# (confirmed live: `docker run gpubnb-mobile-workspace@sha256:<id>` resolves
+# and runs with no push/pull ever having happened), so this is exactly as
+# immutable as every other workspace's registry-pulled `repo@sha256:...` -
+# just not fetchable from anywhere else.
+PINNED_MOBILE_IMAGE = re.compile(r"^gpubnb-mobile-workspace@sha256:[a-f0-9]{64}$")
 # Every workspace surface this gateway runs listens on this port inside its
 # container; the loopback proxy (workspaces/developer/loopback-proxy.js, reused
 # unmodified for every slug) forwards to exactly this port, so a new workspace
 # surface must be configured to bind here rather than its tool's own default.
 WORKSPACE_ENTRY_PORT = 3000
-GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai", "video", "audio", "api"})
+GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai", "video", "audio", "api", "mobile"})
 # Workspaces whose container genuinely needs the GPU attached (--gpus), scoped
 # to the exact hardware UUID the rental resource authority leased for that
-# session - never a fixed device index. Data, Audio and API intentionally
-# excluded: none of their containers ever touch the GPU (audio DSP has no
-# hardware-codec equivalent to Video's NVENC; API Workspace is a CPU-only
-# headless code-execution surface by design), even though their bookings
-# still reserve the machine's GPU for exclusivity/billing purposes, same as
-# every other workspace on this platform (see rental-resource-authority.ts) -
-# the renter is still renting the whole machine.
+# session - never a fixed device index. Data, Audio, API and Mobile
+# intentionally excluded: none of their containers ever touch the GPU (audio
+# DSP has no hardware-codec equivalent to Video's NVENC; API Workspace is a
+# CPU-only headless code-execution surface by design; Mobile is a real
+# headless Android build/dev environment - compiling an APK/AAR needs no
+# GPU, and no graphical emulator is offered since /dev/kvm is confirmed
+# absent on this host), even though their bookings still reserve the
+# machine's GPU for exclusivity/billing purposes, same as every other
+# workspace on this platform (see rental-resource-authority.ts) - the
+# renter is still renting the whole machine.
 GPU_ATTACHED_WORKSPACE_SLUGS = frozenset({"developer", "ai", "video"})
 CONTAINER_PREFIX = "gpubnb-dev-"
 PROXY_PREFIX = "gpubnb-dev-proxy-"
@@ -223,6 +236,10 @@ class GatewaySupervisor:
             if not PINNED_API_IMAGE.fullmatch(image):
                 raise RuntimeError("api_workspace_image_must_be_official_and_digest_pinned")
             return image
+        if workspace_slug == "mobile":
+            if not PINNED_MOBILE_IMAGE.fullmatch(image):
+                raise RuntimeError("mobile_workspace_image_must_be_locally_built_and_digest_pinned")
+            return image
         raise RuntimeError(f"unsupported_gateway_workspace_slug:{workspace_slug}")
 
     def _container_running(self, container: str) -> bool:
@@ -327,6 +344,31 @@ class GatewaySupervisor:
                 "--ServerApp.allow_remote_access=True",
             ]
             self._docker(args, timeout=START_TIMEOUT_SECONDS)
+            return
+        if workspace_slug == "mobile":
+            # Custom local image (workspaces/mobile/Dockerfile) - real code-server
+            # terminal/editor, real Android SDK/Gradle, no GPU (a headless
+            # Android build needs none). Do NOT override --entrypoint here like
+            # the generic Developer branch below does: the image's own baked-in
+            # ENTRYPOINT (gpubnb-mobile-entrypoint) seeds a pre-warmed offline
+            # Gradle cache into $HOME/.gradle and the sample project into
+            # /workspace on first run, before exec'ing code-server - skipping it
+            # would silently lose that. MOBILE_HOME_TMPFS (2048m), not the
+            # smaller DEVELOPER_HOME_TMPFS: the seeded Gradle cache alone is
+            # ~700MB - confirmed live that 512m overflows mid-seed ("No space
+            # left on device", the container then exits and the session never
+            # comes up).
+            self._docker([
+                "run", "-d", "--name", container,
+                "--network", internal_network,
+                "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
+                "--pids-limit=512", "--memory=6g", "--cpus=2",
+                "--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
+                MOBILE_HOME_TMPFS,
+                "--mount", f"type=volume,source={volume},target=/workspace",
+                image,
+                "--bind-addr", f"0.0.0.0:{WORKSPACE_ENTRY_PORT}", "--auth", "none", "/workspace",
+            ], timeout=START_TIMEOUT_SECONDS)
             return
         self._docker([
             "run", "-d", "--name", container,

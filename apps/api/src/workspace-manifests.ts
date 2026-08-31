@@ -40,7 +40,19 @@ export const workspaceManifests:readonly WorkspaceManifest[]=Object.freeze([
  // see runtime_images.DEFAULT_DATA_IMAGE and docs/SESSION_RESUME.md). Never
  // re-add it here without a real client library actually present in the image.
  manifest({slug:'data',name:'Data Workspace',icon:'📊',category:'DATA',release:'BETA',summary:'Analyse et ingénierie des données',technologies:['Python','R','JupyterLab','pandas','scikit-learn'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:16384,diskMiB:51200,docker:true},recommended:{ramMiB:32768,diskMiB:204800}}),
- manifest({slug:'mobile',name:'Mobile Workspace',icon:'📱',category:'MOBILE',release:'UPCOMING',summary:'Développement Android et mobile',technologies:['Android Studio','Flutter','React Native','ADB'],license:'MIXED',minimum:{ramMiB:16384,diskMiB:61440,virtualization:true},recommended:{ramMiB:32768,diskMiB:122880}}),
+ // 'Android Studio', 'Flutter' and 'React Native' intentionally absent from
+ // `technologies`: none is installed. What's real: a custom GPUbnb image
+ // (workspaces/mobile/Dockerfile, built FROM the already-proven Developer
+ // image) adding a real Android SDK (platform-tools, build-tools, a current
+ // platform) and a real Gradle install to the same code-server terminal/
+ // editor Developer Workspace already has - confirmed live with a real
+ // `gradlew assembleDebug` producing a real .aar, fully offline. No
+ // graphical emulator: `virtualization` dropped from `minimum` too - this
+ // runs as a plain container needing no hardware virtualization at all
+ // (real measured requirement, not the assumed-but-never-built VM this
+ // manifest originally specified) - see docs/SESSION_RESUME.md for why a
+ // graphical emulator specifically stays unavailable (/dev/kvm).
+ manifest({slug:'mobile',name:'Mobile Workspace',icon:'📱',category:'MOBILE',release:'BETA',summary:'Développement et build Android en environnement headless (sans émulateur graphique)',technologies:['Android SDK','Gradle','ADB','VS Code'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:16384,diskMiB:61440,docker:true},recommended:{ramMiB:32768,diskMiB:122880}}),
  manifest({slug:'security-lab',name:'Security Lab',icon:'🛡️',category:'SECURITY',release:'EXPERIMENTAL',summary:'Laboratoire défensif très isolé',technologies:['Kali','Wireshark','Burp Suite','CTF'],license:'MIXED',minimum:{ramMiB:16384,diskMiB:51200,virtualization:true},recommended:{ramMiB:32768,diskMiB:102400}}),
  manifest({slug:'cad',name:'CAD Workspace',icon:'📐',category:'CAD',release:'UPCOMING',summary:'CAO, simulation et ingénierie',technologies:['FreeCAD','Blender','AutoCAD','Fusion 360'],license:'USER_LICENSE_REQUIRED',minimum:{ramMiB:16384,diskMiB:61440,vramMiB:6144},recommended:{ramMiB:32768,diskMiB:122880,vramMiB:12288}}),
  manifest({slug:'gaming',name:'Gaming Workspace',icon:'🎮',category:'GAMING',release:'EXPERIMENTAL',summary:'Jeu distant sous licences utilisateur',technologies:['Sunshine','Moonlight','Steam','WebRTC'],license:'USER_ACCOUNT_REQUIRED',minimum:{ramMiB:16384,diskMiB:102400,vramMiB:8192,virtualization:true},recommended:{ramMiB:32768,diskMiB:204800,vramMiB:12288}}),

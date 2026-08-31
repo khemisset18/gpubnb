@@ -1,0 +1,18 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace 'com.gpubnb.mobile.healthcheck'
+    compileSdk 36
+    // Pinned to exactly what the Dockerfile installs via sdkmanager -
+    // AGP's own default build-tools pick ("36.0.0") is not necessarily what
+    // is actually present, and this session's runtime has no network to
+    // fetch a missing one (confirmed live: an unpinned build tries to
+    // auto-download addons_list-*.xml / repository manifests and fails).
+    buildToolsVersion '36.1.0'
+
+    defaultConfig {
+        minSdk 24
+    }
+}

@@ -75,6 +75,30 @@ DEFAULT_API_IMAGE = (
     "quay.io/jupyter/datascience-notebook@sha256:"
     "20cbe280416d58b27e5fa1353a6ab849853103eca05f9e310608370f266c3dc4"
 )
+# Custom GPUbnb image (workspaces/mobile/Dockerfile), built and used
+# LOCALLY on this dev/test host only - NOT published to any registry (no
+# credentials, and publishing is a separate decision the user has not made).
+# This means Mobile Workspace is only actually runnable on a host machine
+# that has this exact image built locally, unlike every other workspace's
+# image here, which is a registry-pulled reference any host can fetch. Built
+# FROM the already-proven Developer image (same code-server terminal/editor,
+# same coder uid/gid 1000, same HTTP-on-3000 surface) plus a real Android
+# SDK (platform-tools, build-tools;36.1.0, platforms;android-36) and a real
+# Gradle 9.7.1 install, both from their official upstream distributions with
+# integrity verified against the real published checksums. No emulator/
+# system-images: /dev/kvm is confirmed absent on this host and there is no
+# honest software fallback - this is a real headless Android build & dev
+# environment, not a device emulator (see docs/SESSION_RESUME.md). Pinned by
+# a real content-addressed digest, exactly like every other workspace here -
+# `docker build -t gpubnb-mobile-workspace:local` gets a local `RepoDigests`
+# entry even without ever being pushed (confirmed live: `docker run
+# gpubnb-mobile-workspace@sha256:<id>` resolves and runs) - it is just not
+# fetchable from any registry, so only a host that ran this exact build can
+# use it. See PINNED_MOBILE_IMAGE in workspace_gateway.py.
+DEFAULT_MOBILE_IMAGE = (
+    "gpubnb-mobile-workspace@sha256:"
+    "93c5903b3acccddd9b7c64a7274c0d93239b32c31f64979d09b77b813d87afd8"
+)
 LEGACY_DEVELOPER_IMAGES = {
     "ghcr.io/khemisset18/gpubnb-developer@sha256:"
     "26700fdc955495b610bbcf8a912110395fc72181a236de2b70b539a0c02150b7",
@@ -100,4 +124,6 @@ def workspace_image(config: dict, slug: str) -> str:
         return DEFAULT_AUDIO_IMAGE
     if slug == "api":
         return DEFAULT_API_IMAGE
+    if slug == "mobile":
+        return DEFAULT_MOBILE_IMAGE
     return str(config.get("diagnosticImage") or "")

@@ -7,6 +7,7 @@ from gpubnb_agent.runtime_images import (
     DEFAULT_COMPUTE_IMAGE,
     DEFAULT_DATA_IMAGE,
     DEFAULT_DEVELOPER_IMAGE,
+    DEFAULT_MOBILE_IMAGE,
     DEFAULT_VIDEO_IMAGE,
     workspace_image,
 )
@@ -118,6 +119,23 @@ class RuntimeImageDefaultsTests(unittest.TestCase):
         explicit = "quay.io/jupyter/datascience-notebook@sha256:" + ("1" * 64)
         self.assertEqual(
             workspace_image({"workspaceImages": {"api": explicit}}, "api"),
+            explicit,
+        )
+
+    def test_mobile_image_is_a_real_content_addressed_local_digest(self):
+        # Not a registry reference (see the constant's own comment) - still
+        # must be a real digest-pinned reference, just under the local-only
+        # gpubnb-mobile-workspace repo name rather than a registry host.
+        self.assertRegex(
+            DEFAULT_MOBILE_IMAGE,
+            r"^gpubnb-mobile-workspace@sha256:[a-f0-9]{64}$",
+        )
+        self.assertEqual(workspace_image({}, "mobile"), DEFAULT_MOBILE_IMAGE)
+
+    def test_explicit_mobile_pin_remains_supported(self):
+        explicit = "gpubnb-mobile-workspace@sha256:" + ("2" * 64)
+        self.assertEqual(
+            workspace_image({"workspaceImages": {"mobile": explicit}}, "mobile"),
             explicit,
         )
 

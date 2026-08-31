@@ -44,7 +44,13 @@ export const workspaceRuntimeProfiles:Readonly<Record<string,WorkspaceRuntimePro
   // corrected to match what's actually real, not what was first envisioned.
   video:{slug:'video',runtime:'CONTAINER',surface:'NOTEBOOK',category:'VIDEO',entrypoint:'jupyterlab',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   cad:{slug:'cad',runtime:'DESKTOP_VM',surface:'DESKTOP',category:'CAD',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
-  mobile:{slug:'mobile',runtime:'ISOLATED_VM',surface:'DESKTOP',category:'MOBILE',entrypoint:'desktop-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  // Delivered as CONTAINER/CODE (code-server + a real Android SDK/Gradle
+  // install, same surface as Developer), not the ISOLATED_VM/DESKTOP this
+  // originally assumed: no VM/hypervisor infrastructure exists in this
+  // codebase, and a graphical emulator specifically needs /dev/kvm, which is
+  // confirmed absent on this host - see docs/SESSION_RESUME.md. This profile
+  // is corrected to match what's actually real, not what was first envisioned.
+  mobile:{slug:'mobile',runtime:'CONTAINER',surface:'CODE',category:'MOBILE',entrypoint:'code-server',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   'security-lab':{slug:'security-lab',runtime:'ISOLATED_VM',surface:'DESKTOP',category:'SECURITY',entrypoint:'isolated-lab-gateway',network:'NONE',persistentWorkspace:false,hostAccess:false,dockerSocket:false,privileged:false},
   gaming:{slug:'gaming',runtime:'STREAMING_VM',surface:'STREAM',category:'GAMING',entrypoint:'stream-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   // Delivered as CONTAINER/NOTEBOOK (JupyterLab + real ffmpeg audio DSP -

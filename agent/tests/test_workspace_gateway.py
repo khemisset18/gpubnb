@@ -602,6 +602,64 @@ class ApiWorkspaceLaunchTests(unittest.TestCase):
         self.assertIn(API_IMAGE, run)
 
 
+MOBILE_IMAGE = "gpubnb-mobile-workspace@sha256:" + ("8" * 64)
+
+
+class MobileWorkspaceLaunchTests(unittest.TestCase):
+    def _supervisor(self, docker: FakeDocker, api: FakeApi) -> GatewaySupervisor:
+        return make_supervisor(docker, api, {
+            "workspaceImages": {"developer": OFFICIAL_IMAGE, "mobile": MOBILE_IMAGE},
+        })
+
+    def test_mobile_workspace_container_runs_code_server_with_no_gpu_and_its_own_entrypoint(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-mobile-1", "mobile")
+
+        workspace = names_for_session("sess-mobile-1")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(MOBILE_IMAGE, run)
+        self.assertFalse(any(arg.startswith("--gpus") for arg in run))
+        # Unlike Developer's generic branch, this must NOT override
+        # --entrypoint: the image's own baked-in entrypoint seeds the offline
+        # Gradle cache and sample project before exec'ing code-server.
+        self.assertNotIn("--entrypoint", run)
+        self.assertIn("--bind-addr", run)
+        self.assertIn(f"0.0.0.0:3000", run)
+        mount_arg = run[run.index("--mount") + 1]
+        self.assertIn("target=/workspace", mount_arg)
+        # Regression guard: the seeded Gradle cache is ~700MB - confirmed live
+        # that the smaller, shared DEVELOPER_HOME_TMPFS (512m) overflows
+        # mid-seed ("No space left on device").
+        home_tmpfs = next(arg for arg in run if arg.startswith("--tmpfs=/home/coder:"))
+        size = int(home_tmpfs.split("size=")[1].split("m,")[0])
+        self.assertGreaterEqual(size, 2048)
+        self.assertIn(",exec,", home_tmpfs)
+
+    def test_mobile_workspace_proxy_still_uses_the_trusted_developer_image(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-mobile-1", "mobile")
+
+        proxy = proxy_name_for_session("sess-mobile-1")
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == proxy)
+        self.assertIn(OFFICIAL_IMAGE, run)
+        self.assertNotIn(MOBILE_IMAGE, run)
+
+    def test_reconcile_reads_mobile_workspace_slug_and_launches_the_right_image(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        api.sessions = [{"id": "sess-mobile-2", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}, "workspaceSlug": "mobile"}]
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._reconcile_sessions()
+
+        workspace = names_for_session("sess-mobile-2")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(MOBILE_IMAGE, run)
+
+
 class ProxyCrashTests(unittest.TestCase):
     def test_proxy_crash_replaces_the_complete_runtime_pair(self) -> None:
         docker, api = FakeDocker(), FakeApi()

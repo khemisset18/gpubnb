@@ -2,11 +2,41 @@ import unittest
 from unittest.mock import Mock, patch
 
 from gpubnb_agent.cli import resolve_developer_workspace_gpu_uuid
-from gpubnb_agent.runner import workspace_health_command
+from gpubnb_agent.runner import DATA_HOME_TMPFS, DEVELOPER_HOME_TMPFS, MOBILE_HOME_TMPFS, workspace_health_command
 
 
 IMAGE = "ghcr.io/khemisset18/gpubnb-developer@sha256:" + ("a" * 64)
 GPU_UUID = "GPU-11111111-2222-3333-4444-555555555555"
+
+
+class HomeTmpfsExecTests(unittest.TestCase):
+    # Regression guard for a real bug caught by live Docker testing (not by any
+    # prior unit test): this Windows/Docker-Desktop/WSL2 host's `--tmpfs` mounts
+    # come up `noexec` by default unless `exec` is explicitly requested, which
+    # silently broke a renter running their own `chmod +x` script directly from
+    # $HOME (exit 126, "Permission denied") in every workspace whose $HOME is a
+    # tmpfs - confirmed live against the real, already-shipped Developer image.
+    def test_developer_home_tmpfs_is_exec_capable(self):
+        self.assertIn(",exec,", DEVELOPER_HOME_TMPFS)
+
+    def test_data_home_tmpfs_is_exec_capable(self):
+        self.assertIn(",exec,", DATA_HOME_TMPFS)
+
+    def test_developer_healthcheck_workspace_tmpfs_is_exec_capable(self):
+        command = workspace_health_command(IMAGE, "developer", GPU_UUID)
+        workspace_tmpfs = next(part for part in command if part.startswith("--tmpfs=/workspace:"))
+        self.assertIn(",exec,", workspace_tmpfs)
+
+    # Regression guard for a second real bug, also only caught by live Docker
+    # testing: Mobile Workspace's pre-warmed Gradle cache (seeded into $HOME
+    # every session) is ~700MB by itself - confirmed live that
+    # DEVELOPER_HOME_TMPFS's 512m overflows mid-seed ("No space left on
+    # device"), so Mobile needs its own larger tmpfs, not the shared one
+    # every other workspace's $HOME is small enough to use.
+    def test_mobile_home_tmpfs_is_large_enough_for_the_seeded_gradle_cache(self):
+        self.assertIn(",exec,", MOBILE_HOME_TMPFS)
+        size = int(MOBILE_HOME_TMPFS.split("size=")[1].split("m,")[0])
+        self.assertGreaterEqual(size, 2048, "must comfortably exceed the ~700MB seeded Gradle cache")
 
 
 class DeveloperWorkspaceHealthCommandTests(unittest.TestCase):
@@ -105,6 +135,57 @@ class ApiWorkspaceHealthCommandTests(unittest.TestCase):
         self.assertIn("execute_request", script)
         self.assertIn("disable_check_xsrf", script)
         self.assertIn('"jupyterlab": False', script)
+
+
+class MobileWorkspaceHealthCommandTests(unittest.TestCase):
+    IMAGE = "gpubnb-mobile-workspace@sha256:" + ("3" * 64)
+
+    def test_mobile_workspace_never_requests_a_gpu(self):
+        # A headless Android build needs no GPU - no graphical emulator is
+        # offered (/dev/kvm confirmed absent on this host).
+        command = workspace_health_command(self.IMAGE, "mobile")
+        self.assertFalse(any(part.startswith("--gpus") for part in command))
+        self.assertFalse(any("NVIDIA_DRIVER_CAPABILITIES" in part for part in command))
+
+    def test_mobile_workspace_no_gpu_uuid_required(self):
+        command = workspace_health_command(self.IMAGE, "mobile", None)
+        self.assertEqual(command[-3], self.IMAGE)
+
+    def test_mobile_workspace_tmpfs_mounts_are_exec_capable(self):
+        # Regression guard: this host's tmpfs mounts default to noexec, which
+        # would silently break gradlew's own execution - see
+        # DEVELOPER_HOME_TMPFS's comment in runner.py.
+        command = workspace_health_command(self.IMAGE, "mobile")
+        home_tmpfs = next(part for part in command if part.startswith("--tmpfs=/home/coder:"))
+        workspace_tmpfs = next(part for part in command if part.startswith("--tmpfs=/workspace:"))
+        self.assertIn(",exec,", home_tmpfs)
+        self.assertIn(",exec,", workspace_tmpfs)
+
+    def test_mobile_workspace_home_tmpfs_and_memory_budget_fit_the_seeded_gradle_cache(self):
+        # Regression guard: the seeded Gradle cache is ~700MB - confirmed live
+        # that the smaller, shared DEVELOPER_HOME_TMPFS (512m) overflows
+        # mid-seed, and that --memory=2g (the other CPU-only healthchecks'
+        # budget) is too tight once that tmpfs plus the JVM's own working
+        # memory are both counted against the same cgroup.
+        command = workspace_health_command(self.IMAGE, "mobile")
+        home_tmpfs = next(part for part in command if part.startswith("--tmpfs=/home/coder:"))
+        size = int(home_tmpfs.split("size=")[1].split("m,")[0])
+        self.assertGreaterEqual(size, 2048)
+        self.assertIn("--memory=4g", command)
+
+    def test_healthcheck_drives_a_real_offline_gradle_build(self):
+        # Not just "the tools are on PATH": proves a real Android build
+        # actually completes fully offline (--network=none) using only the
+        # cache pre-warmed into the image at build time, and checks the real
+        # .aar output exists.
+        command = workspace_health_command(self.IMAGE, "mobile")
+        self.assertEqual(command[-2], "-c")
+        self.assertEqual(command[-3], self.IMAGE)
+        script = command[-1]
+        self.assertIn("gradlew", script)
+        self.assertIn("assembleDebug", script)
+        self.assertIn("--offline", script)
+        self.assertIn("lib-debug.aar", script)
 
 
 class AiWorkspaceHealthCommandTests(unittest.TestCase):

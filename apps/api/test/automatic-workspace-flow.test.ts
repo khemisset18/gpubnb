@@ -130,7 +130,8 @@ test('the catalogue only marks a workspace bookable when it is both compatible a
   assert.equal(bySlug.video.bookable,true);
   assert.equal(bySlug.audio.bookable,true);
   assert.equal(bySlug.api.bookable,true);
-  for(const slug of catalogue.map(item=>item.slug))if(slug!=='compute'&&slug!=='developer'&&slug!=='data'&&slug!=='ai'&&slug!=='video'&&slug!=='audio'&&slug!=='api')assert.equal(bySlug[slug].bookable,false,`${slug} must not be bookable yet even though it is compatible`);
+  assert.equal(bySlug.mobile.bookable,true);
+  for(const slug of catalogue.map(item=>item.slug))if(slug!=='compute'&&slug!=='developer'&&slug!=='data'&&slug!=='ai'&&slug!=='video'&&slug!=='audio'&&slug!=='api'&&slug!=='mobile')assert.equal(bySlug[slug].bookable,false,`${slug} must not be bookable yet even though it is compatible`);
 });
 
 test('an incompatible workspace in the full catalogue is explained, not silently hidden',()=>{
@@ -172,14 +173,14 @@ test('retry is not scoped to a single workspace slug, and re-enqueues using the 
   const end=renterRoutes.indexOf("app.post('/bookings/:bookingId/workspace/data'",start);
   assert.ok(start>=0&&end>start);
   const body=renterRoutes.slice(start,end);
-  assert.match(body,/slug:\{in:\['developer','data','ai','video','audio','api'\]\}/);
+  assert.match(body,/slug:\{in:\['developer','data','ai','video','audio','api','mobile'\]\}/);
   assert.match(body,/workspaceSlug=row\.machineWorkspace\.workspace\.slug/);
   assert.doesNotMatch(body,/workspaceSlug:'developer'/);
 });
 
 test('the workspace-gateway route filters and the executable-slug gate all agree on which slugs run through the persistent gateway',async()=>{
   const gateway=await readFile(path.join(sourceRoot,'workspace-gateway.ts'),'utf8');
-  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai','video','audio','api'\]/);
+  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai','video','audio','api','mobile'\]/);
   const matches=gateway.match(/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/g)??[];
   assert.equal(matches.length,5,'all five agent-facing gateway routes (activate, desired, data-plane-host, register, usage) must use the shared slug list');
   const { executableWorkspaceSlugs }=await import('../src/machine-workspace-catalog.js');
@@ -192,6 +193,7 @@ test('the workspace-gateway route filters and the executable-slug gate all agree
   assert.ok(executableWorkspaceSlugs.includes('video'));
   assert.ok(executableWorkspaceSlugs.includes('audio'));
   assert.ok(executableWorkspaceSlugs.includes('api'));
+  assert.ok(executableWorkspaceSlugs.includes('mobile'));
 });
 
 test('AI Workspace has its own real booking, status and access routes, parallel to Data\'s',async()=>{
@@ -260,4 +262,34 @@ test('API Workspace is compatible even with a modest CPU-only-capable machine - 
   const api=catalogue.find(item=>item.slug==='api')!;
   assert.equal(api.compatible,true,'API Workspace must stay usable on machines with no GPU at all');
   assert.equal(api.bookable,true);
+});
+
+test('Mobile Workspace has its own real booking, status and access routes, parallel to API\'s',async()=>{
+  const renterRoutes=await readFile(path.join(sourceRoot,'workspace-renter-routes.ts'),'utf8');
+  assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/mobile'/);
+  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'mobile'/);
+  assert.match(renterRoutes,/type:JobType\.WORKSPACE_PREPARE,parameters:\{workspaceSlug:'mobile'/);
+  assert.match(renterRoutes,/app\.get\('\/bookings\/:bookingId\/workspace\/mobile\/status'/);
+  assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/mobile\/access'/);
+  const mobileStatusStart=renterRoutes.indexOf("app.get('/bookings/:bookingId/workspace/mobile/status'");
+  const mobileAccessStart=renterRoutes.indexOf("app.post('/bookings/:bookingId/workspace/mobile/access'");
+  const developerStatusStart=renterRoutes.indexOf("app.get('/bookings/:bookingId/workspace'");
+  assert.ok(mobileStatusStart>=0&&mobileAccessStart>mobileStatusStart&&developerStatusStart>mobileAccessStart);
+  assert.match(renterRoutes.slice(mobileStatusStart,mobileAccessStart),/slug: 'mobile'/);
+  assert.match(renterRoutes.slice(mobileAccessStart,developerStatusStart),/slug: 'mobile'/);
+});
+
+test('Mobile Workspace no longer requires virtualization - it is a plain container, not a VM',()=>{
+  const noVirtualizationMachine={ramTotalMiB:32768,diskTotalMiB:200000,vramMiB:0,cudaVersion:null,dockerAvailable:true,nvidiaRuntimeAvailable:false,operatingSystem:'Windows',virtualizationAvailable:false};
+  const catalogue=allWorkspaceCompatibility(noVirtualizationMachine);
+  const mobile=catalogue.find(item=>item.slug==='mobile')!;
+  assert.equal(mobile.compatible,true,'a real headless Android build container needs no hardware virtualization at all');
+});
+
+test('Mobile Workspace is bookable now that its real runtime has been built, tested and live-validated',()=>{
+  const highEndMachine={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'13.1',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true};
+  const catalogue=allWorkspaceCompatibility(highEndMachine);
+  const mobile=catalogue.find(item=>item.slug==='mobile')!;
+  assert.equal(mobile.compatible,true);
+  assert.equal(mobile.bookable,true);
 });

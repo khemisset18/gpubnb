@@ -3,22 +3,24 @@ import { MachineWorkspaceState, WorkspaceRelease, type PrismaClient } from '@pri
 import { analyzeWorkspace, type MachineCapabilities } from './workspace-compatibility.js';
 import { workspaceManifest, workspaceManifests, type WorkspaceManifest } from './workspace-manifests.js';
 
-// 'data', 'ai', 'video', 'audio' and 'api' joined this list once a real
-// runtime existed behind each: agent-side container launch
-// (workspace_gateway.py, official quay.io/jupyter image), API gateway wiring
-// (workspace-gateway.ts, rental-resource-authority.ts) and renter routes
-// (workspace-renter-routes.ts) - see docs/SESSION_RESUME.md for the
+// 'data', 'ai', 'video', 'audio', 'api' and 'mobile' joined this list once a
+// real runtime existed behind each: agent-side container launch
+// (workspace_gateway.py, official quay.io/jupyter image, or for Mobile a
+// custom local GPUbnb image - see workspaces/mobile/Dockerfile), API gateway
+// wiring (workspace-gateway.ts, rental-resource-authority.ts) and renter
+// routes (workspace-renter-routes.ts) - see docs/SESSION_RESUME.md for the
 // verification evidence, including AI's and Video's real GPU passthrough
 // each proven live inside the actual running container (not just at
 // healthcheck time): AI via torch.cuda.is_available(), Video via a real
 // h264_nvenc hardware encode, Audio via a real ffmpeg loudnorm pass (both
-// Video/Audio written to the persistent volume), and API via a real
+// Video/Audio written to the persistent volume), API via a real
 // REST-created Jupyter kernel executing real code over its WebSocket
-// channel, proven through the FULL production relay path (proxy container
-// -> workspace container), not just the isolated healthcheck container.
-// Never add a slug here on the strength of its manifest/catalogue entry
-// alone.
-export const executableWorkspaceSlugs = ['compute', 'developer', 'data', 'ai', 'video', 'audio', 'api'] as const;
+// channel, and Mobile via a real `gradlew assembleDebug` producing a real
+// .aar fully offline - all proven through the FULL production relay path
+// (proxy container -> workspace container), not just an isolated healthcheck
+// container. Never add a slug here on the strength of its manifest/catalogue
+// entry alone.
+export const executableWorkspaceSlugs = ['compute', 'developer', 'data', 'ai', 'video', 'audio', 'api', 'mobile'] as const;
 export type ExecutableWorkspaceSlug = typeof executableWorkspaceSlugs[number];
 
 export function isExecutableWorkspaceSlug(value: string): value is ExecutableWorkspaceSlug {

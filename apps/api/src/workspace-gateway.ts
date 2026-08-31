@@ -24,7 +24,7 @@ const WebSocketServer=WebSocket.Server;
 // machine-workspace-catalog's executableWorkspaceSlugs) because that list also
 // includes 'compute', which never runs through this gateway at all (it's a
 // one-shot batch job - see agent/gpubnb_agent/runner.py's GPU_PROOF path).
-const GATEWAY_WORKSPACE_SLUGS:string[]=['developer','data','ai','video','audio','api'];
+const GATEWAY_WORKSPACE_SLUGS:string[]=['developer','data','ai','video','audio','api','mobile'];
 const GATEWAY_COOKIE='gpubnb_workspace';
 const SESSION_TTL_SECONDS=3600;
 const INTERACTIVE_CONNECT_TIMEOUT_SECONDS=15*60;

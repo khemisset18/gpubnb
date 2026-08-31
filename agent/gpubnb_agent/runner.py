@@ -21,9 +21,27 @@ SAFE_GPU_ID = re.compile(r"^[A-Za-z0-9_.:-]{8,200}$")
 _IMAGE_PULL_LOCK = threading.Lock()
 PROGRESS_INTERVAL_SECONDS = 5.0
 GPU_PROOF_IMAGE_PULL_TIMEOUT_SECONDS = 1200
-DEVELOPER_HOME_TMPFS = "--tmpfs=/home/coder:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700"
+# `exec` is not Docker's tmpfs default on this host - confirmed live that a
+# plain `--tmpfs=...` (no explicit mount option either way) comes up `noexec`
+# on this Windows/Docker-Desktop/WSL2 setup, silently blocking a renter's own
+# `chmod +x ~/some-script && ~/some-script` from ever running (exit 126,
+# "Permission denied", no crash/error surfaced anywhere else - discovered
+# while building Mobile Workspace's own $HOME-seeded Gradle wrapper, then
+# confirmed to affect the already-shipped Developer image's real
+# DEVELOPER_HOME_TMPFS the exact same way). Anything a renter places directly
+# in $HOME (not /workspace, which is a real mounted volume and unaffected)
+# needs this to actually run.
+DEVELOPER_HOME_TMPFS = "--tmpfs=/home/coder:rw,exec,nosuid,size=512m,uid=1000,gid=1000,mode=0700"
 # jupyter/docker-stacks images run as the non-root "jovyan" user (uid/gid 1000).
-DATA_HOME_TMPFS = "--tmpfs=/home/jovyan:rw,nosuid,size=512m,uid=1000,gid=100,mode=0700"
+DATA_HOME_TMPFS = "--tmpfs=/home/jovyan:rw,exec,nosuid,size=512m,uid=1000,gid=100,mode=0700"
+# Same uid/gid/mode as DEVELOPER_HOME_TMPFS (same "coder" user, same image
+# family) but sized for what Mobile Workspace actually needs: the pre-warmed
+# Gradle cache seeded into $HOME on every session start is ~700MB by itself
+# (measured live: `du -sh` on the real image's seed cache) - confirmed live
+# that 512m overflows mid-seed ("No space left on device", the container
+# then exits and the session never comes up). 2048m leaves real headroom for
+# session-local Gradle/JVM daemon state on top of the seed.
+MOBILE_HOME_TMPFS = "--tmpfs=/home/coder:rw,exec,nosuid,size=2048m,uid=1000,gid=1000,mode=0700"
 # Verifies the interpreter the real workspace container runs under can actually
 # import the tools the manifest promises (Python/data-science stack). Kept as an
 # inline script (not a baked-in health binary like Developer's) because Data
@@ -165,6 +183,24 @@ finally:
 
 print("gpubnb_api_workspace_ok")
 """
+# Proves the real product surface, not just that the tools are on PATH: seeds
+# the pre-warmed offline Gradle cache (baked into the image at build time,
+# when it still had real internet access - see workspaces/mobile/Dockerfile)
+# into this throwaway container's own $HOME, copies the real sample Android
+# project into a writable location, and runs a real `gradlew assembleDebug
+# --offline` - confirmed live this only works with `exec` explicitly set on
+# the tmpfs mounts (this host's tmpfs defaults to noexec otherwise, silently
+# breaking gradlew's own execution - see DEVELOPER_HOME_TMPFS's comment).
+# Checks the real .aar output exists, not just a zero exit code.
+MOBILE_WORKSPACE_HEALTHCHECK_SCRIPT = (
+    "set -e; "
+    "cp -a \"$GPUBNB_MOBILE_GRADLE_SEED\" \"$HOME/.gradle\"; "
+    "cp -a \"$GPUBNB_MOBILE_SAMPLE\" /workspace/sample-project; "
+    "cd /workspace/sample-project; "
+    "./gradlew assembleDebug --offline --no-daemon --console=plain; "
+    "test -f lib/build/outputs/aar/lib-debug.aar; "
+    "echo gpubnb_mobile_workspace_ok"
+)
 
 
 def _gpu_vendor() -> str:
@@ -507,7 +543,10 @@ def workspace_health_command(image: str, workspace_slug: str, gpu_uuid: str | No
             # codercom/code-server base image) can't write to either — confirmed against the
             # published image, where the healthcheck failed on `test -w /workspace` even with
             # the tmpfs mounted. Pin the tmpfs to that same uid/gid so it's actually usable.
-            "--tmpfs=/workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0700",
+            # `exec` matches the real production /workspace (a real mounted Docker volume,
+            # not tmpfs, so already exec-capable there) - see DEVELOPER_HOME_TMPFS's comment
+            # for why this needs to be explicit on this host.
+            "--tmpfs=/workspace:rw,exec,nosuid,size=512m,uid=1000,gid=1000,mode=0700",
             f"--gpus=device={gpu_uuid}", "--env=NVIDIA_DRIVER_CAPABILITIES=compute,utility",
         ]
         return [*base, "--entrypoint=/usr/local/bin/gpubnb-developer-healthcheck", image]
@@ -584,6 +623,27 @@ def workspace_health_command(image: str, workspace_slug: str, gpu_uuid: str | No
             "--entrypoint", "python3", image,
             "-c", API_WORKSPACE_HEALTHCHECK_SCRIPT,
         ]
+    if workspace_slug == "mobile":
+        # No GPU: no exact-UUID requirement - a headless Android build needs
+        # none. `exec` on both tmpfs mounts is required for gradlew itself to
+        # run at all on this host - see MOBILE_WORKSPACE_HEALTHCHECK_SCRIPT's
+        # comment. MOBILE_HOME_TMPFS (2048m), not the smaller
+        # DEVELOPER_HOME_TMPFS: the seeded Gradle cache alone is ~700MB -
+        # confirmed live that 512m overflows mid-seed ("No space left on
+        # device"). --memory=4g (up from the 2g other CPU-only healthchecks
+        # use) leaves real headroom above that tmpfs size plus the JVM's own
+        # working memory during the build, since tmpfs usage counts against
+        # the container's memory cgroup.
+        return [
+            "docker", "run", "--rm", "--network=none", "--read-only",
+            "--cap-drop=ALL", "--security-opt=no-new-privileges",
+            "--pids-limit=256", "--memory=4g", "--cpus=2",
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
+            MOBILE_HOME_TMPFS,
+            "--tmpfs=/workspace:rw,exec,nosuid,size=512m,uid=1000,gid=1000,mode=0700",
+            "--entrypoint", "bash", image,
+            "-c", MOBILE_WORKSPACE_HEALTHCHECK_SCRIPT,
+        ]
     return diagnostic_command(image)
 
 
@@ -600,7 +660,7 @@ def prepare_workspace(
     # Both real workspace images (code-server, and the multi-gigabyte Jupyter
     # data-science stack) are far larger than the diagnostic/GPU-proof images
     # this default otherwise guards; give both the same extended pull budget.
-    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video", "audio", "api"} else 600
+    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video", "audio", "api", "mobile"} else 600
     timeout = max(30, min(timeout_limit, int(timeout_seconds)))
     cache_hit = _pull_image(image, timeout, progress_callback)
     health_finished = threading.Event()
