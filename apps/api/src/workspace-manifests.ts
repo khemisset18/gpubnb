@@ -12,15 +12,21 @@ export const workspaceManifests:readonly WorkspaceManifest[]=Object.freeze([
  manifest({slug:'ai',name:'AI Workspace',icon:'🤖',category:'AI',release:'BETA',summary:'IA, modèles et génération',technologies:['Python','CUDA','PyTorch','JupyterLab'],license:'MIXED',minimum:{ramMiB:16384,diskMiB:30720,vramMiB:8192,cuda:true,docker:true,nvidiaRuntime:true},recommended:{ramMiB:32768,diskMiB:102400,vramMiB:16384}}),
  manifest({slug:'developer',name:'Developer Workspace',icon:'💻',category:'DEVELOPMENT',release:'BETA',summary:'Développement complet à distance',technologies:['VS Code','Git','Node.js','Python'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:8192,diskMiB:20480,docker:true,cuda:true,nvidiaRuntime:true},recommended:{ramMiB:16384,diskMiB:51200}}),
  // 'RDP', 'noVNC' and 'Guacamole' intentionally absent from `technologies`:
- // none is the real planned architecture. What's real (researched, not yet
- // built - no Linux GPU host to build/test it on, see
+ // none is the real planned architecture. What's real (see
  // docs/SESSION_RESUME.md section 8): a Selkies-GStreamer-based image
- // (e.g. linuxserver/webtop), a real GPU-accelerated Linux desktop
- // streamed over WebRTC, not a VM (`virtualization` dropped - this is
- // planned as a CONTAINER, see workspace-runtime-profiles.ts). Requires a
- // real /dev/dri render node + the NVIDIA Container Toolkit - see
+ // (`linuxserver/webtop`, live-tested this session - real container
+ // start, real HTTP 200, real relay through this platform's existing
+ // loopback-proxy.js), a real GPU-accelerated Linux desktop, not a VM
+ // (`virtualization` dropped - this is planned as a CONTAINER, see
+ // workspace-runtime-profiles.ts). Streamed over plain WebSocket by
+ // default (Selkies' own default mode, confirmed live via its startup
+ // config - "serving the web interface, signaling, and media on a single
+ // port" per Selkies' own docs) - needs no new TURN/WebRTC infrastructure,
+ // since this platform's Gateway already relays real WebSocket traffic in
+ // production (Developer Workspace's own code-server terminal). Requires
+ // a real /dev/dri render node + the NVIDIA Container Toolkit - see
  // `desktopGpuRendering` below and platform_info.desktop_gpu_rendering_available().
- manifest({slug:'cloud-desktop',name:'Cloud Desktop',icon:'☁️',category:'DESKTOP',release:'UPCOMING',summary:'Bureau Linux distant avec rendu GPU réel (architecture prête, aucun hôte Linux GPU disponible pour le valider)',technologies:['Selkies-GStreamer','WebRTC'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:8192,diskMiB:40960,vramMiB:2048,docker:true,nvidiaRuntime:true,desktopGpuRendering:true},recommended:{ramMiB:16384,diskMiB:81920,vramMiB:4096}}),
+ manifest({slug:'cloud-desktop',name:'Cloud Desktop',icon:'☁️',category:'DESKTOP',release:'UPCOMING',summary:'Bureau Linux distant avec rendu GPU réel (architecture prête, aucun hôte Linux GPU disponible pour le valider)',technologies:['Selkies-GStreamer','WebSocket'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:8192,diskMiB:40960,vramMiB:2048,docker:true,nvidiaRuntime:true,desktopGpuRendering:true},recommended:{ramMiB:16384,diskMiB:81920,vramMiB:4096}}),
  manifest({slug:'compute',name:'Compute Workspace',icon:'⚡',category:'COMPUTE',release:'BETA',summary:'Tâches contrôlées sans bureau',technologies:['Docker','GPU','Batch','Logs'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:4096,diskMiB:10240,docker:true},recommended:{ramMiB:16384,diskMiB:51200,vramMiB:8192}}),
  // 'SDK' and 'Webhooks' intentionally absent from `technologies`: GPUbnb
  // ships no SDK and no webhook mechanism. What's real: the official
@@ -39,7 +45,7 @@ export const workspaceManifests:readonly WorkspaceManifest[]=Object.freeze([
  // session - only Blender itself was verified). Same Selkies-based
  // architecture as Cloud Desktop, not yet buildable/testable here - see
  // docs/SESSION_RESUME.md section 8.
- manifest({slug:'creator',name:'Creator Workspace',icon:'🎨',category:'CREATION',release:'UPCOMING',summary:'Blender avec rendu GPU réel en environnement isolé (architecture prête, aucun hôte Linux GPU disponible pour le valider)',technologies:['Blender','Selkies-GStreamer','WebRTC'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:16384,diskMiB:40960,vramMiB:6144,docker:true,nvidiaRuntime:true,desktopGpuRendering:true},recommended:{ramMiB:32768,diskMiB:102400,vramMiB:12288}}),
+ manifest({slug:'creator',name:'Creator Workspace',icon:'🎨',category:'CREATION',release:'UPCOMING',summary:'Blender avec rendu GPU réel en environnement isolé (architecture prête, aucun hôte Linux GPU disponible pour le valider)',technologies:['Blender','Selkies-GStreamer','WebSocket'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:16384,diskMiB:40960,vramMiB:6144,docker:true,nvidiaRuntime:true,desktopGpuRendering:true},recommended:{ramMiB:32768,diskMiB:102400,vramMiB:12288}}),
  // DaVinci Resolve and an interactive Blender desktop are intentionally
  // absent from `technologies`: no official freely-redistributable Linux
  // container exists for DaVinci, and a GPU-accelerated Blender desktop needs
@@ -92,8 +98,34 @@ export const workspaceManifests:readonly WorkspaceManifest[]=Object.freeze([
  // pattern already proven twice this session (Mobile: Android SDK onto
  // Developer; Security Lab: tshark/YARA/radare2 onto Developer). Not yet
  // buildable/testable here - see docs/SESSION_RESUME.md section 8.
- manifest({slug:'cad',name:'CAD Workspace',icon:'📐',category:'CAD',release:'UPCOMING',summary:'FreeCAD avec rendu GPU réel en environnement isolé (architecture prête, aucun hôte Linux GPU disponible pour le valider)',technologies:['FreeCAD','Selkies-GStreamer','WebRTC'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:16384,diskMiB:61440,vramMiB:6144,docker:true,nvidiaRuntime:true,desktopGpuRendering:true},recommended:{ramMiB:32768,diskMiB:122880,vramMiB:12288}}),
- manifest({slug:'gaming',name:'Gaming Workspace',icon:'🎮',category:'GAMING',release:'EXPERIMENTAL',summary:'Jeu distant sous licences utilisateur',technologies:['Sunshine','Moonlight','Steam','WebRTC'],license:'USER_ACCOUNT_REQUIRED',minimum:{ramMiB:16384,diskMiB:102400,vramMiB:8192,virtualization:true},recommended:{ramMiB:32768,diskMiB:204800,vramMiB:12288}}),
+ manifest({slug:'cad',name:'CAD Workspace',icon:'📐',category:'CAD',release:'UPCOMING',summary:'FreeCAD avec rendu GPU réel en environnement isolé (architecture prête, aucun hôte Linux GPU disponible pour le valider)',technologies:['FreeCAD','Selkies-GStreamer','WebSocket'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:16384,diskMiB:61440,vramMiB:6144,docker:true,nvidiaRuntime:true,desktopGpuRendering:true},recommended:{ramMiB:32768,diskMiB:122880,vramMiB:12288}}),
+ // 'Sunshine' and 'Moonlight' intentionally absent from `technologies`:
+ // re-confirmed via web search that Sunshine has NO TCP-only fallback at
+ // all (UDP-blocked = black screen, by Sunshine's own community's own
+ // documented troubleshooting), and Moonlight is normally a *native*
+ // client app, not a browser client - neither fits this platform's
+ // all-in-browser model or its TCP-only relay. What's real (see
+ // docs/SESSION_RESUME.md section 8/9): the same Selkies-GStreamer
+ // foundation already live-tested for Creator/Cloud Desktop/CAD, with
+ // Steam layered on top - confirmed live: the official Ubuntu multiverse
+ // `steam-installer` package installs cleanly and its real launcher
+ // bootstraps (creates its real ~/.steam install directory) inside this
+ // exact image's real Xvfb display. The renter brings their own Steam
+ // account and owned games, GPUbnb redistributes nothing.
+ // Important correction from this session's own earlier, more cautious
+ // plan: confirmed live (Selkies' own startup config dump) that its
+ // DEFAULT transport is plain WebSocket, not WebRTC - "serving the web
+ // interface, signaling, and media on a single port" (Selkies' own docs) -
+ // WebRTC is opt-in only, for a later latency optimization. This means
+ // the *default* mode needs no new TURN/WebRTC infrastructure at all: it
+ // is a real, ordinary WebSocket connection, and this platform's existing
+ // Gateway already proves that exact relay pattern in production
+ // (Developer Workspace's own code-server terminal already relays real
+ // WebSocket frames through the identical loopback-proxy.js path).
+ // `desktopGpuRendering` required, `virtualization` dropped (this is
+ // planned as a container, not a VM). No Sunshine/Moonlight-tier latency
+ // guarantee in this default mode - a documented, honest tradeoff.
+ manifest({slug:'gaming',name:'Gaming Workspace',icon:'🎮',category:'GAMING',release:'EXPERIMENTAL',summary:'Jeu distant via navigateur (Steam, comptes et jeux apportés par le locataire) - architecture prête, rendu GPU non validé sur cet hôte',technologies:['Steam','Selkies-GStreamer','WebSocket'],license:'USER_ACCOUNT_REQUIRED',minimum:{ramMiB:16384,diskMiB:102400,vramMiB:8192,docker:true,nvidiaRuntime:true,desktopGpuRendering:true},recommended:{ramMiB:32768,diskMiB:204800,vramMiB:12288}}),
  // An interactive Ardour/Audacity GUI and VST plugin hosting are
  // intentionally absent from `technologies`: both need the same
  // containerized-remote-desktop runtime this platform doesn't have working

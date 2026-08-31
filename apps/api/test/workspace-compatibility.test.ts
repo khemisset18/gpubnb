@@ -98,7 +98,7 @@ test('a workspace with no GPU requirement at all is never blocked by GPU fields,
 // works) but NO /dev/dri, confirmed live throughout this project - proving
 // desktop-GPU-rendering capability must never be inferred from CUDA/compute
 // capability, only measured on its own terms.
-for(const slug of ['creator','cloud-desktop','cad'] as const){
+for(const slug of ['creator','cloud-desktop','cad','gaming'] as const){
   test(`${slug} Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY`,()=>{
     // Mirrors this exact real dev host: real CUDA compute, real NVIDIA
     // Container Toolkit, but no /dev/dri render node. Same assertion style

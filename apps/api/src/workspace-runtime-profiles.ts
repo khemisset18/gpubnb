@@ -67,7 +67,11 @@ export const workspaceRuntimeProfiles:Readonly<Record<string,WorkspaceRuntimePro
   // samples/binaries live on the same real mounted volume every other
   // workspace here uses - see docs/SESSION_RESUME.md.
   'security-lab':{slug:'security-lab',runtime:'CONTAINER',surface:'CODE',category:'SECURITY',entrypoint:'code-server',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
-  gaming:{slug:'gaming',runtime:'STREAMING_VM',surface:'STREAM',category:'GAMING',entrypoint:'stream-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  // Same correction as Cloud Desktop/Creator/CAD - planned CONTAINER (the
+  // same Selkies-GStreamer foundation, Steam layered on top), not the
+  // fictional STREAMING_VM/stream-gateway this originally assumed. Not
+  // built/tested yet - see docs/SESSION_RESUME.md section 8/9.
+  gaming:{slug:'gaming',runtime:'CONTAINER',surface:'STREAM',category:'GAMING',entrypoint:'selkies-gstreamer',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   // Delivered as CONTAINER/NOTEBOOK (JupyterLab + real ffmpeg audio DSP -
   // loudnorm, acompressor, equalizer), not the STREAMING_VM this originally
   // assumed: no streaming infrastructure (Sunshine/Moonlight-class UDP/WebRTC
