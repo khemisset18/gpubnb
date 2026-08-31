@@ -99,6 +99,26 @@ DEFAULT_MOBILE_IMAGE = (
     "gpubnb-mobile-workspace@sha256:"
     "93c5903b3acccddd9b7c64a7274c0d93239b32c31f64979d09b77b813d87afd8"
 )
+# Same "built and used locally only" status as DEFAULT_MOBILE_IMAGE - see
+# its comment. Product scope decided explicitly with the user before this
+# was built (a real DEFENSIVE analysis lab, not an offensive pentesting
+# toolkit): tshark, YARA and radare2, all real, official Ubuntu 24.04
+# packages (GPL/BSD, freely redistributable, no manual download/checksum
+# dance needed unlike Mobile's Android SDK). No nmap/sqlmap/hydra/
+# Metasploit - every session's real container has zero route to the public
+# internet or to any other machine (same guarantee every workspace here
+# already has), so an offensive tool would have zero reachable target; only
+# added "pentesting toolkit" labeling risk, no real capability. No Burp
+# Suite: its Community Edition EULA does not permit bundling into a
+# redistributable image. Confirmed live: a real crafted-in-userspace pcap
+# parsed correctly by tshark, a real YARA rule match, and a real radare2
+# analysis of an actual ELF binary - all under --network=none,
+# --cap-drop=ALL, --read-only. See workspaces/security-lab/Dockerfile and
+# docs/SESSION_RESUME.md.
+DEFAULT_SECURITY_LAB_IMAGE = (
+    "gpubnb-security-lab-workspace@sha256:"
+    "c7e647638b34934d27a04516b702df23e238325e8d2490144e5bb84d7bf2c379"
+)
 LEGACY_DEVELOPER_IMAGES = {
     "ghcr.io/khemisset18/gpubnb-developer@sha256:"
     "26700fdc955495b610bbcf8a912110395fc72181a236de2b70b539a0c02150b7",
@@ -126,4 +146,6 @@ def workspace_image(config: dict, slug: str) -> str:
         return DEFAULT_API_IMAGE
     if slug == "mobile":
         return DEFAULT_MOBILE_IMAGE
+    if slug == "security-lab":
+        return DEFAULT_SECURITY_LAB_IMAGE
     return str(config.get("diagnosticImage") or "")

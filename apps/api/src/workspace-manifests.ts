@@ -53,7 +53,22 @@ export const workspaceManifests:readonly WorkspaceManifest[]=Object.freeze([
  // manifest originally specified) - see docs/SESSION_RESUME.md for why a
  // graphical emulator specifically stays unavailable (/dev/kvm).
  manifest({slug:'mobile',name:'Mobile Workspace',icon:'📱',category:'MOBILE',release:'BETA',summary:'Développement et build Android en environnement headless (sans émulateur graphique)',technologies:['Android SDK','Gradle','ADB','VS Code'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:16384,diskMiB:61440,docker:true},recommended:{ramMiB:32768,diskMiB:122880}}),
- manifest({slug:'security-lab',name:'Security Lab',icon:'🛡️',category:'SECURITY',release:'EXPERIMENTAL',summary:'Laboratoire défensif très isolé',technologies:['Kali','Wireshark','Burp Suite','CTF'],license:'MIXED',minimum:{ramMiB:16384,diskMiB:51200,virtualization:true},recommended:{ramMiB:32768,diskMiB:102400}}),
+ // 'Kali', 'Burp Suite' and 'CTF' intentionally absent from `technologies`:
+ // none is installed or installable as claimed. What's real: a custom
+ // GPUbnb image (workspaces/security-lab/Dockerfile, built FROM the
+ // already-proven Developer image) adding real tshark/YARA/radare2 - all
+ // official Ubuntu packages, GPL/BSD, no manual download needed. Product
+ // scope decided explicitly with the user: a real DEFENSIVE analysis lab,
+ // not an offensive pentesting toolkit - no nmap/sqlmap/hydra/Metasploit
+ // (every session's real container has zero route to the public internet
+ // or to any other machine, so an offensive tool would have no reachable
+ // target - only added labeling risk, no real capability). No Burp Suite:
+ // its Community Edition EULA does not permit bundling into a
+ // redistributable image. Confirmed live: a real crafted pcap parsed by
+ // tshark, a real YARA rule match, and a real radare2 analysis of an actual
+ // ELF binary. `virtualization` dropped from `minimum` too - this runs as a
+ // plain container, not a VM - see docs/SESSION_RESUME.md.
+ manifest({slug:'security-lab',name:'Security Lab',icon:'🛡️',category:'SECURITY',release:'BETA',summary:'Analyse forensique et rétro-ingénierie en environnement isolé (pas d\'accès réseau live)',technologies:['Wireshark','YARA','radare2','VS Code'],license:'INCLUDED_OPEN_SOURCE',minimum:{ramMiB:8192,diskMiB:20480,docker:true},recommended:{ramMiB:16384,diskMiB:51200}}),
  manifest({slug:'cad',name:'CAD Workspace',icon:'📐',category:'CAD',release:'UPCOMING',summary:'CAO, simulation et ingénierie',technologies:['FreeCAD','Blender','AutoCAD','Fusion 360'],license:'USER_LICENSE_REQUIRED',minimum:{ramMiB:16384,diskMiB:61440,vramMiB:6144},recommended:{ramMiB:32768,diskMiB:122880,vramMiB:12288}}),
  manifest({slug:'gaming',name:'Gaming Workspace',icon:'🎮',category:'GAMING',release:'EXPERIMENTAL',summary:'Jeu distant sous licences utilisateur',technologies:['Sunshine','Moonlight','Steam','WebRTC'],license:'USER_ACCOUNT_REQUIRED',minimum:{ramMiB:16384,diskMiB:102400,vramMiB:8192,virtualization:true},recommended:{ramMiB:32768,diskMiB:204800,vramMiB:12288}}),
  // An interactive Ardour/Audacity GUI and VST plugin hosting are

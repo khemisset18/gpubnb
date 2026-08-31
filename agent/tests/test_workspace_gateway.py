@@ -660,6 +660,54 @@ class MobileWorkspaceLaunchTests(unittest.TestCase):
         self.assertIn(MOBILE_IMAGE, run)
 
 
+SECURITY_LAB_IMAGE = "gpubnb-security-lab-workspace@sha256:" + ("4" * 64)
+
+
+class SecurityLabWorkspaceLaunchTests(unittest.TestCase):
+    def _supervisor(self, docker: FakeDocker, api: FakeApi) -> GatewaySupervisor:
+        return make_supervisor(docker, api, {
+            "workspaceImages": {"developer": OFFICIAL_IMAGE, "security-lab": SECURITY_LAB_IMAGE},
+        })
+
+    def test_security_lab_workspace_container_runs_code_server_with_no_gpu(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-seclab-1", "security-lab")
+
+        workspace = names_for_session("sess-seclab-1")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(SECURITY_LAB_IMAGE, run)
+        self.assertFalse(any(arg.startswith("--gpus") for arg in run))
+        self.assertIn("--entrypoint", run)
+        self.assertEqual(run[run.index("--entrypoint") + 1], "code-server")
+        self.assertIn("--bind-addr", run)
+        mount_arg = run[run.index("--mount") + 1]
+        self.assertIn("target=/workspace", mount_arg)
+
+    def test_security_lab_workspace_proxy_still_uses_the_trusted_developer_image(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._start_runtime("sess-seclab-1", "security-lab")
+
+        proxy = proxy_name_for_session("sess-seclab-1")
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == proxy)
+        self.assertIn(OFFICIAL_IMAGE, run)
+        self.assertNotIn(SECURITY_LAB_IMAGE, run)
+
+    def test_reconcile_reads_security_lab_workspace_slug_and_launches_the_right_image(self) -> None:
+        docker, api = FakeDocker(), FakeApi()
+        api.sessions = [{"id": "sess-seclab-2", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}, "workspaceSlug": "security-lab"}]
+        supervisor = self._supervisor(docker, api)
+
+        supervisor._reconcile_sessions()
+
+        workspace = names_for_session("sess-seclab-2")[0]
+        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
+        self.assertIn(SECURITY_LAB_IMAGE, run)
+
+
 class ProxyCrashTests(unittest.TestCase):
     def test_proxy_crash_replaces_the_complete_runtime_pair(self) -> None:
         docker, api = FakeDocker(), FakeApi()

@@ -131,7 +131,8 @@ test('the catalogue only marks a workspace bookable when it is both compatible a
   assert.equal(bySlug.audio.bookable,true);
   assert.equal(bySlug.api.bookable,true);
   assert.equal(bySlug.mobile.bookable,true);
-  for(const slug of catalogue.map(item=>item.slug))if(slug!=='compute'&&slug!=='developer'&&slug!=='data'&&slug!=='ai'&&slug!=='video'&&slug!=='audio'&&slug!=='api'&&slug!=='mobile')assert.equal(bySlug[slug].bookable,false,`${slug} must not be bookable yet even though it is compatible`);
+  assert.equal(bySlug['security-lab'].bookable,true);
+  for(const slug of catalogue.map(item=>item.slug))if(slug!=='compute'&&slug!=='developer'&&slug!=='data'&&slug!=='ai'&&slug!=='video'&&slug!=='audio'&&slug!=='api'&&slug!=='mobile'&&slug!=='security-lab')assert.equal(bySlug[slug].bookable,false,`${slug} must not be bookable yet even though it is compatible`);
 });
 
 test('an incompatible workspace in the full catalogue is explained, not silently hidden',()=>{
@@ -173,14 +174,14 @@ test('retry is not scoped to a single workspace slug, and re-enqueues using the 
   const end=renterRoutes.indexOf("app.post('/bookings/:bookingId/workspace/data'",start);
   assert.ok(start>=0&&end>start);
   const body=renterRoutes.slice(start,end);
-  assert.match(body,/slug:\{in:\['developer','data','ai','video','audio','api','mobile'\]\}/);
+  assert.match(body,/slug:\{in:\['developer','data','ai','video','audio','api','mobile','security-lab'\]\}/);
   assert.match(body,/workspaceSlug=row\.machineWorkspace\.workspace\.slug/);
   assert.doesNotMatch(body,/workspaceSlug:'developer'/);
 });
 
 test('the workspace-gateway route filters and the executable-slug gate all agree on which slugs run through the persistent gateway',async()=>{
   const gateway=await readFile(path.join(sourceRoot,'workspace-gateway.ts'),'utf8');
-  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai','video','audio','api','mobile'\]/);
+  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai','video','audio','api','mobile','security-lab'\]/);
   const matches=gateway.match(/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/g)??[];
   assert.equal(matches.length,5,'all five agent-facing gateway routes (activate, desired, data-plane-host, register, usage) must use the shared slug list');
   const { executableWorkspaceSlugs }=await import('../src/machine-workspace-catalog.js');
@@ -194,6 +195,7 @@ test('the workspace-gateway route filters and the executable-slug gate all agree
   assert.ok(executableWorkspaceSlugs.includes('audio'));
   assert.ok(executableWorkspaceSlugs.includes('api'));
   assert.ok(executableWorkspaceSlugs.includes('mobile'));
+  assert.ok(executableWorkspaceSlugs.includes('security-lab'));
 });
 
 test('AI Workspace has its own real booking, status and access routes, parallel to Data\'s',async()=>{
@@ -292,4 +294,34 @@ test('Mobile Workspace is bookable now that its real runtime has been built, tes
   const mobile=catalogue.find(item=>item.slug==='mobile')!;
   assert.equal(mobile.compatible,true);
   assert.equal(mobile.bookable,true);
+});
+
+test('Security Lab Workspace has its own real booking, status and access routes, parallel to Mobile\'s',async()=>{
+  const renterRoutes=await readFile(path.join(sourceRoot,'workspace-renter-routes.ts'),'utf8');
+  assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/security-lab'/);
+  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'security-lab'/);
+  assert.match(renterRoutes,/type:JobType\.WORKSPACE_PREPARE,parameters:\{workspaceSlug:'security-lab'/);
+  assert.match(renterRoutes,/app\.get\('\/bookings\/:bookingId\/workspace\/security-lab\/status'/);
+  assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/security-lab\/access'/);
+  const secStatusStart=renterRoutes.indexOf("app.get('/bookings/:bookingId/workspace/security-lab/status'");
+  const secAccessStart=renterRoutes.indexOf("app.post('/bookings/:bookingId/workspace/security-lab/access'");
+  const developerStatusStart=renterRoutes.indexOf("app.get('/bookings/:bookingId/workspace'");
+  assert.ok(secStatusStart>=0&&secAccessStart>secStatusStart&&developerStatusStart>secAccessStart);
+  assert.match(renterRoutes.slice(secStatusStart,secAccessStart),/slug: 'security-lab'/);
+  assert.match(renterRoutes.slice(secAccessStart,developerStatusStart),/slug: 'security-lab'/);
+});
+
+test('Security Lab Workspace no longer requires virtualization - it is a plain container, not a VM',()=>{
+  const noVirtualizationMachine={ramTotalMiB:16384,diskTotalMiB:100000,vramMiB:0,cudaVersion:null,dockerAvailable:true,nvidiaRuntimeAvailable:false,operatingSystem:'Windows',virtualizationAvailable:false};
+  const catalogue=allWorkspaceCompatibility(noVirtualizationMachine);
+  const securityLab=catalogue.find(item=>item.slug==='security-lab')!;
+  assert.equal(securityLab.compatible,true,'a real defensive analysis container needs no hardware virtualization at all');
+});
+
+test('Security Lab Workspace is bookable now that its real runtime has been built, tested and live-validated',()=>{
+  const highEndMachine={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'13.1',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true};
+  const catalogue=allWorkspaceCompatibility(highEndMachine);
+  const securityLab=catalogue.find(item=>item.slug==='security-lab')!;
+  assert.equal(securityLab.compatible,true);
+  assert.equal(securityLab.bookable,true);
 });

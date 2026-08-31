@@ -8,6 +8,7 @@ from gpubnb_agent.runtime_images import (
     DEFAULT_DATA_IMAGE,
     DEFAULT_DEVELOPER_IMAGE,
     DEFAULT_MOBILE_IMAGE,
+    DEFAULT_SECURITY_LAB_IMAGE,
     DEFAULT_VIDEO_IMAGE,
     workspace_image,
 )
@@ -136,6 +137,20 @@ class RuntimeImageDefaultsTests(unittest.TestCase):
         explicit = "gpubnb-mobile-workspace@sha256:" + ("2" * 64)
         self.assertEqual(
             workspace_image({"workspaceImages": {"mobile": explicit}}, "mobile"),
+            explicit,
+        )
+
+    def test_security_lab_image_is_a_real_content_addressed_local_digest(self):
+        self.assertRegex(
+            DEFAULT_SECURITY_LAB_IMAGE,
+            r"^gpubnb-security-lab-workspace@sha256:[a-f0-9]{64}$",
+        )
+        self.assertEqual(workspace_image({}, "security-lab"), DEFAULT_SECURITY_LAB_IMAGE)
+
+    def test_explicit_security_lab_pin_remains_supported(self):
+        explicit = "gpubnb-security-lab-workspace@sha256:" + ("5" * 64)
+        self.assertEqual(
+            workspace_image({"workspaceImages": {"security-lab": explicit}}, "security-lab"),
             explicit,
         )
 

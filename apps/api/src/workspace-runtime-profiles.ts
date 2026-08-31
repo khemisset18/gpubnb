@@ -51,7 +51,13 @@ export const workspaceRuntimeProfiles:Readonly<Record<string,WorkspaceRuntimePro
   // confirmed absent on this host - see docs/SESSION_RESUME.md. This profile
   // is corrected to match what's actually real, not what was first envisioned.
   mobile:{slug:'mobile',runtime:'CONTAINER',surface:'CODE',category:'MOBILE',entrypoint:'code-server',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
-  'security-lab':{slug:'security-lab',runtime:'ISOLATED_VM',surface:'DESKTOP',category:'SECURITY',entrypoint:'isolated-lab-gateway',network:'NONE',persistentWorkspace:false,hostAccess:false,dockerSocket:false,privileged:false},
+  // Delivered as CONTAINER/CODE (code-server + real tshark/YARA/radare2,
+  // same surface as Developer/Mobile), not the ISOLATED_VM/DESKTOP this
+  // originally assumed: no VM/hypervisor infrastructure exists in this
+  // codebase. persistentWorkspace is now true - a renter's uploaded pcaps/
+  // samples/binaries live on the same real mounted volume every other
+  // workspace here uses - see docs/SESSION_RESUME.md.
+  'security-lab':{slug:'security-lab',runtime:'CONTAINER',surface:'CODE',category:'SECURITY',entrypoint:'code-server',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   gaming:{slug:'gaming',runtime:'STREAMING_VM',surface:'STREAM',category:'GAMING',entrypoint:'stream-gateway',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
   // Delivered as CONTAINER/NOTEBOOK (JupyterLab + real ffmpeg audio DSP -
   // loudnorm, acompressor, equalizer), not the STREAMING_VM this originally

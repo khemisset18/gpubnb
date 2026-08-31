@@ -58,21 +58,25 @@ PINNED_API_IMAGE = re.compile(r"^quay\.io/jupyter/datascience-notebook@sha256:[a
 # immutable as every other workspace's registry-pulled `repo@sha256:...` -
 # just not fetchable from anywhere else.
 PINNED_MOBILE_IMAGE = re.compile(r"^gpubnb-mobile-workspace@sha256:[a-f0-9]{64}$")
+# Same "local-only, never pushed" status as PINNED_MOBILE_IMAGE - see its
+# comment and runtime_images.DEFAULT_SECURITY_LAB_IMAGE.
+PINNED_SECURITY_LAB_IMAGE = re.compile(r"^gpubnb-security-lab-workspace@sha256:[a-f0-9]{64}$")
 # Every workspace surface this gateway runs listens on this port inside its
 # container; the loopback proxy (workspaces/developer/loopback-proxy.js, reused
 # unmodified for every slug) forwards to exactly this port, so a new workspace
 # surface must be configured to bind here rather than its tool's own default.
 WORKSPACE_ENTRY_PORT = 3000
-GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai", "video", "audio", "api", "mobile"})
+GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai", "video", "audio", "api", "mobile", "security-lab"})
 # Workspaces whose container genuinely needs the GPU attached (--gpus), scoped
 # to the exact hardware UUID the rental resource authority leased for that
-# session - never a fixed device index. Data, Audio, API and Mobile
-# intentionally excluded: none of their containers ever touch the GPU (audio
-# DSP has no hardware-codec equivalent to Video's NVENC; API Workspace is a
-# CPU-only headless code-execution surface by design; Mobile is a real
-# headless Android build/dev environment - compiling an APK/AAR needs no
-# GPU, and no graphical emulator is offered since /dev/kvm is confirmed
-# absent on this host), even though their bookings still reserve the
+# session - never a fixed device index. Data, Audio, API, Mobile and
+# Security Lab intentionally excluded: none of their containers ever touch
+# the GPU (audio DSP has no hardware-codec equivalent to Video's NVENC; API
+# Workspace is a CPU-only headless code-execution surface by design; Mobile
+# is a real headless Android build/dev environment - compiling an APK/AAR
+# needs no GPU, and no graphical emulator is offered since /dev/kvm is
+# confirmed absent on this host; Security Lab's tshark/YARA/radare2 are all
+# CPU-only analysis tools), even though their bookings still reserve the
 # machine's GPU for exclusivity/billing purposes, same as every other
 # workspace on this platform (see rental-resource-authority.ts) - the
 # renter is still renting the whole machine.
@@ -240,6 +244,10 @@ class GatewaySupervisor:
             if not PINNED_MOBILE_IMAGE.fullmatch(image):
                 raise RuntimeError("mobile_workspace_image_must_be_locally_built_and_digest_pinned")
             return image
+        if workspace_slug == "security-lab":
+            if not PINNED_SECURITY_LAB_IMAGE.fullmatch(image):
+                raise RuntimeError("security_lab_workspace_image_must_be_locally_built_and_digest_pinned")
+            return image
         raise RuntimeError(f"unsupported_gateway_workspace_slug:{workspace_slug}")
 
     def _container_running(self, container: str) -> bool:
@@ -367,6 +375,26 @@ class GatewaySupervisor:
                 MOBILE_HOME_TMPFS,
                 "--mount", f"type=volume,source={volume},target=/workspace",
                 image,
+                "--bind-addr", f"0.0.0.0:{WORKSPACE_ENTRY_PORT}", "--auth", "none", "/workspace",
+            ], timeout=START_TIMEOUT_SECONDS)
+            return
+        if workspace_slug == "security-lab":
+            # Custom local image (workspaces/security-lab/Dockerfile) - real
+            # code-server terminal/editor, real tshark/YARA/radare2, no GPU
+            # (none of the three tools use one). Standard --entrypoint
+            # code-server override, same as Developer's own branch below -
+            # no custom entrypoint wrapper needed here, unlike Mobile: there
+            # is no pre-warmed cache to seed. DEVELOPER_HOME_TMPFS (512m) is
+            # plenty - nothing here approaches Mobile's ~700MB Gradle cache.
+            self._docker([
+                "run", "-d", "--name", container,
+                "--network", internal_network,
+                "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
+                "--pids-limit=512", "--memory=4g", "--cpus=2",
+                "--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
+                DEVELOPER_HOME_TMPFS,
+                "--mount", f"type=volume,source={volume},target=/workspace",
+                "--entrypoint", "code-server", image,
                 "--bind-addr", f"0.0.0.0:{WORKSPACE_ENTRY_PORT}", "--auth", "none", "/workspace",
             ], timeout=START_TIMEOUT_SECONDS)
             return

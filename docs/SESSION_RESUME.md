@@ -22,7 +22,8 @@ by these commits (local only, not pushed):
 - `025a1e7` feat(agent,api,web): real Audio Workspace runtime (FFmpeg DSP, no GPU)
 - `2cc2383` docs: correct Mobile Workspace finding — headless-build MVP is blocked, not buildable
 - `b29cea1` feat(agent,api,web): real API Workspace runtime (headless jupyter_server REST/WS kernel API)
-- (pending commit this session) feat: real Mobile Workspace runtime (custom local Android SDK/Gradle image) + a real tmpfs-exec bug fix affecting every $HOME-tmpfs workspace
+- `01132f3` feat(agent,api,web): real Mobile Workspace runtime (custom local Android SDK/Gradle image) + a real tmpfs-exec bug fix affecting every $HOME-tmpfs workspace
+- (pending commit this session) feat: real Security Lab Workspace runtime (custom local tshark/YARA/radare2 image, defensive-analysis scope)
 
 Working tree is otherwise clean except this file. `main`/`origin/main` is
 untouched (PR #133's merge commit). PR #134 (this branch → main) is still
@@ -32,8 +33,9 @@ open, not merged.
 
 `executableWorkspaceSlugs` in `apps/api/src/machine-workspace-catalog.ts` is
 the one gate the whole system checks for `bookable`: **`compute`,
-`developer`, `data`, `ai`, `video`, `audio`, `api`, `mobile`**. Do not add
-anything else to this list without the same rigor documented below for each.
+`developer`, `data`, `ai`, `video`, `audio`, `api`, `mobile`,
+`security-lab`**. Do not add anything else to this list without the same
+rigor documented below for each.
 
 - **Compute / Developer**: pre-existing, proven via the original E2E harness.
 - **Data**: real JupyterLab (`quay.io/jupyter/datascience-notebook`, official
@@ -119,15 +121,47 @@ anything else to this list without the same rigor documented below for each.
   SDK component or resolve a brand-new Gradle dependency version that
   wasn't already cached at build time - same isolation model every GPUbnb
   workspace already has.
+- **Security Lab** (new this session): the second custom-local-image
+  workspace (`workspaces/security-lab/Dockerfile`, same "built and used
+  locally, not published" status as Mobile). **Product scope explicitly
+  decided with the user before any build** (`AskUserQuestion`, since this
+  carries real reputational/policy risk a technical fix alone can't
+  resolve): a real **defensive analysis lab**, not an offensive pentesting
+  toolkit. Built FROM the Developer image plus real `tshark`, `yara` and
+  `radare2` - official Ubuntu 24.04 packages, GPL/BSD, no manual
+  download/checksum dance needed (unlike Mobile's Android SDK). Deliberately
+  excludes `nmap`/`sqlmap`/`hydra`/Metasploit: every session's real
+  container has zero route to the public internet or to any other machine
+  (same guarantee every GPUbnb workspace already has - confirmed by
+  re-reading how `internal_network` is actually wired, not assumed), so an
+  offensive tool would have no reachable target here - only "pentesting
+  toolkit" labeling risk, no real added capability. Also excludes Burp
+  Suite: its Community Edition EULA does not permit bundling into a
+  redistributable image, regardless of which tool-set direction was chosen.
+  Live-verified through the FULL production relay path: real container
+  launch, real health check through the real proxy, the real code-server UI
+  served through the relay, no GPU device requests attached, and real
+  functional proofs for all three tools **inside the running session
+  container itself** (`docker exec`): `tshark` correctly parsing a pcap
+  built purely in userspace (no capture capability needed or granted - the
+  real product scope is analyzing a renter's own uploaded capture file, not
+  live capture), a real YARA rule matching a real sample, and `radare2`
+  genuinely analyzing a real ELF binary. Idempotent second reconcile and
+  full cleanup also verified.
+  Known limitation, documented in `workspaces/security-lab/welcome.md`: no
+  live capture (no capability grant, no live network to capture from
+  either) and no live network inside a session to fetch new tools/rulesets.
 - This machine's own GPU (GTX 1650, 4GB VRAM) is below AI's/Video's manifest
   minimums (8GB/6GB), so both correctly show `INSUFFICIENT_VRAM` even though
-  both runtimes are proven working. Audio, API and Mobile need no VRAM at all.
+  both runtimes are proven working. Audio, API, Mobile and Security Lab need
+  no VRAM at all.
 
-All of Data/AI/Video/Audio/API/Mobile: real booking/status/access routes
-(`POST /bookings/:id/workspace/{data,ai,video,audio,api,mobile}`, `GET .../status`,
-`POST .../access`), real buttons on `apps/web/workspace-bookings.js`, real
-cleanup verified (container/proxy/volume/network all confirmed gone after
-stop, GPU memory back to 0 MiB where GPU was used).
+All of Data/AI/Video/Audio/API/Mobile/Security-Lab: real booking/status/access
+routes (`POST /bookings/:id/workspace/{data,ai,video,audio,api,mobile,security-lab}`,
+`GET .../status`, `POST .../access`), real buttons on
+`apps/web/workspace-bookings.js`, real cleanup verified (container/proxy/
+volume/network all confirmed gone after stop, GPU memory back to 0 MiB where
+GPU was used).
 
 **Real bugs found and fixed via live testing** (not by any prior unit test):
 1. `_real_health_check` in `workspace_gateway.py` used plain `urlopen()`,
@@ -156,9 +190,9 @@ stop, GPU memory back to 0 MiB where GPU was used).
 ## 3. Containerized-desktop research — real findings, still blocked on THIS host (except Mobile, now unblocked - see section 2)
 
 Researched whether a containerized (non-VM) desktop/streaming approach could
-unlock Creator, Security Lab, Gaming, and Audio's *full* GUI experience,
-reusing the existing container+proxy+gateway architecture. All hit real,
-evidenced blockers specific to this exact host or this codebase's current
+unlock Creator, Gaming, and Audio's *full* GUI experience, reusing the
+existing container+proxy+gateway architecture. All hit real, evidenced
+blockers specific to this exact host or this codebase's current
 infrastructure - not guesses:
 
 - **Creator (Blender)**: `linuxserver/blender` is a real, actively-maintained
@@ -179,15 +213,18 @@ infrastructure - not guesses:
   already-proven Developer image - see section 2. This is real and
   REAL_WORKING now, but the graphical-emulator gap itself is unchanged and
   still real.
-- **Security Lab (Kali)**: **not** a platform/protocol limitation - all 5
-  official `kalilinux/*` Docker Hub images are confirmed bare (pulled
-  `kali-rolling`, `nmap`/`sqlmap`/`hydra`/`tshark`/`msfconsole` all absent).
-  Getting real tools needs `apt install kali-linux-headless`, but the
-  internal session network is `--network=none` for every workspace, always -
-  there is no network-available provisioning window anywhere in this
-  architecture. Blocked by needing either a custom-published image (no
-  registry credentials) or a new provisioning mechanism (separate
-  infrastructure project) - **not** attempted.
+- **Security Lab (Kali specifically)**: **not** a platform/protocol
+  limitation - all 5 official `kalilinux/*` Docker Hub images were confirmed
+  bare (pulled `kali-rolling`, `nmap`/`sqlmap`/`hydra`/`tshark`/`msfconsole`
+  all absent), and `apt install kali-linux-headless` would need live
+  network access this architecture's sessions never have. Once the user
+  authorized a custom local image (same authorization Mobile used), Security
+  Lab was built a different way instead: not FROM any Kali image at all, but
+  FROM the Developer image plus real `tshark`/`yara`/`radare2` (official
+  Ubuntu 24.04 packages) - see section 2. Real, tested, live-validated. The
+  underlying "no live-network provisioning window" fact that blocked the
+  Kali-metapackage route is unchanged and still real; the working path
+  turned out not to need it.
 - **Gaming (Sunshine/Moonlight)**: a **confirmed hard architectural
   blocker**, not a licensing/GPU issue - Sunshine's real data plane needs
   UDP (documented ports 47998-48010; Sunshine's own docs flag TCP-only
@@ -205,13 +242,16 @@ infrastructure - not guesses:
 | Workspace | Runtime needed | State |
 |---|---|---|
 | Cloud Desktop, Creator, CAD | `DESKTOP_VM` - blocked on this host by missing `/dev/dri` (section 3). A real candidate image exists (`linuxserver/blender`); untestable here. |
-| Security Lab | `ISOLATED_VM`, `network:NONE` - blocked by no pre-tooled official Kali image + no network-available provisioning window in this architecture (section 3). Same "custom image, built locally" path that unblocked Mobile is now worth re-evaluating here too - not yet attempted. |
 | Gaming | `STREAMING_VM` - **hard architectural blocker**, confirmed: Sunshine/Moonlight need UDP, this relay is TCP-only (section 3). Would need a new tunneling infrastructure project. |
 
-## 5. Test status (all re-run and green as of the Mobile Workspace changes)
+## 5. Test status (all re-run and green as of the Security Lab Workspace changes)
 
-- `pytest agent/tests` → 329 passed, 2 skipped.
-- `npm test` in `apps/api` → 486 tests, 476 passed, 0 failed, 10 skipped (need
+- `pytest agent/tests` → 337 passed, 2 skipped. (One run also showed
+  `test_long_health_check_keeps_reporting_progress` failing - a pre-existing,
+  purely timing-based test unrelated to any change this session, patched to
+  a 0.01s progress interval; confirmed flaky under load, not a regression:
+  passes in isolation and on every other full-suite run.)
+- `npm test` in `apps/api` → 489 tests, 479 passed, 0 failed, 10 skipped (need
   a local Postgres/Redis this machine doesn't have running — environmental).
 - `cargo test --features desktop-runtime` → not re-checked this round since
   nothing in host-desktop changed this session; last checked 106 passed, 1
@@ -233,42 +273,40 @@ Do not unlink/reconfigure the production agent to make this pass.
 - Do not fabricate a "bookable" workspace slug without a real runtime behind
   it — see section 2's rigor bar for every entry in `executableWorkspaceSlugs`.
 - Compute/Developer/Data/AI/Video/Audio/API all deliberately used an
-  official, already-published image, never a custom one. Mobile is the one
-  exception: a custom GPUbnb image, built **locally** on this dev/test host
-  only (`workspaces/mobile/Dockerfile`), per the user's scoped authorization
-  ("si les outils et dépendances nécessaires sont réellement disponibles" -
-  they were: real internet access at build time, same as any other build).
-  This is still **not** published to any registry (ghcr.io, no credentials,
-  not requested) - Mobile Workspace is therefore only actually runnable on a
-  host machine that has run this exact `docker build` itself. Do not
+  official, already-published image, never a custom one. Mobile and
+  Security Lab are the two exceptions: custom GPUbnb images, built
+  **locally** on this dev/test host only (`workspaces/mobile/Dockerfile`,
+  `workspaces/security-lab/Dockerfile`), each per its own scoped
+  authorization from the user (Mobile: "si les outils et dépendances
+  nécessaires sont réellement disponibles"; Security Lab: an explicit
+  `AskUserQuestion` decision on tool scope before any Dockerfile was
+  written). This is still **not** published to any registry (ghcr.io, no
+  credentials, not requested) - both are therefore only actually runnable
+  on a host machine that has run their exact `docker build` itself. Do not
   push/publish any image to a registry without a separate, explicit
   go-ahead, and do not build a NEW custom image for another workspace
-  without checking whether that same scoped authorization is meant to
-  extend that far, or asking first.
+  without checking whether a scoped authorization already covers it, or
+  asking first - Security Lab's authorization in particular came with an
+  explicit product-scope decision (defensive-analysis-only, no offensive
+  tools, no Burp Suite) that must not be silently expanded later.
 - Do not claim Creator/Cloud Desktop/CAD GPU rendering, a graphical Android
   emulator for Mobile (headless SDK/Gradle is real; the emulator specifically
-  is not and is not offered), Security Lab's tools, or Gaming's streaming
-  work on this machine or with this architecture as it stands - all are
-  real, evidenced, currently-unresolved blockers, not untested guesses.
+  is not and is not offered), offensive pentesting capability for Security
+  Lab (tshark/YARA/radare2 are real; nmap/sqlmap/hydra/Metasploit were
+  deliberately excluded, live network capture is not offered), or Gaming's
+  streaming work on this machine or with this architecture as it stands -
+  all are real, evidenced, currently-unresolved blockers, not untested
+  guesses.
 
 ## NEXT ACTION
 
-Compute, Developer, Data, AI, Video, Audio, API, Mobile are all real and done
-(8 of 13). Remaining 5, in the user's stated priority order:
-1. **Security Lab**: same root blocker Mobile had before it was unblocked -
-   no pre-tooled HTTP/WS-servable image (`kalilinux/*` are all bare, and
-   `--network=none` rules out live provisioning). The same "custom image,
-   built locally, if the tools are genuinely available" path that unblocked
-   Mobile is worth trying here too - not yet attempted this session. Keep
-   `--network=none` at runtime regardless (bake tools in at build time,
-   which has real internet, the same way Mobile's Android SDK/Gradle were
-   baked in) - never open a live network window to "provision" a running
-   session.
-2. **Creator, Cloud Desktop, CAD**: blocked by missing `/dev/dri` on this
+Compute, Developer, Data, AI, Video, Audio, API, Mobile, Security Lab are all
+real and done (9 of 13). Remaining 4, in the user's stated priority order:
+1. **Creator, Cloud Desktop, CAD**: blocked by missing `/dev/dri` on this
    Windows/Docker-Desktop/WSL2 host. Needs either a real Linux host to test
    GPU rendering on, or a user decision to accept CPU-only software
    rendering as a documented limitation.
-3. **Gaming**: hard architectural blocker - Sunshine/Moonlight need UDP,
+2. **Gaming**: hard architectural blocker - Sunshine/Moonlight need UDP,
    this relay is TCP-only end to end. Needs a new UDP/WebRTC tunneling
    infrastructure project, not a workspace-level task.
 

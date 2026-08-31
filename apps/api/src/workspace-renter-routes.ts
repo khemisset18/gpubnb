@@ -105,7 +105,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     // is actually retryable right now, then re-enqueue WORKSPACE_PREPARE for
     // that same workspace.
     const row=await db.workspaceSession.findFirst({
-      where:{bookingId,renterId:session.userId,status:{in:retryableSessions},machineWorkspace:{workspace:{slug:{in:['developer','data','ai','video','audio','api','mobile']}}},booking:{status:{in:activeBookings},endsAt:{gt:new Date()}}},
+      where:{bookingId,renterId:session.userId,status:{in:retryableSessions},machineWorkspace:{workspace:{slug:{in:['developer','data','ai','video','audio','api','mobile','security-lab']}}},booking:{status:{in:activeBookings},endsAt:{gt:new Date()}}},
       select:{id:true,machineId:true,machineWorkspaceId:true,booking:{select:{endsAt:true}},machineWorkspace:{select:{workspace:{select:{slug:true}}}}},
     });
     if(!row)return reply.code(409).send({error:'workspace_retry_not_available'});
@@ -852,6 +852,131 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
     const row = await db.workspaceSession.findFirst({
       where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'mobile' } } },
+      select: {
+        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true,
+        machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
+        booking: { select: { status: true } },
+      },
+    });
+    if (!row) return reply.code(404).send({ error: 'workspace_session_not_found' });
+    const policy = evaluateWorkspaceAccess({
+      authenticatedUserId: session.userId,
+      renterId: row.renterId,
+      bookingStatus: row.booking.status,
+      sessionStatus: row.status,
+      expiresAt: row.expiresAt,
+      machineConnectivity: row.machine.connectivity,
+      machineOperational: row.machine.operational,
+      moderationStatus: row.machine.moderationStatus,
+      lastHeartbeatAt: row.machine.lastHeartbeatAt,
+      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+    });
+    if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
+    const connection = safeConnection(row.connectionMetadata);
+    if (!connection.ready || !connection.gatewayPath) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
+    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
+    return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
+  });
+
+  app.post('/bookings/:bookingId/workspace/security-lab', async (request, reply) => {
+    const session=await requireSession(request,reply,redis); if(!session)return;
+    const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
+    const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings}},include:{listing:{select:{machineId:true}}}});
+    if(!booking)return reply.code(409).send({error:'funded_booking_required'});
+    let machineWorkspace;
+    try { machineWorkspace=await ensureCompatibleMachineWorkspace(db,booking.listing.machineId,'security-lab'); }
+    catch(error){return reply.code(409).send({error:error instanceof Error?error.message:'security_lab_workspace_incompatible'});}
+    const existing=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true}});
+    if(existing)return existing;
+    try{
+      return await db.$transaction(async tx=>{
+        const created=await tx.workspaceSession.create({data:{
+          bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
+          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',
+          resourceLimits:{maxRamMiB:4096,maxCpuCores:2,storageQuotaMiB:20480,networkAccess:'RESTRICTED',autoStopMinutes:60},
+          connectionType:'GPUBNB_GATEWAY',preparationProgress:5,preparationStep:'SECURITY_LAB_REQUESTED',
+          preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,
+          events:{create:{actorType:'RENTER',actorId:session.userId,action:'SECURITY_LAB_PREPARATION_REQUESTED'}},
+        }});
+        const job=await tx.job.create({data:{bookingId,renterId:session.userId,machineId:booking.listing.machineId,type:JobType.WORKSPACE_PREPARE,parameters:{workspaceSlug:'security-lab',timeoutSeconds:1800}}});
+        return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
+      });
+    }catch(error){
+      const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
+      if(raced)return raced;
+      throw error;
+    }
+  });
+
+  app.get('/bookings/:bookingId/workspace/security-lab/status', async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
+    // Mirrors GET /bookings/:bookingId/workspace/mobile/status above, scoped
+    // to the Security Lab surface - kept as its own parallel route for the
+    // same reason.
+    const row = await db.workspaceSession.findFirst({
+      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'security-lab' } } },
+      select: {
+        id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
+        preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
+        preparationCompletedAt: true, endedAt: true, updatedAt: true,
+        connectionType: true, connectionMetadata: true, readyAt: true, startedAt: true,
+        job: { select: { status: true, errorCode: true, createdAt: true, updatedAt: true, startedAt: true, finishedAt: true } },
+        machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
+        booking: { select: { id: true, status: true, startsAt: true, endsAt: true } },
+        machineWorkspace: { select: { workspace: { select: { slug: true, name: true } } } },
+      },
+    });
+    if (!row) return reply.code(404).send({ error: 'workspace_session_not_found' });
+    const policy = evaluateWorkspaceAccess({
+      authenticatedUserId: session.userId,
+      renterId: session.userId,
+      bookingStatus: row.booking.status,
+      sessionStatus: row.status,
+      expiresAt: row.expiresAt,
+      machineConnectivity: row.machine.connectivity,
+      machineOperational: row.machine.operational,
+      moderationStatus: row.machine.moderationStatus,
+      lastHeartbeatAt: row.machine.lastHeartbeatAt,
+      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+    });
+    const connection = safeConnection(row.connectionMetadata);
+    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
+    const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
+    const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
+    return {
+      sessionId: row.id,
+      status: row.status,
+      workspace: row.machineWorkspace.workspace,
+      gpu: { model: row.machine.gpuModel, vramMiB: row.machine.vramMiB },
+      startsAt: row.booking.startsAt,
+      endsAt: row.booking.endsAt,
+      expiresAt: row.expiresAt,
+      preparation: {
+        progress: row.preparationProgress,
+        step: row.preparationStep,
+        phase,
+        attempts: row.preparationAttempts,
+        elapsedSeconds: Math.max(0,Math.round((preparationEnd.getTime()-preparationStart.getTime())/1000)),
+        updatedAt: row.job?.updatedAt ?? row.updatedAt,
+        jobStatus: row.job?.status ?? null,
+        errorCode: row.job?.errorCode ?? null,
+      },
+      retryable: activeBookings.includes(row.booking.status) && retryableSessions.includes(row.status),
+      canOpen: policy.allowed && connection.ready,
+      blockedReason: !policy.allowed ? policy.code : connection.ready ? null : 'GATEWAY_NOT_READY',
+    };
+  });
+
+  app.post('/bookings/:bookingId/workspace/security-lab/access', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
+    const row = await db.workspaceSession.findFirst({
+      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'security-lab' } } },
       select: {
         id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },

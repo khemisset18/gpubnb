@@ -201,6 +201,38 @@ MOBILE_WORKSPACE_HEALTHCHECK_SCRIPT = (
     "test -f lib/build/outputs/aar/lib-debug.aar; "
     "echo gpubnb_mobile_workspace_ok"
 )
+# Proves each of the three real tools on real data, not just that the
+# binaries start: tshark parses a real pcap (built purely in userspace via
+# Python's struct module - no capture capability needed or granted, matching
+# this workspace's actual read-a-file-you-brought-in product scope), YARA
+# matches a real rule against a real sample, and radare2 genuinely analyzes
+# a real ELF binary already on the image. Confirmed live under the exact
+# same --network=none/--cap-drop=ALL/--read-only constraints this
+# healthcheck actually runs under.
+SECURITY_LAB_WORKSPACE_HEALTHCHECK_SCRIPT = """
+set -e
+python3 -c "
+import struct
+pkt = (
+    b'\\xff\\xff\\xff\\xff\\xff\\xff' + b'\\x02\\x00\\x00\\x00\\x00\\x01' + b'\\x08\\x00'
+    + struct.pack('!BBHHHBBH4s4s', 0x45, 0, 28, 0, 0, 64, 17, 0, bytes([10,0,0,1]), bytes([10,0,0,2]))
+    + struct.pack('!HHHH', 1234, 5678, 8, 0)
+)
+with open('/tmp/gpubnb-sample.pcap','wb') as f:
+    f.write(struct.pack('<IHHiIII', 0xa1b2c3d4, 2, 4, 0, 0, 65535, 1))
+    f.write(struct.pack('<IIII', 0, 0, len(pkt), len(pkt)))
+    f.write(pkt)
+"
+tshark -r /tmp/gpubnb-sample.pcap 2>&1 | grep -q "10.0.0.1"
+
+printf 'rule GpubnbHealthcheck { strings: $a = "GPUBNB_SECURITY_LAB_MARKER" condition: $a }' > /tmp/gpubnb-rule.yar
+printf 'contains GPUBNB_SECURITY_LAB_MARKER right here' > /tmp/gpubnb-sample.txt
+yara /tmp/gpubnb-rule.yar /tmp/gpubnb-sample.txt | grep -q GpubnbHealthcheck
+
+r2 -q -c 'i' "$(command -v tshark)" 2>&1 | grep -qi "elf"
+
+echo gpubnb_security_lab_workspace_ok
+"""
 
 
 def _gpu_vendor() -> str:
@@ -644,6 +676,19 @@ def workspace_health_command(image: str, workspace_slug: str, gpu_uuid: str | No
             "--entrypoint", "bash", image,
             "-c", MOBILE_WORKSPACE_HEALTHCHECK_SCRIPT,
         ]
+    if workspace_slug == "security-lab":
+        # No GPU: no exact-UUID requirement. DEVELOPER_HOME_TMPFS (512m) is
+        # plenty - nothing here approaches Mobile's ~700MB Gradle cache, so
+        # the default CPU-only healthcheck budget (1g/1cpu) is enough too.
+        return [
+            "docker", "run", "--rm", "--network=none", "--read-only",
+            "--cap-drop=ALL", "--security-opt=no-new-privileges",
+            "--pids-limit=128", "--memory=1g", "--cpus=1",
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+            DEVELOPER_HOME_TMPFS,
+            "--entrypoint", "bash", image,
+            "-c", SECURITY_LAB_WORKSPACE_HEALTHCHECK_SCRIPT,
+        ]
     return diagnostic_command(image)
 
 
@@ -660,7 +705,7 @@ def prepare_workspace(
     # Both real workspace images (code-server, and the multi-gigabyte Jupyter
     # data-science stack) are far larger than the diagnostic/GPU-proof images
     # this default otherwise guards; give both the same extended pull budget.
-    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video", "audio", "api", "mobile"} else 600
+    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video", "audio", "api", "mobile", "security-lab"} else 600
     timeout = max(30, min(timeout_limit, int(timeout_seconds)))
     cache_hit = _pull_image(image, timeout, progress_callback)
     health_finished = threading.Event()

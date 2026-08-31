@@ -188,6 +188,33 @@ class MobileWorkspaceHealthCommandTests(unittest.TestCase):
         self.assertIn("lib-debug.aar", script)
 
 
+class SecurityLabWorkspaceHealthCommandTests(unittest.TestCase):
+    IMAGE = "gpubnb-security-lab-workspace@sha256:" + ("6" * 64)
+
+    def test_security_lab_workspace_never_requests_a_gpu(self):
+        # tshark/YARA/radare2 are all CPU-only analysis tools.
+        command = workspace_health_command(self.IMAGE, "security-lab")
+        self.assertFalse(any(part.startswith("--gpus") for part in command))
+        self.assertFalse(any("NVIDIA_DRIVER_CAPABILITIES" in part for part in command))
+
+    def test_security_lab_workspace_no_gpu_uuid_required(self):
+        command = workspace_health_command(self.IMAGE, "security-lab", None)
+        self.assertEqual(command[-3], self.IMAGE)
+
+    def test_healthcheck_drives_real_functional_proofs_for_all_three_tools(self):
+        # Not just "the binaries are on PATH": tshark parses a real pcap,
+        # YARA matches a real rule against a real sample, and radare2
+        # genuinely analyzes a real ELF binary.
+        command = workspace_health_command(self.IMAGE, "security-lab")
+        self.assertEqual(command[-2], "-c")
+        self.assertEqual(command[-3], self.IMAGE)
+        script = command[-1]
+        self.assertIn("tshark", script)
+        self.assertIn("yara", script)
+        self.assertIn("r2", script)
+        self.assertIn("GpubnbHealthcheck", script)
+
+
 class AiWorkspaceHealthCommandTests(unittest.TestCase):
     IMAGE = "quay.io/jupyter/pytorch-notebook@sha256:" + ("f" * 64)
 
