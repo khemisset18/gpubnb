@@ -19,6 +19,9 @@ compte-rendu complet du déploiement et de la revalidation réelle.
 10. Observabilité
 11. Procédures
 12. État réel de production / ce qui reste à faire
+13. Déploiement réel et revalidation réelle (2026-09-01)
+14. Correction de l'automatisation du diagnostic sur le vrai agent Windows (2026-09-01)
+15. Chaîne officielle de build/release/installation/update de l'agent Windows (2026-09-01)
 
 ---
 
@@ -508,3 +511,196 @@ redémarrage propre du service produit exactement un `diagnostic_loop_stopped` p
 `agent/tests/test_diagnostic_poll_loop.py`), stable sur plusieurs exécutions complètes répétées.
 
 **Commit** : `446cd85`.
+
+## 15. Chaîne officielle de build/release/installation/update de l'agent Windows (2026-09-01)
+
+Le correctif du §14 a été appliqué et vérifié **directement sur le vrai binaire de production**,
+en remplaçant `C:\Program Files\GPUbnb Host\gpubnb-agent.exe` à la main. Cette section documente
+et corrige le vrai problème restant identifié ensuite : **le canal de distribution officiel
+(le pipeline qui construit et publie l'agent que tout nouveau Host télécharge) était lui-même en
+panne depuis deux jours**, ce qui aurait rendu ce même correctif indisponible pour tout autre Host.
+
+**État final vérifié** : `host-test-latest` (l'alias que `host-download.mjs` sert réellement à la
+page publique d'installation) pointe maintenant sur le commit `c100560` - HEAD de `main`,
+contenant l'intégralité des correctifs de cette session (diagnostic automatique, pipeline de
+release, stamping de commit, self-update, correctif de la race `STOP_PENDING`). Publié comme
+`host-v0.2.0-beta.72`, re-vérifié indépendamment sur un runner Windows propre par
+`post-publish-host-windows-verify.yml` (installation réelle, `build-info.buildCommit` confirmé
+égal au commit publié, service réellement exercé) le 2026-09-01T13:35:32Z.
+
+### 15.1 Architecture réelle (avant correction)
+
+```
+Push sur main (agent/**, apps/host-desktop/**, ...)
+   │
+   ▼
+.github/workflows/publish-host-test-release.yml (matrice Windows/Linux/macOS)
+   │  build Tauri + PyInstaller (gpubnb-agent.exe) + Rust (gpubnb-host-tunnel.exe)
+   │  cargo fmt/clippy/test -D warnings  ← porte PARTAGÉE par les 3 plateformes
+   │  installeur NSIS signé "non signé" + smoke test réel (verify-windows-release.ps1)
+   ▼
+Release GitHub immuable "host-v0.2.0-beta.<run>" (prerelease, --target <commit exact>)
+   │
+   ▼
+.github/workflows/post-publish-host-windows-verify.yml (workflow_run, si succès)
+   │  télécharge le candidat immuable sur un runner Windows INDÉPENDANT
+   │  vérifie tous les SHA-256, installe réellement, exerce le service, désinstalle
+   ▼
+Alias "host-test-latest" (recréé à chaque promotion, pointe sur le commit vérifié)
+   │
+   ▼
+apps/web/host-install.html → host-downloads.js → netlify/functions/host-download.mjs
+   │  lit directement la release GitHub "host-test-latest" (repo khemisset18/gpubnb)
+   ▼
+Téléchargement par l'utilisateur → installeur NSIS → service Windows GPUbnbAgent
+```
+
+**Cause du problème historique** : le commit `be31781` (2026-08-31 13:02, fonctionnalité
+« Détecter et libérer le GPU », sans rapport avec ce chantier) a introduit une violation
+`cargo fmt` dans `apps/host-desktop/src-tauri/src/agent_bridge.rs:288`. Cette porte est partagée
+par les trois jobs de build (Windows/Linux/macOS) de `publish-host-test-release.yml` : chaque
+build a échoué depuis, y compris celui du correctif du diagnostic (`446cd85`) lui-même. Aucune
+nouvelle release n'a donc été publiée depuis le 2026-08-30 04:43:11 (commit `eedee14a`) - **91
+secondes avant** le binaire figé exact retrouvé sur la machine réelle au §14. Autrement dit : même
+un nouveau Host installé aujourd'hui via le canal officiel aurait reçu le même agent cassé.
+Corrigé en une ligne (reformattage seul, aucun changement de logique) dans `a5d5fb1`. Vérifié en
+conditions réelles : ce seul push a immédiatement débloqué le pipeline, publié
+`host-v0.2.0-beta.70` et promu `host-test-latest` sur `a5d5fb1` (qui contient déjà `446cd85`) en
+moins de 10 minutes, sans aucune autre modification.
+
+### 15.2 Version officielle et traçabilité du binaire
+
+Avant cette correction, un agent installé ne savait dire que sa version sémantique
+(`agent/pyproject.toml`, actuellement `0.6.2`, non liée au commit exact) - insuffisant pour
+distinguer « le bon 0.6.2 » d'« un 0.6.2 figé depuis deux jours », qui est exactement le problème
+qui s'est produit.
+
+Ajouté : `agent/gpubnb_agent/_build_info.py` (`BUILD_COMMIT`), réécrit par CI juste avant la
+construction PyInstaller avec les 12 premiers caractères du commit réel (`$GITHUB_SHA`), et
+vérifié immédiatement après la construction (le build échoue si le commit stampé ne correspond
+pas). Nouvelle commande :
+
+```
+gpubnb-agent.exe build-info
+{"agentVersion": "0.6.2", "buildCommit": "a5d5fb1ff3f7", "frozen": true, "executable": "..."}
+```
+
+`agentVersion` et `buildCommit` apparaissent désormais aussi dans chaque événement
+`diagnostic_poll_loop_started` du log réel - le champ qui aurait transformé l'investigation du
+§14 (comparaison d'horodatages de fichiers, inspection de ligne de commande de processus) en une
+simple lecture de log.
+
+### 15.3 Vérification d'intégrité (déjà existante, conservée)
+
+Chaque asset publié a son SHA-256 dans `SHA256SUMS.txt` (généré à la publication, vérifié
+indépendamment lors de la promotion vers `host-test-latest`). `host-download.mjs` (fonction
+Netlify servant la page de téléchargement publique) sert ce même SHA-256 à l'utilisateur pour
+vérification manuelle. Renforcé cette session : `scripts/verify-windows-release.ps1` vérifie
+maintenant en plus, sur chaque publication ET sur chaque promotion, que le `buildCommit` réel de
+l'exécutable installé correspond exactement au commit publié - **rendant structurellement
+impossible qu'une future release expédie silencieusement un binaire périmé** sans faire échouer
+le pipeline. Le script vérifie aussi que le vrai service Windows installé atteint bien la première
+ligne réelle de `heartbeat_loop()` (le message « Machine non liée », journalisé via
+`logging.exception`) après un redémarrage - preuve, sans compte GPUbnb réel disponible sur le
+runner CI, que le service exécute réellement le code de cette build et non un reliquat figé.
+
+### 15.4 Mise à jour d'un Host déjà installé
+
+Aucun mécanisme d'auto-update n'existait avant cette session (aucun plugin `tauri-plugin-updater`,
+aucune vérification périodique, rien) : le seul moyen de mettre à jour un Host déjà installé était
+de retélécharger et relancer l'installeur NSIS manuellement. C'est la cause directe pour laquelle
+la machine réelle de l'utilisateur avait un `.exe` figé du 2026-08-30 alors que le dépôt était déjà
+corrigé : rien ne l'aurait jamais informée qu'une correction existait.
+
+Ajouté : `gpubnb-agent.exe self-update` (`agent/gpubnb_agent/self_update.py`). Flux réel :
+
+```
+gpubnb-agent.exe self-update
+   │  GET releases/tags/host-test-latest (GitHub) → commit publié
+   │  déjà à jour (buildCommit courant == commit publié) ? → ne rien faire
+   │  télécharge gpubnb-host-windows-x64-portable.zip, vérifie son SHA-256 publié
+   │  extrait gpubnb-agent.exe, vérifie l'en-tête PE (MZ) et la taille minimale
+   │  arrête le service GPUbnbAgent (attend confirmation réelle, timeout 30s)
+   │  renomme l'ancien binaire en gpubnb-agent.exe.bak-<epoch> (jamais supprimé)
+   │  installe le nouveau binaire, redémarre le service
+   │  échec au démarrage ? → restaure automatiquement l'ancien binaire et relance
+   ▼
+{"updated": true, "previousCommit": "...", "newCommit": "...", "backupPath": "...", ...}
+```
+
+`--dry-run` vérifie et rapporte sans rien modifier. La commande refuse de s'exécuter sur une
+installation pip éditable (non figée) - elle reflète déjà toujours le code source, il n'y a rien à
+comparer.
+
+**Bug réel trouvé et corrigé en testant contre un vrai service Windows jetable** (jamais le vrai
+`GPUbnbAgent` de production) : après `stop`, un vrai service reste en `STOP_PENDING` plusieurs
+secondes réelles avant d'atteindre `STOPPED` - or `service_running()` (`SERVICE_RUNNING`
+uniquement) est déjà faux pendant tout ce temps. La première version attendait seulement
+`service_running()==false` avant de remplacer le binaire et relancer, ce qui court-circuitait le
+vrai Service Control Manager : `StartService failed: 1056, une instance du service s'exécute
+déjà`. Corrigé (commit `c100560`) en ajoutant une vérification distincte
+`windows_service.service_fully_stopped()` (code d'état `SERVICE_STOPPED` précis, pas seulement
+« pas RUNNING ») utilisée spécifiquement avant de toucher au binaire. Reproduit et re-vérifié
+réellement (voir §15.7) - c'est exactement le genre de défaut qu'un test purement unitaire avec
+mocks n'aurait jamais révélé.
+
+**Choix assumé : déclenché par le propriétaire, jamais silencieux/automatique en arrière-plan.**
+Les binaires publiés ne sont pas signés (voir `apps/web/host-install.html`, « Signature : non
+signée » sur chaque plateforme) : remplacer sans supervision humaine le binaire d'un service
+Windows de production n'est pas une décision que cette session prend seule. Le mécanisme
+d'exécution (téléchargement, vérification, arrêt, remplacement atomique, redémarrage, rollback
+automatique en cas d'échec) est entièrement automatisé et testé ; seul le déclenchement reste
+manuel pour l'instant. Un bouton « Mettre à jour » dans l'application Host (Tauri) est une suite
+naturelle mais hors périmètre de cette session (nouvelle surface UI/Rust distincte, pas une
+correction du pipeline existant).
+
+### 15.5 Comment vérifier qu'un Host exécute réellement la version officielle actuelle
+
+1. `gpubnb-agent.exe build-info` sur la machine → note `buildCommit`.
+2. Comparer avec le commit ciblé par la release GitHub `host-test-latest` du dépôt
+   `khemisset18/gpubnb` (visible via `gh release view host-test-latest --json targetCommitish`,
+   ou la page https://github.com/khemisset18/gpubnb/releases).
+3. Si différent : `gpubnb-agent.exe self-update` (en administrateur) pour se mettre à jour, ou
+   `gpubnb-agent.exe self-update --dry-run` pour vérifier sans agir.
+4. Dans `C:\ProgramData\GPUbnb\agent.log`, chaque `diagnostic_poll_loop_started` porte désormais
+   `buildCommit` - moyen le plus rapide de diagnostiquer un agent figé sans accès à la machine.
+
+### 15.6 Tests unitaires
+
+14 nouveaux tests (`agent/tests/test_self_update.py`) couvrant la vraie mécanique - vérification
+de checksum (y compris un cas de ZIP altéré ne correspondant plus à son propre SHA-256 publié),
+un arrêt de service qui ne se termine jamais (répertoire d'installation jamais touché), la race
+`STOP_PENDING` du §15.4 reproduite explicitement, et un échec de démarrage après remplacement
+(rollback automatique vers le dernier binaire connu-bon) - avec réseau, contrôle de service,
+horloge et pause entièrement injectés. 376 → 390 tests agent au total, stables sur plusieurs
+exécutions complètes.
+
+### 15.7 Preuve réelle du scénario de mise à jour complet (ancien agent → self-update → nouveau agent)
+
+Exécuté réellement, pas simulé, sur cette machine, sans jamais toucher le vrai service
+`GPUbnbAgent` de production :
+
+1. Créé un service Windows **jetable et distinct**, `GPUbnbAgentSelfUpdateTest`, pointant sur le
+   vrai `gpubnb-agent.exe` extrait de la release réelle `host-v0.2.0-beta.70` (commit `a5d5fb1`,
+   celle publiée juste après le correctif du pipeline, avant `self-update`/`build-info`).
+2. Démarré ce service jetable réellement (`sc start` → `RUNNING` confirmé, hash SHA-256 du binaire
+   noté : `ccbc5148...`).
+3. Exécuté `perform_self_update` (le vrai code de `self_update.py`, appelé directement, contrôle
+   de service branché sur de vrais appels `sc.exe stop/start/query` contre `GPUbnbAgentSelfUpdateTest`
+   uniquement) contre la vraie release `host-test-latest` en vigueur à ce moment.
+4. **Première tentative** : a échoué avec l'erreur Windows réelle 1056 - c'est la découverte du bug
+   `STOP_PENDING` du §15.4. Le rollback automatique a fonctionné correctement : binaire restauré
+   à son hash d'origine, aucun fichier orphelin (`.new`/`.bak`) laissé derrière, service jetable
+   laissé dans un état `STOPPED` propre.
+5. Corrigé (`c100560`), **seconde tentative** : succès complet. `updated=true`,
+   `previousCommit="a5d5fb1ff3f7"`, `newCommit="fc5e777f256c90b94452b72ca1ac8a51a4213c63"`,
+   `backupPath` créé. Vérifié après coup : `gpubnb-agent.exe build-info` sur le binaire remplacé
+   rapporte bien `buildCommit: fc5e777f256c` ; le fichier `.bak` a exactement le hash SHA-256 du
+   binaire d'origine (`ccbc5148...`, confirmé identique) ; le service jetable est `RUNNING`.
+6. Nettoyage : service jetable arrêté et supprimé (`sc delete`), répertoire de test supprimé.
+   Vérifié tout du long et à la fin : `GPUbnbAgent` (le vrai service de production) est resté
+   `RUNNING` sans interruption, jamais arrêté, jamais touché.
+
+C'est la preuve complète du flux `ancien agent → self-update → nouveau agent → service → build
+correct confirmé` demandé, obtenue avec de vraies releases GitHub et un vrai cycle de vie de
+service Windows, sans aucun risque pour la machine réelle en production.

@@ -169,6 +169,74 @@ process. 376/376 agent tests pass (7 new in
 `agent/tests/test_diagnostic_poll_loop.py`). Full writeup:
 `docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` §14.
 
+### Official release pipeline was itself broken — fixed the same day, commits `a5d5fb1`/`fc5e777`
+
+The hand-patched fix above was applied directly to the real production
+binary — necessary to prove it, but it left a real question: would a *new*
+Host, or the *official update path* for an existing one, ever actually get
+this fix? Investigated `publish-host-test-release.yml` /
+`post-publish-host-windows-verify.yml` and found: **no**. A one-line
+`cargo fmt` violation from an unrelated commit (`be31781`, 2026-08-31) broke
+the shared build gate on all three release platforms; every push since —
+including the diagnostic-loop fix itself (`446cd85`) — silently failed to
+publish. `host-test-latest` (the exact channel the public download page and
+`host-download.mjs` Netlify function serve) sat frozen on commit `eedee14a`,
+91 seconds before the exact stale binary this session found on the real
+machine. Fixed with one line (`a5d5fb1`, no logic change) — verified live:
+that push alone unblocked the pipeline and promoted `host-test-latest` to a
+commit that already contains `446cd85`, in under 10 minutes.
+
+Also closed the two structural gaps that let this happen at all and could
+let it happen again unnoticed:
+- **No build-commit traceability**: an installed agent could only report its
+  hand-maintained semver (`0.6.2`), not which commit it was actually built
+  from. Added `agent/gpubnb_agent/_build_info.py` (`BUILD_COMMIT`, stamped by
+  CI, verified right after the PyInstaller build fails-closed if wrong) and
+  `gpubnb-agent.exe build-info`. `scripts/verify-windows-release.ps1` now
+  asserts the installed exe's `buildCommit` matches the exact commit being
+  published/promoted on every single release — a future silent-stale-binary
+  regression now fails the pipeline outright instead of shipping.
+- **No update path for an already-installed Host**: none existed at all —
+  the only way to update was to manually re-download and rerun the NSIS
+  installer, which is exactly why the real machine sat on a two-day-old
+  binary with no way to know a fix existed. Added
+  `gpubnb-agent.exe self-update` (`agent/gpubnb_agent/self_update.py`):
+  checks the real `host-test-latest` release, verifies the published
+  SHA-256, stops the real Windows service, atomically swaps the binary (old
+  one kept as a timestamped backup, never deleted), restarts, and rolls back
+  automatically if the new binary fails to start. Deliberately
+  owner-triggered, not a silent background updater — the published binaries
+  aren't code-signed yet, so unattended replacement of a production
+  service's binary wasn't a call to make unilaterally; that tradeoff is
+  documented in the module itself.
+
+  Testing the real upgrade scenario against a real (disposable, never the
+  production `GPUbnbAgent`) Windows service found one more real bug before
+  it could ship: after `stop`, a real service reports `running=false` while
+  still `STOP_PENDING` for several seconds before reaching `STOPPED`.
+  `self-update` raced ahead on the first signal and got a real Windows 1056
+  ("instance already running") trying to restart too early. Fixed
+  (`c100560`) with a distinct `service_fully_stopped()` check
+  (`SERVICE_STOPPED` specifically) gating the binary swap, separate from the
+  `service_running()` check used to confirm the post-restart come-up — the
+  two are not interchangeable. Re-ran the full real scenario after the fix:
+  disposable test service running a real old build (from
+  `host-v0.2.0-beta.70`) → `self-update` against the real, live
+  `host-test-latest` → real SHA-256-verified download → real stop/replace/
+  restart → confirmed `RUNNING` with `build-info` reporting the new commit
+  and a hash-verified `.bak` of the exact original binary. Real production
+  `GPUbnbAgent` confirmed untouched and running throughout. 390 agent tests
+  pass total (14 new, all mocking network/service-control/clock so nothing
+  depends on a real service in CI).
+
+  **Final verified state**: `host-test-latest` now targets `c100560` (HEAD
+  of `main`), published as `host-v0.2.0-beta.72`, independently re-verified
+  by `post-publish-host-windows-verify.yml` on a clean Windows runner
+  (real install, `build-info.buildCommit` checked against the published
+  commit, service actually exercised) at 2026-09-01T13:35:32Z. A new Host
+  installed today gets every fix in this session. Full writeup:
+  `docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` §15.
+
 ### Known, documented (not hidden) limitations
 
 - Repair: only orphaned-allocation bookkeeping is automated. Agent
