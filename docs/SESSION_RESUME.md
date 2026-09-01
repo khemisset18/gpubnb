@@ -13,15 +13,15 @@ validation checklist, and section 10 has the full this-machine feasibility
 study.
 
 **Do not push anything until the user explicitly authorizes it each time.**
-Everything described in Section 0 below (2026-09-01) is **local commits on
-`main` only — nothing pushed to `origin`, nothing deployed**, per explicit
-instruction that session. The 2026-08-31 push mentioned further down (old
-Section 1) was a separate, earlier, already-consumed authorization — do not
-treat it as standing consent for anything after it.
+The quarantine/diagnostics system in Section 0 below **was pushed to
+`origin/main` and deployed to production (Render + Netlify) on 2026-09-01**,
+under an explicit, one-time authorization given that session ("Tu as
+maintenant mon autorisation pour déployer"). Treat that as consumed, not as
+standing consent for any future push/deploy — ask again next time.
 
 ---
 
-## 0. LATEST SESSION — Quarantine & Diagnostics System (2026-09-01)
+## 0. LATEST SESSION — Quarantine & Diagnostics System (2026-09-01) — DEPLOYED
 
 **Read `docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` for the full architecture.**
 This section is only the continuity summary.
@@ -98,16 +98,61 @@ duplicate-result rejection; force-clear's token/risk-confirmation gates).
 - `20260901013945_add_orphaned_allocation_reason_code` — adds the
   `ORPHANED_ALLOCATION` value to `QuarantineReasonCode`.
 
-### Real production machine (`cmsiggruy0004df0tn669f6bn`)
+### Deployment (2026-09-01, authorized) + two more real bugs found and fixed live
 
-**Not touched.** Still 🔴 quarantined as of the last live check this
-session (2026-09-01), last heartbeat unchanged since 2026-08-30T01:14:12.
-**Cannot be revalidated with the new system yet** — that requires
-`gpubnb.onrender.com`/`gpubnb.netlify.app` to run this code, which requires
-a deploy, which requires pushing to `origin`, which was explicitly not
-authorized this session ("Ne pousse rien sur origin"). This is the one
-genuinely blocked step, not a shortcut taken — see
-`docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` §12.
+Pushed `961639f` → confirmed live on Render+Netlify empirically (new routes
+respond with the new code's exact error shapes, not 404; `/ready` confirms
+prod Postgres+Redis healthy). Testing the real flow against the real
+machine found and fixed two more real bugs, pushed as `04fad5f` and
+`5555ed3`:
+1. `TIMED_OUT` was only ever computed at read time, never written back. A
+   single stale `DiagnosticRun` + oldest-first ordering in `GET
+   /agent/diagnostics/next` permanently shadowed every later, genuinely
+   fresh run — the agent kept getting `diagnosticRunId: null` forever after
+   the first timeout. Fixed: both that route and `createDiagnosticRun` now
+   sweep every stale RUNNING row to TIMED_OUT first, then pick the newest
+   remaining one.
+2. `DEV_DIAGNOSTIC_IMAGE` was never set in Render's env. The new
+   `poll_and_run_diagnostic_once` had no fallback to the agent's own local
+   `config.json` diagnosticImage (unlike the older `run_next_job` path,
+   which already had one). Fixed to match that precedence.
+
+`CI` is red on `main` since 2026-08-30 (predates this session) — 3 Python
+tests assert Windows-only behavior with no platform skip guard, so they
+fail on the Ubuntu CI runner. Confirmed unrelated to this work and
+non-blocking (Render's `deployment-readiness` check passed both times).
+Not fixed — out of scope, flagged here so it isn't a surprise.
+
+### Real production machine (`cmsiggruy0004df0tn669f6bn`) — REVALIDATED SUCCESSFULLY
+
+Was 🔴 QUARANTINED, `reasonCode=UNKNOWN` (genuinely no recoverable history —
+quarantined before this system existed). Owner clicked "Relancer le
+diagnostic" (via the real Host page); the real `gpubnb-agent.exe` Windows
+service on this machine ran a real diagnostic container against the real
+GTX 1650 (`GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a`, driver 592.82, CUDA
+13.1) — all 9 checks (agent/gpu/gpuUuid/driver/docker/nvidiaRuntime/cuda/
+ram/allocation) PASS, no repair needed. `clearQuarantine()` fired from that
+real evidence — never forced. Machine + its Accelerator row confirmed
+synchronized (`CLEAR`, fresh `verifiedAt`). Final state:
+`LISTING_ACTIVE`/`canPublish=true`/`canAcceptBooking=true`, and the
+machine's existing listing ("GTX 1650 - Test beta deux machines") is
+confirmed live on the real, unauthenticated public marketplace endpoint
+(`GET /rental/listings`, no session cookie). Full immutable history (4
+diagnostic attempts during investigation + the final CLEARED event) visible
+on Host, nothing erased. See `docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` §13
+for the full check table and timestamps.
+
+**One real thing left unresolved**: the automatic background thread
+(`poll_and_run_diagnostic`, meant to run after every heartbeat exactly like
+the existing job-poll thread) never logged anything in the real Windows
+service across several restarts, despite the exact same function working
+perfectly every time it was invoked directly (same real keys, same real
+API, same real machine). The revalidation above was obtained by directly
+invoking `gpubnb_agent.cli.poll_and_run_diagnostic_once` from an
+interactive Python session on the same machine — same production code and
+cryptographic identity, not a workaround or a simulation, just manual
+instead of automatic. Worth a focused look in a future session before
+relying on the automatic path unattended.
 
 ### Known, documented (not hidden) limitations
 

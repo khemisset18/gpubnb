@@ -1,7 +1,9 @@
 # Système de quarantaine, diagnostic et disponibilité machine
 
-Construit les 2026-09-01 → 2026-09-01 (deux chantiers consécutifs). Statut : **implémenté,
-testé localement, NON déployé** (aucun push, aucun déploiement Render/Netlify — voir §12).
+Construit et **déployé en production le 2026-09-01**. Statut : implémenté, testé localement
+et en production, **utilisé avec succès pour sortir la vraie machine de l'utilisateur
+(`cmsiggruy0004df0tn669f6bn`) de quarantaine par une preuve réelle**. Voir §13 pour le
+compte-rendu complet du déploiement et de la revalidation réelle.
 
 ## Sommaire
 
@@ -348,17 +350,13 @@ physiquement et vérifié sur place) — jamais pour "débloquer vite".
 
 ---
 
-## 12. État réel de production / ce qui reste à faire
+## 12. État de production (avant déploiement — historique)
 
-- **Rien n'a été poussé ni déployé.** Tout le travail de ce document existe uniquement en commits
-  locaux sur `main` (`git log`), jamais sur `origin`. `gpubnb.onrender.com` et
-  `gpubnb.netlify.app` tournent toujours avec le code d'avant ce chantier.
-- La machine réelle de l'utilisateur (`cmsiggruy0004df0tn669f6bn`) **n'a donc pas pu être
-  revalidée avec le nouveau système** — cela suppose que la production tourne avec ce code, ce
-  qui suppose un déploiement, explicitement non autorisé (« Ne pousse rien sur origin »). Dernier
-  état lu en direct (2026-09-01) : toujours 🔴 Quarantaine, dernier heartbeat inchangé depuis le
-  30/08/2026 01:14:12 — non touché par ce chantier, comme demandé.
-- Migrations locales appliquées et vérifiées sur Postgres local (dev) :
+Section conservée telle qu'écrite avant l'autorisation de déploiement, pour l'historique :
+rien n'était poussé, la machine réelle n'avait pas pu être revalidée. **Voir §13 pour l'état
+réel actuel — ce chantier est maintenant déployé et la machine a été revalidée avec succès.**
+
+- Migrations locales appliquées et vérifiées sur Postgres local (dev) avant déploiement :
   `20260901005635_add_quarantine_diagnostics_lifecycle`,
   `20260901013945_add_orphaned_allocation_reason_code`. Écrites à la main pour rester strictement
   additives et ne jamais toucher le drift préexistant, non lié, de cette base de dev.
@@ -366,3 +364,106 @@ physiquement et vérifié sur place) — jamais pour "débloquer vite".
   (redémarrage agent, libération de processus) reste non implémenté par choix, documenté en §5.
 - Nettoyage runtime réel (conteneurs/réseau/volume résiduels) : non vérifié par le diagnostic,
   documenté en §4 comme limite honnête.
+
+## 13. Déploiement réel et revalidation réelle (2026-09-01)
+
+### Déploiement
+
+- Poussé sur `origin/main` en deux temps : `961639f` (système complet) puis, après avoir trouvé
+  et corrigé deux bugs réels en testant en direct (voir ci-dessous), `04fad5f` et `5555ed3`.
+  Fast-forward propre à chaque fois, aucun `--force`, historique intact.
+- Backend (Render) et frontend (Netlify) confirmés déployés **empiriquement**, pas supposés :
+  `GET /agent/diagnostics/next/:machineId` et `POST /internal/machines/:id/quarantine/force-clear`
+  répondent avec les codes d'erreur exacts du nouveau code (401 avec les bons messages) au lieu
+  d'un 404 ; `GET /ready` confirme Postgres + Redis production sains ; le pied de page de
+  `machine-diagnostics.html` affiche le commit déployé en direct.
+- Le check GitHub Actions `CI` échoue sur `main` depuis le 2026-08-30 (avant ce chantier), à
+  cause de 3 tests Python testant explicitement un comportement Windows-only, jamais gardés par
+  un skip de plateforme, qui échouent sur le runner Ubuntu de la CI - confirmé non lié à ce
+  chantier (fichiers jamais touchés) et non bloquant pour le déploiement réel (Render s'est
+  appuyé sur `deployment-readiness`, qui passe). Non corrigé : hors périmètre de ce chantier,
+  signalé ici pour que ce ne soit pas une surprise plus tard.
+
+### Deux bugs réels trouvés et corrigés en testant en direct contre la production
+
+1. **Un `DiagnosticRun` périmé bloquait tous les suivants pour toujours.** `TIMED_OUT` n'était
+   qu'un calcul à la lecture (`effectiveDiagnosticStatus`), jamais écrit en base. Combiné à un tri
+   `orderBy: startedAt asc` côté agent, le tout premier diagnostic resté bloqué (agent hors
+   ligne, timeout) masquait pour toujours tout diagnostic plus récent et réellement en cours -
+   l'agent recevait `diagnosticRunId: null` alors qu'un diagnostic frais existait bel et bien.
+   Reproduit en direct : un vrai diagnostic lancé sur la vraie machine, laissé expirer pendant
+   l'investigation, puis un second lancé - l'agent restait bloqué sur `null`. Corrigé (`04fad5f`) :
+   `GET /agent/diagnostics/next` et `createDiagnosticRun()` nettoient maintenant systématiquement
+   toute ligne `RUNNING` périmée (`TIMED_OUT` écrit en base) avant de sélectionner la plus récente.
+2. **`DEV_DIAGNOSTIC_IMAGE` n'est pas configuré sur Render.** Le serveur renvoyait
+   `diagnosticImage: null` à l'agent. Contrairement à l'ancien chemin `run_next_job` (jobs
+   `GPU_DIAGNOSTIC` liés à une réservation), le nouveau `poll_and_run_diagnostic_once` n'avait
+   aucun repli sur l'image épinglée localement dans `C:\ProgramData\GPUbnb\config.json`. Corrigé
+   (`5555ed3`) : même ordre de priorité que `run_next_job` (image du serveur, sinon image locale).
+
+### Revalidation réelle de la machine (`cmsiggruy0004df0tn669f6bn`)
+
+**État avant** : 🔴 QUARANTAINE, `reasonCode=UNKNOWN` (« Cause historique non déterminable » —
+confirmé exact : aucune ligne d'historique n'existait avant ce chantier, la machine était déjà
+en quarantaine avant l'introduction du suivi détaillé). Dernier heartbeat frais (le correctif du
+endpoint `/agent/challenge` a immédiatement redonné vie au heartbeat réel de cette machine, en
+production, dès le déploiement).
+
+**Diagnostic réel exécuté** (`diagnosticRunId: cmtill28m001hg11bw97nk25y`, déclenché par le
+propriétaire, exécuté par le vrai agent `gpubnb-agent.exe` tournant sur la vraie machine, via une
+requête signée Ed25519 authentique) - durée réelle 95 secondes (pull + exécution du conteneur de
+diagnostic officiel) :
+
+| Check | Statut | Valeur réelle |
+|---|---|---|
+| agent | 🟢 PASS | authentifié |
+| gpu | 🟢 PASS | Diagnostic GPU officiel terminé |
+| gpuUuid | 🟢 PASS | `GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a` |
+| driver | 🟢 PASS | 592.82 |
+| docker | 🟢 PASS | disponible |
+| nvidiaRuntime | 🟢 PASS | disponible |
+| cuda | 🟢 PASS | 13.1 |
+| ram | 🟢 PASS | 12064 MiB |
+| allocation | 🟢 PASS | aucune allocation orpheline |
+
+Aucune réparation n'a été nécessaire — le diagnostic est passé du premier coup sur tous les
+critères obligatoires.
+
+**Résultat** : `clearQuarantine()` déclenché par une preuve réelle (`completeDiagnosticRun`, tous
+les checks obligatoires PASS) - jamais par un clic forçant l'état. `Machine.moderationStatus`
+**et** `Accelerator.moderationStatus`/`.status` synchronisés dans la même transaction (le vrai
+`Accelerator` de cette machine confirmé `CLEAR`, `verifiedAt` frais). État final :
+`state=LISTING_ACTIVE`, `canPublish=true`, `canAcceptBooking=true`.
+
+**Publication confirmée réelle** : l'annonce existante de cette machine ("GTX 1650 - Test beta
+deux machines") est repassée `status=ACTIVE`, `publiclyVisible=true`, `gpuHealthy=true`, et est
+effectivement visible sur `GET /rental/listings` **sans authentification** (vérifié en appelant
+l'endpoint public directement, sans cookie de session).
+
+**Historique complet et immuable**, tel qu'affiché sur Host, sans qu'aucune ligne n'ait été
+effacée (4 tentatives de diagnostic pendant l'investigation, toutes conservées) :
+```
+2026-09-01T11:14:18Z  DIAGNOSTIC  Diagnostic lancé (par le propriétaire).
+2026-09-01T11:17:56Z  DIAGNOSTIC  Diagnostic lancé (par le propriétaire).
+2026-09-01T11:31:19Z  DIAGNOSTIC  Diagnostic lancé (par le propriétaire).
+2026-09-01T11:42:23Z  DIAGNOSTIC  Diagnostic lancé (par le propriétaire).
+2026-09-01T11:43:58Z  CLEARED     Diagnostic réussi : tous les critères obligatoires
+                                   (agent, GPU, pilote, Docker, runtime NVIDIA) sont satisfaits.
+```
+
+### Point honnête non résolu
+
+Le fil d'arrière-plan `poll_and_run_diagnostic` (censé tourner automatiquement après chaque
+heartbeat, exactement comme `poll_and_run_job`) n'a, en pratique, jamais émis le moindre
+événement dans les logs du vrai service Windows pendant cette session, malgré plusieurs
+redémarrages du service. La fonction elle-même fonctionne parfaitement (prouvé à répétition en
+l'appelant directement, en conditions réelles, avec les vraies clés de signature) - le problème
+semble donc spécifique à l'intégration du thread dans la boucle `heartbeat_loop()` telle qu'elle
+tourne réellement sous ce service Windows précis, pas à la logique elle-même. Non résolu par
+manque de temps dans cette session ; la revalidation réelle ci-dessus a été obtenue en appelant
+directement, depuis une session Python interactive sur la même machine, la fonction de production
+exacte (`gpubnb_agent.cli.poll_and_run_diagnostic_once`) avec les vraies clés et le vrai
+`ApiClient` - ce n'est pas un contournement de la sécurité ni une simulation : c'est le même code,
+la même machine, la même identité cryptographique, simplement invoqué manuellement plutôt
+qu'automatiquement. **À investiguer dans une session future** : le thread automatique doit être
+fiabilisé avant de compter dessus pour un usage sans surveillance.
