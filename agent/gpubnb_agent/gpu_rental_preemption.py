@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import json
+import ntpath
 import os
 import tempfile
 import threading
@@ -225,12 +226,22 @@ def _is_windows_desktop_compositor_path(process_name: str) -> bool:
     compromise this check was never meant to defend against. Does not apply on
     non-Windows platforms, where compute-apps reporting does not include the
     compositor.
+
+    Uses the `ntpath` module explicitly (Windows path semantics, always
+    available regardless of host OS) rather than `os.path`/`os.sep`: those are
+    bound to the *real* host OS at interpreter startup, not to `os.name`, so
+    patching `os.name` alone in a test does not change how `os.path.normcase`
+    or `os.sep` behave on a non-Windows CI runner - `os.path.normcase` is a
+    no-op and `os.sep` is `/` on Linux/macOS regardless of the patch. `ntpath`
+    sidesteps that entirely: it implements real Windows path comparison
+    identically on every platform, so this stays genuinely testable on Linux
+    CI instead of only in real behavior on a real Windows host.
     """
     if os.name != "nt" or not process_name:
         return False
-    system_root = os.path.normcase(os.environ.get("SystemRoot", r"C:\Windows"))
-    normalized = os.path.normcase(process_name)
-    return normalized == system_root or normalized.startswith(system_root + os.sep)
+    system_root = ntpath.normcase(os.environ.get("SystemRoot", r"C:\Windows"))
+    normalized = ntpath.normcase(process_name)
+    return normalized == system_root or normalized.startswith(system_root + ntpath.sep)
 
 
 class NvidiaGpuQuiescenceProbe:
