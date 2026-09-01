@@ -142,17 +142,32 @@ diagnostic attempts during investigation + the final CLEARED event) visible
 on Host, nothing erased. See `docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` §13
 for the full check table and timestamps.
 
-**One real thing left unresolved**: the automatic background thread
-(`poll_and_run_diagnostic`, meant to run after every heartbeat exactly like
-the existing job-poll thread) never logged anything in the real Windows
-service across several restarts, despite the exact same function working
-perfectly every time it was invoked directly (same real keys, same real
-API, same real machine). The revalidation above was obtained by directly
-invoking `gpubnb_agent.cli.poll_and_run_diagnostic_once` from an
-interactive Python session on the same machine — same production code and
-cryptographic identity, not a workaround or a simulation, just manual
-instead of automatic. Worth a focused look in a future session before
-relying on the automatic path unattended.
+**Automatic background thread — RESOLVED same day (2026-09-01), commit
+`446cd85`**: the real Windows service (`GPUbnbAgent`) was running a
+PyInstaller-frozen `gpubnb-agent.exe` built 2026-08-30T04:44:36 —
+before `poll_and_run_diagnostic_once` (added 2026-09-01) existed at all.
+Every manual invocation that "worked" during the revalidation above used a
+separate editable pip install on the same machine that always reflects live
+repo source — a completely different code path from what the service
+actually runs. Proven via `Get-CimInstance Win32_Process` (service's real
+command line: `"C:\Program Files\GPUbnb Host\gpubnb-agent.exe" _service`,
+distinct from the editable install's path) and the frozen exe's file
+timestamp. Not a logic bug — every test of the loop already passed.
+
+Fix: rebuilt the exe from current source with the exact CI command,
+swapped it into `C:\Program Files\GPUbnb Host\` (old build kept as
+`.bak-20260830`), restarted the real service. Added full structured
+observability (`diagnostic_poll_loop_started/running`,
+`diagnostic_poll_request/response`, `diagnostic_run_received/started/
+completed/failed`, `diagnostic_poll_error` with truncated traceback,
+`diagnostic_loop_stopped` — no secrets ever logged) so a silent loop is no
+longer possible. Verified live, zero manual Python: loop starts exactly
+once per service start, polls every ~10s indefinitely, picked up and
+completed a real "Relancer le diagnostic" automatically in 6s (9/9 PASS),
+and a clean restart produces exactly one start/stop pair with no duplicate
+process. 376/376 agent tests pass (7 new in
+`agent/tests/test_diagnostic_poll_loop.py`). Full writeup:
+`docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` §14.
 
 ### Known, documented (not hidden) limitations
 

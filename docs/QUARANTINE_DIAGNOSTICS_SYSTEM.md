@@ -451,19 +451,60 @@ effacée (4 tentatives de diagnostic pendant l'investigation, toutes conservées
                                    (agent, GPU, pilote, Docker, runtime NVIDIA) sont satisfaits.
 ```
 
-### Point honnête non résolu
+### Point honnête non résolu — RÉSOLU le 2026-09-01 (voir §14)
 
-Le fil d'arrière-plan `poll_and_run_diagnostic` (censé tourner automatiquement après chaque
+~~Le fil d'arrière-plan `poll_and_run_diagnostic` (censé tourner automatiquement après chaque
 heartbeat, exactement comme `poll_and_run_job`) n'a, en pratique, jamais émis le moindre
 événement dans les logs du vrai service Windows pendant cette session, malgré plusieurs
-redémarrages du service. La fonction elle-même fonctionne parfaitement (prouvé à répétition en
-l'appelant directement, en conditions réelles, avec les vraies clés de signature) - le problème
-semble donc spécifique à l'intégration du thread dans la boucle `heartbeat_loop()` telle qu'elle
-tourne réellement sous ce service Windows précis, pas à la logique elle-même. Non résolu par
-manque de temps dans cette session ; la revalidation réelle ci-dessus a été obtenue en appelant
-directement, depuis une session Python interactive sur la même machine, la fonction de production
-exacte (`gpubnb_agent.cli.poll_and_run_diagnostic_once`) avec les vraies clés et le vrai
-`ApiClient` - ce n'est pas un contournement de la sécurité ni une simulation : c'est le même code,
-la même machine, la même identité cryptographique, simplement invoqué manuellement plutôt
-qu'automatiquement. **À investiguer dans une session future** : le thread automatique doit être
-fiabilisé avant de compter dessus pour un usage sans surveillance.
+redémarrages du service.~~ Cause réelle trouvée et corrigée : voir §14 ci-dessous. Ce n'était pas
+un bug de logique dans le thread lui-même, mais un exécutable Windows figé (build PyInstaller du
+2026-08-30) qui ne contenait tout simplement pas encore ce code.
+
+## 14. Correction de l'automatisation du diagnostic sur le vrai agent Windows (2026-09-01)
+
+**Cause racine prouvée** : le vrai service Windows `GPUbnbAgent` n'exécute pas le code source de
+ce dépôt. Il exécute un exécutable PyInstaller figé,
+`C:\Program Files\GPUbnb Host\gpubnb-agent.exe`, construit le 2026-08-30T04:44:36 - **avant**
+l'existence de `poll_and_run_diagnostic_once` (ajouté le 2026-09-01). Chaque appel manuel réussi
+pendant l'investigation utilisait en réalité une installation pip éditable séparée sur la même
+machine (`pip show gpubnb-agent` → `Editable project location: .../gpubnb/agent`), qui pointe
+directement vers le code source et reflète donc toujours la dernière version - un chemin
+d'exécution complètement différent de celui du vrai service. Redémarrer le service ne faisait que
+relancer le même exécutable figé ; il ne relisait jamais le dépôt.
+
+**Preuve** : `Get-CimInstance Win32_Process` a montré la ligne de commande réelle du service comme
+`"C:\Program Files\GPUbnb Host\gpubnb-agent.exe" _service`, distincte de
+`...\Python313\Scripts\gpubnb-agent.exe` (l'installation éditable utilisée par tous les tests
+manuels). L'horodatage du fichier de l'exécutable figé précède entièrement le code de la boucle de
+diagnostic de cette session. Aucun bug de logique n'existait dans la boucle elle-même - tous les
+tests unitaires/intégration de `poll_and_run_diagnostic_once` passaient déjà avant cette
+correction.
+
+**Correction** : reconstruction de l'exécutable à partir du code source actuel avec la commande CI
+exacte (`gpubnb-agent.spec` / `publish-host-test-release.yml`, `pyinstaller==6.16.0`), remplacement
+du vrai binaire de production (l'ancien conservé en `.bak-20260830`, non supprimé), redémarrage du
+vrai service Windows.
+
+**Observabilité ajoutée** (`agent/gpubnb_agent/cli.py`) : `diagnostic_poll_loop_started`,
+`diagnostic_poll_loop_running`, `diagnostic_poll_request`, `diagnostic_poll_response`,
+`diagnostic_run_received`, `diagnostic_run_started`, `diagnostic_run_completed`,
+`diagnostic_run_failed`, `diagnostic_poll_error` (avec traceback tronqué), `diagnostic_loop_stopped`
+- chaque cycle émet désormais au moins 3 événements même quand rien n'est en attente ; avant cette
+correction, un cycle "rien à faire" était totalement silencieux, indiscernable d'un thread mort.
+Aucun secret, clé privée, token ou signature n'est jamais loggué.
+
+**Vérifié en conditions réelles, sans aucun appel Python manuel** : `diagnostic_poll_loop_started`
+émis exactement une fois par démarrage du service ; le cycle
+`diagnostic_poll_loop_running → diagnostic_poll_request → diagnostic_poll_response` se répète
+automatiquement toutes les ~10s indéfiniment ; un vrai "Relancer le diagnostic" déclenché depuis
+Host (sur la machine réelle, saine, `LISTING_ACTIVE`, jamais mise en danger) a été détecté
+automatiquement en moins d'un cycle et exécuté/complété en 6s avec un résultat réel 9/9 PASS ; un
+redémarrage propre du service produit exactement un `diagnostic_loop_stopped` puis un
+`diagnostic_poll_loop_started`, une seule paire de processus parent/enfant, aucun doublon (confirmé
+: 2 occurrences totales de `diagnostic_poll_loop_started` dans le log, correspondant exactement aux
+2 démarrages réels du service effectués).
+
+**Tests** : 376/376 tests agent passent (369 préexistants + 7 nouveaux dans
+`agent/tests/test_diagnostic_poll_loop.py`), stable sur plusieurs exécutions complètes répétées.
+
+**Commit** : `446cd85`.
