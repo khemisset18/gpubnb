@@ -43,6 +43,20 @@ export async function enterQuarantine(tx: Prisma.TransactionClient, input: Enter
       ...(alreadyQuarantined ? {} : { quarantinedAt: now }),
     },
   });
+  // Mirror onto Accelerator immediately rather than waiting for the next
+  // heartbeat's inventory sync - see the matching comment in clearQuarantine().
+  // Without this, rental-gpu-catalog.ts / rental-public-listings.ts could show
+  // an accelerator as healthy for up to one heartbeat interval after its
+  // Machine was already quarantined (Machine=QUARANTINED, Accelerator=CLEAR is
+  // exactly the contradictory state this system must never allow).
+  await tx.accelerator.updateMany({
+    where: { machineId: input.machineId, moderationStatus: { not: ModerationStatus.QUARANTINED } },
+    data: { moderationStatus: ModerationStatus.QUARANTINED },
+  });
+  await tx.accelerator.updateMany({
+    where: { machineId: input.machineId, status: { not: AcceleratorOperationalStatus.QUARANTINED } },
+    data: { status: AcceleratorOperationalStatus.QUARANTINED },
+  });
 
   await tx.machineQuarantineEvent.create({
     data: {

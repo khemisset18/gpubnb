@@ -1,215 +1,368 @@
 # Système de quarantaine, diagnostic et disponibilité machine
 
-Construit le 2026-09-01. Statut : **implémenté, testé localement (523/523 tests API + 368/368 tests
-agent), NON déployé** (aucun push, aucun déploiement — voir "Ce qui reste à faire").
+Construit les 2026-09-01 → 2026-09-01 (deux chantiers consécutifs). Statut : **implémenté,
+testé localement, NON déployé** (aucun push, aucun déploiement Render/Netlify — voir §12).
 
-## 0. Constat de départ (investigation réelle, avant tout code)
+## Sommaire
 
-- La machine réelle de l'utilisateur (`cmsiggruy0004df0tn669f6bn`) est en quarantaine côté API
-  (`Machine.moderationStatus = QUARANTINED`) en continu depuis au moins `2026-08-30T00:58`
-  (preuve : 4 fichiers de logs agent réels, et le fichier local
-  `C:\ProgramData\GPUbnb\gpu-resource-rental-v1.json`, qui montre une quarantaine agent-side
-  séparée, horodatée `2026-08-30 00:57:57` locale, sur la session `cmtezdkuo01iok30tse8g5ye1`).
-- 6 endroits dans `apps/api/src` écrivaient `moderationStatus = QUARANTINED`, plus un 7e trouvé
-  en cours de chantier (`/agent/jobs/:id/state`, cas `cleanupUnverified`). **Aucun** endroit dans
-  toute la base ne réécrivait `moderationStatus = CLEAR` avant ce chantier — une quarantaine
-  était donc, avant ce chantier, définitive par construction, pour **toutes** les machines.
-- `GET /agent/challenge/:machineId` refusait (403 `machine_quarantined`) toute machine
-  quarantinée avant même de vérifier sa signature — bloquant tout heartbeat ultérieur (le
-  heartbeat a besoin d'un challenge frais). Explique aussi les `401 invalid_agent_request` en
-  continu observés sur `/agent/workspace-gateway/next-batch` et `/agent/mining/.../rental-authority`.
-- Le frontend (`rental-owner.js`) n'affichait que le badge d'état ; `blockingReason` était
-  calculé côté serveur mais jamais lu côté client, et pour `QUARANTINED` il était codé en dur à
-  `RESOURCE_QUARANTINED` (générique).
-- Le compte de l'utilisateur possède une deuxième machine fantôme (`cms7dbmn30001ie0to0i04iu6`,
-  agent 0.5.0, aucun heartbeat depuis le 30/07/2026).
+1. Architecture
+2. États machine (MachineReadiness)
+3. Reason codes
+4. Diagnostic réel
+5. Réparation automatique
+6. Revalidation et sortie de quarantaine
+7. Force-clear administrateur
+8. Publication d'annonce
+9. Sécurité
+10. Observabilité
+11. Procédures
+12. État réel de production / ce qui reste à faire
 
-## 1. Architecture construite
+---
 
-### 1.1 Base de données (migration `20260901005635_add_quarantine_diagnostics_lifecycle`)
+## 1. Architecture
 
-- Enums : `QuarantineReasonCode` (11 codes stables), `QuarantineEventStatus`
-  (ENTERED/DIAGNOSTIC/CLEARED/REENTERED), `DiagnosticRunStatus`
-  (RUNNING/COMPLETED/FAILED/TIMED_OUT), `DiagnosticTrigger` (OWNER/SYSTEM/ADMIN),
-  `MachineLifecycleStatus` (ACTIVE/STALE/OFFLINE/RETIRED).
-- Table **`MachineQuarantineEvent`** (historique immuable) : id, machineId, status, reasonCode,
-  reason, details (JSON), source, createdAt, resolvedAt, diagnosticRunId. Une nouvelle
-  quarantaine n'écrase jamais l'ancienne — elle ajoute une ligne `ENTERED` ou `REENTERED`.
-- Table **`DiagnosticRun`** : id, machineId, status, checks (JSON), triggeredBy, triggeredById,
-  error, startedAt, completedAt.
-- `Machine` : + `quarantineReasonCode`, `quarantinedAt`, `lastDiagnosticRunId`,
-  `lastDiagnosticAt`, `lifecycleStatus`, `retiredAt`, `retiredReason` (état courant — un
-  instantané, jamais la source de vérité historique).
-- Migration écrite à la main (pas `prisma migrate dev`) pour rester strictement additive et ne
-  jamais toucher au drift préexistant, non lié, de cette base de dev locale (tables
-  `MachineAccelerator`/`OutboxEvent`/etc. héritées d'anciens tests, hors sujet).
+```
+Agent (authentifié Ed25519)
+   │  heartbeat (toujours actif, même quarantiné)
+   │  diagnostic (toujours actif, même quarantiné)
+   ▼
+API : machine-diagnostics-routes.ts ─────────┐
+   │                                          │
+   ├─ quarantine-service.ts                   │  authenticateQuarantinableAgent()
+   │    enterQuarantine()  ← 7 sites réels     │  (signature vérifiée, moderationStatus
+   │    clearQuarantine()  ← SEUL point de     │   jamais requis - voir §9)
+   │                          sortie           │
+   ├─ diagnostic-run-service.ts               │
+   │    createDiagnosticRun()                 │
+   │    completeDiagnosticRun() → decide clear/maintain à partir des checks réels
+   │    evaluateDiagnosticChecks() (pure)      │
+   │                                          │
+   ├─ machine-repair-service.ts               │
+   │    detectAvailableRepair() / applyRepair() (bookkeeping seul, jamais un process réel)
+   │                                          │
+   └─ machine-state-service.ts (computeMachineState - PRÉEXISTANT, source de vérité)
+        │
+        ├── utilisé par rental-listing-service.ts → createExactGpuListing() (publication)
+        ├── utilisé par resource-allocation-service.ts → allocateBookingResources() (réservation)
+        └── utilisé par machine-diagnostics-routes.ts → GET .../diagnostics (Host)
+```
 
-### 1.2 Registre des causes (`apps/api/src/quarantine-reason-registry.ts`)
+**Principe central** : `computeMachineState()` est LA fonction qui décide si une machine est
+publiable/réservable. Elle existait déjà avant ce chantier (`machine-state-service.ts`) et
+gouvernait déjà publication ET réservation à partir des mêmes colonnes (`Machine.moderationStatus`
+notamment) — c'est exactement la fonction `MachineReadiness` demandée. Ce chantier ne l'a pas
+remplacée : il l'a enrichie (vrai `quarantineReasonCode` au lieu du générique
+`RESOURCE_QUARANTINED`) et lui a donné, pour la première fois, un vrai mécanisme pour que l'état
+`QUARANTINED` puisse un jour redevenir autre chose qu'`QUARANTINED`.
 
-11 codes stables (`CRITICAL_GPU_IDENTITY_CHANGE`, `DIAGNOSTIC_COMPLETION_RACE`, `STALE_CLAIM`,
-`STALE_JOB`, `WORKSPACE_CLEANUP_FAILED`, `AGENT_SECURITY_FAILURE`, `GPU_HEALTH_CHECK_FAILED`,
-`GPU_UNAVAILABLE`, `DOCKER_UNAVAILABLE`, `NVIDIA_RUNTIME_UNAVAILABLE`, `UNKNOWN`), chacun avec
-titre, description, sévérité (INFO/WARNING/CRITICAL), impact, conditions de déclenchement,
-et `autoRecoverable`.
+### Fichiers
 
-### 1.3 Service de quarantaine (`apps/api/src/quarantine-service.ts`)
+| Fichier | Rôle |
+|---|---|
+| `quarantine-reason-registry.ts` | Registre statique des reason codes (titre, description, sévérité, impact, preuve, action, etc.) |
+| `quarantine-service.ts` | `enterQuarantine()` / `clearQuarantine()` / `recordDiagnosticEvent()` — seuls points d'écriture de `moderationStatus` |
+| `diagnostic-run-service.ts` | `createDiagnosticRun()` / `completeDiagnosticRun()` / `evaluateDiagnosticChecks()` |
+| `machine-repair-service.ts` | `detectAvailableRepair()` / `applyRepair()` |
+| `machine-diagnostics-routes.ts` | Tous les endpoints agent/propriétaire/admin |
+| `machine-state-service.ts` | `computeMachineState()` (préexistant, enrichi) |
+| `rental-listing-service.ts` | `computeLifecycleStatus()` (nouveau), `projectMachineState()` (préexistant) |
 
-- `enterQuarantine(tx, {...})` : seule fonction qui écrit `moderationStatus = QUARANTINED`.
-  Idempotente (ENTERED la 1re fois, REENTERED ensuite), `quarantinedAt` ne bouge jamais tant que
-  la quarantaine reste continue. Ajoute toujours une ligne d'historique.
-- `clearQuarantine(tx, {...})` : **seule** fonction qui écrit `moderationStatus = CLEAR`. Clôt
-  les événements ouverts (`resolvedAt`), ajoute une ligne `CLEARED`. Découverte en testant :
-  nettoie aussi `Accelerator.moderationStatus`/`Accelerator.status` (qui ne sont, dans toute
-  cette base de code, jamais qu'un miroir du `Machine.moderationStatus` au dernier sync
-  d'inventaire — sans ce nettoyage, la levée de quarantaine restait invisible jusqu'au heartbeat
-  suivant).
-- `recordDiagnosticEvent(tx, {...})` : ligne d'historique neutre (ex. "diagnostic lancé") sans
-  changer l'état.
+---
 
-Les **6 anciens sites** + le 7e trouvé en cours de route (`accelerator-security-executor.ts`,
-`dev-booking-reconciler.ts` ×2, `job-staleness-sweep.ts`, `workspace-gateway.ts`, `server.ts`
-×2 : heartbeat + `/agent/jobs/:id/state`) ont tous été migrés vers `enterQuarantine()`, chacun
-avec le reasonCode réel correspondant à sa cause métier.
+## 2. États machine (MachineReadiness)
 
-### 1.4 Diagnostic réel (`apps/api/src/diagnostic-run-service.ts`)
+`computeMachineState()` reste la seule source de vérité, avec ses 17 états déjà existants
+(`machine-state-service.ts:MachineRentalState`). Correspondance avec le vocabulaire demandé :
 
-- `createDiagnosticRun()` : crée un `DiagnosticRun` RUNNING (idempotent — ne relance pas si un
-  diagnostic est déjà en cours et récent).
-- `evaluateDiagnosticChecks()` : fonction pure. Checks obligatoires pour lever une quarantaine :
-  `agent`, `gpu`, `gpuUuid`, `driver`, `docker`, `nvidiaRuntime`. `ram`/`cuda` sont
-  informationnels (compatibilité Workspace uniquement, jamais bloquants pour la quarantaine —
-  conforme à l'exemple exact donné : "12 Go RAM, Developer compatible, Data incompatible = pas
-  de quarantaine"). **UNKNOWN et NOT_CHECKED ne sont jamais promus en PASS.**
-- `completeDiagnosticRun()` : seule fonction qui décide clear vs maintien, à partir des checks
-  réels. Une erreur d'exécution agent (le diagnostic n'a pas pu tourner) → `FAILED`, quarantaine
-  maintenue avec la raison déjà connue. Un diagnostic qui s'exécute mais échoue un check → réentre
-  en quarantaine avec le reasonCode du premier check en échec. Un diagnostic qui passe tous les
-  checks obligatoires → `clearQuarantine()`.
-- Statut effectif `TIMED_OUT` calculé paresseusement (3 min sans réponse), sans cron dédié.
+| État demandé | État réel utilisé | Note |
+|---|---|---|
+| OFFLINE | `OFFLINE` | heartbeat absent ou périmé |
+| HEARTBEAT_STALE | `OFFLINE` | même état — un heartbeat périmé EST hors-ligne pour la disponibilité |
+| QUARANTINED | `QUARANTINED` | `blockingReason` = le vrai `quarantineReasonCode` |
+| DIAGNOSTIC_RUNNING | `DIAGNOSTIC_RUNNING` | déjà existant (`operational=VERIFYING`) |
+| REPAIR_REQUIRED | *(dérivé)* | pas un état machine séparé - `GET .../diagnostics` renvoie `repair!=null` quand une réparation sûre est détectée, indépendamment de l'état machine |
+| REPAIRING | *(transitoire, non persisté)* | l'application d'une réparation est synchrone (une requête HTTP) ; il n'y a pas de fenêtre "en cours" à représenter |
+| READY / PUBLISHABLE | `READY_TO_PUBLISH` / `LISTING_ACTIVE` | `state.canPublish` / `state.canAcceptBooking` |
+| BUSY / IN_USE | `RESERVED` / `SESSION_STARTING` / `SESSION_ACTIVE` | |
+| ERROR | `DIAGNOSTIC_FAILED` | dernier diagnostic en échec (`operational=DEGRADED`) |
+| UNKNOWN | *(n'existe pas comme état machine)* | `UNKNOWN` est un **reasonCode** (cause non déterminable), jamais un état machine flou |
 
-### 1.5 Réparation (`apps/api/src/machine-repair-service.ts`) — **scope volontairement restreint**
+Décision délibérée : ne pas créer un second enum d'état parallèle. `MachineRentalState` existait,
+fonctionnait, et était déjà branché partout (publication, réservation, workspace) — le dupliquer
+aurait recréé exactement le risque d'états contradictoires que ce chantier doit éliminer.
 
-Une seule action sûre, réellement implémentée : `CLEAR_ORPHANED_ALLOCATIONS` — corrige les
-lignes `AcceleratorAllocation` restées actives alors que leur réservation est déjà `COMPLETED`/
-`CANCELLED`. Ne touche jamais `MiningResource.activeRentalId` (la vraie porte d'exclusivité de
-réservation), ni aucun processus réel sur la machine. Réparer ne lève jamais la quarantaine —
-seul un nouveau diagnostic réel, ensuite, le peut.
+---
 
-**Ce qui n'est PAS implémenté et pourquoi** : redémarrer l'agent, tuer un processus GPU distant,
-etc. nécessiteraient un canal de commande authentifié vers l'agent. Celui-ci existe dans le code
-("Machine Command Gateway") mais est **désactivé à 0% de rollout par choix produit antérieur** —
-l'activer/l'exploiter en toute sécurité est un chantier à part entière, hors du périmètre
-raisonnable de cette session.
+## 3. Reason codes
 
-### 1.6 Disponibilité machine centrale (axe "MachineReadiness")
+12 codes stables dans `quarantine-reason-registry.ts`, chacun avec :
+`code, title, description, severity (INFO/WARNING/CRITICAL), impact, triggerConditions,
+evidenceRequired, recommendedAction, diagnosticRequired, repairPossible, autoExitPossible`.
 
-`computeMachineState()` (`apps/api/src/machine-state-service.ts`) **existait déjà** avant ce
-chantier et s'est révélé être précisément la fonction centrale demandée — elle est déjà la seule
-source utilisée par la publication d'annonce (`createExactGpuListing` → `machine_not_publishable`
-avec la vraie cause) et cohérente avec la réservation (`resource-allocation-service.ts` vérifie
-`moderationStatus === CLEAR` séparément mais avec la même donnée source). Ce chantier l'enrichit :
-- `blockingReason` pour `QUARANTINED` renvoie désormais le vrai `quarantineReasonCode` (ex.
-  `GPU_HEALTH_CHECK_FAILED`) au lieu du générique `RESOURCE_QUARANTINED`.
-- `rental-listing-service.ts` (`listOwnerRentalMachines`, `projectMachineState`) transmet ce
-  code, plus `quarantinedAt`/`lastDiagnosticAt`/`lifecycleStatus`.
+`CRITICAL_GPU_IDENTITY_CHANGE`, `DIAGNOSTIC_COMPLETION_RACE`, `STALE_CLAIM`, `STALE_JOB`,
+`WORKSPACE_CLEANUP_FAILED`, `AGENT_SECURITY_FAILURE`, `GPU_HEALTH_CHECK_FAILED`,
+`ORPHANED_ALLOCATION`, `GPU_UNAVAILABLE`, `DOCKER_UNAVAILABLE`, `NVIDIA_RUNTIME_UNAVAILABLE`,
+`UNKNOWN`.
 
-Un test croisé (`quarantine-diagnostics-system.test.ts`) prouve, contre une vraie base Postgres,
-que la même quarantaine bloque à la fois la publication (`createExactGpuListing`) et la location
-(`allocateBookingResources`) — Host, publication et réservation utilisent bien la même source.
+Les 6 sites de quarantaine originaux + le 7e trouvé en cours de route (`server.ts`
+`/agent/jobs/:id/state`) sont tous mappés à un code précis — **aucun ne retombe sur un message
+générique**. `UNKNOWN` reste réservé au seul cas où aucune preuve exploitable n'existe (ex. :
+quarantaine héritée d'avant ce système), et le dit explicitement plutôt que d'inventer une cause.
 
-### 1.7 Lifecycle machine / machine fantôme (`computeLifecycleStatus`, `rental-listing-service.ts`)
+---
 
-Calculé en direct depuis `lastHeartbeatAt` (pas stocké, ne peut donc jamais devenir lui-même
-obsolète) : `RETIRED` (explicite, prioritaire) > `OFFLINE` si aucun heartbeat, sinon `STALE` à
-30+ jours sans heartbeat, `OFFLINE` à 10h+, `ACTIVE` sinon.
-`POST /rental/machines/:id/retire` (soft delete — `lifecycleStatus=RETIRED`, historique
-conservé, annonces mises en pause) et `.../reactivate`.
+## 4. Diagnostic réel
 
-### 1.8 Endpoints (`apps/api/src/machine-diagnostics-routes.ts`)
+`POST /rental/machines/:id/diagnostics/rerun` crée un `DiagnosticRun` (jamais un simple UPDATE de
+statut). L'agent le récupère via `GET /agent/diagnostics/next/:machineId` (fonctionne même
+quarantiné, voir §9), exécute un **vrai conteneur de diagnostic** (`run_gpu_diagnostic()`, déjà
+existant et déjà utilisé pour les diagnostics de réservation), puis rapporte le résultat réel via
+`POST /agent/diagnostics/:id/result`.
 
-**Côté agent (fonctionnent MALGRÉ la quarantaine — nouvelle authentification dédiée
-`authenticateQuarantinableAgent`, qui vérifie la signature Ed25519 mais jamais
-`moderationStatus`)** :
-- `GET /agent/diagnostics/next/:machineId` — renvoie le diagnostic en attente, s'il y en a un.
-- `POST /agent/diagnostics/:diagnosticRunId/result` — reçoit le résultat réel, construit les
-  checks à partir : (a) du résultat du conteneur de diagnostic officiel (`gpu`, `gpuUuid`), (b)
-  du dernier heartbeat authentifié pour `docker`/`nvidiaRuntime`/`driver`/`cuda`/`ram`, jamais du
-  navigateur.
+### 9 checks réels, jamais inventés
 
-**Côté propriétaire (session requise, `canHost`)** :
-- `GET /rental/machines/:machineId/diagnostics` — vue complète (état, quarantaine avec preuve,
-  checklist, compatibilité par Workspace, réparation disponible ou non, historique).
-- `POST .../diagnostics/rerun` — crée un `DiagnosticRun` réel.
-- `POST .../diagnostics/repair` — applique l'unique réparation sûre si détectée.
-- `POST .../retire` / `.../reactivate`.
+| Check | Source | Obligatoire pour sortir de quarantaine |
+|---|---|---|
+| `agent` | Le fait même que la requête soit signée et vérifiée | ✓ |
+| `gpu` | Conteneur de diagnostic réel | ✓ |
+| `gpuUuid` | Conteneur de diagnostic réel | ✓ |
+| `driver` | Conteneur de diagnostic, sinon dernier heartbeat | ✓ |
+| `docker` | Dernier heartbeat (si frais, sinon UNKNOWN) | ✓ |
+| `nvidiaRuntime` | Dernier heartbeat (si frais, sinon UNKNOWN) | ✓ |
+| `allocation` | `detectAvailableRepair()` — vraie requête DB sur `AcceleratorAllocation`/`Booking` | ✓ |
+| `cuda` | Dernier heartbeat | informationnel (compatibilité Workspace) |
+| `ram` | Dernier heartbeat | informationnel (compatibilité Workspace) |
 
-**Admin, très contrôlé** (`POST /internal/machines/:machineId/quarantine/force-clear`) : exige le
-`INTERNAL_SERVICE_TOKEN` (même mécanisme que les autres routes `/internal/*` existantes — pas de
-notion de rôle admin dans le schéma actuel, donc pas de nouveau système de rôles inventé).
-Journalise `FORCED_QUARANTINE_CLEAR` (`req.log.warn`) et enregistre un événement d'historique
-avec `details.forced = true` et `forcedByAdminId` — jamais caché. **Aucun bouton "Forcer" côté
-propriétaire.**
+Chaque check a un statut `PASS | FAIL | WARNING | UNKNOWN | NOT_CHECKED`. **UNKNOWN et
+NOT_CHECKED ne sont jamais promus en PASS** (`evaluateDiagnosticChecks`, testé). Un check
+obligatoire absent du rapport est traité `NOT_CHECKED`, jamais silencieusement ignoré.
 
-### 1.9 Correction du verrou identifié en investigation
+### Ce qui N'EST PAS vérifié par le diagnostic (limite honnête)
 
-`GET /agent/challenge/:machineId` ne bloque plus sur `moderationStatus`. Une machine quarantinée
-peut donc de nouveau obtenir un challenge, envoyer un heartbeat, et faire tourner un diagnostic.
-**Aucun code de `/agent/heartbeat` n'écrit `CLEAR`** (vérifié par test source) — un heartbeat
-seul ne peut donc jamais lever une quarantaine, uniquement la faire persister/se réactualiser.
+Le nettoyage réel de conteneurs/proxy/réseau/volume résiduels côté agent (au-delà de la
+bookkeeping `allocation`) nécessiterait que l'agent inspecte l'état Docker local et le rapporte —
+non implémenté. `run_gpu_diagnostic()` prouve que le GPU répond, pas qu'aucun conteneur GPUbnb
+résiduel ne tourne. C'est documenté comme limite connue, pas caché.
 
-### 1.10 Agent (`agent/gpubnb_agent/cli.py`)
+---
 
-Nouvelle boucle `poll_and_run_diagnostic_once()`, indépendante de `run_next_job` (qui reste
-scopé aux jobs liés à une réservation), lancée dans son propre thread après chaque heartbeat
-réussi — donc y compris pendant une quarantaine. Réutilise `run_gpu_diagnostic()` (déjà
-existant, déjà testé) et le protocole de signature existant (`agent_request`).
+## 5. Réparation automatique
 
-### 1.11 Frontend
+Une seule action, `CLEAR_ORPHANED_ALLOCATIONS` (`machine-repair-service.ts`) : corrige les lignes
+`AcceleratorAllocation` restées actives alors que leur réservation est déjà `COMPLETED`/
+`CANCELLED`. Ne touche **jamais** `MiningResource.activeRentalId` (la vraie porte d'exclusivité
+de réservation) ni aucun processus réel sur la machine — uniquement de la comptabilité interne.
 
-- `apps/web/machine-diagnostics.html` + `.js` (nouvelle page "État & diagnostics") : cause
-  réelle avec preuve, checklist PASS/FAIL/WARNING/UNKNOWN/NOT_CHECKED par vérification,
-  compatibilité par Workspace, historique complet, bouton "Relancer le diagnostic",
-  bouton "Réparer automatiquement" (affiché uniquement si une réparation sûre existe). **Aucun
-  bouton pour lever la quarantaine directement.**
-- `apps/web/rental-owner.js` : affiche désormais la vraie cause (`blockingReason` /
-  `quarantineReasonCode`), lien vers la nouvelle page, notice + bouton "Retirer cette machine"
-  pour une machine `STALE`.
-- `apps/web/publish.js` : la carte de codes d'erreur (`BLOCKING_REASON`) couvre maintenant aussi
-  les codes machine (avant : uniquement les codes accélérateur — un refus de publication au
-  niveau machine affichait un code brut, pas un message).
+**Séquence imposée** : réparation → **jamais** de retour direct à CLEAR. `applyRepair()` ne
+touche jamais `Machine.moderationStatus`. Un nouveau diagnostic reste obligatoire après toute
+réparation pour confirmer que la machine est réellement saine.
 
-## 2. Tests
+**Ce qui n'est pas implémenté** : redémarrage agent, libération forcée de processus GPU distant,
+nettoyage réseau/volume réel. Nécessiteraient un canal de commande authentifié vers l'agent
+("Machine Command Gateway", existant dans le code mais désactivé à 0% de rollout par un choix
+produit antérieur à ce chantier) — activer ce canal en sécurité est un chantier à part entière,
+volontairement hors périmètre ici plutôt que bâclé.
 
-- **API** : 523/523 tests passent (503 préexistants, tous encore verts après le refactor des 7
-  sites de quarantaine ; 20 nouveaux). Nouveaux fichiers : `diagnostic-run-service.test.ts` (6
-  tests purs sur `evaluateDiagnosticChecks`), `quarantine-diagnostics-system.test.ts` (12 tests
-  contre une vraie base Postgres locale : historique immuable, REENTERED, clear qui résout
-  l'historique, forçage admin tracé, diagnostic PASS→clear, diagnostic FAIL→maintien avec le bon
-  reasonCode, échec d'exécution→maintien, réparation qui ne lève jamais la quarantaine seule,
-  publication refusée si quarantiné, réservation refusée si quarantiné, machine stale identifiée,
-  challenge accessible malgré quarantaine, **boucle end-to-end complète**
-  QUARANTINED→diagnostic→PASS réel→CLEAR→publication réussie). `machine-state-service.test.ts`
-  +2 tests (reasonCode réel propagé, machine offline jamais READY).
-- **Agent** : 368/368 tests passent (364 préexistants + 4 nouveaux pour
-  `poll_and_run_diagnostic_once` : no-op si rien en attente, exécution réelle + rapport,
-  échec d'exécution rapporté comme erreur explicite, image de diagnostic manquante rapportée
-  comme erreur explicite).
-- Un vrai bug a été trouvé et corrigé **par les tests eux-mêmes** en cours de route : sans le
-  nettoyage `Accelerator.moderationStatus`/`.status` dans `clearQuarantine()`, le test
-  end-to-end échouait — la publication restait refusée (`ACCELERATOR_QUARANTINED`) même après
-  une levée de quarantaine réussie côté machine, parce que l'accélérateur gardait son propre
-  miroir figé jusqu'au heartbeat suivant.
+---
 
-## 3. Ce qui reste à faire (explicitement hors de ce qui a été livré)
+## 6. Revalidation et sortie de quarantaine
 
-1. **Rien n'a été poussé ni déployé** (conforme à l'instruction explicite). Le système existe
-   dans le dépôt local uniquement (branche `main`, commits locaux).
-2. La machine réelle de l'utilisateur **n'a pas encore été diagnostiquée avec le nouveau
-   système** : cela nécessite que `gpubnb.onrender.com` (production) et `gpubnb.netlify.app`
-   tournent avec ce code, ce qui exige un déploiement — explicitement non autorisé pour l'instant.
-3. Le lien "Voir les diagnostics" depuis un refus de publication (`publish.js`) n'est pas encore
-   cliquable — seul le message texte a été corrigé.
-4. Réparation automatique : un seul type de réparation sûre est implémenté (nettoyage
-   d'allocations orphelines). Toute réparation nécessitant une commande vers l'agent (redémarrage,
-   libération de processus GPU) est explicitement hors périmètre (Machine Command Gateway
-   désactivé par choix produit antérieur).
+Séquence réellement implémentée et testée (`quarantine-diagnostics-system.test.ts`, test
+end-to-end) :
+
+```
+QUARANTINED
+  → POST .../diagnostics/rerun          (DiagnosticRun créé, status=RUNNING)
+  → GET /agent/diagnostics/next          (agent récupère, MÊME quarantiné)
+  → conteneur de diagnostic réel exécuté sur l'agent
+  → POST /agent/diagnostics/:id/result   (résultat réel)
+  → completeDiagnosticRun() évalue les 7 checks obligatoires
+     ├─ tous PASS  → clearQuarantine() → Machine.moderationStatus=CLEAR
+     │                                    + Accelerator.moderationStatus/.status alignés
+     │                                    (même transaction, voir §correction ci-dessous)
+     └─ au moins un FAIL/UNKNOWN → enterQuarantine() → quarantaine maintenue,
+                                     reasonCode = celui du premier check en échec
+```
+
+**Jamais** : bouton → `UPDATE moderationStatus='CLEAR'` sans preuve. `clearQuarantine()` est la
+seule fonction du code base autorisée à écrire `CLEAR`, et son seul appelant conditionnel est
+`completeDiagnosticRun()` après un vrai `evaluateDiagnosticChecks()` réussi (plus le force-clear
+admin, §7, qui l'appelle explicitement en mode "forcé" et le journalise comme tel).
+
+### Correction Machine ↔ Accelerator (trouvée et corrigée pendant ce chantier)
+
+`Accelerator.moderationStatus` et `Accelerator.status` ne sont, dans toute la base de code, que
+des miroirs du `Machine.moderationStatus` au dernier heartbeat (`mining-resource-inventory.ts`).
+Aucune ligne de code ne quarantine un accélérateur indépendamment de sa machine. Avant correction,
+`clearQuarantine()` ne mettait à jour QUE `Machine` — laissant `Accelerator` marqué `QUARANTINED`
+jusqu'au heartbeat suivant, un état contradictoire (Machine=CLEAR, Accelerator=QUARANTINED) qui
+bloquait silencieusement la republication. **Corrigé dans les deux sens** : `enterQuarantine()`
+ET `clearQuarantine()` mettent maintenant à jour `Machine` et tous ses `Accelerator` dans la même
+transaction. Prouvé par test réel (`end-to-end` test, assertion sur `acceleratorRow.moderationStatus`
+après un clear).
+
+### Cas 3 : re-dégradation automatique (testé)
+
+Une machine redevenue `READY_TO_PUBLISH` puis re-diagnostiquée avec un check `gpu:FAIL` repasse
+automatiquement en quarantaine (`REENTERED` si déjà quarantinée au moment du nouveau diagnostic,
+`ENTERED` si elle était `CLEAR` — `enterQuarantine()` évalue toujours l'état courant, jamais une
+supposition). La publication redevient immédiatement impossible. Testé de bout en bout : PASS →
+CLEAR → publication réussie → FAIL → re-quarantaine → publication refusée à nouveau.
+
+---
+
+## 7. Force-clear administrateur
+
+`POST /internal/machines/:id/quarantine/force-clear` — jamais exposé au propriétaire (aucune
+route `/rental/*` ne l'appelle, aucun bouton dans `machine-diagnostics.html`).
+
+- Authentification : `Bearer <INTERNAL_SERVICE_TOKEN>` (même mécanisme que les autres routes
+  `/internal/*` existantes — pas de nouveau système de rôle admin inventé, il n'en existait aucun
+  dans le schéma).
+- `operatorId` et `reason` (≥10 caractères) obligatoires.
+- **Restriction par sévérité** : si le `reasonCode` courant de la machine est `CRITICAL`
+  (tous les codes le sont, sauf `UNKNOWN`), la requête doit inclure
+  `confirmRisk: "<LE_CODE_EXACT>"` — pas juste un booléen, le code precis, pour forcer l'opérateur
+  à confirmer explicitement QUELLE cause il choisit d'ignorer. Sans cela : `409
+  risk_confirmation_required`.
+- Historique : `MachineQuarantineEvent` de statut `CLEARED` avec `details.forced=true` et
+  `details.forcedByAdminId` — **jamais indiscernable** d'une sortie normale par diagnostic.
+- Journalisé : `request.log.warn(..., 'FORCED_QUARANTINE_CLEAR')`.
+- Ne supprime jamais l'événement de quarantaine original — l'historique reste complet.
+
+---
+
+## 8. Publication d'annonce
+
+`createExactGpuListing()` (préexistant, `rental-listing-service.ts`) est le seul chemin de
+publication et utilise `computeMachineState()` — **la même fonction** que `GET
+.../diagnostics` (Host) et que `allocateBookingResources()` (réservation). Prouvé par test réel :
+la même quarantaine bloque simultanément publication ET réservation, et les deux redeviennent
+possibles après le même `clearQuarantine()`.
+
+Refus type : `machine_not_publishable` avec `details.blockingReason` = le reasonCode réel (ex.
+`GPU_HEALTH_CHECK_FAILED`), affiché côté web (`publish.js`) via la table `BLOCKING_REASON` (mise
+à jour pour couvrir les codes machine, pas seulement les codes accélérateur).
+
+---
+
+## 9. Sécurité
+
+- **Authentification agent** : `authenticateQuarantinableAgent()` vérifie la signature Ed25519 v2
+  (nonce anti-rejeu, hash du corps, timestamp ±30s) sans jamais exiger `moderationStatus=CLEAR` —
+  volontairement séparée des helpers `authenticateAgent` utilisés par `workspace-gateway.ts` /
+  `rental-resource-routes.ts` (qui EUX exigent CLEAR, à raison, pour leurs propres routes).
+  Prouvé par test HTTP réel : la clé de la machine B ne peut jamais authentifier une requête pour
+  la machine A (`machine-diagnostics-routes.integration.test.ts`).
+- **Autorisation propriétaire** : `requireOwnedMachine()` sur toutes les routes `/rental/*` —
+  prouvé par test HTTP réel qu'un propriétaire B reçoit 404 (jamais 403, pour ne pas révéler
+  l'existence de la machine) sur une machine appartenant à A.
+- **Validation** : tous les `machineId`/`diagnosticRunId` sont validés `z.string().cuid()` avant
+  toute requête DB.
+- **Replay protection** : héritée de `verifyAgentRequestV2` (nonce + Redis SET NX), inchangée.
+- **Rate limiting** : toutes les nouvelles routes ont une config `rateLimit` explicite
+  (5-30 req/min selon la sensibilité).
+- **CSRF** : couvert globalement par le hook `assertTrustedOrigin` déjà enregistré dans
+  `server.ts` avant toute route — aucune configuration par route nécessaire.
+- **Le navigateur ne peut jamais déclarer un état matériel** : chaque `DiagnosticCheck` a un champ
+  `source` (`agent-heartbeat | agent-diagnostic | server`) — jamais `browser`. Le corps HTTP que
+  l'agent envoie (`gpuDetected`, `gpuUuid`, etc.) est lui-même authentifié par signature.
+- **Idempotence / anti-double-traitement** : `completeDiagnosticRun()` fait une mise à jour
+  conditionnelle atomique (`updateMany` gardé sur `status='RUNNING'`) — une seconde soumission
+  pour le même `DiagnosticRun` (retry agent, requête rejouée) lève `DiagnosticRunConflictError`
+  (→ 409), **jamais** ré-appliquée. Prouvé par test réel.
+- **Anti-double-création** : `createDiagnosticRun()` prend un verrou consultatif Postgres
+  (`pg_advisory_xact_lock`) par machine, empêchant deux `DiagnosticRun` `RUNNING` simultanés pour
+  la même machine.
+
+**Limite connue (opérationnelle, pas une faille)** : sous forte contention réelle, deux
+transactions Prisma interactives concurrentes sur le même processus peuvent épuiser le pool de
+transactions interactives par défaut et échouer avec une erreur générique de timeout plutôt
+qu'un 409 propre — observé pendant le développement d'un test de course. N'affecte jamais
+l'intégrité des données (Prisma garantit l'atomicité même sur un tel échec), seulement le code
+d'erreur HTTP exact dans ce cas de bord rare (deux soumissions réellement simultanées, ce qui
+n'arrive pas en pratique avec un seul agent séquentiel).
+
+---
+
+## 10. Observabilité
+
+Chaque `MachineQuarantineEvent` porte : `machineId`, `status`, `reasonCode`, `reason`, `source`,
+`createdAt`, `resolvedAt`, `diagnosticRunId` (corrélation directe avec `DiagnosticRun.id`), et
+`details` (JSON — contient `bookingId`/`sessionId`/`workspaceId` quand pertinent selon le site
+d'origine, ex. `DIAGNOSTIC_COMPLETION_RACE` inclut `bookingId`, `WORKSPACE_CLEANUP_FAILED` inclut
+`sessionId`). Chaque `DiagnosticRun` porte son propre `id`, corrélable depuis l'historique.
+
+Logs structurés : `request.log.warn` sur chaque réparation appliquée et chaque force-clear, avec
+`machineId` + les identifiants pertinents.
+
+**Redis n'est jamais la seule preuve.** Le seul mécanisme qui utilisait Redis comme preuve
+(compteur d'échecs de signature, `security.ts:recordSecurityFailure`, TTL 900s) écrit désormais,
+au moment où il déclenche, un `MachineQuarantineEvent` durable en Postgres — la preuve du
+déclenchement survit même si le compteur Redis expire ensuite. Documenté explicitement dans le
+registre (`AGENT_SECURITY_FAILURE.evidenceRequired`) : c'est précisément *pourquoi* cet événement
+d'historique existe.
+
+---
+
+## 11. Procédures
+
+### Pour un propriétaire (Host)
+
+1. Ouvrir **Mes machines** → si le badge est rouge (« Quarantaine »), cliquer sur **« Voir la
+   quarantaine et diagnostiquer »**.
+2. La page **État & diagnostics** affiche la vraie cause, depuis quand, l'impact, la preuve
+   nécessaire et l'action recommandée.
+3. Si un **« Réparer automatiquement »** apparaît, cliquer dessus (n'affecte que la comptabilité
+   interne, jamais un processus réel).
+4. Cliquer **« Relancer le diagnostic »**. La page se rafraîchit automatiquement pendant
+   l'exécution (toutes les 4s) et affiche le résultat réel, coché par coché.
+5. Si tous les critères obligatoires passent, la machine sort automatiquement de quarantaine —
+   aucune action supplémentaire n'est nécessaire ni possible pour forcer cette sortie autrement.
+
+### Pour un administrateur (force-clear, exceptionnel)
+
+```
+curl -X POST https://<api>/internal/machines/<machineId>/quarantine/force-clear \
+  -H "Authorization: Bearer $INTERNAL_SERVICE_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"operatorId":"<vous>","reason":"<raison factuelle détaillée>","confirmRisk":"<REASON_CODE_EXACT_SI_CRITICAL>"}'
+```
+
+N'utiliser que si une réparation + revalidation réelle est impossible (ex. matériel changé
+physiquement et vérifié sur place) — jamais pour "débloquer vite".
+
+### Diagnostiquer une machine bloquée en quarantaine en production
+
+1. `GET /rental/machines/:id/diagnostics` (en tant que propriétaire, ou lire directement en base
+   `Machine.moderationStatus`, `quarantineReasonCode`, `quarantinedAt`) pour la cause courante.
+2. `SELECT * FROM "MachineQuarantineEvent" WHERE "machineId"=... ORDER BY "createdAt"` pour
+   l'historique complet — chaque entrée porte sa preuve dans `details`.
+3. Si `reasonCode='UNKNOWN'` : la cause historique n'est pas déterminable (quarantaine antérieure
+   à ce système, ou preuve Redis expirée) — ne jamais l'inventer. Lancer un nouveau diagnostic ;
+   c'est la nouvelle preuve qui compte, pas une supposition sur l'ancienne.
+4. Si l'agent ne répond jamais à `GET /agent/diagnostics/next` : vérifier qu'il tourne
+   (`gpubnb-agent status` sur la machine), que sa clé n'est pas révoquée
+   (`Machine.keyRevokedAt`), et qu'il atteint l'API (heartbeats récents dans `Heartbeat`).
+
+---
+
+## 12. État réel de production / ce qui reste à faire
+
+- **Rien n'a été poussé ni déployé.** Tout le travail de ce document existe uniquement en commits
+  locaux sur `main` (`git log`), jamais sur `origin`. `gpubnb.onrender.com` et
+  `gpubnb.netlify.app` tournent toujours avec le code d'avant ce chantier.
+- La machine réelle de l'utilisateur (`cmsiggruy0004df0tn669f6bn`) **n'a donc pas pu être
+  revalidée avec le nouveau système** — cela suppose que la production tourne avec ce code, ce
+  qui suppose un déploiement, explicitement non autorisé (« Ne pousse rien sur origin »). Dernier
+  état lu en direct (2026-09-01) : toujours 🔴 Quarantaine, dernier heartbeat inchangé depuis le
+  30/08/2026 01:14:12 — non touché par ce chantier, comme demandé.
+- Migrations locales appliquées et vérifiées sur Postgres local (dev) :
+  `20260901005635_add_quarantine_diagnostics_lifecycle`,
+  `20260901013945_add_orphaned_allocation_reason_code`. Écrites à la main pour rester strictement
+  additives et ne jamais toucher le drift préexistant, non lié, de cette base de dev.
+- Réparation automatique : un seul type sûr et implémenté (allocations orphelines). Le reste
+  (redémarrage agent, libération de processus) reste non implémenté par choix, documenté en §5.
+- Nettoyage runtime réel (conteneurs/réseau/volume résiduels) : non vérifié par le diagnostic,
+  documenté en §4 comme limite honnête.

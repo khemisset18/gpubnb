@@ -45,6 +45,12 @@ function fakeReconcilerDb(options: {
         return {};
       },
     },
+    accelerator: {
+      updateMany: async (args: Record<string, unknown>) => {
+        calls.push({ area: 'tx.accelerator.updateMany', args });
+        return { count: 0 };
+      },
+    },
     machineQuarantineEvent: {
       create: async (args: Record<string, unknown>) => {
         calls.push({ area: 'tx.machineQuarantineEvent.create', args });

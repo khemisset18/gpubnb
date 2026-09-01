@@ -143,6 +143,9 @@ function fakeDb(seed: {
     machineQuarantineEvent: {
       create: async () => ({}),
     },
+    accelerator: {
+      updateMany: async () => ({ count: 0 }),
+    },
     payment: {
       updateMany: async ({ where, data }: any) => {
         let count = 0;

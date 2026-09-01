@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { constantTimeToken, verifyAgentRequest, verifyAgentRequestV2 } from './security.js';
 import {
   DIAGNOSTIC_TIMEOUT_MS,
+  DiagnosticRunConflictError,
   completeDiagnosticRun,
   createDiagnosticRun,
   effectiveDiagnosticStatus,
@@ -158,6 +159,17 @@ async function buildChecksFromDiagnosticResult(
       source: 'agent-heartbeat',
     },
   ];
+  const orphanedAllocation = await detectAvailableRepair(db, machineId);
+  checks.push({
+    name: 'allocation',
+    status: orphanedAllocation ? 'FAIL' : 'PASS',
+    value: orphanedAllocation ? 'allocation orpheline détectée' : 'aucune allocation orpheline',
+    details: orphanedAllocation
+      ? "Une ressource GPU reste réservée en base pour une réservation déjà terminée ou annulée. Utilisez « Réparer automatiquement » puis relancez le diagnostic."
+      : "Aucune AcceleratorAllocation active n'est liée à une réservation déjà terminée/annulée.",
+    measuredAt,
+    source: 'server',
+  });
   return checks;
 }
 
@@ -194,20 +206,31 @@ export function registerMachineDiagnosticsRoutes(app: FastifyInstance, db: Prism
     }
     const run = await db.diagnosticRun.findUnique({ where: { id: diagnosticRunId }, select: { machineId: true, status: true } });
     if (!run || run.machineId !== body.machineId) return reply.code(404).send({ error: 'diagnostic_run_not_found' });
+    // Cheap pre-check, not the authoritative guard: completeDiagnosticRun() itself
+    // performs an atomic conditional update and throws DiagnosticRunConflictError
+    // if this run was already claimed by a concurrent/duplicate submission - this
+    // check only avoids unnecessary work (building checks) for the common case.
     if (run.status !== 'RUNNING') return reply.code(409).send({ error: 'diagnostic_run_not_running' });
 
     const now = new Date();
-    if (body.error) {
+    try {
+      if (body.error) {
+        const outcome = await completeDiagnosticRun(db, {
+          diagnosticRunId, machineId: body.machineId, checks: [], error: body.error, source: 'agent-diagnostic-result', now,
+        });
+        return { ok: true, status: outcome.status, cleared: outcome.cleared };
+      }
+      const checks = await buildChecksFromDiagnosticResult(db, body.machineId, body, now);
       const outcome = await completeDiagnosticRun(db, {
-        diagnosticRunId, machineId: body.machineId, checks: [], error: body.error, source: 'agent-diagnostic-result', now,
+        diagnosticRunId, machineId: body.machineId, checks, source: 'agent-diagnostic-result', now,
       });
-      return { ok: true, status: outcome.status, cleared: outcome.cleared };
+      return { ok: true, status: outcome.status, cleared: outcome.cleared, allMandatoryPass: outcome.evaluation?.allMandatoryPass ?? null };
+    } catch (error) {
+      if (error instanceof DiagnosticRunConflictError) {
+        return reply.code(409).send({ error: 'diagnostic_run_not_running' });
+      }
+      throw error;
     }
-    const checks = await buildChecksFromDiagnosticResult(db, body.machineId, body, now);
-    const outcome = await completeDiagnosticRun(db, {
-      diagnosticRunId, machineId: body.machineId, checks, source: 'agent-diagnostic-result', now,
-    });
-    return { ok: true, status: outcome.status, cleared: outcome.cleared, allMandatoryPass: outcome.evaluation?.allMandatoryPass ?? null };
   });
 
   // --- Owner-facing: Host "État & diagnostics" page ---
@@ -286,6 +309,11 @@ export function registerMachineDiagnosticsRoutes(app: FastifyInstance, db: Prism
         severity: quarantineReason.severity,
         impact: quarantineReason.impact,
         since: machine.quarantinedAt,
+        evidenceRequired: quarantineReason.evidenceRequired,
+        recommendedAction: quarantineReason.recommendedAction,
+        diagnosticRequired: quarantineReason.diagnosticRequired,
+        repairPossible: quarantineReason.repairPossible,
+        autoExitPossible: quarantineReason.autoExitPossible,
       } : { active: false },
       lastHeartbeatAt: machine.lastHeartbeatAt,
       heartbeatFresh,
@@ -374,20 +402,44 @@ export function registerMachineDiagnosticsRoutes(app: FastifyInstance, db: Prism
       return reply.code(401).send({ error: 'unauthorized' });
     }
     const { machineId } = z.object({ machineId: z.string().cuid() }).parse(request.params);
-    const body = z.object({ operatorId: z.string().min(1).max(200), reason: z.string().min(1).max(500) }).parse(request.body);
+    const body = z.object({
+      operatorId: z.string().min(1).max(200),
+      reason: z.string().min(10).max(500),
+      // Required, and must literally match the machine's current reasonCode, whenever
+      // that reason is CRITICAL severity - see quarantine-reason-registry.ts. This is
+      // not just a checkbox: it forces the operator to state which specific cause they
+      // are choosing to override, so the audit trail records an informed decision, not
+      // a reflexive click. WARNING-severity reasons (UNKNOWN) don't require it.
+      confirmRisk: z.string().max(64).optional(),
+    }).parse(request.body);
     const machine = await db.machine.findUnique({ where: { id: machineId }, select: { moderationStatus: true, quarantineReasonCode: true } });
     if (!machine) return reply.code(404).send({ error: 'machine_not_found' });
     if (machine.moderationStatus !== 'QUARANTINED') return reply.code(409).send({ error: 'machine_not_quarantined' });
+    const currentReasonCode = machine.quarantineReasonCode ?? 'UNKNOWN';
+    const currentReason = reasonDefinition(currentReasonCode);
+    if (currentReason.severity === 'CRITICAL' && body.confirmRisk !== currentReasonCode) {
+      return reply.code(409).send({
+        error: 'risk_confirmation_required',
+        reasonCode: currentReasonCode,
+        severity: currentReason.severity,
+        message: `Cette quarantaine a une cause CRITIQUE (${currentReasonCode}). Renvoyez la requête avec confirmRisk="${currentReasonCode}" pour confirmer explicitement que vous acceptez ce risque.`,
+      });
+    }
     const latestRun = await db.diagnosticRun.findFirst({ where: { machineId }, orderBy: { startedAt: 'desc' } });
     await db.$transaction((tx) => clearQuarantine(tx, {
       machineId,
       reason: `Sortie de quarantaine forcée par un administrateur : ${body.reason}`,
       source: 'internal.force-clear',
       forcedByAdminId: body.operatorId,
-      details: { previousReasonCode: machine.quarantineReasonCode, lastDiagnosticRunId: latestRun?.id ?? null, lastDiagnosticStatus: latestRun?.status ?? null },
+      details: {
+        previousReasonCode: currentReasonCode,
+        previousSeverity: currentReason.severity,
+        lastDiagnosticRunId: latestRun?.id ?? null,
+        lastDiagnosticStatus: latestRun?.status ?? null,
+      },
     }));
-    request.log.warn({ machineId, operatorId: body.operatorId, reason: body.reason }, 'FORCED_QUARANTINE_CLEAR');
-    return { ok: true, machineId, moderationStatus: 'CLEAR' };
+    request.log.warn({ machineId, operatorId: body.operatorId, reason: body.reason, previousReasonCode: currentReasonCode }, 'FORCED_QUARANTINE_CLEAR');
+    return { ok: true, machineId, moderationStatus: 'CLEAR', previousReasonCode: currentReasonCode };
   });
 }
 

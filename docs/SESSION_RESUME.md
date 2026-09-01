@@ -5,19 +5,173 @@ bottom before doing anything else. For a clean, non-session-log reference
 on workspace status, see `docs/WORKSPACES_OVERVIEW.md` (13-workspace table,
 what's real, what's blocked and why) and
 `docs/WORKSPACE_RUNTIME_ARCHITECTURE.md` (how the runtime actually works).
+For the machine quarantine/diagnostics system (built 2026-09-01), see
+`docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` — architecture, reason codes,
+security, procedures. Section 0 just below summarizes it.
 This document's own section 9 has the step-by-step Linux GPU host
 validation checklist, and section 10 has the full this-machine feasibility
 study.
 
 **Do not push anything until the user explicitly authorizes it each time.**
-This branch's work was reviewed, merged into `main`, and pushed to
-`origin/main` with the user's explicit authorization on 2026-08-31 — see
-the Git section of that session's final report. Treat that authorization as
-scoped to that push, not as standing/blanket consent for any future one.
+Everything described in Section 0 below (2026-09-01) is **local commits on
+`main` only — nothing pushed to `origin`, nothing deployed**, per explicit
+instruction that session. The 2026-08-31 push mentioned further down (old
+Section 1) was a separate, earlier, already-consumed authorization — do not
+treat it as standing consent for anything after it.
 
 ---
 
-## 1. Git state
+## 0. LATEST SESSION — Quarantine & Diagnostics System (2026-09-01)
+
+**Read `docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` for the full architecture.**
+This section is only the continuity summary.
+
+### What was done
+
+Built a complete, real, tested machine-quarantine/diagnostic/repair/
+revalidation lifecycle. Before this: 7 real code paths could quarantine a
+machine (`Machine.moderationStatus=QUARANTINED`); **zero** code paths could
+ever clear one — a quarantine was permanent by construction, the real cause
+was never persisted (only a generic label), and `GET /agent/challenge`
+blocked a quarantined agent from even sending a fresh heartbeat.
+
+Now: `quarantine-service.ts` (`enterQuarantine`/`clearQuarantine`, the only
+functions allowed to write `moderationStatus`, always append an immutable
+`MachineQuarantineEvent` row) + `diagnostic-run-service.ts` (real
+`DiagnosticRun`s with 9 real PASS/FAIL/WARNING/UNKNOWN/NOT_CHECKED checks,
+sourced only from the authenticated agent, never the browser) +
+`machine-repair-service.ts` (one safe automated repair: orphaned GPU
+allocation bookkeeping cleanup — never a real process, never
+`MiningResource.activeRentalId`) + `machine-diagnostics-routes.ts` (all
+endpoints: agent-facing works *even while quarantined*, owner-facing gated
+by ownership, admin force-clear gated by `INTERNAL_SERVICE_TOKEN` +
+mandatory `confirmRisk` for CRITICAL-severity reasons) + a new Host page
+(`apps/web/machine-diagnostics.html`/`.js`).
+
+`computeMachineState()` (`machine-state-service.ts`, **pre-existing**) was
+confirmed to already be the single MachineReadiness source of truth used by
+both publication (`createExactGpuListing`) and reservation
+(`allocateBookingResources`) — enriched to surface the real
+`quarantineReasonCode` instead of a generic label, not replaced.
+
+A real Machine/Accelerator inconsistency was found and fixed: entering or
+clearing quarantine now updates `Accelerator.moderationStatus`/`.status` in
+the same transaction as `Machine.moderationStatus` (previously only
+`Machine` was updated; `Accelerator` only caught up on the next heartbeat,
+which could silently block republication after a real, valid quarantine
+clear). Two real race conditions were found and fixed: `createDiagnosticRun`
+now takes a `pg_advisory_xact_lock` per machine (was: two concurrent reruns
+could create two RUNNING DiagnosticRuns); `completeDiagnosticRun` now does
+an atomic conditional claim (`updateMany` guarded on `status='RUNNING'`,
+throws `DiagnosticRunConflictError` on loss) so a duplicate/racing result
+submission can never apply its outcome twice.
+
+### Tests
+
+**528/528 API tests pass** (503 pre-existing + 25 new across this session's
+two passes), **368/368 agent tests pass** (364 pre-existing + 4 new).
+New test files: `quarantine-service`/`diagnostic-run-service` coverage is in
+`test/diagnostic-run-service.test.ts` (pure, 9 tests incl. the
+`ORPHANED_ALLOCATION` mandatory check and the lazy TIMED_OUT computation),
+`test/quarantine-diagnostics-system.test.ts` (13 real-Postgres integration
+tests: history immutability/REENTERED, clear resolving open events, forced
+clear tagged in history, diagnostic PASS→clear, FAIL→maintain with the
+right reasonCode, execution-error→maintain, repair never auto-clearing,
+publication/booking both blocked while quarantined, the full
+QUARANTINED→diagnostic→PASS→CLEAR→publish→FAIL-again→re-quarantine loop
+with an Accelerator-consistency assertion, stale-machine lifecycle, the
+duplicate-submission conflict guard), `test/machine-diagnostics-routes.
+integration.test.ts` (2 real HTTP tests over `app.inject()` with genuine
+Ed25519-signed v2 agent requests: cross-machine auth rejection, cross-owner
+isolation, a quarantined agent completing a real diagnostic end-to-end,
+duplicate-result rejection; force-clear's token/risk-confirmation gates).
+6 pre-existing test files were updated (not weakened) to match the new
+`enterQuarantine()`-based source shape where they grep literal source text.
+
+### Migrations (local dev DB only, applied and verified)
+
+- `20260901005635_add_quarantine_diagnostics_lifecycle` — `MachineQuarantineEvent`,
+  `DiagnosticRun`, 5 new enums, 7 new `Machine` columns. Hand-written (not
+  `prisma migrate dev`) to stay strictly additive and avoid an unrelated,
+  pre-existing drift on this dev DB (stray `MachineAccelerator`/`OutboxEvent`/
+  etc. tables from old local testing, absent from `schema.prisma` already).
+- `20260901013945_add_orphaned_allocation_reason_code` — adds the
+  `ORPHANED_ALLOCATION` value to `QuarantineReasonCode`.
+
+### Real production machine (`cmsiggruy0004df0tn669f6bn`)
+
+**Not touched.** Still 🔴 quarantined as of the last live check this
+session (2026-09-01), last heartbeat unchanged since 2026-08-30T01:14:12.
+**Cannot be revalidated with the new system yet** — that requires
+`gpubnb.onrender.com`/`gpubnb.netlify.app` to run this code, which requires
+a deploy, which requires pushing to `origin`, which was explicitly not
+authorized this session ("Ne pousse rien sur origin"). This is the one
+genuinely blocked step, not a shortcut taken — see
+`docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` §12.
+
+### Known, documented (not hidden) limitations
+
+- Repair: only orphaned-allocation bookkeeping is automated. Agent
+  restart / remote process cleanup would need the "Machine Command Gateway"
+  authenticated command channel, which exists in the code but is disabled
+  at 0% rollout by an earlier, separate product decision — out of scope to
+  build safely in this pass.
+- The diagnostic does not verify runtime-level container/network/volume
+  cleanup on the agent (only the DB-bookkeeping `allocation` check) — would
+  need new agent-side Docker introspection.
+- Under genuine simultaneous diagnostic-result submissions, Prisma's
+  interactive-transaction pool can occasionally surface a generic timeout
+  instead of a clean 409 — data integrity is never at risk (Prisma keeps the
+  transaction atomic either way), only the exact HTTP error code in that
+  rare race window.
+
+### Useful commands
+
+```bash
+# Local Postgres/Redis (already running via docker compose from earlier sessions)
+docker ps  # expect gpubnb-postgres-1, gpubnb-redis-1
+
+# API tests (from apps/api)
+npx tsc -p tsconfig.json --noEmit          # typecheck
+npx tsx --test test/*.test.ts              # full suite (real-DB tests auto-skip if no DB)
+
+# Agent tests (from agent)
+python -m pytest tests/ -q
+
+# Clean up test-run leftovers in local dev DB before/after a test run (owner_qd_*,
+# owner_a_*/owner_b_*/owner_fc_* wallets are this session's disposable fixtures):
+docker exec -i gpubnb-postgres-1 psql -U gpubnb -d gpubnb   # then DELETE ... WHERE wallet LIKE 'owner_qd_%' etc.
+```
+
+### Security points not to forget
+
+- `authenticateQuarantinableAgent` (machine-diagnostics-routes.ts) is
+  deliberately separate from `authenticateAgent`/`authenticatedAgent`
+  elsewhere (workspace-gateway.ts, rental-resource-routes.ts, server.ts) —
+  those legitimately still require `moderationStatus=CLEAR` for their own
+  routes. Never merge these two helpers.
+- `clearQuarantine()` is the only function allowed to write
+  `moderationStatus=CLEAR`, anywhere. If a future change needs to clear a
+  quarantine, it must call this function (inside its own evidenced logic),
+  never write the column directly.
+- Force-clear (`/internal/machines/:id/quarantine/force-clear`) must stay
+  off the owner-facing route tree. If you ever add an admin UI for it, gate
+  it with something stronger than the shared `INTERNAL_SERVICE_TOKEN` (that
+  token is fine for a server-to-server/ops-script call, not for a browser
+  session) — this was not built because no admin UI/role concept exists yet
+  in this codebase.
+
+---
+
+## 1. Git state (OLDER — see Section 0 above for the current state)
+
+`main`, HEAD is the "feat: real quarantine + diagnostic + repair lifecycle
+system" commit plus this session's follow-up commit(s) — see `git log
+--oneline -10`. Nothing pushed to `origin/main`.
+
+The paragraph below is preserved from an earlier session for history; it
+predates Section 0 and no longer reflects the current branch (that branch
+was merged to `main` on 2026-08-31, per this file's own note above):
 
 Branch `fix/windows-agent-quiescence-and-e2e-harness`. `origin/...` is behind
 by these commits (local only, not pushed):
@@ -34,9 +188,7 @@ by these commits (local only, not pushed):
 - `01132f3` feat(agent,api,web): real Mobile Workspace runtime (custom local Android SDK/Gradle image) + a real tmpfs-exec bug fix affecting every $HOME-tmpfs workspace
 - (pending commit this session) feat: real Security Lab Workspace runtime (custom local tshark/YARA/radare2 image, defensive-analysis scope)
 
-Working tree is otherwise clean except this file. `main`/`origin/main` is
-untouched (PR #133's merge commit). PR #134 (this branch → main) is still
-open, not merged.
+This history is superseded — see Section 0.
 
 ## 2. Executable workspaces (real runtime, real routes, real tests, live-verified)
 

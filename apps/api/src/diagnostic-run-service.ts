@@ -12,15 +12,18 @@ export type DiagnosticCheck = {
   measuredAt: string;
   /** Where this value actually came from - never 'browser'. Every check here is
    * either derived from the authenticated agent's own report (heartbeat or
-   * diagnostic result) or is a server-side computation over that data. */
+   * diagnostic result) or is a server-side computation over data the agent
+   * reported (never invented). */
   source: 'agent-heartbeat' | 'agent-diagnostic' | 'server';
 };
 
 /** Checks whose PASS is a mandatory precondition to lift a quarantine. Never
  * relaxed by a caller - see evaluateDiagnosticChecks. RAM/CPU are intentionally
  * excluded: those only affect per-workspace compatibility (machine-workspace-catalog.js),
- * never whether the machine itself is safe to unquarantine. */
-const MANDATORY_CHECK_NAMES = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime'] as const;
+ * never whether the machine itself is safe to unquarantine. 'allocation' is
+ * mandatory because a machine with a real orphaned GPU allocation is not safe
+ * to republish even if the GPU hardware itself checks out. */
+const MANDATORY_CHECK_NAMES = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'allocation'] as const;
 
 const CHECK_NAME_TO_REASON_CODE: Record<string, QuarantineReasonCode> = {
   agent: QuarantineReasonCode.AGENT_SECURITY_FAILURE,
@@ -29,6 +32,7 @@ const CHECK_NAME_TO_REASON_CODE: Record<string, QuarantineReasonCode> = {
   driver: QuarantineReasonCode.GPU_HEALTH_CHECK_FAILED,
   docker: QuarantineReasonCode.DOCKER_UNAVAILABLE,
   nvidiaRuntime: QuarantineReasonCode.NVIDIA_RUNTIME_UNAVAILABLE,
+  allocation: QuarantineReasonCode.ORPHANED_ALLOCATION,
 };
 
 export type DiagnosticEvaluation = {
@@ -70,6 +74,14 @@ export type CreateDiagnosticRunInput = {
 
 export async function createDiagnosticRun(db: PrismaClient, input: CreateDiagnosticRunInput) {
   return db.$transaction(async (tx) => {
+    // Serializes concurrent create attempts for the same machine (two rapid
+    // clicks on "Relancer le diagnostic", or the owner and an automated system
+    // triggering one at the same moment) - without this, two RUNNING rows could
+    // both pass the findFirst check below before either commits, and the agent's
+    // GET next (oldest-first) would then work on a different run than the one
+    // Host shows as "current". Same lock-key convention as
+    // resource-allocation-service.ts / rental-listing-service.ts.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.machineId}, 1))`;
     const alreadyRunning = await tx.diagnosticRun.findFirst({
       where: { machineId: input.machineId, status: 'RUNNING' },
       select: { id: true, startedAt: true },
@@ -132,6 +144,17 @@ export type CompleteDiagnosticRunResult = {
  * maintain from the actual check results - never from the mere fact the agent
  * responded.
  */
+/** Thrown when a diagnostic result arrives for a run that is no longer RUNNING -
+ * a concurrent/duplicate submission (agent retry racing itself, or a replayed
+ * request) lost the atomic claim below. The route layer maps this to 409;
+ * never treated as a 500, and never silently reapplies the outcome twice. */
+export class DiagnosticRunConflictError extends Error {
+  constructor() {
+    super('diagnostic_run_already_completed');
+    this.name = 'DiagnosticRunConflictError';
+  }
+}
+
 export async function completeDiagnosticRun(
   db: PrismaClient,
   input: CompleteDiagnosticRunInput,
@@ -148,10 +171,15 @@ export async function completeDiagnosticRun(
     const wasQuarantined = machine?.moderationStatus === 'QUARANTINED';
 
     if (input.error) {
-      await tx.diagnosticRun.update({
-        where: { id: run.id },
+      // Atomic claim: only the request that actually transitions RUNNING -> FAILED
+      // proceeds to apply quarantine side-effects. A second, racing submission for
+      // the same run (agent retry after a lost response, or a replay) finds
+      // count===0 and must not reapply enterQuarantine() a second time.
+      const claimed = await tx.diagnosticRun.updateMany({
+        where: { id: run.id, status: 'RUNNING' },
         data: { status: 'FAILED', checks: input.checks as unknown as Prisma.InputJsonValue, error: input.error.slice(0, 500), completedAt: now },
       });
+      if (claimed.count !== 1) throw new DiagnosticRunConflictError();
       await tx.machine.update({ where: { id: input.machineId }, data: { lastDiagnosticRunId: run.id, lastDiagnosticAt: now } });
       if (wasQuarantined) {
         await enterQuarantine(tx, {
@@ -167,10 +195,12 @@ export async function completeDiagnosticRun(
     }
 
     const evaluation = evaluateDiagnosticChecks(input.checks);
-    await tx.diagnosticRun.update({
-      where: { id: run.id },
+    // Same atomic claim as the FAILED branch above - see DiagnosticRunConflictError.
+    const claimed = await tx.diagnosticRun.updateMany({
+      where: { id: run.id, status: 'RUNNING' },
       data: { status: 'COMPLETED', checks: input.checks as unknown as Prisma.InputJsonValue, completedAt: now },
     });
+    if (claimed.count !== 1) throw new DiagnosticRunConflictError();
     await tx.machine.update({ where: { id: input.machineId }, data: { lastDiagnosticRunId: run.id, lastDiagnosticAt: now } });
 
     if (evaluation.allMandatoryPass) {

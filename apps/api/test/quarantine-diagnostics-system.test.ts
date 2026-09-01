@@ -165,7 +165,7 @@ test('diagnostic PASS on every mandatory check clears an active quarantine (cont
     }));
     const { run } = await createDiagnosticRun(prisma, { machineId: machine.id, triggeredBy: 'OWNER' });
     const now = new Date();
-    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'cuda', 'ram'].map((name) => ({
+    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'allocation', 'cuda', 'ram'].map((name) => ({
       name, status: 'PASS' as const, value: null, details: '', measuredAt: now.toISOString(), source: 'agent-diagnostic' as const,
     }));
     const outcome = await completeDiagnosticRun(prisma, { diagnosticRunId: run.id, machineId: machine.id, checks, source: 'test', now });
@@ -188,7 +188,7 @@ test('diagnostic FAIL on a mandatory check maintains the quarantine with the spe
     }));
     const { run } = await createDiagnosticRun(prisma, { machineId: machine.id, triggeredBy: 'OWNER' });
     const now = new Date();
-    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime'].map((name) => ({
+    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'allocation'].map((name) => ({
       name, status: (name === 'docker' ? 'FAIL' : 'PASS') as 'PASS' | 'FAIL', value: null, details: '', measuredAt: now.toISOString(), source: 'agent-diagnostic' as const,
     }));
     const outcome = await completeDiagnosticRun(prisma, { diagnosticRunId: run.id, machineId: machine.id, checks, source: 'test', now });
@@ -218,6 +218,45 @@ test('a diagnostic that could not execute at all (agent-side error) maintains qu
     assert.equal(outcome.cleared, false);
     const machineRow = await prisma.machine.findUniqueOrThrow({ where: { id: machine.id } });
     assert.equal(machineRow.moderationStatus, ModerationStatus.QUARANTINED);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test('a second result submission for an already-completed diagnostic run is rejected as a conflict, never silently reapplied', { skip: !hasDb }, async () => {
+  const prisma = new PrismaClient();
+  try {
+    const { machine } = await seedMachine(prisma, 'race1');
+    await prisma.$transaction((tx) => enterQuarantine(tx, {
+      machineId: machine.id, reasonCode: 'GPU_HEALTH_CHECK_FAILED', reason: 'entered', source: 'test',
+    }));
+    const { run } = await createDiagnosticRun(prisma, { machineId: machine.id, triggeredBy: 'OWNER' });
+    const now = new Date();
+    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'allocation', 'cuda', 'ram'].map((name) => ({
+      name, status: 'PASS' as const, value: null, details: '', measuredAt: now.toISOString(), source: 'agent-diagnostic' as const,
+    }));
+
+    const { DiagnosticRunConflictError } = await import('../src/diagnostic-run-service.js');
+
+    // First submission: real, wins the atomic claim (RUNNING -> COMPLETED),
+    // clears the quarantine.
+    const first = await completeDiagnosticRun(prisma, { diagnosticRunId: run.id, machineId: machine.id, checks, source: 'race-a', now });
+    assert.equal(first.cleared, true);
+
+    // A second submission for the same run - modeling an agent retry that never
+    // saw the first response, or a replayed request - must find the run no
+    // longer RUNNING and be rejected, never re-run the quarantine decision a
+    // second time (which is exactly the atomic updateMany guard added to
+    // diagnostic-run-service.ts's completeDiagnosticRun for this reason).
+    await assert.rejects(
+      () => completeDiagnosticRun(prisma, { diagnosticRunId: run.id, machineId: machine.id, checks, source: 'race-b', now }),
+      DiagnosticRunConflictError,
+    );
+
+    // The quarantine must have been cleared exactly once - not left in a
+    // corrupted state by two competing writers, and not cleared twice.
+    const history = await prisma.machineQuarantineEvent.findMany({ where: { machineId: machine.id, status: 'CLEARED' } });
+    assert.equal(history.length, 1);
   } finally {
     await prisma.$disconnect();
   }
@@ -309,11 +348,14 @@ test('end-to-end: QUARANTINED -> diagnostic -> real PASS results -> CLEAR -> pub
 
     const { run } = await createDiagnosticRun(prisma, { machineId: machine.id, triggeredBy: 'OWNER' });
     const now = new Date();
-    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'cuda', 'ram'].map((name) => ({
+    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'allocation', 'cuda', 'ram'].map((name) => ({
       name, status: 'PASS' as const, value: null, details: '', measuredAt: now.toISOString(), source: 'agent-diagnostic' as const,
     }));
     const outcome = await completeDiagnosticRun(prisma, { diagnosticRunId: run.id, machineId: machine.id, checks, source: 'test', now });
     assert.equal(outcome.cleared, true);
+
+    const acceleratorRow = await prisma.accelerator.findUniqueOrThrow({ where: { id: accelerator.id } });
+    assert.equal(acceleratorRow.moderationStatus, ModerationStatus.CLEAR, 'Machine/Accelerator must never disagree after a clear');
 
     const listing = await createExactGpuListing(prisma, {
       ownerId: owner.id, machineId: machine.id, acceleratorId: accelerator.id,
@@ -321,6 +363,33 @@ test('end-to-end: QUARANTINED -> diagnostic -> real PASS results -> CLEAR -> pub
       now: new Date(), heartbeatStaleAfterSeconds: 120,
     });
     assert.equal(listing.status, ListingStatus.ACTIVE);
+
+    // Cas 3 (point 17 du chantier) : la machine redevient problématique -> une
+    // nouvelle preuve FAIL doit la refaire basculer automatiquement, et la
+    // publication doit redevenir impossible.
+    const { run: secondRun } = await createDiagnosticRun(prisma, { machineId: machine.id, triggeredBy: 'SYSTEM' });
+    const secondNow = new Date(now.getTime() + 60_000);
+    const failingChecks = checks.map((c) => (c.name === 'gpu' ? { ...c, status: 'FAIL' as const } : c));
+    const secondOutcome = await completeDiagnosticRun(prisma, {
+      diagnosticRunId: secondRun.id, machineId: machine.id, checks: failingChecks, source: 'test', now: secondNow,
+    });
+    assert.equal(secondOutcome.cleared, false);
+    const reQuarantinedMachine = await prisma.machine.findUniqueOrThrow({ where: { id: machine.id } });
+    assert.equal(reQuarantinedMachine.moderationStatus, ModerationStatus.QUARANTINED);
+    assert.equal(reQuarantinedMachine.quarantineReasonCode, 'GPU_UNAVAILABLE');
+
+    const secondListingAttempt = await createExactGpuListing(prisma, {
+      ownerId: owner.id, machineId: machine.id, acceleratorId: accelerator.id,
+      title: 'problematic again', description: 'd'.repeat(20), hourlySol: 0.01,
+      now: new Date(), heartbeatStaleAfterSeconds: 120,
+    }).catch((error) => error);
+    assert.ok(secondListingAttempt instanceof RentalListingError && secondListingAttempt.code === 'machine_not_found', 'publication must be blocked again automatically');
+
+    // Seeding this test set moderationStatus=QUARANTINED directly (bypassing
+    // enterQuarantine, which is not itself under test here), so history starts
+    // from the first real diagnostic, not an ENTERED row.
+    const fullHistory = await prisma.machineQuarantineEvent.findMany({ where: { machineId: machine.id }, orderBy: { createdAt: 'asc' } });
+    assert.deepEqual(fullHistory.map((e) => e.status), ['DIAGNOSTIC', 'CLEARED', 'DIAGNOSTIC', 'ENTERED'], 'the full lifecycle must be visible, in order, with nothing overwritten');
   } finally {
     await prisma.$disconnect();
   }

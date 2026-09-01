@@ -4,7 +4,7 @@ const MD_API=(window.GPUBNB_API_URL||'').replace(/\/$/,'');
 const mdEscape=value=>String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 const mdDate=value=>value?new Date(value).toLocaleString('fr-FR'):'—';
 
-const CHECK_LABELS={agent:'Agent',gpu:'GPU',gpuUuid:'UUID GPU',driver:'Pilote GPU',docker:'Docker',nvidiaRuntime:'Runtime NVIDIA',cuda:'CUDA',ram:'RAM'};
+const CHECK_LABELS={agent:'Agent',gpu:'GPU',gpuUuid:'UUID GPU',driver:'Pilote GPU',docker:'Docker',nvidiaRuntime:'Runtime NVIDIA',cuda:'CUDA',ram:'RAM',allocation:'Allocation GPU'};
 const CHECK_BADGE={PASS:'ok',FAIL:'danger',WARNING:'warn',UNKNOWN:'warn',NOT_CHECKED:'warn'};
 const CHECK_ICON={PASS:'🟢',FAIL:'🔴',WARNING:'🟠',UNKNOWN:'⚪',NOT_CHECKED:'⚪'};
 const SEVERITY_ICON={CRITICAL:'🔴',WARNING:'🟠',INFO:'🟢'};
@@ -47,7 +47,7 @@ function renderBody(data){
   const running=data.runningDiagnostic;
   const last=data.lastDiagnosticRun;
 
-  const quarantinePanel=quarantine.active?`<article class="panel" style="margin-bottom:14px"><div class="section-heading"><div><h2>${SEVERITY_ICON[quarantine.severity]||'🔴'} EN QUARANTAINE</h2><p class="muted">${mdEscape(quarantine.title)}</p></div><span class="badge danger">${mdEscape(quarantine.reasonCode)}</span></div><p>${mdEscape(quarantine.description)}</p><div class="muted"><strong>Impact :</strong> ${mdEscape(quarantine.impact)}</div><div class="muted"><strong>Depuis :</strong> ${mdDate(quarantine.since)}</div></article>`:'';
+  const quarantinePanel=quarantine.active?`<article class="panel" style="margin-bottom:14px"><div class="section-heading"><div><h2>${SEVERITY_ICON[quarantine.severity]||'🔴'} EN QUARANTAINE</h2><p class="muted">${mdEscape(quarantine.title)}</p></div><span class="badge danger">${mdEscape(quarantine.reasonCode)}</span></div><p>${mdEscape(quarantine.description)}</p><div class="muted"><strong>Impact :</strong> ${mdEscape(quarantine.impact)}</div><div class="muted"><strong>Depuis :</strong> ${mdDate(quarantine.since)}</div><div class="muted"><strong>Preuve nécessaire :</strong> ${mdEscape(quarantine.evidenceRequired||'—')}</div><div style="margin-top:10px"><strong>Action recommandée :</strong> ${mdEscape(quarantine.recommendedAction||'Relancez un diagnostic.')}</div></article>`:'';
 
   const runningPanel=running?`<article class="panel" style="margin-bottom:14px"><span class="badge warn">Diagnostic en cours</span><p class="muted">Lancé ${mdDate(running.startedAt)} — en attente du résultat réel de l’agent (rafraîchissement automatique).</p></article>`:'';
 

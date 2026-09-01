@@ -38,6 +38,7 @@ const BLOCKING_REASON={
   WORKSPACE_CLEANUP_FAILED:'nettoyage de Workspace non confirmé',
   AGENT_SECURITY_FAILURE:'échecs de signature agent répétés',
   GPU_HEALTH_CHECK_FAILED:'le diagnostic GPU a échoué',
+  ORPHANED_ALLOCATION:'une allocation GPU orpheline a été détectée',
   GPU_UNAVAILABLE:'aucun GPU détecté',
   DOCKER_UNAVAILABLE:'Docker indisponible',
   NVIDIA_RUNTIME_UNAVAILABLE:'runtime NVIDIA indisponible',
