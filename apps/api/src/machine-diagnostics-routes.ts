@@ -182,12 +182,27 @@ export function registerMachineDiagnosticsRoutes(app: FastifyInstance, db: Prism
     if (!await authenticateQuarantinableAgent(db, redis, machineId, request, route)) {
       return reply.code(401).send({ error: 'invalid_agent_request' });
     }
+    // Self-heal every stale RUNNING row for this machine on each poll - status
+    // is only ever computed lazily (effectiveDiagnosticStatus), never written
+    // back, so nothing else ever clears a dead RUNNING row on its own. Found
+    // live against production: with only the single newest row inspected and
+    // an oldest-first order, one permanently-stuck stale row shadowed every
+    // later, genuinely fresh DiagnosticRun forever - a real diagnostic created
+    // after an earlier one had timed out was never handed to the agent.
+    // Sweeping *every* stale row here (not just whichever one this request
+    // happens to look at) keeps the table from accumulating zombie RUNNING rows.
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - DIAGNOSTIC_TIMEOUT_MS);
+    await db.diagnosticRun.updateMany({
+      where: { machineId, status: 'RUNNING', startedAt: { lt: cutoff } },
+      data: { status: 'TIMED_OUT', completedAt: now, error: 'agent_never_reported_result' },
+    });
     const pending = await db.diagnosticRun.findFirst({
       where: { machineId, status: 'RUNNING' },
-      orderBy: { startedAt: 'asc' },
-      select: { id: true, startedAt: true, status: true },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true },
     });
-    if (!pending || effectiveDiagnosticStatus(pending) === 'TIMED_OUT') {
+    if (!pending) {
       return { diagnosticRunId: null };
     }
     return {

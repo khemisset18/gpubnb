@@ -78,17 +78,29 @@ export async function createDiagnosticRun(db: PrismaClient, input: CreateDiagnos
     // clicks on "Relancer le diagnostic", or the owner and an automated system
     // triggering one at the same moment) - without this, two RUNNING rows could
     // both pass the findFirst check below before either commits, and the agent's
-    // GET next (oldest-first) would then work on a different run than the one
-    // Host shows as "current". Same lock-key convention as
-    // resource-allocation-service.ts / rental-listing-service.ts.
+    // GET next (newest-first, see machine-diagnostics-routes.ts) could then work
+    // on a different run than the one Host shows as "current". Same lock-key
+    // convention as resource-allocation-service.ts / rental-listing-service.ts.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.machineId}, 1))`;
+    // Sweep every stale RUNNING row for this machine first - status='RUNNING'
+    // never gets rewritten to TIMED_OUT on its own (only a poll/result
+    // submission does that, see machine-diagnostics-routes.ts), so without
+    // this a long-dead run could either wrongly report alreadyRunning, or
+    // simply accumulate as a permanent zombie row once the real new run below
+    // is created.
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - DIAGNOSTIC_TIMEOUT_MS);
+    await tx.diagnosticRun.updateMany({
+      where: { machineId: input.machineId, status: 'RUNNING', startedAt: { lt: cutoff } },
+      data: { status: 'TIMED_OUT', completedAt: now, error: 'agent_never_reported_result' },
+    });
     const alreadyRunning = await tx.diagnosticRun.findFirst({
       where: { machineId: input.machineId, status: 'RUNNING' },
-      select: { id: true, startedAt: true },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true },
     });
     if (alreadyRunning) {
-      const ageMs = Date.now() - alreadyRunning.startedAt.getTime();
-      if (ageMs < DIAGNOSTIC_TIMEOUT_MS) return { run: alreadyRunning, alreadyRunning: true as const };
+      return { run: alreadyRunning, alreadyRunning: true as const };
     }
     const run = await tx.diagnosticRun.create({
       data: {

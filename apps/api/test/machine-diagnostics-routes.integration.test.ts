@@ -201,6 +201,88 @@ test('agent diagnostic routes: cross-machine auth is rejected, owner isolation h
   assert.equal(duplicateResponse.statusCode, 409, 'a diagnostic run that already completed must reject a second result, not silently re-apply it');
 });
 
+test('a stale (timed-out) RUNNING run never shadows a fresh one, and self-heals to TIMED_OUT - regression for a real bug found live against production', { skip: !hasDb }, async (t) => {
+  const prisma = new PrismaClient();
+  const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+    lazyConnect: true, maxRetriesPerRequest: 1, connectTimeout: 2_000,
+  });
+  try {
+    await prisma.$connect();
+    redis.on('error', () => {});
+    await redis.connect();
+  } catch (error) {
+    t.skip(`no reachable local Postgres/Redis: ${(error as Error).message}`);
+    await prisma.$disconnect().catch(() => {});
+    redis.disconnect();
+    return;
+  }
+
+  const suffix = crypto.randomBytes(6).toString('hex');
+  const keyPair = nacl.sign.keyPair();
+  const cleanup: Array<() => Promise<unknown>> = [];
+  t.after(async () => {
+    for (const step of cleanup.reverse()) await step().catch(() => {});
+    await prisma.$disconnect();
+    redis.disconnect();
+  });
+
+  const app = Fastify();
+  await app.register(cookie);
+  app.addHook('preParsing', (request, _reply, payload, done) => {
+    const chunks: Buffer[] = [];
+    const capture = new Transform({
+      transform(chunk: Buffer, _enc, callback) { chunks.push(Buffer.from(chunk)); callback(null, chunk); },
+    });
+    capture.once('end', () => { (request as { rawBody?: Buffer }).rawBody = Buffer.concat(chunks); });
+    done(null, payload.pipe(capture as never));
+  });
+  registerMachineDiagnosticsRoutes(app, prisma, redis as never);
+  await app.ready();
+  cleanup.push(() => app.close());
+
+  const owner = await prisma.user.create({ data: { wallet: `owner_stale_${suffix}`, pseudonym: `owner_stale_${suffix}`, canHost: true } });
+  cleanup.push(() => prisma.user.delete({ where: { id: owner.id } }));
+  const machine = await prisma.machine.create({
+    data: {
+      ownerId: owner.id,
+      agentPublicKey: bs58.encode(keyPair.publicKey),
+      connectivity: MachineConnectivity.ONLINE,
+      operational: MachineOperational.UNAVAILABLE,
+      moderationStatus: ModerationStatus.QUARANTINED,
+      quarantineReasonCode: 'UNKNOWN',
+    },
+  });
+  cleanup.push(() => prisma.machine.delete({ where: { id: machine.id } }));
+
+  // A stale RUNNING run - exactly what a real diagnostic looks like a few
+  // minutes after the agent never reported back (crash, network loss).
+  const { DIAGNOSTIC_TIMEOUT_MS } = await import('../src/diagnostic-run-service.js');
+  const staleRun = await prisma.diagnosticRun.create({
+    data: {
+      machineId: machine.id,
+      status: 'RUNNING',
+      triggeredBy: 'OWNER',
+      startedAt: new Date(Date.now() - DIAGNOSTIC_TIMEOUT_MS - 60_000),
+    },
+  });
+
+  // A genuinely fresh run, created afterwards - what the owner sees as "current".
+  const freshRun = await prisma.diagnosticRun.create({
+    data: { machineId: machine.id, status: 'RUNNING', triggeredBy: 'OWNER' },
+  });
+
+  const nextPath = `/agent/diagnostics/next/${machine.id}`;
+  const signed = signedAgentRequest('GET', nextPath, machine.id, keyPair, undefined);
+  const response = await app.inject({ method: 'GET', url: nextPath, headers: signed.headers });
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as { diagnosticRunId: string | null };
+  assert.equal(body.diagnosticRunId, freshRun.id, 'the agent must be handed the fresh run, never shadowed by an older stale one');
+
+  const staleRowAfter = await prisma.diagnosticRun.findUniqueOrThrow({ where: { id: staleRun.id } });
+  assert.equal(staleRowAfter.status, 'TIMED_OUT', 'the stale run must be self-healed to TIMED_OUT, not left as a permanent RUNNING zombie');
+  assert.equal(staleRowAfter.error, 'agent_never_reported_result');
+});
+
 test('force-clear: never accessible to the owner, requires the internal token, and a CRITICAL-severity reason requires an explicit risk confirmation naming that exact code', { skip: !hasDb }, async (t) => {
   const prisma = new PrismaClient();
   const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
