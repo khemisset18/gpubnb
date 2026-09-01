@@ -704,3 +704,87 @@ Exécuté réellement, pas simulé, sur cette machine, sans jamais toucher le vr
 C'est la preuve complète du flux `ancien agent → self-update → nouveau agent → service → build
 correct confirmé` demandé, obtenue avec de vraies releases GitHub et un vrai cycle de vie de
 service Windows, sans aucun risque pour la machine réelle en production.
+
+## 16. Audit MachineReadiness / quarantaine / publication (2026-09-01) — deux vraies divergences trouvées et corrigées
+
+Audit complet demandé : est-ce que Host et le site public voient réellement la même réalité ?
+Réponse trouvée : **non, pas tout à fait** - deux vraies divergences vivantes, avec preuve par le
+code, corrigées ce jour (commit `9ccfa55`).
+
+### 16.1 `computeMachineState` ignorait la version de protocole de l'agent
+
+`computeMachineState` (`machine-state-service.ts`) est la seule fonction utilisée par
+`createExactGpuListing` (publication) ET par la page de diagnostics Host - censée être la source
+de vérité unique. Mais elle ne vérifiait jamais `jobProtocolSupported` (version de protocole
+job-lease de l'agent) : seul le calcul `legacyPublishable`, séparé et ad-hoc, dans le handler de
+heartbeat (`server.ts`), le faisait. Une machine avec un agent trop ancien pouvait donc obtenir une
+**nouvelle** annonce `ACTIVE` via `createExactGpuListing`, puis se la voir masquer dès le heartbeat
+suivant par la logique séparée - un « flash de vert » qui était en réalité cassé.
+
+**Corrigé** : nouvel état `AGENT_OUTDATED` (`blockingReason: AGENT_PROTOCOL_VERSION_TOO_OLD`) dans
+`MachineRentalState`, `jobProtocolSupported` ajouté à `MachineStateInput` et câblé dans les deux
+vrais points d'appel (`rental-listing-service.ts`, `machine-diagnostics-routes.ts`).
+
+### 16.2 Le heartbeat ne vérifiait ni Docker ni le runtime NVIDIA, et ne masquait l'annonce que pour une seule raison
+
+Le calcul `legacyPublishable` du heartbeat (qui active/désactive réellement les annonces à chaque
+cycle) ne vérifiait **jamais** `dockerAvailable`/`nvidiaRuntimeAvailable`, alors que
+`computeMachineState` les exige déjà tous les deux. Une annonce déjà publiée pouvait donc rester
+`ACTIVE` et réservable après que Docker ou le runtime NVIDIA soit tombé sur un Host déjà publié -
+`allocateBookingResources` ne recalcule pas la readiness lui-même, il fait confiance au
+`GpuListing.status`. Pire : l'annonce n'était forcée à se masquer que pour **une seule** cause
+(`!jobProtocolSupported`) - toute autre perte de publishability (GPU échangé, sonde CUDA échouée,
+Docker/NVIDIA tombé) laissait une annonce `ACTIVE` intacte, jamais masquée.
+
+**Corrigé** : `legacyPublishable` inclut désormais `dockerOk`/`nvidiaRuntimeOk` (exactement comme
+`computeMachineState`), et l'annonce est masquée dès que `publishable` est faux, quelle qu'en soit
+la raison - plus seulement pour l'agent obsolète.
+
+### 16.3 `enterQuarantine()` ne touchait jamais `GpuListing`
+
+Trouvé en creusant le chemin de mise en quarantaine : `enterQuarantine()` (la seule fonction par
+laquelle transitent toutes les entrées en quarantaine) synchronisait Machine et Accelerator, mais
+**jamais** `GpuListing`. Une machine mise en quarantaine via le chemin « signature agent invalide »
+ou « nettoyage de tâche périmée » (contrairement au chemin `accelerator-security-executor.ts`, qui
+masquait déjà ses propres décisions de sévérité) pouvait garder une annonce déjà publiée affichée
+`ACTIVE` sur le marché public indéfiniment. `allocateBookingResources` refusait déjà correctement
+la réservation réelle (vérification `moderationStatus`) - ce n'était donc pas une faille de
+sécurité de réservation, mais une vraie divergence Host/site : « Le Host et le site doivent voir la
+même réalité. »
+
+**Corrigé** : ajout du masquage (`ACTIVE`/`RESERVED` → `PENDING_GPU_VERIFICATION`) directement dans
+`enterQuarantine()`, ce qui couvre automatiquement tous les points d'entrée en quarantaine à la
+fois plutôt que de corriger chaque appelant séparément.
+
+### 16.4 Aucune migration nécessaire
+
+`PENDING_GPU_VERIFICATION` existait déjà dans l'énumération `ListingStatus` (déjà utilisé de la
+même façon par `accelerator-security-executor.ts`). `AGENT_OUTDATED` est un type TypeScript
+string-literal (`MachineRentalState`), pas une énumération Prisma.
+
+### 16.5 CI corrigée : les 3 tests Windows-only qui échouaient depuis avant cette session
+
+Cause racine identifiée précisément : `_is_windows_desktop_compositor_path()` utilisait
+`os.path.normcase`/`os.sep`, qui sont liés au **vrai** OS hôte au démarrage de l'interpréteur (pas
+à `os.name`) - patcher `os.name` à `"nt"` dans un test ne change rien à leur comportement réel :
+sur Linux, `os.path.normcase` est un no-op et `os.sep` vaut `/`. Corrigé en utilisant explicitement
+le module `ntpath` (implémentation Windows pure Python, toujours disponible, indépendante de l'OS
+hôte) - la vérification reste conditionnée à `os.name == "nt"` en production réelle, seule la
+comparaison de chaînes est désormais testable de façon identique sur toute plateforme. Commit
+`8ff5bf9`. **CI entièrement verte pour la première fois depuis le 2026-08-30** (confirmé : les 6
+jobs du workflow `CI` sont passés, y compris `agent`).
+
+### 16.6 Tests
+
+3 tests d'intégration nouveaux/étendus contre un vrai Postgres local (dont une vraie assertion
+qu'une annonce déjà `ACTIVE` est réellement masquée dès que sa machine passe en quarantaine, pas
+seulement que la réserver est refusé), 1 test unitaire nouveau (`AGENT_OUTDATED`), 1 test de
+« wiring » statique sur le texte source de `server.ts` (même convention déjà établie dans ce
+dépôt pour ce point de route dense et minifié - voir `job-fencing-wiring.test.ts`). 7 fixtures de
+test corrigées (ajout de `agentVersion`), 1 hook de nettoyage ajouté à
+`quarantine-diagnostics-system.test.ts` (suffixes fixes sans nettoyage préexistant).
+
+**Résultat local, stable sur 3 exécutions consécutives** : 530/531 tests API (le seul restant,
+`gpu-proof-completion.test.ts`, est un flake préexistant sous charge complète de la suite, dans
+`resource-allocation-service.ts`/sa contrainte d'exclusion PostgreSQL - fichier non touché par ce
+travail, passe de façon fiable en isolation) ; 390/390 tests agent inchangés.

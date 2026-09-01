@@ -237,6 +237,49 @@ let it happen again unnoticed:
   installed today gets every fix in this session. Full writeup:
   `docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` §15.
 
+### MachineReadiness/quarantine/publication audit — two real divergences found and fixed, commit `9ccfa55`
+
+Audited whether Host and the public site actually see the same reality, per
+explicit request. Found two real, live gaps:
+1. `computeMachineState` (used by `createExactGpuListing` and the Host
+   diagnostics page) never checked agent protocol version at all — only the
+   heartbeat handler's separate `legacyPublishable` did. A too-old agent
+   could get a brand-new listing created ACTIVE, then have it silently
+   hidden on the very next heartbeat. Fixed: new `AGENT_OUTDATED` state,
+   `jobProtocolSupported` threaded into both real call sites.
+2. Heartbeat's `legacyPublishable` never checked
+   dockerAvailable/nvidiaRuntimeAvailable at all (computeMachineState
+   already requires both) — a listing could stay ACTIVE and bookable after
+   Docker/NVIDIA runtime went down on an already-published host. Also: the
+   listing was only ever force-hidden for one specific reason
+   (`!jobProtocolSupported`), never for any other cause of publishable
+   going false. Fixed: both checks added, listing now hidden whenever
+   publishable is false for any reason.
+3. Separately: `enterQuarantine()` synced Machine+Accelerator but never
+   touched `GpuListing` — a machine quarantined via the invalid-signature
+   or job-staleness path (unlike accelerator-security's own severity
+   decisions) could keep an already-published listing showing ACTIVE
+   indefinitely. Not a booking-safety hole (allocateBookingResources
+   already refused the actual booking correctly) but a real Host/site
+   visibility divergence. Fixed once, inside enterQuarantine itself,
+   covering every quarantine entry point.
+
+No migration needed (both reuse existing enum/type values). 3 new/extended
+real-DB integration tests, 1 new unit test, 1 new static wiring test, 7
+pre-existing test fixtures fixed (missing agentVersion), 1 cleanup hook
+added. Local: 530/531 API tests stable across 3 runs (1 pre-existing,
+unrelated full-suite-load flake in code this pass never touched); 390/390
+agent tests unaffected.
+
+Also fixed, while here (explicitly pre-authorized as in-scope): the 3
+Windows-only agent tests that had been failing on Linux CI since before
+this session (`os.path.normcase`/`os.sep` are bound to the real host OS at
+interpreter startup, not to `os.name` — patching `os.name` in a test never
+changed their actual behavior on Linux). Switched to the `ntpath` module
+explicitly (Windows path semantics, host-OS-independent). **CI fully green
+for the first time since 2026-08-30** — all 6 jobs pass, including `agent`.
+Commit `8ff5bf9`. Full writeup: `docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` §16.
+
 ### Known, documented (not hidden) limitations
 
 - Repair: only orphaned-allocation bookkeeping is automated. Agent
