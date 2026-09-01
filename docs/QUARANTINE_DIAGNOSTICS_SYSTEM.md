@@ -859,3 +859,62 @@ majorité des exigences de cette passe finale (historique de quarantaine persist
 diagnostiquer/réparer/revalider/sortir, force-clear protégé, isolation cross-owner, observabilité
 sans secret) étaient déjà satisfaites par le travail des passes précédentes de cette session et ont
 été re-vérifiées, pas reconstruites.
+
+## 18. Préparation du premier test réel PC A ↔ PC B (2026-09-01)
+
+Audit demandé du parcours complet Booking → Workspace → GPU réel → Cleanup, en vue du premier test
+avec deux machines physiques distinctes. Réutilise et confirme les résultats d'un test réel
+antérieur déjà documenté (§11 de `docs/SESSION_RESUME.md`) plutôt que de tout re-prouver : un
+booking réel, un vrai Workspace Developer avec conteneurs réels, un vrai accès VS Code dans le
+navigateur, une vraie isolation cross-identité, une vraie reprise après crash agent, et un vrai
+cleanup ont déjà été prouvés en conditions quasi-réelles (PC A réel + PC B simulé via IP LAN + proxy
+réel, faute d'une deuxième machine physique disponible à l'époque).
+
+### 18.1 Blocage critique trouvé — configuration, pas un bug de code
+
+`POST /bookings/:id/confirm-deposit` (paiement réel on-chain) retourne inconditionnellement `503
+escrow_not_deployed` tant que `ESCROW_PROGRAM_ID=NOT_DEPLOYED_YET` (`render.yaml`, confirmé
+toujours vrai en production). Le **seul** chemin restant vers `BookingStatus.FUNDED` est la boucle
+de contournement de `dev-booking-reconciler.ts`, elle-même conditionnée à
+`BETA_TEST_DEV_BYPASS==='true'` ET `ESCROW_PROGRAM_ID==='NOT_DEPLOYED_YET'`
+(`betaTestDevBypassActive()`). Ce même flag conditionne aussi le seul chemin de règlement de fin de
+location qui fonctionne actuellement (`reconcileDevBypassSettlements` - l'alternative réelle,
+`MACHINE_COMMAND_GATEWAY_ROLLOUT_BPS`, est à 0% par défaut).
+
+`render.yaml` déclare `BETA_TEST_DEV_BYPASS` avec `sync: false` (valeur par défaut committée :
+`"false"`, mais bascule manuelle possible dans le tableau de bord Render qui survit aux resync) -
+**sa valeur réelle actuellement active en production n'est pas visible depuis ce dépôt et n'a pas
+été vérifiée en direct cette session.** NON VÉRIFIABLE ACTUELLEMENT sans accès au tableau de bord
+Render.
+
+**Conséquence si `false` (valeur par défaut)** : toute nouvelle réservation reste bloquée à
+`AWAITING_DEPOSIT` indéfiniment - le test PC A ↔ PC B ne peut pas dépasser la toute première étape
+de réservation.
+
+**Ce n'est pas un bug à corriger dans le code** - c'est un réglage opérationnel du tableau de bord
+Render (service `gpubnb` → Environment → `BETA_TEST_DEV_BYPASS`) que seul l'utilisateur peut
+vérifier/activer. Aucune tentative de le contourner ou de créer une réservation réelle de test n'a
+été faite cette session sans confirmation explicite, pour éviter d'occuper la vraie ressource GPU
+ou de créer des conteneurs réels sur la machine réelle sans que l'utilisateur s'y attende.
+
+### 18.2 Précision importante : le flux Developer Workspace n'est pas affecté par la découverte antérieure non résolue
+
+Le §11 de `docs/SESSION_RESUME.md` documentait une vraie divergence trouvée à l'époque :
+`readyBookings` (dans `reconcileDevelopmentBookings`) devient `[]` dès que `betaTestDevBypassActive()`
+est vrai, empêchant la tâche `GPU_DIAGNOSTIC` (`purpose: 'FIRST_RENTAL_E2E'`) d'être créée. Vérifié
+précisément cette session : cette tâche est un **chemin de preuve GPU optionnel et séparé**, sans
+lien avec le flux Developer Workspace réellement utilisé pour le test. `POST
+/bookings/:bookingId/workspace/developer` (`workspace-renter-routes.ts:53`) ne dépend que de
+`booking.status ∈ {FUNDED, STARTING, ACTIVE}` - aucune référence à `readyBookings` ni à
+`betaTestDevBypassActive()`. Il annule même explicitement toute tâche `GPU_DIAGNOSTIC` encore en
+attente au moment où le Workspace Developer est demandé (superseded_by_developer_workspace). **Le
+flux réellement utilisé pour le test (booking → Developer Workspace → accès GPU réel → cleanup)
+n'est donc pas bloqué par cette divergence antérieure.**
+
+### 18.3 État final de la vérification live (lecture seule)
+
+Session Chrome authentifiée réelle (propriétaire connecté) + `curl` public sans authentification,
+tous deux répétés en toute fin de session : machine `cmsiggruy0004df0tn669f6bn` toujours CLEAR,
+`Marketplace actif`, GPU re-vérifié en direct (`verifiedAt` synchronisé exactement avec le dernier
+heartbeat réel observé dans `agent.log`), listing `AVAILABLE` publiquement. Aucune modification
+faite à son état.

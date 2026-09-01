@@ -19,6 +19,28 @@ under an explicit, one-time authorization given that session ("Tu as
 maintenant mon autorisation pour déployer"). Treat that as consumed, not as
 standing consent for any future push/deploy — ask again next time.
 
+**⚠️ BEFORE ANY REAL BOOKING TEST (PC A / PC B), CHECK THIS FIRST**: the real
+production `ESCROW_PROGRAM_ID` is `NOT_DEPLOYED_YET` (confirmed in
+`render.yaml`), so `POST /bookings/:id/confirm-deposit` (the real on-chain
+payment path) hard-returns `503 escrow_not_deployed` unconditionally. The
+**only** way a booking can ever reach `FUNDED` right now is
+`dev-booking-reconciler.ts`'s bypass loop, gated on `BETA_TEST_DEV_BYPASS`
+(`render.yaml`: `sync: false`, committed default `"false"` — its real live
+value in the Render dashboard is not visible from this repo and was not
+verified live this session). **If it is not `true` in the real Render
+environment, a fresh booking will sit at `AWAITING_DEPOSIT` forever and the
+whole PC A/PC B test cannot proceed past the first booking step.** Same flag
+also gates the only working end-of-rental settlement path
+(`reconcileDevBypassSettlements` — the real Machine Command Gateway
+alternative is `MACHINE_COMMAND_GATEWAY_ROLLOUT_BPS`, 0% by default). This
+is NOT a code bug — nothing to fix — it is a Render dashboard setting only
+the user can check/toggle (Render → service `gpubnb` → Environment →
+`BETA_TEST_DEV_BYPASS`). See `docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` §18 for
+the full trace. Once confirmed `true`, the rest of the booking → Developer
+Workspace → real GPU access → cleanup chain was already proven live in a
+real (near-)two-machine test — see Section 11 below — and is independent of
+this flag.
+
 ---
 
 ## 0. LATEST SESSION — Quarantine & Diagnostics System (2026-09-01) — DEPLOYED
