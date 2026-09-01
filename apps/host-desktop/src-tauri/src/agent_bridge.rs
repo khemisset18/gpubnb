@@ -288,7 +288,8 @@ pub fn gpu_release_close(pid: u32) -> Result<serde_json::Value, String> {
         return Err("invalid_pid".to_owned());
     }
     let pid_argument = pid.to_string();
-    let output = run_agent(&["gpu-processes", "close", "--pid", &pid_argument]).map_err(str::to_owned)?;
+    let output =
+        run_agent(&["gpu-processes", "close", "--pid", &pid_argument]).map_err(str::to_owned)?;
     if !output.status.success() {
         return Err(classify_agent_failure(&output).into());
     }
