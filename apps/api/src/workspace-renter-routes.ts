@@ -22,6 +22,14 @@ const activeBookings: BookingStatus[]=[BookingStatus.FUNDED,BookingStatus.STARTI
 const terminalJobs: JobStatus[]=[JobStatus.COMPLETED,JobStatus.FAILED,JobStatus.CANCELLED,JobStatus.TIMED_OUT,JobStatus.REJECTED,JobStatus.QUARANTINED];
 const retryableSessions: WorkspaceSessionStatus[]=[WorkspaceSessionStatus.FAILED,WorkspaceSessionStatus.CANCELLED,WorkspaceSessionStatus.TIMED_OUT];
 
+// The initial findFirst below (before the transaction) is only a fast-path check - a
+// concurrent reconcileExpiredActiveDeveloperBookings tick (dev-booking-reconciler.ts) can
+// complete/free this exact booking in the gap between that read and this transaction's
+// write. Thrown from inside the transaction so the atomic re-check below can distinguish
+// "booking genuinely no longer eligible" from a real unique-constraint double-click race,
+// which must still fall through to the existing raced-session recovery in the catch block.
+class BookingNoLongerEligibleForWorkspaceError extends Error {}
+
 export function preparationPhase(status: WorkspaceSessionStatus, step: string | null, jobStatus: JobStatus | null, connectionReady: boolean): string {
   // The container/runtime finishing (status READY) is not the same fact as the
   // gateway tunnel being registered and openable (connectionReady). Reporting
@@ -69,6 +77,20 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if(existing)return existing;
     try{
       return await db.$transaction(async tx=>{
+        // Atomic re-check: the initial findFirst above (before this transaction) is only a
+        // fast-path - reconcileExpiredActiveDeveloperBookings (dev-booking-reconciler.ts)
+        // ticks independently every ~10s and can complete/free this exact booking in the gap
+        // between that read and this write. The row-level lock this UPDATE takes (and, under
+        // contention, waits on) makes this mutually exclusive with that reconciler's own
+        // conditional updateMany on the same booking row - whichever transaction commits
+        // first determines what the other sees. Self-assigning buyerId is a deliberate no-op
+        // write: Booking has no @updatedAt field, so only taking the lock and re-evaluating
+        // the WHERE (status and endsAt included) matters here, not the value written.
+        const stillEligible=await tx.booking.updateMany({
+          where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings},endsAt:{gt:new Date()}},
+          data:{buyerId:session.userId},
+        });
+        if(stillEligible.count!==1) throw new BookingNoLongerEligibleForWorkspaceError();
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
           status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',
@@ -92,6 +114,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     }catch(error){
       const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       if(raced)return raced;
+      if(error instanceof BookingNoLongerEligibleForWorkspaceError)return reply.code(409).send({error:'funded_booking_required'});
       throw error;
     }
   });
