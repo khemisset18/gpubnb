@@ -897,6 +897,211 @@ install` of standard Mesa diagnostic packages inside a throwaway `--rm`-
 adjacent Docker container, cleaned up after; no persistent change to
 Windows, WSL2, or any of the 9 REAL_WORKING workspaces).
 
+## 11. Real PC A -> PC B distributed test — live-executed, 2 real P0 bugs found and fixed, 1 real unresolved finding
+
+A later session executed the actual distributed test from section 9's spirit, but
+scoped down per explicit instruction: PC A = everything (API/DB/Redis/Docker/agent/
+GPU), PC B = browser only, both roles played on this one physical machine (no
+second machine available) - PC A's own LAN IP (`https://<lan-ip>:8443` via a local
+Caddy reverse proxy, `tls internal` self-signed cert) was used as the "PC B" origin,
+via this session's own browser automation tooling. This is **not** equivalent to a
+literal second physical machine (no second NIC/OS/browser-cert-trust-store
+involved), but it is a real network round trip through a real reverse proxy to a
+real backend, and it is the strongest verification available without a second PC.
+Developer Workspace only (not Data - see below), matching the "start with the
+simplest REAL_WORKING workspace" instruction.
+
+### Real preconditions verified live, not assumed
+
+- **`assertTrustedOrigin` would have silently 403'd every mutating request from a
+  real PC B browser** (`apps/api/src/security.ts`): compares the browser's `Origin`
+  header against `config.PUBLIC_APP_DOMAIN`, which defaulted to `localhost`. Fixed
+  by setting `PUBLIC_APP_DOMAIN` to the real LAN IP in `.env` (not a code change -
+  this is exactly what the env var is for).
+- **The Gateway's access-grant cookie is `secure:true` unconditionally**
+  (`workspace-gateway.ts:194`, not gated by `NODE_ENV`) - real HTTPS is not
+  optional for this flow on any environment. Confirmed live: the cookie is
+  genuinely set and automatically resent by the browser across a fresh tab (not
+  just visible in `document.cookie`, since it's also `httpOnly`).
+- **Supabase's free-tier email rate limit is hit almost immediately** (`429
+  over_email_send_rate_limit`) - unusable for repeated test signups. Switched to
+  the Phantom wallet nonce/signature flow (`/auth/nonce` + `/auth/verify`,
+  Ed25519 via the browser's native `crypto.subtle.generateKey({name:'Ed25519'})`,
+  no extension needed for a scripted test), which doesn't touch Supabase at all
+  and is the same auth path this project's own E2E harnesses already use.
+- Real machine capabilities measured, not assumed: this exact dev machine has
+  **12064 MiB RAM total - below Data Workspace's 16384 MiB minimum**, confirmed via
+  `GET /listings/:id/workspaces` returning only `compute` as a pre-booking choice
+  (a deliberate product design, not a bug - Developer/Data/etc. are post-booking
+  add-ons via `POST /bookings/:id/workspace/:slug`, not pre-booking choices - see
+  `machine-workspace-catalog.ts`'s own comment) and via `ensureCompatibleMachineWorkspace`
+  returning `data_workspace_incompatible` for a real attempt. Developer (8192 MiB
+  minimum) is genuinely compatible on this machine and was used for the rest of
+  the test.
+
+### 2 real P0 bugs found live and fixed (see git log for full detail)
+
+1. **`agent/gpubnb_agent/cli.py`** - `run_next_job()` resolved a `GPU_DIAGNOSTIC`
+   job's image via `workspace_image(config, "compute")` instead of the server's
+   real `parameters.diagnosticImage`, since this job type never carries a
+   `workspaceSlug`. Reproduced live: real booking -> real job -> real failure ->
+   real `DEGRADED` booking, before the fix; real `COMPLETED` booking and a real
+   passing `GPU_DIAGNOSTIC` run against the real GTX 1650, after. New test
+   `test_gpu_diagnostic_job_flow.py`.
+2. **`apps/api/src/server.ts`** - `app.listen({host:'0.0.0.0'})` was hardcoded,
+   so the raw API was directly reachable on the LAN, bypassing Caddy entirely
+   (confirmed live via `curl` before/after). New `API_BIND_HOST` env var
+   (default unchanged - `0.0.0.0` - since production runs the API inside a
+   container, where Docker's own port publishing requires it).
+
+### Full chain proven live, real evidence
+
+Real booking (Phantom-authenticated renter) -> real `POST /bookings/:id/workspace/developer`
+-> real `WORKSPACE_PREPARE` job picked up by a real, isolated test agent (own
+`GPUBNB_CONFIG_DIR`, never touched the real production `gpubnb-agent` Windows
+service also running on this machine) -> real `gpubnb-dev-*`/`gpubnb-dev-proxy-*`
+containers launched and healthy on PC A -> real Gateway registration, `canOpen:true`
+-> real access grant (`POST /bookings/:id/workspace/access`) -> real navigation to
+`/workspace-gateway/:sessionId/?folder=/workspace` -> **the real code-server VS Code
+workbench genuinely rendered in the browser** (screenshot evidence: file explorer,
+Welcome tab, Restricted Mode banner - not a mock, not a static page). Confirmed via
+the agent's own trace log (`workspace_trace:ws_open_received` ->
+`ws_local_connected` -> `ws_open_ack`) that the WSS frames genuinely traversed
+Caddy -> Fastify's WS Gateway -> Redis queue -> the agent's poll-relay -> the
+real local WebSocket to the proxy container.
+
+**Isolation confirmed live**: an unauthenticated request, a request with a fake
+grant token, and a request from a completely different, real, freshly-authenticated
+third identity were all rejected with `401` against the live session's Gateway
+path - not by code inspection, by three real HTTP requests against the real
+running server.
+
+**Agent-crash recovery confirmed live, with a real session active**: `taskkill /F`
+on the isolated test agent's real OS process while the Developer session was
+live -> confirmed the real containers kept running unmanaged -> restarted the
+agent -> confirmed same container IDs (no duplicate), heartbeat resumed, machine
+stayed `ONLINE`. This is the same proof pattern as `e2e/recovery-agent-restart.sh`,
+now additionally exercised against this session's own isolated Developer session
+rather than only the original E2E harness's own scenario.
+
+**Stop/cleanup confirmed live**: real `POST /workspace-sessions/:id/stop` ->
+real container + proxy removal (confirmed via a live wait loop, not a single
+check) -> real volume and network removal -> real GPU memory at 0 MiB
+(`nvidia-smi`). Stopping the *workspace* is intentionally not the same as ending
+the *rental* (the renter paid for the whole booking window) - confirmed by
+reading `POST /bookings/:id/cancel`'s own scope (`AWAITING_DEPOSIT` only - no
+early-termination route exists for an `ACTIVE` booking, on purpose).
+
+**A real, deeper gap found while waiting for the booking's natural `endsAt` to
+prove the full "machine becomes available again" cycle**: an `ACTIVE` booking
+that had a Developer Workspace requested on it has **no automatic completion
+path at all** in this dev-bypass test configuration, even well past its own
+`endsAt` (confirmed live: an 8-minute wait past expiry, booking still `ACTIVE`).
+Traced precisely: `reconcileDevBypassSettlements`'s candidate query
+(`findDevBypassSettlementCandidates`) only ever matches `COMPLETED` or
+`DEGRADED` bookings, never `ACTIVE`; the *other* path that could reach
+`COMPLETED` (`reconcileDevelopmentBookings`'s `finishedJobs` handling, tied to
+GPU_DIAGNOSTIC success) explicitly excludes any booking with a Developer
+session (`workspaceSessions:{none:DEVELOPER_SESSION_FILTER}`); and the *newer*
+verified-stop finalization path (`finalizeVerifiedDeveloperStop`, which does
+correctly set `Machine.operational` back to `AVAILABLE`) is only reachable
+through the "Machine Command Gateway" (`stop_rental` command), which is gated
+behind `MACHINE_COMMAND_GATEWAY_ROLLOUT_BPS` - **0% by default**, confirmed via
+the delivery worker's own health log on every tick
+(`"machineCommandGatewayRolloutBps":0`). The legacy stop path this session
+exercised (`POST /workspace-sessions/:id/stop` -> agent reconcile -> real
+`POST /agent/workspace-gateway/:sessionId/stopped`) correctly cleans up every
+Docker resource and does flip `Machine.operational` back to `AVAILABLE` *at
+that moment* - but only when no other booking on the same listing is sitting in
+`FUNDED`/`STARTING`/`ACTIVE`/`DEGRADED`. This session's own earlier `DEGRADED`
+test bookings (from before the GPU_DIAGNOSTIC fix) were exactly such a blocker,
+which is genuinely correct, careful, intentional behavior, not a bug - but it
+meant the real completion cycle could only be proven after also discovering and
+fixing a **second** real, separate gap: `BETA_TEST_DEV_BYPASS` (a different flag
+from `DEV_PAYMENT_BYPASS`, gating `reconcileDevBypassSettlements` specifically)
+had never been set in this session's `.env` - once set, the two stale `DEGRADED`
+bookings genuinely, correctly settled to `REFUNDED` via the real mechanism.
+
+**Full cycle conclusively, empirically proven after both fixes**: `Machine.operational`
+flipped to real `AVAILABLE`; `MiningResource.activeRentalId` for the real GPU
+confirmed `NULL` (the actual DB-level exclusivity gate a new allocation checks -
+`accelerator.miningResource?.activeRentalId` in `resource-allocation-service.ts`,
+not the `AcceleratorAllocation.status` column); and a genuinely **new** booking
+on the same listing was created successfully (`200`, not `409
+resource_allocation_failed`). One minor, honestly-reported loose end: the
+original session's own `AcceleratorAllocation` row was left sitting at
+`ACTIVE` forever - practically harmless (it's superseded, the real exclusivity
+gate is genuinely clear, Docker resources are genuinely gone), but a real,
+permanent bookkeeping inconsistency, not something that self-heals. Explicit
+product decision needed to close it for real (not attempted unilaterally this
+session - a real product/architecture decision, not a quick patch): either wire
+the legacy stop-callback (or a new dev-bypass-aware reconciler) to also
+complete/settle an `ACTIVE` booking's own accelerator allocation once its
+Developer Workspace has fully stopped and `endsAt` has passed, or turn on
+`MACHINE_COMMAND_GATEWAY_ROLLOUT_BPS` for a real deployment so the newer, more
+complete `finalizeVerifiedDeveloperStop` path handles it end to end.
+
+**One further real finding while verifying the fix, worth its own note**:
+`reconcileDevelopmentBookings`'s `readyBookings` query - the one that dispatches
+the GPU_DIAGNOSTIC job that gets a booking from `FUNDED` moving at all - is
+short-circuited to `[]` whenever `betaTestDevBypassActive()` is true
+(`const readyBookings = betaTestDevBypassActive() ? [] : await db.booking.findMany(...)`).
+This means **`BETA_TEST_DEV_BYPASS=true` and a smoothly-progressing fresh
+booking are mutually exclusive with the current implementation**: a booking
+created after enabling it gets `FUNDED` and then never receives a
+GPU_DIAGNOSTIC job, so it can never reach `STARTING`/`COMPLETED` either - a
+real catch-22, confirmed live (a fresh booking created to double-check the fix
+sat at `FUNDED` with zero jobs for the full observation window). This did not
+affect this session's own main proof (that booking was created and completed
+*before* `BETA_TEST_DEV_BYPASS` was set), but it means the two dev-bypass flags
+cannot both be relied on simultaneously for a smooth test run today - another
+real, precise, documented gap for a future session to close (likely:
+`readyBookings` should still run under `BETA_TEST_DEV_BYPASS`, or
+`reconcileDevBypassSettlements` needs its own `FUNDED`/`STARTING` candidate
+path instead of only `COMPLETED`/`DEGRADED`).
+
+### Real, unresolved finding - not a GPUbnb bug, documented honestly
+
+**code-server's own "Management" WebSocket channel takes a consistent, exact
+~5000ms before sending its first frame after the local connection opens** -
+confirmed via `workspace_trace` log timestamps across 8+ separate connection
+attempts (4959-5009ms every time, suspiciously exact, not organic network
+jitter). **Proven independent of GPUbnb's relay**: connecting directly to the
+proxy container's published port with a raw Python `websocket-client`,
+completely bypassing the agent/API/Caddy relay, reproduces the identical
+~5003ms delay. **Ruled out**: `--disable-update-check --disable-telemetry`
+(code-server's own flags for its network-dependent startup checks) on a fresh
+throwaway container - delay unchanged (~5009ms). **Ruled out**: relay latency
+itself, measured directly - `ApiClient.request()` against the live LAN Caddy
+endpoint averages ~33ms/call (10-call sample), nowhere near enough to explain a
+multi-second budget problem.
+
+This ~5s server-side delay eats into code-server's own client-side handshake
+timeout budget, so a first connection sometimes succeeds within a few retries
+(observed) and sometimes needs several reload cycles (also observed) - genuinely
+intermittent, not a hard failure, and not something this session found a fix
+for within GPUbnb's own code. Root cause is inside code-server's own server-side
+"Management" channel initialization, not investigated further (would require
+either patching or deeply reverse-engineering third-party minified JS). Real,
+live, reproducible, and left honestly unresolved rather than papered over -
+worth revisiting if it matters for real renter usability (an initial connection
+did fully succeed and render a real, usable VS Code workbench, so this is a
+reliability/UX rough edge, not a hard blocker for the workspace being
+functionally real).
+
+### A minor, real, self-inflicted DB inconsistency (not a fresh product bug)
+
+Directly `UPDATE`ing `AcceleratorAllocation.status='RELEASED'` via raw SQL
+(to unstick GPU locks held by earlier failed test bookings, before the
+GPU_DIAGNOSTIC fix existed) put the DB into a state
+`dev-booking-reconciler.ts`'s own Prisma query didn't handle gracefully,
+producing one real `gpu_booking_reconcile_failed` error (confirmed via the
+delivery worker's log, occurred exactly once, did not recur). Documented as a
+test-session artifact from manual intervention, not a fresh finding about the
+reconciler's own correctness under its normal, non-manually-touched state
+transitions - the untouched, real booking used for the rest of this test
+completed and settled without incident.
+
 ## NEXT ACTION
 
 Compute, Developer, Data, AI, Video, Audio, API, Mobile, Security Lab remain
