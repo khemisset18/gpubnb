@@ -95,7 +95,7 @@ class QuarantineDiagnosticPollTests(unittest.TestCase):
         self.assertIn("diagnostic_container_failed", body["error"])
         self.assertTrue(any(e.get("event") == "quarantine_diagnostic_failed" for e in events))
 
-    def test_a_missing_diagnostic_image_is_reported_as_an_explicit_configuration_error(self) -> None:
+    def test_a_missing_diagnostic_image_with_no_local_fallback_is_reported_as_an_explicit_configuration_error(self) -> None:
         from gpubnb_agent.cli import poll_and_run_diagnostic_once
 
         machine_id = "machine_test"
@@ -109,10 +109,43 @@ class QuarantineDiagnosticPollTests(unittest.TestCase):
             return {"ok": True}
 
         with patch("gpubnb_agent.cli.agent_request", side_effect=fake_agent_request):
-            poll_and_run_diagnostic_once(Mock(), object(), machine_id)
+            poll_and_run_diagnostic_once(Mock(), object(), machine_id, config={})
 
         result_call = next(c for c in calls if c[0] == f"/agent/diagnostics/{diagnostic_run_id}/result")
         self.assertIn("diagnostic_image_not_configured", result_call[2]["error"])
+
+    def test_when_the_server_sends_no_image_the_agents_own_locally_configured_image_is_used_instead(self) -> None:
+        # Real gap found live: DEV_DIAGNOSTIC_IMAGE was unset in the production
+        # environment, so the server's diagnosticImage was None even though this
+        # agent's own C:\ProgramData\GPUbnb\config.json has a real, pinned
+        # diagnosticImage - matches the precedence run_next_job already uses for
+        # the legacy GPU_DIAGNOSTIC job type.
+        from gpubnb_agent.cli import poll_and_run_diagnostic_once
+
+        machine_id = "machine_test"
+        diagnostic_run_id = "diag_run_4"
+        local_image = "ghcr.io/khemisset18/gpu-diagnostic@sha256:" + ("c" * 64)
+        calls: list[tuple[str, str, object | None]] = []
+
+        def fake_agent_request(_api, _key, _machine_id, path, method="GET", body=None, *_a, **_k):
+            calls.append((path, method, body))
+            if path == f"/agent/diagnostics/next/{machine_id}":
+                return {"diagnosticRunId": diagnostic_run_id, "diagnosticImage": None, "timeoutSeconds": 60}
+            return {"ok": True}
+
+        def fake_run_gpu_diagnostic(passed_image: str, _timeout_seconds: int):
+            self.assertEqual(passed_image, local_image)
+            return {"gpuDetected": True, "summary": "ok", "metrics": {}}
+
+        with (
+            patch("gpubnb_agent.cli.agent_request", side_effect=fake_agent_request),
+            patch("gpubnb_agent.cli.run_gpu_diagnostic", side_effect=fake_run_gpu_diagnostic),
+        ):
+            poll_and_run_diagnostic_once(Mock(), object(), machine_id, config={"diagnosticImage": local_image})
+
+        result_call = next(c for c in calls if c[0] == f"/agent/diagnostics/{diagnostic_run_id}/result")
+        self.assertNotIn("error", result_call[2])
+        self.assertEqual(result_call[2]["gpuDetected"], True)
 
 
 if __name__ == "__main__":

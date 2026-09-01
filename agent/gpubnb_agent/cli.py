@@ -401,7 +401,7 @@ def heartbeat_loop(
 
     def poll_and_run_diagnostic() -> None:
         try:
-            poll_and_run_diagnostic_once(client(config), key, machine_id, event_sink=emit)
+            poll_and_run_diagnostic_once(client(config), key, machine_id, config=config, event_sink=emit)
         except Exception as exc:
             emit({"event": "diagnostic_poll_error", "type": type(exc).__name__, "message": str(exc)[:300]})
 
@@ -496,6 +496,7 @@ def poll_and_run_diagnostic_once(
     api: ApiClient,
     key: Any,
     machine_id: str,
+    config: dict[str, Any] | None = None,
     event_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> None:
     """Polls for a server-side DiagnosticRun (created from Host's "Relancer le
@@ -513,7 +514,12 @@ def poll_and_run_diagnostic_once(
     diagnostic_run_id = pending.get("diagnosticRunId")
     if not isinstance(diagnostic_run_id, str) or not diagnostic_run_id:
         return
-    image = str(pending.get("diagnosticImage") or "")
+    # The server sends its own pinned diagnosticImage when configured
+    # (DEV_DIAGNOSTIC_IMAGE); fall back to this agent's own locally configured
+    # image otherwise - same precedence run_next_job already uses for the
+    # legacy GPU_DIAGNOSTIC job type, so a production environment missing that
+    # one env var doesn't leave every quarantine diagnostic unable to run at all.
+    image = str(pending.get("diagnosticImage") or (config or {}).get("diagnosticImage") or "")
     timeout_seconds = int(pending.get("timeoutSeconds") or DIAGNOSTIC_RUN_TIMEOUT_SECONDS)
     emit({"event": "quarantine_diagnostic_started", "diagnosticRunId": diagnostic_run_id})
     result_path = f"/agent/diagnostics/{diagnostic_run_id}/result"
