@@ -179,3 +179,24 @@ def service_status() -> dict[str, bool]:
         "installed": True,
         "running": status[1] == win32service.SERVICE_RUNNING,
     }
+
+
+def service_fully_stopped() -> bool:
+    """True only once the SCM reports SERVICE_STOPPED specifically.
+
+    Distinct from `not service_status()["running"]`: a service also reports
+    running=False while in the transitional STOP_PENDING state, for several
+    seconds after `stop` on a real service. Treating that as "safe to
+    restart" races the real Service Control Manager - reproduced live
+    (StartService failed: 1056, an instance of the service is already
+    running) while testing self_update.perform_self_update against a real
+    Windows service. Used specifically to gate that restart.
+    """
+    _, _, win32service, win32serviceutil = _require_windows()
+    try:
+        status = win32serviceutil.QueryServiceStatus(SERVICE_NAME)
+    except win32service.error as exc:
+        if getattr(exc, "winerror", None) == 1060:
+            return True  # not installed at all counts as "stopped"
+        raise RuntimeError(f"service_status_failed:{exc}") from exc
+    return status[1] == win32service.SERVICE_STOPPED

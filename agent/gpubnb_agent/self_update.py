@@ -152,9 +152,22 @@ def perform_self_update(
     stop_service: Callable[[], None],
     start_service: Callable[[], None],
     service_running: Callable[[], bool],
+    service_stopped: Callable[[], bool] | None = None,
     now: Callable[[], float] = time.time,
     sleep: Callable[[float], None] = time.sleep,
 ) -> UpdateResult:
+    # service_running()==False is NOT the same thing as "safe to touch the
+    # binary or start again": a real Windows service sits in STOP_PENDING
+    # for several seconds after `stop` before it reaches STOPPED, and
+    # SERVICE_RUNNING is already false throughout that window. Proceeding as
+    # soon as service_running() goes false races the real SCM and produces
+    # "StartService failed: 1056, an instance of the service is already
+    # running" - reproduced against a real (disposable) Windows service
+    # while testing this. service_stopped() must only be true once the
+    # service has actually reached the STOPPED state, not merely "not
+    # running". Callers that genuinely have no transitional state to report
+    # (e.g. a simple test double) may omit it.
+    is_stopped = service_stopped or (lambda: not service_running())
     release = fetch_release_info(repository, channel, http_get=http_get)
     if not is_update_available(release, current_build_commit):
         return UpdateResult(
@@ -186,9 +199,9 @@ def perform_self_update(
 
     stop_service()
     deadline = now() + SERVICE_STOP_TIMEOUT_SECONDS
-    while service_running() and now() < deadline:
+    while not is_stopped() and now() < deadline:
         sleep(0.5)
-    if service_running():
+    if not is_stopped():
         staged.unlink(missing_ok=True)
         raise SelfUpdateError("service_did_not_stop_in_time")
 

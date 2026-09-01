@@ -1084,7 +1084,7 @@ def command_build_info(_: argparse.Namespace) -> int:
 
 def command_self_update(args: argparse.Namespace) -> int:
     from .self_update import SelfUpdateError, perform_self_update
-    from .windows_service import manage_service, service_status
+    from .windows_service import manage_service, service_fully_stopped, service_status
 
     if not getattr(sys, "frozen", False):
         raise RuntimeError(
@@ -1112,6 +1112,7 @@ def command_self_update(args: argparse.Namespace) -> int:
             stop_service=stop_service,
             start_service=start_service,
             service_running=service_running,
+            service_stopped=service_fully_stopped,
         )
     except SelfUpdateError as exc:
         raise RuntimeError(str(exc)) from exc

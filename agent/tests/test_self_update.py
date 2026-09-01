@@ -199,6 +199,59 @@ class PerformSelfUpdateTests(unittest.TestCase):
             self.assertIsNotNone(result.backup_path)
             self.assertEqual(Path(result.backup_path).read_bytes(), FAKE_EXE_OLD)
 
+    def test_stop_pending_is_never_mistaken_for_fully_stopped(self) -> None:
+        # Real bug found by testing against a real (disposable) Windows
+        # service: after `stop`, a service reports running=False while
+        # STOP_PENDING for several real seconds before reaching STOPPED.
+        # Restarting as soon as running() goes false (without a distinct
+        # "is it actually STOPPED" check) races the real SCM and fails with
+        # "StartService failed: 1056, an instance of the service is already
+        # running". service_stopped must be consulted, not service_running,
+        # to decide when it is safe to swap the binary and restart.
+        with TemporaryDirectory() as tmp:
+            install_dir = self._install_dir(tmp)
+            zip_bytes = _portable_zip_bytes(FAKE_EXE_NEW)
+            state = {"phase": "running"}  # running -> stop_pending -> stopped -> running
+            calls: list[str] = []
+
+            def stop_service() -> None:
+                calls.append("stop")
+                state["phase"] = "stop_pending"
+
+            def start_service() -> None:
+                calls.append("start")
+                if state["phase"] != "stopped":
+                    raise RuntimeError("service_control_failed:start:1056:already running")
+                state["phase"] = "running"
+
+            ticks = {"n": 0}
+
+            def service_running() -> bool:
+                return state["phase"] == "running"
+
+            def service_stopped() -> bool:
+                # Stays STOP_PENDING for a few polls before settling, exactly
+                # like the real SCM did in the reproduction above.
+                if state["phase"] == "stop_pending":
+                    ticks["n"] += 1
+                    if ticks["n"] >= 3:
+                        state["phase"] = "stopped"
+                return state["phase"] == "stopped"
+
+            result = perform_self_update(
+                install_dir,
+                current_build_commit="a" * 12,
+                http_get=_fake_http(zip_bytes, _release_payload("f" * 40)),
+                stop_service=stop_service,
+                start_service=start_service,
+                service_running=service_running,
+                service_stopped=service_stopped,
+                sleep=lambda _seconds: None,
+            )
+            self.assertTrue(result.updated)
+            self.assertEqual(calls, ["stop", "start"])
+            self.assertEqual((install_dir / "gpubnb-agent.exe").read_bytes(), FAKE_EXE_NEW)
+
     def test_a_service_that_never_stops_is_never_touched(self) -> None:
         # Real risk this guards against: a hung stop leaving the install
         # directory with neither a working old binary nor a working new one.
