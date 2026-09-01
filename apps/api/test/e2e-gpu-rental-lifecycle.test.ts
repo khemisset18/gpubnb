@@ -115,6 +115,7 @@ test('full GPU rental lifecycle: heartbeat -> inventory -> publish -> booking ->
     data: {
       ownerId: owner.id,
       agentPublicKey: `agentkey_${suffix}`,
+      agentVersion: '0.6.2',
       connectivity: MachineConnectivity.ONLINE,
       operational: MachineOperational.AVAILABLE,
       moderationStatus: ModerationStatus.CLEAR,

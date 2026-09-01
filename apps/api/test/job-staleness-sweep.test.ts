@@ -146,6 +146,9 @@ function fakeDb(seed: {
     accelerator: {
       updateMany: async () => ({ count: 0 }),
     },
+    gpuListing: {
+      updateMany: async () => ({ count: 0 }),
+    },
     payment: {
       updateMany: async ({ where, data }: any) => {
         let count = 0;

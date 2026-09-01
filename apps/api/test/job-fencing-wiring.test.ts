@@ -68,3 +68,25 @@ test('heartbeat derives availability from server-owned runtime state', async () 
   assert.match(body, /agentUpgradeRequired/);
   assert.match(body, /ListingStatus\.HIDDEN_OFFLINE/);
 });
+
+test('heartbeat publishability requires Docker and NVIDIA runtime, and hides the listing on ANY loss of publishability, not only an outdated agent', async () => {
+  // Real divergence bug found in this session's audit: legacyPublishable used
+  // to ignore dockerAvailable/nvidiaRuntimeAvailable entirely (computeMachineState,
+  // the actual single source of truth used by createExactGpuListing and the Host
+  // diagnostics page, already required both) - a listing could stay ACTIVE and
+  // publicly bookable after Docker or the NVIDIA runtime went down on an already-
+  // published host. And the listing was only ever force-hidden for the single
+  // `!jobProtocolSupported` reason, never for any of the other ways publishable
+  // could go false (GPU swap, failed CUDA probe, Docker/NVIDIA runtime loss) -
+  // see docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md for the full incident writeup.
+  const source = await sourcePromise;
+  const body = routeSlice(source, "app.post('/agent/heartbeat'", "const publicWorkspace=");
+  assert.match(body, /dockerOk=b\.dockerAvailable\?\?m\.dockerAvailable/);
+  assert.match(body, /nvidiaRuntimeOk=b\.nvidiaRuntimeAvailable\?\?m\.nvidiaRuntimeAvailable/);
+  assert.match(body, /legacyPublishable=m\.moderationStatus===ModerationStatus\.CLEAR&&sameGpu&&b\.cudaProbeOk&&jobProtocolSupported&&dockerOk&&nvidiaRuntimeOk/);
+  assert.doesNotMatch(
+    body,
+    /else if\(!jobProtocolSupported\)await tx\.gpuListing\.updateMany/,
+    'the listing must be hidden whenever publishable is false for ANY reason, not only an outdated agent',
+  );
+});

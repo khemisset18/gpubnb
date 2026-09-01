@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { before } from 'node:test';
 import {
   BookingStatus,
   ListingResourceMode,
@@ -34,6 +34,54 @@ import type { AcceleratorTelemetry } from '../src/accelerator-telemetry.js';
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
+// This file's fixtures use fixed (not per-run-unique) wallet suffixes and had
+// no cleanup at all - a previous run that failed partway through, or was
+// interrupted, left rows behind that then collided with the next run's
+// prisma.user.create() on the unique `wallet` constraint. Deleting this
+// file's own disposable fixtures before running, in real FK dependency
+// order, makes reruns reliable without depending on every test cleaning up
+// after itself individually.
+before(async () => {
+  if (!hasDb) return;
+  const prisma = new PrismaClient();
+  try {
+    const owners = await prisma.user.findMany({
+      where: { OR: [{ wallet: { startsWith: 'owner_qd_' } }, { wallet: { startsWith: 'buyer_qd_' } }] },
+      select: { id: true },
+    });
+    const ownerIds = owners.map((o) => o.id);
+    if (ownerIds.length === 0) return;
+    const machines = await prisma.machine.findMany({ where: { ownerId: { in: ownerIds } }, select: { id: true } });
+    const machineIds = machines.map((m) => m.id);
+    const listings = await prisma.gpuListing.findMany({
+      where: { OR: [{ machineId: { in: machineIds } }, { ownerId: { in: ownerIds } }] },
+      select: { id: true },
+    });
+    const listingIds = listings.map((l) => l.id);
+    const bookings = await prisma.booking.findMany({
+      where: { OR: [{ listingId: { in: listingIds } }, { buyerId: { in: ownerIds } }] },
+      select: { id: true },
+    });
+    const bookingIds = bookings.map((b) => b.id);
+    await prisma.payment.deleteMany({ where: { bookingId: { in: bookingIds } } });
+    await prisma.acceleratorAllocation.deleteMany({ where: { bookingId: { in: bookingIds } } });
+    await prisma.machineAllocation.deleteMany({ where: { bookingId: { in: bookingIds } } });
+    await prisma.workspaceSession.deleteMany({ where: { bookingId: { in: bookingIds } } });
+    await prisma.booking.deleteMany({ where: { id: { in: bookingIds } } });
+    await prisma.listingAccelerator.deleteMany({ where: { listingId: { in: listingIds } } });
+    await prisma.gpuListing.deleteMany({ where: { id: { in: listingIds } } });
+    await prisma.diagnosticRun.deleteMany({ where: { machineId: { in: machineIds } } });
+    await prisma.machineQuarantineEvent.deleteMany({ where: { machineId: { in: machineIds } } });
+    await prisma.machineWorkspace.deleteMany({ where: { machineId: { in: machineIds } } });
+    await prisma.accelerator.deleteMany({ where: { machineId: { in: machineIds } } });
+    await prisma.heartbeat.deleteMany({ where: { machineId: { in: machineIds } } });
+    await prisma.machine.deleteMany({ where: { id: { in: machineIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: ownerIds } } });
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
 function gpu(deviceId: string): AcceleratorTelemetry {
   return {
     schemaVersion: 1, kind: 'GPU', vendor: 'NVIDIA', model: 'NVIDIA Test GPU', deviceId,
@@ -50,6 +98,7 @@ async function seedMachine(prisma: PrismaClient, suffix: string, overrides: Reco
     data: {
       ownerId: owner.id,
       agentPublicKey: `agentkey_qd_${suffix}`,
+      agentVersion: '0.6.2',
       connectivity: MachineConnectivity.ONLINE,
       operational: MachineOperational.AVAILABLE,
       moderationStatus: ModerationStatus.CLEAR,
@@ -324,6 +373,19 @@ test('a quarantined machine cannot be rented (allocateBookingResources fails clo
     await prisma.$transaction((tx) => enterQuarantine(tx, {
       machineId: machine.id, reasonCode: 'AGENT_SECURITY_FAILURE', reason: 'entered', source: 'test',
     }));
+
+    // Real gap this session's audit found: enterQuarantine used to only touch
+    // Machine/Accelerator, never GpuListing - an already-published listing
+    // could keep showing status=ACTIVE (publicly visible on the marketplace)
+    // indefinitely after its machine was quarantined, even though a real
+    // booking attempt was already correctly refused below. Host and the
+    // public site must show the same reality.
+    const hiddenListing = await prisma.gpuListing.findUniqueOrThrow({ where: { id: listing.id } });
+    assert.equal(
+      hiddenListing.status,
+      ListingStatus.PENDING_GPU_VERIFICATION,
+      'a listing must never keep showing ACTIVE once its machine is quarantined',
+    );
 
     await assert.rejects(
       () => allocateBookingResources(prisma, { bookingId: booking.id, buyerId: buyer.id }),

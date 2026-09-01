@@ -12,6 +12,7 @@ export type MachineRentalState =
   | 'NOT_LINKED'
   | 'WAITING_FOR_FIRST_HEARTBEAT'
   | 'OFFLINE'
+  | 'AGENT_OUTDATED'
   | 'GPU_NOT_DETECTED'
   | 'DRIVER_MISSING'
   | 'DOCKER_UNAVAILABLE'
@@ -43,6 +44,13 @@ export type MachineStateInput = {
    * is QUARANTINED. Falls back to the generic RESOURCE_QUARANTINED blockingReason
    * below when absent (e.g. a machine quarantined before this field existed). */
   quarantineReasonCode?: string | null;
+  /** Whether this machine's currently-reported agentVersion satisfies the
+   * minimum protocol version (see job-execution-lease.ts's
+   * supportsJobLeaseProtocol) - callers pass the already-computed boolean so
+   * this module never has to know about job-lease version parsing. A
+   * protocol-incompatible agent cannot actually execute a job even though
+   * heartbeats/GPU/Docker checks may all otherwise look healthy. */
+  jobProtocolSupported: boolean;
   accelerators: Array<{
     status: AcceleratorOperationalStatus;
     moderationStatus: ModerationStatus;
@@ -135,6 +143,10 @@ export function computeMachineState(input: MachineStateInput): MachineStateView 
     state = 'OFFLINE';
     nextAction = 'RESTART_HOST_OR_CHECK_NETWORK';
     blockingReason = 'HEARTBEAT_STALE_OR_OFFLINE';
+  } else if (!input.jobProtocolSupported) {
+    state = 'AGENT_OUTDATED';
+    nextAction = 'UPDATE_AGENT';
+    blockingReason = 'AGENT_PROTOCOL_VERSION_TOO_OLD';
   } else if (!hasGpu) {
     state = 'GPU_NOT_DETECTED';
     nextAction = 'INSTALL_DRIVER_OR_CHECK_GPU';

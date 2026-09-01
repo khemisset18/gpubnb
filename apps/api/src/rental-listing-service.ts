@@ -6,6 +6,7 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 
+import { supportsJobLeaseProtocol } from './job-execution-lease.js';
 import { computeMachineState, type MachineStateView } from './machine-state-service.js';
 import { requirePublishableRentalGpu } from './rental-gpu-catalog.js';
 
@@ -41,6 +42,7 @@ export type CreateExactGpuListingInput = {
 const machineStateSelect = {
   id: true,
   agentPublicKey: true,
+  agentVersion: true,
   connectivity: true,
   operational: true,
   moderationStatus: true,
@@ -89,6 +91,7 @@ function projectMachineState(
     operational: machine.operational,
     moderationStatus: machine.moderationStatus,
     quarantineReasonCode: machine.quarantineReasonCode,
+    jobProtocolSupported: supportsJobLeaseProtocol(machine.agentVersion),
     lastHeartbeatAt: machine.lastHeartbeatAt,
     lastCudaProbeOk: machine.lastCudaProbeOk,
     dockerAvailable: machine.dockerAvailable,
@@ -115,7 +118,6 @@ export async function listOwnerRentalMachines(
     where: { ownerId },
     select: {
       ...machineStateSelect,
-      agentVersion: true,
       operatingSystem: true,
       osVersion: true,
       gpuModel: true,

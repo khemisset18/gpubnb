@@ -19,6 +19,7 @@ function readyMachine(overrides: Partial<MachineStateInput> = {}): MachineStateI
     connectivity: MachineConnectivity.ONLINE,
     operational: MachineOperational.AVAILABLE,
     moderationStatus: ModerationStatus.CLEAR,
+    jobProtocolSupported: true,
     lastHeartbeatAt: now,
     lastCudaProbeOk: true,
     dockerAvailable: true,
@@ -53,6 +54,14 @@ test('host readiness requires Docker, NVIDIA runtime and verified GPU evidence',
   assert.equal(computeMachineState(readyMachine({ nvidiaRuntimeAvailable: false })).state, 'NVIDIA_RUNTIME_UNAVAILABLE');
   assert.equal(computeMachineState(readyMachine({ lastCudaProbeOk: false })).state, 'DIAGNOSTIC_REQUIRED');
   assert.equal(computeMachineState(readyMachine({ verifiedAt: null })).state, 'VERIFICATION_REQUIRED');
+});
+
+test('an agent whose reported protocol version is too old is AGENT_OUTDATED, not silently treated as ready', () => {
+  const view = computeMachineState(readyMachine({ jobProtocolSupported: false }));
+  assert.equal(view.state, 'AGENT_OUTDATED');
+  assert.equal(view.blockingReason, 'AGENT_PROTOCOL_VERSION_TOO_OLD');
+  assert.equal(view.canPublish, false);
+  assert.equal(view.canAcceptBooking, false);
 });
 
 test('an active listing does not block another verified GPU on a multi-GPU host', () => {

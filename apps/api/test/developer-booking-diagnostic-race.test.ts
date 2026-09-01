@@ -51,6 +51,12 @@ function fakeReconcilerDb(options: {
         return { count: 0 };
       },
     },
+    gpuListing: {
+      updateMany: async (args: Record<string, unknown>) => {
+        calls.push({ area: 'tx.gpuListing.updateMany', args });
+        return { count: 0 };
+      },
+    },
     machineQuarantineEvent: {
       create: async (args: Record<string, unknown>) => {
         calls.push({ area: 'tx.machineQuarantineEvent.create', args });

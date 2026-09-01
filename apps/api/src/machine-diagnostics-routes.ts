@@ -14,6 +14,7 @@ import {
   effectiveDiagnosticStatus,
   type DiagnosticCheck,
 } from './diagnostic-run-service.js';
+import { supportsJobLeaseProtocol } from './job-execution-lease.js';
 import { applyRepair, detectAvailableRepair, REPAIR_ACTIONS, type RepairActionCode } from './machine-repair-service.js';
 import { clearQuarantine } from './quarantine-service.js';
 import { reasonDefinition } from './quarantine-reason-registry.js';
@@ -289,6 +290,7 @@ export function registerMachineDiagnosticsRoutes(app: FastifyInstance, db: Prism
       operational: machine.operational,
       moderationStatus: machine.moderationStatus,
       quarantineReasonCode: machine.quarantineReasonCode,
+      jobProtocolSupported: supportsJobLeaseProtocol(machine.agentVersion),
       lastHeartbeatAt: machine.lastHeartbeatAt,
       lastCudaProbeOk: machine.lastCudaProbeOk,
       dockerAvailable: machine.dockerAvailable,

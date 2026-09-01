@@ -70,6 +70,7 @@ async function seedBookedMachine(prisma: PrismaClient, suffix: string) {
     data: {
       ownerId: owner.id,
       agentPublicKey: `agentkey_fin_${suffix}`,
+      agentVersion: '0.6.2',
       connectivity: MachineConnectivity.ONLINE,
       operational: MachineOperational.RESERVED,
       moderationStatus: ModerationStatus.CLEAR,

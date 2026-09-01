@@ -1,4 +1,4 @@
-import { Prisma, AcceleratorOperationalStatus, ModerationStatus, QuarantineReasonCode } from '@prisma/client';
+import { Prisma, AcceleratorOperationalStatus, ListingStatus, ModerationStatus, QuarantineReasonCode } from '@prisma/client';
 
 function jsonOrNull(details: Record<string, unknown> | undefined): Prisma.InputJsonValue | typeof Prisma.JsonNull {
   return details === undefined ? Prisma.JsonNull : (details as Prisma.InputJsonValue);
@@ -56,6 +56,24 @@ export async function enterQuarantine(tx: Prisma.TransactionClient, input: Enter
   await tx.accelerator.updateMany({
     where: { machineId: input.machineId, status: { not: AcceleratorOperationalStatus.QUARANTINED } },
     data: { status: AcceleratorOperationalStatus.QUARANTINED },
+  });
+  // Real bug found in this session's audit: several quarantine entry points
+  // (invalid agent signature, job-staleness cleanup) never touched
+  // GpuListing at all, so a machine already quarantined - moderationStatus
+  // no longer CLEAR - could keep an existing listing showing status=ACTIVE
+  // on the public marketplace indefinitely (allocateBookingResources still
+  // correctly refuses to actually book it, so this was a Host/site
+  // visibility divergence, not a booking-safety hole - but a real one:
+  // "Host et site doivent utiliser la même réalité"). Hiding here, in the
+  // one function every quarantine entry point already funnels through,
+  // covers all of them at once rather than patching each call site.
+  // PENDING_GPU_VERIFICATION (not HIDDEN_OFFLINE) matches what
+  // accelerator-security-executor.ts already does for its own severity
+  // decisions - the machine genuinely needs a fresh diagnostic before it can
+  // be considered ready again, not just "came back online".
+  await tx.gpuListing.updateMany({
+    where: { machineId: input.machineId, status: { in: [ListingStatus.ACTIVE, ListingStatus.RESERVED] } },
+    data: { status: ListingStatus.PENDING_GPU_VERIFICATION },
   });
 
   await tx.machineQuarantineEvent.create({
