@@ -918,3 +918,38 @@ tous deux répétés en toute fin de session : machine `cmsiggruy0004df0tn669f6b
 `Marketplace actif`, GPU re-vérifié en direct (`verifiedAt` synchronisé exactement avec le dernier
 heartbeat réel observé dans `agent.log`), listing `AVAILABLE` publiquement. Aucune modification
 faite à son état.
+
+## 19. Audit du chemin Booking → Workspace → GPU réel (2026-09-01) — préparation du premier test PC A ↔ PC B
+
+Audit de code, aucune modification (aucun bug réel trouvé cette passe - les mécanismes déjà en
+place se sont révélés plus solides que ce qui restait à vérifier). Objectif : le premier test réel
+avec deux machines physiques distinctes.
+
+**Preuve la plus importante trouvée** (`agent/gpubnb_agent/workspace_gateway_v5.py`) : le
+conteneur du Workspace Developer/AI/Video reçoit `--gpus device=<uuid exact issu de l'autorité de
+ressource signée>`, jamais une valeur générique. Après démarrage, `_start_runtime()` exécute un
+vrai `docker inspect --format {{json .HostConfig.DeviceRequests}}` sur le conteneur réel et compare
+l'UUID GPU réellement attaché à celui attendu - en cas de désaccord, il lève
+`rental_workspace_gpu_binding_mismatch`, arrête le runtime et ne le laisse jamais atteindre `READY`.
+`_adopt_or_start_runtime()` (reprise après crash agent) refait la même vérification avant de
+réutiliser un conteneur existant. **Il est donc structurellement impossible que le Workspace
+affiche "GPU disponible" sans accès réel au GPU** - déjà couvert par des tests existants
+(`test_workspace_gateway_v5.py`).
+
+Autre protection déjà en place confirmée par lecture directe : `reconcileDevelopmentBookings`
+détecte la course « réservation déjà COMPLETED mais session Developer encore active » et met
+automatiquement la machine en quarantaine (`DIAGNOSTIC_COMPLETION_RACE`) plutôt que de laisser un
+état incohérent - le paiement est renvoyé en règlement plutôt que perdu.
+
+**Le flux complet réservation → Workspace Developer → conteneurs réels → accès navigateur réel a
+déjà été prouvé en conditions quasi-réelles** lors du test antérieur documenté au §11 de
+`docs/SESSION_RESUME.md` (un vrai VS Code rendu dans le navigateur, isolation cross-identité
+confirmée par 3 vraies requêtes HTTP, reprise après crash agent confirmée, cleanup réel confirmé).
+Cette passe ne répète pas ce test (aucune deuxième machine physique disponible) mais en confirme la
+robustesse au niveau du code.
+
+**Non vérifiable cette session** : données résiduelles éventuelles (anciennes allocations/réservations)
+sur la vraie annonce - un endpoint de diagnostic dédié existe déjà et est en lecture seule
+(`GET /rental/dev-bypass-status?listingId=<id>`, authentification propriétaire requise) ; à vérifier
+par l'utilisateur lui-même avant le test plutôt que par une nouvelle session navigateur ouverte
+sans nécessité.
