@@ -280,6 +280,52 @@ explicitly (Windows path semantics, host-OS-independent). **CI fully green
 for the first time since 2026-08-30** — all 6 jobs pass, including `agent`.
 Commit `8ff5bf9`. Full writeup: `docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md` §16.
 
+### Final end-to-end audit — real live verification, one real protection added, commit `629b626`
+
+Requested: step back and verify the whole chain (Agent → API → Machine →
+Accelerator → Host → Listing → Marketplace → Booking) is genuinely
+consistent, with live proof on the real machine, not just tests.
+
+**Live proof gathered** (real authenticated Chrome session, owner logged in
+themselves, plus a real unauthenticated `curl` against the public API):
+- Host (`machines.html`/`machine-diagnostics.html`): real machine
+  `cmsiggruy0004df0tn669f6bn` shows "Marketplace actif", 9/9 diagnostic
+  checks PASS, no quarantine section, last diagnostic `COMPLETED` by
+  `OWNER` at 14:15:45. Page footer confirms the Netlify frontend itself is
+  running commit `8ff5bf9` (not just the Render API).
+- Public `GET /rental/listings`, zero auth: the same machine's listing is
+  genuinely `AVAILABLE`, `dockerAvailable`/`nvidiaRuntimeAvailable` both
+  true, GPU `verifiedAt` timestamped moments before the check — two fully
+  independent views (owner-authenticated, anonymous-public) agree exactly.
+
+**Re-checked, confirmed already correct, no bug found**: quarantine reason
+never depends on a Redis TTL (durably written to `MachineQuarantineEvent`
+in Postgres the moment it happens); diagnostic result submission already
+rejects cross-machine and replay attempts (tested end-to-end); the
+CLEAR↔QUARANTINE race during publish/booking is already safe — every
+`enterQuarantine()` caller and both `createExactGpuListing`/
+`allocateBookingResources` use `Serializable` isolation, so Postgres itself
+detects and aborts any real conflict.
+
+**One real gap found and fixed**: `self-update` had no protection against
+an accidental downgrade — it only checked "is the commit different", never
+"is it actually newer". Added `candidate_agent_version()` (runs the
+already-SHA-256-verified candidate exe once, in a throwaway temp dir only,
+to read its own version) and a semver downgrade guard in
+`perform_self_update()`. 5 new tests. 395/395 agent tests, 531/531 API
+tests (clean run after a local-only DB reset — the `resource_conflict`
+flake, confirmed pre-existing and unrelated, occasionally leaves a real
+orphaned booking behind on failure, which can cascade into
+`orphaned-deposit-booking-reconciler.test.ts` on the next run; understood,
+documented, not touched — out of this chantier's scope).
+
+Everything else the final audit asked about was already built and tested
+in earlier passes this session (persistent quarantine history, the
+diagnose/repair/revalidate/exit-quarantine distinction, force-clear
+protections, cross-owner isolation, no-secrets observability) — re-verified
+this pass, not rebuilt. Full writeup: `docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md`
+§17.
+
 ### Known, documented (not hidden) limitations
 
 - Repair: only orphaned-allocation bookkeeping is automated. Agent

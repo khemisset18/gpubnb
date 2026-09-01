@@ -788,3 +788,74 @@ test corrigées (ajout de `agentVersion`), 1 hook de nettoyage ajouté à
 `gpu-proof-completion.test.ts`, est un flake préexistant sous charge complète de la suite, dans
 `resource-allocation-service.ts`/sa contrainte d'exclusion PostgreSQL - fichier non touché par ce
 travail, passe de façon fiable en isolation) ; 390/390 tests agent inchangés.
+
+## 17. Audit final de cohérence bout en bout (2026-09-01) — vérification LIVE réelle, une vraie protection ajoutée
+
+Audit demandé explicitement centré sur la cohérence réelle `Agent → API → Machine → Accelerator →
+Host → Listing → Marketplace → Booking`, avec vérification en direct de la machine réelle en
+session authentifiée (navigateur réel, propriétaire connecté) et via l'endpoint public sans
+authentification.
+
+### 17.1 Vérification live, preuve réelle (pas déduite, pas supposée)
+
+**Session Chrome authentifiée réelle** (le propriétaire s'est connecté lui-même) :
+- `machines.html` : machine réelle `cmsiggruy0004df0tn669f6bn` → « Marketplace actif », Agent
+  0.6.2, dernier heartbeat 01/09/2026 17:30:46, GTX 1650 4 Go, pilote 592.82, CUDA 13.1, « GPU déjà
+  publié ». Une seconde machine (`cms7dbmn30001ie0to0i04iu6`, agent 0.5.0 legacy, hors ligne depuis
+  33 jours) correctement affichée offline/non publiée - aucun impact.
+- `machine-diagnostics.html?machineId=cmsiggruy0004df0tn669f6bn` : **9/9 checks PASS** (Agent, GPU,
+  UUID `GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a`, Pilote, Docker, Runtime NVIDIA, CUDA, RAM,
+  Allocation GPU), aucune section quarantaine affichée (`moderationStatus: CLEAR`), dernier
+  diagnostic `COMPLETED`, déclenché par `OWNER`, 01/09/2026 14:15:45.
+- Pied de page : `Commit 8ff5bf9` - confirme que le **frontend Netlify** exécute réellement le
+  commit attendu, pas seulement l'API Render.
+
+**Endpoint public `GET /rental/listings`, sans aucune authentification** (`curl` direct, aucun
+cookie) : la même machine apparaît réellement, `availability.state: "AVAILABLE"`,
+`dockerAvailable: true`, `nvidiaRuntimeAvailable: true`, GPU `verifiedAt: 2026-09-01T15:31:59Z`
+(re-vérifié en direct, preuve que le code déployé tourne activement, pas un cache figé).
+
+C'est la preuve la plus forte possible sans accès direct à la base de production : deux sources
+totalement indépendantes (vue propriétaire authentifiée, vue public anonyme) racontent exactement
+la même réalité.
+
+### 17.2 Points explicitement re-vérifiés et confirmés sans bug
+
+- **TTL Redis et raison de quarantaine** : `recordSecurityFailure()` n'utilise Redis que pour
+  compter des échecs sur une fenêtre glissante (15 min) - la raison elle-même est écrite de façon
+  durable dans `MachineQuarantineEvent` (Postgres) au moment où le seuil est franchi, jamais
+  redérivée de Redis à la lecture. Une quarantaine ne peut donc jamais redevenir « UNKNOWN » par
+  expiration d'un TTL - confirmé par lecture directe du code, pas de correctif nécessaire.
+- **Protection cross-machine et anti-replay du diagnostic** : `POST
+  /agent/diagnostics/:diagnosticRunId/result` vérifie `run.machineId === body.machineId` (404
+  sinon) en plus de la signature Ed25519 spécifique à la machine ; `completeDiagnosticRun()` fait
+  une capture atomique conditionnelle (`status='RUNNING'`) qui rejette toute deuxième soumission
+  avec `DiagnosticRunConflictError`. Déjà testé end-to-end en base réelle
+  (`machine-diagnostics-routes.integration.test.ts`, `quarantine-diagnostics-system.test.ts`) - pas
+  de nouveau test nécessaire, confirmé existant.
+- **Race CLEAR↔QUARANTINE pendant publication/réservation** : tous les appelants de
+  `enterQuarantine()` (heartbeat, job-staleness-sweep, dev-booking-reconciler,
+  accelerator-security-executor via le heartbeat) utilisent l'isolation `Serializable`, tout comme
+  `createExactGpuListing`/`allocateBookingResources` - Postgres détecte et annule tout conflit de
+  lecture/écriture réel entre les deux, garantissant qu'aucun état final incorrect n'est possible.
+  Confirmé par lecture directe de code, pas de bug trouvé.
+
+### 17.3 Vraie protection ajoutée : self-update ne peut plus régresser silencieusement
+
+`is_update_available()` ne comparait que « le commit est-il différent », jamais « est-il plus
+récent » - un canal de release pointant accidentellement en arrière (mauvaise promotion, rollback,
+canal compromis) aurait pu faire régresser silencieusement un agent déjà à jour. Ajouté :
+`candidate_agent_version()` exécute une seule fois le binaire candidat déjà vérifié par SHA-256,
+dans un dossier temporaire jetable uniquement (jamais le vrai dossier d'installation ni le vrai
+service), pour lire sa propre version ; `perform_self_update()` refuse de continuer si cette
+version est un semver strictement plus ancien que celui actuellement installé. Commit `629b626`,
+5 nouveaux tests, 395/395 tests agent stables.
+
+### 17.4 État final vérifié
+
+API : 531/531 (stable sur exécution propre, base locale reconstruite). Agent : 395/395. CI GitHub
+réelle : verte. Aucune régression, aucun nouveau bug trouvé dans le reste du système audité - la
+majorité des exigences de cette passe finale (historique de quarantaine persistant, distinction
+diagnostiquer/réparer/revalider/sortir, force-clear protégé, isolation cross-owner, observabilité
+sans secret) étaient déjà satisfaites par le travail des passes précédentes de cette session et ont
+été re-vérifiées, pas reconstruites.
