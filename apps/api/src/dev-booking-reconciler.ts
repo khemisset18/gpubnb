@@ -271,14 +271,43 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
       && job.result !== null
       && (job.result as { gpuDetected?: unknown }).gpuDetected === true;
     const changed = await db.$transaction(async (tx) => {
-      const bookingUpdate = await tx.booking.updateMany({
-        where: {
-          id: job.bookingId,
-          status: { in: [BookingStatus.STARTING, BookingStatus.ACTIVE] },
-          workspaceSessions: { none: DEVELOPER_SESSION_FILTER },
-        },
-        data: { status: success ? BookingStatus.COMPLETED : BookingStatus.DEGRADED },
-      });
+      // Real bug found live during the private-beta two-machine test:
+      // GPU_PROOF succeeding used to move the booking straight to
+      // COMPLETED - correct back when proving the GPU *was* the entire
+      // rental, wrong now that a still-genuinely-open booking can go on to
+      // request a Developer Workspace afterward. GPU_PROOF completed !=
+      // rental completed. A successful proof now only unlocks STARTING (the
+      // exact state this reconciler itself puts a booking into a few lines
+      // above, when it creates this exact job) to ACTIVE - still
+      // workspace-eligible (see workspace-developer-flow.js's
+      // ELIGIBLE_BOOKING_STATUSES), with no time pressure at all: nothing
+      // races to move it away from ACTIVE anymore. An already-ACTIVE
+      // booking (reached via some other real path, e.g. a non-Developer
+      // workspace's own metrics-driven activation) is left untouched -
+      // there is nothing left to unlock - which also makes this update a
+      // safe no-op (count 0) on every later tick once a booking is already
+      // unlocked, so the same finished job is never "processed" twice.
+      // Genuine rental completion now happens only once the booking's own
+      // real time window elapses - see
+      // reconcileExpiredActiveDeveloperBookings below - never merely
+      // because the proof job finished.
+      const bookingUpdate = success
+        ? await tx.booking.updateMany({
+          where: {
+            id: job.bookingId,
+            status: BookingStatus.STARTING,
+            workspaceSessions: { none: DEVELOPER_SESSION_FILTER },
+          },
+          data: { status: BookingStatus.ACTIVE },
+        })
+        : await tx.booking.updateMany({
+          where: {
+            id: job.bookingId,
+            status: { in: [BookingStatus.STARTING, BookingStatus.ACTIVE] },
+            workspaceSessions: { none: DEVELOPER_SESSION_FILTER },
+          },
+          data: { status: BookingStatus.DEGRADED },
+        });
       if (bookingUpdate.count !== 1) return false;
       await tx.machine.update({
         where: { id: job.machineId },
@@ -293,6 +322,62 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
   }
 
   return { funded, queued, completed, degraded, quarantinedDeveloper };
+}
+
+// Symmetric counterpart to the fix above: an ACTIVE booking unlocked by a
+// successful GPU_PROOF still has to become COMPLETED *eventually*, once the
+// rental's own real time window elapses, or it (and the GPU it holds
+// exclusively) would never be freed for a new booking. Feeds directly into
+// the settlement path that already exists (COMPLETED is already
+// SETTLEABLE, see settlement-transactions.ts) - no new settlement
+// mechanism, just the missing trigger into the one already there. Never
+// touches a booking with a live Developer session - the exact same
+// exclusivity guard used throughout this file, re-checked inside the same
+// transaction as the write, so a session created in the gap between the
+// read above and this transaction correctly makes the write a no-op rather
+// than racing it. Like every other dev-bypass mechanism here, this is a
+// no-op the instant real escrow is configured.
+export async function findExpiredActiveDeveloperBookings(db: PrismaClient, now: Date) {
+  return db.booking.findMany({
+    where: {
+      status: BookingStatus.ACTIVE,
+      endsAt: { lt: now },
+      workspaceSessions: { none: DEVELOPER_SESSION_FILTER },
+    },
+    select: { id: true, listing: { select: { machineId: true } } },
+    take: 25,
+    orderBy: { endsAt: 'asc' },
+  });
+}
+
+export async function reconcileExpiredActiveDeveloperBookings(
+  db: PrismaClient,
+  now = new Date(),
+): Promise<{ completed: number }> {
+  let completedCount = 0;
+  if (!betaTestDevBypassActive()) return { completed: completedCount };
+
+  const expired = await findExpiredActiveDeveloperBookings(db, now);
+  for (const booking of expired) {
+    const changed = await db.$transaction(async (tx) => {
+      const update = await tx.booking.updateMany({
+        where: {
+          id: booking.id,
+          status: BookingStatus.ACTIVE,
+          workspaceSessions: { none: DEVELOPER_SESSION_FILTER },
+        },
+        data: { status: BookingStatus.COMPLETED },
+      });
+      if (update.count !== 1) return false;
+      await tx.machine.updateMany({
+        where: { id: booking.listing.machineId, operational: MachineOperational.RESERVED },
+        data: { operational: MachineOperational.AVAILABLE },
+      });
+      return true;
+    });
+    if (changed) completedCount += 1;
+  }
+  return { completed: completedCount };
 }
 
 // Base58 excludes 0/O/I/l (see settlement-transactions.ts SIGNATURE_PATTERN), but a
