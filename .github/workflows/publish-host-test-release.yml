@@ -98,10 +98,24 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          # Stamp the real commit into the frozen exe BEFORE building it, so a
+          # running agent can always report exactly what it was built from
+          # (gpubnb-agent.exe build-info / the diagnostic_poll_loop_started
+          # log line) instead of that only being discoverable after the fact
+          # from a file timestamp - see docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md #14.
+          $commit = $env:GITHUB_SHA.Substring(0, 12)
+          Set-Content -Path agent/gpubnb_agent/_build_info.py -Encoding utf8 -Value @"
+          `"`"`"Build metadata for this specific agent artifact - written by CI, see publish-host-test-release.yml.`"`"`"
+          from __future__ import annotations
+
+          BUILD_COMMIT = `"$commit`"
+          "@
           python -m pip install --upgrade pip
           python -m pip install ./agent pyinstaller==6.16.0
-          pyinstaller --clean --noconfirm --onefile --name gpubnb-agent --hidden-import=_cffi_backend --hidden-import=encodings.idna --hidden-import=servicemanager --hidden-import=win32event --hidden-import=win32service --hidden-import=win32serviceutil --hidden-import=win32timezone --collect-all cffi --collect-all nacl agent/gpubnb_agent/__main__.py
+          pyinstaller --clean --noconfirm --onefile --name gpubnb-agent --hidden-import=_cffi_backend --hidden-import=encodings.idna --hidden-import=servicemanager --hidden-import=win32event --hidden-import=win32service --hidden-import=win32serviceutil --hidden-import=win32timezone --hidden-import=urllib.request --collect-all cffi --collect-all nacl agent/gpubnb_agent/__main__.py
           if (-not (Test-Path dist/gpubnb-agent.exe)) { throw 'Standalone agent was not generated.' }
+          $builtCommit = (& ./dist/gpubnb-agent.exe build-info | ConvertFrom-Json).buildCommit
+          if ($builtCommit -ne $commit) { throw "Frozen exe reports buildCommit '$builtCommit', expected '$commit' - the commit stamp did not make it into the build." }
           cargo build --manifest-path services/edge/Cargo.toml --release --bin gpubnb-host-tunnel
           if (-not (Test-Path services/edge/target/release/gpubnb-host-tunnel.exe)) { throw 'Host tunnel sidecar was not generated.' }
           $target = (rustc -vV | Select-String '^host:' | ForEach-Object { ($_ -split ':', 2)[1].Trim() })
@@ -175,7 +189,7 @@ jobs:
       - name: Smoke test exact Windows release installer
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/verify-windows-release.ps1 -InstallerPath 'release-assets/gpubnb-host-windows-x64.exe'
+        run: ./scripts/verify-windows-release.ps1 -InstallerPath 'release-assets/gpubnb-host-windows-x64.exe' -ExpectedCommit "$env:GITHUB_SHA"
 
       - name: Create verified Windows portable archive
         if: runner.os == 'Windows'

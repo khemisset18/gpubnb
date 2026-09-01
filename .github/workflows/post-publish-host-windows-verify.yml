@@ -70,7 +70,9 @@ jobs:
 
       - name: Install, exercise service, and uninstall downloaded Windows candidate
         shell: pwsh
-        run: ./scripts/verify-windows-release.ps1 -InstallerPath 'published-release/gpubnb-host-windows-x64.exe'
+        env:
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: ./scripts/verify-windows-release.ps1 -InstallerPath 'published-release/gpubnb-host-windows-x64.exe' -ExpectedCommit "$env:EXPECTED_SHA"
 
       - name: Promote verified candidate to host-test-latest
         shell: pwsh

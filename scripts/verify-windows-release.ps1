@@ -1,6 +1,13 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$InstallerPath
+    [string]$InstallerPath,
+    # The commit this build/verification run is for. When given, this proves
+    # the installed gpubnb-agent.exe was actually built from this exact
+    # commit, not some earlier stale build - see
+    # docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md #14/#15 for the real incident
+    # (a two-day-old frozen binary silently missing the diagnostic loop) this
+    # check makes structurally impossible to ship again unnoticed.
+    [string]$ExpectedCommit
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,6 +58,16 @@ try {
         throw "Installed Agent version mismatch: expected $expectedAgentVersion, got $installedAgentVersion."
     }
 
+    $buildInfo = (& $sidecar build-info | Out-String) | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0) { throw 'Installed agent build-info command failed.' }
+    if (-not $buildInfo.frozen) { throw 'Installed agent does not report itself as a frozen build.' }
+    if ($ExpectedCommit) {
+        $expectedShort = $ExpectedCommit.Substring(0, 12)
+        if ($buildInfo.buildCommit -ne $expectedShort) {
+            throw "Installed agent buildCommit mismatch: expected $expectedShort (from $ExpectedCommit), got $($buildInfo.buildCommit). The published binary was NOT built from the commit it claims to be."
+        }
+    }
+
     & $sidecar runtime-check
     if ($LASTEXITCODE -ne 0) { throw 'Installed agent runtime-check failed.' }
 
@@ -65,6 +82,27 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Published installer service restart failed.' }
     $service = Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
     if ($service.State -ne 'Running') { throw "GPUbnbAgent is not running after restart: $($service.State)" }
+
+    # This CI runner has no real GPUbnb account/machine to link, so the
+    # heartbeat loop cannot reach diagnostic_poll_loop_started here - but it
+    # MUST reach and log its "not linked" guard (the very first real line of
+    # heartbeat_loop) within a few restart-backoff cycles. This is the
+    # closest thing to proving the real loop-launching code path executes
+    # inside the real installed service that a credential-free CI runner can
+    # do; see docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md #14/#15 for why an
+    # installed-but-silent service is exactly the failure mode this guards.
+    $logPath = Join-Path $env:ProgramData 'GPUbnb\agent.log'
+    $reachedLoopGuard = $false
+    for ($attempt = 0; $attempt -lt 15; $attempt++) {
+        if ((Test-Path $logPath) -and (Select-String -Path $logPath -Pattern 'Machine non li' -Quiet)) {
+            $reachedLoopGuard = $true
+            break
+        }
+        Start-Sleep -Seconds 1
+    }
+    if (-not $reachedLoopGuard) {
+        throw "The installed service never logged reaching heartbeat_loop's first real line (expected 'Machine non liée' in $logPath) - the real service may not be executing this build's code at all."
+    }
 
     $uninstaller = Join-Path $installDirectory 'uninstall.exe'
     if (-not (Test-Path $uninstaller -PathType Leaf)) {

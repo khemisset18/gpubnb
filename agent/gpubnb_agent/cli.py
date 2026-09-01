@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import __version__
+from ._build_info import BUILD_COMMIT
 from .client import ApiClient, agent_request, heartbeat
 from .gpu_rental_preemption import (
     TRANSIENT_QUIESCENCE_REASONS,
@@ -431,6 +432,8 @@ def heartbeat_loop(
         "machineId": machine_id,
         "processMode": process_mode,
         "intervalSeconds": interval,
+        "agentVersion": __version__,
+        "buildCommit": BUILD_COMMIT,
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     })
     pid_path().write_text(
@@ -1069,6 +1072,60 @@ def command_service(args: argparse.Namespace) -> int:
     return manage_service(args.service_action)
 
 
+def command_build_info(_: argparse.Namespace) -> int:
+    print_json({
+        "agentVersion": __version__,
+        "buildCommit": BUILD_COMMIT,
+        "frozen": bool(getattr(sys, "frozen", False)),
+        "executable": sys.executable,
+    })
+    return 0
+
+
+def command_self_update(args: argparse.Namespace) -> int:
+    from .self_update import SelfUpdateError, perform_self_update
+    from .windows_service import manage_service, service_status
+
+    if not getattr(sys, "frozen", False):
+        raise RuntimeError(
+            "self_update_requires_frozen_install: cette commande remplace le "
+            "binaire gpubnb-agent.exe installé - elle n'a pas de sens pour une "
+            "installation pip éditable, qui reflète déjà toujours le code source"
+        )
+    install_dir = Path(args.install_dir) if args.install_dir else Path(sys.executable).resolve().parent
+
+    def stop_service() -> None:
+        manage_service("stop")
+
+    def start_service() -> None:
+        manage_service("start")
+
+    def service_running() -> bool:
+        return bool(service_status().get("running"))
+
+    try:
+        result = perform_self_update(
+            install_dir,
+            repository=args.repository,
+            channel=args.channel,
+            dry_run=args.dry_run,
+            stop_service=stop_service,
+            start_service=start_service,
+            service_running=service_running,
+        )
+    except SelfUpdateError as exc:
+        raise RuntimeError(str(exc)) from exc
+    print_json({
+        "updated": result.updated,
+        "previousCommit": result.previous_commit,
+        "newCommit": result.new_commit,
+        "releaseTag": result.release_tag,
+        "backupPath": result.backup_path,
+        "detail": result.detail,
+    })
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="gpubnb-agent", description="Agent local sécurisé GPUbnb")
     root.add_argument("--version", action="version", version=__version__)
@@ -1158,6 +1215,21 @@ def parser() -> argparse.ArgumentParser:
     list_cmd.add_argument("job_id", help="identifiant du job")
     list_cmd.set_defaults(handler=command_files_list)
     commands.add_parser("version", help="afficher la version").set_defaults(handler=lambda _: print(__version__) or 0)
+    commands.add_parser(
+        "build-info", help="afficher la version, le commit de build et le chemin de l'exécutable"
+    ).set_defaults(handler=command_build_info)
+    self_update = commands.add_parser(
+        "self-update",
+        help="vérifier/télécharger/installer la dernière release officielle Windows (service arrêté puis redémarré)",
+    )
+    self_update.add_argument("--dry-run", action="store_true", help="vérifier seulement, ne rien remplacer")
+    self_update.add_argument("--repository", default="khemisset18/gpubnb")
+    self_update.add_argument("--channel", default="host-test-latest")
+    self_update.add_argument(
+        "--install-dir",
+        help="dossier contenant gpubnb-agent.exe (par défaut : dossier de l'exécutable actuel)",
+    )
+    self_update.set_defaults(handler=command_self_update)
     return root
 
 
