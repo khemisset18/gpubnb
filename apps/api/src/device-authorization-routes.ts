@@ -15,6 +15,7 @@ import { registerWorkspaceRenterRoutes } from './workspace-renter-routes.js';
 import { registerArtifactTransportGuards } from './artifact-transport-guards.js';
 import { registerWorkspaceBrowserSecurity } from './workspace-browser-security.js';
 import { registerRentalMarketplaceRoutes } from './rental-marketplace-routes.js';
+import { registerMachineDiagnosticsRoutes } from './machine-diagnostics-routes.js';
 import { syncMachineAuthCache } from './machine-auth-cache.js';
 import { config } from './config.js';
 import { controlChannelAssignment } from './agent-control-channel.js';
@@ -77,6 +78,7 @@ export const registerDeviceAuthorizationRoutes = (
   registerMiningRoutes(app, db, redis);
   registerWorkspaceRenterRoutes(app, db, redis);
   registerRentalMarketplaceRoutes(app, db, redis);
+  registerMachineDiagnosticsRoutes(app, db, redis);
 
   app.get('/agent/control-channel/:machineId', {
     config: { rateLimit: { max: 12, timeWindow: '1 minute' } },

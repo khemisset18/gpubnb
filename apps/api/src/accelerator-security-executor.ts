@@ -5,12 +5,12 @@ import {
   ListingStatus,
   MachineConnectivity,
   MachineOperational,
-  ModerationStatus,
   PaymentStatus,
   WorkspaceSessionStatus,
   SessionTerminationReason,
 } from '@prisma/client';
 import type { AcceleratorSecurityDecision } from './accelerator-security-policy.js';
+import { enterQuarantine } from './quarantine-service.js';
 
 const activeBookingStatuses = [
   BookingStatus.FUNDED,
@@ -75,11 +75,18 @@ export async function enforceAcceleratorSecurityDecision(
   await tx.machine.update({
     where: { id: machineId },
     data: {
-      moderationStatus: ModerationStatus.QUARANTINED,
       connectivity: MachineConnectivity.OFFLINE,
       operational: MachineOperational.UNAVAILABLE,
       verifiedAt: null,
     },
+  });
+  await enterQuarantine(tx, {
+    machineId,
+    reasonCode: 'CRITICAL_GPU_IDENTITY_CHANGE',
+    reason: "Changement critique d'identité GPU pendant une session active (accélérateur retiré ou identité matérielle modifiée).",
+    details: { policyReason: decision.reason },
+    source: 'accelerator-security-executor',
+    now,
   });
 
   const bookings = await tx.booking.findMany({

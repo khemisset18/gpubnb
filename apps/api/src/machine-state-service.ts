@@ -39,6 +39,10 @@ export type MachineStateInput = {
   nvidiaRuntimeAvailable: boolean;
   verifiedAt?: Date | null;
   heartbeatFresh: boolean;
+  /** Machine.quarantineReasonCode - the real, stable cause when moderationStatus
+   * is QUARANTINED. Falls back to the generic RESOURCE_QUARANTINED blockingReason
+   * below when absent (e.g. a machine quarantined before this field existed). */
+  quarantineReasonCode?: string | null;
   accelerators: Array<{
     status: AcceleratorOperationalStatus;
     moderationStatus: ModerationStatus;
@@ -119,8 +123,10 @@ export function computeMachineState(input: MachineStateInput): MachineStateView 
     presentAccelerators.some((gpu) => gpu.moderationStatus === ModerationStatus.QUARANTINED)
   ) {
     state = 'QUARANTINED';
-    nextAction = 'CONTACT_SUPPORT_OR_RUN_RECOVERY';
-    blockingReason = 'RESOURCE_QUARANTINED';
+    nextAction = 'RUN_QUARANTINE_DIAGNOSTIC';
+    blockingReason = input.moderationStatus !== ModerationStatus.CLEAR
+      ? (input.quarantineReasonCode ?? 'UNKNOWN')
+      : 'RESOURCE_QUARANTINED';
   } else if (!input.lastHeartbeatAt) {
     state = 'WAITING_FOR_FIRST_HEARTBEAT';
     nextAction = 'START_HOST_AND_WAIT_FOR_HEARTBEAT';

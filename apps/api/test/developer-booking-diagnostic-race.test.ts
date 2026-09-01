@@ -32,12 +32,22 @@ function fakeReconcilerDb(options: {
       },
     },
     machine: {
+      findUnique: async (args: Record<string, unknown>) => {
+        calls.push({ area: 'tx.machine.findUnique', args });
+        return { moderationStatus: ModerationStatus.CLEAR, quarantinedAt: null };
+      },
       updateMany: async (args: Record<string, unknown>) => {
         calls.push({ area: 'tx.machine.updateMany', args });
         return { count: 1 };
       },
       update: async (args: Record<string, unknown>) => {
         calls.push({ area: 'tx.machine.update', args });
+        return {};
+      },
+    },
+    machineQuarantineEvent: {
+      create: async (args: Record<string, unknown>) => {
+        calls.push({ area: 'tx.machineQuarantineEvent.create', args });
         return {};
       },
     },
@@ -136,8 +146,18 @@ test('a completed booking with a live Developer runtime fails closed instead of 
 
   const machineUpdate = calls.find(call => call.area === 'tx.machine.updateMany');
   assert.ok(machineUpdate);
-  assert.equal((machineUpdate.args.data as { moderationStatus: ModerationStatus }).moderationStatus, ModerationStatus.QUARANTINED);
   assert.equal((machineUpdate.args.data as { operational: MachineOperational }).operational, MachineOperational.UNAVAILABLE);
+
+  // moderationStatus now flows through the shared enterQuarantine() helper (a
+  // singular tx.machine.update, not the updateMany above), which also appends a
+  // durable MachineQuarantineEvent history row - see quarantine-service.ts.
+  const quarantineWrite = calls.find(call => call.area === 'tx.machine.update');
+  assert.ok(quarantineWrite);
+  assert.equal((quarantineWrite.args.data as { moderationStatus: ModerationStatus }).moderationStatus, ModerationStatus.QUARANTINED);
+  assert.equal((quarantineWrite.args.data as { quarantineReasonCode: string }).quarantineReasonCode, 'DIAGNOSTIC_COMPLETION_RACE');
+  const historyEvent = calls.find(call => call.area === 'tx.machineQuarantineEvent.create');
+  assert.ok(historyEvent, 'entering quarantine must append a durable MachineQuarantineEvent row');
+  assert.equal((historyEvent.args.data as { status: string }).status, 'ENTERED');
 
   const auditEvent = calls.find(call => call.area === 'tx.workspaceSession.update');
   assert.ok(auditEvent);

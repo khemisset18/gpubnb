@@ -9,6 +9,10 @@ const machineStateLabels={
 const gpuBlockLabels={
   ACCELERATOR_NOT_AVAILABLE:'GPU indisponible',ACCELERATOR_QUARANTINED:'GPU en quarantaine',ISOLATION_NOT_VERIFIED:'Isolation non vérifiée',ACCELERATOR_NOT_VERIFIED:'Preuve GPU incomplète',ACCELERATOR_STALE:'Télémétrie GPU trop ancienne',RESOURCE_AUTHORITY_MISSING:'Ressource GPU non mappée',RESOURCE_AUTHORITY_DISABLED:'Ressource GPU désactivée',RESOURCE_AUTHORITY_QUARANTINED:'Ressource GPU en quarantaine',RESOURCE_AUTHORITY_STALE:'Ressource GPU trop ancienne',RESOURCE_RUNTIME_UNSAFE:'Runtime GPU non sûr',ACCELERATOR_ALLOCATED:'GPU déjà alloué',ACCELERATOR_ALREADY_LISTED:'GPU déjà publié',FULL_MACHINE_LISTING_ACTIVE:'Annonce machine entière active',
 };
+const machineBlockLabels={
+  NO_AGENT_PUBLIC_KEY:'Aucun Host relié',NO_HEARTBEAT_RECEIVED:'Aucun signal reçu',HEARTBEAT_STALE_OR_OFFLINE:'Host hors ligne ou signal trop ancien',NO_GPU_INVENTORY:'Aucun GPU détecté',GPU_DRIVER_MISSING:'Pilote GPU manquant',DOCKER_UNAVAILABLE:'Docker indisponible',NVIDIA_RUNTIME_UNAVAILABLE:'Runtime NVIDIA indisponible',GPU_DIAGNOSTIC_REQUIRED:'Diagnostic GPU requis',DIAGNOSTIC_FAILED:'Dernier diagnostic en échec',HOST_NOT_VERIFIED:'Host non vérifié',CLEANUP_NOT_VERIFIED:'Nettoyage non vérifié',RESOURCE_QUARANTINED:'Machine en quarantaine (raison non détaillée)',
+  CRITICAL_GPU_IDENTITY_CHANGE:"Changement critique d'identité GPU pendant une session",DIAGNOSTIC_COMPLETION_RACE:'Session active après libération de la ressource GPU',STALE_CLAIM:'Revendication de ressource GPU non prouvée',STALE_JOB:"Tâche agent restée bloquée sans confirmation",WORKSPACE_CLEANUP_FAILED:'Nettoyage de Workspace non confirmé',AGENT_SECURITY_FAILURE:'Échecs de signature agent répétés',GPU_HEALTH_CHECK_FAILED:'Le diagnostic GPU a échoué',GPU_UNAVAILABLE:'Aucun GPU détecté',UNKNOWN:'Cause non déterminée',
+};
 const listingActionErrors={
   listing_has_live_booking:'Une réservation engagée existe encore. L’archive est bloquée jusqu’à sa fin ou son annulation.',
   machine_not_ready:'La machine doit être en ligne et récente avant de reprendre cette annonce.',
@@ -41,7 +45,12 @@ async function loadMachineGpus(machineId){try{return (await rentalRequest(`/rent
 function renderMachine(machine,gpus){
   const state=machine.state||{};
   const gpuRows=gpus.length?gpus.map(gpu=>{const status=gpu.publishable?'Disponible pour une annonce':(gpuBlockLabels[gpu.blockingReason]||gpu.blockingReason||'Non publiable');return `<div class="list-row"><div><strong>${rentalEscape(gpuLabel(gpu))}</strong><div class="muted">Pilote ${rentalEscape(gpu.driverVersion||'inconnu')} · CUDA ${rentalEscape(gpu.cudaVersion||'non détectée')} · Dernier signal ${rentalEscape(rentalDate(gpu.lastSeenAt))}</div></div><span class="badge ${gpu.publishable?'ok':'warn'}">${rentalEscape(status)}</span></div>`}).join(''):'<div class="muted">Aucun GPU legacy qualifié n’est encore relié à cette machine.</div>';
-  return `<article class="panel" style="margin-bottom:14px"><div class="section-heading"><div><h2>${rentalEscape(machine.gpuModel||'Machine GPUbnb')}</h2><p class="muted">${rentalEscape(machine.operatingSystem||'Système inconnu')}${machine.osVersion?` ${rentalEscape(machine.osVersion)}`:''} · Agent ${rentalEscape(machine.agentVersion||'inconnu')}</p></div><span class="badge ${state.canPublish?'ok':'warn'}">${rentalEscape(machineStateLabels[state.state]||state.state||'État inconnu')}</span></div><div class="muted">Dernier heartbeat : ${rentalEscape(rentalDate(machine.lastHeartbeatAt))} · ${machine.verifiedAt?'Host vérifié':'Host non vérifié'}</div><div class="table-list" style="margin-top:12px">${gpuRows}</div><div class="actions" style="margin-top:12px">${state.canPublish?`<a class="button button-primary" href="publish.html?machineId=${encodeURIComponent(machine.id)}">Publier un GPU disponible</a>`:'<a class="button" href="host-install.html">Instructions de résolution</a>'}<a class="button" href="workspaces.html">Espaces de travail</a></div></article>`;
+  const isQuarantined=state.state==='QUARANTINED';
+  const reasonLine=state.blockingReason?`<div class="muted"><strong>${isQuarantined?'Cause de la quarantaine':'Raison'} :</strong> ${rentalEscape(machineBlockLabels[state.blockingReason]||state.blockingReason)}</div>`:'';
+  const daysSince=machine.lastHeartbeatAt?Math.floor((Date.now()-new Date(machine.lastHeartbeatAt).getTime())/86400000):null;
+  const staleNotice=machine.lifecycleStatus==='STALE'?`<div class="muted">⚪ Machine inactive depuis ${daysSince??'plusieurs'} jours (dernier signal : ${rentalEscape(rentalDate(machine.lastHeartbeatAt))}).</div>`:'';
+  const retireButton=machine.lifecycleStatus==='STALE'?`<button class="button" type="button" data-retire-machine="${rentalEscape(machine.id)}">Retirer cette machine</button>`:'';
+  return `<article class="panel" style="margin-bottom:14px"><div class="section-heading"><div><h2>${rentalEscape(machine.gpuModel||'Machine GPUbnb')}</h2><p class="muted">${rentalEscape(machine.operatingSystem||'Système inconnu')}${machine.osVersion?` ${rentalEscape(machine.osVersion)}`:''} · Agent ${rentalEscape(machine.agentVersion||'inconnu')}</p></div><span class="badge ${isQuarantined?'danger':state.canPublish?'ok':'warn'}">${rentalEscape(machineStateLabels[state.state]||state.state||'État inconnu')}</span></div><div class="muted">Dernier heartbeat : ${rentalEscape(rentalDate(machine.lastHeartbeatAt))} · ${machine.verifiedAt?'Host vérifié':'Host non vérifié'}</div>${reasonLine}${staleNotice}<div class="table-list" style="margin-top:12px">${gpuRows}</div><div class="actions" style="margin-top:12px">${state.canPublish?`<a class="button button-primary" href="publish.html?machineId=${encodeURIComponent(machine.id)}">Publier un GPU disponible</a>`:''}<a class="button${isQuarantined?' button-primary':''}" href="machine-diagnostics.html?machineId=${encodeURIComponent(machine.id)}">${isQuarantined?'Voir la quarantaine et diagnostiquer':'État & diagnostics'}</a><a class="button" href="workspaces.html">Espaces de travail</a>${retireButton}</div></article>`;
 }
 async function rentalMachines(){
   const root=document.querySelector('[data-rental-machines]');if(!root)return;
@@ -69,8 +78,16 @@ async function runListingAction(button){
   try{await rentalRequest(`/rental/listings/${encodeURIComponent(id)}/actions/${encodeURIComponent(action)}`,{method:'POST',body:'{}'});rentalFeedback(action==='pause'?'Annonce mise en pause.':action==='resume'?'Annonce remise en ligne.':'Annonce archivée.');await rentalListings()}catch(error){rentalFeedback(listingActionErrors[error.data?.error]||`Action refusée : ${error.data?.error||error.message}`,true);button.disabled=false;button.textContent=original}
 }
 
+async function runRetireMachine(button){
+  const machineId=button.dataset.retireMachine;if(!machineId)return;
+  if(!window.confirm('Retirer cette machine inactive ? Elle ne sera plus proposée à la location. Son historique est conservé et un administrateur peut la réactiver.'))return;
+  button.disabled=true;const original=button.textContent;button.textContent='Retrait…';
+  try{await rentalRequest(`/rental/machines/${encodeURIComponent(machineId)}/retire`,{method:'POST',body:JSON.stringify({reason:'Retirée par le propriétaire depuis Mes machines (inactive).'})});rentalFeedback('Machine retirée.');await rentalMachines()}catch(error){rentalFeedback(`Retrait impossible : ${error.data?.error||error.message}`,true);button.disabled=false;button.textContent=original}
+}
+
 document.addEventListener('DOMContentLoaded',()=>{
   rentalMachines();rentalListings();
   document.querySelector('[data-rental-check-machines]')?.addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{await rentalMachines()}finally{button.disabled=false}});
   document.querySelector('[data-rental-listings]')?.addEventListener('click',event=>{const button=event.target.closest?.('[data-listing-action]');if(button)runListingAction(button)});
+  document.querySelector('[data-rental-machines]')?.addEventListener('click',event=>{const button=event.target.closest?.('[data-retire-machine]');if(button)runRetireMachine(button)});
 });

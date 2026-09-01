@@ -28,6 +28,56 @@ enum ModerationStatus {
   QUARANTINED
 }
 
+// Stable, software-readable causes for a quarantine decision. The human-facing
+// title/description/severity/impact for each code lives in
+// apps/api/src/quarantine-reason-registry.ts, not in the database - the code
+// here is the only thing other code may branch on.
+enum QuarantineReasonCode {
+  CRITICAL_GPU_IDENTITY_CHANGE
+  DIAGNOSTIC_COMPLETION_RACE
+  STALE_CLAIM
+  STALE_JOB
+  WORKSPACE_CLEANUP_FAILED
+  AGENT_SECURITY_FAILURE
+  GPU_HEALTH_CHECK_FAILED
+  GPU_UNAVAILABLE
+  DOCKER_UNAVAILABLE
+  NVIDIA_RUNTIME_UNAVAILABLE
+  UNKNOWN
+}
+
+// One immutable row per quarantine lifecycle transition. Machine.moderationStatus
+// / quarantineReasonCode / quarantinedAt are only ever a snapshot of "now" - this
+// table is the durable history a new quarantine must never overwrite.
+enum QuarantineEventStatus {
+  ENTERED
+  DIAGNOSTIC
+  CLEARED
+  REENTERED
+}
+
+enum DiagnosticRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  TIMED_OUT
+}
+
+enum DiagnosticTrigger {
+  OWNER
+  SYSTEM
+  ADMIN
+}
+
+// Registration lifecycle, orthogonal to moderationStatus/operational: a machine
+// can be lifecycle ACTIVE while quarantined, or lifecycle STALE while CLEAR.
+enum MachineLifecycleStatus {
+  ACTIVE
+  STALE
+  OFFLINE
+  RETIRED
+}
+
 enum ListingStatus {
   DRAFT
   PENDING_GPU_VERIFICATION
@@ -269,6 +319,15 @@ model Machine {
   gpuVendor String? @db.VarChar(20)
   lastCudaProbeOk Boolean @default(false)
   verifiedAt DateTime?
+  // Current-state snapshot only. MachineQuarantineEvent below is the durable,
+  // append-only history - these fields may be overwritten freely.
+  quarantineReasonCode QuarantineReasonCode?
+  quarantinedAt DateTime?
+  lastDiagnosticRunId String?
+  lastDiagnosticAt DateTime?
+  lifecycleStatus MachineLifecycleStatus @default(ACTIVE)
+  retiredAt DateTime?
+  retiredReason String? @db.VarChar(500)
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   listings GpuListing[]
   accelerators Accelerator[]
@@ -279,6 +338,42 @@ model Machine {
   workspaces MachineWorkspace[]
   miningResources MiningResource[]
   miningAuditLogs MiningAuditLog[]
+  quarantineEvents MachineQuarantineEvent[]
+  diagnosticRuns DiagnosticRun[]
+}
+
+model DiagnosticRun {
+  id String @id @default(cuid())
+  machineId String
+  status DiagnosticRunStatus @default(RUNNING)
+  // Array of {name, status: PASS|FAIL|WARNING|UNKNOWN|NOT_CHECKED, value, details,
+  // measuredAt, source} - see quarantine-reason-registry.ts / diagnostic-run-service.ts.
+  checks Json?
+  triggeredBy DiagnosticTrigger
+  triggeredById String?
+  error String? @db.VarChar(500)
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  quarantineEvents MachineQuarantineEvent[]
+  @@index([machineId, startedAt])
+  @@index([machineId, status])
+}
+
+model MachineQuarantineEvent {
+  id String @id @default(cuid())
+  machineId String
+  status QuarantineEventStatus
+  reasonCode QuarantineReasonCode
+  reason String @db.VarChar(500)
+  details Json?
+  source String @db.VarChar(120)
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+  diagnosticRunId String?
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  diagnosticRun DiagnosticRun? @relation(fields: [diagnosticRunId], references: [id], onDelete: SetNull)
+  @@index([machineId, createdAt])
 }
 
 model Accelerator {

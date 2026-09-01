@@ -44,6 +44,9 @@ const machineStateSelect = {
   connectivity: true,
   operational: true,
   moderationStatus: true,
+  quarantineReasonCode: true,
+  quarantinedAt: true,
+  lastDiagnosticAt: true,
   lastHeartbeatAt: true,
   lastCudaProbeOk: true,
   dockerAvailable: true,
@@ -85,6 +88,7 @@ function projectMachineState(
     connectivity: machine.connectivity,
     operational: machine.operational,
     moderationStatus: machine.moderationStatus,
+    quarantineReasonCode: machine.quarantineReasonCode,
     lastHeartbeatAt: machine.lastHeartbeatAt,
     lastCudaProbeOk: machine.lastCudaProbeOk,
     dockerAvailable: machine.dockerAvailable,
@@ -118,6 +122,8 @@ export async function listOwnerRentalMachines(
       vramMiB: true,
       driverVersion: true,
       cudaVersion: true,
+      lifecycleStatus: true,
+      retiredAt: true,
     },
     orderBy: { lastHeartbeatAt: 'desc' },
   });
@@ -130,6 +136,9 @@ export async function listOwnerRentalMachines(
     connectivity: machine.connectivity,
     operational: machine.operational,
     moderationStatus: machine.moderationStatus,
+    quarantineReasonCode: machine.quarantineReasonCode,
+    quarantinedAt: machine.quarantinedAt,
+    lastDiagnosticAt: machine.lastDiagnosticAt,
     lastHeartbeatAt: machine.lastHeartbeatAt,
     gpuModel: machine.gpuModel,
     vramMiB: machine.vramMiB,
@@ -137,8 +146,27 @@ export async function listOwnerRentalMachines(
     cudaVersion: machine.cudaVersion,
     lastCudaProbeOk: machine.lastCudaProbeOk,
     verifiedAt: machine.verifiedAt,
+    lifecycleStatus: computeLifecycleStatus(machine, now),
+    retiredAt: machine.retiredAt,
     state: projectMachineState(machine, now, heartbeatStaleAfterSeconds),
   }));
+}
+
+// A machine explicitly RETIRED stays RETIRED. Otherwise lifecycle is derived
+// live from heartbeat age rather than trusted as a stored value, so it can
+// never go stale itself: STALE at 30+ days with no heartbeat, OFFLINE at
+// 10x the ordinary heartbeat-offline threshold, ACTIVE otherwise.
+const STALE_MACHINE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+export function computeLifecycleStatus(
+  machine: { lifecycleStatus: string; lastHeartbeatAt: Date | null },
+  now: Date,
+): string {
+  if (machine.lifecycleStatus === 'RETIRED') return 'RETIRED';
+  if (!machine.lastHeartbeatAt) return 'OFFLINE';
+  const ageMs = now.getTime() - machine.lastHeartbeatAt.getTime();
+  if (ageMs >= STALE_MACHINE_AFTER_MS) return 'STALE';
+  if (ageMs >= 10 * 60 * 60 * 1000) return 'OFFLINE';
+  return 'ACTIVE';
 }
 
 function transactionConflict(error: unknown): boolean {

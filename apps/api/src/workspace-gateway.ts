@@ -7,6 +7,7 @@ import WebSocket from 'ws';
 import { dataPlaneHostBootstrapEnabled, issueHostTunnelBootstrap, loadDataPlaneHostRuntimeConfig } from './data-plane-host-bootstrap.js';
 import { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';
 import { consumeWorkspaceAccessGrant } from './workspace-access.js';
+import { enterQuarantine } from './quarantine-service.js';
 import { waitForGatewayQueueItem } from './gateway-queue.js';
 import {
   BrowserPendingBudget,
@@ -344,7 +345,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   });
   app.post('/agent/workspace-gateway/:sessionId/stopped',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;cleaned?:boolean};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/stopped`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
-    if(body.cleaned!==true){await db.machine.update({where:{id:machineId},data:{moderationStatus:ModerationStatus.QUARANTINED,operational:MachineOperational.UNAVAILABLE}});await db.workspaceSession.updateMany({where:{id:sessionId,machineId},data:{status:WorkspaceSessionStatus.QUARANTINED,endedAt:new Date()}});return reply.code(409).send({error:'workspace_cleanup_unverified'});}
+    if(body.cleaned!==true){await db.$transaction(async tx=>{await tx.machine.update({where:{id:machineId},data:{operational:MachineOperational.UNAVAILABLE}});await enterQuarantine(tx,{machineId,reasonCode:'WORKSPACE_CLEANUP_FAILED',reason:"L'agent a signalé la fin de la session Workspace sans confirmer le nettoyage de l'environnement isolé.",details:{sessionId},source:'workspace-gateway.stopped'});await tx.workspaceSession.updateMany({where:{id:sessionId,machineId},data:{status:WorkspaceSessionStatus.QUARANTINED,endedAt:new Date()}});});return reply.code(409).send({error:'workspace_cleanup_unverified'});}
     const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.READY]}},select:{id:true,bookingId:true,startedAt:true}});if(!row)return reply.code(409).send({error:'workspace_not_stoppable'});
     const neverActivated=row.startedAt===null;const endedAt=new Date();
     const release=await db.$transaction(async tx=>{

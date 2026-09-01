@@ -177,6 +177,9 @@ test('agent developer runtime binds only to loopback and has no host bind mount'
 
 test('cleanup is fail closed and expired sessions are stopped',()=>{
   assert.match(api,/workspace_cleanup_unverified/);
-  assert.match(api,/ModerationStatus\.QUARANTINED/);
+  // moderationStatus now flows through the shared enterQuarantine() helper (which also
+  // appends a durable MachineQuarantineEvent history row) rather than a bare literal
+  // column write - see quarantine-service.ts.
+  assert.match(api,/enterQuarantine\(tx,\{machineId,reasonCode:'WORKSPACE_CLEANUP_FAILED'/);
   assert.match(agent,/self\._expired\(session\.get\("expiresAt"\)\)/);
 });

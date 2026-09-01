@@ -9,6 +9,7 @@ import {
   SessionTerminationReason,
   WorkspaceSessionStatus,
 } from '@prisma/client';
+import { enterQuarantine } from './quarantine-service.js';
 
 const STALE_JOB_ERROR_CODE = 'job_stale_timeout';
 
@@ -157,12 +158,30 @@ export async function sweepStaleJobs(
     // Once an agent has claimed a job, cleanup cannot be proven from this API
     // process. Fail closed: a stale claimed workload never makes the machine
     // AVAILABLE by itself.
-    const machineUpdate = claimedMachineIds.length
-      ? await tx.machine.updateMany({
-          where: { id: { in: claimedMachineIds }, moderationStatus: ModerationStatus.CLEAR },
-          data: { moderationStatus: ModerationStatus.QUARANTINED, operational: MachineOperational.UNAVAILABLE },
-        })
-      : { count: 0 };
+    let machineQuarantinedCount = 0;
+    if (claimedMachineIds.length) {
+      const quarantinableIds = await tx.machine.findMany({
+        where: { id: { in: claimedMachineIds }, moderationStatus: ModerationStatus.CLEAR },
+        select: { id: true },
+      });
+      if (quarantinableIds.length) {
+        await tx.machine.updateMany({
+          where: { id: { in: quarantinableIds.map((m) => m.id) } },
+          data: { operational: MachineOperational.UNAVAILABLE },
+        });
+        for (const { id } of quarantinableIds) {
+          await enterQuarantine(tx, {
+            machineId: id,
+            reasonCode: 'STALE_JOB',
+            reason: "Une tâche est restée assignée à l'agent au-delà de son bail (lease), sans confirmation de nettoyage.",
+            source: 'job-staleness-sweep',
+            now,
+          });
+        }
+        machineQuarantinedCount = quarantinableIds.length;
+      }
+    }
+    const machineUpdate = { count: machineQuarantinedCount };
 
     const paymentUpdate = await tx.payment.updateMany({
       where: { bookingId: { in: affectedBookingIds }, status: PaymentStatus.ESCROW_FUNDED },

@@ -114,12 +114,23 @@ function fakeDb(seed: {
       },
     },
     machine: {
+      findMany: async ({ where }: any) => machines
+        .filter(machine =>
+          where.id.in.includes(machine.id) &&
+          (!where.moderationStatus || machine.moderationStatus === where.moderationStatus))
+        .map(machine => ({ id: machine.id })),
+      findUnique: async ({ where }: any) => machines.find(machine => machine.id === where.id) ?? null,
+      update: async ({ where, data }: any) => {
+        const machine = machines.find(item => item.id === where.id);
+        if (machine) Object.assign(machine, data);
+        return machine ?? {};
+      },
       updateMany: async ({ where, data }: any) => {
         let count = 0;
         for (const machine of machines) {
           if (
             where.id.in.includes(machine.id) &&
-            machine.moderationStatus === where.moderationStatus &&
+            (!where.moderationStatus || machine.moderationStatus === where.moderationStatus) &&
             (!where.operational || machine.operational === where.operational)
           ) {
             Object.assign(machine, data);
@@ -128,6 +139,9 @@ function fakeDb(seed: {
         }
         return { count };
       },
+    },
+    machineQuarantineEvent: {
+      create: async () => ({}),
     },
     payment: {
       updateMany: async ({ where, data }: any) => {

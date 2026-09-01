@@ -28,6 +28,19 @@ const BLOCKING_REASON={
   ACCELERATOR_ALLOCATED:'GPU déjà alloué à une réservation',
   ACCELERATOR_ALREADY_LISTED:'GPU déjà publié',
   FULL_MACHINE_LISTING_ACTIVE:'une annonce machine entière utilise déjà ce GPU',
+  // Machine-level blockingReason codes (from machine_not_publishable, not
+  // accelerator-level) - see machine-state-service.ts / quarantine-reason-registry.ts.
+  RESOURCE_QUARANTINED:'la machine est en quarantaine',
+  CRITICAL_GPU_IDENTITY_CHANGE:"changement critique d'identité GPU pendant une session",
+  DIAGNOSTIC_COMPLETION_RACE:'session active après libération de la ressource GPU',
+  STALE_CLAIM:'revendication de ressource GPU non prouvée',
+  STALE_JOB:'tâche agent restée bloquée sans confirmation',
+  WORKSPACE_CLEANUP_FAILED:'nettoyage de Workspace non confirmé',
+  AGENT_SECURITY_FAILURE:'échecs de signature agent répétés',
+  GPU_HEALTH_CHECK_FAILED:'le diagnostic GPU a échoué',
+  GPU_UNAVAILABLE:'aucun GPU détecté',
+  DOCKER_UNAVAILABLE:'Docker indisponible',
+  NVIDIA_RUNTIME_UNAVAILABLE:'runtime NVIDIA indisponible',
 };
 const MACHINE_STATE={
   NOT_LINKED:'Host non relié',

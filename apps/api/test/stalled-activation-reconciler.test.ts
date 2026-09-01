@@ -28,8 +28,8 @@ test('reconcileStalledActivations degrades FUNDED/STARTING bookings whose start 
   assert.match(body, /constclaimedExecution=activeJobs\.some/, 'release policy must distinguish claimed from never-claimed execution');
   assert.match(
     body,
-    /if\(claimedExecution\).*moderationStatus:ModerationStatus\.QUARANTINED,operational:MachineOperational\.UNAVAILABLE/s,
-    'claimed execution with unproved cleanup must fail closed',
+    /if\(claimedExecution\)\{.*operational:MachineOperational\.UNAVAILABLE.*enterQuarantine\(tx,\{machineId:booking\.listing\.machineId,reasonCode:'STALE_JOB'/s,
+    'claimed execution with unproved cleanup must fail closed (via the shared enterQuarantine() helper, which also appends a durable MachineQuarantineEvent history row)',
   );
   assert.match(
     body,

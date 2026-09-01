@@ -33,6 +33,7 @@ from .runner import (
     run_gpu_proof_workspace,
     verify_protection_profile,
 )
+DIAGNOSTIC_RUN_TIMEOUT_SECONDS = 120
 from .platform_info import find_nvidia_smi, find_rocm_smi, find_xpu_smi, gpu_inventory, system_inventory
 from .storage import (
     config_dir, fingerprint, generate_key, key_path, load_config, load_key,
@@ -341,6 +342,7 @@ def heartbeat_loop(
     failures = 0
     developer_image = workspace_image(config, "developer")
     job_thread: threading.Thread | None = None
+    diagnostic_thread: threading.Thread | None = None
 
     def gateway_error(exc: Exception) -> None:
         message = str(exc)[:300]
@@ -397,6 +399,12 @@ def heartbeat_loop(
         except Exception as exc:
             emit({"event": "job_poll_error", "type": type(exc).__name__, "message": str(exc)[:300]})
 
+    def poll_and_run_diagnostic() -> None:
+        try:
+            poll_and_run_diagnostic_once(client(config), key, machine_id, event_sink=emit)
+        except Exception as exc:
+            emit({"event": "diagnostic_poll_error", "type": type(exc).__name__, "message": str(exc)[:300]})
+
     threading.Thread(target=prewarm, name="gpubnb-workspace-prewarm", daemon=True).start()
     threading.Thread(
         target=supervise_gateway,
@@ -427,6 +435,13 @@ def heartbeat_loop(
                         daemon=True,
                     )
                     job_thread.start()
+                if diagnostic_thread is None or not diagnostic_thread.is_alive():
+                    diagnostic_thread = threading.Thread(
+                        target=poll_and_run_diagnostic,
+                        name="gpubnb-diagnostic-worker",
+                        daemon=True,
+                    )
+                    diagnostic_thread.start()
                 failures = 0
             except Exception as exc:
                 failures = min(failures + 1, 8)
@@ -475,6 +490,54 @@ def resolve_developer_workspace_gpu_uuid(
     if gpu_uuid.casefold() not in local_uuids:
         raise RuntimeError("developer_workspace_gpu_uuid_not_found_locally")
     return gpu_uuid
+
+
+def poll_and_run_diagnostic_once(
+    api: ApiClient,
+    key: Any,
+    machine_id: str,
+    event_sink: Callable[[dict[str, Any]], None] | None = None,
+) -> None:
+    """Polls for a server-side DiagnosticRun (created from Host's "Relancer le
+    diagnostic" / "Revalider la machine" button, see machine-diagnostics-routes.ts)
+    and reports the real result back, signed exactly like every other agent
+    request. Deliberately independent of run_next_job's booking-scoped Job
+    machinery: this must keep working even while the machine is quarantined
+    (moderationStatus != CLEAR), which /agent/jobs/next intentionally does not
+    guarantee. Never invents a result - an execution failure here is reported
+    as an explicit error, never silently as a passing check.
+    """
+    emit = event_sink or print_json
+    next_path = f"/agent/diagnostics/next/{machine_id}"
+    pending = agent_request(api, key, machine_id, next_path)
+    diagnostic_run_id = pending.get("diagnosticRunId")
+    if not isinstance(diagnostic_run_id, str) or not diagnostic_run_id:
+        return
+    image = str(pending.get("diagnosticImage") or "")
+    timeout_seconds = int(pending.get("timeoutSeconds") or DIAGNOSTIC_RUN_TIMEOUT_SECONDS)
+    emit({"event": "quarantine_diagnostic_started", "diagnosticRunId": diagnostic_run_id})
+    result_path = f"/agent/diagnostics/{diagnostic_run_id}/result"
+    try:
+        if not image:
+            raise RuntimeError("diagnostic_image_not_configured")
+        report = run_gpu_diagnostic(image, timeout_seconds)
+        metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
+        agent_request(api, key, machine_id, result_path, "POST", {
+            "machineId": machine_id,
+            "gpuDetected": bool(report.get("gpuDetected")),
+            "gpuUuid": metrics.get("firstGpuUuid"),
+            "summary": str(report.get("summary") or "")[:2000],
+            "metrics": metrics,
+        })
+        emit({"event": "quarantine_diagnostic_completed", "diagnosticRunId": diagnostic_run_id, "gpuDetected": bool(report.get("gpuDetected"))})
+    except Exception as exc:
+        agent_request(api, key, machine_id, result_path, "POST", {
+            "machineId": machine_id,
+            "gpuDetected": False,
+            "summary": "",
+            "error": str(exc)[:500],
+        })
+        emit({"event": "quarantine_diagnostic_failed", "diagnosticRunId": diagnostic_run_id, "message": str(exc)[:300]})
 
 
 def run_next_job(

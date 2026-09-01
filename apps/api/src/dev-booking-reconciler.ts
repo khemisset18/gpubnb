@@ -1,6 +1,7 @@
 import { BookingStatus, JobStatus, JobType, MachineOperational, ModerationStatus, PaymentStatus, PrismaClient, ResourceAllocationStatus, SessionTerminationReason, WorkspaceSessionStatus } from '@prisma/client';
 import { config } from './config.js';
 import { confirmSettlement, requestSettlement } from './settlement-transactions.js';
+import { enterQuarantine } from './quarantine-service.js';
 
 const TERMINAL_JOB_STATUSES: JobStatus[] = [
   JobStatus.COMPLETED,
@@ -132,10 +133,20 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
         where: { bookingId: workspace.bookingId, status: PaymentStatus.ESCROW_FUNDED },
         data: { status: PaymentStatus.SETTLEMENT_PENDING },
       });
-      await tx.machine.updateMany({
+      const quarantinable = await tx.machine.updateMany({
         where: { id: workspace.machineId, moderationStatus: ModerationStatus.CLEAR },
-        data: { moderationStatus: ModerationStatus.QUARANTINED, operational: MachineOperational.UNAVAILABLE },
+        data: { operational: MachineOperational.UNAVAILABLE },
       });
+      if (quarantinable.count === 1) {
+        await enterQuarantine(tx, {
+          machineId: workspace.machineId,
+          reasonCode: 'DIAGNOSTIC_COMPLETION_RACE',
+          reason: 'Session Developer restée active alors que la réservation associée est déjà terminée et que la ressource GPU a été réallouée.',
+          details: { bookingId: workspace.bookingId, sessionId: workspace.id },
+          source: 'dev-booking-reconciler.racedDeveloperSessions',
+          now,
+        });
+      }
       await tx.workspaceSession.update({
         where: { id: workspace.id },
         data: {
@@ -440,10 +451,20 @@ export async function reconcileStalledActivations(db: PrismaClient, now = new Da
       });
 
       if (claimedExecution) {
-        await tx.machine.updateMany({
+        const quarantinable = await tx.machine.updateMany({
           where: { id: booking.listing.machineId, moderationStatus: ModerationStatus.CLEAR },
-          data: { moderationStatus: ModerationStatus.QUARANTINED, operational: MachineOperational.UNAVAILABLE },
+          data: { operational: MachineOperational.UNAVAILABLE },
         });
+        if (quarantinable.count === 1) {
+          await enterQuarantine(tx, {
+            machineId: booking.listing.machineId,
+            reasonCode: 'STALE_JOB',
+            reason: "Une tâche d'activation est restée assignée à l'agent au-delà du délai attendu, sans confirmation de nettoyage.",
+            details: { bookingId: booking.id },
+            source: 'dev-booking-reconciler.reconcileStalledActivations',
+            now,
+          });
+        }
       } else {
         const releasedAt = now;
         const allocationData = { status: ResourceAllocationStatus.RELEASED, releasedAt };

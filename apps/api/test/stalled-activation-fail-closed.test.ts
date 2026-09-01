@@ -22,9 +22,13 @@ test('expired claimed activation fails closed instead of releasing the machine',
   const body = await reconcilerBody();
   assert.match(body, /const claimedExecution = activeJobs\.some/);
   assert.match(body, /job\.currentAttemptId !== null \|\| job\.status !== JobStatus\.QUEUED/);
-  assert.match(body, /moderationStatus: ModerationStatus\.QUARANTINED/);
+  // moderationStatus now flows through the shared enterQuarantine() helper (which
+  // also appends a durable MachineQuarantineEvent history row) rather than a bare
+  // literal column write - see quarantine-service.ts.
+  assert.match(body, /await enterQuarantine\(tx, \{[\s\S]*?reasonCode: 'STALE_JOB'/);
   assert.match(body, /operational: MachineOperational\.UNAVAILABLE/);
   assert.ok(body.indexOf('if (claimedExecution)') < body.indexOf('MachineOperational.AVAILABLE'));
+  assert.ok(body.indexOf('if (claimedExecution)') < body.indexOf("reasonCode: 'STALE_JOB'"));
 });
 
 test('only never-claimed work can release a machine and release is guarded by runtime absence', async () => {

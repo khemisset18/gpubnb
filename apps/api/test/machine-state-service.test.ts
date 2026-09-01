@@ -101,3 +101,27 @@ test('quarantine always fails closed', () => {
   }));
   assert.equal(gpu.state, 'QUARANTINED');
 });
+
+test('quarantine surfaces the real stable reasonCode instead of a generic label', () => {
+  const withReason = computeMachineState(readyMachine({
+    moderationStatus: ModerationStatus.QUARANTINED,
+    quarantineReasonCode: 'GPU_HEALTH_CHECK_FAILED',
+  }));
+  assert.equal(withReason.state, 'QUARANTINED');
+  assert.equal(withReason.blockingReason, 'GPU_HEALTH_CHECK_FAILED');
+
+  // A machine quarantined before this field existed (or whose reason code was
+  // never recorded) must never be presented as if no reason exists.
+  const withoutReason = computeMachineState(readyMachine({
+    moderationStatus: ModerationStatus.QUARANTINED,
+    quarantineReasonCode: null,
+  }));
+  assert.equal(withoutReason.blockingReason, 'UNKNOWN');
+});
+
+test('an offline (stale-heartbeat) machine is never READY, independent of quarantine', () => {
+  const stale = computeMachineState(readyMachine({ heartbeatFresh: false }));
+  assert.equal(stale.state, 'OFFLINE');
+  assert.equal(stale.canPublish, false);
+  assert.equal(stale.canAcceptBooking, false);
+});
