@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
@@ -403,7 +404,21 @@ def heartbeat_loop(
         try:
             poll_and_run_diagnostic_once(client(config), key, machine_id, config=config, event_sink=emit)
         except Exception as exc:
-            emit({"event": "diagnostic_poll_error", "type": type(exc).__name__, "message": str(exc)[:300]})
+            # This is the catch-all for anything poll_and_run_diagnostic_once
+            # itself did not already turn into a diagnostic_run_failed report to
+            # the server (e.g. the GET /agent/diagnostics/next call itself
+            # failing - network error, malformed response). Never let this die
+            # silently: the traceback is truncated and never includes request
+            # headers/signatures (those are local variables inside client.py's
+            # signing helpers, never part of an exception's own message/repr).
+            emit({
+                "event": "diagnostic_poll_error",
+                "machineId": machine_id,
+                "type": type(exc).__name__,
+                "message": str(exc)[:300],
+                "traceback": "".join(traceback.format_exception(exc, limit=6))[-2000:],
+                "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            })
 
     threading.Thread(target=prewarm, name="gpubnb-workspace-prewarm", daemon=True).start()
     threading.Thread(
@@ -411,6 +426,13 @@ def heartbeat_loop(
         name="gpubnb-workspace-gateway",
         daemon=True,
     ).start()
+    emit({
+        "event": "diagnostic_poll_loop_started",
+        "machineId": machine_id,
+        "processMode": process_mode,
+        "intervalSeconds": interval,
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    })
     pid_path().write_text(
         json.dumps(
             {
@@ -455,6 +477,11 @@ def heartbeat_loop(
         print("Agent arrêté.")
         return 0
     finally:
+        emit({
+            "event": "diagnostic_loop_stopped",
+            "machineId": machine_id,
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        })
         try:
             pid_path().unlink()
         except FileNotFoundError:
@@ -509,11 +536,28 @@ def poll_and_run_diagnostic_once(
     as an explicit error, never silently as a passing check.
     """
     emit = event_sink or print_json
+    def now_iso() -> str:
+        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     next_path = f"/agent/diagnostics/next/{machine_id}"
+
+    # Every cycle logs its own aliveness + the request/response pair, even when
+    # nothing is pending - this is exactly the observability that was missing
+    # when this loop silently did nothing in the real Windows service with no
+    # trace of why. Never let a cycle finish without at least one event.
+    emit({"event": "diagnostic_poll_loop_running", "machineId": machine_id, "timestamp": now_iso()})
+    emit({"event": "diagnostic_poll_request", "machineId": machine_id, "path": next_path, "timestamp": now_iso()})
     pending = agent_request(api, key, machine_id, next_path)
     diagnostic_run_id = pending.get("diagnosticRunId")
+    emit({
+        "event": "diagnostic_poll_response",
+        "machineId": machine_id,
+        "diagnosticRunId": diagnostic_run_id,
+        "timestamp": now_iso(),
+    })
     if not isinstance(diagnostic_run_id, str) or not diagnostic_run_id:
         return
+    emit({"event": "diagnostic_run_received", "machineId": machine_id, "diagnosticRunId": diagnostic_run_id, "timestamp": now_iso()})
+
     # The server sends its own pinned diagnosticImage when configured
     # (DEV_DIAGNOSTIC_IMAGE); fall back to this agent's own locally configured
     # image otherwise - same precedence run_next_job already uses for the
@@ -521,11 +565,11 @@ def poll_and_run_diagnostic_once(
     # one env var doesn't leave every quarantine diagnostic unable to run at all.
     image = str(pending.get("diagnosticImage") or (config or {}).get("diagnosticImage") or "")
     timeout_seconds = int(pending.get("timeoutSeconds") or DIAGNOSTIC_RUN_TIMEOUT_SECONDS)
-    emit({"event": "quarantine_diagnostic_started", "diagnosticRunId": diagnostic_run_id})
     result_path = f"/agent/diagnostics/{diagnostic_run_id}/result"
     try:
         if not image:
             raise RuntimeError("diagnostic_image_not_configured")
+        emit({"event": "diagnostic_run_started", "machineId": machine_id, "diagnosticRunId": diagnostic_run_id, "timestamp": now_iso()})
         report = run_gpu_diagnostic(image, timeout_seconds)
         metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
         agent_request(api, key, machine_id, result_path, "POST", {
@@ -535,7 +579,13 @@ def poll_and_run_diagnostic_once(
             "summary": str(report.get("summary") or "")[:2000],
             "metrics": metrics,
         })
-        emit({"event": "quarantine_diagnostic_completed", "diagnosticRunId": diagnostic_run_id, "gpuDetected": bool(report.get("gpuDetected"))})
+        emit({
+            "event": "diagnostic_run_completed",
+            "machineId": machine_id,
+            "diagnosticRunId": diagnostic_run_id,
+            "gpuDetected": bool(report.get("gpuDetected")),
+            "timestamp": now_iso(),
+        })
     except Exception as exc:
         agent_request(api, key, machine_id, result_path, "POST", {
             "machineId": machine_id,
@@ -543,7 +593,14 @@ def poll_and_run_diagnostic_once(
             "summary": "",
             "error": str(exc)[:500],
         })
-        emit({"event": "quarantine_diagnostic_failed", "diagnosticRunId": diagnostic_run_id, "message": str(exc)[:300]})
+        emit({
+            "event": "diagnostic_run_failed",
+            "machineId": machine_id,
+            "diagnosticRunId": diagnostic_run_id,
+            "type": type(exc).__name__,
+            "message": str(exc)[:300],
+            "timestamp": now_iso(),
+        })
 
 
 def run_next_job(
