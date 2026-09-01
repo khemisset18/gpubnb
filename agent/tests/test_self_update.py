@@ -20,6 +20,8 @@ from gpubnb_agent.self_update import (
     PORTABLE_ASSET_NAME,
     ReleaseInfo,
     SelfUpdateError,
+    _is_downgrade,
+    candidate_agent_version,
     download_and_verify_agent_exe,
     fetch_release_info,
     is_update_available,
@@ -28,6 +30,13 @@ from gpubnb_agent.self_update import (
 
 FAKE_EXE_OLD = b"MZ" + b"\x00" * (262144)
 FAKE_EXE_NEW = b"MZ" + b"\x01" * (262144)
+
+
+def _fake_run_version_command(_candidate_path: Path) -> str:
+    # The default real implementation actually executes the candidate exe -
+    # these fixtures are not real executables, so every perform_self_update
+    # call that reaches the version-check stage must inject this instead.
+    return "0.6.2"
 
 
 def _portable_zip_bytes(exe_bytes: bytes) -> bytes:
@@ -96,6 +105,35 @@ class UpdateAvailableTests(unittest.TestCase):
         self.assertTrue(is_update_available(release, current_build_commit="a" * 12))
 
 
+class DowngradeProtectionTests(unittest.TestCase):
+    def test_a_strictly_older_semver_is_a_downgrade(self) -> None:
+        self.assertTrue(_is_downgrade("0.7.0", "0.6.2"))
+
+    def test_an_equal_or_newer_semver_is_never_a_downgrade(self) -> None:
+        self.assertFalse(_is_downgrade("0.6.2", "0.6.2"))
+        self.assertFalse(_is_downgrade("0.6.2", "0.6.3"))
+        self.assertFalse(_is_downgrade("0.6.2", "1.0.0"))
+
+    def test_an_unparseable_version_never_blocks_since_it_cannot_prove_a_downgrade(self) -> None:
+        self.assertFalse(_is_downgrade("0.6.2", "not-a-version"))
+        self.assertFalse(_is_downgrade("not-a-version", "0.6.2"))
+
+    def test_candidate_agent_version_runs_the_downloaded_exe_in_a_throwaway_temp_path(self) -> None:
+        seen_paths: list[Path] = []
+
+        def fake_run(path: Path) -> str:
+            seen_paths.append(path)
+            self.assertTrue(path.exists())
+            self.assertEqual(path.read_bytes(), b"fake-exe-bytes")
+            return "0.6.2"
+
+        result = candidate_agent_version(b"fake-exe-bytes", run_version_command=fake_run)
+        self.assertEqual(result, "0.6.2")
+        self.assertEqual(len(seen_paths), 1)
+        # The temp file must be cleaned up afterward - never left behind.
+        self.assertFalse(seen_paths[0].exists())
+
+
 class DownloadAndVerifyTests(unittest.TestCase):
     def test_correct_checksum_extracts_the_real_agent_exe(self) -> None:
         zip_bytes = _portable_zip_bytes(FAKE_EXE_NEW)
@@ -160,6 +198,7 @@ class PerformSelfUpdateTests(unittest.TestCase):
                 current_build_commit="a" * 12,
                 dry_run=True,
                 http_get=_fake_http(zip_bytes, _release_payload("f" * 40)),
+                run_version_command=_fake_run_version_command,
                 stop_service=lambda: calls.append("stop"),
                 start_service=lambda: calls.append("start"),
                 service_running=lambda: True,
@@ -188,6 +227,7 @@ class PerformSelfUpdateTests(unittest.TestCase):
                 install_dir,
                 current_build_commit="a" * 12,
                 http_get=_fake_http(zip_bytes, _release_payload("f" * 40)),
+                run_version_command=_fake_run_version_command,
                 stop_service=stop_service,
                 start_service=start_service,
                 service_running=lambda: running["value"],
@@ -242,6 +282,7 @@ class PerformSelfUpdateTests(unittest.TestCase):
                 install_dir,
                 current_build_commit="a" * 12,
                 http_get=_fake_http(zip_bytes, _release_payload("f" * 40)),
+                run_version_command=_fake_run_version_command,
                 stop_service=stop_service,
                 start_service=start_service,
                 service_running=service_running,
@@ -263,6 +304,7 @@ class PerformSelfUpdateTests(unittest.TestCase):
                     install_dir,
                     current_build_commit="a" * 12,
                     http_get=_fake_http(zip_bytes, _release_payload("f" * 40)),
+                    run_version_command=_fake_run_version_command,
                     stop_service=lambda: None,
                     start_service=lambda: self.fail("must not start before stop is confirmed"),
                     service_running=lambda: True,  # never actually stops
@@ -272,6 +314,30 @@ class PerformSelfUpdateTests(unittest.TestCase):
             self.assertIn("service_did_not_stop_in_time", str(ctx.exception))
             self.assertEqual((install_dir / "gpubnb-agent.exe").read_bytes(), FAKE_EXE_OLD)
             self.assertEqual(list(install_dir.glob("gpubnb-agent.exe.new")), [])
+
+    def test_a_release_reporting_an_older_agent_version_is_refused_never_installed(self) -> None:
+        # Real protection requested: if host-test-latest ever pointed at an
+        # older release (bad promotion, rollback, compromised channel), the
+        # agent must never silently downgrade itself just because the commit
+        # differs from what is currently installed.
+        with TemporaryDirectory() as tmp:
+            install_dir = self._install_dir(tmp)
+            zip_bytes = _portable_zip_bytes(FAKE_EXE_NEW)
+            calls: list[str] = []
+            with self.assertRaises(SelfUpdateError) as ctx:
+                perform_self_update(
+                    install_dir,
+                    current_build_commit="a" * 12,
+                    current_agent_version="0.9.0",
+                    http_get=_fake_http(zip_bytes, _release_payload("f" * 40)),
+                    run_version_command=lambda _path: "0.6.2",  # older than 0.9.0
+                    stop_service=lambda: calls.append("stop"),
+                    start_service=lambda: calls.append("start"),
+                    service_running=lambda: True,
+                )
+            self.assertIn("downgrade_refused", str(ctx.exception))
+            self.assertEqual(calls, [], "must never touch the service on a refused downgrade")
+            self.assertEqual((install_dir / "gpubnb-agent.exe").read_bytes(), FAKE_EXE_OLD)
 
     def test_a_service_that_fails_to_start_is_rolled_back_to_the_known_good_binary(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -288,6 +354,7 @@ class PerformSelfUpdateTests(unittest.TestCase):
                     install_dir,
                     current_build_commit="a" * 12,
                     http_get=_fake_http(zip_bytes, _release_payload("f" * 40)),
+                    run_version_command=_fake_run_version_command,
                     stop_service=lambda: None,
                     start_service=start_service,
                     service_running=lambda: False,

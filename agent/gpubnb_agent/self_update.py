@@ -24,7 +24,10 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 import shutil
+import subprocess
+import tempfile
 import time
 import zipfile
 from dataclasses import dataclass
@@ -32,6 +35,7 @@ from pathlib import Path
 from typing import Callable
 from urllib.request import Request, urlopen
 
+from . import __version__ as AGENT_VERSION
 from ._build_info import BUILD_COMMIT
 
 GITHUB_API = "https://api.github.com"
@@ -131,6 +135,50 @@ def download_and_verify_agent_exe(
     return exe_bytes
 
 
+def _parse_semver(value: str) -> tuple[int, int, int] | None:
+    match = re.match(r"^(\d+)\.(\d+)\.(\d+)", value.strip())
+    if not match:
+        return None
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+
+def default_run_version_command(exe_path: Path) -> str:
+    result = subprocess.run(  # noqa: S603 - fixed argv, no shell, checksum already verified
+        [str(exe_path), "version"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    return result.stdout.strip()
+
+
+def candidate_agent_version(
+    exe_bytes: bytes,
+    *,
+    run_version_command: Callable[[Path], str] = default_run_version_command,
+) -> str:
+    """Runs the downloaded (already checksum-verified) candidate exe with
+    `version` in a throwaway temp location, purely to read what it reports -
+    this never touches the real install directory or service. Used only to
+    refuse an accidental downgrade before anything is actually replaced."""
+    with tempfile.TemporaryDirectory(prefix="gpubnb-self-update-") as tmp:
+        candidate_path = Path(tmp) / "gpubnb-agent-candidate.exe"
+        candidate_path.write_bytes(exe_bytes)
+        return run_version_command(candidate_path)
+
+
+def _is_downgrade(current_version: str, candidate_version: str) -> bool:
+    current = _parse_semver(current_version)
+    candidate = _parse_semver(candidate_version)
+    if current is None or candidate is None:
+        # Can't parse one of the two - never block on an unparseable version,
+        # just can't prove it's a downgrade either. Real protection is best
+        # effort, not a hard requirement when versions aren't semver.
+        return False
+    return candidate < current
+
+
 @dataclass(frozen=True)
 class UpdateResult:
     updated: bool
@@ -147,8 +195,10 @@ def perform_self_update(
     repository: str = DEFAULT_REPOSITORY,
     channel: str = DEFAULT_CHANNEL,
     current_build_commit: str = BUILD_COMMIT,
+    current_agent_version: str = AGENT_VERSION,
     dry_run: bool = False,
     http_get: Callable[[str], bytes] = default_http_get,
+    run_version_command: Callable[[Path], str] = default_run_version_command,
     stop_service: Callable[[], None],
     start_service: Callable[[], None],
     service_running: Callable[[], bool],
@@ -180,6 +230,11 @@ def perform_self_update(
         )
 
     exe_bytes = download_and_verify_agent_exe(release, http_get=http_get)
+    candidate_version = candidate_agent_version(exe_bytes, run_version_command=run_version_command)
+    if _is_downgrade(current_agent_version, candidate_version):
+        raise SelfUpdateError(
+            f"downgrade_refused:current={current_agent_version}:candidate={candidate_version}"
+        )
     if dry_run:
         return UpdateResult(
             updated=False,
