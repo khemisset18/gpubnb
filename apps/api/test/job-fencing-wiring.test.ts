@@ -43,6 +43,21 @@ test('state and completion mutations are fenced by attempt plus token', async ()
   assert.match(complete, /workspace_session_not_preparing/, 'completion must never reopen a terminal Developer session');
 });
 
+// Real 500 found live during the PC A <-> PC B test: /agent/jobs/:id/complete ran its
+// own raw db.$transaction under Serializable isolation with no retry at all, unlike
+// /bookings which already used runBookingTransaction for this exact error class
+// (booking-transaction-retry.ts: P2034 "observed live under concurrent booking load").
+// dev-booking-reconciler.ts's own 10s-interval reconciler writes to the same Job/Booking
+// rows concurrently, which is exactly the contention that class of error is documented
+// for - and completing a job never got the retry that already existed for it elsewhere.
+test('/complete retries a Postgres serialization conflict instead of surfacing a raw 500, and keeps its Serializable isolation', async () => {
+  const source = await sourcePromise;
+  const body = routeSlice(source, "app.post('/agent/jobs/:id/complete'", "app.post('/agent/jobs/:id/finalize-proof'");
+  assert.match(body, /await runBookingTransaction\(db,async tx=>\{/, 'must run through the retry helper, not a raw db.$transaction');
+  assert.match(body, /isolationLevel:Prisma\.TransactionIsolationLevel\.Serializable/, 'must keep Serializable isolation - only how conflicts are handled should change');
+  assert.doesNotMatch(body, /await db\.\$transaction\(async tx=>\{/, 'must not also fall back to an unretried raw transaction');
+});
+
 test('proof finalization cannot be replayed by an obsolete attempt', async () => {
   const source = await sourcePromise;
   const body = routeSlice(source, "app.post('/agent/jobs/:id/finalize-proof'", "app.get('/listings'");

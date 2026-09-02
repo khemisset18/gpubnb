@@ -53,6 +53,30 @@ export function preparationLabel(workspaceDetail) {
   return (phase && PREPARATION_PHASE_LABEL[phase]) || 'Préparation en cours…';
 }
 
+// The commercial rental clock starts only once the workspace is genuinely activated
+// (a real upstream frame proven exchanged with the renter's browser - see
+// activateGatewaySession in workspace-gateway.ts), never at funding/GPU Proof/click
+// time. workspaceDetail.status reads 'RUNNING' only after that real activation - READY
+// (container ready, not yet actually opened) and PREPARING must never show a countdown.
+// endsAt is always the server's own value (booking.endsAt, refreshed by the normal
+// polling cycle); nowMs is the only locally-supplied input, so a fast local re-render
+// can update the displayed count every second without hitting the network, while the
+// authoritative anchor stays server-derived.
+export function remainingRentalSeconds(workspaceDetail, nowMs) {
+  if (!workspaceDetail || workspaceDetail.status !== 'RUNNING' || !workspaceDetail.endsAt) return null;
+  const endsAtMs = new Date(workspaceDetail.endsAt).getTime();
+  if (!Number.isFinite(endsAtMs)) return null;
+  return Math.max(0, Math.round((endsAtMs - nowMs) / 1000));
+}
+
+export function formatRemainingRentalTime(totalSeconds) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+}
+
 /**
  * Builds the URL to navigate to for opening the workspace. Uses only the
  * `openPath` returned by POST /bookings/:id/workspace/access — never

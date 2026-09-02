@@ -157,22 +157,34 @@ async function authenticateAgent(db:PrismaClient,redis:Redis,machineId:string,re
 }
 async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.workspaceSession.findFirst({where:{id:sessionId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR}},select:{id:true,renterId:true,machineId:true,bookingId:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});}
 
-async function activateGatewaySession(db:PrismaClient,sessionId:string,machineId:string){
+// The commercial rental clock's one true start: a real upstream frame proven exchanged
+// between the container and the authenticated renter's browser (see the two call sites
+// below - both fire only on a genuine WebSocket data frame, never on merely opening the
+// gateway URL). booking.workspaceActivatedAt (not booking.status alone) is the
+// idempotency guard: with the private-beta GPU_DIAGNOSTIC path, a booking can already be
+// ACTIVE (proving the GPU works) well before any interactive workspace ever opens - GPU
+// Proof and any wait before the renter opens their workspace must never consume purchased
+// minutes, so both STARTING and ACTIVE are valid pre-activation states here, and only
+// workspaceActivatedAt:null distinguishes "not yet really started" from "already running".
+// Exported (kept otherwise unused outside this module) so it can be exercised directly
+// against a real database in tests, the same convention gpu-proof-completion.ts's
+// completeGpuProofJob already uses - not re-simulated in a test that only reads source.
+export async function activateGatewaySession(db:PrismaClient,sessionId:string,machineId:string){
   return db.$transaction(async tx=>{
     const row=await tx.workspaceSession.findFirst({
       where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},
-      select:{id:true,bookingId:true,status:true,expiresAt:true,booking:{select:{status:true,expectedSeconds:true}}},
+      select:{id:true,bookingId:true,status:true,expiresAt:true,booking:{select:{status:true,expectedSeconds:true,workspaceActivatedAt:true}}},
     });
     if(!row)return null;
-    if(row.status===WorkspaceSessionStatus.RUNNING&&row.booking.status===BookingStatus.ACTIVE)return {activated:false,expiresAt:row.expiresAt};
-    if(row.status!==WorkspaceSessionStatus.READY||row.booking.status!==BookingStatus.STARTING)return null;
+    if(row.booking.workspaceActivatedAt!==null)return {activated:false,expiresAt:row.expiresAt};
+    if(row.status!==WorkspaceSessionStatus.READY||(row.booking.status!==BookingStatus.STARTING&&row.booking.status!==BookingStatus.ACTIVE))return null;
     const activatedAt=new Date();const expiresAt=new Date(activatedAt.getTime()+row.booking.expectedSeconds*1000);
     const sessionUpdate=await tx.workspaceSession.updateMany({where:{id:row.id,status:WorkspaceSessionStatus.READY},data:{status:WorkspaceSessionStatus.RUNNING,startedAt:activatedAt,expiresAt,preparationStep:'INTERACTIVE_WORKSPACE_CONNECTED'}});
     if(sessionUpdate.count!==1){
-      const winner=await tx.workspaceSession.findFirst({where:{id:row.id,machineId,status:WorkspaceSessionStatus.RUNNING,booking:{status:BookingStatus.ACTIVE}},select:{expiresAt:true}});
+      const winner=await tx.workspaceSession.findFirst({where:{id:row.id,machineId,status:WorkspaceSessionStatus.RUNNING,booking:{workspaceActivatedAt:{not:null}}},select:{expiresAt:true}});
       return winner?{activated:false,expiresAt:winner.expiresAt}:null;
     }
-    const bookingUpdate=await tx.booking.updateMany({where:{id:row.bookingId,status:BookingStatus.STARTING},data:{status:BookingStatus.ACTIVE,startsAt:activatedAt,endsAt:expiresAt}});
+    const bookingUpdate=await tx.booking.updateMany({where:{id:row.bookingId,workspaceActivatedAt:null},data:{status:BookingStatus.ACTIVE,startsAt:activatedAt,endsAt:expiresAt,workspaceActivatedAt:activatedAt}});
     if(bookingUpdate.count!==1)throw new Error('workspace_activation_booking_conflict');
     await tx.machineAllocation.updateMany({where:{bookingId:row.bookingId},data:{startsAt:activatedAt,endsAt:expiresAt}});
     await tx.acceleratorAllocation.updateMany({where:{bookingId:row.bookingId},data:{startsAt:activatedAt,endsAt:expiresAt}});

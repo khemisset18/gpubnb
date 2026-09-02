@@ -8,6 +8,7 @@ import {
 } from '@prisma/client';
 
 import { STALLED_ACTIVATION_GRACE_MS } from './dev-booking-reconciler.js';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 
 export type GpuProofCompletionOutcome = {
   bookingStatus: typeof BookingStatus.STARTING | typeof BookingStatus.COMPLETED;
@@ -46,7 +47,7 @@ export async function completeGpuProofJob(
     select: { id: true },
   });
 
-  return db.$transaction(async (tx) => {
+  return runBookingTransaction(db, async (tx) => {
     if (developerWorkspaceCompatible) {
       // Keep the booking alive and the GPU locked to it. reconcileStalledActivations
       // (dev-booking-reconciler.ts) already sweeps FUNDED/STARTING bookings on its own
@@ -56,14 +57,19 @@ export async function completeGpuProofJob(
       // is deliberately left untouched: it must not become AVAILABLE while this booking
       // may still open a Developer workspace on the same accelerator.
       const now = new Date();
+      // workspaceActivatedAt:null guards against ever resetting startsAt/endsAt once the
+      // renter's real rental clock has genuinely started (activateGatewaySession,
+      // workspace-gateway.ts) - GPU_PROOF finishing is always well before that in every
+      // legitimate flow, but this keeps the safety-window reset a true no-op rather than
+      // silently rewinding a real, already-running clock in some future/unexpected ordering.
       await tx.booking.updateMany({
-        where: { id: bookingId, status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING, BookingStatus.ACTIVE] } },
+        where: { id: bookingId, status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING, BookingStatus.ACTIVE] }, workspaceActivatedAt: null },
         data: { status: BookingStatus.STARTING, startsAt: now, endsAt: new Date(now.getTime() + STALLED_ACTIVATION_GRACE_MS) },
       });
       return { bookingStatus: BookingStatus.STARTING, machineReleased: false };
     }
     await tx.booking.updateMany({
-      where: { id: bookingId, status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING, BookingStatus.ACTIVE] } },
+      where: { id: bookingId, status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING, BookingStatus.ACTIVE] }, workspaceActivatedAt: null },
       data: { status: BookingStatus.COMPLETED },
     });
     const released = await tx.machine.updateMany({

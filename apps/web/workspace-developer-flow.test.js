@@ -7,6 +7,8 @@ import {
   isBookingEligibleForWorkspace,
   preparationLabel,
   resolveWorkspaceOpenUrl,
+  remainingRentalSeconds,
+  formatRemainingRentalTime,
 } from './workspace-developer-flow.js';
 
 // A. GPU_PROOF COMPLETED -> bouton "Créer mon espace"
@@ -153,4 +155,49 @@ test('resolveWorkspaceOpenUrl refuses a non-relative openPath (defense in depth 
     () => resolveWorkspaceOpenUrl('https://gpubnb.onrender.com', { openPath: 'https://evil.example/x' }),
     /workspace_access_response_invalid/,
   );
+});
+
+// Real bug found live during the PC A <-> PC B test: GPU Proof (~8 min) and any wait
+// before the renter opens their workspace must never eat into a 15-minute rental - the
+// commercial clock only starts once the workspace is genuinely RUNNING (a real upstream
+// frame proven exchanged - see activateGatewaySession, workspace-gateway.ts), never at
+// funding, GPU Proof, or merely clicking the button.
+test('remainingRentalSeconds shows nothing before the workspace is genuinely RUNNING', () => {
+  const now = Date.parse('2026-09-01T12:00:00Z');
+  const futureEndsAt = new Date(now + 15 * 60_000).toISOString();
+  for (const status of ['PREPARING', 'READY', 'STOP_REQUESTED', 'STOPPING', 'COMPLETED', 'FAILED']) {
+    assert.equal(remainingRentalSeconds({ status, endsAt: futureEndsAt }, now), null, `status=${status}`);
+  }
+  assert.equal(remainingRentalSeconds(null, now), null);
+  assert.equal(remainingRentalSeconds({ status: 'RUNNING', endsAt: null }, now), null);
+});
+
+test('remainingRentalSeconds derives the count purely from the server-provided endsAt, not a client-side start time', () => {
+  const now = Date.parse('2026-09-01T12:00:00Z');
+  // 8 minutes of GPU Proof + waiting before the workspace opened must not have been
+  // deducted - endsAt itself already reflects a full 15 minutes from real activation.
+  const endsAt = new Date(now + 15 * 60_000).toISOString();
+  assert.equal(remainingRentalSeconds({ status: 'RUNNING', endsAt }, now), 15 * 60);
+});
+
+test('remainingRentalSeconds never goes negative once the deadline has passed', () => {
+  const now = Date.parse('2026-09-01T12:00:00Z');
+  const pastEndsAt = new Date(now - 5_000).toISOString();
+  assert.equal(remainingRentalSeconds({ status: 'RUNNING', endsAt: pastEndsAt }, now), 0);
+});
+
+test('remainingRentalSeconds is a pure function of (workspaceDetail, now) - a refresh or reconnect that re-reads the same server endsAt yields the exact same countdown, never a reset', () => {
+  const now = Date.parse('2026-09-01T12:00:00Z');
+  const detail = { status: 'RUNNING', endsAt: new Date(now + 600_000).toISOString() };
+  assert.equal(remainingRentalSeconds(detail, now), remainingRentalSeconds(detail, now));
+  // Simulate a page refresh 90s later against the same stored endsAt: strictly less
+  // remaining time, never reset back up to the full duration.
+  assert.equal(remainingRentalSeconds(detail, now + 90_000), 510);
+});
+
+test('formatRemainingRentalTime formats minutes:seconds, and hours:minutes:seconds past an hour', () => {
+  assert.equal(formatRemainingRentalTime(0), '00:00');
+  assert.equal(formatRemainingRentalTime(65), '01:05');
+  assert.equal(formatRemainingRentalTime(15 * 60), '15:00');
+  assert.equal(formatRemainingRentalTime(3661), '1:01:01');
 });

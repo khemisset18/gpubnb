@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   BookingStatus,
@@ -246,6 +247,46 @@ withPrisma('a second booking cannot claim the same accelerator while the first i
     } finally {
       await prisma.booking.delete({ where: { id: secondBooking.id } }).catch(() => {});
     }
+  } finally {
+    await seed.cleanup();
+  }
+});
+
+// Real 500 found live during the PC A <-> PC B test: this function ran its own raw
+// db.$transaction under Serializable isolation with no retry, while dev-booking-
+// reconciler.ts's reconciler concurrently wrote to the same Job/Booking rows every 10s -
+// exactly the contention booking-transaction-retry.ts's P2034 handling exists for
+// (already used by /bookings, just never wired in here).
+test('completeGpuProofJob runs through the retry helper, not a raw unretried transaction', async () => {
+  const source = await readFile(new URL('../src/gpu-proof-completion.ts', import.meta.url), 'utf8');
+  assert.match(source, /import \{ runBookingTransaction \} from '\.\/booking-transaction-retry\.js';/);
+  assert.match(source, /return runBookingTransaction\(db, async \(tx\) => \{/);
+  assert.doesNotMatch(source, /return db\.\$transaction\(async \(tx\) => \{/);
+  assert.match(source, /isolationLevel: Prisma\.TransactionIsolationLevel\.Serializable/, 'must keep Serializable isolation');
+});
+
+// TEST 12 — completeGpuProofJob must never rewind startsAt/endsAt once the renter's real
+// workspace clock has genuinely started (workspaceActivatedAt set) - GPU_PROOF always
+// finishes well before that in every legitimate flow, but this proves the guard actually
+// holds rather than assuming the ordering.
+withPrisma('completeGpuProofJob never resets startsAt/endsAt once the real rental clock has already started', async (prisma) => {
+  const suffix = crypto.randomBytes(6).toString('hex');
+  const seed = await seedBookedMachine(prisma, suffix);
+  try {
+    await ensureCompatibleMachineWorkspace(prisma, seed.machine.id, 'developer');
+    const realStart = new Date(Date.now() - 5 * 60_000);
+    const realEnd = new Date(Date.now() + 10 * 60_000);
+    await prisma.booking.update({
+      where: { id: seed.booking.id },
+      data: { workspaceActivatedAt: realStart, startsAt: realStart, endsAt: realEnd },
+    });
+
+    await completeGpuProofJob(prisma, seed.booking.id, seed.machine.id);
+
+    const booking = await prisma.booking.findUniqueOrThrow({ where: { id: seed.booking.id } });
+    assert.deepEqual(booking.startsAt, realStart, 'a real, already-running clock must never be rewound');
+    assert.deepEqual(booking.endsAt, realEnd);
+    assert.equal(booking.status, BookingStatus.ACTIVE, 'status set by the real activation must be left untouched');
   } finally {
     await seed.cleanup();
   }

@@ -41,9 +41,16 @@ test('only the first authenticated upstream WebSocket frame starts paid time', a
   assert.ok(helperStart >= 0 && helperEnd > helperStart);
   const helper = source.slice(helperStart, helperEnd).replace(/\s+/g, '');
 
-  assert.match(helper, /row\.status!==WorkspaceSessionStatus\.READY\|\|row\.booking\.status!==BookingStatus\.STARTING/);
+  // workspaceActivatedAt (not booking.status alone) is now the idempotency guard: the
+  // private-beta GPU_DIAGNOSTIC path can already move a booking to ACTIVE - proving the
+  // GPU works - well before any interactive workspace opens, so STARTING and ACTIVE are
+  // both valid pre-activation states; only a real, already-set workspaceActivatedAt means
+  // "already started, do nothing" (see dev-booking-reconciler.ts / workspace-activation-timer.test.ts).
+  assert.match(helper, /row\.booking\.workspaceActivatedAt!==null\)return\{activated:false,expiresAt:row\.expiresAt\}/);
+  assert.match(helper, /row\.status!==WorkspaceSessionStatus\.READY\|\|\(row\.booking\.status!==BookingStatus\.STARTING&&row\.booking\.status!==BookingStatus\.ACTIVE\)/);
   assert.match(helper, /status:WorkspaceSessionStatus\.RUNNING,startedAt:activatedAt,expiresAt/);
-  assert.match(helper, /status:BookingStatus\.ACTIVE,startsAt:activatedAt,endsAt:expiresAt/);
+  assert.match(helper, /status:BookingStatus\.ACTIVE,startsAt:activatedAt,endsAt:expiresAt,workspaceActivatedAt:activatedAt/);
+  assert.match(helper, /where:\{id:row\.bookingId,workspaceActivatedAt:null\}/, 'the write itself must be gated on workspaceActivatedAt, not merely on status - the true idempotency key');
   assert.match(helper, /action:'INTERACTIVE_WORKSPACE_CONNECTED'/);
 
   const frameStart = source.indexOf("app.post('/agent/workspace-gateway/ws-frame'");

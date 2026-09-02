@@ -443,6 +443,15 @@ model Booking {
   quotedLamports BigInt
   validSeconds Int @default(0)
   expectedSeconds Int
+  // Set exactly once, the moment the renter's interactive Developer (or other
+  // GATEWAY_WORKSPACE_SLUGS) session genuinely activates - a real upstream frame
+  // proven exchanged with the authenticated browser (see activateGatewaySession,
+  // workspace-gateway.ts). null means the commercial rental clock has not started
+  // yet: GPU_PROOF, funding, and any wait before the renter actually opens their
+  // workspace must never consume purchased minutes. Doubles as the idempotency
+  // guard for that same activation (never re-extends startsAt/endsAt on a refresh,
+  // reconnect, or double click).
+  workspaceActivatedAt DateTime?
   status BookingStatus @default(CREATED)
   escrowAddress String?
   depositSignature String? @unique

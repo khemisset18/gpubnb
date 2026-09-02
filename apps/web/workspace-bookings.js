@@ -1,5 +1,5 @@
 'use strict';
-import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspaceOpenUrl } from './workspace-developer-flow.js';
+import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspaceOpenUrl, remainingRentalSeconds, formatRemainingRentalTime } from './workspace-developer-flow.js';
 
 (() => {
   const API=(window.GPUBNB_API_URL||'').replace(/\/$/,'');
@@ -95,7 +95,13 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
     }else if(phase===DeveloperPhase.ENDED){
       badge=`<span class="badge">${escapeHTML(detail?.status||'TERMINÉ')}</span>`;
     }
-    return `<article class="list-row" data-developer-row="${escapeHTML(booking.id)}"><div><strong>Espace de travail · ${title}</strong>${errorHTML}</div><div class="actions">${action}${badge}</div></article>`;
+    // Only ever rendered once workspaceDetail.status is genuinely 'RUNNING' (real
+    // activation - see remainingRentalSeconds), never merely because CREATE/OPEN/PREPARING
+    // is showing. data-countdown-endsat anchors updateCountdowns()'s fast local 1s tick to
+    // the server's own endsAt - no re-fetch needed to keep the display live between polls.
+    const remaining=remainingRentalSeconds(detail,Date.now());
+    const countdownHTML=remaining===null?'':`<span class="muted" data-countdown-endsat="${escapeHTML(detail.endsAt)}">${escapeHTML(formatRemainingRentalTime(remaining))} restant</span>`;
+    return `<article class="list-row" data-developer-row="${escapeHTML(booking.id)}"><div><strong>Espace de travail · ${title}</strong>${errorHTML}${countdownHTML}</div><div class="actions">${action}${badge}</div></article>`;
   }
 
   function dataBlockHTML(booking,job,detail,errorMessage){
@@ -766,5 +772,15 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
       }));
     }catch(error){root.innerHTML=`<div class="empty-state"><p class="muted">${escapeHTML(error.message||'Impossible de charger les réservations GPU.')}</p></div>`;}
   }
-  window.addEventListener('DOMContentLoaded',()=>{void render();setInterval(()=>void render(),10000)});
+  // Purely local: re-reads each countdown span's own server-provided endsAt (set by the
+  // last render() pass) against the current clock, every second - no network request, so
+  // a fast smooth countdown never adds API load. The 10s render() cycle above remains the
+  // only thing that can change endsAt itself, keeping the server value authoritative.
+  function updateCountdowns(){
+    for(const el of document.querySelectorAll('[data-countdown-endsat]')){
+      const remaining=remainingRentalSeconds({status:'RUNNING',endsAt:el.dataset.countdownEndsat},Date.now());
+      el.textContent=remaining===null?'':`${formatRemainingRentalTime(remaining)} restant`;
+    }
+  }
+  window.addEventListener('DOMContentLoaded',()=>{void render();setInterval(()=>void render(),10000);setInterval(updateCountdowns,1000)});
 })();

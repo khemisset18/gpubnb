@@ -148,7 +148,10 @@ test('billing activation remains tied to a real upstream websocket frame',()=>{
 
 test('concurrent websocket activation accepts the transaction winner',()=>{
   assert.match(api,/if\(sessionUpdate\.count!==1\)\{/);
-  assert.match(api,/status:WorkspaceSessionStatus\.RUNNING,booking:\{status:BookingStatus\.ACTIVE\}/);
+  // The loser's re-check must key off workspaceActivatedAt (the true idempotency marker),
+  // not booking.status:ACTIVE alone - a booking can already be ACTIVE via the
+  // GPU_DIAGNOSTIC beta-bypass path before any interactive workspace ever activates.
+  assert.match(api,/status:WorkspaceSessionStatus\.RUNNING,booking:\{workspaceActivatedAt:\{not:null\}\}/);
   assert.match(api,/winner\?\{activated:false,expiresAt:winner\.expiresAt\}:null/);
 });
 

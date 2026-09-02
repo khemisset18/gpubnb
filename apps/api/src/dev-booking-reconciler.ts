@@ -342,7 +342,13 @@ export async function findExpiredActiveDeveloperBookings(db: PrismaClient, now: 
     where: {
       status: BookingStatus.ACTIVE,
       endsAt: { lt: now },
-      workspaceSessions: { none: DEVELOPER_SESSION_FILTER },
+      // Bare DEVELOPER_SESSION_FILTER (no status) would match a booking whose Developer
+      // session already ended (a normal Stop, or an unactivated timeout) forever, the same
+      // way a booking that never had one at all matches - silently blocking this sweep from
+      // ever settling a booking that finished its rental normally. Scoped to only a LIVE
+      // session, matching every other exclusivity guard in this file (see
+      // reconcileDevelopmentBookings above).
+      workspaceSessions: { none: { ...DEVELOPER_SESSION_FILTER, status: { in: ACTIVE_DEVELOPER_SESSION_STATUSES } } },
     },
     select: { id: true, listing: { select: { machineId: true } } },
     take: 25,
@@ -364,7 +370,7 @@ export async function reconcileExpiredActiveDeveloperBookings(
         where: {
           id: booking.id,
           status: BookingStatus.ACTIVE,
-          workspaceSessions: { none: DEVELOPER_SESSION_FILTER },
+          workspaceSessions: { none: { ...DEVELOPER_SESSION_FILTER, status: { in: ACTIVE_DEVELOPER_SESSION_STATUSES } } },
         },
         data: { status: BookingStatus.COMPLETED },
       });
