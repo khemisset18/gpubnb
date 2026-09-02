@@ -153,6 +153,7 @@ withPrisma('GPU_PROOF-only booking (no compatible Developer workspace) completes
     const outcome = await completeGpuProofJob(prisma, seed.booking.id, seed.machine.id);
     assert.equal(outcome.bookingStatus, BookingStatus.COMPLETED);
     assert.equal(outcome.machineReleased, true);
+    assert.equal(outcome.changed, true, 'a genuine transition must be reported as such');
 
     const booking = await prisma.booking.findUniqueOrThrow({ where: { id: seed.booking.id } });
     assert.equal(booking.status, BookingStatus.COMPLETED);
@@ -173,6 +174,7 @@ withPrisma('a booking on a Developer-capable machine is kept alive and the GPU s
     const outcome = await completeGpuProofJob(prisma, seed.booking.id, seed.machine.id);
     assert.equal(outcome.bookingStatus, BookingStatus.STARTING);
     assert.equal(outcome.machineReleased, false);
+    assert.equal(outcome.changed, true, 'a genuine transition must be reported as such');
 
     const booking = await prisma.booking.findUniqueOrThrow({ where: { id: seed.booking.id } });
     assert.equal(booking.status, BookingStatus.STARTING);
@@ -302,7 +304,13 @@ withPrisma('completeGpuProofJob never mutates a booking that already reached a d
     await prisma.booking.update({ where: { id: seed.booking.id }, data: { status: BookingStatus.CANCELLED } });
     const before = await prisma.booking.findUniqueOrThrow({ where: { id: seed.booking.id } });
 
-    await completeGpuProofJob(prisma, seed.booking.id, seed.machine.id);
+    // Real gap found live (2026-09-02): neither branch of completeGpuProofJob used to check
+    // whether its own booking.updateMany actually matched a row before reporting a confident
+    // bookingStatus - a caller (here, /agent/jobs/:id/finalize-proof) could report ok:true for
+    // a transition that never actually applied. changed:false is the only signal that this
+    // call was a genuine no-op.
+    const outcome = await completeGpuProofJob(prisma, seed.booking.id, seed.machine.id);
+    assert.equal(outcome.changed, false, 'a no-op against an already-terminal booking must be reported as such, not silently claimed as a real transition');
 
     const after = await prisma.booking.findUniqueOrThrow({ where: { id: seed.booking.id } });
     assert.equal(after.status, BookingStatus.CANCELLED);

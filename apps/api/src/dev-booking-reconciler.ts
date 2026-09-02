@@ -366,6 +366,17 @@ export async function findExpiredActiveDeveloperBookings(db: PrismaClient, now: 
       // session, matching every other exclusivity guard in this file (see
       // reconcileDevelopmentBookings above).
       workspaceSessions: { none: { ...DEVELOPER_SESSION_FILTER, status: { in: ACTIVE_DEVELOPER_SESSION_STATUSES } } },
+      // Real gap found live (2026-09-02): this booking's own endsAt is unrelated to how long
+      // its GPU_PROOF verification actually takes - a booking reaches ACTIVE via the
+      // GPU_DIAGNOSTIC bypass (above) while a separate, slower GPU_PROOF job (the one that
+      // unlocks the Developer button) can still genuinely be running for the exact same
+      // booking. Without this exclusion, this sweep would silently mark the booking COMPLETED
+      // out from under that still-running job - no crash, no error, just a booking the renter
+      // can never open a Developer workspace on again, even though GPU_PROOF goes on to
+      // succeed moments later. Reuses the same active-job-status list every other exclusivity
+      // guard in this file already uses (see ACTIVE_WORKSPACE_PREPARE_JOB_STATUSES above),
+      // not a new mechanism.
+      jobs: { none: { type: JobType.GPU_PROOF, status: { in: ACTIVE_WORKSPACE_PREPARE_JOB_STATUSES } } },
     },
     select: { id: true, listing: { select: { machineId: true } } },
     take: 25,
@@ -395,6 +406,10 @@ export async function reconcileExpiredActiveDeveloperBookings(
           id: booking.id,
           status: BookingStatus.ACTIVE,
           workspaceSessions: { none: { ...DEVELOPER_SESSION_FILTER, status: { in: ACTIVE_DEVELOPER_SESSION_STATUSES } } },
+          // Re-checked inside the transaction, not just the outer read above: a GPU_PROOF job
+          // could be created (ensureComputePreparation) or start progressing in the gap
+          // between that read and this write.
+          jobs: { none: { type: JobType.GPU_PROOF, status: { in: ACTIVE_WORKSPACE_PREPARE_JOB_STATUSES } } },
         },
         data: { status: BookingStatus.COMPLETED },
       });

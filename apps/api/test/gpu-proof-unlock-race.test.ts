@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BookingStatus, JobStatus, MachineOperational } from '@prisma/client';
+import { BookingStatus, JobStatus, JobType, MachineOperational } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 
 // Real bug found live during the private-beta two-machine test: a successful
@@ -210,6 +210,42 @@ test('Test F: a genuinely expired ACTIVE booking with no live Developer session 
     const bookingUpdate = calls.find((call) => call.area === 'tx.booking.updateMany');
     assert.ok(bookingUpdate);
     assert.equal((bookingUpdate.args.data as { status: BookingStatus }).status, BookingStatus.COMPLETED);
+  } finally {
+    config.BETA_TEST_DEV_BYPASS = previousBeta;
+    config.ESCROW_PROGRAM_ID = previousEscrow;
+  }
+});
+
+// Real gap found live (2026-09-02): a booking reaches ACTIVE via the GPU_DIAGNOSTIC bypass
+// (Test C above) while a separate, slower GPU_PROOF job - the one that unlocks the Developer
+// button - can still genuinely be running for the exact same booking. Without this exclusion,
+// this exact sweep would silently mark that booking COMPLETED out from under the still-running
+// job: no crash, no error, just a renter who can never open a Developer workspace again even
+// though GPU_PROOF goes on to succeed moments later.
+test('the expiry sweep excludes a booking whose GPU_PROOF job is still active, both in its query and its re-check inside the transaction', async () => {
+  const previousBeta = config.BETA_TEST_DEV_BYPASS;
+  const previousEscrow = config.ESCROW_PROGRAM_ID;
+  config.BETA_TEST_DEV_BYPASS = 'true';
+  config.ESCROW_PROGRAM_ID = 'NOT_DEPLOYED_YET';
+  try {
+    const { db, calls } = fakeExpiryDb({
+      expiredBookings: [{ id: 'booking-1', listing: { machineId: 'machine-1' } }],
+    });
+    await reconcileExpiredActiveDeveloperBookings(db, new Date('2026-09-01T22:00:00Z'));
+
+    const query = calls.find((call) => call.area === 'booking.findMany');
+    assert.ok(query);
+    const readWhere = query.args.where as { jobs?: { none: { type: JobType; status: { in: JobStatus[] } } } };
+    assert.ok(readWhere.jobs, 'the outer read must exclude bookings with an active GPU_PROOF job');
+    assert.equal(readWhere.jobs.none.type, JobType.GPU_PROOF);
+    assert.ok(readWhere.jobs.none.status.in.includes(JobStatus.RUNNING));
+    assert.ok(readWhere.jobs.none.status.in.includes(JobStatus.QUEUED));
+
+    const bookingUpdate = calls.find((call) => call.area === 'tx.booking.updateMany');
+    assert.ok(bookingUpdate);
+    const writeWhere = bookingUpdate.args.where as { jobs?: { none: { type: JobType; status: { in: JobStatus[] } } } };
+    assert.ok(writeWhere.jobs, 'the write must re-check the same exclusion inside the transaction, not just trust the outer read (a job can start in the gap between them)');
+    assert.equal(writeWhere.jobs.none.type, JobType.GPU_PROOF);
   } finally {
     config.BETA_TEST_DEV_BYPASS = previousBeta;
     config.ESCROW_PROGRAM_ID = previousEscrow;

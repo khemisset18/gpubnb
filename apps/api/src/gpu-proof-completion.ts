@@ -13,6 +13,15 @@ import { runBookingTransaction } from './booking-transaction-retry.js';
 export type GpuProofCompletionOutcome = {
   bookingStatus: typeof BookingStatus.STARTING | typeof BookingStatus.COMPLETED;
   machineReleased: boolean;
+  // Real gap found live (2026-09-02): neither branch below used to check whether its own
+  // booking.updateMany actually matched a row before reporting bookingStatus as if it had -
+  // if the booking had already left FUNDED/STARTING/ACTIVE by the time this ran (e.g. swept to
+  // COMPLETED by reconcileExpiredActiveDeveloperBookings racing this exact call), the caller
+  // still got back a confident-looking outcome describing a transition that never actually
+  // happened. false here means this call was a no-op: the booking was already in a different
+  // terminal/incompatible state, and bookingStatus/machineReleased above describe what this
+  // call *attempted*, not what is now true in the database.
+  changed: boolean;
 };
 
 /**
@@ -62,20 +71,21 @@ export async function completeGpuProofJob(
       // workspace-gateway.ts) - GPU_PROOF finishing is always well before that in every
       // legitimate flow, but this keeps the safety-window reset a true no-op rather than
       // silently rewinding a real, already-running clock in some future/unexpected ordering.
-      await tx.booking.updateMany({
+      const updated = await tx.booking.updateMany({
         where: { id: bookingId, status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING, BookingStatus.ACTIVE] }, workspaceActivatedAt: null },
         data: { status: BookingStatus.STARTING, startsAt: now, endsAt: new Date(now.getTime() + STALLED_ACTIVATION_GRACE_MS) },
       });
-      return { bookingStatus: BookingStatus.STARTING, machineReleased: false };
+      return { bookingStatus: BookingStatus.STARTING, machineReleased: false, changed: updated.count === 1 };
     }
-    await tx.booking.updateMany({
+    const updated = await tx.booking.updateMany({
       where: { id: bookingId, status: { in: [BookingStatus.FUNDED, BookingStatus.STARTING, BookingStatus.ACTIVE] }, workspaceActivatedAt: null },
       data: { status: BookingStatus.COMPLETED },
     });
+    if (updated.count !== 1) return { bookingStatus: BookingStatus.COMPLETED, machineReleased: false, changed: false };
     const released = await tx.machine.updateMany({
       where: { id: machineId, moderationStatus: ModerationStatus.CLEAR, operational: { in: [MachineOperational.RESERVED, MachineOperational.RUNNING] } },
       data: { operational: MachineOperational.AVAILABLE },
     });
-    return { bookingStatus: BookingStatus.COMPLETED, machineReleased: released.count === 1 };
+    return { bookingStatus: BookingStatus.COMPLETED, machineReleased: released.count === 1, changed: true };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
