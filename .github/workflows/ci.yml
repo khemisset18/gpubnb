@@ -191,7 +191,10 @@ jobs:
           # that branch's own CI's responsibility, not main's. Scanning them here made
           # main's security gate fail on a dependency version that was never actually
           # main's (main's own apps/api/package-lock.json is scanned normally either way).
-          skip-dirs: .claude/worktrees
+          # The skip-dirs *action input* is silently a no-op on this trivy-action version
+          # (confirmed live: the actual invoked command was plain `trivy fs .`, nothing
+          # else) - trivy.yaml at the repo root is Trivy's own native config file, picked
+          # up automatically regardless of the action's input handling.
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           format: json
