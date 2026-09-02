@@ -186,6 +186,12 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
+          # .claude/worktrees/* are separate git worktrees for other branches' in-progress
+          # work (checked into this repo, not gitignored) - their own dependency trees are
+          # that branch's own CI's responsibility, not main's. Scanning them here made
+          # main's security gate fail on a dependency version that was never actually
+          # main's (main's own apps/api/package-lock.json is scanned normally either way).
+          skip-dirs: .claude/worktrees
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           format: json
