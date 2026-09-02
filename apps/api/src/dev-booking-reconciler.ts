@@ -91,7 +91,9 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
   });
 
   for (const workspace of racedDeveloperSessions) {
-    const quarantined = await db.$transaction(async (tx) => {
+    // DB-only callback, safe to retry as a whole - already Serializable, only the missing
+    // retry around it is new (see reconcileStalledActivations below for the same pattern).
+    const quarantined = await runBookingTransaction(db, async (tx) => {
       const session = await tx.workspaceSession.updateMany({
         where: {
           id: workspace.id,
@@ -161,7 +163,7 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
         },
       });
       return true;
-    }, { isolationLevel: 'Serializable' });
+    }, { isolationLevel: 'Serializable', maxWait: 5_000, timeout: 10_000 });
     if (quarantined) quarantinedDeveloper += 1;
   }
 
@@ -177,7 +179,11 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
       orderBy: { createdAt: 'asc' },
     });
     for (const booking of waiting) {
-      const changed = await db.$transaction(async (tx) => {
+      // DB-only callback, safe to retry as a whole - this booking row is also written by
+      // agent-triggered, Serializable-retried transactions (completeGpuProofJob and friends),
+      // so an unretried transient conflict here used to just silently skip a tick instead of
+      // recovering.
+      const changed = await runBookingTransaction(db, async (tx) => {
         const update = await tx.booking.updateMany({
           where: { id: booking.id, status: BookingStatus.AWAITING_DEPOSIT },
           data: { status: BookingStatus.FUNDED, depositSignature: `dev-bypass:${booking.id}` },
@@ -189,7 +195,7 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
           create: { bookingId: booking.id, grossLamports: booking.quotedLamports, status: PaymentStatus.ESCROW_FUNDED },
         });
         return true;
-      });
+      }, { isolationLevel: 'Serializable', maxWait: 5_000, timeout: 10_000 });
       if (changed) funded += 1;
     }
   }
@@ -220,7 +226,9 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
       select: { id: true },
     });
     if (existing) continue;
-    const created = await db.$transaction(async (tx) => {
+    // DB-only callback, safe to retry as a whole - see the comment on the dev-bypass funding
+    // loop above for why this booking row needs the same protection.
+    const created = await runBookingTransaction(db, async (tx) => {
       const reserved = await tx.booking.updateMany({
         where: {
           id: booking.id,
@@ -248,7 +256,7 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
         data: { operational: MachineOperational.RESERVED },
       });
       return true;
-    });
+    }, { isolationLevel: 'Serializable', maxWait: 5_000, timeout: 10_000 });
     if (created) queued += 1;
   }
 
@@ -271,7 +279,15 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
       && typeof job.result === 'object'
       && job.result !== null
       && (job.result as { gpuDetected?: unknown }).gpuDetected === true;
-    const changed = await db.$transaction(async (tx) => {
+    // DB-only callback, safe to retry as a whole. Real bug found live (2026-09-02): this ran
+    // unretried, on the same booking row completeGpuProofJob (gpu-proof-completion.ts, already
+    // Serializable + retried) writes to via the agent's own /finalize-proof call, and on the
+    // same row reconcileExpiredActiveDeveloperBookings below also writes to on its own 10s
+    // tick - real contention between this unretried tick and those retried ones, right around
+    // a booking's natural expiry, could exhaust the agent-facing side's bounded retry budget
+    // and surface as an uncaught 500 to the agent, with the GPU verification itself already
+    // having genuinely succeeded.
+    const changed = await runBookingTransaction(db, async (tx) => {
       // Real bug found live during the private-beta two-machine test:
       // GPU_PROOF succeeding used to move the booking straight to
       // COMPLETED - correct back when proving the GPU *was* the entire
@@ -315,7 +331,7 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
         data: { operational: success ? MachineOperational.AVAILABLE : MachineOperational.DEGRADED },
       });
       return true;
-    });
+    }, { isolationLevel: 'Serializable', maxWait: 5_000, timeout: 10_000 });
     if (changed) {
       if (success) completed += 1;
       else degraded += 1;
@@ -366,7 +382,14 @@ export async function reconcileExpiredActiveDeveloperBookings(
 
   const expired = await findExpiredActiveDeveloperBookings(db, now);
   for (const booking of expired) {
-    const changed = await db.$transaction(async (tx) => {
+    // DB-only callback, safe to retry as a whole. Real bug found live (2026-09-02): this ran
+    // unretried, right at the exact moment a booking's own time window elapses - precisely
+    // when the agent's own /finalize-proof -> completeGpuProofJob call (already Serializable +
+    // retried) can also be landing on the same booking row for a job that only just finished.
+    // An unretried conflict here could win the row lock in a way that exhausted the
+    // agent-facing side's bounded retry budget, surfacing as an uncaught 500 to the agent even
+    // though the GPU verification itself had already genuinely succeeded.
+    const changed = await runBookingTransaction(db, async (tx) => {
       const update = await tx.booking.updateMany({
         where: {
           id: booking.id,
@@ -381,7 +404,7 @@ export async function reconcileExpiredActiveDeveloperBookings(
         data: { operational: MachineOperational.AVAILABLE },
       });
       return true;
-    });
+    }, { isolationLevel: 'Serializable', maxWait: 5_000, timeout: 10_000 });
     if (changed) completedCount += 1;
   }
   return { completed: completedCount };
