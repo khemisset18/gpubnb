@@ -163,14 +163,19 @@ def signed_headers(key: SigningKey, machine_id: str, method: str, path: str, bod
     return signed_headers_for_body_sha256(key, machine_id, method, path, request_body_sha256(body))
 
 
-def agent_request(client: ApiClient, key: SigningKey, machine_id: str, path: str, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
+def agent_request(client: ApiClient, key: SigningKey, machine_id: str, path: str, method: str = "GET", body: dict[str, Any] | None = None, timeout: int = 12) -> dict[str, Any]:
     # Each attempt must carry its own signature: the server treats a signed
     # request as single-use, so retrying with headers computed once up front
     # gets every retry rejected as a replay instead of actually retrying.
+    # timeout is per-attempt, not per-call: a caller on a tight deadline (e.g. the
+    # job-lease refresh loop, whose target sits behind a short-lived server lease -
+    # see JOB_RECLAIM_AFTER_SECONDS) can pass a shorter value so one hung attempt
+    # can't by itself consume most of that lease window; the default keeps every
+    # other caller's existing behavior unchanged.
     last_error: Exception | None = None
     for attempt in range(MAX_RETRIES):
         try:
-            return client.request(path, method, body, signed_headers(key, machine_id, method, path, body))
+            return client.request(path, method, body, signed_headers(key, machine_id, method, path, body), timeout)
         except (urllib.error.URLError, RuntimeError, TimeoutError, OSError) as exc:
             last_error = exc
             if attempt < MAX_RETRIES - 1:

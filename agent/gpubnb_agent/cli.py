@@ -633,11 +633,17 @@ def run_next_job(
         lease_path = f"/agent/jobs/{job_id}/lease"
         while not lease_stop.wait(10):
             try:
+                # Short per-attempt timeout: this call sits behind a short-lived server
+                # lease (JOB_RECLAIM_AFTER_SECONDS), so a single hung/slow attempt at the
+                # default 12s x MAX_RETRIES budget could by itself burn most of that
+                # window on a bad connection. A tighter timeout means more, faster
+                # attempts survive a real transient network blip instead of one attempt
+                # blocking until the lease is already gone.
                 agent_request(api, key, machine_id, lease_path, "POST", {
                     "machineId": machine_id,
                     "attemptId": attempt_id,
                     "leaseToken": lease_token,
-                })
+                }, timeout=6)
             except Exception as exc:
                 if "stale_job_attempt" in str(exc):
                     lease_fenced.set()

@@ -40,7 +40,16 @@ const schema = z.object({
   HEARTBEAT_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(120).default(25),
   HEARTBEAT_OFFLINE_SECONDS: z.coerce.number().int().min(15).max(300).default(60),
   JOB_STALE_AFTER_SECONDS: z.coerce.number().int().min(120).max(3600).default(900),
-  JOB_RECLAIM_AFTER_SECONDS: z.coerce.number().int().min(30).max(300).default(45),
+  // Real incident (2026-09-02, PC A<->PC B beta test): a single real network blip
+  // (agent<->API connection reset, ~1-2 minutes) let this lease expire before the
+  // agent's next successful refresh, and the job-staleness sweep (job-staleness-sweep.ts)
+  // fail-closed-quarantined the whole machine over it - even though the agent process
+  // and its heartbeat never actually stopped. 45s left almost no margin for a real
+  // consumer network hiccup against a 10s agent refresh cadence with its own retries.
+  // Doubled to 90s (still well inside [30,300]) so a brief, genuinely transient outage
+  // survives without tripping the same fail-closed protection a truly abandoned/dead
+  // job still correctly hits.
+  JOB_RECLAIM_AFTER_SECONDS: z.coerce.number().int().min(30).max(300).default(90),
   COMMISSION_BPS: z.coerce.number().int().min(0).max(1000).default(500),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_ANON_KEY: z.string().min(20).optional(),
