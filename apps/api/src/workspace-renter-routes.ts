@@ -211,7 +211,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
     const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
@@ -266,7 +266,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
@@ -338,7 +338,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
     const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
@@ -393,7 +393,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
@@ -462,7 +462,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
     const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
@@ -517,7 +517,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
@@ -586,7 +586,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
     const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
@@ -641,7 +641,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
@@ -710,7 +710,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
     const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
@@ -765,7 +765,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
@@ -837,7 +837,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
     const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
@@ -892,7 +892,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
@@ -962,7 +962,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
     const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
@@ -1017,7 +1017,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
@@ -1058,7 +1058,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
     const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
@@ -1113,7 +1113,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       machineOperational: row.machine.operational,
       moderationStatus: row.machine.moderationStatus,
       lastHeartbeatAt: row.machine.lastHeartbeatAt,
-      heartbeatMaxAgeSeconds: config.HEARTBEAT_MAX_AGE_SECONDS,
+      heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);

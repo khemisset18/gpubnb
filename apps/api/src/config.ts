@@ -37,7 +37,26 @@ const schema = z.object({
   // without weakening the NODE_ENV==='production' guard on DEV_PAYMENT_BYPASS below.
   BETA_TEST_DEV_BYPASS: z.enum(['true', 'false']).default('false'),
   DEV_DIAGNOSTIC_IMAGE: z.string().regex(/^ghcr\.io\/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$/).optional(),
+  // Clock-skew check on the heartbeat submission's OWN embedded timestamp
+  // (agent's Date.now() at signing time vs the server's Date.now() at receipt) -
+  // unrelated to how long ago the last *accepted* heartbeat was. Kept tight and
+  // separate from WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS below, which answers
+  // a different question with a very different real-world tolerance.
   HEARTBEAT_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(120).default(25),
+  // Real bug found live (2026-09-02): this used to be the same value as
+  // HEARTBEAT_MAX_AGE_SECONDS (25s) for evaluateWorkspaceAccess's "is the last
+  // stored heartbeat still fresh enough to allow opening the workspace" gate too -
+  // but that check measures time since the *last accepted* heartbeat, not clock
+  // skew on one submission. Measured directly from this real machine's own
+  // agent.log: successive heartbeats land 28-40s apart (the agent's own
+  // system/GPU inventory collection dominates its nominal 10s loop interval), so
+  // a 25s freshness threshold made the "Ouvrir mon espace" button - and a real
+  // open attempt - intermittently fail with HEARTBEAT_STALE on a perfectly
+  // healthy machine, for no user-visible reason. Given a comfortable margin
+  // above the worst observed single gap, and kept at or below
+  // HEARTBEAT_OFFLINE_SECONDS so interactive access can never be considered
+  // fresher than the machine's own general online/offline status.
+  WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(120).default(55),
   HEARTBEAT_OFFLINE_SECONDS: z.coerce.number().int().min(15).max(300).default(60),
   JOB_STALE_AFTER_SECONDS: z.coerce.number().int().min(120).max(3600).default(900),
   // Real incident (2026-09-02, PC A<->PC B beta test): a single real network blip
