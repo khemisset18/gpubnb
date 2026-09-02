@@ -68,6 +68,11 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
   };
   const terminalOk=new Set(['COMPLETED']);
   const terminalFailure=new Set(['FAILED','CANCELLED','TIMED_OUT','REJECTED','QUARANTINED']);
+  // Mirrors the server's retryableSessions (workspace-renter-routes.ts) at the WorkspaceSession
+  // level: FAILED/CANCELLED/TIMED_OUT/REJECTED jobs all map onto a retryable session status
+  // (see /agent/jobs/:id/state's sessionStatus derivation) - QUARANTINED alone is excluded,
+  // since that means the *machine* was quarantined, not just this one verification attempt.
+  const retryableJobStatuses=new Set(['FAILED','CANCELLED','TIMED_OUT','REJECTED']);
 
   function developerBlockHTML(booking,job,detail,errorMessage){
     const phase=deriveDeveloperPhase({bookingStatus:booking.status,gpuProofJob:job,workspaceDetail:detail});
@@ -293,7 +298,19 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
     const label=jobLabel[job.status]||job.status;
     const errorText=job.errorCode?`<div class="muted">Motif : ${escapeHTML(job.errorCode)}</div>`:'';
     const badgeClass=terminalOk.has(job.status)?'ok':terminalFailure.has(job.status)?'warn':'';
-    return `<article class="list-row"><div><strong>Compute · ${title}</strong><div class="muted">${escapeHTML(label)}</div>${errorText}</div><div class="actions"><span class="badge ${badgeClass}">${escapeHTML(job.status)}</span></div></article>`;
+    // Real bug found live: a failed Compute/GPU_PROOF job had no recovery path at all - neither
+    // automatic (ensureComputePreparation only ever returns the existing, already-broken session)
+    // nor manual (the shared retry route used to exclude 'compute'). Now that the backend accepts
+    // a compute retry, offer it here exactly like the "Préparer Compute" button above, scoped to
+    // the same statuses the server will actually accept (retryableJobStatuses).
+    const canRetry=!history&&preparableBookingStatuses.has(booking.status)&&retryableJobStatuses.has(job.status);
+    const retryButton=canRetry?`<button class="button" type="button" data-retry-compute="${escapeHTML(booking.id)}">Réessayer</button>`:'';
+    // Real confusion found live: a bare status word here ("RUNNING") reads as "my workspace is
+    // running" (WorkspaceSessionStatus.RUNNING - billed clock, workspace open) when this badge
+    // is actually the Compute *verification* job's own status (JobStatus.RUNNING - the GPU proof
+    // container is still being checked, nothing to open yet). Explicitly scoped to never be
+    // mistaken for the other one.
+    return `<article class="list-row"><div><strong>Compute · ${title}</strong><div class="muted">${escapeHTML(label)}</div>${errorText}</div><div class="actions">${retryButton}<span class="badge ${badgeClass}">Vérification GPU : ${escapeHTML(job.status)}</span></div></article>`;
   }
 
   async function render(){
@@ -448,6 +465,17 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
         }catch(error){
           button.disabled=false;button.textContent='Préparer Compute';
           alert(error.code==='funded_booking_required'?'Le financement bêta n’est pas encore terminé.':(error.message||'Préparation Compute impossible.'));
+        }
+      }));
+
+      root.querySelectorAll('[data-retry-compute]').forEach(button=>button.addEventListener('click',async()=>{
+        button.disabled=true;button.textContent='Nouvelle tentative…';
+        try{
+          await request('/bookings/'+encodeURIComponent(button.dataset.retryCompute)+'/workspace/retry',{method:'POST'});
+          await render();
+        }catch(error){
+          button.disabled=false;button.textContent='Réessayer';
+          alert(error.code==='workspace_retry_not_available'?'Aucune vérification Compute à relancer pour l’instant.':error.code==='workspace_preparation_already_active'?'Une vérification est déjà en cours.':(error.message||'Nouvelle tentative impossible.'));
         }
       }));
 

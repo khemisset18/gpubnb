@@ -175,7 +175,10 @@ test('retry is not scoped to a single workspace slug, and re-enqueues using the 
   const end=renterRoutes.indexOf("app.post('/bookings/:bookingId/workspace/data'",start);
   assert.ok(start>=0&&end>start);
   const body=renterRoutes.slice(start,end);
-  assert.match(body,/slug:\{in:\['developer','data','ai','video','audio','api','mobile','security-lab'\]\}/);
+  // 'compute' joined this list once a failed GPU_PROOF session was found to have no
+  // recovery path at all (real live incident, 2026-09-02) - see workspace-preparation-recovery.test.ts
+  // for the compute-specific job-type branching this required.
+  assert.match(body,/slug:\{in:\['compute','developer','data','ai','video','audio','api','mobile','security-lab'\]\}/);
   assert.match(body,/workspaceSlug=row\.machineWorkspace\.workspace\.slug/);
   assert.doesNotMatch(body,/workspaceSlug:'developer'/);
 });

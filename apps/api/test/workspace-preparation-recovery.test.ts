@@ -48,6 +48,21 @@ test('private-beta renter UI separates current Compute reservations from collaps
   assert.doesNotMatch(source, /data-prepare-developer/, 'private-beta recovery must not silently switch the renter to Developer');
 });
 
+// Real live incident (2026-09-02): a FAILED GPU_PROOF job had no recovery path at all -
+// ensureComputePreparation only ever returns the existing (already-broken) session instead of
+// creating a fresh job, and this route used to exclude 'compute' from its retryable slugs
+// entirely, forcing an abandoned booking with no way to reopen a Developer workspace.
+test('workspace retry now covers a failed Compute/GPU_PROOF session too, creating the correct job type', async () => {
+  const source = await readFile(new URL('../src/workspace-renter-routes.ts', import.meta.url), 'utf8');
+  const start = source.indexOf("app.post('/bookings/:bookingId/workspace/retry'");
+  const body = source.slice(start, source.indexOf("app.get('/bookings/:bookingId/workspace'", start));
+  assert.match(body, /slug:\{in:\['compute','developer','data','ai','video','audio','api','mobile','security-lab'\]\}/, 'compute must be retry-eligible alongside every other workspace type');
+  assert.match(body, /const isCompute=workspaceSlug==='compute'/, 'the branch must be keyed off the actual session slug, not assumed');
+  assert.match(body, /type:JobType\.GPU_PROOF,parameters:\{durationSeconds:Math\.max\(30,Math\.min\(600,row\.booking\.expectedSeconds\)\),workspaceSlug:'compute'\}/, 'a compute retry must create a real GPU_PROOF job shaped exactly like ensureComputePreparation\'s, not a WORKSPACE_PREPARE job the agent would never treat as GPU_PROOF');
+  assert.match(body, /const activeJobType=isCompute\?JobType\.GPU_PROOF:JobType\.WORKSPACE_PREPARE/, 'the "already active" guard must check the right job type per slug, or a stuck WORKSPACE_PREPARE could never block a duplicate GPU_PROOF retry and vice versa');
+  assert.match(body, /runBookingTransaction\(db,async tx=>\{[\s\S]*?isolationLevel:Prisma\.TransactionIsolationLevel\.Serializable/, 'the retry transaction must be retried on a transient serialization conflict, not just wrapped once');
+});
+
 test('private-beta renter UI keeps the latest terminal GPU_PROOF failure visible', async () => {
   const source = await readFile(new URL('../../web/workspace-bookings.js', import.meta.url), 'utf8');
   assert.match(source, /latestFailure/, 'the newest failed GPU proof must be promoted above collapsed history');

@@ -67,9 +67,23 @@ test('proof finalization cannot be replayed by an obsolete attempt', async () =>
   // completeGpuProofJob (gpu-proof-completion.ts) so it can be exercised directly
   // against a real database in gpu-proof-completion.test.ts, instead of being
   // re-simulated in a test that only reads server.ts's source text.
-  assert.match(body, /completeGpuProofJob\(db,job\.bookingId,body\.machineId\)/);
+  assert.match(body, /completeGpuProofJob\(db,validated\.bookingId,body\.machineId\)/);
   const completion = await readFile(new URL('../src/gpu-proof-completion.ts', import.meta.url), 'utf8');
   assert.match(completion, /moderationStatus:\s*ModerationStatus\.CLEAR/);
+});
+
+// Real 500 found live (2026-09-02): the job lookup + validation ran as a plain, unwrapped
+// db.job.findFirst - unlike completeGpuProofJob below it, which was already Serializable +
+// retried - so a transient connection/contention blip here surfaced straight to the agent as
+// an uncaught 500. The agent correctly reported the job as terminally FAILED even though the
+// GPU verification itself had already genuinely succeeded (gpuDetected/containerCleaned both
+// true), permanently stranding the booking with no "Ouvrir mon espace" ever possible.
+test('proof finalization\'s job lookup is retried on a transient failure, not left as a raw unretried read', async () => {
+  const source = await sourcePromise;
+  const body = routeSlice(source, "app.post('/agent/jobs/:id/finalize-proof'", "app.get('/listings'");
+  assert.match(body, /await runBookingTransaction\(db,async tx=>\{/, 'the job lookup and validation must run through the retry helper');
+  assert.match(body, /const job=await tx\.job\.findFirst/, 'the read must happen inside the retried transaction, not before it');
+  assert.doesNotMatch(body, /const job=await db\.job\.findFirst/, 'must not also fall back to a raw, unretried db.job.findFirst outside the transaction');
 });
 
 test('heartbeat derives availability from server-owned runtime state', async () => {

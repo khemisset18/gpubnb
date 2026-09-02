@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { BookingStatus, JobStatus, JobType, MachineWorkspaceState, WorkspaceSessionStatus } from '@prisma/client';
+import { BookingStatus, JobStatus, JobType, MachineWorkspaceState, Prisma, WorkspaceSessionStatus } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 
@@ -9,6 +9,7 @@ import { evaluateWorkspaceAccess } from './workspace-access-policy.js';
 import { issueWorkspaceAccessGrant } from './workspace-access.js';
 import { registerWorkspaceGatewayRoutes } from './workspace-gateway.js';
 import { ensureCompatibleMachineWorkspace } from './machine-workspace-catalog.js';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 
 export function safeConnection(metadata: unknown): { ready: boolean; gatewayPath: string | null } {
   if (!metadata || typeof metadata !== 'object') return { ready: false, gatewayPath: null };
@@ -123,27 +124,41 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const session=await requireSession(request,reply,redis); if(!session)return;
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
     // Not scoped to a single slug: a booking can carry a Developer session, a
-    // Data session, or (Developer specifically) both alongside its Compute one -
-    // retry just needs to find whichever gateway-backed session on this booking
-    // is actually retryable right now, then re-enqueue WORKSPACE_PREPARE for
-    // that same workspace.
+    // Data session, a Compute session, or (Developer specifically) both alongside
+    // its Compute one - retry just needs to find whichever session on this booking
+    // is actually retryable right now, then re-enqueue the right job type for it.
+    // 'compute' included: a real live incident showed a FAILED GPU_PROOF job had no
+    // recovery path at all - ensureComputePreparation only ever returns the existing
+    // (broken) session instead of creating a fresh job, and this route used to
+    // exclude 'compute' entirely, even though the underlying GPU verification can
+    // genuinely still be worth re-running (e.g. after a transient server error, not
+    // a real hardware problem).
     const row=await db.workspaceSession.findFirst({
-      where:{bookingId,renterId:session.userId,status:{in:retryableSessions},machineWorkspace:{workspace:{slug:{in:['developer','data','ai','video','audio','api','mobile','security-lab']}}},booking:{status:{in:activeBookings},endsAt:{gt:new Date()}}},
-      select:{id:true,machineId:true,machineWorkspaceId:true,booking:{select:{endsAt:true}},machineWorkspace:{select:{workspace:{select:{slug:true}}}}},
+      where:{bookingId,renterId:session.userId,status:{in:retryableSessions},machineWorkspace:{workspace:{slug:{in:['compute','developer','data','ai','video','audio','api','mobile','security-lab']}}},booking:{status:{in:activeBookings},endsAt:{gt:new Date()}}},
+      select:{id:true,machineId:true,machineWorkspaceId:true,booking:{select:{endsAt:true,expectedSeconds:true}},machineWorkspace:{select:{workspace:{select:{slug:true}}}}},
     });
     if(!row)return reply.code(409).send({error:'workspace_retry_not_available'});
     const workspaceSlug=row.machineWorkspace.workspace.slug;
-    const active=await db.job.findFirst({where:{bookingId,type:JobType.WORKSPACE_PREPARE,status:{notIn:terminalJobs}},select:{id:true}});
+    // Compute's job is GPU_PROOF (ensureComputePreparation), never WORKSPACE_PREPARE -
+    // the "already active" guard and the re-enqueued job must match that, or a retry
+    // would create a WORKSPACE_PREPARE job the agent doesn't treat as GPU_PROOF at all
+    // (no finalize-proof call - see run_next_job in cli.py).
+    const isCompute=workspaceSlug==='compute';
+    const activeJobType=isCompute?JobType.GPU_PROOF:JobType.WORKSPACE_PREPARE;
+    const active=await db.job.findFirst({where:{bookingId,type:activeJobType,status:{notIn:terminalJobs}},select:{id:true}});
     if(active)return reply.code(409).send({error:'workspace_preparation_already_active',jobId:active.id});
-    const retried=await db.$transaction(async tx=>{
+    const retried=await runBookingTransaction(db,async tx=>{
       const reset=await tx.workspaceSession.updateMany({
         where:{id:row.id,status:{in:retryableSessions}},
         data:{status:WorkspaceSessionStatus.PREPARING,jobId:null,endedAt:null,terminationReason:null,readyAt:null,startedAt:null,connectionMetadata:{},preparationProgress:5,preparationStep:'RETRY_REQUESTED',preparationRequestedAt:new Date(),preparationStartedAt:null,preparationCompletedAt:null,preparationAttempts:{increment:1},expiresAt:row.booking.endsAt},
       });
       if(reset.count!==1)return null;
-      const job=await tx.job.create({data:{bookingId,renterId:session.userId,machineId:row.machineId,type:JobType.WORKSPACE_PREPARE,parameters:{workspaceSlug,timeoutSeconds:1200}}});
+      const job=await tx.job.create({data:isCompute
+        ? {bookingId,renterId:session.userId,machineId:row.machineId,type:JobType.GPU_PROOF,parameters:{durationSeconds:Math.max(30,Math.min(600,row.booking.expectedSeconds)),workspaceSlug:'compute'}}
+        : {bookingId,renterId:session.userId,machineId:row.machineId,type:JobType.WORKSPACE_PREPARE,parameters:{workspaceSlug,timeoutSeconds:1200}},
+      });
       return tx.workspaceSession.update({where:{id:row.id},data:{jobId:job.id,events:{create:{actorType:'RENTER',actorId:session.userId,action:'DEVELOPER_PREPARATION_RETRIED'}}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
-    });
+    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,maxWait:5_000,timeout:10_000});
     return retried??reply.code(409).send({error:'workspace_retry_raced'});
   });
 
