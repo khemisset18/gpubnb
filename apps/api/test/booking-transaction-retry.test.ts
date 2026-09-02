@@ -136,3 +136,44 @@ test('isRetryableBookingTransactionError recognizes both known transient Prisma 
   const unrelatedKnownError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: 'test' });
   assert.equal(isRetryableBookingTransactionError(unrelatedKnownError), false);
 });
+
+// Real CI failure found live: lockBookingAndPayment's `SELECT ... FOR UPDATE OF` is a raw
+// query (tx.$queryRaw - Prisma's query builder has no FOR UPDATE OF equivalent), and
+// Prisma wraps *any* raw-query failure as P2010 "Raw query failed" - the real Postgres
+// SQLSTATE only survives in the message text, never in `.code`. A settlement confirmation
+// under real 8-way concurrent load hit a genuine 40001 exactly this way and was never
+// retried, because P2010 alone used to be treated as non-retryable (correctly - it also
+// wraps a real SQL syntax error or constraint violation, which must never be blindly
+// retried).
+test('a raw query (tx.$queryRaw, e.g. SELECT ... FOR UPDATE) that fails on a genuine Postgres serialization conflict is retried, even though it surfaces as P2010', () => {
+  const rawQuerySerializationConflict = new Prisma.PrismaClientKnownRequestError(
+    'Raw query failed. Code: `40001`. Message: `could not serialize access due to concurrent update`',
+    { code: 'P2010', clientVersion: 'test' },
+  );
+  assert.equal(isRetryableBookingTransactionError(rawQuerySerializationConflict), true);
+
+  const rawQueryDeadlock = new Prisma.PrismaClientKnownRequestError(
+    'Raw query failed. Code: `40P01`. Message: `deadlock detected`',
+    { code: 'P2010', clientVersion: 'test' },
+  );
+  assert.equal(isRetryableBookingTransactionError(rawQueryDeadlock), true);
+});
+
+test('a raw query failure for an unrelated reason (P2010 without a transient SQLSTATE) is never retried - P2010 alone is too broad to blindly retry', () => {
+  const rawQuerySyntaxError = new Prisma.PrismaClientKnownRequestError(
+    'Raw query failed. Code: `42601`. Message: `syntax error at or near "SELCT"`',
+    { code: 'P2010', clientVersion: 'test' },
+  );
+  assert.equal(isRetryableBookingTransactionError(rawQuerySyntaxError), false);
+});
+
+test('two concurrent SELECT ... FOR UPDATE-style raw-query conflicts retry through runBookingTransaction end to end', async () => {
+  const rawQuerySerializationConflict = new Prisma.PrismaClientKnownRequestError(
+    'Raw query failed. Code: `40001`. Message: `could not serialize access due to concurrent update`',
+    { code: 'P2010', clientVersion: 'test' },
+  );
+  const { db, getCalls } = fakeDb([() => rawQuerySerializationConflict, () => ({ ok: true })]);
+  const result = await runBookingTransaction(db, async tx => tx, { maxAttempts: 3, baseDelayMs: 1 });
+  assert.deepEqual(result, { ok: true });
+  assert.equal(getCalls(), 2, 'must retry exactly once before succeeding');
+});

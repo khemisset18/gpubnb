@@ -15,15 +15,6 @@ import {
   WorkspaceSessionStatus,
 } from '@prisma/client';
 import { Redis } from 'ioredis';
-
-import { syncGpuMiningResourcesFromAccelerators } from '../src/mining-resource-inventory.js';
-import { createExactGpuListing } from '../src/rental-listing-service.js';
-import { allocateBookingResources } from '../src/resource-allocation-service.js';
-import { ensureCompatibleMachineWorkspace } from '../src/machine-workspace-catalog.js';
-import { activateGatewaySession } from '../src/workspace-gateway.js';
-import { finalizeVerifiedDeveloperStop } from '../src/workspace-stop-finalizer.js';
-import { requestSettlement, confirmSettlement } from '../src/settlement-transactions.js';
-import { devBypassSettlementSignature } from '../src/dev-booking-reconciler.js';
 import type { AcceleratorTelemetry } from '../src/accelerator-telemetry.js';
 
 // End-to-end walkthrough of the exact chain this whole audit was about, against a real
@@ -61,6 +52,24 @@ process.env.INTERNAL_SERVICE_TOKEN ??= 'test-internal-token-0123456789abcdef';
 process.env.PLATFORM_WALLET ??= '11111111111111111111111111111111';
 process.env.BETA_TEST_DEV_BYPASS ??= 'true';
 process.env.ESCROW_PROGRAM_ID ??= 'NOT_DEPLOYED_YET';
+
+// config.ts validates PLATFORM_WALLET (and friends) as required at import time. Static
+// imports are hoisted before any other top-level statement (including the fallbacks
+// above), so every import that transitively reaches config.ts must be dynamic here,
+// evaluated after these fallbacks are in place - same convention as every other real-DB
+// test file in this repo (see gpu-proof-completion.test.ts). Real CI failure found live:
+// this passed locally only because an earlier-loaded test file in the same combined
+// `tsx --test test/*.test.ts` process had already set PLATFORM_WALLET first - a fresh,
+// isolated CI run of this file alone crashed with a ZodError before this static import
+// mistake was fixed.
+const { syncGpuMiningResourcesFromAccelerators } = await import('../src/mining-resource-inventory.js');
+const { createExactGpuListing } = await import('../src/rental-listing-service.js');
+const { allocateBookingResources } = await import('../src/resource-allocation-service.js');
+const { ensureCompatibleMachineWorkspace } = await import('../src/machine-workspace-catalog.js');
+const { activateGatewaySession } = await import('../src/workspace-gateway.js');
+const { finalizeVerifiedDeveloperStop } = await import('../src/workspace-stop-finalizer.js');
+const { requestSettlement, confirmSettlement } = await import('../src/settlement-transactions.js');
+const { devBypassSettlementSignature } = await import('../src/dev-booking-reconciler.js');
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
