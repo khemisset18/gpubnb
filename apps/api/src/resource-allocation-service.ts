@@ -14,6 +14,7 @@ import {
   SchedulerPresenceError,
   assertSchedulerMachinePresence,
 } from './scheduler-presence.js';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 
 const LIVE_ALLOCATION_STATUSES: ResourceAllocationStatus[] = [
   ResourceAllocationStatus.HELD,
@@ -253,10 +254,22 @@ export async function allocateBookingResources(
   input: AllocateBookingResourcesInput,
 ): Promise<BookingResourceAllocation> {
   try {
-    return await db.$transaction((tx) => allocateInTransaction(tx, input), {
+    // Safe to retry as a whole: assertSchedulerMachinePresence (inside the transaction) is
+    // a pure Redis read (HGETALL/PTTL, no writes) plus an optional log line - re-running it
+    // on a P2034 retry has no side effect. Everything else in the callback is DB-only.
+    // maxAttempts above the shared default (3): a popular listing genuinely means many
+    // renters funding around the same moment, all serialized behind this same machine's
+    // pg_advisory_xact_lock - real 5-way concurrent load in testing showed Postgres SSI
+    // legitimately aborting more than 3 times even for non-conflicting windows (expected
+    // behavior of Serializable under real contention, not a bug), so a shallow retry
+    // budget here surfaces as a spurious resource_conflict for renters who never actually
+    // conflicted with anyone.
+    return await runBookingTransaction(db, (tx) => allocateInTransaction(tx, input), {
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
       maxWait: 5_000,
       timeout: 10_000,
+      maxAttempts: 6,
+      baseDelayMs: 40,
     });
   } catch (error) {
     if (error instanceof ResourceAllocationError) throw error;

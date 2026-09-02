@@ -11,6 +11,7 @@ import {
   hashJobLeaseToken,
   jobLeaseExpiresAt,
 } from './job-execution-lease.js';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 
 const ACTIVE_JOB_BOOKINGS: BookingStatus[] = [
   BookingStatus.FUNDED,
@@ -198,8 +199,22 @@ export async function claimNextAgentJob(
   db: PrismaClient,
   options: AgentJobClaimOptions,
 ) {
-  return db.$transaction(
+  // Multiple agents/poll cycles can race to claim from the same queue - createJobLeaseToken
+  // is pure crypto.randomBytes (no side effect), so a P2034-triggered retry simply mints a
+  // fresh, equally valid token for the retried attempt; nothing from a failed attempt is
+  // ever observed by a caller. maxWait above Prisma's tight 2s default: real concurrency
+  // testing (many simultaneous claim callers) showed Prisma's own interactive-transaction
+  // acquisition timing out (P2028) well before genuine Postgres connection exhaustion
+  // (confirmed separately: max_connections=100, a handful actually in use) - a burst of
+  // agent polls waiting slightly longer to even start is the intended, correct behavior
+  // here, not a spurious failure. maxAttempts above the shared default: real 10-way
+  // concurrent claim testing against the same queue showed Postgres SSI genuinely
+  // aborting more than 3 times (expected behavior of Serializable under real contention),
+  // which used to surface as a job silently never getting claimed rather than the queue
+  // correctly draining once contention clears.
+  return runBookingTransaction(
+    db,
     tx => claimNextAgentJobInTransaction(tx, options),
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 10_000, maxAttempts: 6, baseDelayMs: 40 },
   );
 }

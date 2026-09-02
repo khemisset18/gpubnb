@@ -10,6 +10,7 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 import type { Redis } from 'ioredis';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 
 const STOPPABLE = [
   WorkspaceSessionStatus.STOP_REQUESTED,
@@ -73,7 +74,9 @@ export async function finalizeVerifiedDeveloperStop(
   machineId: string,
   endedAt = new Date(),
 ): Promise<WorkspaceStopFinalization> {
-  const result = await db.$transaction(async (tx) => {
+  // DB-only callback (advisory lock + reads/writes, no network/Redis inside - the redis.del
+  // cleanup below runs only after the transaction commits), safe to retry as a whole.
+  const result = await runBookingTransaction(db, async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${sessionId}, 0))`;
 
     const row = await tx.workspaceSession.findFirst({
@@ -172,7 +175,11 @@ export async function finalizeVerifiedDeveloperStop(
       activated: !neverActivated,
       machineReleased: machineUpdate.count === 1,
     };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  // maxWait above Prisma's tight 2s default: the pg_advisory_xact_lock above already
+  // serializes concurrent finalize calls on the same session; real concurrency testing
+  // showed Prisma's own interactive-transaction acquisition timing out (P2028) under a
+  // burst of callers well before genuine Postgres connection exhaustion.
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 10_000 });
 
   await redis.del(activatedKey(sessionId));
   return result;

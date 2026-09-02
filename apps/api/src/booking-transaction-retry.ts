@@ -18,13 +18,30 @@ export function isRetryableBookingTransactionError(e: unknown): boolean {
 export async function runBookingTransaction<T>(
   db: PrismaClient,
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
-  options: { maxAttempts?: number; baseDelayMs?: number; isolationLevel?: Prisma.TransactionIsolationLevel } = {},
+  options: {
+    maxAttempts?: number;
+    baseDelayMs?: number;
+    isolationLevel?: Prisma.TransactionIsolationLevel;
+    maxWait?: number;
+    timeout?: number;
+  } = {},
 ): Promise<T> {
   const maxAttempts = options.maxAttempts ?? 3;
   const baseDelayMs = options.baseDelayMs ?? 25;
+  // Only ever include the keys the caller actually passed - Prisma then applies its own
+  // default for any field left out entirely, rather than every isolationLevel-only caller
+  // suddenly also pinning maxWait/timeout to some arbitrary default it never asked for.
+  const txOptions: { isolationLevel?: Prisma.TransactionIsolationLevel; maxWait?: number; timeout?: number } | undefined =
+    (options.isolationLevel !== undefined || options.maxWait !== undefined || options.timeout !== undefined)
+      ? {
+        ...(options.isolationLevel !== undefined ? { isolationLevel: options.isolationLevel } : {}),
+        ...(options.maxWait !== undefined ? { maxWait: options.maxWait } : {}),
+        ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
+      }
+      : undefined;
   for (let attempt = 1; ; attempt++) {
     try {
-      return await db.$transaction(fn, options.isolationLevel ? { isolationLevel: options.isolationLevel } : undefined);
+      return await db.$transaction(fn, txOptions);
     } catch (e) {
       if (attempt >= maxAttempts || !isRetryableBookingTransactionError(e)) throw e;
       await new Promise(resolve => setTimeout(resolve, baseDelayMs * attempt + Math.floor(Math.random() * baseDelayMs)));

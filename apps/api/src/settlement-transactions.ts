@@ -8,6 +8,7 @@ import {
 } from '@prisma/client';
 import { calculateSettlement, type Settlement } from './settlement.js';
 import { recordRentalEvent } from './rental-delivery-service.js';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 
 const SIGNATURE_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,128}$/;
 const TERMINAL_BOOKING_STATUSES: ReadonlySet<BookingStatus> = new Set([
@@ -158,7 +159,10 @@ export async function requestSettlement(
   db: PrismaClient,
   bookingId: string,
 ): Promise<SettlementPreview> {
-  return db.$transaction(
+  // DB-only callback (lockBookingAndPayment/payment.update/recordRentalEvent's outbox
+  // write, no network calls), safe to retry as a whole.
+  return runBookingTransaction(
+    db,
     async (tx) => {
       const booking = await lockBookingAndPayment(tx, bookingId);
       if (!SETTLEABLE_BOOKING_STATUSES.has(booking.status)) {
@@ -200,7 +204,12 @@ export async function requestSettlement(
 
       return { bookingId, paymentId: booking.payment.id, settlement };
     },
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    // maxWait above Prisma's tight 2s default: FOR UPDATE OF booking,payment already
+    // serializes concurrent settlement calls on the same booking at the row-lock level;
+    // real concurrency testing showed Prisma's own interactive-transaction acquisition
+    // timing out (P2028) under a burst of callers well before genuine Postgres connection
+    // exhaustion, not a sign either lock is stuck.
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 10_000 },
   );
 }
 
@@ -210,7 +219,13 @@ export async function confirmSettlement(
   signatureInput: string,
 ): Promise<SettlementConfirmation> {
   const signature = assertSignature(signatureInput);
-  return db.$transaction(
+  // DB-only callback (lockBookingAndPayment, payment/booking updates, releaseAllocations,
+  // recordRentalEvent's outbox write - no network/RPC calls of its own; assertSignature
+  // above only checks base58 shape, it does not verify on-chain - this function records
+  // an outcome an already-trusted internal caller reports, it never verifies a
+  // transaction itself), safe to retry as a whole.
+  return runBookingTransaction(
+    db,
     async (tx) => {
       const booking = await lockBookingAndPayment(tx, bookingId);
       const settlement = calculateForBooking(booking);
@@ -283,6 +298,6 @@ export async function confirmSettlement(
         idempotent: false,
       };
     },
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 10_000 },
   );
 }

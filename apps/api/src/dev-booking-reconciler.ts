@@ -2,6 +2,7 @@ import { BookingStatus, JobStatus, JobType, MachineOperational, ModerationStatus
 import { config } from './config.js';
 import { confirmSettlement, requestSettlement } from './settlement-transactions.js';
 import { enterQuarantine } from './quarantine-service.js';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 
 const TERMINAL_JOB_STATUSES: JobStatus[] = [
   JobStatus.COMPLETED,
@@ -498,7 +499,10 @@ export async function reconcileStalledActivations(db: PrismaClient, now = new Da
     take: 50,
   });
   for (const booking of stalled) {
-    const changed = await db.$transaction(async (tx) => {
+    // DB-only callback (job/booking/session/allocation reads and writes, enterQuarantine -
+    // no network calls), safe to retry as a whole. Already Serializable (unchanged below);
+    // only the missing retry around it is new.
+    const changed = await runBookingTransaction(db, async (tx) => {
       const activeJobs = await tx.job.findMany({
         where: { bookingId: booking.id, status: { in: ACTIVE_ACTIVATION_JOB_STATUSES } },
         select: { id: true, status: true, currentAttemptId: true, leaseExpiresAt: true, updatedAt: true },
@@ -579,7 +583,7 @@ export async function reconcileStalledActivations(db: PrismaClient, now = new Da
         });
       }
       return true;
-    }, { isolationLevel: 'Serializable' });
+    }, { isolationLevel: 'Serializable', maxWait: 5_000, timeout: 10_000 });
     if (changed) degraded += 1;
   }
   return { degraded };

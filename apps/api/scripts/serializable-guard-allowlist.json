@@ -1,0 +1,24 @@
+{
+  "_comment": "Pre-existing raw .$transaction(...) calls using Serializable isolation, found when check-serializable-guard.mjs was introduced. NOT reviewed/confirmed as safe to wrap in runBookingTransaction (some may call non-idempotent code inside the callback, or may simply be outside this session's audited scope) - each is untouched technical debt, not an approved exception. This is a regression guard, not a retroactive one: it exists so no NEW unwrapped Serializable transaction is added silently, while not blocking the build on everything this session's audit did not touch. To remove an entry: confirm the callback is DB-only/idempotent, wrap it with runBookingTransaction, add a test, then delete the line here.",
+  "entries": [
+    "apps/api/src/accelerator-heartbeat-service.ts:72",
+    "apps/api/src/accelerator-inventory-store.ts:171",
+    "apps/api/src/accelerator-security-executor.ts:170",
+    "apps/api/src/dev-booking-reconciler.ts:94",
+    "apps/api/src/job-staleness-sweep.ts:83",
+    "apps/api/src/mining-routes.ts:262",
+    "apps/api/src/offline-sweep-service.ts:65",
+    "apps/api/src/rental-listing-lifecycle.ts:313",
+    "apps/api/src/rental-listing-lifecycle.ts:372",
+    "apps/api/src/rental-listing-service.ts:187",
+    "apps/api/src/rental-workflow-transactions.ts:60",
+    "apps/api/src/rental-workflow-transactions.ts:177",
+    "apps/api/src/resource-allocation-service.ts:287",
+    "apps/api/src/resource-allocation-service.ts:346",
+    "apps/api/src/server.ts:92",
+    "apps/api/src/server.ts:103",
+    "apps/api/src/server.ts:214",
+    "apps/api/src/workspace-gateway.ts:360",
+    "apps/api/src/workspace-gateway.ts:363"
+  ]
+}

@@ -12,7 +12,8 @@
     "test": "tsx --test test/*.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "verify": "npm test && npm run build"
+    "lint:serializable-guard": "node scripts/check-serializable-guard.mjs",
+    "verify": "npm test && npm run build && npm run lint:serializable-guard"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

@@ -9,9 +9,15 @@ async function reconcilerBody(): Promise<string> {
   return source.slice(start);
 }
 
-test('stalled activation re-checks execution liveness inside a serializable transaction', async () => {
+test('stalled activation re-checks execution liveness inside a serializable, retry-wrapped transaction', async () => {
   const body = await reconcilerBody();
-  assert.match(body, /\$transaction\(async \(tx\) =>/);
+  // Real 500 found live during the PC A <-> PC B test (a different call site, same bug
+  // class): a raw db.$transaction() with no retry surfaces a transient P2034 as an
+  // unhandled 500 instead of recovering. reconcileStalledActivations now goes through
+  // runBookingTransaction (booking-transaction-retry.ts) - same Serializable isolation,
+  // just no longer unretried.
+  assert.match(body, /runBookingTransaction\(db, async \(tx\) =>/);
+  assert.doesNotMatch(body.slice(0, body.indexOf('export async function reconcileOrphanedDepositBookings')), /\bdb\.\$transaction\(/, 'must not also fall back to a raw, unretried db.$transaction()');
   assert.match(body, /tx\.job\.findMany/);
   assert.match(body, /job\.leaseExpiresAt !== null && job\.leaseExpiresAt > now/);
   assert.match(body, /if \(executionStillLive\) return false/);
