@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { evaluateWorkspaceAccess } from './workspace-access-policy.js';
 import { issueWorkspaceAccessGrant } from './workspace-access.js';
 import { registerWorkspaceGatewayRoutes } from './workspace-gateway.js';
+import { isWorkspaceGatewayLive } from './workspace-gateway-liveness.js';
 import { ensureCompatibleMachineWorkspace } from './machine-workspace-catalog.js';
 import { runBookingTransaction } from './booking-transaction-retry.js';
 
@@ -150,7 +151,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const retried=await runBookingTransaction(db,async tx=>{
       const reset=await tx.workspaceSession.updateMany({
         where:{id:row.id,status:{in:retryableSessions}},
-        data:{status:WorkspaceSessionStatus.PREPARING,jobId:null,endedAt:null,terminationReason:null,readyAt:null,startedAt:null,connectionMetadata:{},preparationProgress:5,preparationStep:'RETRY_REQUESTED',preparationRequestedAt:new Date(),preparationStartedAt:null,preparationCompletedAt:null,preparationAttempts:{increment:1},expiresAt:row.booking.endsAt},
+        data:{status:WorkspaceSessionStatus.PREPARING,jobId:null,endedAt:null,terminationReason:null,readyAt:null,startedAt:null,connectionMetadata:{},gatewayLastSeenAt:null,preparationProgress:5,preparationStep:'RETRY_REQUESTED',preparationRequestedAt:new Date(),preparationStartedAt:null,preparationCompletedAt:null,preparationAttempts:{increment:1},expiresAt:row.booking.endsAt},
       });
       if(reset.count!==1)return null;
       const job=await tx.job.create({data:isCompute
@@ -208,7 +209,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
         preparationCompletedAt: true, endedAt: true, updatedAt: true,
-        connectionType: true, connectionMetadata: true, readyAt: true, startedAt: true,
+        connectionType: true, connectionMetadata: true, gatewayLastSeenAt: true, readyAt: true, startedAt: true,
         job: { select: { status: true, errorCode: true, createdAt: true, updatedAt: true, startedAt: true, finishedAt: true } },
         machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { id: true, status: true, startsAt: true, endsAt: true } },
@@ -229,7 +230,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
-    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
+    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt));
     const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
     const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
     return {
@@ -251,8 +252,8 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         errorCode: row.job?.errorCode ?? null,
       },
       retryable: activeBookings.includes(row.booking.status) && retryableSessions.includes(row.status),
-      canOpen: policy.allowed && connection.ready,
-      blockedReason: !policy.allowed ? policy.code : connection.ready ? null : 'GATEWAY_NOT_READY',
+      canOpen: policy.allowed && connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt),
+      blockedReason: !policy.allowed ? policy.code : !connection.ready ? 'GATEWAY_NOT_READY' : isWorkspaceGatewayLive(row.gatewayLastSeenAt) ? null : 'GATEWAY_STALE',
     };
   });
 
@@ -265,7 +266,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const row = await db.workspaceSession.findFirst({
       where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'data' } } },
       select: {
-        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true,
+        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { status: true } },
       },
@@ -285,7 +286,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
-    if (!connection.ready || !connection.gatewayPath) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
+    if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
     const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
@@ -335,7 +336,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
         preparationCompletedAt: true, endedAt: true, updatedAt: true,
-        connectionType: true, connectionMetadata: true, readyAt: true, startedAt: true,
+        connectionType: true, connectionMetadata: true, gatewayLastSeenAt: true, readyAt: true, startedAt: true,
         job: { select: { status: true, errorCode: true, createdAt: true, updatedAt: true, startedAt: true, finishedAt: true } },
         machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { id: true, status: true, startsAt: true, endsAt: true } },
@@ -356,7 +357,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
-    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
+    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt));
     const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
     const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
     return {
@@ -378,8 +379,8 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         errorCode: row.job?.errorCode ?? null,
       },
       retryable: activeBookings.includes(row.booking.status) && retryableSessions.includes(row.status),
-      canOpen: policy.allowed && connection.ready,
-      blockedReason: !policy.allowed ? policy.code : connection.ready ? null : 'GATEWAY_NOT_READY',
+      canOpen: policy.allowed && connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt),
+      blockedReason: !policy.allowed ? policy.code : !connection.ready ? 'GATEWAY_NOT_READY' : isWorkspaceGatewayLive(row.gatewayLastSeenAt) ? null : 'GATEWAY_STALE',
     };
   });
 
@@ -392,7 +393,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const row = await db.workspaceSession.findFirst({
       where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'ai' } } },
       select: {
-        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true,
+        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { status: true } },
       },
@@ -412,7 +413,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
-    if (!connection.ready || !connection.gatewayPath) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
+    if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
     const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
@@ -459,7 +460,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
         preparationCompletedAt: true, endedAt: true, updatedAt: true,
-        connectionType: true, connectionMetadata: true, readyAt: true, startedAt: true,
+        connectionType: true, connectionMetadata: true, gatewayLastSeenAt: true, readyAt: true, startedAt: true,
         job: { select: { status: true, errorCode: true, createdAt: true, updatedAt: true, startedAt: true, finishedAt: true } },
         machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { id: true, status: true, startsAt: true, endsAt: true } },
@@ -480,7 +481,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
-    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
+    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt));
     const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
     const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
     return {
@@ -502,8 +503,8 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         errorCode: row.job?.errorCode ?? null,
       },
       retryable: activeBookings.includes(row.booking.status) && retryableSessions.includes(row.status),
-      canOpen: policy.allowed && connection.ready,
-      blockedReason: !policy.allowed ? policy.code : connection.ready ? null : 'GATEWAY_NOT_READY',
+      canOpen: policy.allowed && connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt),
+      blockedReason: !policy.allowed ? policy.code : !connection.ready ? 'GATEWAY_NOT_READY' : isWorkspaceGatewayLive(row.gatewayLastSeenAt) ? null : 'GATEWAY_STALE',
     };
   });
 
@@ -516,7 +517,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const row = await db.workspaceSession.findFirst({
       where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'video' } } },
       select: {
-        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true,
+        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { status: true } },
       },
@@ -536,7 +537,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
-    if (!connection.ready || !connection.gatewayPath) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
+    if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
     const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
@@ -583,7 +584,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
         preparationCompletedAt: true, endedAt: true, updatedAt: true,
-        connectionType: true, connectionMetadata: true, readyAt: true, startedAt: true,
+        connectionType: true, connectionMetadata: true, gatewayLastSeenAt: true, readyAt: true, startedAt: true,
         job: { select: { status: true, errorCode: true, createdAt: true, updatedAt: true, startedAt: true, finishedAt: true } },
         machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { id: true, status: true, startsAt: true, endsAt: true } },
@@ -604,7 +605,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
-    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
+    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt));
     const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
     const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
     return {
@@ -626,8 +627,8 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         errorCode: row.job?.errorCode ?? null,
       },
       retryable: activeBookings.includes(row.booking.status) && retryableSessions.includes(row.status),
-      canOpen: policy.allowed && connection.ready,
-      blockedReason: !policy.allowed ? policy.code : connection.ready ? null : 'GATEWAY_NOT_READY',
+      canOpen: policy.allowed && connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt),
+      blockedReason: !policy.allowed ? policy.code : !connection.ready ? 'GATEWAY_NOT_READY' : isWorkspaceGatewayLive(row.gatewayLastSeenAt) ? null : 'GATEWAY_STALE',
     };
   });
 
@@ -640,7 +641,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const row = await db.workspaceSession.findFirst({
       where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'audio' } } },
       select: {
-        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true,
+        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { status: true } },
       },
@@ -660,7 +661,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
-    if (!connection.ready || !connection.gatewayPath) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
+    if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
     const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
@@ -707,7 +708,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
         preparationCompletedAt: true, endedAt: true, updatedAt: true,
-        connectionType: true, connectionMetadata: true, readyAt: true, startedAt: true,
+        connectionType: true, connectionMetadata: true, gatewayLastSeenAt: true, readyAt: true, startedAt: true,
         job: { select: { status: true, errorCode: true, createdAt: true, updatedAt: true, startedAt: true, finishedAt: true } },
         machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { id: true, status: true, startsAt: true, endsAt: true } },
@@ -728,7 +729,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
-    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
+    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt));
     const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
     const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
     return {
@@ -750,8 +751,8 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         errorCode: row.job?.errorCode ?? null,
       },
       retryable: activeBookings.includes(row.booking.status) && retryableSessions.includes(row.status),
-      canOpen: policy.allowed && connection.ready,
-      blockedReason: !policy.allowed ? policy.code : connection.ready ? null : 'GATEWAY_NOT_READY',
+      canOpen: policy.allowed && connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt),
+      blockedReason: !policy.allowed ? policy.code : !connection.ready ? 'GATEWAY_NOT_READY' : isWorkspaceGatewayLive(row.gatewayLastSeenAt) ? null : 'GATEWAY_STALE',
     };
   });
 
@@ -764,7 +765,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const row = await db.workspaceSession.findFirst({
       where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'api' } } },
       select: {
-        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true,
+        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { status: true } },
       },
@@ -784,7 +785,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
-    if (!connection.ready || !connection.gatewayPath) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
+    if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
     const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
@@ -834,7 +835,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
         preparationCompletedAt: true, endedAt: true, updatedAt: true,
-        connectionType: true, connectionMetadata: true, readyAt: true, startedAt: true,
+        connectionType: true, connectionMetadata: true, gatewayLastSeenAt: true, readyAt: true, startedAt: true,
         job: { select: { status: true, errorCode: true, createdAt: true, updatedAt: true, startedAt: true, finishedAt: true } },
         machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { id: true, status: true, startsAt: true, endsAt: true } },
@@ -855,7 +856,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
-    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
+    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt));
     const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
     const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
     return {
@@ -877,8 +878,8 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         errorCode: row.job?.errorCode ?? null,
       },
       retryable: activeBookings.includes(row.booking.status) && retryableSessions.includes(row.status),
-      canOpen: policy.allowed && connection.ready,
-      blockedReason: !policy.allowed ? policy.code : connection.ready ? null : 'GATEWAY_NOT_READY',
+      canOpen: policy.allowed && connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt),
+      blockedReason: !policy.allowed ? policy.code : !connection.ready ? 'GATEWAY_NOT_READY' : isWorkspaceGatewayLive(row.gatewayLastSeenAt) ? null : 'GATEWAY_STALE',
     };
   });
 
@@ -891,7 +892,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const row = await db.workspaceSession.findFirst({
       where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'mobile' } } },
       select: {
-        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true,
+        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { status: true } },
       },
@@ -911,7 +912,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
-    if (!connection.ready || !connection.gatewayPath) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
+    if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
     const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
@@ -959,7 +960,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
         preparationCompletedAt: true, endedAt: true, updatedAt: true,
-        connectionType: true, connectionMetadata: true, readyAt: true, startedAt: true,
+        connectionType: true, connectionMetadata: true, gatewayLastSeenAt: true, readyAt: true, startedAt: true,
         job: { select: { status: true, errorCode: true, createdAt: true, updatedAt: true, startedAt: true, finishedAt: true } },
         machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { id: true, status: true, startsAt: true, endsAt: true } },
@@ -980,7 +981,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
-    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
+    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt));
     const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
     const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
     return {
@@ -1002,8 +1003,8 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         errorCode: row.job?.errorCode ?? null,
       },
       retryable: activeBookings.includes(row.booking.status) && retryableSessions.includes(row.status),
-      canOpen: policy.allowed && connection.ready,
-      blockedReason: !policy.allowed ? policy.code : connection.ready ? null : 'GATEWAY_NOT_READY',
+      canOpen: policy.allowed && connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt),
+      blockedReason: !policy.allowed ? policy.code : !connection.ready ? 'GATEWAY_NOT_READY' : isWorkspaceGatewayLive(row.gatewayLastSeenAt) ? null : 'GATEWAY_STALE',
     };
   });
 
@@ -1016,7 +1017,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const row = await db.workspaceSession.findFirst({
       where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'security-lab' } } },
       select: {
-        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true,
+        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { status: true } },
       },
@@ -1036,7 +1037,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
-    if (!connection.ready || !connection.gatewayPath) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
+    if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
     const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
@@ -1055,7 +1056,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
         preparationCompletedAt: true, endedAt: true, updatedAt: true,
-        connectionType: true, connectionMetadata: true, readyAt: true, startedAt: true,
+        connectionType: true, connectionMetadata: true, gatewayLastSeenAt: true, readyAt: true, startedAt: true,
         job: { select: { status: true, errorCode: true, createdAt: true, updatedAt: true, startedAt: true, finishedAt: true } },
         machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { id: true, status: true, startsAt: true, endsAt: true } },
@@ -1076,7 +1077,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
     });
     const connection = safeConnection(row.connectionMetadata);
-    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready);
+    const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt));
     const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
     const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
     return {
@@ -1098,8 +1099,8 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         errorCode: row.job?.errorCode ?? null,
       },
       retryable: activeBookings.includes(row.booking.status) && retryableSessions.includes(row.status),
-      canOpen: policy.allowed && connection.ready,
-      blockedReason: !policy.allowed ? policy.code : connection.ready ? null : 'GATEWAY_NOT_READY',
+      canOpen: policy.allowed && connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt),
+      blockedReason: !policy.allowed ? policy.code : !connection.ready ? 'GATEWAY_NOT_READY' : isWorkspaceGatewayLive(row.gatewayLastSeenAt) ? null : 'GATEWAY_STALE',
     };
   });
 
@@ -1112,7 +1113,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     const row = await db.workspaceSession.findFirst({
       where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'developer' } } },
       select: {
-        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true,
+        id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
         booking: { select: { status: true } },
       },
@@ -1132,7 +1133,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     });
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
-    if (!connection.ready || !connection.gatewayPath) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
+    if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
     const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });

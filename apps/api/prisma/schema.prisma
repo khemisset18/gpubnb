@@ -543,6 +543,7 @@ model WorkspaceSession {
   resourceLimits Json
   connectionType String? @db.VarChar(32)
   connectionMetadata Json?
+  gatewayLastSeenAt DateTime?
   lastMetricCounter BigInt @default(0)
   preparationProgress Int @default(0)
   preparationStep String? @db.VarChar(80)

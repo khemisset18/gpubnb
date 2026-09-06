@@ -248,7 +248,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     const firstRegistration=row.status===WorkspaceSessionStatus.READY&&typeof metadata?.gatewayPath!=='string';
     const readyAt=new Date();const activationDeadline=new Date(readyAt.getTime()+INTERACTIVE_CONNECT_TIMEOUT_SECONDS*1000);
     await db.$transaction([
-      db.workspaceSession.update({where:{id:row.id},data:{connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort)},...(firstRegistration?{readyAt,startedAt:null,expiresAt:activationDeadline,preparationProgress:100,preparationStep:'WAITING_FOR_INTERACTIVE_CONNECTION'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}}),
+      db.workspaceSession.update({where:{id:row.id},data:{connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort)},gatewayLastSeenAt:readyAt,...(firstRegistration?{readyAt,startedAt:null,expiresAt:activationDeadline,preparationProgress:100,preparationStep:'WAITING_FOR_INTERACTIVE_CONNECTION'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}}),
       ...(firstRegistration?[
         db.booking.updateMany({where:{id:row.bookingId,status:BookingStatus.FUNDED},data:{status:BookingStatus.STARTING,startsAt:readyAt,endsAt:activationDeadline}}),
         db.machineAllocation.updateMany({where:{bookingId:row.bookingId},data:{startsAt:readyAt,endsAt:activationDeadline}}),
@@ -271,12 +271,12 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     if(!pendingActivation&&!billable)return reply.code(409).send({error:'workspace_not_billable'});
     if(counter<=row.lastMetricCounter)return reply.code(409).send({error:'usage_counter_replay'});
     if(pendingActivation){
-      await db.workspaceSession.update({where:{id:row.id},data:{lastMetricCounter:counter}});
+      await db.workspaceSession.update({where:{id:row.id},data:{lastMetricCounter:counter,gatewayLastSeenAt:new Date()}});
       return {ok:true,validIncrement:0,pendingActivation:true};
     }
     const increment=Math.min(Number(body.intervalSeconds),Math.max(0,row.booking.expectedSeconds-row.booking.validSeconds));
     await db.$transaction([
-      db.workspaceSession.update({where:{id:row.id},data:{lastMetricCounter:counter}}),
+      db.workspaceSession.update({where:{id:row.id},data:{lastMetricCounter:counter,gatewayLastSeenAt:new Date()}}),
       db.booking.update({where:{id:row.bookingId},data:{validSeconds:{increment}}}),
     ]);
     return {ok:true,validIncrement:increment,pendingActivation:false};
