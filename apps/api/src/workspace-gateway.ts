@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { BookingStatus, JobStatus, MachineConnectivity, MachineOperational, ModerationStatus, PaymentStatus, Prisma, SessionTerminationReason, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 import WebSocket from 'ws';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 import { dataPlaneHostBootstrapEnabled, issueHostTunnelBootstrap, loadDataPlaneHostRuntimeConfig } from './data-plane-host-bootstrap.js';
 import { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';
 import { consumeWorkspaceAccessGrant } from './workspace-access.js';
@@ -357,10 +358,10 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   });
   app.post('/agent/workspace-gateway/:sessionId/stopped',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;cleaned?:boolean};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/stopped`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
-    if(body.cleaned!==true){await db.$transaction(async tx=>{await tx.machine.update({where:{id:machineId},data:{operational:MachineOperational.UNAVAILABLE}});await enterQuarantine(tx,{machineId,reasonCode:'WORKSPACE_CLEANUP_FAILED',reason:"L'agent a signalé la fin de la session Workspace sans confirmer le nettoyage de l'environnement isolé.",details:{sessionId},source:'workspace-gateway.stopped'});await tx.workspaceSession.updateMany({where:{id:sessionId,machineId},data:{status:WorkspaceSessionStatus.QUARANTINED,endedAt:new Date()}});},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});return reply.code(409).send({error:'workspace_cleanup_unverified'});}
+    if(body.cleaned!==true){await runBookingTransaction(db,async tx=>{await tx.machine.update({where:{id:machineId},data:{operational:MachineOperational.UNAVAILABLE}});await enterQuarantine(tx,{machineId,reasonCode:'WORKSPACE_CLEANUP_FAILED',reason:"L'agent a signalé la fin de la session Workspace sans confirmer le nettoyage de l'environnement isolé.",details:{sessionId},source:'workspace-gateway.stopped'});await tx.workspaceSession.updateMany({where:{id:sessionId,machineId},data:{status:WorkspaceSessionStatus.QUARANTINED,endedAt:new Date()}});},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,maxWait:5_000,timeout:10_000});return reply.code(409).send({error:'workspace_cleanup_unverified'});}
     const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.READY]}},select:{id:true,bookingId:true,startedAt:true}});if(!row)return reply.code(409).send({error:'workspace_not_stoppable'});
     const neverActivated=row.startedAt===null;const endedAt=new Date();
-    const release=await db.$transaction(async tx=>{
+    const release=await runBookingTransaction(db,async tx=>{
       await tx.workspaceSession.update({where:{id:row.id},data:{status:neverActivated?WorkspaceSessionStatus.TIMED_OUT:WorkspaceSessionStatus.COMPLETED,endedAt,connectionMetadata:{},...(neverActivated?{terminationReason:SessionTerminationReason.TIMEOUT,preparationStep:'INTERACTIVE_CONNECTION_TIMEOUT'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:neverActivated?'INTERACTIVE_CONNECTION_NEVER_ESTABLISHED':'GATEWAY_CLEANUP_VERIFIED'}}}});
       if(neverActivated){
         await tx.booking.updateMany({where:{id:row.bookingId,status:{in:[BookingStatus.FUNDED,BookingStatus.STARTING]}},data:{status:BookingStatus.DEGRADED}});
@@ -377,7 +378,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         data:{operational:neverActivated?MachineOperational.DEGRADED:MachineOperational.AVAILABLE},
       });
       return machineUpdate.count===1;
-    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
+    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,maxWait:5_000,timeout:10_000});
     await redis.del(wsSessionActivatedKey(sessionId));
     return {ok:true,activated:!neverActivated,machineReleased:release};
   });
