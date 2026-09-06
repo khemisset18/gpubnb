@@ -155,6 +155,10 @@ export async function listOwnerRentalMachines(
   }));
 }
 
+// A machine explicitly RETIRED stays RETIRED. Otherwise lifecycle is derived
+// live from heartbeat age rather than trusted as a stored value, so it can
+// never go stale itself: STALE at 30+ days with no heartbeat, OFFLINE at
+// 10x the ordinary heartbeat-offline threshold, ACTIVE otherwise.
 const STALE_MACHINE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 export function computeLifecycleStatus(
   machine: { lifecycleStatus: string; lastHeartbeatAt: Date | null },
@@ -182,6 +186,9 @@ export async function createExactGpuListing(
 
   try {
     return await runBookingTransaction(db, async (tx) => {
+      // Machine-scoped locking intentionally serializes listing publication with
+      // resource allocation, which uses the same advisory-lock key. This prevents
+      // publish/booking races and duplicate listing creation across GPUs on one host.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.machineId}, 0))`;
 
       const machine = await tx.machine.findFirst({
@@ -227,6 +234,8 @@ export async function createExactGpuListing(
           hourlyLamports,
           status: ListingStatus.ACTIVE,
           resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
+          // SELECTED_ACCELERATORS cardinality is represented by ListingAccelerator
+          // rows. The DB reserves minimum/maximumAccelerators for COMPUTE_POOL only.
           accelerators: { create: { acceleratorId: input.acceleratorId } },
         },
         select: {
