@@ -1,0 +1,141 @@
+name: codex-reliability-patch
+
+on:
+  push:
+    branches:
+      - codex/heartbeat-gateway-reliability
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/heartbeat-gateway-reliability
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Apply exact guarded replacements
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str):
+              p = Path(path)
+              s = p.read_text()
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}: {old[:120]!r}')
+              p.write_text(s.replace(old, new, 1))
+
+          # P0: heartbeat DB transaction. Redis challenge consumption and signature checks
+          # deliberately remain outside this retry boundary.
+          replace_once(
+              'apps/api/src/server.ts',
+              'const heartbeatResult=await db.$transaction(async tx=>{',
+              'const heartbeatResult=await runBookingTransaction(db,async tx=>{',
+          )
+          replace_once(
+              'apps/api/src/server.ts',
+              "},{isolationLevel:'Serializable'});return {ok:true,publishable:heartbeatResult.publishable,agentUpgradeRequired:!jobProtocolSupported",
+              "},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,maxWait:5_000,timeout:10_000});return {ok:true,publishable:heartbeatResult.publishable,agentUpgradeRequired:!jobProtocolSupported",
+          )
+
+          # P0/P1: Developer gateway cleanup transactions are DB-only. The Redis activation
+          # key is deleted only after the successful cleanup transaction commits.
+          replace_once(
+              'apps/api/src/workspace-gateway.ts',
+              "import WebSocket from 'ws';\n",
+              "import WebSocket from 'ws';\nimport { runBookingTransaction } from './booking-transaction-retry.js';\n",
+          )
+          replace_once(
+              'apps/api/src/workspace-gateway.ts',
+              'if(body.cleaned!==true){await db.$transaction(async tx=>{',
+              'if(body.cleaned!==true){await runBookingTransaction(db,async tx=>{',
+          )
+          replace_once(
+              'apps/api/src/workspace-gateway.ts',
+              "},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});return reply.code(409).send({error:'workspace_cleanup_unverified'});}",
+              "},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,maxWait:5_000,timeout:10_000});return reply.code(409).send({error:'workspace_cleanup_unverified'});}",
+          )
+          replace_once(
+              'apps/api/src/workspace-gateway.ts',
+              'const release=await db.$transaction(async tx=>{',
+              'const release=await runBookingTransaction(db,async tx=>{',
+          )
+          replace_once(
+              'apps/api/src/workspace-gateway.ts',
+              "},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});\n    await redis.del(wsSessionActivatedKey(sessionId));",
+              "},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,maxWait:5_000,timeout:10_000});\n    await redis.del(wsSessionActivatedKey(sessionId));",
+          )
+
+          # Ratchet the guard only for sites audited in this patch.
+          allow = Path('apps/api/scripts/serializable-guard-allowlist.json')
+          s = allow.read_text()
+          for entry in [
+              '    "apps/api/src/server.ts:103",\n',
+              '    "apps/api/src/workspace-gateway.ts:360",\n',
+              '    "apps/api/src/workspace-gateway.ts:363"\n',
+          ]:
+              if entry not in s:
+                  raise SystemExit(f'allowlist entry missing: {entry.strip()}')
+              s = s.replace(entry, '', 1)
+          # Repair possible trailing comma after removing the final entry.
+          s = s.replace('    "apps/api/src/server.ts:214",\n  ]', '    "apps/api/src/server.ts:214"\n  ]')
+          allow.write_text(s)
+
+          test = Path('apps/api/test/reliability-retry-wiring.test.ts')
+          test.write_text("""import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          import test from 'node:test';
+
+          test('production heartbeat retries only the PostgreSQL transaction after one-time Redis challenge consumption', async () => {
+            const source = await readFile(new URL('../src/server.ts', import.meta.url), 'utf8');
+            const start = source.indexOf("app.post('/agent/heartbeat'");
+            const end = source.indexOf("const publicWorkspace=", start);
+            assert.ok(start >= 0 && end > start);
+            const body = source.slice(start, end).replace(/\\s+/g, '');
+            const challenge = body.indexOf('redis.getdel(`agent-challenge:');
+            const retry = body.indexOf('constheartbeatResult=awaitrunBookingTransaction(db,asynctx=>{');
+            assert.ok(challenge >= 0 && retry > challenge, 'one-time challenge consumption must stay outside and before the retried DB callback');
+            assert.match(body, /isolationLevel:Prisma\\.TransactionIsolationLevel\\.Serializable,maxWait:5_000,timeout:10_000/);
+            const callback = body.slice(retry, body.indexOf('return{ok:true,publishable:heartbeatResult.publishable', retry));
+            assert.doesNotMatch(callback, /redis\\./, 'retry callback must remain PostgreSQL-only');
+          });
+
+          test('workspace stopped route retries both replay-safe Serializable cleanup transactions and deletes Redis only after commit', async () => {
+            const source = await readFile(new URL('../src/workspace-gateway.ts', import.meta.url), 'utf8');
+            const start = source.indexOf("app.post('/agent/workspace-gateway/:sessionId/stopped'");
+            const end = source.indexOf('\\n  });', start);
+            assert.ok(start >= 0 && end > start);
+            const body = source.slice(start, end).replace(/\\s+/g, '');
+            assert.equal((body.match(/runBookingTransaction\\(db,asynctx=>/g) ?? []).length, 2);
+            assert.equal((body.match(/isolationLevel:Prisma\\.TransactionIsolationLevel\\.Serializable,maxWait:5_000,timeout:10_000/g) ?? []).length, 2);
+            const cleanupTx = body.lastIndexOf('runBookingTransaction(db,asynctx=>');
+            const redisDelete = body.indexOf('redis.del(wsSessionActivatedKey(sessionId))');
+            assert.ok(cleanupTx >= 0 && redisDelete > cleanupTx, 'Redis cleanup must not be replayed inside the transaction callback');
+          });
+          """.replace('          ', ''))
+          PY
+
+          git diff --check
+          git diff -- apps/api/src/server.ts apps/api/src/workspace-gateway.ts apps/api/scripts/serializable-guard-allowlist.json apps/api/test/reliability-retry-wiring.test.ts
+
+      - name: Commit guarded patch
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/api/src/server.ts apps/api/src/workspace-gateway.ts apps/api/scripts/serializable-guard-allowlist.json apps/api/test/reliability-retry-wiring.test.ts
+          if git diff --cached --quiet; then
+            echo 'No changes to commit.'
+            exit 0
+          fi
+          git commit -m 'fix(reliability): retry heartbeat and gateway cleanup transactions'
+          git push origin HEAD:codex/heartbeat-gateway-reliability
