@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 
 import { requireSession } from './auth.js';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 import {
   authorizeMiningConfigurationUpdate,
   miningConfigurationInputSchema,
@@ -259,7 +260,7 @@ export const registerMiningRoutes = (
     }
 
     try {
-      const inserted = await db.$transaction(async (tx) => {
+      const inserted = await runBookingTransaction(db, async (tx) => {
         const resource = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           SELECT "id" FROM "MiningResource"
            WHERE "id" = ${event.resourceId} AND "machineId" = ${event.machineId}
@@ -324,7 +325,11 @@ export const registerMiningRoutes = (
            WHERE "id" = ${event.resourceId}
         `);
         return true;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: 5_000,
+        timeout: 10_000,
+      });
       return { accepted: inserted };
     } catch (error) {
       const code = error instanceof Error ? error.message : 'runtime_event_rejected';
