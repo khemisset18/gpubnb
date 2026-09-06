@@ -12,6 +12,7 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 
+import { runBookingTransaction } from './booking-transaction-retry.js';
 import { isExactGpuPubliclyHealthy } from './rental-public-listings.js';
 
 export type OwnerListingAction = 'pause' | 'resume' | 'archive';
@@ -177,15 +178,6 @@ function isTransactionConflict(error: unknown): boolean {
     (error.code === 'P2002' || error.code === 'P2034');
 }
 
-// Legacy FULL_MACHINE listings predate the SELECTED_ACCELERATORS marketplace and were
-// created by the now-disabled POST /listings route. They carry no ListingAccelerator
-// rows and are invisible to the current owner/public listing surfaces, but a live
-// FULL_MACHINE listing still blocks per-GPU publication of the same physical machine
-// (computeRentalGpuReadiness -> FULL_MACHINE_LISTING_ACTIVE). This is the one-time,
-// narrowly-scoped retirement path for that legacy resourceMode: it never applies to
-// SELECTED_ACCELERATORS listings (transitionOwnerExactGpuListing above is unchanged),
-// and it only ever flips status -> ARCHIVED (never a DELETE), so listing history for
-// audit/dispute purposes is preserved.
 const committedBookingStatusSet = new Set<BookingStatus>(committedBookingStatuses);
 
 const legacyArchivableStatuses = new Set<ListingStatus>([
@@ -221,14 +213,6 @@ const liveWorkspaceSessionStatuses = new Set<WorkspaceSessionStatus>([
   WorkspaceSessionStatus.STOPPING,
 ]);
 
-// PARTIALLY_REFUNDED is deliberately absent: confirmSettlement (settlement-transactions.ts)
-// sets it, alongside BookingStatus.SETTLED and a recorded settlementSignature, as one of
-// three mutually exclusive terminal outcomes (full release / full refund / mixed release+
-// refund) for a booking whose window ended partway through - nothing in the codebase ever
-// transitions a payment onward from there. Treating it as still "open" here made any legacy
-// FULL_MACHINE listing whose last booking settled with a partial refund permanently
-// unarchivable (confirmed against production: cmskhoviy0047dx0uuv7am07o blocked by booking
-// cmsp5vcwo... at PARTIALLY_REFUNDED, endsAt 9 days in the past).
 const openPaymentStatuses = new Set<PaymentStatus>([
   PaymentStatus.ESCROW_PENDING,
   PaymentStatus.ESCROW_FUNDED,
@@ -255,9 +239,6 @@ const legacyArchiveSelect = {
 
 type LegacyArchiveListing = Prisma.GpuListingGetPayload<{ select: typeof legacyArchiveSelect }>;
 
-// Scoped to *this listing's own bookings* only (via the booking -> listing FK), never
-// to the machine as a whole: a machine can carry more than one listing, and this must
-// never treat another listing's live activity as a reason to block (or allow) this one.
 function assertNoLiveDependency(listing: LegacyArchiveListing): void {
   for (const booking of listing.bookings) {
     if (committedBookingStatusSet.has(booking.status)) {
@@ -299,27 +280,19 @@ export type LegacyListingArchiveResult = {
   alreadyArchived: boolean;
 };
 
-// Retires a single legacy FULL_MACHINE listing so the physical machine it points at
-// stops tripping FULL_MACHINE_LISTING_ACTIVE for the SELECTED_ACCELERATORS flow. Never
-// deletes the row (history stays queryable for audit), never touches a
-// SELECTED_ACCELERATORS listing, and is idempotent: calling it again on an
-// already-ARCHIVED listing returns success without writing.
 export async function archiveLegacyFullMachineListing(
   db: PrismaClient,
   ownerId: string,
   listingId: string,
 ): Promise<LegacyListingArchiveResult> {
   try {
-    return await db.$transaction(async (tx) => {
+    return await runBookingTransaction(db, async (tx) => {
       const identity = await tx.gpuListing.findFirst({
         where: { id: listingId, ownerId },
         select: { id: true, machineId: true },
       });
       if (!identity) throw new OwnerListingLifecycleError('listing_not_found');
 
-      // Same per-machine advisory lock as transitionOwnerExactGpuListing: serializes
-      // against a concurrent exact-GPU publish/readiness check for this machine so the
-      // two code paths can never race on the same physical resource.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${identity.machineId}, 0))`;
 
       const listing = await tx.gpuListing.findFirst({
@@ -369,7 +342,7 @@ export async function transitionOwnerExactGpuListing(
   staleAfterSeconds: number,
 ) {
   try {
-    return await db.$transaction(async (tx) => {
+    return await runBookingTransaction(db, async (tx) => {
       const identity = await tx.gpuListing.findFirst({
         where: { id: listingId, ownerId },
         select: { id: true, machineId: true },
