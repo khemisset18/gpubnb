@@ -1,0 +1,32 @@
+name: codex-gateway-liveness-patch
+
+on:
+  push:
+    branches:
+      - codex/workspace-gateway-liveness
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/workspace-gateway-liveness
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply exact guarded source patch
+        run: node apps/api/scripts/codex-gateway-liveness-patch.mjs
+      - name: Commit source patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/api/prisma/schema.prisma apps/api/src/workspace-gateway.ts apps/api/src/workspace-renter-routes.ts
+          git diff --cached --exit-code && exit 0
+          git commit -m 'fix(reliability): expire stale workspace gateway registrations'
+          git push origin HEAD:codex/workspace-gateway-liveness
