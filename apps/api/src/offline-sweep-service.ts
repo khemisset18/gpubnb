@@ -5,10 +5,12 @@ import {
   MachineConnectivity,
   MachineOperational,
   PaymentStatus,
+  Prisma,
   PrismaClient,
   SessionTerminationReason,
   WorkspaceSessionStatus,
 } from '@prisma/client';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 import { buildOfflineSweepPlan, heartbeatCutoff } from './offline-sweep.js';
 
 const ACTIVE_BOOKING_STATUSES = [
@@ -62,7 +64,10 @@ export async function sweepOfflineMachines(
 ): Promise<OfflineSweepResult> {
   const cutoff = heartbeatCutoff(now, offlineAfterSeconds);
 
-  return db.$transaction(async tx => {
+  // Every operation in this callback is a database read/write. Replaying after a
+  // transient Serializable abort is therefore safer than surfacing a one-off sweep
+  // failure that leaves machine/listing/session state temporarily divergent.
+  return runBookingTransaction(db, async tx => {
     const machines = await tx.machine.findMany({
       where: {
         connectivity: MachineConnectivity.ONLINE,
@@ -223,5 +228,9 @@ export async function sweepOfflineMachines(
       jobsCancelled: jobUpdate.count,
       paymentsPendingSettlement: paymentUpdate.count,
     };
-  }, { isolationLevel: 'Serializable' });
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    maxWait: 5_000,
+    timeout: 10_000,
+  });
 }

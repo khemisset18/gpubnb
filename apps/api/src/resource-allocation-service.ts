@@ -284,7 +284,10 @@ export async function transitionBookingResources(
   target: ResourceAllocationStatus,
   at = new Date(),
 ): Promise<void> {
-  await db.$transaction(async (tx) => {
+  // DB-only and protected by the same machine-scoped advisory lock as allocation.
+  // Retry transient Serializable aborts instead of turning a valid lifecycle transition
+  // into an intermittent API failure.
+  await runBookingTransaction(db, async (tx) => {
     const booking = await tx.booking.findUnique({
       where: { id: bookingId },
       select: {
@@ -343,7 +346,8 @@ export async function releaseBookingResources(
   bookingId: string,
   releasedAt = new Date(),
 ): Promise<void> {
-  await db.$transaction(async (tx) => {
+  // Release is likewise DB-only and idempotent over the live allocation statuses.
+  await runBookingTransaction(db, async (tx) => {
     const booking = await tx.booking.findUnique({
       where: { id: bookingId },
       select: { listing: { select: { machineId: true } } },

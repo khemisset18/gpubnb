@@ -9,6 +9,7 @@ import {
   SessionTerminationReason,
   WorkspaceSessionStatus,
 } from '@prisma/client';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 import { enterQuarantine } from './quarantine-service.js';
 
 const STALE_JOB_ERROR_CODE = 'job_stale_timeout';
@@ -80,7 +81,9 @@ export async function sweepStaleJobs(
   const cutoff = new Date(now.getTime() - staleAfterSeconds * 1000);
   const claimedStale = claimedJobIsStale(now, cutoff);
 
-  return db.$transaction(async tx => {
+  // DB-only callback (including enterQuarantine, which writes through the same tx),
+  // so a transient Serializable abort is safe to replay as one atomic sweep.
+  return runBookingTransaction(db, async tx => {
     const staleJobs = await tx.job.findMany({
       where: {
         OR: [
@@ -198,5 +201,9 @@ export async function sweepStaleJobs(
       machinesQuarantined: machineUpdate.count,
       paymentsPendingSettlement: paymentUpdate.count,
     };
-  }, { isolationLevel: 'Serializable' });
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    maxWait: 5_000,
+    timeout: 10_000,
+  });
 }
