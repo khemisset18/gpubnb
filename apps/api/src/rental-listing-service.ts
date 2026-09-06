@@ -6,6 +6,7 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 
+import { runBookingTransaction } from './booking-transaction-retry.js';
 import { supportsJobLeaseProtocol } from './job-execution-lease.js';
 import { computeMachineState, type MachineStateView } from './machine-state-service.js';
 import { requirePublishableRentalGpu } from './rental-gpu-catalog.js';
@@ -184,7 +185,7 @@ export async function createExactGpuListing(
   if (hourlyLamports < 1n) throw new RentalListingError('invalid_price');
 
   try {
-    return await db.$transaction(async (tx) => {
+    return await runBookingTransaction(db, async (tx) => {
       // Machine-scoped locking intentionally serializes listing publication with
       // resource allocation, which uses the same advisory-lock key. This prevents
       // publish/booking races and duplicate listing creation across GPUs on one host.

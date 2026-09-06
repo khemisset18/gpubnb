@@ -12,6 +12,7 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 
+import { runBookingTransaction } from './booking-transaction-retry.js';
 import { isExactGpuPubliclyHealthy } from './rental-public-listings.js';
 
 export type OwnerListingAction = 'pause' | 'resume' | 'archive';
@@ -310,7 +311,7 @@ export async function archiveLegacyFullMachineListing(
   listingId: string,
 ): Promise<LegacyListingArchiveResult> {
   try {
-    return await db.$transaction(async (tx) => {
+    return await runBookingTransaction(db, async (tx) => {
       const identity = await tx.gpuListing.findFirst({
         where: { id: listingId, ownerId },
         select: { id: true, machineId: true },
@@ -369,7 +370,7 @@ export async function transitionOwnerExactGpuListing(
   staleAfterSeconds: number,
 ) {
   try {
-    return await db.$transaction(async (tx) => {
+    return await runBookingTransaction(db, async (tx) => {
       const identity = await tx.gpuListing.findFirst({
         where: { id: listingId, ownerId },
         select: { id: true, machineId: true },
