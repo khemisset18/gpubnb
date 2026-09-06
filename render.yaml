@@ -62,8 +62,11 @@ services:
         value: "false"
       - key: HEARTBEAT_MAX_AGE_SECONDS
         value: 25
+      # Keep the production offline threshold above the 55s interactive-workspace
+      # access freshness window. Real Host heartbeat gaps can approach 40s, so a 40s
+      # offline cutoff races normal jitter and can hide/quarantine an otherwise healthy Host.
       - key: HEARTBEAT_OFFLINE_SECONDS
-        value: 40
+        value: 60
       - key: COMMISSION_BPS
         value: 500
   - type: worker
@@ -101,6 +104,6 @@ services:
       - key: HEARTBEAT_MAX_AGE_SECONDS
         value: 25
       - key: HEARTBEAT_OFFLINE_SECONDS
-        value: 40
+        value: 60
       - key: COMMISSION_BPS
         value: 500
