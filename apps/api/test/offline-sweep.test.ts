@@ -39,7 +39,8 @@ test('offline cancellation closes the explicit lease and unfinished attempt atom
   assert.match(normalized, /if\(jobUpdate\.count>0\)\{awaittx\.jobAttempt\.updateMany/);
   assert.match(normalized, /jobId:\{in:plan\.cancelledJobIds\},finishedAt:null,job:\{status:JobStatus\.CANCELLED,errorCode:'AGENT_OFFLINE'\}/);
   assert.match(normalized, /data:\{finishedAt:now,failureReason:'AGENT_OFFLINE',?\}/);
-  assert.match(normalized, /isolationLevel:'Serializable'/);
+  assert.match(normalized, /runBookingTransaction\(db,asynctx=>/);
+  assert.match(normalized, /isolationLevel:Prisma\.TransactionIsolationLevel\.Serializable/);
 });
 
 test('offline sweep never turns an offline machine back to available or claims financial success', async () => {
