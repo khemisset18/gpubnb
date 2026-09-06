@@ -19,7 +19,9 @@ test('production heartbeat retries only the PostgreSQL transaction after one-tim
 test('workspace stopped route retries both replay-safe Serializable cleanup transactions and deletes Redis only after commit', async () => {
   const source = await readFile(new URL('../src/workspace-gateway.ts', import.meta.url), 'utf8');
   const start = source.indexOf("app.post('/agent/workspace-gateway/:sessionId/stopped'");
-  const end = source.indexOf('\n  });', start);
+  // The route contains nested callbacks whose own `});` terminators appear before the
+  // Fastify route ends. Bound this slice by the next top-level gateway declaration instead.
+  const end = source.indexOf('const wss=new WebSocketServer', start);
   assert.ok(start >= 0 && end > start);
   const body = source.slice(start, end).replace(/\s+/g, '');
   assert.equal((body.match(/runBookingTransaction\(db,asynctx=>/g) ?? []).length, 2);
