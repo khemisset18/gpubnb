@@ -111,7 +111,7 @@ test('verified Developer cleanup cannot release a machine while another runtime 
   const end = source.indexOf('\n  });', start);
   const body = source.slice(start, end).replace(/\s+/g, '');
 
-  assert.match(body, /\$transaction\(asynctx=>/);
+  assert.match(body, /runBookingTransaction\(db,asynctx=>/, 'cleanup/release must use the bounded retry wrapper');
   assert.match(body, /workspaceSessions:\{none:\{id:\{not:row\.id\},status:\{in:\[/, 'another active workspace must block release');
   assert.match(body, /jobs:\{none:\{status:\{in:\[/, 'another active job must block release');
   assert.match(body, /listings:\{none:\{bookings:\{some:\{id:\{not:row\.bookingId\},status:\{in:\[/, 'another resource-locking booking must block release');
