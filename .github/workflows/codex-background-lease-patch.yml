@@ -1,18 +1,20 @@
 name: codex-background-lease-patch
 on:
   push:
-    branches: [codex/distributed-background-task-leases]
+    branches:
+      - codex/distributed-background-task-leases
 permissions:
   contents: write
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
+    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: codex/distributed-background-task-leases
       - name: Apply exact guarded patch
+        shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
