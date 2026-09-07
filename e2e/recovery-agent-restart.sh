@@ -2,7 +2,8 @@
 # Real recovery-scenario harness: kills the real agent process mid-session and
 # proves the system recovers safely. See recovery-agent-restart.cjs and README.md.
 # Uses its own disposable resource names/ports (gpubnb-recovery-*, 15532/16479/18887)
-# so it can run independently of run.sh.
+# so it can run independently of run.sh. Workspace cleanup is limited to
+# GPUbnb-owned resources that did not exist when this harness started.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 API_DIR="../apps/api"
@@ -13,14 +14,51 @@ API_PORT=18887
 DATABASE_URL="postgresql://gpubnb:gpubnb@localhost:${PG_PORT}/gpubnb?schema=public"
 REDIS_URL="redis://:change-me@localhost:${REDIS_PORT}"
 
+BASELINE_CONTAINERS="$(mktemp)"
+BASELINE_VOLUMES="$(mktemp)"
+BASELINE_NETWORKS="$(mktemp)"
+
+snapshot_gpu_workspace_resources() {
+  (docker ps -a --format '{{.Names}}' 2>/dev/null | grep '^gpubnb-dev-' | sort > "$BASELINE_CONTAINERS") || true
+  (docker volume ls --format '{{.Name}}' 2>/dev/null | grep '^gpubnb-workspace-' | sort > "$BASELINE_VOLUMES") || true
+  (docker network ls --format '{{.Name}}' 2>/dev/null | grep '^gpubnb-workspace-internal-' | sort > "$BASELINE_NETWORKS") || true
+}
+
+remove_new_gpu_workspace_resources() {
+  local name
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if ! grep -Fxq -- "$name" "$BASELINE_CONTAINERS"; then
+      docker rm -f "$name" >/dev/null 2>&1 || true
+    fi
+  done < <((docker ps -a --format '{{.Names}}' 2>/dev/null | grep '^gpubnb-dev-') || true)
+
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if ! grep -Fxq -- "$name" "$BASELINE_VOLUMES"; then
+      docker volume rm -f "$name" >/dev/null 2>&1 || true
+    fi
+  done < <((docker volume ls --format '{{.Name}}' 2>/dev/null | grep '^gpubnb-workspace-') || true)
+
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if ! grep -Fxq -- "$name" "$BASELINE_NETWORKS"; then
+      docker network rm "$name" >/dev/null 2>&1 || true
+    fi
+  done < <((docker network ls --format '{{.Name}}' 2>/dev/null | grep '^gpubnb-workspace-internal-') || true)
+}
+
+snapshot_gpu_workspace_resources
+
 cleanup() {
   echo "--- cleanup ---"
   if [ -n "${API_PID:-}" ]; then
     taskkill //F //T //PID "$API_PID" 2>/dev/null || kill "$API_PID" 2>/dev/null || true
   fi
   GPUBNB_CONFIG_DIR="$CONFIG_DIR" gpubnb-agent stop 2>/dev/null || true
+  remove_new_gpu_workspace_resources
   docker rm -f gpubnb-recovery-pg gpubnb-recovery-redis 2>/dev/null || true
-  docker ps -a --format '{{.Names}}' | grep '^gpubnb-dev-' | xargs -r docker rm -f 2>/dev/null || true
+  rm -f "$BASELINE_CONTAINERS" "$BASELINE_VOLUMES" "$BASELINE_NETWORKS"
 }
 trap cleanup EXIT
 
