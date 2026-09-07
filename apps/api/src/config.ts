@@ -74,6 +74,12 @@ const schema = z.object({
   SUPABASE_ANON_KEY: z.string().min(20).optional(),
   FILE_STORAGE_DIR: z.string().default('./data/artifacts'),
   MAX_ARTIFACT_BYTES: z.coerce.number().int().min(1024).max(500_000_000).default(104_857_600),
+  ARTIFACT_STORAGE_BACKEND: z.enum(['filesystem', 's3']).default('filesystem'),
+  ARTIFACT_S3_ENDPOINT: z.string().url().optional(),
+  ARTIFACT_S3_REGION: z.string().min(1).max(64).default('local'),
+  ARTIFACT_S3_BUCKET: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{1,62}$/).optional(),
+  ARTIFACT_S3_ACCESS_KEY_ID: z.string().min(8).optional(),
+  ARTIFACT_S3_SECRET_ACCESS_KEY: z.string().min(16).optional(),
 
   // Global control-plane migration. `legacy` keeps the current PostgreSQL-backed
   // heartbeat path authoritative. `shadow` is reserved for dual-write validation,
@@ -94,6 +100,18 @@ const schema = z.object({
 
 export const config = schema.parse(process.env);
 new PublicKey(config.PLATFORM_WALLET);
+
+if (config.ARTIFACT_STORAGE_BACKEND === 's3') {
+  const missing = [
+    ['ARTIFACT_S3_ENDPOINT', config.ARTIFACT_S3_ENDPOINT],
+    ['ARTIFACT_S3_BUCKET', config.ARTIFACT_S3_BUCKET],
+    ['ARTIFACT_S3_ACCESS_KEY_ID', config.ARTIFACT_S3_ACCESS_KEY_ID],
+    ['ARTIFACT_S3_SECRET_ACCESS_KEY', config.ARTIFACT_S3_SECRET_ACCESS_KEY],
+  ].filter(([, value]) => !value).map(([name]) => name);
+  if (missing.length > 0) {
+    throw new Error(`S3 artifact storage requires: ${missing.join(', ')}`);
+  }
+}
 
 const redisUrl = new URL(config.REDIS_URL);
 const isTlsRedis = redisUrl.protocol === 'rediss:';
