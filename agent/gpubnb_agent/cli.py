@@ -42,6 +42,7 @@ from .storage import (
     log_path, pid_path, public_key, save_config,
 )
 from .runtime_images import DEFAULT_DEVELOPER_IMAGE, workspace_image
+from .runtime_cleanliness import inspect_runtime_cleanliness
 
 DEFAULT_API = "https://gpubnb.netlify.app/api"
 
@@ -569,10 +570,17 @@ def poll_and_run_diagnostic_once(
     image = str(pending.get("diagnosticImage") or (config or {}).get("diagnosticImage") or "")
     timeout_seconds = int(pending.get("timeoutSeconds") or DIAGNOSTIC_RUN_TIMEOUT_SECONDS)
     result_path = f"/agent/diagnostics/{diagnostic_run_id}/result"
+    expected_runtime_session_ids = pending.get("expectedRuntimeSessionIds")
+    if not isinstance(expected_runtime_session_ids, list):
+        expected_runtime_session_ids = []
     try:
         if not image:
             raise RuntimeError("diagnostic_image_not_configured")
         emit({"event": "diagnostic_run_started", "machineId": machine_id, "diagnosticRunId": diagnostic_run_id, "timestamp": now_iso()})
+        runtime_cleanliness = inspect_runtime_cleanliness([
+            value for value in expected_runtime_session_ids
+            if isinstance(value, str) and value
+        ])
         report = run_gpu_diagnostic(image, timeout_seconds)
         metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
         agent_request(api, key, machine_id, result_path, "POST", {
@@ -581,6 +589,7 @@ def poll_and_run_diagnostic_once(
             "gpuUuid": metrics.get("firstGpuUuid"),
             "summary": str(report.get("summary") or "")[:2000],
             "metrics": metrics,
+            "runtimeCleanliness": runtime_cleanliness.to_api_payload(),
         })
         emit({
             "event": "diagnostic_run_completed",
