@@ -8,9 +8,9 @@ class FakeRedis{
   async getdel(key:string){const value=this.values.get(key)??null;this.values.delete(key);return value;}
 }
 
-test('workspace access grant is opaque, scoped and one-time',async()=>{
+test('workspace access grant is opaque, scoped, correlated and one-time',async()=>{
   const redis=new FakeRedis();
-  const grant=await issueWorkspaceAccessGrant(redis as never,{userId:'renter-1',bookingId:'booking-1',sessionId:'session-1'});
+  const grant=await issueWorkspaceAccessGrant(redis as never,{userId:'renter-1',bookingId:'booking-1',sessionId:'session-1',requestId:'request-123'});
   assert.ok(grant.token.length>=40);
   assert.equal(grant.expiresIn,60);
   assert.equal([...redis.values.values()][0]?.includes(grant.token),false);
@@ -18,7 +18,15 @@ test('workspace access grant is opaque, scoped and one-time',async()=>{
   assert.equal(consumed?.userId,'renter-1');
   assert.equal(consumed?.bookingId,'booking-1');
   assert.equal(consumed?.sessionId,'session-1');
+  assert.equal(consumed?.requestId,'request-123');
   assert.equal(await consumeWorkspaceAccessGrant(redis as never,grant.token),null);
+});
+
+test('workspace access request correlation remains optional for compatibility',async()=>{
+  const redis=new FakeRedis();
+  const grant=await issueWorkspaceAccessGrant(redis as never,{userId:'renter-1',bookingId:'booking-1',sessionId:'session-1'});
+  const consumed=await consumeWorkspaceAccessGrant(redis as never,grant.token);
+  assert.equal(consumed?.requestId,undefined);
 });
 
 test('invalid oversized token is rejected without lookup',async()=>{
