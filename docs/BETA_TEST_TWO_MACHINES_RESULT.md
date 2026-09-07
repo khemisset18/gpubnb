@@ -1,5 +1,9 @@
 # Résultat — Bêta test de location GPU (annonce "deux machines")
 
+> **STATUT : PREUVE HISTORIQUE UNIQUEMENT — PAS UNE QUALIFICATION DE LA RELEASE ACTUELLE.**
+>
+> Ce run date du 9 août 2026 et correspond à une ancienne topologie de déploiement. Il valide un `GPU_DIAGNOSTIC` réel sur GTX 1650, mais **ne valide pas** le parcours actuel `GPU_PROOF` → `WORKSPACE_PREPARE` → « Ouvrir mon espace » → session interactive → arrêt/nettoyage. La qualification physique courante doit suivre `docs/CURRENT_PHYSICAL_QUALIFICATION.md` et produire de nouvelles preuves sur le SHA de release réellement testé.
+
 ## Date et heure
 
 2026-08-09, ~01:53–01:55 UTC. Hôte réel (PC A, GPU physique) et compte locataire distinct (même buyer utilisé sur toute la campagne de test), réservation passée via le site en ligne (gpubnb.netlify.app / API `gpubnb.onrender.com`).
