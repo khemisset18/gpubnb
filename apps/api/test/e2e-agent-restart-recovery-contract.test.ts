@@ -61,3 +61,24 @@ test('recovery requires exact runtime adoption, clean COMPLETED termination, and
   assert.match(source, /\['FAILED', 'TIMED_OUT', 'CANCELLED'\]\.includes\(current\.status\)/);
   assert.doesNotMatch(source, /return \['COMPLETED', 'FAILED', 'TIMED_OUT', 'CANCELLED'\]\.includes/);
 });
+
+test('recovery proves a fresh heartbeat from the restarted Agent after normal completion', async () => {
+  const shell = await readFile(path.join(repoRoot, 'e2e/recovery-agent-restart.sh'), 'utf8');
+  const proof = await readFile(path.join(repoRoot, 'e2e/verify-recovery-heartbeat.cjs'), 'utf8');
+
+  const scenario = shell.indexOf('node recovery-agent-restart.cjs setup');
+  const heartbeatProof = shell.indexOf('node verify-recovery-heartbeat.cjs "$DATABASE_URL"');
+  assert.ok(scenario >= 0 && heartbeatProof > scenario, 'fresh-heartbeat proof must run after the recovery scenario completes');
+
+  for (const required of [
+    "status: 'COMPLETED'",
+    "machineWorkspace: { workspace: { slug: 'developer' } }",
+    '!session.endedAt',
+    "machine?.connectivity === 'ONLINE'",
+    'machine.lastHeartbeatAt.getTime() > session.endedAt.getTime()',
+    'Date.now() + 90_000',
+    '[recovery-heartbeat-proof] PASS',
+  ]) {
+    assert.ok(proof.includes(required), `recovery heartbeat proof is missing: ${required}`);
+  }
+});
