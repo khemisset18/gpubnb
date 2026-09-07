@@ -103,6 +103,22 @@ test('renewal detects ownership loss without deleting the successor', async () =
   assert.equal(redis.evalCalls.some((call) => call.ttl === '5000'), true, 'renewal must compare owner before extending TTL');
 });
 
+test('a task finishing after its last confirmed TTL is marked lease-lost', async () => {
+  const redis = new FakeRedis();
+  let now = 10_000;
+  const result = await runWithDistributedTaskLease(
+    redis as never,
+    'booking-reconcile',
+    async () => {
+      now += 5_000;
+      return 'late';
+    },
+    { ttlMs: 5_000, renewalMs: 1_000, now: () => now },
+  );
+
+  assert.deepEqual(result, { status: 'executed', value: 'late', leaseLost: true });
+});
+
 test('invalid task names fail closed before touching Redis', async () => {
   const redis = new FakeRedis();
   await assert.rejects(
