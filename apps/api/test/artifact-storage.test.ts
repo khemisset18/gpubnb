@@ -83,7 +83,7 @@ test('S3 backend writes deterministic backend-aware keys and reads object bodies
   assert.equal(calls[1]?.name, 'GetObjectCommand');
 });
 
-test('S3 backend refuses cross-bucket keys', async () => {
+test('S3 backend refuses cross-bucket and malformed object keys', async () => {
   const storage = new S3ArtifactStorage({
     endpoint: 'https://project.storage.supabase.co/storage/v1/s3',
     region: 'local',
@@ -95,6 +95,34 @@ test('S3 backend refuses cross-bucket keys', async () => {
   await assert.rejects(
     () => storage.read('s3:another-bucket/job123/result/' + 'd'.repeat(64)),
     /artifact_bucket_mismatch/,
+  );
+  await assert.rejects(
+    () => storage.read('s3:gpubnb-artifacts/job123/../' + 'd'.repeat(64)),
+    /invalid_artifact_storage_key/,
+  );
+  await assert.rejects(
+    () => storage.read('s3:gpubnb-artifacts/job123/result/not-a-sha'),
+    /invalid_artifact_storage_key/,
+  );
+});
+
+test('S3 backend maps object-store 404 to the API storage-not-found contract', async () => {
+  const storage = new S3ArtifactStorage({
+    endpoint: 'https://project.storage.supabase.co/storage/v1/s3',
+    region: 'local',
+    bucket: 'gpubnb-artifacts',
+    accessKeyId: 'test-access-key',
+    secretAccessKey: 'test-secret-key',
+    client: {
+      send: async () => {
+        const error = Object.assign(new Error('missing'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } });
+        throw error;
+      },
+    } as never,
+  });
+  await assert.rejects(
+    () => storage.read('s3:gpubnb-artifacts/job123/result/' + 'f'.repeat(64)),
+    (error: unknown) => error instanceof ArtifactStorageError && error.code === 'ENOENT',
   );
 });
 
