@@ -1,10 +1,17 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 const ARTIFACT_KIND_RE = /^[A-Za-z0-9._-]{1,32}$/;
 const ARTIFACT_SHA256_RE = /^[a-f0-9]{64}$/;
 const ARTIFACT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+const ARTIFACT_BUCKET_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{1,62}$/;
+
+export interface ArtifactStorage {
+  write(jobId: string, kind: string, sha256: string, data: Buffer): Promise<string>;
+  read(storageKey: string): Promise<Buffer>;
+}
 
 export class ArtifactStorageError extends Error {
   constructor(public readonly code: string) {
@@ -35,7 +42,21 @@ function decodeFilesystemStorageKey(storageKey: string): string {
   throw new ArtifactStorageError('unsupported_artifact_storage_backend');
 }
 
-export class FilesystemArtifactStorage {
+function decodeS3StorageKey(storageKey: string, expectedBucket: string): string {
+  if (!storageKey.startsWith('s3:')) throw new ArtifactStorageError('unsupported_artifact_storage_backend');
+  const encoded = storageKey.slice(3);
+  const slash = encoded.indexOf('/');
+  if (slash <= 0) throw new ArtifactStorageError('invalid_artifact_storage_key');
+  const bucket = encoded.slice(0, slash);
+  const objectKey = encoded.slice(slash + 1);
+  if (bucket !== expectedBucket) throw new ArtifactStorageError('artifact_bucket_mismatch');
+  if (!objectKey || objectKey.includes('\\0') || objectKey.startsWith('/') || objectKey.includes('..')) {
+    throw new ArtifactStorageError('invalid_artifact_storage_key');
+  }
+  return objectKey;
+}
+
+export class FilesystemArtifactStorage implements ArtifactStorage {
   readonly root: string;
 
   constructor(root: string) {
@@ -44,7 +65,7 @@ export class FilesystemArtifactStorage {
   }
 
   private resolveObjectKey(objectKey: string): string {
-    if (!objectKey || path.isAbsolute(objectKey) || objectKey.includes('\0')) {
+    if (!objectKey || path.isAbsolute(objectKey) || objectKey.includes('\\0')) {
       throw new ArtifactStorageError('invalid_artifact_storage_key');
     }
     const resolved = path.resolve(this.root, objectKey);
@@ -66,5 +87,76 @@ export class FilesystemArtifactStorage {
   async read(storageKey: string): Promise<Buffer> {
     const objectKey = decodeFilesystemStorageKey(storageKey);
     return fsp.readFile(this.resolveObjectKey(objectKey));
+  }
+}
+
+type S3Sender = Pick<S3Client, 'send'>;
+
+export type S3ArtifactStorageOptions = {
+  endpoint: string;
+  region: string;
+  bucket: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  client?: S3Sender;
+};
+
+export class S3ArtifactStorage implements ArtifactStorage {
+  readonly bucket: string;
+  private readonly client: S3Sender;
+
+  constructor(options: S3ArtifactStorageOptions) {
+    if (!ARTIFACT_BUCKET_RE.test(options.bucket)) throw new ArtifactStorageError('invalid_artifact_bucket');
+    this.bucket = options.bucket;
+    this.client = options.client ?? new S3Client({
+      endpoint: options.endpoint,
+      region: options.region,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: options.accessKeyId,
+        secretAccessKey: options.secretAccessKey,
+      },
+    });
+  }
+
+  async write(jobId: string, kind: string, sha256: string, data: Buffer): Promise<string> {
+    const objectKey = buildArtifactObjectKey(jobId, kind, sha256);
+    await this.client.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: objectKey,
+      Body: data,
+      ContentType: 'application/octet-stream',
+      Metadata: { sha256 },
+    }));
+    return `s3:${this.bucket}/${objectKey}`;
+  }
+
+  async read(storageKey: string): Promise<Buffer> {
+    const objectKey = decodeS3StorageKey(storageKey, this.bucket);
+    const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: objectKey })) as {
+      Body?: { transformToByteArray?: () => Promise<Uint8Array> };
+    };
+    if (!result.Body?.transformToByteArray) throw new ArtifactStorageError('artifact_object_body_missing');
+    return Buffer.from(await result.Body.transformToByteArray());
+  }
+}
+
+export class RoutedArtifactStorage implements ArtifactStorage {
+  constructor(
+    private readonly writer: ArtifactStorage,
+    private readonly filesystem: FilesystemArtifactStorage,
+    private readonly s3?: S3ArtifactStorage,
+  ) {}
+
+  write(jobId: string, kind: string, sha256: string, data: Buffer): Promise<string> {
+    return this.writer.write(jobId, kind, sha256, data);
+  }
+
+  read(storageKey: string): Promise<Buffer> {
+    if (storageKey.startsWith('s3:')) {
+      if (!this.s3) throw new ArtifactStorageError('unsupported_artifact_storage_backend');
+      return this.s3.read(storageKey);
+    }
+    return this.filesystem.read(storageKey);
   }
 }
