@@ -1,0 +1,28 @@
+name: codex-e2e-completed-session
+
+on:
+  push:
+    branches:
+      - codex/e2e-completed-code-server-session
+    paths:
+      - .github/workflows/codex-e2e-completed-session.yml
+      - scripts/codex-e2e-completed-session.py
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/e2e-completed-code-server-session
+      - run: python3 scripts/codex-e2e-completed-session.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add e2e/run.cjs apps/api/test/e2e-code-server-activation-contract.test.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "test(e2e): require genuine code-server activation and completion"
+          git push origin HEAD:codex/e2e-completed-code-server-session
