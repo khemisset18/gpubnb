@@ -1,0 +1,28 @@
+name: codex-e2e-proof-finalization-race
+
+on:
+  push:
+    branches:
+      - codex/e2e-real-gpu-proof
+    paths:
+      - .github/workflows/codex-e2e-proof-finalization-race.yml
+      - scripts/codex-e2e-proof-finalization-race.py
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/e2e-real-gpu-proof
+      - run: python3 scripts/codex-e2e-proof-finalization-race.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add e2e/run.cjs apps/api/test/e2e-real-gpu-proof-contract.test.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "test(e2e): wait for GPU proof finalization without races"
+          git push origin HEAD:codex/e2e-real-gpu-proof
