@@ -263,14 +263,50 @@ test('gateway register is the only thing that makes a Developer workspace openab
   const openPath: string = access.json().openPath;
   assert.ok(openPath.startsWith(`${gatewayPath}?grant=`), `openPath must be scoped to the registered gatewayPath, got ${openPath}`);
 
-  // --- 4. Idempotence: a second register (agent retry / restart) must not
-  // duplicate the booking transition or break connectionMetadata ---
+  // --- 4. One-time bootstrap: the same workspace grant can authenticate only once. ---
+  const firstOpen = await app.inject({ method: 'GET', url: openPath });
+  assert.equal(firstOpen.statusCode, 302, JSON.stringify(firstOpen.json()));
+  assert.ok(firstOpen.headers['set-cookie'], 'first grant consumption must establish the scoped gateway cookie');
+  const replayOpen = await app.inject({ method: 'GET', url: openPath });
+  assert.equal(replayOpen.statusCode, 401);
+  assert.deepEqual(replayOpen.json(), { error: 'invalid_workspace_grant' });
+
+  // --- 5. Gateway liveness fault: stale registration must revoke canOpen/access. ---
+  await prisma.workspaceSession.update({ where: { id: session.id }, data: { gatewayLastSeenAt: new Date(Date.now() - 60_000) } });
+  const gatewayStale = await app.inject({ method: 'GET', url: `/bookings/${booking.id}/workspace`, headers: { cookie: cookieHeader } });
+  assert.equal(gatewayStale.statusCode, 200);
+  assert.equal(gatewayStale.json().canOpen, false);
+  assert.equal(gatewayStale.json().blockedReason, 'GATEWAY_STALE');
+  const accessGatewayStale = await app.inject({ method: 'POST', url: `/bookings/${booking.id}/workspace/access`, headers: { cookie: cookieHeader } });
+  assert.equal(accessGatewayStale.statusCode, 409);
+  assert.deepEqual(accessGatewayStale.json(), { error: 'workspace_gateway_not_ready' });
+
+  // Re-register is the recovery operation and must remain idempotent.
   const signed2 = signedAgentRequest('POST', registerRoute, machine.id, keyPair, registerBody);
   const register2 = await app.inject({ method: 'POST', url: registerRoute, headers: signed2.headers, payload: signed2.payload });
   assert.equal(register2.statusCode, 200);
   assert.equal(register2.json().gatewayPath, gatewayPath);
+  const gatewayRecovered = await app.inject({ method: 'GET', url: `/bookings/${booking.id}/workspace`, headers: { cookie: cookieHeader } });
+  assert.equal(gatewayRecovered.json().canOpen, true);
 
   const bookingAfterSecondRegister = await prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
   assert.equal(bookingAfterSecondRegister.status, BookingStatus.STARTING, 'second register must not re-trigger the first-registration transition');
   assert.equal(bookingAfterSecondRegister.startsAt.getTime(), bookingAfterRegister.startsAt.getTime(), 'second register must not reset the activation window');
+
+  // --- 6. Host heartbeat fault: stale PC A health must revoke access without
+  // destroying the ready workspace; a fresh heartbeat timestamp restores it. ---
+  await prisma.machine.update({ where: { id: machine.id }, data: { lastHeartbeatAt: new Date(Date.now() - (config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS + 5) * 1000) } });
+  const heartbeatStale = await app.inject({ method: 'GET', url: `/bookings/${booking.id}/workspace`, headers: { cookie: cookieHeader } });
+  assert.equal(heartbeatStale.statusCode, 200);
+  assert.equal(heartbeatStale.json().canOpen, false);
+  assert.equal(heartbeatStale.json().blockedReason, 'HEARTBEAT_STALE');
+  const accessHeartbeatStale = await app.inject({ method: 'POST', url: `/bookings/${booking.id}/workspace/access`, headers: { cookie: cookieHeader } });
+  assert.equal(accessHeartbeatStale.statusCode, 409);
+  assert.deepEqual(accessHeartbeatStale.json(), { error: 'heartbeat_stale' });
+
+  await prisma.machine.update({ where: { id: machine.id }, data: { lastHeartbeatAt: new Date() } });
+  const heartbeatRecovered = await app.inject({ method: 'GET', url: `/bookings/${booking.id}/workspace`, headers: { cookie: cookieHeader } });
+  assert.equal(heartbeatRecovered.statusCode, 200);
+  assert.equal(heartbeatRecovered.json().canOpen, true);
+  assert.equal(heartbeatRecovered.json().blockedReason, null);
 });
