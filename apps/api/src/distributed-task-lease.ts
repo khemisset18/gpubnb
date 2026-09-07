@@ -23,6 +23,7 @@ export type DistributedTaskLeaseOptions = {
   ttlMs?: number;
   renewalMs?: number;
   keyPrefix?: string;
+  now?: () => number;
 };
 
 function taskKey(name: string, prefix: string): string {
@@ -40,21 +41,27 @@ export async function runWithDistributedTaskLease<T>(
   const renewalMs = Math.max(1_000, Math.min(options.renewalMs ?? Math.floor(ttlMs / 3), Math.floor(ttlMs / 2)));
   const key = taskKey(name, options.keyPrefix ?? 'gpubnb:task-lease:');
   const token = crypto.randomUUID();
+  const now = options.now ?? Date.now;
   const acquired = await redis.set(key, token, 'PX', ttlMs, 'NX');
   if (acquired !== 'OK') return { status: 'skipped_locked' };
 
   let stopped = false;
   let leaseLost = false;
   let renewalInFlight = false;
+  let leaseValidUntil = now() + ttlMs;
   const renew = async (): Promise<void> => {
     if (stopped || renewalInFlight || leaseLost) return;
     renewalInFlight = true;
     try {
       const result = Number(await redis.eval(RENEW_SCRIPT, 1, key, token, String(ttlMs)));
-      if (result !== 1) leaseLost = true;
+      if (result === 1) leaseValidUntil = now() + ttlMs;
+      else leaseLost = true;
     } catch {
-      // A transient Redis failure does not prove ownership was lost. The next
-      // renewal will retry while the original TTL still fences other workers.
+      // A short Redis failure does not immediately prove ownership was lost, but
+      // once the last confirmed TTL has elapsed a successor may legally acquire
+      // the key. Mark the lease lost rather than pretending mutual exclusion still
+      // exists after that deadline.
+      if (now() >= leaseValidUntil) leaseLost = true;
     } finally {
       renewalInFlight = false;
     }
@@ -64,6 +71,7 @@ export async function runWithDistributedTaskLease<T>(
 
   try {
     const value = await task();
+    if (now() >= leaseValidUntil) leaseLost = true;
     return { status: 'executed', value, leaseLost };
   } finally {
     stopped = true;
