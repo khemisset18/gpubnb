@@ -14,7 +14,7 @@ async function source(): Promise<string> {
 test('real E2E rental executes Compute GPU_PROOF before Developer workspace preparation', async () => {
   const e2e = await source();
   const proofRoute = e2e.indexOf('`/bookings/${booking.id}/workspace-sessions`');
-  const proofWait = e2e.indexOf("waitUntil('GPU_PROOF completes'");
+  const proofWait = e2e.indexOf("waitUntil('GPU_PROOF completes and finalizes'");
   const developerRoute = e2e.indexOf('`/bookings/${booking.id}/workspace/developer`');
 
   assert.ok(proofRoute >= 0, 'E2E must request the production Compute preparation route');
@@ -22,13 +22,14 @@ test('real E2E rental executes Compute GPU_PROOF before Developer workspace prep
   assert.ok(developerRoute > proofWait, 'Developer preparation must happen only after GPU_PROOF completes');
   assert.match(e2e, /workspaceSlug: 'compute'/);
   assert.match(e2e, /type: 'GPU_PROOF'/);
-  assert.match(e2e, /proofResult\.gpuDetected !== true/);
+  assert.match(e2e, /proofResult\.gpuDetected !== true \|\| proofResult\.metrics\?\.containerCleaned !== true/);
 });
 
 test('GPU_PROOF completion must leave the rental reserved for subsequent Developer activation', async () => {
   const e2e = await source();
-  assert.match(e2e, /afterProof\.status !== 'STARTING'/);
-  assert.match(e2e, /afterProof\.workspaceActivatedAt !== null/);
+  assert.match(e2e, /bookingAfterProof\.status === 'FUNDED'/);
+  assert.match(e2e, /bookingAfterProof\.status !== 'STARTING'/);
+  assert.match(e2e, /bookingAfterProof\.workspaceActivatedAt !== null/);
   assert.match(e2e, /GPU_PROOF must keep the booking reserved for Developer activation/);
 });
 

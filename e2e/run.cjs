@@ -141,7 +141,7 @@ async function main() {
   log('    compute sessionId', computeSession.id);
 
   log('7c. waiting for the real agent to execute and finalize the real GPU_PROOF job');
-  const proofJob = await waitUntil('GPU_PROOF completes', async () => {
+  const finalizedProof = await waitUntil('GPU_PROOF completes and finalizes', async () => {
     const job = await prisma.job.findFirst({
       where: { bookingId: booking.id, type: 'GPU_PROOF' },
       orderBy: { createdAt: 'desc' },
@@ -151,20 +151,25 @@ async function main() {
     if (['FAILED', 'CANCELLED', 'TIMED_OUT', 'REJECTED', 'QUARANTINED'].includes(job.status)) {
       throw new Error(`GPU_PROOF failed: ${job.status}:${job.errorCode || 'unknown'}`);
     }
-    return job.status === 'COMPLETED' ? job : null;
+    if (job.status !== 'COMPLETED') return null;
+    const proofResult = job.result && typeof job.result === 'object' ? job.result : {};
+    if (proofResult.gpuDetected !== true || proofResult.metrics?.containerCleaned !== true) {
+      throw new Error('GPU_PROOF completed without verified GPU use and cleanup: ' + JSON.stringify(proofResult));
+    }
+    const bookingAfterProof = await prisma.booking.findUniqueOrThrow({
+      where: { id: booking.id },
+      select: { status: true, workspaceActivatedAt: true },
+    });
+    // /agent/jobs/:id/complete stores the verified result before the agent calls
+    // /finalize-proof. FUNDED here is a legitimate tiny race; wait for the server-side
+    // finalization rather than treating that inter-request gap as a product failure.
+    if (bookingAfterProof.status === 'FUNDED' && bookingAfterProof.workspaceActivatedAt === null) return null;
+    if (bookingAfterProof.status !== 'STARTING' || bookingAfterProof.workspaceActivatedAt !== null) {
+      throw new Error('GPU_PROOF must keep the booking reserved for Developer activation: ' + JSON.stringify(bookingAfterProof));
+    }
+    return { job, booking: bookingAfterProof };
   }, { timeoutMs: 600_000, intervalMs: 2000 });
-  const proofResult = proofJob.result && typeof proofJob.result === 'object' ? proofJob.result : {};
-  if (proofResult.gpuDetected !== true) {
-    throw new Error('GPU_PROOF completed without gpuDetected=true: ' + JSON.stringify(proofResult));
-  }
-  const afterProof = await prisma.booking.findUniqueOrThrow({
-    where: { id: booking.id },
-    select: { status: true, workspaceActivatedAt: true },
-  });
-  if (afterProof.status !== 'STARTING' || afterProof.workspaceActivatedAt !== null) {
-    throw new Error('GPU_PROOF must keep the booking reserved for Developer activation: ' + JSON.stringify(afterProof));
-  }
-  log('    GPU_PROOF completed', { jobId: proofJob.id, bookingStatus: afterProof.status });
+  log('    GPU_PROOF completed and finalized', { jobId: finalizedProof.job.id, bookingStatus: finalizedProof.booking.status });
 
   log('8. real POST /bookings/:id/workspace/developer after GPU_PROOF (the actual "Créer mon espace" button)');
   const devRes = await fetch(`${API}/bookings/${booking.id}/workspace/developer`, { method: 'POST', headers: { cookie: renter.cookie } });
