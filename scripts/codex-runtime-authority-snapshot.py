@@ -163,10 +163,14 @@ routes_path.write_text(routes)
 # Agent payload tests: the new server must receive the exact snapshot used by the agent.
 test_path = Path('agent/tests/test_runtime_cleanliness_diagnostic_payload.py')
 test = test_path.read_text()
-old = '''        self.assertIn("runtimeCleanliness", body)
+old = '''        self.assertEqual(result["runtimeCleanliness"], evidence)
+        self.assertNotIn("clean", result["runtimeCleanliness"])
 '''
-new = '''        self.assertIn("runtimeCleanliness", body)
-        self.assertEqual(body["runtimeCleanliness"]["expectedSessionIds"], ["session-1"])
+new = '''        self.assertEqual(
+            result["runtimeCleanliness"],
+            {**evidence, "expectedSessionIds": expected},
+        )
+        self.assertNotIn("clean", result["runtimeCleanliness"])
 '''
 if test.count(old) != 1:
     raise SystemExit(f'agent payload test marker count={test.count(old)}')
