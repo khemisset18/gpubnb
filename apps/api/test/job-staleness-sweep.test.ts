@@ -63,6 +63,7 @@ function fakeDb(seed: {
   };
 
   const tx = {
+    $queryRaw: async () => [{ acquired: true }],
     job: {
       findMany: async ({ where }: any) => jobs
         .filter(job => where.OR.some((part: any) => {
