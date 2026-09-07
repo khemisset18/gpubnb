@@ -214,7 +214,7 @@ test('diagnostic PASS on every mandatory check clears an active quarantine (cont
     }));
     const { run } = await createDiagnosticRun(prisma, { machineId: machine.id, triggeredBy: 'OWNER' });
     const now = new Date();
-    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'allocation', 'cuda', 'ram'].map((name) => ({
+    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'runtimeCleanup', 'allocation', 'cuda', 'ram'].map((name) => ({
       name, status: 'PASS' as const, value: null, details: '', measuredAt: now.toISOString(), source: 'agent-diagnostic' as const,
     }));
     const outcome = await completeDiagnosticRun(prisma, { diagnosticRunId: run.id, machineId: machine.id, checks, source: 'test', now });
@@ -237,7 +237,7 @@ test('diagnostic FAIL on a mandatory check maintains the quarantine with the spe
     }));
     const { run } = await createDiagnosticRun(prisma, { machineId: machine.id, triggeredBy: 'OWNER' });
     const now = new Date();
-    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'allocation'].map((name) => ({
+    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'runtimeCleanup', 'allocation'].map((name) => ({
       name, status: (name === 'docker' ? 'FAIL' : 'PASS') as 'PASS' | 'FAIL', value: null, details: '', measuredAt: now.toISOString(), source: 'agent-diagnostic' as const,
     }));
     const outcome = await completeDiagnosticRun(prisma, { diagnosticRunId: run.id, machineId: machine.id, checks, source: 'test', now });
@@ -281,7 +281,7 @@ test('a second result submission for an already-completed diagnostic run is reje
     }));
     const { run } = await createDiagnosticRun(prisma, { machineId: machine.id, triggeredBy: 'OWNER' });
     const now = new Date();
-    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'allocation', 'cuda', 'ram'].map((name) => ({
+    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'runtimeCleanup', 'allocation', 'cuda', 'ram'].map((name) => ({
       name, status: 'PASS' as const, value: null, details: '', measuredAt: now.toISOString(), source: 'agent-diagnostic' as const,
     }));
 
@@ -410,7 +410,7 @@ test('end-to-end: QUARANTINED -> diagnostic -> real PASS results -> CLEAR -> pub
 
     const { run } = await createDiagnosticRun(prisma, { machineId: machine.id, triggeredBy: 'OWNER' });
     const now = new Date();
-    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'allocation', 'cuda', 'ram'].map((name) => ({
+    const checks = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'runtimeCleanup', 'allocation', 'cuda', 'ram'].map((name) => ({
       name, status: 'PASS' as const, value: null, details: '', measuredAt: now.toISOString(), source: 'agent-diagnostic' as const,
     }));
     const outcome = await completeDiagnosticRun(prisma, { diagnosticRunId: run.id, machineId: machine.id, checks, source: 'test', now });

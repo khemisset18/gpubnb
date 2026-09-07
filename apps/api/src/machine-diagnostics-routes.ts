@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import type { PrismaClient } from '@prisma/client';
+import { WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
+import { MAX_RUNTIME_EXPECTED_SESSIONS, runtimeExpectationMatches } from './runtime-cleanliness-authority.js';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
@@ -68,8 +69,33 @@ const diagnosticResultSchema = z.object({
   driverVersion: z.string().max(80).nullable().optional(),
   summary: z.string().max(2000),
   metrics: z.record(z.unknown()).optional(),
+  runtimeCleanliness: z.object({
+    unexpectedContainers: z.array(z.string().min(1).max(200)).max(64),
+    unexpectedVolumes: z.array(z.string().min(1).max(200)).max(64),
+    unexpectedNetworks: z.array(z.string().min(1).max(200)).max(64),
+    expectedSessionIds: z.array(z.string().cuid()).max(MAX_RUNTIME_EXPECTED_SESSIONS),
+  }).strict().optional(),
   error: z.string().max(500).nullable().optional(),
 }).strict();
+
+async function currentRuntimeSessionIds(db: PrismaClient, machineId: string): Promise<string[]> {
+  const sessions = await db.workspaceSession.findMany({
+    where: {
+      machineId,
+      status: { in: [
+        WorkspaceSessionStatus.PREPARING,
+        WorkspaceSessionStatus.READY,
+        WorkspaceSessionStatus.RUNNING,
+        WorkspaceSessionStatus.STOP_REQUESTED,
+        WorkspaceSessionStatus.STOPPING,
+      ] },
+    },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+    take: MAX_RUNTIME_EXPECTED_SESSIONS,
+  });
+  return sessions.map((session) => session.id);
+}
 
 async function buildChecksFromDiagnosticResult(
   db: PrismaClient,
@@ -160,6 +186,41 @@ async function buildChecksFromDiagnosticResult(
       source: 'agent-heartbeat',
     },
   ];
+  const cleanup = result.runtimeCleanliness;
+  const currentExpectedRuntimeSessionIds = cleanup
+    ? await currentRuntimeSessionIds(db, machineId)
+    : [];
+  const authoritySnapshotCurrent = Boolean(
+    cleanup && runtimeExpectationMatches(cleanup.expectedSessionIds, currentExpectedRuntimeSessionIds),
+  );
+  const unexpectedRuntimeResources = cleanup
+    ? [...cleanup.unexpectedContainers, ...cleanup.unexpectedVolumes, ...cleanup.unexpectedNetworks]
+    : [];
+  checks.push({
+    name: 'runtimeCleanup',
+    status: !cleanup || !authoritySnapshotCurrent
+      ? 'UNKNOWN'
+      : unexpectedRuntimeResources.length === 0
+        ? 'PASS'
+        : 'FAIL',
+    value: !cleanup
+      ? null
+      : !authoritySnapshotCurrent
+        ? 'autorité runtime modifiée pendant le diagnostic'
+        : unexpectedRuntimeResources.length === 0
+          ? 'aucune ressource runtime orpheline'
+          : `${unexpectedRuntimeResources.length} ressource(s) runtime inattendue(s)`,
+    details: !cleanup
+      ? "L'agent n'a fourni aucune preuve d'inventaire Docker pour ce diagnostic. Mise à jour de l'agent requise avant levée de quarantaine."
+      : !authoritySnapshotCurrent
+        ? "Les sessions runtime autorisées ont changé entre l'assignation et le résultat. Le snapshot est périmé : relancez le diagnostic avant toute levée de quarantaine."
+        : unexpectedRuntimeResources.length === 0
+          ? 'Les containers, proxies, volumes et réseaux GPUbnb présents correspondent uniquement aux sessions autorisées par le serveur.'
+          : `Ressources GPUbnb inattendues détectées sur l'hôte : ${unexpectedRuntimeResources.slice(0, 12).join(', ')}`,
+    measuredAt,
+    source: 'agent-diagnostic',
+  });
+
   const orphanedAllocation = await detectAvailableRepair(db, machineId);
   checks.push({
     name: 'allocation',
@@ -206,10 +267,12 @@ export function registerMachineDiagnosticsRoutes(app: FastifyInstance, db: Prism
     if (!pending) {
       return { diagnosticRunId: null };
     }
+    const expectedRuntimeSessionIds = await currentRuntimeSessionIds(db, machineId);
     return {
       diagnosticRunId: pending.id,
       diagnosticImage: config.DEV_DIAGNOSTIC_IMAGE ?? null,
       timeoutSeconds: Math.floor(DIAGNOSTIC_TIMEOUT_MS / 1000),
+      expectedRuntimeSessionIds,
     };
   });
 

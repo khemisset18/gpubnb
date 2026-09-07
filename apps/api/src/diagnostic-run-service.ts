@@ -23,7 +23,7 @@ export type DiagnosticCheck = {
  * never whether the machine itself is safe to unquarantine. 'allocation' is
  * mandatory because a machine with a real orphaned GPU allocation is not safe
  * to republish even if the GPU hardware itself checks out. */
-const MANDATORY_CHECK_NAMES = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'allocation'] as const;
+const MANDATORY_CHECK_NAMES = ['agent', 'gpu', 'gpuUuid', 'driver', 'docker', 'nvidiaRuntime', 'runtimeCleanup', 'allocation'] as const;
 
 const CHECK_NAME_TO_REASON_CODE: Record<string, QuarantineReasonCode> = {
   agent: QuarantineReasonCode.AGENT_SECURITY_FAILURE,
@@ -32,6 +32,7 @@ const CHECK_NAME_TO_REASON_CODE: Record<string, QuarantineReasonCode> = {
   driver: QuarantineReasonCode.GPU_HEALTH_CHECK_FAILED,
   docker: QuarantineReasonCode.DOCKER_UNAVAILABLE,
   nvidiaRuntime: QuarantineReasonCode.NVIDIA_RUNTIME_UNAVAILABLE,
+  runtimeCleanup: QuarantineReasonCode.WORKSPACE_CLEANUP_FAILED,
   allocation: QuarantineReasonCode.ORPHANED_ALLOCATION,
 };
 
@@ -220,7 +221,7 @@ export async function completeDiagnosticRun(
         await clearQuarantine(tx, {
           machineId: input.machineId,
           diagnosticRunId: run.id,
-          reason: 'Diagnostic réussi : tous les critères obligatoires (agent, GPU, pilote, Docker, runtime NVIDIA) sont satisfaits.',
+          reason: 'Diagnostic réussi : tous les critères obligatoires (agent, GPU, pilote, Docker, runtime NVIDIA, propreté runtime) sont satisfaits.',
           details: { checks: input.checks },
           source: input.source,
           now,
