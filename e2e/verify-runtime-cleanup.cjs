@@ -1,7 +1,10 @@
 // Post-run proof for e2e/run.sh. Reads the disposable database to identify the
-// Developer session that actually registered a Docker runtime, then proves all
+// Developer session by its authoritative workspace relation, then proves all
 // canonical per-session Docker resources are absent. This runs before run.sh's
 // EXIT trap so a passing harness cannot hide leaks behind best-effort teardown.
+//
+// Important: a successful stop intentionally clears connectionMetadata, so this
+// verifier must not try to rediscover a completed session from runtimeId.
 'use strict';
 const path = require('path');
 const { execFileSync } = require('child_process');
@@ -31,31 +34,36 @@ function resourceNamesForSession(sessionId) {
   };
 }
 
+function metadataRuntimeId(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return typeof value.runtimeId === 'string' ? value.runtimeId : null;
+}
+
 async function main() {
   const prisma = new PrismaClient();
   try {
-    const sessions = await prisma.workspaceSession.findMany({
+    const developer = await prisma.workspaceSession.findFirst({
+      where: { machineWorkspace: { workspace: { slug: 'developer' } } },
       orderBy: { createdAt: 'desc' },
-      take: 20,
-      select: { id: true, status: true, connectionMetadata: true },
+      select: { id: true, status: true, endedAt: true, connectionMetadata: true },
     });
-    const developer = sessions.find((session) => {
-      const metadata = session.connectionMetadata;
-      return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
-        && typeof metadata.runtimeId === 'string'
-        && metadata.runtimeId.startsWith('gpubnb-dev-');
-    });
-    if (!developer) throw new Error('no Developer workspace with a registered runtime was found');
+    if (!developer) throw new Error('no Developer workspace session was found');
     if (developer.status !== 'COMPLETED') {
-      throw new Error(`latest registered Developer workspace is not COMPLETED: ${developer.status}`);
+      throw new Error(`latest Developer workspace is not COMPLETED: ${developer.status}`);
+    }
+    if (!developer.endedAt) {
+      throw new Error('COMPLETED Developer workspace has no endedAt timestamp');
+    }
+
+    // workspace-stop-finalizer deliberately clears connectionMetadata on a
+    // successful terminal transition. A lingering runtimeId would mean the DB
+    // still advertises a runtime that the Docker checks below expect to be gone.
+    const lingeringRuntimeId = metadataRuntimeId(developer.connectionMetadata);
+    if (lingeringRuntimeId) {
+      throw new Error(`COMPLETED Developer workspace still advertises runtimeId: ${lingeringRuntimeId}`);
     }
 
     const names = resourceNamesForSession(developer.id);
-    const runtimeId = developer.connectionMetadata.runtimeId;
-    if (runtimeId !== names.container) {
-      throw new Error(`registered runtimeId does not match canonical container name: ${runtimeId} != ${names.container}`);
-    }
-
     const containers = dockerNameSet(['ps', '-a', '--format', '{{.Names}}']);
     const volumes = dockerNameSet(['volume', 'ls', '--format', '{{.Name}}']);
     const networks = dockerNameSet(['network', 'ls', '--format', '{{.Name}}']);
@@ -70,7 +78,11 @@ async function main() {
       throw new Error(`per-session Docker cleanup incomplete: ${leaked.join(', ')}`);
     }
 
-    console.log('[cleanup-proof] PASS', JSON.stringify({ sessionId: developer.id, resources: names }));
+    console.log('[cleanup-proof] PASS', JSON.stringify({
+      sessionId: developer.id,
+      endedAt: developer.endedAt,
+      resources: names,
+    }));
   } finally {
     await prisma.$disconnect();
   }
