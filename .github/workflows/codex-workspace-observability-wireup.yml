@@ -49,9 +49,9 @@ jobs:
 
           old = "const browser=JSON.parse(raw) as {userId:string;sessionId:string};"
           new = "const browser=JSON.parse(raw) as {userId:string;sessionId:string;accessRequestId?:string};"
-          if gateway.count(old) != 1:
+          if gateway.count(old) != 2:
               raise SystemExit(f'browser parse marker count={gateway.count(old)}')
-          gateway = gateway.replace(old, new, 1)
+          gateway = gateway.replace(old, new)
 
           old = "const openRequestId=crypto.randomUUID();let browserClosed=false;let browserBackpressureSince=0;\n        const browserPending=new BrowserPendingBudget();\n        app.log.info({event:'workspace_gateway_browser_connected',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket connected');"
           new = "const openRequestId=crypto.randomUUID();let browserClosed=false;let browserBackpressureSince=0;\n        const browserPending=new BrowserPendingBudget();\n        const gatewayLog=app.log.child({accessRequestId:browser.accessRequestId,bookingId:row.bookingId,jobId:row.jobId,workspaceSessionId:sessionId,machineId:row.machineId,channelId,channel:channelLogId,openRequestId});\n        gatewayLog.info({event:'workspace_gateway_browser_connected'},'workspace gateway browser websocket connected');"
@@ -65,7 +65,6 @@ jobs:
               raise SystemExit('gateway callback bounds missing')
           block = gateway[start:end]
           block = block.replace('app.log.', 'gatewayLog.')
-          # The first child construction must remain app.log.child, not self-reference.
           block = block.replace('const gatewayLog=gatewayLog.child(', 'const gatewayLog=app.log.child(', 1)
           gateway = gateway[:start] + block + gateway[end:]
           gateway_path.write_text(gateway)
