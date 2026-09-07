@@ -40,8 +40,10 @@ class RuntimeCleanlinessReport:
         )
 
     def to_api_payload(self) -> dict[str, object]:
+        # Do not send a trusted-looking `clean` boolean. The API derives the
+        # outcome itself from these bounded evidence lists so an inconsistent
+        # client payload can never claim clean=true while also reporting leaks.
         return {
-            "clean": self.clean,
             "unexpectedContainers": list(self.unexpected_containers),
             "unexpectedVolumes": list(self.unexpected_volumes),
             "unexpectedNetworks": list(self.unexpected_networks),
