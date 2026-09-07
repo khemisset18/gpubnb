@@ -46,7 +46,9 @@
       "requiredSemantics": [
         "ttl",
         "getdel",
+        "set-nx",
         "lua",
+        "lists",
         "streams"
       ]
     }
