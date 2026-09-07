@@ -1,0 +1,57 @@
+name: codex-background-lease-patch
+on:
+  push:
+    branches: [codex/distributed-background-task-leases]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/distributed-background-task-leases
+      - name: Apply exact guarded patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('apps/api/src/server.ts')
+          s=p.read_text()
+          def replace_once(old,new):
+              global s
+              n=s.count(old)
+              if n != 1:
+                  raise SystemExit(f'guard mismatch: expected 1 match, got {n}')
+              s=s.replace(old,new,1)
+
+          replace_once(
+          "import { reconcileDevelopmentBookings, reconcileStalledActivations, reconcileOrphanedDepositBookings, reconcileDevBypassSettlements, reconcileExpiredActiveDeveloperBookings } from './dev-booking-reconciler.js';",
+          "import { reconcileDevelopmentBookings, reconcileStalledActivations, reconcileOrphanedDepositBookings, reconcileDevBypassSettlements, reconcileExpiredActiveDeveloperBookings } from './dev-booking-reconciler.js';\nimport { runWithDistributedTaskLease } from './distributed-task-lease.js';"
+          )
+
+          old="""// and sweep-scheduler processes defined in render.yaml fail to deploy on it — confirmed via a
+// failed blueprint sync: \"service type is not available for this plan\"). Until either a paid
+// plan or the two dedicated workers are available, the two reconciliation loops they'd normally
+// run run in-process here instead, on plain intervals (single process, so no distributed lock
+// is needed the way the dedicated sweep-scheduler needs one across multiple replicas).
+let reconciling=false;
+const reconcileIntervalId=setInterval(()=>{if(reconciling)return;reconciling=true;const now=new Date();Promise.all([reconcileDevelopmentBookings(db,now).then(result=>{if(Object.values(result).some(v=>v>0))app.log.info({...result},'gpu_booking_reconciled');}).catch(err=>app.log.error({err},'gpu_booking_reconcile_failed')),reconcileStalledActivations(db,now).then(result=>{if(result.degraded>0)app.log.info({...result},'stalled_booking_activation_degraded');}).catch(err=>app.log.error({err},'stalled_activation_reconcile_failed')),reconcileOrphanedDepositBookings(db,now).then(result=>{if(result.cancelled>0)app.log.info({...result},'orphaned_deposit_bookings_cancelled');}).catch(err=>app.log.error({err},'orphaned_deposit_reconcile_failed')),reconcileDevBypassSettlements(db,now).then(result=>{if(result.settled>0)app.log.info({settled:result.settled},'dev_bypass_bookings_settled');if(result.failed.length>0)app.log.warn({failed:result.failed},'dev_bypass_settlement_attempt_failed');}).catch(err=>app.log.error({err},'dev_bypass_settlement_reconcile_failed')),reconcileExpiredActiveDeveloperBookings(db,now).then(result=>{if(result.completed>0)app.log.info({...result},'expired_active_developer_bookings_completed');}).catch(err=>app.log.error({err},'expired_active_developer_bookings_reconcile_failed'))]).finally(()=>{reconciling=false});},10_000);
+let sweeping=false;
+const sweepIntervalId=setInterval(()=>{if(sweeping)return;sweeping=true;(async()=>{const offline=await sweepOfflineMachines(db,new Date(),config.HEARTBEAT_OFFLINE_SECONDS);const staleJobs=await sweepStaleJobs(db,new Date(),config.JOB_STALE_AFTER_SECONDS);if(offline.machinesOffline>0||staleJobs.jobsTimedOut>0||staleJobs.jobsFailed>0)app.log.info({offline:{...offline,cutoff:offline.cutoff.toISOString()},staleJobs:{...staleJobs,cutoff:staleJobs.cutoff.toISOString()}},'offline_sweep_completed');})().catch(err=>app.log.error({err},'offline_sweep_failed')).finally(()=>{sweeping=false});},Math.max(config.HEARTBEAT_OFFLINE_SECONDS,30)*1000);"""
+          new="""// Reconciliation remains in-process for compatibility, but every execution is fenced by
+// a renewable Redis lease. This keeps the same behavior safe across rolling deploys,
+// multiple API replicas, and a later split into dedicated worker processes.
+let reconciling=false;
+const reconcileIntervalId=setInterval(()=>{if(reconciling)return;reconciling=true;(async()=>{const leased=await runWithDistributedTaskLease(redis,'gpubnb:task:booking-reconcile',30_000,async()=>{const now=new Date();await Promise.all([reconcileDevelopmentBookings(db,now).then(result=>{if(Object.values(result).some(v=>v>0))app.log.info({...result},'gpu_booking_reconciled');}).catch(err=>app.log.error({err},'gpu_booking_reconcile_failed')),reconcileStalledActivations(db,now).then(result=>{if(result.degraded>0)app.log.info({...result},'stalled_booking_activation_degraded');}).catch(err=>app.log.error({err},'stalled_activation_reconcile_failed')),reconcileOrphanedDepositBookings(db,now).then(result=>{if(result.cancelled>0)app.log.info({...result},'orphaned_deposit_bookings_cancelled');}).catch(err=>app.log.error({err},'orphaned_deposit_reconcile_failed')),reconcileDevBypassSettlements(db,now).then(result=>{if(result.settled>0)app.log.info({settled:result.settled},'dev_bypass_bookings_settled');if(result.failed.length>0)app.log.warn({failed:result.failed},'dev_bypass_settlement_attempt_failed');}).catch(err=>app.log.error({err},'dev_bypass_settlement_reconcile_failed')),reconcileExpiredActiveDeveloperBookings(db,now).then(result=>{if(result.completed>0)app.log.info({...result},'expired_active_developer_bookings_completed');}).catch(err=>app.log.error({err},'expired_active_developer_bookings_reconcile_failed'))]);});if(leased.acquired&&leased.leaseLost)app.log.warn({event:'booking_reconcile_lease_lost'},'distributed booking reconciliation lease was lost during execution');})().catch(err=>app.log.error({err},'gpu_booking_reconcile_loop_failed')).finally(()=>{reconciling=false});},10_000);
+let sweeping=false;
+const sweepIntervalId=setInterval(()=>{if(sweeping)return;sweeping=true;(async()=>{const leaseMs=Math.max(config.HEARTBEAT_OFFLINE_SECONDS*2,120)*1000;const leased=await runWithDistributedTaskLease(redis,'gpubnb:task:offline-sweep',leaseMs,async()=>{const offline=await sweepOfflineMachines(db,new Date(),config.HEARTBEAT_OFFLINE_SECONDS);const staleJobs=await sweepStaleJobs(db,new Date(),config.JOB_STALE_AFTER_SECONDS);if(offline.machinesOffline>0||staleJobs.jobsTimedOut>0||staleJobs.jobsFailed>0)app.log.info({offline:{...offline,cutoff:offline.cutoff.toISOString()},staleJobs:{...staleJobs,cutoff:staleJobs.cutoff.toISOString()}},'offline_sweep_completed');});if(leased.acquired&&leased.leaseLost)app.log.warn({event:'offline_sweep_lease_lost'},'distributed offline sweep lease was lost during execution');})().catch(err=>app.log.error({err},'offline_sweep_failed')).finally(()=>{sweeping=false});},Math.max(config.HEARTBEAT_OFFLINE_SECONDS,30)*1000);"""
+          replace_once(old,new)
+          p.write_text(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/api/src/server.ts
+          git diff --cached --check
+          git commit -m "fix(reliability): fence in-process background loops across replicas"
+          git push origin HEAD:codex/distributed-background-task-leases
