@@ -18,7 +18,7 @@ async function listFiles(root: string): Promise<string[]> {
   return files;
 }
 
-test('no new Render API/gateway hardcodes are added while legacy deployment drift is being removed', async () => {
+test('active web/build/deployment configuration contains no Render API or gateway hardcodes', async () => {
   const roots = [
     path.join(repoRoot, 'apps/web'),
     path.join(repoRoot, 'scripts'),
@@ -38,21 +38,9 @@ test('no new Render API/gateway hardcodes are added while legacy deployment drif
     }
   }
 
-  // These are known legacy/provider-coupled locations from the current repository.
-  // They are a removal list, not approved architecture. Remove an entry when that
-  // file becomes provider-neutral. Any NEW location fails this test immediately.
-  const legacyLocations = [
-    '.github/workflows/deployment-readiness.yml',
-    'apps/web/config.js',
-    'apps/web/netlify.toml',
-    'apps/web/workspace-developer-flow.test.js',
-    'netlify.toml',
-    'scripts/generate-web-build-info.mjs',
-  ];
-
   assert.deepEqual(
     matches.sort(),
-    legacyLocations.sort(),
-    `provider hardcode drift changed; migrate/remove legacy entries deliberately instead of adding a new hosting-vendor dependency: ${matches.join(', ')}`,
+    [],
+    `active provider hardcode detected; public origins must come from build/deployment configuration instead: ${matches.join(', ')}`,
   );
 });
