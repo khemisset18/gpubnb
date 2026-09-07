@@ -271,16 +271,46 @@ def reconnect_delay(attempt: int, random_value: float | None = None) -> float:
     return max(0.25, ceiling * sample)
 
 
+MAX_SEQUENCE = 9_223_372_036_854_775_807
+CONTROL_STATE_KEYS = {"schemaVersion", "lastAckedCommandSequence", "terminalResults"}
+CONTROL_RESULT_KEYS = {"commandId", "sequence", "status", "detailCode"}
+
+
+def _load_terminal_resume_state() -> tuple[int, list[dict[str, Any]]]:
+    raw = load_control_channel_state()
+    if not raw:
+        return 0, []
+    if set(raw) != CONTROL_STATE_KEYS or raw.get("schemaVersion") != 1:
+        return 0, []
+    value = raw.get("lastAckedCommandSequence")
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= MAX_SEQUENCE:
+        return 0, []
+    raw_results = raw.get("terminalResults")
+    if not isinstance(raw_results, list):
+        return 0, []
+
+    results: list[dict[str, Any]] = []
+    for item in raw_results[-RESULT_CACHE_SIZE:]:
+        if not isinstance(item, dict) or set(item) != CONTROL_RESULT_KEYS:
+            continue
+        command_id, sequence, status, detail = (
+            item.get("commandId"), item.get("sequence"), item.get("status"), item.get("detailCode")
+        )
+        if not isinstance(command_id, str) or ID_RE.fullmatch(command_id) is None:
+            continue
+        if isinstance(sequence, bool) or not isinstance(sequence, int) or not 0 < sequence <= MAX_SEQUENCE:
+            continue
+        if sequence > value or status not in TERMINAL_ACKS:
+            continue
+        if detail is not None and (not isinstance(detail, str) or DETAIL_RE.fullmatch(detail) is None):
+            continue
+        results.append({"commandId": command_id, "sequence": sequence, "status": status, "detailCode": detail})
+    return value, results
+
+
 class _TerminalState:
     def __init__(self) -> None:
-        raw = load_control_channel_state()
-        value = raw.get("lastAckedCommandSequence")
-        self.last_acked_sequence = value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
-        self.results: list[dict[str, Any]] = []
-        for item in raw.get("terminalResults", []) if isinstance(raw.get("terminalResults"), list) else []:
-            if isinstance(item, dict) and item.get("status") in TERMINAL_ACKS:
-                self.results.append(item)
-        self.results = self.results[-RESULT_CACHE_SIZE:]
+        self.last_acked_sequence, self.results = _load_terminal_resume_state()
 
     def cached(self, command_id: str, sequence: int) -> ControlCommandResult | None:
         for item in reversed(self.results):
@@ -291,6 +321,8 @@ class _TerminalState:
 
     def remember(self, command: ControlCommand, result: ControlCommandResult) -> None:
         result = result.normalized()
+        if not 0 < command.sequence <= MAX_SEQUENCE:
+            raise ControlChannelError("control_terminal_sequence_invalid")
         if command.sequence < self.last_acked_sequence:
             raise ControlChannelError("control_terminal_sequence_regression")
         cached = self.cached(command.command_id, command.sequence)
