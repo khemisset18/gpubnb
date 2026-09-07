@@ -1,0 +1,66 @@
+name: artifact-storage-s3-integration
+
+on:
+  pull_request:
+    paths:
+      - 'apps/api/src/artifact-storage.ts'
+      - 'apps/api/test/artifact-storage-s3.integration.test.ts'
+      - 'apps/api/package.json'
+      - 'apps/api/package-lock.json'
+      - '.github/workflows/artifact-storage-s3-integration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/src/artifact-storage.ts'
+      - 'apps/api/test/artifact-storage-s3.integration.test.ts'
+      - 'apps/api/package.json'
+      - 'apps/api/package-lock.json'
+      - '.github/workflows/artifact-storage-s3-integration.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  minio-roundtrip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - name: Install locked API dependencies
+        working-directory: apps/api
+        run: npm ci
+      - name: Start S3-compatible MinIO
+        run: |
+          docker run -d --rm --name gpubnb-minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=gpubnb-ci-access \
+            -e MINIO_ROOT_PASSWORD=gpubnb-ci-secret-key \
+            minio/minio:latest server /data --address :9000
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs gpubnb-minio
+          exit 1
+      - name: Real S3 put/get round trip
+        working-directory: apps/api
+        env:
+          ARTIFACT_S3_INTEGRATION: '1'
+          ARTIFACT_S3_ENDPOINT: http://127.0.0.1:9000
+          ARTIFACT_S3_REGION: us-east-1
+          ARTIFACT_S3_ACCESS_KEY_ID: gpubnb-ci-access
+          ARTIFACT_S3_SECRET_ACCESS_KEY: gpubnb-ci-secret-key
+        run: npx tsx --test test/artifact-storage-s3.integration.test.ts
+      - name: MinIO diagnostics
+        if: failure()
+        run: docker logs gpubnb-minio || true
+      - name: Stop MinIO
+        if: always()
+        run: docker stop gpubnb-minio || true
