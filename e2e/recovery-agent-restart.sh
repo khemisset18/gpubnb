@@ -85,3 +85,6 @@ gpubnb-agent setup --api-url "http://localhost:${API_PORT}" >/dev/null || true
 
 echo "--- 5. real recovery scenario ---"
 node recovery-agent-restart.cjs setup "http://localhost:${API_PORT}" "$DATABASE_URL"
+
+echo "--- 6. fresh heartbeat proof from the restarted Agent ---"
+node verify-recovery-heartbeat.cjs "$DATABASE_URL"
