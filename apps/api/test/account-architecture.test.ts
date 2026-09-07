@@ -7,17 +7,16 @@ const apiRoot = resolve(import.meta.dirname, '..');
 const repoRoot = resolve(apiRoot, '../..');
 const read = (path: string) => readFileSync(resolve(repoRoot, path), 'utf8');
 
-const normalizedLines = (content: string) =>
-  new Set(content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
-
-test('Netlify proxies same-origin API calls to Render', () => {
-  const config = read('netlify.toml');
-  const lines = normalizedLines(config);
-  assert.ok(lines.has('from = "/api/*"'));
-  assert.ok(lines.has('to = "https://gpubnb.onrender.com/:splat"'));
-  assert.ok(lines.has('status = 200'));
-  assert.ok(lines.has('force = true'));
+test('Netlify same-origin API routing is generated from provider-neutral build origins', () => {
+  const netlify = read('netlify.toml');
+  const generator = read('scripts/generate-web-build-info.mjs');
+  assert.match(netlify, /generate-web-build-info\.mjs/);
+  assert.doesNotMatch(netlify, /onrender\.com/);
+  assert.match(generator, /GPUBNB_API_ORIGIN/);
+  assert.match(generator, /GPUBNB_GATEWAY_ORIGIN/);
+  assert.match(generator, /\/api\/\* \$\{apiOrigin\}\/\:splat 200!/);
   assert.match(read('apps/web/config.js'), /GPUBNB_API_URL = .+ "\/api"/);
+  assert.doesNotMatch(read('apps/web/config.js'), /onrender\.com/);
 });
 
 test('private-beta bookings stay on the registered Compute API path, with Developer unlocked only after GPU_PROOF completes', () => {
