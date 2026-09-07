@@ -16,9 +16,10 @@ test('main real-GPU harness proves exact per-session Docker cleanup before EXIT 
   assert.ok(runCjs >= 0 && cleanupProof > runCjs, 'cleanup proof must run after the real E2E orchestrator succeeds');
 
   for (const required of [
+    "machineWorkspace: { workspace: { slug: 'developer' } }",
     "developer.status !== 'COMPLETED'",
-    "metadata.runtimeId.startsWith('gpubnb-dev-')",
-    'runtimeId !== names.container',
+    '!developer.endedAt',
+    'COMPLETED Developer workspace still advertises runtimeId',
     'gpubnb-dev-proxy-',
     'gpubnb-workspace-',
     'gpubnb-workspace-internal-',
@@ -30,4 +31,10 @@ test('main real-GPU harness proves exact per-session Docker cleanup before EXIT 
   ]) {
     assert.ok(proof.includes(required), `cleanup proof is missing: ${required}`);
   }
+
+  assert.doesNotMatch(
+    proof,
+    /sessions\.find\([\s\S]*metadata\.runtimeId\.startsWith\('gpubnb-dev-'\)/,
+    'a completed session cannot be rediscovered from runtimeId because successful stop clears connectionMetadata',
+  );
 });
