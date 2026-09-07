@@ -1,0 +1,44 @@
+name: codex-artifact-integrity-wireup
+
+on:
+  push:
+    branches:
+      - codex/supabase-s3-artifact-storage
+    paths:
+      - .github/workflows/codex-artifact-integrity-wireup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/supabase-s3-artifact-storage
+      - name: Wire download integrity verification
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/api/src/server.ts')
+          text = path.read_text()
+          old_import = "import { FilesystemArtifactStorage, RoutedArtifactStorage, S3ArtifactStorage } from './artifact-storage.js';"
+          new_import = "import { FilesystemArtifactStorage, RoutedArtifactStorage, S3ArtifactStorage, verifyArtifactBytes } from './artifact-storage.js';"
+          if text.count(old_import) != 1:
+              raise SystemExit(f'import marker count={text.count(old_import)}')
+          text = text.replace(old_import, new_import, 1)
+          old = "try{const data=await artifactStorage.read(artifact.storageKey);reply.header('content-type','application/octet-stream');reply.header('x-artifact-sha256',artifact.sha256);return reply.send(data);}catch(err){if(typeof err==='object'&&err&&'code'in err&&(err as {code?:string}).code==='ENOENT')return reply.code(404).send({error:'artifact_not_found_in_storage'});throw err;}"
+          new = "try{const data=await artifactStorage.read(artifact.storageKey);verifyArtifactBytes(data,artifact.sha256,artifact.sizeBytes);reply.header('content-type','application/octet-stream');reply.header('x-artifact-sha256',artifact.sha256);return reply.send(data);}catch(err){if(typeof err==='object'&&err&&'code'in err){const code=(err as {code?:string}).code;if(code==='ENOENT')return reply.code(404).send({error:'artifact_not_found_in_storage'});if(code==='artifact_integrity_check_failed'){req.log.error({jobId:id,artifactId,storageKey:artifact.storageKey},'artifact_integrity_check_failed');return reply.code(502).send({error:'artifact_integrity_check_failed'});}}throw err;}"
+          if text.count(old) != 1:
+              raise SystemExit(f'download marker count={text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Commit guarded integrity wireup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/api/src/server.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(storage): verify artifacts before download"
+          git push origin HEAD:codex/supabase-s3-artifact-storage
