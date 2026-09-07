@@ -24,7 +24,7 @@ import {
 } from './control-command-dispatch.js';
 import { claimGatewayMachineCommands, gatewayCommandMachineIds } from './gateway-command-store.js';
 import { validateDeliveryKey } from './reliable-delivery.js';
-import { reconcileDevelopmentBookings } from './dev-booking-reconciler.js';
+import { reconcileDevelopmentBookingsScheduled } from './development-booking-scheduler.js';
 import { finalizeVerifiedDeveloperStop } from './workspace-stop-finalizer.js';
 
 const POLL_INTERVAL_MS = 250;
@@ -154,7 +154,11 @@ async function main(): Promise<void> {
       const now = Date.now();
       if (now - lastReconcileAt >= RECONCILE_INTERVAL_MS) {
         try {
-          const reconciliation = await reconcileDevelopmentBookings(db, new Date(now));
+          const scheduled = await reconcileDevelopmentBookingsScheduled(redis, db, new Date(now));
+          const reconciliation = scheduled.result;
+          if (scheduled.leaseLost) {
+            console.warn(JSON.stringify({ level: 'warn', message: 'distributed_task_lease_lost', task: 'development-bookings', workerId }));
+          }
           if (Object.values(reconciliation).some((value) => value > 0)) {
             console.info(JSON.stringify({ level: 'info', message: 'gpu_booking_reconciled', ...reconciliation }));
           }
