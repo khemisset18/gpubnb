@@ -42,20 +42,24 @@ test('runtime cleanliness plus every existing mandatory check can pass', () => {
   assert.deepEqual(evaluation.failingChecks, []);
 });
 
-test('diagnostic wiring derives runtime cleanliness server-side from bounded evidence', async () => {
+test('diagnostic wiring derives runtime cleanliness server-side from bounded evidence and fresh authority', async () => {
   const routes = await readFile(new URL('../src/machine-diagnostics-routes.ts', import.meta.url), 'utf8');
   const agent = await readFile(new URL('../../../agent/gpubnb_agent/cli.py', import.meta.url), 'utf8');
   const inventory = await readFile(new URL('../../../agent/gpubnb_agent/runtime_cleanliness.py', import.meta.url), 'utf8');
 
   assert.match(routes, /expectedRuntimeSessionIds/);
+  assert.match(routes, /expectedSessionIds: z\.array/);
+  assert.match(routes, /runtimeExpectationMatches\(cleanup\.expectedSessionIds, currentExpectedRuntimeSessionIds\)/);
+  assert.match(routes, /autorité runtime modifiée pendant le diagnostic/);
   assert.match(routes, /unexpectedContainers: z\.array\([^\n]+\)\.max\(64\)/);
   assert.match(routes, /name: 'runtimeCleanup'/);
-  assert.match(routes, /unexpectedRuntimeResources\.length === 0 \? 'PASS' : 'FAIL'/);
+  assert.match(routes, /unexpectedRuntimeResources\.length === 0/);
   assert.doesNotMatch(routes, /runtimeCleanliness\.clean/);
 
   assert.match(agent, /inspect_runtime_cleanliness/);
   assert.match(agent, /runtime_expectation_supplied/);
   assert.match(agent, /runtimeCleanliness/);
+  assert.match(agent, /"expectedSessionIds"/);
 
   assert.match(inventory, /names_for_session/);
   assert.match(inventory, /proxy_name_for_session/);
