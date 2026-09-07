@@ -167,12 +167,29 @@ test('agent diagnostic routes: cross-machine auth is rejected, owner isolation h
   const realNext = signedAgentRequest('GET', nextPathA, machineA.id, keyPairA, undefined);
   const nextResponse = await app.inject({ method: 'GET', url: nextPathA, headers: realNext.headers });
   assert.equal(nextResponse.statusCode, 200, 'a quarantined machine must still be able to authenticate and poll for its own diagnostic');
-  const nextBody = nextResponse.json() as { diagnosticRunId: string | null; diagnosticImage: string | null };
+  const nextBody = nextResponse.json() as {
+    diagnosticRunId: string | null;
+    diagnosticImage: string | null;
+    expectedRuntimeSessionIds: string[];
+  };
   assert.equal(nextBody.diagnosticRunId, diagnosticRunId);
+  assert.ok(Array.isArray(nextBody.expectedRuntimeSessionIds));
 
   // --- The agent for A reports a real PASS result; machine B's key must not be able to submit it ---
   const resultPath = `/agent/diagnostics/${diagnosticRunId}/result`;
-  const resultBody = { machineId: machineA.id, gpuDetected: true, gpuUuid: 'GPU-real-uuid', summary: 'ok', metrics: {} };
+  const resultBody = {
+    machineId: machineA.id,
+    gpuDetected: true,
+    gpuUuid: 'GPU-real-uuid',
+    summary: 'ok',
+    metrics: {},
+    runtimeCleanliness: {
+      unexpectedContainers: [],
+      unexpectedVolumes: [],
+      unexpectedNetworks: [],
+      expectedSessionIds: nextBody.expectedRuntimeSessionIds,
+    },
+  };
   const forgedResult = signedAgentRequest('POST', resultPath, machineA.id, keyPairB, resultBody);
   const forgedResultResponse = await app.inject({ method: 'POST', url: resultPath, headers: forgedResult.headers, payload: forgedResult.payload });
   assert.equal(forgedResultResponse.statusCode, 401, 'machine B\'s key must never be able to submit a result for machine A\'s diagnostic run');
