@@ -1,5 +1,7 @@
 # Audit technique GPUbnb
 
+> **Archive historique.** Cet audit décrit l'état du dépôt au **23 juillet 2026** et ne doit plus être utilisé comme source de vérité opérationnelle. Pour l'architecture et le déploiement actuels, utiliser `docs/INFRASTRUCTURE_SOURCE_OF_TRUTH.md`, `deploy/runtime-processes.json` et les runbooks sous `docs/`. Le 7 septembre 2026, les anciennes copies exécutables API/frontend à la racine ont été supprimées ; `agent.py` reste uniquement comme launcher de compatibilité vers `agent/agent.py`.
+
 Date : 23 juillet 2026  
 Portée : dépôt `khemisset18/gpubnb`, branche `main`.
 
@@ -68,8 +70,7 @@ manquent.
 - Il n'existe ni `setup`, ni stockage de configuration, ni liaison par code.
 - Aucun moteur `jobs`, polling agent, logs progressifs ou artefacts.
 - Aucun test automatisé Python de l'agent.
-- Les doublons de fichiers racine (`server.ts`, `agent.py`, schémas et frontend)
-  créent un risque de modifier la mauvaise copie.
+- ~~Les doublons de fichiers racine créent un risque de modifier la mauvaise copie.~~ **Résolu le 7 septembre 2026** : les copies API/frontend racine mortes ont été supprimées et un test CI empêche leur réintroduction. Le `agent.py` racine est conservé uniquement comme launcher de compatibilité explicite.
 
 ## Manques majeurs
 
