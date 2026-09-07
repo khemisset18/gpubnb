@@ -594,7 +594,15 @@ def poll_and_run_diagnostic_once(
             "gpuUuid": metrics.get("firstGpuUuid"),
             "summary": str(report.get("summary") or "")[:2000],
             "metrics": metrics,
-            **({"runtimeCleanliness": runtime_cleanliness.to_api_payload()} if runtime_cleanliness is not None else {}),
+            **({
+                "runtimeCleanliness": {
+                    **runtime_cleanliness.to_api_payload(),
+                    "expectedSessionIds": [
+                        value for value in expected_runtime_session_ids
+                        if isinstance(value, str) and value
+                    ],
+                },
+            } if runtime_cleanliness is not None else {}),
         })
         emit({
             "event": "diagnostic_run_completed",

@@ -41,7 +41,10 @@ class RuntimeCleanlinessDiagnosticPayloadTests(unittest.TestCase):
 
         inspect.assert_called_once_with(expected)
         result = next(body for path, method, body in calls if path.endswith(f"/{run_id}/result") and method == "POST")
-        self.assertEqual(result["runtimeCleanliness"], evidence)
+        self.assertEqual(
+            result["runtimeCleanliness"],
+            {**evidence, "expectedSessionIds": expected},
+        )
         self.assertNotIn("clean", result["runtimeCleanliness"])
 
     def test_old_server_without_expectation_does_not_touch_docker(self) -> None:
