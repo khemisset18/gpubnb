@@ -142,11 +142,19 @@ export class S3ArtifactStorage implements ArtifactStorage {
 
   async read(storageKey: string): Promise<Buffer> {
     const objectKey = decodeS3StorageKey(storageKey, this.bucket);
-    const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: objectKey })) as {
-      Body?: { transformToByteArray?: () => Promise<Uint8Array> };
-    };
-    if (!result.Body?.transformToByteArray) throw new ArtifactStorageError('artifact_object_body_missing');
-    return Buffer.from(await result.Body.transformToByteArray());
+    try {
+      const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: objectKey })) as {
+        Body?: { transformToByteArray?: () => Promise<Uint8Array> };
+      };
+      if (!result.Body?.transformToByteArray) throw new ArtifactStorageError('artifact_object_body_missing');
+      return Buffer.from(await result.Body.transformToByteArray());
+    } catch (error) {
+      const candidate = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+      if (candidate?.name === 'NoSuchKey' || candidate?.name === 'NotFound' || candidate?.$metadata?.httpStatusCode === 404) {
+        throw new ArtifactStorageError('ENOENT');
+      }
+      throw error;
+    }
   }
 }
 
