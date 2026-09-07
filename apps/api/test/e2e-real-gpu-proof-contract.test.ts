@@ -13,9 +13,9 @@ async function source(): Promise<string> {
 
 test('real E2E rental executes Compute GPU_PROOF before Developer workspace preparation', async () => {
   const e2e = await source();
-  const proofRoute = e2e.indexOf('`/bookings/${booking.id}/workspace-sessions`');
+  const proofRoute = e2e.indexOf('`${API}/bookings/${booking.id}/workspace-sessions`');
   const proofWait = e2e.indexOf("waitUntil('GPU_PROOF completes and finalizes'");
-  const developerRoute = e2e.indexOf('`/bookings/${booking.id}/workspace/developer`');
+  const developerRoute = e2e.indexOf('`${API}/bookings/${booking.id}/workspace/developer`');
 
   assert.ok(proofRoute >= 0, 'E2E must request the production Compute preparation route');
   assert.ok(proofWait > proofRoute, 'E2E must wait for the real GPU_PROOF job created by that route');
