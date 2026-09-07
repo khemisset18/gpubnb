@@ -15,6 +15,7 @@ const allPass = (): DiagnosticCheck[] => [
   check('driver', 'PASS'),
   check('docker', 'PASS'),
   check('nvidiaRuntime', 'PASS'),
+  check('runtimeCleanup', 'PASS'),
   check('allocation', 'PASS'),
   check('cuda', 'PASS'),
   check('ram', 'PASS'),
