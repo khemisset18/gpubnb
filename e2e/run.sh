@@ -53,6 +53,9 @@ snapshot_gpu_workspace_resources
 
 cleanup() {
   echo "--- cleanup ---"
+  if [ -n "${UUID_PROOF_PID:-}" ]; then
+    kill "$UUID_PROOF_PID" 2>/dev/null || true
+  fi
   if [ -n "${API_PID:-}" ]; then
     # On Windows, `npx tsx src/server.ts &` is a chain of 3-4 processes (a cmd.exe
     # npx shim, node, and tsx's own loader child); a plain `kill $API_PID` only
@@ -103,7 +106,17 @@ export GPUBNB_CONFIG_DIR="$CONFIG_DIR"
 gpubnb-agent setup --api-url "http://localhost:${API_PORT}" >/dev/null || true
 
 echo "--- 5. real wallet auth, pairing, link, agent start ---"
+UUID_PROOF_LOG=/tmp/gpubnb-e2e-exact-gpu-uuid.log
+rm -f "$UUID_PROOF_LOG"
+node watch-exact-gpu-uuid.cjs "$DATABASE_URL" > "$UUID_PROOF_LOG" 2>&1 &
+UUID_PROOF_PID=$!
 node run.cjs setup "http://localhost:${API_PORT}" "$DATABASE_URL"
+if ! wait "$UUID_PROOF_PID"; then
+  cat "$UUID_PROOF_LOG"
+  exit 1
+fi
+UUID_PROOF_PID=""
+cat "$UUID_PROOF_LOG"
 
 echo "--- 6. exact per-session Docker cleanup proof ---"
 node verify-runtime-cleanup.cjs "$DATABASE_URL"
