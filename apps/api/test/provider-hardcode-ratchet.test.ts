@@ -44,3 +44,15 @@ test('active web/build/deployment configuration contains no Render API or gatewa
     `active provider hardcode detected; public origins must come from build/deployment configuration instead: ${matches.join(', ')}`,
   );
 });
+
+test('verification scripts use the provider-neutral runtime contract, never the legacy Render blueprint', async () => {
+  for (const relative of ['verify.sh', 'scripts/verify.sh']) {
+    const source = await readFile(path.join(repoRoot, relative), 'utf8');
+    assert.doesNotMatch(source, /render\.yaml/i, `${relative} must not treat render.yaml as deployment authority`);
+    assert.match(source, /deploy\/runtime-processes\.json/);
+    assert.match(source, /delivery-worker/);
+    assert.match(source, /requiredSemantics/);
+    assert.match(source, /getdel/);
+    assert.match(source, /streams/);
+  }
+});
