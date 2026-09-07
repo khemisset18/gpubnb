@@ -51,7 +51,7 @@ class RuntimeCleanlinessReport:
 
 
 def _real_docker(args: list[str]) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
+    return subprocess.run(
         ["docker", *args],
         capture_output=True,
         text=True,
@@ -59,16 +59,14 @@ def _real_docker(args: list[str]) -> subprocess.CompletedProcess[str]:
         check=False,
         shell=False,
     )
+
+
+def _checked_lines(result: subprocess.CompletedProcess[str], operation: str) -> set[str]:
     if result.returncode != 0:
-        operation = "-".join(args[:2])[:48] or "unknown"
         raise RuntimeError(
-            f"runtime_cleanliness_docker_failed:{operation}:{result.returncode}:"
+            f"runtime_cleanliness_docker_failed:{operation[:48]}:{result.returncode}:"
             f"{result.stderr[:240].strip()}"
         )
-    return result
-
-
-def _lines(result: subprocess.CompletedProcess[str]) -> set[str]:
     return {line.strip() for line in result.stdout.splitlines() if line.strip()}
 
 
@@ -100,9 +98,18 @@ def inspect_runtime_cleanliness(
         expected_volumes.add(volume)
         expected_networks.add(network_name_for_session(session_id))
 
-    containers = _lines(run(["ps", "-a", "--format", "{{.Names}}"]))
-    volumes = _lines(run(["volume", "ls", "--format", "{{.Name}}"]))
-    networks = _lines(run(["network", "ls", "--format", "{{.Name}}"]))
+    containers = _checked_lines(
+        run(["ps", "-a", "--format", "{{.Names}}"]),
+        "ps-a",
+    )
+    volumes = _checked_lines(
+        run(["volume", "ls", "--format", "{{.Name}}"]),
+        "volume-ls",
+    )
+    networks = _checked_lines(
+        run(["network", "ls", "--format", "{{.Name}}"]),
+        "network-ls",
+    )
 
     owned_containers = {
         name for name in containers
