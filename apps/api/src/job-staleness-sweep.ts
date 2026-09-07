@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import { runBookingTransaction } from './booking-transaction-retry.js';
 import { enterQuarantine } from './quarantine-service.js';
+import { tryTransactionAdvisoryLock } from './transaction-advisory-lock.js';
 
 const STALE_JOB_ERROR_CODE = 'job_stale_timeout';
 
@@ -83,7 +84,13 @@ export async function sweepStaleJobs(
 
   // DB-only callback (including enterQuarantine, which writes through the same tx),
   // so a transient Serializable abort is safe to replay as one atomic sweep.
+  // A transaction-scoped advisory lock prevents two scheduler/API replicas from
+  // independently evaluating the same stale set at the same time.
   return runBookingTransaction(db, async tx => {
+    if (!await tryTransactionAdvisoryLock(tx, 'gpubnb:stale-job-sweep')) {
+      return EMPTY_RESULT(cutoff);
+    }
+
     const staleJobs = await tx.job.findMany({
       where: {
         OR: [

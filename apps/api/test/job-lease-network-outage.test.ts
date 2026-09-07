@@ -24,6 +24,7 @@ test('a 30 second API-agent outage cannot stale or quarantine a job with a 90 se
 
   let anyMutationAttempted = false;
   const tx = {
+    $queryRaw: async () => [{ acquired: true }],
     job: {
       findMany: async ({ where }: any) => {
         const claimedClause = where.OR.find((part: any) => part.status?.in?.includes(JobStatus.RUNNING));
