@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Real end-to-end harness for the GPUbnb Workspace workflow. See README.md.
-# Every resource this script creates is prefixed gpubnb-e2e- and is torn down
-# on exit (success or failure) by the trap below.
+# Postgres/Redis/API/config are disposable. Docker workspace cleanup is scoped
+# to GPUbnb-owned resources that did not exist when this harness started, so a
+# failed test cannot blindly delete a pre-existing local rental runtime.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 API_DIR="../apps/api"
@@ -11,6 +12,44 @@ REDIS_PORT=16379
 API_PORT=18787
 DATABASE_URL="postgresql://gpubnb:gpubnb@localhost:${PG_PORT}/gpubnb?schema=public"
 REDIS_URL="redis://:change-me@localhost:${REDIS_PORT}"
+
+BASELINE_CONTAINERS="$(mktemp)"
+BASELINE_VOLUMES="$(mktemp)"
+BASELINE_NETWORKS="$(mktemp)"
+
+snapshot_gpu_workspace_resources() {
+  (docker ps -a --format '{{.Names}}' 2>/dev/null | grep '^gpubnb-dev-' | sort > "$BASELINE_CONTAINERS") || true
+  (docker volume ls --format '{{.Name}}' 2>/dev/null | grep '^gpubnb-workspace-' | sort > "$BASELINE_VOLUMES") || true
+  # Only per-session internal networks are test-owned. The shared
+  # gpubnb-workspace-gateway network is infrastructure and must never be removed.
+  (docker network ls --format '{{.Name}}' 2>/dev/null | grep '^gpubnb-workspace-internal-' | sort > "$BASELINE_NETWORKS") || true
+}
+
+remove_new_gpu_workspace_resources() {
+  local name
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if ! grep -Fxq -- "$name" "$BASELINE_CONTAINERS"; then
+      docker rm -f "$name" >/dev/null 2>&1 || true
+    fi
+  done < <((docker ps -a --format '{{.Names}}' 2>/dev/null | grep '^gpubnb-dev-') || true)
+
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if ! grep -Fxq -- "$name" "$BASELINE_VOLUMES"; then
+      docker volume rm -f "$name" >/dev/null 2>&1 || true
+    fi
+  done < <((docker volume ls --format '{{.Name}}' 2>/dev/null | grep '^gpubnb-workspace-') || true)
+
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if ! grep -Fxq -- "$name" "$BASELINE_NETWORKS"; then
+      docker network rm "$name" >/dev/null 2>&1 || true
+    fi
+  done < <((docker network ls --format '{{.Name}}' 2>/dev/null | grep '^gpubnb-workspace-internal-') || true)
+}
+
+snapshot_gpu_workspace_resources
 
 cleanup() {
   echo "--- cleanup ---"
@@ -24,8 +63,9 @@ cleanup() {
     taskkill //F //T //PID "$API_PID" 2>/dev/null || kill "$API_PID" 2>/dev/null || true
   fi
   GPUBNB_CONFIG_DIR="$CONFIG_DIR" gpubnb-agent stop 2>/dev/null || true
+  remove_new_gpu_workspace_resources
   docker rm -f gpubnb-e2e-pg gpubnb-e2e-redis 2>/dev/null || true
-  docker ps -a --format '{{.Names}}' | grep '^gpubnb-dev-' | xargs -r docker rm -f 2>/dev/null || true
+  rm -f "$BASELINE_CONTAINERS" "$BASELINE_VOLUMES" "$BASELINE_NETWORKS"
 }
 trap cleanup EXIT
 
