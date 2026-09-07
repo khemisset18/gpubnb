@@ -17,66 +17,53 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: codex/runtime-scheduler-audit
-      - name: Wire distributed scheduler authority
+      - name: Fence sweeps and remove stale provider assumption
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          server_path = Path('apps/api/src/server.ts')
-          server = server_path.read_text()
-          old_import = "import { reconcileDevelopmentBookings, reconcileStalledActivations, reconcileOrphanedDepositBookings, reconcileDevBypassSettlements, reconcileExpiredActiveDeveloperBookings } from './dev-booking-reconciler.js';"
-          new_import = "import { reconcileStalledActivations, reconcileOrphanedDepositBookings, reconcileDevBypassSettlements, reconcileExpiredActiveDeveloperBookings } from './dev-booking-reconciler.js';\nimport { reconcileDevelopmentBookingsScheduled } from './development-booking-scheduler.js';\nimport { runWithDistributedTaskLease } from './distributed-task-lease.js';"
-          if server.count(old_import) != 1:
-              raise SystemExit(f'server import marker count={server.count(old_import)}')
-          server = server.replace(old_import, new_import, 1)
+          path = Path('apps/api/src/server.ts')
+          text = path.read_text()
 
-          marker = 'const reconcileIntervalId=setInterval'
-          start = server.find(marker)
+          old_comment = '''// Render's free plan does not support the Background Worker service type (the delivery-worker
+// and sweep-scheduler processes defined in render.yaml fail to deploy on it — confirmed via a
+// failed blueprint sync: "service type is not available for this plan"). Until either a paid
+// plan or the two dedicated workers are available, the two reconciliation loops they'd normally
+// run run in-process here instead, on plain intervals (single process, so no distributed lock
+// is needed the way the dedicated sweep-scheduler needs one across multiple replicas).'''
+          new_comment = '''// Reconciliation and sweep loops remain in-process for deployment compatibility.
+// Every shared background tick is fenced by Redis so multiple API replicas and the
+// delivery worker cannot accidentally duplicate the same scheduler authority.'''
+          if text.count(old_comment) != 1:
+              raise SystemExit(f'stale provider comment marker count={text.count(old_comment)}')
+          text = text.replace(old_comment, new_comment, 1)
+
+          marker = 'const sweepIntervalId=setInterval'
+          start = text.find(marker)
           if start < 0:
-              raise SystemExit('reconcile interval marker missing')
-          end = server.find('\n', start)
+              raise SystemExit('sweep interval marker missing')
+          end = text.find('\n', start)
           if end < 0:
-              end = len(server)
-          line = server[start:end]
-          if line.count('Promise.all([') != 1:
-              raise SystemExit(f'Promise.all count in reconcile line={line.count("Promise.all([")})')
-          line = line.replace(
-              'Promise.all([',
-              "runWithDistributedTaskLease(redis,'api-reconciliation-tick',()=>Promise.all([",
-              1,
-          )
-          old_dev = "reconcileDevelopmentBookings(db,now).then(result=>{if(Object.values(result).some(v=>v>0))"
-          new_dev = "reconcileDevelopmentBookingsScheduled(redis,db,now).then(({result,leaseLost})=>{if(leaseLost)app.log.warn({task:'development-bookings'},'distributed_task_lease_lost');if(Object.values(result).some(v=>v>0))"
-          if line.count(old_dev) != 1:
-              raise SystemExit(f'development booking marker count={line.count(old_dev)}')
-          line = line.replace(old_dev, new_dev, 1)
-          old_end = ']).finally(()=>{reconciling=false});},10_000);'
-          new_end = "]),{ttlMs:30_000,renewalMs:10_000}).then(lease=>{if(lease.status==='executed'&&lease.leaseLost)app.log.warn({task:'api-reconciliation-tick'},'distributed_task_lease_lost');}).catch(err=>app.log.error({err},'api_reconciliation_tick_failed')).finally(()=>{reconciling=false});},10_000);"
+              end = len(text)
+          line = text[start:end]
+          old_start = 'sweeping=true;(async()=>{'
+          new_start = "sweeping=true;runWithDistributedTaskLease(redis,'api-sweep-tick',async()=>{"
+          if line.count(old_start) != 1:
+              raise SystemExit(f'sweep body marker count={line.count(old_start)}')
+          line = line.replace(old_start, new_start, 1)
+          old_end = "})().catch(err=>app.log.error({err},'offline_sweep_failed')).finally(()=>{sweeping=false});},Math.max(config.HEARTBEAT_OFFLINE_SECONDS,30)*1000);"
+          new_end = "},{ttlMs:120_000,renewalMs:30_000}).then(lease=>{if(lease.status==='executed'&&lease.leaseLost)app.log.warn({task:'api-sweep-tick'},'distributed_task_lease_lost');}).catch(err=>app.log.error({err},'offline_sweep_failed')).finally(()=>{sweeping=false});},Math.max(config.HEARTBEAT_OFFLINE_SECONDS,30)*1000);"
           if line.count(old_end) != 1:
-              raise SystemExit(f'reconcile interval end marker count={line.count(old_end)}')
+              raise SystemExit(f'sweep interval end marker count={line.count(old_end)}')
           line = line.replace(old_end, new_end, 1)
-          server = server[:start] + line + server[end:]
-          server_path.write_text(server)
-
-          worker_path = Path('apps/api/src/delivery-worker.ts')
-          worker = worker_path.read_text()
-          old_worker_import = "import { reconcileDevelopmentBookings } from './dev-booking-reconciler.js';"
-          new_worker_import = "import { reconcileDevelopmentBookingsScheduled } from './development-booking-scheduler.js';"
-          if worker.count(old_worker_import) != 1:
-              raise SystemExit(f'worker import marker count={worker.count(old_worker_import)}')
-          worker = worker.replace(old_worker_import, new_worker_import, 1)
-          old_call = '          const reconciliation = await reconcileDevelopmentBookings(db, new Date(now));'
-          new_call = "          const scheduled = await reconcileDevelopmentBookingsScheduled(redis, db, new Date(now));\n          const reconciliation = scheduled.result;\n          if (scheduled.leaseLost) {\n            console.warn(JSON.stringify({ level: 'warn', message: 'distributed_task_lease_lost', task: 'development-bookings', workerId }));\n          }"
-          if worker.count(old_call) != 1:
-              raise SystemExit(f'worker reconciliation marker count={worker.count(old_call)}')
-          worker = worker.replace(old_call, new_call, 1)
-          worker_path.write_text(worker)
+          text = text[:start] + line + text[end:]
+          path.write_text(text)
           PY
-      - name: Commit guarded scheduler wireup
+      - name: Commit guarded sweep wireup
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apps/api/src/server.ts apps/api/src/delivery-worker.ts
+          git add apps/api/src/server.ts
           git diff --cached --quiet && exit 0
-          git commit -m "fix(runtime): coordinate reconciliation across replicas"
+          git commit -m "fix(runtime): fence background sweeps across replicas"
           git push origin HEAD:codex/runtime-scheduler-audit
