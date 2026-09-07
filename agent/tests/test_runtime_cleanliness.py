@@ -78,7 +78,8 @@ class RuntimeCleanlinessTests(unittest.TestCase):
         self.assertEqual(report.unexpected_volumes, (orphan_volume,))
         self.assertEqual(report.unexpected_networks, (network_name_for_session(orphan_id),))
         payload = report.to_api_payload()
-        self.assertEqual(payload["clean"], False)
+        self.assertNotIn("clean", payload)
+        self.assertEqual(set(payload), {"unexpectedContainers", "unexpectedVolumes", "unexpectedNetworks"})
 
     def test_empty_expected_set_detects_every_per_session_resource(self) -> None:
         orphan_id = "cmleftover1234567890"
