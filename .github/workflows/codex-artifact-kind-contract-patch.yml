@@ -1,0 +1,40 @@
+name: codex-artifact-kind-contract-patch
+
+on:
+  push:
+    branches:
+      - codex/artifact-storage-foundation
+    paths:
+      - .github/workflows/codex-artifact-kind-contract-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/artifact-storage-foundation
+      - name: Align HTTP artifact kind validation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/api/src/server.ts')
+          text = path.read_text()
+          old = "kind:z.string().regex(/^[A-Za-z0-9._-]{1,32}$/).default('result')"
+          new = "kind:z.string().regex(/^(?!\\.{1,2}$)[A-Za-z0-9._-]{1,32}$/).default('result')"
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one artifact-kind schema, found {count}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Commit guarded route validation update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/api/src/server.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(storage): align artifact kind API validation"
+          git push origin HEAD:codex/artifact-storage-foundation
