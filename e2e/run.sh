@@ -104,3 +104,6 @@ gpubnb-agent setup --api-url "http://localhost:${API_PORT}" >/dev/null || true
 
 echo "--- 5. real wallet auth, pairing, link, agent start ---"
 node run.cjs setup "http://localhost:${API_PORT}" "$DATABASE_URL"
+
+echo "--- 6. exact per-session Docker cleanup proof ---"
+node verify-runtime-cleanup.cjs "$DATABASE_URL"
