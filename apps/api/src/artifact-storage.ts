@@ -14,7 +14,9 @@ export class ArtifactStorageError extends Error {
 }
 
 export function validateArtifactKind(kind: string): string {
-  if (!ARTIFACT_KIND_RE.test(kind)) throw new ArtifactStorageError('invalid_artifact_kind');
+  if (!ARTIFACT_KIND_RE.test(kind) || kind === '.' || kind === '..') {
+    throw new ArtifactStorageError('invalid_artifact_kind');
+  }
   return kind;
 }
 
