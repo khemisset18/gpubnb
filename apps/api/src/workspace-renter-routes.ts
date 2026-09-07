@@ -287,7 +287,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
     if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
-    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
+    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id, requestId: request.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
 
@@ -414,7 +414,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
     if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
-    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
+    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id, requestId: request.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
 
@@ -538,7 +538,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
     if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
-    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
+    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id, requestId: request.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
 
@@ -662,7 +662,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
     if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
-    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
+    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id, requestId: request.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
 
@@ -786,7 +786,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
     if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
-    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
+    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id, requestId: request.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
 
@@ -913,7 +913,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
     if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
-    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
+    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id, requestId: request.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
 
@@ -1038,7 +1038,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
     if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
-    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
+    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id, requestId: request.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
 
@@ -1134,7 +1134,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!policy.allowed) return reply.code(409).send({ error: policy.code.toLowerCase() });
     const connection = safeConnection(row.connectionMetadata);
     if (!connection.ready || !connection.gatewayPath || !isWorkspaceGatewayLive(row.gatewayLastSeenAt)) return reply.code(409).send({ error: 'workspace_gateway_not_ready' });
-    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id });
+    const grant = await issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id, requestId: request.id });
     return { ...grant, openPath: `${connection.gatewayPath}?grant=${encodeURIComponent(grant.token)}` };
   });
 }
