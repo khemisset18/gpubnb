@@ -1,0 +1,38 @@
+name: codex-agent-resume-state-adjust
+
+on:
+  push:
+    branches:
+      - codex/agent-resume-state-boundary
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/agent-resume-state-boundary
+      - name: Preserve valid resume sequence while ignoring non-authoritative fields
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('agent/gpubnb_agent/control_channel.py')
+          text = path.read_text()
+          old = '''    if set(raw) != CONTROL_STATE_KEYS or raw.get("schemaVersion") != 1:\n        return 0, []\n    value = raw.get("lastAckedCommandSequence")\n'''
+          new = '''    if raw.get("schemaVersion") != 1:\n        return 0, []\n    value = raw.get("lastAckedCommandSequence")\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one schema block, found {text.count(old)}')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+      - name: Commit guarded production adjustment
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add agent/gpubnb_agent/control_channel.py
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(agent): preserve valid resume sequence on extra local fields"
+          git push origin HEAD:codex/agent-resume-state-boundary
