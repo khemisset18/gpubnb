@@ -50,7 +50,16 @@ function decodeS3StorageKey(storageKey: string, expectedBucket: string): string 
   const bucket = encoded.slice(0, slash);
   const objectKey = encoded.slice(slash + 1);
   if (bucket !== expectedBucket) throw new ArtifactStorageError('artifact_bucket_mismatch');
-  if (!objectKey || objectKey.includes('\\0') || objectKey.startsWith('/') || objectKey.includes('..')) {
+  if (!objectKey || objectKey.includes('\0')) throw new ArtifactStorageError('invalid_artifact_storage_key');
+  const parts = objectKey.split('/');
+  if (parts.length !== 3) throw new ArtifactStorageError('invalid_artifact_storage_key');
+  const [jobId, kind, sha256] = parts;
+  try {
+    if (buildArtifactObjectKey(jobId!, kind!, sha256!) !== objectKey) {
+      throw new ArtifactStorageError('invalid_artifact_storage_key');
+    }
+  } catch (error) {
+    if (error instanceof ArtifactStorageError && error.code === 'invalid_artifact_storage_key') throw error;
     throw new ArtifactStorageError('invalid_artifact_storage_key');
   }
   return objectKey;
@@ -65,7 +74,7 @@ export class FilesystemArtifactStorage implements ArtifactStorage {
   }
 
   private resolveObjectKey(objectKey: string): string {
-    if (!objectKey || path.isAbsolute(objectKey) || objectKey.includes('\\0')) {
+    if (!objectKey || path.isAbsolute(objectKey) || objectKey.includes('\0')) {
       throw new ArtifactStorageError('invalid_artifact_storage_key');
     }
     const resolved = path.resolve(this.root, objectKey);
