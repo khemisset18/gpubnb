@@ -355,9 +355,12 @@ this pass, not rebuilt. Full writeup: `docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md`
   authenticated command channel, which exists in the code but is disabled
   at 0% rollout by an earlier, separate product decision — out of scope to
   build safely in this pass.
-- The diagnostic does not verify runtime-level container/network/volume
-  cleanup on the agent (only the DB-bookkeeping `allocation` check) — would
-  need new agent-side Docker introspection.
+- Runtime-level container/network/volume cleanup is now verified by the
+  signed, read-only Agent 0.6.3 `runtimeCleanup` diagnostic proof (see
+  `docs/RUNTIME_CLEANLINESS_DIAGNOSTIC.md`). The remaining limitation is
+  remediation: the diagnostic intentionally does not mutate Docker state;
+  automatic remote cleanup still requires the separately-qualified Machine
+  Command Gateway rollout.
 - Under genuine simultaneous diagnostic-result submissions, Prisma's
   interactive-transaction pool can occasionally surface a generic timeout
   instead of a clean 409 — data integrity is never at risk (Prisma keeps the
