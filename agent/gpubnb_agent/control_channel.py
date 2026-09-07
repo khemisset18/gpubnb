@@ -280,7 +280,7 @@ def _load_terminal_resume_state() -> tuple[int, list[dict[str, Any]]]:
     raw = load_control_channel_state()
     if not raw:
         return 0, []
-    if set(raw) != CONTROL_STATE_KEYS or raw.get("schemaVersion") != 1:
+    if raw.get("schemaVersion") != 1:
         return 0, []
     value = raw.get("lastAckedCommandSequence")
     if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= MAX_SEQUENCE:
