@@ -6,6 +6,7 @@ on:
     paths:
       - 'apps/web/**'
       - 'apps/api/**'
+      - 'deploy/**'
       - 'services/edge/**'
       - 'scripts/generate-web-build-info.mjs'
       - 'netlify.toml'
@@ -15,6 +16,7 @@ on:
     paths:
       - 'apps/web/**'
       - 'apps/api/**'
+      - 'deploy/**'
       - 'services/edge/**'
       - 'scripts/generate-web-build-info.mjs'
       - 'netlify.toml'
@@ -88,6 +90,38 @@ jobs:
         run: |
           set -euo pipefail
           test "$(docker image inspect gpubnb-api:deployment-check --format '{{.Config.User}}')" = 'app'
+
+  runtime-topology:
+    name: Runtime process topology
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate required provider-neutral process roles
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const topology = JSON.parse(fs.readFileSync('deploy/runtime-processes.json', 'utf8'));
+          const processes = topology.processes || {};
+          const required = {
+            'database-migrate': ['one-shot', './node_modules/.bin/prisma migrate deploy'],
+            'api': ['service', 'node dist/server.js'],
+            'delivery-worker': ['worker', 'node dist/delivery-worker.js'],
+          };
+          for (const [name, [kind, command]] of Object.entries(required)) {
+            if (!processes[name]) throw new Error(`missing runtime process: ${name}`);
+            if (processes[name].kind !== kind) throw new Error(`wrong kind for ${name}`);
+            if (processes[name].command !== command) throw new Error(`wrong command for ${name}`);
+          }
+          if (processes.api.healthPath !== '/ready') throw new Error('api /ready health check required');
+          const before = new Set(processes['database-migrate'].requiredBefore || []);
+          if (!before.has('api') || !before.has('delivery-worker')) throw new Error('migrations must precede api and delivery-worker');
+          if (/onrender\.com|render\.yaml|railway|heroku|fly\.io/i.test(JSON.stringify(topology))) throw new Error('provider-specific runtime topology');
+          NODE
+          grep -Fq '"start": "node dist/server.js"' apps/api/package.json
+          grep -Fq '"start:delivery": "node dist/delivery-worker.js"' apps/api/package.json
+          grep -Fq 'delivery_worker_started' apps/api/src/delivery-worker.ts
 
   configuration:
     name: Deployment configuration safety
