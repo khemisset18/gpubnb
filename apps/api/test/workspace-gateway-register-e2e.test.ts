@@ -265,7 +265,7 @@ test('gateway register is the only thing that makes a Developer workspace openab
 
   // --- 4. One-time bootstrap: the same workspace grant can authenticate only once. ---
   const firstOpen = await app.inject({ method: 'GET', url: openPath });
-  assert.equal(firstOpen.statusCode, 302, JSON.stringify(firstOpen.json()));
+  assert.equal(firstOpen.statusCode, 302);
   assert.ok(firstOpen.headers['set-cookie'], 'first grant consumption must establish the scoped gateway cookie');
   const replayOpen = await app.inject({ method: 'GET', url: openPath });
   assert.equal(replayOpen.statusCode, 401);
