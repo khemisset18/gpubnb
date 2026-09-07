@@ -44,6 +44,7 @@ test('no new Render API/gateway hardcodes are added while legacy deployment drif
   const legacyLocations = [
     '.github/workflows/deployment-readiness.yml',
     'apps/web/config.js',
+    'apps/web/netlify.toml',
     'apps/web/workspace-developer-flow.test.js',
     'netlify.toml',
     'scripts/generate-web-build-info.mjs',
