@@ -1,0 +1,65 @@
+name: codex-s3-storage-wireup
+
+on:
+  push:
+    branches:
+      - codex/supabase-s3-artifact-storage
+    paths:
+      - .github/workflows/codex-s3-storage-wireup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/supabase-s3-artifact-storage
+
+      - name: Wire artifact storage configuration and server
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          config = Path('apps/api/src/config.ts')
+          text = config.read_text()
+          old = "  FILE_STORAGE_DIR: z.string().default('./data/artifacts'),\n  MAX_ARTIFACT_BYTES: z.coerce.number().int().min(1024).max(500_000_000).default(104_857_600),"
+          new = "  FILE_STORAGE_DIR: z.string().default('./data/artifacts'),\n  MAX_ARTIFACT_BYTES: z.coerce.number().int().min(1024).max(500_000_000).default(104_857_600),\n  ARTIFACT_STORAGE_BACKEND: z.enum(['filesystem', 's3']).default('filesystem'),\n  ARTIFACT_S3_ENDPOINT: z.string().url().optional(),\n  ARTIFACT_S3_REGION: z.string().min(1).max(64).default('local'),\n  ARTIFACT_S3_BUCKET: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{1,62}$/).optional(),\n  ARTIFACT_S3_ACCESS_KEY_ID: z.string().min(8).optional(),\n  ARTIFACT_S3_SECRET_ACCESS_KEY: z.string().min(16).optional(),"
+          if text.count(old) != 1:
+              raise SystemExit(f'config storage marker count={text.count(old)}')
+          text = text.replace(old, new, 1)
+          marker = "new PublicKey(config.PLATFORM_WALLET);"
+          addition = """new PublicKey(config.PLATFORM_WALLET);\n\nif (config.ARTIFACT_STORAGE_BACKEND === 's3') {\n  const missing = [\n    ['ARTIFACT_S3_ENDPOINT', config.ARTIFACT_S3_ENDPOINT],\n    ['ARTIFACT_S3_BUCKET', config.ARTIFACT_S3_BUCKET],\n    ['ARTIFACT_S3_ACCESS_KEY_ID', config.ARTIFACT_S3_ACCESS_KEY_ID],\n    ['ARTIFACT_S3_SECRET_ACCESS_KEY', config.ARTIFACT_S3_SECRET_ACCESS_KEY],\n  ].filter(([, value]) => !value).map(([name]) => name);\n  if (missing.length > 0) {\n    throw new Error(`S3 artifact storage requires: ${missing.join(', ')}`);\n  }\n}"""
+          if text.count(marker) != 1:
+              raise SystemExit(f'config validation marker count={text.count(marker)}')
+          config.write_text(text.replace(marker, addition, 1))
+
+          server = Path('apps/api/src/server.ts')
+          text = server.read_text()
+          old_import = "import { FilesystemArtifactStorage } from './artifact-storage.js';"
+          new_import = "import { FilesystemArtifactStorage, RoutedArtifactStorage, S3ArtifactStorage } from './artifact-storage.js';"
+          if text.count(old_import) != 1:
+              raise SystemExit(f'server import marker count={text.count(old_import)}')
+          text = text.replace(old_import, new_import, 1)
+          old_init = "const artifactStorage=new FilesystemArtifactStorage(config.FILE_STORAGE_DIR);"
+          new_init = "const filesystemArtifactStorage=new FilesystemArtifactStorage(config.FILE_STORAGE_DIR);const s3ArtifactStorage=config.ARTIFACT_STORAGE_BACKEND==='s3'?new S3ArtifactStorage({endpoint:config.ARTIFACT_S3_ENDPOINT!,region:config.ARTIFACT_S3_REGION,bucket:config.ARTIFACT_S3_BUCKET!,accessKeyId:config.ARTIFACT_S3_ACCESS_KEY_ID!,secretAccessKey:config.ARTIFACT_S3_SECRET_ACCESS_KEY!}):undefined;const artifactStorage=new RoutedArtifactStorage(s3ArtifactStorage??filesystemArtifactStorage,filesystemArtifactStorage,s3ArtifactStorage);"
+          if text.count(old_init) != 1:
+              raise SystemExit(f'server init marker count={text.count(old_init)}')
+          server.write_text(text.replace(old_init, new_init, 1))
+          PY
+
+      - name: Refresh locked dependencies
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          npm --prefix apps/api install --package-lock-only --ignore-scripts
+
+      - name: Commit guarded S3 wireup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/api/src/config.ts apps/api/src/server.ts package-lock.json apps/api/package-lock.json
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(storage): wire configurable S3 artifact backend"
+          git push origin HEAD:codex/supabase-s3-artifact-storage
