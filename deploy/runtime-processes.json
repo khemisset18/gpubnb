@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "image": {
+    "dockerfile": "apps/api/Dockerfile",
+    "buildContext": ".",
+    "runtimeUser": "app"
+  },
+  "processes": {
+    "database-migrate": {
+      "kind": "one-shot",
+      "command": "./node_modules/.bin/prisma migrate deploy",
+      "requiredBefore": ["api", "delivery-worker"]
+    },
+    "api": {
+      "kind": "service",
+      "command": "node dist/server.js",
+      "healthPath": "/ready",
+      "requires": ["postgres", "redis"],
+      "responsibilities": [
+        "http-api",
+        "agent-api",
+        "workspace-gateway",
+        "reconciliation-fallback",
+        "offline-and-stale-job-sweeps"
+      ]
+    },
+    "delivery-worker": {
+      "kind": "worker",
+      "command": "node dist/delivery-worker.js",
+      "requires": ["postgres", "redis"],
+      "responsibilities": [
+        "outbox-delivery",
+        "machine-command-delivery",
+        "development-booking-reconciliation"
+      ]
+    }
+  },
+  "dependencies": {
+    "postgres": {
+      "configuration": "DATABASE_URL",
+      "durable": true
+    },
+    "redis": {
+      "configuration": "REDIS_URL",
+      "durable": false,
+      "requiredSemantics": [
+        "ttl",
+        "getdel",
+        "lua",
+        "streams"
+      ]
+    }
+  }
+}
