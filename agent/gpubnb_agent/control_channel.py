@@ -32,6 +32,7 @@ MAX_COMMAND_PAYLOAD_BYTES = 48 * 1024
 MAX_COMMAND_LIFETIME_MS = 15 * 60 * 1000
 MAX_CLOCK_SKEW_MS = 2 * 60 * 1000
 RESULT_CACHE_SIZE = 64
+MAX_SEQUENCE = 9_223_372_036_854_775_807
 ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{8,160}$")
 DNS_RE = re.compile(r"^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 DETAIL_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
@@ -241,7 +242,7 @@ def validate_command(message: dict[str, Any], machine_id: str, now_ms: int | Non
     if kind not in KNOWN_KINDS:
         raise ControlChannelError("control_command_kind_invalid")
     sequence, issued, expires = raw.get("sequence"), raw.get("issuedAtMs"), raw.get("expiresAtMs")
-    if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence <= 0:
+    if isinstance(sequence, bool) or not isinstance(sequence, int) or not 0 < sequence <= MAX_SEQUENCE:
         raise ControlChannelError("control_command_sequence_invalid")
     if any(isinstance(v, bool) or not isinstance(v, int) for v in (issued, expires)):
         raise ControlChannelError("control_command_time_invalid")
@@ -271,8 +272,6 @@ def reconnect_delay(attempt: int, random_value: float | None = None) -> float:
     return max(0.25, ceiling * sample)
 
 
-MAX_SEQUENCE = 9_223_372_036_854_775_807
-CONTROL_STATE_KEYS = {"schemaVersion", "lastAckedCommandSequence", "terminalResults"}
 CONTROL_RESULT_KEYS = {"commandId", "sequence", "status", "detailCode"}
 
 
