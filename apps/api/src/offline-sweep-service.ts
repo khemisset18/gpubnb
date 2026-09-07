@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { runBookingTransaction } from './booking-transaction-retry.js';
 import { buildOfflineSweepPlan, heartbeatCutoff } from './offline-sweep.js';
+import { tryTransactionAdvisoryLock } from './transaction-advisory-lock.js';
 
 const ACTIVE_BOOKING_STATUSES = [
   BookingStatus.FUNDED,
@@ -49,6 +50,16 @@ export type OfflineSweepResult = {
   paymentsPendingSettlement: number;
 };
 
+const emptyOfflineSweepResult = (cutoff: Date): OfflineSweepResult => ({
+  cutoff,
+  machinesOffline: 0,
+  listingsHidden: 0,
+  bookingsDegraded: 0,
+  sessionsFailed: 0,
+  jobsCancelled: 0,
+  paymentsPendingSettlement: 0,
+});
+
 /**
  * Applies the authoritative offline transition in one serializable transaction.
  *
@@ -67,7 +78,13 @@ export async function sweepOfflineMachines(
   // Every operation in this callback is a database read/write. Replaying after a
   // transient Serializable abort is therefore safer than surfacing a one-off sweep
   // failure that leaves machine/listing/session state temporarily divergent.
+  // The transaction-scoped advisory lock also makes this safe when several API or
+  // worker replicas run the scheduler at the same time.
   return runBookingTransaction(db, async tx => {
+    if (!await tryTransactionAdvisoryLock(tx, 'gpubnb:offline-sweep')) {
+      return emptyOfflineSweepResult(cutoff);
+    }
+
     const machines = await tx.machine.findMany({
       where: {
         connectivity: MachineConnectivity.ONLINE,
@@ -77,17 +94,7 @@ export async function sweepOfflineMachines(
     });
     const machineIds = machines.map(machine => machine.id);
 
-    if (machineIds.length === 0) {
-      return {
-        cutoff,
-        machinesOffline: 0,
-        listingsHidden: 0,
-        bookingsDegraded: 0,
-        sessionsFailed: 0,
-        jobsCancelled: 0,
-        paymentsPendingSettlement: 0,
-      };
-    }
+    if (machineIds.length === 0) return emptyOfflineSweepResult(cutoff);
 
     const [bookings, sessions, jobs] = await Promise.all([
       tx.booking.findMany({
