@@ -1,0 +1,81 @@
+name: codex-workspace-observability-wireup
+
+on:
+  push:
+    branches:
+      - codex/workspace-observability-correlation
+    paths:
+      - .github/workflows/codex-workspace-observability-wireup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/workspace-observability-correlation
+      - name: Wire workspace correlation context
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          renter_path = Path('apps/api/src/workspace-renter-routes.ts')
+          renter = renter_path.read_text()
+          old = "issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id })"
+          count = renter.count(old)
+          if count < 1:
+              raise SystemExit(f'workspace grant marker count={count}')
+          renter = renter.replace(old, "issueWorkspaceAccessGrant(redis, { userId: session.userId, bookingId, sessionId: row.id, requestId: request.id })")
+          renter_path.write_text(renter)
+
+          gateway_path = Path('apps/api/src/workspace-gateway.ts')
+          gateway = gateway_path.read_text()
+
+          old = "select:{id:true,renterId:true,machineId:true,bookingId:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}"
+          new = "select:{id:true,renterId:true,machineId:true,bookingId:true,jobId:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}"
+          if gateway.count(old) != 1:
+              raise SystemExit(f'active session select marker count={gateway.count(old)}')
+          gateway = gateway.replace(old, new, 1)
+
+          old = "JSON.stringify({userId:row.renterId,sessionId})"
+          new = "JSON.stringify({userId:row.renterId,sessionId,accessRequestId:consumed.requestId})"
+          if gateway.count(old) != 1:
+              raise SystemExit(f'gateway browser session marker count={gateway.count(old)}')
+          gateway = gateway.replace(old, new, 1)
+
+          old = "const browser=JSON.parse(raw) as {userId:string;sessionId:string};"
+          new = "const browser=JSON.parse(raw) as {userId:string;sessionId:string;accessRequestId?:string};"
+          if gateway.count(old) != 1:
+              raise SystemExit(f'browser parse marker count={gateway.count(old)}')
+          gateway = gateway.replace(old, new, 1)
+
+          old = "const openRequestId=crypto.randomUUID();let browserClosed=false;let browserBackpressureSince=0;\n        const browserPending=new BrowserPendingBudget();\n        app.log.info({event:'workspace_gateway_browser_connected',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket connected');"
+          new = "const openRequestId=crypto.randomUUID();let browserClosed=false;let browserBackpressureSince=0;\n        const browserPending=new BrowserPendingBudget();\n        const gatewayLog=app.log.child({accessRequestId:browser.accessRequestId,bookingId:row.bookingId,jobId:row.jobId,workspaceSessionId:sessionId,machineId:row.machineId,channelId,channel:channelLogId,openRequestId});\n        gatewayLog.info({event:'workspace_gateway_browser_connected'},'workspace gateway browser websocket connected');"
+          if gateway.count(old) != 1:
+              raise SystemExit(f'gateway correlation insertion marker count={gateway.count(old)}')
+          gateway = gateway.replace(old, new, 1)
+
+          start = gateway.find("const gatewayLog=app.log.child(")
+          end = gateway.find("      });\n    }catch(error){", start)
+          if start < 0 or end < 0:
+              raise SystemExit('gateway callback bounds missing')
+          block = gateway[start:end]
+          block = block.replace('app.log.', 'gatewayLog.')
+          # The first child construction must remain app.log.child, not self-reference.
+          block = block.replace('const gatewayLog=gatewayLog.child(', 'const gatewayLog=app.log.child(', 1)
+          gateway = gateway[:start] + block + gateway[end:]
+          gateway_path.write_text(gateway)
+          PY
+      - name: Commit observability wiring
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/api/src/workspace-renter-routes.ts apps/api/src/workspace-gateway.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(observability): correlate workspace access and gateway logs"
+          git push origin HEAD:codex/workspace-observability-correlation
