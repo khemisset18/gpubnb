@@ -1,16 +1,15 @@
 [build]
   publish = "apps/web"
   functions = "netlify/functions"
-  command = "node scripts/generate-web-build-info.mjs && test -f apps/web/index.html && test -f apps/web/app.js && test -f apps/web/styles.css && test -f apps/web/config.js && test -f apps/web/portal.css && test -f apps/web/portal.js && test -f apps/web/host-downloads.js && test -f apps/web/dashboard.html && test -f apps/web/host-install.html && test -f netlify/functions/host-download.mjs"
+  command = "node scripts/generate-web-build-info.mjs && test -f apps/web/index.html && test -f apps/web/app.js && test -f apps/web/styles.css && test -f apps/web/config.js && test -f apps/web/_redirects && test -f apps/web/_headers && test -f apps/web/portal.css && test -f apps/web/portal.js && test -f apps/web/host-downloads.js && test -f apps/web/dashboard.html && test -f apps/web/host-install.html && test -f netlify/functions/host-download.mjs"
 
 [build.environment]
   NODE_VERSION = "22"
 
-[[redirects]]
-  from = "/api/*"
-  to = "https://gpubnb.onrender.com/:splat"
-  status = 200
-  force = true
+# /api proxy routing and the CSP are generated at build time into apps/web/_redirects
+# and apps/web/_headers from validated GPUBNB_API_ORIGIN / GPUBNB_GATEWAY_ORIGIN.
+# This keeps provider names out of the repository and makes missing production
+# origins fail the build instead of silently falling back to a stale host.
 
 [[redirects]]
   from = "/dashboard"
@@ -37,7 +36,6 @@
     Strict-Transport-Security = "max-age=31536000; includeSubDomains"
     Cross-Origin-Opener-Policy = "same-origin"
     Cross-Origin-Resource-Policy = "same-origin"
-    Content-Security-Policy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://gpubnb.onrender.com https://api.devnet.solana.com https://*.supabase.co wss://*.supabase.co; upgrade-insecure-requests"
 
 [[headers]]
   for = "/*.html"

@@ -2,7 +2,7 @@
 
 Last audited: 2026-09-07.
 
-This document separates **confirmed repository facts** from **deployment assumptions**. It exists because the repository currently mixes Supabase, Upstash, Netlify, Render and local/Caddy references from different deployment eras.
+This document separates **confirmed repository facts** from **deployment assumptions**. It exists because the repository contains Supabase, Redis-compatible, Netlify and historical provider references from different deployment eras.
 
 ## Confirmed from the current repository
 
@@ -10,7 +10,8 @@ This document separates **confirmed repository facts** from **deployment assumpt
 
 - Static frontend lives in `apps/web`.
 - The repository contains Netlify configuration in `netlify.toml`.
-- `apps/web/config.js`, `netlify.toml`, `scripts/generate-web-build-info.mjs`, architecture tests and deployment-readiness checks still contain `gpubnb.onrender.com` assumptions.
+- Active browser/build configuration is provider-neutral: the hosted build requires `GPUBNB_API_ORIGIN`, accepts an optional `GPUBNB_GATEWAY_ORIGIN`, and generates the published `_redirects`, `_headers` and gateway browser config from those values.
+- Hosted builds fail closed if the API origin is missing, invalid or not HTTPS. No hosting-vendor URL is an approved browser fallback.
 
 ### Identity and database
 
@@ -20,14 +21,15 @@ This document separates **confirmed repository facts** from **deployment assumpt
 
 ### Redis/state coordination
 
-- The API still requires `REDIS_URL` and uses Redis for sessions, one-time challenges/nonces, workspace gateway relay queues, access grants and other coordination state.
-- Historical deployment docs explicitly describe Upstash as the Redis provider.
+- The API still requires `REDIS_URL` and uses Redis for sessions, one-time challenges/nonces, workspace gateway relay queues, access grants, distributed scheduler leases and other coordination state.
+- Historical deployment docs explicitly describe Upstash as one Redis provider used by GPUbnb.
 - No repository evidence currently proves that Redis state has been migrated into Supabase.
 
 ### Application/API runtime
 
 - The production application code is still a long-lived Node/Fastify API in `apps/api`.
-- The same runtime owns authenticated agent endpoints, background reconciliation loops, workspace gateway HTTP/WebSocket relay, job leases and lifecycle transitions.
+- The runtime owns authenticated agent endpoints, background reconciliation loops, workspace gateway HTTP/WebSocket relay, job leases and lifecycle transitions.
+- Background reconciliation and sweeps are fenced by Redis-backed distributed task leases, so correctness no longer depends on one API process.
 - There is no `supabase/functions` tree and repository search finds no deployed Supabase Edge Function implementation replacing this Fastify service.
 
 ### GPU host runtime
@@ -37,13 +39,13 @@ This document separates **confirmed repository facts** from **deployment assumpt
 
 ## What is NOT safe to assume
 
-Do not treat any hosting provider file as the live production source of truth merely because it exists in the repository.
+Do not treat any hosting-provider file as the live production source of truth merely because it exists in the repository.
 
 In particular:
 
-- `render.yaml` proves that Render deployment support exists in Git history; it does **not** prove the current account still uses Render.
+- `render.yaml` is a legacy provider deployment artifact; it does **not** prove the current account still uses Render and is not the authoritative runtime topology.
 - Supabase PostgreSQL/Auth usage does **not** prove the Fastify/WebSocket API has been migrated to Supabase-hosted Edge Functions.
-- `gpubnb.onrender.com` hard-coding in the frontend proves configuration drift if the live API moved elsewhere; it must not be used as evidence that Render is still authoritative.
+- Browser/API/gateway origins come from deployment build configuration. Their configured values must be verified against the live deployment rather than inferred from repository history.
 
 ## Provider-neutral target architecture
 
@@ -52,10 +54,11 @@ Keep responsibilities explicit:
 1. **Frontend** — static web hosting/CDN.
 2. **Auth** — Supabase Auth and Phantom wallet auth.
 3. **Database** — Supabase PostgreSQL via a pooled server connection.
-4. **Ephemeral coordination** — Redis-compatible service while the current relay/session/challenge design depends on Redis semantics.
-5. **API/control plane** — a persistent runtime capable of running the Fastify service, background loops and authenticated agent APIs.
-6. **Interactive workspace data plane** — a persistent WebSocket-capable runtime with reconnect/resume semantics suitable for rentals lasting many minutes.
-7. **GPU host** — Windows/Linux agent + Docker/NVIDIA runtime on provider machines.
+4. **Ephemeral coordination** — Redis-compatible service while the current relay/session/challenge/lease design depends on Redis semantics.
+5. **API/control plane** — a persistent runtime capable of running the Fastify service, authenticated agent APIs and lifecycle operations.
+6. **Delivery/background processing** — an explicitly deployed worker process, using the same durable database and Redis coordination but not assumed to exist merely because an API container exists.
+7. **Interactive workspace data plane** — a persistent WebSocket-capable runtime with reconnect/resume semantics suitable for rentals lasting many minutes.
+8. **GPU host** — Windows/Linux agent + Docker/NVIDIA runtime on provider machines.
 
 The API/control-plane provider is intentionally unnamed here. The deployment target must be supplied as configuration rather than embedded into browser code or tests.
 
@@ -74,18 +77,20 @@ Any production deployment must preserve all of these regardless of provider:
 - Redis challenge/signature verification must remain outside retryable database callbacks.
 - Interactive billing starts only on the first authenticated upstream workspace WebSocket frame.
 - `canOpen` must require a fresh machine heartbeat, a valid workspace session, registered gateway metadata and fresh gateway liveness.
-- No browser-visible production URL should be hard-coded to a hosting vendor.
+- No browser-visible production URL may be hard-coded to a hosting vendor.
+- Hosted web builds must fail closed when required public origins are absent or insecure.
 - No deployment-specific file may be treated as authoritative unless the live deployment target is verified.
+- API and delivery-worker process roles must both be represented in the provider-neutral deployment contract before the legacy provider topology is deleted.
 
 ## Migration rule
 
-Before removing Render (or any other provider) from the repository, first prove where the following live responsibilities run today:
+The active frontend no longer depends on a Render URL, but removing the remaining legacy provider deployment artifact still requires proof of the live runtime responsibilities. Before deleting `render.yaml` (or another provider manifest), first prove where these run today:
 
 - public Fastify API origin;
 - workspace WebSocket gateway origin;
-- background reconciliation/sweep process;
+- delivery worker;
+- background reconciliation/sweep authority;
 - Redis endpoint/provider;
-- Prisma `DATABASE_URL` target;
-- frontend API/gateway configuration.
+- Prisma `DATABASE_URL` target.
 
-Only after all six are verified should legacy provider files, redirects and CI assertions be removed. This prevents a cleanup PR from silently disconnecting PC A agents or PC B workspace traffic.
+Only after those responsibilities are represented by a provider-neutral deployment contract and verified in the live environment should the legacy provider manifest be deleted. This prevents a repository cleanup from silently disconnecting PC A agents, PC B workspace traffic or background delivery processing.

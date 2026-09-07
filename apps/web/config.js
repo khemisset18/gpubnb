@@ -1,9 +1,9 @@
-// URL publique de l’API, sans slash final. Laisser vide uniquement si le frontend et l’API partagent le même domaine.
+// URL publique de l’API vue par le navigateur. En production, le build garde
+// `/api` et génère un proxy Netlify vers GPUBNB_API_ORIGIN.
 window.GPUBNB_API_URL = window.GPUBNB_API_URL || "/api";
-// Interactive workspaces need a real WebSocket-capable origin. The regular API
-// can stay behind Netlify's /api rewrite, but the browser must leave that rewrite
-// before following gateway redirects or opening the code-server WebSocket.
-window.GPUBNB_GATEWAY_URL = window.GPUBNB_GATEWAY_URL || "https://gpubnb.onrender.com";
+// Le build remplace cette valeur de développement par GPUBNB_GATEWAY_ORIGIN
+// (ou GPUBNB_API_ORIGIN lorsque API et gateway partagent le même runtime).
+window.GPUBNB_GATEWAY_URL = window.GPUBNB_GATEWAY_URL || "http://localhost:3000";
 window.GPUBNB_CONFIG = {
   apiBase: window.GPUBNB_API_URL,
   workspaceGatewayBase: window.GPUBNB_GATEWAY_URL,

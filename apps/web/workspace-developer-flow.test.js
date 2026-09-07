@@ -133,26 +133,26 @@ test('preparationLabel describes GATEWAY_NOT_READY distinctly from a generic mes
 
 // D. "Ouvrir mon espace" utilise l'URL réellement retournée par l'API.
 test('resolveWorkspaceOpenUrl joins the gateway origin with exactly the server-provided openPath', () => {
-  const url = resolveWorkspaceOpenUrl('https://gpubnb.onrender.com', {
+  const url = resolveWorkspaceOpenUrl('https://gateway.example.test', {
     token: 'abc',
     expiresIn: 60,
     openPath: '/workspace-gateway/cmabc123/connect?grant=abc',
   });
-  assert.equal(url, 'https://gpubnb.onrender.com/workspace-gateway/cmabc123/connect?grant=abc');
+  assert.equal(url, 'https://gateway.example.test/workspace-gateway/cmabc123/connect?grant=abc');
 });
 
 test('resolveWorkspaceOpenUrl tolerates a trailing slash on the configured gateway base', () => {
-  const url = resolveWorkspaceOpenUrl('https://gpubnb.onrender.com/', { openPath: '/workspace-gateway/x/connect' });
-  assert.equal(url, 'https://gpubnb.onrender.com/workspace-gateway/x/connect');
+  const url = resolveWorkspaceOpenUrl('https://gateway.example.test/', { openPath: '/workspace-gateway/x/connect' });
+  assert.equal(url, 'https://gateway.example.test/workspace-gateway/x/connect');
 });
 
 test('resolveWorkspaceOpenUrl refuses to fabricate a URL when the API omitted openPath', () => {
-  assert.throws(() => resolveWorkspaceOpenUrl('https://gpubnb.onrender.com', { token: 'abc' }), /workspace_access_response_invalid/);
+  assert.throws(() => resolveWorkspaceOpenUrl('https://gateway.example.test', { token: 'abc' }), /workspace_access_response_invalid/);
 });
 
 test('resolveWorkspaceOpenUrl refuses a non-relative openPath (defense in depth against a compromised/misbehaving API response)', () => {
   assert.throws(
-    () => resolveWorkspaceOpenUrl('https://gpubnb.onrender.com', { openPath: 'https://evil.example/x' }),
+    () => resolveWorkspaceOpenUrl('https://gateway.example.test', { openPath: 'https://evil.example/x' }),
     /workspace_access_response_invalid/,
   );
 });
