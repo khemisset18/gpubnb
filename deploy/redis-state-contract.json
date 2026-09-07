@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "classification": "control-plane-correctness-state",
+  "providerNeutral": true,
+  "durability": "ephemeral-with-durable-business-state-in-postgres",
+  "requiredCapabilities": [
+    "ttl",
+    "getdel",
+    "set-nx",
+    "lua",
+    "lists",
+    "streams"
+  ],
+  "stateClasses": [
+    {
+      "name": "authentication-nonces-and-one-time-grants",
+      "sourceFiles": [
+        "apps/api/src/auth.ts",
+        "apps/api/src/workspace-access.ts",
+        "apps/api/src/server.ts"
+      ],
+      "requiredSemantics": ["ttl", "getdel", "set-nx"],
+      "invariants": [
+        "a credential accepted once cannot be accepted a second time",
+        "expiration is enforced independently of application process lifetime"
+      ]
+    },
+    {
+      "name": "agent-request-anti-replay",
+      "sourceFiles": ["apps/api/src/security.ts"],
+      "requiredSemantics": ["ttl", "set-nx"],
+      "invariants": [
+        "the same signed request cannot win two concurrent verification attempts"
+      ]
+    },
+    {
+      "name": "machine-presence",
+      "sourceFiles": ["apps/api/src/machine-presence.ts"],
+      "requiredSemantics": ["ttl", "lua"],
+      "invariants": [
+        "claim and connection identity update are atomic",
+        "a stale connection cannot refresh another connection's presence"
+      ]
+    },
+    {
+      "name": "resource-and-scheduler-leases",
+      "sourceFiles": [
+        "apps/api/src/resource-lease.ts",
+        "apps/api/src/rental-resource-authority.ts",
+        "apps/api/src/distributed-task-lease.ts"
+      ],
+      "requiredSemantics": ["ttl", "set-nx", "lua"],
+      "invariants": [
+        "lease renewal verifies ownership before extending ttl",
+        "lease release verifies ownership before delete",
+        "fencing tokens prevent a stale owner from acting as the current owner"
+      ]
+    },
+    {
+      "name": "workspace-gateway-relay",
+      "sourceFiles": [
+        "apps/api/src/workspace-gateway.ts",
+        "apps/api/src/gateway-queue.ts"
+      ],
+      "requiredSemantics": ["ttl", "lua", "lists"],
+      "invariants": [
+        "relay queues remain bounded by item and byte budgets",
+        "dequeue accounting and queue expiry are maintained",
+        "workspace relay state is not treated as durable business history"
+      ]
+    },
+    {
+      "name": "outbox-stream-publication",
+      "sourceFiles": ["apps/api/src/delivery-worker.ts"],
+      "requiredSemantics": ["streams"],
+      "invariants": [
+        "Postgres remains the durable outbox authority",
+        "Redis stream publication is a delivery surface and can be rebuilt from durable state"
+      ]
+    }
+  ],
+  "migrationRules": [
+    "Do not replace Redis with plain Postgres CRUD or process memory.",
+    "A replacement must demonstrate atomic equivalents for every required semantic used by the migrated state class.",
+    "One-time credentials and anti-replay state must preserve consume-once behavior under concurrency.",
+    "Lease migrations must preserve ttl, ownership-checked renew/release and fencing.",
+    "Gateway queue migrations must preserve bounded queues and backpressure.",
+    "Durable audit and business lifecycle state belongs in Postgres; Redis is not the source of record for those domains.",
+    "Run fault and concurrency tests before changing REDIS_URL or removing Redis from a runtime role."
+  ]
+}
