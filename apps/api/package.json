@@ -10,6 +10,7 @@
     "start": "node dist/server.js",
     "start:delivery": "node dist/delivery-worker.js",
     "test": "tsx --test --test-concurrency=1 test/*.test.ts",
+    "artifacts:migrate:s3": "tsx scripts/migrate-artifacts-to-s3.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "lint:serializable-guard": "node scripts/check-serializable-guard.mjs",
