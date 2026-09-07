@@ -1,0 +1,51 @@
+name: codex-runtime-sweep-wireup
+
+on:
+  push:
+    branches:
+      - codex/runtime-scheduler-audit
+    paths:
+      - .github/workflows/codex-runtime-sweep-wireup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/runtime-scheduler-audit
+      - name: Patch server sweep authority
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('apps/api/src/server.ts')
+          s = p.read_text()
+          old = "sweeping=true;(async()=>{"
+          new = "sweeping=true;runWithDistributedTaskLease(redis,'api-sweep-tick',async()=>{"
+          if s.count(old) != 1:
+              raise SystemExit('sweep start marker mismatch')
+          s = s.replace(old, new, 1)
+          old = "})().catch(err=>app.log.error({err},'offline_sweep_failed')).finally(()=>{sweeping=false});},Math.max(config.HEARTBEAT_OFFLINE_SECONDS,30)*1000);"
+          new = "},{ttlMs:120_000,renewalMs:30_000}).then(lease=>{if(lease.status==='executed'&&lease.leaseLost)app.log.warn({task:'api-sweep-tick'},'distributed_task_lease_lost');}).catch(err=>app.log.error({err},'offline_sweep_failed')).finally(()=>{sweeping=false});},Math.max(config.HEARTBEAT_OFFLINE_SECONDS,30)*1000);"
+          if s.count(old) != 1:
+              raise SystemExit('sweep end marker mismatch')
+          s = s.replace(old, new, 1)
+          old = "// Render's free plan does not support the Background Worker service type (the delivery-worker\n// and sweep-scheduler processes defined in render.yaml fail to deploy on it — confirmed via a\n// failed blueprint sync: \"service type is not available for this plan\"). Until either a paid\n// plan or the two dedicated workers are available, the two reconciliation loops they'd normally\n// run run in-process here instead, on plain intervals (single process, so no distributed lock\n// is needed the way the dedicated sweep-scheduler needs one across multiple replicas)."
+          new = "// Reconciliation and sweep loops remain in-process for deployment compatibility.\n// Every shared background tick is fenced by Redis so multiple API replicas and the\n// delivery worker cannot accidentally duplicate the same scheduler authority."
+          if s.count(old) != 1:
+              raise SystemExit('provider comment marker mismatch')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Commit server sweep authority
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/api/src/server.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(runtime): fence background sweeps across replicas"
+          git push origin HEAD:codex/runtime-scheduler-audit
