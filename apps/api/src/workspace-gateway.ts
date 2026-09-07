@@ -156,7 +156,7 @@ async function authenticateAgent(db:PrismaClient,redis:Redis,machineId:string,re
   if(withBody)return false;
   return verifyAgentRequest(redis,machineId,machine.agentPublicKey,request.method,routePath,request.headers['x-agent-timestamp'],request.headers['x-agent-signature']);
 }
-async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.workspaceSession.findFirst({where:{id:sessionId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR}},select:{id:true,renterId:true,machineId:true,bookingId:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});}
+async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.workspaceSession.findFirst({where:{id:sessionId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR}},select:{id:true,renterId:true,machineId:true,bookingId:true,jobId:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});}
 
 // The commercial rental clock's one true start: a real upstream frame proven exchanged
 // between the container and the authenticated renter's browser (see the two call sites
@@ -198,7 +198,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   app.get('/workspace-gateway/:sessionId',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const grant=String((request.query as {grant?:string}).grant||'');const consumed=await consumeWorkspaceAccessGrant(redis,grant);
     if(!consumed||consumed.sessionId!==sessionId)return reply.code(401).send({error:'invalid_workspace_grant'});const row=await activeGatewaySession(db,sessionId);if(!row||row.renterId!==consumed.userId)return reply.code(409).send({error:'workspace_not_available'});
-    const browserToken=crypto.randomBytes(32).toString('base64url');const ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.floor((row.expiresAt.getTime()-Date.now())/1000)));await redis.set(gatewaySessionKey(browserToken),JSON.stringify({userId:row.renterId,sessionId}),'EX',ttl);
+    const browserToken=crypto.randomBytes(32).toString('base64url');const ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.floor((row.expiresAt.getTime()-Date.now())/1000)));await redis.set(gatewaySessionKey(browserToken),JSON.stringify({userId:row.renterId,sessionId,accessRequestId:consumed.requestId}),'EX',ttl);
     // Consuming a grant only authenticates the browser. Billing and the purchased
     // duration start later, after the agent proves that code-server exchanged a
     // real WebSocket frame with this authenticated browser.
@@ -208,7 +208,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     reply.setCookie(GATEWAY_COOKIE,browserToken,{httpOnly:true,secure:true,sameSite:'lax',path:`/workspace-gateway/${sessionId}`});return reply.redirect(`/workspace-gateway/${sessionId}/`);
   });
   app.all('/workspace-gateway/:sessionId/*',async(request,reply)=>{
-    const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const token=parseCookie(request.headers.cookie,GATEWAY_COOKIE);if(!token)return reply.code(401).send({error:'workspace_auth_required'});const raw=await redis.get(gatewaySessionKey(token));if(!raw)return reply.code(401).send({error:'workspace_session_expired'});const browser=JSON.parse(raw) as {userId:string;sessionId:string};if(browser.sessionId!==sessionId)return reply.code(403).send({error:'workspace_session_mismatch'});const row=await activeGatewaySession(db,sessionId);if(!row||row.renterId!==browser.userId)return reply.code(409).send({error:'workspace_not_available'});
+    const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const token=parseCookie(request.headers.cookie,GATEWAY_COOKIE);if(!token)return reply.code(401).send({error:'workspace_auth_required'});const raw=await redis.get(gatewaySessionKey(token));if(!raw)return reply.code(401).send({error:'workspace_session_expired'});const browser=JSON.parse(raw) as {userId:string;sessionId:string;accessRequestId?:string};if(browser.sessionId!==sessionId)return reply.code(403).send({error:'workspace_session_mismatch'});const row=await activeGatewaySession(db,sessionId);if(!row||row.renterId!==browser.userId)return reply.code(409).send({error:'workspace_not_available'});
     const suffix='/'+String((request.params as {'*'?:string})['*']||'');const query=request.url.includes('?')?'?'+request.url.split('?').slice(1).join('?'):'';const targetPath=`${suffix}${query}`;if(!safePath(targetPath))return reply.code(400).send({error:'invalid_gateway_path'});const body=request.rawBody??Buffer.alloc(0);if(body.length>10*1024*1024)return reply.code(413).send({error:'gateway_body_too_large'});
     const id=crypto.randomUUID();const relay:RelayRequest={id,sessionId,kind:'http',method:request.method,path:targetPath,headers:relayHeaders(request.headers as Record<string,unknown>),bodyBase64:body.toString('base64')};if(!await enqueueMachineRelay(redis,row.machineId,relay))return reply.code(503).send({error:'workspace_gateway_backpressure'});const result=await waitJson(redis,responseKey(id));if(!result)return reply.code(504).send({error:'workspace_gateway_timeout'});for(const [name,value] of Object.entries(result.headers||{})){if(SAFE_RESPONSE_HEADERS.has(name.toLowerCase()))reply.header(name,value);}if(result.error)return reply.code(502).send({error:'workspace_upstream_error'});return reply.code(Math.max(100,Math.min(599,result.status||502))).send(Buffer.from(result.bodyBase64||'','base64'));
   });
@@ -407,7 +407,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     try{
       const raw=await redis.get(gatewaySessionKey(token));
       if(!raw){app.log.warn({event:'workspace_gateway_upgrade_rejected',sessionId,reason:'cookie_expired'},'workspace gateway upgrade rejected');rejectWebSocketUpgrade(socket as Socket,401,'workspace_session_expired');return;}
-      const browser=JSON.parse(raw) as {userId:string;sessionId:string};
+      const browser=JSON.parse(raw) as {userId:string;sessionId:string;accessRequestId?:string};
       if(browser.sessionId!==sessionId){app.log.warn({event:'workspace_gateway_upgrade_rejected',sessionId,reason:'session_mismatch'},'workspace gateway upgrade rejected');rejectWebSocketUpgrade(socket as Socket,403,'workspace_session_mismatch');return;}
       const row=await activeGatewaySession(db,sessionId);
       if(!row||row.renterId!==browser.userId){app.log.warn({event:'workspace_gateway_upgrade_rejected',sessionId,reason:'workspace_unavailable'},'workspace gateway upgrade rejected');rejectWebSocketUpgrade(socket as Socket,409,'workspace_not_available');return;}
@@ -417,8 +417,9 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         const channelTtl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((row.expiresAt.getTime()-Date.now())/1000)));
         const openRequestId=crypto.randomUUID();let browserClosed=false;let browserBackpressureSince=0;
         const browserPending=new BrowserPendingBudget();
-        app.log.info({event:'workspace_gateway_browser_connected',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket connected');
-        ws.on('error',error=>app.log.warn({err:error,event:'workspace_gateway_browser_socket_error',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket error'));
+        const gatewayLog=app.log.child({accessRequestId:browser.accessRequestId,bookingId:row.bookingId,jobId:row.jobId,workspaceSessionId:sessionId,machineId:row.machineId,channelId,channel:channelLogId,openRequestId});
+        gatewayLog.info({event:'workspace_gateway_browser_connected'},'workspace gateway browser websocket connected');
+        ws.on('error',error=>gatewayLog.warn({err:error,event:'workspace_gateway_browser_socket_error',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket error'));
         // Keep queue ordering backward-compatible: browser frames may be queued as
         // soon as ws_open itself is enqueued. LPUSH/RPOP preserves ws_open before
         // ws_send, so legacy agents can still establish code-server and exchange
@@ -434,17 +435,17 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
           if(opened){
             if(opened.error||opened.status!==101)throw new Error(`workspace_upstream_open_failed:${opened.error||opened.status}`);
             await redis.set(wsUpstreamReadyKey(channelId),'1','EX',channelTtl);
-            app.log.info({event:'workspace_gateway_upstream_opened',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway upstream websocket opened');
+            gatewayLog.info({event:'workspace_gateway_upstream_opened',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway upstream websocket opened');
             return;
           }
           // Old agents do not answer ws_open. Preserve their previous behavior:
           // a signed first upstream frame proves the local WebSocket is alive.
           const legacyReady=await redis.get(wsUpstreamReadyKey(channelId));
           if(browserClosed)return;
-          if(legacyReady){app.log.info({event:'workspace_gateway_legacy_upstream_ready',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway legacy agent produced an upstream frame');return;}
+          if(legacyReady){gatewayLog.info({event:'workspace_gateway_legacy_upstream_ready',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway legacy agent produced an upstream frame');return;}
           throw new Error('workspace_upstream_open_timeout');
         });
-        void upstreamProbe.catch(error=>{if(browserClosed)return;app.log.error({err:error,event:'workspace_gateway_upstream_open_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway upstream websocket failed to open');if(ws.readyState===WebSocket.OPEN)ws.close(1011,'workspace upstream unavailable');});
+        void upstreamProbe.catch(error=>{if(browserClosed)return;gatewayLog.error({err:error,event:'workspace_gateway_upstream_open_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway upstream websocket failed to open');if(ws.readyState===WebSocket.OPEN)ws.close(1011,'workspace upstream unavailable');});
 
         let pumpBusy=false;
         const pump=setInterval(()=>{
@@ -452,7 +453,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
           if(ws.bufferedAmount>WS_BROWSER_BUFFERED_HIGH_WATER_BYTES){
             if(browserBackpressureSince===0)browserBackpressureSince=Date.now();
             if(Date.now()-browserBackpressureSince>WS_BROWSER_BACKPRESSURE_TIMEOUT_MS){
-              app.log.error({event:'workspace_gateway_browser_backpressure_timeout',sessionId,machineId:row.machineId,channel:channelLogId,bufferedAmount:ws.bufferedAmount},'workspace gateway browser backpressure timed out');
+              gatewayLog.error({event:'workspace_gateway_browser_backpressure_timeout',sessionId,machineId:row.machineId,channel:channelLogId,bufferedAmount:ws.bufferedAmount},'workspace gateway browser backpressure timed out');
               browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1013,'browser backpressure');
             }
             return;
@@ -470,31 +471,31 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
               if(ws.readyState===WebSocket.OPEN)ws.send(Buffer.from(parsed.dataBase64,'base64'),{binary:parsed.binary});
             }
           })()
-            .catch(error=>{app.log.error({err:error,event:'workspace_gateway_pump_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway websocket pump failed');if(ws.readyState===WebSocket.OPEN)ws.close(1011,'gateway relay failed');})
+            .catch(error=>{gatewayLog.error({err:error,event:'workspace_gateway_pump_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway websocket pump failed');if(ws.readyState===WebSocket.OPEN)ws.close(1011,'gateway relay failed');})
             .finally(()=>{pumpBusy=false;});
         },20);
         let browserSendChain:Promise<void>=setup.then(()=>undefined);
         ws.on('message',(data:WebSocket.Data,isBinary:boolean)=>{
           if(browserClosed)return;
           let frame:Buffer;
-          try{frame=websocketDataToBuffer(data);}catch(error){app.log.error({err:error,event:'workspace_gateway_browser_frame_invalid',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser frame invalid');browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1003,'unsupported websocket frame');return;}
+          try{frame=websocketDataToBuffer(data);}catch(error){gatewayLog.error({err:error,event:'workspace_gateway_browser_frame_invalid',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser frame invalid');browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1003,'unsupported websocket frame');return;}
           if(frame.length>WS_MAX_FRAME_BYTES||!browserPending.tryAcquire(frame.length)){
-            app.log.error({event:'workspace_gateway_browser_send_backpressure',sessionId,machineId:row.machineId,channel:channelLogId,frameBytes:frame.length,pending:browserPending.snapshot()},'workspace gateway browser send queue exceeded');
+            gatewayLog.error({event:'workspace_gateway_browser_send_backpressure',sessionId,machineId:row.machineId,channel:channelLogId,frameBytes:frame.length,pending:browserPending.snapshot()},'workspace gateway browser send queue exceeded');
             browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1013,'gateway backpressure');return;
           }
           const relay:RelayRequest={id:crypto.randomUUID(),sessionId,kind:'ws_send',channelId,dataBase64:frame.toString('base64'),binary:isBinary};
           const task=browserSendChain.then(async()=>{if(!await enqueueMachineRelay(redis,row.machineId,relay))throw new Error('workspace_machine_queue_backpressure');});
           browserSendChain=task.finally(()=>browserPending.release(frame.length)).catch(error=>{
-            app.log.error({err:error,event:'workspace_gateway_send_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser frame relay failed');
+            gatewayLog.error({err:error,event:'workspace_gateway_send_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser frame relay failed');
             if(!browserClosed){browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1013,'gateway relay backpressure');}
           });
         });
         ws.on('close',()=>{
-          browserClosed=true;clearInterval(pump);app.log.info({event:'workspace_gateway_browser_closed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket closed');
+          browserClosed=true;clearInterval(pump);gatewayLog.info({event:'workspace_gateway_browser_closed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket closed');
           void browserSendChain.then(async()=>{
             if(!await enqueueMachineRelay(redis,row.machineId,{id:crypto.randomUUID(),sessionId,kind:'ws_close',channelId} satisfies RelayRequest))throw new Error('workspace_machine_queue_backpressure');
             await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId),wsInputKey(channelId),wsInputBytesKey(channelId));
-          }).catch(error=>app.log.error({err:error,event:'workspace_gateway_close_cleanup_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway close cleanup failed'));
+          }).catch(error=>gatewayLog.error({err:error,event:'workspace_gateway_close_cleanup_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway close cleanup failed'));
         });
       });
     }catch(error){
