@@ -5,6 +5,7 @@
 'use strict';
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
+const { randomUUID } = require('crypto');
 const WebSocket = require(path.join(__dirname, '../apps/api/node_modules/ws'));
 
 const API = process.argv[3];
@@ -224,22 +225,53 @@ async function main() {
   const setCookie = grantGet.headers.get('set-cookie');
   if (!setCookie) throw new Error('grant GET did not set a gateway session cookie: ' + grantGet.status);
   const gatewayCookie = setCookie.split(';')[0];
-  await new Promise((resolve, reject) => {
-    // The gateway's upgrade handler (workspace-gateway.ts) matches
-    // /workspace-gateway/:sessionId/<upstream-path-to-proxy> - a bare
-    // /workspace-gateway/:sessionId with nothing after it 404s
-    // (websocket_route_not_found), same as a real browser's very first
-    // WebSocket request to code-server's own root path would look like.
-    const [pathAndQuery] = grant.openPath.split('?');
-    const url = `${API.replace('http', 'ws')}${pathAndQuery}/`;
-    const ws = new WebSocket(url, { headers: { cookie: gatewayCookie } });
-    const timer = setTimeout(() => reject(new Error('activation websocket did not open in time')), 15_000);
-    ws.on('open', () => { clearTimeout(timer); setTimeout(() => ws.close(), 1000); });
-    ws.on('close', () => resolve());
-    ws.on('error', (e) => { clearTimeout(timer); reject(e); });
-  });
+  const [gatewayPath] = grant.openPath.split('?');
+  async function proveCodeServerChannel(type) {
+    // code-server/VS Code Web opens these same remote-authority WebSocket channels.
+    // Merely receiving HTTP 101 is insufficient for GPUbnb billing: wait for a
+    // genuine data frame emitted by code-server and relayed Host -> API -> browser.
+    const params = new URLSearchParams({
+      type,
+      reconnectionToken: randomUUID(),
+      reconnection: 'false',
+      skipWebSocketFrames: 'false',
+    });
+    const url = `${API.replace('http', 'ws')}${gatewayPath}/?${params}`;
+    await new Promise((resolve, reject) => {
+      const ws = new WebSocket(url, { headers: { cookie: gatewayCookie } });
+      let upstreamFrameSeen = false;
+      const timer = setTimeout(() => {
+        ws.terminate();
+        reject(new Error(`${type} code-server channel produced no upstream frame in time`));
+      }, 20_000);
+      ws.on('message', (data) => {
+        upstreamFrameSeen = true;
+        clearTimeout(timer);
+        log(`    ${type} upstream frame`, { bytes: Buffer.byteLength(data) });
+        ws.close();
+      });
+      ws.on('close', () => {
+        clearTimeout(timer);
+        if (upstreamFrameSeen) resolve();
+        else reject(new Error(`${type} code-server channel closed before any upstream frame`));
+      });
+      ws.on('error', (e) => { clearTimeout(timer); reject(e); });
+    });
+  }
 
-  log('13. real stop');
+  await proveCodeServerChannel('Management');
+  await proveCodeServerChannel('ExtensionHost');
+
+  const activated = await waitUntil('real upstream code-server frame activates billing', async () => {
+    const current = await prisma.booking.findUnique({
+      where: { id: booking.id },
+      select: { status: true, workspaceActivatedAt: true },
+    });
+    return current?.status === 'ACTIVE' && current.workspaceActivatedAt ? current : null;
+  }, { timeoutMs: 30_000, intervalMs: 500 });
+  log('    interactive rental activated by real code-server traffic', { workspaceActivatedAt: activated.workspaceActivatedAt });
+
+  log('13. real stop after genuine interactive activation');
   const stopRes = await fetch(`${API}/workspace-sessions/${session.id}/stop`, { method: 'POST', headers: { cookie: renter.cookie } });
   log('    stop response', await stopRes.json());
 
@@ -255,9 +287,12 @@ async function main() {
   // activated, TIMED_OUT otherwise) once the agent separately calls
   // POST /agent/workspace-gateway/:sessionId/stopped after it verifies that
   // cleanup - a short async gap after the container itself is gone.
-  const finalSession = await waitUntil('session reaches a terminal status', async () => {
+  const finalSession = await waitUntil('session reaches COMPLETED after genuine interactive activation', async () => {
     const s = await prisma.workspaceSession.findUnique({ where: { id: session.id }, select: { status: true } });
-    return ['COMPLETED', 'FAILED', 'TIMED_OUT', 'CANCELLED'].includes(s.status) ? s : null;
+    if (['FAILED', 'TIMED_OUT', 'CANCELLED'].includes(s.status)) {
+      throw new Error(`activated workspace ended unexpectedly: ${s.status}`);
+    }
+    return s.status === 'COMPLETED' ? s : null;
   }, { timeoutMs: 30_000, intervalMs: 2000 });
   log('    final session status', finalSession.status);
   await releaseBookingResources(prisma, booking.id).catch(() => {});
@@ -274,7 +309,7 @@ async function main() {
   const secondAllocation = await allocateBookingResources(prisma, { bookingId: booking2.id, buyerId: renter.userId });
   log('    second allocation succeeded', secondAllocation.acceleratorIds);
 
-  log('DONE — full real lifecycle proven: booking -> GPU assignment -> real GPU_PROOF -> real agent -> real Docker -> real GPU -> real code-server -> real gateway register -> real READY -> real access -> real activation -> real stop -> real cleanup -> GPU available for a second rental.');
+  log('DONE — full real lifecycle proven: booking -> GPU assignment -> real GPU_PROOF -> real agent -> real Docker -> real GPU -> real code-server -> real gateway register -> real READY -> real access -> real Management+ExtensionHost traffic -> ACTIVE -> COMPLETED stop -> real cleanup -> GPU available for a second rental.');
   await prisma.$disconnect();
 }
 
