@@ -152,7 +152,11 @@ if ($Action -eq 'Start') {
         agentVersion = [string]$pcA.agent.version
         agentBuildCommit = [string]$pcA.agent.buildCommit
         machineId = [string]$pcA.agent.machineId
+        os = [string]$pcA.host.os
+        dockerServerVersion = [string]$pcA.host.dockerServerVersion
         targetGpuUuid = [string]$pcA.host.targetGpu.uuid
+        targetGpuName = [string]$pcA.host.targetGpu.name
+        nvidiaDriverVersion = [string]$pcA.host.targetGpu.driverVersion
         frontendOrigin = [string]$pcB.origins.frontend
         apiOrigin = [string]$pcB.origins.api
         gatewayOrigin = [string]$pcB.origins.gateway
@@ -168,7 +172,10 @@ Status: **IN PROGRESS — NOT PASSED**
 Release SHA: `$releaseCommit`
 Agent: `$($pcA.agent.version)` / build `$($pcA.agent.buildCommit)`
 Machine: `$($pcA.agent.machineId)`
+Host OS: `$($pcA.host.os)`
+Docker server: `$($pcA.host.dockerServerVersion)`
 Target GPU: `$($pcA.host.targetGpu.uuid)` — `$($pcA.host.targetGpu.name)`
+NVIDIA driver: `$($pcA.host.targetGpu.driverVersion)`
 Frontend: `$($pcB.origins.frontend)`
 API: `$($pcB.origins.api)`
 Gateway: `$($pcB.origins.gateway)`
@@ -194,7 +201,9 @@ Assert-SafeIdentifier 'GpuProofJobId' $GpuProofJobId
 Assert-SafeIdentifier 'WorkspaceSessionId' $WorkspaceSessionId
 Assert-SafeIdentifier 'MachineId' $MachineId
 Assert-SafeIdentifier 'LeasedGpuUuid' $LeasedGpuUuid
+if ($CorrelationIds.Count -lt 1) { throw 'At least one sanitized CorrelationId is required' }
 foreach ($correlationId in $CorrelationIds) { Assert-SafeIdentifier 'CorrelationId' $correlationId }
+if ([string]::IsNullOrWhiteSpace($PcBScreenshotPath)) { throw 'PcBScreenshotPath is required for the renter nvidia-smi evidence' }
 
 if ($MachineId -ne [string]$record.host.machineId) {
     throw "MachineId does not match the release lock: expected $($record.host.machineId), got $MachineId"
@@ -217,16 +226,13 @@ $allClean = $containers.Count -eq 0 -and $volumes.Count -eq 0 -and $networks.Cou
 $nvidia = Run-External 'nvidia-smi' @('--query-gpu=uuid,name,driver_version', '--format=csv,noheader')
 $targetStillPresent = $nvidia.code -eq 0 -and $nvidia.text.ToLowerInvariant().Contains($LeasedGpuUuid.ToLowerInvariant())
 
-$pcBEvidenceName = $null
-if (-not [string]::IsNullOrWhiteSpace($PcBScreenshotPath)) {
-    if (-not (Test-Path -LiteralPath $PcBScreenshotPath -PathType Leaf)) { throw "PC B evidence file not found: $PcBScreenshotPath" }
-    $extension = [IO.Path]::GetExtension($PcBScreenshotPath).ToLowerInvariant()
-    if ($extension -notin @('.png', '.jpg', '.jpeg', '.webp', '.txt')) {
-        throw 'PC B evidence must be a sanitized PNG/JPG/WEBP screenshot or TXT terminal capture'
-    }
-    $pcBEvidenceName = "pc-b-nvidia-smi$extension"
-    Copy-Item -LiteralPath $PcBScreenshotPath -Destination (Join-Path $EvidenceDir $pcBEvidenceName) -Force
+if (-not (Test-Path -LiteralPath $PcBScreenshotPath -PathType Leaf)) { throw "PC B evidence file not found: $PcBScreenshotPath" }
+$extension = [IO.Path]::GetExtension($PcBScreenshotPath).ToLowerInvariant()
+if ($extension -notin @('.png', '.jpg', '.jpeg', '.webp', '.txt')) {
+    throw 'PC B evidence must be a sanitized PNG/JPG/WEBP screenshot or TXT terminal capture'
 }
+$pcBEvidenceName = "pc-b-nvidia-smi$extension"
+Copy-Item -LiteralPath $PcBScreenshotPath -Destination (Join-Path $EvidenceDir $pcBEvidenceName) -Force
 
 $record.status = 'EVIDENCE_COLLECTED'
 $record.endedAtUtc = [DateTime]::UtcNow.ToString('o')
@@ -244,13 +250,12 @@ $record.cleanup = [ordered]@{
     clean = $allClean
     targetGpuStillPresent = $targetStillPresent
 }
-$record.pcBEvidence = if ($pcBEvidenceName) { $pcBEvidenceName } else { $null }
+$record.pcBEvidence = $pcBEvidenceName
 $record.decision = 'PENDING_MANUAL_REVIEW'
 $record | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $runPath -Encoding UTF8
 
 $cleanupText = if ($allClean) { 'PASS — no GPUbnb per-session Docker resources remain' } else { 'FAIL — unexpected GPUbnb per-session Docker resources remain' }
 $gpuPresentText = if ($targetStillPresent) { 'PASS — leased physical GPU UUID is still present on PC A after cleanup' } else { 'FAIL — target GPU UUID was not observed after cleanup' }
-$pcBEvidenceText = if ($pcBEvidenceName) { $pcBEvidenceName } else { 'NOT PROVIDED' }
 
 @"
 # GPUbnb current-release physical qualification evidence
@@ -265,7 +270,10 @@ This collector never marks the release PASSED by itself. `docs/CURRENT_PHYSICAL_
 - Frontend build: `$($record.release.frontendCommit)`
 - Agent: `$($record.release.agentVersion)` / build `$($record.release.agentBuildCommit)`
 - Machine: `$MachineId`
-- GPU: `$LeasedGpuUuid`
+- Host OS: `$($record.host.os)`
+- Docker server: `$($record.host.dockerServerVersion)`
+- GPU: `$LeasedGpuUuid` — `$($record.host.targetGpu.name)`
+- NVIDIA driver: `$($record.host.targetGpu.driverVersion)`
 - Frontend: `$($record.release.frontendOrigin)`
 - API: `$($record.release.apiOrigin)`
 - Gateway: `$($record.release.gatewayOrigin)`
@@ -290,7 +298,7 @@ This collector never marks the release PASSED by itself. `docs/CURRENT_PHYSICAL_
 - Leased GPU UUID matches PC A target: PASS
 - Docker cleanup: `$cleanupText`
 - Physical GPU still visible after cleanup: `$gpuPresentText`
-- PC B sanitized `nvidia-smi` evidence file: `$pcBEvidenceText`
+- PC B sanitized `nvidia-smi` evidence file: `$pcBEvidenceName`
 
 ## Mandatory manual review before changing the gate to PASSED
 
