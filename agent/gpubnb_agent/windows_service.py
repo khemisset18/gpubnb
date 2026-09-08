@@ -10,6 +10,8 @@ from logging import Formatter, Logger
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
+from .docker_cli import ensure_docker_on_path
+
 SERVICE_NAME = "GPUbnbAgent"
 SERVICE_DISPLAY_NAME = "GPUbnb Host Agent"
 SERVICE_DESCRIPTION = "Supervises the GPUbnb host agent and secure workspace runtime."
@@ -105,6 +107,15 @@ def _service_class() -> type:
             servicemanager.LogInfoMsg(f"{SERVICE_NAME} starting")
             logger = _service_logger()
             logger.info("%s starting", SERVICE_NAME)
+            # Docker Desktop's default Windows install is frequently per-user,
+            # while this service runs with the SCM's service environment. Normalize
+            # the CLI path once here so heartbeat inventory, GPU_PROOF, Developer
+            # gateway runtime and cleanup all inherit the same usable docker.exe.
+            docker_executable = ensure_docker_on_path()
+            if docker_executable:
+                logger.info("Docker CLI resolved for service runtime: %s", docker_executable)
+            else:
+                logger.warning("Docker CLI was not found in PATH or supported Docker Desktop install roots")
             supervise_heartbeat(self._stop_event, heartbeat_loop, logger)
             logger.info("%s stopped", SERVICE_NAME)
             servicemanager.LogInfoMsg(f"{SERVICE_NAME} stopped")
@@ -197,6 +208,6 @@ def service_fully_stopped() -> bool:
         status = win32serviceutil.QueryServiceStatus(SERVICE_NAME)
     except win32service.error as exc:
         if getattr(exc, "winerror", None) == 1060:
-            return True  # not installed at all counts as "stopped"
+            return True
         raise RuntimeError(f"service_status_failed:{exc}") from exc
     return status[1] == win32service.SERVICE_STOPPED
