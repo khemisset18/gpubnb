@@ -9,6 +9,7 @@ import {
   ModerationStatus,
   PrismaClient,
   ResourceAllocationStatus,
+  WorkspaceSessionStatus,
 } from '@prisma/client';
 
 // config.ts validates PLATFORM_WALLET (and friends) as required at import time.
@@ -33,10 +34,9 @@ import type { AcceleratorTelemetry } from '../src/accelerator-telemetry.js';
 
 // Real-DB integration tests for completeGpuProofJob (called from
 // /agent/jobs/:id/finalize-proof). GPU_PROOF completing must not silently end a
-// booking that may still request a Developer workspace on the same accelerator -
-// this exercises the actual production function against real Postgres rows, not a
-// re-simulation of its logic. Skips cleanly if no local Postgres is reachable
-// (same convention as e2e-gpu-rental-lifecycle.test.ts).
+// booking that can run Developer on the same accelerator. A fresh compatible
+// booking now also queues Developer automatically, so the renter no longer needs
+// a second manual "Créer mon espace" action before the persistent runtime exists.
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
@@ -104,7 +104,7 @@ async function seedBookedMachine(prisma: PrismaClient, suffix: string) {
       buyerId: renter.id,
       listingId: listing.id,
       idempotencyKey: `idem_fin_${suffix}`,
-      startsAt: new Date(now.getTime() - 25 * 60_000), // simulates a booking that has been open a while (e.g. a slow GPU_PROOF)
+      startsAt: new Date(now.getTime() - 25 * 60_000),
       endsAt: new Date(now.getTime() + 3_600_000),
       quotedLamports: 1_000_000n,
       expectedSeconds: 600,
@@ -117,6 +117,8 @@ async function seedBookedMachine(prisma: PrismaClient, suffix: string) {
     owner, renter, machine, accelerator, listing, booking,
     async cleanup() {
       await prisma.acceleratorAllocation.deleteMany({ where: { bookingId: booking.id } }).catch(() => {});
+      await prisma.workspaceSession.deleteMany({ where: { bookingId: booking.id } }).catch(() => {});
+      await prisma.job.deleteMany({ where: { bookingId: booking.id } }).catch(() => {});
       await prisma.booking.deleteMany({ where: { listingId: listing.id } }).catch(() => {});
       await prisma.machineWorkspace.deleteMany({ where: { machineId: machine.id } }).catch(() => {});
       await prisma.gpuListing.delete({ where: { id: listing.id } }).catch(() => {});
@@ -145,14 +147,17 @@ function withPrisma(name: string, run: (prisma: PrismaClient, t: import('node:te
   });
 }
 
-// TEST 1 — GPU_PROOF seul: comportement actuel conservé.
-withPrisma('GPU_PROOF-only booking (no compatible Developer workspace) completes and releases the machine exactly as before', async (prisma) => {
+// An actually incompatible machine keeps the historical GPU_PROOF-only behavior.
+withPrisma('GPU_PROOF-only booking on a Developer-incompatible machine completes and releases the machine', async (prisma) => {
   const suffix = crypto.randomBytes(6).toString('hex');
   const seed = await seedBookedMachine(prisma, suffix);
   try {
+    await prisma.machine.update({ where: { id: seed.machine.id }, data: { dockerAvailable: false } });
     const outcome = await completeGpuProofJob(prisma, seed.booking.id, seed.machine.id);
     assert.equal(outcome.bookingStatus, BookingStatus.COMPLETED);
     assert.equal(outcome.machineReleased, true);
+    assert.equal(outcome.developerWorkspaceSessionId, null);
+    assert.equal(outcome.developerPreparationQueued, false);
     assert.equal(outcome.changed, true, 'a genuine transition must be reported as such');
 
     const booking = await prisma.booking.findUniqueOrThrow({ where: { id: seed.booking.id } });
@@ -164,24 +169,33 @@ withPrisma('GPU_PROOF-only booking (no compatible Developer workspace) completes
   }
 });
 
-// TEST 2 — Developer Workspace disponible : la location n'est PAS clôturée, le GPU reste réservé.
-withPrisma('a booking on a Developer-capable machine is kept alive and the GPU stays locked to it', async (prisma) => {
+// Fresh real renter path: there is deliberately NO pre-created Developer MachineWorkspace.
+withPrisma('a fresh Developer-capable booking automatically queues Developer and keeps the GPU locked', async (prisma) => {
   const suffix = crypto.randomBytes(6).toString('hex');
   const seed = await seedBookedMachine(prisma, suffix);
   try {
-    await ensureCompatibleMachineWorkspace(prisma, seed.machine.id, 'developer');
+    const before = await prisma.machineWorkspace.findFirst({ where: { machineId: seed.machine.id, workspace: { slug: 'developer' } } });
+    assert.equal(before, null);
 
     const outcome = await completeGpuProofJob(prisma, seed.booking.id, seed.machine.id);
     assert.equal(outcome.bookingStatus, BookingStatus.STARTING);
     assert.equal(outcome.machineReleased, false);
+    assert.equal(outcome.developerPreparationQueued, true);
+    assert.ok(outcome.developerWorkspaceSessionId);
     assert.equal(outcome.changed, true, 'a genuine transition must be reported as such');
+
+    const session = await prisma.workspaceSession.findUniqueOrThrow({
+      where: { id: outcome.developerWorkspaceSessionId! },
+      include: { machineWorkspace: { include: { workspace: true } }, job: true },
+    });
+    assert.equal(session.machineWorkspace.workspace.slug, 'developer');
+    assert.equal(session.status, WorkspaceSessionStatus.PREPARING);
+    assert.equal(session.job?.type, 'WORKSPACE_PREPARE');
 
     const booking = await prisma.booking.findUniqueOrThrow({ where: { id: seed.booking.id } });
     assert.equal(booking.status, BookingStatus.STARTING);
     assert.notEqual(booking.status, BookingStatus.COMPLETED);
 
-    // Point critique: le GPU ne doit JAMAIS redevenir AVAILABLE entre GPU_PROOF
-    // COMPLETED et l'ouverture réelle du Developer Workspace.
     const machine = await prisma.machine.findUniqueOrThrow({ where: { id: seed.machine.id } });
     assert.notEqual(machine.operational, MachineOperational.AVAILABLE);
     assert.equal(machine.operational, MachineOperational.RESERVED);
@@ -190,11 +204,9 @@ withPrisma('a booking on a Developer-capable machine is kept alive and the GPU s
   }
 });
 
-// TEST 8 — même si GPU_PROOF (ou l'attente qui précède) a pris longtemps, la fenêtre
-// de sécurité pour demander le workspace repart à zéro à partir de maintenant.
 withPrisma('startsAt/endsAt are refreshed to now regardless of how long the booking had already been open', async (prisma) => {
   const suffix = crypto.randomBytes(6).toString('hex');
-  const seed = await seedBookedMachine(prisma, suffix); // seeded with startsAt 25 minutes in the past
+  const seed = await seedBookedMachine(prisma, suffix);
   try {
     await ensureCompatibleMachineWorkspace(prisma, seed.machine.id, 'developer');
     const before = Date.now();
@@ -209,8 +221,6 @@ withPrisma('startsAt/endsAt are refreshed to now regardless of how long the book
   }
 });
 
-// TEST 10 — race condition : le GPU ne doit pas devenir réservable par une deuxième
-// location tant que la première n'a pas réellement terminé son Developer Workspace.
 withPrisma('a second booking cannot claim the same accelerator while the first is waiting to open its Developer workspace', async (prisma) => {
   const suffix = crypto.randomBytes(6).toString('hex');
   const seed = await seedBookedMachine(prisma, suffix);
@@ -218,10 +228,6 @@ withPrisma('a second booking cannot claim the same accelerator while the first i
     await ensureCompatibleMachineWorkspace(prisma, seed.machine.id, 'developer');
     await completeGpuProofJob(prisma, seed.booking.id, seed.machine.id);
 
-    // Starts after the first booking's refreshed endsAt (now + STALLED_ACTIVATION_GRACE_MS),
-    // so this specifically isolates the accelerator-availability guard below from the
-    // separate booking_no_overlap DB exclusion constraint (a real, independent defense
-    // this same call would also trip if the two windows overlapped in time).
     const secondBooking = await prisma.booking.create({
       data: {
         buyerId: seed.renter.id,
@@ -235,11 +241,6 @@ withPrisma('a second booking cannot claim the same accelerator while the first i
       },
     });
     try {
-      // completeGpuProofJob deliberately never touches AcceleratorAllocation: the first
-      // booking's row is still HELD/CONFIRMED/ACTIVE over its own time range, so the
-      // database's own AcceleratorAllocation_no_overlap exclusion constraint (not just
-      // the accelerator_not_rentable application check) independently refuses a second
-      // live allocation on the same physical accelerator.
       await assert.rejects(() => allocateBookingResources(prisma, { bookingId: secondBooking.id, buyerId: seed.renter.id }));
       const firstAllocation = await prisma.acceleratorAllocation.findFirstOrThrow({ where: { bookingId: seed.booking.id, acceleratorId: seed.accelerator.id } });
       assert.ok(
@@ -254,11 +255,6 @@ withPrisma('a second booking cannot claim the same accelerator while the first i
   }
 });
 
-// Real 500 found live during the PC A <-> PC B test: this function ran its own raw
-// db.$transaction under Serializable isolation with no retry, while dev-booking-
-// reconciler.ts's reconciler concurrently wrote to the same Job/Booking rows every 10s -
-// exactly the contention booking-transaction-retry.ts's P2034 handling exists for
-// (already used by /bookings, just never wired in here).
 test('completeGpuProofJob runs through the retry helper, not a raw unretried transaction', async () => {
   const source = await readFile(new URL('../src/gpu-proof-completion.ts', import.meta.url), 'utf8');
   assert.match(source, /import \{ runBookingTransaction \} from '\.\/booking-transaction-retry\.js';/);
@@ -267,10 +263,6 @@ test('completeGpuProofJob runs through the retry helper, not a raw unretried tra
   assert.match(source, /isolationLevel: Prisma\.TransactionIsolationLevel\.Serializable/, 'must keep Serializable isolation');
 });
 
-// TEST 12 — completeGpuProofJob must never rewind startsAt/endsAt once the renter's real
-// workspace clock has genuinely started (workspaceActivatedAt set) - GPU_PROOF always
-// finishes well before that in every legitimate flow, but this proves the guard actually
-// holds rather than assuming the ordering.
 withPrisma('completeGpuProofJob never resets startsAt/endsAt once the real rental clock has already started', async (prisma) => {
   const suffix = crypto.randomBytes(6).toString('hex');
   const seed = await seedBookedMachine(prisma, suffix);
@@ -294,9 +286,6 @@ withPrisma('completeGpuProofJob never resets startsAt/endsAt once the real renta
   }
 });
 
-// TEST 11 (partiel, côté serveur) — appeler completeGpuProofJob n'importe quand
-// n'a d'effet que sur un booking encore FUNDED/STARTING/ACTIVE : un booking déjà
-// terminé/annulé n'est jamais rouvert ou réécrit.
 withPrisma('completeGpuProofJob never mutates a booking that already reached a different terminal status', async (prisma) => {
   const suffix = crypto.randomBytes(6).toString('hex');
   const seed = await seedBookedMachine(prisma, suffix);
@@ -304,11 +293,6 @@ withPrisma('completeGpuProofJob never mutates a booking that already reached a d
     await prisma.booking.update({ where: { id: seed.booking.id }, data: { status: BookingStatus.CANCELLED } });
     const before = await prisma.booking.findUniqueOrThrow({ where: { id: seed.booking.id } });
 
-    // Real gap found live (2026-09-02): neither branch of completeGpuProofJob used to check
-    // whether its own booking.updateMany actually matched a row before reporting a confident
-    // bookingStatus - a caller (here, /agent/jobs/:id/finalize-proof) could report ok:true for
-    // a transition that never actually applied. changed:false is the only signal that this
-    // call was a genuine no-op.
     const outcome = await completeGpuProofJob(prisma, seed.booking.id, seed.machine.id);
     assert.equal(outcome.changed, false, 'a no-op against an already-terminal booking must be reported as such, not silently claimed as a real transition');
 
