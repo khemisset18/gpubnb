@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
+const repoRoot = new URL('../../../', import.meta.url);
+
 async function source(path: string): Promise<string> {
-  return readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
+  return readFile(new URL(path, repoRoot), 'utf8');
 }
 
 test('verified GPU proof automatically queues the persistent Developer workspace', async () => {
-  const completion = await source('api/src/gpu-proof-completion.ts');
+  const completion = await source('apps/api/src/gpu-proof-completion.ts');
   const compatibleBranch = completion.slice(completion.indexOf('if (developerWorkspaceCompatible)'));
 
   assert.match(compatibleBranch, /workspaceSession\.create\(/);
@@ -20,8 +22,8 @@ test('verified GPU proof automatically queues the persistent Developer workspace
 });
 
 test('the proof container is ephemeral but the renter Developer runtime is detached and not --rm', async () => {
-  const runner = await source('../../agent/gpubnb_agent/runner.py');
-  const gatewayV5 = await source('../../agent/gpubnb_agent/workspace_gateway_v5.py');
+  const runner = await source('agent/gpubnb_agent/runner.py');
+  const gatewayV5 = await source('agent/gpubnb_agent/workspace_gateway_v5.py');
 
   const proofStart = runner.indexOf('def gpu_proof_command');
   const proofEnd = runner.indexOf('\ndef ', proofStart + 10);
@@ -37,7 +39,7 @@ test('the proof container is ephemeral but the renter Developer runtime is detac
 });
 
 test('PC B labels GPU proof RUNNING as verification, not as an opened workspace', async () => {
-  const bookings = await source('web/workspace-bookings.js');
+  const bookings = await source('apps/web/workspace-bookings.js');
   assert.match(bookings, /Vérification GPU : \$\{escapeHTML\(job\.status\)\}/);
   assert.match(bookings, /Ouvrir mon espace/);
 });
