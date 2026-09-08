@@ -158,6 +158,27 @@ jobs:
       - run: node --check apps/web/choose-workspace.js
       - run: node --check apps/web/rental-owner.js
       - run: node scripts/devnet-doctor.mjs
+      - name: Validate qualification PowerShell syntax
+        shell: pwsh
+        run: |
+          $files = @(
+            'scripts/qualification-preflight-pc-a.ps1',
+            'scripts/qualification-preflight-pc-b.ps1',
+            'scripts/qualification-evidence.ps1'
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "$file: $($_.Message)" }
+              exit 1
+            }
+          }
       - name: Validate Developer Workspace manifest and shell
         run: |
           python3 -m json.tool workspaces/developer/manifest.json >/dev/null
