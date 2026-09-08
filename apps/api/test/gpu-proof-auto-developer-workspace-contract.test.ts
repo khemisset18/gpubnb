@@ -8,8 +8,9 @@ async function source(path: string): Promise<string> {
   return readFile(new URL(path, repoRoot), 'utf8');
 }
 
-test('verified GPU proof automatically queues the persistent Developer workspace', async () => {
+test('verified GPU proof automatically analyzes and queues the persistent Developer workspace', async () => {
   const completion = await source('apps/api/src/gpu-proof-completion.ts');
+  assert.match(completion, /ensureCompatibleMachineWorkspace\(db, machineId, 'developer'\)/);
   const compatibleBranch = completion.slice(completion.indexOf('if (developerWorkspaceCompatible)'));
 
   assert.match(compatibleBranch, /workspaceSession\.create\(/);
