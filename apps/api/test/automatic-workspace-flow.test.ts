@@ -70,7 +70,7 @@ test('Compute server route creates GPU_PROOF through ensureComputePreparation',a
   assert.match(server,/workspaceSlug:'compute'/);
 });
 
-test('bookings page follows GPU_PROOF, then offers the registered Developer workspace once it completes',async()=>{
+test('bookings page follows GPU_PROOF, then exposes the automatically prepared Developer workspace once it completes',async()=>{
   const bookings=await readFile(path.join(webRoot,'workspace-bookings.js'),'utf8');
   assert.match(bookings,/dashboard\.tenant\?\.jobs/);
   assert.match(bookings,/job\.type==='GPU_PROOF'/);
@@ -78,12 +78,13 @@ test('bookings page follows GPU_PROOF, then offers the registered Developer work
   assert.match(bookings,/workspace-sessions/);
   assert.match(bookings,/workspaceSlug:'compute'/);
   // The Developer workspace surface only ever activates for a booking whose
-  // GPU_PROOF job already reached COMPLETED (see workspace-developer-flow.js);
-  // it is never offered as an alternative to, or before, Compute/GPU_PROOF.
+  // GPU_PROOF job already reached COMPLETED (see workspace-developer-flow.js).
+  // Creation is automatic: the page follows the resulting session and only
+  // exposes access once preparation has completed.
   assert.match(bookings,/job\.status==='COMPLETED'/);
-  assert.match(bookings,/workspace\/developer/);
+  assert.doesNotMatch(bookings,/workspace\/developer/);
+  assert.doesNotMatch(bookings,/data-create-developer/);
   assert.match(bookings,/workspace\/access/);
-  assert.match(bookings,/data-create-developer/);
   assert.match(bookings,/data-open-developer/);
 });
 
