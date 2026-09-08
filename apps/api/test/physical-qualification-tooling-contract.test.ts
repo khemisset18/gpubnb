@@ -87,6 +87,8 @@ test('evidence collector stays fail-closed and cannot self-declare physical qual
     'LeasedGpuUuid',
     'GpuProofJobId',
     'WorkspaceSessionId',
+    'At least one sanitized CorrelationId is required',
+    'PcBScreenshotPath is required for the renter nvidia-smi evidence',
     'PC B evidence must be a sanitized',
     'The collector never marks the release PASSED by itself',
   ]) {
