@@ -100,7 +100,7 @@ test('evidence collector stays fail-closed and cannot self-declare physical qual
     'gpu-proof-evidence',
     'state-transition-timeline',
     'final-availability',
-    'The collector never marks the release PASSED by itself',
+    'This collector never marks the release PASSED by itself',
   ]) {
     assert.ok(script.includes(required), `evidence collector is missing: ${required}`);
   }
