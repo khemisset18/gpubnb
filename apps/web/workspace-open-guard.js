@@ -11,6 +11,7 @@
     '[data-open-mobile]',
     '[data-open-security-lab]',
   ].join(',');
+  const openInFlight = new Set();
 
   function accessPath(button, bookingId) {
     if (button.hasAttribute('data-open-developer')) return `/bookings/${encodeURIComponent(bookingId)}/workspace/access`;
@@ -64,10 +65,9 @@
     event.preventDefault();
     event.stopPropagation();
 
-    if (button.dataset.workspaceOpening === '1') return;
     const bookingId = bookingIdFor(button);
     const path = accessPath(button, bookingId);
-    if (!bookingId || !path) return;
+    if (!bookingId || !path || openInFlight.has(bookingId)) return;
 
     const reserved = window.open('about:blank', '_blank');
     if (!reserved) {
@@ -78,6 +78,7 @@
     try { reserved.opener = null; } catch {}
 
     const originalText = button.textContent;
+    openInFlight.add(bookingId);
     button.dataset.workspaceOpening = '1';
     button.disabled = true;
     button.textContent = 'Ouverture…';
@@ -99,6 +100,7 @@
         const message = error instanceof Error ? error.message : 'Ouverture impossible.';
         window.alert(`Ouverture de l’espace impossible : ${message}`);
       } finally {
+        openInFlight.delete(bookingId);
         delete button.dataset.workspaceOpening;
       }
     })();
