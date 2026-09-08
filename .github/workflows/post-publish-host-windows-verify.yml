@@ -82,16 +82,92 @@ jobs:
           VERSION_TAG: host-v0.2.0-beta.${{ github.event.workflow_run.run_number }}
         run: |
           $ErrorActionPreference = 'Stop'
-          gh release view host-test-latest --repo $env:GITHUB_REPOSITORY *> $null
-          $releaseLookupExit = $LASTEXITCODE
-          if ($releaseLookupExit -notin @(0, 1)) { throw "Failed to inspect host-test-latest (exit $releaseLookupExit)." }
-          if ($releaseLookupExit -eq 0) {
-            gh release delete host-test-latest --repo $env:GITHUB_REPOSITORY --cleanup-tag --yes
-            if ($LASTEXITCODE -ne 0) { throw 'Failed to delete the previous host-test-latest release.' }
+
+          # Draft releases are intentionally visible to authenticated release listings but
+          # are NOT retrievable through /releases/tags/<tag>. Remove either a published or
+          # draft alias deterministically before recreating it.
+          $allReleases = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json
+          $existing = $allReleases | Where-Object { $_.tag_name -eq 'host-test-latest' } | Select-Object -First 1
+          if ($existing) {
+            gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/releases/$($existing.id)"
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to delete the previous host-test-latest release object.' }
           }
+
+          gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/host-test-latest" *> $null
+          $tagLookupExit = $LASTEXITCODE
+          if ($tagLookupExit -eq 0) {
+            gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/git/refs/tags/host-test-latest"
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to delete the previous host-test-latest tag.' }
+          } elseif ($tagLookupExit -ne 1) {
+            throw "Failed to inspect host-test-latest tag (exit $tagLookupExit)."
+          }
+
+          # Upload into a draft first. Only publish after every asset upload has succeeded.
           gh release create host-test-latest published-release/* `
             --repo $env:GITHUB_REPOSITORY `
             --target $env:EXPECTED_SHA `
             --title "GPUbnb Host — VERIFIED alias of $env:VERSION_TAG" `
             --notes "Alias promu uniquement après validation post-publication indépendante du candidat immuable $env:VERSION_TAG : checksums de tous les artefacts vérifiés, installation Windows réelle, Agent/runtime-check, service Windows et désinstallation validés." `
-            --prerelease
+            --prerelease `
+            --draft
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to create the verified alias draft with all assets.' }
+
+          $allReleases = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json
+          $alias = $allReleases | Where-Object { $_.tag_name -eq 'host-test-latest' } | Select-Object -First 1
+          if (-not $alias) { throw 'Created host-test-latest release is missing from authenticated release listing.' }
+          if (-not $alias.draft) { throw 'host-test-latest unexpectedly published before explicit promotion.' }
+          if ($alias.target_commitish -ne $env:EXPECTED_SHA) {
+            throw "host-test-latest draft target mismatch: expected $env:EXPECTED_SHA, got $($alias.target_commitish)"
+          }
+
+          $requiredAssets = @(
+            'gpubnb-host-windows-x64.exe',
+            'gpubnb-host-windows-x64-portable.zip',
+            'gpubnb-host-linux-x64.deb',
+            'gpubnb-host-macos-arm64.dmg',
+            'SHA256SUMS.txt'
+          )
+          $assetNames = @($alias.assets | ForEach-Object { $_.name })
+          foreach ($name in $requiredAssets) {
+            if ($assetNames -notcontains $name) { throw "host-test-latest draft is missing uploaded asset $name" }
+          }
+
+          gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/releases/$($alias.id)" `
+            -F draft=false `
+            -F prerelease=true `
+            -f target_commitish="$env:EXPECTED_SHA" *> $null
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to publish host-test-latest after verification.' }
+
+      - name: Verify promoted alias is publicly retrievable
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $alias = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/host-test-latest" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or -not $alias) {
+            throw 'Published host-test-latest is not retrievable through the public release-by-tag endpoint.'
+          }
+          if ($alias.draft) { throw 'Published host-test-latest still reports draft=true.' }
+          if (-not $alias.prerelease) { throw 'Published host-test-latest must remain a prerelease.' }
+          if ($alias.target_commitish -ne $env:EXPECTED_SHA) {
+            throw "Published host-test-latest target mismatch: expected $env:EXPECTED_SHA, got $($alias.target_commitish)"
+          }
+
+          $tag = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/host-test-latest" | ConvertFrom-Json
+          if ($tag.object.type -ne 'commit' -or $tag.object.sha -ne $env:EXPECTED_SHA) {
+            throw "host-test-latest tag ref mismatch: expected commit $env:EXPECTED_SHA, got $($tag.object.type) $($tag.object.sha)"
+          }
+
+          $requiredAssets = @(
+            'gpubnb-host-windows-x64.exe',
+            'gpubnb-host-windows-x64-portable.zip',
+            'gpubnb-host-linux-x64.deb',
+            'gpubnb-host-macos-arm64.dmg',
+            'SHA256SUMS.txt'
+          )
+          $assetNames = @($alias.assets | ForEach-Object { $_.name })
+          foreach ($name in $requiredAssets) {
+            if ($assetNames -notcontains $name) { throw "Published host-test-latest is missing asset $name" }
+          }
