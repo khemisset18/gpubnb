@@ -2,7 +2,6 @@ import {
   BookingStatus,
   JobType,
   MachineOperational,
-  MachineWorkspaceState,
   ModerationStatus,
   Prisma,
   WorkspaceSessionStatus,
@@ -11,6 +10,7 @@ import {
 
 import { STALLED_ACTIVATION_GRACE_MS } from './dev-booking-reconciler.js';
 import { runBookingTransaction } from './booking-transaction-retry.js';
+import { ensureCompatibleMachineWorkspace } from './machine-workspace-catalog.js';
 
 export type GpuProofCompletionOutcome = {
   bookingStatus: typeof BookingStatus.STARTING | typeof BookingStatus.COMPLETED;
@@ -38,6 +38,12 @@ export type GpuProofCompletionOutcome = {
  * persistent gpubnb-dev-* runtime was ever requested. Keeping this transition server-side
  * also means closing/reloading PC B cannot lose the request.
  *
+ * Compatibility is evaluated here from the machine's current measured capabilities,
+ * rather than relying on a MachineWorkspace row having been created by a previous manual
+ * "Créer mon espace" click. That old dependency was circular: the automatic handoff could
+ * never happen on a fresh renter path because the row it checked only came into existence
+ * when the renter performed the manual action we are removing.
+ *
  * The existing POST /bookings/:bookingId/workspace/developer route remains idempotent and
  * can still return this same session, so old clients and explicit retries keep working.
  */
@@ -46,17 +52,12 @@ export async function completeGpuProofJob(
   bookingId: string,
   machineId: string,
 ): Promise<GpuProofCompletionOutcome> {
-  // Read-only check: does this machine even offer a compatible Developer workspace
-  // right now? If not, nothing changes from the pre-existing behavior - immediate
-  // completion, exactly as before GPU_PROOF's follow-up workspace existed.
-  const developerWorkspaceCompatible = await db.machineWorkspace.findFirst({
-    where: {
-      machineId,
-      workspace: { slug: 'developer' },
-      state: { in: [MachineWorkspaceState.READY, MachineWorkspaceState.LIMITED] },
-    },
-    select: { id: true },
-  });
+  let developerWorkspaceCompatible = null;
+  try {
+    developerWorkspaceCompatible = await ensureCompatibleMachineWorkspace(db, machineId, 'developer');
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== 'developer_workspace_incompatible') throw error;
+  }
 
   return runBookingTransaction(db, async (tx) => {
     if (developerWorkspaceCompatible) {
