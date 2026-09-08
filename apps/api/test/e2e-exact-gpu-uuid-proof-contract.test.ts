@@ -12,9 +12,9 @@ test('main real-GPU harness proves the Developer container sees exactly the leas
   const proof = await readFile(path.join(repoRoot, 'e2e/watch-exact-gpu-uuid.cjs'), 'utf8');
 
   const watcher = shell.indexOf('node watch-exact-gpu-uuid.cjs "$DATABASE_URL"');
-  const scenario = shell.indexOf('node run.cjs setup');
+  const scenario = shell.indexOf('node run.cjs setup "http://localhost:${API_PORT}" "$DATABASE_URL"');
   const wait = shell.indexOf('wait "$UUID_PROOF_PID"');
-  assert.ok(watcher >= 0 && watcher < scenario && wait > scenario, 'UUID proof must observe the live workspace concurrently and be awaited before success');
+  assert.ok(watcher >= 0 && scenario > watcher && wait > scenario, 'UUID proof must observe the live workspace concurrently and be awaited before success');
 
   for (const required of [
     "machineWorkspace: { workspace: { slug: 'developer' } }",
