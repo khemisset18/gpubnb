@@ -27,14 +27,26 @@
   async function fetchMetadata(platform, fetchImpl = fetch, timeoutMs = 8000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let lastError = null;
     try {
-      const response = await fetchImpl(`${endpoint}?platform=${encodeURIComponent(platform)}`, {
-        headers: { accept: 'application/json' },
-        signal: controller.signal,
-      });
-      const data = await response.json();
-      if (!response.ok || typeof data.available !== 'boolean') throw new Error(data.error || 'invalid_response');
-      return data;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 300));
+        try {
+          const nonce = `${Date.now()}-${attempt}`;
+          const response = await fetchImpl(`${endpoint}?platform=${encodeURIComponent(platform)}&_=${nonce}`, {
+            headers: { accept: 'application/json' },
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+          const data = await response.json();
+          if (!response.ok || typeof data.available !== 'boolean') throw new Error(data.error || 'invalid_response');
+          return data;
+        } catch (error) {
+          lastError = error;
+          if (controller.signal.aborted) throw error;
+        }
+      }
+      throw lastError || new Error('host_release_metadata_unavailable');
     } finally {
       clearTimeout(timer);
     }
