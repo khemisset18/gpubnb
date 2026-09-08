@@ -9,15 +9,28 @@ const allowed = {
 const headers = { accept: 'application/vnd.github+json', 'user-agent': 'GPUbnb-Netlify/1.0' };
 if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
 
-function json(body, status = 200) {
-  return Response.json(body, { status, headers: { 'cache-control': 'public, max-age=60, stale-while-revalidate=300' } });
+const metadataCache = 'public, max-age=30, stale-while-revalidate=60';
+const noStore = 'no-store';
+
+function json(body, status = 200, cacheControl = metadataCache) {
+  return Response.json(body, {
+    status,
+    headers: {
+      'cache-control': cacheControl,
+      'x-content-type-options': 'nosniff',
+    },
+  });
 }
 
 async function github(path) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 7000);
   try {
-    return await fetch(`https://api.github.com/repos/${repository}${path}`, { headers, signal: controller.signal });
+    return await fetch(`https://api.github.com/repos/${repository}${path}`, {
+      headers,
+      signal: controller.signal,
+      cache: 'no-store',
+    });
   } finally {
     clearTimeout(timer);
   }
@@ -33,7 +46,10 @@ async function checksumFor(release, filename) {
   const asset = release.assets.find(item => item.name === 'SHA256SUMS.txt')
     || release.assets.find(item => item.name === `${filename}.sha256`);
   if (!asset) return null;
-  const response = await fetch(asset.browser_download_url, { headers: { 'user-agent': headers['user-agent'] } });
+  const response = await fetch(asset.browser_download_url, {
+    headers: { 'user-agent': headers['user-agent'] },
+    cache: 'no-store',
+  });
   if (!response.ok) return null;
   const line = (await response.text()).split(/\r?\n/).find(value => value.trim().endsWith(filename));
   const checksum = line?.trim().split(/\s+/)[0];
@@ -44,21 +60,32 @@ export default async request => {
   const url = new URL(request.url);
   const platform = url.searchParams.get('platform');
   const requested = allowed[platform];
-  if (!requested) return json({ error: 'unsupported_platform', supported: Object.keys(allowed) }, 400);
+  if (!requested) return json({ error: 'unsupported_platform', supported: Object.keys(allowed) }, 400, noStore);
   const architecture = url.searchParams.get('arch');
   if (architecture && architecture !== requested.architecture) {
-    return json({ error: 'unsupported_architecture', platform, supported: [requested.architecture] }, 400);
+    return json({ error: 'unsupported_architecture', platform, supported: [requested.architecture] }, 400, noStore);
   }
 
   try {
     const release = await releaseMetadata();
     const asset = release.assets.find(item => item.name === requested.filename);
-    if (!asset) return json({ available: false, platform, architecture: requested.architecture, filename: requested.filename });
+    if (!asset) {
+      return json({
+        available: false,
+        platform,
+        architecture: requested.architecture,
+        filename: requested.filename,
+      }, 200, noStore);
+    }
     const downloadUrl = `/.netlify/functions/host-download?platform=${platform}&download=1`;
     if (url.searchParams.get('download') === '1') {
       return new Response(null, {
         status: 302,
-        headers: { location: asset.browser_download_url, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
+        headers: {
+          location: asset.browser_download_url,
+          'cache-control': noStore,
+          'x-content-type-options': 'nosniff',
+        },
       });
     }
     return json({
@@ -76,6 +103,9 @@ export default async request => {
       downloadUrl,
     });
   } catch (error) {
-    return json({ error: 'release_verification_failed', message: error.message }, 502);
+    return json({
+      error: 'release_verification_failed',
+      message: error instanceof Error ? error.message : 'unknown_error',
+    }, 502, noStore);
   }
 };
