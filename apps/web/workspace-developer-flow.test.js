@@ -11,14 +11,14 @@ import {
   formatRemainingRentalTime,
 } from './workspace-developer-flow.js';
 
-// A. GPU_PROOF COMPLETED -> bouton "Créer mon espace"
-test('shows CREATE once GPU_PROOF is COMPLETED and no developer session exists yet', () => {
+// A. GPU_PROOF COMPLETED -> automatic server-side Developer preparation.
+test('shows PREPARING while the auto-created Developer session is not visible yet', () => {
   const phase = deriveDeveloperPhase({
     bookingStatus: 'ACTIVE',
     gpuProofJob: { status: 'COMPLETED' },
     workspaceDetail: null,
   });
-  assert.equal(phase, DeveloperPhase.CREATE);
+  assert.equal(phase, DeveloperPhase.PREPARING);
 });
 
 test('stays HIDDEN while GPU_PROOF has not completed', () => {

@@ -20,6 +20,19 @@ test('verified GPU proof automatically analyzes and queues the persistent Develo
   assert.match(compatibleBranch, /GPU_PROOF_VERIFIED_AUTO_DEVELOPER/);
   assert.match(compatibleBranch, /DEVELOPER_PREPARATION_AUTO_REQUESTED_AFTER_GPU_PROOF/);
   assert.match(compatibleBranch, /developerPreparationQueued/);
+  assert.match(compatibleBranch, /type:\s*JobType\.GPU_DIAGNOSTIC, status:\s*JobStatus\.QUEUED/);
+  assert.match(compatibleBranch, /superseded_by_developer_workspace/);
+});
+
+test('legacy manual Developer request remains race-safe and returns the concurrent session', async () => {
+  const routes = await source('apps/api/src/workspace-renter-routes.ts');
+  const start = routes.indexOf("app.post('/bookings/:bookingId/workspace/developer'");
+  const end = routes.indexOf("app.post('/bookings/:bookingId/workspace/retry'", start);
+  const developerRoute = routes.slice(start, end);
+  assert.match(developerRoute, /const existing=await db\.workspaceSession\.findFirst/);
+  assert.match(developerRoute, /error instanceof Prisma\.PrismaClientKnownRequestError&&error\.code==='P2002'/);
+  assert.match(developerRoute, /const raced=await db\.workspaceSession\.findFirst/);
+  assert.match(developerRoute, /if\(raced\)return raced/);
 });
 
 test('the proof container is ephemeral but the renter Developer runtime is detached and not --rm', async () => {

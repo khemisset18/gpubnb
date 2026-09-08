@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   BookingStatus,
+  JobStatus,
+  JobType,
   MachineConnectivity,
   MachineOperational,
   ModerationStatus,
@@ -199,6 +201,33 @@ withPrisma('a fresh Developer-capable booking automatically queues Developer and
     const machine = await prisma.machine.findUniqueOrThrow({ where: { id: seed.machine.id } });
     assert.notEqual(machine.operational, MachineOperational.AVAILABLE);
     assert.equal(machine.operational, MachineOperational.RESERVED);
+  } finally {
+    await seed.cleanup();
+  }
+});
+
+withPrisma('automatic Developer handoff cancels only a queued GPU diagnostic', async (prisma) => {
+  const suffix = crypto.randomBytes(6).toString('hex');
+  const seed = await seedBookedMachine(prisma, suffix);
+  try {
+    const queued = await prisma.job.create({
+      data: {
+        bookingId: seed.booking.id,
+        renterId: seed.renter.id,
+        machineId: seed.machine.id,
+        type: JobType.GPU_DIAGNOSTIC,
+        status: JobStatus.QUEUED,
+        parameters: {},
+      },
+    });
+    await completeGpuProofJob(prisma, seed.booking.id, seed.machine.id);
+    const diagnostic = await prisma.job.findUniqueOrThrow({ where: { id: queued.id } });
+    assert.equal(diagnostic.status, JobStatus.CANCELLED);
+    assert.equal(diagnostic.errorCode, 'superseded_by_developer_workspace');
+    assert.ok(diagnostic.finishedAt);
+    assert.equal(await prisma.job.count({
+      where: { bookingId: seed.booking.id, type: JobType.WORKSPACE_PREPARE },
+    }), 1);
   } finally {
     await seed.cleanup();
   }

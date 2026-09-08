@@ -11,18 +11,20 @@ async function recoverySource(): Promise<string> {
   return readFile(path.join(repoRoot, 'e2e/recovery-agent-restart.cjs'), 'utf8');
 }
 
-test('agent-restart recovery cannot bypass the current GPU_PROOF-before-Developer contract', async () => {
+test('agent-restart recovery uses the automatic GPU_PROOF-to-Developer handoff', async () => {
   const source = await recoverySource();
   const compute = source.indexOf("workspaceSlug: 'compute'");
   const proof = source.indexOf("type: 'GPU_PROOF'");
-  const developer = source.indexOf('/workspace/developer');
+  const developer = source.indexOf("machineWorkspace: { workspace: { slug: 'developer' } }");
 
   assert.ok(compute >= 0, 'recovery must request Compute through the production route');
   assert.ok(proof > compute, 'recovery must wait for the real GPU_PROOF job');
-  assert.ok(developer > proof, 'Developer preparation must happen only after GPU_PROOF');
+  assert.ok(developer > proof, 'recovery must discover the auto-created Developer session after GPU_PROOF');
   assert.match(source, /proofResult\.gpuDetected !== true/);
   assert.match(source, /proofResult\.metrics\?\.containerCleaned !== true/);
   assert.match(source, /bookingAfterProof\.status !== 'STARTING'/);
+  assert.match(source, /current\.job\?\.type !== 'WORKSPACE_PREPARE'/);
+  assert.doesNotMatch(source, /fetch\([^\n]*workspace\/developer/);
 });
 
 test('agent is killed only after genuine code-server traffic activated the booking', async () => {

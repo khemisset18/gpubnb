@@ -80,10 +80,7 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
     const title=escapeHTML(booking.listing?.title||'Réservation GPU');
     const errorHTML=errorMessage?`<div class="muted">${escapeHTML(errorMessage)}</div>`:'';
     let action='';let badge=`<span class="badge">${escapeHTML(detail?.status||'')}</span>`;
-    if(phase===DeveloperPhase.CREATE){
-      action=`<button class="button button-primary" type="button" data-create-developer="${escapeHTML(booking.id)}">Créer mon espace de travail</button>`;
-      badge='';
-    }else if(phase===DeveloperPhase.PREPARING){
+    if(phase===DeveloperPhase.PREPARING){
       // Never surface the raw session status here: it can legitimately read
       // "READY" (the container/runtime finished) while the gateway tunnel is
       // still not registered - i.e. the workspace is not actually openable
@@ -495,13 +492,6 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
           await render();
         }
       }
-
-      root.querySelectorAll('[data-create-developer]').forEach(button=>button.addEventListener('click',()=>{
-        const bookingId=button.dataset.createDeveloper;
-        runDeveloperAction(bookingId,button,'Création…',()=>
-          request(`/bookings/${encodeURIComponent(bookingId)}/workspace/developer`,{method:'POST'}),
-        );
-      }));
 
       root.querySelectorAll('[data-retry-developer]').forEach(button=>button.addEventListener('click',()=>{
         const bookingId=button.dataset.retryDeveloper;

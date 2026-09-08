@@ -1,5 +1,6 @@
 import {
   BookingStatus,
+  JobStatus,
   JobType,
   MachineOperational,
   ModerationStatus,
@@ -126,6 +127,17 @@ export async function completeGpuProofJob(
                 action: 'DEVELOPER_PREPARATION_AUTO_REQUESTED_AFTER_GPU_PROOF',
               },
             },
+          },
+        });
+        // Preserve parity with the legacy manual Developer endpoint. A queued
+        // beta diagnostic is superseded by the real renter workspace, but an
+        // already-running diagnostic is deliberately left alone.
+        await tx.job.updateMany({
+          where: { bookingId, type: JobType.GPU_DIAGNOSTIC, status: JobStatus.QUEUED },
+          data: {
+            status: JobStatus.CANCELLED,
+            errorCode: 'superseded_by_developer_workspace',
+            finishedAt: now,
           },
         });
         const job = await tx.job.create({

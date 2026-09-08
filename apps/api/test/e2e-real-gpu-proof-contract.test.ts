@@ -11,18 +11,20 @@ async function source(): Promise<string> {
   return readFile(path.join(repoRoot, 'e2e/run.cjs'), 'utf8');
 }
 
-test('real E2E rental executes Compute GPU_PROOF before Developer workspace preparation', async () => {
+test('real E2E rental observes the Developer workspace created automatically by GPU_PROOF finalization', async () => {
   const e2e = await source();
   const proofRoute = e2e.indexOf('`${API}/bookings/${booking.id}/workspace-sessions`');
   const proofWait = e2e.indexOf("waitUntil('GPU_PROOF completes and finalizes'");
-  const developerRoute = e2e.indexOf('`${API}/bookings/${booking.id}/workspace/developer`');
+  const developerLookup = e2e.indexOf("machineWorkspace: { workspace: { slug: 'developer' } }");
 
   assert.ok(proofRoute >= 0, 'E2E must request the production Compute preparation route');
   assert.ok(proofWait > proofRoute, 'E2E must wait for the real GPU_PROOF job created by that route');
-  assert.ok(developerRoute > proofWait, 'Developer preparation must happen only after GPU_PROOF completes');
+  assert.ok(developerLookup > proofWait, 'E2E must discover the auto-created Developer session after GPU_PROOF');
   assert.match(e2e, /workspaceSlug: 'compute'/);
   assert.match(e2e, /type: 'GPU_PROOF'/);
   assert.match(e2e, /proofResult\.gpuDetected !== true \|\| proofResult\.metrics\?\.containerCleaned !== true/);
+  assert.match(e2e, /current\.job\?\.type !== 'WORKSPACE_PREPARE'/);
+  assert.doesNotMatch(e2e, /fetch\([^\n]*workspace\/developer/);
 });
 
 test('GPU_PROOF completion must leave the rental reserved for subsequent Developer activation', async () => {
