@@ -108,6 +108,20 @@ test('evidence collector stays fail-closed and cannot self-declare physical qual
   assert.doesNotMatch(script, /status\s*=\s*['"]PASSED['"]/);
 });
 
+test('CI parses every physical qualification PowerShell helper before merge', async () => {
+  const ci = await read('.github/workflows/ci.yml');
+  for (const required of [
+    'Validate qualification PowerShell syntax',
+    'shell: pwsh',
+    'System.Management.Automation.Language.Parser]::ParseFile',
+    'scripts/qualification-preflight-pc-a.ps1',
+    'scripts/qualification-preflight-pc-b.ps1',
+    'scripts/qualification-evidence.ps1',
+  ]) {
+    assert.ok(ci.includes(required), `CI PowerShell syntax gate is missing: ${required}`);
+  }
+});
+
 test('current gate advertises tooling but remains NOT YET PASSED and evidence bundles are gitignored', async () => {
   const current = await read('docs/CURRENT_PHYSICAL_QUALIFICATION.md');
   const ignore = await read('.gitignore');
