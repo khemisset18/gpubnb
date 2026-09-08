@@ -49,12 +49,64 @@ function Get-Public {
     }
 }
 
+function Get-ReleaseCommit {
+    param($Response)
+    if ($null -eq $Response -or -not $Response.ok -or $Response.status -ne 200) { return $null }
+    try { $payload = $Response.body | ConvertFrom-Json } catch { return $null }
+    $commit = [string]$payload.commit
+    if ($commit -notmatch '^[0-9a-fA-F]{40}$') { return $null }
+    return $commit.ToLowerInvariant()
+}
+
+function Test-GatewayWebSocket {
+    param([string]$Origin)
+    $wsUrl = (($Origin -replace '^https://', 'wss://').TrimEnd('/')) + '/ws-health'
+    $client = [System.Net.WebSockets.ClientWebSocket]::new()
+    $cts = [System.Threading.CancellationTokenSource]::new()
+    $stream = [System.IO.MemoryStream]::new()
+    try {
+        $cts.CancelAfter(20000)
+        $client.ConnectAsync([Uri]$wsUrl, $cts.Token).GetAwaiter().GetResult()
+        $buffer = New-Object byte[] 1024
+        do {
+            $segment = [System.ArraySegment[byte]]::new($buffer)
+            $received = $client.ReceiveAsync($segment, $cts.Token).GetAwaiter().GetResult()
+            if ($received.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) { break }
+            if ($received.Count -gt 0) { $stream.Write($buffer, 0, $received.Count) }
+        } while (-not $received.EndOfMessage)
+        $message = [System.Text.Encoding]::UTF8.GetString($stream.ToArray())
+        return [pscustomobject]@{
+            ok = ($message -eq 'gpubnb-ws-ok')
+            url = $wsUrl
+            message = $message
+            error = $null
+        }
+    } catch {
+        return [pscustomobject]@{
+            ok = $false
+            url = $wsUrl
+            message = ''
+            error = $_.Exception.Message
+        }
+    } finally {
+        $stream.Dispose()
+        $cts.Dispose()
+        $client.Dispose()
+    }
+}
+
 try {
     $frontend = Normalize-PublicOrigin 'FrontendOrigin' $FrontendOrigin
     $api = Normalize-PublicOrigin 'ApiOrigin' $ApiOrigin
     $gateway = Normalize-PublicOrigin 'GatewayOrigin' $GatewayOrigin
 } catch {
     Write-Error $_.Exception.Message
+    exit 1
+}
+
+$expectedFull = $ExpectedReleaseCommit.Trim().ToLowerInvariant()
+if ($expectedFull -and $expectedFull -notmatch '^[0-9a-f]{40}$') {
+    Write-Error 'ExpectedReleaseCommit must be the exact 40-character Git SHA for physical qualification'
     exit 1
 }
 
@@ -71,9 +123,27 @@ $directApiReady = Get-Public "$api/ready"
 $directApiReadyOk = $directApiReady.ok -and $directApiReady.status -eq 200
 Add-Check 'direct API /ready' $directApiReadyOk $(if ($directApiReadyOk) { 'HTTP 200' } else { "expected HTTP 200, got $($directApiReady.status)" })
 
-$gatewayHealth = Get-Public "$gateway/ws-health"
-$gatewayHealthOk = $gatewayHealth.ok -and $gatewayHealth.status -eq 200 -and $gatewayHealth.body.Contains('gpubnb-ws-ok')
-Add-Check 'workspace gateway /ws-health' $gatewayHealthOk $(if ($gatewayHealthOk) { 'HTTP 200 + gpubnb-ws-ok' } else { "gateway health failed (HTTP $($gatewayHealth.status))" })
+$directReleaseResponse = Get-Public "$api/release"
+$directReleaseCommit = Get-ReleaseCommit $directReleaseResponse
+$directReleaseOk = $null -ne $directReleaseCommit
+Add-Check 'direct API release identity' $directReleaseOk $(if ($directReleaseOk) { $directReleaseCommit } else { "missing exact release SHA (HTTP $($directReleaseResponse.status))" })
+
+$sameOriginReleaseResponse = Get-Public "$frontend/api/release"
+$sameOriginReleaseCommit = Get-ReleaseCommit $sameOriginReleaseResponse
+$sameOriginReleaseOk = $null -ne $sameOriginReleaseCommit
+Add-Check 'same-origin API release identity' $sameOriginReleaseOk $(if ($sameOriginReleaseOk) { $sameOriginReleaseCommit } else { "missing exact release SHA through /api proxy (HTTP $($sameOriginReleaseResponse.status))" })
+
+$apiReleaseAgreement = $directReleaseOk -and $sameOriginReleaseOk -and $directReleaseCommit -eq $sameOriginReleaseCommit
+Add-Check 'direct and same-origin API target the same release' $apiReleaseAgreement $(if ($apiReleaseAgreement) { $directReleaseCommit } else { "direct=$directReleaseCommit proxied=$sameOriginReleaseCommit" })
+
+if ($expectedFull -and $directReleaseOk -and $sameOriginReleaseOk) {
+    $apiExpected = $directReleaseCommit -eq $expectedFull -and $sameOriginReleaseCommit -eq $expectedFull
+    Add-Check 'expected API release commit' $apiExpected $(if ($apiExpected) { $expectedFull } else { "expected $expectedFull, direct=$directReleaseCommit proxied=$sameOriginReleaseCommit" })
+}
+
+$gatewayHealth = Test-GatewayWebSocket $gateway
+$gatewayHealthOk = $gatewayHealth.ok
+Add-Check 'workspace gateway WebSocket /ws-health' $gatewayHealthOk $(if ($gatewayHealthOk) { 'WSS upgrade + exact gpubnb-ws-ok frame' } else { "WSS probe failed: $($gatewayHealth.error)" })
 
 $configResponse = Get-Public "$frontend/config.js"
 $configOk = $configResponse.ok -and $configResponse.status -eq 200
@@ -96,16 +166,18 @@ Add-Check 'published gateway origin matches qualification target' $gatewayMatche
 $commitPresent = $null -ne $publishedCommit
 Add-Check 'published frontend build commit' $commitPresent $(if ($commitPresent) { $publishedCommit } else { 'missing 7-character hosted build commit in config.js' })
 
-if (-not [string]::IsNullOrWhiteSpace($ExpectedReleaseCommit) -and $commitPresent) {
-    $expectedShort = $ExpectedReleaseCommit.Trim().ToLowerInvariant()
-    if ($expectedShort.Length -gt 7) { $expectedShort = $expectedShort.Substring(0, 7) }
-    $commitMatch = $publishedCommit -eq $expectedShort
-    Add-Check 'expected frontend release commit' $commitMatch $(if ($commitMatch) { $expectedShort } else { "expected $expectedShort, published $publishedCommit" })
+if ($expectedFull -and $commitPresent) {
+    $expectedShort = $expectedFull.Substring(0, 7)
+    $frontendMatch = $publishedCommit -eq $expectedShort
+    Add-Check 'expected frontend release commit' $frontendMatch $(if ($frontendMatch) { $expectedShort } else { "expected $expectedShort, published $publishedCommit" })
 }
+
+$frontendApiAgreement = $commitPresent -and $directReleaseOk -and $directReleaseCommit.StartsWith($publishedCommit)
+Add-Check 'frontend and API release identities agree' $frontendApiAgreement $(if ($frontendApiAgreement) { "$publishedCommit -> $directReleaseCommit" } else { "frontend=$publishedCommit api=$directReleaseCommit" })
 
 $failed = @($checks | Where-Object { -not $_.passed })
 $result = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     kind = 'gpubnb-physical-qualification-pc-b-preflight'
     generatedAtUtc = [DateTime]::UtcNow.ToString('o')
     passed = ($failed.Count -eq 0)
@@ -116,9 +188,17 @@ $result = [ordered]@{
     }
     frontend = [ordered]@{
         publishedCommit = $publishedCommit
-        expectedReleaseCommit = if ($ExpectedReleaseCommit) { $ExpectedReleaseCommit } else { $null }
+        expectedReleaseCommit = if ($ExpectedReleaseCommit) { $expectedFull } else { $null }
         publishedGatewayOrigin = $publishedGateway
         apiBase = if ($publishedApiSameOrigin) { '/api' } else { $null }
+    }
+    api = [ordered]@{
+        directReleaseCommit = $directReleaseCommit
+        sameOriginReleaseCommit = $sameOriginReleaseCommit
+    }
+    gateway = [ordered]@{
+        websocketHealthPassed = $gatewayHealthOk
+        healthPath = '/ws-health'
     }
     checks = $checks
 }
