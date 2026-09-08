@@ -17,6 +17,18 @@ A qualification result is valid only for one exact tested release identity. Reco
 
 If any executable component changes after the run, the result becomes historical evidence and this gate returns to **NOT YET PASSED** until the affected path is requalified.
 
+## Qualification tooling
+
+`docs/TWO_PC_TEST.md` is the current operator procedure for this gate. Before the clean run:
+
+- run `scripts/qualification-preflight-pc-a.ps1` on PC A to lock the repository/Agent/GPU identity and fail closed on a dirty release, unhealthy Agent/Docker/NVIDIA state, or an old GPUbnb per-session Docker resource;
+- run `scripts/qualification-preflight-pc-b.ps1` on PC B to verify the real HTTPS frontend, same-origin `/api` proxy, direct API `/ready`, gateway `/ws-health`, published gateway origin and frontend build commit;
+- start `scripts/qualification-evidence.ps1` only after both preflights are PASS. It writes a non-secret release lock and evidence record.
+
+After normal stop, use the same evidence collector in `Finish` mode to bind the booking/job/session/machine/GPU identifiers to the release lock and prove the canonical per-session container/proxy/volume/internal-network resources are absent.
+
+These helpers deliberately do **not** mark this gate PASSED. They do not replace visual confirmation from PC B, server state-transition evidence, or the final manual decision required below. Generated local evidence lives under `qualification-evidence/`, which is gitignored to reduce accidental publication.
+
 ## Required physical setup
 
 - PC A: a real host machine running the release Agent, Docker and NVIDIA runtime, with a physical NVIDIA GPU published by GPUbnb.
