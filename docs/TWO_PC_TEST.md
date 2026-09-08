@@ -124,7 +124,16 @@ L'UUID visible doit être exactement l'UUID loué. Enregistrer une capture **san
 
 ## 5. Finaliser la collecte d'évidence
 
-Récupérer depuis le run : `<BOOKING_ID>`, `<GPU_PROOF_JOB_ID>`, `<WORKSPACE_SESSION_ID>`, `<MACHINE_ID>`, `<LEASED_GPU_UUID>` et les correlation/request IDs sanitisés utiles.
+Récupérer depuis le run : `<BOOKING_ID>`, `<GPU_PROOF_JOB_ID>`, `<WORKSPACE_SESSION_ID>`, `<MACHINE_ID>`, `<LEASED_GPU_UUID>` et au moins un correlation/request ID sanitisé utile.
+
+Préparer également quatre fichiers sanitisés :
+
+- une capture PNG/JPG/WEBP ou TXT de `nvidia-smi` dans code-server sur PC B ;
+- une preuve GPU_PROOF liée à l'UUID loué ;
+- une timeline des transitions booking/job/workspace/machine couvrant préparation, ouverture, activité et arrêt ;
+- une preuve finale que le GPU et la listing sont revenus disponibles/bookables après cleanup/release.
+
+Les trois dernières preuves peuvent être JSON, TXT ou Markdown sanitisés. Ne jamais copier de réponse brute contenant credentials, cookies, headers d'authentification, grants ou lease tokens.
 
 Puis sur PC A :
 
@@ -138,16 +147,21 @@ powershell -ExecutionPolicy Bypass -File .\scripts\qualification-evidence.ps1 `
   -MachineId <MACHINE_ID> `
   -LeasedGpuUuid <LEASED_GPU_UUID> `
   -CorrelationIds <CORRELATION_ID_1>,<CORRELATION_ID_2> `
-  -PcBScreenshotPath C:\path\to\sanitized-nvidia-smi.png
+  -PcBScreenshotPath C:\path\to\sanitized-nvidia-smi.png `
+  -GpuProofEvidencePath C:\path\to\sanitized-gpu-proof.json `
+  -StateTimelinePath C:\path\to\sanitized-state-timeline.json `
+  -FinalAvailabilityPath C:\path\to\sanitized-final-availability.json
 ```
 
 Le collecteur :
 
 - vérifie que machine/UUID correspondent au release lock ;
+- exige au moins un correlation/request ID sanitisé ;
+- exige et copie les quatre preuves explicitement fournies ;
+- rejette les fichiers texte/JSON/Markdown qui contiennent des marqueurs évidents de credentials/tokens ;
 - dérive les noms Docker canoniques de la session ;
 - échoue si un container/proxy/volume/réseau interne GPUbnb reste présent ;
 - vérifie que le GPU physique cible existe encore après cleanup ;
-- copie uniquement la capture PC B explicitement fournie ;
 - génère un `RESULT.md` avec checklist de décision.
 
 **Le collecteur ne marque jamais automatiquement la release PASSED.** Les preuves serveur/UI et la capture PC B doivent encore être revues contre `CURRENT_PHYSICAL_QUALIFICATION.md`.
