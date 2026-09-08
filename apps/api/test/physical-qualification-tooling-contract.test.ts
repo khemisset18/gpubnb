@@ -58,14 +58,20 @@ test('PC A preflight locks release/Agent/GPU identity and is read-only toward Do
   assert.doesNotMatch(script, /docker[^\n]*(?:\brm\b|volume\s+rm|network\s+rm)/i);
 });
 
-test('PC B preflight proves the configured public browser/API/gateway path and build identity', async () => {
+test('PC B preflight proves the configured public browser/API/gateway path and exact build identity', async () => {
   const script = await read('scripts/qualification-preflight-pc-b.ps1');
   for (const required of [
     'must use HTTPS for final physical qualification',
     '/api/ready',
     '/ready',
+    '/api/release',
+    '/release',
+    'ClientWebSocket',
+    'wss://',
     '/ws-health',
     'gpubnb-ws-ok',
+    'directReleaseCommit',
+    'sameOriginReleaseCommit',
     'config.js',
     'GPUBNB_API_URL',
     'GPUBNB_GATEWAY_URL',
@@ -74,6 +80,40 @@ test('PC B preflight proves the configured public browser/API/gateway path and b
   ]) {
     assert.ok(script.includes(required), `PC B preflight is missing: ${required}`);
   }
+  assert.doesNotMatch(
+    script,
+    /Get-Public\s+"\$gateway\/ws-health"/,
+    'gateway health is a WebSocket upgrade endpoint and must never regress to an HTTP GET probe',
+  );
+});
+
+test('API publishes only an exact non-secret deployment commit for qualification', async () => {
+  const routes = await read('apps/api/src/device-authorization-routes.ts');
+  const identity = await read('apps/api/src/release-identity.ts');
+  assert.match(routes, /app\.get\('\/release'/);
+  assert.match(routes, /resolveReleaseIdentity\(\)/);
+  assert.match(routes, /commit:\s*identity\.commit/);
+  assert.match(identity, /GPUBNB_RELEASE_SHA/);
+  assert.match(identity, /RENDER_GIT_COMMIT/);
+  assert.match(identity, /GITHUB_SHA/);
+  assert.match(identity, /\^\[0-9a-f\]\{40\}\$/i);
+  assert.doesNotMatch(identity, /DATABASE_URL|REDIS_URL|SESSION_SECRET|TOKEN/);
+});
+
+test('PC B reserves the workspace tab synchronously before requesting the one-time access grant', async () => {
+  const html = await read('apps/web/bookings.html');
+  const guard = await read('apps/web/workspace-open-guard.js');
+  assert.match(html, /workspace-open-guard\.js/);
+  assert.match(guard, /document\.addEventListener\('click'/);
+  assert.match(guard, /event\.stopPropagation\(\)/);
+  assert.match(guard, /window\.open\('about:blank', '_blank'\)/);
+  assert.match(guard, /reserved\.opener = null/);
+  assert.match(guard, /reserved\.location\.replace\(destination\.href\)/);
+  assert.match(guard, /workspace\/access/);
+  assert.match(guard, /workspace\/developer|data-open-developer/);
+  const reserve = guard.indexOf("window.open('about:blank', '_blank')");
+  const grantFetch = guard.indexOf('await fetchAccess', reserve);
+  assert.ok(reserve >= 0 && grantFetch > reserve, 'the blank tab must be reserved during the trusted click before any awaited network work');
 });
 
 test('evidence collector stays fail-closed and cannot self-declare physical qualification passed', async () => {
