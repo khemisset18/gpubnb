@@ -15,7 +15,10 @@ param(
     [string]$MachineId = '',
     [string]$LeasedGpuUuid = '',
     [string[]]$CorrelationIds = @(),
-    [string]$PcBScreenshotPath = ''
+    [string]$PcBScreenshotPath = '',
+    [string]$GpuProofEvidencePath = '',
+    [string]$StateTimelinePath = '',
+    [string]$FinalAvailabilityPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -80,6 +83,28 @@ function List-Matching {
     throw "unsupported Docker resource kind: $Kind"
 }
 
+function Copy-SanitizedEvidence {
+    param([string]$SourcePath, [string]$DestinationStem, [string]$Label, [string]$TargetDirectory)
+    if ([string]::IsNullOrWhiteSpace($SourcePath) -or -not (Test-Path -LiteralPath $SourcePath -PathType Leaf)) {
+        throw "$Label file not found: $SourcePath"
+    }
+    $extension = [IO.Path]::GetExtension($SourcePath).ToLowerInvariant()
+    $allowed = @('.json', '.txt', '.md', '.png', '.jpg', '.jpeg', '.webp')
+    if ($extension -notin $allowed) {
+        throw "$Label must be sanitized JSON/TXT/MD or PNG/JPG/WEBP evidence"
+    }
+    if ($extension -in @('.json', '.txt', '.md')) {
+        $text = Get-Content -LiteralPath $SourcePath -Raw
+        $secretPattern = '(?i)(authorization\s*:|cookie\s*:|redis(?:s)?://|postgres(?:ql)?://|service[_-]?role|bootstrap[_-]?grant|lease[_-]?token|BEGIN\s+(RSA|OPENSSH|EC)?\s*PRIVATE\s+KEY)'
+        if ($text -match $secretPattern) {
+            throw "$Label appears to contain a forbidden credential/token marker; sanitize it before collection"
+        }
+    }
+    $destinationName = "$DestinationStem$extension"
+    Copy-Item -LiteralPath $SourcePath -Destination (Join-Path $TargetDirectory $destinationName) -Force
+    return $destinationName
+}
+
 if ($Action -eq 'Start') {
     if ([string]::IsNullOrWhiteSpace($RedisClass)) { throw 'RedisClass is required (provider/endpoint class only, never credentials)' }
     if ([string]::IsNullOrWhiteSpace($PostgresClass)) { throw 'PostgresClass is required (target class only, never credentials)' }
@@ -140,8 +165,8 @@ if ($Action -eq 'Start') {
             leasedGpuUuid = $null
             correlationIds = @()
         }
+        evidenceFiles = $null
         cleanup = $null
-        pcBEvidence = $null
         decision = 'PENDING_MANUAL_REVIEW'
     }
     $record | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $EvidenceDir 'qualification-run.json') -Encoding UTF8
@@ -192,6 +217,7 @@ Do not change any executable component or public origin during this clean run. I
 
 # Finish
 if ([string]::IsNullOrWhiteSpace($EvidenceDir)) { throw 'EvidenceDir is required for Finish' }
+$EvidenceDir = (Resolve-Path $EvidenceDir).Path
 $runPath = Join-Path $EvidenceDir 'qualification-run.json'
 $record = Read-JsonFile $runPath 'qualification run'
 if ($record.status -ne 'IN_PROGRESS') { throw "qualification run is not IN_PROGRESS: $($record.status)" }
@@ -204,6 +230,9 @@ Assert-SafeIdentifier 'LeasedGpuUuid' $LeasedGpuUuid
 if ($CorrelationIds.Count -lt 1) { throw 'At least one sanitized CorrelationId is required' }
 foreach ($correlationId in $CorrelationIds) { Assert-SafeIdentifier 'CorrelationId' $correlationId }
 if ([string]::IsNullOrWhiteSpace($PcBScreenshotPath)) { throw 'PcBScreenshotPath is required for the renter nvidia-smi evidence' }
+if ([string]::IsNullOrWhiteSpace($GpuProofEvidencePath)) { throw 'GpuProofEvidencePath is required' }
+if ([string]::IsNullOrWhiteSpace($StateTimelinePath)) { throw 'StateTimelinePath is required' }
+if ([string]::IsNullOrWhiteSpace($FinalAvailabilityPath)) { throw 'FinalAvailabilityPath is required' }
 
 if ($MachineId -ne [string]$record.host.machineId) {
     throw "MachineId does not match the release lock: expected $($record.host.machineId), got $MachineId"
@@ -226,13 +255,10 @@ $allClean = $containers.Count -eq 0 -and $volumes.Count -eq 0 -and $networks.Cou
 $nvidia = Run-External 'nvidia-smi' @('--query-gpu=uuid,name,driver_version', '--format=csv,noheader')
 $targetStillPresent = $nvidia.code -eq 0 -and $nvidia.text.ToLowerInvariant().Contains($LeasedGpuUuid.ToLowerInvariant())
 
-if (-not (Test-Path -LiteralPath $PcBScreenshotPath -PathType Leaf)) { throw "PC B evidence file not found: $PcBScreenshotPath" }
-$extension = [IO.Path]::GetExtension($PcBScreenshotPath).ToLowerInvariant()
-if ($extension -notin @('.png', '.jpg', '.jpeg', '.webp', '.txt')) {
-    throw 'PC B evidence must be a sanitized PNG/JPG/WEBP screenshot or TXT terminal capture'
-}
-$pcBEvidenceName = "pc-b-nvidia-smi$extension"
-Copy-Item -LiteralPath $PcBScreenshotPath -Destination (Join-Path $EvidenceDir $pcBEvidenceName) -Force
+$pcBEvidenceName = Copy-SanitizedEvidence $PcBScreenshotPath 'pc-b-nvidia-smi' 'PC B nvidia-smi evidence' $EvidenceDir
+$gpuProofEvidenceName = Copy-SanitizedEvidence $GpuProofEvidencePath 'gpu-proof-evidence' 'GPU_PROOF evidence' $EvidenceDir
+$timelineEvidenceName = Copy-SanitizedEvidence $StateTimelinePath 'state-transition-timeline' 'state transition timeline' $EvidenceDir
+$availabilityEvidenceName = Copy-SanitizedEvidence $FinalAvailabilityPath 'final-availability' 'final GPU/listing availability evidence' $EvidenceDir
 
 $record.status = 'EVIDENCE_COLLECTED'
 $record.endedAtUtc = [DateTime]::UtcNow.ToString('o')
@@ -241,6 +267,12 @@ $record.rental.gpuProofJobId = $GpuProofJobId
 $record.rental.workspaceSessionId = $WorkspaceSessionId
 $record.rental.leasedGpuUuid = $LeasedGpuUuid
 $record.rental.correlationIds = @($CorrelationIds)
+$record.evidenceFiles = [ordered]@{
+    pcBNvidiaSmi = $pcBEvidenceName
+    gpuProof = $gpuProofEvidenceName
+    stateTimeline = $timelineEvidenceName
+    finalAvailability = $availabilityEvidenceName
+}
 $record.cleanup = [ordered]@{
     expectedResources = $names
     exactLeftovers = $exactLeftovers
@@ -250,7 +282,6 @@ $record.cleanup = [ordered]@{
     clean = $allClean
     targetGpuStillPresent = $targetStillPresent
 }
-$record.pcBEvidence = $pcBEvidenceName
 $record.decision = 'PENDING_MANUAL_REVIEW'
 $record | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $runPath -Encoding UTF8
 
@@ -290,6 +321,13 @@ This collector never marks the release PASSED by itself. `docs/CURRENT_PHYSICAL_
 - Leased accelerator hardware UUID: `$LeasedGpuUuid`
 - Correlation IDs: `$([string]::Join(', ', @($CorrelationIds)))`
 
+## Evidence files
+
+- PC B `nvidia-smi`: `$pcBEvidenceName`
+- GPU_PROOF evidence: `$gpuProofEvidenceName`
+- State transition timeline: `$timelineEvidenceName`
+- Final GPU/listing availability: `$availabilityEvidenceName`
+
 ## Automatically collected checks
 
 - PC A preflight: PASS
@@ -298,7 +336,7 @@ This collector never marks the release PASSED by itself. `docs/CURRENT_PHYSICAL_
 - Leased GPU UUID matches PC A target: PASS
 - Docker cleanup: `$cleanupText`
 - Physical GPU still visible after cleanup: `$gpuPresentText`
-- PC B sanitized `nvidia-smi` evidence file: `$pcBEvidenceName`
+- Required sanitized evidence files: PRESENT
 
 ## Mandatory manual review before changing the gate to PASSED
 
