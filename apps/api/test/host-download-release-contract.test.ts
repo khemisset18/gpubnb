@@ -15,6 +15,7 @@ test('website Host download uses the exact published Windows installer asset', a
   const hostDownload = await read('netlify/functions/host-download.mjs');
   const publishWorkflow = await read('.github/workflows/publish-host-test-release.yml');
   const installPage = await read('apps/web/host-install.html');
+  const webConfig = await read('apps/web/config.js');
 
   assert.match(
     hostDownload,
@@ -27,8 +28,13 @@ test('website Host download uses the exact published Windows installer asset', a
   );
   assert.match(installPage, new RegExp(WINDOWS_INSTALLER.replaceAll('.', '\\.')));
   assert.match(installPage, /Installeur Windows/);
+  assert.match(
+    webConfig,
+    new RegExp(`windows: \\{ architecture: "x64", filename: "${WINDOWS_INSTALLER.replaceAll('.', '\\.')}"`),
+  );
 
   assert.doesNotMatch(hostDownload, /filename: 'gpubnb-host-windows-x64\.zip'/);
+  assert.doesNotMatch(webConfig, /gpubnb-host-windows-x64\.zip/);
   assert.doesNotMatch(installPage, /extrayez entièrement le ZIP/i);
   assert.doesNotMatch(installPage, /GPUbnb-Host-Portable\.exe/);
   assert.match(publishWorkflow, /gpubnb-host-windows-x64-portable\.zip/);
@@ -44,6 +50,20 @@ test('Host download visibly exposes immutable release identity and checksum', as
   assert.match(hostDownloadsUi, /immutable: metadata\.immutableVersion/);
   assert.match(installPage, /data-download-immutable/);
   assert.match(installPage, /data-download-checksum/);
+});
+
+test('Host release metadata bypasses transient cache failures while remaining fail closed', async () => {
+  const hostDownload = await read('netlify/functions/host-download.mjs');
+  const hostDownloadsUi = await read('apps/web/host-downloads.js');
+
+  assert.match(hostDownload, /const noStore = 'no-store';/);
+  assert.match(hostDownload, /cache: 'no-store'/);
+  assert.match(hostDownload, /release_verification_failed/);
+  assert.match(hostDownload, /502, noStore/);
+  assert.match(hostDownloadsUi, /cache: 'no-store'/);
+  assert.match(hostDownloadsUi, /for \(let attempt = 0; attempt < 2; attempt\+\+\)/);
+  assert.match(hostDownloadsUi, /&_\=\$\{nonce\}/);
+  assert.doesNotMatch(hostDownload, /host-v0\.2\.0-beta\.79/, 'must not bypass host-test-latest with a hard-coded candidate');
 });
 
 test('Windows release smoke test rejects an installer with the wrong embedded Agent version', async () => {
