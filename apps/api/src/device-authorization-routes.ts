@@ -21,6 +21,7 @@ import { config } from './config.js';
 import { controlChannelAssignment } from './agent-control-channel.js';
 import { configureSchedulerPresence } from './scheduler-presence.js';
 import { recordSecurityFailure, verifyAgentRequest } from './security.js';
+import { resolveReleaseIdentity } from './release-identity.js';
 
 const agentPublicKeySchema = z.string().min(32).max(64).regex(/^[1-9A-HJ-NP-Za-km-z]+$/);
 const machineFingerprintSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
@@ -79,6 +80,15 @@ export const registerDeviceAuthorizationRoutes = (
   registerWorkspaceRenterRoutes(app, db, redis);
   registerRentalMarketplaceRoutes(app, db, redis);
   registerMachineDiagnosticsRoutes(app, db, redis);
+
+  // Public, non-secret release identity for physical qualification. This lets
+  // PC B prove that both the direct API and Netlify's same-origin /api proxy are
+  // serving the exact Git commit being qualified instead of a stale deployment.
+  app.get('/release', async (_request, reply) => {
+    const identity = resolveReleaseIdentity();
+    if (!identity.commit) return reply.code(503).send({ ok: false, commit: null });
+    return { ok: true, commit: identity.commit, source: identity.source };
+  });
 
   app.get('/agent/control-channel/:machineId', {
     config: { rateLimit: { max: 12, timeWindow: '1 minute' } },
