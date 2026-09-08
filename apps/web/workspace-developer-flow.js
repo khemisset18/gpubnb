@@ -31,7 +31,10 @@ export function isBookingEligibleForWorkspace(bookingStatus) {
 export function deriveDeveloperPhase({ bookingStatus, gpuProofJob, workspaceDetail }) {
   if (!isBookingEligibleForWorkspace(bookingStatus)) return DeveloperPhase.HIDDEN;
   if (!isGpuProofCompleted(gpuProofJob)) return DeveloperPhase.HIDDEN;
-  if (!workspaceDetail) return DeveloperPhase.CREATE;
+  // finalize-proof creates Developer server-side. A 404 immediately after the
+  // completed proof is only eventual visibility between polling requests, not
+  // an action the renter must perform.
+  if (!workspaceDetail) return DeveloperPhase.PREPARING;
   if (workspaceDetail.canOpen) return DeveloperPhase.OPEN;
   if (workspaceDetail.retryable) return DeveloperPhase.RETRY;
   if (ENDED_SESSION_STATUSES.has(workspaceDetail.status)) return DeveloperPhase.ENDED;

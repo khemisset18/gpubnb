@@ -8,8 +8,8 @@ Docker and a real NVIDIA GPU.
 wallet auth (real Ed25519) → machine pairing (real agent) → heartbeat →
 local onboarding bootstrap → listing → booking/allocation →
 POST /workspace-sessions {workspaceSlug:compute} → real GPU_PROOF job →
-server-side proof finalization → booking remains STARTING/reserved →
-POST /workspace/developer → real WORKSPACE_PREPARE job →
+server-side proof finalization → automatic Developer session while the booking remains STARTING/reserved →
+real WORKSPACE_PREPARE job →
 real Docker container (gpubnb-developer image) → real gateway register →
 READY (canOpen:true) → real access grant → real code-server Management +
 ExtensionHost upstream frames → ACTIVE → stop → COMPLETED → real cleanup →
@@ -69,7 +69,8 @@ public PC A ↔ PC B browser qualification.
   accepts the proof as successful.
 - It waits for `/agent/jobs/:id/finalize-proof` to finish its server-side
   booking transition rather than racing the preceding job-completion request.
-- Developer preparation is requested only after the proof is finalized.
+- Proof finalization automatically creates the Developer session and queues its
+  WORKSPACE_PREPARE job; the harness never calls the legacy manual Developer route.
 - It never writes Developer `status: READY` itself — that transition only
   happens because the real `/agent/jobs/:id/complete` and
   `/agent/workspace-gateway/:sessionId/register` handlers run.

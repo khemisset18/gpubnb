@@ -114,9 +114,14 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       });
     }catch(error){
-      const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
-      if(raced)return raced;
       if(error instanceof BookingNoLongerEligibleForWorkspaceError)return reply.code(409).send({error:'funded_booking_required'});
+      // Only a uniqueness collision is the expected auto/manual creation race.
+      // Never hide an unrelated transaction failure merely because a session
+      // happens to be visible by the time this catch block runs.
+      if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002'){
+        const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
+        if(raced)return raced;
+      }
       throw error;
     }
   });

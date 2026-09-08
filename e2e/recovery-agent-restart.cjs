@@ -304,13 +304,17 @@ async function main() {
   }, { timeoutMs: 600_000, intervalMs: 2000 });
   log('   GPU_PROOF completed and finalized', { jobId: finalizedProof.job.id, bookingStatus: finalizedProof.booking.status });
 
-  log('9. real Developer workspace request only after GPU_PROOF');
-  const devRes = await fetch(`${API}/bookings/${booking.id}/workspace/developer`, {
-    method: 'POST',
-    headers: { cookie: renter.cookie },
-  });
-  const session = await devRes.json();
-  if (!devRes.ok) throw new Error('workspace/developer failed: ' + JSON.stringify(session));
+  log('9. waiting for Developer automatically created by finalize-proof');
+  const session = await waitUntil('automatic Developer session and WORKSPACE_PREPARE exist', async () => {
+    const current = await prisma.workspaceSession.findFirst({
+      where: { bookingId: booking.id, machineWorkspace: { workspace: { slug: 'developer' } } },
+      include: { job: { select: { id: true, type: true, status: true } } },
+    });
+    if (!current) return null;
+    if (!['PREPARING', 'READY'].includes(current.status)) throw new Error('automatic Developer session has invalid status: ' + JSON.stringify(current));
+    if (current.job?.type !== 'WORKSPACE_PREPARE') throw new Error('automatic Developer session has no WORKSPACE_PREPARE job: ' + JSON.stringify(current));
+    return current;
+  }, { timeoutMs: 30_000, intervalMs: 500 });
   log('   sessionId', session.id);
 
   log('10. waiting for real WORKSPACE_PREPARE and gateway registration');

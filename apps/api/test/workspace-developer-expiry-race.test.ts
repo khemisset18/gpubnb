@@ -65,11 +65,9 @@ test('workspace/developer atomically re-verifies the booking (status + endsAt) i
     'losing the race must throw a distinguishable, typed error - not silently proceed to create an orphaned session',
   );
 
-  // The catch block must turn that typed error into a clean, documented rejection - and must
-  // still prefer the pre-existing raced-session recovery first, so a genuine double-click
-  // (test H) is unaffected: two concurrent requests that both pass the atomic re-check still
-  // race on workspaceSession's own @@unique([bookingId, machineWorkspaceId]) constraint, and
-  // the loser there must keep recovering the winner's session, not surface this new error.
+  // The catch block must turn that typed error into a clean, documented rejection. Only a
+  // P2002 uniqueness collision is the expected auto/manual double-click race and may recover
+  // the winning session; unrelated transaction failures must continue to propagate.
   const catchIndex = compact.indexOf('}catch(error){', transactionStart);
   assert.ok(catchIndex >= 0, 'route must still catch transaction failures');
   // compact is already bounded to just this route (sliced up to the next route
@@ -78,8 +76,12 @@ test('workspace/developer atomically re-verifies the booking (status + endsAt) i
   const catchBody = compact.slice(catchIndex);
   const racedIndex = catchBody.indexOf('if(raced)returnraced;');
   const typedErrorIndex = catchBody.indexOf('BookingNoLongerEligibleForWorkspaceError');
-  assert.ok(racedIndex >= 0 && typedErrorIndex >= 0, 'catch block must check both the raced-session recovery and the new typed rejection');
-  assert.ok(racedIndex < typedErrorIndex, 'a genuine double-click must still recover the winner\'s session before this new rejection is even considered');
+  const p2002Index = catchBody.indexOf("errorinstanceofPrisma.PrismaClientKnownRequestError&&error.code==='P2002'");
+  const throwIndex = catchBody.lastIndexOf('throwerror;');
+  assert.ok(racedIndex >= 0 && typedErrorIndex >= 0 && p2002Index >= 0, 'catch block must handle the typed rejection and the P2002 raced-session recovery');
+  assert.ok(typedErrorIndex < p2002Index, 'a typed eligibility rejection must be handled before checking for a uniqueness collision');
+  assert.ok(p2002Index < racedIndex, 'the raced-session lookup must be guarded by the P2002 uniqueness-collision check');
+  assert.ok(racedIndex < throwIndex, 'unrelated transaction failures must be rethrown instead of being masked by a visible session');
   assert.match(
     catchBody,
     /errorinstanceofBookingNoLongerEligibleForWorkspaceError\)returnreply\.code\(409\)\.send\(\{error:'funded_booking_required'\}\)/,

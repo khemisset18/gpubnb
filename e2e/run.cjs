@@ -172,10 +172,17 @@ async function main() {
   }, { timeoutMs: 600_000, intervalMs: 2000 });
   log('    GPU_PROOF completed and finalized', { jobId: finalizedProof.job.id, bookingStatus: finalizedProof.booking.status });
 
-  log('8. real POST /bookings/:id/workspace/developer after GPU_PROOF (the actual "Créer mon espace" button)');
-  const devRes = await fetch(`${API}/bookings/${booking.id}/workspace/developer`, { method: 'POST', headers: { cookie: renter.cookie } });
-  const session = await devRes.json();
-  if (devRes.status !== 200) throw new Error('workspace/developer failed: ' + JSON.stringify(session));
+  log('8. waiting for the Developer session created automatically by finalize-proof');
+  const session = await waitUntil('automatic Developer session and WORKSPACE_PREPARE exist', async () => {
+    const current = await prisma.workspaceSession.findFirst({
+      where: { bookingId: booking.id, machineWorkspace: { workspace: { slug: 'developer' } } },
+      include: { job: { select: { id: true, type: true, status: true } } },
+    });
+    if (!current) return null;
+    if (!['PREPARING', 'READY'].includes(current.status)) throw new Error('automatic Developer session has invalid status: ' + JSON.stringify(current));
+    if (current.job?.type !== 'WORKSPACE_PREPARE') throw new Error('automatic Developer session has no WORKSPACE_PREPARE job: ' + JSON.stringify(current));
+    return current;
+  }, { timeoutMs: 30_000, intervalMs: 500 });
   log('   sessionId', session.id);
 
   log('9. waiting for the real agent to run the real WORKSPACE_PREPARE job (real Docker verification container)');
