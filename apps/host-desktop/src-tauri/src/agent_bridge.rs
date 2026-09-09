@@ -116,10 +116,16 @@ fn parse_config() -> Option<AgentConfig> {
 }
 
 fn background_command(program: &str) -> Command {
-    let mut command = Command::new(program);
     #[cfg(target_os = "windows")]
-    command.creation_flags(CREATE_NO_WINDOW);
-    command
+    {
+        let mut command = Command::new(program);
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(program)
+    }
 }
 
 fn spawn_agent(program: &str, prefix: &[&str], arguments: &[&str]) -> Option<Child> {
