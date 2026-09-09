@@ -7,7 +7,7 @@ import {
 
 test('rental heartbeat policy defaults without importing production config', () => {
   assert.equal(rentalHeartbeatOfflineSeconds({}), DEFAULT_RENTAL_HEARTBEAT_OFFLINE_SECONDS);
-  assert.equal(DEFAULT_RENTAL_HEARTBEAT_OFFLINE_SECONDS, 60);
+  assert.equal(DEFAULT_RENTAL_HEARTBEAT_OFFLINE_SECONDS, 300);
 });
 
 test('rental heartbeat policy honors the same validated range as app config', () => {

@@ -1,4 +1,4 @@
-export const DEFAULT_RENTAL_HEARTBEAT_OFFLINE_SECONDS = 60;
+export const DEFAULT_RENTAL_HEARTBEAT_OFFLINE_SECONDS = 300;
 
 export function rentalHeartbeatOfflineSeconds(
   environment: NodeJS.ProcessEnv = process.env,

@@ -5,6 +5,8 @@ use crate::secure_launcher;
 use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread::{self, JoinHandle};
@@ -19,6 +21,21 @@ const STOP_TIMEOUT: Duration = Duration::from_secs(10);
 const STOP_POLL_INTERVAL: Duration = Duration::from_millis(25);
 const STDOUT_LOG_NAME: &str = "miner-stdout.log";
 const STDERR_LOG_NAME: &str = "miner-stderr.log";
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn background_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = Command::new(program);
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(program)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -77,7 +94,10 @@ impl MinerProcessManager {
         let mut arguments = build_approved_arguments(spec)?;
         append_gpu_power_limit(&mut arguments, spec)?;
         let (stdout_log, stderr_log) = self.prepare_logs()?;
-        let mut child = Command::new(&executable)
+        // This workload is managed entirely through process handles and captured
+        // logs. A Windows console is neither an operator interface nor part of
+        // the stop protocol, so keep it detached from the provider desktop.
+        let mut child = background_command(&executable)
             .args(&arguments)
             .current_dir(&self.approved_root)
             .stdin(Stdio::null())
@@ -346,7 +366,7 @@ fn append_gpu_power_limit(
     if !spec.miner_profile_id.starts_with("lolminer_") {
         return Ok(());
     }
-    let output = Command::new("nvidia-smi")
+    let output = background_command("nvidia-smi")
         .args([
             "--query-gpu=power.default_limit,power.min_limit",
             "--format=csv,noheader,nounits",

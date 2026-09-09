@@ -43,6 +43,7 @@ SAFE_WORKER = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
 SAFE_WALLET = re.compile(r"^[A-Za-z0-9_.:+-]{3,256}$")
 PCI_BDF = re.compile(r"^(?:[0-9A-Fa-f]{4,8}:)?([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2})\.[0-7]$")
 RESOURCE_STATES = {"MINING", "STOPPED", "QUARANTINED"}
+WINDOWS_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 
 
 @dataclass(frozen=True)
@@ -165,7 +166,11 @@ class _PopenHandle:
 
 class SystemLauncher:
     def spawn(self, executable: Path, arguments: list[str], cwd: Path) -> SpawnedProcess:
-        flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+        flags = (
+            subprocess.CREATE_NEW_PROCESS_GROUP | WINDOWS_CREATE_NO_WINDOW
+            if os.name == "nt"
+            else 0
+        )
         try:
             child = subprocess.Popen(
                 [str(executable), *arguments],
@@ -192,13 +197,9 @@ class SystemProcessInspector:
                 "Select-Object -First 1 ProcessId,ExecutablePath,CreationDate;"
                 "if($null -eq $p){exit 3};$p|ConvertTo-Json -Compress"
             )
-            result = subprocess.run(
+            result = run_command(
                 ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
-                capture_output=True,
-                text=True,
                 timeout=10,
-                check=False,
-                shell=False,
             )
             if result.returncode != 0:
                 return None
@@ -240,13 +241,9 @@ class SystemProcessInspector:
         if current != identity:
             raise ExecutionControlError("miner_process_identity_mismatch")
         if os.name == "nt":
-            result = subprocess.run(
+            result = run_command(
                 ["taskkill", "/PID", str(identity.pid), "/F", "/T"],
-                capture_output=True,
-                text=True,
                 timeout=10,
-                check=False,
-                shell=False,
             )
             if result.returncode not in {0, 128}:
                 raise ExecutionControlError("miner_process_stop_failed")

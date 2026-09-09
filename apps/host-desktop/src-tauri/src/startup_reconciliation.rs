@@ -17,6 +17,8 @@
 //! crate-wide in `lib.rs`.
 #![cfg_attr(not(feature = "desktop-runtime"), allow(dead_code))]
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
@@ -39,6 +41,21 @@ const GPUBNB_CONTAINER_PREFIXES: [&str; 3] = [
 ];
 const TERMINATION_TIMEOUT: Duration = Duration::from_secs(10);
 const TERMINATION_POLL_INTERVAL: Duration = Duration::from_millis(50);
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn background_command(program: &str) -> Command {
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = Command::new(program);
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(program)
+    }
+}
 
 /// A real, currently-running process whose executable resolves to one of our own
 /// verified, approved miner binaries — never a guess based on process name alone.
@@ -234,7 +251,7 @@ pub struct RealSystemInspector;
 #[cfg(target_os = "windows")]
 impl SystemInspector for RealSystemInspector {
     fn running_processes(&self) -> Result<Vec<(u32, PathBuf)>, &'static str> {
-        let output = Command::new("powershell.exe")
+        let output = background_command("powershell.exe")
             .args([
                 "-NoProfile",
                 "-NonInteractive",
@@ -256,7 +273,7 @@ impl SystemInspector for RealSystemInspector {
     }
 
     fn terminate_pid(&self, pid: u32) -> Result<(), &'static str> {
-        let status = Command::new("taskkill")
+        let status = background_command("taskkill")
             .args(["/PID", &pid.to_string(), "/F", "/T"])
             .status()
             .map_err(|_| "process_termination_failed")?;
@@ -268,7 +285,7 @@ impl SystemInspector for RealSystemInspector {
     }
 
     fn pid_is_running(&self, pid: u32) -> Result<bool, &'static str> {
-        let output = Command::new("powershell.exe")
+        let output = background_command("powershell.exe")
             .args([
                 "-NoProfile",
                 "-NonInteractive",
@@ -306,7 +323,7 @@ impl SystemInspector for RealSystemInspector {
 }
 
 fn list_running_containers() -> Result<Vec<String>, &'static str> {
-    let output = Command::new("docker")
+    let output = background_command("docker")
         .args(["ps", "--format", "{{.Names}}"])
         .output()
         .map_err(|_| "container_enumeration_failed")?;

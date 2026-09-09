@@ -1,6 +1,8 @@
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fs::OpenOptions;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread;
@@ -10,6 +12,8 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_COMMAND_OUTPUT_BYTES: usize = 16 * 1024;
 const MAX_GPU_COUNT: usize = 32;
 const MAX_VRAM_MIB: u64 = 2_000_000;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -52,13 +56,16 @@ pub struct NativeDiagnostic {
 }
 
 fn command_output(program: &str, args: &[&str]) -> Option<String> {
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    command
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
+        .stderr(Stdio::null());
+    #[cfg(target_os = "windows")]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let mut child = command.spawn().ok()?;
 
     let deadline = Instant::now() + COMMAND_TIMEOUT;
     loop {

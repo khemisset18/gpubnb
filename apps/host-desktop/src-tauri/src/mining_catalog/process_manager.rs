@@ -1,11 +1,28 @@
 use super::secure_launcher::VerifiedMinerBinary;
 use std::collections::HashMap;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
 const MAX_ARGUMENTS: usize = 64;
 const MAX_ARGUMENT_LENGTH: usize = 2_048;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn background_command(program: &std::path::Path) -> Command {
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = Command::new(program);
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(program)
+    }
+}
 
 pub trait ManagedProcess: Send {
     fn id(&self) -> u32;
@@ -61,7 +78,10 @@ impl ProcessBackend for SystemProcessBackend {
         arguments: &[String],
     ) -> Result<Box<dyn ManagedProcess>, &'static str> {
         validate_arguments(arguments)?;
-        let child = Command::new(&binary.canonical_path)
+        // Approved miners are background workloads. Their stdout/stderr are already
+        // detached here, so showing a console on Windows serves no purpose and can
+        // repeatedly steal focus from the provider desktop.
+        let child = background_command(&binary.canonical_path)
             .args(arguments)
             .env_clear()
             .stdin(Stdio::null())

@@ -12,6 +12,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import Callable
 
+from .platform_info import run_command
 from .workspace_gateway import (
     CONTAINER_PREFIX,
     INTERNAL_NETWORK_PREFIX,
@@ -51,14 +52,10 @@ class RuntimeCleanlinessReport:
 
 
 def _real_docker(args: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["docker", *args],
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-        shell=False,
-    )
+    # Diagnostic inventory is background-only. Reuse the bounded Windows-safe
+    # process helper so Docker CLI probes cannot flash a console on the provider
+    # desktop while quarantine diagnostics are running.
+    return run_command(["docker", *args], timeout=15)
 
 
 def _checked_lines(result: subprocess.CompletedProcess[str], operation: str) -> set[str]:

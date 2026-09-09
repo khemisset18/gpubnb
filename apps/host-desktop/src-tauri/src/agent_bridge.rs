@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Output, Stdio};
 use std::thread;
@@ -17,6 +19,8 @@ const GPU_PROCESS_CLOSE_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_AGENT_OUTPUT_BYTES: usize = 64 * 1024;
 const MAX_CONFIG_BYTES: u64 = 64 * 1024;
 const MAX_MACHINE_ID_LENGTH: usize = 128;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,15 +115,28 @@ fn parse_config() -> Option<AgentConfig> {
     })
 }
 
+fn background_command(program: &str) -> Command {
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = Command::new(program);
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(program)
+    }
+}
+
 fn spawn_agent(program: &str, prefix: &[&str], arguments: &[&str]) -> Option<Child> {
-    Command::new(program)
+    let mut command = background_command(program);
+    command
         .args(prefix)
         .args(arguments)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .ok()
+        .stderr(Stdio::piped());
+    command.spawn().ok()
 }
 
 fn bounded_output(mut child: Child, timeout: Duration) -> Result<Output, &'static str> {
@@ -350,7 +367,7 @@ pub fn install_service_elevated() -> Result<AgentStatus, String> {
 #[cfg(target_os = "windows")]
 fn run_elevated(executable: &std::path::Path, arguments: &[&str]) -> Result<(), String> {
     let script = elevated_launch_script(executable, arguments);
-    let output = Command::new("powershell.exe")
+    let output = background_command("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .output()
         .map_err(|_| "agent_elevation_failed".to_owned())?;

@@ -11,6 +11,7 @@ from logging.handlers import RotatingFileHandler
 from typing import Any
 
 from .docker_cli import ensure_docker_on_path
+from .platform_info import run_command
 
 SERVICE_NAME = "GPUbnbAgent"
 SERVICE_DISPLAY_NAME = "GPUbnb Host Agent"
@@ -152,14 +153,10 @@ def manage_service(action: str) -> int:
 
 
 def _sc(*arguments: str) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        ["sc.exe", *arguments],
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-        shell=False,
-    )
+    # Service recovery configuration is non-interactive background work. Reuse
+    # the Agent's bounded no-console launcher so sc.exe cannot flash a console
+    # when invoked from the desktop/service setup path.
+    result = run_command(["sc.exe", *arguments], timeout=15)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()[-500:]
         raise RuntimeError(f"service_control_failed:{arguments[0]}:{detail}")
