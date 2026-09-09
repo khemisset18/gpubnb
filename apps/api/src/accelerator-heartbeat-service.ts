@@ -3,6 +3,7 @@ import { sanitizeAccelerators } from './accelerator-telemetry.js';
 import { syncMachineAccelerators } from './accelerator-inventory-store.js';
 import { decideAcceleratorSecurity } from './accelerator-security-policy.js';
 import { enforceAcceleratorSecurityDecision } from './accelerator-security-executor.js';
+import { enforceGpuThermalQuarantine } from './gpu-thermal-quarantine.js';
 import { syncGpuMiningResourcesFromAccelerators } from './mining-resource-inventory.js';
 import { reactivateHealthyOfflineListings } from './rental-listing-recovery.js';
 import { rentalHeartbeatOfflineSeconds } from './rental-runtime-policy.js';
@@ -38,13 +39,24 @@ export async function processAcceleratorHeartbeat(
     legacyGpuMatches: !context.historicalGpuUuid || primaryGpu?.deviceId === context.historicalGpuUuid,
   });
 
+  // Identity/security enforcement keeps precedence over temperature. If it has
+  // already quarantined the machine, the thermal layer records no competing
+  // primary cause and merely keeps the machine non-publishable while hot.
   const enforcement = await enforceAcceleratorSecurityDecision(
     tx,
     context.machineId,
     decision,
   );
 
-  const publishable = decision.publishable && Boolean(primaryGpu?.available);
+  const thermal = await enforceGpuThermalQuarantine(
+    tx,
+    context.machineId,
+    accelerators,
+  );
+
+  const publishable = decision.publishable
+    && Boolean(primaryGpu?.available)
+    && !thermal.blocking;
   const recoveredListings = publishable
     ? await reactivateHealthyOfflineListings(
       tx,
@@ -60,6 +72,7 @@ export async function processAcceleratorHeartbeat(
     sync,
     decision,
     enforcement,
+    thermal,
     recoveredListings,
     publishable,
   };

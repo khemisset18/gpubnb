@@ -35,9 +35,9 @@ FAKE_EXE_NEW = b"MZ" + b"\x01" * (262144)
 def _fake_run_version_command(_candidate_path: Path) -> str:
     # The default real implementation actually executes the candidate exe -
     # these fixtures are not real executables, so every perform_self_update
-    # call that reaches the version-check stage must inject a version strictly
-    # newer than the current Agent release instead.
-    return "0.6.4"
+    # call that reaches the version-check stage injects the current qualified
+    # Agent version instead.
+    return "0.6.5"
 
 
 def _portable_zip_bytes(exe_bytes: bytes) -> bytes:

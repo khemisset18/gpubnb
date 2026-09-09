@@ -4,9 +4,14 @@ use std::os::windows::process::CommandExt;
 use std::process::Command;
 use std::sync::Mutex;
 
+// These are LOCAL workload-protection thresholds, not server quarantine.
+// Mining is stopped conservatively before hardware reaches the platform's
+// separate 98 C quarantine boundary. The user never has to manually clear a
+// server quarantine just because this local protection fired.
 pub const THERMAL_WARNING_CELSIUS: f64 = 80.0;
 pub const THERMAL_STOP_CELSIUS: f64 = 85.0;
 pub const THERMAL_REARM_CELSIUS: f64 = 75.0;
+pub const THERMAL_QUARANTINE_CELSIUS: f64 = 98.0;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -26,8 +31,7 @@ fn background_command(program: &str) -> Command {
 pub fn read_native_temperature() -> Result<f64, &'static str> {
     // The thermal monitor runs every five seconds while mining. On Windows a
     // plain console-child launch can flash a terminal on every sample even
-    // though nvidia-smi is purely a background sensor. Keep the sampling and
-    // fail-closed thresholds unchanged; only detach the child console.
+    // though nvidia-smi is purely a background sensor.
     let output = background_command("nvidia-smi")
         .args([
             "--query-gpu=temperature.gpu",
@@ -66,6 +70,7 @@ pub struct MiningThermalSafetySnapshot {
     pub warning_celsius: f64,
     pub stop_celsius: f64,
     pub rearm_celsius: f64,
+    pub quarantine_celsius: f64,
 }
 
 #[derive(Debug, Default)]
@@ -80,6 +85,15 @@ impl MiningThermalGuard {
             return false;
         }
         self.last_temperature_celsius = Some(temperature_celsius);
+
+        // Automatic hysteresis: after a protective stop, any subsequent real
+        // sensor sample at/below the cool threshold clears the local latch.
+        // No acknowledgement button or PowerShell intervention is required.
+        if self.latched && temperature_celsius <= THERMAL_REARM_CELSIUS {
+            self.latched = false;
+            return false;
+        }
+
         if temperature_celsius >= THERMAL_STOP_CELSIUS && !self.latched {
             self.latched = true;
             return true;
@@ -103,6 +117,7 @@ impl MiningThermalGuard {
             warning_celsius: THERMAL_WARNING_CELSIUS,
             stop_celsius: THERMAL_STOP_CELSIUS,
             rearm_celsius: THERMAL_REARM_CELSIUS,
+            quarantine_celsius: THERMAL_QUARANTINE_CELSIUS,
         }
     }
 }
@@ -138,6 +153,24 @@ impl MiningThermalSafetyState {
     }
 
     pub fn snapshot(&self) -> Result<MiningThermalSafetySnapshot, &'static str> {
+        // The mining monitor stops sampling once it has stopped the miner. Host
+        // Desktop still asks for this snapshot on every UI refresh, so use that
+        // read to keep checking the real sensor and automatically clear the local
+        // latch after cooldown. If the sensor is unavailable, fail closed by
+        // leaving the latch untouched.
+        let latched = self
+            .guard
+            .lock()
+            .map_err(|_| "mining_thermal_guard_unavailable")?
+            .latched;
+        if latched {
+            if let Ok(temperature) = read_native_temperature() {
+                self.guard
+                    .lock()
+                    .map_err(|_| "mining_thermal_guard_unavailable")?
+                    .observe(temperature);
+            }
+        }
         self.guard
             .lock()
             .map_err(|_| "mining_thermal_guard_unavailable")
@@ -150,8 +183,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn stops_once_at_the_fail_closed_threshold() {
+    fn protective_stop_is_not_the_98c_quarantine_boundary() {
         let state = MiningThermalSafetyState::default();
+        let snapshot = state.snapshot().unwrap();
+        assert_eq!(snapshot.stop_celsius, 85.0);
+        assert_eq!(snapshot.quarantine_celsius, 98.0);
         assert_eq!(state.observe(84.9), Ok(false));
         assert_eq!(state.observe(85.0), Ok(true));
         assert_eq!(state.observe(93.0), Ok(false));
@@ -162,7 +198,16 @@ mod tests {
     }
 
     #[test]
-    fn requires_real_cooldown_before_rearming() {
+    fn real_cooldown_auto_rearms_without_user_acknowledgement() {
+        let mut guard = MiningThermalGuard::default();
+        assert!(guard.observe(90.0));
+        assert!(guard.latched);
+        assert!(!guard.observe(75.0));
+        assert!(!guard.latched);
+    }
+
+    #[test]
+    fn manual_acknowledge_remains_a_safe_optional_fallback() {
         let state = MiningThermalSafetyState::default();
         state.observe(90.0).unwrap();
         assert_eq!(
