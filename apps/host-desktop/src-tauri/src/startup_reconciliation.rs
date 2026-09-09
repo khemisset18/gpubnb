@@ -45,10 +45,16 @@ const TERMINATION_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 fn background_command(program: &str) -> Command {
-    let mut command = Command::new(program);
     #[cfg(target_os = "windows")]
-    command.creation_flags(CREATE_NO_WINDOW);
-    command
+    {
+        let mut command = Command::new(program);
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(program)
+    }
 }
 
 /// A real, currently-running process whose executable resolves to one of our own
