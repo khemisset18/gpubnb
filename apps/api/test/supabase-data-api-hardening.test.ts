@@ -14,10 +14,10 @@ test('browser Supabase usage is auth-only and never queries Prisma application t
 
 test('rejected Supabase sessions are cleared locally instead of retried forever', async () => {
   const auth = await read('apps/web/auth.js');
-  assert.match(auth, /error\\.code=data\\.error/);
-  assert.match(auth, /error\\?\\.code===['"]invalid_supabase_session['"]/);
-  assert.match(auth, /auth\\.signOut\\(\\{scope:'local'\\}\\)/);
-  assert.match(auth, /error\\?\\.code===['"]rate_limited['"]/);
+  assert.match(auth, /error\.code=data\.error/);
+  assert.match(auth, /error\?\.code===['"]invalid_supabase_session['"]/);
+  assert.match(auth, /auth\.signOut\(\{scope:'local'\}\)/);
+  assert.match(auth, /error\?\.code===['"]rate_limited['"]/);
 });
 
 test('database migration revokes current and future Data API privileges from browser roles', async () => {
