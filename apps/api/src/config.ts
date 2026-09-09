@@ -57,7 +57,11 @@ const schema = z.object({
   // HEARTBEAT_OFFLINE_SECONDS so interactive access can never be considered
   // fresher than the machine's own general online/offline status.
   WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(120).default(55),
-  HEARTBEAT_OFFLINE_SECONDS: z.coerce.number().int().min(15).max(300).default(60),
+  // Physical Windows qualification on 2026-09-09 observed healthy accepted
+  // heartbeat gaps above 60s while the service process remained alive. The
+  // offline sweep is a destructive control-plane transition (it cancels active
+  // work), so its grace must be materially larger than normal Host jitter.
+  HEARTBEAT_OFFLINE_SECONDS: z.coerce.number().int().min(15).max(300).default(300),
   JOB_STALE_AFTER_SECONDS: z.coerce.number().int().min(120).max(3600).default(900),
   // Real incident (2026-09-02, PC A<->PC B beta test): a single real network blip
   // (agent<->API connection reset, ~1-2 minutes) let this lease expire before the
