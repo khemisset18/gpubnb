@@ -1,12 +1,12 @@
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fs::OpenOptions;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_COMMAND_OUTPUT_BYTES: usize = 16 * 1024;
