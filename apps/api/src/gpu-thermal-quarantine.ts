@@ -1,6 +1,9 @@
 import {
+  DiagnosticRunStatus,
+  DiagnosticTrigger,
   MachineOperational,
   ModerationStatus,
+  QuarantineEventStatus,
   QuarantineReasonCode,
   type Prisma,
 } from '@prisma/client';
@@ -69,7 +72,7 @@ async function activeThermalQuarantineEvent(
       machineId,
       resolvedAt: null,
       source: 'accelerator-heartbeat.thermal',
-      status: { in: ['ENTERED', 'REENTERED'] },
+      status: { in: [QuarantineEventStatus.ENTERED, QuarantineEventStatus.REENTERED] },
     },
     orderBy: { createdAt: 'desc' },
     select: { id: true, createdAt: true },
@@ -119,7 +122,7 @@ async function queueAutomaticThermalRecoveryDiagnostic(
   if (!activeThermal || machine?.moderationStatus !== ModerationStatus.QUARANTINED) return null;
 
   const running = await tx.diagnosticRun.findFirst({
-    where: { machineId, status: 'RUNNING' },
+    where: { machineId, status: DiagnosticRunStatus.RUNNING },
     orderBy: { startedAt: 'desc' },
     select: { id: true },
   });
@@ -128,8 +131,8 @@ async function queueAutomaticThermalRecoveryDiagnostic(
   const run = await tx.diagnosticRun.create({
     data: {
       machineId,
-      status: 'RUNNING',
-      triggeredBy: 'SYSTEM',
+      status: DiagnosticRunStatus.RUNNING,
+      triggeredBy: DiagnosticTrigger.SYSTEM,
       startedAt: now,
     },
     select: { id: true },
