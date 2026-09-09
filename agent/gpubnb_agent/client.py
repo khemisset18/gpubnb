@@ -17,7 +17,7 @@ import base58
 from nacl.signing import SigningKey
 
 from . import __version__
-from .platform_info import gpu_inventory, system_inventory
+from .platform_info import gpu_inventory, inventory_cycle, system_inventory
 from .storage import detect_hardware_change, load_counter, save_counter, save_machine_fingerprint
 from .telemetry import telemetry_snapshot
 
@@ -184,19 +184,23 @@ def agent_request(client: ApiClient, key: SigningKey, machine_id: str, path: str
 
 
 def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, Any]:
-    # Collect the comparatively slow Windows inventory before requesting the
-    # short-lived server challenge or timestamping the heartbeat. Otherwise a
-    # cold hardware scan can consume the entire validity window before send.
-    gpus = gpu_inventory()
-    if not gpus:
-        raise RuntimeError("Le heartbeat exige au moins un GPU détecté")
-    # The legacy heartbeat schema carries one primary GPU. The complete validated
-    # multi-GPU snapshot is attached under telemetry for the v2 server migration.
-    gpu = gpus[0]
-    session_id = None
-    probe = True
-    sys_info = system_inventory()
-    telemetry = telemetry_snapshot()
+    # A heartbeat is one inventory transaction. Legacy heartbeat fields, v2
+    # telemetry and generic accelerator providers must observe the same physical
+    # snapshot instead of independently re-running nvidia-smi/Docker/CIM probes.
+    # The transaction ends before the short-lived challenge is requested, so no
+    # expensive local discovery consumes challenge validity.
+    with inventory_cycle():
+        gpus = gpu_inventory()
+        if not gpus:
+            raise RuntimeError("Le heartbeat exige au moins un GPU détecté")
+        # The legacy heartbeat schema carries one primary GPU. The complete validated
+        # multi-GPU snapshot is attached under telemetry for the v2 server migration.
+        gpu = gpus[0]
+        session_id = None
+        probe = True
+        sys_info = system_inventory()
+        telemetry = telemetry_snapshot()
+
     current_fp = sys_info.get("machineFingerprint") or ""
     hw_changed, previous_fp = detect_hardware_change(current_fp)
     if current_fp:
@@ -252,14 +256,9 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
         except (urllib.error.URLError, RuntimeError, TimeoutError, OSError) as exc:
             last_error = exc
             if "counter_replay" in str(exc) and resync_attempt < COUNTER_REPLAY_RESYNC_LIMIT:
-                # The local counter file fell behind the server's last accepted
-                # value (crash/uninstall wiped ProgramData before the last
-                # successful save could land, or two agent instances raced).
-                # `counter` is now burned — the server has already seen an
-                # equal-or-higher value for this key, so it can never be reused —
-                # persist it immediately and try the next value right away instead
-                # of retrying the exact same doomed counter forever, which is what
-                # left the agent stuck offline after every reinstall.
+                # The local counter file fell behind the server's lastCounter (crash,
+                # uninstall wiping ProgramData before the last successful save could
+                # land, or two agent instances raced). This value is burned forever.
                 save_counter(counter)
                 resync_attempt += 1
                 continue
