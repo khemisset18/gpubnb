@@ -1,5 +1,10 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { DiagnosticTrigger, QuarantineReasonCode } from '@prisma/client';
+import {
+  GPU_THERMAL_RECOVERY_CELSIUS,
+  GPU_THERMAL_SUBREASON,
+  gpuThermalRecoveryStatus,
+} from './gpu-thermal-quarantine.js';
 import { clearQuarantine, enterQuarantine, recordDiagnosticEvent } from './quarantine-service.js';
 
 export type CheckStatus = 'PASS' | 'FAIL' | 'WARNING' | 'UNKNOWN' | 'NOT_CHECKED';
@@ -207,11 +212,49 @@ export async function completeDiagnosticRun(
       return { status: 'FAILED', cleared: false, evaluation: null };
     }
 
-    const evaluation = evaluateDiagnosticChecks(input.checks);
+    // Thermal quarantine has a stricter, evidence-based exit rule than ordinary
+    // health checks. It trips only at >=98 C, but once tripped it stays fail-closed
+    // until a fresh signed heartbeat proves the GPU cooled to <=90 C. The user
+    // never has to edit state or manually acknowledge a latch.
+    const thermalRecovery = wasQuarantined
+      ? await gpuThermalRecoveryStatus(tx, input.machineId)
+      : { active: false, ready: true, temperatureC: null, measuredAt: null };
+    const thermalCheck: DiagnosticCheck | null = thermalRecovery.active
+      ? {
+        name: 'temperature',
+        status: thermalRecovery.ready
+          ? 'PASS'
+          : thermalRecovery.temperatureC == null
+            ? 'UNKNOWN'
+            : 'FAIL',
+        value: thermalRecovery.temperatureC == null ? null : `${thermalRecovery.temperatureC} °C`,
+        details: thermalRecovery.ready
+          ? `Le GPU a refroidi sous le seuil de réarmement automatique (${GPU_THERMAL_RECOVERY_CELSIUS} °C).`
+          : thermalRecovery.temperatureC == null
+            ? "Aucune température de heartbeat récente n'est disponible pour prouver le refroidissement du GPU."
+            : `Le GPU est encore trop chaud pour lever la quarantaine thermique. Attendre <= ${GPU_THERMAL_RECOVERY_CELSIUS} °C.`,
+        measuredAt: thermalRecovery.measuredAt?.toISOString() ?? now.toISOString(),
+        source: 'agent-heartbeat',
+      }
+      : null;
+    const effectiveChecks = thermalCheck ? [...input.checks, thermalCheck] : input.checks;
+    const baseEvaluation = evaluateDiagnosticChecks(effectiveChecks);
+    const thermalStillBlocking = Boolean(thermalCheck && thermalCheck.status !== 'PASS');
+    const evaluation: DiagnosticEvaluation = thermalStillBlocking
+      ? {
+        allMandatoryPass: false,
+        failingChecks: [...baseEvaluation.failingChecks, thermalCheck!],
+        // Preserve the already-recorded primary cause while the thermal proof is
+        // still missing. Once cool, any remaining ordinary failing check can take
+        // over with its own precise reason code.
+        reasonCode: machine?.quarantineReasonCode ?? QuarantineReasonCode.GPU_HEALTH_CHECK_FAILED,
+      }
+      : baseEvaluation;
+
     // Same atomic claim as the FAILED branch above - see DiagnosticRunConflictError.
     const claimed = await tx.diagnosticRun.updateMany({
       where: { id: run.id, status: 'RUNNING' },
-      data: { status: 'COMPLETED', checks: input.checks as unknown as Prisma.InputJsonValue, completedAt: now },
+      data: { status: 'COMPLETED', checks: effectiveChecks as unknown as Prisma.InputJsonValue, completedAt: now },
     });
     if (claimed.count !== 1) throw new DiagnosticRunConflictError();
     await tx.machine.update({ where: { id: input.machineId }, data: { lastDiagnosticRunId: run.id, lastDiagnosticAt: now } });
@@ -222,7 +265,7 @@ export async function completeDiagnosticRun(
           machineId: input.machineId,
           diagnosticRunId: run.id,
           reason: 'Diagnostic réussi : tous les critères obligatoires (agent, GPU, pilote, Docker, runtime NVIDIA, propreté runtime) sont satisfaits.',
-          details: { checks: input.checks },
+          details: { checks: effectiveChecks },
           source: input.source,
           now,
         });
@@ -232,7 +275,7 @@ export async function completeDiagnosticRun(
           diagnosticRunId: run.id,
           reasonCode: QuarantineReasonCode.UNKNOWN,
           reason: 'Diagnostic réussi : tous les critères obligatoires sont satisfaits.',
-          details: { checks: input.checks },
+          details: { checks: effectiveChecks },
           source: input.source,
           now,
         });
@@ -241,11 +284,21 @@ export async function completeDiagnosticRun(
     }
 
     const failingNames = evaluation.failingChecks.map((c) => c.name).join(', ');
+    const thermalReason = thermalStillBlocking
+      ? thermalRecovery.temperatureC == null
+        ? `Quarantaine thermique maintenue : le refroidissement n'est pas encore prouvé (seuil de sortie <= ${GPU_THERMAL_RECOVERY_CELSIUS} °C).`
+        : `Quarantaine thermique maintenue : GPU à ${thermalRecovery.temperatureC} °C, seuil de sortie automatique <= ${GPU_THERMAL_RECOVERY_CELSIUS} °C.`
+      : null;
     await enterQuarantine(tx, {
       machineId: input.machineId,
       reasonCode: evaluation.reasonCode,
-      reason: `Diagnostic terminé : au moins un critère obligatoire n'est pas satisfait (${failingNames}). Quarantaine maintenue.`,
-      details: { checks: input.checks, diagnosticRunId: run.id },
+      reason: thermalReason
+        ?? `Diagnostic terminé : au moins un critère obligatoire n'est pas satisfait (${failingNames}). Quarantaine maintenue.`,
+      details: {
+        checks: effectiveChecks,
+        diagnosticRunId: run.id,
+        ...(thermalStillBlocking ? { subreasonCode: GPU_THERMAL_SUBREASON } : {}),
+      },
       source: input.source,
       now,
     });
