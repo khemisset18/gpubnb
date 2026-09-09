@@ -184,9 +184,10 @@ mod tests {
 
     #[test]
     fn protective_stop_is_not_the_98c_quarantine_boundary() {
-        assert!(THERMAL_STOP_CELSIUS < THERMAL_QUARANTINE_CELSIUS);
-        assert_eq!(THERMAL_QUARANTINE_CELSIUS, 98.0);
         let state = MiningThermalSafetyState::default();
+        let snapshot = state.snapshot().unwrap();
+        assert_eq!(snapshot.stop_celsius, 85.0);
+        assert_eq!(snapshot.quarantine_celsius, 98.0);
         assert_eq!(state.observe(84.9), Ok(false));
         assert_eq!(state.observe(85.0), Ok(true));
         assert_eq!(state.observe(93.0), Ok(false));
