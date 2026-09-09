@@ -14,14 +14,14 @@ test('workspace access freshness never exceeds the API offline threshold', async
   const offlineAfter = configDefault(config, 'HEARTBEAT_OFFLINE_SECONDS');
 
   assert.equal(accessMaxAge, 55);
-  assert.equal(offlineAfter, 60);
+  assert.equal(offlineAfter, 300);
   assert.ok(offlineAfter >= accessMaxAge);
 });
 
-test('Render preserves the same 60 second heartbeat offline budget for web and worker', async () => {
+test('Render preserves the same 300 second heartbeat offline budget for web and worker', async () => {
   const render = await readFile(new URL('../../../render.yaml', import.meta.url), 'utf8');
   const values = [...render.matchAll(/- key: HEARTBEAT_OFFLINE_SECONDS\s+value: (\d+)/g)].map((match) => Number(match[1]));
 
-  assert.deepEqual(values, [60, 60]);
+  assert.deepEqual(values, [300, 300]);
   assert.ok(values.every((value) => value >= 55));
 });
