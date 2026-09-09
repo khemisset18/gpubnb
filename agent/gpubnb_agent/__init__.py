@@ -33,3 +33,12 @@ from .workspace_gateway_v5 import install as _install_workspace_gateway_v5
 
 _install_workspace_gateway_v5()
 del _install_workspace_gateway_v5
+
+# Older qualified builds could leave a local QUARANTINED rental claim after the
+# server had legitimately retired that lease. Recover only when a newly fetched
+# authority carries a strictly newer fence and a fresh physical GPU quiescence
+# proof succeeds; every ambiguous case remains fail-closed.
+from .rental_claim_recovery import install as _install_rental_claim_recovery
+
+_install_rental_claim_recovery()
+del _install_rental_claim_recovery
