@@ -11,6 +11,12 @@ import {
 
 const machineParamsSchema = z.object({ machineId: z.string().cuid() });
 const sessionParamsSchema = machineParamsSchema.extend({ sessionId: z.string().cuid() });
+// The v5 Host reconciler refreshes rental authority once per second while the
+// workspace gateway is alive. The API-wide 120/minute default is shared with
+// heartbeat/job/diagnostic traffic and can therefore rate-limit a healthy Host.
+// Give this authenticated control-plane route its own bounded budget with enough
+// room for the nominal 60 polls/minute plus transient retries.
+const RENTAL_AUTHORITY_RATE_LIMIT_PER_MINUTE = 180;
 const releaseBodySchema = z.object({
   leases: z.array(z.object({
     resourceId: z.string().min(8).max(191),
@@ -59,7 +65,9 @@ export function registerRentalResourceAuthorityRoutes(
   db: PrismaClient,
   redis: Redis,
 ): void {
-  app.get('/agent/mining/:machineId/rental-authority', async (request, reply) => {
+  app.get('/agent/mining/:machineId/rental-authority', {
+    config: { rateLimit: { max: RENTAL_AUTHORITY_RATE_LIMIT_PER_MINUTE, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     const { machineId } = machineParamsSchema.parse(request.params);
     const route = `/agent/mining/${machineId}/rental-authority`;
     if (!await authenticateAgent(db, redis, machineId, request, route)) {
