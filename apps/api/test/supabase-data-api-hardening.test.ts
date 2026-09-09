@@ -12,6 +12,14 @@ test('browser Supabase usage is auth-only and never queries Prisma application t
   assert.doesNotMatch(auth, /\/graphql\/v1/, 'browser code must not call Supabase GraphQL application tables directly');
 });
 
+test('rejected Supabase sessions are cleared locally instead of retried forever', async () => {
+  const auth = await read('apps/web/auth.js');
+  assert.match(auth, /error\\.code=data\\.error/);
+  assert.match(auth, /error\\?\\.code===['"]invalid_supabase_session['"]/);
+  assert.match(auth, /auth\\.signOut\\(\\{scope:'local'\\}\\)/);
+  assert.match(auth, /error\\?\\.code===['"]rate_limited['"]/);
+});
+
 test('database migration revokes current and future Data API privileges from browser roles', async () => {
   const sql = await read('apps/api/prisma/migrations/20260907013500_lock_down_supabase_data_api/migration.sql');
 
