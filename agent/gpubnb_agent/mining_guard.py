@@ -23,6 +23,7 @@ from typing import Protocol
 APPROVED_MINER_FILE_NAMES = ("xmrig.exe", "xmrig", "lolMiner.exe", "lolMiner")
 STOP_TIMEOUT_SECONDS = 30.0
 POLL_INTERVAL_SECONDS = 0.5
+WINDOWS_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 
 
 class ProcessInspector(Protocol):
@@ -44,14 +45,26 @@ class ProcessInspector(Protocol):
 class WindowsProcessInspector:
     """Real implementation, Windows-only (the only platform GPUbnb Host ships to)."""
 
+    @staticmethod
+    def _run(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            shell=False,
+            creationflags=WINDOWS_CREATE_NO_WINDOW,
+        )
+
     def running_processes(self) -> list[tuple[int, str]]:
         command = (
             "Get-CimInstance Win32_Process | Select-Object ProcessId,ExecutablePath "
             "| ConvertTo-Json -Compress"
         )
-        result = subprocess.run(
+        result = self._run(
             ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
-            capture_output=True, text=True, timeout=15, check=False, shell=False,
+            timeout=15,
         )
         if result.returncode != 0:
             raise RuntimeError("mining_guard_process_enumeration_failed")
@@ -71,16 +84,13 @@ class WindowsProcessInspector:
         return processes
 
     def terminate(self, pid: int) -> None:
-        subprocess.run(
-            ["taskkill", "/PID", str(pid), "/F", "/T"],
-            capture_output=True, text=True, timeout=10, check=False, shell=False,
-        )
+        self._run(["taskkill", "/PID", str(pid), "/F", "/T"], timeout=10)
 
     def is_running(self, pid: int) -> bool:
-        result = subprocess.run(
+        result = self._run(
             ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
              f"[bool](Get-Process -Id {pid} -ErrorAction SilentlyContinue)"],
-            capture_output=True, text=True, timeout=10, check=False, shell=False,
+            timeout=10,
         )
         return result.returncode == 0 and result.stdout.strip().lower() == "true"
 
