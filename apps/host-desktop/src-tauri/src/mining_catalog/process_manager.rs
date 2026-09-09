@@ -12,10 +12,16 @@ const MAX_ARGUMENT_LENGTH: usize = 2_048;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 fn background_command(program: &std::path::Path) -> Command {
-    let mut command = Command::new(program);
     #[cfg(target_os = "windows")]
-    command.creation_flags(CREATE_NO_WINDOW);
-    command
+    {
+        let mut command = Command::new(program);
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(program)
+    }
 }
 
 pub trait ManagedProcess: Send {
