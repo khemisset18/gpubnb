@@ -71,6 +71,18 @@ queues a real signed DiagnosticRun. The diagnostic may clear quarantine only if
 all normal mandatory checks pass **and** the latest heartbeat still proves the
 thermal cooldown. No ProgramData editing or manual acknowledgement is required.
 
+## Exact cause contract
+
+Every new quarantine transition must keep a durable human-readable reason in
+`MachineQuarantineEvent`. The diagnostics page promotes the newest unresolved
+ENTERED/REENTERED reason as `Cause détectée`, so an owner sees what actually
+happened instead of only a generic state label. The thermal path additionally
+stores the stable subreason `GPU_THERMAL_LIMIT_REACHED` with measured temperature,
+GPU UUID, trip threshold and recovery threshold in event details.
+
+An existing unrelated quarantine is never relabelled merely because the GPU is
+also hot. The original primary cause stays visible and truthful.
+
 ## Owner UX
 
 The machine diagnostics screen puts the durable event reason at the top as
