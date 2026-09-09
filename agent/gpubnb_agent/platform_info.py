@@ -14,11 +14,18 @@ import platform
 import re
 import shutil
 import subprocess
+import threading
+import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 WINDOWS_NVIDIA_SMI = Path(r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe")
 MAX_COMMAND_OUTPUT = 2_000_000
+WINDOWS_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+DOCKER_INFO_CACHE_TTL_SECONDS = 60.0
+_DOCKER_INFO_CACHE_LOCK = threading.Lock()
+_DOCKER_INFO_CACHE: tuple[float, dict[str, Any]] | None = None
 
 
 def _find_binary(env_name: str, names: list[str], fixed: list[str]) -> str | None:
@@ -45,9 +52,23 @@ def find_xpu_smi() -> str | None:
 
 
 def run_command(command: list[str], timeout: int = 8) -> subprocess.CompletedProcess[str]:
-    """Run an allowlisted executable without a shell and with bounded output."""
+    """Run an allowlisted executable without a shell and with bounded output.
+
+    Windows service builds must never flash a console window on the provider's
+    desktop. Python's default subprocess creation inherits console behaviour, so
+    every PowerShell-based inventory probe used to create a visible window. Keep
+    all child commands detached from a console while preserving captured output.
+    """
     try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False, shell=False)
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            shell=False,
+            creationflags=WINDOWS_CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
     except (OSError, subprocess.TimeoutExpired):
         return subprocess.CompletedProcess(command, 127, "", "command unavailable")
     result.stdout = result.stdout[:MAX_COMMAND_OUTPUT]
@@ -194,7 +215,7 @@ def gpu_inventory(binary: str | None = None) -> list[dict[str, Any]]:
     return list(unique.values())
 
 
-def docker_info() -> dict[str, Any]:
+def _uncached_docker_info() -> dict[str, Any]:
     executable = shutil.which("docker")
     if not executable:
         return {"available": False, "daemonReachable": False, "nvidiaRuntime": False, "version": None}
@@ -203,9 +224,8 @@ def docker_info() -> dict[str, Any]:
     # under real contention (e.g. right after other Docker activity: pulling an
     # image, building, starting containers) it was measured taking up to ~14s on
     # a real Windows/Docker Desktop host, well past the default 8s run_command
-    # timeout - a false timeout here reports nvidiaRuntimeAvailable=False on a
-    # host where the NVIDIA Container Toolkit is genuinely installed, which then
-    # makes every Developer-workspace compatibility check fail.
+    # timeout. Keep the result cached briefly so heartbeat cadence is not coupled
+    # to a heavy Docker Desktop inventory call.
     info_result = run_command([executable, "info", "--format", "{{json .Runtimes}}"], timeout=20)
     return {
         "available": True,
@@ -213,6 +233,18 @@ def docker_info() -> dict[str, Any]:
         "nvidiaRuntime": info_result.returncode == 0 and "nvidia" in info_result.stdout.lower(),
         "version": version_result.stdout.strip().strip('"') or None,
     }
+
+
+def docker_info() -> dict[str, Any]:
+    global _DOCKER_INFO_CACHE
+    now = time.monotonic()
+    with _DOCKER_INFO_CACHE_LOCK:
+        cached = _DOCKER_INFO_CACHE
+        if cached is not None and now - cached[0] < DOCKER_INFO_CACHE_TTL_SECONDS:
+            return dict(cached[1])
+        value = _uncached_docker_info()
+        _DOCKER_INFO_CACHE = (time.monotonic(), dict(value))
+        return value
 
 
 def memory_info() -> dict[str, int | None]:
@@ -233,6 +265,7 @@ def memory_info() -> dict[str, int | None]:
         return {"ramTotalMiB": None, "ramAvailableMiB": None}
 
 
+@lru_cache(maxsize=1)
 def cpu_info() -> dict[str, Any]:
     model = platform.processor() or platform.machine()
     if platform.system() == "Linux":
@@ -246,6 +279,7 @@ def cpu_info() -> dict[str, Any]:
     return {"cpu": model[:200], "cpuCount": os.cpu_count() or 1}
 
 
+@lru_cache(maxsize=1)
 def board_bios_info() -> dict[str, str | None]:
     result = {"motherboardManufacturer": None, "motherboardModel": None, "biosVendor": None, "biosVersion": None}
     if platform.system() == "Windows":
@@ -277,6 +311,7 @@ def board_bios_info() -> dict[str, str | None]:
     return result
 
 
+@lru_cache(maxsize=1)
 def virtualization_available() -> bool:
     if platform.system() == "Windows":
         # VirtualizationFirmwareEnabled becomes unreliable (often falsely False) once a
@@ -334,8 +369,15 @@ def configured_disk_root() -> str:
     return os.environ.get("SystemDrive", "C:") + "\\" if platform.system() == "Windows" else "/"
 
 
+@lru_cache(maxsize=1)
 def machine_fingerprint() -> str:
-    """Pseudonymous hardware-change marker; never includes hostname or serial numbers."""
+    """Pseudonymous hardware-change marker; never includes hostname or serial numbers.
+
+    The fingerprint is intentionally stable for the lifetime of an agent process.
+    Hardware changes require a service restart/re-link before they are trusted, so
+    recomputing GPU/BIOS/RAM inventory on every heartbeat only creates latency and
+    console churn without improving the security decision.
+    """
     gpus = gpu_inventory()
     board = board_bios_info()
     memory = memory_info()
