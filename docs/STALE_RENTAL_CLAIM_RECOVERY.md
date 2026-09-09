@@ -56,9 +56,10 @@ Temperature alone enters **server quarantine only at 98 C or above**. A measured
 97.999 C does not enter thermal quarantine.
 
 This is intentionally separate from local workload protection. Host Desktop may
-stop mining conservatively at a lower temperature to protect the physical GPU;
-that local protective stop is not a Machine quarantine and now rearms
-automatically after a real cooldown sample.
+stop mining conservatively at a lower temperature (currently 85 C) to protect the
+physical GPU. That is a protective workload stop, **not** a Machine quarantine.
+The local latch now rearms automatically after a real cooldown sample, so the
+owner does not need to acknowledge it manually.
 
 At the 98 C boundary the server persists the exact measured temperature, GPU
 hardware UUID and thresholds in immutable quarantine history. It never replaces
