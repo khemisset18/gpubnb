@@ -44,7 +44,7 @@ services:
       - key: SUPABASE_URL
         value: https://ctifqdjpxdfdgdgbpzod.supabase.co
       - key: SUPABASE_ANON_KEY
-        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6ImN0aWZxZGpweGRmZGdkZ2Jwem9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1ODkxOTEsImV4cCI6MjEwMDE2NTE5MX0.ghl21WQ8tfcmEOqRfW1QF1Lt_revqkHHgkgAJqqaMhU # gitleaks:allow
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0aWZxZGpweGRmZGdkZ2Jwem9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1ODkxOTEsImV4cCI6MjEwMDE2NTE5MX0.ghl21WQ8tfcmEOqRfW1QF1Lt_revqkHHgkgAJqqaMhU # gitleaks:allow
       - key: SESSION_COOKIE_NAME
         value: gpubnb_session
       - key: SESSION_TTL_SECONDS
