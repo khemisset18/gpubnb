@@ -1,6 +1,6 @@
-# Stale quarantined rental claim recovery
+# Quarantine recovery and stale rental claims
 
-## Problem
+## Stale local rental claim problem
 
 Older Windows Host builds can retain `gpu-resource-rental-v1.json` and
 `gpu-resource-runtime-v1.json` records in `QUARANTINED` after the server has
@@ -13,7 +13,7 @@ Deleting those files is not an acceptable recovery protocol: it discards the
 local fencing evidence and could allow a stale or ambiguous authority to reuse a
 GPU.
 
-## Qualified recovery rule
+## Qualified stale-claim recovery rule
 
 The Agent may supersede a local `QUARANTINED` claim only when **all** of these are
 true:
@@ -50,9 +50,40 @@ This ordering is restart-safe:
 - crash after `PREEMPTING`: canonical preemption resumes the exact tuple;
 - equal/older fences and ambiguous intermediate generations remain blocked.
 
+## Thermal policy
+
+Temperature alone enters **server quarantine only at 98 C or above**. A measured
+97.999 C does not enter thermal quarantine.
+
+This is intentionally separate from local workload protection. Host Desktop may
+stop mining conservatively at a lower temperature to protect the physical GPU;
+that local protective stop is not a Machine quarantine and now rearms
+automatically after a real cooldown sample.
+
+At the 98 C boundary the server persists the exact measured temperature, GPU
+hardware UUID and thresholds in immutable quarantine history. It never replaces
+an already-active unrelated security/cleanup quarantine with a thermal label.
+
+A thermal quarantine never clears merely because a later heartbeat is cooler.
+Once a heartbeat proves the GPU has cooled to 90 C or below, GPUbnb automatically
+queues a real signed DiagnosticRun. The diagnostic may clear quarantine only if
+all normal mandatory checks pass **and** the latest heartbeat still proves the
+thermal cooldown. No ProgramData editing or manual acknowledgement is required.
+
+## Owner UX
+
+The machine diagnostics screen puts the durable event reason at the top as
+`Cause détectée`. While quarantined it exposes one primary action:
+`Résoudre automatiquement`.
+
+That action applies only a server-approved safe bookkeeping repair when one is
+available, then starts the real diagnostic automatically. It never calls the
+administrator force-clear endpoint and never edits local state files. Thermal
+quarantine normally begins its diagnostic automatically after cooldown, so the
+owner often does not need to click anything at all.
+
 ## Explicit non-goals
 
-This does **not** clear server-side Machine/Accelerator quarantine, bypass the
-owner diagnostic workflow, delete ProgramData state, force-stop unknown
-processes, weaken mining/rental exclusivity, or recover a runtime that still has
-process identity metadata.
+This does **not** bypass server-side security quarantine, delete ProgramData
+state, force-stop unknown processes, weaken mining/rental exclusivity, or recover
+a runtime that still has process identity metadata.
