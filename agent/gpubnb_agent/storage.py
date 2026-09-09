@@ -9,11 +9,17 @@ import platform
 import subprocess
 import sys
 import tempfile
+import threading
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import base58
 from nacl.signing import SigningKey
+
+WINDOWS_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+_SECURED_DIRECTORIES_LOCK = threading.Lock()
+_SECURED_DIRECTORIES: set[str] = set()
 
 
 def config_dir() -> Path:
@@ -28,12 +34,24 @@ def config_dir() -> Path:
     return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "gpubnb"
 
 
+def _windows_creation_flags() -> int:
+    return WINDOWS_CREATE_NO_WINDOW if os.name == "nt" else 0
+
+
+@lru_cache(maxsize=1)
 def _windows_owner() -> str | None:
-    # USERDOMAIN/USERNAME env vars are not reliably set in every invocation context
-    # (services, some shells). `whoami` is the authoritative source Windows itself
-    # uses to resolve the running identity, so ask it instead of trusting the env.
+    # Process identity cannot change while the Agent service is running. Resolve it
+    # once from Windows instead of spawning `whoami` for every atomic heartbeat file
+    # write. Environment variables remain only a fallback for restricted contexts.
     try:
-        result = subprocess.run(["whoami"], capture_output=True, text=True, shell=False, check=False)
+        result = subprocess.run(
+            ["whoami"],
+            capture_output=True,
+            text=True,
+            shell=False,
+            check=False,
+            creationflags=_windows_creation_flags(),
+        )
         account = result.stdout.strip()
         if result.returncode == 0 and account:
             return account
@@ -46,41 +64,72 @@ def _windows_owner() -> str | None:
     return f"{domain}\\{user}" if domain else user
 
 
-def _secure_windows_acl(path: Path) -> None:
+def _secure_windows_acl(path: Path) -> bool:
     # %PROGRAMDATA% inherits a default ACL that grants the local Users group read
-    # access. Without an explicit, non-inherited grant restricted to the current
-    # user and SYSTEM, any other unprivileged local account can read agent.key and
-    # sign requests as this machine. Best-effort: never crash the agent over this,
-    # but never stay silent either — icacls failing here is a real security gap.
+    # access. Restrict the Agent data root to the service identity and SYSTEM. Child
+    # files created inside this directory inherit the same protected ACL, so the
+    # expensive icacls operation belongs on the directory boundary rather than on
+    # every heartbeat counter rewrite.
     owner = _windows_owner()
     if not owner:
-        print("AVERTISSEMENT: impossible de déterminer l'utilisateur Windows courant "
-              f"pour restreindre les permissions de {path}", file=sys.stderr)
-        return
-    # (OI)(CI) (object-inherit/container-inherit) only make sense on a directory ACE,
-    # so they can only be applied to child objects — a plain file has none. Passing
-    # them on a file's own ACE produced a grant icacls accepted but Windows did not
-    # actually honor, silently locking the owner out. Use them for directories only.
+        print(
+            "AVERTISSEMENT: impossible de déterminer l'utilisateur Windows courant "
+            f"pour restreindre les permissions de {path}",
+            file=sys.stderr,
+        )
+        return False
     rights = "(OI)(CI)F" if path.is_dir() else "F"
     result = subprocess.run(
-        ["icacls", str(path), "/inheritance:r", "/grant:r", f"{owner}:{rights}", f"SYSTEM:{rights}"],
-        capture_output=True, text=True, shell=False, check=False,
+        [
+            "icacls",
+            str(path),
+            "/inheritance:r",
+            "/grant:r",
+            f"{owner}:{rights}",
+            f"SYSTEM:{rights}",
+        ],
+        capture_output=True,
+        text=True,
+        shell=False,
+        check=False,
+        creationflags=_windows_creation_flags(),
     )
     if result.returncode != 0:
-        print(f"AVERTISSEMENT: échec de la restriction ACL Windows sur {path}: "
-              f"{result.stderr.strip()[:300]}", file=sys.stderr)
+        print(
+            f"AVERTISSEMENT: échec de la restriction ACL Windows sur {path}: "
+            f"{result.stderr.strip()[:300]}",
+            file=sys.stderr,
+        )
+        return False
+    return True
 
 
-def _secure_directory(path: Path) -> None:
+def _directory_cache_key(path: Path) -> str:
+    try:
+        resolved = path.resolve()
+    except OSError:
+        resolved = path.absolute()
+    return os.path.normcase(str(resolved))
+
+
+def _secure_directory(path: Path) -> bool:
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
     if os.name != "nt":
         path.chmod(0o700)
-    else:
-        _secure_windows_acl(path)
+        return True
+
+    key = _directory_cache_key(path)
+    with _SECURED_DIRECTORIES_LOCK:
+        if key in _SECURED_DIRECTORIES:
+            return True
+        secured = _secure_windows_acl(path)
+        if secured:
+            _SECURED_DIRECTORIES.add(key)
+        return secured
 
 
 def _atomic_write(path: Path, content: str) -> None:
-    _secure_directory(path.parent)
+    parent_secured = _secure_directory(path.parent)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}-", dir=path.parent, text=True)
     try:
         if os.name != "nt":
@@ -89,10 +138,15 @@ def _atomic_write(path: Path, content: str) -> None:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
+        # The temporary file was created *after* the parent ACL was hardened and in
+        # the same directory, so on Windows it inherits the protected owner/SYSTEM
+        # ACL. os.replace preserves that file security descriptor. If parent ACL
+        # hardening failed, make one explicit best-effort file-level attempt rather
+        # than silently leaving broad inherited permissions.
         os.replace(temporary, path)
         if os.name != "nt":
             path.chmod(0o600)
-        else:
+        elif not parent_secured:
             _secure_windows_acl(path)
     finally:
         if os.path.exists(temporary):
@@ -208,8 +262,13 @@ def load_machine_fingerprint() -> str | None:
 
 
 def save_machine_fingerprint(value: str) -> None:
-    if value:
-        _atomic_write(fingerprint_path(), value)
+    if not value:
+        return
+    # Avoid a second atomic write (and historically another ACL/console cascade)
+    # on every successful heartbeat when the physical fingerprint is unchanged.
+    if load_machine_fingerprint() == value:
+        return
+    _atomic_write(fingerprint_path(), value)
 
 
 def detect_hardware_change(current_fingerprint: str) -> tuple[bool, str | None]:
