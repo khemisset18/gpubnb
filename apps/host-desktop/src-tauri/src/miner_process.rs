@@ -25,10 +25,16 @@ const STDERR_LOG_NAME: &str = "miner-stderr.log";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 fn background_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
-    let mut command = Command::new(program);
     #[cfg(target_os = "windows")]
-    command.creation_flags(CREATE_NO_WINDOW);
-    command
+    {
+        let mut command = Command::new(program);
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(program)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
