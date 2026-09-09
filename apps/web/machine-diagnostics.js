@@ -4,7 +4,7 @@ const MD_API=(window.GPUBNB_API_URL||'').replace(/\/$/,'');
 const mdEscape=value=>String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 const mdDate=value=>value?new Date(value).toLocaleString('fr-FR'):'—';
 
-const CHECK_LABELS={agent:'Agent',gpu:'GPU',gpuUuid:'UUID GPU',driver:'Pilote GPU',docker:'Docker',nvidiaRuntime:'Runtime NVIDIA',cuda:'CUDA',ram:'RAM',allocation:'Allocation GPU'};
+const CHECK_LABELS={agent:'Agent',gpu:'GPU',gpuUuid:'UUID GPU',driver:'Pilote GPU',docker:'Docker',nvidiaRuntime:'Runtime NVIDIA',runtimeCleanup:'Nettoyage runtime',temperature:'Température GPU',cuda:'CUDA',ram:'RAM',allocation:'Allocation GPU'};
 const CHECK_BADGE={PASS:'ok',FAIL:'danger',WARNING:'warn',UNKNOWN:'warn',NOT_CHECKED:'warn'};
 const CHECK_ICON={PASS:'🟢',FAIL:'🔴',WARNING:'🟠',UNKNOWN:'⚪',NOT_CHECKED:'⚪'};
 const SEVERITY_ICON={CRITICAL:'🔴',WARNING:'🟠',INFO:'🟢'};
@@ -14,6 +14,7 @@ const STATE_LABELS={
 const STATE_BADGE={READY_TO_PUBLISH:'ok',LISTING_ACTIVE:'ok',SESSION_ACTIVE:'ok',RESERVED:'ok',SESSION_STARTING:'ok',QUARANTINED:'danger',OFFLINE:'warn',DIAGNOSTIC_RUNNING:'warn'};
 
 let pollTimer=null;
+let currentData=null;
 
 async function mdRequest(path,options={}){
   const headers={accept:'application/json',...(options.headers||{})};
@@ -40,16 +41,22 @@ function renderHistory(events){
   return `<div class="table-list">${events.map(e=>`<div class="list-row"><div><strong>${mdEscape(statusLabel[e.status]||e.status)}${e.forced?' · forcé par un administrateur':''}</strong><div class="muted">${mdEscape(e.reasonTitle||e.reasonCode)} — ${mdEscape(e.reason)}</div><div class="muted">${mdDate(e.createdAt)} · source : ${mdEscape(e.source)}</div></div></div>`).join('')}</div>`;
 }
 
+function activeQuarantineCause(data){
+  if(!Array.isArray(data.history))return null;
+  return data.history.find(event=>(event.status==='ENTERED'||event.status==='REENTERED')&&!event.resolvedAt)||null;
+}
+
 function renderBody(data){
   const state=data.state||{};
   const stateBadge=STATE_BADGE[state.state]||'warn';
   const quarantine=data.quarantine||{};
   const running=data.runningDiagnostic;
   const last=data.lastDiagnosticRun;
+  const cause=activeQuarantineCause(data);
 
-  const quarantinePanel=quarantine.active?`<article class="panel" style="margin-bottom:14px"><div class="section-heading"><div><h2>${SEVERITY_ICON[quarantine.severity]||'🔴'} EN QUARANTAINE</h2><p class="muted">${mdEscape(quarantine.title)}</p></div><span class="badge danger">${mdEscape(quarantine.reasonCode)}</span></div><p>${mdEscape(quarantine.description)}</p><div class="muted"><strong>Impact :</strong> ${mdEscape(quarantine.impact)}</div><div class="muted"><strong>Depuis :</strong> ${mdDate(quarantine.since)}</div><div class="muted"><strong>Preuve nécessaire :</strong> ${mdEscape(quarantine.evidenceRequired||'—')}</div><div style="margin-top:10px"><strong>Action recommandée :</strong> ${mdEscape(quarantine.recommendedAction||'Relancez un diagnostic.')}</div></article>`:'';
+  const quarantinePanel=quarantine.active?`<article class="panel" style="margin-bottom:14px"><div class="section-heading"><div><h2>${SEVERITY_ICON[quarantine.severity]||'🔴'} EN QUARANTAINE</h2><p class="muted">${mdEscape(quarantine.title)}</p></div><span class="badge danger">${mdEscape(quarantine.reasonCode)}</span></div>${cause?`<div class="form-message error" style="margin-bottom:10px"><strong>Cause détectée :</strong> ${mdEscape(cause.reason)}</div>`:''}<p>${mdEscape(quarantine.description)}</p><div class="muted"><strong>Impact :</strong> ${mdEscape(quarantine.impact)}</div><div class="muted"><strong>Depuis :</strong> ${mdDate(quarantine.since)}</div><div class="muted"><strong>Preuve nécessaire :</strong> ${mdEscape(quarantine.evidenceRequired||'—')}</div><div style="margin-top:10px"><strong>Action recommandée :</strong> ${mdEscape(quarantine.recommendedAction||'Utilisez « Résoudre automatiquement ».')}</div></article>`:'';
 
-  const runningPanel=running?`<article class="panel" style="margin-bottom:14px"><span class="badge warn">Diagnostic en cours</span><p class="muted">Lancé ${mdDate(running.startedAt)} — en attente du résultat réel de l’agent (rafraîchissement automatique).</p></article>`:'';
+  const runningPanel=running?`<article class="panel" style="margin-bottom:14px"><span class="badge warn">Résolution en cours</span><p class="muted">Diagnostic lancé ${mdDate(running.startedAt)} — l’agent effectue les preuves réelles. Cette page se rafraîchit automatiquement.</p></article>`:'';
 
   return `
 ${quarantinePanel}
@@ -78,11 +85,23 @@ ${runningPanel}
 async function loadAndRender(machineId){
   const root=document.querySelector('[data-md-body]');
   const data=await mdRequest(`/rental/machines/${encodeURIComponent(machineId)}/diagnostics`);
+  currentData=data;
   document.querySelector('[data-md-title]').textContent=`Machine ${machineId}`;
   root.innerHTML=renderBody(data);
-  const repairButton=document.querySelector('[data-md-repair]');
-  repairButton.hidden=!data.repair;
-  if(data.repair)repairButton.title=data.repair.description;
+
+  const rerunButton=document.querySelector('[data-md-rerun]');
+  const resolveButton=document.querySelector('[data-md-repair]');
+  const quarantined=data.quarantine?.active===true;
+  rerunButton.hidden=quarantined;
+  resolveButton.hidden=!quarantined;
+  if(quarantined){
+    resolveButton.textContent=data.runningDiagnostic?'Résolution en cours…':'Résoudre automatiquement';
+    resolveButton.disabled=Boolean(data.runningDiagnostic);
+    resolveButton.title=data.repair?.description||'GPUbnb lance automatiquement les contrôles nécessaires et lève la quarantaine uniquement si les preuves sont bonnes.';
+  }else{
+    rerunButton.disabled=false;
+    resolveButton.disabled=false;
+  }
 
   if(pollTimer){clearInterval(pollTimer);pollTimer=null}
   if(data.runningDiagnostic){
@@ -91,6 +110,22 @@ async function loadAndRender(machineId){
     },4000);
   }
   return data;
+}
+
+async function startAutomaticResolution(machineId){
+  const data=currentData||await loadAndRender(machineId);
+  if(data.repair){
+    try{
+      await mdRequest(`/rental/machines/${encodeURIComponent(machineId)}/diagnostics/repair`,{method:'POST'});
+    }catch(error){
+      // A concurrent heartbeat/repair may have already removed the bookkeeping
+      // issue between rendering and clicking. In that one race the correct next
+      // step is still the real diagnostic, not an error page.
+      if(error.data?.error!=='no_safe_repair_available')throw error;
+    }
+  }
+  await mdRequest(`/rental/machines/${encodeURIComponent(machineId)}/diagnostics/rerun`,{method:'POST'});
+  return loadAndRender(machineId);
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
@@ -112,13 +147,12 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
 
   document.querySelector('[data-md-repair]').addEventListener('click',async event=>{
-    const button=event.currentTarget;button.disabled=true;const original=button.textContent;button.textContent='Réparation…';
+    const button=event.currentTarget;button.disabled=true;const original=button.textContent;button.textContent='Résolution…';
     try{
-      await mdRequest(`/rental/machines/${encodeURIComponent(machineId)}/diagnostics/repair`,{method:'POST'});
-      await loadAndRender(machineId);
-      document.querySelector('[data-md-body]').insertAdjacentHTML('afterbegin','<div class="form-message success">Réparation appliquée. Relancez un diagnostic pour confirmer.</div>');
+      await startAutomaticResolution(machineId);
+      document.querySelector('[data-md-body]').insertAdjacentHTML('afterbegin','<div class="form-message success">Résolution lancée. GPUbnb effectue les vérifications et lèvera automatiquement la quarantaine seulement si tout est sûr.</div>');
     }catch(error){
-      document.querySelector('[data-md-body]').insertAdjacentHTML('afterbegin',`<div class="form-message error">Réparation impossible : ${mdEscape(error.data?.error||error.message)}</div>`);
+      document.querySelector('[data-md-body]').insertAdjacentHTML('afterbegin',`<div class="form-message error">Résolution impossible : ${mdEscape(error.data?.error||error.message)}</div>`);
     }finally{button.disabled=false;button.textContent=original}
   });
 });
