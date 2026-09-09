@@ -1,13 +1,28 @@
 use serde::Serialize;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::process::Command;
 use std::sync::Mutex;
 
 pub const THERMAL_WARNING_CELSIUS: f64 = 80.0;
 pub const THERMAL_STOP_CELSIUS: f64 = 85.0;
 pub const THERMAL_REARM_CELSIUS: f64 = 75.0;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn background_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(target_os = "windows")]
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
 
 pub fn read_native_temperature() -> Result<f64, &'static str> {
-    let output = Command::new("nvidia-smi")
+    // The thermal monitor runs every five seconds while mining. On Windows a
+    // plain console-child launch can flash a terminal on every sample even
+    // though nvidia-smi is purely a background sensor. Keep the sampling and
+    // fail-closed thresholds unchanged; only detach the child console.
+    let output = background_command("nvidia-smi")
         .args([
             "--query-gpu=temperature.gpu",
             "--format=csv,noheader,nounits",
