@@ -27,6 +27,7 @@ from .mining_guard import (
     miner_install_root,
     stop_all_miners_and_verify,
 )
+from .platform_info import run_command
 from .storage import config_dir
 from .workspace_gateway import (
     names_for_session,
@@ -39,6 +40,7 @@ SAFE_WORKER = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
 SAFE_WALLET = re.compile(r"^[A-Za-z0-9_.:+-]{3,256}$")
 ALLOWED_STRATUM_SCHEMES = {"stratum+tcp", "stratum+ssl", "stratum+tls"}
 MAX_ARGUMENT_LEN = 512
+WINDOWS_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 
 # Mirrors apps/host-desktop/src-tauri/src/approved_miner_manifest.rs. A parity
 # test protects this table from silently drifting away from the Rust runtime.
@@ -207,12 +209,12 @@ def parse_mining_launch_spec(payload: Any) -> MiningLaunchSpec:
 
 
 def _gpu_power_limit_arguments(mode: str) -> list[str]:
-    result = subprocess.run(
+    result = run_command(
         [
             "nvidia-smi", "--query-gpu=power.default_limit,power.min_limit",
             "--format=csv,noheader,nounits",
         ],
-        capture_output=True, text=True, timeout=15, check=False, shell=False,
+        timeout=15,
     )
     if result.returncode != 0:
         raise ExecutionControlError("gpu_power_limit_unavailable")
@@ -302,7 +304,11 @@ def start_mining(payload: Any, command_id: str) -> ExecutionResult:
         raise ExecutionControlError("miner_already_running")
     executable = _verified_binary(spec.profile_id, root)
     arguments = build_miner_arguments(spec)
-    flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    flags = (
+        subprocess.CREATE_NEW_PROCESS_GROUP | WINDOWS_CREATE_NO_WINDOW
+        if os.name == "nt"
+        else 0
+    )
     try:
         child = subprocess.Popen(
             [str(executable), *arguments],
@@ -341,10 +347,7 @@ def stop_mining() -> ExecutionResult:
 
 
 def _docker(args: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["docker", *args], capture_output=True, text=True,
-        timeout=30, check=False, shell=False,
-    )
+    return run_command(["docker", *args], timeout=30)
 
 
 def _docker_absent(kind: str, name: str) -> bool:
