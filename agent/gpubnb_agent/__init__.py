@@ -26,7 +26,7 @@ from .workspace_gateway_v4 import install as _install_workspace_gateway_v4
 _install_workspace_gateway_v4()
 del _install_workspace_gateway_v4
 
-# Add resource-scoped rental preemption after all transport/security layers.  v5
+# Add resource-scoped rental preemption after all transport/security layers. v5
 # only replaces GPU ownership/lifecycle hooks: HTTP, WebSocket and QUIC behavior
 # continues to come from the already-qualified v4/v3/v2 stack.
 from .workspace_gateway_v5 import install as _install_workspace_gateway_v5
@@ -42,3 +42,11 @@ from .rental_claim_recovery import install as _install_rental_claim_recovery
 
 _install_rental_claim_recovery()
 del _install_rental_claim_recovery
+
+# Keep local code-server WebSocket opens off the control-message loop. A slow
+# Management channel must not head-of-line block ExtensionHost/reconnect opens or
+# browser frames; v6 preserves ordering with a bounded per-channel pending buffer.
+from .workspace_gateway_v6 import install as _install_workspace_gateway_v6
+
+_install_workspace_gateway_v6()
+del _install_workspace_gateway_v6
