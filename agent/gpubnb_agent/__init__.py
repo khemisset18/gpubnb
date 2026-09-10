@@ -1,6 +1,6 @@
 """GPUbnb Agent: local GPU inventory and signed control plane client."""
 
-__version__ = "0.6.5"
+__version__ = "0.6.6"
 
 # Install the high-throughput Developer Workspace transport before the CLI imports
 # workspace_gateway. The v2 supervisor subclasses the hardened lifecycle code and
@@ -50,3 +50,13 @@ from .workspace_gateway_v6 import install as _install_workspace_gateway_v6
 
 _install_workspace_gateway_v6()
 del _install_workspace_gateway_v6
+
+# Physical beta.84 isolated the remaining reconnect loop to legacy ws_send
+# commands whose binary opcode metadata can be absent even though local opens and
+# signed ACKs are fast. v7 adds an explicit protocol version and a narrow,
+# code-server-only compatibility rule while retaining fail-closed behavior for
+# every ambiguous or modern malformed message.
+from .workspace_gateway_v7 import install as _install_workspace_gateway_v7
+
+_install_workspace_gateway_v7()
+del _install_workspace_gateway_v7
