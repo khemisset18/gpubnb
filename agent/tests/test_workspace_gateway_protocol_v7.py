@@ -67,6 +67,24 @@ class WorkspaceGatewayProtocolV7Tests(unittest.TestCase):
             ["ws_browser_binary_metadata_legacy_compat"],
         )
 
+    def test_legacy_missing_binary_is_normalized_before_v6_pending_buffer(self) -> None:
+        supervisor, ws, traces, errors = _supervisor()
+        supervisor.channels = {}
+        supervisor._ws_open_pending = {"channel-1": []}
+        supervisor._ws_open_pending_bytes = {"channel-1": 0}
+
+        supervisor._handle(_item())
+
+        self.assertEqual(ws.sent, [])
+        self.assertEqual(errors, [])
+        self.assertEqual(len(supervisor._ws_open_pending["channel-1"]), 1)
+        buffered = supervisor._ws_open_pending["channel-1"][0]
+        self.assertIs(buffered.get("binary"), True)
+        self.assertEqual(
+            [event for event, _ in traces if event == "ws_first_browser_frame_buffered"],
+            ["ws_first_browser_frame_buffered"],
+        )
+
     def test_legacy_missing_binary_metadata_fails_closed_on_unrelated_path(self) -> None:
         supervisor, ws, _, errors = _supervisor("/socket")
 
