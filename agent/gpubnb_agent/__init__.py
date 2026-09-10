@@ -1,6 +1,6 @@
 """GPUbnb Agent: local GPU inventory and signed control plane client."""
 
-__version__ = "0.6.5"
+__version__ = "0.6.6"
 
 # Install the high-throughput Developer Workspace transport before the CLI imports
 # workspace_gateway. The v2 supervisor subclasses the hardened lifecycle code and
@@ -42,3 +42,11 @@ from .rental_claim_recovery import install as _install_rental_claim_recovery
 
 _install_rental_claim_recovery()
 del _install_rental_claim_recovery
+
+# Advertise the explicit ws_open-ack capability last so the server can use a
+# latency-safe browser-handshake barrier without changing any preceding rental,
+# security or transport semantics. Older servers ignore the additive field.
+from .workspace_gateway_v6 import install as _install_workspace_gateway_v6
+
+_install_workspace_gateway_v6()
+del _install_workspace_gateway_v6
