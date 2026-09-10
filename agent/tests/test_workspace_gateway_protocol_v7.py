@@ -85,6 +85,32 @@ class WorkspaceGatewayProtocolV7Tests(unittest.TestCase):
             ["ws_first_browser_frame_buffered"],
         )
 
+    def test_modern_missing_metadata_cancels_pending_open_fail_closed(self) -> None:
+        supervisor, ws, _, errors = _supervisor()
+        supervisor.channels = {}
+        supervisor._ws_open_pending = {"channel-1": [_item(b"queued-before-error")]}
+        supervisor._ws_open_pending_bytes = {"channel-1": 128}
+        item = _item()
+        item["protocolVersion"] = WORKSPACE_GATEWAY_PROTOCOL_VERSION
+
+        supervisor._handle(item)
+
+        self.assertEqual(ws.sent, [])
+        self.assertEqual(errors, ["workspace_protocol_binary_metadata_required"])
+        self.assertIn("channel-1", supervisor._ws_open_cancelled)
+        self.assertEqual(supervisor._ws_open_pending["channel-1"], [])
+        self.assertEqual(supervisor._ws_open_pending_bytes["channel-1"], 0)
+        self.assertNotIn("channel-1", supervisor._ws_channel_paths)
+
+    def test_canonical_broken_channel_cleanup_also_forgets_protocol_path(self) -> None:
+        supervisor, ws, _, _ = _supervisor()
+
+        supervisor._close_broken_channel("session-1", "channel-1", ws)
+
+        self.assertTrue(ws.closed)
+        self.assertNotIn("channel-1", supervisor.channels)
+        self.assertNotIn("channel-1", supervisor._ws_channel_paths)
+
     def test_legacy_missing_binary_metadata_fails_closed_on_unrelated_path(self) -> None:
         supervisor, ws, _, errors = _supervisor("/socket")
 
