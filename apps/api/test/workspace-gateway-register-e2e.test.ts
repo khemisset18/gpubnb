@@ -33,26 +33,11 @@ const { ensureCompatibleMachineWorkspace } = await import('../src/machine-worksp
 const { registerWorkspaceRenterRoutes } = await import('../src/workspace-renter-routes.js');
 const { config } = await import('../src/config.js');
 
-// Full API-level regression test for the two incidents fixed in this repo:
-//   1. A WorkspaceSession could read status=READY (and the renter-facing phase
-//      literally said "READY") while connectionMetadata was still null, because
-//      the job-completion handler set READY before the gateway ever registered.
-//   2. Once registered, a second /register call (agent retry, restart, or a
-//      runtimeId/localPort refresh) must stay idempotent - no duplicate booking
-//      transitions, no thrown error, no broken connectionMetadata.
-//
-// This test drives the REAL route handlers (registerWorkspaceRenterRoutes, which
-// also registers the gateway routes) over real HTTP via app.inject(), against a
-// real local Postgres + Redis, with a genuine Ed25519-signed v2 agent request -
-// not a re-implementation of the logic under test.
-//
-// It does not boot server.ts itself (a large monolith), so /agent/jobs/:id/complete
-// is not exercised here: that transition is reproduced with the identical Prisma
-// write it performs (status: PREPARING, no connectionMetadata) before the routes
-// under test take over. The chain this test proves - GET status before/after
-// register, POST /workspace/access before/after, and register idempotence - is
-// exactly the chain that broke in production.
-
+// Full API-level regression test for the gateway readiness contract. It proves
+// that a READY database state without connectionMetadata is not renter-openable,
+// that a genuinely signed Host registration makes it openable, that protocol-v2
+// capability metadata is persisted for the browser-handshake barrier, and that
+// re-registration remains idempotent.
 const hasDb = Boolean(process.env.DATABASE_URL);
 
 function tokenHash(token: string): string {
@@ -79,7 +64,7 @@ function signedAgentRequest(method: string, routePath: string, machineId: string
   };
 }
 
-test('gateway register is the only thing that makes a Developer workspace openable, and is idempotent', { skip: !hasDb }, async (t) => {
+test('gateway register is the only thing that makes a Developer workspace openable, negotiates v2, and is idempotent', { skip: !hasDb }, async (t) => {
   const prisma = new PrismaClient();
   const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
     lazyConnect: true,
@@ -130,7 +115,6 @@ test('gateway register is the only thing that makes a Developer workspace openab
   await app.ready();
   cleanup.push(() => app.close());
 
-  // --- Fixtures: renter with a real session, machine, developer workspace, booking, job ---
   const renter = await prisma.user.create({ data: { wallet: `renter_${suffix}`, pseudonym: `renter_${suffix}` } });
   cleanup.push(() => prisma.user.delete({ where: { id: renter.id } }));
   const owner = await prisma.user.create({ data: { wallet: `owner_${suffix}`, pseudonym: `owner_${suffix}`, canHost: true } });
@@ -195,8 +179,6 @@ test('gateway register is the only thing that makes a Developer workspace openab
   });
   cleanup.push(() => prisma.booking.delete({ where: { id: booking.id } }));
 
-  // Required by the guard_booking_resource_lifecycle trigger: FUNDED/STARTING/
-  // ACTIVE bookings must always carry a live resource allocation.
   await prisma.machineAllocation.create({
     data: { bookingId: booking.id, machineId: machine.id, status: 'ACTIVE', startsAt: booking.startsAt, endsAt: booking.endsAt },
   });
@@ -210,9 +192,6 @@ test('gateway register is the only thing that makes a Developer workspace openab
   });
   cleanup.push(() => prisma.job.delete({ where: { id: job.id } }));
 
-  // Reproduces exactly what POST /agent/jobs/:id/complete writes for a
-  // WORKSPACE_PREPARE job today (server.ts): the container/runtime is proven
-  // ready, but the gateway has not registered yet.
   const session = await prisma.workspaceSession.create({
     data: {
       bookingId: booking.id, renterId: renter.id, machineId: machine.id,
@@ -224,14 +203,13 @@ test('gateway register is the only thing that makes a Developer workspace openab
     },
   });
 
-  // --- 1. Before /register: must never claim the workspace is openable ---
   const before = await app.inject({ method: 'GET', url: `/bookings/${booking.id}/workspace`, headers: { cookie: cookieHeader } });
   assert.equal(before.statusCode, 200);
   const beforeBody = before.json();
-  assert.equal(beforeBody.status, 'READY', 'sanity check: the raw DB status really is READY at this point');
-  assert.equal(beforeBody.canOpen, false, 'canOpen must be false: connectionMetadata is still null');
+  assert.equal(beforeBody.status, 'READY');
+  assert.equal(beforeBody.canOpen, false);
   assert.equal(beforeBody.blockedReason, 'GATEWAY_NOT_READY');
-  assert.equal(beforeBody.preparation.phase, 'GATEWAY_NOT_READY', 'the phase must never literally say READY here');
+  assert.equal(beforeBody.preparation.phase, 'GATEWAY_NOT_READY');
 
   const accessBefore = await app.inject({
     method: 'POST', url: `/bookings/${booking.id}/workspace/access`, headers: { cookie: cookieHeader },
@@ -239,19 +217,30 @@ test('gateway register is the only thing that makes a Developer workspace openab
   assert.equal(accessBefore.statusCode, 409);
   assert.deepEqual(accessBefore.json(), { error: 'workspace_gateway_not_ready' });
 
-  // --- 2. Agent registers the real gateway connection ---
-  const registerBody = { machineId: machine.id, runtimeId: `runtime-${suffix}`, localPort: 41234 };
+  // Agent 0.6.6 advertises protocol v2 in the exact signed registration body.
+  const registerBody = {
+    machineId: machine.id,
+    runtimeId: `runtime-${suffix}`,
+    localPort: 41234,
+    gatewayProtocolVersion: 2,
+  };
   const registerRoute = `/agent/workspace-gateway/${session.id}/register`;
   const signed1 = signedAgentRequest('POST', registerRoute, machine.id, keyPair, registerBody);
   const register1 = await app.inject({ method: 'POST', url: registerRoute, headers: signed1.headers, payload: signed1.payload });
   assert.equal(register1.statusCode, 200, JSON.stringify(register1.json()));
   const gatewayPath = register1.json().gatewayPath;
   assert.equal(gatewayPath, `/workspace-gateway/${session.id}`);
+  assert.equal(register1.json().gatewayProtocolVersion, 2);
+
+  const storedAfterRegister = await prisma.workspaceSession.findUniqueOrThrow({ where: { id: session.id } });
+  const storedMetadata = storedAfterRegister.connectionMetadata as Record<string, unknown>;
+  assert.equal(storedMetadata.gatewayProtocolVersion, 2, 'v2 capability must survive in connectionMetadata for the browser upgrade path');
+  assert.equal(storedMetadata.runtimeId, registerBody.runtimeId);
+  assert.equal(storedMetadata.localPort, registerBody.localPort);
 
   const bookingAfterRegister = await prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
-  assert.equal(bookingAfterRegister.status, BookingStatus.STARTING, 'first registration must start the booking timer');
+  assert.equal(bookingAfterRegister.status, BookingStatus.STARTING, 'registration makes the workspace ready to connect, not yet billable');
 
-  // --- 3. After /register: now genuinely openable ---
   const after = await app.inject({ method: 'GET', url: `/bookings/${booking.id}/workspace`, headers: { cookie: cookieHeader } });
   const afterBody = after.json();
   assert.equal(afterBody.canOpen, true);
@@ -263,14 +252,13 @@ test('gateway register is the only thing that makes a Developer workspace openab
   const openPath: string = access.json().openPath;
   assert.ok(openPath.startsWith(`${gatewayPath}?grant=`), `openPath must be scoped to the registered gatewayPath, got ${openPath}`);
 
-  // --- 4. Idempotence: a second register (agent retry / restart) must not
-  // duplicate the booking transition or break connectionMetadata ---
   const signed2 = signedAgentRequest('POST', registerRoute, machine.id, keyPair, registerBody);
   const register2 = await app.inject({ method: 'POST', url: registerRoute, headers: signed2.headers, payload: signed2.payload });
   assert.equal(register2.statusCode, 200);
   assert.equal(register2.json().gatewayPath, gatewayPath);
+  assert.equal(register2.json().gatewayProtocolVersion, 2);
 
   const bookingAfterSecondRegister = await prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
-  assert.equal(bookingAfterSecondRegister.status, BookingStatus.STARTING, 'second register must not re-trigger the first-registration transition');
+  assert.equal(bookingAfterSecondRegister.status, BookingStatus.STARTING);
   assert.equal(bookingAfterSecondRegister.startsAt.getTime(), bookingAfterRegister.startsAt.getTime(), 'second register must not reset the activation window');
 });
