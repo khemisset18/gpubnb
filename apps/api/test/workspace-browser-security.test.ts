@@ -7,6 +7,7 @@ import {
   WORKSPACE_BROWSER_CSP,
   isWorkspaceBrowserPath,
   registerWorkspaceBrowserSecurity,
+  workspaceServiceWorkerScope,
 } from '../src/workspace-browser-security.js';
 
 test('workspace browser CSP is scoped away from agent and API routes', () => {
@@ -16,7 +17,7 @@ test('workspace browser CSP is scoped away from agent and API routes', () => {
   assert.equal(isWorkspaceBrowserPath('/health'), false);
 });
 
-test('workspace response overrides the strict API Helmet CSP with VS Code runtime requirements', async () => {
+test('workspace response overrides API CSP and grants only the authenticated session service-worker scope', async () => {
   const app = Fastify();
   await app.register(helmet, {
     contentSecurityPolicy: {
@@ -40,6 +41,8 @@ test('workspace response overrides the strict API Helmet CSP with VS Code runtim
     const workspace = await app.inject({ method: 'GET', url: '/workspace-gateway/session-1/' });
     assert.equal(workspace.statusCode, 200);
     assert.equal(workspace.headers['content-security-policy'], WORKSPACE_BROWSER_CSP);
+    assert.equal(workspace.headers['service-worker-allowed'], workspaceServiceWorkerScope('session-1'));
+    assert.equal(workspace.headers['service-worker-allowed'], '/workspace-gateway/session-1/');
     assert.match(WORKSPACE_BROWSER_CSP, /script-src[^;]*'unsafe-inline'/);
     assert.match(WORKSPACE_BROWSER_CSP, /script-src[^;]*'unsafe-eval'/);
     assert.match(WORKSPACE_BROWSER_CSP, /script-src[^;]*'wasm-unsafe-eval'/);
@@ -52,9 +55,14 @@ test('workspace response overrides the strict API Helmet CSP with VS Code runtim
     const apiCsp = String(health.headers['content-security-policy'] || '');
     assert.doesNotMatch(apiCsp, /'unsafe-eval'/);
     assert.doesNotMatch(apiCsp, /'unsafe-inline'/);
+    assert.equal(health.headers['service-worker-allowed'], undefined);
   } finally {
     await app.close();
   }
+});
+
+test('workspace service-worker scope encodes the session id and cannot escape the gateway prefix', () => {
+  assert.equal(workspaceServiceWorkerScope('session/../other'), '/workspace-gateway/session%2F..%2Fother/');
 });
 
 test('workspace absolute-path redirects remain inside the authenticated session prefix', async () => {
