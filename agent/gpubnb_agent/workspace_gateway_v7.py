@@ -2,11 +2,11 @@
 
 Physical beta.84 traces proved that local code-server opens and signed open ACKs
 are fast, but some browser relay commands can still arrive without the `binary`
-boolean that the hardened v3 relay requires.  The v3 contract remains strict for
-all generic channels.  This final layer adds one deliberately narrow rollout
+boolean that the hardened v3 relay requires. The v3 contract remains strict for
+all generic channels. This final layer adds one deliberately narrow rollout
 compatibility rule for code-server's content-addressed `/stable-<commit>`
-WebSocket endpoint while introducing an explicit protocol version for new API
-messages.
+WebSocket endpoint and recognizes an explicit protocol version when the API
+supplies one.
 
 Security properties:
 
@@ -17,6 +17,7 @@ Security properties:
 * frame payload/base64/size validation remains owned by v3 and is unchanged;
 * unsupported protocol versions fail with a precise error instead of entering a
   reconnect loop;
+* protocol compatibility state is bounded independently of payload buffers;
 * no frame payload, cookie, token or credential is written to diagnostics.
 """
 from __future__ import annotations
@@ -29,6 +30,7 @@ from . import workspace_gateway as legacy
 from . import workspace_gateway_v6 as concurrent_open
 
 WORKSPACE_GATEWAY_PROTOCOL_VERSION = 2
+WS_PROTOCOL_CHANNEL_MAX_ITEMS = 512
 _CODE_SERVER_WS_PATH = re.compile(r"^/stable-[0-9a-fA-F]{40}(?:\?|$)")
 
 
@@ -60,6 +62,13 @@ class GatewaySupervisor(concurrent_open.GatewaySupervisor):
         if not channel_id:
             return
         with self._ws_protocol_lock:
+            if (
+                channel_id not in self._ws_channel_paths
+                and len(self._ws_channel_paths) >= WS_PROTOCOL_CHANNEL_MAX_ITEMS
+            ):
+                raise RuntimeError(
+                    f"workspace_protocol_channel_state_exceeded:max={WS_PROTOCOL_CHANNEL_MAX_ITEMS}"
+                )
             self._ws_channel_paths[channel_id] = path
 
     def _forget_channel_path(self, channel_id: str) -> None:
@@ -85,11 +94,11 @@ class GatewaySupervisor(concurrent_open.GatewaySupervisor):
     def _normalize_ws_send(self, item: dict[str, Any]) -> dict[str, Any] | None:
         """Return a safe relay item, or fail the channel and return ``None``.
 
-        Legacy API messages have no protocolVersion.  For those messages only,
+        Legacy API messages have no protocolVersion. For those messages only,
         a missing binary field is recoverable on code-server's immutable
-        `/stable-<commit>` WebSocket path.  The exact payload bytes are then sent
+        `/stable-<commit>` WebSocket path. The exact payload bytes are then sent
         as a WebSocket binary frame, which is lossless and avoids inventing text
-        encoding semantics.  Any modern/malformed/ambiguous case remains strict.
+        encoding semantics. Any modern/malformed/ambiguous case remains strict.
         """
         try:
             version = self._message_protocol_version(item)
@@ -108,7 +117,7 @@ class GatewaySupervisor(concurrent_open.GatewaySupervisor):
             )
             return None
 
-        # Do not coerce strings, integers or other corrupted metadata.  The only
+        # Do not coerce strings, integers or other corrupted metadata. The only
         # rollout exception is a genuinely absent/null field from a legacy API.
         if "binary" in item and binary is not None:
             self._fail_channel(
@@ -144,13 +153,13 @@ class GatewaySupervisor(concurrent_open.GatewaySupervisor):
         if kind == "ws_open":
             try:
                 self._message_protocol_version(item)
+                self._remember_channel_path(item)
             except Exception as exc:
                 # Before a socket exists, use v6's signed open rejection path so
                 # the API/browser receives a deterministic failure immediately.
                 self._report_error(exc)
                 self._reject_open(item, str(exc)[:180])
                 return
-            self._remember_channel_path(item)
             return super()._handle(item)
 
         if kind == "ws_send":
