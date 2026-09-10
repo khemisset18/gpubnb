@@ -34,11 +34,19 @@ const workspaceSessionIdFromUrl = (url: string): string | null => {
 
 export const isWorkspaceBrowserPath = (url: string): boolean => workspaceSessionIdFromUrl(url) !== null;
 
+export const workspaceServiceWorkerScope = (sessionId: string): string =>
+  `/workspace-gateway/${encodeURIComponent(sessionId)}/`;
+
 export const registerWorkspaceBrowserSecurity = (app: FastifyInstance): void => {
   app.addHook('onSend', (request, reply, payload, done) => {
     const sessionId = workspaceSessionIdFromUrl(request.url);
     if (sessionId) {
       reply.header('content-security-policy', WORKSPACE_BROWSER_CSP);
+      // code-server serves serviceWorker.js from a nested _static path while the
+      // worker needs to control the whole authenticated workspace session prefix.
+      // Scope this widening to the renter workspace only; unrelated API/agent
+      // responses retain their normal browser security headers.
+      reply.header('service-worker-allowed', workspaceServiceWorkerScope(sessionId));
       const location = reply.getHeader('location');
       if (typeof location === 'string') {
         reply.header('location', rewriteWorkspaceLocation(location, sessionId));
