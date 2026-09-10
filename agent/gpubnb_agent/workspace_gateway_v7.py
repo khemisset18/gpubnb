@@ -17,7 +17,10 @@ Security properties:
 * frame payload/base64/size validation remains owned by v3 and is unchanged;
 * unsupported protocol versions fail with a precise error instead of entering a
   reconnect loop;
-* protocol compatibility state is bounded independently of payload buffers;
+* malformed metadata cancels a still-pending v6 open as well as an established
+  socket, so a rejected frame cannot leave an orphan live channel behind;
+* protocol compatibility state is bounded independently of payload buffers and
+  is discarded on canonical broken-channel cleanup;
 * no frame payload, cookie, token or credential is written to diagnostics.
 """
 from __future__ import annotations
@@ -81,15 +84,38 @@ class GatewaySupervisor(concurrent_open.GatewaySupervisor):
         with self._ws_protocol_lock:
             return self._ws_channel_paths.get(channel_id, "")
 
+    def _cancel_pending_open(self, channel_id: str) -> bool:
+        """Cancel v6 scheduler state without waiting for the local open thread."""
+        if not channel_id:
+            return False
+        with self._ws_open_state_lock:
+            pending = self._ws_open_pending.get(channel_id)
+            if pending is None:
+                return False
+            self._ws_open_cancelled.add(channel_id)
+            pending.clear()
+            self._ws_open_pending_bytes[channel_id] = 0
+            return True
+
+    def _close_broken_channel(self, session_id: str, channel_id: str, ws: Any) -> None:
+        """Extend v3 canonical cleanup with v7 compatibility-state cleanup."""
+        try:
+            super()._close_broken_channel(session_id, channel_id, ws)
+        finally:
+            self._forget_channel_path(channel_id)
+
     def _fail_channel(self, item: dict[str, Any], error: Exception) -> None:
         channel_id = str(item.get("channelId") or "")
         session_id = str(item.get("sessionId") or "")
         self._report_error(error)
+        self._cancel_pending_open(channel_id)
         ws = self.channels.get(channel_id)
         if ws is not None:
-            # v3 owns the canonical fail-closed channel cleanup routine.
+            # v3 owns the canonical established-channel cleanup routine; our
+            # override also removes the protocol-path state.
             self._close_broken_channel(session_id, channel_id, ws)
-        self._forget_channel_path(channel_id)
+        else:
+            self._forget_channel_path(channel_id)
 
     def _normalize_ws_send(self, item: dict[str, Any]) -> dict[str, Any] | None:
         """Return a safe relay item, or fail the channel and return ``None``.
