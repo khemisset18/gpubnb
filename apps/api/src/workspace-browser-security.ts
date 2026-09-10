@@ -34,11 +34,22 @@ const workspaceSessionIdFromUrl = (url: string): string | null => {
 
 export const isWorkspaceBrowserPath = (url: string): boolean => workspaceSessionIdFromUrl(url) !== null;
 
+/**
+ * code-server serves its worker script below `_static/out/browser/`, while the
+ * worker deliberately controls the whole authenticated per-session gateway
+ * prefix. Browsers refuse that wider scope unless the response explicitly
+ * grants it. Never grant `/` or `/workspace-gateway/`: the narrow session root
+ * is the maximum scope a renter workspace is allowed to control.
+ */
+export const workspaceServiceWorkerScope = (sessionId: string): string =>
+  `/workspace-gateway/${sessionId}/`;
+
 export const registerWorkspaceBrowserSecurity = (app: FastifyInstance): void => {
   app.addHook('onSend', (request, reply, payload, done) => {
     const sessionId = workspaceSessionIdFromUrl(request.url);
     if (sessionId) {
       reply.header('content-security-policy', WORKSPACE_BROWSER_CSP);
+      reply.header('service-worker-allowed', workspaceServiceWorkerScope(sessionId));
       const location = reply.getHeader('location');
       if (typeof location === 'string') {
         reply.header('location', rewriteWorkspaceLocation(location, sessionId));
