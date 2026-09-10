@@ -41,17 +41,30 @@ test('workspace response overrides the strict API Helmet CSP with VS Code runtim
     const workspace = await app.inject({ method: 'GET', url: '/workspace-gateway/session-1/' });
     assert.equal(workspace.statusCode, 200);
     assert.equal(workspace.headers['content-security-policy'], WORKSPACE_BROWSER_CSP);
-    assert.equal(
-      workspace.headers['service-worker-allowed'],
-      workspaceServiceWorkerScope('session-1'),
-    );
-    assert.equal(workspace.headers['service-worker-allowed'], '/workspace-gateway/session-1/');
+    assert.equal(workspace.headers['service-worker-allowed'], undefined);
     assert.match(WORKSPACE_BROWSER_CSP, /script-src[^;]*'unsafe-inline'/);
     assert.match(WORKSPACE_BROWSER_CSP, /script-src[^;]*'unsafe-eval'/);
     assert.match(WORKSPACE_BROWSER_CSP, /script-src[^;]*'wasm-unsafe-eval'/);
     assert.match(WORKSPACE_BROWSER_CSP, /style-src[^;]*'unsafe-inline'/);
     assert.match(WORKSPACE_BROWSER_CSP, /worker-src[^;]*blob:/);
     assert.match(WORKSPACE_BROWSER_CSP, /connect-src[^;]*wss:/);
+
+    const worker = await app.inject({
+      method: 'GET',
+      url: '/workspace-gateway/session-1/_static/out/browser/serviceWorker.js?cache=1',
+    });
+    assert.equal(worker.statusCode, 200);
+    assert.equal(
+      worker.headers['service-worker-allowed'],
+      workspaceServiceWorkerScope('session-1'),
+    );
+    assert.equal(worker.headers['service-worker-allowed'], '/workspace-gateway/session-1/');
+
+    const ordinaryAsset = await app.inject({
+      method: 'GET',
+      url: '/workspace-gateway/session-1/_static/out/browser/workbench.js',
+    });
+    assert.equal(ordinaryAsset.headers['service-worker-allowed'], undefined);
 
     const health = await app.inject({ method: 'GET', url: '/health' });
     assert.equal(health.statusCode, 200);
@@ -79,12 +92,12 @@ test('workspace absolute-path redirects remain inside the authenticated session 
     const local = await app.inject({ method: 'GET', url: '/workspace-gateway/session-1/redirect' });
     assert.equal(local.statusCode, 302);
     assert.equal(local.headers.location, '/workspace-gateway/session-1/stable-abc/static/workbench.js');
-    assert.equal(local.headers['service-worker-allowed'], '/workspace-gateway/session-1/');
+    assert.equal(local.headers['service-worker-allowed'], undefined);
 
     const external = await app.inject({ method: 'GET', url: '/workspace-gateway/session-1/external' });
     assert.equal(external.statusCode, 302);
     assert.equal(external.headers.location, 'https://example.com/x');
-    assert.equal(external.headers['service-worker-allowed'], '/workspace-gateway/session-1/');
+    assert.equal(external.headers['service-worker-allowed'], undefined);
   } finally {
     await app.close();
   }
