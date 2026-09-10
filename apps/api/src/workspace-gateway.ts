@@ -28,6 +28,7 @@ const WebSocketServer=WebSocket.Server;
 // one-shot batch job - see agent/gpubnb_agent/runner.py's GPU_PROOF path).
 const GATEWAY_WORKSPACE_SLUGS:string[]=['developer','data','ai','video','audio','api','mobile','security-lab'];
 const GATEWAY_COOKIE='gpubnb_workspace';
+const GATEWAY_PROTOCOL_VERSION=2;
 const SESSION_TTL_SECONDS=3600;
 const INTERACTIVE_CONNECT_TIMEOUT_SECONDS=15*60;
 const RESPONSE_TIMEOUT_MS=30_000;
@@ -97,9 +98,10 @@ return 0
 
 type RelayRequest={id:string;sessionId:string;kind:'http'|'ws_open'|'ws_send'|'ws_close';method?:string;path?:string;headers?:Record<string,string>;bodyBase64?:string;channelId?:string;dataBase64?:string;binary?:boolean};
 type RelayResponse={status:number;headers?:Record<string,string>;bodyBase64?:string;error?:string};
-type GatewayChannelBinding={sessionId:string;machineId:string;browserSessionKey:string};
+type GatewayActivationMode='upstream-frame'|'browser-delivery';
+type GatewayChannelBinding={sessionId:string;machineId:string;browserSessionKey:string;activationMode?:GatewayActivationMode};
 type AgentWsFrame={frameId?:string;channelId?:string;dataBase64?:string;binary?:boolean;close?:boolean};
-type UpgradeStatus=401|403|404|409|500;
+type UpgradeStatus=401|403|404|409|500|502|503|504;
 
 const gatewaySessionKey=(token:string)=>`workspace-gateway-session:${crypto.createHash('sha256').update(token).digest('hex')}`;
 const machineQueue=(machineId:string)=>`workspace-gateway:machine:${machineId}`;
@@ -134,7 +136,7 @@ async function enqueueMachineRelay(redis:Redis,machineId:string,relay:RelayReque
 }
 
 export function websocketUpgradeRejection(status:UpgradeStatus,error:string):Buffer{
-  const statusText:Record<UpgradeStatus,string>={401:'Unauthorized',403:'Forbidden',404:'Not Found',409:'Conflict',500:'Internal Server Error'};
+  const statusText:Record<UpgradeStatus,string>={401:'Unauthorized',403:'Forbidden',404:'Not Found',409:'Conflict',500:'Internal Server Error',502:'Bad Gateway',503:'Service Unavailable',504:'Gateway Timeout'};
   const body=JSON.stringify({error});
   return Buffer.from(`HTTP/1.1 ${status} ${statusText[status]}\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,'utf8');
 }
@@ -158,19 +160,14 @@ async function authenticateAgent(db:PrismaClient,redis:Redis,machineId:string,re
 }
 async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.workspaceSession.findFirst({where:{id:sessionId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR}},select:{id:true,renterId:true,machineId:true,bookingId:true,jobId:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});}
 
-// The commercial rental clock's one true start: a real upstream frame proven exchanged
-// between the container and the authenticated renter's browser (see the two call sites
-// below - both fire only on a genuine WebSocket data frame, never on merely opening the
-// gateway URL). booking.workspaceActivatedAt (not booking.status alone) is the
-// idempotency guard: with the private-beta GPU_DIAGNOSTIC path, a booking can already be
-// ACTIVE (proving the GPU works) well before any interactive workspace ever opens - GPU
-// Proof and any wait before the renter opens their workspace must never consume purchased
-// minutes, so both STARTING and ACTIVE are valid pre-activation states here, and only
-// workspaceActivatedAt:null distinguishes "not yet really started" from "already running".
-// Exported (kept otherwise unused outside this module) so it can be exercised directly
-// against a real database in tests, the same convention gpu-proof-completion.ts's
-// completeGpuProofJob already uses - not re-simulated in a test that only reads source.
-export async function activateGatewaySession(db:PrismaClient,sessionId:string,machineId:string){
+// The commercial rental clock's one true start is a real interactive frame on
+// an authenticated browser channel. Legacy protocol-v1 Hosts activate when the
+// signed first upstream frame reaches the API. Protocol-v2 Hosts allow the API
+// to pre-open the local socket before exposing the browser WebSocket, so their
+// activation is deferred until that queued upstream frame is actually handed to
+// the authenticated browser socket. booking.workspaceActivatedAt is the durable
+// idempotency guard in both paths.
+export async function activateGatewaySession(db:PrismaClient,sessionId:string,machineId:string,activatedAt=new Date()){
   return db.$transaction(async tx=>{
     const row=await tx.workspaceSession.findFirst({
       where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},
@@ -179,7 +176,7 @@ export async function activateGatewaySession(db:PrismaClient,sessionId:string,ma
     if(!row)return null;
     if(row.booking.workspaceActivatedAt!==null)return {activated:false,expiresAt:row.expiresAt};
     if(row.status!==WorkspaceSessionStatus.READY||(row.booking.status!==BookingStatus.STARTING&&row.booking.status!==BookingStatus.ACTIVE))return null;
-    const activatedAt=new Date();const expiresAt=new Date(activatedAt.getTime()+row.booking.expectedSeconds*1000);
+    const expiresAt=new Date(activatedAt.getTime()+row.booking.expectedSeconds*1000);
     const sessionUpdate=await tx.workspaceSession.updateMany({where:{id:row.id,status:WorkspaceSessionStatus.READY},data:{status:WorkspaceSessionStatus.RUNNING,startedAt:activatedAt,expiresAt,preparationStep:'INTERACTIVE_WORKSPACE_CONNECTED'}});
     if(sessionUpdate.count!==1){
       const winner=await tx.workspaceSession.findFirst({where:{id:row.id,machineId,status:WorkspaceSessionStatus.RUNNING,booking:{workspaceActivatedAt:{not:null}}},select:{expiresAt:true}});
@@ -242,20 +239,24 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     return {items};
   });
   app.post('/agent/workspace-gateway/:sessionId/register',async(request,reply)=>{
-    const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;runtimeId?:string;localPort?:number};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/register`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!/^[a-zA-Z0-9_.-]{6,100}$/.test(String(body.runtimeId||''))||!Number.isInteger(body.localPort)||Number(body.localPort)<1024||Number(body.localPort)>65535)return reply.code(400).send({error:'invalid_runtime_registration'});
+    const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;runtimeId?:string;localPort?:number;gatewayProtocolVersion?:number};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/register`;
+    if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
+    if(!/^[a-zA-Z0-9_.-]{6,100}$/.test(String(body.runtimeId||''))||!Number.isInteger(body.localPort)||Number(body.localPort)<1024||Number(body.localPort)>65535)return reply.code(400).send({error:'invalid_runtime_registration'});
+    const gatewayProtocolVersion=body.gatewayProtocolVersion===undefined?1:Number(body.gatewayProtocolVersion);
+    if(!Number.isInteger(gatewayProtocolVersion)||gatewayProtocolVersion<1||gatewayProtocolVersion>GATEWAY_PROTOCOL_VERSION)return reply.code(400).send({error:'invalid_gateway_protocol_version'});
     const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,bookingId:true,connectionMetadata:true,booking:{select:{expectedSeconds:true}}}});if(!row)return reply.code(409).send({error:'workspace_not_registerable'});
     const metadata=row.connectionMetadata&&typeof row.connectionMetadata==='object'?row.connectionMetadata as Record<string,unknown>:null;
     const firstRegistration=row.status===WorkspaceSessionStatus.READY&&typeof metadata?.gatewayPath!=='string';
     const readyAt=new Date();const activationDeadline=new Date(readyAt.getTime()+INTERACTIVE_CONNECT_TIMEOUT_SECONDS*1000);
     await db.$transaction([
-      db.workspaceSession.update({where:{id:row.id},data:{connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort)},gatewayLastSeenAt:readyAt,...(firstRegistration?{readyAt,startedAt:null,expiresAt:activationDeadline,preparationProgress:100,preparationStep:'WAITING_FOR_INTERACTIVE_CONNECTION'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}}),
+      db.workspaceSession.update({where:{id:row.id},data:{connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort),gatewayProtocolVersion},gatewayLastSeenAt:readyAt,...(firstRegistration?{readyAt,startedAt:null,expiresAt:activationDeadline,preparationProgress:100,preparationStep:'WAITING_FOR_INTERACTIVE_CONNECTION'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}}),
       ...(firstRegistration?[
         db.booking.updateMany({where:{id:row.bookingId,status:BookingStatus.FUNDED},data:{status:BookingStatus.STARTING,startsAt:readyAt,endsAt:activationDeadline}}),
         db.machineAllocation.updateMany({where:{bookingId:row.bookingId},data:{startsAt:readyAt,endsAt:activationDeadline}}),
         db.acceleratorAllocation.updateMany({where:{bookingId:row.bookingId},data:{startsAt:readyAt,endsAt:activationDeadline}}),
       ]:[]),
     ]);
-    return {ok:true,gatewayPath:`/workspace-gateway/${sessionId}`};
+    return {ok:true,gatewayPath:`/workspace-gateway/${sessionId}`,gatewayProtocolVersion};
   });
   app.post('/agent/workspace-gateway/:sessionId/usage',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');
@@ -307,13 +308,15 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         return reply.code(409).send({error:'unknown_gateway_channel'});
       }
       const binding=JSON.parse(bindingRaw) as GatewayChannelBinding;if(binding.machineId!==machineId)return reply.code(403).send({error:'gateway_channel_machine_mismatch'});
-      let ttl=WS_INPUT_TTL_SECONDS;
+      let ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,await redis.ttl(binding.browserSessionKey)));
       if(!close){
-        const activatedKey=wsSessionActivatedKey(binding.sessionId);ttl=await redis.ttl(activatedKey);
-        if(ttl<1){
-          const activation=await activateGatewaySession(db,binding.sessionId,machineId);if(!activation)return reply.code(409).send({error:'interactive_workspace_not_activatable'});
-          ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((activation.expiresAt.getTime()-Date.now())/1000)));
-          await redis.set(activatedKey,'1','EX',ttl);await redis.expire(binding.browserSessionKey,ttl);
+        if(binding.activationMode!=='browser-delivery'){
+          const activatedKey=wsSessionActivatedKey(binding.sessionId);ttl=await redis.ttl(activatedKey);
+          if(ttl<1){
+            const activation=await activateGatewaySession(db,binding.sessionId,machineId);if(!activation)return reply.code(409).send({error:'interactive_workspace_not_activatable'});
+            ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((activation.expiresAt.getTime()-Date.now())/1000)));
+            await redis.set(activatedKey,'1','EX',ttl);await redis.expire(binding.browserSessionKey,ttl);
+          }
         }
         await redis.set(wsUpstreamReadyKey(channelId),'1','EX',ttl);await redis.expire(wsChannelKey(channelId),ttl);
       }
@@ -336,19 +339,22 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     const bindingRaw=await redis.get(wsChannelKey(channelId));if(!bindingRaw)return close?{ok:true,stale:true}:reply.code(409).send({error:'unknown_gateway_channel'});
     const binding=JSON.parse(bindingRaw) as GatewayChannelBinding;if(binding.machineId!==machineId)return reply.code(403).send({error:'gateway_channel_machine_mismatch'});
     if(!close){
-      // A real upstream frame remains the billing activation signal. Cache that
-      // session-level activation in Redis so the VS Code protocol hot path does
-      // not run a PostgreSQL transaction for every Management/ExtensionHost frame.
-      const activatedKey=wsSessionActivatedKey(binding.sessionId);
-      let ttl=await redis.ttl(activatedKey);
-      if(ttl<1){
-        const activation=await activateGatewaySession(db,binding.sessionId,machineId);if(!activation)return reply.code(409).send({error:'interactive_workspace_not_activatable'});
-        ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((activation.expiresAt.getTime()-Date.now())/1000)));
-        await redis.set(activatedKey,'1','EX',ttl);await redis.expire(binding.browserSessionKey,ttl);
+      let ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,await redis.ttl(binding.browserSessionKey)));
+      if(binding.activationMode!=='browser-delivery'){
+        // Protocol-v1 compatibility: old Hosts do not advertise an explicit
+        // ws_open ACK, so the signed first upstream frame remains their
+        // activation proof during a rolling deployment.
+        const activatedKey=wsSessionActivatedKey(binding.sessionId);
+        ttl=await redis.ttl(activatedKey);
+        if(ttl<1){
+          const activation=await activateGatewaySession(db,binding.sessionId,machineId);if(!activation)return reply.code(409).send({error:'interactive_workspace_not_activatable'});
+          ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((activation.expiresAt.getTime()-Date.now())/1000)));
+          await redis.set(activatedKey,'1','EX',ttl);await redis.expire(binding.browserSessionKey,ttl);
+        }
       }
-      // Channel readiness is intentionally separate from session activation:
-      // ws_open ACKs may prove a local socket exists, but only a real frame may
-      // activate billing. Legacy agents still use this first-frame readiness key.
+      // Channel readiness is intentionally separate from session activation.
+      // Protocol v2 may establish the local socket before the browser upgrade;
+      // its billing activation happens only after browser delivery below.
       await redis.set(wsUpstreamReadyKey(channelId),'1','EX',ttl);await redis.expire(wsChannelKey(channelId),ttl);
     }
     const relayPayload=JSON.stringify({dataBase64,binary:body.binary===true,close});
@@ -412,40 +418,92 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       const row=await activeGatewaySession(db,sessionId);
       if(!row||row.renterId!==browser.userId){app.log.warn({event:'workspace_gateway_upgrade_rejected',sessionId,reason:'workspace_unavailable'},'workspace gateway upgrade rejected');rejectWebSocketUpgrade(socket as Socket,409,'workspace_not_available');return;}
 
-      wss.handleUpgrade(request,socket as Socket,head,(ws:WebSocket)=>{
-        const channelId=crypto.randomUUID();const channelLogId=channelId.slice(0,8);const targetPath='/'+match[2]+url.search;const browserSessionKey=gatewaySessionKey(token);
-        const channelTtl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((row.expiresAt.getTime()-Date.now())/1000)));
-        const openRequestId=crypto.randomUUID();let browserClosed=false;let browserBackpressureSince=0;
-        const browserPending=new BrowserPendingBudget();
-        const gatewayLog=app.log.child({accessRequestId:browser.accessRequestId,bookingId:row.bookingId,jobId:row.jobId,workspaceSessionId:sessionId,machineId:row.machineId,channelId,channel:channelLogId,openRequestId});
-        gatewayLog.info({event:'workspace_gateway_browser_connected'},'workspace gateway browser websocket connected');
-        ws.on('error',error=>gatewayLog.warn({err:error,event:'workspace_gateway_browser_socket_error',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket error'));
-        // Keep queue ordering backward-compatible: browser frames may be queued as
-        // soon as ws_open itself is enqueued. LPUSH/RPOP preserves ws_open before
-        // ws_send, so legacy agents can still establish code-server and exchange
-        // their first frame while newer agents additionally return an explicit ACK.
-        const setup=(async()=>{
-          await redis.set(wsChannelKey(channelId),JSON.stringify({sessionId,machineId:row.machineId,browserSessionKey} satisfies GatewayChannelBinding),'EX',channelTtl);
+      const metadata=row.connectionMetadata&&typeof row.connectionMetadata==='object'?row.connectionMetadata as Record<string,unknown>:{};
+      const gatewayProtocolVersion=Number(metadata.gatewayProtocolVersion||1);
+      const preflightUpstream=gatewayProtocolVersion>=2;
+      const channelId=crypto.randomUUID();const channelLogId=channelId.slice(0,8);const targetPath='/'+match[2]+url.search;const browserSessionKey=gatewaySessionKey(token);
+      const channelTtl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((row.expiresAt.getTime()-Date.now())/1000)));
+      const openRequestId=crypto.randomUUID();
+      const activationMode:GatewayActivationMode=preflightUpstream?'browser-delivery':'upstream-frame';
+      const gatewayLog=app.log.child({accessRequestId:browser.accessRequestId,bookingId:row.bookingId,jobId:row.jobId,workspaceSessionId:sessionId,machineId:row.machineId,channelId,channel:channelLogId,openRequestId,gatewayProtocolVersion});
+      let setupPromise:Promise<void>|null=null;
+      const ensureSetup=()=>{
+        if(setupPromise)return setupPromise;
+        setupPromise=(async()=>{
+          await redis.set(wsChannelKey(channelId),JSON.stringify({sessionId,machineId:row.machineId,browserSessionKey,activationMode} satisfies GatewayChannelBinding),'EX',channelTtl);
           const accepted=await enqueueMachineRelay(redis,row.machineId,{id:openRequestId,sessionId,kind:'ws_open',channelId,path:targetPath,headers:relayHeaders(request.headers as Record<string,unknown>)} satisfies RelayRequest);
           if(!accepted)throw new Error('workspace_machine_queue_backpressure');
         })();
-        const upstreamProbe=setup.then(async()=>{
-          const opened=await waitJson(redis,responseKey(openRequestId),WS_UPSTREAM_OPEN_TIMEOUT_MS);
-          if(browserClosed)return;
-          if(opened){
-            if(opened.error||opened.status!==101)throw new Error(`workspace_upstream_open_failed:${opened.error||opened.status}`);
-            await redis.set(wsUpstreamReadyKey(channelId),'1','EX',channelTtl);
-            gatewayLog.info({event:'workspace_gateway_upstream_opened',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway upstream websocket opened');
-            return;
-          }
-          // Old agents do not answer ws_open. Preserve their previous behavior:
-          // a signed first upstream frame proves the local WebSocket is alive.
+        return setupPromise;
+      };
+      const waitForUpstream=async(allowLegacyFrame:boolean)=>{
+        await ensureSetup();
+        const opened=await waitJson(redis,responseKey(openRequestId),WS_UPSTREAM_OPEN_TIMEOUT_MS);
+        if(opened){
+          if(opened.error||opened.status!==101)throw new Error(`workspace_upstream_open_failed:${opened.error||opened.status}`);
+          await redis.set(wsUpstreamReadyKey(channelId),'1','EX',channelTtl);
+          gatewayLog.info({event:'workspace_gateway_upstream_opened',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway upstream websocket opened');
+          return;
+        }
+        if(allowLegacyFrame){
           const legacyReady=await redis.get(wsUpstreamReadyKey(channelId));
-          if(browserClosed)return;
           if(legacyReady){gatewayLog.info({event:'workspace_gateway_legacy_upstream_ready',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway legacy agent produced an upstream frame');return;}
-          throw new Error('workspace_upstream_open_timeout');
-        });
-        void upstreamProbe.catch(error=>{if(browserClosed)return;gatewayLog.error({err:error,event:'workspace_gateway_upstream_open_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway upstream websocket failed to open');if(ws.readyState===WebSocket.OPEN)ws.close(1011,'workspace upstream unavailable');});
+        }
+        throw new Error('workspace_upstream_open_timeout');
+      };
+
+      if(preflightUpstream){
+        const startedAt=Date.now();
+        gatewayLog.info({event:'workspace_gateway_upstream_preflight_started'},'workspace gateway upstream preflight started');
+        try{
+          await waitForUpstream(false);
+        }catch(error){
+          const message=error instanceof Error?error.message:String(error);
+          gatewayLog.error({err:error,event:'workspace_gateway_upstream_preflight_failed',elapsedMs:Date.now()-startedAt},'workspace gateway upstream preflight failed');
+          try{await enqueueMachineRelay(redis,row.machineId,{id:crypto.randomUUID(),sessionId,kind:'ws_close',channelId} satisfies RelayRequest);}catch{}
+          await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId),wsInputKey(channelId),wsInputBytesKey(channelId),responseKey(openRequestId));
+          const status:UpgradeStatus=message.includes('timeout')?504:message.includes('backpressure')?503:502;
+          rejectWebSocketUpgrade(socket as Socket,status,'workspace_upstream_not_ready');return;
+        }
+        gatewayLog.info({event:'workspace_gateway_upstream_preflight_ready',elapsedMs:Date.now()-startedAt},'workspace gateway upstream preflight ready');
+      }
+
+      wss.handleUpgrade(request,socket as Socket,head,(ws:WebSocket)=>{
+        let browserClosed=false;let browserBackpressureSince=0;
+        const browserPending=new BrowserPendingBudget();
+        gatewayLog.info({event:'workspace_gateway_browser_connected',preflightUpstream},'workspace gateway browser websocket connected');
+        ws.on('error',error=>gatewayLog.warn({err:error,event:'workspace_gateway_browser_socket_error',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket error'));
+
+        const setup=preflightUpstream?Promise.resolve():ensureSetup();
+        if(!preflightUpstream){
+          const upstreamProbe=setup.then(()=>waitForUpstream(true));
+          void upstreamProbe.catch(error=>{if(browserClosed)return;gatewayLog.error({err:error,event:'workspace_gateway_upstream_open_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway upstream websocket failed to open');if(ws.readyState===WebSocket.OPEN)ws.close(1011,'workspace upstream unavailable');});
+        }
+
+        let activationPromise:Promise<void>|null=null;
+        const ensureBrowserDeliveryActivation=()=>{
+          if(activationPromise)return activationPromise;
+          const observedAt=new Date();
+          activationPromise=(async()=>{
+            const activatedKey=wsSessionActivatedKey(sessionId);
+            let ttl=await redis.ttl(activatedKey);
+            if(ttl<1){
+              const activation=await activateGatewaySession(db,sessionId,row.machineId,observedAt);
+              if(!activation)throw new Error('interactive_workspace_not_activatable');
+              ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((activation.expiresAt.getTime()-Date.now())/1000)));
+              await redis.set(activatedKey,'1','EX',ttl);
+            }
+            await redis.expire(browserSessionKey,ttl);
+            await redis.expire(wsChannelKey(channelId),ttl);
+            await redis.expire(wsUpstreamReadyKey(channelId),ttl);
+            gatewayLog.info({event:'workspace_gateway_browser_delivery_activated',observedAt:observedAt.toISOString()},'workspace gateway interactive session activated');
+          })();
+          void activationPromise.catch(error=>{
+            gatewayLog.error({err:error,event:'workspace_gateway_activation_failed'},'workspace gateway interactive activation failed');
+            if(!browserClosed){browserClosed=true;if(ws.readyState===WebSocket.OPEN)ws.close(1011,'workspace activation failed');}
+          });
+          return activationPromise;
+        };
 
         let pumpBusy=false;
         const pump=setInterval(()=>{
@@ -468,7 +526,17 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
               const parsed=JSON.parse(frame) as {dataBase64?:unknown;binary?:unknown;close?:unknown};
               if(parsed.close===true){if(ws.readyState===WebSocket.OPEN)ws.close(1000,'upstream closed');break;}
               if(typeof parsed.binary!=='boolean'||!isStrictBase64Payload(parsed.dataBase64,WS_MAX_BASE64_BYTES,WS_MAX_FRAME_BYTES))throw new Error('workspace_ws_redis_frame_invalid');
-              if(ws.readyState===WebSocket.OPEN)ws.send(Buffer.from(parsed.dataBase64,'base64'),{binary:parsed.binary});
+              if(ws.readyState===WebSocket.OPEN){
+                const payload=Buffer.from(parsed.dataBase64,'base64');
+                ws.send(payload,{binary:parsed.binary},error=>{
+                  if(error){
+                    gatewayLog.error({err:error,event:'workspace_gateway_browser_delivery_failed'},'workspace gateway browser delivery failed');
+                    if(!browserClosed){browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1011,'browser delivery failed');}
+                    return;
+                  }
+                  void ensureBrowserDeliveryActivation();
+                });
+              }
             }
           })()
             .catch(error=>{gatewayLog.error({err:error,event:'workspace_gateway_pump_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway websocket pump failed');if(ws.readyState===WebSocket.OPEN)ws.close(1011,'gateway relay failed');})
