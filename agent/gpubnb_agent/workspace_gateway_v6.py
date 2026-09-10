@@ -72,20 +72,25 @@ class GatewaySupervisor(resource_scoped.GatewaySupervisor):
         channel_id = str(item.get("channelId") or "")
         session_id = str(item.get("sessionId") or "")
         if not channel_id:
-            return super()._ws_open(item)
+            return self._ws_open(item)
 
         if not self._ws_open_slots.acquire(blocking=False):
             self._reject_open(item, "workspace_ws_open_concurrency_exceeded")
             return
 
+        duplicate = False
         with self._ws_open_state_lock:
             if channel_id in self._ws_open_pending:
-                self._ws_open_slots.release()
-                self._reject_open(item, "workspace_ws_open_duplicate")
-                return
-            self._ws_open_pending[channel_id] = []
-            self._ws_open_pending_bytes[channel_id] = 0
-            self._ws_open_cancelled.discard(channel_id)
+                duplicate = True
+            else:
+                self._ws_open_pending[channel_id] = []
+                self._ws_open_pending_bytes[channel_id] = 0
+                self._ws_open_cancelled.discard(channel_id)
+        if duplicate:
+            self._ws_open_slots.release()
+            # Never hold the scheduler state lock across an Internet/API request.
+            self._reject_open(item, "workspace_ws_open_duplicate")
+            return
 
         self._trace(
             "ws_open_dispatched",
@@ -99,7 +104,10 @@ class GatewaySupervisor(resource_scoped.GatewaySupervisor):
             cancelled = False
             opened = False
             try:
-                super(GatewaySupervisor, self)._ws_open(item)
+                # v6 intentionally does not override _ws_open: dynamic dispatch
+                # lands on the qualified v5/v4/v3/v2 implementation. Keeping the
+                # call through self also preserves controlled test injection.
+                self._ws_open(item)
                 with self._ws_open_state_lock:
                     opened = channel_id in self.channels
                     cancelled = channel_id in self._ws_open_cancelled
