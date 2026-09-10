@@ -37,7 +37,7 @@ def _fake_run_version_command(_candidate_path: Path) -> str:
     # these fixtures are not real executables, so every perform_self_update
     # call that reaches the version-check stage injects the current qualified
     # Agent version instead.
-    return "0.6.5"
+    return "0.6.6"
 
 
 def _portable_zip_bytes(exe_bytes: bytes) -> bytes:
