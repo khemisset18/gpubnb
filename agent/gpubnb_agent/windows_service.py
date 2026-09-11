@@ -12,6 +12,7 @@ from typing import Any
 
 from .docker_cli import ensure_docker_on_path
 from .platform_info import run_command
+from .power_guard import run_rental_power_guard
 
 SERVICE_NAME = "GPUbnbAgent"
 SERVICE_DISPLAY_NAME = "GPUbnb Host Agent"
@@ -107,6 +108,7 @@ def _service_class() -> type:
         def SvcDoRun(self) -> None:
             servicemanager.LogInfoMsg(f"{SERVICE_NAME} starting")
             logger = _service_logger()
+            event_sink = _service_event_sink(logger)
             logger.info("%s starting", SERVICE_NAME)
             # Docker Desktop's default Windows install is frequently per-user,
             # while this service runs with the SCM's service environment. Normalize
@@ -117,7 +119,25 @@ def _service_class() -> type:
                 logger.info("Docker CLI resolved for service runtime: %s", docker_executable)
             else:
                 logger.warning("Docker CLI was not found in PATH or supported Docker Desktop install roots")
+
+            # Keep the machine awake only while the server still owns live rental
+            # authority.  This runs independently from heartbeat supervision so a
+            # transient heartbeat worker restart cannot silently drop the guard.
+            # Explicit user sleep/reboot/shutdown remains possible because the guard
+            # asserts only ES_SYSTEM_REQUIRED, never a shutdown blocker.
+            power_guard_thread = threading.Thread(
+                target=run_rental_power_guard,
+                args=(self._stop_event,),
+                kwargs={"event_sink": event_sink},
+                name="gpubnb-rental-power-guard",
+                daemon=True,
+            )
+            power_guard_thread.start()
+
             supervise_heartbeat(self._stop_event, heartbeat_loop, logger)
+            # SvcStop sets the shared event. Give the guard a short bounded window
+            # to release ES_SYSTEM_REQUIRED before the service process exits.
+            power_guard_thread.join(timeout=5)
             logger.info("%s stopped", SERVICE_NAME)
             servicemanager.LogInfoMsg(f"{SERVICE_NAME} stopped")
 
