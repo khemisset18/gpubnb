@@ -56,7 +56,7 @@ class PowerGuardTests(unittest.TestCase):
         self.assertEqual(writes[-1], power_guard.ES_CONTINUOUS)
         self.assertEqual(events[-1]["event"], "rental_power_guard_released")
 
-    def test_loop_releases_guard_when_service_stops(self) -> None:
+    def test_loop_restores_persisted_claim_then_releases_when_service_stops(self) -> None:
         stop = threading.Event()
         writes: list[int] = []
         events: list[dict[str, object]] = []
@@ -73,6 +73,7 @@ class PowerGuardTests(unittest.TestCase):
             event_sink=events.append,
             interval_seconds=1,
             authority_loader=authority_loader,
+            local_claim_loader=lambda: 1,
             writer=writes.append,
         )
 
@@ -84,7 +85,32 @@ class PowerGuardTests(unittest.TestCase):
                 power_guard.ES_CONTINUOUS,
             ],
         )
+        self.assertTrue(any(event["event"] == "rental_power_guard_restored" for event in events))
         self.assertEqual(events[-1]["event"], "rental_power_guard_stopped")
+
+    def test_loop_without_local_claim_acquires_from_authority(self) -> None:
+        stop = threading.Event()
+        writes: list[int] = []
+
+        def authority_loader() -> int:
+            stop.set()
+            return 1
+
+        power_guard.run_rental_power_guard(
+            stop,
+            interval_seconds=1,
+            authority_loader=authority_loader,
+            local_claim_loader=lambda: 0,
+            writer=writes.append,
+        )
+
+        self.assertEqual(
+            writes,
+            [
+                power_guard.ES_CONTINUOUS | power_guard.ES_SYSTEM_REQUIRED,
+                power_guard.ES_CONTINUOUS,
+            ],
+        )
 
 
 if __name__ == "__main__":
