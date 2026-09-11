@@ -1,22 +1,26 @@
-"""Keep a Windows GPUbnb host awake while server-owned rental authority is live.
+"""Keep an available Windows GPUbnb Host reachable without forcing full activity.
 
-This deliberately does *not* change the user's Windows power plan and does not keep
-the display awake. The Agent only asserts ES_SYSTEM_REQUIRED while the control
-plane reports at least one rental-authority session for this machine. A user can
-still explicitly sleep, reboot or shut down the PC.
+GPUbnb deliberately does not change the owner's Windows power plan and never keeps
+the display awake. Windows remains free to turn the monitor off and idle CPU/GPU
+hardware normally. The Agent asserts only ES_SYSTEM_REQUIRED while the signed server
+power policy says the Host must remain reachable: an owner-available listing or a
+live rental/session prevents *system sleep*, while an explicitly paused/offline Host
+returns to ordinary Windows sleep behavior.
 
-Authority failures are fail-safe: once a rental has acquired the guard, a transient
-network/API failure never releases it. After a service/reboot recovery, persisted
-GPUbnb rental claims can also restore the guard immediately while the first signed
-authority read is still in flight. The guard is released only after a successful
-authority read proves there are no live rental sessions, or when the Windows
-service itself is stopping.
+This is the GPUbnb standby model: the PC can sit idle for hours at normal S0 idle
+power, but the Agent/network remain alive so a new rental can start immediately.
+Explicit user sleep, reboot and shutdown remain possible.
+
+Authority failures are fail-safe: once protection is active, a transient network/API
+failure never releases it. Persisted fenced rental claims can also restore protection
+immediately after a service/reboot recovery while signed server state reconnects.
 """
 from __future__ import annotations
 
 import ctypes
 import os
 import threading
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from .client import ApiClient, agent_request
@@ -27,11 +31,22 @@ DEFAULT_API = "https://gpubnb.netlify.app/api"
 ES_SYSTEM_REQUIRED = 0x00000001
 ES_CONTINUOUS = 0x80000000
 POWER_GUARD_INTERVAL_SECONDS = 10
+POWER_POLICY_REASONS = frozenset({"live_session", "marketplace_available", "not_available"})
 
 EventSink = Callable[[dict[str, Any]], None]
 ExecutionStateWriter = Callable[[int], None]
-AuthorityLoader = Callable[[], int]
 LocalClaimLoader = Callable[[], int]
+
+
+@dataclass(frozen=True)
+class HostPowerAuthority:
+    keep_awake: bool
+    reason: str
+    live_session_count: int = 0
+    availability_listing_count: int = 0
+
+
+AuthorityLoader = Callable[[], HostPowerAuthority]
 
 
 def _write_windows_execution_state(flags: int) -> None:
@@ -51,7 +66,7 @@ class SystemAwakeGuard:
 
     SetThreadExecutionState is intentionally called from the same long-lived guard
     thread for acquire and release. ES_DISPLAY_REQUIRED is never asserted, so the
-    monitor may still turn off normally while the rented GPU stays available.
+    monitor may still turn off normally while GPUbnb remains remotely reachable.
     """
 
     def __init__(self, writer: ExecutionStateWriter | None = None) -> None:
@@ -77,13 +92,58 @@ class SystemAwakeGuard:
             self._active = False
 
 
-def _active_rental_count() -> int:
+def _client_context() -> tuple[ApiClient, Any, str]:
     config = load_config()
     machine_id = config.get("machineId")
     if not isinstance(machine_id, str) or not machine_id:
         raise RuntimeError("machine_not_linked")
     key = load_key()
     api = ApiClient(str(config.get("apiUrl") or DEFAULT_API), config.get("caFile"))
+    return api, key, machine_id
+
+
+def _parse_power_policy(payload: dict[str, Any]) -> HostPowerAuthority:
+    if payload.get("protocolVersion") != 1:
+        raise RuntimeError("host_power_policy_protocol_invalid")
+    keep_awake = payload.get("keepAwake")
+    reason = payload.get("reason")
+    live_sessions = payload.get("liveSessionCount")
+    availability_listings = payload.get("availabilityListingCount")
+    if not isinstance(keep_awake, bool) or reason not in POWER_POLICY_REASONS:
+        raise RuntimeError("host_power_policy_invalid")
+    if (
+        not isinstance(live_sessions, int)
+        or isinstance(live_sessions, bool)
+        or live_sessions < 0
+        or live_sessions > 1024
+        or not isinstance(availability_listings, int)
+        or isinstance(availability_listings, bool)
+        or availability_listings < 0
+        or availability_listings > 1024
+    ):
+        raise RuntimeError("host_power_policy_invalid")
+    if keep_awake != (live_sessions > 0 or availability_listings > 0):
+        raise RuntimeError("host_power_policy_inconsistent")
+    return HostPowerAuthority(
+        keep_awake=keep_awake,
+        reason=str(reason),
+        live_session_count=live_sessions,
+        availability_listing_count=availability_listings,
+    )
+
+
+def _legacy_rental_authority_fallback(
+    api: ApiClient,
+    key: Any,
+    machine_id: str,
+) -> HostPowerAuthority:
+    """Preserve safe behavior during a staged Agent/API rollout.
+
+    An Agent carrying this feature may briefly run against an API release that does
+    not yet expose /power-policy. In that case, fall back to the existing signed
+    rental-authority contract. It cannot keep an idle listing awake, but it still
+    guarantees that a live paid rental is never made less safe by deployment order.
+    """
     payload = agent_request(
         api,
         key,
@@ -91,7 +151,31 @@ def _active_rental_count() -> int:
         f"/agent/mining/{machine_id}/rental-authority",
     )
     authority = parse_rental_authority_sessions(payload)
-    return len(authority)
+    live_sessions = len(authority)
+    return HostPowerAuthority(
+        keep_awake=live_sessions > 0,
+        reason="legacy_live_session" if live_sessions else "legacy_not_available",
+        live_session_count=live_sessions,
+    )
+
+
+def _load_host_power_authority() -> HostPowerAuthority:
+    api, key, machine_id = _client_context()
+    try:
+        payload = agent_request(
+            api,
+            key,
+            machine_id,
+            f"/agent/host/{machine_id}/power-policy",
+        )
+        return _parse_power_policy(payload)
+    except Exception as policy_error:
+        try:
+            return _legacy_rental_authority_fallback(api, key, machine_id)
+        except Exception as legacy_error:
+            raise RuntimeError(
+                f"host_power_policy_unavailable:{type(policy_error).__name__}:{type(legacy_error).__name__}"
+            ) from legacy_error
 
 
 def _persisted_rental_claim_count() -> int:
@@ -100,15 +184,15 @@ def _persisted_rental_claim_count() -> int:
 
 def reconcile_power_guard_once(
     guard: SystemAwakeGuard,
-    authority_loader: AuthorityLoader = _active_rental_count,
+    authority_loader: AuthorityLoader = _load_host_power_authority,
     event_sink: EventSink | None = None,
 ) -> bool:
     emit = event_sink or (lambda _event: None)
     try:
-        active_rentals = max(0, int(authority_loader()))
+        authority = authority_loader()
     except Exception as exc:
         # Critical invariant: an unavailable authority must never turn an already
-        # protected paid rental into an unprotected one. Keep the current state.
+        # protected paid/available Host into an unprotected one. Keep current state.
         emit({
             "event": "rental_power_guard_authority_error",
             "type": type(exc).__name__,
@@ -117,7 +201,7 @@ def reconcile_power_guard_once(
         })
         return guard.active
 
-    required = active_rentals > 0
+    required = authority.keep_awake
     try:
         changed = guard.set_required(required)
     except Exception as exc:
@@ -133,7 +217,9 @@ def reconcile_power_guard_once(
     if changed:
         emit({
             "event": "rental_power_guard_acquired" if required else "rental_power_guard_released",
-            "activeRentals": active_rentals,
+            "reason": authority.reason,
+            "liveSessions": authority.live_session_count,
+            "availabilityListings": authority.availability_listing_count,
         })
     return guard.active
 
@@ -176,7 +262,7 @@ def run_rental_power_guard(
     stop_event: threading.Event,
     event_sink: EventSink | None = None,
     interval_seconds: int = POWER_GUARD_INTERVAL_SECONDS,
-    authority_loader: AuthorityLoader = _active_rental_count,
+    authority_loader: AuthorityLoader = _load_host_power_authority,
     local_claim_loader: LocalClaimLoader = _persisted_rental_claim_count,
     writer: ExecutionStateWriter | None = None,
 ) -> None:
@@ -188,8 +274,8 @@ def run_rental_power_guard(
     emit({"event": "rental_power_guard_started", "intervalSeconds": interval_seconds})
     try:
         # Reboots can happen while a paid session is active. Restore the local
-        # protection immediately from the persisted fenced claim, then let the
-        # signed server authority confirm or release it on the first loop.
+        # protection immediately from the persisted fenced claim, then let signed
+        # server power policy confirm/expand/release it on the first loop.
         _restore_from_local_claims(guard, local_claim_loader, emit)
         while not stop_event.is_set():
             reconcile_power_guard_once(guard, authority_loader=authority_loader, event_sink=emit)
