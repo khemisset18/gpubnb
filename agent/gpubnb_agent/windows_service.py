@@ -120,16 +120,17 @@ def _service_class() -> type:
             else:
                 logger.warning("Docker CLI was not found in PATH or supported Docker Desktop install roots")
 
-            # Keep the machine awake only while the server still owns live rental
-            # authority.  This runs independently from heartbeat supervision so a
-            # transient heartbeat worker restart cannot silently drop the guard.
-            # Explicit user sleep/reboot/shutdown remains possible because the guard
-            # asserts only ES_SYSTEM_REQUIRED, never a shutdown blocker.
+            # GPUbnb standby: while the owner still exposes this machine to the
+            # marketplace (or a rental/session is live), prevent only automatic
+            # system sleep. Windows may still turn the display off and idle the
+            # CPU/GPU normally, and explicit user sleep/reboot/shutdown remains
+            # possible. This thread is independent from heartbeat supervision so a
+            # transient heartbeat worker restart cannot silently drop protection.
             power_guard_thread = threading.Thread(
                 target=run_rental_power_guard,
                 args=(self._stop_event,),
                 kwargs={"event_sink": event_sink},
-                name="gpubnb-rental-power-guard",
+                name="gpubnb-host-power-guard",
                 daemon=True,
             )
             power_guard_thread.start()
