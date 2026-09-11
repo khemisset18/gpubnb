@@ -37,12 +37,17 @@ async function authenticateAgent(
   machineId: string,
   request: FastifyRequest,
   routePath: string,
+  requireClear = true,
 ): Promise<boolean> {
   const machine = await db.machine.findUnique({
     where: { id: machineId },
     select: { agentPublicKey: true, keyRevokedAt: true, moderationStatus: true },
   });
-  if (!machine || machine.keyRevokedAt || machine.moderationStatus !== ModerationStatus.CLEAR) {
+  if (
+    !machine
+    || machine.keyRevokedAt
+    || (requireClear && machine.moderationStatus !== ModerationStatus.CLEAR)
+  ) {
     return false;
   }
   const rawBody = request.rawBody ?? Buffer.alloc(0);
@@ -75,7 +80,11 @@ export function registerRentalResourceAuthorityRoutes(
   }, async (request, reply) => {
     const { machineId } = machineParamsSchema.parse(request.params);
     const route = `/agent/host/${machineId}/power-policy`;
-    if (!await authenticateAgent(db, redis, machineId, request, route)) {
+    // Power policy is a signed read-only recovery/control endpoint. A quarantined
+    // machine must still be able to learn whether it should release or retain its
+    // sleep guard; only revoked/missing identities or invalid signatures are denied.
+    // Rental authority itself remains requireClear=true and therefore fail-closed.
+    if (!await authenticateAgent(db, redis, machineId, request, route, false)) {
       return reply.code(401).send({ error: 'invalid_agent_request' });
     }
     try {
