@@ -1,12 +1,18 @@
 # Current physical qualification — PC A ↔ PC B
 
-Status: **NOT YET PASSED for the current release**.
+Status: **HOST/WORKSPACE PHYSICAL BASELINE PASSED on `host-v0.2.0-beta.85` / Agent `0.6.6`; full all-component release identity lock remains pending**.
 
-This document is the release gate for claiming that the current GPUbnb PC A ↔ PC B rental path is physically qualified. Historical runs, simulators, unit tests, CI, and an older `GPU_DIAGNOSTIC` result do not satisfy this gate.
+The validated Host/Workspace/GPU/cleanup result is frozen in `docs/PHYSICAL_BASELINE_2026-09-11_BETA85.md` and by branch `baseline/physical-pass-beta85-2026-09-11` at commit `4615a880752a8a97c161c4a37f0f50bf6f1bca03`.
+
+The physical product path has now passed on real PC A ↔ PC B: the renter opened a usable code-server Workspace, the renter terminal proved the exact leased physical GPU UUID, the rental ended normally, all four classes of per-session Docker resources were absent after stop, and the resource/listing returned to available/bookable.
+
+This document remains the release gate for claiming a **fully locked current deployment**. The final clean run locked the Host/Agent identity but did not independently re-capture a complete API/frontend deployment identity bundle in the same evidence package. Do not silently upgrade the Host/Workspace baseline into an all-component deployment attestation.
+
+Historical runs, simulators, unit tests, CI, and an older `GPU_DIAGNOSTIC` result do not satisfy this gate by themselves.
 
 ## Release identity
 
-A qualification result is valid only for one exact tested release identity. Record before starting:
+A full current-release qualification result is valid only for one exact tested release identity. Record before starting:
 
 - Git commit SHA deployed by the API/control plane;
 - Agent version and build commit reported by PC A;
@@ -15,11 +21,25 @@ A qualification result is valid only for one exact tested release identity. Reco
 - Redis provider/endpoint class and PostgreSQL target class, without recording credentials;
 - PC A OS, Docker version, NVIDIA driver and physical GPU UUID/model.
 
-If any executable component changes after the run, the result becomes historical evidence and this gate returns to **NOT YET PASSED** until the affected path is requalified.
+If any executable component changes after the run, the affected result becomes historical evidence until that changed component/path is requalified. The frozen beta.85 branch remains a rollback/reference baseline and must not be moved to follow later commits.
+
+## Qualified Host/Workspace baseline
+
+The 2026-09-11 beta.85 run established all of the following on the real Host/Workspace path:
+
+- Host release `host-v0.2.0-beta.85`;
+- Agent `0.6.6`, build commit `4615a880752a`;
+- public GPUbnb Workspace opened to a usable real code-server environment;
+- renter terminal returned exact GPU identity `GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a, NVIDIA GeForce GTX 1650, 592.82, 4096 MiB`;
+- normal rental stop completed without manual repair;
+- GPU/listing returned to available/bookable;
+- post-stop Docker inventory returned no `gpubnb-dev-*`, `gpubnb-dev-proxy-*`, `gpubnb-workspace-*` or `gpubnb-workspace-internal-*` resources.
+
+Detailed record: `docs/PHYSICAL_BASELINE_2026-09-11_BETA85.md`.
 
 ## Qualification tooling
 
-`docs/TWO_PC_TEST.md` is the current operator procedure for this gate. Before the clean run:
+`docs/TWO_PC_TEST.md` is the current operator procedure for this gate. Before a clean qualification run:
 
 - run `scripts/qualification-preflight-pc-a.ps1` on PC A to lock the repository/Agent/GPU identity and fail closed on a dirty release, unhealthy Agent/Docker/NVIDIA state, or an old GPUbnb per-session Docker resource;
 - run `scripts/qualification-preflight-pc-b.ps1` on PC B to verify the real HTTPS frontend, same-origin `/api` proxy, direct API `/ready`, gateway `/ws-health`, published gateway origin and frontend build commit;
@@ -27,7 +47,7 @@ If any executable component changes after the run, the result becomes historical
 
 After normal stop, use the same evidence collector in `Finish` mode to bind the booking/job/session/machine/GPU identifiers to the release lock and prove the canonical per-session container/proxy/volume/internal-network resources are absent.
 
-These helpers deliberately do **not** mark this gate PASSED. They do not replace visual confirmation from PC B, server state-transition evidence, or the final manual decision required below. Generated local evidence lives under `qualification-evidence/`, which is gitignored to reduce accidental publication.
+These helpers deliberately do **not** mark a release PASSED by themselves. They do not replace visual confirmation from PC B, server state-transition evidence, or the final manual decision required below. Generated local evidence lives under `qualification-evidence/`, which is gitignored to reduce accidental publication.
 
 ## Required physical setup
 
@@ -55,6 +75,8 @@ All steps below must pass in one coherent rental lifecycle:
 13. PC A confirms workspace container, proxy, per-session volume and per-session network cleanup. The runtime-cleanliness diagnostic must not report an orphan.
 14. Booking/workspace/jobs reach terminal states without an invalid transition, stale attempt, duplicate terminal mutation or unexpected quarantine.
 15. The physical GPU resource and listing return to the expected available/bookable state.
+
+The beta.85 Host/Workspace baseline has passed the functional portions above. A future full all-component release-lock run should use the tooling to capture the exact API/frontend identity in the same evidence package rather than relying on inference.
 
 ## Required evidence
 
@@ -93,21 +115,28 @@ The qualification is **FAILED**, not “mostly passed”, if any of these happen
 
 ## Fault campaign after the clean run
 
-A clean run is mandatory first. Then execute controlled failures separately; they do not replace the clean run:
+A clean normal-path run has now passed for the beta.85 Host/Workspace baseline. Controlled failures remain separate qualification work and do not invalidate that normal-path result unless they reveal a defect in the same path.
+
+Next controlled failures include:
 
 - brief API/network interruption shorter than the qualified job lease margin;
 - browser reconnect while the workspace remains healthy;
 - Agent process restart with an existing legitimate workspace runtime;
 - gateway reconnect/resume;
 - repeated stop request/idempotent cleanup;
+- unexpected Host power loss/reboot during an active rental, tracked in #190;
 - deliberately leave a GPUbnb-named orphan in a disposable test setup and confirm `runtimeCleanup` prevents automatic unquarantine until it is removed.
 
 Each injected fault must have a written expected state transition and must not transfer business authority to PC A local state.
 
+## Performance hardening after the pass
+
+Do not destabilize the proven transport by changing generic timeouts or queue bounds without measurement. Issue #191 tracks a measurement-first performance phase: correlate runtime startup, code-server readiness, gateway registration, HTTP asset relay, WebSocket enqueue/dequeue, local handshake, first useful frame, time-to-interactive and cleanup latency, then optimize the measured bottleneck while comparing against the frozen beta.85 baseline.
+
 ## Pass decision
 
-Set this document's status to **PASSED** only after one current-release clean run completes all mandatory steps and the evidence above is attached or referenced in a dedicated result document. Record the exact release SHA in that result.
+The current project statement is:
 
-Until then, the correct project statement is:
+> Real PC A ↔ PC B Host/Workspace/GPU/cleanup qualification has PASSED on `host-v0.2.0-beta.85` / Agent `0.6.6` / commit `4615a880752a8a97c161c4a37f0f50bf6f1bca03`. The strict all-component deployment lock remains pending until the exact API/frontend release identities are captured in the same qualification evidence bundle.
 
-> Automated qualification is green, but current-release physical PC A ↔ PC B qualification is pending.
+Any future runtime/transport change must preserve or exceed the behavior recorded in `docs/PHYSICAL_BASELINE_2026-09-11_BETA85.md` before replacing beta.85 as the reference baseline.
