@@ -1,11 +1,15 @@
+#[cfg(any(target_os = "windows", test))]
 use std::path::{Path, PathBuf};
 
+#[cfg(any(target_os = "windows", test))]
 const HOST_AUTOSTART_VALUE_NAME: &str = "GPUbnb Host";
 
+#[cfg(any(target_os = "windows", test))]
 fn autostart_value(executable: &Path) -> String {
     format!("\"{}\"", executable.display())
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn docker_desktop_candidates_from(
     program_files: Option<&str>,
     local_app_data: Option<&str>,
@@ -63,7 +67,10 @@ mod windows {
             .status()
             .map_err(|error| format!("host_autostart_registry:{error}"))?;
         if !status.success() {
-            return Err(format!("host_autostart_registry_exit:{}", status.code().unwrap_or(-1)));
+            return Err(format!(
+                "host_autostart_registry_exit:{}",
+                status.code().unwrap_or(-1)
+            ));
         }
         Ok(())
     }
@@ -81,7 +88,10 @@ mod windows {
             .output()
             .map_err(|error| format!("docker_tasklist:{error}"))?;
         if !output.status.success() {
-            return Err(format!("docker_tasklist_exit:{}", output.status.code().unwrap_or(-1)));
+            return Err(format!(
+                "docker_tasklist_exit:{}",
+                output.status.code().unwrap_or(-1)
+            ));
         }
         Ok(String::from_utf8_lossy(&output.stdout)
             .to_ascii_lowercase()
@@ -89,9 +99,10 @@ mod windows {
     }
 
     fn docker_desktop_candidates() -> Vec<PathBuf> {
-        let program_files = env::var("ProgramFiles").ok().or_else(|| Some(r"C:\Program Files".into()));
+        let program_files =
+            env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".to_owned());
         let local_app_data = env::var("LOCALAPPDATA").ok();
-        docker_desktop_candidates_from(program_files.as_deref(), local_app_data.as_deref())
+        docker_desktop_candidates_from(Some(&program_files), local_app_data.as_deref())
     }
 
     fn ensure_docker_desktop_started() -> Result<bool, String> {
@@ -150,15 +161,11 @@ mod tests {
             Some(r"C:\Program Files"),
             Some(r"C:\Users\host\AppData\Local"),
         );
-        self::assert_candidates(&candidates);
-    }
-
-    fn assert_candidates(candidates: &[PathBuf]) {
+        assert!(candidates
+            .iter()
+            .any(|path| path.ends_with(Path::new("Docker/Docker/Docker Desktop.exe"))));
         assert!(candidates.iter().any(|path| {
-            path.ends_with(Path::new(r"Docker\Docker\Docker Desktop.exe"))
-        }));
-        assert!(candidates.iter().any(|path| {
-            path.ends_with(Path::new(r"Programs\DockerDesktop\Docker Desktop.exe"))
+            path.ends_with(Path::new("Programs/DockerDesktop/Docker Desktop.exe"))
         }));
     }
 }
