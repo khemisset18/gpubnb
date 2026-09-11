@@ -1,14 +1,16 @@
 """Keep a Windows GPUbnb host awake while server-owned rental authority is live.
 
 This deliberately does *not* change the user's Windows power plan and does not keep
-the display awake.  The Agent only asserts ES_SYSTEM_REQUIRED while the control
-plane reports at least one rental-authority session for this machine.  A user can
+the display awake. The Agent only asserts ES_SYSTEM_REQUIRED while the control
+plane reports at least one rental-authority session for this machine. A user can
 still explicitly sleep, reboot or shut down the PC.
 
 Authority failures are fail-safe: once a rental has acquired the guard, a transient
-network/API failure never releases it.  The guard is released only after a
-successful authority read proves there are no live rental sessions, or when the
-Windows service itself is stopping.
+network/API failure never releases it. After a service/reboot recovery, persisted
+GPUbnb rental claims can also restore the guard immediately while the first signed
+authority read is still in flight. The guard is released only after a successful
+authority read proves there are no live rental sessions, or when the Windows
+service itself is stopping.
 """
 from __future__ import annotations
 
@@ -18,7 +20,7 @@ import threading
 from typing import Any, Callable
 
 from .client import ApiClient, agent_request
-from .gpu_rental_preemption import parse_rental_authority_sessions
+from .gpu_rental_preemption import RentalClaimStore, parse_rental_authority_sessions
 from .storage import load_config, load_key
 
 DEFAULT_API = "https://gpubnb.netlify.app/api"
@@ -29,6 +31,7 @@ POWER_GUARD_INTERVAL_SECONDS = 10
 EventSink = Callable[[dict[str, Any]], None]
 ExecutionStateWriter = Callable[[int], None]
 AuthorityLoader = Callable[[], int]
+LocalClaimLoader = Callable[[], int]
 
 
 def _write_windows_execution_state(flags: int) -> None:
@@ -47,7 +50,7 @@ class SystemAwakeGuard:
     """Thread-owned Windows execution-state guard.
 
     SetThreadExecutionState is intentionally called from the same long-lived guard
-    thread for acquire and release.  ES_DISPLAY_REQUIRED is never asserted, so the
+    thread for acquire and release. ES_DISPLAY_REQUIRED is never asserted, so the
     monitor may still turn off normally while the rented GPU stays available.
     """
 
@@ -91,6 +94,10 @@ def _active_rental_count() -> int:
     return len(authority)
 
 
+def _persisted_rental_claim_count() -> int:
+    return len(RentalClaimStore().load())
+
+
 def reconcile_power_guard_once(
     guard: SystemAwakeGuard,
     authority_loader: AuthorityLoader = _active_rental_count,
@@ -101,7 +108,7 @@ def reconcile_power_guard_once(
         active_rentals = max(0, int(authority_loader()))
     except Exception as exc:
         # Critical invariant: an unavailable authority must never turn an already
-        # protected paid rental into an unprotected one.  Keep the current state.
+        # protected paid rental into an unprotected one. Keep the current state.
         emit({
             "event": "rental_power_guard_authority_error",
             "type": type(exc).__name__,
@@ -131,11 +138,46 @@ def reconcile_power_guard_once(
     return guard.active
 
 
+def _restore_from_local_claims(
+    guard: SystemAwakeGuard,
+    local_claim_loader: LocalClaimLoader,
+    event_sink: EventSink,
+) -> None:
+    try:
+        local_claims = max(0, int(local_claim_loader()))
+    except Exception as exc:
+        event_sink({
+            "event": "rental_power_guard_local_claim_error",
+            "type": type(exc).__name__,
+            "message": str(exc)[:300],
+        })
+        return
+    if local_claims == 0:
+        return
+    try:
+        changed = guard.set_required(True)
+    except Exception as exc:
+        event_sink({
+            "event": "rental_power_guard_state_error",
+            "type": type(exc).__name__,
+            "message": str(exc)[:300],
+            "requested": True,
+            "guardActive": guard.active,
+        })
+        return
+    if changed:
+        event_sink({
+            "event": "rental_power_guard_restored",
+            "persistedRentalClaims": local_claims,
+        })
+
+
 def run_rental_power_guard(
     stop_event: threading.Event,
     event_sink: EventSink | None = None,
     interval_seconds: int = POWER_GUARD_INTERVAL_SECONDS,
     authority_loader: AuthorityLoader = _active_rental_count,
+    local_claim_loader: LocalClaimLoader = _persisted_rental_claim_count,
     writer: ExecutionStateWriter | None = None,
 ) -> None:
     """Run until the Windows service stops, then always release our sleep request."""
@@ -145,6 +187,10 @@ def run_rental_power_guard(
     guard = SystemAwakeGuard(writer=writer)
     emit({"event": "rental_power_guard_started", "intervalSeconds": interval_seconds})
     try:
+        # Reboots can happen while a paid session is active. Restore the local
+        # protection immediately from the persisted fenced claim, then let the
+        # signed server authority confirm or release it on the first loop.
+        _restore_from_local_claims(guard, local_claim_loader, emit)
         while not stop_event.is_set():
             reconcile_power_guard_once(guard, authority_loader=authority_loader, event_sink=emit)
             if stop_event.wait(max(1, int(interval_seconds))):
