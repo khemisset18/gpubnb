@@ -19,9 +19,7 @@ fn docker_desktop_candidates_from(
         candidates.push(PathBuf::from(root).join("Docker/Docker/Docker Desktop.exe"));
     }
     if let Some(root) = local_app_data.filter(|value| !value.is_empty()) {
-        candidates.push(
-            PathBuf::from(root).join("Programs/Docker/Docker/Docker Desktop.exe"),
-        );
+        candidates.push(PathBuf::from(root).join("Programs/Docker/Docker/Docker Desktop.exe"));
         candidates.push(PathBuf::from(root).join("Programs/DockerDesktop/Docker Desktop.exe"));
         candidates.push(PathBuf::from(root).join("Docker/Docker Desktop.exe"));
     }
