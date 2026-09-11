@@ -170,6 +170,14 @@ def _load_host_power_authority() -> HostPowerAuthority:
         )
         return _parse_power_policy(payload)
     except Exception as policy_error:
+        # Backward compatibility is intentionally narrow. A pre-feature API will
+        # answer 404 for this route, in which case the legacy live-rental authority
+        # is enough to preserve existing safety during rollout. Any other failure
+        # (bad signature, malformed/contradictory policy, network outage, server
+        # error) must propagate so reconcile_power_guard_once keeps the current
+        # guard state instead of silently downgrading owner availability semantics.
+        if "API HTTP 404:" not in str(policy_error):
+            raise
         try:
             return _legacy_rental_authority_fallback(api, key, machine_id)
         except Exception as legacy_error:
