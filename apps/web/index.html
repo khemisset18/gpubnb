@@ -31,7 +31,7 @@
     </a>
     <nav aria-label="Navigation principale">
       <a href="#market">Marketplace</a>
-      <a href="workspaces.html">Workspaces</a>
+      <a href="workspaces.html">Espaces de travail</a>
       <a href="#how-it-works">Fonctionnement</a>
       <a href="host-install.html">Héberger</a>
       <a href="trust.html">Confiance</a>
@@ -94,13 +94,13 @@
       <div class="process-grid">
         <article><span>01</span><h3>Publier</h3><p>GPUbnb Host mesure la machine et maintient sa présence. L’API décide si elle peut apparaître comme disponible.</p></article>
         <article><span>02</span><h3>Réserver</h3><p>La plateforme contrôle disponibilité, état de la machine et ressources avant de préparer une session.</p></article>
-        <article><span>03</span><h3>Exécuter</h3><p>Le locataire utilise un Workspace dédié ; fencing, métriques et cleanup bornent le cycle de location.</p></article>
+        <article><span>03</span><h3>Exécuter</h3><p>Le locataire utilise un Workspace dédié ; fencing, métriques et cleanup bornent le cycle de location, avec aucun accès au bureau hôte.</p></article>
       </div>
     </section>
 
     <section id="market" class="section shell">
       <div class="section-heading">
-        <div><span class="eyebrow"><i></i> Marketplace en direct</span><h2>Des GPU présents maintenant.</h2><p>Seules les annonces confirmées par l’API réelle apparaissent ici.</p></div>
+        <div><span class="eyebrow"><i></i> Marketplace en direct</span><h2>Des GPU présents maintenant.</h2><p>Annonce active + machine actuellement en ligne : seules ces annonces confirmées par l’API réelle apparaissent ici.</p></div>
         <button id="refresh" class="button button-secondary" type="button">Actualiser</button>
       </div>
       <div class="filter-bar" aria-label="Filtres de présentation">
@@ -108,7 +108,7 @@
       </div>
       <aside class="status-strip marketplace-proof" aria-label="Comment lire les signaux de confiance">
         <div><span class="status-dot"></span><b>Données techniques, pas marketing</b></div>
-        <span>Le modèle GPU, la VRAM, le pilote et la compatibilité affichés proviennent des mesures Agent disponibles. Une machine non publiable doit disparaître du catalogue.</span>
+        <span>Le modèle GPU, la VRAM, le pilote et la compatibilité affichés proviennent des mesures Agent disponibles. GPUbnb n’invente ni note, ni avis, ni pourcentage de fiabilité. Une machine non publiable doit disparaître du catalogue.</span>
       </aside>
       <div id="listings" class="gpu-grid"><article class="empty">Chargement des annonces réelles…</article></div>
     </section>
@@ -145,14 +145,14 @@
       <span class="eyebrow"><i></i> GPUbnb</span>
       <h2>Un cloud GPU crédible se construit avec des preuves.</h2>
       <p>La priorité reste la sécurité, l’autorité, la reprise après incident, les preuves matérielles et une expérience claire. Le design doit rendre ces garanties compréhensibles — jamais les remplacer.</p>
-      <div class="hero-actions"><a class="button button-primary" href="workspaces.html">Voir les Workspaces</a><a class="button button-secondary" href="dashboard.html">Tableau de bord</a></div>
+      <div class="hero-actions"><a class="button button-primary" href="workspaces.html">Voir les Espaces de travail</a><a class="button button-secondary" href="dashboard.html">Tableau de bord</a></div>
     </section>
   </main>
 
   <footer class="enterprise-footer">
     <div class="shell footer-inner enterprise-footer-inner">
       <div class="footer-brand-block"><a class="brand" href="#top"><span class="brand-mark">G</span><span>GPUbnb</span></a><p>Infrastructure GPU distribuée en bêta privée.</p></div>
-      <nav aria-label="Navigation de pied de page"><a href="#market">Marketplace</a><a href="workspaces.html">Workspaces</a><a href="host-install.html">GPUbnb Host</a><a href="trust.html">Centre de confiance</a></nav>
+      <nav aria-label="Navigation de pied de page"><a href="#market">Marketplace</a><a href="workspaces.html">Espaces de travail</a><a href="host-install.html">GPUbnb Host</a><a href="trust.html">Centre de confiance</a></nav>
       <span class="footer-status">Devnet · Mainnet désactivé</span>
     </div>
   </footer>
