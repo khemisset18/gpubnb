@@ -37,6 +37,7 @@ jobs:
           && python -m unittest discover -s agent/tests -p 'test_recovery_runtime.py' -v
           && python -m unittest discover -s agent/tests -p 'test_windows_service.py' -v
           && python -m unittest discover -s agent/tests -p 'test_entrypoint_docker_bootstrap.py' -v
+          && python -m unittest discover -s agent/tests -p 'test_workspace_gateway_websocket.py' -v
       - name: Agent release compatibility tests
         run: python -m unittest discover -s agent/tests -p 'test_release_compatibility.py' -v
       - name: Verified self-update and deterministic rollback tests
