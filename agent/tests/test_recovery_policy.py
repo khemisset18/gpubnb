@@ -141,6 +141,16 @@ class RecoveryPolicyTests(unittest.TestCase):
             "unsafe_runtime_state",
         )
 
+    def test_protocol_upgrade_response_is_platform_action_not_unknown_failure(self) -> None:
+        reason = classify_supervisor_exception(
+            RuntimeError('API HTTP 426: {"error":"agent_upgrade_required","requiredVersion":"0.6.7"}'),
+            subsystem="gateway",
+        )
+        self.assertEqual(reason, "release_protocol_incompatible")
+        decision = recovery_decision(reason)
+        self.assertEqual(decision.mode, "platform_action")
+        self.assertIsNone(decision.retry_after_seconds)
+
     def test_missing_docker_binary_is_only_inferred_in_runtime_context(self) -> None:
         missing = FileNotFoundError("docker.exe")
         self.assertEqual(
