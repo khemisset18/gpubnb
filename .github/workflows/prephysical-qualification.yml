@@ -1,0 +1,63 @@
+name: prephysical-qualification
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  agent-logic:
+    name: Gate 2/4 — Agent power, recovery, rollback and quarantine logic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install Agent
+        run: python -m pip install --disable-pip-version-check -e agent
+      - name: Compile critical Agent modules
+        run: >-
+          python -m py_compile
+          agent/gpubnb_agent/power_guard.py
+          agent/gpubnb_agent/recovery_policy.py
+          agent/gpubnb_agent/release_compatibility.py
+          agent/gpubnb_agent/self_update.py
+          agent/gpubnb_agent/windows_service.py
+      - name: Power guard truth table and fail-safe tests
+        run: python -m unittest discover -s agent/tests -p 'test_power_guard.py' -v
+      - name: Recovery policy classification tests
+        run: python -m unittest discover -s agent/tests -p 'test_recovery_policy.py' -v
+      - name: Agent release compatibility tests
+        run: python -m unittest discover -s agent/tests -p 'test_release_compatibility.py' -v
+      - name: Verified self-update and deterministic rollback tests
+        run: python -m unittest discover -s agent/tests -p 'test_self_update*.py' -v
+      - name: Quarantine diagnostic control-plane tests
+        run: python -m unittest discover -s agent/tests -p 'test_quarantine_diagnostic_poll.py' -v
+
+  api-boundaries:
+    name: Gate 1/2/3/5 — API authority, release trust and cross-component boundaries
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - name: Install locked API dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Run targeted pre-physical contracts
+        run: >-
+          npx tsx --test --test-concurrency=1
+          test/host-power-policy.test.ts
+          test/release-compatibility-agent-contract.test.ts
+          test/release-compatibility-runtime.test.ts
+          test/windows-release-signing-wiring.test.ts
+          test/prephysical-boundaries.test.ts
+      - name: Strict TypeScript verification
+        run: npx tsc -p tsconfig.json --noEmit

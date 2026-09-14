@@ -34,6 +34,16 @@ describe('host power policy', () => {
     });
   });
 
+  it('live session authority takes reason precedence when a listing is also available', () => {
+    assert.deepEqual(deriveHostPowerPolicy(2, 3), {
+      protocolVersion: 1,
+      keepAwake: true,
+      reason: 'live_session',
+      liveSessionCount: 2,
+      availabilityListingCount: 3,
+    });
+  });
+
   it('returns Windows sleep control only when no availability intent or live session remains', () => {
     assert.deepEqual(deriveHostPowerPolicy(0, 0), {
       protocolVersion: 1,

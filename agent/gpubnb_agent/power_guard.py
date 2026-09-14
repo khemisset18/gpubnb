@@ -134,6 +134,15 @@ def _parse_power_policy(payload: dict[str, Any]) -> HostPowerAuthority:
         raise RuntimeError("host_power_policy_invalid")
     if keep_awake != (live_sessions > 0 or availability_listings > 0):
         raise RuntimeError("host_power_policy_inconsistent")
+    expected_reason = (
+        "live_session"
+        if live_sessions > 0
+        else "marketplace_available"
+        if availability_listings > 0
+        else "not_available"
+    )
+    if reason != expected_reason:
+        raise RuntimeError("host_power_policy_reason_inconsistent")
     return HostPowerAuthority(
         keep_awake=keep_awake,
         reason=str(reason),
