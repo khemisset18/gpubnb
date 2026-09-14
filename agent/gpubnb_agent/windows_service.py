@@ -13,6 +13,7 @@ from typing import Any
 from .docker_cli import ensure_docker_on_path
 from .platform_info import run_command
 from .power_guard import run_rental_power_guard
+from .supervisor_recovery import PLATFORM_REPROBE_SECONDS, supervisor_wait
 
 SERVICE_NAME = "GPUbnbAgent"
 SERVICE_DISPLAY_NAME = "GPUbnb Host Agent"
@@ -52,8 +53,16 @@ def supervise_heartbeat(
     heartbeat: Any,
     logger: Logger,
 ) -> None:
-    delay = RESTART_DELAY_SECONDS
+    """Supervise the main Agent worker without blind catch-all restarts.
+
+    Retryable transport/process exits use the central bounded recovery policy.
+    Platform-action states are periodically re-probed so a legitimate server-side
+    recovery can resume without rebooting Windows. Unknown/owner/security states
+    park this worker until service stop/restart; the independent power guard stays
+    alive and therefore does not lose signed Standby/rental protection.
+    """
     event_sink = _service_event_sink(logger)
+    attempt = 0
     while not stop_event.is_set():
         try:
             exit_code = heartbeat(
@@ -63,12 +72,70 @@ def supervise_heartbeat(
             )
             if stop_event.is_set() and exit_code in (None, 0):
                 return
-            raise RuntimeError(f"agent_service_exited:{exit_code}")
-        except Exception:
-            logger.exception("Agent worker failed; retry scheduled in %s seconds", delay)
-            if stop_event.wait(delay):
+            failure: BaseException = RuntimeError(
+                f"heartbeat_worker_exited:exit={exit_code}"
+            )
+        except Exception as exc:
+            failure = exc
+
+        mode, reason, delay = supervisor_wait(
+            failure,
+            attempt,
+            subsystem="heartbeat",
+        )
+        event = {
+            "event": "agent_supervisor_recovery",
+            "mode": mode,
+            "reason": reason,
+            "type": type(failure).__name__,
+            "message": str(failure)[:300],
+            "retryAfterSeconds": delay,
+        }
+        event_sink(event)
+
+        if mode == "retry":
+            actual_delay = delay if delay is not None else float(RESTART_DELAY_SECONDS)
+            logger.error(
+                "Agent worker failed (%s); policy retry in %s seconds: %s",
+                reason,
+                actual_delay,
+                str(failure)[:300],
+            )
+            attempt += 1
+            if stop_event.wait(actual_delay):
                 return
-            delay = min(MAX_RESTART_DELAY_SECONDS, delay * 2)
+            continue
+
+        if mode == "platform_action":
+            logger.error(
+                "Agent worker paused for platform action (%s); signed re-probe in %s seconds",
+                reason,
+                PLATFORM_REPROBE_SECONDS,
+            )
+            event_sink({
+                "event": "agent_supervisor_platform_wait",
+                "mode": mode,
+                "reason": reason,
+                "retryAfterSeconds": PLATFORM_REPROBE_SECONDS,
+            })
+            attempt = 0
+            if stop_event.wait(PLATFORM_REPROBE_SECONDS):
+                return
+            continue
+
+        logger.error(
+            "Agent worker blocked by recovery policy (%s/%s): %s",
+            mode,
+            reason,
+            str(failure)[:300],
+        )
+        event_sink({
+            "event": "agent_supervisor_blocked",
+            "mode": mode,
+            "reason": reason,
+        })
+        stop_event.wait()
+        return
 
 
 def _require_windows() -> tuple[Any, Any, Any, Any]:

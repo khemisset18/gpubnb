@@ -6,6 +6,7 @@ from gpubnb_agent.recovery_policy import (
     RECOVERABLE_FAILURES,
     STOP_FAILURES,
     bounded_backoff_seconds,
+    classify_supervisor_exception,
     recovery_decision,
 )
 
@@ -25,6 +26,7 @@ class RecoveryPolicyTests(unittest.TestCase):
     def test_revoked_identity_or_quarantine_never_self_clears(self) -> None:
         self.assertEqual(recovery_decision("agent_key_revoked").mode, "platform_action")
         self.assertEqual(recovery_decision("machine_quarantined").mode, "platform_action")
+        self.assertEqual(recovery_decision("agent_auth_rejected").mode, "platform_action")
 
     def test_security_ambiguity_stops_instead_of_retrying_destructively(self) -> None:
         self.assertEqual(recovery_decision("invalid_server_signature").mode, "stop")
@@ -84,6 +86,81 @@ class RecoveryPolicyTests(unittest.TestCase):
                 decision = recovery_decision(reason)
                 self.assertEqual(decision.mode, "stop")
                 self.assertIsNone(decision.retry_after_seconds)
+
+    def test_runtime_classifier_only_retries_unambiguous_transient_failures(self) -> None:
+        cases = [
+            (TimeoutError("API timed out"), "heartbeat", "api_timeout"),
+            (RuntimeError("API HTTP 503: unavailable"), "gateway", "api_unavailable"),
+            (
+                RuntimeError("workspace_docker_failed:info:1:Docker Desktop is starting"),
+                "gateway",
+                "docker_starting",
+            ),
+            (
+                RuntimeError("workspace_docker_failed:info:1:error during connect to docker daemon"),
+                "gateway",
+                "docker_daemon_unreachable",
+            ),
+            (
+                RuntimeError("rental_gpu_compute_processes_present"),
+                "gateway",
+                "rental_gpu_compute_processes_present",
+            ),
+        ]
+        for exc, subsystem, expected in cases:
+            with self.subTest(exc=str(exc)):
+                self.assertEqual(
+                    classify_supervisor_exception(exc, subsystem=subsystem),
+                    expected,
+                )
+                self.assertEqual(recovery_decision(expected).mode, "retry")
+
+    def test_runtime_classifier_parks_unknown_and_sensitive_failures(self) -> None:
+        self.assertEqual(
+            classify_supervisor_exception(
+                RuntimeError("brand_new_runtime_fault"), subsystem="gateway"
+            ),
+            "unknown_failure",
+        )
+        self.assertEqual(
+            recovery_decision("unknown_failure").mode,
+            "owner_action",
+        )
+        self.assertEqual(
+            classify_supervisor_exception(
+                RuntimeError('API HTTP 401: {"error":"invalid_agent_request"}'),
+                subsystem="gateway",
+            ),
+            "agent_auth_rejected",
+        )
+        self.assertEqual(
+            classify_supervisor_exception(
+                RuntimeError("host_tunnel_bootstrap_session_scope_mismatch"),
+                subsystem="tunnel",
+            ),
+            "unsafe_runtime_state",
+        )
+
+    def test_protocol_upgrade_response_is_platform_action_not_unknown_failure(self) -> None:
+        reason = classify_supervisor_exception(
+            RuntimeError('API HTTP 426: {"error":"agent_upgrade_required","requiredVersion":"0.6.7"}'),
+            subsystem="gateway",
+        )
+        self.assertEqual(reason, "release_protocol_incompatible")
+        decision = recovery_decision(reason)
+        self.assertEqual(decision.mode, "platform_action")
+        self.assertIsNone(decision.retry_after_seconds)
+
+    def test_missing_docker_binary_is_only_inferred_in_runtime_context(self) -> None:
+        missing = FileNotFoundError("docker.exe")
+        self.assertEqual(
+            classify_supervisor_exception(missing, subsystem="gateway"),
+            "docker_not_installed",
+        )
+        self.assertEqual(
+            classify_supervisor_exception(missing, subsystem="heartbeat"),
+            "unknown_failure",
+        )
 
 
 if __name__ == "__main__":

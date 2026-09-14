@@ -20,13 +20,24 @@ jobs:
           python -m py_compile
           agent/gpubnb_agent/power_guard.py
           agent/gpubnb_agent/recovery_policy.py
+          agent/gpubnb_agent/supervisor_recovery.py
+          agent/gpubnb_agent/recovery_runtime.py
           agent/gpubnb_agent/release_compatibility.py
           agent/gpubnb_agent/self_update.py
           agent/gpubnb_agent/windows_service.py
+          agent/gpubnb_agent/workspace_gateway_v7.py
+          agent/gpubnb_agent/entrypoint.py
       - name: Power guard truth table and fail-safe tests
         run: python -m unittest discover -s agent/tests -p 'test_power_guard.py' -v
       - name: Recovery policy classification tests
         run: python -m unittest discover -s agent/tests -p 'test_recovery_policy.py' -v
+      - name: Real supervisor recovery tests
+        run: >-
+          python -m unittest discover -s agent/tests -p 'test_supervisor_recovery.py' -v
+          && python -m unittest discover -s agent/tests -p 'test_recovery_runtime.py' -v
+          && python -m unittest discover -s agent/tests -p 'test_windows_service.py' -v
+          && python -m unittest discover -s agent/tests -p 'test_entrypoint_docker_bootstrap.py' -v
+          && python -m unittest discover -s agent/tests -p 'test_workspace_gateway_websocket.py' -v
       - name: Agent release compatibility tests
         run: python -m unittest discover -s agent/tests -p 'test_release_compatibility.py' -v
       - name: Verified self-update and deterministic rollback tests

@@ -26,12 +26,14 @@ class WindowsServiceTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "runtime_missing"):
                 windows_service._require_windows()
 
-    def test_supervisor_retries_worker_failure_and_stops_cleanly(self) -> None:
+    def test_supervisor_retries_transient_failure_with_central_delay(self) -> None:
         stop_event = threading.Event()
-        heartbeat = MagicMock(side_effect=[RuntimeError("configuration_missing"), 0])
+        heartbeat = MagicMock(side_effect=RuntimeError("api_timeout"))
         logger = MagicMock(spec=logging.Logger)
+        waits: list[float | None] = []
 
-        def stop_after_first_wait(_: float) -> bool:
+        def stop_after_first_wait(timeout: float | None = None) -> bool:
+            waits.append(timeout)
             stop_event.set()
             return True
 
@@ -43,7 +45,46 @@ class WindowsServiceTests(unittest.TestCase):
         self.assertEqual(args, (stop_event,))
         self.assertEqual(kwargs["process_mode"], "_service")
         self.assertTrue(callable(kwargs["event_sink"]))
-        logger.exception.assert_called_once()
+        self.assertEqual(waits, [5.0])
+        logger.error.assert_called()
+
+    def test_supervisor_does_not_hot_retry_unknown_failure(self) -> None:
+        stop_event = threading.Event()
+        heartbeat = MagicMock(side_effect=RuntimeError("brand_new_runtime_fault"))
+        logger = MagicMock(spec=logging.Logger)
+        waits: list[float | None] = []
+
+        def park_until_service_stop(timeout: float | None = None) -> bool:
+            waits.append(timeout)
+            stop_event.set()
+            return True
+
+        with patch.object(stop_event, "wait", side_effect=park_until_service_stop):
+            windows_service.supervise_heartbeat(stop_event, heartbeat, logger)
+
+        heartbeat.assert_called_once()
+        self.assertEqual(waits, [None])
+        logged = " ".join(str(arg) for call in logger.error.call_args_list for arg in call.args)
+        self.assertIn("unknown_failure", logged)
+
+    def test_supervisor_reprobes_platform_state_slowly(self) -> None:
+        stop_event = threading.Event()
+        heartbeat = MagicMock(side_effect=RuntimeError("machine_quarantined"))
+        logger = MagicMock(spec=logging.Logger)
+        waits: list[float | None] = []
+
+        def stop_after_platform_wait(timeout: float | None = None) -> bool:
+            waits.append(timeout)
+            stop_event.set()
+            return True
+
+        with patch.object(stop_event, "wait", side_effect=stop_after_platform_wait):
+            windows_service.supervise_heartbeat(stop_event, heartbeat, logger)
+
+        heartbeat.assert_called_once()
+        self.assertEqual(waits, [60.0])
+        logged = " ".join(str(arg) for call in logger.error.call_args_list for arg in call.args)
+        self.assertIn("machine_quarantined", logged)
 
     def test_service_event_sink_persists_structured_agent_events(self) -> None:
         logger = MagicMock(spec=logging.Logger)
