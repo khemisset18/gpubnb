@@ -20,9 +20,12 @@ def main() -> int:
     # environment when they invoke Docker.  This also makes GPUBNB_DOCKER a
     # real operational override instead of a resolver-only setting.
     ensure_docker_on_path()
-    # Control-channel wrappers must be installed first: recovery_runtime keeps
-    # those wrapped heartbeat/job functions and only replaces process-loop
-    # supervision so both layers remain active in the frozen executable.
-    install_control_channel(cli)
+    # Recovery owns the base process loop. Install it BEFORE control-channel so
+    # the existing control wrapper can capture that loop, layer its heartbeat /
+    # job functions on top, and still execute its qualified _stop_all() cleanup
+    # in finally when the service exits. recovery_runtime dereferences
+    # cli.heartbeat/run_next_job at runtime, so it still calls the wrapped
+    # control-channel functions after the second install.
     install_recovery_runtime(cli)
+    install_control_channel(cli)
     return cli.main()
