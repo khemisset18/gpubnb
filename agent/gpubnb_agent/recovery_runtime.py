@@ -157,10 +157,9 @@ def install(cli_module: Any) -> None:
                 })
 
         def diagnostic_supervisor() -> None:
-            while (
-                not diagnostic_stop.is_set()
-                and not service_stopped()
-            ):
+            attempts = 0
+            while not diagnostic_stop.is_set() and not service_stopped():
+                wait_seconds = float(interval)
                 try:
                     cli_module.poll_and_run_diagnostic_once(
                         cli_module.client(config),
@@ -169,6 +168,7 @@ def install(cli_module: Any) -> None:
                         config=config,
                         event_sink=emit,
                     )
+                    attempts = 0
                 except Exception as exc:
                     emit({
                         "event": "diagnostic_poll_error",
@@ -180,7 +180,26 @@ def install(cli_module: Any) -> None:
                         )[-2000:],
                         "timestamp": _now_iso(),
                     })
-                if diagnostic_stop.wait(interval):
+                    mode, reason, delay = supervisor_wait(
+                        exc,
+                        attempts,
+                        subsystem="heartbeat",
+                    )
+                    emit({
+                        "event": "diagnostic_recovery",
+                        "mode": mode,
+                        "reason": reason,
+                        "retryAfterSeconds": delay,
+                    })
+                    if mode == "retry":
+                        attempts += 1
+                        wait_seconds = delay if delay is not None else 5.0
+                    elif mode == "platform_action":
+                        attempts = 0
+                        wait_seconds = PLATFORM_REPROBE_SECONDS
+                    else:
+                        return
+                if diagnostic_stop.wait(wait_seconds):
                     return
 
         threading.Thread(
