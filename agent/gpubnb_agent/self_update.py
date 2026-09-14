@@ -4,8 +4,8 @@ The updater is intentionally owner-triggered while public Windows artifacts are
 not yet Authenticode-signed. It only follows the promoted release alias, verifies
 the published SHA-256 and replaces the installed service binary transactionally.
 
-The verified entry point additionally binds the candidate and installed binary to
-the release's immutable commit and performs a local runtime probe. Any failure
+The production/default path additionally binds the candidate and installed binary
+to the release's immutable commit and performs a local runtime probe. Any failure
 after replacement rolls back to the known-good backup before returning an error.
 """
 from __future__ import annotations
@@ -203,8 +203,8 @@ def _is_downgrade(current_version: str, candidate_version: str) -> bool:
     current = _parse_semver(current_version)
     candidate = _parse_semver(candidate_version)
     if current is None or candidate is None:
-        # Kept for compatibility with the low-level updater. The verified
-        # production entry point below fails closed when either value is not semver.
+        # Compatibility for low-level injected tests. The production/default
+        # path below fails closed when either value is not valid semver.
         return False
     return candidate < current
 
@@ -273,6 +273,50 @@ def _rollback_to_backup(
     return ";".join(errors) or None
 
 
+def _strict_validators(
+    *,
+    current_agent_version: str,
+    service_running: Callable[[], bool],
+    run_version_command: Callable[[Path], str],
+    run_build_info_command: Callable[[Path], dict[str, Any]],
+    run_runtime_check: Callable[[Path], bool],
+) -> tuple[CandidateValidator, PostUpdateValidator]:
+    if _parse_semver(current_agent_version) is None:
+        raise SelfUpdateError("current_agent_version_invalid")
+
+    def validate_candidate(exe_bytes: bytes, release: ReleaseInfo, candidate_version: str) -> None:
+        if _parse_semver(candidate_version) is None:
+            raise SelfUpdateError("candidate_version_invalid")
+        with tempfile.TemporaryDirectory(prefix="gpubnb-self-update-identity-") as tmp:
+            candidate_path = Path(tmp) / "gpubnb-agent-candidate.exe"
+            candidate_path.write_bytes(exe_bytes)
+            build_info = run_build_info_command(candidate_path)
+        try:
+            identity = parse_build_identity(candidate_version, build_info)
+            require_identity_matches_release(identity, release.commit, stage="candidate")
+        except UpdateIdentityError as exc:
+            raise SelfUpdateError(str(exc)) from exc
+
+    def validate_installed(target: Path, release: ReleaseInfo, candidate_version: str) -> None:
+        installed_version = run_version_command(target)
+        installed_info = run_build_info_command(target)
+        try:
+            identity = parse_build_identity(installed_version, installed_info)
+        except UpdateIdentityError as exc:
+            raise SelfUpdateError(f"installed_identity_invalid:{exc}") from exc
+        checks = PostUpdateChecks(
+            service_running=service_running(),
+            identity_matches_release=identity_matches_release(identity, release.commit),
+            version_matches_candidate=installed_version == candidate_version,
+            runtime_healthy=bool(run_runtime_check(target)),
+        )
+        reason = rollback_reason(checks)
+        if reason is not None:
+            raise SelfUpdateError(reason)
+
+    return validate_candidate, validate_installed
+
+
 def perform_self_update(
     install_dir: Path,
     *,
@@ -295,6 +339,24 @@ def perform_self_update(
     # A Windows service can be STOP_PENDING while service_running()==False.
     # Never swap the executable until the SCM reports fully STOPPED.
     is_stopped = service_stopped or (lambda: not service_running())
+
+    # The installed CLI calls this function with the default runner. In that
+    # production path, strict candidate + post-install validation is mandatory.
+    # Tests with deliberately fake PE fixtures may inject a runner and explicit
+    # validators to exercise the low-level transaction mechanics independently.
+    if (
+        candidate_validator is None
+        and post_update_validator is None
+        and run_version_command is default_run_version_command
+    ):
+        candidate_validator, post_update_validator = _strict_validators(
+            current_agent_version=current_agent_version,
+            service_running=service_running,
+            run_version_command=run_version_command,
+            run_build_info_command=default_run_build_info_command,
+            run_runtime_check=default_run_runtime_check,
+        )
+
     release = fetch_release_info(repository, channel, http_get=http_get)
     if not is_update_available(release, current_build_commit):
         return UpdateResult(
@@ -421,40 +483,14 @@ def perform_verified_self_update(
     now: Callable[[], float] = time.time,
     sleep: Callable[[float], None] = time.sleep,
 ) -> UpdateResult:
-    """Production self-update path with fail-closed identity/health validation."""
-    if _parse_semver(current_agent_version) is None:
-        raise SelfUpdateError("current_agent_version_invalid")
-
-    def validate_candidate(exe_bytes: bytes, release: ReleaseInfo, candidate_version: str) -> None:
-        if _parse_semver(candidate_version) is None:
-            raise SelfUpdateError("candidate_version_invalid")
-        with tempfile.TemporaryDirectory(prefix="gpubnb-self-update-identity-") as tmp:
-            candidate_path = Path(tmp) / "gpubnb-agent-candidate.exe"
-            candidate_path.write_bytes(exe_bytes)
-            build_info = run_build_info_command(candidate_path)
-        try:
-            identity = parse_build_identity(candidate_version, build_info)
-            require_identity_matches_release(identity, release.commit, stage="candidate")
-        except UpdateIdentityError as exc:
-            raise SelfUpdateError(str(exc)) from exc
-
-    def validate_installed(target: Path, release: ReleaseInfo, candidate_version: str) -> None:
-        installed_version = run_version_command(target)
-        installed_info = run_build_info_command(target)
-        try:
-            identity = parse_build_identity(installed_version, installed_info)
-        except UpdateIdentityError as exc:
-            raise SelfUpdateError(f"installed_identity_invalid:{exc}") from exc
-        checks = PostUpdateChecks(
-            service_running=service_running(),
-            identity_matches_release=identity_matches_release(identity, release.commit),
-            version_matches_candidate=installed_version == candidate_version,
-            runtime_healthy=bool(run_runtime_check(target)),
-        )
-        reason = rollback_reason(checks)
-        if reason is not None:
-            raise SelfUpdateError(reason)
-
+    """Explicit strict update API for tests/other trusted callers."""
+    candidate_validator, post_update_validator = _strict_validators(
+        current_agent_version=current_agent_version,
+        service_running=service_running,
+        run_version_command=run_version_command,
+        run_build_info_command=run_build_info_command,
+        run_runtime_check=run_runtime_check,
+    )
     return perform_self_update(
         install_dir,
         repository=repository,
@@ -464,8 +500,8 @@ def perform_verified_self_update(
         dry_run=dry_run,
         http_get=http_get,
         run_version_command=run_version_command,
-        candidate_validator=validate_candidate,
-        post_update_validator=validate_installed,
+        candidate_validator=candidate_validator,
+        post_update_validator=post_update_validator,
         stop_service=stop_service,
         start_service=start_service,
         service_running=service_running,
