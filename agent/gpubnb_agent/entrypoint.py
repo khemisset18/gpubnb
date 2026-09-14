@@ -4,6 +4,7 @@ from __future__ import annotations
 from . import cli
 from .control_channel_runtime import install as install_control_channel
 from .docker_cli import ensure_docker_on_path
+from .recovery_runtime import install as install_recovery_runtime
 from .windows_subprocess import install_background_subprocess_policy
 
 
@@ -19,5 +20,9 @@ def main() -> int:
     # environment when they invoke Docker.  This also makes GPUBNB_DOCKER a
     # real operational override instead of a resolver-only setting.
     ensure_docker_on_path()
+    # Control-channel wrappers must be installed first: recovery_runtime keeps
+    # those wrapped heartbeat/job functions and only replaces process-loop
+    # supervision so both layers remain active in the frozen executable.
     install_control_channel(cli)
+    install_recovery_runtime(cli)
     return cli.main()
