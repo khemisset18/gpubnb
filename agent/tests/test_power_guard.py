@@ -86,7 +86,46 @@ class PowerGuardTests(unittest.TestCase):
         self.assertEqual(events[-1]["event"], "rental_power_guard_released")
         self.assertEqual(events[-1]["reason"], "not_available")
 
-    def test_power_policy_parser_rejects_inconsistent_server_state(self) -> None:
+    def test_power_policy_parser_accepts_only_canonical_truth_table(self) -> None:
+        cases = [
+            (
+                {
+                    "protocolVersion": 1,
+                    "keepAwake": True,
+                    "reason": "live_session",
+                    "liveSessionCount": 1,
+                    "availabilityListingCount": 0,
+                },
+                "live_session",
+            ),
+            (
+                {
+                    "protocolVersion": 1,
+                    "keepAwake": True,
+                    "reason": "marketplace_available",
+                    "liveSessionCount": 0,
+                    "availabilityListingCount": 1,
+                },
+                "marketplace_available",
+            ),
+            (
+                {
+                    "protocolVersion": 1,
+                    "keepAwake": False,
+                    "reason": "not_available",
+                    "liveSessionCount": 0,
+                    "availabilityListingCount": 0,
+                },
+                "not_available",
+            ),
+        ]
+        for payload, expected_reason in cases:
+            with self.subTest(reason=expected_reason):
+                parsed = power_guard._parse_power_policy(payload)
+                self.assertEqual(parsed.reason, expected_reason)
+                self.assertEqual(parsed.keep_awake, payload["keepAwake"])
+
+    def test_power_policy_parser_rejects_inconsistent_keep_awake_state(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "host_power_policy_inconsistent"):
             power_guard._parse_power_policy({
                 "protocolVersion": 1,
@@ -95,6 +134,48 @@ class PowerGuardTests(unittest.TestCase):
                 "liveSessionCount": 0,
                 "availabilityListingCount": 1,
             })
+
+    def test_power_policy_parser_rejects_reason_that_contradicts_counts(self) -> None:
+        contradictory = [
+            {
+                "protocolVersion": 1,
+                "keepAwake": True,
+                "reason": "not_available",
+                "liveSessionCount": 0,
+                "availabilityListingCount": 1,
+            },
+            {
+                "protocolVersion": 1,
+                "keepAwake": True,
+                "reason": "marketplace_available",
+                "liveSessionCount": 1,
+                "availabilityListingCount": 1,
+            },
+            {
+                "protocolVersion": 1,
+                "keepAwake": False,
+                "reason": "live_session",
+                "liveSessionCount": 0,
+                "availabilityListingCount": 0,
+            },
+        ]
+        for payload in contradictory:
+            with self.subTest(payload=payload):
+                with self.assertRaisesRegex(RuntimeError, "host_power_policy_reason_inconsistent"):
+                    power_guard._parse_power_policy(payload)
+
+    def test_power_policy_parser_rejects_boolean_negative_or_unbounded_counts(self) -> None:
+        bad_counts = [True, -1, 1025]
+        for bad_value in bad_counts:
+            with self.subTest(value=bad_value):
+                with self.assertRaisesRegex(RuntimeError, "host_power_policy_invalid"):
+                    power_guard._parse_power_policy({
+                        "protocolVersion": 1,
+                        "keepAwake": True,
+                        "reason": "live_session",
+                        "liveSessionCount": bad_value,
+                        "availabilityListingCount": 0,
+                    })
 
     def test_legacy_fallback_does_not_treat_zero_sessions_as_owner_offline(self) -> None:
         with (
