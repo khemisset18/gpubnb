@@ -156,6 +156,37 @@ class RecoveryRuntimeTests(unittest.TestCase):
         self.assertEqual(recovery[0]["mode"], "stop")
         self.assertEqual(recovery[0]["reason"], "unsafe_runtime_state")
 
+    def test_diagnostic_auth_rejection_uses_platform_backoff_not_hot_polling(self) -> None:
+        diagnostic_attempted = threading.Event()
+
+        def diagnostic(*_args, **_kwargs):
+            diagnostic_attempted.set()
+            raise RuntimeError('API HTTP 401: {"error":"invalid_agent_request"}')
+
+        def heartbeat(*_args):
+            self.assertTrue(diagnostic_attempted.wait(1))
+            return {"ok": True}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            module = fake_cli(tmp, heartbeat, diagnostic, lambda *_a, **_k: None)
+            install(module)
+            stop = ScriptedServiceStop([True])
+            with patch(
+                "gpubnb_agent.workspace_gateway.run_workspace_gateway_forever",
+                side_effect=lambda stop_event=None, **_kwargs: stop_event.wait(1),
+            ):
+                module.heartbeat_loop(
+                    stop_event=stop,
+                    process_mode="_service",
+                    event_sink=module.events.append,
+                )
+
+        recovery = [e for e in module.events if e.get("event") == "diagnostic_recovery"]
+        self.assertTrue(recovery)
+        self.assertEqual(recovery[0]["mode"], "platform_action")
+        self.assertEqual(recovery[0]["reason"], "agent_auth_rejected")
+        self.assertEqual(recovery[0]["retryAfterSeconds"], None)
+
     def test_install_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             module = fake_cli(tmp, lambda *_a: {"ok": True}, lambda *_a, **_k: None, lambda *_a, **_k: None)
