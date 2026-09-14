@@ -18,6 +18,25 @@ class WindowsServiceTests(unittest.TestCase):
         self.assertEqual(windows_service.SERVICE_NAME, "GPUbnbAgent")
         self.assertNotIn(" ", windows_service.SERVICE_NAME)
 
+    def test_service_class_does_not_import_cli_before_dispatcher(self) -> None:
+        class FakeServiceFramework:
+            pass
+
+        win32serviceutil = MagicMock()
+        win32serviceutil.ServiceFramework = FakeServiceFramework
+        with (
+            patch.object(
+                windows_service,
+                "_require_windows",
+                return_value=(MagicMock(), MagicMock(), MagicMock(), win32serviceutil),
+            ),
+            patch.dict("sys.modules", {"gpubnb_agent.cli": None}),
+        ):
+            service_class = windows_service._service_class()
+
+        self.assertEqual(service_class._svc_name_, "GPUbnbAgent")
+        self.assertEqual(service_class._exe_args_, "_service")
+
     def test_missing_runtime_is_not_reported_as_success(self) -> None:
         with (
             patch.object(windows_service.os, "name", "nt"),
