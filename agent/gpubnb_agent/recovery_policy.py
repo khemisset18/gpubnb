@@ -91,6 +91,12 @@ def classify_supervisor_exception(
         if reason in text:
             return reason
 
+    # HTTP 426 is an explicit compatibility/platform state, not an unknown local
+    # runtime fault. Keep the signed recovery plane alive while new work remains
+    # blocked by the server's protocol gate.
+    if "agent_upgrade_required" in text:
+        return "release_protocol_incompatible"
+
     # Generic signed-Agent rejection does not tell the Host whether the cause is
     # quarantine, revocation or another server-side identity state. Treat it as
     # platform action and never clear/rotate anything locally.
