@@ -6,7 +6,7 @@ on:
 
 jobs:
   agent-logic:
-    name: Gate 2/4 — Agent power, recovery and compatibility logic
+    name: Gate 2/4 — Agent power, recovery, rollback and quarantine logic
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -21,6 +21,7 @@ jobs:
           agent/gpubnb_agent/power_guard.py
           agent/gpubnb_agent/recovery_policy.py
           agent/gpubnb_agent/release_compatibility.py
+          agent/gpubnb_agent/self_update.py
           agent/gpubnb_agent/windows_service.py
       - name: Power guard truth table and fail-safe tests
         run: python -m unittest discover -s agent/tests -p 'test_power_guard.py' -v
@@ -28,9 +29,13 @@ jobs:
         run: python -m unittest discover -s agent/tests -p 'test_recovery_policy.py' -v
       - name: Agent release compatibility tests
         run: python -m unittest discover -s agent/tests -p 'test_release_compatibility.py' -v
+      - name: Verified self-update and deterministic rollback tests
+        run: python -m unittest discover -s agent/tests -p 'test_self_update_verified.py' -v
+      - name: Quarantine diagnostic control-plane tests
+        run: python -m unittest discover -s agent/tests -p 'test_quarantine_diagnostic_poll.py' -v
 
   api-boundaries:
-    name: Gate 1/2/3 — API authority and cross-component boundaries
+    name: Gate 1/2/3/5 — API authority, release trust and cross-component boundaries
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -52,6 +57,7 @@ jobs:
           test/host-power-policy.test.ts
           test/release-compatibility-agent-contract.test.ts
           test/release-compatibility-runtime.test.ts
+          test/windows-release-signing-wiring.test.ts
           test/prephysical-boundaries.test.ts
       - name: Strict TypeScript verification
         run: npx tsc -p tsconfig.json --noEmit
