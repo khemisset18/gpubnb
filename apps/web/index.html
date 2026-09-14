@@ -58,14 +58,14 @@
           <div class="terminal-body">
             <p class="terminal-command"><strong>$</strong> gpubnb-agent verify</p>
             <p class="muted">Vérification locale du matériel…</p>
-            <p class="terminal-success">✓ RTX 4090 détectée · preuve signée</p>
+            <p class="terminal-success">✓ GPU détecté · identité matérielle vérifiée</p>
             <div class="terminal-stats">
-              <div><b>24 GB</b><span>VRAM</span></div>
-              <div><b>99,2 %</b><span>stabilité démo</span></div>
-              <div><b>58°C</b><span>température</span></div>
+              <div><b>VRAM</b><span>mesurée</span></div>
+              <div><b>Pilote</b><span>mesuré</span></div>
+              <div><b>Online</b><span>heartbeat récent</span></div>
             </div>
             <div class="progress"><span></span></div>
-            <p class="terminal-note">Aucun accès au bureau hôte</p>
+            <p class="terminal-note">Aucun score de fiabilité fictif · aucun accès au bureau hôte</p>
           </div>
         </div>
       </div>
@@ -84,6 +84,10 @@
       <div class="filter-bar" aria-label="Filtres de présentation">
         <span class="filter active">Tous les GPU</span><span class="filter">24 GB+</span><span class="filter">IA & LLM</span><span class="filter">Rendu 3D</span><span class="filter">Disponible</span>
       </div>
+      <aside class="status-strip" aria-label="Comment lire les signaux de confiance">
+        <div><span class="status-dot"></span><b>Ce que “en direct” signifie</b></div>
+        <span>Annonce active + machine actuellement en ligne. Le modèle GPU, la VRAM, le pilote et la compatibilité affichés proviennent des mesures Agent disponibles — GPUbnb n’invente ni note, ni avis, ni pourcentage de fiabilité.</span>
+      </aside>
       <div id="listings" class="gpu-grid"><article class="empty">Chargement des annonces réelles…</article></div>
     </section>
 
