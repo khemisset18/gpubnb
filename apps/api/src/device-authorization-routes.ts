@@ -16,6 +16,7 @@ import { registerArtifactTransportGuards } from './artifact-transport-guards.js'
 import { registerWorkspaceBrowserSecurity } from './workspace-browser-security.js';
 import { registerRentalMarketplaceRoutes } from './rental-marketplace-routes.js';
 import { registerMachineDiagnosticsRoutes } from './machine-diagnostics-routes.js';
+import { registerReleaseCompatibilityRuntime } from './release-compatibility-runtime.js';
 import { syncMachineAuthCache } from './machine-auth-cache.js';
 import { config } from './config.js';
 import { controlChannelAssignment } from './agent-control-channel.js';
@@ -76,6 +77,10 @@ export const registerDeviceAuthorizationRoutes = (
   configureSchedulerPresence(redis, config.MACHINE_PRESENCE_MODE);
   registerArtifactTransportGuards(app);
   registerWorkspaceBrowserSecurity(app);
+  // This must be registered before server.ts declares /agent/heartbeat: its
+  // preSerialization hook only observes a heartbeat after the real handler has
+  // authenticated and accepted it, then persists the signed protocol verdict.
+  registerReleaseCompatibilityRuntime(app, db, redis);
   registerMiningRoutes(app, db, redis);
   registerWorkspaceRenterRoutes(app, db, redis);
   registerRentalMarketplaceRoutes(app, db, redis);
