@@ -6,10 +6,21 @@ function text(id,value){const node=document.getElementById(id);if(node)node.text
 function state(id,value){const node=document.getElementById(id);if(node)node.dataset.state=value}
 
 async function jsonFetch(path){
-  const response=await fetch(`${TRUST_API}${path}`,{credentials:'include',headers:{accept:'application/json'},cache:'no-store'});
-  const data=await response.json().catch(()=>({}));
-  if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);
-  return data;
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),10_000);
+  try{
+    const response=await fetch(`${TRUST_API}${path}`,{
+      credentials:'include',
+      headers:{accept:'application/json'},
+      cache:'no-store',
+      signal:controller.signal,
+    });
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);
+    return data;
+  }finally{
+    clearTimeout(timeout);
+  }
 }
 
 async function loadHealth(){
