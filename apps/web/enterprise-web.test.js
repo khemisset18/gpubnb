@@ -22,6 +22,19 @@ test('homepage critical path stays lean and marketplace loading is independent',
   assert.match(script, /AbortController/);
 });
 
+test('marketplace filter controls are real, accessible and based on returned data', async () => {
+  const html = await read('index.html');
+  const script = await read('app.js');
+  for (const filter of ['all', 'high-vram', 'available']) {
+    assert.match(html, new RegExp(`data-filter=["']${filter}["']`));
+  }
+  assert.doesNotMatch(html, /IA & LLM|Rendu 3D/);
+  assert.match(html, /aria-pressed=/);
+  assert.match(script, /24\*1024/);
+  assert.match(script, /availability\.state==='AVAILABLE'/);
+  assert.match(script, /setAttribute\('aria-pressed'/);
+});
+
 test('public copy never confuses signed Agent requests with Windows code signing', async () => {
   const files = await Promise.all(['index.html', 'trust.html', 'host-install.html'].map(read));
   const copy = files.join('\n');
