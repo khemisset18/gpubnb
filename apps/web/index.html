@@ -102,14 +102,16 @@
         <div><span class="eyebrow"><i></i> Marketplace en direct</span><h2>Des GPU présents maintenant.</h2><p>Annonce active + machine actuellement en ligne : seules ces annonces confirmées par l’API réelle apparaissent ici.</p></div>
         <button id="refresh" class="button button-secondary" type="button">Actualiser</button>
       </div>
-      <div class="filter-bar" aria-label="Filtres de présentation">
-        <span class="filter active">Tous les GPU</span><span class="filter">24 GB+</span><span class="filter">IA & LLM</span><span class="filter">Rendu 3D</span><span class="filter">Disponible</span>
+      <div class="filter-bar" role="group" aria-label="Filtrer les GPU affichés">
+        <button class="filter active" type="button" data-filter="all" aria-pressed="true">Tous les GPU</button>
+        <button class="filter" type="button" data-filter="high-vram" aria-pressed="false">24 GB+</button>
+        <button class="filter" type="button" data-filter="available" aria-pressed="false">Disponible</button>
       </div>
       <aside class="status-strip marketplace-proof" aria-label="Comment lire les signaux de confiance">
         <div><span class="status-dot"></span><b>Données techniques, pas marketing</b></div>
         <span>Le modèle GPU, la VRAM, le pilote et la compatibilité affichés proviennent des mesures Agent disponibles. GPUbnb n’invente ni note, ni avis, ni pourcentage de fiabilité. Une machine non publiable doit disparaître du catalogue.</span>
       </aside>
-      <div id="listings" class="gpu-grid"><article class="empty">Chargement des annonces réelles…</article></div>
+      <div id="listings" class="gpu-grid" aria-live="polite"><article class="empty">Chargement des annonces réelles…</article></div>
     </section>
 
     <section class="enterprise-proof-band" aria-label="Principes de fiabilité">
