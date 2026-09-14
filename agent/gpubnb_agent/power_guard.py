@@ -32,6 +32,7 @@ ES_SYSTEM_REQUIRED = 0x00000001
 ES_CONTINUOUS = 0x80000000
 POWER_GUARD_INTERVAL_SECONDS = 10
 POWER_POLICY_REASONS = frozenset({"live_session", "marketplace_available", "not_available"})
+POWER_POLICY_COMPATIBILITY_ACTION = "deploy_power_policy_api_before_idle_standby_test"
 
 EventSink = Callable[[dict[str, Any]], None]
 ExecutionStateWriter = Callable[[int], None]
@@ -44,6 +45,15 @@ class HostPowerAuthority:
     reason: str
     live_session_count: int = 0
     availability_listing_count: int = 0
+
+
+class HostPowerPolicyCompatibilityError(RuntimeError):
+    """The Agent is newer than the deployed API needed for idle standby semantics."""
+
+    def __init__(self, compatibility: str, detail: str) -> None:
+        self.compatibility = compatibility
+        self.detail = detail
+        super().__init__(f"host_power_policy_unavailable:{compatibility}:{detail}")
 
 
 AuthorityLoader = Callable[[], HostPowerAuthority]
@@ -191,8 +201,9 @@ def _load_host_power_authority() -> HostPowerAuthority:
             return _legacy_rental_authority_fallback(api, key, machine_id)
         except Exception as legacy_error:
             marker = str(legacy_error)[:160] or type(legacy_error).__name__
-            raise RuntimeError(
-                f"host_power_policy_unavailable:policy_404:{marker}"
+            raise HostPowerPolicyCompatibilityError(
+                "api_missing_power_policy",
+                marker,
             ) from legacy_error
 
 
@@ -211,12 +222,22 @@ def reconcile_power_guard_once(
     except Exception as exc:
         # Critical invariant: an unavailable authority must never turn an already
         # protected paid/available Host into an unprotected one. Keep current state.
-        emit({
+        event: dict[str, Any] = {
             "event": "rental_power_guard_authority_error",
             "type": type(exc).__name__,
             "message": str(exc)[:300],
             "guardActive": guard.active,
-        })
+        }
+        if isinstance(exc, HostPowerPolicyCompatibilityError):
+            # This is a deployment-order problem, not an ordinary network failure.
+            # Make it machine-readable so support/qualification can fail fast before
+            # somebody waits for Windows' sleep timer to discover the mismatch.
+            event.update({
+                "compatibility": exc.compatibility,
+                "standbyReady": False,
+                "action": POWER_POLICY_COMPATIBILITY_ACTION,
+            })
+        emit(event)
         return guard.active
 
     required = authority.keep_awake
