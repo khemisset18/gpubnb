@@ -49,6 +49,19 @@ class FakeGateway:
     def _report_error(self, error: Exception) -> None:
         self.reported.append(str(error))
 
+    def _report_recovery(
+        self,
+        mode: str,
+        reason: str,
+        delay_seconds: float | None,
+    ) -> None:
+        GatewaySupervisor._report_recovery(
+            self,  # type: ignore[arg-type]
+            mode,
+            reason,
+            delay_seconds,
+        )
+
 
 class SupervisorRecoveryTests(unittest.TestCase):
     def test_docker_starting_uses_central_backoff_then_recovers(self) -> None:
