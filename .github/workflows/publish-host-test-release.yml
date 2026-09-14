@@ -258,7 +258,6 @@ jobs:
             Write-Host 'Authenticode is not yet mandatory for this Devnet candidate; any present signature must still be valid.'
             & ./scripts/verify-windows-authenticode.ps1 -Path $paths
           }
-          if ($LASTEXITCODE -ne 0) { throw 'authenticode_policy_verification_failed' }
 
       - uses: actions/upload-artifact@v6
         with:
