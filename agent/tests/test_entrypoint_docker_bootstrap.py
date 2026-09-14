@@ -41,7 +41,7 @@ class EntrypointDockerBootstrapTests(unittest.TestCase):
 
         self.assertEqual(
             calls,
-            ["subprocess", "docker", "control", "recovery", "cli"],
+            ["subprocess", "docker", "recovery", "control", "cli"],
         )
 
 
