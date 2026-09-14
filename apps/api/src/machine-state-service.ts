@@ -1,6 +1,7 @@
 import {
   AcceleratorOperationalStatus,
   BookingStatus,
+  DiagnosticRunStatus,
   ListingStatus,
   MachineConnectivity,
   MachineOperational,
@@ -20,6 +21,7 @@ export type MachineRentalState =
   | 'DIAGNOSTIC_REQUIRED'
   | 'DIAGNOSTIC_RUNNING'
   | 'DIAGNOSTIC_FAILED'
+  | 'DEGRADED'
   | 'VERIFICATION_REQUIRED'
   | 'READY_TO_PUBLISH'
   | 'LISTING_ACTIVE'
@@ -40,16 +42,16 @@ export type MachineStateInput = {
   nvidiaRuntimeAvailable: boolean;
   verifiedAt?: Date | null;
   heartbeatFresh: boolean;
+  /** Status of the newest durable DiagnosticRun when the caller already has it.
+   * Generic MachineOperational.DEGRADED is deliberately not enough evidence to
+   * claim that a diagnostic failed: runtime, cleanup and booking reconciliation
+   * can also mark the machine degraded. */
+  latestDiagnosticStatus?: DiagnosticRunStatus | null;
   /** Machine.quarantineReasonCode - the real, stable cause when moderationStatus
-   * is QUARANTINED. Falls back to the generic RESOURCE_QUARANTINED blockingReason
-   * below when absent (e.g. a machine quarantined before this field existed). */
+   * is QUARANTINED. Falls back to UNKNOWN when absent (for older rows). */
   quarantineReasonCode?: string | null;
   /** Whether this machine's currently-reported agentVersion satisfies the
-   * minimum protocol version (see job-execution-lease.ts's
-   * supportsJobLeaseProtocol) - callers pass the already-computed boolean so
-   * this module never has to know about job-lease version parsing. A
-   * protocol-incompatible agent cannot actually execute a job even though
-   * heartbeats/GPU/Docker checks may all otherwise look healthy. */
+   * minimum job execution protocol. */
   jobProtocolSupported: boolean;
   accelerators: Array<{
     status: AcceleratorOperationalStatus;
@@ -94,6 +96,10 @@ function latestDate(values: Array<Date | null | undefined>): Date | null {
     if (!latest || value > latest) return value;
     return latest;
   }, null);
+}
+
+function diagnosticFailure(status: DiagnosticRunStatus | null | undefined): boolean {
+  return status === DiagnosticRunStatus.FAILED || status === DiagnosticRunStatus.TIMED_OUT;
 }
 
 export function computeMachineState(input: MachineStateInput): MachineStateView {
@@ -163,13 +169,24 @@ export function computeMachineState(input: MachineStateInput): MachineStateView 
     state = 'NVIDIA_RUNTIME_UNAVAILABLE';
     nextAction = 'INSTALL_NVIDIA_CONTAINER_TOOLKIT';
     blockingReason = 'NVIDIA_RUNTIME_UNAVAILABLE';
-  } else if (input.operational === MachineOperational.VERIFYING) {
+  } else if (
+    input.operational === MachineOperational.VERIFYING ||
+    input.latestDiagnosticStatus === DiagnosticRunStatus.RUNNING
+  ) {
     state = 'DIAGNOSTIC_RUNNING';
     nextAction = 'WAIT_FOR_DIAGNOSTIC';
-  } else if (input.operational === MachineOperational.DEGRADED) {
+  } else if (diagnosticFailure(input.latestDiagnosticStatus)) {
+    // DIAGNOSTIC_FAILED is evidence-backed only. A generic DEGRADED machine is
+    // handled separately below and must never masquerade as a failed diagnostic.
     state = 'DIAGNOSTIC_FAILED';
     nextAction = 'RE_RUN_DIAGNOSTIC_AFTER_FIXING_ERRORS';
-    blockingReason = 'DIAGNOSTIC_FAILED';
+    blockingReason = input.latestDiagnosticStatus === DiagnosticRunStatus.TIMED_OUT
+      ? 'DIAGNOSTIC_TIMED_OUT'
+      : 'DIAGNOSTIC_FAILED';
+  } else if (input.operational === MachineOperational.DEGRADED) {
+    state = 'DEGRADED';
+    nextAction = 'CHECK_HOST_HEALTH';
+    blockingReason = 'MACHINE_DEGRADED';
   } else if (!input.lastCudaProbeOk || !hasVerifiedGpu) {
     state = 'DIAGNOSTIC_REQUIRED';
     nextAction = 'RUN_GPU_DIAGNOSTIC';
@@ -205,9 +222,6 @@ export function computeMachineState(input: MachineStateInput): MachineStateView 
     nextAction,
     blockingReason,
     lastEvidenceAt,
-    // Machine readiness is intentionally independent from per-GPU availability.
-    // A multi-GPU host may publish another verified free accelerator while a
-    // different accelerator already has an active listing.
     canPublish: hostHealthy,
     canAcceptBooking: hostHealthy,
     canStartSession: state === 'RESERVED',
