@@ -179,11 +179,16 @@ def _service_class() -> type:
             event_sink = _service_event_sink(logger)
             logger.info("%s starting", SERVICE_NAME)
 
-            from . import cli, install_runtime_layers
+            from . import install_runtime_layers
+
+            # Preserve the historically qualified package wiring: v2 -> ... -> v7
+            # must be installed before cli imports workspace_gateway.
+            install_runtime_layers()
+
+            from . import cli
             from .entrypoint import install_process_runtime
             from .power_guard import run_rental_power_guard
 
-            install_runtime_layers()
             docker_executable = install_process_runtime(cli)
             if docker_executable:
                 logger.info("Docker CLI resolved for service runtime: %s", docker_executable)
