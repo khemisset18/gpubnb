@@ -92,7 +92,15 @@ class GatewaySupervisor(qualified.GatewaySupervisor):
             raise
         if not isinstance(result, dict):
             raise RuntimeError("workspace_reconnect_desired_invalid_response")
-        if result.get("protocolVersion") != WORKSPACE_RECONNECT_PROTOCOL_VERSION:
+        protocol_version = result.get("protocolVersion")
+        if protocol_version is None:
+            # Legacy test doubles and transitional routers can answer an unknown
+            # /desired path with the old gateway shape instead of a literal 404.
+            # No protocol advertisement means "feature unavailable", never a
+            # reconnect authorization. An explicit unsupported version below is
+            # still a hard compatibility failure.
+            return None
+        if protocol_version != WORKSPACE_RECONNECT_PROTOCOL_VERSION:
             raise RuntimeError("workspace_reconnect_protocol_mismatch")
         if result.get("graceSeconds") != 10 * 60:
             raise RuntimeError("workspace_reconnect_grace_mismatch")
