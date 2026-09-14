@@ -78,6 +78,14 @@ def install_runtime_layers() -> None:
     from .workspace_gateway_v7 import install as install_workspace_gateway_v7
 
     install_workspace_gateway_v7()
+
+    # A real browser/network interruption must neither burn purchased minutes nor
+    # create free compute. v8 couples the 10-minute commercial reconnect grace to a
+    # real Docker pause and resumes the same runtime only after signed API authority
+    # confirms that billing can continue.
+    from .workspace_gateway_v8 import install as install_workspace_gateway_v8
+
+    install_workspace_gateway_v8()
     _runtime_layers_installed = True
 
 
