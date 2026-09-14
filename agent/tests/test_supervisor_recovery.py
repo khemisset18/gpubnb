@@ -16,35 +16,22 @@ class ScriptedStopEvent:
     def is_set(self) -> bool:
         return self.stopped
 
+    def set(self) -> None:
+        self.stopped = True
+
     def wait(self, timeout: float | None = None) -> bool:
         self.waits.append(timeout)
-        result = self.wait_results.pop(0) if self.wait_results else True
+        result = self.wait_results.pop(0) if self.wait_results else self.stopped
         if result:
             self.stopped = True
         return result
 
 
 class FakeGateway:
-    def __init__(self, errors: list[Exception | None], waits: list[bool]) -> None:
-        self.machine_id = "machine_test"
+    def __init__(self, waits: list[bool]) -> None:
         self.stop_event = ScriptedStopEvent(waits)
         self.host_tunnels = MagicMock()
-        self._last_error_signature = None
-        self.errors = list(errors)
-        self.reconcile_calls = 0
         self.reported: list[str] = []
-
-    def _reconcile_sessions(self) -> None:
-        self.reconcile_calls += 1
-        outcome = self.errors.pop(0) if self.errors else None
-        if outcome is not None:
-            raise outcome
-
-    def _request(self, _path: str):
-        return None
-
-    def _handle(self, _item) -> None:
-        raise AssertionError("no item expected")
 
     def _report_error(self, error: Exception) -> None:
         self.reported.append(str(error))
@@ -64,16 +51,18 @@ class FakeGateway:
 
 
 class SupervisorRecoveryTests(unittest.TestCase):
-    def test_docker_starting_uses_central_backoff_then_recovers(self) -> None:
-        gateway = FakeGateway(
-            [RuntimeError("workspace_docker_failed:info:1:Docker Desktop is starting"), None],
-            [False, True],
+    def test_docker_starting_uses_central_backoff_without_stopping_gateway(self) -> None:
+        gateway = FakeGateway([False])
+
+        result = GatewaySupervisor._recover_gateway_failure(  # type: ignore[arg-type]
+            gateway,
+            RuntimeError("workspace_docker_failed:info:1:Docker Desktop is starting"),
+            0,
         )
 
-        GatewaySupervisor.run(gateway)  # type: ignore[arg-type]
-
-        self.assertEqual(gateway.reconcile_calls, 2)
-        self.assertEqual(gateway.stop_event.waits, [5.0, 0.05])
+        self.assertEqual(result, (True, 1))
+        self.assertEqual(gateway.stop_event.waits, [5.0])
+        gateway.host_tunnels.stop_all.assert_not_called()
         self.assertTrue(
             any(
                 "workspace_gateway_recovery:mode=retry:reason=docker_starting:retryAfter=5"
@@ -82,32 +71,35 @@ class SupervisorRecoveryTests(unittest.TestCase):
             )
         )
 
-    def test_quarantine_reprobes_slowly_without_hot_loop(self) -> None:
-        gateway = FakeGateway(
-            [RuntimeError("machine_quarantined"), None],
-            [False, True],
+    def test_quarantine_reprobes_slowly_and_stops_edge_tunnel(self) -> None:
+        gateway = FakeGateway([False])
+
+        result = GatewaySupervisor._recover_gateway_failure(  # type: ignore[arg-type]
+            gateway,
+            RuntimeError("machine_quarantined"),
+            7,
         )
 
-        GatewaySupervisor.run(gateway)  # type: ignore[arg-type]
-
-        self.assertEqual(gateway.reconcile_calls, 2)
-        self.assertEqual(gateway.stop_event.waits, [60.0, 0.05])
-        self.assertGreaterEqual(gateway.host_tunnels.stop_all.call_count, 1)
+        self.assertEqual(result, (True, 0))
+        self.assertEqual(gateway.stop_event.waits, [60.0])
+        gateway.host_tunnels.stop_all.assert_called_once()
         self.assertTrue(
             any("mode=platform_action:reason=machine_quarantined" in item for item in gateway.reported)
         )
 
-    def test_unknown_runtime_failure_parks_worker_instead_of_retrying(self) -> None:
-        gateway = FakeGateway(
-            [RuntimeError("brand_new_runtime_fault")],
-            [True],
+    def test_unknown_runtime_failure_stops_gateway_plane_instead_of_retrying(self) -> None:
+        gateway = FakeGateway([])
+
+        result = GatewaySupervisor._recover_gateway_failure(  # type: ignore[arg-type]
+            gateway,
+            RuntimeError("brand_new_runtime_fault"),
+            0,
         )
 
-        GatewaySupervisor.run(gateway)  # type: ignore[arg-type]
-
-        self.assertEqual(gateway.reconcile_calls, 1)
-        self.assertEqual(gateway.stop_event.waits, [None])
-        self.assertGreaterEqual(gateway.host_tunnels.stop_all.call_count, 1)
+        self.assertEqual(result, (False, 0))
+        self.assertTrue(gateway.stop_event.is_set())
+        self.assertEqual(gateway.stop_event.waits, [])
+        gateway.host_tunnels.stop_all.assert_called_once()
         self.assertTrue(
             any("mode=owner_action:reason=unknown_failure" in item for item in gateway.reported)
         )
