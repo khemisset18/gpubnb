@@ -57,10 +57,10 @@ class DockerCliResolutionTests(unittest.TestCase):
                 else:
                     os.environ["PATH"] = original
 
-    def test_windows_service_bootstraps_docker_before_heartbeat_worker(self) -> None:
+    def test_windows_service_installs_process_runtime_before_heartbeat_worker(self) -> None:
         source = (Path(__file__).parents[1] / "gpubnb_agent" / "windows_service.py").read_text(encoding="utf-8")
-        bootstrap = source.index("docker_executable = ensure_docker_on_path()")
-        worker = source.index("supervise_heartbeat(self._stop_event, heartbeat_loop, logger)")
+        bootstrap = source.index("docker_executable = install_process_runtime(cli)")
+        worker = source.index("supervise_heartbeat(self._stop_event, cli.heartbeat_loop, logger)")
         self.assertLess(bootstrap, worker)
 
 
