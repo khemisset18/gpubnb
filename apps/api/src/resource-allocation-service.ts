@@ -2,6 +2,7 @@ import {
   BookingStatus,
   ListingResourceMode,
   ListingStatus,
+  MachineOperational,
   ModerationStatus,
   Prisma,
   PrismaClient,
@@ -98,6 +99,7 @@ async function allocateInTransaction(
           machine: {
             select: {
               id: true,
+              operational: true,
               moderationStatus: true,
               accelerators: {
                 select: {
@@ -157,8 +159,14 @@ async function allocateInTransaction(
   }
   if (
     booking.listing.status !== ListingStatus.ACTIVE ||
-    booking.listing.machine.moderationStatus !== ModerationStatus.CLEAR
+    booking.listing.machine.moderationStatus !== ModerationStatus.CLEAR ||
+    booking.listing.machine.operational === MachineOperational.UNAVAILABLE
   ) {
+    // UNAVAILABLE is intentionally part of the allocation authority. In release
+    // compatibility enforcement mode an accepted but protocol-incompatible
+    // heartbeat projects the machine into UNAVAILABLE and hides its listings. A
+    // stale concurrent /listings response therefore still cannot create a live
+    // resource allocation. STOP/release paths below never consult this guard.
     throw new ResourceAllocationError('listing_not_available');
   }
 
