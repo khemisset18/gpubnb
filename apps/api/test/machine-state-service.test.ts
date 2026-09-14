@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   AcceleratorOperationalStatus,
   BookingStatus,
+  DiagnosticRunStatus,
   ListingStatus,
   MachineConnectivity,
   MachineOperational,
@@ -26,6 +27,7 @@ function readyMachine(overrides: Partial<MachineStateInput> = {}): MachineStateI
     nvidiaRuntimeAvailable: true,
     verifiedAt: now,
     heartbeatFresh: true,
+    latestDiagnosticStatus: DiagnosticRunStatus.COMPLETED,
     accelerators: [{
       status: AcceleratorOperationalStatus.AVAILABLE,
       moderationStatus: ModerationStatus.CLEAR,
@@ -62,6 +64,43 @@ test('an agent whose reported protocol version is too old is AGENT_OUTDATED, not
   assert.equal(view.blockingReason, 'AGENT_PROTOCOL_VERSION_TOO_OLD');
   assert.equal(view.canPublish, false);
   assert.equal(view.canAcceptBooking, false);
+});
+
+test('generic DEGRADED with a successful latest diagnostic never masquerades as DIAGNOSTIC_FAILED', () => {
+  const view = computeMachineState(readyMachine({
+    operational: MachineOperational.DEGRADED,
+    latestDiagnosticStatus: DiagnosticRunStatus.COMPLETED,
+  }));
+  assert.equal(view.state, 'DEGRADED');
+  assert.equal(view.blockingReason, 'MACHINE_DEGRADED');
+  assert.equal(view.canPublish, false);
+  assert.equal(view.canAcceptBooking, false);
+});
+
+test('an actual failed diagnostic is projected as DIAGNOSTIC_FAILED', () => {
+  const view = computeMachineState(readyMachine({
+    operational: MachineOperational.DEGRADED,
+    latestDiagnosticStatus: DiagnosticRunStatus.FAILED,
+  }));
+  assert.equal(view.state, 'DIAGNOSTIC_FAILED');
+  assert.equal(view.blockingReason, 'DIAGNOSTIC_FAILED');
+  assert.equal(view.canPublish, false);
+});
+
+test('a timed-out diagnostic is an evidence-backed diagnostic failure', () => {
+  const view = computeMachineState(readyMachine({
+    latestDiagnosticStatus: DiagnosticRunStatus.TIMED_OUT,
+  }));
+  assert.equal(view.state, 'DIAGNOSTIC_FAILED');
+  assert.equal(view.blockingReason, 'DIAGNOSTIC_TIMED_OUT');
+});
+
+test('a running diagnostic remains distinct from generic degradation', () => {
+  const view = computeMachineState(readyMachine({
+    operational: MachineOperational.DEGRADED,
+    latestDiagnosticStatus: DiagnosticRunStatus.RUNNING,
+  }));
+  assert.equal(view.state, 'DIAGNOSTIC_RUNNING');
 });
 
 test('an active listing does not block another verified GPU on a multi-GPU host', () => {
@@ -119,8 +158,6 @@ test('quarantine surfaces the real stable reasonCode instead of a generic label'
   assert.equal(withReason.state, 'QUARANTINED');
   assert.equal(withReason.blockingReason, 'GPU_HEALTH_CHECK_FAILED');
 
-  // A machine quarantined before this field existed (or whose reason code was
-  // never recorded) must never be presented as if no reason exists.
   const withoutReason = computeMachineState(readyMachine({
     moderationStatus: ModerationStatus.QUARANTINED,
     quarantineReasonCode: null,

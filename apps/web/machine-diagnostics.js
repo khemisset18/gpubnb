@@ -9,9 +9,9 @@ const CHECK_BADGE={PASS:'ok',FAIL:'danger',WARNING:'warn',UNKNOWN:'warn',NOT_CHE
 const CHECK_ICON={PASS:'🟢',FAIL:'🔴',WARNING:'🟠',UNKNOWN:'⚪',NOT_CHECKED:'⚪'};
 const SEVERITY_ICON={CRITICAL:'🔴',WARNING:'🟠',INFO:'🟢'};
 const STATE_LABELS={
-  NOT_LINKED:'Host non relié',WAITING_FOR_FIRST_HEARTBEAT:'Premier signal en attente',OFFLINE:'Host hors ligne',AGENT_OUTDATED:'Agent obsolète — mise à jour requise',GPU_NOT_DETECTED:'GPU non détecté',DRIVER_MISSING:'Pilote GPU manquant',DOCKER_UNAVAILABLE:'Docker indisponible',NVIDIA_RUNTIME_UNAVAILABLE:'Runtime NVIDIA indisponible',DIAGNOSTIC_REQUIRED:'Diagnostic GPU requis',DIAGNOSTIC_RUNNING:'Diagnostic en cours',DIAGNOSTIC_FAILED:'Diagnostic en échec',VERIFICATION_REQUIRED:'Vérification Host requise',READY_TO_PUBLISH:'Prête à publier',LISTING_ACTIVE:'Marketplace actif',RESERVED:'Réservée',SESSION_STARTING:'Session en démarrage',SESSION_ACTIVE:'Session active',CLEANUP_REQUIRED:'Nettoyage à vérifier',QUARANTINED:'Quarantaine',
+  NOT_LINKED:'Host non relié',WAITING_FOR_FIRST_HEARTBEAT:'Premier signal en attente',OFFLINE:'Host hors ligne',AGENT_OUTDATED:'Agent obsolète — mise à jour requise',GPU_NOT_DETECTED:'GPU non détecté',DRIVER_MISSING:'Pilote GPU manquant',DOCKER_UNAVAILABLE:'Docker indisponible',NVIDIA_RUNTIME_UNAVAILABLE:'Runtime NVIDIA indisponible',DIAGNOSTIC_REQUIRED:'Diagnostic GPU requis',DIAGNOSTIC_RUNNING:'Diagnostic en cours',DIAGNOSTIC_FAILED:'Diagnostic en échec',DEGRADED:'Host dégradé — vérification requise',VERIFICATION_REQUIRED:'Vérification Host requise',READY_TO_PUBLISH:'Prête à publier',LISTING_ACTIVE:'Marketplace actif',RESERVED:'Réservée',SESSION_STARTING:'Session en démarrage',SESSION_ACTIVE:'Session active',CLEANUP_REQUIRED:'Nettoyage à vérifier',QUARANTINED:'Quarantaine',
 };
-const STATE_BADGE={READY_TO_PUBLISH:'ok',LISTING_ACTIVE:'ok',SESSION_ACTIVE:'ok',RESERVED:'ok',SESSION_STARTING:'ok',QUARANTINED:'danger',OFFLINE:'warn',DIAGNOSTIC_RUNNING:'warn'};
+const STATE_BADGE={READY_TO_PUBLISH:'ok',LISTING_ACTIVE:'ok',SESSION_ACTIVE:'ok',RESERVED:'ok',SESSION_STARTING:'ok',QUARANTINED:'danger',OFFLINE:'warn',DIAGNOSTIC_RUNNING:'warn',DEGRADED:'warn'};
 
 let pollTimer=null;
 let currentData=null;
@@ -118,9 +118,6 @@ async function startAutomaticResolution(machineId){
     try{
       await mdRequest(`/rental/machines/${encodeURIComponent(machineId)}/diagnostics/repair`,{method:'POST'});
     }catch(error){
-      // A concurrent heartbeat/repair may have already removed the bookkeeping
-      // issue between rendering and clicking. In that one race the correct next
-      // step is still the real diagnostic, not an error page.
       if(error.data?.error!=='no_safe_repair_available')throw error;
     }
   }
