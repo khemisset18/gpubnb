@@ -1,12 +1,9 @@
-"""Self-update for the frozen Windows agent.
+"""Transactional self-update for the frozen Windows Agent.
 
-The updater is intentionally owner-triggered while public Windows artifacts are
-not yet Authenticode-signed. It only follows the promoted release alias, verifies
-the published SHA-256 and replaces the installed service binary transactionally.
-
-The production/default path additionally binds the candidate and installed binary
-to the release's immutable commit and performs a local runtime probe. Any failure
-after replacement rolls back to the known-good backup before returning an error.
+The public updater remains owner-triggered while Windows releases are not yet
+Authenticode-signed. It only follows the promoted release alias, verifies the
+published SHA-256, validates release/build identity, swaps the service binary,
+and rolls back to the known-good backup on any failed post-install gate.
 """
 from __future__ import annotations
 
@@ -56,7 +53,7 @@ def default_http_get(url: str) -> bytes:
             "accept": "application/vnd.github+json",
         },
     )
-    with urlopen(request, timeout=20) as response:  # noqa: S310 - fixed https GitHub host
+    with urlopen(request, timeout=20) as response:  # noqa: S310 - fixed GitHub HTTPS host
         return response.read()
 
 
@@ -81,8 +78,11 @@ def fetch_release_info(
         raise SelfUpdateError(f"release_missing_asset:{PORTABLE_ASSET_NAME}")
     if "SHA256SUMS.txt" not in assets:
         raise SelfUpdateError("release_missing_asset:SHA256SUMS.txt")
+    raw_commit = str(data.get("target_commitish") or "").strip()
+    if not raw_commit:
+        raise SelfUpdateError("release_missing_commit")
     try:
-        commit = normalize_release_commit(str(data.get("target_commitish") or ""))
+        commit = normalize_release_commit(raw_commit)
     except UpdateIdentityError as exc:
         raise SelfUpdateError(str(exc)) from exc
     return ReleaseInfo(
@@ -137,20 +137,30 @@ def _parse_semver(value: str) -> tuple[int, int, int] | None:
     match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?", value.strip())
     if not match:
         return None
-    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
 
 
-def _run_agent_command(exe_path: Path, command: str, *, timeout: int = 15) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(  # noqa: S603 - fixed argv, candidate is checksum-verified
+def _is_downgrade(current_version: str, candidate_version: str) -> bool:
+    current = _parse_semver(current_version)
+    candidate = _parse_semver(candidate_version)
+    if current is None or candidate is None:
+        # Low-level compatibility behavior retained for injected unit tests.
+        # The production/verified path below rejects unparseable versions.
+        return False
+    return candidate < current
+
+
+def _run_agent_command(exe_path: Path, command: str) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(  # noqa: S603 - fixed argv; candidate is checksum-verified
         [str(exe_path), command],
         capture_output=True,
         text=True,
-        timeout=timeout,
+        timeout=15,
         check=False,
     )
     if result.returncode != 0:
         raise SelfUpdateError(
-            f"candidate_command_failed:{command}:exit={result.returncode}:stderr={result.stderr.strip()[:200]}"
+            f"agent_command_failed:{command}:exit={result.returncode}:stderr={result.stderr.strip()[:200]}"
         )
     return result
 
@@ -175,8 +185,7 @@ def default_run_build_info_command(exe_path: Path) -> dict[str, Any]:
 
 def default_run_runtime_check(exe_path: Path) -> bool:
     try:
-        raw = _run_agent_command(exe_path, "runtime-check").stdout.strip()
-        value = json.loads(raw)
+        value = json.loads(_run_agent_command(exe_path, "runtime-check").stdout.strip())
     except (SelfUpdateError, json.JSONDecodeError):
         return False
     return bool(
@@ -192,21 +201,10 @@ def candidate_agent_version(
     *,
     run_version_command: Callable[[Path], str] = default_run_version_command,
 ) -> str:
-    """Read a checksum-verified candidate's version from a throwaway path."""
     with tempfile.TemporaryDirectory(prefix="gpubnb-self-update-") as tmp:
         candidate_path = Path(tmp) / "gpubnb-agent-candidate.exe"
         candidate_path.write_bytes(exe_bytes)
         return run_version_command(candidate_path)
-
-
-def _is_downgrade(current_version: str, candidate_version: str) -> bool:
-    current = _parse_semver(current_version)
-    candidate = _parse_semver(candidate_version)
-    if current is None or candidate is None:
-        # Compatibility for low-level injected tests. The production/default
-        # path below fails closed when either value is not valid semver.
-        return False
-    return candidate < current
 
 
 @dataclass(frozen=True)
@@ -247,7 +245,6 @@ def _rollback_to_backup(
     now: Callable[[], float],
     sleep: Callable[[float], None],
 ) -> str | None:
-    errors: list[str] = []
     try:
         if not is_stopped():
             stop_service()
@@ -267,10 +264,12 @@ def _rollback_to_backup(
     try:
         start_service()
     except Exception as exc:
-        errors.append(f"rollback_service_start_failed:{exc}")
+        # The old binary is already restored. Return immediately instead of
+        # pointlessly polling a service whose start call itself failed.
+        return f"rollback_service_start_failed:{exc}"
     if not _wait_for(service_running, SERVICE_START_TIMEOUT_SECONDS, now=now, sleep=sleep):
-        errors.append("rollback_service_did_not_start")
-    return ";".join(errors) or None
+        return "rollback_service_did_not_start"
+    return None
 
 
 def _strict_validators(
@@ -336,14 +335,11 @@ def perform_self_update(
     now: Callable[[], float] = time.time,
     sleep: Callable[[float], None] = time.sleep,
 ) -> UpdateResult:
-    # A Windows service can be STOP_PENDING while service_running()==False.
-    # Never swap the executable until the SCM reports fully STOPPED.
     is_stopped = service_stopped or (lambda: not service_running())
 
-    # The installed CLI calls this function with the default runner. In that
-    # production path, strict candidate + post-install validation is mandatory.
-    # Tests with deliberately fake PE fixtures may inject a runner and explicit
-    # validators to exercise the low-level transaction mechanics independently.
+    # The installed CLI uses the defaults, so strict identity + runtime gates
+    # are automatically active in the real production path. Injected fake
+    # runners used by low-level unit tests keep their explicit test behavior.
     if (
         candidate_validator is None
         and post_update_validator is None
@@ -359,14 +355,7 @@ def perform_self_update(
 
     release = fetch_release_info(repository, channel, http_get=http_get)
     if not is_update_available(release, current_build_commit):
-        return UpdateResult(
-            updated=False,
-            previous_commit=current_build_commit,
-            new_commit=None,
-            release_tag=release.tag,
-            backup_path=None,
-            detail=f"already_current:{release.tag}",
-        )
+        return UpdateResult(False, current_build_commit, None, release.tag, None, f"already_current:{release.tag}")
 
     exe_bytes = download_and_verify_agent_exe(release, http_get=http_get)
     candidate_version = candidate_agent_version(exe_bytes, run_version_command=run_version_command)
@@ -377,14 +366,7 @@ def perform_self_update(
     if candidate_validator is not None:
         candidate_validator(exe_bytes, release, candidate_version)
     if dry_run:
-        return UpdateResult(
-            updated=False,
-            previous_commit=current_build_commit,
-            new_commit=release.commit,
-            release_tag=release.tag,
-            backup_path=None,
-            detail=f"update_available_dry_run:{release.tag}",
-        )
+        return UpdateResult(False, current_build_commit, release.commit, release.tag, None, f"update_available_dry_run:{release.tag}")
 
     target = install_dir / "gpubnb-agent.exe"
     if not target.exists():
@@ -411,28 +393,16 @@ def perform_self_update(
         start_service()
     except Exception as exc:
         rollback_error = _rollback_to_backup(
-            target,
-            backup,
-            stop_service=stop_service,
-            start_service=start_service,
-            service_running=service_running,
-            is_stopped=is_stopped,
-            now=now,
-            sleep=sleep,
+            target, backup, stop_service=stop_service, start_service=start_service,
+            service_running=service_running, is_stopped=is_stopped, now=now, sleep=sleep,
         )
         suffix = f":rollback={rollback_error}" if rollback_error else ":rollback=ok"
         raise SelfUpdateError(f"service_start_failed_after_update:{exc}{suffix}") from exc
 
     if not _wait_for(service_running, SERVICE_START_TIMEOUT_SECONDS, now=now, sleep=sleep):
         rollback_error = _rollback_to_backup(
-            target,
-            backup,
-            stop_service=stop_service,
-            start_service=start_service,
-            service_running=service_running,
-            is_stopped=is_stopped,
-            now=now,
-            sleep=sleep,
+            target, backup, stop_service=stop_service, start_service=start_service,
+            service_running=service_running, is_stopped=is_stopped, now=now, sleep=sleep,
         )
         suffix = f":rollback={rollback_error}" if rollback_error else ":rollback=ok"
         raise SelfUpdateError(f"service_did_not_start_after_update{suffix}")
@@ -442,26 +412,13 @@ def perform_self_update(
             post_update_validator(target, release, candidate_version)
         except Exception as exc:
             rollback_error = _rollback_to_backup(
-                target,
-                backup,
-                stop_service=stop_service,
-                start_service=start_service,
-                service_running=service_running,
-                is_stopped=is_stopped,
-                now=now,
-                sleep=sleep,
+                target, backup, stop_service=stop_service, start_service=start_service,
+                service_running=service_running, is_stopped=is_stopped, now=now, sleep=sleep,
             )
             suffix = f":rollback={rollback_error}" if rollback_error else ":rollback=ok"
             raise SelfUpdateError(f"post_update_validation_failed:{exc}{suffix}") from exc
 
-    return UpdateResult(
-        updated=True,
-        previous_commit=current_build_commit,
-        new_commit=release.commit,
-        release_tag=release.tag,
-        backup_path=str(backup),
-        detail=f"updated_to:{release.tag}",
-    )
+    return UpdateResult(True, current_build_commit, release.commit, release.tag, str(backup), f"updated_to:{release.tag}")
 
 
 def perform_verified_self_update(
@@ -483,7 +440,6 @@ def perform_verified_self_update(
     now: Callable[[], float] = time.time,
     sleep: Callable[[float], None] = time.sleep,
 ) -> UpdateResult:
-    """Explicit strict update API for tests/other trusted callers."""
     candidate_validator, post_update_validator = _strict_validators(
         current_agent_version=current_agent_version,
         service_running=service_running,
