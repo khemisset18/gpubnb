@@ -137,12 +137,19 @@ def _legacy_rental_authority_fallback(
     key: Any,
     machine_id: str,
 ) -> HostPowerAuthority:
-    """Preserve safe behavior during a staged Agent/API rollout.
+    """Preserve paid-session safety against a pre-power-policy API.
 
-    An Agent carrying this feature may briefly run against an API release that does
-    not yet expose /power-policy. In that case, fall back to the existing signed
-    rental-authority contract. It cannot keep an idle listing awake, but it still
-    guarantees that a live paid rental is never made less safe by deployment order.
+    The legacy authority can prove a live rental, but it cannot prove that an idle
+    Host is intentionally marketplace-available. A positive live-session result is
+    therefore safe to use directly. A zero-session result is *not* equivalent to
+    "not available" and must be treated as unknown so an already-active standby
+    guard is never released merely because the server was rolled back or deployed
+    out of order.
+
+    On a fresh Agent start against an old API this intentionally cannot invent idle
+    listing availability: the guard stays in its current state until the signed
+    power-policy endpoint is available. Deployment compatibility is observable in
+    the structured authority-error log instead of silently changing semantics.
     """
     payload = agent_request(
         api,
@@ -152,9 +159,11 @@ def _legacy_rental_authority_fallback(
     )
     authority = parse_rental_authority_sessions(payload)
     live_sessions = len(authority)
+    if live_sessions == 0:
+        raise RuntimeError("host_power_policy_legacy_idle_availability_unknown")
     return HostPowerAuthority(
-        keep_awake=live_sessions > 0,
-        reason="legacy_live_session" if live_sessions else "legacy_not_available",
+        keep_awake=True,
+        reason="legacy_live_session",
         live_session_count=live_sessions,
     )
 
@@ -171,18 +180,19 @@ def _load_host_power_authority() -> HostPowerAuthority:
         return _parse_power_policy(payload)
     except Exception as policy_error:
         # Backward compatibility is intentionally narrow. A pre-feature API will
-        # answer 404 for this route, in which case the legacy live-rental authority
-        # is enough to preserve existing safety during rollout. Any other failure
-        # (bad signature, malformed/contradictory policy, network outage, server
-        # error) must propagate so reconcile_power_guard_once keeps the current
-        # guard state instead of silently downgrading owner availability semantics.
+        # answer 404 for this route. In that case the legacy authority may still
+        # prove a live paid rental, but a zero-session response cannot prove that
+        # the owner took the Host offline. Treat that state as unknown so an
+        # already-active standby guard cannot be silently released during a server
+        # rollback/deployment skew. Any other policy failure also propagates.
         if "API HTTP 404:" not in str(policy_error):
             raise
         try:
             return _legacy_rental_authority_fallback(api, key, machine_id)
         except Exception as legacy_error:
+            marker = str(legacy_error)[:160] or type(legacy_error).__name__
             raise RuntimeError(
-                f"host_power_policy_unavailable:{type(policy_error).__name__}:{type(legacy_error).__name__}"
+                f"host_power_policy_unavailable:policy_404:{marker}"
             ) from legacy_error
 
 
