@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import {
   evaluateReportedCompatibility,
   releaseCompatibilityMode,
-} from '../src/release-compatibility-runtime.js';
+} from '../src/release-compatibility-policy.js';
 import { releaseCompatibilityDescriptor } from '../src/release-compatibility.js';
 
 const ROOT = new URL('../', import.meta.url);
