@@ -6,7 +6,10 @@ const status=document.querySelector('#apiStatus');
 const networkWarning=document.querySelector('#networkWarning');
 const accountButton=document.querySelector('#accountButton');
 const refreshButton=document.querySelector('#refresh');
+const filterBar=document.querySelector('.filter-bar');
 let loadingMarketplace=false;
+let marketplaceItems=[];
+let activeFilter='all';
 
 function el(tag,text,className){
   const node=document.createElement(tag);
@@ -59,11 +62,21 @@ function renderCard(item){
   return card;
 }
 
-function renderMarketplace(items){
+function filteredMarketplace(){
+  if(activeFilter==='high-vram')return marketplaceItems.filter(item=>Number(item.gpu?.vramMiB)>=24*1024);
+  if(activeFilter==='available')return marketplaceItems.filter(item=>!item.availability?.state||item.availability.state==='AVAILABLE');
+  return marketplaceItems;
+}
+
+function renderMarketplace(){
   if(!listings)return;
+  const items=filteredMarketplace();
   listings.replaceChildren();
   if(!items.length){
-    listings.append(el('article','Aucun GPU vérifié et connecté pour le moment.','empty'));
+    const message=marketplaceItems.length
+      ? 'Aucun GPU ne correspond à ce filtre pour le moment.'
+      : 'Aucun GPU vérifié et connecté pour le moment.';
+    listings.append(el('article',message,'empty'));
     return;
   }
   const fragment=document.createDocumentFragment();
@@ -71,9 +84,21 @@ function renderMarketplace(items){
   listings.append(fragment);
 }
 
+function selectFilter(next){
+  if(!['all','high-vram','available'].includes(next))return;
+  activeFilter=next;
+  for(const button of filterBar?.querySelectorAll('[data-filter]')||[]){
+    const selected=button.dataset.filter===activeFilter;
+    button.classList.toggle('active',selected);
+    button.setAttribute('aria-pressed',String(selected));
+  }
+  renderMarketplace();
+}
+
 async function loadMarketplace(){
   if(!listings||loadingMarketplace)return;
   loadingMarketplace=true;
+  listings.setAttribute('aria-busy','true');
   if(refreshButton)refreshButton.disabled=true;
   listings.replaceChildren(el('article','Chargement…','empty'));
 
@@ -100,8 +125,10 @@ async function loadMarketplace(){
       return;
     }
 
-    renderMarketplace(Array.isArray(listingResult.value)?listingResult.value:[]);
+    marketplaceItems=Array.isArray(listingResult.value)?listingResult.value:[];
+    renderMarketplace();
   }finally{
+    listings.setAttribute('aria-busy','false');
     loadingMarketplace=false;
     if(refreshButton)refreshButton.disabled=false;
   }
@@ -118,6 +145,10 @@ async function loadAccount(){
   }
 }
 
+filterBar?.addEventListener('click',event=>{
+  const button=event.target.closest('[data-filter]');
+  if(button)selectFilter(button.dataset.filter);
+});
 refreshButton?.addEventListener('click',()=>void loadMarketplace());
 void loadMarketplace();
 void loadAccount();
