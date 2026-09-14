@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
+import { buildHostPowerPolicy } from './host-power-policy.js';
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
 import {
   buildRentalResourceAuthority,
@@ -17,6 +18,10 @@ const sessionParamsSchema = machineParamsSchema.extend({ sessionId: z.string().c
 // Give this authenticated control-plane route its own bounded budget with enough
 // room for the nominal 60 polls/minute plus transient retries.
 const RENTAL_AUTHORITY_RATE_LIMIT_PER_MINUTE = 180;
+// The Windows Host power guard polls every 10 seconds. Keep this route separate
+// from rental authority so an idle-but-listed machine does not add a database
+// listing lookup to the gateway's once-per-second authority reconciliation.
+const HOST_POWER_POLICY_RATE_LIMIT_PER_MINUTE = 30;
 const releaseBodySchema = z.object({
   leases: z.array(z.object({
     resourceId: z.string().min(8).max(191),
@@ -32,12 +37,17 @@ async function authenticateAgent(
   machineId: string,
   request: FastifyRequest,
   routePath: string,
+  requireClear = true,
 ): Promise<boolean> {
   const machine = await db.machine.findUnique({
     where: { id: machineId },
     select: { agentPublicKey: true, keyRevokedAt: true, moderationStatus: true },
   });
-  if (!machine || machine.keyRevokedAt || machine.moderationStatus !== ModerationStatus.CLEAR) {
+  if (
+    !machine
+    || machine.keyRevokedAt
+    || (requireClear && machine.moderationStatus !== ModerationStatus.CLEAR)
+  ) {
     return false;
   }
   const rawBody = request.rawBody ?? Buffer.alloc(0);
@@ -65,6 +75,27 @@ export function registerRentalResourceAuthorityRoutes(
   db: PrismaClient,
   redis: Redis,
 ): void {
+  app.get('/agent/host/:machineId/power-policy', {
+    config: { rateLimit: { max: HOST_POWER_POLICY_RATE_LIMIT_PER_MINUTE, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const { machineId } = machineParamsSchema.parse(request.params);
+    const route = `/agent/host/${machineId}/power-policy`;
+    // Power policy is a signed read-only recovery/control endpoint. A quarantined
+    // machine must still be able to learn whether it should release or retain its
+    // sleep guard; only revoked/missing identities or invalid signatures are denied.
+    // Rental authority itself remains requireClear=true and therefore fail-closed.
+    if (!await authenticateAgent(db, redis, machineId, request, route, false)) {
+      return reply.code(401).send({ error: 'invalid_agent_request' });
+    }
+    try {
+      return await buildHostPowerPolicy(db, machineId);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'host_power_policy_failed';
+      request.log.warn({ machineId, code }, 'host_power_policy_failed');
+      return reply.code(503).send({ error: code });
+    }
+  });
+
   app.get('/agent/mining/:machineId/rental-authority', {
     config: { rateLimit: { max: RENTAL_AUTHORITY_RATE_LIMIT_PER_MINUTE, timeWindow: '1 minute' } },
   }, async (request, reply) => {

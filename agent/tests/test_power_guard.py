@@ -1,0 +1,266 @@
+import threading
+import unittest
+from unittest.mock import patch
+
+from gpubnb_agent import power_guard
+
+
+class PowerGuardTests(unittest.TestCase):
+    def test_guard_only_asserts_system_required_and_never_display_required(self) -> None:
+        writes: list[int] = []
+        guard = power_guard.SystemAwakeGuard(writer=writes.append)
+
+        self.assertTrue(guard.set_required(True))
+        self.assertFalse(guard.set_required(True))
+        self.assertTrue(guard.set_required(False))
+
+        self.assertEqual(
+            writes,
+            [
+                power_guard.ES_CONTINUOUS | power_guard.ES_SYSTEM_REQUIRED,
+                power_guard.ES_CONTINUOUS,
+            ],
+        )
+
+    def test_marketplace_available_host_stays_awake_without_live_rental(self) -> None:
+        writes: list[int] = []
+        events: list[dict[str, object]] = []
+        guard = power_guard.SystemAwakeGuard(writer=writes.append)
+
+        active = power_guard.reconcile_power_guard_once(
+            guard,
+            authority_loader=lambda: power_guard.HostPowerAuthority(
+                keep_awake=True,
+                reason="marketplace_available",
+                live_session_count=0,
+                availability_listing_count=1,
+            ),
+            event_sink=events.append,
+        )
+
+        self.assertTrue(active)
+        self.assertTrue(guard.active)
+        self.assertEqual(writes, [power_guard.ES_CONTINUOUS | power_guard.ES_SYSTEM_REQUIRED])
+        self.assertEqual(events[-1]["event"], "rental_power_guard_acquired")
+        self.assertEqual(events[-1]["reason"], "marketplace_available")
+        self.assertEqual(events[-1]["liveSessions"], 0)
+        self.assertEqual(events[-1]["availabilityListings"], 1)
+
+    def test_authority_failure_keeps_existing_guard_active(self) -> None:
+        writes: list[int] = []
+        events: list[dict[str, object]] = []
+        guard = power_guard.SystemAwakeGuard(writer=writes.append)
+        guard.set_required(True)
+
+        active = power_guard.reconcile_power_guard_once(
+            guard,
+            authority_loader=lambda: (_ for _ in ()).throw(RuntimeError("network_down")),
+            event_sink=events.append,
+        )
+
+        self.assertTrue(active)
+        self.assertTrue(guard.active)
+        self.assertEqual(writes, [power_guard.ES_CONTINUOUS | power_guard.ES_SYSTEM_REQUIRED])
+        self.assertEqual(events[-1]["event"], "rental_power_guard_authority_error")
+        self.assertTrue(events[-1]["guardActive"])
+        self.assertNotIn("compatibility", events[-1])
+
+    def test_successful_not_available_policy_releases_guard(self) -> None:
+        writes: list[int] = []
+        events: list[dict[str, object]] = []
+        guard = power_guard.SystemAwakeGuard(writer=writes.append)
+        guard.set_required(True)
+
+        active = power_guard.reconcile_power_guard_once(
+            guard,
+            authority_loader=lambda: power_guard.HostPowerAuthority(
+                keep_awake=False,
+                reason="not_available",
+            ),
+            event_sink=events.append,
+        )
+
+        self.assertFalse(active)
+        self.assertFalse(guard.active)
+        self.assertEqual(writes[-1], power_guard.ES_CONTINUOUS)
+        self.assertEqual(events[-1]["event"], "rental_power_guard_released")
+        self.assertEqual(events[-1]["reason"], "not_available")
+
+    def test_power_policy_parser_rejects_inconsistent_server_state(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "host_power_policy_inconsistent"):
+            power_guard._parse_power_policy({
+                "protocolVersion": 1,
+                "keepAwake": False,
+                "reason": "marketplace_available",
+                "liveSessionCount": 0,
+                "availabilityListingCount": 1,
+            })
+
+    def test_legacy_fallback_does_not_treat_zero_sessions_as_owner_offline(self) -> None:
+        with (
+            patch.object(power_guard, "agent_request", return_value={}),
+            patch.object(power_guard, "parse_rental_authority_sessions", return_value={}),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "host_power_policy_legacy_idle_availability_unknown",
+            ):
+                power_guard._legacy_rental_authority_fallback(
+                    object(),
+                    object(),
+                    "machine-1",
+                )
+
+    def test_legacy_fallback_still_protects_proven_live_rental(self) -> None:
+        with (
+            patch.object(power_guard, "agent_request", return_value={}),
+            patch.object(
+                power_guard,
+                "parse_rental_authority_sessions",
+                return_value={"session-1": {}},
+            ),
+        ):
+            authority = power_guard._legacy_rental_authority_fallback(
+                object(),
+                object(),
+                "machine-1",
+            )
+
+        self.assertTrue(authority.keep_awake)
+        self.assertEqual(authority.reason, "legacy_live_session")
+        self.assertEqual(authority.live_session_count, 1)
+
+    def test_missing_power_policy_api_is_explicit_before_idle_wait(self) -> None:
+        events: list[dict[str, object]] = []
+        guard = power_guard.SystemAwakeGuard(writer=lambda _flags: None)
+
+        with (
+            patch.object(
+                power_guard,
+                "_client_context",
+                return_value=(object(), object(), "machine-1"),
+            ),
+            patch.object(
+                power_guard,
+                "agent_request",
+                side_effect=[RuntimeError("API HTTP 404: missing"), {}],
+            ),
+            patch.object(power_guard, "parse_rental_authority_sessions", return_value={}),
+        ):
+            active = power_guard.reconcile_power_guard_once(
+                guard,
+                authority_loader=power_guard._load_host_power_authority,
+                event_sink=events.append,
+            )
+
+        self.assertFalse(active)
+        self.assertFalse(guard.active)
+        self.assertEqual(events[-1]["event"], "rental_power_guard_authority_error")
+        self.assertEqual(events[-1]["type"], "HostPowerPolicyCompatibilityError")
+        self.assertEqual(events[-1]["compatibility"], "api_missing_power_policy")
+        self.assertFalse(events[-1]["standbyReady"])
+        self.assertEqual(
+            events[-1]["action"],
+            power_guard.POWER_POLICY_COMPATIBILITY_ACTION,
+        )
+        self.assertIn("host_power_policy_legacy_idle_availability_unknown", events[-1]["message"])
+
+    def test_missing_power_policy_api_never_releases_existing_guard(self) -> None:
+        writes: list[int] = []
+        events: list[dict[str, object]] = []
+        guard = power_guard.SystemAwakeGuard(writer=writes.append)
+        guard.set_required(True)
+
+        with (
+            patch.object(
+                power_guard,
+                "_client_context",
+                return_value=(object(), object(), "machine-1"),
+            ),
+            patch.object(
+                power_guard,
+                "agent_request",
+                side_effect=[RuntimeError("API HTTP 404: missing"), {}],
+            ),
+            patch.object(power_guard, "parse_rental_authority_sessions", return_value={}),
+        ):
+            active = power_guard.reconcile_power_guard_once(
+                guard,
+                authority_loader=power_guard._load_host_power_authority,
+                event_sink=events.append,
+            )
+
+        self.assertTrue(active)
+        self.assertTrue(guard.active)
+        self.assertEqual(writes, [power_guard.ES_CONTINUOUS | power_guard.ES_SYSTEM_REQUIRED])
+        self.assertTrue(events[-1]["guardActive"])
+        self.assertEqual(events[-1]["compatibility"], "api_missing_power_policy")
+        self.assertFalse(events[-1]["standbyReady"])
+
+    def test_loop_restores_persisted_claim_then_releases_when_service_stops(self) -> None:
+        stop = threading.Event()
+        writes: list[int] = []
+        events: list[dict[str, object]] = []
+        calls = 0
+
+        def authority_loader() -> power_guard.HostPowerAuthority:
+            nonlocal calls
+            calls += 1
+            stop.set()
+            return power_guard.HostPowerAuthority(
+                keep_awake=True,
+                reason="live_session",
+                live_session_count=1,
+            )
+
+        power_guard.run_rental_power_guard(
+            stop,
+            event_sink=events.append,
+            interval_seconds=1,
+            authority_loader=authority_loader,
+            local_claim_loader=lambda: 1,
+            writer=writes.append,
+        )
+
+        self.assertEqual(calls, 1)
+        self.assertEqual(
+            writes,
+            [
+                power_guard.ES_CONTINUOUS | power_guard.ES_SYSTEM_REQUIRED,
+                power_guard.ES_CONTINUOUS,
+            ],
+        )
+        self.assertTrue(any(event["event"] == "rental_power_guard_restored" for event in events))
+        self.assertEqual(events[-1]["event"], "rental_power_guard_stopped")
+
+    def test_loop_without_local_claim_acquires_from_marketplace_policy(self) -> None:
+        stop = threading.Event()
+        writes: list[int] = []
+
+        def authority_loader() -> power_guard.HostPowerAuthority:
+            stop.set()
+            return power_guard.HostPowerAuthority(
+                keep_awake=True,
+                reason="marketplace_available",
+                availability_listing_count=1,
+            )
+
+        power_guard.run_rental_power_guard(
+            stop,
+            interval_seconds=1,
+            authority_loader=authority_loader,
+            local_claim_loader=lambda: 0,
+            writer=writes.append,
+        )
+
+        self.assertEqual(
+            writes,
+            [
+                power_guard.ES_CONTINUOUS | power_guard.ES_SYSTEM_REQUIRED,
+                power_guard.ES_CONTINUOUS,
+            ],
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
