@@ -9,6 +9,10 @@ import {
 
 export type ReleaseCompatibilityMode = 'observe' | 'enforce';
 
+type ReleaseCompatibilityEnvironment = {
+  GPUBNB_RELEASE_COMPATIBILITY_MODE?: string | undefined;
+};
+
 const featureSchema = z.object({
   agentRequestSignature: z.number().int().min(0).max(1024).optional(),
   hostPowerPolicy: z.number().int().min(0).max(1024).optional(),
@@ -31,11 +35,22 @@ export type ReleaseCompatibilityObservation = {
 };
 
 export function releaseCompatibilityMode(
-  env: Pick<NodeJS.ProcessEnv, 'GPUBNB_RELEASE_COMPATIBILITY_MODE'> = process.env,
+  env: ReleaseCompatibilityEnvironment = process.env,
 ): ReleaseCompatibilityMode {
   return String(env.GPUBNB_RELEASE_COMPATIBILITY_MODE ?? 'observe').trim().toLowerCase() === 'enforce'
     ? 'enforce'
     : 'observe';
+}
+
+function normalizedFeatures(
+  value: z.infer<typeof featureSchema>,
+): ComponentCompatibility['features'] {
+  const features: ComponentCompatibility['features'] = {};
+  if (value.agentRequestSignature !== undefined) features.agentRequestSignature = value.agentRequestSignature;
+  if (value.hostPowerPolicy !== undefined) features.hostPowerPolicy = value.hostPowerPolicy;
+  if (value.workspaceGateway !== undefined) features.workspaceGateway = value.workspaceGateway;
+  if (value.supportReport !== undefined) features.supportReport = value.supportReport;
+  return features;
 }
 
 export function evaluateReportedCompatibility(value: unknown): ReleaseCompatibilityObservation {
@@ -43,7 +58,7 @@ export function evaluateReportedCompatibility(value: unknown): ReleaseCompatibil
   const reported: ComponentCompatibility | null = parsed.success
     ? {
       releaseCompatibilityProtocol: parsed.data.releaseCompatibilityProtocol,
-      features: parsed.data.features,
+      features: normalizedFeatures(parsed.data.features),
     }
     : null;
   const evaluation = evaluateComponentCompatibility(reported);
