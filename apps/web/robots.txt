@@ -1,2 +1,14 @@
 User-agent: *
+Allow: /
 Disallow: /internal/
+Disallow: /api/
+Disallow: /auth.html
+Disallow: /account.html
+Disallow: /dashboard.html
+Disallow: /machines.html
+Disallow: /machine-diagnostics.html
+Disallow: /bookings.html
+Disallow: /session.html
+Disallow: /revenues.html
+
+# Public product and trust pages intentionally remain indexable.

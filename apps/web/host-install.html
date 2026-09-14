@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Téléchargements officiels GPUbnb Host avec version, commit source, taille et SHA-256 vérifiables.">
+  <meta name="theme-color" content="#070a09">
   <title>Installer GPUbnb Host</title>
   <link rel="stylesheet" href="portal.css">
   <script defer src="config.js"></script>
@@ -10,51 +12,83 @@
   <script defer src="host-downloads.js"></script>
 </head>
 <body>
-<main class="portal-main">
+<header class="portal-header">
+  <a class="portal-brand" href="index.html">GPUbnb</a>
+  <nav class="portal-nav" aria-label="Navigation principale">
+    <a href="index.html#market">Marketplace</a>
+    <a href="workspaces.html">Workspaces</a>
+    <a href="host-install.html" aria-current="page">GPUbnb Host</a>
+    <a href="trust.html">Centre de confiance</a>
+  </nav>
+  <a class="button" href="dashboard.html">Tableau de bord</a>
+</header>
+
+<main class="portal-main" id="main-content">
   <section class="panel">
-    <span class="badge warn">Préversion · Devnet</span>
+    <span class="badge warn">Bêta privée · Devnet</span>
     <h1>Installer GPUbnb Host</h1>
-    <p class="muted">Téléchargez l’application propriétaire officielle, puis reliez votre machine. Aucun téléchargement ne démarre automatiquement.</p>
+    <p class="muted">Téléchargez l’application hôte officielle depuis le canal qualifié. Le bouton reste désactivé tant que le navigateur n’a pas obtenu les métadonnées de release. Aucun téléchargement ne démarre automatiquement.</p>
+    <p><a href="trust.html">Consulter les contrôles de sécurité et les limites de qualification →</a></p>
   </section>
-  <section class="downloads" style="margin-top:18px">
+
+  <section class="downloads" style="margin-top:18px" aria-label="Téléchargements GPUbnb Host">
     <article class="card download-card" data-download-platform="windows">
       <span class="badge ok" data-recommended hidden>Recommandé pour votre appareil</span>
       <h2>Windows 64 bits</h2>
-      <p data-download-instructions>Téléchargez l’installeur EXE, vérifiez sa somme SHA-256, puis lancez <code>gpubnb-host-windows-x64.exe</code>. Cette préversion peut déclencher l’avertissement Windows SmartScreen car elle n’est pas encore signée.</p>
+      <p data-download-instructions>Téléchargez l’installeur EXE, comparez sa somme SHA-256 avec celle affichée ci-dessous, puis lancez <code>gpubnb-host-windows-x64.exe</code>. Cette préversion peut déclencher Microsoft SmartScreen car Authenticode n’est pas encore obligatoire sur le canal de qualification.</p>
       <p class="muted"><strong>Disponibilité :</strong> <span data-download-availability>Vérification du fichier…</span></p>
-      <p class="muted">Installeur Windows · Version : <span data-download-version>—</span> · Commit : <code data-download-immutable>—</code> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature : non signée</p>
-      <details><summary>Vérifier l’intégrité</summary><p>Comparez la somme fournie avec celle calculée sur votre fichier.</p><code data-download-checksum>—</code></details>
+      <p class="muted">Installeur Windows · Version : <span data-download-version>—</span> · Commit : <code data-download-immutable>—</code> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature Windows : non signée dans la phase actuelle</p>
+      <details><summary>Vérifier l’intégrité</summary><p>Calculez le SHA-256 du fichier téléchargé et comparez-le exactement à l’empreinte publiée.</p><code data-download-checksum>—</code></details>
       <a class="button button-primary" data-download-button aria-disabled="true">Vérification…</a>
-      <details><summary>« Windows protège votre ordinateur »</summary><p>Vérifiez que le fichier provient de la release officielle et consultez ses propriétés. Ne désactivez pas globalement Microsoft Defender.</p></details>
+      <details><summary>Si Windows affiche « Windows protège votre ordinateur »</summary><p>Vérifiez d’abord la provenance de la release, son commit et son SHA-256. Ne désactivez pas globalement Microsoft Defender pour installer GPUbnb Host.</p></details>
     </article>
+
     <article class="card download-card" data-download-platform="linux">
       <span class="badge ok" data-recommended hidden>Recommandé pour votre appareil</span>
       <h2>Linux x86-64</h2>
       <p data-download-instructions>Installez le paquet avec <code>sudo apt install ./gpubnb-host-linux-x64.deb</code>. Un pilote NVIDIA fonctionnel et <code>nvidia-smi</code> sont nécessaires pour héberger une charge CUDA.</p>
       <p class="muted"><strong>Disponibilité :</strong> <span data-download-availability>Vérification du fichier…</span></p>
-      <p class="muted">Paquet DEB · Version : <span data-download-version>—</span> · Commit : <code data-download-immutable>—</code> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature : non signée</p>
+      <p class="muted">Paquet DEB · Version : <span data-download-version>—</span> · Commit : <code data-download-immutable>—</code> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span></p>
       <details><summary>Vérifier l’intégrité</summary><code data-download-checksum>—</code></details>
       <a class="button button-primary" data-download-button aria-disabled="true">Vérification…</a>
     </article>
+
     <article class="card download-card" data-download-platform="macos">
       <span class="badge ok" data-recommended hidden>Recommandé pour votre appareil</span>
       <h2>macOS Apple Silicon</h2>
-      <p data-download-instructions>Compatible uniquement avec les Mac Apple Silicon dans cette préversion. Cette version permet de tester l’application, mais elle ne permet pas d’héberger une charge CUDA NVIDIA.</p>
+      <p data-download-instructions>Compatible uniquement avec les Mac Apple Silicon dans cette préversion. Cette application permet de tester le produit, mais elle ne transforme pas un Mac en hôte CUDA NVIDIA.</p>
       <p class="muted"><strong>Disponibilité :</strong> <span data-download-availability>Vérification du fichier…</span></p>
-      <p class="muted">Image DMG · Version : <span data-download-version>—</span> · Commit : <code data-download-immutable>—</code> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span> · Signature : non signée</p>
+      <p class="muted">Image DMG · Version : <span data-download-version>—</span> · Commit : <code data-download-immutable>—</code> · Publication : <span data-download-published>—</span> · Taille : <span data-download-size>—</span></p>
       <details><summary>Vérifier l’intégrité</summary><code data-download-checksum>—</code></details>
       <a class="button button-primary" data-download-button aria-disabled="true">Vérification…</a>
     </article>
   </section>
-  <p><a href="https://github.com/khemisset18/gpubnb/releases" target="_blank" rel="noopener noreferrer">Voir toutes les versions sur GitHub</a></p>
+
+  <p><a href="https://github.com/khemisset18/gpubnb/releases" target="_blank" rel="noopener noreferrer">Voir l’historique des releases sur GitHub ↗</a></p>
+
   <section class="hero-row" style="margin-top:18px">
     <article class="panel">
-      <h2>Parcours en sept étapes</h2>
-      <ol><li>Activer l’espace propriétaire</li><li>Télécharger GPUbnb Host</li><li>Installer l’application</li><li>Lancer GPUbnb Host</li><li>Créer et copier le code de liaison</li><li>Saisir le code dans GPUbnb Host</li><li>Vérifier la machine et publier l’annonce</li></ol>
-      <div class="card"><strong>Limite actuelle</strong><p class="muted">Fonction testable en bêta privée : réservation Compute avec preuve de charge GPU contrôlée. Les sessions CUDA interactives, Jupyter, Blender et l’accès distant arbitraire ne sont pas encore qualifiés par ce parcours.</p></div>
+      <h2>Parcours d’installation</h2>
+      <ol>
+        <li>Activer votre espace propriétaire.</li>
+        <li>Télécharger GPUbnb Host depuis cette page.</li>
+        <li>Vérifier la version, le commit et le SHA-256.</li>
+        <li>Installer puis lancer GPUbnb Host.</li>
+        <li>Créer un code de liaison à usage unique.</li>
+        <li>Saisir le code dans GPUbnb Host.</li>
+        <li>Vérifier la machine avant toute publication.</li>
+      </ol>
+      <div class="card"><strong>Qualification actuelle</strong><p class="muted">GPUbnb reste en bêta privée sur Devnet. Les comportements de veille GPUbnb, reboot, Workspace, GPU physique et cleanup doivent rester qualifiés sur machines réelles avant une promotion publique plus large.</p></div>
     </article>
-    <aside class="panel"><h2>Lier une machine</h2><p class="muted">Le code est à usage unique et expire après dix minutes.</p><button class="button button-primary" type="button" data-create-link>Créer un code de liaison</button><div data-link-result role="status" style="margin-top:18px"></div><a class="button" style="margin-top:12px" href="machines.html">Vérifier mes machines</a></aside>
+    <aside class="panel">
+      <h2>Lier une machine</h2>
+      <p class="muted">Le code est à usage unique et expire après dix minutes. Ne le partagez pas publiquement.</p>
+      <button class="button button-primary" type="button" data-create-link>Créer un code de liaison</button>
+      <div data-link-result role="status" style="margin-top:18px"></div>
+      <a class="button" style="margin-top:12px" href="machines.html">Vérifier mes machines</a>
+    </aside>
   </section>
 </main>
+<footer class="footer">GPUbnb · Bêta privée Devnet · <a href="trust.html">Centre de confiance</a></footer>
 </body>
 </html>

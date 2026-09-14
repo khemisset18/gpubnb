@@ -3,30 +3,37 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="GPUbnb — marketplace pseudonyme de location GPU avec paiement en SOL et escrow Solana.">
+  <meta name="description" content="GPUbnb — marketplace GPU en bêta privée avec mesures Agent, Workspaces dédiés et paiements Devnet transparents.">
   <meta name="theme-color" content="#070a09">
-  <title>GPUbnb — Louez de la puissance GPU</title>
+  <meta name="color-scheme" content="dark">
+  <title>GPUbnb — Puissance GPU vérifiable</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="enterprise.css">
   <script defer src="config.js"></script>
-  <script defer src="vendor/solana-web3.min.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#top">Aller au contenu</a>
   <div class="ambient ambient-one"></div>
   <div class="ambient ambient-two"></div>
 
-  <header class="site-header">
+  <div class="release-banner" role="status">
+    <div class="shell release-banner-inner">
+      <span><i aria-hidden="true"></i><strong>Bêta privée</strong> · Devnet · Mainnet verrouillé</span>
+      <a href="trust.html">Centre de confiance →</a>
+    </div>
+  </div>
+
+  <header class="site-header enterprise-header">
     <a class="brand" href="#top" aria-label="GPUbnb accueil">
       <span class="brand-mark">G</span><span>GPUbnb</span>
     </a>
     <nav aria-label="Navigation principale">
       <a href="#market">Marketplace</a>
       <a href="workspaces.html">Espaces de travail</a>
-      <a href="publish.html">Publier un GPU</a>
-      <a href="demandes.html">Demandes</a>
-      <a href="propositions.html">Propositions</a>
-      <a href="#security">Sécurité</a>
-      <a href="#reliability">Fiabilité</a>
+      <a href="#how-it-works">Fonctionnement</a>
+      <a href="host-install.html">Héberger</a>
+      <a href="trust.html">Confiance</a>
     </nav>
     <div class="header-actions">
       <a class="dashboard-link" href="dashboard.html">Tableau de bord</a>
@@ -35,104 +42,120 @@
   </header>
 
   <main id="top">
-    <section class="hero shell">
+    <section class="hero shell enterprise-hero">
       <div class="hero-copy">
-        <span class="eyebrow"><i></i> Marketplace GPU pseudonyme</span>
-        <h1>Louez de la<br>puissance GPU.<br><em>Gardez votre<br>vie privée.</em></h1>
-        <p>Publiez un GPU, réservez une machine vérifiée et payez en SOL. L’escrow protège la transaction sans KYC imposé par la plateforme.</p>
+        <span class="eyebrow"><i></i> Infrastructure GPU distribuée</span>
+        <h1>La puissance GPU.<br><em>Vérifiable par<br>conception.</em></h1>
+        <p class="hero-lead">Publiez un GPU ou réservez une machine dont l’état est alimenté par des mesures Agent réelles. GPUbnb privilégie l’autorité serveur, les preuves techniques et des limites explicites plutôt que des promesses marketing.</p>
         <div class="hero-actions">
           <a class="button button-primary button-large" href="#market">Explorer la marketplace</a>
-          <a class="button button-secondary button-large" href="publish.html">Publier un GPU</a>
+          <a class="button button-secondary button-large" href="host-install.html">Mettre mon GPU en ligne</a>
         </div>
-        <div class="trust-row" aria-label="Garanties principales">
-          <span><b>5 %</b> commission fixe</span>
-          <span><b>Escrow</b> natif Solana</span>
-          <span><b>Agent</b> GPU signé</span>
+        <div class="enterprise-trust-row" aria-label="Garanties principales">
+          <span><b>01</b> Mesures GPU réelles</span>
+          <span><b>02</b> Requêtes Agent signées</span>
+          <span><b>03</b> Escrow Solana Devnet</span>
+          <span><b>04</b> Releases vérifiables</span>
         </div>
       </div>
 
       <div class="hero-visual" aria-label="Aperçu de vérification GPU">
         <div class="glow-orb"></div>
-        <div class="terminal-card">
-          <div class="terminal-top"><span class="terminal-dots"><i></i><i></i><i></i></span><span>agent-gpu-demo</span></div>
+        <div class="terminal-card enterprise-terminal">
+          <div class="terminal-top"><span class="terminal-dots"><i></i><i></i><i></i></span><span>GPUbnb Host · contrôle local</span></div>
           <div class="terminal-body">
-            <p class="terminal-command"><strong>$</strong> gpubnb-agent verify</p>
-            <p class="muted">Vérification locale du matériel…</p>
-            <p class="terminal-success">✓ GPU détecté · identité matérielle vérifiée</p>
+            <p class="terminal-command"><strong>$</strong> gpubnb-agent runtime-check</p>
+            <p class="terminal-success">✓ Runtime réseau · DNS · TLS disponibles</p>
+            <p class="terminal-command"><strong>$</strong> nvidia-smi --query-gpu=uuid,name,memory.total</p>
+            <p class="terminal-success">✓ Identité GPU · modèle · VRAM mesurés</p>
             <div class="terminal-stats">
-              <div><b>VRAM</b><span>mesurée</span></div>
-              <div><b>Pilote</b><span>mesuré</span></div>
-              <div><b>Online</b><span>heartbeat récent</span></div>
+              <div><b>Autorité</b><span>serveur</span></div>
+              <div><b>Session</b><span>isolée</span></div>
+              <div><b>Cleanup</b><span>contrôlé</span></div>
             </div>
-            <div class="progress"><span></span></div>
-            <p class="terminal-note">Aucun score de fiabilité fictif · aucun accès au bureau hôte</p>
+            <p class="terminal-note">Aucun benchmark fictif · aucun faux avis · aucune note de confiance inventée</p>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="status-strip shell" aria-live="polite">
+    <section class="status-strip shell enterprise-status" aria-live="polite">
       <div><span class="status-dot"></span><b id="apiStatus">API en vérification…</b></div>
       <span id="networkWarning">Réseau configuré par le serveur.</span>
     </section>
 
+    <section id="how-it-works" class="section shell">
+      <div class="section-kicker">
+        <span class="eyebrow"><i></i> Un parcours lisible</span>
+        <h2>Du GPU physique au Workspace, sans zone grise.</h2>
+        <p>Chaque étape a un rôle précis : mesurer la machine, vérifier son autorité, préparer un environnement puis contrôler sa fin de vie.</p>
+      </div>
+      <div class="process-grid">
+        <article><span>01</span><h3>Publier</h3><p>GPUbnb Host mesure la machine et maintient sa présence. L’API décide si elle peut apparaître comme disponible.</p></article>
+        <article><span>02</span><h3>Réserver</h3><p>La plateforme contrôle disponibilité, état de la machine et ressources avant de préparer une session.</p></article>
+        <article><span>03</span><h3>Exécuter</h3><p>Le locataire utilise un Workspace dédié ; fencing, métriques et cleanup bornent le cycle de location, avec aucun accès au bureau hôte.</p></article>
+      </div>
+    </section>
+
     <section id="market" class="section shell">
       <div class="section-heading">
-        <div><span class="eyebrow"><i></i> Marketplace en direct</span><h2>Des GPU prêts à calculer.</h2><p>Seules les annonces confirmées par un agent actif apparaissent ici.</p></div>
+        <div><span class="eyebrow"><i></i> Marketplace en direct</span><h2>Des GPU présents maintenant.</h2><p>Annonce active + machine actuellement en ligne : seules ces annonces confirmées par l’API réelle apparaissent ici.</p></div>
         <button id="refresh" class="button button-secondary" type="button">Actualiser</button>
       </div>
-      <div class="filter-bar" aria-label="Filtres de présentation">
-        <span class="filter active">Tous les GPU</span><span class="filter">24 GB+</span><span class="filter">IA & LLM</span><span class="filter">Rendu 3D</span><span class="filter">Disponible</span>
+      <div class="filter-bar" role="group" aria-label="Filtrer les GPU affichés">
+        <button class="filter active" type="button" data-filter="all" aria-pressed="true">Tous les GPU</button>
+        <button class="filter" type="button" data-filter="high-vram" aria-pressed="false">24 GB+</button>
+        <button class="filter" type="button" data-filter="available" aria-pressed="false">Disponible</button>
       </div>
-      <aside class="status-strip" aria-label="Comment lire les signaux de confiance">
-        <div><span class="status-dot"></span><b>Ce que “en direct” signifie</b></div>
-        <span>Annonce active + machine actuellement en ligne. Le modèle GPU, la VRAM, le pilote et la compatibilité affichés proviennent des mesures Agent disponibles — GPUbnb n’invente ni note, ni avis, ni pourcentage de fiabilité.</span>
+      <aside class="status-strip marketplace-proof" aria-label="Comment lire les signaux de confiance">
+        <div><span class="status-dot"></span><b>Données techniques, pas marketing</b></div>
+        <span>Le modèle GPU, la VRAM, le pilote et la compatibilité affichés proviennent des mesures Agent disponibles. GPUbnb n’invente ni note, ni avis, ni pourcentage de fiabilité. Une machine non publiable doit disparaître du catalogue.</span>
       </aside>
-      <div id="listings" class="gpu-grid"><article class="empty">Chargement des annonces réelles…</article></div>
+      <div id="listings" class="gpu-grid" aria-live="polite"><article class="empty">Chargement des annonces réelles…</article></div>
     </section>
 
-    <section id="reliability" class="metrics-section shell">
-      <div class="metric"><strong>90 %</strong><span>seuil de disponibilité pour paiement intégral</span></div>
-      <div class="metric"><strong>95 / 5</strong><span>fournisseur / plateforme sur le montant payable</span></div>
-      <div class="metric"><strong>1 escrow</strong><span>PDA unique pour chaque réservation</span></div>
+    <section class="enterprise-proof-band" aria-label="Principes de fiabilité">
+      <div class="shell enterprise-proof-grid">
+        <div><strong>Fail-closed</strong><span>Une ambiguïté de sécurité ne doit pas devenir une autorisation implicite.</span></div>
+        <div><strong>Traçable</strong><span>Versions, commits, checksums et états techniques restent identifiables.</span></div>
+        <div><strong>Mesurable</strong><span>Les optimisations passent après les mesures et la qualification physique.</span></div>
+      </div>
     </section>
 
-    <section id="security" class="section shell split-section">
-      <div>
+    <section id="security" class="section shell enterprise-security">
+      <div class="section-kicker">
         <span class="eyebrow"><i></i> Sécurité vérifiable</span>
         <h2>La confiance ne repose pas sur une promesse.</h2>
-        <p class="lead">Chaque étape importante laisse une preuve : signature Phantom, dépôt on-chain, heartbeat de l’agent et règlement mesuré.</p>
+        <p>GPUbnb distingue les contrôles déjà actifs des étapes encore obligatoires avant une promotion publique plus large.</p>
       </div>
-      <div class="feature-list">
-        <article><span>01</span><div><h3>Escrow Solana</h3><p>Les fonds restent verrouillés jusqu’au règlement ou remboursement prévu.</p></div></article>
-        <article><span>02</span><div><h3>Matériel vérifié</h3><p>Challenge signé, compteur anti-rejeu et disparition automatique hors ligne.</p></div></article>
-        <article><span>03</span><div><h3>Mainnet verrouillé</h3><p>Cette version reste en mode Devnet tant que les preuves d’audit ne sont pas réunies.</p></div></article>
+      <div class="trust-grid">
+        <article><span class="trust-icon">A</span><h3>Autorité serveur</h3><p>Les ressources de location sont liées à l’autorité de la plateforme plutôt qu’à une déclaration locale non vérifiée.</p></article>
+        <article><span class="trust-icon">S</span><h3>Signatures et anti-rejeu</h3><p>Les échanges Agent sensibles sont protégés. Le binaire Windows reste explicitement non signé tant qu’Authenticode n’est pas activé.</p></article>
+        <article><span class="trust-icon">R</span><h3>Release vérifiable</h3><p>Le téléchargement public expose version, commit, date, taille et SHA-256 depuis le canal de release qualifié.</p></article>
+        <article><span class="trust-icon">Q</span><h3>Qualification physique</h3><p>Reboot, GPU réel, veille GPUbnb, Workspace et cleanup sont testés séparément d’un simple badge CI.</p></article>
       </div>
+      <div class="trust-cta-row"><a class="button button-secondary" href="trust.html">Ouvrir le centre de confiance</a><a class="text-link" href="host-install.html">Voir les informations de release Host →</a></div>
     </section>
 
-    <section id="publish" class="cta shell">
-      <div><span class="eyebrow"><i></i> Pour les propriétaires</span><h2>Votre GPU peut travailler quand vous ne l’utilisez pas.</h2><p>Installez l’agent, publiez votre capacité et suivez vos sessions depuis un tableau de bord unique.</p></div>
-      <a class="button button-primary button-large" href="publish.html">Préparer mon GPU</a>
+    <section id="publish" class="cta shell enterprise-cta">
+      <div><span class="eyebrow"><i></i> Pour les propriétaires</span><h2>Votre GPU reste votre machine.</h2><p>GPUbnb Host vise une disponibilité distante sans forcer l’écran à rester allumé ni simuler de charge CPU/GPU.</p></div>
+      <div class="cta-actions"><a class="button button-primary button-large" href="host-install.html">Installer GPUbnb Host</a><a class="button button-secondary" href="publish.html">Publier une annonce</a></div>
     </section>
 
-    <section id="community" class="section shell community-section">
-      <span class="eyebrow"><i></i> Communauté</span>
-      <h2>Construisons un cloud GPU plus ouvert.</h2>
-      <p>Le forum, le chat et la réputation seront reliés à l’API réelle. Aucun faux avis ni faux volume n’est affiché.</p>
-    </section>
-
-    <section id="dashboard" class="dashboard-preview shell">
-      <div class="dashboard-copy"><span class="eyebrow"><i></i> Tableau de bord</span><h2>Tout suivre au même endroit.</h2><p>Réservations, revenus, sessions actives et paiements seront accessibles après connexion Google, e-mail ou Phantom.</p></div>
-      <div class="dashboard-card">
-        <div class="mini-nav"><b>Vue générale</b><span>Devnet</span></div>
-        <div class="mini-stats"><div><span>Sessions actives</span><strong>—</strong></div><div><span>Revenus</span><strong>— SOL</strong></div><div><span>Disponibilité</span><strong>— %</strong></div></div>
-        <div class="chart-placeholder"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      </div>
+    <section class="section shell enterprise-final">
+      <span class="eyebrow"><i></i> GPUbnb</span>
+      <h2>Un cloud GPU crédible se construit avec des preuves.</h2>
+      <p>La priorité reste la sécurité, l’autorité, la reprise après incident, les preuves matérielles et une expérience claire. Le design doit rendre ces garanties compréhensibles — jamais les remplacer.</p>
+      <div class="hero-actions"><a class="button button-primary" href="workspaces.html">Voir les Espaces de travail</a><a class="button button-secondary" href="dashboard.html">Tableau de bord</a></div>
     </section>
   </main>
 
-  <footer>
-    <div class="shell footer-inner"><a class="brand" href="#top"><span class="brand-mark">G</span><span>GPUbnb</span></a><p>Marketplace pseudonyme de location GPU sur Solana.</p><span>Devnet · Mainnet désactivé</span></div>
+  <footer class="enterprise-footer">
+    <div class="shell footer-inner enterprise-footer-inner">
+      <div class="footer-brand-block"><a class="brand" href="#top"><span class="brand-mark">G</span><span>GPUbnb</span></a><p>Infrastructure GPU distribuée en bêta privée.</p></div>
+      <nav aria-label="Navigation de pied de page"><a href="#market">Marketplace</a><a href="workspaces.html">Espaces de travail</a><a href="host-install.html">GPUbnb Host</a><a href="trust.html">Centre de confiance</a></nav>
+      <span class="footer-status">Devnet · Mainnet désactivé</span>
+    </div>
   </footer>
 </body>
 </html>

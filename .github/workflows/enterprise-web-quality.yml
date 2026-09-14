@@ -1,0 +1,38 @@
+name: enterprise-web-quality
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/enterprise-web-quality.yml'
+  push:
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/enterprise-web-quality.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  public-site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: JavaScript syntax
+        run: |
+          node --check apps/web/app.js
+          node --check apps/web/host-downloads.js
+          node --check apps/web/trust.js
+      - name: Enterprise trust and accessibility contracts
+        run: node --test apps/web/enterprise-web.test.js
+      - name: No accidental production claims
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RniE 'production[- ]ready|100% sécurisé|100% secure|certifié SOC|SOC 2 certifié' apps/web --include='*.html' --include='*.js'; then
+            echo 'Unverified production/security claim detected in public web copy.' >&2
+            exit 1
+          fi

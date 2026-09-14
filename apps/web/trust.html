@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Centre de confiance GPUbnb : statut réseau, intégrité des releases, contrôles Agent et limites de qualification.">
+  <meta name="theme-color" content="#070908">
+  <meta name="color-scheme" content="dark">
+  <title>Centre de confiance — GPUbnb</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="enterprise.css">
+  <script defer src="config.js"></script>
+  <script defer src="host-downloads.js"></script>
+  <script defer src="trust.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Aller au contenu</a>
+  <div class="ambient ambient-one"></div>
+  <header class="site-header enterprise-header">
+    <a class="brand" href="index.html" aria-label="GPUbnb — accueil"><span class="brand-mark" aria-hidden="true">G</span><span>GPUbnb</span></a>
+    <nav aria-label="Navigation principale">
+      <a href="index.html#market">Marketplace</a>
+      <a href="workspaces.html">Workspaces</a>
+      <a href="host-install.html">GPUbnb Host</a>
+      <a class="nav-active" href="trust.html" aria-current="page">Confiance</a>
+    </nav>
+    <div class="header-actions"><a class="dashboard-link" href="dashboard.html">Tableau de bord</a><a class="button button-primary" href="auth.html">Se connecter</a></div>
+  </header>
+
+  <main id="main-content" class="trust-page shell">
+    <section class="trust-hero">
+      <span class="eyebrow"><i></i> Centre de confiance</span>
+      <h1>Des preuves techniques plutôt que des promesses.</h1>
+      <p>Cette page sépare les contrôles réellement actifs, les informations de release vérifiables et les limites qui restent à qualifier. GPUbnb est actuellement en bêta privée sur Devnet.</p>
+    </section>
+
+    <section class="trust-status-grid" aria-live="polite" aria-label="État vérifié de la plateforme">
+      <article class="trust-status-card" id="trustApiCard"><small>API</small><strong id="trustApiStatus">Vérification…</strong><span id="trustApiDetail">Connexion au service.</span></article>
+      <article class="trust-status-card"><small>Réseau de paiement</small><strong id="trustNetworkStatus">Vérification…</strong><span id="trustNetworkDetail">Lecture de la configuration serveur.</span></article>
+      <article class="trust-status-card" id="trustReleaseCard"><small>Release Windows</small><strong id="trustReleaseStatus">Vérification…</strong><span id="trustReleaseDetail">Lecture du canal public qualifié.</span></article>
+    </section>
+
+    <section class="trust-section" aria-labelledby="controls-title">
+      <span class="eyebrow"><i></i> Contrôles actifs</span>
+      <h2 id="controls-title">Ce que le système vérifie aujourd’hui.</h2>
+      <div class="trust-control-list">
+        <article class="trust-control"><span class="control-mark">✓</span><div><h3>Identité et requêtes Agent</h3><p>Les requêtes sensibles utilisent des signatures Agent et des protections anti-rejeu. Cela ne signifie pas que l’exécutable Windows est déjà signé par Authenticode.</p></div><span class="control-status">Actif</span></article>
+        <article class="trust-control"><span class="control-mark">✓</span><div><h3>Autorité serveur et fencing</h3><p>Une machine locale ne doit pas s’auto-attribuer une location. Les ressources et sessions sont liées à l’autorité serveur et à des identifiants de tentative.</p></div><span class="control-status">Actif</span></article>
+        <article class="trust-control"><span class="control-mark">✓</span><div><h3>Mesures GPU et présence</h3><p>Modèle, UUID, VRAM, pilote, heartbeat et preuves de runtime sont issus des données Agent disponibles, pas d’un catalogue marketing statique.</p></div><span class="control-status">Actif</span></article>
+        <article class="trust-control"><span class="control-mark">✓</span><div><h3>Nettoyage et quarantaine</h3><p>Les ressources runtime inattendues et certains échecs de sécurité peuvent bloquer la machine plutôt que poursuivre silencieusement.</p></div><span class="control-status">Actif</span></article>
+      </div>
+    </section>
+
+    <section class="trust-section" aria-labelledby="release-title">
+      <span class="eyebrow"><i></i> Intégrité de la release</span>
+      <h2 id="release-title">Le téléchargement public doit être identifiable.</h2>
+      <p class="lead">Les informations ci-dessous sont lues depuis le canal de téléchargement public. Une indisponibilité de métadonnées est affichée comme telle ; aucune version de secours n’est inventée côté navigateur.</p>
+      <div class="release-detail">
+        <div><span>Version</span><code id="trustReleaseVersion">—</code></div>
+        <div><span>Commit source</span><code id="trustReleaseCommit">—</code></div>
+        <div><span>Publication</span><code id="trustReleasePublished">—</code></div>
+        <div><span>SHA-256</span><code id="trustReleaseSha">—</code></div>
+      </div>
+      <div class="trust-note"><strong>Signature Windows :</strong> la phase de qualification actuelle peut encore utiliser un candidat non signé. Quand Authenticode deviendra obligatoire pour une promotion, le workflow de publication devra refuser tout exécutable attendu sans signature valide.</div>
+      <p><a class="button button-secondary" href="host-install.html">Voir les téléchargements GPUbnb Host</a></p>
+    </section>
+
+    <section class="trust-section" aria-labelledby="limits-title">
+      <span class="eyebrow"><i></i> Limites explicites</span>
+      <h2 id="limits-title">Ce qui n’est pas présenté comme acquis.</h2>
+      <div class="trust-control-list">
+        <article class="trust-control"><span class="control-mark">!</span><div><h3>Authenticode de production</h3><p>Le dépôt contient les garde-fous de vérification, mais un vrai certificat, sa clé privée et un environnement de signature protégé restent nécessaires.</p></div><span class="control-status">À finaliser</span></article>
+        <article class="trust-control"><span class="control-mark">!</span><div><h3>Qualification physique Windows</h3><p>Un CI vert ne remplace pas les scénarios réels : reboot, GPU physique, veille GPUbnb, Workspace, fin de location et cleanup doivent être testés sur machines physiques.</p></div><span class="control-status">Obligatoire</span></article>
+        <article class="trust-control"><span class="control-mark">!</span><div><h3>Compatibilité inter-composants</h3><p>La plateforme possède des contrats de protocoles et des garde-fous de version, mais la négociation complète Host / Agent / API / gateway doit rester explicite avant une promotion large.</p></div><span class="control-status">En durcissement</span></article>
+        <article class="trust-control"><span class="control-mark">!</span><div><h3>Mainnet</h3><p>Cette version vise Devnet. Le passage à des paiements réels ne doit pas précéder les qualifications sécurité, résilience, facturation et release.</p></div><span class="control-status">Verrouillé</span></article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="enterprise-footer"><div class="shell footer-inner enterprise-footer-inner"><div class="footer-brand-block"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">G</span><span>GPUbnb</span></a><p>Bêta privée · Devnet</p></div><nav aria-label="Navigation de pied de page"><a href="index.html">Accueil</a><a href="host-install.html">GPUbnb Host</a><a href="workspaces.html">Workspaces</a><a href="dashboard.html">Tableau de bord</a></nav><span class="footer-status">Transparence avant promotion</span></div></footer>
+</body>
+</html>

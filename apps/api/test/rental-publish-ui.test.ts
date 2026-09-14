@@ -63,7 +63,9 @@ test('renter marketplace and workspace chooser use exact selected GPU routes', a
   const app = await readFile(path.join(webRoot, 'app.js'), 'utf8');
   const chooser = await readFile(path.join(webRoot, 'choose-workspace.js'), 'utf8');
   assert.match(app, /jsonFetch\('\/rental\/listings'\)/);
-  assert.match(app, /x\.gpu\.model/);
+  // Keep this contract focused on rendering the selected GPU model, regardless of
+  // whether the local card parameter is named `x`, `item`, or something clearer.
+  assert.match(app, /\.gpu\.model/);
   assert.doesNotMatch(app, /remote=await jsonFetch\('\/listings'\)/);
   assert.match(chooser, /\/rental\/listings\/\$\{encodeURIComponent\(listingId\)\}\/workspaces/);
   assert.match(chooser, /listing\.gpu\.model/);
