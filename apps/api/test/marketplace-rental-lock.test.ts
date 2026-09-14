@@ -11,7 +11,8 @@ test('marketplace exposes a busy state and the actual dynamic release time', asy
 
 test('marketplace disables rental while the GPU is rented or working', async () => {
   const source = (await readFile(new URL('../../web/app.js', import.meta.url), 'utf8')).replace(/\s+/g, '');
-  assert.match(source, /x\.availability\.state!=='AVAILABLE'/);
+  // Assert the behavior/contract, not a local callback parameter name such as `x`.
+  assert.match(source, /availability\?\.state&&[A-Za-z_$][\w$]*\.availability\.state!=='AVAILABLE'/);
   assert.match(source, /choose\.disabled=true/);
   assert.match(source, /ChoisirceGPUetmonespace/);
 });
