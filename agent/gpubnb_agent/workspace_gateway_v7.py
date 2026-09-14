@@ -31,6 +31,11 @@ from typing import Any
 
 from . import workspace_gateway as legacy
 from . import workspace_gateway_v6 as concurrent_open
+from .supervisor_recovery import (
+    PLATFORM_REPROBE_SECONDS,
+    PolicyHostTunnelSupervisor,
+    supervisor_wait,
+)
 
 WORKSPACE_GATEWAY_PROTOCOL_VERSION = 2
 WS_PROTOCOL_CHANNEL_MAX_ITEMS = 512
@@ -38,12 +43,21 @@ _CODE_SERVER_WS_PATH = re.compile(r"^/stable-[0-9a-fA-F]{40}(?:\?|$)")
 
 
 class GatewaySupervisor(concurrent_open.GatewaySupervisor):
-    """v6 supervisor with explicit protocol-version and legacy metadata guard."""
+    """v6 supervisor with protocol compatibility and policy-driven recovery."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._ws_protocol_lock = threading.Lock()
         self._ws_channel_paths: dict[str, str] = {}
+        # The base constructor creates an empty tunnel supervisor. Replace it
+        # before the run loop starts so tunnel retries share the central bounded
+        # schedule without changing any authority/bootstrap validation logic.
+        self.host_tunnels = PolicyHostTunnelSupervisor(
+            self.api,
+            self.key,
+            self.machine_id,
+            self.config,
+        )
 
     @staticmethod
     def _message_protocol_version(item: dict[str, Any]) -> int | None:
@@ -199,6 +213,82 @@ class GatewaySupervisor(concurrent_open.GatewaySupervisor):
             return super()._handle(item)
 
         return super()._handle(item)
+
+    def _report_recovery(
+        self,
+        mode: str,
+        reason: str,
+        delay_seconds: float | None,
+    ) -> None:
+        detail = f"workspace_gateway_recovery:mode={mode}:reason={reason}"
+        if delay_seconds is not None:
+            detail += f":retryAfter={delay_seconds:g}"
+        self._report_error(RuntimeError(detail))
+
+    def run(self) -> None:
+        """Run with central recovery policy instead of the legacy 1-second loop."""
+        last_reconcile = 0.0
+        retry_attempt = 0
+        try:
+            while not self.stop_event.is_set():
+                try:
+                    if (
+                        legacy.time.monotonic() - last_reconcile
+                        >= legacy.RECONCILE_INTERVAL_SECONDS
+                    ):
+                        self._reconcile_sessions()
+                        last_reconcile = legacy.time.monotonic()
+                    item = self._request(
+                        f"/agent/workspace-gateway/{self.machine_id}/next"
+                    )
+                    if item:
+                        self._handle(item)
+                except Exception as exc:
+                    self._report_error(exc)
+                    mode, reason, delay = supervisor_wait(
+                        exc,
+                        retry_attempt,
+                        subsystem="gateway",
+                    )
+                    if mode == "retry":
+                        actual_delay = delay if delay is not None else 5.0
+                        self._report_recovery(mode, reason, actual_delay)
+                        retry_attempt += 1
+                        if self.stop_event.wait(actual_delay):
+                            break
+                        continue
+
+                    # Unsafe data-plane helpers must not remain running while a
+                    # platform/owner/security state blocks gateway authority.
+                    self.host_tunnels.stop_all()
+
+                    if mode == "platform_action":
+                        # Re-probe signed server authority at low frequency. No
+                        # Docker work happens while the server continues to
+                        # reject the gateway request; explicit platform recovery
+                        # can therefore resume without restarting Windows.
+                        self._report_recovery(
+                            mode,
+                            reason,
+                            PLATFORM_REPROBE_SECONDS,
+                        )
+                        retry_attempt = 0
+                        if self.stop_event.wait(PLATFORM_REPROBE_SECONDS):
+                            break
+                        continue
+
+                    # owner_action and stop are never automatically retried. A
+                    # new unknown failure therefore cannot become a 1 Hz loop.
+                    self._report_recovery(mode, reason, None)
+                    self.stop_event.wait()
+                    break
+                else:
+                    retry_attempt = 0
+                    self._last_error_signature = None
+                    if self.stop_event.wait(0.05):
+                        break
+        finally:
+            self.host_tunnels.stop_all()
 
 
 def install() -> None:
