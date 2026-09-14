@@ -1,23 +1,12 @@
 """Self-update for the frozen Windows agent.
 
-This checks the official release channel (the same `host-test-latest` alias
-the public "Installer GPUbnb Host" download page and
-post-publish-host-windows-verify.yml use - see
-netlify/functions/host-download.mjs), verifies the published SHA-256, and
-safely replaces the running Windows service's binary.
+The updater is intentionally owner-triggered while public Windows artifacts are
+not yet Authenticode-signed. It only follows the promoted release alias, verifies
+the published SHA-256 and replaces the installed service binary transactionally.
 
-Deliberately owner-triggered (`gpubnb-agent.exe self-update`), never a
-silent background updater: the published binaries are not code-signed yet
-(apps/web/host-install.html shows "Signature : non signée" on every
-platform), so unattended replacement of a production Windows service's
-binary is not something this pass wants to do without a human in the loop.
-See docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md for the incident this closes and
-the full flow this implements.
-
-Every side effect (HTTP, service control, sleeping, wall-clock) is injected
-so the real update logic - fetch, verify, replace, roll back on failure -
-can be tested without a real Windows service. See
-agent/tests/test_self_update.py.
+The verified entry point additionally binds the candidate and installed binary to
+the release's immutable commit and performs a local runtime probe. Any failure
+after replacement rolls back to the known-good backup before returning an error.
 """
 from __future__ import annotations
 
@@ -32,11 +21,19 @@ import time
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 from urllib.request import Request, urlopen
 
 from . import __version__ as AGENT_VERSION
 from ._build_info import BUILD_COMMIT
+from .update_recovery import PostUpdateChecks, rollback_reason
+from .update_validation import (
+    UpdateIdentityError,
+    identity_matches_release,
+    normalize_release_commit,
+    parse_build_identity,
+    require_identity_matches_release,
+)
 
 GITHUB_API = "https://api.github.com"
 DEFAULT_REPOSITORY = "khemisset18/gpubnb"
@@ -84,9 +81,10 @@ def fetch_release_info(
         raise SelfUpdateError(f"release_missing_asset:{PORTABLE_ASSET_NAME}")
     if "SHA256SUMS.txt" not in assets:
         raise SelfUpdateError("release_missing_asset:SHA256SUMS.txt")
-    commit = str(data.get("target_commitish") or "")
-    if not commit:
-        raise SelfUpdateError("release_missing_commit")
+    try:
+        commit = normalize_release_commit(str(data.get("target_commitish") or ""))
+    except UpdateIdentityError as exc:
+        raise SelfUpdateError(str(exc)) from exc
     return ReleaseInfo(
         tag=str(data.get("tag_name") or channel),
         commit=commit,
@@ -97,8 +95,6 @@ def fetch_release_info(
 
 def is_update_available(release: ReleaseInfo, current_build_commit: str = BUILD_COMMIT) -> bool:
     if current_build_commit == "dev":
-        # Never built by CI - there is no real commit to compare, so an
-        # update always looks "available" rather than falsely "current".
         return True
     return not (
         release.commit.startswith(current_build_commit)
@@ -119,6 +115,8 @@ def download_and_verify_agent_exe(
     if not zip_line:
         raise SelfUpdateError("checksum_missing_for_portable_zip")
     expected_sha256 = zip_line.strip().split()[0].lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+        raise SelfUpdateError("checksum_manifest_invalid")
     zip_bytes = http_get(release.portable_zip_url)
     actual_sha256 = hashlib.sha256(zip_bytes).hexdigest()
     if actual_sha256 != expected_sha256:
@@ -136,21 +134,57 @@ def download_and_verify_agent_exe(
 
 
 def _parse_semver(value: str) -> tuple[int, int, int] | None:
-    match = re.match(r"^(\d+)\.(\d+)\.(\d+)", value.strip())
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?", value.strip())
     if not match:
         return None
     return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
 
 
-def default_run_version_command(exe_path: Path) -> str:
-    result = subprocess.run(  # noqa: S603 - fixed argv, no shell, checksum already verified
-        [str(exe_path), "version"],
+def _run_agent_command(exe_path: Path, command: str, *, timeout: int = 15) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(  # noqa: S603 - fixed argv, candidate is checksum-verified
+        [str(exe_path), command],
         capture_output=True,
         text=True,
-        timeout=15,
+        timeout=timeout,
         check=False,
     )
-    return result.stdout.strip()
+    if result.returncode != 0:
+        raise SelfUpdateError(
+            f"candidate_command_failed:{command}:exit={result.returncode}:stderr={result.stderr.strip()[:200]}"
+        )
+    return result
+
+
+def default_run_version_command(exe_path: Path) -> str:
+    value = _run_agent_command(exe_path, "version").stdout.strip()
+    if not value:
+        raise SelfUpdateError("candidate_version_empty")
+    return value
+
+
+def default_run_build_info_command(exe_path: Path) -> dict[str, Any]:
+    raw = _run_agent_command(exe_path, "build-info").stdout.strip()
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SelfUpdateError("candidate_build_info_invalid_json") from exc
+    if not isinstance(value, dict):
+        raise SelfUpdateError("candidate_build_info_invalid_shape")
+    return value
+
+
+def default_run_runtime_check(exe_path: Path) -> bool:
+    try:
+        raw = _run_agent_command(exe_path, "runtime-check").stdout.strip()
+        value = json.loads(raw)
+    except (SelfUpdateError, json.JSONDecodeError):
+        return False
+    return bool(
+        isinstance(value, dict)
+        and value.get("idnaCodec") is True
+        and value.get("dnsResolution") is True
+        and value.get("tlsContext") is True
+    )
 
 
 def candidate_agent_version(
@@ -158,10 +192,7 @@ def candidate_agent_version(
     *,
     run_version_command: Callable[[Path], str] = default_run_version_command,
 ) -> str:
-    """Runs the downloaded (already checksum-verified) candidate exe with
-    `version` in a throwaway temp location, purely to read what it reports -
-    this never touches the real install directory or service. Used only to
-    refuse an accidental downgrade before anything is actually replaced."""
+    """Read a checksum-verified candidate's version from a throwaway path."""
     with tempfile.TemporaryDirectory(prefix="gpubnb-self-update-") as tmp:
         candidate_path = Path(tmp) / "gpubnb-agent-candidate.exe"
         candidate_path.write_bytes(exe_bytes)
@@ -172,9 +203,8 @@ def _is_downgrade(current_version: str, candidate_version: str) -> bool:
     current = _parse_semver(current_version)
     candidate = _parse_semver(candidate_version)
     if current is None or candidate is None:
-        # Can't parse one of the two - never block on an unparseable version,
-        # just can't prove it's a downgrade either. Real protection is best
-        # effort, not a hard requirement when versions aren't semver.
+        # Kept for compatibility with the low-level updater. The verified
+        # production entry point below fails closed when either value is not semver.
         return False
     return candidate < current
 
@@ -189,6 +219,60 @@ class UpdateResult:
     detail: str
 
 
+CandidateValidator = Callable[[bytes, ReleaseInfo, str], None]
+PostUpdateValidator = Callable[[Path, ReleaseInfo, str], None]
+
+
+def _wait_for(
+    predicate: Callable[[], bool],
+    timeout_seconds: int,
+    *,
+    now: Callable[[], float],
+    sleep: Callable[[float], None],
+) -> bool:
+    deadline = now() + timeout_seconds
+    while not predicate() and now() < deadline:
+        sleep(0.5)
+    return predicate()
+
+
+def _rollback_to_backup(
+    target: Path,
+    backup: Path,
+    *,
+    stop_service: Callable[[], None],
+    start_service: Callable[[], None],
+    service_running: Callable[[], bool],
+    is_stopped: Callable[[], bool],
+    now: Callable[[], float],
+    sleep: Callable[[float], None],
+) -> str | None:
+    errors: list[str] = []
+    try:
+        if not is_stopped():
+            stop_service()
+        if not _wait_for(is_stopped, SERVICE_STOP_TIMEOUT_SECONDS, now=now, sleep=sleep):
+            return "rollback_service_did_not_stop"
+    except Exception as exc:
+        return f"rollback_service_stop_failed:{exc}"
+
+    try:
+        if not backup.exists():
+            return "rollback_backup_missing"
+        target.unlink(missing_ok=True)
+        shutil.move(str(backup), str(target))
+    except OSError as exc:
+        return f"rollback_binary_restore_failed:{exc}"
+
+    try:
+        start_service()
+    except Exception as exc:
+        errors.append(f"rollback_service_start_failed:{exc}")
+    if not _wait_for(service_running, SERVICE_START_TIMEOUT_SECONDS, now=now, sleep=sleep):
+        errors.append("rollback_service_did_not_start")
+    return ";".join(errors) or None
+
+
 def perform_self_update(
     install_dir: Path,
     *,
@@ -199,6 +283,8 @@ def perform_self_update(
     dry_run: bool = False,
     http_get: Callable[[str], bytes] = default_http_get,
     run_version_command: Callable[[Path], str] = default_run_version_command,
+    candidate_validator: CandidateValidator | None = None,
+    post_update_validator: PostUpdateValidator | None = None,
     stop_service: Callable[[], None],
     start_service: Callable[[], None],
     service_running: Callable[[], bool],
@@ -206,17 +292,8 @@ def perform_self_update(
     now: Callable[[], float] = time.time,
     sleep: Callable[[float], None] = time.sleep,
 ) -> UpdateResult:
-    # service_running()==False is NOT the same thing as "safe to touch the
-    # binary or start again": a real Windows service sits in STOP_PENDING
-    # for several seconds after `stop` before it reaches STOPPED, and
-    # SERVICE_RUNNING is already false throughout that window. Proceeding as
-    # soon as service_running() goes false races the real SCM and produces
-    # "StartService failed: 1056, an instance of the service is already
-    # running" - reproduced against a real (disposable) Windows service
-    # while testing this. service_stopped() must only be true once the
-    # service has actually reached the STOPPED state, not merely "not
-    # running". Callers that genuinely have no transitional state to report
-    # (e.g. a simple test double) may omit it.
+    # A Windows service can be STOP_PENDING while service_running()==False.
+    # Never swap the executable until the SCM reports fully STOPPED.
     is_stopped = service_stopped or (lambda: not service_running())
     release = fetch_release_info(repository, channel, http_get=http_get)
     if not is_update_available(release, current_build_commit):
@@ -235,6 +312,8 @@ def perform_self_update(
         raise SelfUpdateError(
             f"downgrade_refused:current={current_agent_version}:candidate={candidate_version}"
         )
+    if candidate_validator is not None:
+        candidate_validator(exe_bytes, release, candidate_version)
     if dry_run:
         return UpdateResult(
             updated=False,
@@ -253,10 +332,7 @@ def perform_self_update(
     staged.write_bytes(exe_bytes)
 
     stop_service()
-    deadline = now() + SERVICE_STOP_TIMEOUT_SECONDS
-    while not is_stopped() and now() < deadline:
-        sleep(0.5)
-    if not is_stopped():
+    if not _wait_for(is_stopped, SERVICE_STOP_TIMEOUT_SECONDS, now=now, sleep=sleep):
         staged.unlink(missing_ok=True)
         raise SelfUpdateError("service_did_not_stop_in_time")
 
@@ -264,28 +340,57 @@ def perform_self_update(
         shutil.move(str(target), str(backup))
         shutil.move(str(staged), str(target))
     except OSError as exc:
-        # Best-effort rollback before giving up: never leave the install
-        # directory without a gpubnb-agent.exe at all.
         if backup.exists() and not target.exists():
             shutil.move(str(backup), str(target))
+        staged.unlink(missing_ok=True)
         raise SelfUpdateError(f"binary_replace_failed:{exc}") from exc
 
     try:
         start_service()
     except Exception as exc:
-        target.unlink(missing_ok=True)
-        shutil.move(str(backup), str(target))
-        try:
-            start_service()
-        except Exception:
-            pass
-        raise SelfUpdateError(f"service_start_failed_after_update:{exc}") from exc
+        rollback_error = _rollback_to_backup(
+            target,
+            backup,
+            stop_service=stop_service,
+            start_service=start_service,
+            service_running=service_running,
+            is_stopped=is_stopped,
+            now=now,
+            sleep=sleep,
+        )
+        suffix = f":rollback={rollback_error}" if rollback_error else ":rollback=ok"
+        raise SelfUpdateError(f"service_start_failed_after_update:{exc}{suffix}") from exc
 
-    deadline = now() + SERVICE_START_TIMEOUT_SECONDS
-    while not service_running() and now() < deadline:
-        sleep(0.5)
-    if not service_running():
-        raise SelfUpdateError("service_did_not_start_after_update")
+    if not _wait_for(service_running, SERVICE_START_TIMEOUT_SECONDS, now=now, sleep=sleep):
+        rollback_error = _rollback_to_backup(
+            target,
+            backup,
+            stop_service=stop_service,
+            start_service=start_service,
+            service_running=service_running,
+            is_stopped=is_stopped,
+            now=now,
+            sleep=sleep,
+        )
+        suffix = f":rollback={rollback_error}" if rollback_error else ":rollback=ok"
+        raise SelfUpdateError(f"service_did_not_start_after_update{suffix}")
+
+    if post_update_validator is not None:
+        try:
+            post_update_validator(target, release, candidate_version)
+        except Exception as exc:
+            rollback_error = _rollback_to_backup(
+                target,
+                backup,
+                stop_service=stop_service,
+                start_service=start_service,
+                service_running=service_running,
+                is_stopped=is_stopped,
+                now=now,
+                sleep=sleep,
+            )
+            suffix = f":rollback={rollback_error}" if rollback_error else ":rollback=ok"
+            raise SelfUpdateError(f"post_update_validation_failed:{exc}{suffix}") from exc
 
     return UpdateResult(
         updated=True,
@@ -294,4 +399,77 @@ def perform_self_update(
         release_tag=release.tag,
         backup_path=str(backup),
         detail=f"updated_to:{release.tag}",
+    )
+
+
+def perform_verified_self_update(
+    install_dir: Path,
+    *,
+    repository: str = DEFAULT_REPOSITORY,
+    channel: str = DEFAULT_CHANNEL,
+    current_build_commit: str = BUILD_COMMIT,
+    current_agent_version: str = AGENT_VERSION,
+    dry_run: bool = False,
+    http_get: Callable[[str], bytes] = default_http_get,
+    run_version_command: Callable[[Path], str] = default_run_version_command,
+    run_build_info_command: Callable[[Path], dict[str, Any]] = default_run_build_info_command,
+    run_runtime_check: Callable[[Path], bool] = default_run_runtime_check,
+    stop_service: Callable[[], None],
+    start_service: Callable[[], None],
+    service_running: Callable[[], bool],
+    service_stopped: Callable[[], bool] | None = None,
+    now: Callable[[], float] = time.time,
+    sleep: Callable[[float], None] = time.sleep,
+) -> UpdateResult:
+    """Production self-update path with fail-closed identity/health validation."""
+    if _parse_semver(current_agent_version) is None:
+        raise SelfUpdateError("current_agent_version_invalid")
+
+    def validate_candidate(exe_bytes: bytes, release: ReleaseInfo, candidate_version: str) -> None:
+        if _parse_semver(candidate_version) is None:
+            raise SelfUpdateError("candidate_version_invalid")
+        with tempfile.TemporaryDirectory(prefix="gpubnb-self-update-identity-") as tmp:
+            candidate_path = Path(tmp) / "gpubnb-agent-candidate.exe"
+            candidate_path.write_bytes(exe_bytes)
+            build_info = run_build_info_command(candidate_path)
+        try:
+            identity = parse_build_identity(candidate_version, build_info)
+            require_identity_matches_release(identity, release.commit, stage="candidate")
+        except UpdateIdentityError as exc:
+            raise SelfUpdateError(str(exc)) from exc
+
+    def validate_installed(target: Path, release: ReleaseInfo, candidate_version: str) -> None:
+        installed_version = run_version_command(target)
+        installed_info = run_build_info_command(target)
+        try:
+            identity = parse_build_identity(installed_version, installed_info)
+        except UpdateIdentityError as exc:
+            raise SelfUpdateError(f"installed_identity_invalid:{exc}") from exc
+        checks = PostUpdateChecks(
+            service_running=service_running(),
+            identity_matches_release=identity_matches_release(identity, release.commit),
+            version_matches_candidate=installed_version == candidate_version,
+            runtime_healthy=bool(run_runtime_check(target)),
+        )
+        reason = rollback_reason(checks)
+        if reason is not None:
+            raise SelfUpdateError(reason)
+
+    return perform_self_update(
+        install_dir,
+        repository=repository,
+        channel=channel,
+        current_build_commit=current_build_commit,
+        current_agent_version=current_agent_version,
+        dry_run=dry_run,
+        http_get=http_get,
+        run_version_command=run_version_command,
+        candidate_validator=validate_candidate,
+        post_update_validator=validate_installed,
+        stop_service=stop_service,
+        start_service=start_service,
+        service_running=service_running,
+        service_stopped=service_stopped,
+        now=now,
+        sleep=sleep,
     )
