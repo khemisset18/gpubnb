@@ -14,6 +14,7 @@ from typing import Any
 
 from .accelerators import accelerator_inventory
 from .platform_info import gpu_inventory, system_inventory
+from .release_compatibility import release_compatibility_descriptor
 
 
 def _clamp(value: float | int | None, minimum: float, maximum: float) -> float | None:
@@ -147,6 +148,7 @@ class TelemetrySampler:
             "networkTxBytesPerSecond": tx_rate,
             "gpus": gpus,
             "accelerators": accelerators,
+            "releaseCompatibility": release_compatibility_descriptor(),
             "runtime": {
                 "dockerAvailable": bool(system.get("dockerAvailable")),
                 "dockerVersion": system.get("dockerVersion"),
