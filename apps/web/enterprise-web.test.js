@@ -12,6 +12,16 @@ test('landing keeps the real marketplace runtime anchors', async () => {
   }
 });
 
+test('homepage critical path stays lean and marketplace loading is independent', async () => {
+  const html = await read('index.html');
+  const script = await read('app.js');
+  assert.doesNotMatch(html, /vendor\/solana-web3\.min\.js/);
+  assert.doesNotMatch(script, /window\.solana|encode58|connectedWallet/);
+  assert.match(script, /Promise\.allSettled/);
+  assert.match(script, /void loadMarketplace\(\);\s*void loadAccount\(\);/);
+  assert.match(script, /AbortController/);
+});
+
 test('public copy never confuses signed Agent requests with Windows code signing', async () => {
   const files = await Promise.all(['index.html', 'trust.html', 'host-install.html'].map(read));
   const copy = files.join('\n');
@@ -29,6 +39,7 @@ test('trust center exposes verifiable release and environment concepts', async (
   assert.match(html, /qualification physique/i);
   assert.match(script, /fetchMetadata\('windows'\)/);
   assert.match(script, /jsonFetch\('\/health'\)/);
+  assert.match(script, /AbortController/);
   assert.doesNotMatch(html, /certifi[ée]|production[- ]ready|100\s*%/i);
 });
 
