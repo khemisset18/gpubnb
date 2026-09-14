@@ -21,6 +21,8 @@ Security properties:
   socket, so a rejected frame cannot leave an orphan live channel behind;
 * protocol compatibility state is bounded independently of payload buffers and
   is discarded on canonical broken-channel cleanup;
+* Docker/session reconciliation remains isolated from the latency-sensitive
+  control loop while both loops use the same fail-closed recovery policy;
 * no frame payload, cookie, token or credential is written to diagnostics.
 """
 from __future__ import annotations
@@ -30,6 +32,7 @@ import threading
 from typing import Any
 
 from . import workspace_gateway as legacy
+from . import workspace_gateway_v2 as transport
 from . import workspace_gateway_v6 as concurrent_open
 from .supervisor_recovery import (
     PLATFORM_REPROBE_SECONDS,
@@ -225,69 +228,103 @@ class GatewaySupervisor(concurrent_open.GatewaySupervisor):
             detail += f":retryAfter={delay_seconds:g}"
         self._report_error(RuntimeError(detail))
 
+    def _recover_gateway_failure(self, exc: Exception, attempt: int) -> tuple[bool, int]:
+        """Apply one central-policy decision and return (continue, next_attempt)."""
+        self._report_error(exc)
+        mode, reason, delay = supervisor_wait(
+            exc,
+            attempt,
+            subsystem="gateway",
+        )
+        if mode == "retry":
+            actual_delay = delay if delay is not None else 5.0
+            self._report_recovery(mode, reason, actual_delay)
+            if self.stop_event.wait(actual_delay):
+                return False, attempt + 1
+            return True, attempt + 1
+
+        # Never retain an edge sidecar when signed gateway authority is blocked
+        # by a platform/owner/security state.
+        self.host_tunnels.stop_all()
+        if mode == "platform_action":
+            self._report_recovery(mode, reason, PLATFORM_REPROBE_SECONDS)
+            if self.stop_event.wait(PLATFORM_REPROBE_SECONDS):
+                return False, 0
+            return True, 0
+
+        # Unknown/owner/security failures shut down only this gateway plane. The
+        # Windows service-wide power guard and diagnostic authority are separate.
+        self._report_recovery(mode, reason, None)
+        self.stop_event.set()
+        return False, attempt
+
+    def _reconcile_loop(self) -> None:
+        """Keep expensive Docker reconciliation off the control-message loop."""
+        attempt = 0
+        while not self.stop_event.is_set():
+            started = legacy.time.monotonic()
+            try:
+                self._reconcile_sessions()
+            except Exception as exc:
+                keep_running, attempt = self._recover_gateway_failure(exc, attempt)
+                if not keep_running:
+                    return
+                continue
+            attempt = 0
+            elapsed = legacy.time.monotonic() - started
+            delay = max(0.0, legacy.RECONCILE_INTERVAL_SECONDS - elapsed)
+            if self.stop_event.wait(delay):
+                return
+
     def run(self) -> None:
-        """Run with central recovery policy instead of the legacy 1-second loop."""
-        last_reconcile = 0.0
-        retry_attempt = 0
+        """Preserve v2 control/reconcile isolation with central recovery policy."""
+        initial_attempt = 0
+        while not self.stop_event.is_set():
+            try:
+                self._reconcile_sessions()
+            except Exception as exc:
+                keep_running, initial_attempt = self._recover_gateway_failure(
+                    exc,
+                    initial_attempt,
+                )
+                if not keep_running:
+                    self.host_tunnels.stop_all()
+                    return
+                continue
+            break
+
+        if self.stop_event.is_set():
+            self.host_tunnels.stop_all()
+            return
+
+        reconcile_thread = threading.Thread(
+            target=self._reconcile_loop,
+            daemon=True,
+            name="gpubnb-workspace-reconcile",
+        )
+        reconcile_thread.start()
+        control_attempt = 0
         try:
             while not self.stop_event.is_set():
                 try:
-                    if (
-                        legacy.time.monotonic() - last_reconcile
-                        >= legacy.RECONCILE_INTERVAL_SECONDS
-                    ):
-                        self._reconcile_sessions()
-                        last_reconcile = legacy.time.monotonic()
-                    item = self._request(
-                        f"/agent/workspace-gateway/{self.machine_id}/next"
-                    )
-                    if item:
+                    items = self._next_items()
+                    for item in items:
                         self._handle(item)
                 except Exception as exc:
-                    self._report_error(exc)
-                    mode, reason, delay = supervisor_wait(
+                    keep_running, control_attempt = self._recover_gateway_failure(
                         exc,
-                        retry_attempt,
-                        subsystem="gateway",
+                        control_attempt,
                     )
-                    if mode == "retry":
-                        actual_delay = delay if delay is not None else 5.0
-                        self._report_recovery(mode, reason, actual_delay)
-                        retry_attempt += 1
-                        if self.stop_event.wait(actual_delay):
-                            break
-                        continue
-
-                    # Unsafe data-plane helpers must not remain running while a
-                    # platform/owner/security state blocks gateway authority.
-                    self.host_tunnels.stop_all()
-
-                    if mode == "platform_action":
-                        # Re-probe signed server authority at low frequency. No
-                        # Docker work happens while the server continues to
-                        # reject the gateway request; explicit platform recovery
-                        # can therefore resume without restarting Windows.
-                        self._report_recovery(
-                            mode,
-                            reason,
-                            PLATFORM_REPROBE_SECONDS,
-                        )
-                        retry_attempt = 0
-                        if self.stop_event.wait(PLATFORM_REPROBE_SECONDS):
-                            break
-                        continue
-
-                    # owner_action and stop are never automatically retried. A
-                    # new unknown failure therefore cannot become a 1 Hz loop.
-                    self._report_recovery(mode, reason, None)
-                    self.stop_event.wait()
-                    break
-                else:
-                    retry_attempt = 0
-                    self._last_error_signature = None
-                    if self.stop_event.wait(0.05):
-                        break
+                    if not keep_running:
+                        return
+                    continue
+                control_attempt = 0
+                self._last_error_signature = None
+                if items and self.stop_event.wait(transport.CONTROL_BURST_PAUSE_SECONDS):
+                    return
         finally:
+            self.stop_event.set()
+            reconcile_thread.join(timeout=2.0)
             self.host_tunnels.stop_all()
 
 
