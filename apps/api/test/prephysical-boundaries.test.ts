@@ -9,6 +9,14 @@ async function source(relativePath: string): Promise<string> {
   return readFile(path.join(repoRoot, relativePath), 'utf8');
 }
 
+function between(text: string, start: string, end: string): string {
+  const startIndex = text.indexOf(start);
+  assert.notEqual(startIndex, -1, `missing start marker: ${start}`);
+  const endIndex = text.indexOf(end, startIndex + start.length);
+  assert.notEqual(endIndex, -1, `missing end marker: ${end}`);
+  return text.slice(startIndex, endIndex);
+}
+
 test('Windows standby changes only system sleep and never the display or power plan', async () => {
   const [powerGuard, windowsService] = await Promise.all([
     source('agent/gpubnb_agent/power_guard.py'),
@@ -36,6 +44,34 @@ test('power policy keeps quarantine recovery read-only without weakening rental 
     1,
     'only the signed read-only power-policy route may relax moderationStatus=CLEAR',
   );
+});
+
+test('quarantine blocks normal jobs but preserves the signed diagnostic control plane', async () => {
+  const [server, diagnostics] = await Promise.all([
+    source('apps/api/src/server.ts'),
+    source('apps/api/src/machine-diagnostics-routes.ts'),
+  ]);
+
+  const normalAgentAuth = between(
+    server,
+    'async function authenticatedAgent(machineId:string',
+    'async function authenticatedAgentWithBody',
+  );
+  assert.match(normalAgentAuth, /moderationStatus!==ModerationStatus\.CLEAR/);
+  assert.match(normalAgentAuth, /keyRevokedAt/);
+  assert.match(server, /app\.get\('\/agent\/jobs\/next\/:machineId'/);
+  assert.match(server, /const machine=await authenticatedAgent\(machineId,'GET',routePath,req\.headers\)/);
+
+  const diagnosticAuth = between(
+    diagnostics,
+    'async function authenticateQuarantinableAgent(',
+    'const diagnosticResultSchema',
+  );
+  assert.match(diagnosticAuth, /agentPublicKey:\s*true/);
+  assert.match(diagnosticAuth, /keyRevokedAt:\s*true/);
+  assert.match(diagnosticAuth, /if \(!machine \|\| machine\.keyRevokedAt\) return false/);
+  assert.doesNotMatch(diagnosticAuth, /moderationStatus/);
+  assert.doesNotMatch(diagnosticAuth, /ModerationStatus\.CLEAR/);
 });
 
 test('release compatibility defaults to observation and gates new allocation through UNAVAILABLE', async () => {
