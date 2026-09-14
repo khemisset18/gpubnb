@@ -10,11 +10,6 @@ from logging import Formatter, Logger
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
-from .docker_cli import ensure_docker_on_path
-from .platform_info import run_command
-from .power_guard import run_rental_power_guard
-from .supervisor_recovery import PLATFORM_REPROBE_SECONDS, supervisor_wait
-
 SERVICE_NAME = "GPUbnbAgent"
 SERVICE_DISPLAY_NAME = "GPUbnb Host Agent"
 SERVICE_DESCRIPTION = "Supervises the GPUbnb host agent and secure workspace runtime."
@@ -61,6 +56,10 @@ def supervise_heartbeat(
     park this worker until service stop/restart; the independent power guard stays
     alive and therefore does not lose signed Standby/rental protection.
     """
+    # Keep the SCM bootstrap module cheap to import. Recovery policy is part of the
+    # normal runtime and is only needed after ServiceFramework is already running.
+    from .supervisor_recovery import PLATFORM_REPROBE_SECONDS, supervisor_wait
+
     event_sink = _service_event_sink(logger)
     attempt = 0
     while not stop_event.is_set():
@@ -153,7 +152,6 @@ def _require_windows() -> tuple[Any, Any, Any, Any]:
 
 def _service_class() -> type:
     servicemanager, win32event, win32service, win32serviceutil = _require_windows()
-    from .cli import heartbeat_loop
 
     class GPUbnbAgentService(win32serviceutil.ServiceFramework):
         _svc_name_ = SERVICE_NAME
@@ -173,15 +171,20 @@ def _service_class() -> type:
             win32event.SetEvent(self._stop_handle)
 
         def SvcDoRun(self) -> None:
+            # ServiceFramework reports SERVICE_RUNNING before entering SvcDoRun.
+            # Only now is it safe to import the full Agent/Workspace stack on a
+            # cold Windows boot without consuming SCM's dispatcher deadline.
             servicemanager.LogInfoMsg(f"{SERVICE_NAME} starting")
             logger = _service_logger()
             event_sink = _service_event_sink(logger)
             logger.info("%s starting", SERVICE_NAME)
-            # Docker Desktop's default Windows install is frequently per-user,
-            # while this service runs with the SCM's service environment. Normalize
-            # the CLI path once here so heartbeat inventory, GPU_PROOF, Developer
-            # gateway runtime and cleanup all inherit the same usable docker.exe.
-            docker_executable = ensure_docker_on_path()
+
+            from . import cli, install_runtime_layers
+            from .entrypoint import install_process_runtime
+            from .power_guard import run_rental_power_guard
+
+            install_runtime_layers()
+            docker_executable = install_process_runtime(cli)
             if docker_executable:
                 logger.info("Docker CLI resolved for service runtime: %s", docker_executable)
             else:
@@ -202,7 +205,7 @@ def _service_class() -> type:
             )
             power_guard_thread.start()
 
-            supervise_heartbeat(self._stop_event, heartbeat_loop, logger)
+            supervise_heartbeat(self._stop_event, cli.heartbeat_loop, logger)
             # SvcStop sets the shared event. Give the guard a short bounded window
             # to release ES_SYSTEM_REQUIRED before the service process exits.
             power_guard_thread.join(timeout=5)
@@ -213,6 +216,8 @@ def _service_class() -> type:
 
 
 def dispatch_service() -> int:
+    # This path intentionally performs only the minimum pywin32 work required to
+    # connect the process to SCM. Heavy Agent imports happen inside SvcDoRun.
     servicemanager, _, _, _ = _require_windows()
     service_class = _service_class()
     servicemanager.Initialize()
@@ -243,7 +248,10 @@ def manage_service(action: str) -> int:
 def _sc(*arguments: str) -> subprocess.CompletedProcess[str]:
     # Service recovery configuration is non-interactive background work. Reuse
     # the Agent's bounded no-console launcher so sc.exe cannot flash a console
-    # when invoked from the desktop/service setup path.
+    # when invoked from the desktop/service setup path. Import it lazily so the
+    # SCM dispatcher bootstrap never loads platform/GPU runtime helpers first.
+    from .platform_info import run_command
+
     result = run_command(["sc.exe", *arguments], timeout=15)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()[-500:]
