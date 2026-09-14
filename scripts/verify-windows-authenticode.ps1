@@ -22,8 +22,15 @@ foreach ($item in $Path) {
     $signed = $null -ne $signature.SignerCertificate
     $valid = $signature.Status -eq [System.Management.Automation.SignatureStatus]::Valid
 
-    if ($Required -and (-not $signed -or -not $valid)) {
-        throw "authenticode_required_but_invalid:$item:$($signature.Status)"
+    # An unsigned development candidate is permitted only when signing is not
+    # required. A file that *does* contain a signature must always validate:
+    # accepting a present-but-broken signature is worse than explicitly knowing
+    # that a pre-qualification candidate is unsigned.
+    if ($signed -and -not $valid) {
+        throw "authenticode_present_but_invalid:$item:$($signature.Status)"
+    }
+    if ($Required -and -not $signed) {
+        throw "authenticode_required_but_missing:$item"
     }
 
     $results += [ordered]@{
