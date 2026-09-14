@@ -1,5 +1,6 @@
 import threading
 import unittest
+from unittest.mock import patch
 
 from gpubnb_agent import power_guard
 
@@ -93,6 +94,40 @@ class PowerGuardTests(unittest.TestCase):
                 "liveSessionCount": 0,
                 "availabilityListingCount": 1,
             })
+
+    def test_legacy_fallback_does_not_treat_zero_sessions_as_owner_offline(self) -> None:
+        with (
+            patch.object(power_guard, "agent_request", return_value={}),
+            patch.object(power_guard, "parse_rental_authority_sessions", return_value={}),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "host_power_policy_legacy_idle_availability_unknown",
+            ):
+                power_guard._legacy_rental_authority_fallback(
+                    object(),
+                    object(),
+                    "machine-1",
+                )
+
+    def test_legacy_fallback_still_protects_proven_live_rental(self) -> None:
+        with (
+            patch.object(power_guard, "agent_request", return_value={}),
+            patch.object(
+                power_guard,
+                "parse_rental_authority_sessions",
+                return_value={"session-1": {}},
+            ),
+        ):
+            authority = power_guard._legacy_rental_authority_fallback(
+                object(),
+                object(),
+                "machine-1",
+            )
+
+        self.assertTrue(authority.keep_awake)
+        self.assertEqual(authority.reason, "legacy_live_session")
+        self.assertEqual(authority.live_session_count, 1)
 
     def test_loop_restores_persisted_claim_then_releases_when_service_stops(self) -> None:
         stop = threading.Event()
