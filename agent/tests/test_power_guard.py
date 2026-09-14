@@ -63,6 +63,7 @@ class PowerGuardTests(unittest.TestCase):
         self.assertEqual(writes, [power_guard.ES_CONTINUOUS | power_guard.ES_SYSTEM_REQUIRED])
         self.assertEqual(events[-1]["event"], "rental_power_guard_authority_error")
         self.assertTrue(events[-1]["guardActive"])
+        self.assertNotIn("compatibility", events[-1])
 
     def test_successful_not_available_policy_releases_guard(self) -> None:
         writes: list[int] = []
@@ -128,6 +129,73 @@ class PowerGuardTests(unittest.TestCase):
         self.assertTrue(authority.keep_awake)
         self.assertEqual(authority.reason, "legacy_live_session")
         self.assertEqual(authority.live_session_count, 1)
+
+    def test_missing_power_policy_api_is_explicit_before_idle_wait(self) -> None:
+        events: list[dict[str, object]] = []
+        guard = power_guard.SystemAwakeGuard(writer=lambda _flags: None)
+
+        with (
+            patch.object(
+                power_guard,
+                "_client_context",
+                return_value=(object(), object(), "machine-1"),
+            ),
+            patch.object(
+                power_guard,
+                "agent_request",
+                side_effect=[RuntimeError("API HTTP 404: missing"), {}],
+            ),
+            patch.object(power_guard, "parse_rental_authority_sessions", return_value={}),
+        ):
+            active = power_guard.reconcile_power_guard_once(
+                guard,
+                authority_loader=power_guard._load_host_power_authority,
+                event_sink=events.append,
+            )
+
+        self.assertFalse(active)
+        self.assertFalse(guard.active)
+        self.assertEqual(events[-1]["event"], "rental_power_guard_authority_error")
+        self.assertEqual(events[-1]["type"], "HostPowerPolicyCompatibilityError")
+        self.assertEqual(events[-1]["compatibility"], "api_missing_power_policy")
+        self.assertFalse(events[-1]["standbyReady"])
+        self.assertEqual(
+            events[-1]["action"],
+            power_guard.POWER_POLICY_COMPATIBILITY_ACTION,
+        )
+        self.assertIn("host_power_policy_legacy_idle_availability_unknown", events[-1]["message"])
+
+    def test_missing_power_policy_api_never_releases_existing_guard(self) -> None:
+        writes: list[int] = []
+        events: list[dict[str, object]] = []
+        guard = power_guard.SystemAwakeGuard(writer=writes.append)
+        guard.set_required(True)
+
+        with (
+            patch.object(
+                power_guard,
+                "_client_context",
+                return_value=(object(), object(), "machine-1"),
+            ),
+            patch.object(
+                power_guard,
+                "agent_request",
+                side_effect=[RuntimeError("API HTTP 404: missing"), {}],
+            ),
+            patch.object(power_guard, "parse_rental_authority_sessions", return_value={}),
+        ):
+            active = power_guard.reconcile_power_guard_once(
+                guard,
+                authority_loader=power_guard._load_host_power_authority,
+                event_sink=events.append,
+            )
+
+        self.assertTrue(active)
+        self.assertTrue(guard.active)
+        self.assertEqual(writes, [power_guard.ES_CONTINUOUS | power_guard.ES_SYSTEM_REQUIRED])
+        self.assertTrue(events[-1]["guardActive"])
+        self.assertEqual(events[-1]["compatibility"], "api_missing_power_policy")
+        self.assertFalse(events[-1]["standbyReady"])
 
     def test_loop_restores_persisted_claim_then_releases_when_service_stops(self) -> None:
         stop = threading.Event()
