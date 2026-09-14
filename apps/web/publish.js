@@ -28,8 +28,6 @@ const BLOCKING_REASON={
   ACCELERATOR_ALLOCATED:'GPU déjà alloué à une réservation',
   ACCELERATOR_ALREADY_LISTED:'GPU déjà publié',
   FULL_MACHINE_LISTING_ACTIVE:'une annonce machine entière utilise déjà ce GPU',
-  // Machine-level blockingReason codes (from machine_not_publishable, not
-  // accelerator-level) - see machine-state-service.ts / quarantine-reason-registry.ts.
   RESOURCE_QUARANTINED:'la machine est en quarantaine',
   CRITICAL_GPU_IDENTITY_CHANGE:"changement critique d'identité GPU pendant une session",
   DIAGNOSTIC_COMPLETION_RACE:'session active après libération de la ressource GPU',
@@ -42,11 +40,14 @@ const BLOCKING_REASON={
   GPU_UNAVAILABLE:'aucun GPU détecté',
   DOCKER_UNAVAILABLE:'Docker indisponible',
   NVIDIA_RUNTIME_UNAVAILABLE:'runtime NVIDIA indisponible',
+  MACHINE_DEGRADED:'le Host signale une dégradation générale — ouvrez le diagnostic pour identifier la cause',
+  DIAGNOSTIC_TIMED_OUT:'le dernier diagnostic a expiré avant de produire une preuve complète',
 };
 const MACHINE_STATE={
   NOT_LINKED:'Host non relié',
   WAITING_FOR_FIRST_HEARTBEAT:'premier heartbeat en attente',
   OFFLINE:'Host hors ligne',
+  AGENT_OUTDATED:'Agent obsolète — mise à jour requise',
   GPU_NOT_DETECTED:'aucun GPU détecté',
   DRIVER_MISSING:'pilote GPU manquant',
   DOCKER_UNAVAILABLE:'Docker indisponible',
@@ -54,6 +55,7 @@ const MACHINE_STATE={
   DIAGNOSTIC_REQUIRED:'diagnostic GPU requis',
   DIAGNOSTIC_RUNNING:'diagnostic en cours',
   DIAGNOSTIC_FAILED:'diagnostic en échec',
+  DEGRADED:'Host dégradé — vérification requise',
   VERIFICATION_REQUIRED:'vérification Host requise',
   READY_TO_PUBLISH:'prête à publier',
   LISTING_ACTIVE:'machine active sur le marketplace',
