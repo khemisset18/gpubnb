@@ -12,6 +12,7 @@ import { RedisDeviceAuthorizationStore } from './device-authorization-store.js';
 import { registerMiningRoutes } from './mining-routes.js';
 import { syncMiningResourcesFromInventory } from './mining-resource-inventory.js';
 import { registerWorkspaceRenterRoutes } from './workspace-renter-routes.js';
+import { registerWorkspaceReconnectRoutes } from './workspace-reconnect-routes.js';
 import { registerArtifactTransportGuards } from './artifact-transport-guards.js';
 import { registerWorkspaceBrowserSecurity } from './workspace-browser-security.js';
 import { registerRentalMarketplaceRoutes } from './rental-marketplace-routes.js';
@@ -83,6 +84,7 @@ export const registerDeviceAuthorizationRoutes = (
   registerReleaseCompatibilityRuntime(app, db, redis);
   registerMiningRoutes(app, db, redis);
   registerWorkspaceRenterRoutes(app, db, redis);
+  registerWorkspaceReconnectRoutes(app, db, redis);
   registerRentalMarketplaceRoutes(app, db, redis);
   registerMachineDiagnosticsRoutes(app, db, redis);
 
