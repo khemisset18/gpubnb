@@ -26,7 +26,7 @@ const WebSocketServer=WebSocket.Server;
 // machine-workspace-catalog's executableWorkspaceSlugs) because that list also
 // includes 'compute', which never runs through this gateway at all (it's a
 // one-shot batch job - see agent/gpubnb_agent/runner.py's GPU_PROOF path).
-const GATEWAY_WORKSPACE_SLUGS:string[]=['developer','data','ai','video','audio','api','mobile','security-lab'];
+const GATEWAY_WORKSPACE_SLUGS:string[]=['developer','data','ai','video','audio','api','mobile','security-lab','cloud-desktop','creator','cad','gaming'];
 const GATEWAY_COOKIE='gpubnb_workspace';
 const SESSION_TTL_SECONDS=3600;
 const INTERACTIVE_CONNECT_TIMEOUT_SECONDS=15*60;
@@ -158,18 +158,6 @@ async function authenticateAgent(db:PrismaClient,redis:Redis,machineId:string,re
 }
 async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.workspaceSession.findFirst({where:{id:sessionId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR}},select:{id:true,renterId:true,machineId:true,bookingId:true,jobId:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});}
 
-// The commercial rental clock's one true start: a real upstream frame proven exchanged
-// between the container and the authenticated renter's browser (see the two call sites
-// below - both fire only on a genuine WebSocket data frame, never on merely opening the
-// gateway URL). booking.workspaceActivatedAt (not booking.status alone) is the
-// idempotency guard: with the private-beta GPU_DIAGNOSTIC path, a booking can already be
-// ACTIVE (proving the GPU works) well before any interactive workspace ever opens - GPU
-// Proof and any wait before the renter opens their workspace must never consume purchased
-// minutes, so both STARTING and ACTIVE are valid pre-activation states here, and only
-// workspaceActivatedAt:null distinguishes "not yet really started" from "already running".
-// Exported (kept otherwise unused outside this module) so it can be exercised directly
-// against a real database in tests, the same convention gpu-proof-completion.ts's
-// completeGpuProofJob already uses - not re-simulated in a test that only reads source.
 export async function activateGatewaySession(db:PrismaClient,sessionId:string,machineId:string){
   return db.$transaction(async tx=>{
     const row=await tx.workspaceSession.findFirst({
@@ -199,12 +187,6 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const grant=String((request.query as {grant?:string}).grant||'');const consumed=await consumeWorkspaceAccessGrant(redis,grant);
     if(!consumed||consumed.sessionId!==sessionId)return reply.code(401).send({error:'invalid_workspace_grant'});const row=await activeGatewaySession(db,sessionId);if(!row||row.renterId!==consumed.userId)return reply.code(409).send({error:'workspace_not_available'});
     const browserToken=crypto.randomBytes(32).toString('base64url');const ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.floor((row.expiresAt.getTime()-Date.now())/1000)));await redis.set(gatewaySessionKey(browserToken),JSON.stringify({userId:row.renterId,sessionId,accessRequestId:consumed.requestId}),'EX',ttl);
-    // Consuming a grant only authenticates the browser. Billing and the purchased
-    // duration start later, after the agent proves that code-server exchanged a
-    // real WebSocket frame with this authenticated browser.
-    // Entry comes from the Netlify renter portal. Lax is required for the cookie
-    // to survive that top-level cross-site navigation and its same-origin redirect;
-    // HttpOnly, Secure and the per-session Path keep it scoped to this gateway.
     reply.setCookie(GATEWAY_COOKIE,browserToken,{httpOnly:true,secure:true,sameSite:'lax',path:`/workspace-gateway/${sessionId}`});return reply.redirect(`/workspace-gateway/${sessionId}/`);
   });
   app.all('/workspace-gateway/:sessionId/*',async(request,reply)=>{
@@ -215,9 +197,6 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   app.get('/agent/workspace-gateway/:machineId/desired',async(request,reply)=>{
     const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/desired`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});
     const rows=await db.workspaceSession.findMany({where:{machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});
-    // The agent needs to know which container/image to run per session - a
-    // flat workspaceSlug is what workspace_gateway.py's _reconcile_sessions
-    // reads (defaulting to 'developer' for any older/unrecognized value).
     const sessions=rows.map(({machineWorkspace,...row})=>({...row,workspaceSlug:machineWorkspace.workspace.slug}));
     return {sessions,dataPlane:{hostTunnelEnabled:dataPlaneHostBootstrapEnabled()}};
   });
@@ -336,9 +315,6 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     const bindingRaw=await redis.get(wsChannelKey(channelId));if(!bindingRaw)return close?{ok:true,stale:true}:reply.code(409).send({error:'unknown_gateway_channel'});
     const binding=JSON.parse(bindingRaw) as GatewayChannelBinding;if(binding.machineId!==machineId)return reply.code(403).send({error:'gateway_channel_machine_mismatch'});
     if(!close){
-      // A real upstream frame remains the billing activation signal. Cache that
-      // session-level activation in Redis so the VS Code protocol hot path does
-      // not run a PostgreSQL transaction for every Management/ExtensionHost frame.
       const activatedKey=wsSessionActivatedKey(binding.sessionId);
       let ttl=await redis.ttl(activatedKey);
       if(ttl<1){
@@ -346,9 +322,6 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         ttl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((activation.expiresAt.getTime()-Date.now())/1000)));
         await redis.set(activatedKey,'1','EX',ttl);await redis.expire(binding.browserSessionKey,ttl);
       }
-      // Channel readiness is intentionally separate from session activation:
-      // ws_open ACKs may prove a local socket exists, but only a real frame may
-      // activate billing. Legacy agents still use this first-frame readiness key.
       await redis.set(wsUpstreamReadyKey(channelId),'1','EX',ttl);await redis.expire(wsChannelKey(channelId),ttl);
     }
     const relayPayload=JSON.stringify({dataBase64,binary:body.binary===true,close});
@@ -420,10 +393,6 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         const gatewayLog=app.log.child({accessRequestId:browser.accessRequestId,bookingId:row.bookingId,jobId:row.jobId,workspaceSessionId:sessionId,machineId:row.machineId,channelId,channel:channelLogId,openRequestId});
         gatewayLog.info({event:'workspace_gateway_browser_connected'},'workspace gateway browser websocket connected');
         ws.on('error',error=>gatewayLog.warn({err:error,event:'workspace_gateway_browser_socket_error',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket error'));
-        // Keep queue ordering backward-compatible: browser frames may be queued as
-        // soon as ws_open itself is enqueued. LPUSH/RPOP preserves ws_open before
-        // ws_send, so legacy agents can still establish code-server and exchange
-        // their first frame while newer agents additionally return an explicit ACK.
         const setup=(async()=>{
           await redis.set(wsChannelKey(channelId),JSON.stringify({sessionId,machineId:row.machineId,browserSessionKey} satisfies GatewayChannelBinding),'EX',channelTtl);
           const accepted=await enqueueMachineRelay(redis,row.machineId,{id:openRequestId,sessionId,kind:'ws_open',channelId,path:targetPath,headers:relayHeaders(request.headers as Record<string,unknown>)} satisfies RelayRequest);
@@ -438,8 +407,6 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
             gatewayLog.info({event:'workspace_gateway_upstream_opened',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway upstream websocket opened');
             return;
           }
-          // Old agents do not answer ws_open. Preserve their previous behavior:
-          // a signed first upstream frame proves the local WebSocket is alive.
           const legacyReady=await redis.get(wsUpstreamReadyKey(channelId));
           if(browserClosed)return;
           if(legacyReady){gatewayLog.info({event:'workspace_gateway_legacy_upstream_ready',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway legacy agent produced an upstream frame');return;}
