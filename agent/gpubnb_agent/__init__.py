@@ -86,6 +86,14 @@ def install_runtime_layers() -> None:
     from .workspace_gateway_v8 import install as install_workspace_gateway_v8
 
     install_workspace_gateway_v8()
+
+    # The base gateway already contains the real Selkies launch profiles for Cloud
+    # Desktop, Creator, CAD and Gaming. v9 only admits those slugs after all v2-v8
+    # transport, fencing and reconnect layers are installed; compatibility remains
+    # server-authoritative and requires real desktop GPU rendering capability.
+    from .workspace_gateway_v9 import install as install_workspace_gateway_v9
+
+    install_workspace_gateway_v9()
     _runtime_layers_installed = True
 
 
