@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
 import { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';
+import { registerDesktopWorkspaceRoutes } from './desktop-workspace-routes.js';
 import {
   WORKSPACE_RECONNECT_GRACE_SECONDS,
   WORKSPACE_RECONNECT_PROTOCOL_VERSION,
@@ -81,6 +82,11 @@ export function registerWorkspaceReconnectRoutes(
   db: PrismaClient,
   redis: Redis,
 ): void {
+  // Stacked here because this registration hook already ships in the same API
+  // layer as reconnect-grace. The desktop module itself is independent and
+  // reuses the normal signed Workspace gateway/access authority.
+  registerDesktopWorkspaceRoutes(app, db, redis);
+
   app.get('/agent/workspace-reconnect/:machineId/desired', {
     config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
   }, async (request, reply) => {
