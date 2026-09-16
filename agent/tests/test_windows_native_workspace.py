@@ -76,14 +76,15 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
 
     def test_self_test_requires_isolated_session_capture_media_and_input(self):
         for field in ("isolatedSession", "captureFrame", "mediaLoopback", "inputIsolation"):
-            with self.subTest(field=field), (
-                patch.object(native.platform, "system", return_value="Windows"),
-                patch.object(native, "run_command", return_value=self._passing_report(**{field: False})),
-                patch.object(native, "gpu_inventory", return_value=[{"gpuVendor": "NVIDIA", "gpuUuid": "GPU-EXACT"}]),
-            ):
-                result = native.windows_native_desktop_preflight("helper.exe")
-                self.assertFalse(result.available)
-                self.assertIn(field, result.reason)
+            with self.subTest(field=field):
+                with (
+                    patch.object(native.platform, "system", return_value="Windows"),
+                    patch.object(native, "run_command", return_value=self._passing_report(**{field: False})),
+                    patch.object(native, "gpu_inventory", return_value=[{"gpuVendor": "NVIDIA", "gpuUuid": "GPU-EXACT"}]),
+                ):
+                    result = native.windows_native_desktop_preflight("helper.exe")
+                    self.assertFalse(result.available)
+                    self.assertIn(field, result.reason)
 
     def test_self_test_requires_nvenc(self):
         with (
