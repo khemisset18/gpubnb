@@ -82,15 +82,16 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
 
     def test_launch_requires_isolated_session_and_input_boundary(self):
         for field in ("isolatedSession", "captureReady", "mediaReady", "inputIsolation"):
-            with self.subTest(field=field), (
-                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
-                patch.object(runtime, "workspace_native_ready", return_value=(True, "ready")),
-                patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
-                patch.object(runtime, "discover_native_application", return_value=None),
-                patch.object(runtime, "run_command", return_value=self._start_report(**{field: False})),
-            ):
-                with self.assertRaisesRegex(RuntimeError, field):
-                    runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+            with self.subTest(field=field):
+                with (
+                    patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                    patch.object(runtime, "workspace_native_ready", return_value=(True, "ready")),
+                    patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+                    patch.object(runtime, "discover_native_application", return_value=None),
+                    patch.object(runtime, "run_command", return_value=self._start_report(**{field: False})),
+                ):
+                    with self.assertRaisesRegex(RuntimeError, field):
+                        runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
 
     def test_creator_launch_passes_discovered_blender_path(self):
         report = self._start_report(workspaceSlug="creator")
@@ -111,15 +112,16 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             ("controllerReady", "native_workspace_start_controller_required"),
         ):
             report = self._start_report(workspaceSlug="gaming", **{field: False})
-            with self.subTest(field=field), (
-                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
-                patch.object(runtime, "workspace_native_ready", return_value=(True, "ready")),
-                patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
-                patch.object(runtime, "discover_native_application", return_value=r"C:\Steam\steam.exe"),
-                patch.object(runtime, "run_command", return_value=report),
-            ):
-                with self.assertRaisesRegex(RuntimeError, error):
-                    runtime.launch_windows_native_workspace("sess-1", "gaming", "GPU-EXACT")
+            with self.subTest(field=field):
+                with (
+                    patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                    patch.object(runtime, "workspace_native_ready", return_value=(True, "ready")),
+                    patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+                    patch.object(runtime, "discover_native_application", return_value=r"C:\Steam\steam.exe"),
+                    patch.object(runtime, "run_command", return_value=report),
+                ):
+                    with self.assertRaisesRegex(RuntimeError, error):
+                        runtime.launch_windows_native_workspace("sess-1", "gaming", "GPU-EXACT")
 
     def test_stop_requires_helper_confirmation_for_exact_session(self):
         confirmed = SimpleNamespace(
