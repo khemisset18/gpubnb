@@ -2,10 +2,10 @@
 """Local qualification report for GPUbnb Windows-native graphical Workspaces.
 
 This tool is intentionally read-only from the marketplace point of view: it does
-not make a Machine bookable and does not start a renter Workspace.  It invokes the
-same fail-closed native stream-helper self-test used by the Agent, reports only
-non-secret capability facts, and can optionally return a non-zero exit status when
-qualification is required by an operator/CI step.
+not make a Machine bookable and does not start a renter Workspace. It invokes the
+same fail-closed native stream-helper self-test used by the Agent exactly once,
+reports only non-secret capability facts, and can optionally return a non-zero exit
+status when qualification is required by an operator/CI step.
 """
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ from gpubnb_agent.windows_native_workspace import (
     WINDOWS_NATIVE_WORKSPACE_SLUGS,
     discover_native_application,
     find_stream_helper,
+    profile_for_slug,
     windows_native_desktop_preflight,
-    workspace_native_ready,
 )
 
 REPORT_SCHEMA_VERSION = 1
@@ -31,20 +31,34 @@ def build_report(workspace: str | None = None) -> dict[str, Any]:
         raise ValueError("unsupported_windows_native_workspace")
 
     helper = find_stream_helper()
+    # Expensive physical capture/NVENC/session proof: run once, then evaluate the
+    # four Workspace-specific application/audio gates from the same snapshot.
     preflight = windows_native_desktop_preflight(helper)
     workspace_reports: dict[str, dict[str, Any]] = {}
 
     for slug in slugs:
+        profile = profile_for_slug(slug)
         application = discover_native_application(slug)
-        try:
-            ready, reason = workspace_native_ready(slug, helper)
-        except Exception as exc:  # qualification must fail closed, not hide the report
-            ready, reason = False, f"qualification_error:{type(exc).__name__}"
+        application_available = application is not None or profile.application is None
+
+        if not preflight.available:
+            ready, reason = False, preflight.reason
+        elif profile.requires_audio and not preflight.audio_available:
+            ready, reason = False, "workspace_audio_required"
+        elif not application_available:
+            ready, reason = False, f"{slug}_application_missing"
+        else:
+            ready, reason = True, "ready"
+
         workspace_reports[slug] = {
             "ready": bool(ready),
             "reason": str(reason)[:200],
             # Deliberately report only presence. Never print provider filesystem paths.
-            "applicationAvailable": application is not None or slug == "cloud-desktop",
+            "applicationAvailable": application_available,
+            # Gaming controller readiness is asserted again by --start because the
+            # preflight contract currently proves capture/input isolation, not a
+            # particular renter controller device.
+            "runtimeControllerProofRequired": bool(profile.requires_controller),
         }
 
     return {
