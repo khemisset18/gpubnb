@@ -12,6 +12,7 @@ compatibility remains authoritative until this backend is physically qualified.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from ipaddress import ip_address
 import json
 from pathlib import Path
 from typing import Any
@@ -63,8 +64,15 @@ def _loopback_media_url(value: object) -> str | None:
     parsed = urlparse(raw)
     if parsed.scheme not in {"http", "https", "ws", "wss"}:
         return None
-    host = (parsed.hostname or "").casefold()
-    if host not in {"127.0.0.1", "localhost", "::1"}:
+    host = (parsed.hostname or "").strip()
+    # Never resolve a hostname here. Even "localhost" can be redirected through a
+    # modified hosts file. A literal loopback IP is the only accepted network
+    # boundary between the native helper and GPUbnb's authenticated gateway.
+    try:
+        address = ip_address(host)
+    except ValueError:
+        return None
+    if not address.is_loopback:
         return None
     if parsed.username or parsed.password or parsed.fragment:
         return None
