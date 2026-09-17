@@ -1,12 +1,12 @@
 """Fail-closed lifecycle contract for Windows-native graphical Workspaces.
 
 The actual capture/encode/session implementation lives in the signed GPUbnb
-Windows stream helper.  This module is the Agent-side authority boundary around
+Windows stream helper. This module is the Agent-side authority boundary around
 that helper: it validates the selected Workspace, re-runs the native capability
 preflight, binds the helper to the exact leased GPU, accepts only loopback media
 endpoints, and rejects any launch that cannot prove renter-session isolation.
 
-Nothing in this module makes a machine bookable by itself.  Server-side
+Nothing in this module makes a machine bookable by itself. Server-side
 compatibility remains authoritative until this backend is physically qualified.
 """
 from __future__ import annotations
@@ -24,7 +24,6 @@ from .windows_native_workspace import (
     find_stream_helper,
     profile_for_slug,
     windows_native_desktop_preflight,
-    workspace_native_ready,
 )
 
 
@@ -69,7 +68,43 @@ def _loopback_media_url(value: object) -> str | None:
         return None
     if parsed.username or parsed.password or parsed.fragment:
         return None
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    # The native helper must bind an explicit ephemeral/local service port. Accepting
+    # an implicit 80/443 endpoint could accidentally point the gateway at an unrelated
+    # provider-local service rather than the helper instance we just launched.
+    if port is None or not 1 <= port <= 65535:
+        return None
     return raw
+
+
+def _helper_stop_confirmed(executable: str, session_id: str) -> bool:
+    """Best-effort helper cleanup used after a successful-but-invalid start reply."""
+    result = run_command(
+        [executable, "--stop", "--json", "--session-id", session_id],
+        timeout=30,
+    )
+    if result.returncode != 0:
+        return False
+    report = _json_object(result.stdout)
+    return bool(
+        report is not None
+        and report.get("stopped") is True
+        and str(report.get("sessionId") or "") == session_id
+    )
+
+
+def _raise_after_started_session_validation_failure(
+    executable: str,
+    session_id: str,
+    code: str,
+) -> None:
+    """Never leave a helper-owned session alive after rejecting its start report."""
+    if _helper_stop_confirmed(executable, session_id):
+        raise RuntimeError(code)
+    raise RuntimeError(f"{code}_cleanup_unverified")
 
 
 def launch_windows_native_workspace(
@@ -81,7 +116,7 @@ def launch_windows_native_workspace(
 ) -> NativeRuntimeHandle:
     """Launch one native Workspace only after every local proof passes.
 
-    The helper owns the dedicated Windows renter session.  The Agent never asks it
+    The helper owns the dedicated Windows renter session. The Agent never asks it
     to capture the provider desktop and never accepts a public media listener: the
     returned media endpoint must be loopback-only so the existing authenticated
     GPUbnb gateway can remain the network authority.
@@ -96,17 +131,22 @@ def launch_windows_native_workspace(
     if not executable:
         raise RuntimeError("native_stream_helper_missing")
 
-    ready, reason = workspace_native_ready(workspace_slug, executable)
-    if not ready:
-        raise RuntimeError(reason)
-
+    # Run the expensive physical capture/NVENC/isolation proof exactly once per
+    # launch attempt. The previous implementation called workspace_native_ready()
+    # and then repeated the same helper self-test, doubling launch latency and side
+    # effects for no security benefit.
     preflight = windows_native_desktop_preflight(executable)
     if not preflight.available:
         raise RuntimeError(preflight.reason)
     if not preflight.gpu_uuid or preflight.gpu_uuid.casefold() != gpu_uuid.casefold():
         raise RuntimeError("native_stream_leased_gpu_mismatch")
+    if profile.requires_audio and not preflight.audio_available:
+        raise RuntimeError("workspace_audio_required")
 
     application = discover_native_application(workspace_slug)
+    if profile.application is not None and application is None:
+        raise RuntimeError(f"{workspace_slug}_application_missing")
+
     command = [
         executable,
         "--start",
@@ -123,18 +163,33 @@ def launch_windows_native_workspace(
 
     result = run_command(command, timeout=60)
     if result.returncode != 0:
+        # Helper contract: a non-zero --start must not leave a live renter session.
+        # Only a successful start reply crosses the boundary where cleanup below is
+        # mandatory before the Agent may reject the returned metadata.
         raise RuntimeError("native_workspace_start_failed")
+
     report = _json_object(result.stdout)
     if report is None:
-        raise RuntimeError("native_workspace_start_invalid_json")
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_invalid_json"
+        )
+    assert report is not None
     if report.get("schemaVersion") != SELF_TEST_SCHEMA_VERSION:
-        raise RuntimeError("native_workspace_start_schema_mismatch")
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_schema_mismatch"
+        )
     if str(report.get("sessionId") or "") != session_id:
-        raise RuntimeError("native_workspace_start_session_mismatch")
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_session_mismatch"
+        )
     if str(report.get("workspaceSlug") or "") != workspace_slug:
-        raise RuntimeError("native_workspace_start_slug_mismatch")
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_slug_mismatch"
+        )
     if str(report.get("gpuUuid") or "").casefold() != gpu_uuid.casefold():
-        raise RuntimeError("native_workspace_start_gpu_mismatch")
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_gpu_mismatch"
+        )
 
     required_true = (
         "isolatedSession",
@@ -144,20 +199,30 @@ def launch_windows_native_workspace(
     )
     missing = next((field for field in required_true if report.get(field) is not True), None)
     if missing:
-        raise RuntimeError(f"native_workspace_start_missing_{missing}")
+        _raise_after_started_session_validation_failure(
+            executable, session_id, f"native_workspace_start_missing_{missing}"
+        )
     if str(report.get("hardwareEncoder") or "").casefold() != "nvenc":
-        raise RuntimeError("native_workspace_start_nvenc_required")
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_nvenc_required"
+        )
 
     audio_ready = report.get("audioReady") is True
     controller_ready = report.get("controllerReady") is True
     if profile.requires_audio and not audio_ready:
-        raise RuntimeError("native_workspace_start_audio_required")
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_audio_required"
+        )
     if profile.requires_controller and not controller_ready:
-        raise RuntimeError("native_workspace_start_controller_required")
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_controller_required"
+        )
 
     media_url = _loopback_media_url(report.get("mediaUrl"))
     if media_url is None:
-        raise RuntimeError("native_workspace_start_loopback_media_required")
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_loopback_media_required"
+        )
 
     return NativeRuntimeHandle(
         session_id=session_id,
