@@ -38,6 +38,8 @@ For the four graphical Workspaces the API chooses one qualified backend:
 
 A host must never silently fall back from one backend to another after booking.
 
+Until the Windows capability is persisted and physically qualified, the API must also reject these four slugs on Windows even if a malformed or stale inventory reports `desktopGpuRenderingAvailable=true`. That field is a Linux backend proof, never a Windows compatibility escape hatch.
+
 ## Windows-native runtimes
 
 ### Cloud Desktop
@@ -68,16 +70,36 @@ The existing GPUbnb control plane remains authoritative for booking, fencing, re
 
 Cloud Desktop/Creator/CAD can tolerate a higher-latency first transport. Gaming must ultimately use a low-latency browser media transport; the existing control WebSocket may be used for signaling/control but should not be treated as the final high-performance game-video transport without measurement.
 
+### Chosen Windows capture boundary
+
+The initial implementation should use a GPUbnb-owned **virtual display** rather than capture a provider physical monitor. Windows IddCx is designed for indirect/virtual displays and remote-display scenarios, which makes it the preferred isolation boundary for Cloud Desktop and the shared graphical backend.
+
+The media helper must therefore prove all of the following before reporting READY:
+
+- a GPUbnb virtual monitor exists and belongs to the renter runtime;
+- the capture source is that virtual monitor/output, never an arbitrary physical provider output;
+- the Direct3D capture device is created on the adapter that owns the exact leased GPU;
+- Desktop Duplication/DXGI can acquire a real frame from that output;
+- the acquired GPU frame reaches NVENC on the exact leased GPU;
+- the encoded frame is consumed through the loopback media endpoint;
+- a desktop switch, display mode change, session disconnect or DXGI access-loss invalidates READY and forces capture re-creation/re-proof before billing may resume.
+
+The helper protocol must identify the selected output/adapter strongly enough for the Agent to compare the start report with the preflight report. A bare `captureReady=true` is not sufficient for release qualification.
+
+IddCx adds driver packaging/signing/deployment complexity. That complexity is preferable to silently streaming the provider's personal monitor. If the virtual-display driver is absent or cannot start, the Windows desktop backend remains unavailable.
+
 ## Isolation invariants
 
 - Never capture or expose the provider's personal desktop.
 - Dedicated renter identity/session and ACL-scoped workspace directory.
+- Dedicated GPUbnb virtual display for the renter graphical surface; provider physical outputs are never valid capture targets.
 - Exact leased GPU identity is checked before READY.
 - No access to provider profile, browser cookies, documents, clipboard or mounted personal drives by default.
 - Renter input is scoped to the dedicated session only.
 - Process tree is owned by a GPUbnb job/session boundary and is terminated on cleanup.
 - Reboot/reconnect follows the existing server-authoritative fencing and 10-minute reconnect/billing rules.
 - Workspace-specific outbound networking is explicit; Gaming cannot inherit the no-internet policy by accident, and non-Gaming desktop Workspaces should stay fail-closed unless their manifest allows egress.
+- Native media URLs are literal loopback IP endpoints with an explicit port; hostnames such as `localhost` are not trusted as a network boundary.
 
 ## Compatibility
 
@@ -94,15 +116,15 @@ These are minimum compatibility gates, not performance guarantees.
 
 ## Delivery order
 
-1. Capability/preflight with a real capture+encode self-test; no catalogue enabling yet.
+1. Capability/preflight with a real virtual-display + capture + encode self-test; no catalogue enabling yet.
 2. Authenticated Windows media session and dedicated renter-session lifecycle.
 3. Cloud Desktop end-to-end.
 4. Creator/Blender exact-GPU render proof.
 5. CAD/FreeCAD viewport proof.
 6. Gaming/Steam, audio, controller/input and explicit egress policy.
-7. Reconnect, billing-pause, reboot and cleanup qualification.
+7. Reconnect, billing-pause, reboot and cleanup qualification, including DXGI/session-loss recovery.
 8. Only then expose the Windows cards as `bookable`.
 
 ## Qualification boundary
 
-Do not claim Windows support from unit tests alone. At least one physical Windows NVIDIA host with enough VRAM must prove capture, hardware encode, browser decode, exact leased GPU use, isolation, reconnect/billing behavior and cleanup before this backend can be promoted.
+Do not claim Windows support from unit tests alone. At least one physical Windows NVIDIA host with enough VRAM must prove virtual-display isolation, capture, hardware encode, browser decode, exact leased GPU use, provider-desktop exclusion, reconnect/billing behavior and cleanup before this backend can be promoted.
