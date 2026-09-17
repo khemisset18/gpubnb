@@ -122,8 +122,9 @@ test('the catalogue only marks a workspace bookable when it is both compatible a
   const catalogue=allWorkspaceCompatibility(highEndMachine);
   const bySlug=Object.fromEntries(catalogue.map(item=>[item.slug,item]));
   // A 24GB card clears every manifest's requirements, so every workspace is
-  // compatible here - this isolates the executable-slug gate as the only
-  // reason the remaining, still-catalogue-only workspaces stay unbookable.
+  // compatible here - this isolates the runtime/platform gate. The four desktop
+  // workspaces must remain fail-closed on Windows until the native backend has
+  // its own independently measured capability.
   assert.ok(catalogue.every(item=>item.compatible),'every workspace must be compatible on this high-end machine, or the test fixture is wrong');
   assert.equal(bySlug.compute.bookable,true);
   assert.equal(bySlug.developer.bookable,true);
@@ -134,7 +135,7 @@ test('the catalogue only marks a workspace bookable when it is both compatible a
   assert.equal(bySlug.api.bookable,true);
   assert.equal(bySlug.mobile.bookable,true);
   assert.equal(bySlug['security-lab'].bookable,true);
-  for(const slug of catalogue.map(item=>item.slug))if(slug!=='compute'&&slug!=='developer'&&slug!=='data'&&slug!=='ai'&&slug!=='video'&&slug!=='audio'&&slug!=='api'&&slug!=='mobile'&&slug!=='security-lab')assert.equal(bySlug[slug].bookable,false,`${slug} must not be bookable yet even though it is compatible`);
+  for(const slug of ['cloud-desktop','creator','cad','gaming'])assert.equal(bySlug[slug].bookable,false,`${slug} must remain fail-closed on Windows until the native backend is qualified`);
 });
 
 test('an incompatible workspace in the full catalogue is explained, not silently hidden',()=>{
@@ -186,7 +187,7 @@ test('retry is not scoped to a single workspace slug, and re-enqueues using the 
 
 test('the workspace-gateway route filters and the executable-slug gate all agree on which slugs run through the persistent gateway',async()=>{
   const gateway=await readFile(path.join(sourceRoot,'workspace-gateway.ts'),'utf8');
-  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai','video','audio','api','mobile','security-lab'\]/);
+  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai','video','audio','api','mobile','security-lab','cloud-desktop','creator','cad','gaming'\]/);
   const matches=gateway.match(/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/g)??[];
   assert.equal(matches.length,5,'all five agent-facing gateway routes (activate, desired, data-plane-host, register, usage) must use the shared slug list');
   const { executableWorkspaceSlugs }=await import('../src/machine-workspace-catalog.js');
@@ -201,6 +202,10 @@ test('the workspace-gateway route filters and the executable-slug gate all agree
   assert.ok(executableWorkspaceSlugs.includes('api'));
   assert.ok(executableWorkspaceSlugs.includes('mobile'));
   assert.ok(executableWorkspaceSlugs.includes('security-lab'));
+  assert.ok(executableWorkspaceSlugs.includes('cloud-desktop'));
+  assert.ok(executableWorkspaceSlugs.includes('creator'));
+  assert.ok(executableWorkspaceSlugs.includes('cad'));
+  assert.ok(executableWorkspaceSlugs.includes('gaming'));
 });
 
 test('AI Workspace has its own real booking, status and access routes, parallel to Data\'s',async()=>{
@@ -221,7 +226,7 @@ test('AI Workspace has its own real booking, status and access routes, parallel 
 test('Video Workspace has its own real booking, status and access routes, parallel to AI\'s',async()=>{
   const renterRoutes=await readFile(path.join(sourceRoot,'workspace-renter-routes.ts'),'utf8');
   assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/video'/);
-  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'video'/);
+  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'video'\)/);
   assert.match(renterRoutes,/type:JobType\.WORKSPACE_PREPARE,parameters:\{workspaceSlug:'video'/);
   assert.match(renterRoutes,/app\.get\('\/bookings\/:bookingId\/workspace\/video\/status'/);
   assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/video\/access'/);
@@ -236,7 +241,7 @@ test('Video Workspace has its own real booking, status and access routes, parall
 test('Audio Workspace has its own real booking, status and access routes, parallel to Video\'s',async()=>{
   const renterRoutes=await readFile(path.join(sourceRoot,'workspace-renter-routes.ts'),'utf8');
   assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/audio'/);
-  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'audio'/);
+  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'audio'\)/);
   assert.match(renterRoutes,/type:JobType\.WORKSPACE_PREPARE,parameters:\{workspaceSlug:'audio'/);
   assert.match(renterRoutes,/app\.get\('\/bookings\/:bookingId\/workspace\/audio\/status'/);
   assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/audio\/access'/);
@@ -251,7 +256,7 @@ test('Audio Workspace has its own real booking, status and access routes, parall
 test('API Workspace has its own real booking, status and access routes, parallel to Audio\'s',async()=>{
   const renterRoutes=await readFile(path.join(sourceRoot,'workspace-renter-routes.ts'),'utf8');
   assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/api'/);
-  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'api'/);
+  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'api'\)/);
   assert.match(renterRoutes,/type:JobType\.WORKSPACE_PREPARE,parameters:\{workspaceSlug:'api'/);
   assert.match(renterRoutes,/app\.get\('\/bookings\/:bookingId\/workspace\/api\/status'/);
   assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/api\/access'/);
@@ -274,7 +279,7 @@ test('API Workspace is compatible even with a modest CPU-only-capable machine - 
 test('Mobile Workspace has its own real booking, status and access routes, parallel to API\'s',async()=>{
   const renterRoutes=await readFile(path.join(sourceRoot,'workspace-renter-routes.ts'),'utf8');
   assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/mobile'/);
-  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'mobile'/);
+  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'mobile'\)/);
   assert.match(renterRoutes,/type:JobType\.WORKSPACE_PREPARE,parameters:\{workspaceSlug:'mobile'/);
   assert.match(renterRoutes,/app\.get\('\/bookings\/:bookingId\/workspace\/mobile\/status'/);
   assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/mobile\/access'/);
@@ -304,7 +309,7 @@ test('Mobile Workspace is bookable now that its real runtime has been built, tes
 test('Security Lab Workspace has its own real booking, status and access routes, parallel to Mobile\'s',async()=>{
   const renterRoutes=await readFile(path.join(sourceRoot,'workspace-renter-routes.ts'),'utf8');
   assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/security-lab'/);
-  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'security-lab'/);
+  assert.match(renterRoutes,/ensureCompatibleMachineWorkspace\(db,booking\.listing\.machineId,'security-lab'\)/);
   assert.match(renterRoutes,/type:JobType\.WORKSPACE_PREPARE,parameters:\{workspaceSlug:'security-lab'/);
   assert.match(renterRoutes,/app\.get\('\/bookings\/:bookingId\/workspace\/security-lab\/status'/);
   assert.match(renterRoutes,/app\.post\('\/bookings\/:bookingId\/workspace\/security-lab\/access'/);
