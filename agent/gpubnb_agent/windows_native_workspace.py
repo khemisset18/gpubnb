@@ -6,8 +6,9 @@ Gaming and a fail-closed capability probe that can later be wired into the
 heartbeat/API once the native media helper is shipped and physically qualified.
 
 The helper contract is intentionally stronger than "Windows + CUDA + enough
-VRAM": a real isolated renter session, a real captured frame, hardware encoding
-and a local media round-trip must all succeed for capability to be true.
+VRAM": a real isolated renter session, a GPUbnb-owned virtual display, a real
+captured frame, hardware encoding and a local media round-trip must all succeed
+for capability to be true. The provider desktop must be explicitly excluded.
 """
 from __future__ import annotations
 
@@ -157,6 +158,8 @@ def windows_native_desktop_preflight(
           "helperVersion": "...",
           "gpuUuid": "GPU-...",
           "isolatedSession": true,
+          "virtualDisplay": true,
+          "providerDesktopExcluded": true,
           "captureFrame": true,
           "hardwareEncoder": "nvenc",
           "mediaLoopback": true,
@@ -188,6 +191,8 @@ def windows_native_desktop_preflight(
 
     required_true = (
         "isolatedSession",
+        "virtualDisplay",
+        "providerDesktopExcluded",
         "captureFrame",
         "mediaLoopback",
         "inputIsolation",
