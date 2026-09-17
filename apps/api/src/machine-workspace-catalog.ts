@@ -5,18 +5,33 @@ import { workspaceManifest, workspaceManifests, type WorkspaceManifest } from '.
 
 // Executable means there is a real runtime path behind the catalogue card: a
 // container image, agent launch profile, API/gateway lifecycle and renter route.
-// Compatibility remains machine-specific. In particular Cloud Desktop, Creator,
-// CAD and Gaming all require desktopGpuRenderingAvailable, so merely being in
-// this list never makes them runnable on Windows/WSL2 hosts without a real DRI/
-// desktop-rendering path.
+// Compatibility remains machine-specific. Cloud Desktop, Creator, CAD and Gaming
+// currently have a qualified Linux/Selkies backend only. A future Windows-native
+// backend must expose its own independently measured capability before these slugs
+// may become bookable on Windows; desktopGpuRenderingAvailable must never be used
+// as a Windows escape hatch because it represents the Linux desktop-rendering path.
 export const executableWorkspaceSlugs = [
   'compute', 'developer', 'data', 'ai', 'video', 'audio', 'api', 'mobile', 'security-lab',
   'cloud-desktop', 'creator', 'cad', 'gaming',
 ] as const;
 export type ExecutableWorkspaceSlug = typeof executableWorkspaceSlugs[number];
 
+const linuxDesktopWorkspaceSlugs = new Set<string>(['cloud-desktop', 'creator', 'cad', 'gaming']);
+
 export function isExecutableWorkspaceSlug(value: string): value is ExecutableWorkspaceSlug {
   return executableWorkspaceSlugs.includes(value as ExecutableWorkspaceSlug);
+}
+
+function isWorkspaceRuntimeAvailable(machine: MachineCapabilities, slug: string): boolean {
+  if (!isExecutableWorkspaceSlug(slug)) return false;
+  if (!linuxDesktopWorkspaceSlugs.has(slug)) return true;
+
+  // Fail closed on Windows even if a malformed/spoofed inventory reports the
+  // Linux-only desktop flag. The Windows-native backend will get a distinct,
+  // physically measured capability and an explicit branch here when it exists.
+  const os = machine.operatingSystem?.trim().toLowerCase() ?? '';
+  if (os.startsWith('windows')) return false;
+  return machine.desktopGpuRenderingAvailable;
 }
 
 export function compatibleWorkspaceChoices(machine: MachineCapabilities) {
@@ -38,7 +53,7 @@ export function compatibleWorkspaceChoices(machine: MachineCapabilities) {
 export function allWorkspaceCompatibility(machine: MachineCapabilities) {
   // Full catalogue view: every manifest gets a real, machine-specific verdict.
   // A workspace is bookable only when the runtime exists AND the current host
-  // actually satisfies its requirements.
+  // actually satisfies both its requirements and the backend/platform gate.
   return workspaceManifests.map((manifest) => {
     const compatibility = analyzeWorkspace(machine, manifest);
     const compatible = compatibility.state === 'READY' || compatibility.state === 'LIMITED';
@@ -46,7 +61,7 @@ export function allWorkspaceCompatibility(machine: MachineCapabilities) {
       ...manifest,
       compatibility,
       compatible,
-      bookable: compatible && isExecutableWorkspaceSlug(manifest.slug),
+      bookable: compatible && isWorkspaceRuntimeAvailable(machine, manifest.slug),
     };
   });
 }
@@ -71,6 +86,9 @@ export async function ensureCompatibleMachineWorkspace(
   const compatibility = analyzeWorkspace(machine, manifest);
   if (compatibility.state !== 'READY' && compatibility.state !== 'LIMITED') {
     throw new Error(`${slug}_workspace_incompatible`);
+  }
+  if (!isWorkspaceRuntimeAvailable(machine, slug)) {
+    throw new Error(`${slug}_workspace_runtime_unavailable`);
   }
 
   const definition = await db.workspaceDefinition.upsert({
