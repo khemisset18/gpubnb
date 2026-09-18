@@ -90,8 +90,9 @@ gpubnb-windows-stream.exe --start --json \
 ```
 
 Before returning success, the helper must have created the isolated renter
-boundary, bound rendering/capture/encode to the leased GPU and opened a loopback
-media endpoint on an explicit TCP port.
+boundary on a GPUbnb-owned virtual display, proved the provider desktop is not a
+capture source, bound rendering/capture/encode to the leased GPU and opened a
+loopback media endpoint on an explicit TCP port.
 
 Success stdout:
 
@@ -103,6 +104,8 @@ Success stdout:
   "gpuUuid": "GPU-...",
   "helperVersion": "0.1.0",
   "isolatedSession": true,
+  "virtualDisplay": true,
+  "providerDesktopExcluded": true,
   "captureReady": true,
   "hardwareEncoder": "nvenc",
   "mediaReady": true,
@@ -122,8 +125,9 @@ Additional Workspace requirements:
   `audioReady` and `controllerReady` must both be true before GPUbnb exposes the
   session as ready.
 
-A helper MUST NOT return success while presenting a provider desktop, a public
-listener, a software encoder, the wrong GPU or an unisolated input target.
+A helper MUST NOT return success unless both `virtualDisplay` and
+`providerDesktopExcluded` are true. It must never present a provider desktop,
+a public listener, a software encoder, the wrong GPU or an unisolated input target.
 
 ## `--stop --json`
 
