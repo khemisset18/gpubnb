@@ -6,7 +6,7 @@
 //! DXGI capture, exact-GPU NVENC and isolated input are implemented.
 
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
-use gpubnb_windows_platform::media::{MediaProbeRequest, probe_media_frame};
+use gpubnb_windows_platform::media::{MediaProbeError, MediaProbeRequest, probe_media_frame};
 use gpubnb_windows_platform::pipe::connect_worker_pipe_client;
 use gpubnb_windows_platform::session::current_process_session_id;
 use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
@@ -227,7 +227,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         refresh_hz: spec.refresh_hz,
                         capture_timeout_ms: PIPE_TIMEOUT_MS,
                     })
-                    .map_err(|_| WorkerError::new("media_frame_proof_failed", 21))?;
+                    .map_err(|error| media_probe_error(error, false))?;
 
                     let proof = encode_worker_media_proof(WorkerMediaProof {
                         protocol_version: WORKER_PROTOCOL_VERSION,
@@ -283,7 +283,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         refresh_hz: spec.refresh_hz,
                         capture_timeout_ms: PIPE_TIMEOUT_MS,
                     })
-                    .map_err(|_| WorkerError::new("resume_media_reproof_failed", 21))?;
+                    .map_err(|error| media_probe_error(error, true))?;
 
                     let proof = encode_worker_media_proof(WorkerMediaProof {
                         protocol_version: WORKER_PROTOCOL_VERSION,
@@ -309,6 +309,17 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
             }
         }
     }
+}
+
+fn media_probe_error(error: MediaProbeError, resume: bool) -> WorkerError {
+    let code = match (resume, error) {
+        (_, MediaProbeError::CaptureTimeout) => "media_capture_timeout",
+        (_, MediaProbeError::CaptureAccessLost) => "media_capture_access_lost",
+        (_, MediaProbeError::DeviceLost) => "media_device_lost",
+        (true, _) => "resume_media_reproof_failed",
+        (false, _) => "media_frame_proof_failed",
+    };
+    WorkerError::new(code, 21)
 }
 
 fn error_json(error: WorkerError) -> String {
@@ -421,6 +432,26 @@ mod tests {
         ] {
             assert!(parse_args(&args).is_err());
         }
+    }
+
+    #[test]
+    fn media_failure_codes_are_specific_and_secret_free() {
+        for (error, expected) in [
+            (MediaProbeError::CaptureTimeout, "media_capture_timeout"),
+            (MediaProbeError::CaptureAccessLost, "media_capture_access_lost"),
+            (MediaProbeError::DeviceLost, "media_device_lost"),
+            (MediaProbeError::ProbeFailed, "media_frame_proof_failed"),
+        ] {
+            let mapped = media_probe_error(error, false);
+            assert_eq!(mapped.code, expected);
+            let json = error_json(mapped);
+            assert!(!json.contains("GPU-"));
+            assert!(!json.contains("S-1-"));
+        }
+        assert_eq!(
+            media_probe_error(MediaProbeError::ProbeFailed, true).code,
+            "resume_media_reproof_failed"
+        );
     }
 
     #[test]
