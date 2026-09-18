@@ -397,6 +397,10 @@ export function registerMachineDiagnosticsRoutes(app: FastifyInstance, db: Prism
       } : { active: false },
       lastHeartbeatAt: machine.lastHeartbeatAt,
       heartbeatFresh,
+      desktopCapabilities: {
+        linuxDesktopGpuRenderingAvailable: machine.desktopGpuRenderingAvailable,
+        windowsNativeDesktopStreamingAvailable: machine.nativeDesktopStreamingAvailable,
+      },
       lastDiagnosticAt: machine.lastDiagnosticAt,
       runningDiagnostic: latestRun && effectiveDiagnosticStatus(latestRun, now) === 'RUNNING'
         ? { id: latestRun.id, startedAt: latestRun.startedAt }
