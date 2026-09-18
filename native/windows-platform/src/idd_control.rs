@@ -1,10 +1,7 @@
 //! Safe service-side contract for one GPUbnb-owned IddCx monitor.
 //!
-//! This module performs no DeviceIoControl call yet. It deliberately defines the
-//! identity/mode proof that a future privileged control path must satisfy before a
-//! virtual monitor may be plugged in.
-
-use crate::PlatformError;
+//! This module defines the fixed control ABI and, on Windows, discovers the
+//! GPUbnb IddCx device interface and sends the validated request with DeviceIoControl.
 
 pub const IDD_CONTROL_VERSION: u32 = 1;
 pub const IDD_CONTROL_REQUEST_SIZE: usize = 64;
@@ -39,6 +36,7 @@ pub enum VirtualDisplayControlError {
     DeviceIoControlFailed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VirtualDisplayRequestError {
     Generation,
     WindowsSession,
