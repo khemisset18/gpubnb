@@ -39,9 +39,7 @@ fn pipe_name(session_id: &str, generation: u64) -> Result<String, PlatformError>
     if !safe_session_id(session_id) || generation == 0 {
         return Err(PlatformError::InvalidSessionId);
     }
-    Ok(format!(
-        r"\\.\pipe\gpubnb-native-{session_id}-{generation}"
-    ))
+    Ok(format!(r"\\.\pipe\gpubnb-native-{session_id}-{generation}"))
 }
 
 fn security_sddl(service_sid: &str, renter_logon_sid: &str) -> Result<String, PlatformError> {
@@ -287,9 +285,7 @@ mod windows_impl {
         let mut length = 0u32;
         // SAFETY: first call intentionally supplies a null output buffer to query
         // the required length.
-        let first = unsafe {
-            GetTokenInformation(token, class, ptr::null_mut(), 0, &mut length)
-        };
+        let first = unsafe { GetTokenInformation(token, class, ptr::null_mut(), 0, &mut length) };
         if first != 0 || length == 0 {
             return Err(PlatformError::TokenQueryFailed);
         }
@@ -449,10 +445,7 @@ mod tests {
             pipe_name("sess-1", 7).expect("valid pipe name"),
             r"\\.\pipe\gpubnb-native-sess-1-7"
         );
-        assert_eq!(
-            pipe_name("sess-1", 0),
-            Err(PlatformError::InvalidSessionId)
-        );
+        assert_eq!(pipe_name("sess-1", 0), Err(PlatformError::InvalidSessionId));
     }
 
     #[cfg(target_os = "windows")]
