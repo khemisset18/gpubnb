@@ -75,6 +75,7 @@ static GUID GPUbnbContainerIdFromNonce(_In_reads_(GPUBNB_IDD_DISPLAY_NONCE_SIZE)
 
 static NTSTATUS GPUbnbPlugMonitor(
     _In_ WDFDEVICE device,
+    _In_ WDF_FILEOBJECT ownerFile,
     _In_ const GPUbnbIddControlRequest* request)
 {
     auto* deviceContext = WdfObjectGet_GPUbnbDeviceContext(device);
@@ -133,17 +134,24 @@ static NTSTATUS GPUbnbPlugMonitor(
     }
 
     deviceContext->Monitor = output.MonitorObject;
+    deviceContext->MonitorOwnerFile = ownerFile;
     return STATUS_SUCCESS;
 }
 
 static NTSTATUS GPUbnbUnplugMonitor(
     _In_ WDFDEVICE device,
+    _In_ WDF_FILEOBJECT ownerFile,
     _In_ const GPUbnbIddControlRequest* request)
 {
     auto* deviceContext = WdfObjectGet_GPUbnbDeviceContext(device);
     if (deviceContext->Monitor == nullptr)
     {
         return STATUS_NOT_FOUND;
+    }
+
+    if (deviceContext->MonitorOwnerFile != ownerFile)
+    {
+        return STATUS_ACCESS_DENIED;
     }
 
     auto* monitorContext = WdfObjectGet_GPUbnbMonitorContext(deviceContext->Monitor);
@@ -163,6 +171,7 @@ static NTSTATUS GPUbnbUnplugMonitor(
     if (NT_SUCCESS(status))
     {
         deviceContext->Monitor = nullptr;
+        deviceContext->MonitorOwnerFile = nullptr;
     }
     return status;
 }
@@ -266,6 +275,17 @@ NTSTATUS GPUbnbDeviceAdd(
         return status;
     }
 
+    WDF_FILEOBJECT_CONFIG fileConfig;
+    WDF_FILEOBJECT_CONFIG_INIT(
+        &fileConfig,
+        WDF_NO_EVENT_CALLBACK,
+        WDF_NO_EVENT_CALLBACK,
+        GPUbnbFileCleanup);
+    WdfDeviceInitSetFileObjectConfig(
+        deviceInit,
+        &fileConfig,
+        WDF_NO_OBJECT_ATTRIBUTES);
+
     WDF_OBJECT_ATTRIBUTES deviceAttributes;
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&deviceAttributes, GPUbnbDeviceContext);
 
@@ -304,6 +324,7 @@ NTSTATUS GPUbnbDeviceAdd(
     auto* context = WdfObjectGet_GPUbnbDeviceContext(device);
     context->Adapter = nullptr;
     context->Monitor = nullptr;
+    context->MonitorOwnerFile = nullptr;
     return STATUS_SUCCESS;
 }
 
@@ -356,10 +377,18 @@ VOID GPUbnbEvtIoDeviceControl(
                     else
                     {
                         WDFDEVICE device = WdfIoQueueGetDevice(queue);
-                        status = control->Operation == static_cast<UINT32>(
-                                     GPUbnbIddControlOperation::PlugMonitor)
-                            ? GPUbnbPlugMonitor(device, control)
-                            : GPUbnbUnplugMonitor(device, control);
+                        WDF_FILEOBJECT ownerFile = WdfRequestGetFileObject(request);
+                        if (ownerFile == nullptr)
+                        {
+                            status = STATUS_ACCESS_DENIED;
+                        }
+                        else
+                        {
+                            status = control->Operation == static_cast<UINT32>(
+                                         GPUbnbIddControlOperation::PlugMonitor)
+                                ? GPUbnbPlugMonitor(device, ownerFile, control)
+                                : GPUbnbUnplugMonitor(device, ownerFile, control);
+                        }
                     }
                 }
             }
@@ -367,6 +396,25 @@ VOID GPUbnbEvtIoDeviceControl(
     }
 
     WdfRequestComplete(request, status);
+}
+
+_Use_decl_annotations_
+VOID GPUbnbFileCleanup(WDFFILEOBJECT fileObject)
+{
+    WDFDEVICE device = WdfFileObjectGetDevice(fileObject);
+    auto* context = WdfObjectGet_GPUbnbDeviceContext(device);
+    if (context->Monitor == nullptr || context->MonitorOwnerFile != fileObject)
+    {
+        return;
+    }
+
+    const IDDCX_MONITOR monitor = context->Monitor;
+    const NTSTATUS status = IddCxMonitorDeparture(monitor);
+    if (NT_SUCCESS(status))
+    {
+        context->Monitor = nullptr;
+        context->MonitorOwnerFile = nullptr;
+    }
 }
 
 _Use_decl_annotations_
