@@ -76,6 +76,8 @@ pub enum PlatformError {
     ProcessWaitFailed,
     ProcessWaitTimeout,
     ProcessExitQueryFailed,
+    ProcessImageQueryFailed,
+    ProcessImageIdentityMismatch,
     IddInterfaceQueryFailed,
     IddInterfaceMissing,
     IddInterfaceAmbiguous,
