@@ -7,34 +7,33 @@
 //! -> GPUbnb IddCx display -> fresh DXGI frame -> exact-GPU NVENC bitstream.
 
 use crate::graphics_proof::{
-    validate_graphics_proof_chain, CaptureFrameProof, EncodeCodec, NvencProof, PixelFormat,
-    VirtualDisplayProof,
+    CaptureFrameProof, EncodeCodec, NvencProof, PixelFormat, VirtualDisplayProof,
+    validate_graphics_proof_chain,
 };
 use crate::lifecycle::WorkspaceKind;
 use crate::worker_protocol::{
-    decode_and_validate_worker_hello, decode_worker_media_proof, encode_worker_command,
-    encode_worker_display_spec, encode_worker_input, validate_worker_media_proof, WorkerCommand,
-    WorkerCommandFrame, WorkerDisplaySpec, WorkerFence, WorkerInputEvent, WorkerInputFrame,
-    WORKER_PROTOCOL_VERSION,
+    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerCommandFrame, WorkerDisplaySpec, WorkerFence,
+    WorkerInputEvent, WorkerInputFrame, decode_and_validate_worker_hello,
+    decode_worker_media_proof, encode_worker_command, encode_worker_display_spec,
+    encode_worker_input, validate_worker_media_proof,
 };
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
 use gpubnb_windows_platform::idd_control::{
-    activate_virtual_display_lease, VirtualDisplayLease, VirtualDisplayOperation,
-    VirtualDisplayRequest,
+    VirtualDisplayLease, VirtualDisplayOperation, VirtualDisplayRequest,
+    activate_virtual_display_lease,
 };
-use gpubnb_windows_platform::pipe::{create_worker_pipe, current_process_user_sid, WorkerPipe};
+use gpubnb_windows_platform::open_application_for_verification;
+use gpubnb_windows_platform::pipe::{WorkerPipe, create_worker_pipe, current_process_user_sid};
 use gpubnb_windows_platform::process::{
-    launch_qualified_renter_worker, RenterWorkerLaunchSpec, RenterWorkerProcess,
+    RenterWorkerLaunchSpec, RenterWorkerProcess, launch_qualified_renter_worker,
 };
 use gpubnb_windows_platform::session::query_renter_session_token;
-use gpubnb_windows_platform::open_application_for_verification;
 use std::path::Path;
 
 const WORKER_PATH: &str = r"C:\Program Files\GPUbnb\gpubnb-windows-worker.exe";
 const PIPE_TIMEOUT_MS: u32 = 10_000;
 const STOP_TIMEOUT_MS: u32 = 5_000;
-const WORKER_SIGNER_SHA256_HEX: Option<&str> =
-    option_env!("GPUBNB_WINDOWS_WORKER_SIGNER_SHA256");
+const WORKER_SIGNER_SHA256_HEX: Option<&str> = option_env!("GPUBNB_WINDOWS_WORKER_SIGNER_SHA256");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceRuntimeError {
@@ -266,8 +265,7 @@ impl QualifiedGraphicsRuntime {
                 sequence: self.next_sequence,
             })
             .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
-            if self.pipe.send_frame(&command).is_err()
-                || worker.wait_exit(STOP_TIMEOUT_MS).is_err()
+            if self.pipe.send_frame(&command).is_err() || worker.wait_exit(STOP_TIMEOUT_MS).is_err()
             {
                 stop_error = Some(ServiceRuntimeError::StopUnconfirmed);
             }
@@ -317,7 +315,8 @@ fn worker_signer() -> Result<[u8; 32], ServiceRuntimeError> {
     let mut out = [0u8; 32];
     for (index, slot) in out.iter_mut().enumerate() {
         let high = hex_nibble(bytes[index * 2]).ok_or(ServiceRuntimeError::WorkerSignerPolicy)?;
-        let low = hex_nibble(bytes[index * 2 + 1]).ok_or(ServiceRuntimeError::WorkerSignerPolicy)?;
+        let low =
+            hex_nibble(bytes[index * 2 + 1]).ok_or(ServiceRuntimeError::WorkerSignerPolicy)?;
         *slot = (high << 4) | low;
     }
     if out == [0; 32] {
@@ -353,8 +352,7 @@ pub fn start_qualified_graphics_runtime(
     )
     .map_err(|_| ServiceRuntimeError::RenterSession)?;
 
-    let service_sid =
-        current_process_user_sid().map_err(|_| ServiceRuntimeError::RenterSession)?;
+    let service_sid = current_process_user_sid().map_err(|_| ServiceRuntimeError::RenterSession)?;
     let pipe = create_worker_pipe(
         config.session_id,
         config.generation,
@@ -435,8 +433,8 @@ pub fn start_qualified_graphics_runtime(
         sequence: 1,
     })
     .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
-    let display_frame =
-        encode_worker_display_spec(display_spec).map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
+    let display_frame = encode_worker_display_spec(display_spec)
+        .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
     pipe.send_frame(&prepare)
         .and_then(|_| pipe.send_frame(&display_frame))
         .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
@@ -529,9 +527,15 @@ mod tests {
     #[test]
     fn signer_policy_is_never_implicit() {
         match WORKER_SIGNER_SHA256_HEX {
-            None => assert_eq!(worker_signer(), Err(ServiceRuntimeError::WorkerSignerPolicy)),
+            None => assert_eq!(
+                worker_signer(),
+                Err(ServiceRuntimeError::WorkerSignerPolicy)
+            ),
             Some(value) if value.len() != 64 => {
-                assert_eq!(worker_signer(), Err(ServiceRuntimeError::WorkerSignerPolicy))
+                assert_eq!(
+                    worker_signer(),
+                    Err(ServiceRuntimeError::WorkerSignerPolicy)
+                )
             }
             Some(_) => assert!(worker_signer().is_ok()),
         }
@@ -582,6 +586,5 @@ mod tests {
             }),
             Err(ServiceRuntimeError::InvalidConfiguration)
         );
-
     }
 }
