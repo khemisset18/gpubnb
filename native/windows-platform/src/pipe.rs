@@ -62,9 +62,38 @@ pub struct WorkerPipe {
     _handle: windows_impl::OwnedPipeHandle,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerifiedPipeClient {
+    pub process_id: u32,
+    pub logon_sid: String,
+}
+
 impl WorkerPipe {
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn accept_verified_client(
+        &self,
+        expected_logon_sid: &str,
+        timeout_ms: u32,
+    ) -> Result<VerifiedPipeClient, PlatformError> {
+        if !numeric_sid(expected_logon_sid) || timeout_ms == 0 {
+            return Err(PlatformError::InvalidSid);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::accept_verified_client(
+                &self._handle,
+                expected_logon_sid,
+                timeout_ms,
+            )
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = timeout_ms;
+            Err(PlatformError::WindowsRequired)
+        }
     }
 }
 
@@ -110,7 +139,7 @@ pub fn current_process_logon_sid() -> Result<String, PlatformError> {
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
-    use super::WorkerPipe;
+    use super::{VerifiedPipeClient, WorkerPipe};
     use crate::PlatformError;
     use std::ffi::{OsStr, c_void};
     use std::mem::{align_of, size_of};
@@ -125,6 +154,12 @@ mod windows_impl {
     const TOKEN_GROUPS_CLASS: u32 = 2;
     const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
     const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+    const ERROR_PIPE_CONNECTED: u32 = 535;
+    const ERROR_IO_PENDING: u32 = 997;
+    const WAIT_OBJECT_0: u32 = 0;
+    const WAIT_TIMEOUT: u32 = 258;
+    const INFINITE: u32 = u32::MAX;
+    const PIPE_AUTH_PRELUDE: u8 = 0x47;
 
     const PIPE_ACCESS_DUPLEX: u32 = 0x0000_0003;
     const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x0008_0000;
@@ -152,6 +187,28 @@ mod windows_impl {
         user: SidAndAttributes,
     }
 
+    #[repr(C)]
+    struct Overlapped {
+        internal: usize,
+        internal_high: usize,
+        offset: u32,
+        offset_high: u32,
+        event: Handle,
+    }
+
+    impl Overlapped {
+        fn new(event: Handle) -> Self {
+            Self {
+                internal: 0,
+                internal_high: 0,
+                offset: 0,
+                offset_high: 0,
+                event,
+            }
+        }
+    }
+
+
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn CreateNamedPipeW(
@@ -168,6 +225,30 @@ mod windows_impl {
         fn GetCurrentProcess() -> Handle;
         fn GetLastError() -> u32;
         fn LocalFree(memory: Handle) -> Handle;
+        fn CreateEventW(
+            event_attributes: *mut c_void,
+            manual_reset: i32,
+            initial_state: i32,
+            name: *const u16,
+        ) -> Handle;
+        fn WaitForSingleObject(handle: Handle, milliseconds: u32) -> u32;
+        fn GetOverlappedResult(
+            file: Handle,
+            overlapped: *mut Overlapped,
+            transferred: *mut u32,
+            wait: i32,
+        ) -> i32;
+        fn CancelIoEx(file: Handle, overlapped: *mut Overlapped) -> i32;
+        fn ConnectNamedPipe(pipe: Handle, overlapped: *mut Overlapped) -> i32;
+        fn ReadFile(
+            file: Handle,
+            buffer: *mut c_void,
+            bytes_to_read: u32,
+            bytes_read: *mut u32,
+            overlapped: *mut Overlapped,
+        ) -> i32;
+        fn GetNamedPipeClientProcessId(pipe: Handle, client_process_id: *mut u32) -> i32;
+        fn GetCurrentThread() -> Handle;
     }
 
     #[link(name = "advapi32")]
@@ -191,6 +272,14 @@ mod windows_impl {
             return_length: *mut u32,
         ) -> i32;
         fn ConvertSidToStringSidW(sid: *mut c_void, string_sid: *mut *mut u16) -> i32;
+        fn ImpersonateNamedPipeClient(pipe: Handle) -> i32;
+        fn RevertToSelf() -> i32;
+        fn OpenThreadToken(
+            thread_handle: Handle,
+            desired_access: u32,
+            open_as_self: i32,
+            token_handle: *mut Handle,
+        ) -> i32;
     }
 
     pub(super) struct OwnedPipeHandle(Handle);
@@ -198,6 +287,17 @@ mod windows_impl {
     impl Drop for OwnedPipeHandle {
         fn drop(&mut self) {
             // SAFETY: this type uniquely owns a live pipe handle.
+            unsafe {
+                let _ = CloseHandle(self.0);
+            }
+        }
+    }
+
+    struct OwnedEvent(Handle);
+
+    impl Drop for OwnedEvent {
+        fn drop(&mut self) {
+            // SAFETY: this type uniquely owns a live event handle.
             unsafe {
                 let _ = CloseHandle(self.0);
             }
@@ -270,6 +370,17 @@ mod windows_impl {
         text
     }
 
+    fn open_current_thread_token() -> Result<OwnedToken, PlatformError> {
+        let mut raw = 0isize;
+        // SAFETY: GetCurrentThread returns a pseudo-handle for the calling
+        // impersonating thread and raw is a valid out pointer.
+        let ok = unsafe { OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 0, &mut raw) };
+        if ok == 0 || raw == 0 {
+            return Err(PlatformError::TokenQueryFailed);
+        }
+        Ok(OwnedToken(raw))
+    }
+
     fn open_current_token() -> Result<OwnedToken, PlatformError> {
         let mut raw = 0isize;
         // SAFETY: GetCurrentProcess returns a pseudo-handle valid for
@@ -338,8 +449,7 @@ mod windows_impl {
         Ok(buffer)
     }
 
-    pub(super) fn current_process_sid(logon_sid: bool) -> Result<String, PlatformError> {
-        let token = open_current_token()?;
+    fn sid_from_token(token: &OwnedToken, logon_sid: bool) -> Result<String, PlatformError> {
         if !logon_sid {
             let buffer = token_information(token.0, TOKEN_USER_CLASS)?;
             if buffer.len() < size_of::<TokenUser>() {
@@ -384,6 +494,11 @@ mod windows_impl {
         sid_to_string(logon.sid)
     }
 
+    pub(super) fn current_process_sid(logon_sid: bool) -> Result<String, PlatformError> {
+        let token = open_current_token()?;
+        sid_from_token(&token, logon_sid)
+    }
+
     fn security_descriptor(sddl: &str) -> Result<LocalSecurityDescriptor, PlatformError> {
         let wide_sddl = wide(OsStr::new(sddl)).map_err(|_| PlatformError::InvalidSid)?;
         let mut descriptor = ptr::null_mut();
@@ -401,6 +516,164 @@ mod windows_impl {
             return Err(PlatformError::SecurityDescriptorFailed);
         }
         Ok(LocalSecurityDescriptor(descriptor))
+    }
+
+    fn create_event() -> Result<OwnedEvent, PlatformError> {
+        // SAFETY: null security/name pointers are allowed. Manual-reset avoids
+        // losing a completion signal before GetOverlappedResult consumes it.
+        let raw = unsafe { CreateEventW(ptr::null_mut(), 1, 0, ptr::null()) };
+        if raw == 0 {
+            return Err(PlatformError::PipeConnectFailed);
+        }
+        Ok(OwnedEvent(raw))
+    }
+
+    fn cancel_and_drain(pipe: Handle, overlapped: &mut Overlapped) {
+        // SAFETY: both handles/OVERLAPPED remain live until this function returns.
+        unsafe {
+            let _ = CancelIoEx(pipe, overlapped);
+            let _ = WaitForSingleObject(overlapped.event, INFINITE);
+            let mut transferred = 0u32;
+            let _ = GetOverlappedResult(pipe, overlapped, &mut transferred, 0);
+        }
+    }
+
+    fn wait_pending(
+        pipe: Handle,
+        overlapped: &mut Overlapped,
+        timeout_ms: u32,
+        timeout_error: PlatformError,
+        operation_error: PlatformError,
+    ) -> Result<u32, PlatformError> {
+        // SAFETY: event belongs to this live OVERLAPPED.
+        match unsafe { WaitForSingleObject(overlapped.event, timeout_ms) } {
+            WAIT_OBJECT_0 => {}
+            WAIT_TIMEOUT => {
+                cancel_and_drain(pipe, overlapped);
+                return Err(timeout_error);
+            }
+            _ => {
+                cancel_and_drain(pipe, overlapped);
+                return Err(operation_error);
+            }
+        }
+        let mut transferred = 0u32;
+        // SAFETY: operation has signaled completion and storage is still live.
+        let ok = unsafe { GetOverlappedResult(pipe, overlapped, &mut transferred, 0) };
+        if ok == 0 {
+            return Err(operation_error);
+        }
+        Ok(transferred)
+    }
+
+    fn connect_client(pipe: Handle, timeout_ms: u32) -> Result<(), PlatformError> {
+        let event = create_event()?;
+        let mut overlapped = Overlapped::new(event.0);
+        // SAFETY: pipe is overlapped and the OVERLAPPED/event stay live.
+        let connected = unsafe { ConnectNamedPipe(pipe, &mut overlapped) };
+        if connected != 0 {
+            return Ok(());
+        }
+        // SAFETY: GetLastError immediately follows the failed API call.
+        match unsafe { GetLastError() } {
+            ERROR_PIPE_CONNECTED => Ok(()),
+            ERROR_IO_PENDING => wait_pending(
+                pipe,
+                &mut overlapped,
+                timeout_ms,
+                PlatformError::PipeConnectTimeout,
+                PlatformError::PipeConnectFailed,
+            )
+            .map(|_| ()),
+            _ => Err(PlatformError::PipeConnectFailed),
+        }
+    }
+
+    fn read_auth_prelude(pipe: Handle, timeout_ms: u32) -> Result<(), PlatformError> {
+        let event = create_event().map_err(|_| PlatformError::PipeReadFailed)?;
+        let mut overlapped = Overlapped::new(event.0);
+        let mut prelude = 0u8;
+        // SAFETY: one-byte buffer and OVERLAPPED/event remain live through
+        // completion. lpNumberOfBytesRead may be null for overlapped I/O.
+        let immediate = unsafe {
+            ReadFile(
+                pipe,
+                (&mut prelude as *mut u8).cast::<c_void>(),
+                1,
+                ptr::null_mut(),
+                &mut overlapped,
+            )
+        };
+        let transferred = if immediate != 0 {
+            let mut transferred = 0u32;
+            // SAFETY: an immediately completed overlapped operation may be queried.
+            let ok = unsafe { GetOverlappedResult(pipe, &mut overlapped, &mut transferred, 0) };
+            if ok == 0 {
+                return Err(PlatformError::PipeReadFailed);
+            }
+            transferred
+        } else {
+            // SAFETY: GetLastError immediately follows failed ReadFile.
+            if unsafe { GetLastError() } != ERROR_IO_PENDING {
+                return Err(PlatformError::PipeReadFailed);
+            }
+            wait_pending(
+                pipe,
+                &mut overlapped,
+                timeout_ms,
+                PlatformError::PipeConnectTimeout,
+                PlatformError::PipeReadFailed,
+            )?
+        };
+        if transferred != 1 || prelude != PIPE_AUTH_PRELUDE {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        Ok(())
+    }
+
+    pub(super) fn accept_verified_client(
+        pipe: &OwnedPipeHandle,
+        expected_logon_sid: &str,
+        timeout_ms: u32,
+    ) -> Result<VerifiedPipeClient, PlatformError> {
+        connect_client(pipe.0, timeout_ms)?;
+        read_auth_prelude(pipe.0, timeout_ms)?;
+
+        let mut process_id = 0u32;
+        // SAFETY: pipe is a connected server handle and process_id is a valid out pointer.
+        let pid_ok = unsafe { GetNamedPipeClientProcessId(pipe.0, &mut process_id) };
+        if pid_ok == 0 || process_id == 0 {
+            return Err(PlatformError::PipeClientPidFailed);
+        }
+
+        // SECURITY BOUNDARY: failure must abort. Continuing would execute under
+        // the privileged service identity instead of the renter client's identity.
+        // SAFETY: pipe has a client and at least one message was read above.
+        let impersonated = unsafe { ImpersonateNamedPipeClient(pipe.0) };
+        if impersonated == 0 {
+            return Err(PlatformError::PipeImpersonationFailed);
+        }
+
+        let peer_result = (|| {
+            let token = open_current_thread_token()
+                .map_err(|_| PlatformError::PipeImpersonationFailed)?;
+            let actual = sid_from_token(&token, true)
+                .map_err(|_| PlatformError::PipeImpersonationFailed)?;
+            if !actual.eq_ignore_ascii_case(expected_logon_sid) {
+                return Err(PlatformError::PipePeerSidMismatch);
+            }
+            Ok(VerifiedPipeClient {
+                process_id,
+                logon_sid: actual,
+            })
+        })();
+
+        // SAFETY: this thread is impersonating only because the call above succeeded.
+        let reverted = unsafe { RevertToSelf() };
+        if reverted == 0 {
+            return Err(PlatformError::RevertToSelfFailed);
+        }
+        peer_result
     }
 
     pub(super) fn create_worker_pipe(
@@ -487,6 +760,138 @@ mod tests {
         )
         .expect("secure pipe");
         assert!(pipe.name().starts_with(r"\\.\pipe\gpubnb-native-"));
+    }
+
+    #[cfg(target_os = "windows")]
+    fn connect_test_client(
+        name: String,
+        ready: std::sync::mpsc::Sender<u32>,
+        release: std::sync::mpsc::Receiver<()>,
+    ) {
+        use std::ffi::{OsStr, c_void};
+        use std::os::windows::ffi::OsStrExt;
+
+        type Handle = isize;
+        const INVALID_HANDLE_VALUE: Handle = -1;
+        const GENERIC_READ: u32 = 0x8000_0000;
+        const GENERIC_WRITE: u32 = 0x4000_0000;
+        const OPEN_EXISTING: u32 = 3;
+        const SECURITY_SQOS_PRESENT: u32 = 0x0010_0000;
+        const SECURITY_IDENTIFICATION: u32 = 0x0001_0000;
+
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn CreateFileW(
+                file_name: *const u16,
+                desired_access: u32,
+                share_mode: u32,
+                security_attributes: *mut c_void,
+                creation_disposition: u32,
+                flags_and_attributes: u32,
+                template_file: Handle,
+            ) -> Handle;
+            fn WriteFile(
+                file: Handle,
+                buffer: *const c_void,
+                bytes_to_write: u32,
+                bytes_written: *mut u32,
+                overlapped: *mut c_void,
+            ) -> i32;
+            fn CloseHandle(object: Handle) -> i32;
+            fn GetCurrentProcessId() -> u32;
+        }
+
+        let wide: Vec<u16> = OsStr::new(&name).encode_wide().chain(Some(0)).collect();
+        // SAFETY: path is NUL-terminated and optional pointers are null.
+        let handle = unsafe {
+            CreateFileW(
+                wide.as_ptr(),
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                std::ptr::null_mut(),
+                OPEN_EXISTING,
+                SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
+                0,
+            )
+        };
+        assert_ne!(handle, INVALID_HANDLE_VALUE, "open secure pipe client");
+
+        let prelude = PIPE_AUTH_PRELUDE;
+        let mut written = 0u32;
+        // SAFETY: one-byte buffer remains live for synchronous WriteFile.
+        let ok = unsafe {
+            WriteFile(
+                handle,
+                (&prelude as *const u8).cast::<c_void>(),
+                1,
+                &mut written,
+                std::ptr::null_mut(),
+            )
+        };
+        assert_ne!(ok, 0, "write auth prelude");
+        assert_eq!(written, 1);
+        // SAFETY: no preconditions.
+        let pid = unsafe { GetCurrentProcessId() };
+        ready.send(pid).expect("send client pid");
+        release.recv().expect("server verification completed");
+        // SAFETY: client uniquely owns this handle.
+        unsafe {
+            let _ = CloseHandle(handle);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_verifies_connected_client_pid_and_logon_sid() {
+        let service_sid = current_process_user_sid().expect("service SID");
+        let logon_sid = current_process_logon_sid().expect("logon SID");
+        let pipe = create_worker_pipe(
+            "ci-peer-check",
+            std::process::id() as u64,
+            &service_sid,
+            &logon_sid,
+        )
+        .expect("secure pipe");
+
+        let (pid_tx, pid_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let name = pipe.name().to_owned();
+        let client = std::thread::spawn(move || connect_test_client(name, pid_tx, release_rx));
+
+        let verified = pipe
+            .accept_verified_client(&logon_sid, 10_000)
+            .expect("verified pipe peer");
+        let client_pid = pid_rx.recv().expect("client pid");
+        assert_eq!(verified.process_id, client_pid);
+        assert_eq!(verified.logon_sid, logon_sid);
+        release_tx.send(()).expect("release client");
+        client.join().expect("client thread");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_rejects_connected_client_with_wrong_logon_sid() {
+        let service_sid = current_process_user_sid().expect("service SID");
+        let logon_sid = current_process_logon_sid().expect("logon SID");
+        let pipe = create_worker_pipe(
+            "ci-peer-mismatch",
+            std::process::id() as u64 + 1,
+            &service_sid,
+            &logon_sid,
+        )
+        .expect("secure pipe");
+
+        let (pid_tx, _pid_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let name = pipe.name().to_owned();
+        let client = std::thread::spawn(move || connect_test_client(name, pid_tx, release_rx));
+
+        assert_eq!(
+            pipe.accept_verified_client("S-1-5-5-999999-999999", 10_000),
+            Err(PlatformError::PipePeerSidMismatch)
+        );
+        release_tx.send(()).expect("release client");
+        client.join().expect("client thread");
     }
 
     #[cfg(not(target_os = "windows"))]
