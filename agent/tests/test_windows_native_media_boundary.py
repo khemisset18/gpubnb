@@ -6,17 +6,22 @@ from gpubnb_agent.windows_native_runtime import _loopback_media_url
 
 
 class WindowsNativeMediaBoundaryTests(unittest.TestCase):
+    SESSION_ID = "sess-1"
+
     def test_accepts_literal_ipv4_loopback_with_explicit_port(self):
         value = "http://127.0.0.1:43123/session/sess-1"
-        self.assertEqual(_loopback_media_url(value), value)
+        self.assertEqual(_loopback_media_url(value, self.SESSION_ID), value)
 
     def test_accepts_literal_ipv6_loopback_with_explicit_port(self):
         value = "ws://[::1]:43123/session/sess-1"
-        self.assertEqual(_loopback_media_url(value), value)
+        self.assertEqual(_loopback_media_url(value, self.SESSION_ID), value)
 
     def test_rejects_localhost_name_instead_of_resolving_it(self):
         self.assertIsNone(
-            _loopback_media_url("http://localhost:43123/session/sess-1")
+            _loopback_media_url(
+                "http://localhost:43123/session/sess-1",
+                self.SESSION_ID,
+            )
         )
 
     def test_rejects_non_loopback_literal_addresses(self):
@@ -27,16 +32,34 @@ class WindowsNativeMediaBoundaryTests(unittest.TestCase):
             "ws://[2001:db8::1]:43123/session/sess-1",
         ):
             with self.subTest(value=value):
-                self.assertIsNone(_loopback_media_url(value))
+                self.assertIsNone(_loopback_media_url(value, self.SESSION_ID))
 
-    def test_rejects_implicit_port_credentials_and_fragments(self):
+    def test_rejects_implicit_port_credentials_query_and_fragments(self):
         for value in (
             "http://127.0.0.1/session/sess-1",
             "http://user:pass@127.0.0.1:43123/session/sess-1",
+            "http://127.0.0.1:43123/session/sess-1?token=secret",
             "http://127.0.0.1:43123/session/sess-1#fragment",
         ):
             with self.subTest(value=value):
-                self.assertIsNone(_loopback_media_url(value))
+                self.assertIsNone(_loopback_media_url(value, self.SESSION_ID))
+
+    def test_rejects_cross_session_path(self):
+        self.assertIsNone(
+            _loopback_media_url(
+                "http://127.0.0.1:43123/session/sess-2",
+                self.SESSION_ID,
+            )
+        )
+
+    def test_rejects_near_match_or_extra_path_segments(self):
+        for value in (
+            "http://127.0.0.1:43123/session/sess-1/",
+            "http://127.0.0.1:43123/session/sess-1/control",
+            "http://127.0.0.1:43123/session/sess-10",
+        ):
+            with self.subTest(value=value):
+                self.assertIsNone(_loopback_media_url(value, self.SESSION_ID))
 
 
 if __name__ == "__main__":
