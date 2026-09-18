@@ -5,6 +5,7 @@
 
 use std::path::Path;
 
+pub mod job;
 pub mod pipe;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +37,9 @@ pub enum PlatformError {
     SecurityDescriptorFailed,
     TokenQueryFailed,
     PipeCreateFailed,
+    JobCreateFailed,
+    JobConfigureFailed,
+    JobQueryFailed,
 }
 
 pub struct VerifiedApplicationFile {
