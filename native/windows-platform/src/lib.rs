@@ -149,7 +149,7 @@ mod windows_impl {
         // handle is owned/live, and the info class determines T at each call site.
         let ok = unsafe {
             GetFileInformationByHandleEx(
-                _handle: handle,
+                handle,
                 class,
                 value.as_mut_ptr().cast::<c_void>(),
                 size_of::<T>() as u32,
