@@ -102,10 +102,7 @@ mod windows_impl {
 
     #[link(name = "kernel32")]
     unsafe extern "system" {
-        fn CreateJobObjectW(
-            job_attributes: *mut c_void,
-            name: *const u16,
-        ) -> Handle;
+        fn CreateJobObjectW(job_attributes: *mut c_void, name: *const u16) -> Handle;
         fn SetInformationJobObject(
             job: Handle,
             information_class: i32,
@@ -167,9 +164,7 @@ mod windows_impl {
         Ok(worker_job)
     }
 
-    pub(super) fn kill_on_close_enabled(
-        handle: &OwnedJobHandle,
-    ) -> Result<bool, PlatformError> {
+    pub(super) fn kill_on_close_enabled(handle: &OwnedJobHandle) -> Result<bool, PlatformError> {
         let mut limits = MaybeUninit::<JobObjectExtendedLimitInformation>::zeroed();
         let mut returned = 0u32;
         // SAFETY: limits points to writable storage matching the requested class.
@@ -188,8 +183,7 @@ mod windows_impl {
         // SAFETY: successful QueryInformationJobObject initialized the structure.
         let limits = unsafe { limits.assume_init() };
         Ok(
-            limits.basic_limit_information.limit_flags
-                & JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            limits.basic_limit_information.limit_flags & JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
                 == JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
         )
     }
@@ -209,6 +203,9 @@ mod tests {
     #[cfg(not(target_os = "windows"))]
     #[test]
     fn non_windows_job_fails_closed() {
-        assert_eq!(create_worker_job().err(), Some(PlatformError::WindowsRequired));
+        assert_eq!(
+            create_worker_job().err(),
+            Some(PlatformError::WindowsRequired)
+        );
     }
 }
