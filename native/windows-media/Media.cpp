@@ -669,7 +669,8 @@ public:
         ID3D11Texture2D* texture,
         uint32_t width,
         uint32_t height,
-        uint32_t* encodedBytes)
+        uint32_t* encodedBytes,
+        std::vector<uint8_t>* output = nullptr)
     {
         if (texture == nullptr || encodedBytes == nullptr || encoder_ == nullptr)
         {
@@ -742,6 +743,12 @@ public:
             return E_FAIL;
         }
         *encodedBytes = lock.bitstreamSizeInBytes;
+        if (output != nullptr)
+        {
+            const auto* begin =
+                static_cast<const uint8_t*>(lock.bitstreamBufferPtr);
+            output->assign(begin, begin + lock.bitstreamSizeInBytes);
+        }
 
         if (functions_.nvEncUnlockBitstream(
                 encoder_,
@@ -826,6 +833,94 @@ void InitializeResult(
     result->Width = request.Width;
     result->Height = request.Height;
     result->RefreshHz = request.RefreshHz;
+}
+} // namespace
+
+struct GPUbnbMediaSession
+{
+    GPUbnbMediaProbeRequest request = {};
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    ComPtr<IDXGIOutputDuplication> duplication;
+    NvencEncoder encoder;
+    uint64_t frameSequence = 0;
+};
+
+namespace
+{
+void InitializeFrameResult(
+    const GPUbnbMediaProbeRequest& request,
+    GPUbnbMediaFrameResult* result)
+{
+    *result = {};
+    result->Size = sizeof(*result);
+    result->Version = GPUBNB_WINDOWS_MEDIA_ABI_VERSION;
+    result->RenderAdapterLuid = request.RenderAdapterLuid;
+    result->Width = request.Width;
+    result->Height = request.Height;
+    result->RefreshHz = request.RefreshHz;
+}
+
+HRESULT BuildPersistentSession(
+    const GPUbnbMediaProbeRequest& request,
+    GPUbnbMediaSession* session)
+{
+    HRESULT hr = VerifyExactGpu(
+        request.ExpectedGpuUuid,
+        request.RenderAdapterLuid);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    DisplayTarget display;
+    hr = FindDisplayTarget(
+        ContainerIdFromNonce(request.DisplayNonce),
+        request.RenderAdapterLuid,
+        request.RefreshHz,
+        &display);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    ComPtr<IDXGIAdapter1> adapter;
+    ComPtr<IDXGIOutput1> output;
+    hr = FindDxgiOutput(display, &adapter, &output);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    hr = CreateCaptureDevice(
+        adapter.Get(),
+        &session->device,
+        &session->context);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    hr = output->DuplicateOutput(
+        session->device.Get(),
+        &session->duplication);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    hr = session->encoder.Initialize(
+        session->device.Get(),
+        request.Width,
+        request.Height,
+        request.RefreshHz);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    session->request = request;
+    return S_OK;
 }
 } // namespace
 
@@ -956,4 +1051,115 @@ HRESULT __stdcall GPUbnbProbeMediaFrame(
     result->ProofFlags |= GPUBNB_MEDIA_PROOF_NVENC_BITSTREAM;
     result->FailedStage = GPUBNB_MEDIA_STAGE_NONE;
     return S_OK;
+}
+
+
+extern "C" __declspec(dllexport)
+HRESULT __stdcall GPUbnbMediaOpen(
+    const GPUbnbMediaProbeRequest* request,
+    GPUbnbMediaSession** session)
+{
+    if (request == nullptr || session == nullptr)
+    {
+        return E_POINTER;
+    }
+    *session = nullptr;
+
+    HRESULT hr = ValidateRequest(*request);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    auto value = std::make_unique<GPUbnbMediaSession>();
+    hr = BuildPersistentSession(*request, value.get());
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    *session = value.release();
+    return S_OK;
+}
+
+extern "C" __declspec(dllexport)
+HRESULT __stdcall GPUbnbMediaReadFrame(
+    GPUbnbMediaSession* session,
+    uint8_t* bitstream,
+    uint32_t bitstreamCapacity,
+    GPUbnbMediaFrameResult* result)
+{
+    if (session == nullptr || result == nullptr)
+    {
+        return E_POINTER;
+    }
+    InitializeFrameResult(session->request, result);
+    result->ProofFlags =
+        GPUBNB_MEDIA_PROOF_EXACT_GPU |
+        GPUBNB_MEDIA_PROOF_DISPLAY_FOUND;
+    result->FailedStage = GPUBNB_MEDIA_STAGE_CAPTURE;
+
+    DXGI_OUTDUPL_FRAME_INFO frameInfo = {};
+    ComPtr<IDXGIResource> frameResource;
+    HRESULT hr = session->duplication->AcquireNextFrame(
+        session->request.CaptureTimeoutMs,
+        &frameInfo,
+        &frameResource);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+    DuplicationFrame frameGuard(session->duplication.Get());
+    frameGuard.MarkAcquired();
+
+    ComPtr<ID3D11Texture2D> texture;
+    hr = frameResource.As(&texture);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    D3D11_TEXTURE2D_DESC desc = {};
+    texture->GetDesc(&desc);
+    if (desc.Width != session->request.Width ||
+        desc.Height != session->request.Height ||
+        desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM)
+    {
+        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+    }
+    result->ProofFlags |= GPUBNB_MEDIA_PROOF_CAPTURED_FRAME;
+
+    result->FailedStage = GPUBNB_MEDIA_STAGE_NVENC_ENCODE;
+    uint32_t encodedBytes = 0;
+    std::vector<uint8_t> encoded;
+    hr = session->encoder.Encode(
+        texture.Get(),
+        session->request.Width,
+        session->request.Height,
+        &encodedBytes,
+        &encoded);
+    if (FAILED(hr) || encodedBytes == 0 || encoded.size() != encodedBytes)
+    {
+        return FAILED(hr) ? hr : E_FAIL;
+    }
+
+    result->EncodedBytes = encodedBytes;
+    result->RequiredCapacity = encodedBytes;
+    result->FrameSequence = ++session->frameSequence;
+    result->ProofFlags |= GPUBNB_MEDIA_PROOF_NVENC_BITSTREAM;
+    result->FailedStage = GPUBNB_MEDIA_STAGE_NONE;
+
+    if (bitstream == nullptr || bitstreamCapacity < encodedBytes)
+    {
+        return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+    }
+
+    std::memcpy(bitstream, encoded.data(), encodedBytes);
+    return S_OK;
+}
+
+extern "C" __declspec(dllexport)
+void __stdcall GPUbnbMediaClose(GPUbnbMediaSession* session)
+{
+    delete session;
 }
