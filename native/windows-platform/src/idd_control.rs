@@ -12,6 +12,7 @@ pub const IDD_CONTROL_REQUEST_SIZE: usize = 64;
 pub enum VirtualDisplayOperation {
     PlugMonitor = 1,
     UnplugMonitor = 2,
+    ValidateOnly = 3,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,6 +123,16 @@ mod tests {
         assert_eq!(u32::from_le_bytes(wire[52..56].try_into().unwrap()), 1080);
         assert_eq!(u32::from_le_bytes(wire[56..60].try_into().unwrap()), 60);
         assert_eq!(&wire[60..64], &[0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn validate_only_operation_has_distinct_wire_value() {
+        let request = VirtualDisplayRequest {
+            operation: VirtualDisplayOperation::ValidateOnly,
+            ..valid()
+        };
+        let wire = encode_virtual_display_request(request).expect("encode validate-only");
+        assert_eq!(u32::from_le_bytes(wire[8..12].try_into().unwrap()), 3);
     }
 
     #[test]
