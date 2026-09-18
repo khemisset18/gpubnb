@@ -60,3 +60,14 @@ jobs:
           if ($item.Length -le 0) {
             throw "GPUbnbWindowsMedia.dll is empty"
           }
+          $exports = & dumpbin /exports $dll
+          foreach ($symbol in @(
+            "GPUbnbProbeMediaFrame",
+            "GPUbnbMediaOpen",
+            "GPUbnbMediaReadFrame",
+            "GPUbnbMediaClose"
+          )) {
+            if ($exports -notmatch [regex]::Escape($symbol)) {
+              throw "Missing required media ABI export: $symbol"
+            }
+          }
