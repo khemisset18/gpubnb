@@ -42,7 +42,9 @@ impl CliError {
 fn validate_session_id(value: &str) -> Result<(), CliError> {
     if value.is_empty()
         || value.len() > MAX_SESSION_ID
-        || !value.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        || !value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
     {
         return Err(CliError::new("invalid_session_id", 2));
     }
@@ -69,9 +71,7 @@ fn validate_gpu_uuid(value: &str) -> Result<(), CliError> {
 }
 
 fn validate_application(value: &str) -> Result<(), CliError> {
-    if value.is_empty()
-        || value.len() > MAX_APPLICATION_PATH
-        || value.chars().any(char::is_control)
+    if value.is_empty() || value.len() > MAX_APPLICATION_PATH || value.chars().any(char::is_control)
     {
         return Err(CliError::new("invalid_application_path", 2));
     }
