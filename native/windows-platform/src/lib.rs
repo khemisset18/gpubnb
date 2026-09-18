@@ -8,6 +8,9 @@ use std::path::Path;
 pub mod job;
 pub mod pipe;
 
+#[cfg(target_os = "windows")]
+mod process;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileIdentity {
     pub volume_serial: u64,
@@ -40,6 +43,13 @@ pub enum PlatformError {
     JobCreateFailed,
     JobConfigureFailed,
     JobQueryFailed,
+    JobAssignFailed,
+    ProcessCreateFailed,
+    ProcessNotAssigned,
+    ProcessResumeFailed,
+    ProcessWaitFailed,
+    ProcessWaitTimeout,
+    ProcessExitQueryFailed,
 }
 
 pub struct VerifiedApplicationFile {
