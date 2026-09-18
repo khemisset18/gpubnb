@@ -3,6 +3,8 @@
 //! This module defines the fixed control ABI and, on Windows, discovers the
 //! GPUbnb IddCx device interface and sends only the inert ValidateOnly probe with DeviceIoControl.
 
+use crate::PlatformError;
+
 pub const IDD_CONTROL_VERSION: u32 = 1;
 pub const IDD_CONTROL_REQUEST_SIZE: usize = 64;
 
