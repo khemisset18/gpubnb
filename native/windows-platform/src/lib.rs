@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
+pub mod gpu_identity;
 pub mod idd_control;
 pub mod job;
 pub mod nvenc;
