@@ -19,15 +19,12 @@ test('Windows native desktop capability is persisted in Prisma but remains diagn
 test('only a v2 body-signed heartbeat may update the Windows native capability', async () => {
   const server = await readFile(path.join(sourceRoot, 'server.ts'), 'utf8');
   assert.match(server, /nativeDesktopStreamingAvailable:z\.boolean\(\)\.optional\(\)/);
-  assert.match(server, /nativeDesktopStreamingGpuUuid:z\.string\(\).*?\.nullable\(\)\.optional\(\)/);
-  assert.match(
-    server,
-    /b\.telemetry&&\(b\.nativeDesktopStreamingAvailable!==undefined\|\|b\.nativeDesktopStreamingGpuUuid!==undefined\|\|b\.os!==undefined\)\?\{nativeDesktopStreamingAvailable:/,
-  );
-  assert.match(
-    server,
-    /startsWith\('windows'\)&&\(b\.nativeDesktopStreamingAvailable\?\?false\)/,
-  );
+  assert.match(server, /nativeDesktopStreamingGpuUuid:z\.string\(\)\.trim\(\)\.regex\(WINDOWS_NATIVE_GPU_UUID_RE\)\.nullable\(\)\.optional\(\)/);
+  assert.match(server, /validateWindowsNativeCapability\(\{/);
+  assert.match(server, /operatingSystem:b\.os\?\?m\.operatingSystem/);
+  assert.match(server, /rawAccelerators:b\.telemetry\.accelerators/);
+  assert.match(server, /nativeCapability&&!nativeCapability\.ok/);
+  assert.match(server, /nativeDesktopStreamingAvailable:nativeCapability\.available/);
 
   const linkStart = server.indexOf("app.post('/agent/link'");
   const linkEnd = server.indexOf("app.get('/machines/mine'", linkStart);
@@ -47,29 +44,16 @@ test('owner diagnostics expose Linux and Windows desktop capabilities separately
 });
 
 
-test('signed Windows native capability keeps availability and exact GPU proof coherent', async () => {
+test('signed Windows native capability is delegated to the centralized validator', async () => {
   const server = await readFile(path.join(sourceRoot, 'server.ts'), 'utf8');
   assert.match(server, /incoherent_native_desktop_capability/);
-  assert.match(server, /nativeDesktopStreamingAvailable===true&&\(!nativeOs\.startsWith\('windows'\)\|\|!nativeUuid\|\|!nativeGpuPresent\)/);
-  assert.match(server, /nativeDesktopStreamingAvailable!==true&&nativeUuid/);
-  assert.match(server, /nativeDesktopStreamingGpuUuid:.*?nativeDesktopStreamingAvailable===true\?\(b\.nativeDesktopStreamingGpuUuid\?\?null\):null/);
+  assert.match(server, /validateWindowsNativeCapability/);
+  assert.match(server, /nativeCapability\?\.ok\?\{nativeDesktopStreamingAvailable:nativeCapability\.available,nativeDesktopStreamingGpuUuid:nativeCapability\.gpuUuid\}:\{\}/);
 });
 
-
-test('positive Windows native proof must bind to an available NVIDIA GPU in the same signed accelerator inventory', async () => {
+test('server imports the native capability authority and canonical UUID pattern', async () => {
   const server = await readFile(path.join(sourceRoot, 'server.ts'), 'utf8');
-  assert.match(server, /sanitizeAccelerators\(b\.telemetry\.accelerators\)/);
-  assert.match(server, /accelerator\.kind==='GPU'/);
-  assert.match(server, /accelerator\.available/);
-  assert.match(server, /accelerator\.vendor\.trim\(\)\.toLowerCase\(\)==='nvidia'/);
-  assert.match(server, /accelerator\.deviceId\.toLowerCase\(\)===nativeUuid\.toLowerCase\(\)/);
-  assert.match(server, /!nativeGpuPresent/);
+  assert.match(server, /WINDOWS_NATIVE_GPU_UUID_RE, validateWindowsNativeCapability/);
+  assert.match(server, /nativeDesktopStreamingGpuUuid:z\.string\(\)\.trim\(\)\.regex\(WINDOWS_NATIVE_GPU_UUID_RE\)/);
 });
 
-test('Windows native proof UUID accepts only canonical physical NVIDIA GPU UUIDs', async () => {
-  const server = await readFile(path.join(sourceRoot, 'server.ts'), 'utf8');
-  assert.match(
-    server,
-    /nativeDesktopStreamingGpuUuid:z\.string\(\)\.trim\(\)\.regex\(\/\^GPU-\[0-9A-Fa-f\]\{8\}-/,
-  );
-});
