@@ -31,6 +31,19 @@ jobs:
       - name: Configure MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Verify IddCx control ACL remains SYSTEM-only
+        shell: pwsh
+        run: |
+          $inf = Get-Content native/windows-idd/GPUbnbIdd.inf -Raw
+          if ($inf -notmatch 'HKR,,Security,,"D:P\(A;;GA;;;SY\)"') {
+            throw "IddCx control device must remain SYSTEM-only"
+          }
+          foreach ($forbidden in @(';;;BA)', ';;;WD)', ';;;BU)', ';;;AU)')) {
+            if ($inf.Contains($forbidden)) {
+              throw "Forbidden IddCx control ACL principal: $forbidden"
+            }
+          }
+
       - name: Restore WDK NuGet and build inert IddCx driver
         shell: pwsh
         run: |
