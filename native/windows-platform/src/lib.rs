@@ -5,6 +5,8 @@
 
 use std::path::Path;
 
+pub mod pipe;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileIdentity {
     pub volume_serial: u64,
@@ -29,6 +31,11 @@ pub enum PlatformError {
     ReparsePoint,
     AuthenticodeNotTrusted,
     AuthenticodeStateCloseFailed,
+    InvalidSessionId,
+    InvalidSid,
+    SecurityDescriptorFailed,
+    TokenQueryFailed,
+    PipeCreateFailed,
 }
 
 pub struct VerifiedApplicationFile {
