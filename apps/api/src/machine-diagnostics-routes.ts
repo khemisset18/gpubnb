@@ -400,6 +400,7 @@ export function registerMachineDiagnosticsRoutes(app: FastifyInstance, db: Prism
       desktopCapabilities: {
         linuxDesktopGpuRenderingAvailable: machine.desktopGpuRenderingAvailable,
         windowsNativeDesktopStreamingAvailable: machine.nativeDesktopStreamingAvailable,
+        windowsNativeDesktopStreamingGpuUuid: machine.nativeDesktopStreamingGpuUuid,
       },
       lastDiagnosticAt: machine.lastDiagnosticAt,
       runningDiagnostic: latestRun && effectiveDiagnosticStatus(latestRun, now) === 'RUNNING'
