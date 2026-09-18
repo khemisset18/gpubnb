@@ -84,11 +84,7 @@ impl WorkerPipe {
         }
         #[cfg(target_os = "windows")]
         {
-            windows_impl::accept_verified_client(
-                &self._handle,
-                expected_logon_sid,
-                timeout_ms,
-            )
+            windows_impl::accept_verified_client(&self._handle, expected_logon_sid, timeout_ms)
         }
         #[cfg(not(target_os = "windows"))]
         {
@@ -206,7 +202,6 @@ mod windows_impl {
             }
         }
     }
-
 
     #[link(name = "kernel32")]
     unsafe extern "system" {
@@ -654,10 +649,10 @@ mod windows_impl {
         }
 
         let peer_result = (|| {
-            let token = open_current_thread_token()
-                .map_err(|_| PlatformError::PipeImpersonationFailed)?;
-            let actual = sid_from_token(&token, true)
-                .map_err(|_| PlatformError::PipeImpersonationFailed)?;
+            let token =
+                open_current_thread_token().map_err(|_| PlatformError::PipeImpersonationFailed)?;
+            let actual =
+                sid_from_token(&token, true).map_err(|_| PlatformError::PipeImpersonationFailed)?;
             if !actual.eq_ignore_ascii_case(expected_logon_sid) {
                 return Err(PlatformError::PipePeerSidMismatch);
             }
