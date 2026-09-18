@@ -12,16 +12,9 @@ pub struct WorkerJob {
 }
 
 impl WorkerJob {
+    #[cfg(target_os = "windows")]
     pub(crate) fn assign_process_handle(&self, process_handle: isize) -> Result<(), PlatformError> {
-        #[cfg(target_os = "windows")]
-        {
-            windows_impl::assign_process(&self._handle, process_handle)
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            let _ = process_handle;
-            Err(PlatformError::WindowsRequired)
-        }
+        windows_impl::assign_process(&self._handle, process_handle)
     }
 
     pub fn kill_on_close_enabled(&self) -> Result<bool, PlatformError> {
