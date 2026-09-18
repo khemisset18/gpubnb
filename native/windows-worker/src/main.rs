@@ -298,7 +298,8 @@ mod tests {
             create_worker_pipe, current_process_logon_sid, current_process_user_sid,
         };
         use gpubnb_windows_stream_helper::worker_protocol::{
-            WorkerFence, decode_and_validate_worker_hello,
+            WorkerCommand, WorkerCommandFrame, WorkerFence, decode_and_validate_worker_hello,
+            decode_worker_command, encode_worker_command, validate_worker_command,
         };
 
         let service_sid = current_process_user_sid().expect("service SID");
@@ -332,6 +333,13 @@ mod tests {
             };
             let frame = encode_worker_hello(hello).expect("encode worker hello");
             client.send_frame(&frame).expect("send worker hello");
+
+            let command = client.read_frame(PIPE_TIMEOUT_MS).expect("read command");
+            let command = decode_worker_command(&command).expect("decode command");
+            assert_eq!(
+                validate_worker_command(generation, 1, command),
+                Ok(WorkerCommand::Stop)
+            );
         });
 
         let peer = pipe
@@ -352,6 +360,15 @@ mod tests {
             decode_and_validate_worker_hello(expected, &frame).expect("validate worker hello");
         assert_eq!(hello.worker_pid, expected_pid);
         assert_eq!(hello.windows_session_id, windows_session_id);
+
+        let command = encode_worker_command(WorkerCommandFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            command: WorkerCommand::Stop,
+            generation,
+            sequence: 1,
+        })
+        .expect("encode stop command");
+        pipe.send_frame(&command).expect("send stop command");
 
         client.join().expect("client thread");
     }
