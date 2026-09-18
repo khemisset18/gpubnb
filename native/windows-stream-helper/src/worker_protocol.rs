@@ -14,6 +14,7 @@ pub const MAX_WORKER_HELLO_FRAME: usize = 512;
 pub const WORKER_COMMAND_FRAME_SIZE: usize = 19;
 pub const WORKER_DISPLAY_SPEC_FRAME_SIZE: usize = 58;
 pub const WORKER_MEDIA_PROOF_FRAME_SIZE: usize = 74;
+pub const WORKER_MEDIA_REQUIRED_PROOF_FLAGS: u32 = 0x0f;
 const MAX_SESSION_ID: usize = 128;
 const MAX_GPU_UUID: usize = 64;
 
@@ -474,7 +475,7 @@ pub fn decode_worker_media_proof(
     if encoded_bytes == 0 {
         return Err(WorkerGraphicsFrameError::EncodedOutput);
     }
-    if proof_flags == 0 {
+    if proof_flags != WORKER_MEDIA_REQUIRED_PROOF_FLAGS {
         return Err(WorkerGraphicsFrameError::ProofFlags);
     }
 
@@ -521,6 +522,9 @@ pub fn validate_worker_media_proof(
     }
     if proof.refresh_hz != expected_display.refresh_hz {
         return Err(WorkerGraphicsFrameError::RefreshRate);
+    }
+    if proof.proof_flags != WORKER_MEDIA_REQUIRED_PROOF_FLAGS {
+        return Err(WorkerGraphicsFrameError::ProofFlags);
     }
     Ok(())
 }
@@ -977,7 +981,7 @@ mod tests {
             refresh_hz: 60,
             frame_sequence: 1,
             encoded_bytes: 4096,
-            proof_flags: 0x0f,
+            proof_flags: WORKER_MEDIA_REQUIRED_PROOF_FLAGS,
         };
         let encoded = encode_worker_media_proof(proof).expect("encode media proof");
         assert_eq!(encoded.len(), WORKER_MEDIA_PROOF_FRAME_SIZE);
@@ -986,6 +990,13 @@ mod tests {
         assert_eq!(
             validate_worker_media_proof(7, 2, 42, display, decoded),
             Ok(())
+        );
+
+        let mut partial = proof;
+        partial.proof_flags &= !0x08;
+        assert_eq!(
+            validate_worker_media_proof(7, 2, 42, display, partial),
+            Err(WorkerGraphicsFrameError::ProofFlags)
         );
 
         let mut replay = proof;
