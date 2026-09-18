@@ -97,6 +97,38 @@ The helper protocol must identify the selected output/adapter strongly enough fo
 
 IddCx adds driver packaging/signing/deployment complexity. That complexity is preferable to silently streaming the provider's personal monitor. If the virtual-display driver is absent or cannot start, the Windows desktop backend remains unavailable.
 
+## Windows service / renter worker boundary
+
+The privileged Windows control service must not capture or inject input directly
+into the provider's interactive desktop. It owns only privileged lifecycle tasks:
+creating the renter boundary, applying ACLs, starting/stopping the worker, fencing
+the leased GPU/session and verifying cleanup.
+
+The graphical worker runs inside the dedicated renter logon session. The service
+and worker communicate over local IPC with all of these requirements:
+
+- a named pipe must use an explicit security descriptor; Windows default named-pipe
+  ACLs are not acceptable for this authority boundary;
+- the DACL is restricted to the GPUbnb service identity and the exact renter logon
+  SID/session that owns the worker;
+- remote pipe access is forbidden and the peer process/token is verified before
+  accepting application-level messages;
+- every handshake is fenced to the exact GPUbnb session id, GPU UUID, Workspace,
+  monotonically increasing worker generation and Windows logon session;
+- a stale worker from an earlier generation cannot resume or control a replacement
+  session;
+- the command surface is typed and finite (prepare display, start capture, suspend,
+  resume only after fresh proof, stop); there is no arbitrary shell/command field;
+- application choice remains the GPUbnb allowlisted Workspace policy rather than a
+  renter-controlled executable path crossing the privileged IPC boundary;
+- pipe disconnect, peer-token mismatch or worker crash immediately invalidates
+  READY and media/billing eligibility until a fresh worker handshake and readiness
+  proof complete.
+
+The pure Rust lifecycle and worker-protocol modules are deliberately independent of
+Win32 so these authority rules remain unit-testable on Windows and Linux. The
+future platform layer must satisfy them; it may not bypass them.
+
 ## Isolation invariants
 
 - Never capture or expose the provider's personal desktop.
