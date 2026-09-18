@@ -6,14 +6,18 @@
 //! DXGI capture, exact-GPU NVENC and isolated input are implemented.
 
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
+use gpubnb_windows_platform::input::{
+    inject_input, InputEvent as PlatformInputEvent, MouseButton as PlatformMouseButton,
+};
 use gpubnb_windows_platform::media::{MediaProbeError, MediaProbeRequest, probe_media_frame};
 use gpubnb_windows_platform::pipe::connect_worker_pipe_client;
 use gpubnb_windows_platform::session::current_process_session_id;
 use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
 use gpubnb_windows_stream_helper::worker_protocol::{
-    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerHello, WorkerMediaProof,
-    decode_worker_command, decode_worker_display_spec, encode_worker_hello,
-    encode_worker_media_proof, validate_worker_command, validate_worker_display_spec,
+    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerHello, WorkerInputEvent, WorkerMediaProof,
+    WorkerMouseButton, decode_worker_command, decode_worker_display_spec, decode_worker_input,
+    encode_worker_hello, encode_worker_media_proof, validate_worker_command,
+    validate_worker_display_spec, validate_worker_input,
 };
 use std::env;
 use std::process::ExitCode;
@@ -294,6 +298,25 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                 WorkerCommand::SuspendMedia => {
                     media_state = media_state.suspend()?;
                 }
+                WorkerCommand::InjectInput => {
+                    if !matches!(media_state, MediaState::Ready) {
+                        return Err(WorkerError::new("input_requires_media_ready", 21));
+                    }
+                    let frame = client
+                        .read_frame(PIPE_TIMEOUT_MS)
+                        .map_err(|_| WorkerError::new("input_frame_read_failed", 21))?;
+                    let input = decode_worker_input(&frame)
+                        .map_err(|_| WorkerError::new("input_frame_invalid", 21))?;
+                    let event = validate_worker_input(
+                        args.generation,
+                        command_sequence,
+                        windows_session_id,
+                        input,
+                    )
+                    .map_err(|_| WorkerError::new("input_frame_fence_failed", 21))?;
+                    inject_input(windows_session_id, platform_input(event))
+                        .map_err(|_| WorkerError::new("input_injection_failed", 21))?;
+                }
                 WorkerCommand::ResumeAfterFreshProof => {
                     let next_state = media_state.resume()?;
                     let spec = display_spec
@@ -343,6 +366,37 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                 }
             }
         }
+    }
+}
+
+fn platform_input(event: WorkerInputEvent) -> PlatformInputEvent {
+    match event {
+        WorkerInputEvent::KeyScan {
+            scan_code,
+            key_up,
+            extended,
+        } => PlatformInputEvent::KeyScan {
+            scan_code,
+            key_up,
+            extended,
+        },
+        WorkerInputEvent::MouseMoveRelative { dx, dy } => {
+            PlatformInputEvent::MouseMoveRelative { dx, dy }
+        }
+        WorkerInputEvent::MouseMoveAbsolute { x, y } => {
+            PlatformInputEvent::MouseMoveAbsolute { x, y }
+        }
+        WorkerInputEvent::MouseButton { button, key_up } => PlatformInputEvent::MouseButton {
+            button: match button {
+                WorkerMouseButton::Left => PlatformMouseButton::Left,
+                WorkerMouseButton::Right => PlatformMouseButton::Right,
+                WorkerMouseButton::Middle => PlatformMouseButton::Middle,
+                WorkerMouseButton::X1 => PlatformMouseButton::X1,
+                WorkerMouseButton::X2 => PlatformMouseButton::X2,
+            },
+            key_up,
+        },
+        WorkerInputEvent::MouseWheel { delta } => PlatformInputEvent::MouseWheel { delta },
     }
 }
 
@@ -467,6 +521,32 @@ mod tests {
         ] {
             assert!(parse_args(&args).is_err());
         }
+    }
+
+    #[test]
+    fn typed_input_mapping_has_no_arbitrary_message_surface() {
+        assert_eq!(
+            platform_input(WorkerInputEvent::KeyScan {
+                scan_code: 30,
+                key_up: false,
+                extended: false,
+            }),
+            PlatformInputEvent::KeyScan {
+                scan_code: 30,
+                key_up: false,
+                extended: false,
+            }
+        );
+        assert_eq!(
+            platform_input(WorkerInputEvent::MouseButton {
+                button: WorkerMouseButton::Left,
+                key_up: true,
+            }),
+            PlatformInputEvent::MouseButton {
+                button: PlatformMouseButton::Left,
+                key_up: true,
+            }
+        );
     }
 
     #[test]
