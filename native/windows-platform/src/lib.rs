@@ -84,6 +84,8 @@ pub enum PlatformError {
     IddControlOpenFailed,
     IddControlFailed,
     IddUnsafeOperation,
+    GpuGraphicsIdentityUnavailable,
+    GpuGraphicsIdentityMismatch,
 }
 
 pub struct VerifiedApplicationFile {
