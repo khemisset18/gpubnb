@@ -348,12 +348,12 @@ mod tests {
 
     #[test]
     fn workspace_application_contract_is_fail_closed() {
-        assert_eq!(validate_workspace_application("cloud-desktop", None), Ok(()));
         assert_eq!(
-            validate_workspace_application(
-                "cloud-desktop",
-                Some(r"C:\Windows\System32\cmd.exe")
-            ),
+            validate_workspace_application("cloud-desktop", None),
+            Ok(())
+        );
+        assert_eq!(
+            validate_workspace_application("cloud-desktop", Some(r"C:\Windows\System32\cmd.exe")),
             Err(CliError::new("application_not_allowed", 2))
         );
         for workspace in ["creator", "cad", "gaming"] {
