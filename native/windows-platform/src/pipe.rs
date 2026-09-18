@@ -78,10 +78,25 @@ impl WorkerPipeClient {
         }
         #[cfg(target_os = "windows")]
         {
-            windows_impl::send_frame(&self._handle, frame)
+            windows_impl::send_client_frame(&self._handle, frame)
         }
         #[cfg(not(target_os = "windows"))]
         {
+            Err(PlatformError::WindowsRequired)
+        }
+    }
+
+    pub fn read_frame(&self, timeout_ms: u32) -> Result<Vec<u8>, PlatformError> {
+        if timeout_ms == 0 {
+            return Err(PlatformError::PipeConnectTimeout);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::read_client_frame(&self._handle, timeout_ms)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = timeout_ms;
             Err(PlatformError::WindowsRequired)
         }
     }
@@ -102,6 +117,20 @@ pub struct VerifiedPipeClient {
 impl WorkerPipe {
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn send_frame(&self, frame: &[u8]) -> Result<(), PlatformError> {
+        if frame.len() > WORKER_PIPE_FRAME_MAX {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::send_server_frame(&self._handle, frame)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err(PlatformError::WindowsRequired)
+        }
     }
 
     pub fn read_frame(&self, timeout_ms: u32) -> Result<Vec<u8>, PlatformError> {
@@ -771,7 +800,7 @@ mod windows_impl {
                 0,
                 ptr::null_mut(),
                 OPEN_EXISTING,
-                SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
+                SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION | FILE_FLAG_OVERLAPPED,
                 0,
             )
         };
@@ -780,21 +809,8 @@ mod windows_impl {
         }
         let handle = OwnedClientHandle(raw);
 
-        let prelude = PIPE_AUTH_PRELUDE;
-        let mut written = 0u32;
-        // SAFETY: one-byte prelude buffer remains live for synchronous WriteFile.
-        let ok = unsafe {
-            WriteFile(
-                handle.0,
-                (&prelude as *const u8).cast::<c_void>(),
-                1,
-                &mut written,
-                ptr::null_mut(),
-            )
-        };
-        if ok == 0 || written != 1 {
-            return Err(PlatformError::PipeProtocolFailed);
-        }
+        let prelude = [PIPE_AUTH_PRELUDE];
+        write_message(handle.0, &prelude, timeout_ms)?;
 
         Ok(WorkerPipeClient {
             name,
@@ -802,38 +818,78 @@ mod windows_impl {
         })
     }
 
-    pub(super) fn send_frame(
-        client: &OwnedClientHandle,
-        frame: &[u8],
+    fn write_message(
+        handle: Handle,
+        bytes: &[u8],
+        timeout_ms: u32,
     ) -> Result<(), PlatformError> {
+        if bytes.is_empty() || bytes.len() > u32::MAX as usize || timeout_ms == 0 {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        let event = create_event().map_err(|_| PlatformError::PipeProtocolFailed)?;
+        let mut overlapped = Overlapped::new(event.0);
+        // SAFETY: bytes and OVERLAPPED/event stay live until completion.
+        let immediate = unsafe {
+            WriteFile(
+                handle,
+                bytes.as_ptr().cast::<c_void>(),
+                bytes.len() as u32,
+                ptr::null_mut(),
+                (&mut overlapped as *mut Overlapped).cast::<c_void>(),
+            )
+        };
+        let transferred = if immediate != 0 {
+            let mut transferred = 0u32;
+            // SAFETY: the overlapped write completed synchronously.
+            let ok = unsafe { GetOverlappedResult(handle, &mut overlapped, &mut transferred, 0) };
+            if ok == 0 {
+                return Err(PlatformError::PipeProtocolFailed);
+            }
+            transferred
+        } else {
+            // SAFETY: GetLastError immediately follows WriteFile.
+            if unsafe { GetLastError() } != ERROR_IO_PENDING {
+                return Err(PlatformError::PipeProtocolFailed);
+            }
+            wait_pending(
+                handle,
+                &mut overlapped,
+                timeout_ms,
+                PlatformError::PipeConnectTimeout,
+                PlatformError::PipeProtocolFailed,
+            )?
+        };
+        if transferred as usize != bytes.len() {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        Ok(())
+    }
+
+    fn send_frame_handle(handle: Handle, frame: &[u8]) -> Result<(), PlatformError> {
         if frame.len() > WORKER_PIPE_FRAME_MAX {
             return Err(PlatformError::PipeProtocolFailed);
         }
         let mut packet = [0u8; WORKER_PIPE_PACKET_SIZE];
         packet[..2].copy_from_slice(&(frame.len() as u16).to_le_bytes());
         packet[2..2 + frame.len()].copy_from_slice(frame);
-
-        let mut written = 0u32;
-        // SAFETY: fixed packet stays live for the synchronous write.
-        let ok = unsafe {
-            WriteFile(
-                client.0,
-                packet.as_ptr().cast::<c_void>(),
-                WORKER_PIPE_PACKET_SIZE as u32,
-                &mut written,
-                ptr::null_mut(),
-            )
-        };
-        if ok == 0 || written as usize != WORKER_PIPE_PACKET_SIZE {
-            return Err(PlatformError::PipeProtocolFailed);
-        }
-        Ok(())
+        write_message(handle, &packet, 10_000)
     }
 
-    pub(super) fn read_frame(
+    pub(super) fn send_client_frame(
+        client: &OwnedClientHandle,
+        frame: &[u8],
+    ) -> Result<(), PlatformError> {
+        send_frame_handle(client.0, frame)
+    }
+
+    pub(super) fn send_server_frame(
         pipe: &OwnedPipeHandle,
-        timeout_ms: u32,
-    ) -> Result<Vec<u8>, PlatformError> {
+        frame: &[u8],
+    ) -> Result<(), PlatformError> {
+        send_frame_handle(pipe.0, frame)
+    }
+
+    fn read_frame_handle(handle: Handle, timeout_ms: u32) -> Result<Vec<u8>, PlatformError> {
         let event = create_event().map_err(|_| PlatformError::PipeReadFailed)?;
         let mut overlapped = Overlapped::new(event.0);
         let mut packet = [0u8; WORKER_PIPE_PACKET_SIZE];
@@ -841,7 +897,7 @@ mod windows_impl {
         // SAFETY: fixed packet and OVERLAPPED stay live through completion.
         let immediate = unsafe {
             ReadFile(
-                pipe.0,
+                handle,
                 packet.as_mut_ptr().cast::<c_void>(),
                 WORKER_PIPE_PACKET_SIZE as u32,
                 ptr::null_mut(),
@@ -851,7 +907,7 @@ mod windows_impl {
         let transferred = if immediate != 0 {
             let mut transferred = 0u32;
             // SAFETY: the overlapped read completed synchronously.
-            let ok = unsafe { GetOverlappedResult(pipe.0, &mut overlapped, &mut transferred, 0) };
+            let ok = unsafe { GetOverlappedResult(handle, &mut overlapped, &mut transferred, 0) };
             if ok == 0 {
                 return Err(PlatformError::PipeReadFailed);
             }
@@ -866,7 +922,7 @@ mod windows_impl {
                 return Err(PlatformError::PipeReadFailed);
             }
             wait_pending(
-                pipe.0,
+                handle,
                 &mut overlapped,
                 timeout_ms,
                 PlatformError::PipeConnectTimeout,
@@ -885,6 +941,20 @@ mod windows_impl {
             return Err(PlatformError::PipeProtocolFailed);
         }
         Ok(packet[2..2 + declared].to_vec())
+    }
+
+    pub(super) fn read_frame(
+        pipe: &OwnedPipeHandle,
+        timeout_ms: u32,
+    ) -> Result<Vec<u8>, PlatformError> {
+        read_frame_handle(pipe.0, timeout_ms)
+    }
+
+    pub(super) fn read_client_frame(
+        client: &OwnedClientHandle,
+        timeout_ms: u32,
+    ) -> Result<Vec<u8>, PlatformError> {
+        read_frame_handle(client.0, timeout_ms)
     }
 
     pub(super) fn accept_verified_client(
