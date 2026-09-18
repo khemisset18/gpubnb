@@ -127,7 +127,11 @@ mod tests {
     }
 
     impl FakePlatform {
-        fn step(&mut self, name: &'static str, error: NativeBackendError) -> Result<(), NativeBackendError> {
+        fn step(
+            &mut self,
+            name: &'static str,
+            error: NativeBackendError,
+        ) -> Result<(), NativeBackendError> {
             self.calls.push(name);
             if self.fail_at == Some(name) {
                 Err(error)
