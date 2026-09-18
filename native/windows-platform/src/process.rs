@@ -4,10 +4,10 @@
 //! It verifies the kernel ordering we will reuse for CreateProcessAsUser:
 //! create suspended -> assign Job Object -> resume.
 
-use crate::PlatformError;
+use crate::{PlatformError, VerifiedApplicationFile};
 use crate::job::{WorkerJob, create_worker_job};
 use crate::session::RenterSessionToken;
-use std::ffi::{OsStr, c_void};
+use std::ffi::{OsStr, OsString, c_void};
 use std::mem::{MaybeUninit, size_of};
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
@@ -110,6 +110,69 @@ impl Drop for OwnedThreadHandle {
             let _ = CloseHandle(self.0);
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RenterWorkerLaunchSpec<'a> {
+    pub session_id: &'a str,
+    pub generation: u64,
+    pub gpu_uuid: &'a str,
+    pub workspace: &'a str,
+}
+
+fn safe_session_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
+fn canonical_gpu_uuid(value: &str) -> bool {
+    if !value.starts_with("GPU-") || value.len() != 40 {
+        return false;
+    }
+    value[4..].bytes().enumerate().all(|(index, byte)| {
+        let hyphen = matches!(index, 8 | 13 | 18 | 23);
+        (hyphen && byte == b'-') || (!hyphen && byte.is_ascii_hexdigit())
+    })
+}
+
+fn allowed_workspace(value: &str) -> bool {
+    matches!(value, "cloud-desktop" | "creator" | "cad" | "gaming")
+}
+
+fn validate_worker_launch_spec(spec: RenterWorkerLaunchSpec<'_>) -> Result<(), PlatformError> {
+    if !safe_session_id(spec.session_id)
+        || spec.generation == 0
+        || !canonical_gpu_uuid(spec.gpu_uuid)
+        || !allowed_workspace(spec.workspace)
+    {
+        return Err(PlatformError::InvalidPath);
+    }
+    Ok(())
+}
+
+fn worker_command_line(
+    worker_path: &Path,
+    spec: RenterWorkerLaunchSpec<'_>,
+) -> Result<OsString, PlatformError> {
+    validate_worker_launch_spec(spec)?;
+    if !worker_path.is_absolute() {
+        return Err(PlatformError::InvalidPath);
+    }
+
+    let mut command = OsString::from(""");
+    command.push(worker_path.as_os_str());
+    command.push("" --session-id ");
+    command.push(spec.session_id);
+    command.push(" --generation ");
+    command.push(spec.generation.to_string());
+    command.push(" --gpu-uuid ");
+    command.push(spec.gpu_uuid);
+    command.push(" --workspace ");
+    command.push(spec.workspace);
+    Ok(command)
 }
 
 pub struct RenterWorkerProcess {
@@ -285,19 +348,24 @@ fn spawn_suspended_as_renter(
     })
 }
 
-pub fn launch_renter_worker(
+pub fn launch_qualified_renter_worker(
     token: &RenterSessionToken,
-    application: &Path,
-    command_line: &OsStr,
+    verified_worker: &VerifiedApplicationFile,
+    spec: RenterWorkerLaunchSpec<'_>,
 ) -> Result<RenterWorkerProcess, PlatformError> {
+    validate_worker_launch_spec(spec)?;
+    verified_worker.verify_authenticode()?;
+
+    let application = verified_worker.path();
     let current_directory = application.parent().ok_or(PlatformError::InvalidPath)?;
     if !current_directory.is_absolute() {
         return Err(PlatformError::InvalidPath);
     }
+    let command_line = worker_command_line(application, spec)?;
 
     let job = create_worker_job()?;
     let mut worker =
-        spawn_suspended_as_renter(token, application, command_line, current_directory)?;
+        spawn_suspended_as_renter(token, application, &command_line, current_directory)?;
     worker.assign_to_job(&job)?;
     worker.resume()?;
 
@@ -383,6 +451,47 @@ mod tests {
         std::env::var_os("ComSpec")
             .map(PathBuf::from)
             .expect("ComSpec")
+    }
+
+    #[test]
+    fn worker_launch_spec_rejects_arbitrary_workspace_and_identity() {
+        let good = RenterWorkerLaunchSpec {
+            session_id: "sess-1",
+            generation: 1,
+            gpu_uuid: "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+            workspace: "cloud-desktop",
+        };
+        assert_eq!(validate_worker_launch_spec(good), Ok(()));
+
+        for bad in [
+            RenterWorkerLaunchSpec { session_id: "../provider", ..good },
+            RenterWorkerLaunchSpec { generation: 0, ..good },
+            RenterWorkerLaunchSpec { gpu_uuid: "GPU-EXACT", ..good },
+            RenterWorkerLaunchSpec { workspace: "developer", ..good },
+        ] {
+            assert_eq!(
+                validate_worker_launch_spec(bad),
+                Err(PlatformError::InvalidPath)
+            );
+        }
+    }
+
+    #[test]
+    fn worker_command_line_is_generated_only_from_safe_fields() {
+        let spec = RenterWorkerLaunchSpec {
+            session_id: "sess-ABC_123",
+            generation: 7,
+            gpu_uuid: "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+            workspace: "gaming",
+        };
+        let path = Path::new(r"C:\Program Files\GPUbnb\gpubnb-windows-worker.exe");
+        let command = worker_command_line(path, spec).expect("worker command");
+        let text = command.to_string_lossy();
+        assert!(text.contains("--session-id sess-ABC_123"));
+        assert!(text.contains("--generation 7"));
+        assert!(text.contains("--workspace gaming"));
+        assert!(!text.contains("cmd.exe"));
+        assert!(!text.contains("powershell"));
     }
 
     #[test]
