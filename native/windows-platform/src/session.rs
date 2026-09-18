@@ -14,6 +14,11 @@ pub struct RenterSessionToken {
     handle: windows_impl::OwnedToken,
 }
 
+pub struct RenterEnvironment {
+    #[cfg(target_os = "windows")]
+    block: windows_impl::OwnedEnvironment,
+}
+
 impl RenterSessionToken {
     pub const fn session_id(&self) -> u32 {
         self.session_id
@@ -27,9 +32,27 @@ impl RenterSessionToken {
         &self.user_sid
     }
 
+    pub fn create_environment(&self) -> Result<RenterEnvironment, PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::create_environment(&self.handle)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err(PlatformError::WindowsRequired)
+        }
+    }
+
     #[cfg(target_os = "windows")]
     pub(crate) const fn raw_handle(&self) -> isize {
         self.handle.0
+    }
+}
+
+impl RenterEnvironment {
+    #[cfg(target_os = "windows")]
+    pub(crate) const fn raw_ptr(&self) -> *mut std::ffi::c_void {
+        self.block.0
     }
 }
 
@@ -88,6 +111,20 @@ mod windows_impl {
         }
     }
 
+    pub(super) struct OwnedEnvironment(pub(super) *mut c_void);
+
+    impl Drop for OwnedEnvironment {
+        fn drop(&mut self) {
+            if !self.0.is_null() {
+                // SAFETY: pointer was returned by CreateEnvironmentBlock and is
+                // uniquely owned by this wrapper.
+                unsafe {
+                    let _ = DestroyEnvironmentBlock(self.0);
+                }
+            }
+        }
+    }
+
     struct TokenBuffer {
         words: Vec<usize>,
         byte_len: usize,
@@ -106,6 +143,16 @@ mod windows_impl {
     #[link(name = "wtsapi32")]
     unsafe extern "system" {
         fn WTSQueryUserToken(session_id: u32, token: *mut Handle) -> i32;
+    }
+
+    #[link(name = "userenv")]
+    unsafe extern "system" {
+        fn CreateEnvironmentBlock(
+            environment: *mut *mut c_void,
+            token: Handle,
+            inherit: i32,
+        ) -> i32;
+        fn DestroyEnvironmentBlock(environment: *mut c_void) -> i32;
     }
 
     #[link(name = "advapi32")]
@@ -244,6 +291,21 @@ mod windows_impl {
             .find(|group| group.attributes & SE_GROUP_LOGON_ID == SE_GROUP_LOGON_ID)
             .ok_or(PlatformError::RenterTokenQueryFailed)?;
         sid_to_string(group.sid)
+    }
+
+    pub(super) fn create_environment(
+        token: &OwnedToken,
+    ) -> Result<super::RenterEnvironment, PlatformError> {
+        let mut raw = ptr::null_mut();
+        // SAFETY: token is a live primary user token. inherit=FALSE ensures the
+        // privileged service environment is not copied into the renter worker.
+        let ok = unsafe { CreateEnvironmentBlock(&mut raw, token.0, 0) };
+        if ok == 0 || raw.is_null() {
+            return Err(PlatformError::EnvironmentCreateFailed);
+        }
+        Ok(super::RenterEnvironment {
+            block: OwnedEnvironment(raw),
+        })
     }
 
     pub(super) fn query_renter_session_token(
