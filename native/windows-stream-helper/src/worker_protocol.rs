@@ -14,7 +14,6 @@ pub const MAX_WORKER_HELLO_FRAME: usize = 512;
 const MAX_SESSION_ID: usize = 128;
 const MAX_GPU_UUID: usize = 64;
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkerCommand {
     PrepareDisplay,
@@ -194,17 +193,26 @@ impl<'a> FrameCursor<'a> {
     }
 
     fn u16(&mut self) -> Result<u16, WorkerFrameError> {
-        let bytes: [u8; 2] = self.take(2)?.try_into().map_err(|_| WorkerFrameError::Truncated)?;
+        let bytes: [u8; 2] = self
+            .take(2)?
+            .try_into()
+            .map_err(|_| WorkerFrameError::Truncated)?;
         Ok(u16::from_le_bytes(bytes))
     }
 
     fn u32(&mut self) -> Result<u32, WorkerFrameError> {
-        let bytes: [u8; 4] = self.take(4)?.try_into().map_err(|_| WorkerFrameError::Truncated)?;
+        let bytes: [u8; 4] = self
+            .take(4)?
+            .try_into()
+            .map_err(|_| WorkerFrameError::Truncated)?;
         Ok(u32::from_le_bytes(bytes))
     }
 
     fn u64(&mut self) -> Result<u64, WorkerFrameError> {
-        let bytes: [u8; 8] = self.take(8)?.try_into().map_err(|_| WorkerFrameError::Truncated)?;
+        let bytes: [u8; 8] = self
+            .take(8)?
+            .try_into()
+            .map_err(|_| WorkerFrameError::Truncated)?;
         Ok(u64::from_le_bytes(bytes))
     }
 
@@ -333,7 +341,6 @@ mod tests {
             decode_worker_hello(&trailing),
             Err(WorkerFrameError::TrailingBytes)
         );
-
     }
 
     #[test]
