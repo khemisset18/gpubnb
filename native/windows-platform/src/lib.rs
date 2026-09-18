@@ -237,13 +237,7 @@ mod windows_impl {
             let evidence = opened.evidence();
             assert!(evidence.fixed_local_volume);
             assert!(!evidence.final_component_reparse_point);
-            assert_ne!(evidence.file_id_all_zero(), true);
-        }
-
-        impl ApplicationFileEvidence {
-            fn file_id_all_zero(self) -> bool {
-                self.identity.file_id.iter().all(|byte| *byte == 0)
-            }
+            assert!(evidence.identity.file_id.iter().any(|byte| *byte != 0));
         }
     }
 }
