@@ -18,7 +18,8 @@ static NTSTATUS GPUbnbValidateControlRequest(
     }
 
     if (request->Operation != static_cast<UINT32>(GPUbnbIddControlOperation::PlugMonitor) &&
-        request->Operation != static_cast<UINT32>(GPUbnbIddControlOperation::UnplugMonitor))
+        request->Operation != static_cast<UINT32>(GPUbnbIddControlOperation::UnplugMonitor) &&
+        request->Operation != static_cast<UINT32>(GPUbnbIddControlOperation::ValidateOnly))
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -175,10 +176,20 @@ VOID GPUbnbEvtIoDeviceControl(
                 status = GPUbnbValidateControlRequest(control);
                 if (NT_SUCCESS(status))
                 {
-                    // Validation-only milestone. A valid request must not create,
-                    // remove or mutate a monitor until service authentication,
-                    // monitor ownership and physical qualification are complete.
-                    status = STATUS_NOT_SUPPORTED;
+                    if (control->Operation == static_cast<UINT32>(
+                            GPUbnbIddControlOperation::ValidateOnly))
+                    {
+                        // Side-effect-free contract probe. This is the only
+                        // successful operation before physical qualification.
+                        status = STATUS_SUCCESS;
+                    }
+                    else
+                    {
+                        // Plug/unplug remain impossible until service
+                        // authentication, monitor ownership and physical
+                        // qualification are complete.
+                        status = STATUS_NOT_SUPPORTED;
+                    }
                 }
             }
         }
