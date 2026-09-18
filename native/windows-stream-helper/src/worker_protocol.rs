@@ -11,6 +11,7 @@ use crate::lifecycle::WorkspaceKind;
 
 pub const WORKER_PROTOCOL_VERSION: u16 = 1;
 pub const MAX_WORKER_HELLO_FRAME: usize = 512;
+pub const WORKER_COMMAND_FRAME_SIZE: usize = 19;
 const MAX_SESSION_ID: usize = 128;
 const MAX_GPU_UUID: usize = 64;
 
@@ -21,6 +22,23 @@ pub enum WorkerCommand {
     SuspendMedia,
     ResumeAfterFreshProof,
     Stop,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkerCommandFrame {
+    pub protocol_version: u16,
+    pub command: WorkerCommand,
+    pub generation: u64,
+    pub sequence: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerCommandError {
+    InvalidLength,
+    ProtocolVersion,
+    InvalidCommand,
+    Generation,
+    Sequence,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,6 +107,97 @@ pub enum WorkerHandshakeError {
     Generation,
     WindowsSession,
     WorkerPid,
+}
+
+fn command_tag(command: WorkerCommand) -> u8 {
+    match command {
+        WorkerCommand::PrepareDisplay => 1,
+        WorkerCommand::StartCapture => 2,
+        WorkerCommand::SuspendMedia => 3,
+        WorkerCommand::ResumeAfterFreshProof => 4,
+        WorkerCommand::Stop => 5,
+    }
+}
+
+fn command_from_tag(tag: u8) -> Result<WorkerCommand, WorkerCommandError> {
+    match tag {
+        1 => Ok(WorkerCommand::PrepareDisplay),
+        2 => Ok(WorkerCommand::StartCapture),
+        3 => Ok(WorkerCommand::SuspendMedia),
+        4 => Ok(WorkerCommand::ResumeAfterFreshProof),
+        5 => Ok(WorkerCommand::Stop),
+        _ => Err(WorkerCommandError::InvalidCommand),
+    }
+}
+
+pub fn encode_worker_command(
+    frame: WorkerCommandFrame,
+) -> Result<[u8; WORKER_COMMAND_FRAME_SIZE], WorkerCommandError> {
+    if frame.protocol_version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerCommandError::ProtocolVersion);
+    }
+    if frame.generation == 0 {
+        return Err(WorkerCommandError::Generation);
+    }
+    if frame.sequence == 0 {
+        return Err(WorkerCommandError::Sequence);
+    }
+
+    let mut out = [0u8; WORKER_COMMAND_FRAME_SIZE];
+    out[0..2].copy_from_slice(&frame.protocol_version.to_le_bytes());
+    out[2] = command_tag(frame.command);
+    out[3..11].copy_from_slice(&frame.generation.to_le_bytes());
+    out[11..19].copy_from_slice(&frame.sequence.to_le_bytes());
+    Ok(out)
+}
+
+pub fn decode_worker_command(frame: &[u8]) -> Result<WorkerCommandFrame, WorkerCommandError> {
+    if frame.len() != WORKER_COMMAND_FRAME_SIZE {
+        return Err(WorkerCommandError::InvalidLength);
+    }
+
+    let protocol_version = u16::from_le_bytes([frame[0], frame[1]]);
+    if protocol_version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerCommandError::ProtocolVersion);
+    }
+    let command = command_from_tag(frame[2])?;
+    let generation = u64::from_le_bytes(
+        frame[3..11]
+            .try_into()
+            .map_err(|_| WorkerCommandError::InvalidLength)?,
+    );
+    let sequence = u64::from_le_bytes(
+        frame[11..19]
+            .try_into()
+            .map_err(|_| WorkerCommandError::InvalidLength)?,
+    );
+    if generation == 0 {
+        return Err(WorkerCommandError::Generation);
+    }
+    if sequence == 0 {
+        return Err(WorkerCommandError::Sequence);
+    }
+
+    Ok(WorkerCommandFrame {
+        protocol_version,
+        command,
+        generation,
+        sequence,
+    })
+}
+
+pub fn validate_worker_command(
+    expected_generation: u64,
+    expected_sequence: u64,
+    frame: WorkerCommandFrame,
+) -> Result<WorkerCommand, WorkerCommandError> {
+    if expected_generation == 0 || frame.generation != expected_generation {
+        return Err(WorkerCommandError::Generation);
+    }
+    if expected_sequence == 0 || frame.sequence != expected_sequence {
+        return Err(WorkerCommandError::Sequence);
+    }
+    Ok(frame.command)
 }
 
 fn workspace_tag(workspace: WorkspaceKind) -> u8 {
@@ -444,6 +553,72 @@ mod tests {
                 Err(WorkerHandshakeError::WorkerPid)
             );
         }
+    }
+
+    #[test]
+    fn typed_command_frame_round_trips_and_is_generation_sequence_fenced() {
+        let frame = WorkerCommandFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            command: WorkerCommand::PrepareDisplay,
+            generation: 7,
+            sequence: 1,
+        };
+        let encoded = encode_worker_command(frame).expect("encode command");
+        assert_eq!(encoded.len(), WORKER_COMMAND_FRAME_SIZE);
+        let decoded = decode_worker_command(&encoded).expect("decode command");
+        assert_eq!(decoded, frame);
+        assert_eq!(
+            validate_worker_command(7, 1, decoded),
+            Ok(WorkerCommand::PrepareDisplay)
+        );
+        assert_eq!(
+            validate_worker_command(8, 1, decoded),
+            Err(WorkerCommandError::Generation)
+        );
+        assert_eq!(
+            validate_worker_command(7, 2, decoded),
+            Err(WorkerCommandError::Sequence)
+        );
+    }
+
+    #[test]
+    fn command_frame_rejects_unknown_tag_bad_length_and_zero_fences() {
+        let valid = WorkerCommandFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            command: WorkerCommand::Stop,
+            generation: 7,
+            sequence: 9,
+        };
+        let encoded = encode_worker_command(valid).expect("encode command");
+
+        for cut in 0..WORKER_COMMAND_FRAME_SIZE {
+            assert_eq!(
+                decode_worker_command(&encoded[..cut]),
+                Err(WorkerCommandError::InvalidLength)
+            );
+        }
+
+        let mut bad_tag = encoded;
+        bad_tag[2] = 0xff;
+        assert_eq!(
+            decode_worker_command(&bad_tag),
+            Err(WorkerCommandError::InvalidCommand)
+        );
+
+        assert_eq!(
+            encode_worker_command(WorkerCommandFrame {
+                generation: 0,
+                ..valid
+            }),
+            Err(WorkerCommandError::Generation)
+        );
+        assert_eq!(
+            encode_worker_command(WorkerCommandFrame {
+                sequence: 0,
+                ..valid
+            }),
+            Err(WorkerCommandError::Sequence)
+        );
     }
 
     #[test]
