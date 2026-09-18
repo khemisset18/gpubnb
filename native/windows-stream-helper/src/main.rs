@@ -60,22 +60,80 @@ fn validate_workspace(value: &str) -> Result<(), CliError> {
 }
 
 fn validate_gpu_uuid(value: &str) -> Result<(), CliError> {
-    if value.len() < 5
-        || value.len() > MAX_GPU_UUID
-        || !value.starts_with("GPU-")
-        || value.chars().any(char::is_control)
-    {
+    // NVIDIA physical GPU UUIDs exposed by nvidia-smi use GPU- followed by a
+    // canonical 8-4-4-4-12 hexadecimal UUID. Reject looser strings so a future
+    // backend cannot silently accept aliases, device names or injected arguments.
+    if value.len() > MAX_GPU_UUID || !value.starts_with("GPU-") {
         return Err(CliError::new("invalid_gpu_uuid", 2));
+    }
+    let uuid = &value[4..];
+    if uuid.len() != 36 {
+        return Err(CliError::new("invalid_gpu_uuid", 2));
+    }
+    for (index, byte) in uuid.bytes().enumerate() {
+        let hyphen = matches!(index, 8 | 13 | 18 | 23);
+        if (hyphen && byte != b'-') || (!hyphen && !byte.is_ascii_hexdigit()) {
+            return Err(CliError::new("invalid_gpu_uuid", 2));
+        }
     }
     Ok(())
 }
 
 fn validate_application(value: &str) -> Result<(), CliError> {
-    if value.is_empty() || value.len() > MAX_APPLICATION_PATH || value.chars().any(char::is_control)
+    // Only local, drive-qualified Win32 executable paths are accepted. UNC paths,
+    // device namespaces, relative paths, alternate data streams and path traversal
+    // are intentionally rejected even though the Agent also performs discovery.
+    if value.is_empty()
+        || value.len() > MAX_APPLICATION_PATH
+        || value.chars().any(char::is_control)
+        || value.contains('/')
+        || value.starts_with(r"\\")
+        || value.starts_with(r"\\?\")
+        || value.starts_with(r"\\.\")
     {
         return Err(CliError::new("invalid_application_path", 2));
     }
+
+    let bytes = value.as_bytes();
+    if bytes.len() < 4
+        || !bytes[0].is_ascii_alphabetic()
+        || bytes[1] != b':'
+        || bytes[2] != b'\\'
+        || !value.to_ascii_lowercase().ends_with(".exe")
+    {
+        return Err(CliError::new("invalid_application_path", 2));
+    }
+
+    // A colon is permitted only as the drive separator. This excludes NTFS ADS
+    // forms such as "app.exe:stream". Reject dot components and Win32-normalized
+    // trailing spaces/dots to avoid path interpretation mismatches.
+    if value[2..].contains(':') {
+        return Err(CliError::new("invalid_application_path", 2));
+    }
+    for component in value[3..].split('\\') {
+        if component.is_empty()
+            || component == "."
+            || component == ".."
+            || component.ends_with(' ')
+            || component.ends_with('.')
+        {
+            return Err(CliError::new("invalid_application_path", 2));
+        }
+    }
     Ok(())
+}
+
+fn validate_workspace_application(
+    workspace: &str,
+    application: Option<&str>,
+) -> Result<(), CliError> {
+    match (workspace, application) {
+        ("cloud-desktop", None) => Ok(()),
+        ("cloud-desktop", Some(_)) => Err(CliError::new("application_not_allowed", 2)),
+        ("creator" | "cad" | "gaming", Some(path)) => validate_application(path),
+        ("creator" | "cad" | "gaming", None) => Err(CliError::new("application_required", 2)),
+        _ => Err(CliError::new("unsupported_workspace", 2)),
+    }
 }
 
 fn take_value(args: &[String], index: &mut usize, name: &'static str) -> Result<String, CliError> {
@@ -123,9 +181,7 @@ fn parse_start(args: &[String]) -> Result<Command, CliError> {
     validate_session_id(&session_id)?;
     validate_workspace(&workspace)?;
     validate_gpu_uuid(&gpu_uuid)?;
-    if let Some(path) = application.as_deref() {
-        validate_application(path)?;
-    }
+    validate_workspace_application(&workspace, application.as_deref())?;
 
     Ok(Command::Start {
         session_id,
@@ -201,6 +257,8 @@ fn main() -> ExitCode {
 mod tests {
     use super::*;
 
+    const GPU_UUID: &str = "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a";
+
     fn strings(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_owned()).collect()
     }
@@ -227,7 +285,7 @@ mod tests {
             "--workspace",
             "creator",
             "--gpu-uuid",
-            "GPU-EXACT",
+            GPU_UUID,
             "--application",
             r"C:\Program Files\Blender Foundation\blender.exe",
         ]))
@@ -240,11 +298,70 @@ mod tests {
             "--session-id",
             "../provider",
             "--workspace",
-            "creator",
+            "cloud-desktop",
             "--gpu-uuid",
-            "GPU-EXACT",
+            GPU_UUID,
         ]));
         assert_eq!(bad, Err(CliError::new("invalid_session_id", 2)));
+    }
+
+    #[test]
+    fn gpu_uuid_requires_canonical_nvidia_uuid() {
+        for invalid in [
+            "GPU-EXACT",
+            "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524g",
+            "GPU-e8301c162a142b3ff057b21f3b00524a",
+            "AMD-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+        ] {
+            assert_eq!(
+                validate_gpu_uuid(invalid),
+                Err(CliError::new("invalid_gpu_uuid", 2)),
+                "{invalid}"
+            );
+        }
+        assert_eq!(validate_gpu_uuid(GPU_UUID), Ok(()));
+    }
+
+    #[test]
+    fn application_path_must_be_local_absolute_executable() {
+        assert_eq!(
+            validate_application(r"C:\Program Files\Blender Foundation\blender.exe"),
+            Ok(())
+        );
+        for invalid in [
+            r"blender.exe",
+            r"..\blender.exe",
+            r"\\server\share\blender.exe",
+            r"\\?\C:\Program Files\Blender\blender.exe",
+            r"C:\Program Files\Blender\..\blender.exe",
+            r"C:\Program Files\Blender\blender.exe:payload",
+            r"C:/Program Files/Blender/blender.exe",
+            r"C:\Program Files\Blender\blender.com",
+        ] {
+            assert_eq!(
+                validate_application(invalid),
+                Err(CliError::new("invalid_application_path", 2)),
+                "{invalid}"
+            );
+        }
+    }
+
+    #[test]
+    fn workspace_application_contract_is_fail_closed() {
+        assert_eq!(validate_workspace_application("cloud-desktop", None), Ok(()));
+        assert_eq!(
+            validate_workspace_application(
+                "cloud-desktop",
+                Some(r"C:\Windows\System32\cmd.exe")
+            ),
+            Err(CliError::new("application_not_allowed", 2))
+        );
+        for workspace in ["creator", "cad", "gaming"] {
+            assert_eq!(
+                validate_workspace_application(workspace, None),
+                Err(CliError::new("application_required", 2))
+            );
+        }
     }
 
     #[test]
@@ -257,7 +374,7 @@ mod tests {
             "--workspace",
             "developer",
             "--gpu-uuid",
-            "GPU-EXACT",
+            GPU_UUID,
         ]));
         assert_eq!(unknown, Err(CliError::new("unsupported_workspace", 2)));
 
@@ -270,7 +387,9 @@ mod tests {
             "--workspace",
             "gaming",
             "--gpu-uuid",
-            "GPU-EXACT",
+            GPU_UUID,
+            "--application",
+            r"C:\Program Files (x86)\Steam\steam.exe",
         ]));
         assert_eq!(
             duplicate,
@@ -296,7 +415,7 @@ mod tests {
             Command::Start {
                 session_id: "sess-1".to_owned(),
                 workspace: "cloud-desktop".to_owned(),
-                gpu_uuid: "GPU-EXACT".to_owned(),
+                gpu_uuid: GPU_UUID.to_owned(),
                 application: None,
             },
             Command::Stop {
