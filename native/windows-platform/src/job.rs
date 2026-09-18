@@ -12,6 +12,18 @@ pub struct WorkerJob {
 }
 
 impl WorkerJob {
+    pub(crate) fn assign_process_handle(&self, process_handle: isize) -> Result<(), PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::assign_process(&self._handle, process_handle)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = process_handle;
+            Err(PlatformError::WindowsRequired)
+        }
+    }
+
     pub fn kill_on_close_enabled(&self) -> Result<bool, PlatformError> {
         #[cfg(target_os = "windows")]
         {
@@ -101,6 +113,7 @@ mod windows_impl {
             return_length: *mut u32,
         ) -> i32;
         fn CloseHandle(object: Handle) -> i32;
+        fn AssignProcessToJobObject(job: Handle, process: Handle) -> i32;
     }
 
     pub(super) struct OwnedJobHandle(Handle);
@@ -146,6 +159,22 @@ mod windows_impl {
             return Err(PlatformError::JobConfigureFailed);
         }
         Ok(worker_job)
+    }
+
+    pub(super) fn assign_process(
+        handle: &OwnedJobHandle,
+        process_handle: Handle,
+    ) -> Result<(), PlatformError> {
+        if process_handle == 0 {
+            return Err(PlatformError::JobAssignFailed);
+        }
+        // SAFETY: both handles are owned/live at the call site. The process is
+        // created suspended so no renter code runs before this assignment.
+        let ok = unsafe { AssignProcessToJobObject(handle.0, process_handle) };
+        if ok == 0 {
+            return Err(PlatformError::JobAssignFailed);
+        }
+        Ok(())
     }
 
     pub(super) fn kill_on_close_enabled(handle: &OwnedJobHandle) -> Result<bool, PlatformError> {
