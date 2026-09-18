@@ -36,9 +36,7 @@ The helper must never capture the provider's personal desktop.
 `sessionId` is an opaque GPUbnb identifier containing only ASCII letters,
 digits, `-` and `_`, maximum 200 characters.
 
-`gpuUuid` is the exact stable NVIDIA UUID selected by GPUbnb for the lease. The
-helper must reject a launch when capture/encode/rendering cannot be bound to that
-GPU. A different GPU must never be substituted silently.
+`gpuUuid` is the exact stable NVIDIA UUID selected by GPUbnb for the lease. The helper accepts only the canonical physical-GPU form `GPU-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` and must reject a launch when capture/encode/rendering cannot be bound to that GPU. A different GPU, alias or device name must never be substituted silently.
 
 Supported Workspace slugs in v1:
 
@@ -53,7 +51,7 @@ The self-test is a real local proof, not a configuration check. It must create a
 ephemeral GPU-rendered test surface in a GPUbnb-isolated Windows context, capture
 at least one real frame, hardware-encode it on the selected NVIDIA GPU, deliver
 that encoded frame through the local media path and verify renter-input isolation.
-Temporary self-test resources must be removed before the process exits.
+The self-test must prove that the capture source is the GPUbnb-owned virtual display and that the provider desktop is excluded; a generic interactive-session boolean is not sufficient. Temporary self-test resources must be removed before the process exits.
 
 Success stdout:
 
@@ -64,6 +62,8 @@ Success stdout:
   "helperVersion": "0.1.0",
   "gpuUuid": "GPU-...",
   "isolatedSession": true,
+  "virtualDisplay": true,
+  "providerDesktopExcluded": true,
   "captureFrame": true,
   "hardwareEncoder": "nvenc",
   "mediaLoopback": true,
@@ -126,12 +126,14 @@ dedicated local authentication mechanism.
 
 Additional Workspace requirements:
 
-- Cloud Desktop: no application path required.
-- Creator: the qualified Blender executable is launched in the renter boundary.
-- CAD: the qualified FreeCAD executable is launched in the renter boundary.
-- Gaming: the qualified Steam executable is launched in the renter boundary;
+- Cloud Desktop: `--application` is forbidden; the helper must not accept an arbitrary executable.
+- Creator: a qualified Blender executable is required and launched in the renter boundary.
+- CAD: a qualified FreeCAD executable is required and launched in the renter boundary.
+- Gaming: a qualified Steam executable is required and launched in the renter boundary;
   `audioReady` and `controllerReady` must both be true before GPUbnb exposes the
   session as ready.
+
+Application paths are defense-in-depth validated by both Agent and helper: local drive-qualified Windows paths only, explicit `.exe`, no PATH lookup, no UNC/network path, no Win32 device namespace, no alternate data stream and no `.`/`..` component.
 
 A helper MUST NOT return success unless both `virtualDisplay` and
 `providerDesktopExcluded` are true. It must never present a provider desktop,
