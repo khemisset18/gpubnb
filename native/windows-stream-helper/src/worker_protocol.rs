@@ -2,7 +2,9 @@
 //!
 //! Windows named-pipe ACL/token verification belongs to the platform layer. This
 //! module adds a second fail-closed fence: even an accepted local pipe peer must
-//! match the exact booking session, GPU, workspace, generation and logon session.
+//! match the exact booking session, GPU, workspace, generation and WTS session.
+//! This hello proves identity only. Virtual-display/capture/NVENC proofs belong to
+//! the later readiness lifecycle and must never be forged just to establish IPC.
 //! The protocol deliberately contains no shell command or arbitrary executable path.
 
 use crate::lifecycle::WorkspaceKind;
@@ -40,8 +42,6 @@ pub struct WorkerHelloOwned {
     pub generation: u64,
     pub windows_session_id: u32,
     pub worker_pid: u32,
-    pub virtual_display_owned: bool,
-    pub provider_desktop_excluded: bool,
 }
 
 impl WorkerHelloOwned {
@@ -54,8 +54,6 @@ impl WorkerHelloOwned {
             generation: self.generation,
             windows_session_id: self.windows_session_id,
             worker_pid: self.worker_pid,
-            virtual_display_owned: self.virtual_display_owned,
-            provider_desktop_excluded: self.provider_desktop_excluded,
         }
     }
 }
@@ -69,8 +67,6 @@ pub struct WorkerHello<'a> {
     pub generation: u64,
     pub windows_session_id: u32,
     pub worker_pid: u32,
-    pub virtual_display_owned: bool,
-    pub provider_desktop_excluded: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,7 +78,6 @@ pub enum WorkerFrameError {
     InvalidSession,
     InvalidGpu,
     InvalidWorkspace,
-    InvalidBoolean,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,10 +87,9 @@ pub enum WorkerHandshakeError {
     Gpu,
     Workspace,
     Generation,
-    LogonSession,
+    WindowsSession,
     WorkerPid,
-    VirtualDisplay,
-    ProviderDesktop,
+    WindowsSession,
 }
 
 fn workspace_tag(workspace: WorkspaceKind) -> u8 {
@@ -162,8 +156,6 @@ pub fn encode_worker_hello(hello: WorkerHello<'_>) -> Result<Vec<u8>, WorkerFram
     frame.extend_from_slice(&hello.generation.to_le_bytes());
     frame.extend_from_slice(&hello.windows_session_id.to_le_bytes());
     frame.extend_from_slice(&hello.worker_pid.to_le_bytes());
-    frame.push(u8::from(hello.virtual_display_owned));
-    frame.push(u8::from(hello.provider_desktop_excluded));
 
     if frame.len() > MAX_WORKER_HELLO_FRAME {
         return Err(WorkerFrameError::TooLarge);
@@ -223,14 +215,6 @@ impl<'a> FrameCursor<'a> {
         Ok(value.to_owned())
     }
 
-    fn boolean(&mut self) -> Result<bool, WorkerFrameError> {
-        match self.u8()? {
-            0 => Ok(false),
-            1 => Ok(true),
-            _ => Err(WorkerFrameError::InvalidBoolean),
-        }
-    }
-
     fn finish(self) -> Result<(), WorkerFrameError> {
         if self.offset == self.frame.len() {
             Ok(())
@@ -249,8 +233,6 @@ pub fn decode_worker_hello(frame: &[u8]) -> Result<WorkerHelloOwned, WorkerFrame
     let generation = cursor.u64()?;
     let windows_session_id = cursor.u32()?;
     let worker_pid = cursor.u32()?;
-    let virtual_display_owned = cursor.boolean()?;
-    let provider_desktop_excluded = cursor.boolean()?;
     cursor.finish()?;
 
     if !valid_session_id(&session_id) {
@@ -268,8 +250,6 @@ pub fn decode_worker_hello(frame: &[u8]) -> Result<WorkerHelloOwned, WorkerFrame
         generation,
         windows_session_id,
         worker_pid,
-        virtual_display_owned,
-        provider_desktop_excluded,
     })
 }
 
@@ -293,16 +273,10 @@ pub fn validate_worker_hello(
         return Err(WorkerHandshakeError::Generation);
     }
     if hello.windows_session_id != expected.windows_session_id {
-        return Err(WorkerHandshakeError::LogonSession);
+        return Err(WorkerHandshakeError::WindowsSession);
     }
     if hello.worker_pid == 0 {
         return Err(WorkerHandshakeError::WorkerPid);
-    }
-    if !hello.virtual_display_owned {
-        return Err(WorkerHandshakeError::VirtualDisplay);
-    }
-    if !hello.provider_desktop_excluded {
-        return Err(WorkerHandshakeError::ProviderDesktop);
     }
     Ok(())
 }
@@ -333,8 +307,6 @@ mod tests {
             generation: 7,
             windows_session_id: 0x1020_3040,
             worker_pid: 4242,
-            virtual_display_owned: true,
-            provider_desktop_excluded: true,
         }
     }
 
@@ -348,7 +320,7 @@ mod tests {
     }
 
     #[test]
-    fn worker_hello_frame_rejects_truncation_trailing_bytes_and_invalid_flags() {
+    fn worker_hello_frame_rejects_truncation_and_trailing_bytes() {
         let encoded = encode_worker_hello(hello()).expect("encode hello");
 
         for cut in 0..encoded.len() {
@@ -362,13 +334,6 @@ mod tests {
             Err(WorkerFrameError::TrailingBytes)
         );
 
-        let mut invalid_flag = encoded;
-        let last = invalid_flag.len() - 1;
-        invalid_flag[last] = 2;
-        assert_eq!(
-            decode_worker_hello(&invalid_flag),
-            Err(WorkerFrameError::InvalidBoolean)
-        );
     }
 
     #[test]
@@ -403,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn wrong_gpu_workspace_or_logon_session_is_rejected() {
+    fn wrong_gpu_workspace_or_windows_session_is_rejected() {
         let mut value = hello();
         value.gpu_uuid = "GPU-11111111-1111-1111-1111-111111111111";
         assert_eq!(
@@ -422,24 +387,7 @@ mod tests {
         value.windows_session_id += 1;
         assert_eq!(
             validate_worker_hello(fence(), value),
-            Err(WorkerHandshakeError::LogonSession)
-        );
-    }
-
-    #[test]
-    fn isolation_proofs_are_required_at_handshake() {
-        let mut value = hello();
-        value.virtual_display_owned = false;
-        assert_eq!(
-            validate_worker_hello(fence(), value),
-            Err(WorkerHandshakeError::VirtualDisplay)
-        );
-
-        let mut value = hello();
-        value.provider_desktop_excluded = false;
-        assert_eq!(
-            validate_worker_hello(fence(), value),
-            Err(WorkerHandshakeError::ProviderDesktop)
+            Err(WorkerHandshakeError::WindowsSession)
         );
     }
 
