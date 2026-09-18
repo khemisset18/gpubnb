@@ -665,7 +665,11 @@ mod windows_impl {
         // SAFETY: this thread is impersonating only because the call above succeeded.
         let reverted = unsafe { RevertToSelf() };
         if reverted == 0 {
-            return Err(PlatformError::RevertToSelfFailed);
+            // Microsoft explicitly warns that continuing after RevertToSelf fails
+            // leaves this privileged thread running as the client. There is no
+            // trustworthy recovery path inside the process, so fail closed by
+            // terminating the component instead of returning to privileged code.
+            std::process::abort();
         }
         peer_result
     }
