@@ -12,3 +12,6 @@ pub mod application_trust;
 pub mod backend;
 pub mod capture_policy;
 pub mod graphics_proof;
+
+#[cfg(target_os = "windows")]
+pub mod service_runtime;
