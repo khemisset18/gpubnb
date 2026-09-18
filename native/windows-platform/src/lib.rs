@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 pub mod gpu_identity;
 pub mod idd_control;
 pub mod job;
+pub mod media;
 pub mod nvenc;
 pub mod pipe;
 pub mod session;
