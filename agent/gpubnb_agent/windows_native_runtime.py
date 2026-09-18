@@ -11,7 +11,7 @@ compatibility remains authoritative until this backend is physically qualified.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from ipaddress import ip_address
 import json
 from pathlib import Path
@@ -35,6 +35,7 @@ class NativeRuntimeHandle:
     gpu_uuid: str
     helper_version: str | None
     media_url: str
+    media_token: str = field(repr=False)
     application_path: str | None
     audio_ready: bool
     controller_ready: bool
@@ -74,7 +75,7 @@ def _loopback_media_url(value: object) -> str | None:
         return None
     if not address.is_loopback:
         return None
-    if parsed.username or parsed.password or parsed.fragment:
+    if parsed.username or parsed.password or parsed.fragment or parsed.query:
         return None
     try:
         port = parsed.port
@@ -86,6 +87,15 @@ def _loopback_media_url(value: object) -> str | None:
     if port is None or not 1 <= port <= 65535:
         return None
     return raw
+
+
+def _media_token(value: object) -> str | None:
+    token = str(value or "").strip()
+    if not 32 <= len(token) <= 200:
+        return None
+    if any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for char in token):
+        return None
+    return token
 
 
 def _helper_stop_confirmed(executable: str, session_id: str) -> bool:
@@ -233,6 +243,11 @@ def launch_windows_native_workspace(
         _raise_after_started_session_validation_failure(
             executable, session_id, "native_workspace_start_loopback_media_required"
         )
+    media_token = _media_token(report.get("mediaToken"))
+    if media_token is None:
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_media_token_required"
+        )
 
     return NativeRuntimeHandle(
         session_id=session_id,
@@ -240,6 +255,7 @@ def launch_windows_native_workspace(
         gpu_uuid=gpu_uuid,
         helper_version=str(report.get("helperVersion") or "")[:100] or preflight.helper_version,
         media_url=media_url,
+        media_token=media_token,
         application_path=application,
         audio_ready=audio_ready,
         controller_ready=controller_ready,
