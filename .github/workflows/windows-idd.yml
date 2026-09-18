@@ -1,0 +1,46 @@
+name: windows-idd-build
+
+on:
+  pull_request:
+    paths:
+      - "native/windows-idd/**"
+      - ".github/workflows/windows-idd.yml"
+  push:
+    branches:
+      - "feat/windows-native-desktop-workspaces"
+    paths:
+      - "native/windows-idd/**"
+      - ".github/workflows/windows-idd.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-idd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore WDK NuGet and build inert IddCx driver
+        shell: pwsh
+        run: |
+          msbuild native/windows-idd/GPUbnbIdd.vcxproj /restore /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError
+
+      - name: Verify build produced driver package inputs
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem native/windows-idd -Recurse -Filter GPUbnbIdd.dll | Select-Object -First 1
+          if (-not $dll) { throw "GPUbnbIdd.dll was not produced" }
+          if (-not (Test-Path native/windows-idd/GPUbnbIdd.inf)) { throw "GPUbnbIdd.inf missing" }
+          Write-Host "Built inert IddCx DLL: $($dll.FullName)"
+          Write-Host "Driver remains non-installing and non-promotable in CI."
