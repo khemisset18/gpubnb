@@ -28,7 +28,7 @@ pub struct WorkerFence<'a> {
     pub gpu_uuid: &'a str,
     pub workspace: WorkspaceKind,
     pub generation: u64,
-    pub logon_session_id: u64,
+    pub windows_session_id: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,7 +38,7 @@ pub struct WorkerHelloOwned {
     pub gpu_uuid: String,
     pub workspace: WorkspaceKind,
     pub generation: u64,
-    pub logon_session_id: u64,
+    pub windows_session_id: u32,
     pub worker_pid: u32,
     pub virtual_display_owned: bool,
     pub provider_desktop_excluded: bool,
@@ -52,7 +52,7 @@ impl WorkerHelloOwned {
             gpu_uuid: &self.gpu_uuid,
             workspace: self.workspace,
             generation: self.generation,
-            logon_session_id: self.logon_session_id,
+            windows_session_id: self.windows_session_id,
             worker_pid: self.worker_pid,
             virtual_display_owned: self.virtual_display_owned,
             provider_desktop_excluded: self.provider_desktop_excluded,
@@ -67,7 +67,7 @@ pub struct WorkerHello<'a> {
     pub gpu_uuid: &'a str,
     pub workspace: WorkspaceKind,
     pub generation: u64,
-    pub logon_session_id: u64,
+    pub windows_session_id: u32,
     pub worker_pid: u32,
     pub virtual_display_owned: bool,
     pub provider_desktop_excluded: bool,
@@ -160,7 +160,7 @@ pub fn encode_worker_hello(hello: WorkerHello<'_>) -> Result<Vec<u8>, WorkerFram
     push_string(&mut frame, hello.gpu_uuid)?;
     frame.push(workspace_tag(hello.workspace));
     frame.extend_from_slice(&hello.generation.to_le_bytes());
-    frame.extend_from_slice(&hello.logon_session_id.to_le_bytes());
+    frame.extend_from_slice(&hello.windows_session_id.to_le_bytes());
     frame.extend_from_slice(&hello.worker_pid.to_le_bytes());
     frame.push(u8::from(hello.virtual_display_owned));
     frame.push(u8::from(hello.provider_desktop_excluded));
@@ -247,7 +247,7 @@ pub fn decode_worker_hello(frame: &[u8]) -> Result<WorkerHelloOwned, WorkerFrame
     let gpu_uuid = cursor.string()?;
     let workspace = workspace_from_tag(cursor.u8()?)?;
     let generation = cursor.u64()?;
-    let logon_session_id = cursor.u64()?;
+    let windows_session_id = cursor.u32()?;
     let worker_pid = cursor.u32()?;
     let virtual_display_owned = cursor.boolean()?;
     let provider_desktop_excluded = cursor.boolean()?;
@@ -266,7 +266,7 @@ pub fn decode_worker_hello(frame: &[u8]) -> Result<WorkerHelloOwned, WorkerFrame
         gpu_uuid,
         workspace,
         generation,
-        logon_session_id,
+        windows_session_id,
         worker_pid,
         virtual_display_owned,
         provider_desktop_excluded,
@@ -292,7 +292,7 @@ pub fn validate_worker_hello(
     if hello.generation != expected.generation {
         return Err(WorkerHandshakeError::Generation);
     }
-    if hello.logon_session_id != expected.logon_session_id {
+    if hello.windows_session_id != expected.windows_session_id {
         return Err(WorkerHandshakeError::LogonSession);
     }
     if hello.worker_pid == 0 {
@@ -320,7 +320,7 @@ mod tests {
             gpu_uuid: GPU,
             workspace: WorkspaceKind::CloudDesktop,
             generation: 7,
-            logon_session_id: 0x1020_3040,
+            windows_session_id: 0x1020_3040,
         }
     }
 
@@ -331,7 +331,7 @@ mod tests {
             gpu_uuid: GPU,
             workspace: WorkspaceKind::CloudDesktop,
             generation: 7,
-            logon_session_id: 0x1020_3040,
+            windows_session_id: 0x1020_3040,
             worker_pid: 4242,
             virtual_display_owned: true,
             provider_desktop_excluded: true,
@@ -419,7 +419,7 @@ mod tests {
         );
 
         let mut value = hello();
-        value.logon_session_id += 1;
+        value.windows_session_id += 1;
         assert_eq!(
             validate_worker_hello(fence(), value),
             Err(WorkerHandshakeError::LogonSession)
