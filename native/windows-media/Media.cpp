@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <SetupAPI.h>
+#include <initguid.h>
 #include <devpkey.h>
 #include <d3d11.h>
 #include <dxgi1_2.h>
