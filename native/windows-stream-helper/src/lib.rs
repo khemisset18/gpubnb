@@ -10,3 +10,4 @@ pub mod worker_protocol;
 
 pub mod backend;
 pub mod application_trust;
+pub mod capture_policy;
