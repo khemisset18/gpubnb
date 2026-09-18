@@ -844,8 +844,7 @@ mod windows_impl {
         let transferred = if immediate != 0 {
             let mut transferred = 0u32;
             // SAFETY: the overlapped read completed synchronously.
-            let ok =
-                unsafe { GetOverlappedResult(pipe.0, &mut overlapped, &mut transferred, 0) };
+            let ok = unsafe { GetOverlappedResult(pipe.0, &mut overlapped, &mut transferred, 0) };
             if ok == 0 {
                 return Err(PlatformError::PipeReadFailed);
             }
@@ -1138,7 +1137,9 @@ mod tests {
             let client =
                 connect_worker_pipe_client(session, generation, 10_000).expect("connect client");
             ready_tx.send(()).expect("client ready");
-            client.send_frame(b"gpubnb-worker-hello").expect("send frame");
+            client
+                .send_frame(b"gpubnb-worker-hello")
+                .expect("send frame");
         });
 
         let verified = pipe
