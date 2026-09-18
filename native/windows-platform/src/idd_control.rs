@@ -80,14 +80,12 @@ pub fn encode_virtual_display_request(
     Ok(out)
 }
 
-pub fn probe_idd_control_contract(
-    request: VirtualDisplayRequest,
-) -> Result<(), PlatformError> {
+pub fn probe_idd_control_contract(request: VirtualDisplayRequest) -> Result<(), PlatformError> {
     if request.operation != VirtualDisplayOperation::ValidateOnly {
         return Err(PlatformError::IddUnsafeOperation);
     }
-    let wire = encode_virtual_display_request(request)
-        .map_err(|_| PlatformError::IddControlFailed)?;
+    let wire =
+        encode_virtual_display_request(request).map_err(|_| PlatformError::IddControlFailed)?;
 
     #[cfg(target_os = "windows")]
     {
@@ -427,19 +425,31 @@ mod tests {
     fn identity_fields_fail_closed_independently() {
         let cases = [
             (
-                VirtualDisplayRequest { generation: 0, ..valid() },
+                VirtualDisplayRequest {
+                    generation: 0,
+                    ..valid()
+                },
                 VirtualDisplayRequestError::Generation,
             ),
             (
-                VirtualDisplayRequest { windows_session_id: 0, ..valid() },
+                VirtualDisplayRequest {
+                    windows_session_id: 0,
+                    ..valid()
+                },
                 VirtualDisplayRequestError::WindowsSession,
             ),
             (
-                VirtualDisplayRequest { render_adapter_luid: 0, ..valid() },
+                VirtualDisplayRequest {
+                    render_adapter_luid: 0,
+                    ..valid()
+                },
                 VirtualDisplayRequestError::RenderAdapter,
             ),
             (
-                VirtualDisplayRequest { display_nonce: [0; 16], ..valid() },
+                VirtualDisplayRequest {
+                    display_nonce: [0; 16],
+                    ..valid()
+                },
                 VirtualDisplayRequestError::DisplayNonce,
             ),
         ];
@@ -450,8 +460,18 @@ mod tests {
 
     #[test]
     fn absurd_or_tiny_modes_are_rejected() {
-        for (width, height) in [(0, 1080), (639, 480), (1920, 479), (7681, 4320), (7680, 4321)] {
-            let request = VirtualDisplayRequest { width, height, ..valid() };
+        for (width, height) in [
+            (0, 1080),
+            (639, 480),
+            (1920, 479),
+            (7681, 4320),
+            (7680, 4321),
+        ] {
+            let request = VirtualDisplayRequest {
+                width,
+                height,
+                ..valid()
+            };
             assert_eq!(
                 validate_virtual_display_request(request),
                 Err(VirtualDisplayRequestError::Dimensions)
@@ -463,7 +483,10 @@ mod tests {
     fn refresh_rate_is_bounded() {
         for refresh_hz in [0, 29, 241, u32::MAX] {
             assert_eq!(
-                validate_virtual_display_request(VirtualDisplayRequest { refresh_hz, ..valid() }),
+                validate_virtual_display_request(VirtualDisplayRequest {
+                    refresh_hz,
+                    ..valid()
+                }),
                 Err(VirtualDisplayRequestError::RefreshRate)
             );
         }
