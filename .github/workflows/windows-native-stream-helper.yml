@@ -51,7 +51,9 @@ jobs:
         run: |
           $exe = Resolve-Path 'native/windows-stream-helper/target/release/gpubnb-windows-stream.exe'
           & $exe --self-test --json
-          if ($LASTEXITCODE -eq 0) {
+          $helperExit = $LASTEXITCODE
+          if ($helperExit -eq 0) {
             throw 'Unqualified Windows native helper unexpectedly reported success.'
           }
-          Write-Host "Expected fail-closed exit code: $LASTEXITCODE"
+          Write-Host "Expected fail-closed exit code: $helperExit"
+          exit 0
