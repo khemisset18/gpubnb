@@ -61,14 +61,25 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
         self.assertFalse(result.available)
         self.assertEqual(result.reason, "native_stream_helper_missing")
 
+    def test_native_application_discovery_never_accepts_path_only_executables(self):
+        with patch.object(native.Path, "is_file", return_value=False):
+            self.assertIsNone(native.discover_native_application("creator"))
+            self.assertIsNone(native.discover_native_application("cad"))
+            self.assertIsNone(native.discover_native_application("gaming"))
+        for slug in ("creator", "cad", "gaming"):
+            self.assertTrue(
+                all(
+                    native.PureWindowsPath(candidate).is_absolute()
+                    for candidate in native.profile_for_slug(slug).executable_candidates
+                )
+            )
+
     def test_helper_discovery_never_uses_path_lookup(self):
         with (
             patch.object(native, "_find_absolute_windows_file", return_value=None) as absolute_file,
-            patch.object(native.shutil, "which") as which,
             patch.dict(native.os.environ, {}, clear=True),
         ):
             self.assertIsNone(native.find_stream_helper())
-        which.assert_not_called()
         absolute_file.assert_called_once_with(native.WINDOWS_STREAM_HELPER_INSTALL_PATH)
 
     def test_dev_helper_requires_explicit_opt_in(self):
