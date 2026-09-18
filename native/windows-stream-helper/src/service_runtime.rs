@@ -68,6 +68,13 @@ pub struct ServiceRuntimeConfig<'a> {
     pub refresh_hz: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeMediaState {
+    Ready,
+    Suspended,
+    Failed,
+}
+
 pub struct QualifiedGraphicsRuntime {
     // Drop order is deliberate. Losing the pipe wakes/fails the worker, then the
     // Job Object kills any remaining worker tree, then the IddCx lease is removed.
@@ -77,7 +84,9 @@ pub struct QualifiedGraphicsRuntime {
     generation: u64,
     windows_session_id: u32,
     display_spec: WorkerDisplaySpec,
+    gpu_uuid: String,
     next_sequence: u64,
+    media_state: RuntimeMediaState,
 }
 
 impl QualifiedGraphicsRuntime {
@@ -91,6 +100,125 @@ impl QualifiedGraphicsRuntime {
 
     pub const fn display_spec(&self) -> WorkerDisplaySpec {
         self.display_spec
+    }
+
+    pub const fn media_ready(&self) -> bool {
+        matches!(self.media_state, RuntimeMediaState::Ready)
+    }
+
+    pub fn suspend_media(&mut self) -> Result<(), ServiceRuntimeError> {
+        if !matches!(self.media_state, RuntimeMediaState::Ready) {
+            return Err(ServiceRuntimeError::WorkerProtocol);
+        }
+        let sequence = self.next_sequence;
+        let command = encode_worker_command(WorkerCommandFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            command: WorkerCommand::SuspendMedia,
+            generation: self.generation,
+            sequence,
+        })
+        .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
+        if self.pipe.send_frame(&command).is_err() {
+            self.media_state = RuntimeMediaState::Failed;
+            return Err(ServiceRuntimeError::WorkerProtocol);
+        }
+        self.next_sequence = self
+            .next_sequence
+            .checked_add(1)
+            .ok_or(ServiceRuntimeError::WorkerProtocol)?;
+        self.media_state = RuntimeMediaState::Suspended;
+        Ok(())
+    }
+
+    pub fn resume_after_fresh_proof(&mut self) -> Result<(), ServiceRuntimeError> {
+        if !matches!(self.media_state, RuntimeMediaState::Suspended) {
+            return Err(ServiceRuntimeError::WorkerProtocol);
+        }
+        let sequence = self.next_sequence;
+        let command = encode_worker_command(WorkerCommandFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            command: WorkerCommand::ResumeAfterFreshProof,
+            generation: self.generation,
+            sequence,
+        })
+        .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
+        if self.pipe.send_frame(&command).is_err() {
+            self.media_state = RuntimeMediaState::Failed;
+            return Err(ServiceRuntimeError::WorkerProtocol);
+        }
+
+        let proof_frame = match self.pipe.read_frame(PIPE_TIMEOUT_MS) {
+            Ok(frame) => frame,
+            Err(_) => {
+                self.media_state = RuntimeMediaState::Failed;
+                return Err(ServiceRuntimeError::MediaProof);
+            }
+        };
+        let media = match decode_worker_media_proof(&proof_frame) {
+            Ok(proof) => proof,
+            Err(_) => {
+                self.media_state = RuntimeMediaState::Failed;
+                return Err(ServiceRuntimeError::MediaProof);
+            }
+        };
+        if validate_worker_media_proof(
+            self.generation,
+            sequence,
+            self.windows_session_id,
+            self.display_spec,
+            media,
+        )
+        .is_err()
+        {
+            self.media_state = RuntimeMediaState::Failed;
+            return Err(ServiceRuntimeError::MediaProof);
+        }
+
+        if validate_graphics_proof_chain(
+            self.generation,
+            self.windows_session_id,
+            &self.gpu_uuid,
+            VirtualDisplayProof {
+                generation: self.generation,
+                windows_session_id: self.windows_session_id,
+                display_nonce: self.display_spec.display_nonce,
+                adapter_luid: self.display_spec.adapter_luid,
+                width: self.display_spec.width,
+                height: self.display_spec.height,
+                refresh_hz: self.display_spec.refresh_hz,
+                provider_desktop_excluded: true,
+            },
+            CaptureFrameProof {
+                generation: self.generation,
+                windows_session_id: self.windows_session_id,
+                display_nonce: self.display_spec.display_nonce,
+                adapter_luid: self.display_spec.adapter_luid,
+                frame_sequence: media.frame_sequence,
+                width: media.width,
+                height: media.height,
+                format: PixelFormat::Bgra8Unorm,
+            },
+            &NvencProof {
+                generation: self.generation,
+                adapter_luid: self.display_spec.adapter_luid,
+                gpu_uuid: self.gpu_uuid.clone(),
+                input_frame_sequence: media.frame_sequence,
+                codec: EncodeCodec::H264,
+                encoded_bytes: media.encoded_bytes,
+            },
+        )
+        .is_err()
+        {
+            self.media_state = RuntimeMediaState::Failed;
+            return Err(ServiceRuntimeError::GraphicsProof);
+        }
+
+        self.next_sequence = self
+            .next_sequence
+            .checked_add(1)
+            .ok_or(ServiceRuntimeError::WorkerProtocol)?;
+        self.media_state = RuntimeMediaState::Ready;
+        Ok(())
     }
 
     pub fn stop(mut self) -> Result<(), ServiceRuntimeError> {
@@ -346,13 +474,22 @@ pub fn start_qualified_graphics_runtime(
         generation: config.generation,
         windows_session_id: config.windows_session_id,
         display_spec,
+        gpu_uuid: config.gpu_uuid.to_owned(),
         next_sequence: 3,
+        media_state: RuntimeMediaState::Ready,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_media_state_is_fail_closed() {
+        assert!(matches!(RuntimeMediaState::Ready, RuntimeMediaState::Ready));
+        assert_ne!(RuntimeMediaState::Ready, RuntimeMediaState::Suspended);
+        assert_ne!(RuntimeMediaState::Suspended, RuntimeMediaState::Failed);
+    }
 
     #[test]
     fn signer_policy_is_never_implicit() {
