@@ -88,7 +88,6 @@ pub enum WorkerHandshakeError {
     Generation,
     WindowsSession,
     WorkerPid,
-    WindowsSession,
 }
 
 fn workspace_tag(workspace: WorkspaceKind) -> u8 {
