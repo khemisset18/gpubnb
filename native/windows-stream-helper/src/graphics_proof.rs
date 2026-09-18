@@ -214,14 +214,7 @@ mod tests {
         let mut wrong_session_capture = capture();
         wrong_session_capture.windows_session_id = 43;
         assert_eq!(
-            validate_graphics_proof_chain(
-                7,
-                42,
-                GPU,
-                display(),
-                wrong_session_capture,
-                &encode(),
-            ),
+            validate_graphics_proof_chain(7, 42, GPU, display(), wrong_session_capture, &encode(),),
             Err(GraphicsProofError::WindowsSession)
         );
     }
