@@ -22,6 +22,9 @@ pub struct VirtualDisplayProof {
     pub windows_session_id: u32,
     pub display_nonce: [u8; 16],
     pub adapter_luid: u64,
+    pub width: u32,
+    pub height: u32,
+    pub refresh_hz: u32,
     pub provider_desktop_excluded: bool,
 }
 
@@ -53,6 +56,7 @@ pub enum GraphicsProofError {
     WindowsSession,
     DisplayIdentity,
     Adapter,
+    DisplayMode,
     ProviderDesktop,
     Frame,
     Dimensions,
@@ -103,6 +107,14 @@ pub fn validate_graphics_proof_chain(
     {
         return Err(GraphicsProofError::Adapter);
     }
+    if display.width == 0
+        || display.height == 0
+        || !(30..=240).contains(&display.refresh_hz)
+        || capture.width != display.width
+        || capture.height != display.height
+    {
+        return Err(GraphicsProofError::DisplayMode);
+    }
     if !display.provider_desktop_excluded {
         return Err(GraphicsProofError::ProviderDesktop);
     }
@@ -139,6 +151,9 @@ mod tests {
             windows_session_id: 42,
             display_nonce: NONCE,
             adapter_luid: 0x1122_3344_5566_7788,
+            width: 1920,
+            height: 1080,
+            refresh_hz: 60,
             provider_desktop_excluded: true,
         }
     }
@@ -216,6 +231,23 @@ mod tests {
         assert_eq!(
             validate_graphics_proof_chain(7, 42, GPU, display(), wrong_session_capture, &encode(),),
             Err(GraphicsProofError::WindowsSession)
+        );
+    }
+
+    #[test]
+    fn fullscreen_mode_must_match_captured_surface() {
+        let mut wrong_size = capture();
+        wrong_size.width = 1280;
+        assert_eq!(
+            validate_graphics_proof_chain(7, 42, GPU, display(), wrong_size, &encode()),
+            Err(GraphicsProofError::DisplayMode)
+        );
+
+        let mut invalid_refresh = display();
+        invalid_refresh.refresh_hz = 0;
+        assert_eq!(
+            validate_graphics_proof_chain(7, 42, GPU, invalid_refresh, capture(), &encode()),
+            Err(GraphicsProofError::DisplayMode)
         );
     }
 
