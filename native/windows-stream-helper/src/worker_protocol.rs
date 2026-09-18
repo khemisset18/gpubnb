@@ -407,9 +407,7 @@ pub fn decode_worker_input(frame: &[u8]) -> Result<WorkerInputFrame, WorkerInput
         }
         2 => WorkerInputEvent::MouseMoveRelative { dx: arg1, dy: arg2 },
         3 => {
-            if !(0..=u16::MAX as i32).contains(&arg1)
-                || !(0..=u16::MAX as i32).contains(&arg2)
-            {
+            if !(0..=u16::MAX as i32).contains(&arg1) || !(0..=u16::MAX as i32).contains(&arg2) {
                 return Err(WorkerInputError::InvalidEvent);
             }
             WorkerInputEvent::MouseMoveAbsolute {
@@ -430,9 +428,7 @@ pub fn decode_worker_input(frame: &[u8]) -> Result<WorkerInputFrame, WorkerInput
             if arg2 != 0 || !(-1_200..=1_200).contains(&arg1) || arg1 == 0 {
                 return Err(WorkerInputError::InvalidEvent);
             }
-            WorkerInputEvent::MouseWheel {
-                delta: arg1 as i16,
-            }
+            WorkerInputEvent::MouseWheel { delta: arg1 as i16 }
         }
         _ => return Err(WorkerInputError::InvalidEvent),
     };
@@ -1287,10 +1283,7 @@ mod tests {
         assert_eq!(encoded.len(), WORKER_INPUT_FRAME_SIZE);
         let decoded = decode_worker_input(&encoded).expect("decode input");
         assert_eq!(decoded, value);
-        assert_eq!(
-            validate_worker_input(7, 9, 42, decoded),
-            Ok(value.event)
-        );
+        assert_eq!(validate_worker_input(7, 9, 42, decoded), Ok(value.event));
         assert_eq!(
             validate_worker_input(7, 10, 42, decoded),
             Err(WorkerInputError::Sequence)
