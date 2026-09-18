@@ -6,6 +6,7 @@
 #include <wdf.h>
 #include <iddcx.h>
 #include "ControlProtocol.h"
+#include "SwapChainProcessor.h"
 
 struct GPUbnbDeviceContext
 {
@@ -26,6 +27,7 @@ struct GPUbnbMonitorContext
     UINT32 WindowsSessionId;
     UINT64 Generation;
     UCHAR DisplayNonce[GPUBNB_IDD_DISPLAY_NONCE_SIZE];
+    GPUbnbSwapChainProcessor* SwapChainProcessor;
 };
 
 WDF_DECLARE_CONTEXT_TYPE(GPUbnbMonitorContext);
