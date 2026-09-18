@@ -49,7 +49,7 @@ pub fn query_nvenc_max_supported_version() -> Result<NvencApiVersion, NvencProbe
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
-    use super::{decode_nvenc_api_version, NvencApiVersion, NvencProbeError};
+    use super::{NvencApiVersion, NvencProbeError, decode_nvenc_api_version};
     use std::ffi::{c_char, c_void};
     use std::mem;
     use std::ptr;
@@ -81,16 +81,13 @@ mod windows_impl {
         }
     }
 
-    pub(super) fn query_nvenc_max_supported_version(
-    ) -> Result<NvencApiVersion, NvencProbeError> {
+    pub(super) fn query_nvenc_max_supported_version() -> Result<NvencApiVersion, NvencProbeError> {
         let name: Vec<u16> = "nvEncodeAPI64.dll".encode_utf16().chain(Some(0)).collect();
         // nvEncodeAPI64.dll is supplied by the NVIDIA display driver. Restrict
         // resolution to System32 so a renter-writable current directory cannot
         // substitute a same-named DLL.
         // SAFETY: name is NUL-terminated; optional file handle is null/zero.
-        let raw = unsafe {
-            LoadLibraryExW(name.as_ptr(), 0, LOAD_LIBRARY_SEARCH_SYSTEM32)
-        };
+        let raw = unsafe { LoadLibraryExW(name.as_ptr(), 0, LOAD_LIBRARY_SEARCH_SYSTEM32) };
         if raw == 0 {
             return Err(NvencProbeError::LibraryMissing);
         }
