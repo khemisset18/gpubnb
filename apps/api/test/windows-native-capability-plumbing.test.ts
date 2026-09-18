@@ -12,12 +12,14 @@ test('Windows native desktop capability is persisted in Prisma but remains diagn
     'utf8',
   );
   assert.match(schema, /nativeDesktopStreamingAvailable Boolean @default\(false\)/);
+  assert.match(schema, /nativeDesktopStreamingGpuUuid String\? @db\.VarChar\(200\)/);
   assert.match(migration, /ADD COLUMN "nativeDesktopStreamingAvailable" BOOLEAN NOT NULL DEFAULT false/);
 });
 
 test('only a v2 body-signed heartbeat may update the Windows native capability', async () => {
   const server = await readFile(path.join(sourceRoot, 'server.ts'), 'utf8');
   assert.match(server, /nativeDesktopStreamingAvailable:z\.boolean\(\)\.optional\(\)/);
+  assert.match(server, /nativeDesktopStreamingGpuUuid:z\.string\(\).*?\.nullable\(\)\.optional\(\)/);
   assert.match(
     server,
     /b\.telemetry&&\(b\.nativeDesktopStreamingAvailable!==undefined\|\|b\.os!==undefined\)\?\{nativeDesktopStreamingAvailable:/,
@@ -32,7 +34,7 @@ test('only a v2 body-signed heartbeat may update the Windows native capability',
   assert.ok(linkStart >= 0 && linkEnd > linkStart);
   assert.doesNotMatch(
     server.slice(linkStart, linkEnd),
-    /nativeDesktopStreamingAvailable/,
+    /nativeDesktopStreaming(?:Available|GpuUuid)/,
     'link-code inventory must never prequalify the Windows native backend',
   );
 });
@@ -41,4 +43,14 @@ test('owner diagnostics expose Linux and Windows desktop capabilities separately
   const routes = await readFile(path.join(sourceRoot, 'machine-diagnostics-routes.ts'), 'utf8');
   assert.match(routes, /linuxDesktopGpuRenderingAvailable: machine\.desktopGpuRenderingAvailable/);
   assert.match(routes, /windowsNativeDesktopStreamingAvailable: machine\.nativeDesktopStreamingAvailable/);
+  assert.match(routes, /windowsNativeDesktopStreamingGpuUuid: machine\.nativeDesktopStreamingGpuUuid/);
+});
+
+
+test('signed Windows native capability keeps availability and exact GPU proof coherent', async () => {
+  const server = await readFile(path.join(sourceRoot, 'server.ts'), 'utf8');
+  assert.match(server, /incoherent_native_desktop_capability/);
+  assert.match(server, /nativeDesktopStreamingAvailable===true&&\(!nativeOs\.startsWith\('windows'\)\|\|!nativeUuid\)/);
+  assert.match(server, /nativeDesktopStreamingAvailable!==true&&nativeUuid/);
+  assert.match(server, /nativeDesktopStreamingGpuUuid:.*?nativeDesktopStreamingAvailable===true\?\(b\.nativeDesktopStreamingGpuUuid\?\?null\):null/);
 });
