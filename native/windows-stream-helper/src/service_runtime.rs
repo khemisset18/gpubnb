@@ -168,9 +168,9 @@ fn validate_config(config: ServiceRuntimeConfig<'_>) -> Result<(), ServiceRuntim
         || config.generation == 0
         || config.windows_session_id == 0
         || config.display_nonce == [0; 16]
-        || config.width < 640
-        || config.height < 480
-        || !(30..=240).contains(&config.refresh_hz)
+        || config.width < 1920
+        || config.height < 1080
+        || !(60..=240).contains(&config.refresh_hz)
     {
         return Err(ServiceRuntimeError::InvalidConfiguration);
     }
@@ -395,5 +395,21 @@ mod tests {
             }),
             Err(ServiceRuntimeError::InvalidConfiguration)
         );
+        assert_eq!(
+            validate_config(ServiceRuntimeConfig {
+                width: 1280,
+                height: 720,
+                ..base
+            }),
+            Err(ServiceRuntimeError::InvalidConfiguration)
+        );
+        assert_eq!(
+            validate_config(ServiceRuntimeConfig {
+                refresh_hz: 30,
+                ..base
+            }),
+            Err(ServiceRuntimeError::InvalidConfiguration)
+        );
+
     }
 }
