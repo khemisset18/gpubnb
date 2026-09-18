@@ -112,7 +112,11 @@ class WindowsInventoryHeartbeatHardeningTests(unittest.TestCase):
             patch.object(platform_info, "docker_info", return_value=docker),
             patch.object(platform_info, "virtualization_available", return_value=True),
             patch.object(platform_info, "desktop_gpu_rendering_available", return_value=False),
-            patch.object(platform_info, "windows_native_desktop_streaming_available", return_value=True),
+            patch.object(
+                platform_info,
+                "windows_native_desktop_streaming_capability",
+                return_value={"available": True, "gpuUuid": "GPU-test"},
+            ),
             patch.object(platform_info.shutil, "disk_usage", return_value=disk),
         ):
             with platform_info.inventory_cycle():
@@ -124,6 +128,7 @@ class WindowsInventoryHeartbeatHardeningTests(unittest.TestCase):
         self.assertEqual(first_gpu, second_gpu)
         self.assertEqual(first_system, second_system)
         self.assertTrue(first_system["nativeDesktopStreamingAvailable"])
+        self.assertEqual(first_system["nativeDesktopStreamingGpuUuid"], "GPU-test")
         self.assertEqual(nvidia.call_count, 1)
         self.assertEqual(amd.call_count, 1)
         self.assertEqual(intel.call_count, 1)
