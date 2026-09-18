@@ -5,6 +5,7 @@
 #include <wudfwdm.h>
 #include <wdf.h>
 #include <iddcx.h>
+#include "ControlProtocol.h"
 
 struct GPUbnbDeviceContext
 {
