@@ -9,7 +9,8 @@ use gpubnb_windows_platform::pipe::connect_worker_pipe_client;
 use gpubnb_windows_platform::session::current_process_session_id;
 use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
 use gpubnb_windows_stream_helper::worker_protocol::{
-    WORKER_PROTOCOL_VERSION, WorkerHello, encode_worker_hello,
+    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerHello, decode_worker_command,
+    encode_worker_hello, validate_worker_command,
 };
 use std::env;
 use std::process::ExitCode;
@@ -161,12 +162,32 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
             .send_frame(&frame)
             .map_err(|_| WorkerError::new("worker_hello_send_failed", 21))?;
 
-        // Identity transport is implemented, but graphical readiness is not. Never
-        // stay alive pretending to be a usable renter runtime.
-        Err(WorkerError::new(
-            "native_worker_backend_not_implemented",
-            21,
-        ))
+        let mut expected_sequence = 1u64;
+        loop {
+            let frame = client
+                .read_frame(PIPE_TIMEOUT_MS)
+                .map_err(|_| WorkerError::new("worker_command_read_failed", 21))?;
+            let command = decode_worker_command(&frame)
+                .map_err(|_| WorkerError::new("worker_command_invalid", 21))?;
+            let command = validate_worker_command(args.generation, expected_sequence, command)
+                .map_err(|_| WorkerError::new("worker_command_fence_failed", 21))?;
+            expected_sequence = expected_sequence
+                .checked_add(1)
+                .ok_or_else(|| WorkerError::new("worker_command_sequence_exhausted", 21))?;
+
+            match command {
+                WorkerCommand::Stop => return Ok(()),
+                WorkerCommand::PrepareDisplay
+                | WorkerCommand::StartCapture
+                | WorkerCommand::SuspendMedia
+                | WorkerCommand::ResumeAfterFreshProof => {
+                    return Err(WorkerError::new(
+                        "native_worker_backend_not_implemented",
+                        21,
+                    ));
+                }
+            }
+        }
     }
 }
 
