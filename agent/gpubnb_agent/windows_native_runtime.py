@@ -201,6 +201,8 @@ def launch_windows_native_workspace(
 
     required_true = (
         "isolatedSession",
+        "virtualDisplay",
+        "providerDesktopExcluded",
         "captureReady",
         "mediaReady",
         "inputIsolation",
