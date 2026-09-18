@@ -7,6 +7,7 @@ use std::path::Path;
 
 pub mod job;
 pub mod pipe;
+pub mod session;
 
 #[cfg(target_os = "windows")]
 mod process;
@@ -36,6 +37,10 @@ pub enum PlatformError {
     AuthenticodeNotTrusted,
     AuthenticodeStateCloseFailed,
     InvalidSessionId,
+    InvalidWindowsSessionId,
+    RenterTokenQueryFailed,
+    RenterTokenSessionMismatch,
+    RenterTokenNotPrimary,
     InvalidSid,
     SecurityDescriptorFailed,
     TokenQueryFailed,
