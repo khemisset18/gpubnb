@@ -1125,6 +1125,36 @@ mod tests {
 
     #[cfg(target_os = "windows")]
     #[test]
+    fn windows_round_trips_bounded_worker_frame_through_public_client() {
+        let service_sid = current_process_user_sid().expect("service SID");
+        let logon_sid = current_process_logon_sid().expect("logon SID");
+        let generation = std::process::id() as u64 + 10;
+        let session = "ci-public-client";
+        let pipe =
+            create_worker_pipe(session, generation, &service_sid, &logon_sid).expect("secure pipe");
+
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let client = std::thread::spawn(move || {
+            let client =
+                connect_worker_pipe_client(session, generation, 10_000).expect("connect client");
+            ready_tx.send(()).expect("client ready");
+            client.send_frame(b"gpubnb-worker-hello").expect("send frame");
+        });
+
+        let verified = pipe
+            .accept_verified_client(&logon_sid, std::process::id(), 10_000)
+            .expect("verified public client");
+        assert_eq!(verified.process_id, std::process::id());
+        ready_rx.recv().expect("client connected");
+        assert_eq!(
+            pipe.read_frame(10_000).expect("read bounded frame"),
+            b"gpubnb-worker-hello"
+        );
+        client.join().expect("client thread");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
     fn windows_verifies_connected_client_pid_and_logon_sid() {
         let service_sid = current_process_user_sid().expect("service SID");
         let logon_sid = current_process_logon_sid().expect("logon SID");
