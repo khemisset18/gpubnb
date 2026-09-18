@@ -44,3 +44,13 @@ Until the native backend is implemented and physically qualified, running:
 ```
 
 must return non-zero.
+
+## Application policy boundary
+
+The helper accepts only the explicit Blender, FreeCAD and Steam Program Files
+paths in the Agent discovery policy, matched without ASCII case sensitivity.
+Cloud Desktop rejects every application argument. This is a lexical allowlist,
+not executable provenance: file identity, reparse-point rejection, local-volume
+verification, signing/hash qualification and launch-time race protection still
+need implementation before any application may actually launch. The bootstrap
+continues to fail closed after validation and creates no session resources.

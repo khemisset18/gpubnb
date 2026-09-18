@@ -130,7 +130,35 @@ fn validate_workspace_application(
     match (workspace, application) {
         ("cloud-desktop", None) => Ok(()),
         ("cloud-desktop", Some(_)) => Err(CliError::new("application_not_allowed", 2)),
-        ("creator" | "cad" | "gaming", Some(path)) => validate_application(path),
+        ("creator" | "cad" | "gaming", Some(path)) => {
+            validate_application(path)?;
+            // Mirror the Agent's explicit discovery policy. A matching basename
+            // alone does not authorize an arbitrary user/network supplied binary.
+            let allowed: &[&str] = match workspace {
+                "creator" => &[
+                    r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
+                    r"C:\Program Files\Blender Foundation\Blender 4.4\blender.exe",
+                    r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
+                ],
+                "cad" => &[
+                    r"C:\Program Files\FreeCAD 1.0\bin\FreeCAD.exe",
+                    r"C:\Program Files\FreeCAD 0.21\bin\FreeCAD.exe",
+                ],
+                "gaming" => &[
+                    r"C:\Program Files (x86)\Steam\steam.exe",
+                    r"C:\Program Files\Steam\steam.exe",
+                ],
+                _ => unreachable!(),
+            };
+            if allowed
+                .iter()
+                .any(|candidate| path.eq_ignore_ascii_case(candidate))
+            {
+                Ok(())
+            } else {
+                Err(CliError::new("application_not_qualified", 2))
+            }
+        }
         ("creator" | "cad" | "gaming", None) => Err(CliError::new("application_required", 2)),
         _ => Err(CliError::new("unsupported_workspace", 2)),
     }
@@ -294,7 +322,7 @@ mod tests {
             "--gpu-uuid",
             GPU_UUID,
             "--application",
-            r"C:\Program Files\Blender Foundation\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
         ]))
         .expect("valid contract");
         assert!(matches!(command, Command::Start { workspace, .. } if workspace == "creator"));
@@ -367,6 +395,44 @@ mod tests {
             assert_eq!(
                 validate_workspace_application(workspace, None),
                 Err(CliError::new("application_required", 2))
+            );
+        }
+    }
+
+    #[test]
+    fn application_policy_rejects_arbitrary_and_cross_workspace_executables() {
+        for workspace in ["creator", "cad", "gaming"] {
+            for path in [
+                r"C:\Windows\System32\cmd.exe",
+                r"C:\Temp\blender.exe",
+                r"C:\Temp\FreeCAD.exe",
+                r"C:\Temp\steam.exe",
+            ] {
+                assert_eq!(
+                    validate_workspace_application(workspace, Some(path)),
+                    Err(CliError::new("application_not_qualified", 2))
+                );
+            }
+        }
+        assert_eq!(
+            validate_workspace_application("creator", Some(r"C:\Program Files\Steam\steam.exe")),
+            Err(CliError::new("application_not_qualified", 2))
+        );
+        for (workspace, path) in [
+            (
+                "creator",
+                r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
+            ),
+            ("cad", r"C:\Program Files\FreeCAD 1.0\bin\FreeCAD.exe"),
+            ("gaming", r"C:\Program Files (x86)\Steam\steam.exe"),
+        ] {
+            assert_eq!(
+                validate_workspace_application(workspace, Some(path)),
+                Ok(())
+            );
+            assert_eq!(
+                validate_workspace_application(workspace, Some(&path.to_ascii_uppercase())),
+                Ok(())
             );
         }
     }
