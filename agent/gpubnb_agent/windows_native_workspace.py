@@ -17,7 +17,6 @@ import json
 import os
 import platform
 from pathlib import Path, PureWindowsPath
-import shutil
 from typing import Any
 
 from .platform_info import gpu_inventory, run_command
@@ -54,7 +53,6 @@ WINDOWS_NATIVE_WORKSPACE_PROFILES: dict[str, NativeWorkspaceProfile] = {
             r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.4\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
-            "blender.exe",
         ),
     ),
     "cad": NativeWorkspaceProfile(
@@ -63,7 +61,6 @@ WINDOWS_NATIVE_WORKSPACE_PROFILES: dict[str, NativeWorkspaceProfile] = {
         executable_candidates=(
             r"C:\Program Files\FreeCAD 1.0\bin\FreeCAD.exe",
             r"C:\Program Files\FreeCAD 0.21\bin\FreeCAD.exe",
-            "FreeCAD.exe",
         ),
     ),
     "gaming": NativeWorkspaceProfile(
@@ -72,7 +69,6 @@ WINDOWS_NATIVE_WORKSPACE_PROFILES: dict[str, NativeWorkspaceProfile] = {
         executable_candidates=(
             r"C:\Program Files (x86)\Steam\steam.exe",
             r"C:\Program Files\Steam\steam.exe",
-            "steam.exe",
         ),
         requires_audio=True,
         requires_controller=True,
@@ -99,11 +95,11 @@ def profile_for_slug(slug: str) -> NativeWorkspaceProfile:
 
 
 def _find_candidate(candidate: str) -> str | None:
+    """Resolve only explicit Windows application paths; never search PATH."""
+    if not PureWindowsPath(candidate).is_absolute():
+        return None
     path = Path(candidate)
-    if path.is_absolute() and path.is_file():
-        return str(path)
-    resolved = shutil.which(candidate)
-    return str(Path(resolved).resolve()) if resolved else None
+    return str(path.resolve()) if path.is_file() else None
 
 
 def discover_native_application(slug: str) -> str | None:
