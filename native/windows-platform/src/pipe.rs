@@ -10,6 +10,8 @@ const MAX_SESSION_ID: usize = 128;
 const MAX_SID_TEXT: usize = 184;
 const RENTER_PIPE_ACCESS_MASK: u32 = 0x0012_019B;
 const PIPE_AUTH_PRELUDE: u8 = 0x47;
+pub const WORKER_PIPE_FRAME_MAX: usize = 512;
+const WORKER_PIPE_PACKET_SIZE: usize = WORKER_PIPE_FRAME_MAX + 2;
 
 fn safe_session_id(value: &str) -> bool {
     !value.is_empty()
@@ -57,6 +59,32 @@ fn security_sddl(service_sid: &str, renter_logon_sid: &str) -> Result<String, Pl
     ))
 }
 
+pub struct WorkerPipeClient {
+    name: String,
+    #[cfg(target_os = "windows")]
+    _handle: windows_impl::OwnedClientHandle,
+}
+
+impl WorkerPipeClient {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn send_frame(&self, frame: &[u8]) -> Result<(), PlatformError> {
+        if frame.len() > WORKER_PIPE_FRAME_MAX {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::send_frame(&self._handle, frame)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err(PlatformError::WindowsRequired)
+        }
+    }
+}
+
 pub struct WorkerPipe {
     name: String,
     #[cfg(target_os = "windows")]
@@ -72,6 +100,21 @@ pub struct VerifiedPipeClient {
 impl WorkerPipe {
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn read_frame(&self, timeout_ms: u32) -> Result<Vec<u8>, PlatformError> {
+        if timeout_ms == 0 {
+            return Err(PlatformError::PipeConnectTimeout);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::read_frame(&self._handle, timeout_ms)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = timeout_ms;
+            Err(PlatformError::WindowsRequired)
+        }
     }
 
     pub fn accept_verified_client(
@@ -100,6 +143,27 @@ impl WorkerPipe {
             let _ = (expected_process_id, timeout_ms);
             Err(PlatformError::WindowsRequired)
         }
+    }
+}
+
+pub fn connect_worker_pipe_client(
+    session_id: &str,
+    generation: u64,
+    timeout_ms: u32,
+) -> Result<WorkerPipeClient, PlatformError> {
+    let name = pipe_name(session_id, generation)?;
+    if timeout_ms == 0 {
+        return Err(PlatformError::PipeConnectTimeout);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::connect_worker_pipe_client(name, timeout_ms)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (name, timeout_ms);
+        Err(PlatformError::WindowsRequired)
     }
 }
 
@@ -145,7 +209,10 @@ pub fn current_process_logon_sid() -> Result<String, PlatformError> {
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
-    use super::{PIPE_AUTH_PRELUDE, VerifiedPipeClient, WorkerPipe};
+    use super::{
+        PIPE_AUTH_PRELUDE, VerifiedPipeClient, WORKER_PIPE_FRAME_MAX, WORKER_PIPE_PACKET_SIZE,
+        WorkerPipe, WorkerPipeClient,
+    };
     use crate::PlatformError;
     use std::ffi::{OsStr, c_void};
     use std::mem::{align_of, size_of};
@@ -164,6 +231,7 @@ mod windows_impl {
     const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
     const ERROR_PIPE_CONNECTED: u32 = 535;
     const ERROR_IO_PENDING: u32 = 997;
+    const ERROR_MORE_DATA: u32 = 234;
     const WAIT_OBJECT_0: u32 = 0;
     const WAIT_TIMEOUT: u32 = 258;
     const INFINITE: u32 = u32::MAX;
@@ -254,6 +322,23 @@ mod windows_impl {
         ) -> i32;
         fn GetNamedPipeClientProcessId(pipe: Handle, client_process_id: *mut u32) -> i32;
         fn GetCurrentThread() -> Handle;
+        fn WaitNamedPipeW(name: *const u16, timeout_ms: u32) -> i32;
+        fn CreateFileW(
+            file_name: *const u16,
+            desired_access: u32,
+            share_mode: u32,
+            security_attributes: *mut c_void,
+            creation_disposition: u32,
+            flags_and_attributes: u32,
+            template_file: Handle,
+        ) -> Handle;
+        fn WriteFile(
+            file: Handle,
+            buffer: *const c_void,
+            bytes_to_write: u32,
+            bytes_written: *mut u32,
+            overlapped: *mut c_void,
+        ) -> i32;
     }
 
     #[link(name = "advapi32")]
@@ -285,6 +370,17 @@ mod windows_impl {
             open_as_self: i32,
             token_handle: *mut Handle,
         ) -> i32;
+    }
+
+    pub(super) struct OwnedClientHandle(Handle);
+
+    impl Drop for OwnedClientHandle {
+        fn drop(&mut self) {
+            // SAFETY: this type uniquely owns a connected client pipe handle.
+            unsafe {
+                let _ = CloseHandle(self.0);
+            }
+        }
     }
 
     pub(super) struct OwnedPipeHandle(Handle);
@@ -646,6 +742,145 @@ mod windows_impl {
         Ok(())
     }
 
+    pub(super) fn connect_worker_pipe_client(
+        name: String,
+        timeout_ms: u32,
+    ) -> Result<WorkerPipeClient, PlatformError> {
+        let wide_name = wide(OsStr::new(&name))?;
+        // SAFETY: name is NUL-terminated. WaitNamedPipeW blocks only for the
+        // caller-supplied bounded timeout.
+        let available = unsafe { WaitNamedPipeW(wide_name.as_ptr(), timeout_ms) };
+        if available == 0 {
+            return Err(PlatformError::PipeConnectTimeout);
+        }
+
+        // SECURITY_IDENTIFICATION prevents the privileged server from using the
+        // client connection for impersonation beyond identity inspection.
+        // SAFETY: all optional pointers are null and name remains live.
+        let raw = unsafe {
+            CreateFileW(
+                wide_name.as_ptr(),
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                ptr::null_mut(),
+                OPEN_EXISTING,
+                SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
+                0,
+            )
+        };
+        if raw == INVALID_HANDLE_VALUE {
+            return Err(PlatformError::PipeConnectFailed);
+        }
+        let handle = OwnedClientHandle(raw);
+
+        let prelude = PIPE_AUTH_PRELUDE;
+        let mut written = 0u32;
+        // SAFETY: one-byte prelude buffer remains live for synchronous WriteFile.
+        let ok = unsafe {
+            WriteFile(
+                handle.0,
+                (&prelude as *const u8).cast::<c_void>(),
+                1,
+                &mut written,
+                ptr::null_mut(),
+            )
+        };
+        if ok == 0 || written != 1 {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+
+        Ok(WorkerPipeClient {
+            name,
+            _handle: handle,
+        })
+    }
+
+    pub(super) fn send_frame(
+        client: &OwnedClientHandle,
+        frame: &[u8],
+    ) -> Result<(), PlatformError> {
+        if frame.len() > WORKER_PIPE_FRAME_MAX {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        let mut packet = [0u8; WORKER_PIPE_PACKET_SIZE];
+        packet[..2].copy_from_slice(&(frame.len() as u16).to_le_bytes());
+        packet[2..2 + frame.len()].copy_from_slice(frame);
+
+        let mut written = 0u32;
+        // SAFETY: fixed packet stays live for the synchronous write.
+        let ok = unsafe {
+            WriteFile(
+                client.0,
+                packet.as_ptr().cast::<c_void>(),
+                WORKER_PIPE_PACKET_SIZE as u32,
+                &mut written,
+                ptr::null_mut(),
+            )
+        };
+        if ok == 0 || written as usize != WORKER_PIPE_PACKET_SIZE {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        Ok(())
+    }
+
+    pub(super) fn read_frame(
+        pipe: &OwnedPipeHandle,
+        timeout_ms: u32,
+    ) -> Result<Vec<u8>, PlatformError> {
+        let event = create_event().map_err(|_| PlatformError::PipeReadFailed)?;
+        let mut overlapped = Overlapped::new(event.0);
+        let mut packet = [0u8; WORKER_PIPE_PACKET_SIZE];
+
+        // SAFETY: fixed packet and OVERLAPPED stay live through completion.
+        let immediate = unsafe {
+            ReadFile(
+                pipe.0,
+                packet.as_mut_ptr().cast::<c_void>(),
+                WORKER_PIPE_PACKET_SIZE as u32,
+                ptr::null_mut(),
+                &mut overlapped,
+            )
+        };
+        let transferred = if immediate != 0 {
+            let mut transferred = 0u32;
+            // SAFETY: the overlapped read completed synchronously.
+            let ok =
+                unsafe { GetOverlappedResult(pipe.0, &mut overlapped, &mut transferred, 0) };
+            if ok == 0 {
+                return Err(PlatformError::PipeReadFailed);
+            }
+            transferred
+        } else {
+            // SAFETY: GetLastError immediately follows ReadFile.
+            let error = unsafe { GetLastError() };
+            if error == ERROR_MORE_DATA {
+                return Err(PlatformError::PipeProtocolFailed);
+            }
+            if error != ERROR_IO_PENDING {
+                return Err(PlatformError::PipeReadFailed);
+            }
+            wait_pending(
+                pipe.0,
+                &mut overlapped,
+                timeout_ms,
+                PlatformError::PipeConnectTimeout,
+                PlatformError::PipeReadFailed,
+            )?
+        };
+
+        if transferred as usize != WORKER_PIPE_PACKET_SIZE {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        let declared = usize::from(u16::from_le_bytes([packet[0], packet[1]]));
+        if declared > WORKER_PIPE_FRAME_MAX {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        if packet[2 + declared..].iter().any(|byte| *byte != 0) {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        Ok(packet[2..2 + declared].to_vec())
+    }
+
     pub(super) fn accept_verified_client(
         pipe: &OwnedPipeHandle,
         expected_logon_sid: &str,
@@ -771,6 +1006,20 @@ mod tests {
         assert!(sddl.starts_with("D:P"));
         assert!(!sddl.contains("WD"));
         assert!(!sddl.contains("AN"));
+    }
+
+    #[test]
+    fn oversized_worker_frame_is_rejected_before_io() {
+        #[cfg(not(target_os = "windows"))]
+        {
+            let client = WorkerPipeClient {
+                name: "test".to_owned(),
+            };
+            assert_eq!(
+                client.send_frame(&vec![0u8; WORKER_PIPE_FRAME_MAX + 1]),
+                Err(PlatformError::PipeProtocolFailed)
+            );
+        }
     }
 
     #[test]
