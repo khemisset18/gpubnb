@@ -124,6 +124,7 @@ static NTSTATUS GPUbnbPlugMonitor(
         monitorContext->DisplayNonce,
         request->DisplayNonce,
         GPUBNB_IDD_DISPLAY_NONCE_SIZE);
+    monitorContext->SwapChainProcessor = nullptr;
 
     IDARG_OUT_MONITORARRIVAL arrival = {};
     status = IddCxMonitorArrival(output.MonitorObject, &arrival);
@@ -165,6 +166,8 @@ static NTSTATUS GPUbnbUnplugMonitor(
     {
         return STATUS_ACCESS_DENIED;
     }
+
+    GPUbnbStopSwapChainProcessor(&monitorContext->SwapChainProcessor);
 
     const IDDCX_MONITOR monitor = deviceContext->Monitor;
     const NTSTATUS status = IddCxMonitorDeparture(monitor);
@@ -408,6 +411,9 @@ VOID GPUbnbFileCleanup(WDFFILEOBJECT fileObject)
         return;
     }
 
+    auto* monitorContext = WdfObjectGet_GPUbnbMonitorContext(context->Monitor);
+    GPUbnbStopSwapChainProcessor(&monitorContext->SwapChainProcessor);
+
     const IDDCX_MONITOR monitor = context->Monitor;
     const NTSTATUS status = IddCxMonitorDeparture(monitor);
     if (NT_SUCCESS(status))
@@ -551,7 +557,9 @@ NTSTATUS GPUbnbMonitorAssignSwapChain(
     IDDCX_MONITOR monitor,
     const IDARG_IN_SETSWAPCHAIN* input)
 {
-    if (input == nullptr || input->hSwapChain == nullptr)
+    if (input == nullptr ||
+        input->hSwapChain == nullptr ||
+        input->hNextSurfaceAvailable == nullptr)
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -563,15 +571,27 @@ NTSTATUS GPUbnbMonitorAssignSwapChain(
         return STATUS_GRAPHICS_INDIRECT_DISPLAY_ABANDON_SWAPCHAIN;
     }
 
-    // The virtual monitor and exact render-adapter fence are now real. Frame
-    // consumption remains fail-closed until the D3D/NVENC processor is attached.
-    WdfObjectDelete(reinterpret_cast<WDFOBJECT>(input->hSwapChain));
-    return STATUS_GRAPHICS_INDIRECT_DISPLAY_ABANDON_SWAPCHAIN;
+    GPUbnbStopSwapChainProcessor(&context->SwapChainProcessor);
+    const NTSTATUS status = GPUbnbStartSwapChainProcessor(
+        input->hSwapChain,
+        input->hNextSurfaceAvailable,
+        context->RenderAdapterLuid,
+        context->Width,
+        context->Height,
+        &context->SwapChainProcessor);
+    if (!NT_SUCCESS(status))
+    {
+        WdfObjectDelete(reinterpret_cast<WDFOBJECT>(input->hSwapChain));
+        return STATUS_GRAPHICS_INDIRECT_DISPLAY_ABANDON_SWAPCHAIN;
+    }
+
+    return STATUS_SUCCESS;
 }
 
 _Use_decl_annotations_
 NTSTATUS GPUbnbMonitorUnassignSwapChain(IDDCX_MONITOR monitor)
 {
-    UNREFERENCED_PARAMETER(monitor);
+    auto* context = WdfObjectGet_GPUbnbMonitorContext(monitor);
+    GPUbnbStopSwapChainProcessor(&context->SwapChainProcessor);
     return STATUS_SUCCESS;
 }
