@@ -586,9 +586,10 @@ public:
         {
             return E_FAIL;
         }
-        const uint32_t requiredVersion =
-            (NVENCAPI_MAJOR_VERSION << 4) | NVENCAPI_MINOR_VERSION;
-        if (requiredVersion > maxVersion)
+        // NvEncodeAPIGetMaxSupportedVersion returns the same packed API version
+        // format as NVENCAPI_VERSION from nvEncodeAPI.h. Compare the canonical
+        // header value directly instead of reconstructing the bit layout.
+        if (NVENCAPI_VERSION > maxVersion)
         {
             return HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH);
         }
