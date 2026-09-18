@@ -9,7 +9,9 @@ use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
 use gpubnb_windows_platform::input::{
     inject_input, InputEvent as PlatformInputEvent, MouseButton as PlatformMouseButton,
 };
-use gpubnb_windows_platform::media::{MediaProbeError, MediaProbeRequest, probe_media_frame};
+use gpubnb_windows_platform::media::{
+    MediaProbeError, MediaProbeRequest, MediaSession, open_media_session,
+};
 use gpubnb_windows_platform::pipe::connect_worker_pipe_client;
 use gpubnb_windows_platform::session::current_process_session_id;
 use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
@@ -214,6 +216,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
         let mut expected_sequence = 1u64;
         let mut display_spec = None;
         let mut media_state = MediaState::Empty;
+        let mut media_session: Option<MediaSession> = None;
         loop {
             let frame = client
                 .read_frame(PIPE_TIMEOUT_MS)
@@ -264,7 +267,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         return Err(WorkerError::new("capture_gpu_luid_mismatch", 21));
                     }
 
-                    let media = probe_media_frame(MediaProbeRequest {
+                    let mut session = open_media_session(MediaProbeRequest {
                         gpu_uuid: &args.gpu_uuid,
                         adapter_luid: spec.adapter_luid,
                         display_nonce: spec.display_nonce,
@@ -274,6 +277,9 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         capture_timeout_ms: PIPE_TIMEOUT_MS,
                     })
                     .map_err(|error| media_probe_error(error, false))?;
+                    let media = session
+                        .read_frame()
+                        .map_err(|error| media_probe_error(error, false))?;
 
                     let proof = encode_worker_media_proof(WorkerMediaProof {
                         protocol_version: WORKER_PROTOCOL_VERSION,
@@ -286,17 +292,20 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         height: media.height,
                         refresh_hz: media.refresh_hz,
                         frame_sequence: media.frame_sequence,
-                        encoded_bytes: media.encoded_bytes,
+                        encoded_bytes: u32::try_from(media.bytes.len())
+                            .map_err(|_| WorkerError::new("media_frame_too_large", 21))?,
                         proof_flags: media.proof_flags,
                     })
                     .map_err(|_| WorkerError::new("media_proof_encode_failed", 21))?;
                     client
                         .send_frame(&proof)
                         .map_err(|_| WorkerError::new("media_proof_send_failed", 21))?;
+                    media_session = Some(session);
                     media_state = next_state;
                 }
                 WorkerCommand::SuspendMedia => {
                     media_state = media_state.suspend()?;
+                    media_session.take();
                 }
                 WorkerCommand::InjectInput => {
                     if !matches!(media_state, MediaState::Ready) {
@@ -332,7 +341,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         return Err(WorkerError::new("resume_gpu_luid_mismatch", 21));
                     }
 
-                    let media = probe_media_frame(MediaProbeRequest {
+                    let mut session = open_media_session(MediaProbeRequest {
                         gpu_uuid: &args.gpu_uuid,
                         adapter_luid: spec.adapter_luid,
                         display_nonce: spec.display_nonce,
@@ -342,6 +351,9 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         capture_timeout_ms: PIPE_TIMEOUT_MS,
                     })
                     .map_err(|error| media_probe_error(error, true))?;
+                    let media = session
+                        .read_frame()
+                        .map_err(|error| media_probe_error(error, true))?;
 
                     let proof = encode_worker_media_proof(WorkerMediaProof {
                         protocol_version: WORKER_PROTOCOL_VERSION,
@@ -354,7 +366,8 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         height: media.height,
                         refresh_hz: media.refresh_hz,
                         frame_sequence: media.frame_sequence,
-                        encoded_bytes: media.encoded_bytes,
+                        encoded_bytes: u32::try_from(media.bytes.len())
+                            .map_err(|_| WorkerError::new("media_frame_too_large", 21))?,
                         proof_flags: media.proof_flags,
                     })
                     .map_err(|_| WorkerError::new("resume_media_proof_encode_failed", 21))?;
@@ -362,8 +375,14 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         .send_frame(&proof)
                         .map_err(|_| WorkerError::new("resume_media_proof_send_failed", 21))?;
 
+                    media_session = Some(session);
                     media_state = next_state;
                 }
+            }
+
+            // Keep the persistent session live across control commands while Ready.
+            if matches!(media_state, MediaState::Ready) && media_session.is_none() {
+                return Err(WorkerError::new("media_session_missing", 21));
             }
         }
     }
