@@ -163,7 +163,10 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
 
         // Identity transport is implemented, but graphical readiness is not. Never
         // stay alive pretending to be a usable renter runtime.
-        Err(WorkerError::new("native_worker_backend_not_implemented", 21))
+        Err(WorkerError::new(
+            "native_worker_backend_not_implemented",
+            21,
+        ))
     }
 }
 
@@ -235,20 +238,44 @@ mod tests {
     fn worker_cli_rejects_invalid_session_generation_gpu_and_workspace() {
         for args in [
             strings(&[
-                "--session-id", "../provider", "--generation", "1", "--gpu-uuid", GPU,
-                "--workspace", "cloud-desktop",
+                "--session-id",
+                "../provider",
+                "--generation",
+                "1",
+                "--gpu-uuid",
+                GPU,
+                "--workspace",
+                "cloud-desktop",
             ]),
             strings(&[
-                "--session-id", "sess-1", "--generation", "0", "--gpu-uuid", GPU,
-                "--workspace", "cloud-desktop",
+                "--session-id",
+                "sess-1",
+                "--generation",
+                "0",
+                "--gpu-uuid",
+                GPU,
+                "--workspace",
+                "cloud-desktop",
             ]),
             strings(&[
-                "--session-id", "sess-1", "--generation", "1", "--gpu-uuid", "GPU-EXACT",
-                "--workspace", "cloud-desktop",
+                "--session-id",
+                "sess-1",
+                "--generation",
+                "1",
+                "--gpu-uuid",
+                "GPU-EXACT",
+                "--workspace",
+                "cloud-desktop",
             ]),
             strings(&[
-                "--session-id", "sess-1", "--generation", "1", "--gpu-uuid", GPU,
-                "--workspace", "developer",
+                "--session-id",
+                "sess-1",
+                "--generation",
+                "1",
+                "--gpu-uuid",
+                GPU,
+                "--workspace",
+                "developer",
             ]),
         ] {
             assert!(parse_args(&args).is_err());
@@ -269,7 +296,10 @@ mod tests {
         #[cfg(not(target_os = "windows"))]
         {
             let parsed = parse_args(&valid_args()).expect("valid worker args");
-            assert_eq!(execute(&parsed), Err(WorkerError::new("windows_required", 20)));
+            assert_eq!(
+                execute(&parsed),
+                Err(WorkerError::new("windows_required", 20))
+            );
         }
     }
 }
