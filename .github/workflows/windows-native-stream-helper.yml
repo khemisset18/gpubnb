@@ -82,6 +82,24 @@ jobs:
       - name: Build release Windows renter worker
         run: cargo build --locked --release --manifest-path native/windows-worker/Cargo.toml
 
+      - name: Bootstrap renter worker must fail closed off Windows
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set +e
+          reply=$(native/windows-worker/target/release/gpubnb-windows-worker \
+            --session-id ci-worker \
+            --generation 1 \
+            --gpu-uuid GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a \
+            --workspace cloud-desktop)
+          worker_exit=$?
+          set -e
+          if [ "$worker_exit" -ne 20 ]; then
+            echo "Expected windows_required exit 20, got $worker_exit" >&2
+            exit 1
+          fi
+          python -c 'import json,sys; r=json.loads(sys.argv[1]); assert r == {"ok": False, "error": "windows_required"}' "$reply"
+
       - name: Bootstrap helper must fail closed on Windows
         if: runner.os == 'Windows'
         shell: pwsh
