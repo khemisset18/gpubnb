@@ -27,6 +27,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             "audioReady": True,
             "controllerReady": True,
             "mediaUrl": "http://127.0.0.1:43123/session/sess-1",
+            "mediaToken": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
         }
         report.update(overrides)
         return SimpleNamespace(returncode=0, stdout=json.dumps(report), stderr="")
@@ -64,6 +65,8 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
         self.assertEqual(handle.workspace_slug, "cloud-desktop")
         self.assertEqual(handle.gpu_uuid, "GPU-EXACT")
         self.assertTrue(handle.media_url.startswith("http://127.0.0.1:"))
+        self.assertEqual(len(handle.media_token), 43)
+        self.assertNotIn(handle.media_token, repr(handle))
         command = run_command.call_args.args[0]
         self.assertIn("--gpu-uuid", command)
         self.assertIn("GPU-EXACT", command)
@@ -101,6 +104,28 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             patch.object(runtime, "run_command", side_effect=[start, self._stop_report()]),
         ):
             with self.assertRaisesRegex(RuntimeError, "native_workspace_start_loopback_media_required"):
+                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+
+    def test_launch_rejects_media_token_in_url_query_and_cleans_session(self):
+        start = self._start_report(mediaUrl="http://127.0.0.1:43123/session/sess-1?token=secret")
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+            patch.object(runtime, "discover_native_application", return_value=None),
+            patch.object(runtime, "run_command", side_effect=[start, self._stop_report()]),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "native_workspace_start_loopback_media_required"):
+                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+
+    def test_launch_requires_strong_media_token_and_cleans_session(self):
+        start = self._start_report(mediaToken="short")
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+            patch.object(runtime, "discover_native_application", return_value=None),
+            patch.object(runtime, "run_command", side_effect=[start, self._stop_report()]),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "native_workspace_start_media_token_required"):
                 runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
 
     def test_launch_requires_isolated_session_and_input_boundary(self):
