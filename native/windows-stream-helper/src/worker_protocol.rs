@@ -12,6 +12,8 @@ use crate::lifecycle::WorkspaceKind;
 pub const WORKER_PROTOCOL_VERSION: u16 = 1;
 pub const MAX_WORKER_HELLO_FRAME: usize = 512;
 pub const WORKER_COMMAND_FRAME_SIZE: usize = 19;
+pub const WORKER_DISPLAY_SPEC_FRAME_SIZE: usize = 58;
+pub const WORKER_MEDIA_PROOF_FRAME_SIZE: usize = 74;
 const MAX_SESSION_ID: usize = 128;
 const MAX_GPU_UUID: usize = 64;
 
@@ -198,6 +200,329 @@ pub fn validate_worker_command(
         return Err(WorkerCommandError::Sequence);
     }
     Ok(frame.command)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkerDisplaySpec {
+    pub protocol_version: u16,
+    pub generation: u64,
+    pub command_sequence: u64,
+    pub windows_session_id: u32,
+    pub adapter_luid: u64,
+    pub display_nonce: [u8; 16],
+    pub width: u32,
+    pub height: u32,
+    pub refresh_hz: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkerMediaProof {
+    pub protocol_version: u16,
+    pub generation: u64,
+    pub command_sequence: u64,
+    pub windows_session_id: u32,
+    pub adapter_luid: u64,
+    pub display_nonce: [u8; 16],
+    pub width: u32,
+    pub height: u32,
+    pub refresh_hz: u32,
+    pub frame_sequence: u64,
+    pub encoded_bytes: u32,
+    pub proof_flags: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerGraphicsFrameError {
+    InvalidLength,
+    ProtocolVersion,
+    Generation,
+    Sequence,
+    WindowsSession,
+    Adapter,
+    DisplayNonce,
+    Dimensions,
+    RefreshRate,
+    FrameSequence,
+    EncodedOutput,
+    ProofFlags,
+}
+
+fn read_fixed_u32(frame: &[u8], offset: usize) -> Result<u32, WorkerGraphicsFrameError> {
+    let bytes: [u8; 4] = frame
+        .get(offset..offset + 4)
+        .ok_or(WorkerGraphicsFrameError::InvalidLength)?
+        .try_into()
+        .map_err(|_| WorkerGraphicsFrameError::InvalidLength)?;
+    Ok(u32::from_le_bytes(bytes))
+}
+
+fn read_fixed_u64(frame: &[u8], offset: usize) -> Result<u64, WorkerGraphicsFrameError> {
+    let bytes: [u8; 8] = frame
+        .get(offset..offset + 8)
+        .ok_or(WorkerGraphicsFrameError::InvalidLength)?
+        .try_into()
+        .map_err(|_| WorkerGraphicsFrameError::InvalidLength)?;
+    Ok(u64::from_le_bytes(bytes))
+}
+
+fn validate_display_fields(
+    generation: u64,
+    sequence: u64,
+    windows_session_id: u32,
+    adapter_luid: u64,
+    display_nonce: [u8; 16],
+    width: u32,
+    height: u32,
+    refresh_hz: u32,
+) -> Result<(), WorkerGraphicsFrameError> {
+    if generation == 0 {
+        return Err(WorkerGraphicsFrameError::Generation);
+    }
+    if sequence == 0 {
+        return Err(WorkerGraphicsFrameError::Sequence);
+    }
+    if windows_session_id == 0 {
+        return Err(WorkerGraphicsFrameError::WindowsSession);
+    }
+    if adapter_luid == 0 {
+        return Err(WorkerGraphicsFrameError::Adapter);
+    }
+    if display_nonce == [0; 16] {
+        return Err(WorkerGraphicsFrameError::DisplayNonce);
+    }
+    if !(640..=7680).contains(&width) || !(480..=4320).contains(&height) {
+        return Err(WorkerGraphicsFrameError::Dimensions);
+    }
+    if !(30..=240).contains(&refresh_hz) {
+        return Err(WorkerGraphicsFrameError::RefreshRate);
+    }
+    Ok(())
+}
+
+pub fn encode_worker_display_spec(
+    spec: WorkerDisplaySpec,
+) -> Result<[u8; WORKER_DISPLAY_SPEC_FRAME_SIZE], WorkerGraphicsFrameError> {
+    if spec.protocol_version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerGraphicsFrameError::ProtocolVersion);
+    }
+    validate_display_fields(
+        spec.generation,
+        spec.command_sequence,
+        spec.windows_session_id,
+        spec.adapter_luid,
+        spec.display_nonce,
+        spec.width,
+        spec.height,
+        spec.refresh_hz,
+    )?;
+
+    let mut out = [0u8; WORKER_DISPLAY_SPEC_FRAME_SIZE];
+    out[0..2].copy_from_slice(&spec.protocol_version.to_le_bytes());
+    out[2..10].copy_from_slice(&spec.generation.to_le_bytes());
+    out[10..18].copy_from_slice(&spec.command_sequence.to_le_bytes());
+    out[18..22].copy_from_slice(&spec.windows_session_id.to_le_bytes());
+    out[22..30].copy_from_slice(&spec.adapter_luid.to_le_bytes());
+    out[30..46].copy_from_slice(&spec.display_nonce);
+    out[46..50].copy_from_slice(&spec.width.to_le_bytes());
+    out[50..54].copy_from_slice(&spec.height.to_le_bytes());
+    out[54..58].copy_from_slice(&spec.refresh_hz.to_le_bytes());
+    Ok(out)
+}
+
+pub fn decode_worker_display_spec(
+    frame: &[u8],
+) -> Result<WorkerDisplaySpec, WorkerGraphicsFrameError> {
+    if frame.len() != WORKER_DISPLAY_SPEC_FRAME_SIZE {
+        return Err(WorkerGraphicsFrameError::InvalidLength);
+    }
+    let protocol_version = u16::from_le_bytes([frame[0], frame[1]]);
+    if protocol_version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerGraphicsFrameError::ProtocolVersion);
+    }
+    let generation = read_fixed_u64(frame, 2)?;
+    let command_sequence = read_fixed_u64(frame, 10)?;
+    let windows_session_id = read_fixed_u32(frame, 18)?;
+    let adapter_luid = read_fixed_u64(frame, 22)?;
+    let display_nonce: [u8; 16] = frame[30..46]
+        .try_into()
+        .map_err(|_| WorkerGraphicsFrameError::InvalidLength)?;
+    let width = read_fixed_u32(frame, 46)?;
+    let height = read_fixed_u32(frame, 50)?;
+    let refresh_hz = read_fixed_u32(frame, 54)?;
+
+    validate_display_fields(
+        generation,
+        command_sequence,
+        windows_session_id,
+        adapter_luid,
+        display_nonce,
+        width,
+        height,
+        refresh_hz,
+    )?;
+
+    Ok(WorkerDisplaySpec {
+        protocol_version,
+        generation,
+        command_sequence,
+        windows_session_id,
+        adapter_luid,
+        display_nonce,
+        width,
+        height,
+        refresh_hz,
+    })
+}
+
+pub fn validate_worker_display_spec(
+    expected_generation: u64,
+    expected_command_sequence: u64,
+    expected_windows_session_id: u32,
+    spec: WorkerDisplaySpec,
+) -> Result<(), WorkerGraphicsFrameError> {
+    if spec.generation != expected_generation {
+        return Err(WorkerGraphicsFrameError::Generation);
+    }
+    if spec.command_sequence != expected_command_sequence {
+        return Err(WorkerGraphicsFrameError::Sequence);
+    }
+    if spec.windows_session_id != expected_windows_session_id {
+        return Err(WorkerGraphicsFrameError::WindowsSession);
+    }
+    Ok(())
+}
+
+pub fn encode_worker_media_proof(
+    proof: WorkerMediaProof,
+) -> Result<[u8; WORKER_MEDIA_PROOF_FRAME_SIZE], WorkerGraphicsFrameError> {
+    if proof.protocol_version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerGraphicsFrameError::ProtocolVersion);
+    }
+    validate_display_fields(
+        proof.generation,
+        proof.command_sequence,
+        proof.windows_session_id,
+        proof.adapter_luid,
+        proof.display_nonce,
+        proof.width,
+        proof.height,
+        proof.refresh_hz,
+    )?;
+    if proof.frame_sequence == 0 {
+        return Err(WorkerGraphicsFrameError::FrameSequence);
+    }
+    if proof.encoded_bytes == 0 {
+        return Err(WorkerGraphicsFrameError::EncodedOutput);
+    }
+    if proof.proof_flags == 0 {
+        return Err(WorkerGraphicsFrameError::ProofFlags);
+    }
+
+    let mut out = [0u8; WORKER_MEDIA_PROOF_FRAME_SIZE];
+    out[0..2].copy_from_slice(&proof.protocol_version.to_le_bytes());
+    out[2..10].copy_from_slice(&proof.generation.to_le_bytes());
+    out[10..18].copy_from_slice(&proof.command_sequence.to_le_bytes());
+    out[18..22].copy_from_slice(&proof.windows_session_id.to_le_bytes());
+    out[22..30].copy_from_slice(&proof.adapter_luid.to_le_bytes());
+    out[30..46].copy_from_slice(&proof.display_nonce);
+    out[46..50].copy_from_slice(&proof.width.to_le_bytes());
+    out[50..54].copy_from_slice(&proof.height.to_le_bytes());
+    out[54..58].copy_from_slice(&proof.refresh_hz.to_le_bytes());
+    out[58..66].copy_from_slice(&proof.frame_sequence.to_le_bytes());
+    out[66..70].copy_from_slice(&proof.encoded_bytes.to_le_bytes());
+    out[70..74].copy_from_slice(&proof.proof_flags.to_le_bytes());
+    Ok(out)
+}
+
+pub fn decode_worker_media_proof(
+    frame: &[u8],
+) -> Result<WorkerMediaProof, WorkerGraphicsFrameError> {
+    if frame.len() != WORKER_MEDIA_PROOF_FRAME_SIZE {
+        return Err(WorkerGraphicsFrameError::InvalidLength);
+    }
+    let protocol_version = u16::from_le_bytes([frame[0], frame[1]]);
+    if protocol_version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerGraphicsFrameError::ProtocolVersion);
+    }
+    let generation = read_fixed_u64(frame, 2)?;
+    let command_sequence = read_fixed_u64(frame, 10)?;
+    let windows_session_id = read_fixed_u32(frame, 18)?;
+    let adapter_luid = read_fixed_u64(frame, 22)?;
+    let display_nonce: [u8; 16] = frame[30..46]
+        .try_into()
+        .map_err(|_| WorkerGraphicsFrameError::InvalidLength)?;
+    let width = read_fixed_u32(frame, 46)?;
+    let height = read_fixed_u32(frame, 50)?;
+    let refresh_hz = read_fixed_u32(frame, 54)?;
+    let frame_sequence = read_fixed_u64(frame, 58)?;
+    let encoded_bytes = read_fixed_u32(frame, 66)?;
+    let proof_flags = read_fixed_u32(frame, 70)?;
+
+    validate_display_fields(
+        generation,
+        command_sequence,
+        windows_session_id,
+        adapter_luid,
+        display_nonce,
+        width,
+        height,
+        refresh_hz,
+    )?;
+    if frame_sequence == 0 {
+        return Err(WorkerGraphicsFrameError::FrameSequence);
+    }
+    if encoded_bytes == 0 {
+        return Err(WorkerGraphicsFrameError::EncodedOutput);
+    }
+    if proof_flags == 0 {
+        return Err(WorkerGraphicsFrameError::ProofFlags);
+    }
+
+    Ok(WorkerMediaProof {
+        protocol_version,
+        generation,
+        command_sequence,
+        windows_session_id,
+        adapter_luid,
+        display_nonce,
+        width,
+        height,
+        refresh_hz,
+        frame_sequence,
+        encoded_bytes,
+        proof_flags,
+    })
+}
+
+pub fn validate_worker_media_proof(
+    expected_generation: u64,
+    expected_command_sequence: u64,
+    expected_windows_session_id: u32,
+    expected_display: WorkerDisplaySpec,
+    proof: WorkerMediaProof,
+) -> Result<(), WorkerGraphicsFrameError> {
+    if proof.generation != expected_generation {
+        return Err(WorkerGraphicsFrameError::Generation);
+    }
+    if proof.command_sequence != expected_command_sequence {
+        return Err(WorkerGraphicsFrameError::Sequence);
+    }
+    if proof.windows_session_id != expected_windows_session_id {
+        return Err(WorkerGraphicsFrameError::WindowsSession);
+    }
+    if proof.adapter_luid != expected_display.adapter_luid {
+        return Err(WorkerGraphicsFrameError::Adapter);
+    }
+    if proof.display_nonce != expected_display.display_nonce {
+        return Err(WorkerGraphicsFrameError::DisplayNonce);
+    }
+    if proof.width != expected_display.width || proof.height != expected_display.height {
+        return Err(WorkerGraphicsFrameError::Dimensions);
+    }
+    if proof.refresh_hz != expected_display.refresh_hz {
+        return Err(WorkerGraphicsFrameError::RefreshRate);
+    }
+    Ok(())
 }
 
 fn workspace_tag(workspace: WorkspaceKind) -> u8 {
@@ -618,6 +943,53 @@ mod tests {
                 ..valid
             }),
             Err(WorkerCommandError::Sequence)
+        );
+    }
+
+    #[test]
+    fn display_spec_and_media_proof_are_exactly_fenced() {
+        let display = WorkerDisplaySpec {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            generation: 7,
+            command_sequence: 1,
+            windows_session_id: 42,
+            adapter_luid: 0x1122_3344_5566_7788,
+            display_nonce: [0xA5; 16],
+            width: 1920,
+            height: 1080,
+            refresh_hz: 60,
+        };
+        let encoded = encode_worker_display_spec(display).expect("encode display");
+        assert_eq!(encoded.len(), WORKER_DISPLAY_SPEC_FRAME_SIZE);
+        let decoded = decode_worker_display_spec(&encoded).expect("decode display");
+        assert_eq!(decoded, display);
+        assert_eq!(validate_worker_display_spec(7, 1, 42, decoded), Ok(()));
+
+        let proof = WorkerMediaProof {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            generation: 7,
+            command_sequence: 2,
+            windows_session_id: 42,
+            adapter_luid: display.adapter_luid,
+            display_nonce: display.display_nonce,
+            width: 1920,
+            height: 1080,
+            refresh_hz: 60,
+            frame_sequence: 1,
+            encoded_bytes: 4096,
+            proof_flags: 0x0f,
+        };
+        let encoded = encode_worker_media_proof(proof).expect("encode media proof");
+        assert_eq!(encoded.len(), WORKER_MEDIA_PROOF_FRAME_SIZE);
+        let decoded = decode_worker_media_proof(&encoded).expect("decode media proof");
+        assert_eq!(decoded, proof);
+        assert_eq!(validate_worker_media_proof(7, 2, 42, display, decoded), Ok(()));
+
+        let mut replay = proof;
+        replay.command_sequence = 1;
+        assert_eq!(
+            validate_worker_media_proof(7, 2, 42, display, replay),
+            Err(WorkerGraphicsFrameError::Sequence)
         );
     }
 
