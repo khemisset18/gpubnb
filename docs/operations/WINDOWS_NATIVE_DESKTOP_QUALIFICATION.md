@@ -56,9 +56,13 @@ PASS requires all of:
 - real captured frame;
 - `hardwareEncoder = nvenc`;
 - isolated renter session proof;
+- GPUbnb-owned virtual display proof (`virtualDisplay = true`);
+- explicit provider-desktop exclusion proof (`providerDesktopExcluded = true`);
 - input isolation proof;
 - local media loopback proof;
 - no helper listener on LAN/public interfaces;
+- media endpoint uses a literal loopback IP, explicit port and exact `/session/<sessionId>` path;
+- fresh per-session media token is required and absent from URL/log output;
 - no leftover helper/session process after the self-test.
 
 ## 3. Cloud Desktop end to end
@@ -94,11 +98,16 @@ Cloud Desktop cannot pass qualification without controlled failure tests:
 - kill/restart the native stream helper;
 - restart the GPUbnb Agent;
 - temporarily interrupt Host networking;
+- force a display mode change / desktop switch and verify DXGI access-loss recovery;
+- remove/recreate the virtual display and verify the stream cannot remain READY on stale capture;
+- attempt a cross-session media route/token and verify it is rejected;
 - reboot Windows during an active test rental.
 
 For every case verify server-authoritative fencing, no free-compute window, no double
 billing, no duplicate renter session and cleanup/recovery without exposing the
-provider desktop.
+provider desktop. Any DXGI access loss, virtual-display loss or helper restart must
+clear media readiness until a fresh capture + exact-GPU + NVENC proof succeeds; the
+billable interval must not resume before that fresh proof.
 
 ## 5. Creator / Blender
 
@@ -148,7 +157,7 @@ resource limits.
 For each qualified Host/build record at minimum:
 
 - Agent commit/version;
-- helper version/hash;
+- helper version/hash and Authenticode/signing identity for a release candidate;
 - Windows build;
 - GPU model + UUID;
 - NVIDIA driver;
