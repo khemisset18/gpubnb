@@ -308,6 +308,7 @@ model Machine {
   nvidiaRuntimeAvailable Boolean @default(false)
   virtualizationAvailable Boolean @default(false)
   desktopGpuRenderingAvailable Boolean @default(false)
+  nativeDesktopStreamingAvailable Boolean @default(false)
   connectivity MachineConnectivity @default(OFFLINE)
   operational MachineOperational @default(UNAVAILABLE)
   moderationStatus ModerationStatus @default(CLEAR)
