@@ -676,8 +676,8 @@ mod windows_impl {
         let peer_result = (|| {
             let token =
                 open_current_thread_token().map_err(|_| PlatformError::PipeImpersonationFailed)?;
-            let level = impersonation_level(&token)
-                .map_err(|_| PlatformError::PipeImpersonationFailed)?;
+            let level =
+                impersonation_level(&token).map_err(|_| PlatformError::PipeImpersonationFailed)?;
             if level > SECURITY_IDENTIFICATION_LEVEL {
                 return Err(PlatformError::PipeImpersonationLevelTooHigh);
             }
@@ -994,11 +994,7 @@ mod tests {
         let client = std::thread::spawn(move || connect_test_client(name, pid_tx, release_rx));
 
         assert_eq!(
-            pipe.accept_verified_client(
-                "S-1-5-5-999999-999999",
-                std::process::id(),
-                10_000,
-            ),
+            pipe.accept_verified_client("S-1-5-5-999999-999999", std::process::id(), 10_000,),
             Err(PlatformError::PipePeerSidMismatch)
         );
         release_tx.send(()).expect("release client");
