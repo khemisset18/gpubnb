@@ -30,6 +30,7 @@ pub struct WorkerFence<'a> {
     pub workspace: WorkspaceKind,
     pub generation: u64,
     pub windows_session_id: u32,
+    pub worker_pid: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -260,6 +261,21 @@ pub fn decode_worker_hello(frame: &[u8]) -> Result<WorkerHelloOwned, WorkerFrame
     })
 }
 
+pub fn decode_and_validate_worker_hello(
+    expected: WorkerFence<'_>,
+    frame: &[u8],
+) -> Result<WorkerHelloOwned, WorkerProtocolError> {
+    let hello = decode_worker_hello(frame).map_err(WorkerProtocolError::Frame)?;
+    validate_worker_hello(expected, hello.as_borrowed()).map_err(WorkerProtocolError::Handshake)?;
+    Ok(hello)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerProtocolError {
+    Frame(WorkerFrameError),
+    Handshake(WorkerHandshakeError),
+}
+
 pub fn validate_worker_hello(
     expected: WorkerFence<'_>,
     hello: WorkerHello<'_>,
@@ -282,7 +298,7 @@ pub fn validate_worker_hello(
     if hello.windows_session_id != expected.windows_session_id {
         return Err(WorkerHandshakeError::WindowsSession);
     }
-    if hello.worker_pid == 0 {
+    if expected.worker_pid == 0 || hello.worker_pid != expected.worker_pid {
         return Err(WorkerHandshakeError::WorkerPid);
     }
     Ok(())
@@ -302,6 +318,7 @@ mod tests {
             workspace: WorkspaceKind::CloudDesktop,
             generation: 7,
             windows_session_id: 0x1020_3040,
+            worker_pid: 4242,
         }
     }
 
@@ -348,6 +365,19 @@ mod tests {
         assert_eq!(
             decode_worker_hello(&oversized),
             Err(WorkerFrameError::TooLarge)
+        );
+    }
+
+    #[test]
+    fn decode_and_validate_rejects_replayed_worker_pid() {
+        let mut replay = hello();
+        replay.worker_pid = 4243;
+        let frame = encode_worker_hello(replay).expect("encode replay");
+        assert_eq!(
+            decode_and_validate_worker_hello(fence(), &frame),
+            Err(WorkerProtocolError::Handshake(
+                WorkerHandshakeError::WorkerPid
+            ))
         );
     }
 
@@ -406,12 +436,14 @@ mod tests {
             Err(WorkerHandshakeError::ProtocolVersion)
         );
 
-        let mut value = hello();
-        value.worker_pid = 0;
-        assert_eq!(
-            validate_worker_hello(fence(), value),
-            Err(WorkerHandshakeError::WorkerPid)
-        );
+        for wrong_pid in [0, 4243] {
+            let mut value = hello();
+            value.worker_pid = wrong_pid;
+            assert_eq!(
+                validate_worker_hello(fence(), value),
+                Err(WorkerHandshakeError::WorkerPid)
+            );
+        }
     }
 
     #[test]
