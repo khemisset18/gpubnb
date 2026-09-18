@@ -22,7 +22,7 @@ test('only a v2 body-signed heartbeat may update the Windows native capability',
   assert.match(server, /nativeDesktopStreamingGpuUuid:z\.string\(\).*?\.nullable\(\)\.optional\(\)/);
   assert.match(
     server,
-    /b\.telemetry&&\(b\.nativeDesktopStreamingAvailable!==undefined\|\|b\.os!==undefined\)\?\{nativeDesktopStreamingAvailable:/,
+    /b\.telemetry&&\(b\.nativeDesktopStreamingAvailable!==undefined\|\|b\.nativeDesktopStreamingGpuUuid!==undefined\|\|b\.os!==undefined\)\?\{nativeDesktopStreamingAvailable:/,
   );
   assert.match(
     server,
@@ -50,7 +50,7 @@ test('owner diagnostics expose Linux and Windows desktop capabilities separately
 test('signed Windows native capability keeps availability and exact GPU proof coherent', async () => {
   const server = await readFile(path.join(sourceRoot, 'server.ts'), 'utf8');
   assert.match(server, /incoherent_native_desktop_capability/);
-  assert.match(server, /nativeDesktopStreamingAvailable===true&&\(!nativeOs\.startsWith\('windows'\)\|\|!nativeUuid\)/);
+  assert.match(server, /nativeDesktopStreamingAvailable===true&&\(!nativeOs\.startsWith\('windows'\)\|\|!nativeUuid\|\|!nativeGpuPresent\)/);
   assert.match(server, /nativeDesktopStreamingAvailable!==true&&nativeUuid/);
   assert.match(server, /nativeDesktopStreamingGpuUuid:.*?nativeDesktopStreamingAvailable===true\?\(b\.nativeDesktopStreamingGpuUuid\?\?null\):null/);
 });
