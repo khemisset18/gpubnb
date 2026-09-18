@@ -43,7 +43,8 @@ for (const slug of ['cloud-desktop', 'creator', 'cad', 'gaming'] as const) {
 
     await assert.rejects(
       () => ensureCompatibleMachineWorkspace(db as never, highEndWindows.id, slug),
-      new RegExp(`^${slug}_workspace_runtime_unavailable$`),
+      (error: unknown) => error instanceof Error
+        && error.message === `${slug}_workspace_runtime_unavailable`,
     );
     assert.equal(definitionUpserts, 0);
     assert.equal(machineWorkspaceUpserts, 0);
