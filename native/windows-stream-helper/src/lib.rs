@@ -7,3 +7,5 @@
 pub mod lifecycle;
 
 pub mod worker_protocol;
+
+pub mod backend;
