@@ -98,6 +98,21 @@ pub enum VirtualDisplayRequestError {
     RefreshRate,
 }
 
+pub fn display_container_id_from_nonce(
+    mut nonce: [u8; 16],
+) -> Result<[u8; 16], VirtualDisplayRequestError> {
+    if nonce == [0; 16] {
+        return Err(VirtualDisplayRequestError::DisplayNonce);
+    }
+
+    // Match GPUbnbContainerIdFromNonce in the IddCx driver byte-for-byte.
+    // GUID Data3 occupies bytes 6..8 in native little-endian layout; set UUID
+    // version 4 in the high nibble. Data4[0] is byte 8; set RFC 4122 variant.
+    nonce[7] = (nonce[7] & 0x0f) | 0x40;
+    nonce[8] = (nonce[8] & 0x3f) | 0x80;
+    Ok(nonce)
+}
+
 pub fn validate_virtual_display_request(
     request: VirtualDisplayRequest,
 ) -> Result<(), VirtualDisplayRequestError> {
@@ -503,6 +518,25 @@ mod tests {
                 ..valid()
             }),
             Err(PlatformError::WindowsRequired)
+        );
+    }
+
+    #[test]
+    fn container_id_derivation_matches_driver_layout() {
+        let nonce = [
+            0x01, 0x02, 0x03, 0x04,
+            0x05, 0x06,
+            0x07, 0xf8,
+            0xff, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+        ];
+        let id = display_container_id_from_nonce(nonce).expect("container id");
+        assert_eq!(id[0..7], nonce[0..7]);
+        assert_eq!(id[7], 0x48);
+        assert_eq!(id[8], 0xbf);
+        assert_eq!(id[9..], nonce[9..]);
+        assert_eq!(
+            display_container_id_from_nonce([0; 16]),
+            Err(VirtualDisplayRequestError::DisplayNonce)
         );
     }
 
