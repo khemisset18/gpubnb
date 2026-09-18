@@ -818,11 +818,7 @@ mod windows_impl {
         })
     }
 
-    fn write_message(
-        handle: Handle,
-        bytes: &[u8],
-        timeout_ms: u32,
-    ) -> Result<(), PlatformError> {
+    fn write_message(handle: Handle, bytes: &[u8], timeout_ms: u32) -> Result<(), PlatformError> {
         if bytes.is_empty() || bytes.len() > u32::MAX as usize || timeout_ms == 0 {
             return Err(PlatformError::PipeProtocolFailed);
         }
