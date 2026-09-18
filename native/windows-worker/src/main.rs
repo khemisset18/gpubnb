@@ -1,0 +1,275 @@
+//! GPUbnb renter-session graphical worker bootstrap.
+//!
+//! This binary owns no privileged lifecycle authority. It can only prove its
+//! identity to the local GPUbnb service over the ACL/PID-fenced named pipe. The
+//! graphical backend remains deliberately fail-closed until virtual display,
+//! DXGI capture, exact-GPU NVENC and isolated input are implemented.
+
+use gpubnb_windows_platform::pipe::connect_worker_pipe_client;
+use gpubnb_windows_platform::session::current_process_session_id;
+use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
+use gpubnb_windows_stream_helper::worker_protocol::{
+    WORKER_PROTOCOL_VERSION, WorkerHello, encode_worker_hello,
+};
+use std::env;
+use std::process::ExitCode;
+
+const MAX_SESSION_ID: usize = 128;
+const MAX_GPU_UUID: usize = 64;
+const PIPE_TIMEOUT_MS: u32 = 10_000;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorkerArgs {
+    session_id: String,
+    generation: u64,
+    gpu_uuid: String,
+    workspace: WorkspaceKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WorkerError {
+    code: &'static str,
+    exit_code: u8,
+}
+
+impl WorkerError {
+    const fn new(code: &'static str, exit_code: u8) -> Self {
+        Self { code, exit_code }
+    }
+}
+
+fn valid_session_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_SESSION_ID
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
+fn valid_gpu_uuid(value: &str) -> bool {
+    if value.len() > MAX_GPU_UUID || !value.starts_with("GPU-") {
+        return false;
+    }
+    let uuid = &value[4..];
+    uuid.len() == 36
+        && uuid.bytes().enumerate().all(|(index, byte)| {
+            let hyphen = matches!(index, 8 | 13 | 18 | 23);
+            (hyphen && byte == b'-') || (!hyphen && byte.is_ascii_hexdigit())
+        })
+}
+
+fn parse_workspace(value: &str) -> Result<WorkspaceKind, WorkerError> {
+    match value {
+        "cloud-desktop" => Ok(WorkspaceKind::CloudDesktop),
+        "creator" => Ok(WorkspaceKind::Creator),
+        "cad" => Ok(WorkspaceKind::Cad),
+        "gaming" => Ok(WorkspaceKind::Gaming),
+        _ => Err(WorkerError::new("unsupported_workspace", 2)),
+    }
+}
+
+fn take_value(
+    args: &[String],
+    index: &mut usize,
+    missing: &'static str,
+) -> Result<String, WorkerError> {
+    *index += 1;
+    args.get(*index)
+        .cloned()
+        .ok_or_else(|| WorkerError::new(missing, 2))
+}
+
+fn parse_args(args: &[String]) -> Result<WorkerArgs, WorkerError> {
+    let mut session_id = None;
+    let mut generation = None;
+    let mut gpu_uuid = None;
+    let mut workspace = None;
+    let mut index = 0usize;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--session-id" if session_id.is_none() => {
+                session_id = Some(take_value(args, &mut index, "missing_session_id")?);
+            }
+            "--generation" if generation.is_none() => {
+                let raw = take_value(args, &mut index, "missing_generation")?;
+                generation = Some(
+                    raw.parse::<u64>()
+                        .map_err(|_| WorkerError::new("invalid_generation", 2))?,
+                );
+            }
+            "--gpu-uuid" if gpu_uuid.is_none() => {
+                gpu_uuid = Some(take_value(args, &mut index, "missing_gpu_uuid")?);
+            }
+            "--workspace" if workspace.is_none() => {
+                let raw = take_value(args, &mut index, "missing_workspace")?;
+                workspace = Some(parse_workspace(&raw)?);
+            }
+            _ => return Err(WorkerError::new("unknown_or_duplicate_argument", 2)),
+        }
+        index += 1;
+    }
+
+    let session_id = session_id.ok_or_else(|| WorkerError::new("missing_session_id", 2))?;
+    let generation = generation.ok_or_else(|| WorkerError::new("missing_generation", 2))?;
+    let gpu_uuid = gpu_uuid.ok_or_else(|| WorkerError::new("missing_gpu_uuid", 2))?;
+    let workspace = workspace.ok_or_else(|| WorkerError::new("missing_workspace", 2))?;
+
+    if !valid_session_id(&session_id) {
+        return Err(WorkerError::new("invalid_session_id", 2));
+    }
+    if generation == 0 {
+        return Err(WorkerError::new("invalid_generation", 2));
+    }
+    if !valid_gpu_uuid(&gpu_uuid) {
+        return Err(WorkerError::new("invalid_gpu_uuid", 2));
+    }
+
+    Ok(WorkerArgs {
+        session_id,
+        generation,
+        gpu_uuid,
+        workspace,
+    })
+}
+
+fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = args;
+        Err(WorkerError::new("windows_required", 20))
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let windows_session_id = current_process_session_id()
+            .map_err(|_| WorkerError::new("windows_session_unavailable", 21))?;
+        let client = connect_worker_pipe_client(&args.session_id, args.generation, PIPE_TIMEOUT_MS)
+            .map_err(|_| WorkerError::new("worker_pipe_connect_failed", 21))?;
+        let hello = WorkerHello {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            session_id: &args.session_id,
+            gpu_uuid: &args.gpu_uuid,
+            workspace: args.workspace,
+            generation: args.generation,
+            windows_session_id,
+            worker_pid: std::process::id(),
+        };
+        let frame =
+            encode_worker_hello(hello).map_err(|_| WorkerError::new("worker_hello_invalid", 21))?;
+        client
+            .send_frame(&frame)
+            .map_err(|_| WorkerError::new("worker_hello_send_failed", 21))?;
+
+        // Identity transport is implemented, but graphical readiness is not. Never
+        // stay alive pretending to be a usable renter runtime.
+        Err(WorkerError::new("native_worker_backend_not_implemented", 21))
+    }
+}
+
+fn error_json(error: WorkerError) -> String {
+    format!(r#"{{"ok":false,"error":"{}"}}"#, error.code)
+}
+
+fn main() -> ExitCode {
+    let args: Vec<String> = env::args().skip(1).collect();
+    match parse_args(&args).and_then(|parsed| execute(&parsed)) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            println!("{}", error_json(error));
+            ExitCode::from(error.exit_code)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const GPU: &str = "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a";
+
+    fn strings(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    fn valid_args() -> Vec<String> {
+        strings(&[
+            "--session-id",
+            "sess-123",
+            "--generation",
+            "7",
+            "--gpu-uuid",
+            GPU,
+            "--workspace",
+            "cloud-desktop",
+        ])
+    }
+
+    #[test]
+    fn strict_worker_identity_cli_parses() {
+        let parsed = parse_args(&valid_args()).expect("valid worker args");
+        assert_eq!(parsed.session_id, "sess-123");
+        assert_eq!(parsed.generation, 7);
+        assert_eq!(parsed.gpu_uuid, GPU);
+        assert_eq!(parsed.workspace, WorkspaceKind::CloudDesktop);
+    }
+
+    #[test]
+    fn worker_cli_rejects_duplicate_unknown_and_arbitrary_app_arguments() {
+        let mut duplicate = valid_args();
+        duplicate.extend(strings(&["--workspace", "gaming"]));
+        assert_eq!(
+            parse_args(&duplicate),
+            Err(WorkerError::new("unknown_or_duplicate_argument", 2))
+        );
+
+        let mut application = valid_args();
+        application.extend(strings(&["--application", r"C:\Windows\System32\cmd.exe"]));
+        assert_eq!(
+            parse_args(&application),
+            Err(WorkerError::new("unknown_or_duplicate_argument", 2))
+        );
+    }
+
+    #[test]
+    fn worker_cli_rejects_invalid_session_generation_gpu_and_workspace() {
+        for args in [
+            strings(&[
+                "--session-id", "../provider", "--generation", "1", "--gpu-uuid", GPU,
+                "--workspace", "cloud-desktop",
+            ]),
+            strings(&[
+                "--session-id", "sess-1", "--generation", "0", "--gpu-uuid", GPU,
+                "--workspace", "cloud-desktop",
+            ]),
+            strings(&[
+                "--session-id", "sess-1", "--generation", "1", "--gpu-uuid", "GPU-EXACT",
+                "--workspace", "cloud-desktop",
+            ]),
+            strings(&[
+                "--session-id", "sess-1", "--generation", "1", "--gpu-uuid", GPU,
+                "--workspace", "developer",
+            ]),
+        ] {
+            assert!(parse_args(&args).is_err());
+        }
+    }
+
+    #[test]
+    fn errors_never_echo_identity_inputs() {
+        let error = WorkerError::new("worker_pipe_connect_failed", 21);
+        let output = error_json(error);
+        assert!(!output.contains("sess-"));
+        assert!(!output.contains("GPU-"));
+        assert!(output.contains("worker_pipe_connect_failed"));
+    }
+
+    #[test]
+    fn bootstrap_worker_never_reports_success_off_windows() {
+        #[cfg(not(target_os = "windows"))]
+        {
+            let parsed = parse_args(&valid_args()).expect("valid worker args");
+            assert_eq!(execute(&parsed), Err(WorkerError::new("windows_required", 20)));
+        }
+    }
+}
