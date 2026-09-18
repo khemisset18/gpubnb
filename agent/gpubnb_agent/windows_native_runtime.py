@@ -58,7 +58,7 @@ def _safe_id(value: str, field: str) -> str:
     return candidate
 
 
-def _loopback_media_url(value: object) -> str | None:
+def _loopback_media_url(value: object, expected_session_id: str) -> str | None:
     raw = str(value or "").strip()
     if not raw or len(raw) > 500:
         return None
@@ -76,6 +76,10 @@ def _loopback_media_url(value: object) -> str | None:
     if not address.is_loopback:
         return None
     if parsed.username or parsed.password or parsed.fragment or parsed.query:
+        return None
+    # Cross-session routing is forbidden even on loopback. The helper contract
+    # exposes exactly one media resource for the requested opaque session id.
+    if parsed.path != f"/session/{expected_session_id}":
         return None
     try:
         port = parsed.port
@@ -238,7 +242,7 @@ def launch_windows_native_workspace(
             executable, session_id, "native_workspace_start_controller_required"
         )
 
-    media_url = _loopback_media_url(report.get("mediaUrl"))
+    media_url = _loopback_media_url(report.get("mediaUrl"), session_id)
     if media_url is None:
         _raise_after_started_session_validation_failure(
             executable, session_id, "native_workspace_start_loopback_media_required"
