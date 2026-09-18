@@ -30,6 +30,15 @@ pub struct VirtualDisplayRequest {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VirtualDisplayControlError {
+    WindowsRequired,
+    Request(VirtualDisplayRequestError),
+    DeviceInterfaceNotFound,
+    DeviceInterfaceQueryFailed,
+    DeviceOpenFailed,
+    DeviceIoControlFailed,
+}
+
 pub enum VirtualDisplayRequestError {
     Generation,
     WindowsSession,
@@ -61,6 +70,23 @@ pub fn validate_virtual_display_request(
         return Err(VirtualDisplayRequestError::RefreshRate);
     }
     Ok(())
+}
+
+pub fn send_virtual_display_request(
+    request: VirtualDisplayRequest,
+) -> Result<(), VirtualDisplayControlError> {
+    let wire = encode_virtual_display_request(request)
+        .map_err(VirtualDisplayControlError::Request)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::send_virtual_display_request(&wire)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = wire;
+        Err(VirtualDisplayControlError::WindowsRequired)
+    }
 }
 
 pub fn encode_virtual_display_request(
@@ -381,6 +407,15 @@ mod tests {
                 ..valid()
             }),
             Err(PlatformError::WindowsRequired)
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn non_windows_control_path_fails_closed() {
+        assert_eq!(
+            send_virtual_display_request(valid()),
+            Err(VirtualDisplayControlError::WindowsRequired)
         );
     }
 
