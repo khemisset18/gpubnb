@@ -224,6 +224,11 @@ mod windows_impl {
     type Handle = isize;
 
     const INVALID_HANDLE_VALUE: Handle = -1;
+    const GENERIC_READ: u32 = 0x8000_0000;
+    const GENERIC_WRITE: u32 = 0x4000_0000;
+    const OPEN_EXISTING: u32 = 3;
+    const SECURITY_SQOS_PRESENT: u32 = 0x0010_0000;
+    const SECURITY_IDENTIFICATION: u32 = 0x0001_0000;
     const TOKEN_QUERY: u32 = 0x0008;
     const TOKEN_USER_CLASS: u32 = 1;
     const TOKEN_GROUPS_CLASS: u32 = 2;
