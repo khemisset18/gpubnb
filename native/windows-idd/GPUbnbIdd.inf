@@ -33,7 +33,7 @@ AddReg=GPUbnbIdd_HardwareSettings
 
 [GPUbnbIdd_HardwareSettings]
 HKR,,"UpperFilters",%REG_MULTI_SZ%,"IndirectKmd"
-HKR,,"Security",,%REG_SZ%,"D:P(A;;GA;;;SY)(A;;GA;;;BA)"
+HKR,,Security,,"D:P(A;;GA;;;SY)(A;;GA;;;BA)"
 HKR,"WUDF","DeviceGroupId",%REG_SZ%,"GPUbnbVirtualDisplay-UMDF-v1"
 
 [GPUbnbIdd_Install.NT.Services]
