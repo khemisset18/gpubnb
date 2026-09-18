@@ -3,5 +3,12 @@
 version = 4
 
 [[package]]
+name = "gpubnb-windows-platform"
+version = "0.1.0"
+
+[[package]]
 name = "gpubnb-windows-stream-helper"
 version = "0.1.0"
+dependencies = [
+ "gpubnb-windows-platform",
+]
