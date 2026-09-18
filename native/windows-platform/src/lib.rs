@@ -27,6 +27,8 @@ pub enum PlatformError {
     VolumeInfoFailed,
     NonFixedVolume,
     ReparsePoint,
+    AuthenticodeNotTrusted,
+    AuthenticodeStateCloseFailed,
 }
 
 pub struct VerifiedApplicationFile {
@@ -38,6 +40,18 @@ pub struct VerifiedApplicationFile {
 impl VerifiedApplicationFile {
     pub const fn evidence(&self) -> ApplicationFileEvidence {
         self.evidence
+    }
+
+    pub fn verify_authenticode(&self, path: &Path) -> Result<(), PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::verify_authenticode(path, &self._handle)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = path;
+            Err(PlatformError::WindowsRequired)
+        }
     }
 }
 
@@ -66,6 +80,7 @@ mod windows_impl {
     type Handle = isize;
 
     const INVALID_HANDLE_VALUE: Handle = -1;
+    const GENERIC_READ: u32 = 0x8000_0000;
     const FILE_READ_ATTRIBUTES: u32 = 0x0080;
     const FILE_SHARE_READ: u32 = 0x0000_0001;
     const OPEN_EXISTING: u32 = 3;
@@ -74,6 +89,20 @@ mod windows_impl {
     const FILE_ID_INFO_CLASS: i32 = 0x12;
     const FILE_ATTRIBUTE_TAG_INFO_CLASS: i32 = 0x09;
     const DRIVE_FIXED: u32 = 3;
+
+    const WTD_UI_NONE: u32 = 2;
+    const WTD_REVOKE_WHOLECHAIN: u32 = 1;
+    const WTD_CHOICE_FILE: u32 = 1;
+    const WTD_STATEACTION_VERIFY: u32 = 1;
+    const WTD_STATEACTION_CLOSE: u32 = 2;
+    const WTD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT: u32 = 0x80;
+
+    const WINTRUST_ACTION_GENERIC_VERIFY_V2: Guid = Guid {
+        data1: 0x00AAC56B,
+        data2: 0xCD44,
+        data3: 0x11D0,
+        data4: [0x8C, 0xC2, 0x00, 0xC0, 0x4F, 0xC2, 0x95, 0xEE],
+    };
 
     #[repr(C)]
     struct FileId128 {
@@ -90,6 +119,39 @@ mod windows_impl {
     struct FileAttributeTagInfo {
         file_attributes: u32,
         reparse_tag: u32,
+    }
+
+    #[repr(C)]
+    struct Guid {
+        data1: u32,
+        data2: u16,
+        data3: u16,
+        data4: [u8; 8],
+    }
+
+    #[repr(C)]
+    struct WintrustFileInfo {
+        cb_struct: u32,
+        pcwsz_file_path: *const u16,
+        h_file: Handle,
+        pg_known_subject: *mut Guid,
+    }
+
+    #[repr(C)]
+    struct WintrustData {
+        cb_struct: u32,
+        p_policy_callback_data: *mut c_void,
+        p_sip_client_data: *mut c_void,
+        dw_ui_choice: u32,
+        fdw_revocation_checks: u32,
+        dw_union_choice: u32,
+        p_file: *mut WintrustFileInfo,
+        dw_state_action: u32,
+        h_wvt_state_data: Handle,
+        pwsz_url_reference: *mut u16,
+        dw_prov_flags: u32,
+        dw_ui_context: u32,
+        p_signature_settings: *mut c_void,
     }
 
     #[link(name = "kernel32")]
@@ -116,6 +178,11 @@ mod windows_impl {
         ) -> i32;
         fn GetDriveTypeW(root_path_name: *const u16) -> u32;
         fn CloseHandle(object: Handle) -> i32;
+    }
+
+    #[link(name = "wintrust")]
+    unsafe extern "system" {
+        fn WinVerifyTrust(hwnd: Handle, action_id: *const Guid, trust_data: *mut c_void) -> i32;
     }
 
     pub(super) struct OwnedHandle(Handle);
@@ -177,6 +244,65 @@ mod windows_impl {
         Ok(drive_type == DRIVE_FIXED)
     }
 
+    pub(super) fn verify_authenticode(
+        path: &Path,
+        handle: &OwnedHandle,
+    ) -> Result<(), PlatformError> {
+        if !path.is_absolute() {
+            return Err(PlatformError::InvalidPath);
+        }
+        let path_wide = wide(path.as_os_str())?;
+        let mut file_info = WintrustFileInfo {
+            cb_struct: size_of::<WintrustFileInfo>() as u32,
+            pcwsz_file_path: path_wide.as_ptr(),
+            h_file: handle.0,
+            pg_known_subject: std::ptr::null_mut(),
+        };
+        let mut trust = WintrustData {
+            cb_struct: size_of::<WintrustData>() as u32,
+            p_policy_callback_data: std::ptr::null_mut(),
+            p_sip_client_data: std::ptr::null_mut(),
+            dw_ui_choice: WTD_UI_NONE,
+            fdw_revocation_checks: WTD_REVOKE_WHOLECHAIN,
+            dw_union_choice: WTD_CHOICE_FILE,
+            p_file: &mut file_info,
+            dw_state_action: WTD_STATEACTION_VERIFY,
+            h_wvt_state_data: 0,
+            pwsz_url_reference: std::ptr::null_mut(),
+            dw_prov_flags: WTD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT,
+            dw_ui_context: 0,
+            p_signature_settings: std::ptr::null_mut(),
+        };
+
+        // SAFETY: all WinTrust pointers reference live stack/path storage for the
+        // duration of the call, and handle is the retained verification handle.
+        let verify_status = unsafe {
+            WinVerifyTrust(
+                0,
+                &WINTRUST_ACTION_GENERIC_VERIFY_V2,
+                (&mut trust as *mut WintrustData).cast::<c_void>(),
+            )
+        };
+
+        trust.dw_state_action = WTD_STATEACTION_CLOSE;
+        // SAFETY: the structure is the same WinTrust state created by the verify
+        // call above. Microsoft requires a CLOSE call for every VERIFY action.
+        let close_status = unsafe {
+            WinVerifyTrust(
+                0,
+                &WINTRUST_ACTION_GENERIC_VERIFY_V2,
+                (&mut trust as *mut WintrustData).cast::<c_void>(),
+            )
+        };
+        if close_status != 0 {
+            return Err(PlatformError::AuthenticodeStateCloseFailed);
+        }
+        if verify_status != 0 {
+            return Err(PlatformError::AuthenticodeNotTrusted);
+        }
+        Ok(())
+    }
+
     pub(super) fn open_application_for_verification(
         path: &Path,
     ) -> Result<VerifiedApplicationFile, PlatformError> {
@@ -196,7 +322,7 @@ mod windows_impl {
         let raw = unsafe {
             CreateFileW(
                 path_wide.as_ptr(),
-                FILE_READ_ATTRIBUTES,
+                GENERIC_READ | FILE_READ_ATTRIBUTES,
                 FILE_SHARE_READ,
                 std::ptr::null_mut(),
                 OPEN_EXISTING,
@@ -234,6 +360,16 @@ mod windows_impl {
         use super::*;
 
         #[test]
+        fn unsigned_cargo_test_binary_fails_authenticode_closed() {
+            let exe = std::env::current_exe().expect("current exe");
+            let opened = open_application_for_verification(&exe).expect("open current exe");
+            assert_eq!(
+                opened.verify_authenticode(&exe),
+                Err(PlatformError::AuthenticodeNotTrusted)
+            );
+        }
+
+        #[test]
         fn current_executable_has_stable_identity_on_fixed_runner_volume() {
             let exe = std::env::current_exe().expect("current exe");
             let opened = open_application_for_verification(&exe).expect("open current exe");
@@ -254,6 +390,21 @@ mod non_windows_tests {
         assert_eq!(
             open_application_for_verification(Path::new("/tmp/app.exe")).err(),
             Some(PlatformError::WindowsRequired)
+        );
+
+        let fake = VerifiedApplicationFile {
+            evidence: ApplicationFileEvidence {
+                identity: FileIdentity {
+                    volume_serial: 1,
+                    file_id: [1; 16],
+                },
+                fixed_local_volume: true,
+                final_component_reparse_point: false,
+            },
+        };
+        assert_eq!(
+            fake.verify_authenticode(Path::new("/tmp/app.exe")),
+            Err(PlatformError::WindowsRequired)
         );
     }
 }
