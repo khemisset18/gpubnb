@@ -9,8 +9,10 @@ use crate::PlatformError;
 const MAX_SESSION_ID: usize = 128;
 const MAX_SID_TEXT: usize = 184;
 const RENTER_PIPE_ACCESS_MASK: u32 = 0x0012_019B;
+#[cfg(target_os = "windows")]
 const PIPE_AUTH_PRELUDE: u8 = 0x47;
 pub const WORKER_PIPE_FRAME_MAX: usize = 512;
+#[cfg(target_os = "windows")]
 const WORKER_PIPE_PACKET_SIZE: usize = WORKER_PIPE_FRAME_MAX + 2;
 
 fn safe_session_id(value: &str) -> bool {
