@@ -14,6 +14,62 @@ pub enum VirtualDisplayOperation {
     ValidateOnly = 3,
 }
 
+pub struct VirtualDisplayLease {
+    request: VirtualDisplayRequest,
+    #[cfg(target_os = "windows")]
+    handle: windows_impl::OwnedControlHandle,
+    active: bool,
+}
+
+impl VirtualDisplayLease {
+    pub const fn request(&self) -> VirtualDisplayRequest {
+        self.request
+    }
+
+    pub fn close(mut self) -> Result<(), PlatformError> {
+        if !self.active {
+            return Ok(());
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let unplug = VirtualDisplayRequest {
+                operation: VirtualDisplayOperation::UnplugMonitor,
+                ..self.request
+            };
+            let wire = encode_virtual_display_request(unplug)
+                .map_err(|_| PlatformError::IddControlFailed)?;
+            windows_impl::send_control(&self.handle, &wire)?;
+            self.active = false;
+            Ok(())
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err(PlatformError::WindowsRequired)
+        }
+    }
+}
+
+impl Drop for VirtualDisplayLease {
+    fn drop(&mut self) {
+        if !self.active {
+            return;
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let unplug = VirtualDisplayRequest {
+                operation: VirtualDisplayOperation::UnplugMonitor,
+                ..self.request
+            };
+            if let Ok(wire) = encode_virtual_display_request(unplug) {
+                let _ = windows_impl::send_control(&self.handle, &wire);
+            }
+            // Even if the explicit unplug fails, dropping the retained control
+            // handle triggers the driver's owner-file cleanup backstop.
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VirtualDisplayRequest {
     pub operation: VirtualDisplayOperation,
@@ -172,9 +228,9 @@ mod windows_impl {
         fn CloseHandle(object: Handle) -> i32;
     }
 
-    struct OwnedHandle(Handle);
+    pub(super) struct OwnedControlHandle(Handle);
 
-    impl Drop for OwnedHandle {
+    impl Drop for OwnedControlHandle {
         fn drop(&mut self) {
             // SAFETY: this wrapper uniquely owns a CreateFileW device handle.
             unsafe {
@@ -265,9 +321,7 @@ mod windows_impl {
         Ok(encoded)
     }
 
-    pub(super) fn send_validate_only(
-        wire: &[u8; IDD_CONTROL_REQUEST_SIZE],
-    ) -> Result<(), PlatformError> {
+    pub(super) fn open_control() -> Result<OwnedControlHandle, PlatformError> {
         let interface = discover_single_interface()?;
         let wide_interface = wide(OsStr::new(&interface))?;
 
@@ -287,11 +341,16 @@ mod windows_impl {
         if raw == INVALID_HANDLE_VALUE {
             return Err(PlatformError::IddControlOpenFailed);
         }
-        let handle = OwnedHandle(raw);
+        Ok(OwnedControlHandle(raw))
+    }
 
+    pub(super) fn send_control(
+        handle: &OwnedControlHandle,
+        wire: &[u8; IDD_CONTROL_REQUEST_SIZE],
+    ) -> Result<(), PlatformError> {
         let mut bytes_returned = 0u32;
         // SAFETY: wire is an exact fixed-size input buffer and the IOCTL has no
-        // output payload. The call is synchronous.
+        // output payload. The call is synchronous and handle remains live.
         let ok = unsafe {
             DeviceIoControl(
                 handle.0,
@@ -308,6 +367,13 @@ mod windows_impl {
             return Err(PlatformError::IddControlFailed);
         }
         Ok(())
+    }
+
+    pub(super) fn send_validate_only(
+        wire: &[u8; IDD_CONTROL_REQUEST_SIZE],
+    ) -> Result<(), PlatformError> {
+        let handle = open_control()?;
+        send_control(&handle, wire)
     }
 
     #[cfg(test)]
@@ -349,6 +415,32 @@ mod tests {
             height: 1080,
             refresh_hz: 60,
         }
+    }
+
+    #[test]
+    fn activation_requires_plug_operation() {
+        for operation in [
+            VirtualDisplayOperation::ValidateOnly,
+            VirtualDisplayOperation::UnplugMonitor,
+        ] {
+            assert_eq!(
+                activate_virtual_display_lease(VirtualDisplayRequest {
+                    operation,
+                    ..valid()
+                })
+                .err(),
+                Some(PlatformError::IddUnsafeOperation)
+            );
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn activation_fails_closed_off_windows() {
+        assert_eq!(
+            activate_virtual_display_lease(valid()).err(),
+            Some(PlatformError::WindowsRequired)
+        );
     }
 
     #[test]
