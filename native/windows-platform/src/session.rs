@@ -75,6 +75,22 @@ fn numeric_sid(value: &str) -> bool {
     fields >= 4
 }
 
+fn validate_exclusive_active_session(
+    renter_session_id: u32,
+    active_session_ids: &[u32],
+) -> Result<(), PlatformError> {
+    if !active_session_ids.contains(&renter_session_id) {
+        return Err(PlatformError::RenterSessionNotActive);
+    }
+    if active_session_ids
+        .iter()
+        .any(|session_id| *session_id != renter_session_id)
+    {
+        return Err(PlatformError::AnotherInteractiveSessionActive);
+    }
+    Ok(())
+}
+
 fn validate_renter_identity_policy(
     expected_renter_user_sid: &str,
     provider_user_sid: &str,
@@ -142,6 +158,7 @@ mod windows_impl {
     const TOKEN_PRIMARY: u32 = 1;
     const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
     const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+    const WTS_ACTIVE: u32 = 0;
 
     #[repr(C)]
     struct SidAndAttributes {
@@ -153,6 +170,13 @@ mod windows_impl {
     struct TokenUser {
         user: SidAndAttributes,
     }
+    #[repr(C)]
+    struct WtsSessionInfoW {
+        session_id: u32,
+        win_station_name: *mut u16,
+        state: u32,
+    }
+
 
     pub(super) struct OwnedToken(pub(super) Handle);
 
@@ -197,6 +221,14 @@ mod windows_impl {
     #[link(name = "wtsapi32")]
     unsafe extern "system" {
         fn WTSQueryUserToken(session_id: u32, token: *mut Handle) -> i32;
+        fn WTSEnumerateSessionsW(
+            server: Handle,
+            reserved: u32,
+            version: u32,
+            sessions: *mut *mut WtsSessionInfoW,
+            count: *mut u32,
+        ) -> i32;
+        fn WTSFreeMemory(memory: *mut c_void);
     }
 
     #[link(name = "userenv")]
@@ -364,6 +396,43 @@ mod windows_impl {
         Ok(session_id)
     }
 
+    fn active_session_ids() -> Result<Vec<u32>, PlatformError> {
+        let mut raw: *mut WtsSessionInfoW = ptr::null_mut();
+        let mut count = 0u32;
+        // SAFETY: raw/count are valid out pointers. A null server handle means the
+        // local machine, which is the only authority boundary GPUbnb supports.
+        let ok = unsafe { WTSEnumerateSessionsW(0, 0, 1, &mut raw, &mut count) };
+        if ok == 0 {
+            return Err(PlatformError::RenterTokenQueryFailed);
+        }
+
+        struct OwnedWtsMemory(*mut c_void);
+        impl Drop for OwnedWtsMemory {
+            fn drop(&mut self) {
+                if !self.0.is_null() {
+                    // SAFETY: memory came from WTSEnumerateSessionsW.
+                    unsafe { WTSFreeMemory(self.0) };
+                }
+            }
+        }
+
+        let _memory = OwnedWtsMemory(raw.cast::<c_void>());
+        if count == 0 {
+            return Ok(Vec::new());
+        }
+        if raw.is_null() || count > 1024 {
+            return Err(PlatformError::RenterTokenQueryFailed);
+        }
+
+        // SAFETY: WTSEnumerateSessionsW returned count contiguous entries.
+        let sessions = unsafe { std::slice::from_raw_parts(raw, count as usize) };
+        Ok(sessions
+            .iter()
+            .filter(|session| session.state == WTS_ACTIVE)
+            .map(|session| session.session_id)
+            .collect())
+    }
+
     pub(super) fn create_environment(
         token: &OwnedToken,
     ) -> Result<super::RenterEnvironment, PlatformError> {
@@ -383,6 +452,8 @@ mod windows_impl {
         session_id: u32,
         expected_renter_user_sid: &str,
     ) -> Result<RenterSessionToken, PlatformError> {
+        super::validate_exclusive_active_session(session_id, &active_session_ids()?)?;
+
         let mut raw = 0isize;
         // SAFETY: raw is a valid out pointer. WTSQueryUserToken requires the
         // privileged LocalSystem service context; lack of that privilege fails closed.
@@ -420,6 +491,23 @@ mod windows_impl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exclusive_session_policy_requires_only_the_renter_to_be_active() {
+        assert_eq!(validate_exclusive_active_session(42, &[42]), Ok(()));
+        assert_eq!(
+            validate_exclusive_active_session(42, &[]),
+            Err(PlatformError::RenterSessionNotActive)
+        );
+        assert_eq!(
+            validate_exclusive_active_session(42, &[7]),
+            Err(PlatformError::RenterSessionNotActive)
+        );
+        assert_eq!(
+            validate_exclusive_active_session(42, &[42, 7]),
+            Err(PlatformError::AnotherInteractiveSessionActive)
+        );
+    }
 
     #[test]
     fn renter_identity_policy_rejects_provider_system_and_malformed_sids() {
