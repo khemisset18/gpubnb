@@ -291,6 +291,71 @@ mod tests {
         assert!(output.contains("worker_pipe_connect_failed"));
     }
 
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_round_trip_proves_pipe_and_application_fencing() {
+        use gpubnb_windows_platform::pipe::{
+            create_worker_pipe, current_process_logon_sid, current_process_user_sid,
+        };
+        use gpubnb_windows_stream_helper::worker_protocol::{
+            WorkerFence, decode_and_validate_worker_hello,
+        };
+
+        let service_sid = current_process_user_sid().expect("service SID");
+        let logon_sid = current_process_logon_sid().expect("logon SID");
+        let windows_session_id = current_process_session_id().expect("WTS session");
+        let generation = 77u64;
+        let session_id = "ci-worker-roundtrip";
+        let expected_pid = std::process::id();
+
+        let pipe = create_worker_pipe(
+            session_id,
+            generation,
+            &service_sid,
+            &logon_sid,
+        )
+        .expect("secure worker pipe");
+
+        let gpu = GPU.to_owned();
+        let client = std::thread::spawn(move || {
+            let client =
+                connect_worker_pipe_client(session_id, generation, PIPE_TIMEOUT_MS)
+                    .expect("connect worker pipe");
+            let hello = WorkerHello {
+                protocol_version: WORKER_PROTOCOL_VERSION,
+                session_id,
+                gpu_uuid: &gpu,
+                workspace: WorkspaceKind::CloudDesktop,
+                generation,
+                windows_session_id,
+                worker_pid: std::process::id(),
+            };
+            let frame = encode_worker_hello(hello).expect("encode worker hello");
+            client.send_frame(&frame).expect("send worker hello");
+        });
+
+        let peer = pipe
+            .accept_verified_client(&logon_sid, expected_pid, PIPE_TIMEOUT_MS)
+            .expect("verify pipe peer");
+        assert_eq!(peer.process_id, expected_pid);
+
+        let frame = pipe.read_frame(PIPE_TIMEOUT_MS).expect("read worker hello");
+        let expected = WorkerFence {
+            session_id,
+            gpu_uuid: GPU,
+            workspace: WorkspaceKind::CloudDesktop,
+            generation,
+            windows_session_id,
+            worker_pid: expected_pid,
+        };
+        let hello =
+            decode_and_validate_worker_hello(expected, &frame).expect("validate worker hello");
+        assert_eq!(hello.worker_pid, expected_pid);
+        assert_eq!(hello.windows_session_id, windows_session_id);
+
+        client.join().expect("client thread");
+    }
+
     #[test]
     fn bootstrap_worker_never_reports_success_off_windows() {
         #[cfg(not(target_os = "windows"))]
