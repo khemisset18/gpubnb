@@ -13,8 +13,9 @@ use crate::graphics_proof::{
 use crate::lifecycle::WorkspaceKind;
 use crate::worker_protocol::{
     decode_and_validate_worker_hello, decode_worker_media_proof, encode_worker_command,
-    encode_worker_display_spec, validate_worker_media_proof, WorkerCommand, WorkerCommandFrame,
-    WorkerDisplaySpec, WorkerFence, WORKER_PROTOCOL_VERSION,
+    encode_worker_display_spec, encode_worker_input, validate_worker_media_proof, WorkerCommand,
+    WorkerCommandFrame, WorkerDisplaySpec, WorkerFence, WorkerInputEvent, WorkerInputFrame,
+    WORKER_PROTOCOL_VERSION,
 };
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
 use gpubnb_windows_platform::idd_control::{
@@ -104,6 +105,38 @@ impl QualifiedGraphicsRuntime {
 
     pub const fn media_ready(&self) -> bool {
         matches!(self.media_state, RuntimeMediaState::Ready)
+    }
+
+    pub fn inject_input(&mut self, event: WorkerInputEvent) -> Result<(), ServiceRuntimeError> {
+        if !matches!(self.media_state, RuntimeMediaState::Ready) {
+            return Err(ServiceRuntimeError::WorkerProtocol);
+        }
+        let sequence = self.next_sequence;
+        let next_sequence = sequence
+            .checked_add(1)
+            .ok_or(ServiceRuntimeError::WorkerProtocol)?;
+        let command = encode_worker_command(WorkerCommandFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            command: WorkerCommand::InjectInput,
+            generation: self.generation,
+            sequence,
+        })
+        .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
+        let input = encode_worker_input(WorkerInputFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            generation: self.generation,
+            command_sequence: sequence,
+            windows_session_id: self.windows_session_id,
+            event,
+        })
+        .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
+
+        if self.pipe.send_frame(&command).is_err() || self.pipe.send_frame(&input).is_err() {
+            self.media_state = RuntimeMediaState::Failed;
+            return Err(ServiceRuntimeError::WorkerProtocol);
+        }
+        self.next_sequence = next_sequence;
+        Ok(())
     }
 
     pub fn suspend_media(&mut self) -> Result<(), ServiceRuntimeError> {
