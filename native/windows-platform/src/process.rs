@@ -301,10 +301,7 @@ pub fn launch_renter_worker(
     worker.assign_to_job(&job)?;
     worker.resume()?;
 
-    Ok(RenterWorkerProcess {
-        _job: job,
-        worker,
-    })
+    Ok(RenterWorkerProcess { _job: job, worker })
 }
 
 fn spawn_suspended_current_user_validation(
