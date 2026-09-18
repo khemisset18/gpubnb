@@ -1,5 +1,8 @@
 #include "Driver.h"
 
+EXTERN_C const GUID GUID_DEVINTERFACE_GPUBNB_IDD_CONTROL =
+{ 0x3f4c6f31, 0x4e7c, 0x4de7, { 0x9f, 0xd8, 0x72, 0x18, 0xb3, 0x88, 0x1a, 0x55 } };
+
 static NTSTATUS GPUbnbValidateControlRequest(
     _In_ const GPUbnbIddControlRequest* request)
 {
@@ -109,6 +112,15 @@ NTSTATUS GPUbnbDeviceAdd(
     }
 
     status = IddCxDeviceInitialize(device);
+    if (!NT_SUCCESS(status))
+    {
+        return status;
+    }
+
+    status = WdfDeviceCreateDeviceInterface(
+        device,
+        &GUID_DEVINTERFACE_GPUBNB_IDD_CONTROL,
+        nullptr);
     if (!NT_SUCCESS(status))
     {
         return status;
