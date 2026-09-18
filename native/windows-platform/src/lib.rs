@@ -39,6 +39,8 @@ pub enum PlatformError {
     ReparsePoint,
     AuthenticodeNotTrusted,
     AuthenticodeStateCloseFailed,
+    SignerCertificateUnavailable,
+    SignerPolicyMismatch,
     InvalidSessionId,
     InvalidWindowsSessionId,
     RenterTokenQueryFailed,
@@ -106,14 +108,33 @@ impl VerifiedApplicationFile {
         self.evidence
     }
 
-    pub fn verify_authenticode(&self) -> Result<(), PlatformError> {
+    pub fn signer_sha256(&self) -> Result<[u8; 32], PlatformError> {
         #[cfg(target_os = "windows")]
         {
-            windows_impl::verify_authenticode(&self.path, &self._handle)
+            windows_impl::verify_authenticode_signer_sha256(&self.path, &self._handle)
         }
         #[cfg(not(target_os = "windows"))]
         {
             Err(PlatformError::WindowsRequired)
+        }
+    }
+
+    pub fn verify_authenticode(&self) -> Result<(), PlatformError> {
+        self.signer_sha256().map(|_| ())
+    }
+
+    pub fn verify_signer_allowed_sha256(
+        &self,
+        allowed_signers: &[[u8; 32]],
+    ) -> Result<[u8; 32], PlatformError> {
+        if allowed_signers.is_empty() {
+            return Err(PlatformError::SignerPolicyMismatch);
+        }
+        let signer = self.signer_sha256()?;
+        if allowed_signers.iter().any(|allowed| *allowed == signer) {
+            Ok(signer)
+        } else {
+            Err(PlatformError::SignerPolicyMismatch)
         }
     }
 }
@@ -154,6 +175,8 @@ mod windows_impl {
     const FILE_ID_INFO_CLASS: i32 = 0x12;
     const FILE_ATTRIBUTE_TAG_INFO_CLASS: i32 = 0x09;
     const DRIVE_FIXED: u32 = 3;
+    const LOAD_LIBRARY_SEARCH_SYSTEM32: u32 = 0x0000_0800;
+    const CERT_SHA256_HASH_PROP_ID: u32 = 107;
 
     const WTD_UI_NONE: u32 = 2;
     const WTD_REVOKE_WHOLECHAIN: u32 = 1;
@@ -184,6 +207,12 @@ mod windows_impl {
     struct FileAttributeTagInfo {
         file_attributes: u32,
         reparse_tag: u32,
+    }
+
+    #[repr(C)]
+    struct CryptProviderCertPrefix {
+        cb_struct: u32,
+        p_cert: *const c_void,
     }
 
     #[repr(C)]
@@ -242,12 +271,38 @@ mod windows_impl {
             buffer_length: u32,
         ) -> i32;
         fn GetDriveTypeW(root_path_name: *const u16) -> u32;
+        fn LoadLibraryExW(file_name: *const u16, file: isize, flags: u32) -> isize;
+        fn GetProcAddress(module: isize, name: *const i8) -> *mut c_void;
+        fn FreeLibrary(module: isize) -> i32;
         fn CloseHandle(object: Handle) -> i32;
     }
 
     #[link(name = "wintrust")]
     unsafe extern "system" {
         fn WinVerifyTrust(hwnd: Handle, action_id: *const Guid, trust_data: *mut c_void) -> i32;
+    }
+
+    #[link(name = "crypt32")]
+    unsafe extern "system" {
+        fn CertGetCertificateContextProperty(
+            cert_context: *const c_void,
+            prop_id: u32,
+            data: *mut c_void,
+            data_size: *mut u32,
+        ) -> i32;
+    }
+
+    struct OwnedModule(isize);
+
+    impl Drop for OwnedModule {
+        fn drop(&mut self) {
+            if self.0 != 0 {
+                // SAFETY: unique ownership of a module returned by LoadLibraryExW.
+                unsafe {
+                    let _ = FreeLibrary(self.0);
+                }
+            }
+        }
     }
 
     pub(super) struct OwnedHandle(Handle);
@@ -352,10 +407,88 @@ mod windows_impl {
         Ok(drive_type == DRIVE_FIXED)
     }
 
-    pub(super) fn verify_authenticode(
+    unsafe fn wintrust_symbol<T: Copy>(
+        module: isize,
+        name: &'static [u8],
+    ) -> Result<T, PlatformError> {
+        // SAFETY: module is live and name is a static NUL-terminated export name.
+        let address = unsafe { GetProcAddress(module, name.as_ptr().cast::<i8>()) };
+        if address.is_null() {
+            return Err(PlatformError::SignerCertificateUnavailable);
+        }
+        // SAFETY: caller supplies the documented function-pointer ABI for the symbol.
+        Ok(unsafe { std::mem::transmute_copy::<*mut c_void, T>(&address) })
+    }
+
+    fn signer_sha256_from_wintrust_state(state: Handle) -> Result<[u8; 32], PlatformError> {
+        if state == 0 {
+            return Err(PlatformError::SignerCertificateUnavailable);
+        }
+
+        let dll: Vec<u16> = "wintrust.dll".encode_utf16().chain(Some(0)).collect();
+        // SAFETY: dll is NUL-terminated and resolution is restricted to System32.
+        let raw = unsafe { LoadLibraryExW(dll.as_ptr(), 0, LOAD_LIBRARY_SEARCH_SYSTEM32) };
+        if raw == 0 {
+            return Err(PlatformError::SignerCertificateUnavailable);
+        }
+        let module = OwnedModule(raw);
+
+        type ProvData = unsafe extern "system" fn(Handle) -> *mut c_void;
+        type GetSigner =
+            unsafe extern "system" fn(*mut c_void, u32, i32, u32) -> *mut c_void;
+        type GetCert =
+            unsafe extern "system" fn(*mut c_void, u32) -> *mut CryptProviderCertPrefix;
+
+        // These WinTrust helper exports intentionally have no import library.
+        let prov_data: ProvData =
+            unsafe { wintrust_symbol(module.0, b"WTHelperProvDataFromStateData\0")? };
+        let get_signer: GetSigner =
+            unsafe { wintrust_symbol(module.0, b"WTHelperGetProvSignerFromChain\0")? };
+        let get_cert: GetCert =
+            unsafe { wintrust_symbol(module.0, b"WTHelperGetProvCertFromChain\0")? };
+
+        // SAFETY: state is the live WinVerifyTrust state for this verification.
+        let provider = unsafe { prov_data(state) };
+        if provider.is_null() {
+            return Err(PlatformError::SignerCertificateUnavailable);
+        }
+        // SAFETY: signer index zero requests the primary signer, not a countersigner.
+        let signer = unsafe { get_signer(provider, 0, 0, 0) };
+        if signer.is_null() {
+            return Err(PlatformError::SignerCertificateUnavailable);
+        }
+        // SAFETY: certificate index zero is the leaf signing certificate.
+        let cert = unsafe { get_cert(signer, 0) };
+        if cert.is_null() {
+            return Err(PlatformError::SignerCertificateUnavailable);
+        }
+        // SAFETY: the returned provider certificate is live until WinVerifyTrust CLOSE.
+        let cert_context = unsafe { (*cert).p_cert };
+        if cert_context.is_null() {
+            return Err(PlatformError::SignerCertificateUnavailable);
+        }
+
+        let mut hash = [0u8; 32];
+        let mut size = hash.len() as u32;
+        // SAFETY: hash is writable for exactly 32 bytes; cert_context is live.
+        let ok = unsafe {
+            CertGetCertificateContextProperty(
+                cert_context,
+                CERT_SHA256_HASH_PROP_ID,
+                hash.as_mut_ptr().cast::<c_void>(),
+                &mut size,
+            )
+        };
+        if ok == 0 || size != hash.len() as u32 {
+            return Err(PlatformError::SignerCertificateUnavailable);
+        }
+        Ok(hash)
+    }
+
+    pub(super) fn verify_authenticode_signer_sha256(
         path: &Path,
         handle: &OwnedHandle,
-    ) -> Result<(), PlatformError> {
+    ) -> Result<[u8; 32], PlatformError> {
         if !path.is_absolute() {
             return Err(PlatformError::InvalidPath);
         }
@@ -392,6 +525,12 @@ mod windows_impl {
             )
         };
 
+        let signer_result = if verify_status == 0 {
+            signer_sha256_from_wintrust_state(trust.h_wvt_state_data)
+        } else {
+            Err(PlatformError::AuthenticodeNotTrusted)
+        };
+
         trust.dw_state_action = WTD_STATEACTION_CLOSE;
         // SAFETY: the structure is the same WinTrust state created by the verify
         // call above. Microsoft requires a CLOSE call for every VERIFY action.
@@ -405,10 +544,7 @@ mod windows_impl {
         if close_status != 0 {
             return Err(PlatformError::AuthenticodeStateCloseFailed);
         }
-        if verify_status != 0 {
-            return Err(PlatformError::AuthenticodeNotTrusted);
-        }
-        Ok(())
+        signer_result
     }
 
     pub(super) fn open_application_for_verification(
