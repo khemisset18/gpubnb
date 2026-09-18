@@ -18,6 +18,8 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             "gpuUuid": "GPU-EXACT",
             "helperVersion": "0.2-test",
             "isolatedSession": True,
+            "virtualDisplay": True,
+            "providerDesktopExcluded": True,
             "captureReady": True,
             "hardwareEncoder": "nvenc",
             "mediaReady": True,
@@ -102,7 +104,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                 runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
 
     def test_launch_requires_isolated_session_and_input_boundary(self):
-        for field in ("isolatedSession", "captureReady", "mediaReady", "inputIsolation"):
+        for field in ("isolatedSession", "virtualDisplay", "providerDesktopExcluded", "captureReady", "mediaReady", "inputIsolation"):
             with self.subTest(field=field):
                 with (
                     patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
