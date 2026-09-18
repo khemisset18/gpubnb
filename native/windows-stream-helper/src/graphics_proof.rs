@@ -187,51 +187,58 @@ mod tests {
 
     #[test]
     fn cross_adapter_or_gpu_encode_is_rejected() {
-        let mut encode = encode();
-        encode.adapter_luid += 1;
+        let mut wrong_adapter = encode();
+        wrong_adapter.adapter_luid += 1;
         assert_eq!(
-            validate_graphics_proof_chain(7, 42, GPU, display(), capture(), &encode),
+            validate_graphics_proof_chain(7, 42, GPU, display(), capture(), &wrong_adapter),
             Err(GraphicsProofError::Adapter)
         );
 
-        let mut encode = encode();
-        encode.gpu_uuid = "GPU-11111111-1111-1111-1111-111111111111".to_owned();
+        let mut wrong_gpu = encode();
+        wrong_gpu.gpu_uuid = "GPU-11111111-1111-1111-1111-111111111111".to_owned();
         assert_eq!(
-            validate_graphics_proof_chain(7, 42, GPU, display(), capture(), &encode),
+            validate_graphics_proof_chain(7, 42, GPU, display(), capture(), &wrong_gpu),
             Err(GraphicsProofError::Gpu)
         );
     }
 
     #[test]
     fn stale_generation_or_wrong_wts_session_is_rejected() {
-        let mut display = display();
-        display.generation = 6;
+        let mut stale_display = display();
+        stale_display.generation = 6;
         assert_eq!(
-            validate_graphics_proof_chain(7, 42, GPU, display, capture(), &encode()),
+            validate_graphics_proof_chain(7, 42, GPU, stale_display, capture(), &encode()),
             Err(GraphicsProofError::Generation)
         );
 
-        let mut capture = capture();
-        capture.windows_session_id = 43;
+        let mut wrong_session_capture = capture();
+        wrong_session_capture.windows_session_id = 43;
         assert_eq!(
-            validate_graphics_proof_chain(7, 42, GPU, display(), capture, &encode()),
+            validate_graphics_proof_chain(
+                7,
+                42,
+                GPU,
+                display(),
+                wrong_session_capture,
+                &encode(),
+            ),
             Err(GraphicsProofError::WindowsSession)
         );
     }
 
     #[test]
     fn provider_desktop_and_empty_encode_fail_closed() {
-        let mut display = display();
-        display.provider_desktop_excluded = false;
+        let mut provider_display = display();
+        provider_display.provider_desktop_excluded = false;
         assert_eq!(
-            validate_graphics_proof_chain(7, 42, GPU, display, capture(), &encode()),
+            validate_graphics_proof_chain(7, 42, GPU, provider_display, capture(), &encode()),
             Err(GraphicsProofError::ProviderDesktop)
         );
 
-        let mut encode = encode();
-        encode.encoded_bytes = 0;
+        let mut empty_encode = encode();
+        empty_encode.encoded_bytes = 0;
         assert_eq!(
-            validate_graphics_proof_chain(7, 42, GPU, display(), capture(), &encode),
+            validate_graphics_proof_chain(7, 42, GPU, display(), capture(), &empty_encode),
             Err(GraphicsProofError::EncodedOutput)
         );
     }
