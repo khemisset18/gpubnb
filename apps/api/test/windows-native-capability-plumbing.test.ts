@@ -54,3 +54,22 @@ test('signed Windows native capability keeps availability and exact GPU proof co
   assert.match(server, /nativeDesktopStreamingAvailable!==true&&nativeUuid/);
   assert.match(server, /nativeDesktopStreamingGpuUuid:.*?nativeDesktopStreamingAvailable===true\?\(b\.nativeDesktopStreamingGpuUuid\?\?null\):null/);
 });
+
+
+test('positive Windows native proof must bind to an available NVIDIA GPU in the same signed accelerator inventory', async () => {
+  const server = await readFile(path.join(sourceRoot, 'server.ts'), 'utf8');
+  assert.match(server, /sanitizeAccelerators\(b\.telemetry\.accelerators\)/);
+  assert.match(server, /accelerator\.kind==='GPU'/);
+  assert.match(server, /accelerator\.available/);
+  assert.match(server, /accelerator\.vendor\.trim\(\)\.toLowerCase\(\)==='nvidia'/);
+  assert.match(server, /accelerator\.deviceId\.toLowerCase\(\)===nativeUuid\.toLowerCase\(\)/);
+  assert.match(server, /!nativeGpuPresent/);
+});
+
+test('Windows native proof UUID accepts only canonical physical NVIDIA GPU UUIDs', async () => {
+  const server = await readFile(path.join(sourceRoot, 'server.ts'), 'utf8');
+  assert.match(
+    server,
+    /nativeDesktopStreamingGpuUuid:z\.string\(\)\.trim\(\)\.regex\(\/\^GPU-\[0-9A-Fa-f\]\{8\}-/,
+  );
+});
