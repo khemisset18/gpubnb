@@ -42,6 +42,48 @@ impl WorkerError {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MediaState {
+    Empty,
+    DisplayPrepared,
+    Ready,
+    Suspended,
+}
+
+impl MediaState {
+    fn prepare(self) -> Result<Self, WorkerError> {
+        match self {
+            Self::Empty | Self::DisplayPrepared => Ok(Self::DisplayPrepared),
+            Self::Ready | Self::Suspended => Err(WorkerError::new("media_state_prepare_invalid", 21)),
+        }
+    }
+
+    fn capture(self) -> Result<Self, WorkerError> {
+        match self {
+            Self::DisplayPrepared | Self::Ready => Ok(Self::Ready),
+            Self::Empty => Err(WorkerError::new("display_not_prepared", 21)),
+            Self::Suspended => Err(WorkerError::new("media_suspended_requires_fresh_resume", 21)),
+        }
+    }
+
+    fn suspend(self) -> Result<Self, WorkerError> {
+        match self {
+            Self::Ready => Ok(Self::Suspended),
+            Self::Suspended => Err(WorkerError::new("media_already_suspended", 21)),
+            Self::Empty | Self::DisplayPrepared => Err(WorkerError::new("media_not_ready", 21)),
+        }
+    }
+
+    fn resume(self) -> Result<Self, WorkerError> {
+        match self {
+            Self::Suspended => Ok(Self::Ready),
+            Self::Empty | Self::DisplayPrepared | Self::Ready => {
+                Err(WorkerError::new("media_not_suspended", 21))
+            }
+        }
+    }
+}
+
 fn valid_session_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= MAX_SESSION_ID
@@ -167,7 +209,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
 
         let mut expected_sequence = 1u64;
         let mut display_spec = None;
-        let mut media_suspended = false;
+        let mut media_state = MediaState::Empty;
         loop {
             let frame = client
                 .read_frame(PIPE_TIMEOUT_MS)
@@ -185,6 +227,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
             match command {
                 WorkerCommand::Stop => return Ok(()),
                 WorkerCommand::PrepareDisplay => {
+                    let next_state = media_state.prepare()?;
                     let frame = client
                         .read_frame(PIPE_TIMEOUT_MS)
                         .map_err(|_| WorkerError::new("display_spec_read_failed", 21))?;
@@ -204,11 +247,10 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         return Err(WorkerError::new("display_gpu_luid_mismatch", 21));
                     }
                     display_spec = Some(spec);
+                    media_state = next_state;
                 }
                 WorkerCommand::StartCapture => {
-                    if media_suspended {
-                        return Err(WorkerError::new("media_suspended_requires_fresh_resume", 21));
-                    }
+                    let next_state = media_state.capture()?;
                     let spec = display_spec
                         .ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
 
@@ -247,20 +289,13 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                     client
                         .send_frame(&proof)
                         .map_err(|_| WorkerError::new("media_proof_send_failed", 21))?;
+                    media_state = next_state;
                 }
                 WorkerCommand::SuspendMedia => {
-                    if display_spec.is_none() {
-                        return Err(WorkerError::new("display_not_prepared", 21));
-                    }
-                    if media_suspended {
-                        return Err(WorkerError::new("media_already_suspended", 21));
-                    }
-                    media_suspended = true;
+                    media_state = media_state.suspend()?;
                 }
                 WorkerCommand::ResumeAfterFreshProof => {
-                    if !media_suspended {
-                        return Err(WorkerError::new("media_not_suspended", 21));
-                    }
+                    let next_state = media_state.resume()?;
                     let spec = display_spec
                         .ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
 
@@ -304,7 +339,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         .send_frame(&proof)
                         .map_err(|_| WorkerError::new("resume_media_proof_send_failed", 21))?;
 
-                    media_suspended = false;
+                    media_state = next_state;
                 }
             }
         }
@@ -432,6 +467,30 @@ mod tests {
         ] {
             assert!(parse_args(&args).is_err());
         }
+    }
+
+    #[test]
+    fn media_state_machine_rejects_out_of_order_and_requires_fresh_resume() {
+        assert_eq!(
+            MediaState::Empty.capture(),
+            Err(WorkerError::new("display_not_prepared", 21))
+        );
+        let prepared = MediaState::Empty.prepare().expect("prepare");
+        let ready = prepared.capture().expect("capture");
+        let suspended = ready.suspend().expect("suspend");
+        assert_eq!(
+            suspended.capture(),
+            Err(WorkerError::new("media_suspended_requires_fresh_resume", 21))
+        );
+        assert_eq!(
+            suspended.prepare(),
+            Err(WorkerError::new("media_state_prepare_invalid", 21))
+        );
+        assert_eq!(suspended.resume(), Ok(MediaState::Ready));
+        assert_eq!(
+            MediaState::Ready.resume(),
+            Err(WorkerError::new("media_not_suspended", 21))
+        );
     }
 
     #[test]
