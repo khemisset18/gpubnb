@@ -41,6 +41,7 @@ pub enum PlatformError {
     RenterTokenQueryFailed,
     RenterTokenSessionMismatch,
     RenterTokenNotPrimary,
+    EnvironmentCreateFailed,
     InvalidSid,
     SecurityDescriptorFailed,
     TokenQueryFailed,
