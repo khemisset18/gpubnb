@@ -8,6 +8,10 @@ use crate::PlatformError;
 pub const IDD_CONTROL_VERSION: u32 = 1;
 pub const IDD_CONTROL_REQUEST_SIZE: usize = 64;
 
+// Physical qualification gate mirrored from the UMDF driver. Both sides must
+// remain false until an explicitly promoted, physically qualified build.
+pub const IDD_MONITOR_MUTATION_ENABLED: bool = false;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum VirtualDisplayOperation {
@@ -136,6 +140,35 @@ pub fn encode_virtual_display_request(
     out[56..60].copy_from_slice(&request.refresh_hz.to_le_bytes());
     // 60..64 is reserved and intentionally remains zero.
     Ok(out)
+}
+
+pub fn activate_virtual_display_lease(
+    request: VirtualDisplayRequest,
+) -> Result<VirtualDisplayLease, PlatformError> {
+    if request.operation != VirtualDisplayOperation::PlugMonitor {
+        return Err(PlatformError::IddUnsafeOperation);
+    }
+    if !IDD_MONITOR_MUTATION_ENABLED {
+        return Err(PlatformError::IddUnsafeOperation);
+    }
+    let wire =
+        encode_virtual_display_request(request).map_err(|_| PlatformError::IddControlFailed)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let handle = windows_impl::open_control()?;
+        windows_impl::send_control(&handle, &wire)?;
+        Ok(VirtualDisplayLease {
+            request,
+            handle,
+            active: true,
+        })
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = wire;
+        Err(PlatformError::WindowsRequired)
+    }
 }
 
 pub fn probe_idd_control_contract(request: VirtualDisplayRequest) -> Result<(), PlatformError> {
@@ -436,12 +469,12 @@ mod tests {
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
     #[test]
-    fn activation_fails_closed_off_windows() {
+    fn activation_is_hard_disabled_before_physical_qualification() {
+        assert!(!IDD_MONITOR_MUTATION_ENABLED);
         assert_eq!(
             activate_virtual_display_lease(valid()).err(),
-            Some(PlatformError::WindowsRequired)
+            Some(PlatformError::IddUnsafeOperation)
         );
     }
 
