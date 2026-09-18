@@ -22,6 +22,36 @@ pub const MEDIA_REQUIRED_PROOFS: u32 = MEDIA_PROOF_EXACT_GPU
 
 const TRUSTED_MEDIA_DLL: &str = r"C:\Program Files\GPUbnb\GPUbnbWindowsMedia.dll";
 
+const TRUSTED_MEDIA_SIGNER_SHA256_HEX: Option<&str> =
+    option_env!("GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256");
+
+fn hex_nibble(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn trusted_media_signer() -> Result<[u8; 32], MediaProbeError> {
+    let value = TRUSTED_MEDIA_SIGNER_SHA256_HEX.ok_or(MediaProbeError::DllUntrusted)?;
+    if value.len() != 64 {
+        return Err(MediaProbeError::DllUntrusted);
+    }
+    let bytes = value.as_bytes();
+    let mut out = [0u8; 32];
+    for (index, slot) in out.iter_mut().enumerate() {
+        let high = hex_nibble(bytes[index * 2]).ok_or(MediaProbeError::DllUntrusted)?;
+        let low = hex_nibble(bytes[index * 2 + 1]).ok_or(MediaProbeError::DllUntrusted)?;
+        *slot = (high << 4) | low;
+    }
+    if out == [0; 32] {
+        return Err(MediaProbeError::DllUntrusted);
+    }
+    Ok(out)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MediaProbeRequest<'a> {
     pub gpu_uuid: &'a str,
