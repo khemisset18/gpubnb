@@ -11,6 +11,7 @@ struct GPUbnbDeviceContext
 {
     IDDCX_ADAPTER Adapter;
     IDDCX_MONITOR Monitor;
+    WDF_FILEOBJECT MonitorOwnerFile;
 };
 
 WDF_DECLARE_CONTEXT_TYPE(GPUbnbDeviceContext);
@@ -32,6 +33,7 @@ WDF_DECLARE_CONTEXT_TYPE(GPUbnbMonitorContext);
 extern "C" DRIVER_INITIALIZE DriverEntry;
 EVT_WDF_DRIVER_DEVICE_ADD GPUbnbDeviceAdd;
 EVT_WDF_DEVICE_D0_ENTRY GPUbnbDeviceD0Entry;
+EVT_WDF_FILE_CLEANUP GPUbnbFileCleanup;
 
 EVT_IDD_CX_ADAPTER_INIT_FINISHED GPUbnbAdapterInitFinished;
 EVT_IDD_CX_ADAPTER_COMMIT_MODES GPUbnbAdapterCommitModes;
