@@ -15,3 +15,6 @@ path = "src/main.rs"
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[target.'cfg(windows)'.dependencies]
+gpubnb-windows-platform = { path = "../windows-platform" }
