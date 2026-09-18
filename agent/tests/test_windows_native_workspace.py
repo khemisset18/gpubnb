@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from gpubnb_agent import windows_native_workspace as native
 
@@ -16,6 +16,8 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
             "helperVersion": "0.1-test",
             "gpuUuid": "GPU-EXACT",
             "isolatedSession": True,
+            "virtualDisplay": True,
+            "providerDesktopExcluded": True,
             "captureFrame": True,
             "hardwareEncoder": "nvenc",
             "mediaLoopback": True,
@@ -59,6 +61,35 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
         self.assertFalse(result.available)
         self.assertEqual(result.reason, "native_stream_helper_missing")
 
+    def test_helper_discovery_never_uses_path_lookup(self):
+        with (
+            patch.object(native, "_find_absolute_windows_file", return_value=None) as absolute_file,
+            patch.object(native.shutil, "which") as which,
+            patch.dict(native.os.environ, {}, clear=True),
+        ):
+            self.assertIsNone(native.find_stream_helper())
+        which.assert_not_called()
+        absolute_file.assert_called_once_with(native.WINDOWS_STREAM_HELPER_INSTALL_PATH)
+
+    def test_dev_helper_requires_explicit_opt_in(self):
+        dev = r"C:\\dev\\gpubnb-windows-stream.exe"
+        with (
+            patch.object(native, "_find_absolute_windows_file", side_effect=[None, dev]) as absolute_file,
+            patch.dict(
+                native.os.environ,
+                {
+                    native.WINDOWS_STREAM_HELPER_DEV_ALLOW_ENV: "1",
+                    native.WINDOWS_STREAM_HELPER_DEV_PATH_ENV: dev,
+                },
+                clear=True,
+            ),
+        ):
+            self.assertEqual(native.find_stream_helper(), dev)
+        self.assertEqual(
+            absolute_file.call_args_list,
+            [call(native.WINDOWS_STREAM_HELPER_INSTALL_PATH), call(dev)],
+        )
+
     def test_cuda_or_gpu_presence_cannot_replace_real_self_test(self):
         with (
             patch.object(native.platform, "system", return_value="Windows"),
@@ -75,7 +106,7 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
         self.assertEqual(result.reason, "native_stream_self_test_failed")
 
     def test_self_test_requires_isolated_session_capture_media_and_input(self):
-        for field in ("isolatedSession", "captureFrame", "mediaLoopback", "inputIsolation"):
+        for field in ("isolatedSession", "virtualDisplay", "providerDesktopExcluded", "captureFrame", "mediaLoopback", "inputIsolation"):
             with self.subTest(field=field):
                 with (
                     patch.object(native.platform, "system", return_value="Windows"),
