@@ -225,7 +225,7 @@ mod windows_impl {
                 fixed_local_volume: true,
                 final_component_reparse_point: false,
             },
-            handle,
+            _handle: handle,
         })
     }
 
