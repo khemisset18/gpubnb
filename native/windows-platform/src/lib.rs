@@ -55,6 +55,7 @@ pub enum PlatformError {
     PipeReadFailed,
     PipeProtocolFailed,
     PipeClientPidFailed,
+    PipeClientPidMismatch,
     PipeImpersonationFailed,
     PipeImpersonationLevelTooHigh,
     PipePeerSidMismatch,
