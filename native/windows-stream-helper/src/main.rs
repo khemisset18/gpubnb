@@ -1,0 +1,308 @@
+//! GPUbnb Windows-native stream helper authority boundary.
+//!
+//! This bootstrap binary is intentionally fail-closed. It implements the strict
+//! CLI/input contract and owns no capture/session resources yet. A future Windows
+//! backend may return success only after the IddCx virtual-display, DXGI capture,
+//! exact-GPU NVENC and input-isolation proofs required by the Agent all pass.
+
+use std::env;
+use std::process::ExitCode;
+
+const MAX_SESSION_ID: usize = 200;
+const MAX_GPU_UUID: usize = 200;
+const MAX_APPLICATION_PATH: usize = 1024;
+const WORKSPACES: [&str; 4] = ["cloud-desktop", "creator", "cad", "gaming"];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Command {
+    SelfTest,
+    Start {
+        session_id: String,
+        workspace: String,
+        gpu_uuid: String,
+        application: Option<String>,
+    },
+    Stop {
+        session_id: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CliError {
+    code: &'static str,
+    exit_code: u8,
+}
+
+impl CliError {
+    const fn new(code: &'static str, exit_code: u8) -> Self {
+        Self { code, exit_code }
+    }
+}
+
+fn validate_session_id(value: &str) -> Result<(), CliError> {
+    if value.is_empty()
+        || value.len() > MAX_SESSION_ID
+        || !value.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Err(CliError::new("invalid_session_id", 2));
+    }
+    Ok(())
+}
+
+fn validate_workspace(value: &str) -> Result<(), CliError> {
+    if WORKSPACES.contains(&value) {
+        Ok(())
+    } else {
+        Err(CliError::new("unsupported_workspace", 2))
+    }
+}
+
+fn validate_gpu_uuid(value: &str) -> Result<(), CliError> {
+    if value.len() < 5
+        || value.len() > MAX_GPU_UUID
+        || !value.starts_with("GPU-")
+        || value.chars().any(char::is_control)
+    {
+        return Err(CliError::new("invalid_gpu_uuid", 2));
+    }
+    Ok(())
+}
+
+fn validate_application(value: &str) -> Result<(), CliError> {
+    if value.is_empty()
+        || value.len() > MAX_APPLICATION_PATH
+        || value.chars().any(char::is_control)
+    {
+        return Err(CliError::new("invalid_application_path", 2));
+    }
+    Ok(())
+}
+
+fn take_value(args: &[String], index: &mut usize, name: &'static str) -> Result<String, CliError> {
+    *index += 1;
+    args.get(*index)
+        .cloned()
+        .ok_or_else(|| CliError::new(name, 2))
+}
+
+fn parse_start(args: &[String]) -> Result<Command, CliError> {
+    let mut json = false;
+    let mut session_id = None;
+    let mut workspace = None;
+    let mut gpu_uuid = None;
+    let mut application = None;
+    let mut i = 1;
+
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" if !json => json = true,
+            "--session-id" if session_id.is_none() => {
+                session_id = Some(take_value(args, &mut i, "missing_session_id")?);
+            }
+            "--workspace" if workspace.is_none() => {
+                workspace = Some(take_value(args, &mut i, "missing_workspace")?);
+            }
+            "--gpu-uuid" if gpu_uuid.is_none() => {
+                gpu_uuid = Some(take_value(args, &mut i, "missing_gpu_uuid")?);
+            }
+            "--application" if application.is_none() => {
+                application = Some(take_value(args, &mut i, "missing_application_path")?);
+            }
+            _ => return Err(CliError::new("unknown_or_duplicate_argument", 2)),
+        }
+        i += 1;
+    }
+
+    if !json {
+        return Err(CliError::new("json_required", 2));
+    }
+    let session_id = session_id.ok_or_else(|| CliError::new("missing_session_id", 2))?;
+    let workspace = workspace.ok_or_else(|| CliError::new("missing_workspace", 2))?;
+    let gpu_uuid = gpu_uuid.ok_or_else(|| CliError::new("missing_gpu_uuid", 2))?;
+
+    validate_session_id(&session_id)?;
+    validate_workspace(&workspace)?;
+    validate_gpu_uuid(&gpu_uuid)?;
+    if let Some(path) = application.as_deref() {
+        validate_application(path)?;
+    }
+
+    Ok(Command::Start {
+        session_id,
+        workspace,
+        gpu_uuid,
+        application,
+    })
+}
+
+fn parse_stop(args: &[String]) -> Result<Command, CliError> {
+    let mut json = false;
+    let mut session_id = None;
+    let mut i = 1;
+
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" if !json => json = true,
+            "--session-id" if session_id.is_none() => {
+                session_id = Some(take_value(args, &mut i, "missing_session_id")?);
+            }
+            _ => return Err(CliError::new("unknown_or_duplicate_argument", 2)),
+        }
+        i += 1;
+    }
+
+    if !json {
+        return Err(CliError::new("json_required", 2));
+    }
+    let session_id = session_id.ok_or_else(|| CliError::new("missing_session_id", 2))?;
+    validate_session_id(&session_id)?;
+    Ok(Command::Stop { session_id })
+}
+
+fn parse_args(args: &[String]) -> Result<Command, CliError> {
+    match args.first().map(String::as_str) {
+        Some("--self-test") if args.len() == 2 && args[1] == "--json" => Ok(Command::SelfTest),
+        Some("--self-test") => Err(CliError::new("invalid_self_test_arguments", 2)),
+        Some("--start") => parse_start(args),
+        Some("--stop") => parse_stop(args),
+        _ => Err(CliError::new("command_required", 2)),
+    }
+}
+
+fn execute(command: &Command) -> Result<(), CliError> {
+    match command {
+        Command::SelfTest => {
+            #[cfg(not(target_os = "windows"))]
+            {
+                Err(CliError::new("windows_required", 20))
+            }
+            #[cfg(target_os = "windows")]
+            {
+                Err(CliError::new("native_backend_not_implemented", 21))
+            }
+        }
+        Command::Start { .. } => Err(CliError::new("native_backend_not_implemented", 21)),
+        Command::Stop { .. } => Err(CliError::new("native_backend_not_implemented", 21)),
+    }
+}
+
+fn main() -> ExitCode {
+    let args: Vec<String> = env::args().skip(1).collect();
+    match parse_args(&args).and_then(|command| execute(&command)) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("error:{}", error.code);
+            ExitCode::from(error.exit_code)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn strings(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    #[test]
+    fn self_test_requires_exact_json_contract() {
+        assert_eq!(
+            parse_args(&strings(&["--self-test", "--json"])),
+            Ok(Command::SelfTest)
+        );
+        assert_eq!(
+            parse_args(&strings(&["--self-test"])),
+            Err(CliError::new("invalid_self_test_arguments", 2))
+        );
+    }
+
+    #[test]
+    fn start_accepts_only_supported_workspace_and_safe_ids() {
+        let command = parse_args(&strings(&[
+            "--start",
+            "--json",
+            "--session-id",
+            "sess-ABC_123",
+            "--workspace",
+            "creator",
+            "--gpu-uuid",
+            "GPU-EXACT",
+            "--application",
+            r"C:\Program Files\Blender Foundation\blender.exe",
+        ]))
+        .expect("valid contract");
+        assert!(matches!(command, Command::Start { workspace, .. } if workspace == "creator"));
+
+        let bad = parse_args(&strings(&[
+            "--start",
+            "--json",
+            "--session-id",
+            "../provider",
+            "--workspace",
+            "creator",
+            "--gpu-uuid",
+            "GPU-EXACT",
+        ]));
+        assert_eq!(bad, Err(CliError::new("invalid_session_id", 2)));
+    }
+
+    #[test]
+    fn start_rejects_unknown_workspace_and_duplicate_arguments() {
+        let unknown = parse_args(&strings(&[
+            "--start",
+            "--json",
+            "--session-id",
+            "sess-1",
+            "--workspace",
+            "developer",
+            "--gpu-uuid",
+            "GPU-EXACT",
+        ]));
+        assert_eq!(unknown, Err(CliError::new("unsupported_workspace", 2)));
+
+        let duplicate = parse_args(&strings(&[
+            "--start",
+            "--json",
+            "--json",
+            "--session-id",
+            "sess-1",
+            "--workspace",
+            "gaming",
+            "--gpu-uuid",
+            "GPU-EXACT",
+        ]));
+        assert_eq!(
+            duplicate,
+            Err(CliError::new("unknown_or_duplicate_argument", 2))
+        );
+    }
+
+    #[test]
+    fn stop_contract_is_strict() {
+        assert_eq!(
+            parse_args(&strings(&["--stop", "--json", "--session-id", "sess-1"])),
+            Ok(Command::Stop {
+                session_id: "sess-1".to_owned()
+            })
+        );
+        assert!(parse_args(&strings(&["--stop", "--session-id", "sess-1"])).is_err());
+    }
+
+    #[test]
+    fn bootstrap_backend_can_never_report_success() {
+        let commands = [
+            Command::SelfTest,
+            Command::Start {
+                session_id: "sess-1".to_owned(),
+                workspace: "cloud-desktop".to_owned(),
+                gpu_uuid: "GPU-EXACT".to_owned(),
+                application: None,
+            },
+            Command::Stop {
+                session_id: "sess-1".to_owned(),
+            },
+        ];
+        assert!(commands.iter().all(|command| execute(command).is_err()));
+    }
+}
