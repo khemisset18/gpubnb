@@ -111,6 +111,9 @@ impl QualifiedGraphicsRuntime {
             return Err(ServiceRuntimeError::WorkerProtocol);
         }
         let sequence = self.next_sequence;
+        let next_sequence = sequence
+            .checked_add(1)
+            .ok_or(ServiceRuntimeError::WorkerProtocol)?;
         let command = encode_worker_command(WorkerCommandFrame {
             protocol_version: WORKER_PROTOCOL_VERSION,
             command: WorkerCommand::SuspendMedia,
@@ -122,10 +125,7 @@ impl QualifiedGraphicsRuntime {
             self.media_state = RuntimeMediaState::Failed;
             return Err(ServiceRuntimeError::WorkerProtocol);
         }
-        self.next_sequence = self
-            .next_sequence
-            .checked_add(1)
-            .ok_or(ServiceRuntimeError::WorkerProtocol)?;
+        self.next_sequence = next_sequence;
         self.media_state = RuntimeMediaState::Suspended;
         Ok(())
     }
@@ -146,6 +146,9 @@ impl QualifiedGraphicsRuntime {
             self.media_state = RuntimeMediaState::Failed;
             return Err(ServiceRuntimeError::WorkerProtocol);
         }
+        // Once the command is on the pipe, the worker may already have consumed
+        // the sequence even if its proof later fails or the process disconnects.
+        self.next_sequence = next_sequence;
 
         let proof_frame = match self.pipe.read_frame(PIPE_TIMEOUT_MS) {
             Ok(frame) => frame,
@@ -213,10 +216,6 @@ impl QualifiedGraphicsRuntime {
             return Err(ServiceRuntimeError::GraphicsProof);
         }
 
-        self.next_sequence = self
-            .next_sequence
-            .checked_add(1)
-            .ok_or(ServiceRuntimeError::WorkerProtocol)?;
         self.media_state = RuntimeMediaState::Ready;
         Ok(())
     }
