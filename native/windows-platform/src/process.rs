@@ -378,10 +378,11 @@ fn spawn_suspended_as_renter(
 pub fn launch_qualified_renter_worker(
     token: &RenterSessionToken,
     verified_worker: &VerifiedApplicationFile,
+    allowed_signer_sha256: &[[u8; 32]],
     spec: RenterWorkerLaunchSpec<'_>,
 ) -> Result<RenterWorkerProcess, PlatformError> {
     validate_worker_launch_spec(spec)?;
-    verified_worker.verify_authenticode()?;
+    verified_worker.verify_signer_allowed_sha256(allowed_signer_sha256)?;
 
     let application = verified_worker.path();
     let current_directory = application.parent().ok_or(PlatformError::InvalidPath)?;
