@@ -10,9 +10,24 @@
 struct GPUbnbDeviceContext
 {
     IDDCX_ADAPTER Adapter;
+    IDDCX_MONITOR Monitor;
 };
 
 WDF_DECLARE_CONTEXT_TYPE(GPUbnbDeviceContext);
+
+struct GPUbnbMonitorContext
+{
+    WDFDEVICE Device;
+    UINT32 Width;
+    UINT32 Height;
+    UINT32 RefreshHz;
+    LUID RenderAdapterLuid;
+    UINT32 WindowsSessionId;
+    UINT64 Generation;
+    UCHAR DisplayNonce[GPUBNB_IDD_DISPLAY_NONCE_SIZE];
+};
+
+WDF_DECLARE_CONTEXT_TYPE(GPUbnbMonitorContext);
 
 extern "C" DRIVER_INITIALIZE DriverEntry;
 EVT_WDF_DRIVER_DEVICE_ADD GPUbnbDeviceAdd;
