@@ -95,6 +95,17 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
         self.assertEqual(run_command.call_count, 2)
         self.assertEqual(run_command.call_args_list[1].args[0][-2:], ["--session-id", "sess-1"])
 
+    def test_launch_rejects_cross_session_media_path_and_cleans_session(self):
+        start = self._start_report(mediaUrl="http://127.0.0.1:43123/session/sess-other")
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+            patch.object(runtime, "discover_native_application", return_value=None),
+            patch.object(runtime, "run_command", side_effect=[start, self._stop_report()]),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "native_workspace_start_loopback_media_required"):
+                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+
     def test_launch_requires_explicit_loopback_media_port(self):
         start = self._start_report(mediaUrl="http://127.0.0.1/session/sess-1")
         with (
