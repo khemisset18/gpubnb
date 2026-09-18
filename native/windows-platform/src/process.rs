@@ -252,7 +252,7 @@ mod tests {
     fn suspended_process_cannot_resume_before_job_assignment() {
         let shell = command_shell();
         let command = OsString::from(format!(
-            ""{}" /D /Q /C exit 0",
+            "\"{}\" /D /Q /C exit 0",
             shell.display()
         ));
         let mut worker =
@@ -266,7 +266,7 @@ mod tests {
         let job = create_worker_job().expect("worker job");
         let shell = command_shell();
         let command = OsString::from(format!(
-            ""{}" /D /Q /C exit 0",
+            "\"{}\" /D /Q /C exit 0",
             shell.display()
         ));
         let mut worker =
