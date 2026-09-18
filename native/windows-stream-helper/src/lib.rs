@@ -5,3 +5,5 @@
 //! obey before the CLI is ever allowed to report a ready renter session.
 
 pub mod lifecycle;
+
+pub mod worker_protocol;
