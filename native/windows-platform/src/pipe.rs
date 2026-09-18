@@ -281,7 +281,22 @@ mod windows_impl {
         Ok(OwnedToken(raw))
     }
 
-    fn token_information(token: Handle, class: u32) -> Result<Vec<u8>, PlatformError> {
+    struct TokenBuffer {
+        words: Vec<usize>,
+        byte_len: usize,
+    }
+
+    impl TokenBuffer {
+        fn as_ptr(&self) -> *const u8 {
+            self.words.as_ptr().cast::<u8>()
+        }
+
+        fn len(&self) -> usize {
+            self.byte_len
+        }
+    }
+
+    fn token_information(token: Handle, class: u32) -> Result<TokenBuffer, PlatformError> {
         let mut length = 0u32;
         // SAFETY: first call intentionally supplies a null output buffer to query
         // the required length.
@@ -294,21 +309,32 @@ mod windows_impl {
             return Err(PlatformError::TokenQueryFailed);
         }
 
-        let mut buffer = vec![0u8; length as usize];
-        // SAFETY: buffer has exactly the requested capacity and remains live for
-        // any SID pointers embedded inside the returned token structure.
+        // Token structures contain pointer-sized fields. Allocate in usize units
+        // so every cast below has at least pointer alignment; Vec<u8> is not enough.
+        let word = size_of::<usize>();
+        let words = (length as usize)
+            .checked_add(word - 1)
+            .ok_or(PlatformError::TokenQueryFailed)?
+            / word;
+        let mut buffer = TokenBuffer {
+            words: vec![0usize; words],
+            byte_len: length as usize,
+        };
+        // SAFETY: the allocation is pointer-aligned and has at least length bytes.
+        // It stays live while any SID pointer embedded in it is inspected.
         let ok = unsafe {
             GetTokenInformation(
                 token,
                 class,
-                buffer.as_mut_ptr().cast::<c_void>(),
+                buffer.words.as_mut_ptr().cast::<c_void>(),
                 length,
                 &mut length,
             )
         };
-        if ok == 0 {
+        if ok == 0 || length as usize > buffer.words.len() * word {
             return Err(PlatformError::TokenQueryFailed);
         }
+        buffer.byte_len = length as usize;
         Ok(buffer)
     }
 
