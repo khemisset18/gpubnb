@@ -5,12 +5,15 @@
 //! graphical backend remains deliberately fail-closed until virtual display,
 //! DXGI capture, exact-GPU NVENC and isolated input are implemented.
 
+use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
+use gpubnb_windows_platform::media::{MediaProbeRequest, probe_media_frame};
 use gpubnb_windows_platform::pipe::connect_worker_pipe_client;
 use gpubnb_windows_platform::session::current_process_session_id;
 use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
 use gpubnb_windows_stream_helper::worker_protocol::{
-    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerHello, decode_worker_command,
-    encode_worker_hello, validate_worker_command,
+    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerHello, WorkerMediaProof,
+    decode_worker_command, decode_worker_display_spec, encode_worker_hello,
+    encode_worker_media_proof, validate_worker_command, validate_worker_display_spec,
 };
 use std::env;
 use std::process::ExitCode;
@@ -163,26 +166,87 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
             .map_err(|_| WorkerError::new("worker_hello_send_failed", 21))?;
 
         let mut expected_sequence = 1u64;
+        let mut display_spec = None;
         loop {
             let frame = client
                 .read_frame(PIPE_TIMEOUT_MS)
                 .map_err(|_| WorkerError::new("worker_command_read_failed", 21))?;
-            let command = decode_worker_command(&frame)
+            let command_frame = decode_worker_command(&frame)
                 .map_err(|_| WorkerError::new("worker_command_invalid", 21))?;
-            let command = validate_worker_command(args.generation, expected_sequence, command)
-                .map_err(|_| WorkerError::new("worker_command_fence_failed", 21))?;
+            let command =
+                validate_worker_command(args.generation, expected_sequence, command_frame)
+                    .map_err(|_| WorkerError::new("worker_command_fence_failed", 21))?;
+            let command_sequence = command_frame.sequence;
             expected_sequence = expected_sequence
                 .checked_add(1)
                 .ok_or_else(|| WorkerError::new("worker_command_sequence_exhausted", 21))?;
 
             match command {
                 WorkerCommand::Stop => return Ok(()),
-                WorkerCommand::PrepareDisplay
-                | WorkerCommand::StartCapture
-                | WorkerCommand::SuspendMedia
-                | WorkerCommand::ResumeAfterFreshProof => {
+                WorkerCommand::PrepareDisplay => {
+                    let frame = client
+                        .read_frame(PIPE_TIMEOUT_MS)
+                        .map_err(|_| WorkerError::new("display_spec_read_failed", 21))?;
+                    let spec = decode_worker_display_spec(&frame)
+                        .map_err(|_| WorkerError::new("display_spec_invalid", 21))?;
+                    validate_worker_display_spec(
+                        args.generation,
+                        command_sequence,
+                        windows_session_id,
+                        spec,
+                    )
+                    .map_err(|_| WorkerError::new("display_spec_fence_failed", 21))?;
+
+                    let identity = resolve_nvidia_uuid_to_luid(&args.gpu_uuid)
+                        .map_err(|_| WorkerError::new("exact_gpu_mapping_failed", 21))?;
+                    if identity.luid != spec.adapter_luid {
+                        return Err(WorkerError::new("display_gpu_luid_mismatch", 21));
+                    }
+                    display_spec = Some(spec);
+                }
+                WorkerCommand::StartCapture => {
+                    let spec = display_spec
+                        .ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
+
+                    let identity = resolve_nvidia_uuid_to_luid(&args.gpu_uuid)
+                        .map_err(|_| WorkerError::new("exact_gpu_mapping_failed", 21))?;
+                    if identity.luid != spec.adapter_luid {
+                        return Err(WorkerError::new("capture_gpu_luid_mismatch", 21));
+                    }
+
+                    let media = probe_media_frame(MediaProbeRequest {
+                        gpu_uuid: &args.gpu_uuid,
+                        adapter_luid: spec.adapter_luid,
+                        display_nonce: spec.display_nonce,
+                        width: spec.width,
+                        height: spec.height,
+                        refresh_hz: spec.refresh_hz,
+                        capture_timeout_ms: PIPE_TIMEOUT_MS,
+                    })
+                    .map_err(|_| WorkerError::new("media_frame_proof_failed", 21))?;
+
+                    let proof = encode_worker_media_proof(WorkerMediaProof {
+                        protocol_version: WORKER_PROTOCOL_VERSION,
+                        generation: args.generation,
+                        command_sequence,
+                        windows_session_id,
+                        adapter_luid: media.adapter_luid,
+                        display_nonce: spec.display_nonce,
+                        width: media.width,
+                        height: media.height,
+                        refresh_hz: media.refresh_hz,
+                        frame_sequence: media.frame_sequence,
+                        encoded_bytes: media.encoded_bytes,
+                        proof_flags: media.proof_flags,
+                    })
+                    .map_err(|_| WorkerError::new("media_proof_encode_failed", 21))?;
+                    client
+                        .send_frame(&proof)
+                        .map_err(|_| WorkerError::new("media_proof_send_failed", 21))?;
+                }
+                WorkerCommand::SuspendMedia | WorkerCommand::ResumeAfterFreshProof => {
                     return Err(WorkerError::new(
-                        "native_worker_backend_not_implemented",
+                        "native_media_lifecycle_not_implemented",
                         21,
                     ));
                 }
