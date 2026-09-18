@@ -4,9 +4,9 @@
 //! It verifies the kernel ordering we will reuse for CreateProcessAsUser:
 //! create suspended -> assign Job Object -> resume.
 
-use crate::{PlatformError, VerifiedApplicationFile};
 use crate::job::{WorkerJob, create_worker_job};
 use crate::session::RenterSessionToken;
+use crate::{PlatformError, VerifiedApplicationFile};
 use std::ffi::{OsStr, OsString, c_void};
 use std::mem::{MaybeUninit, size_of};
 use std::os::windows::ffi::OsStrExt;
@@ -464,10 +464,22 @@ mod tests {
         assert_eq!(validate_worker_launch_spec(good), Ok(()));
 
         for bad in [
-            RenterWorkerLaunchSpec { session_id: "../provider", ..good },
-            RenterWorkerLaunchSpec { generation: 0, ..good },
-            RenterWorkerLaunchSpec { gpu_uuid: "GPU-EXACT", ..good },
-            RenterWorkerLaunchSpec { workspace: "developer", ..good },
+            RenterWorkerLaunchSpec {
+                session_id: "../provider",
+                ..good
+            },
+            RenterWorkerLaunchSpec {
+                generation: 0,
+                ..good
+            },
+            RenterWorkerLaunchSpec {
+                gpu_uuid: "GPU-EXACT",
+                ..good
+            },
+            RenterWorkerLaunchSpec {
+                workspace: "developer",
+                ..good
+            },
         ] {
             assert_eq!(
                 validate_worker_launch_spec(bad),
