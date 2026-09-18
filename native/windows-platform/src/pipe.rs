@@ -77,18 +77,27 @@ impl WorkerPipe {
     pub fn accept_verified_client(
         &self,
         expected_logon_sid: &str,
+        expected_process_id: u32,
         timeout_ms: u32,
     ) -> Result<VerifiedPipeClient, PlatformError> {
         if !numeric_sid(expected_logon_sid) || timeout_ms == 0 {
             return Err(PlatformError::InvalidSid);
         }
+        if expected_process_id == 0 {
+            return Err(PlatformError::PipeClientPidMismatch);
+        }
         #[cfg(target_os = "windows")]
         {
-            windows_impl::accept_verified_client(&self._handle, expected_logon_sid, timeout_ms)
+            windows_impl::accept_verified_client(
+                &self._handle,
+                expected_logon_sid,
+                expected_process_id,
+                timeout_ms,
+            )
         }
         #[cfg(not(target_os = "windows"))]
         {
-            let _ = timeout_ms;
+            let _ = (expected_process_id, timeout_ms);
             Err(PlatformError::WindowsRequired)
         }
     }
@@ -640,6 +649,7 @@ mod windows_impl {
     pub(super) fn accept_verified_client(
         pipe: &OwnedPipeHandle,
         expected_logon_sid: &str,
+        expected_process_id: u32,
         timeout_ms: u32,
     ) -> Result<VerifiedPipeClient, PlatformError> {
         connect_client(pipe.0, timeout_ms)?;
@@ -650,6 +660,9 @@ mod windows_impl {
         let pid_ok = unsafe { GetNamedPipeClientProcessId(pipe.0, &mut process_id) };
         if pid_ok == 0 || process_id == 0 {
             return Err(PlatformError::PipeClientPidFailed);
+        }
+        if process_id != expected_process_id {
+            return Err(PlatformError::PipeClientPidMismatch);
         }
 
         // SECURITY BOUNDARY: failure must abort. Continuing would execute under
@@ -887,11 +900,44 @@ mod tests {
         });
 
         let verified = pipe
-            .accept_verified_client(&logon_sid, 10_000)
+            .accept_verified_client(&logon_sid, std::process::id(), 10_000)
             .expect("verified pipe peer");
         let client_pid = pid_rx.recv().expect("client pid");
         assert_eq!(verified.process_id, client_pid);
         assert_eq!(verified.logon_sid, logon_sid);
+        release_tx.send(()).expect("release client");
+        client.join().expect("client thread");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_rejects_connected_client_with_wrong_process_id() {
+        let service_sid = current_process_user_sid().expect("service SID");
+        let logon_sid = current_process_logon_sid().expect("logon SID");
+        let pipe = create_worker_pipe(
+            "ci-peer-pid-mismatch",
+            std::process::id() as u64 + 3,
+            &service_sid,
+            &logon_sid,
+        )
+        .expect("secure pipe");
+
+        let (pid_tx, _pid_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let name = pipe.name().to_owned();
+        let client = std::thread::spawn(move || {
+            connect_test_client(
+                name,
+                TEST_SECURITY_SQOS_PRESENT | TEST_SECURITY_IDENTIFICATION,
+                pid_tx,
+                release_rx,
+            )
+        });
+
+        assert_eq!(
+            pipe.accept_verified_client(&logon_sid, std::process::id() + 1, 10_000),
+            Err(PlatformError::PipeClientPidMismatch)
+        );
         release_tx.send(()).expect("release client");
         client.join().expect("client thread");
     }
@@ -948,7 +994,11 @@ mod tests {
         let client = std::thread::spawn(move || connect_test_client(name, pid_tx, release_rx));
 
         assert_eq!(
-            pipe.accept_verified_client("S-1-5-5-999999-999999", 10_000),
+            pipe.accept_verified_client(
+                "S-1-5-5-999999-999999",
+                std::process::id(),
+                10_000,
+            ),
             Err(PlatformError::PipePeerSidMismatch)
         );
         release_tx.send(()).expect("release client");
