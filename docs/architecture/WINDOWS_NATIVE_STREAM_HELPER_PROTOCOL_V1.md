@@ -112,9 +112,17 @@ Success stdout:
   "inputIsolation": true,
   "audioReady": false,
   "controllerReady": false,
-  "mediaUrl": "http://127.0.0.1:43123/session/sess-..."
+  "mediaUrl": "http://127.0.0.1:43123/session/sess-...",
+  "mediaToken": "<random-base64url-secret>"
 }
 ```
+
+`mediaToken` is a fresh, high-entropy per-session secret used by the authenticated
+GPUbnb gateway when connecting to the helper. It must contain at least 32
+base64url-safe characters, must never be placed in `mediaUrl`, and must never be
+written to logs, diagnostics, persisted session metadata or renter-visible JSON.
+The helper rejects media/input requests that do not present the token through the
+dedicated local authentication mechanism.
 
 Additional Workspace requirements:
 
