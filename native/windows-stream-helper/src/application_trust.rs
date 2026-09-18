@@ -91,27 +91,45 @@ mod tests {
     fn each_independent_trust_gate_fails_closed() {
         let cases = [
             (
-                ApplicationTrustEvidence { path_allowlisted: false, ..trusted() },
+                ApplicationTrustEvidence {
+                    path_allowlisted: false,
+                    ..trusted()
+                },
                 ApplicationTrustError::PathPolicy,
             ),
             (
-                ApplicationTrustEvidence { local_volume: false, ..trusted() },
+                ApplicationTrustEvidence {
+                    local_volume: false,
+                    ..trusted()
+                },
                 ApplicationTrustError::RemoteVolume,
             ),
             (
-                ApplicationTrustEvidence { reparse_point: true, ..trusted() },
+                ApplicationTrustEvidence {
+                    reparse_point: true,
+                    ..trusted()
+                },
                 ApplicationTrustError::ReparsePoint,
             ),
             (
-                ApplicationTrustEvidence { authenticode_trusted: false, ..trusted() },
+                ApplicationTrustEvidence {
+                    authenticode_trusted: false,
+                    ..trusted()
+                },
                 ApplicationTrustError::Authenticode,
             ),
             (
-                ApplicationTrustEvidence { publisher_policy_matched: false, ..trusted() },
+                ApplicationTrustEvidence {
+                    publisher_policy_matched: false,
+                    ..trusted()
+                },
                 ApplicationTrustError::PublisherPolicy,
             ),
             (
-                ApplicationTrustEvidence { verification_handle_held_through_launch: false, ..trusted() },
+                ApplicationTrustEvidence {
+                    verification_handle_held_through_launch: false,
+                    ..trusted()
+                },
                 ApplicationTrustError::VerificationHandleReleased,
             ),
         ];
