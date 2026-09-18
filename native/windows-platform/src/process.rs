@@ -162,9 +162,9 @@ fn worker_command_line(
         return Err(PlatformError::InvalidPath);
     }
 
-    let mut command = OsString::from(""");
+    let mut command = OsString::from("\"");
     command.push(worker_path.as_os_str());
-    command.push("" --session-id ");
+    command.push("\" --session-id ");
     command.push(spec.session_id);
     command.push(" --generation ");
     command.push(spec.generation.to_string());
