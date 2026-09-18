@@ -6,10 +6,10 @@
 
 use crate::job::{WorkerJob, create_worker_job};
 use crate::session::RenterSessionToken;
-use crate::{PlatformError, VerifiedApplicationFile};
+use crate::{PlatformError, VerifiedApplicationFile, open_application_for_verification};
 use std::ffi::{OsStr, OsString, c_void};
 use std::mem::{MaybeUninit, size_of};
-use std::os::windows::ffi::OsStrExt;
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
 use std::ptr;
 
@@ -86,6 +86,12 @@ unsafe extern "system" {
     fn ResumeThread(thread: Handle) -> u32;
     fn WaitForSingleObject(handle: Handle, milliseconds: u32) -> u32;
     fn GetExitCodeProcess(process: Handle, exit_code: *mut u32) -> i32;
+    fn QueryFullProcessImageNameW(
+        process: Handle,
+        flags: u32,
+        exe_name: *mut u16,
+        size: *mut u32,
+    ) -> i32;
     fn TerminateProcess(process: Handle, exit_code: u32) -> i32;
     fn CloseHandle(object: Handle) -> i32;
 }
@@ -256,6 +262,27 @@ impl SuspendedWorkerProcess {
     }
 }
 
+fn verify_suspended_process_image(
+    worker: &SuspendedWorkerProcess,
+    verified: &VerifiedApplicationFile,
+) -> Result<(), PlatformError> {
+    let mut buffer = vec![0u16; 32_768];
+    let mut len = u32::try_from(buffer.len()).map_err(|_| PlatformError::ProcessImageQueryFailed)?;
+    // SAFETY: worker owns a live process handle; buffer is writable for len UTF-16 units.
+    let ok = unsafe {
+        QueryFullProcessImageNameW(worker.process.0, 0, buffer.as_mut_ptr(), &mut len)
+    };
+    if ok == 0 || len == 0 || usize::try_from(len).ok().filter(|n| *n < buffer.len()).is_none() {
+        return Err(PlatformError::ProcessImageQueryFailed);
+    }
+    let image = OsString::from_wide(&buffer[..len as usize]);
+    let launched = open_application_for_verification(Path::new(&image))?;
+    if launched.evidence().identity != verified.evidence().identity {
+        return Err(PlatformError::ProcessImageIdentityMismatch);
+    }
+    Ok(())
+}
+
 fn wide(value: &OsStr) -> Result<Vec<u16>, PlatformError> {
     let encoded: Vec<u16> = value.encode_wide().chain(Some(0)).collect();
     if encoded.len() <= 1
@@ -366,6 +393,7 @@ pub fn launch_qualified_renter_worker(
     let job = create_worker_job()?;
     let mut worker =
         spawn_suspended_as_renter(token, application, &command_line, current_directory)?;
+    verify_suspended_process_image(&worker, verified_worker)?;
     worker.assign_to_job(&job)?;
     worker.resume()?;
 
