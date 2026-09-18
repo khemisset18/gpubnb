@@ -58,7 +58,7 @@ struct GPUbnbMediaProbeResult
 #pragma pack(pop)
 
 static_assert(sizeof(GPUbnbMediaProbeRequest) == 64, "GPUbnb media request ABI drift");
-static_assert(sizeof(GPUbnbMediaProbeResult) == 60, "GPUbnb media result ABI drift");
+static_assert(sizeof(GPUbnbMediaProbeResult) == 64, "GPUbnb media result ABI drift");
 
 extern "C" __declspec(dllexport)
 HRESULT __stdcall GPUbnbProbeMediaFrame(
