@@ -167,3 +167,15 @@ Cloud Desktop may be considered for Windows bookability only after stages 0-4 pa
 on physical hardware. Creator/CAD/Gaming additionally require their own stage.
 PR #220 remains draft until the shared backend plus at least the intended Workspace
 qualification evidence exists and CI is clean.
+
+## Helper path trust
+
+Production qualification must use the installed helper at
+`C:\\Program Files\\GPUbnb\\gpubnb-windows-stream.exe`. The Agent deliberately
+never discovers this security-sensitive executable through `PATH`.
+
+A development build may be selected only by setting both
+`GPUBNB_WINDOWS_STREAM_HELPER_DEV_ALLOW=1` and an **absolute**
+`GPUBNB_WINDOWS_STREAM_HELPER` path. This override is for controlled development
+and physical qualification only; release packaging must install the signed helper
+at the fixed Program Files location.
