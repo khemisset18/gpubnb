@@ -35,6 +35,9 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Install Agent dependencies
+        run: python -m pip install ./agent
+
       - name: Agent native security contracts
         env:
           PYTHONPATH: agent
