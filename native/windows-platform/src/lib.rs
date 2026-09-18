@@ -10,7 +10,7 @@ pub mod pipe;
 pub mod session;
 
 #[cfg(target_os = "windows")]
-mod process;
+pub mod process;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileIdentity {
@@ -65,6 +65,7 @@ pub enum PlatformError {
     JobQueryFailed,
     JobAssignFailed,
     ProcessCreateFailed,
+    RenterProcessCreateFailed,
     ProcessNotAssigned,
     ProcessResumeFailed,
     ProcessWaitFailed,
