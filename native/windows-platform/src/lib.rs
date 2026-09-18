@@ -32,7 +32,7 @@ pub enum PlatformError {
 pub struct VerifiedApplicationFile {
     evidence: ApplicationFileEvidence,
     #[cfg(target_os = "windows")]
-    handle: windows_impl::OwnedHandle,
+    _handle: windows_impl::OwnedHandle,
 }
 
 impl VerifiedApplicationFile {
@@ -149,7 +149,7 @@ mod windows_impl {
         // handle is owned/live, and the info class determines T at each call site.
         let ok = unsafe {
             GetFileInformationByHandleEx(
-                handle,
+                _handle: handle,
                 class,
                 value.as_mut_ptr().cast::<c_void>(),
                 size_of::<T>() as u32,
