@@ -44,6 +44,17 @@ jobs:
             }
           }
 
+      - name: Verify monitor mutation remains physically gated
+        shell: pwsh
+        run: |
+          $driver = Get-Content native/windows-idd/Driver.cpp -Raw
+          if ($driver -notmatch 'static constexpr bool GPUBNB_ENABLE_MONITOR_MUTATION = false;') {
+            throw "IddCx monitor mutation gate must remain compile-time false before physical qualification"
+          }
+          if ($driver -match 'GPUBNB_ENABLE_MONITOR_MUTATION = true;') {
+            throw "IddCx monitor mutation was enabled without physical qualification"
+          }
+
       - name: Restore WDK NuGet and build inert IddCx driver
         shell: pwsh
         run: |
