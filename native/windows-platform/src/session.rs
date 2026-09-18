@@ -404,10 +404,7 @@ mod tests {
         );
         for system_sid in FORBIDDEN_RENTER_SYSTEM_SIDS {
             assert_eq!(
-                validate_renter_identity_policy(
-                    system_sid,
-                    "S-1-5-21-100-200-300-1000",
-                ),
+                validate_renter_identity_policy(system_sid, "S-1-5-21-100-200-300-1000",),
                 Err(PlatformError::RenterSystemIdentityForbidden)
             );
         }
@@ -423,7 +420,8 @@ mod tests {
     #[test]
     fn session_zero_is_never_a_renter_session() {
         assert_eq!(
-            query_renter_session_token(0, "S-1-5-21-100-200-300-1001", "S-1-5-21-100-200-300-1000").err(),
+            query_renter_session_token(0, "S-1-5-21-100-200-300-1001", "S-1-5-21-100-200-300-1000")
+                .err(),
             Some(PlatformError::InvalidWindowsSessionId)
         );
     }
