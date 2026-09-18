@@ -114,6 +114,14 @@ static DWORD WINAPI GPUbnbSwapChainThread(_In_ LPVOID parameter)
 
     for (;;)
     {
+        // Check stop independently of frame availability. Under a continuous
+        // producer the acquire call may never return E_PENDING, so relying only
+        // on the wait path could make cleanup block indefinitely.
+        if (WaitForSingleObject(processor->StopEvent, 0) == WAIT_OBJECT_0)
+        {
+            break;
+        }
+
         IDARG_OUT_RELEASEANDACQUIREBUFFER buffer = {};
         hr = IddCxSwapChainReleaseAndAcquireBuffer(processor->SwapChain, &buffer);
         if (hr == E_PENDING)
