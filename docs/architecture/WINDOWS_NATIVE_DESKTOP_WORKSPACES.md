@@ -58,6 +58,15 @@ Launch a qualified native FreeCAD build inside the renter session and require a 
 
 Launch Steam in the isolated renter session. The renter supplies their own Steam account and owned games. GPUbnb redistributes no games or account credentials. Gaming requires an explicit outbound-network policy distinct from the current network-isolated compute Workspaces.
 
+### Native application trust
+
+Automatic discovery for Blender, FreeCAD and Steam is restricted to explicit
+Program Files paths. The Agent never resolves these renter-facing executables
+through the process `PATH`, because a user-writable PATH entry must not be able
+to replace a qualified Workspace application. Non-standard installations remain
+fail-closed until GPUbnb has an explicit, signed application qualification policy.
+
+
 ## Streaming architecture
 
 The Windows Host owns capture and encoding; Docker is not the GUI runtime.
