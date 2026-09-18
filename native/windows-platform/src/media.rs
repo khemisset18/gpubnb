@@ -11,6 +11,8 @@ use std::path::Path;
 pub const MEDIA_ABI_VERSION: u32 = 1;
 pub const MEDIA_REQUEST_SIZE: usize = 64;
 pub const MEDIA_RESULT_SIZE: usize = 64;
+pub const MEDIA_FRAME_RESULT_SIZE: usize = 64;
+pub const MAX_ENCODED_FRAME_BYTES: usize = 8 * 1024 * 1024;
 pub const MEDIA_PROOF_EXACT_GPU: u32 = 1 << 0;
 pub const MEDIA_PROOF_DISPLAY_FOUND: u32 = 1 << 1;
 pub const MEDIA_PROOF_CAPTURED_FRAME: u32 = 1 << 2;
@@ -73,6 +75,47 @@ pub struct MediaProbeResult {
     pub refresh_hz: u32,
     pub encoded_bytes: u32,
     pub frame_sequence: u64,
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EncodedMediaFrame {
+    pub bytes: Vec<u8>,
+    pub frame_sequence: u64,
+    pub proof_flags: u32,
+    pub adapter_luid: u64,
+    pub width: u32,
+    pub height: u32,
+    pub refresh_hz: u32,
+}
+
+pub struct MediaSession {
+    expected: MediaProbeRequestOwned,
+    #[cfg(target_os = "windows")]
+    inner: windows_impl::PersistentSession,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MediaProbeRequestOwned {
+    adapter_luid: u64,
+    display_nonce: [u8; 16],
+    width: u32,
+    height: u32,
+    refresh_hz: u32,
+    capture_timeout_ms: u32,
+}
+
+impl MediaSession {
+    pub fn read_frame(&mut self) -> Result<EncodedMediaFrame, MediaProbeError> {
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::read_persistent_frame(&mut self.inner, self.expected)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err(MediaProbeError::WindowsRequired)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,6 +228,29 @@ fn decode_result(
     Ok(result)
 }
 
+pub fn open_media_session(request: MediaProbeRequest<'_>) -> Result<MediaSession, MediaProbeError> {
+    let wire = encode_request(request)?;
+    let expected = MediaProbeRequestOwned {
+        adapter_luid: request.adapter_luid,
+        display_nonce: request.display_nonce,
+        width: request.width,
+        height: request.height,
+        refresh_hz: request.refresh_hz,
+        capture_timeout_ms: request.capture_timeout_ms,
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        let inner = windows_impl::open_persistent_session(&wire)?;
+        Ok(MediaSession { expected, inner })
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (wire, expected);
+        Err(MediaProbeError::WindowsRequired)
+    }
+}
+
 pub fn probe_media_frame(request: MediaProbeRequest<'_>) -> Result<MediaProbeResult, MediaProbeError> {
     let wire = encode_request(request)?;
 
@@ -209,6 +275,10 @@ mod windows_impl {
     type Hmodule = isize;
     type Hresult = i32;
     type ProbeFn = unsafe extern "system" fn(*const c_void, *mut c_void) -> Hresult;
+    type OpenFn = unsafe extern "system" fn(*const c_void, *mut *mut c_void) -> Hresult;
+    type ReadFrameFn =
+        unsafe extern "system" fn(*mut c_void, *mut u8, u32, *mut c_void) -> Hresult;
+    type CloseFn = unsafe extern "system" fn(*mut c_void);
 
     const LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR: u32 = 0x0000_0100;
     const LOAD_LIBRARY_SEARCH_SYSTEM32: u32 = 0x0000_0800;
@@ -218,6 +288,24 @@ mod windows_impl {
         fn LoadLibraryExW(file_name: *const u16, file: isize, flags: u32) -> Hmodule;
         fn GetProcAddress(module: Hmodule, name: *const c_char) -> *mut c_void;
         fn FreeLibrary(module: Hmodule) -> i32;
+    }
+
+    pub(super) struct PersistentSession {
+        raw: *mut c_void,
+        read: ReadFrameFn,
+        close: CloseFn,
+        _module: OwnedModule,
+    }
+
+    impl Drop for PersistentSession {
+        fn drop(&mut self) {
+            if !self.raw.is_null() {
+                // SAFETY: raw is uniquely owned by this wrapper and close belongs
+                // to the same verified module retained in _module.
+                unsafe { (self.close)(self.raw) };
+                self.raw = std::ptr::null_mut();
+            }
+        }
     }
 
     struct OwnedModule(Hmodule);
@@ -233,10 +321,7 @@ mod windows_impl {
         }
     }
 
-    pub(super) fn probe_media_frame(
-        wire: &[u8; MEDIA_REQUEST_SIZE],
-        expected: MediaProbeRequest<'_>,
-    ) -> Result<MediaProbeResult, MediaProbeError> {
+    fn load_verified_module() -> Result<OwnedModule, MediaProbeError> {
         let path = Path::new(TRUSTED_MEDIA_DLL);
         let verified =
             open_application_for_verification(path).map_err(|_| MediaProbeError::DllUnavailable)?;
@@ -246,8 +331,8 @@ mod windows_impl {
             .map_err(|_| MediaProbeError::DllUntrusted)?;
 
         let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
-        // SAFETY: path is fixed, absolute and NUL-terminated. Resolution is
-        // restricted to the DLL directory and System32 for its dependencies.
+        // SAFETY: path is fixed/verified/NUL-terminated and dependency search is
+        // restricted to the verified DLL directory and System32.
         let raw = unsafe {
             LoadLibraryExW(
                 wide.as_ptr(),
@@ -258,16 +343,116 @@ mod windows_impl {
         if raw == 0 {
             return Err(MediaProbeError::DllUnavailable);
         }
-        let module = OwnedModule(raw);
+        Ok(OwnedModule(raw))
+    }
 
-        const SYMBOL: &[u8] = b"GPUbnbProbeMediaFrame\0";
-        // SAFETY: module is live and SYMBOL is static/NUL-terminated.
-        let address = unsafe { GetProcAddress(module.0, SYMBOL.as_ptr().cast::<c_char>()) };
+    unsafe fn symbol<T: Copy>(module: Hmodule, name: &[u8]) -> Result<T, MediaProbeError> {
+        // SAFETY: module is live and name is a static NUL-terminated symbol.
+        let address = unsafe { GetProcAddress(module, name.as_ptr().cast::<c_char>()) };
         if address.is_null() {
             return Err(MediaProbeError::SymbolMissing);
         }
-        // SAFETY: the DLL ABI is pinned by Media.h and the exported stdcall symbol.
-        let probe: ProbeFn = unsafe { mem::transmute(address) };
+        // SAFETY: caller supplies the exact exported ABI type for this symbol.
+        Ok(unsafe { mem::transmute_copy::<*mut c_void, T>(&address) })
+    }
+
+    pub(super) fn open_persistent_session(
+        wire: &[u8; MEDIA_REQUEST_SIZE],
+    ) -> Result<PersistentSession, MediaProbeError> {
+        let module = load_verified_module()?;
+        let open: OpenFn = unsafe { symbol(module.0, b"GPUbnbMediaOpen\0")? };
+        let read: ReadFrameFn = unsafe { symbol(module.0, b"GPUbnbMediaReadFrame\0")? };
+        let close: CloseFn = unsafe { symbol(module.0, b"GPUbnbMediaClose\0")? };
+
+        let mut raw = std::ptr::null_mut();
+        // SAFETY: wire is the exact fixed ABI input and raw is a writable out pointer.
+        let hr = unsafe {
+            open(
+                wire.as_ptr().cast::<c_void>(),
+                &mut raw as *mut *mut c_void,
+            )
+        };
+        if hr < 0 || raw.is_null() {
+            return Err(if hr < 0 {
+                classify_probe_hresult(hr)
+            } else {
+                MediaProbeError::ProbeFailed
+            });
+        }
+
+        Ok(PersistentSession {
+            raw,
+            read,
+            close,
+            _module: module,
+        })
+    }
+
+    pub(super) fn read_persistent_frame(
+        session: &mut PersistentSession,
+        expected: MediaProbeRequestOwned,
+    ) -> Result<EncodedMediaFrame, MediaProbeError> {
+        let mut bytes = vec![0u8; MAX_ENCODED_FRAME_BYTES];
+        let mut result = [0u8; MEDIA_FRAME_RESULT_SIZE];
+        // SAFETY: session/raw/module are live; buffers are writable for their exact
+        // advertised capacities and the ABI result is exactly 64 bytes.
+        let hr = unsafe {
+            (session.read)(
+                session.raw,
+                bytes.as_mut_ptr(),
+                bytes.len() as u32,
+                result.as_mut_ptr().cast::<c_void>(),
+            )
+        };
+        if hr < 0 {
+            return Err(classify_probe_hresult(hr));
+        }
+        if read_u32(&result, 0)? != MEDIA_FRAME_RESULT_SIZE as u32
+            || read_u32(&result, 4)? != MEDIA_ABI_VERSION
+        {
+            return Err(MediaProbeError::InvalidResult);
+        }
+        let proof_flags = read_u32(&result, 8)?;
+        let failed_stage = read_u32(&result, 12)?;
+        let adapter_luid = read_u64(&result, 16)?;
+        let width = read_u32(&result, 24)?;
+        let height = read_u32(&result, 28)?;
+        let refresh_hz = read_u32(&result, 32)?;
+        let encoded_bytes = read_u32(&result, 36)? as usize;
+        let frame_sequence = read_u64(&result, 40)?;
+        let required_capacity = read_u32(&result, 48)? as usize;
+
+        if failed_stage != 0
+            || adapter_luid != expected.adapter_luid
+            || width != expected.width
+            || height != expected.height
+            || refresh_hz != expected.refresh_hz
+            || encoded_bytes == 0
+            || encoded_bytes != required_capacity
+            || encoded_bytes > bytes.len()
+            || frame_sequence == 0
+            || proof_flags & MEDIA_REQUIRED_PROOFS != MEDIA_REQUIRED_PROOFS
+        {
+            return Err(MediaProbeError::InvalidResult);
+        }
+        bytes.truncate(encoded_bytes);
+        Ok(EncodedMediaFrame {
+            bytes,
+            frame_sequence,
+            proof_flags,
+            adapter_luid,
+            width,
+            height,
+            refresh_hz,
+        })
+    }
+
+    pub(super) fn probe_media_frame(
+        wire: &[u8; MEDIA_REQUEST_SIZE],
+        expected: MediaProbeRequest<'_>,
+    ) -> Result<MediaProbeResult, MediaProbeError> {
+        let module = load_verified_module()?;
+        let probe: ProbeFn = unsafe { symbol(module.0, b"GPUbnbProbeMediaFrame\0")? };
 
         let mut result = [0u8; MEDIA_RESULT_SIZE];
         // SAFETY: input/output buffers are exactly the fixed 64-byte ABI sizes.
@@ -330,6 +515,12 @@ mod tests {
             );
         }
         assert_eq!(classify_probe_hresult(-1), MediaProbeError::ProbeFailed);
+    }
+
+    #[test]
+    fn persistent_frame_result_layout_is_pinned() {
+        assert_eq!(MEDIA_FRAME_RESULT_SIZE, 64);
+        assert_eq!(MAX_ENCODED_FRAME_BYTES, 8 * 1024 * 1024);
     }
 
     #[test]
