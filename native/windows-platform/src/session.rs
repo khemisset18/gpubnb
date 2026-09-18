@@ -6,7 +6,6 @@
 
 use crate::PlatformError;
 
-#[derive(Debug)]
 pub struct RenterSessionToken {
     session_id: u32,
     logon_sid: String,
