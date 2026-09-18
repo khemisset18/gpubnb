@@ -86,3 +86,39 @@ test('the Windows runtime gate does not disable the already-qualified Linux desk
   assert.equal(definitionUpserts, 1);
   assert.equal(machineWorkspaceUpserts, 1);
 });
+
+
+test('machine-level native proof cannot prequalify every GPU before exact accelerator binding exists', async () => {
+  const windowsWithNativeProof = {
+    ...highEndWindows,
+    desktopGpuRenderingAvailable: false,
+    nativeDesktopStreamingAvailable: true,
+    nativeDesktopStreamingGpuUuid: 'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a',
+  };
+  let definitionUpserts = 0;
+  const db = {
+    machine: {
+      findUnique: async () => windowsWithNativeProof,
+    },
+    workspaceDefinition: {
+      upsert: async () => {
+        definitionUpserts += 1;
+        return { id: 'definition' };
+      },
+    },
+    machineWorkspace: {
+      upsert: async () => ({ id: 'machine-workspace' }),
+    },
+  };
+
+  await assert.rejects(
+    () => ensureCompatibleMachineWorkspace(db as never, windowsWithNativeProof.id, 'cloud-desktop'),
+    (error: unknown) => error instanceof Error
+      && error.message === 'cloud-desktop_workspace_runtime_unavailable',
+  );
+  assert.equal(
+    definitionUpserts,
+    0,
+    'machine-level Windows capability must remain diagnostic-only until the selected accelerator UUID is bound to the native proof',
+  );
+});
