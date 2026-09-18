@@ -251,10 +251,7 @@ mod tests {
     #[test]
     fn suspended_process_cannot_resume_before_job_assignment() {
         let shell = command_shell();
-        let command = OsString::from(format!(
-            "\"{}\" /D /Q /C exit 0",
-            shell.display()
-        ));
+        let command = OsString::from(format!("\"{}\" /D /Q /C exit 0", shell.display()));
         let mut worker =
             spawn_suspended_current_user_validation(&shell, &command).expect("spawn suspended");
         assert_ne!(worker.pid(), 0);
