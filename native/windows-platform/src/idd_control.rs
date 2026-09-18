@@ -4,6 +4,8 @@
 //! identity/mode proof that a future privileged control path must satisfy before a
 //! virtual monitor may be plugged in.
 
+use crate::PlatformError;
+
 pub const IDD_CONTROL_VERSION: u32 = 1;
 pub const IDD_CONTROL_REQUEST_SIZE: usize = 64;
 
@@ -81,6 +83,262 @@ pub fn encode_virtual_display_request(
     Ok(out)
 }
 
+pub fn probe_idd_control_contract(
+    request: VirtualDisplayRequest,
+) -> Result<(), PlatformError> {
+    if request.operation != VirtualDisplayOperation::ValidateOnly {
+        return Err(PlatformError::IddUnsafeOperation);
+    }
+    let wire = encode_virtual_display_request(request)
+        .map_err(|_| PlatformError::IddControlFailed)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::send_validate_only(&wire)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = wire;
+        Err(PlatformError::WindowsRequired)
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows_impl {
+    use super::IDD_CONTROL_REQUEST_SIZE;
+    use crate::PlatformError;
+    use std::ffi::{OsStr, c_void};
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr;
+
+    type Handle = isize;
+
+    const CR_SUCCESS: u32 = 0;
+    const CM_GET_DEVICE_INTERFACE_LIST_PRESENT: u32 = 0;
+    const MAX_INTERFACE_CHARS: u32 = 32_768;
+    const INVALID_HANDLE_VALUE: Handle = -1;
+    const GENERIC_WRITE: u32 = 0x4000_0000;
+    const OPEN_EXISTING: u32 = 3;
+    const IOCTL_GPUBNB_IDD_CONTROL: u32 = 0x0022_A000;
+
+    #[repr(C)]
+    struct Guid {
+        data1: u32,
+        data2: u16,
+        data3: u16,
+        data4: [u8; 8],
+    }
+
+    const GUID_DEVINTERFACE_GPUBNB_IDD_CONTROL: Guid = Guid {
+        data1: 0x3f4c6f31,
+        data2: 0x4e7c,
+        data3: 0x4de7,
+        data4: [0x9f, 0xd8, 0x72, 0x18, 0xb3, 0x88, 0x1a, 0x55],
+    };
+
+    #[link(name = "cfgmgr32")]
+    unsafe extern "system" {
+        fn CM_Get_Device_Interface_List_SizeW(
+            length: *mut u32,
+            interface_class_guid: *const Guid,
+            device_id: *const u16,
+            flags: u32,
+        ) -> u32;
+        fn CM_Get_Device_Interface_ListW(
+            interface_class_guid: *const Guid,
+            device_id: *const u16,
+            buffer: *mut u16,
+            buffer_len: u32,
+            flags: u32,
+        ) -> u32;
+    }
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn CreateFileW(
+            file_name: *const u16,
+            desired_access: u32,
+            share_mode: u32,
+            security_attributes: *mut c_void,
+            creation_disposition: u32,
+            flags_and_attributes: u32,
+            template_file: Handle,
+        ) -> Handle;
+        fn DeviceIoControl(
+            device: Handle,
+            io_control_code: u32,
+            input_buffer: *mut c_void,
+            input_buffer_size: u32,
+            output_buffer: *mut c_void,
+            output_buffer_size: u32,
+            bytes_returned: *mut u32,
+            overlapped: *mut c_void,
+        ) -> i32;
+        fn CloseHandle(object: Handle) -> i32;
+    }
+
+    struct OwnedHandle(Handle);
+
+    impl Drop for OwnedHandle {
+        fn drop(&mut self) {
+            // SAFETY: this wrapper uniquely owns a CreateFileW device handle.
+            unsafe {
+                let _ = CloseHandle(self.0);
+            }
+        }
+    }
+
+    fn parse_multi_sz(buffer: &[u16]) -> Result<Vec<String>, PlatformError> {
+        let mut values = Vec::new();
+        let mut start = 0usize;
+        while start < buffer.len() {
+            let relative_end = buffer[start..]
+                .iter()
+                .position(|unit| *unit == 0)
+                .ok_or(PlatformError::IddInterfaceQueryFailed)?;
+            if relative_end == 0 {
+                break;
+            }
+            let end = start + relative_end;
+            let value = String::from_utf16(&buffer[start..end])
+                .map_err(|_| PlatformError::IddInterfaceQueryFailed)?;
+            values.push(value);
+            start = end + 1;
+        }
+        Ok(values)
+    }
+
+    fn discover_single_interface() -> Result<String, PlatformError> {
+        for _ in 0..3 {
+            let mut length = 0u32;
+            // SAFETY: length is a valid out pointer; optional device id is null.
+            let size_status = unsafe {
+                CM_Get_Device_Interface_List_SizeW(
+                    &mut length,
+                    &GUID_DEVINTERFACE_GPUBNB_IDD_CONTROL,
+                    ptr::null(),
+                    CM_GET_DEVICE_INTERFACE_LIST_PRESENT,
+                )
+            };
+            if size_status != CR_SUCCESS {
+                return Err(PlatformError::IddInterfaceQueryFailed);
+            }
+            if length <= 1 {
+                return Err(PlatformError::IddInterfaceMissing);
+            }
+            if length > MAX_INTERFACE_CHARS {
+                return Err(PlatformError::IddInterfaceQueryFailed);
+            }
+
+            let mut buffer = vec![0u16; length as usize];
+            // SAFETY: buffer contains exactly length writable UTF-16 elements.
+            let list_status = unsafe {
+                CM_Get_Device_Interface_ListW(
+                    &GUID_DEVINTERFACE_GPUBNB_IDD_CONTROL,
+                    ptr::null(),
+                    buffer.as_mut_ptr(),
+                    length,
+                    CM_GET_DEVICE_INTERFACE_LIST_PRESENT,
+                )
+            };
+            if list_status != CR_SUCCESS {
+                // The interface set can change between size/list calls. Retry the
+                // complete query with a fresh size rather than trusting stale data.
+                continue;
+            }
+
+            let values = parse_multi_sz(&buffer)?;
+            return match values.as_slice() {
+                [] => Err(PlatformError::IddInterfaceMissing),
+                [only] => Ok(only.clone()),
+                _ => Err(PlatformError::IddInterfaceAmbiguous),
+            };
+        }
+        Err(PlatformError::IddInterfaceQueryFailed)
+    }
+
+    fn wide(value: &OsStr) -> Result<Vec<u16>, PlatformError> {
+        let encoded: Vec<u16> = value.encode_wide().chain(Some(0)).collect();
+        if encoded.len() <= 1
+            || encoded
+                .iter()
+                .take(encoded.len() - 1)
+                .any(|unit| *unit == 0)
+        {
+            return Err(PlatformError::IddInterfaceQueryFailed);
+        }
+        Ok(encoded)
+    }
+
+    pub(super) fn send_validate_only(
+        wire: &[u8; IDD_CONTROL_REQUEST_SIZE],
+    ) -> Result<(), PlatformError> {
+        let interface = discover_single_interface()?;
+        let wide_interface = wide(OsStr::new(&interface))?;
+
+        // SAFETY: path is NUL-terminated. No handles are inherited and sharing is
+        // disabled because the control plane expects one authoritative service.
+        let raw = unsafe {
+            CreateFileW(
+                wide_interface.as_ptr(),
+                GENERIC_WRITE,
+                0,
+                ptr::null_mut(),
+                OPEN_EXISTING,
+                0,
+                0,
+            )
+        };
+        if raw == INVALID_HANDLE_VALUE {
+            return Err(PlatformError::IddControlOpenFailed);
+        }
+        let handle = OwnedHandle(raw);
+
+        let mut bytes_returned = 0u32;
+        // SAFETY: wire is an exact fixed-size input buffer and the IOCTL has no
+        // output payload. The call is synchronous.
+        let ok = unsafe {
+            DeviceIoControl(
+                handle.0,
+                IOCTL_GPUBNB_IDD_CONTROL,
+                wire.as_ptr().cast_mut().cast::<c_void>(),
+                IDD_CONTROL_REQUEST_SIZE as u32,
+                ptr::null_mut(),
+                0,
+                &mut bytes_returned,
+                ptr::null_mut(),
+            )
+        };
+        if ok == 0 || bytes_returned != 0 {
+            return Err(PlatformError::IddControlFailed);
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn multi_sz_parser_requires_unambiguous_entries() {
+            let one: Vec<u16> = OsStr::new(r"\\?\gpubnb#control")
+                .encode_wide()
+                .chain([0, 0])
+                .collect();
+            assert_eq!(
+                parse_multi_sz(&one),
+                Ok(vec![r"\\?\gpubnb#control".to_owned()])
+            );
+
+            let malformed = vec![b'a' as u16, b'b' as u16];
+            assert_eq!(
+                parse_multi_sz(&malformed),
+                Err(PlatformError::IddInterfaceQueryFailed)
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,6 +354,34 @@ mod tests {
             height: 1080,
             refresh_hz: 60,
         }
+    }
+
+    #[test]
+    fn unsafe_operations_are_blocked_before_platform_access() {
+        for operation in [
+            VirtualDisplayOperation::PlugMonitor,
+            VirtualDisplayOperation::UnplugMonitor,
+        ] {
+            assert_eq!(
+                probe_idd_control_contract(VirtualDisplayRequest {
+                    operation,
+                    ..valid()
+                }),
+                Err(PlatformError::IddUnsafeOperation)
+            );
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn validate_only_probe_fails_closed_off_windows() {
+        assert_eq!(
+            probe_idd_control_contract(VirtualDisplayRequest {
+                operation: VirtualDisplayOperation::ValidateOnly,
+                ..valid()
+            }),
+            Err(PlatformError::WindowsRequired)
+        );
     }
 
     #[test]
