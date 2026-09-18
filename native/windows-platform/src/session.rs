@@ -177,7 +177,6 @@ mod windows_impl {
         state: u32,
     }
 
-
     pub(super) struct OwnedToken(pub(super) Handle);
 
     impl Drop for OwnedToken {
