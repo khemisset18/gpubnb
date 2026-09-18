@@ -6,6 +6,8 @@ on:
       - native/windows-stream-helper/**
       - agent/gpubnb_agent/windows_native_*.py
       - agent/tests/test_windows_native_*.py
+      - agent/tools/windows_native_qualify.py
+      - docs/operations/WINDOWS_NATIVE_DESKTOP_QUALIFICATION.md
       - docs/architecture/WINDOWS_NATIVE_*.md
       - .github/workflows/windows-native-stream-helper.yml
   workflow_dispatch:
@@ -29,6 +31,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Agent native security contracts
+        env:
+          PYTHONPATH: agent
+        run: python -m unittest discover -s agent/tests -p "test_windows_native_*.py" -v
+
       - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: rustfmt, clippy
@@ -50,10 +61,14 @@ jobs:
         shell: pwsh
         run: |
           $exe = Resolve-Path 'native/windows-stream-helper/target/release/gpubnb-windows-stream.exe'
-          & $exe --self-test --json
+          $reply = & $exe --self-test --json
           $helperExit = $LASTEXITCODE
-          if ($helperExit -eq 0) {
-            throw 'Unqualified Windows native helper unexpectedly reported success.'
+          if ($helperExit -ne 21) {
+            throw "Expected unavailable backend exit 21, got $helperExit."
+          }
+          $report = $reply | ConvertFrom-Json
+          if ($report.ok -cne $false -or $report.error -cne 'native_backend_not_implemented') {
+            throw 'Helper did not return the expected fail-closed proof.'
           }
           Write-Host "Expected fail-closed exit code: $helperExit"
           exit 0
