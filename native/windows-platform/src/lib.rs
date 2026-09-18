@@ -3,7 +3,7 @@
 //! Unsafe FFI is intentionally confined to this crate. Higher-level readiness,
 //! billing and session-fencing policy stays in the safe windows-stream-helper core.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub mod job;
 pub mod pipe;
@@ -74,24 +74,28 @@ pub enum PlatformError {
 }
 
 pub struct VerifiedApplicationFile {
+    path: PathBuf,
     evidence: ApplicationFileEvidence,
     #[cfg(target_os = "windows")]
     _handle: windows_impl::OwnedHandle,
 }
 
 impl VerifiedApplicationFile {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     pub const fn evidence(&self) -> ApplicationFileEvidence {
         self.evidence
     }
 
-    pub fn verify_authenticode(&self, path: &Path) -> Result<(), PlatformError> {
+    pub fn verify_authenticode(&self) -> Result<(), PlatformError> {
         #[cfg(target_os = "windows")]
         {
-            windows_impl::verify_authenticode(path, &self._handle)
+            windows_impl::verify_authenticode(&self.path, &self._handle)
         }
         #[cfg(not(target_os = "windows"))]
         {
-            let _ = path;
             Err(PlatformError::WindowsRequired)
         }
     }
@@ -385,6 +389,7 @@ mod windows_impl {
 
         let identity: FileIdInfo = file_info(handle.0, FILE_ID_INFO_CLASS)?;
         Ok(VerifiedApplicationFile {
+            path: path.to_path_buf(),
             evidence: ApplicationFileEvidence {
                 identity: FileIdentity {
                     volume_serial: identity.volume_serial_number,
@@ -406,7 +411,7 @@ mod windows_impl {
             let exe = std::env::current_exe().expect("current exe");
             let opened = open_application_for_verification(&exe).expect("open current exe");
             assert_eq!(
-                opened.verify_authenticode(&exe),
+                opened.verify_authenticode(),
                 Err(PlatformError::AuthenticodeNotTrusted)
             );
         }
@@ -435,6 +440,7 @@ mod non_windows_tests {
         );
 
         let fake = VerifiedApplicationFile {
+            path: PathBuf::from("/tmp/app.exe"),
             evidence: ApplicationFileEvidence {
                 identity: FileIdentity {
                     volume_serial: 1,
@@ -445,7 +451,7 @@ mod non_windows_tests {
             },
         };
         assert_eq!(
-            fake.verify_authenticode(Path::new("/tmp/app.exe")),
+            fake.verify_authenticode(),
             Err(PlatformError::WindowsRequired)
         );
     }
