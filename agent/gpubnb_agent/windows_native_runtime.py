@@ -80,7 +80,12 @@ def _loopback_media_url(value: object, expected_session_id: str) -> str | None:
 
 
 def _media_token(value: object) -> str | None:
-    token = str(value or "").strip()
+    # The wire contract requires a JSON string. Never coerce numbers, booleans,
+    # arrays or objects into text because that weakens type separation at the
+    # authentication boundary.
+    if not isinstance(value, str):
+        return None
+    token = value.strip()
     if not 32 <= len(token) <= 200:
         return None
     if any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for char in token):
