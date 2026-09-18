@@ -83,8 +83,24 @@ pub enum MediaProbeError {
     DllUntrusted,
     SymbolMissing,
     ProbeFailed,
+    CaptureTimeout,
+    CaptureAccessLost,
+    DeviceLost,
     InvalidResult,
     MissingProof,
+}
+
+
+fn classify_probe_hresult(hr: i32) -> MediaProbeError {
+    // DXGI HRESULT values are stable Win32 ABI constants. Keep the mapping here
+    // so higher layers can revoke only the proofs affected by the failure.
+    match hr as u32 {
+        0x887A0027 => MediaProbeError::CaptureTimeout, // DXGI_ERROR_WAIT_TIMEOUT
+        0x887A0026 => MediaProbeError::CaptureAccessLost, // DXGI_ERROR_ACCESS_LOST
+        0x887A0005 | 0x887A0006 | 0x887A0007 =>
+            MediaProbeError::DeviceLost, // REMOVED / HUNG / RESET
+        _ => MediaProbeError::ProbeFailed,
+    }
 }
 
 fn encode_request(request: MediaProbeRequest<'_>) -> Result<[u8; MEDIA_REQUEST_SIZE], MediaProbeError> {
@@ -262,7 +278,7 @@ mod windows_impl {
             )
         };
         if hr < 0 {
-            return Err(MediaProbeError::ProbeFailed);
+            return Err(classify_probe_hresult(hr));
         }
         decode_result(&result, expected)
     }
@@ -295,6 +311,25 @@ mod tests {
             }
             Some(_) => assert!(trusted_media_signer().is_ok()),
         }
+    }
+
+    #[test]
+    fn dxgi_failures_are_classified_for_fail_closed_lifecycle() {
+        assert_eq!(
+            classify_probe_hresult(0x887A0027u32 as i32),
+            MediaProbeError::CaptureTimeout
+        );
+        assert_eq!(
+            classify_probe_hresult(0x887A0026u32 as i32),
+            MediaProbeError::CaptureAccessLost
+        );
+        for hr in [0x887A0005u32, 0x887A0006u32, 0x887A0007u32] {
+            assert_eq!(
+                classify_probe_hresult(hr as i32),
+                MediaProbeError::DeviceLost
+            );
+        }
+        assert_eq!(classify_probe_hresult(-1), MediaProbeError::ProbeFailed);
     }
 
     #[test]
