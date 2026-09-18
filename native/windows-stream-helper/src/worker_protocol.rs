@@ -14,6 +14,7 @@ pub const MAX_WORKER_HELLO_FRAME: usize = 512;
 pub const WORKER_COMMAND_FRAME_SIZE: usize = 19;
 pub const WORKER_DISPLAY_SPEC_FRAME_SIZE: usize = 58;
 pub const WORKER_MEDIA_PROOF_FRAME_SIZE: usize = 74;
+pub const WORKER_INPUT_FRAME_SIZE: usize = 31;
 pub const WORKER_MEDIA_REQUIRED_PROOF_FLAGS: u32 = 0x0f;
 const MAX_SESSION_ID: usize = 128;
 const MAX_GPU_UUID: usize = 64;
@@ -24,6 +25,7 @@ pub enum WorkerCommand {
     StartCapture,
     SuspendMedia,
     ResumeAfterFreshProof,
+    InjectInput,
     Stop,
 }
 
@@ -119,6 +121,7 @@ fn command_tag(command: WorkerCommand) -> u8 {
         WorkerCommand::SuspendMedia => 3,
         WorkerCommand::ResumeAfterFreshProof => 4,
         WorkerCommand::Stop => 5,
+        WorkerCommand::InjectInput => 6,
     }
 }
 
@@ -129,6 +132,7 @@ fn command_from_tag(tag: u8) -> Result<WorkerCommand, WorkerCommandError> {
         3 => Ok(WorkerCommand::SuspendMedia),
         4 => Ok(WorkerCommand::ResumeAfterFreshProof),
         5 => Ok(WorkerCommand::Stop),
+        6 => Ok(WorkerCommand::InjectInput),
         _ => Err(WorkerCommandError::InvalidCommand),
     }
 }
@@ -201,6 +205,265 @@ pub fn validate_worker_command(
         return Err(WorkerCommandError::Sequence);
     }
     Ok(frame.command)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerMouseButton {
+    Left,
+    Right,
+    Middle,
+    X1,
+    X2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerInputEvent {
+    KeyScan {
+        scan_code: u16,
+        key_up: bool,
+        extended: bool,
+    },
+    MouseMoveRelative {
+        dx: i32,
+        dy: i32,
+    },
+    MouseMoveAbsolute {
+        x: u16,
+        y: u16,
+    },
+    MouseButton {
+        button: WorkerMouseButton,
+        key_up: bool,
+    },
+    MouseWheel {
+        delta: i16,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkerInputFrame {
+    pub protocol_version: u16,
+    pub generation: u64,
+    pub command_sequence: u64,
+    pub windows_session_id: u32,
+    pub event: WorkerInputEvent,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerInputError {
+    InvalidLength,
+    ProtocolVersion,
+    Generation,
+    Sequence,
+    WindowsSession,
+    InvalidEvent,
+}
+
+fn validate_input_event(event: WorkerInputEvent) -> Result<(), WorkerInputError> {
+    match event {
+        WorkerInputEvent::KeyScan { scan_code, .. } => {
+            if scan_code == 0 || scan_code > 0x01ff {
+                return Err(WorkerInputError::InvalidEvent);
+            }
+        }
+        WorkerInputEvent::MouseMoveRelative { dx, dy } => {
+            if (dx == 0 && dy == 0)
+                || !(-32_767..=32_767).contains(&dx)
+                || !(-32_767..=32_767).contains(&dy)
+            {
+                return Err(WorkerInputError::InvalidEvent);
+            }
+        }
+        WorkerInputEvent::MouseMoveAbsolute { .. } => {}
+        WorkerInputEvent::MouseButton { .. } => {}
+        WorkerInputEvent::MouseWheel { delta } => {
+            if delta == 0 || !(-1_200..=1_200).contains(&delta) {
+                return Err(WorkerInputError::InvalidEvent);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn mouse_button_tag(button: WorkerMouseButton) -> i32 {
+    match button {
+        WorkerMouseButton::Left => 1,
+        WorkerMouseButton::Right => 2,
+        WorkerMouseButton::Middle => 3,
+        WorkerMouseButton::X1 => 4,
+        WorkerMouseButton::X2 => 5,
+    }
+}
+
+fn mouse_button_from_tag(tag: i32) -> Result<WorkerMouseButton, WorkerInputError> {
+    match tag {
+        1 => Ok(WorkerMouseButton::Left),
+        2 => Ok(WorkerMouseButton::Right),
+        3 => Ok(WorkerMouseButton::Middle),
+        4 => Ok(WorkerMouseButton::X1),
+        5 => Ok(WorkerMouseButton::X2),
+        _ => Err(WorkerInputError::InvalidEvent),
+    }
+}
+
+pub fn encode_worker_input(
+    frame: WorkerInputFrame,
+) -> Result<[u8; WORKER_INPUT_FRAME_SIZE], WorkerInputError> {
+    if frame.protocol_version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerInputError::ProtocolVersion);
+    }
+    if frame.generation == 0 {
+        return Err(WorkerInputError::Generation);
+    }
+    if frame.command_sequence == 0 {
+        return Err(WorkerInputError::Sequence);
+    }
+    if frame.windows_session_id == 0 {
+        return Err(WorkerInputError::WindowsSession);
+    }
+    validate_input_event(frame.event)?;
+
+    let (tag, arg1, arg2) = match frame.event {
+        WorkerInputEvent::KeyScan {
+            scan_code,
+            key_up,
+            extended,
+        } => (
+            1u8,
+            i32::from(scan_code),
+            i32::from(u8::from(key_up) | (u8::from(extended) << 1)),
+        ),
+        WorkerInputEvent::MouseMoveRelative { dx, dy } => (2, dx, dy),
+        WorkerInputEvent::MouseMoveAbsolute { x, y } => (3, i32::from(x), i32::from(y)),
+        WorkerInputEvent::MouseButton { button, key_up } => {
+            (4, mouse_button_tag(button), i32::from(u8::from(key_up)))
+        }
+        WorkerInputEvent::MouseWheel { delta } => (5, i32::from(delta), 0),
+    };
+
+    let mut out = [0u8; WORKER_INPUT_FRAME_SIZE];
+    out[0..2].copy_from_slice(&frame.protocol_version.to_le_bytes());
+    out[2..10].copy_from_slice(&frame.generation.to_le_bytes());
+    out[10..18].copy_from_slice(&frame.command_sequence.to_le_bytes());
+    out[18..22].copy_from_slice(&frame.windows_session_id.to_le_bytes());
+    out[22] = tag;
+    out[23..27].copy_from_slice(&arg1.to_le_bytes());
+    out[27..31].copy_from_slice(&arg2.to_le_bytes());
+    Ok(out)
+}
+
+pub fn decode_worker_input(frame: &[u8]) -> Result<WorkerInputFrame, WorkerInputError> {
+    if frame.len() != WORKER_INPUT_FRAME_SIZE {
+        return Err(WorkerInputError::InvalidLength);
+    }
+    let protocol_version = u16::from_le_bytes([frame[0], frame[1]]);
+    if protocol_version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerInputError::ProtocolVersion);
+    }
+    let generation = u64::from_le_bytes(
+        frame[2..10]
+            .try_into()
+            .map_err(|_| WorkerInputError::InvalidLength)?,
+    );
+    let command_sequence = u64::from_le_bytes(
+        frame[10..18]
+            .try_into()
+            .map_err(|_| WorkerInputError::InvalidLength)?,
+    );
+    let windows_session_id = u32::from_le_bytes(
+        frame[18..22]
+            .try_into()
+            .map_err(|_| WorkerInputError::InvalidLength)?,
+    );
+    if generation == 0 {
+        return Err(WorkerInputError::Generation);
+    }
+    if command_sequence == 0 {
+        return Err(WorkerInputError::Sequence);
+    }
+    if windows_session_id == 0 {
+        return Err(WorkerInputError::WindowsSession);
+    }
+    let arg1 = i32::from_le_bytes(
+        frame[23..27]
+            .try_into()
+            .map_err(|_| WorkerInputError::InvalidLength)?,
+    );
+    let arg2 = i32::from_le_bytes(
+        frame[27..31]
+            .try_into()
+            .map_err(|_| WorkerInputError::InvalidLength)?,
+    );
+    let event = match frame[22] {
+        1 => {
+            if !(1..=0x01ff).contains(&arg1) || !(0..=3).contains(&arg2) {
+                return Err(WorkerInputError::InvalidEvent);
+            }
+            WorkerInputEvent::KeyScan {
+                scan_code: arg1 as u16,
+                key_up: arg2 & 1 != 0,
+                extended: arg2 & 2 != 0,
+            }
+        }
+        2 => WorkerInputEvent::MouseMoveRelative { dx: arg1, dy: arg2 },
+        3 => {
+            if !(0..=u16::MAX as i32).contains(&arg1)
+                || !(0..=u16::MAX as i32).contains(&arg2)
+            {
+                return Err(WorkerInputError::InvalidEvent);
+            }
+            WorkerInputEvent::MouseMoveAbsolute {
+                x: arg1 as u16,
+                y: arg2 as u16,
+            }
+        }
+        4 => {
+            if !(0..=1).contains(&arg2) {
+                return Err(WorkerInputError::InvalidEvent);
+            }
+            WorkerInputEvent::MouseButton {
+                button: mouse_button_from_tag(arg1)?,
+                key_up: arg2 == 1,
+            }
+        }
+        5 => {
+            if arg2 != 0 || !(-1_200..=1_200).contains(&arg1) || arg1 == 0 {
+                return Err(WorkerInputError::InvalidEvent);
+            }
+            WorkerInputEvent::MouseWheel {
+                delta: arg1 as i16,
+            }
+        }
+        _ => return Err(WorkerInputError::InvalidEvent),
+    };
+    validate_input_event(event)?;
+
+    Ok(WorkerInputFrame {
+        protocol_version,
+        generation,
+        command_sequence,
+        windows_session_id,
+        event,
+    })
+}
+
+pub fn validate_worker_input(
+    expected_generation: u64,
+    expected_command_sequence: u64,
+    expected_windows_session_id: u32,
+    frame: WorkerInputFrame,
+) -> Result<WorkerInputEvent, WorkerInputError> {
+    if frame.generation != expected_generation {
+        return Err(WorkerInputError::Generation);
+    }
+    if frame.command_sequence != expected_command_sequence {
+        return Err(WorkerInputError::Sequence);
+    }
+    if frame.windows_session_id != expected_windows_session_id {
+        return Err(WorkerInputError::WindowsSession);
+    }
+    validate_input_event(frame.event)?;
+    Ok(frame.event)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1008,14 +1271,69 @@ mod tests {
     }
 
     #[test]
+    fn typed_input_frame_round_trips_and_is_fenced() {
+        let value = WorkerInputFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            generation: 7,
+            command_sequence: 9,
+            windows_session_id: 42,
+            event: WorkerInputEvent::KeyScan {
+                scan_code: 30,
+                key_up: false,
+                extended: false,
+            },
+        };
+        let encoded = encode_worker_input(value).expect("encode input");
+        assert_eq!(encoded.len(), WORKER_INPUT_FRAME_SIZE);
+        let decoded = decode_worker_input(&encoded).expect("decode input");
+        assert_eq!(decoded, value);
+        assert_eq!(
+            validate_worker_input(7, 9, 42, decoded),
+            Ok(value.event)
+        );
+        assert_eq!(
+            validate_worker_input(7, 10, 42, decoded),
+            Err(WorkerInputError::Sequence)
+        );
+    }
+
+    #[test]
+    fn input_frame_rejects_unknown_or_unsafe_values() {
+        let mut encoded = encode_worker_input(WorkerInputFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            generation: 7,
+            command_sequence: 9,
+            windows_session_id: 42,
+            event: WorkerInputEvent::MouseWheel { delta: 120 },
+        })
+        .expect("encode input");
+        encoded[22] = 0xff;
+        assert_eq!(
+            decode_worker_input(&encoded),
+            Err(WorkerInputError::InvalidEvent)
+        );
+        assert_eq!(
+            encode_worker_input(WorkerInputFrame {
+                protocol_version: WORKER_PROTOCOL_VERSION,
+                generation: 7,
+                command_sequence: 9,
+                windows_session_id: 42,
+                event: WorkerInputEvent::MouseMoveRelative { dx: 0, dy: 0 },
+            }),
+            Err(WorkerInputError::InvalidEvent)
+        );
+    }
+
+    #[test]
     fn command_surface_has_no_arbitrary_execute_variant() {
         let commands = [
             WorkerCommand::PrepareDisplay,
             WorkerCommand::StartCapture,
             WorkerCommand::SuspendMedia,
             WorkerCommand::ResumeAfterFreshProof,
+            WorkerCommand::InjectInput,
             WorkerCommand::Stop,
         ];
-        assert_eq!(commands.len(), 5);
+        assert_eq!(commands.len(), 6);
     }
 }
