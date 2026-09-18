@@ -55,12 +55,47 @@ struct GPUbnbMediaProbeResult
     uint64_t FrameSequence;
     uint32_t Reserved[4];
 };
+
+struct GPUbnbMediaFrameResult
+{
+    uint32_t Size;
+    uint32_t Version;
+    uint32_t ProofFlags;
+    uint32_t FailedStage;
+    LUID RenderAdapterLuid;
+    uint32_t Width;
+    uint32_t Height;
+    uint32_t RefreshHz;
+    uint32_t EncodedBytes;
+    uint64_t FrameSequence;
+    uint32_t RequiredCapacity;
+    uint32_t Reserved[3];
+};
 #pragma pack(pop)
 
 static_assert(sizeof(GPUbnbMediaProbeRequest) == 64, "GPUbnb media request ABI drift");
 static_assert(sizeof(GPUbnbMediaProbeResult) == 64, "GPUbnb media result ABI drift");
+static_assert(sizeof(GPUbnbMediaFrameResult) == 64, "GPUbnb media frame ABI drift");
+
+struct GPUbnbMediaSession;
 
 extern "C" __declspec(dllexport)
 HRESULT __stdcall GPUbnbProbeMediaFrame(
     const GPUbnbMediaProbeRequest* request,
     GPUbnbMediaProbeResult* result);
+
+
+extern "C" __declspec(dllexport)
+HRESULT __stdcall GPUbnbMediaOpen(
+    const GPUbnbMediaProbeRequest* request,
+    GPUbnbMediaSession** session);
+
+extern "C" __declspec(dllexport)
+HRESULT __stdcall GPUbnbMediaReadFrame(
+    GPUbnbMediaSession* session,
+    uint8_t* bitstream,
+    uint32_t bitstreamCapacity,
+    GPUbnbMediaFrameResult* result);
+
+extern "C" __declspec(dllexport)
+void __stdcall GPUbnbMediaClose(GPUbnbMediaSession* session);
