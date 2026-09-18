@@ -4,6 +4,7 @@
 //! GPUbnb IddCx device interface and sends only the inert ValidateOnly probe with DeviceIoControl.
 
 use crate::PlatformError;
+use crate::gpu_identity::resolve_nvidia_uuid_to_luid;
 
 pub const IDD_CONTROL_VERSION: u32 = 1;
 pub const IDD_CONTROL_REQUEST_SIZE: usize = 64;
@@ -158,6 +159,7 @@ pub fn encode_virtual_display_request(
 }
 
 pub fn activate_virtual_display_lease(
+    gpu_uuid: &str,
     request: VirtualDisplayRequest,
 ) -> Result<VirtualDisplayLease, PlatformError> {
     if request.operation != VirtualDisplayOperation::PlugMonitor {
@@ -165,6 +167,11 @@ pub fn activate_virtual_display_lease(
     }
     if !IDD_MONITOR_MUTATION_ENABLED {
         return Err(PlatformError::IddUnsafeOperation);
+    }
+    let identity = resolve_nvidia_uuid_to_luid(gpu_uuid)
+        .map_err(|_| PlatformError::GpuGraphicsIdentityUnavailable)?;
+    if identity.luid != request.render_adapter_luid {
+        return Err(PlatformError::GpuGraphicsIdentityMismatch);
     }
     let wire =
         encode_virtual_display_request(request).map_err(|_| PlatformError::IddControlFailed)?;
@@ -474,7 +481,7 @@ mod tests {
             VirtualDisplayOperation::UnplugMonitor,
         ] {
             assert_eq!(
-                activate_virtual_display_lease(VirtualDisplayRequest {
+                activate_virtual_display_lease("GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", VirtualDisplayRequest {
                     operation,
                     ..valid()
                 })
@@ -488,7 +495,7 @@ mod tests {
     fn activation_is_hard_disabled_before_physical_qualification() {
         assert!(!IDD_MONITOR_MUTATION_ENABLED);
         assert_eq!(
-            activate_virtual_display_lease(valid()).err(),
+            activate_virtual_display_lease("GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", valid()).err(),
             Some(PlatformError::IddUnsafeOperation)
         );
     }
