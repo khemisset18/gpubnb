@@ -46,6 +46,8 @@ pub enum PlatformError {
     RenterSystemIdentityForbidden,
     RenterProviderIdentityForbidden,
     RenterTokenUserMismatch,
+    RenterSessionNotActive,
+    AnotherInteractiveSessionActive,
     EnvironmentCreateFailed,
     InvalidSid,
     SecurityDescriptorFailed,
