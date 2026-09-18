@@ -27,7 +27,9 @@ The helper must never capture the provider's personal desktop.
 - `--stop` is idempotent: an already-clean session still returns `stopped:true`
   for the requested session id after verifying no owned process/listener remains.
 - Media listeners bind loopback only. No `0.0.0.0`, LAN, public or wildcard
-  listener is permitted.
+  listener is permitted. The Agent accepts only a literal loopback IP, an explicit
+  TCP port and a path exactly `/session/<sessionId>`; credentials, query strings
+  and fragments are rejected.
 - The helper never logs provider usernames, profile paths, browser data,
   document paths, tokens or renter credentials.
 
