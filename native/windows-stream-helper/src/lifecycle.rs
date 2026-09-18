@@ -213,16 +213,17 @@ mod tests {
         assert_eq!(state.phase(), SessionPhase::Ready);
         assert!(state.billable());
 
-        for mutate in [
-            |proof: &mut ReadinessProof| proof.isolated_session = false,
-            |proof: &mut ReadinessProof| proof.virtual_display = false,
-            |proof: &mut ReadinessProof| proof.provider_desktop_excluded = false,
-            |proof: &mut ReadinessProof| proof.exact_gpu_bound = false,
-            |proof: &mut ReadinessProof| proof.capture_ready = false,
-            |proof: &mut ReadinessProof| proof.nvenc_ready = false,
-            |proof: &mut ReadinessProof| proof.media_ready = false,
-            |proof: &mut ReadinessProof| proof.input_isolated = false,
-        ] {
+        let mutations: [fn(&mut ReadinessProof); 8] = [
+            |proof| proof.isolated_session = false,
+            |proof| proof.virtual_display = false,
+            |proof| proof.provider_desktop_excluded = false,
+            |proof| proof.exact_gpu_bound = false,
+            |proof| proof.capture_ready = false,
+            |proof| proof.nvenc_ready = false,
+            |proof| proof.media_ready = false,
+            |proof| proof.input_isolated = false,
+        ];
+        for mutate in mutations {
             let mut proof = ready;
             mutate(&mut proof);
             let mut candidate = NativeSessionState::new(WorkspaceKind::CloudDesktop);
