@@ -129,7 +129,11 @@ mod tests {
     impl FakePlatform {
         fn step(&mut self, name: &'static str, error: NativeBackendError) -> Result<(), NativeBackendError> {
             self.calls.push(name);
-            if self.fail_at == Some(name) { Err(error) } else { Ok(()) }
+            if self.fail_at == Some(name) {
+                Err(error)
+            } else {
+                Ok(())
+            }
         }
     }
 
@@ -166,7 +170,11 @@ mod tests {
         }
         fn cleanup(&mut self) -> Result<(), NativeBackendError> {
             self.calls.push("cleanup");
-            if self.cleanup_fails { Err(NativeBackendError::Cleanup) } else { Ok(()) }
+            if self.cleanup_fails {
+                Err(NativeBackendError::Cleanup)
+            } else {
+                Ok(())
+            }
         }
     }
 
@@ -177,12 +185,15 @@ mod tests {
             &mut platform,
             WorkspaceKind::CloudDesktop,
             "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
-        ).expect("qualified proof");
+        )
+        .expect("qualified proof");
 
         assert!(proof.qualifies(WorkspaceKind::CloudDesktop));
         assert_eq!(
             platform.calls,
-            ["session", "display", "provider", "gpu", "capture", "nvenc", "media", "input"]
+            [
+                "session", "display", "provider", "gpu", "capture", "nvenc", "media", "input",
+            ]
         );
     }
 
@@ -238,7 +249,8 @@ mod tests {
             &mut platform,
             WorkspaceKind::Gaming,
             "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
-        ).expect("gaming proof");
+        )
+        .expect("gaming proof");
         assert!(proof.qualifies(WorkspaceKind::Gaming));
         assert_eq!(platform.calls.last(), Some(&"controller"));
         assert!(platform.calls.contains(&"audio"));
@@ -251,11 +263,14 @@ mod tests {
                 fail_at: Some(step),
                 ..FakePlatform::default()
             };
-            assert!(prove_runtime_ready(
-                &mut platform,
-                WorkspaceKind::Gaming,
-                "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
-            ).is_err());
+            assert!(
+                prove_runtime_ready(
+                    &mut platform,
+                    WorkspaceKind::Gaming,
+                    "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+                )
+                .is_err()
+            );
             assert_eq!(platform.calls.last(), Some(&"cleanup"));
         }
     }
