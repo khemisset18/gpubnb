@@ -149,7 +149,9 @@ mod windows_impl {
     const TOKEN_QUERY: u32 = 0x0008;
     const TOKEN_USER_CLASS: u32 = 1;
     const TOKEN_GROUPS_CLASS: u32 = 2;
+    const TOKEN_IMPERSONATION_LEVEL_CLASS: u32 = 9;
     const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
+    const SECURITY_IDENTIFICATION_LEVEL: u32 = 1;
     const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
     const ERROR_PIPE_CONNECTED: u32 = 535;
     const ERROR_IO_PENDING: u32 = 997;
@@ -443,6 +445,16 @@ mod windows_impl {
         Ok(buffer)
     }
 
+    fn impersonation_level(token: &OwnedToken) -> Result<u32, PlatformError> {
+        let buffer = token_information(token.0, TOKEN_IMPERSONATION_LEVEL_CLASS)?;
+        if buffer.len() < size_of::<u32>() {
+            return Err(PlatformError::PipeImpersonationFailed);
+        }
+        // SAFETY: TokenImpersonationLevel returns one SECURITY_IMPERSONATION_LEVEL
+        // value, represented by a 32-bit enum, and the buffer size was checked.
+        Ok(unsafe { *(buffer.as_ptr().cast::<u32>()) })
+    }
+
     fn sid_from_token(token: &OwnedToken, logon_sid: bool) -> Result<String, PlatformError> {
         if !logon_sid {
             let buffer = token_information(token.0, TOKEN_USER_CLASS)?;
@@ -651,6 +663,11 @@ mod windows_impl {
         let peer_result = (|| {
             let token =
                 open_current_thread_token().map_err(|_| PlatformError::PipeImpersonationFailed)?;
+            let level = impersonation_level(&token)
+                .map_err(|_| PlatformError::PipeImpersonationFailed)?;
+            if level > SECURITY_IDENTIFICATION_LEVEL {
+                return Err(PlatformError::PipeImpersonationLevelTooHigh);
+            }
             let actual =
                 sid_from_token(&token, true).map_err(|_| PlatformError::PipeImpersonationFailed)?;
             if !actual.eq_ignore_ascii_case(expected_logon_sid) {
@@ -715,6 +732,13 @@ mod windows_impl {
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "windows")]
+    const TEST_SECURITY_SQOS_PRESENT: u32 = 0x0010_0000;
+    #[cfg(target_os = "windows")]
+    const TEST_SECURITY_IDENTIFICATION: u32 = 0x0001_0000;
+    #[cfg(target_os = "windows")]
+    const TEST_SECURITY_IMPERSONATION: u32 = 0x0002_0000;
+
     #[test]
     fn session_and_sid_inputs_are_injection_safe() {
         assert!(safe_session_id("sess-ABC_123"));
@@ -763,6 +787,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     fn connect_test_client(
         name: String,
+        sqos_flags: u32,
         ready: std::sync::mpsc::Sender<u32>,
         release: std::sync::mpsc::Receiver<()>,
     ) {
@@ -774,8 +799,6 @@ mod tests {
         const GENERIC_READ: u32 = 0x8000_0000;
         const GENERIC_WRITE: u32 = 0x4000_0000;
         const OPEN_EXISTING: u32 = 3;
-        const SECURITY_SQOS_PRESENT: u32 = 0x0010_0000;
-        const SECURITY_IDENTIFICATION: u32 = 0x0001_0000;
 
         #[link(name = "kernel32")]
         unsafe extern "system" {
@@ -808,7 +831,7 @@ mod tests {
                 0,
                 std::ptr::null_mut(),
                 OPEN_EXISTING,
-                SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
+                sqos_flags,
                 0,
             )
         };
@@ -854,7 +877,14 @@ mod tests {
         let (pid_tx, pid_rx) = std::sync::mpsc::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         let name = pipe.name().to_owned();
-        let client = std::thread::spawn(move || connect_test_client(name, pid_tx, release_rx));
+        let client = std::thread::spawn(move || {
+            connect_test_client(
+                name,
+                TEST_SECURITY_SQOS_PRESENT | TEST_SECURITY_IDENTIFICATION,
+                pid_tx,
+                release_rx,
+            )
+        });
 
         let verified = pipe
             .accept_verified_client(&logon_sid, 10_000)
@@ -862,6 +892,39 @@ mod tests {
         let client_pid = pid_rx.recv().expect("client pid");
         assert_eq!(verified.process_id, client_pid);
         assert_eq!(verified.logon_sid, logon_sid);
+        release_tx.send(()).expect("release client");
+        client.join().expect("client thread");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_rejects_pipe_client_requesting_impersonation_authority() {
+        let service_sid = current_process_user_sid().expect("service SID");
+        let logon_sid = current_process_logon_sid().expect("logon SID");
+        let pipe = create_worker_pipe(
+            "ci-peer-level",
+            std::process::id() as u64 + 2,
+            &service_sid,
+            &logon_sid,
+        )
+        .expect("secure pipe");
+
+        let (pid_tx, _pid_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let name = pipe.name().to_owned();
+        let client = std::thread::spawn(move || {
+            connect_test_client(
+                name,
+                TEST_SECURITY_SQOS_PRESENT | TEST_SECURITY_IMPERSONATION,
+                pid_tx,
+                release_rx,
+            )
+        });
+
+        assert_eq!(
+            pipe.accept_verified_client(&logon_sid, 10_000),
+            Err(PlatformError::PipeImpersonationLevelTooHigh)
+        );
         release_tx.send(()).expect("release client");
         client.join().expect("client thread");
     }
