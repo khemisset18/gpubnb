@@ -3,6 +3,11 @@
 EXTERN_C const GUID GUID_DEVINTERFACE_GPUBNB_IDD_CONTROL =
 { 0x3f4c6f31, 0x4e7c, 0x4de7, { 0x9f, 0xd8, 0x72, 0x18, 0xb3, 0x88, 0x1a, 0x55 } };
 
+// Physical qualification gate. Keep real monitor mutation compiled so WDK/ABI
+// regressions are caught, but make it unreachable in production behavior until
+// GPUbnb explicitly promotes a physically qualified build.
+static constexpr bool GPUBNB_ENABLE_MONITOR_MUTATION = false;
+
 static void GPUbnbFillSignalInfo(
     _Out_ DISPLAYCONFIG_VIDEO_SIGNAL_INFO* mode,
     _In_ UINT32 width,
@@ -340,6 +345,13 @@ VOID GPUbnbEvtIoDeviceControl(
                             GPUbnbIddControlOperation::ValidateOnly))
                     {
                         status = STATUS_SUCCESS;
+                    }
+                    else if (!GPUBNB_ENABLE_MONITOR_MUTATION)
+                    {
+                        // Fail closed before physical qualification. This gate is
+                        // compile-time false and cannot be toggled by a renter,
+                        // environment variable, registry value or API request.
+                        status = STATUS_NOT_SUPPORTED;
                     }
                     else
                     {
