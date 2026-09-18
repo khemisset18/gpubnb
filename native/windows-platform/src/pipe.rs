@@ -83,7 +83,7 @@ pub fn create_worker_pipe(
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = sddl;
+        let _ = (name, sddl);
         Err(PlatformError::WindowsRequired)
     }
 }
