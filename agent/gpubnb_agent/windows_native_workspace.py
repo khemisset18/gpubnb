@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import json
 import os
 import platform
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import shutil
 from typing import Any
 
@@ -26,6 +26,9 @@ WINDOWS_NATIVE_WORKSPACE_SLUGS = frozenset(
     {"cloud-desktop", "creator", "cad", "gaming"}
 )
 SELF_TEST_SCHEMA_VERSION = 1
+WINDOWS_STREAM_HELPER_INSTALL_PATH = r"C:\\Program Files\\GPUbnb\\gpubnb-windows-stream.exe"
+WINDOWS_STREAM_HELPER_DEV_PATH_ENV = "GPUBNB_WINDOWS_STREAM_HELPER"
+WINDOWS_STREAM_HELPER_DEV_ALLOW_ENV = "GPUBNB_WINDOWS_STREAM_HELPER_DEV_ALLOW"
 
 
 @dataclass(frozen=True)
@@ -115,27 +118,30 @@ def discover_native_application(slug: str) -> str | None:
     return None
 
 
+def _find_absolute_windows_file(candidate: str | None) -> str | None:
+    if not candidate or not PureWindowsPath(candidate).is_absolute():
+        return None
+    path = Path(candidate)
+    if not path.is_file():
+        return None
+    return str(path.resolve())
+
+
 def find_stream_helper() -> str | None:
-    """Find the qualified GPUbnb Windows media helper.
+    """Find the trusted GPUbnb Windows media helper without PATH lookup.
 
-    There is intentionally no generic ffmpeg/OBS/Sunshine fallback.  The helper
-    must implement GPUbnb's isolated-session and self-test contract; otherwise
-    the host remains incompatible.
+    Production prefers the fixed Program Files location. A development override
+    is accepted only when an explicit opt-in flag is set and the path is absolute.
+    Relative paths and PATH discovery are deliberately forbidden so an unrelated
+    executable cannot accidentally satisfy the native-streaming capability probe.
     """
-    configured = os.environ.get("GPUBNB_WINDOWS_STREAM_HELPER")
-    candidates = [
-        configured,
-        r"C:\Program Files\GPUbnb\gpubnb-windows-stream.exe",
-        "gpubnb-windows-stream.exe",
-    ]
-    for candidate in candidates:
-        if not candidate:
-            continue
-        resolved = _find_candidate(candidate)
-        if resolved:
-            return resolved
-    return None
+    installed = _find_absolute_windows_file(WINDOWS_STREAM_HELPER_INSTALL_PATH)
+    if installed:
+        return installed
 
+    if os.environ.get(WINDOWS_STREAM_HELPER_DEV_ALLOW_ENV) == "1":
+        return _find_absolute_windows_file(os.environ.get(WINDOWS_STREAM_HELPER_DEV_PATH_ENV))
+    return None
 
 def _parse_self_test(stdout: str) -> dict[str, Any] | None:
     try:
