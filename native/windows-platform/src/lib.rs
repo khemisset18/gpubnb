@@ -58,8 +58,8 @@ pub fn open_application_for_verification(
 #[cfg(target_os = "windows")]
 mod windows_impl {
     use super::{ApplicationFileEvidence, FileIdentity, PlatformError, VerifiedApplicationFile};
-    use std::ffi::{c_void, OsStr};
-    use std::mem::{size_of, MaybeUninit};
+    use std::ffi::{OsStr, c_void};
+    use std::mem::{MaybeUninit, size_of};
     use std::os::windows::ffi::OsStrExt;
     use std::path::Path;
 
@@ -132,7 +132,12 @@ mod windows_impl {
 
     fn wide(value: &OsStr) -> Result<Vec<u16>, PlatformError> {
         let encoded: Vec<u16> = value.encode_wide().chain(Some(0)).collect();
-        if encoded.len() <= 1 || encoded.iter().take(encoded.len() - 1).any(|unit| *unit == 0) {
+        if encoded.len() <= 1
+            || encoded
+                .iter()
+                .take(encoded.len() - 1)
+                .any(|unit| *unit == 0)
+        {
             return Err(PlatformError::InvalidPath);
         }
         Ok(encoded)
@@ -162,9 +167,8 @@ mod windows_impl {
         let mut root = [0u16; 1024];
         // SAFETY: path_wide is NUL-terminated and root is a writable buffer with
         // the supplied element count.
-        let ok = unsafe {
-            GetVolumePathNameW(path_wide.as_ptr(), root.as_mut_ptr(), root.len() as u32)
-        };
+        let ok =
+            unsafe { GetVolumePathNameW(path_wide.as_ptr(), root.as_mut_ptr(), root.len() as u32) };
         if ok == 0 {
             return Err(PlatformError::VolumeInfoFailed);
         }
@@ -205,8 +209,7 @@ mod windows_impl {
         }
         let handle = OwnedHandle(raw);
 
-        let attributes: FileAttributeTagInfo =
-            file_info(handle.0, FILE_ATTRIBUTE_TAG_INFO_CLASS)?;
+        let attributes: FileAttributeTagInfo = file_info(handle.0, FILE_ATTRIBUTE_TAG_INFO_CLASS)?;
         let is_reparse = attributes.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0;
         if is_reparse {
             return Err(PlatformError::ReparsePoint);
