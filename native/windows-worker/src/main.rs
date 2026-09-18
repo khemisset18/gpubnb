@@ -167,6 +167,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
 
         let mut expected_sequence = 1u64;
         let mut display_spec = None;
+        let mut media_suspended = false;
         loop {
             let frame = client
                 .read_frame(PIPE_TIMEOUT_MS)
@@ -205,6 +206,9 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                     display_spec = Some(spec);
                 }
                 WorkerCommand::StartCapture => {
+                    if media_suspended {
+                        return Err(WorkerError::new("media_suspended_requires_fresh_resume", 21));
+                    }
                     let spec = display_spec
                         .ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
 
@@ -244,11 +248,63 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         .send_frame(&proof)
                         .map_err(|_| WorkerError::new("media_proof_send_failed", 21))?;
                 }
-                WorkerCommand::SuspendMedia | WorkerCommand::ResumeAfterFreshProof => {
-                    return Err(WorkerError::new(
-                        "native_media_lifecycle_not_implemented",
-                        21,
-                    ));
+                WorkerCommand::SuspendMedia => {
+                    if display_spec.is_none() {
+                        return Err(WorkerError::new("display_not_prepared", 21));
+                    }
+                    if media_suspended {
+                        return Err(WorkerError::new("media_already_suspended", 21));
+                    }
+                    media_suspended = true;
+                }
+                WorkerCommand::ResumeAfterFreshProof => {
+                    if !media_suspended {
+                        return Err(WorkerError::new("media_not_suspended", 21));
+                    }
+                    let spec = display_spec
+                        .ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
+
+                    // A resume is never an administrative toggle. Re-prove that the
+                    // rented NVIDIA UUID still resolves to the exact display LUID,
+                    // then capture and NVENC-encode a new frame before the service
+                    // is allowed to re-arm READY/billing.
+                    let identity = resolve_nvidia_uuid_to_luid(&args.gpu_uuid)
+                        .map_err(|_| WorkerError::new("exact_gpu_mapping_failed", 21))?;
+                    if identity.luid != spec.adapter_luid {
+                        return Err(WorkerError::new("resume_gpu_luid_mismatch", 21));
+                    }
+
+                    let media = probe_media_frame(MediaProbeRequest {
+                        gpu_uuid: &args.gpu_uuid,
+                        adapter_luid: spec.adapter_luid,
+                        display_nonce: spec.display_nonce,
+                        width: spec.width,
+                        height: spec.height,
+                        refresh_hz: spec.refresh_hz,
+                        capture_timeout_ms: PIPE_TIMEOUT_MS,
+                    })
+                    .map_err(|_| WorkerError::new("resume_media_reproof_failed", 21))?;
+
+                    let proof = encode_worker_media_proof(WorkerMediaProof {
+                        protocol_version: WORKER_PROTOCOL_VERSION,
+                        generation: args.generation,
+                        command_sequence,
+                        windows_session_id,
+                        adapter_luid: media.adapter_luid,
+                        display_nonce: spec.display_nonce,
+                        width: media.width,
+                        height: media.height,
+                        refresh_hz: media.refresh_hz,
+                        frame_sequence: media.frame_sequence,
+                        encoded_bytes: media.encoded_bytes,
+                        proof_flags: media.proof_flags,
+                    })
+                    .map_err(|_| WorkerError::new("resume_media_proof_encode_failed", 21))?;
+                    client
+                        .send_frame(&proof)
+                        .map_err(|_| WorkerError::new("resume_media_proof_send_failed", 21))?;
+
+                    media_suspended = false;
                 }
             }
         }
