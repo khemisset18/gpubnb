@@ -135,6 +135,9 @@ impl QualifiedGraphicsRuntime {
             return Err(ServiceRuntimeError::WorkerProtocol);
         }
         let sequence = self.next_sequence;
+        let next_sequence = sequence
+            .checked_add(1)
+            .ok_or(ServiceRuntimeError::WorkerProtocol)?;
         let command = encode_worker_command(WorkerCommandFrame {
             protocol_version: WORKER_PROTOCOL_VERSION,
             command: WorkerCommand::ResumeAfterFreshProof,
