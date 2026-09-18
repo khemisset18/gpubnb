@@ -56,14 +56,57 @@ impl RenterEnvironment {
     }
 }
 
-pub fn query_renter_session_token(session_id: u32) -> Result<RenterSessionToken, PlatformError> {
+const FORBIDDEN_RENTER_SYSTEM_SIDS: [&str; 3] = ["S-1-5-18", "S-1-5-19", "S-1-5-20"];
+
+fn numeric_sid(value: &str) -> bool {
+    if value.is_empty() || value.len() > 184 || !value.starts_with("S-1-") {
+        return false;
+    }
+    let mut fields = 0usize;
+    for component in value.split('-') {
+        if component.is_empty() {
+            return false;
+        }
+        if fields >= 2 && !component.bytes().all(|byte| byte.is_ascii_digit()) {
+            return false;
+        }
+        fields += 1;
+    }
+    fields >= 4
+}
+
+fn validate_renter_identity_policy(
+    expected_renter_user_sid: &str,
+    provider_user_sid: &str,
+) -> Result<(), PlatformError> {
+    if !numeric_sid(expected_renter_user_sid) || !numeric_sid(provider_user_sid) {
+        return Err(PlatformError::InvalidRenterUserSid);
+    }
+    if FORBIDDEN_RENTER_SYSTEM_SIDS
+        .iter()
+        .any(|sid| sid.eq_ignore_ascii_case(expected_renter_user_sid))
+    {
+        return Err(PlatformError::RenterSystemIdentityForbidden);
+    }
+    if expected_renter_user_sid.eq_ignore_ascii_case(provider_user_sid) {
+        return Err(PlatformError::RenterProviderIdentityForbidden);
+    }
+    Ok(())
+}
+
+pub fn query_renter_session_token(
+    session_id: u32,
+    expected_renter_user_sid: &str,
+    provider_user_sid: &str,
+) -> Result<RenterSessionToken, PlatformError> {
     if session_id == 0 {
         return Err(PlatformError::InvalidWindowsSessionId);
     }
+    validate_renter_identity_policy(expected_renter_user_sid, provider_user_sid)?;
 
     #[cfg(target_os = "windows")]
     {
-        windows_impl::query_renter_session_token(session_id)
+        windows_impl::query_renter_session_token(session_id, expected_renter_user_sid)
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -310,6 +353,7 @@ mod windows_impl {
 
     pub(super) fn query_renter_session_token(
         session_id: u32,
+        expected_renter_user_sid: &str,
     ) -> Result<RenterSessionToken, PlatformError> {
         let mut raw = 0isize;
         // SAFETY: raw is a valid out pointer. WTSQueryUserToken requires the
@@ -331,6 +375,9 @@ mod windows_impl {
         }
 
         let user_sid = user_sid(handle.0)?;
+        if !user_sid.eq_ignore_ascii_case(expected_renter_user_sid) {
+            return Err(PlatformError::RenterTokenUserMismatch);
+        }
         let logon_sid = logon_sid(handle.0)?;
 
         Ok(RenterSessionToken {
@@ -347,9 +394,36 @@ mod tests {
     use super::*;
 
     #[test]
+    fn renter_identity_policy_rejects_provider_system_and_malformed_sids() {
+        assert_eq!(
+            validate_renter_identity_policy(
+                "S-1-5-21-100-200-300-1000",
+                "S-1-5-21-100-200-300-1000",
+            ),
+            Err(PlatformError::RenterProviderIdentityForbidden)
+        );
+        for system_sid in FORBIDDEN_RENTER_SYSTEM_SIDS {
+            assert_eq!(
+                validate_renter_identity_policy(
+                    system_sid,
+                    "S-1-5-21-100-200-300-1000",
+                ),
+                Err(PlatformError::RenterSystemIdentityForbidden)
+            );
+        }
+        assert_eq!(
+            validate_renter_identity_policy(
+                "S-1-5-21-100)(A;;GA;;;WD",
+                "S-1-5-21-100-200-300-1000",
+            ),
+            Err(PlatformError::InvalidRenterUserSid)
+        );
+    }
+
+    #[test]
     fn session_zero_is_never_a_renter_session() {
         assert_eq!(
-            query_renter_session_token(0).err(),
+            query_renter_session_token(0, "S-1-5-21-100-200-300-1001", "S-1-5-21-100-200-300-1000").err(),
             Some(PlatformError::InvalidWindowsSessionId)
         );
     }
@@ -358,7 +432,12 @@ mod tests {
     #[test]
     fn nonexistent_session_fails_closed() {
         assert_eq!(
-            query_renter_session_token(u32::MAX - 1).err(),
+            query_renter_session_token(
+                u32::MAX - 1,
+                "S-1-5-21-100-200-300-1001",
+                "S-1-5-21-100-200-300-1000",
+            )
+            .err(),
             Some(PlatformError::RenterTokenQueryFailed)
         );
     }
@@ -367,7 +446,12 @@ mod tests {
     #[test]
     fn non_windows_fails_closed() {
         assert_eq!(
-            query_renter_session_token(1).err(),
+            query_renter_session_token(
+                1,
+                "S-1-5-21-100-200-300-1001",
+                "S-1-5-21-100-200-300-1000",
+            )
+            .err(),
             Some(PlatformError::WindowsRequired)
         );
     }
