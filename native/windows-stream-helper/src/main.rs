@@ -242,11 +242,18 @@ fn execute(command: &Command) -> Result<(), CliError> {
     }
 }
 
+fn error_json(error: CliError) -> String {
+    // Error codes are compile-time ASCII constants. Never echo arguments, paths,
+    // GPU identifiers, tokens or other caller-controlled data into diagnostics.
+    format!(r#"{{"ok":false,"error":"{}"}}"#, error.code)
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     match parse_args(&args).and_then(|command| execute(&command)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            println!("{}", error_json(error));
             eprintln!("error:{}", error.code);
             ExitCode::from(error.exit_code)
         }
@@ -406,6 +413,17 @@ mod tests {
             })
         );
         assert!(parse_args(&strings(&["--stop", "--session-id", "sess-1"])).is_err());
+    }
+
+    #[test]
+    fn error_output_is_machine_readable_and_secret_free() {
+        let error = CliError::new("native_backend_not_implemented", 21);
+        assert_eq!(
+            error_json(error),
+            r#"{"ok":false,"error":"native_backend_not_implemented"}"#
+        );
+        assert!(!error_json(error).contains("GPU-"));
+        assert!(!error_json(error).contains("\\"));
     }
 
     #[test]
