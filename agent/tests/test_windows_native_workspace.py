@@ -19,6 +19,8 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
             "virtualDisplay": True,
             "providerDesktopExcluded": True,
             "captureFrame": True,
+            "exactGpuBound": True,
+            "nvencReady": True,
             "hardwareEncoder": "nvenc",
             "mediaLoopback": True,
             "inputIsolation": True,
@@ -117,7 +119,7 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
         self.assertEqual(result.reason, "native_stream_self_test_failed")
 
     def test_self_test_requires_isolated_session_capture_media_and_input(self):
-        for field in ("isolatedSession", "virtualDisplay", "providerDesktopExcluded", "captureFrame", "mediaLoopback", "inputIsolation"):
+        for field in ("isolatedSession", "virtualDisplay", "providerDesktopExcluded", "captureFrame", "exactGpuBound", "nvencReady", "mediaLoopback", "inputIsolation"):
             with self.subTest(field=field):
                 with (
                     patch.object(native.platform, "system", return_value="Windows"),

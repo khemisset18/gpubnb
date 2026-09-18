@@ -217,6 +217,8 @@ def launch_windows_native_workspace(
         "virtualDisplay",
         "providerDesktopExcluded",
         "captureReady",
+        "exactGpuBound",
+        "nvencReady",
         "mediaReady",
         "inputIsolation",
     )

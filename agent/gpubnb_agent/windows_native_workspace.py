@@ -155,6 +155,8 @@ def windows_native_desktop_preflight(
           "virtualDisplay": true,
           "providerDesktopExcluded": true,
           "captureFrame": true,
+          "exactGpuBound": true,
+          "nvencReady": true,
           "hardwareEncoder": "nvenc",
           "mediaLoopback": true,
           "inputIsolation": true,
@@ -188,6 +190,8 @@ def windows_native_desktop_preflight(
         "virtualDisplay",
         "providerDesktopExcluded",
         "captureFrame",
+        "exactGpuBound",
+        "nvencReady",
         "mediaLoopback",
         "inputIsolation",
     )

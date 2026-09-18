@@ -22,6 +22,8 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             "virtualDisplay": True,
             "providerDesktopExcluded": True,
             "captureReady": True,
+            "exactGpuBound": True,
+            "nvencReady": True,
             "hardwareEncoder": "nvenc",
             "mediaReady": True,
             "inputIsolation": True,
@@ -162,7 +164,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             self.assertEqual(run.call_count, 2)
 
     def test_launch_requires_isolated_session_and_input_boundary(self):
-        for field in ("isolatedSession", "virtualDisplay", "providerDesktopExcluded", "captureReady", "mediaReady", "inputIsolation"):
+        for field in ("isolatedSession", "virtualDisplay", "providerDesktopExcluded", "captureReady", "exactGpuBound", "nvencReady", "mediaReady", "inputIsolation"):
             with self.subTest(field=field):
                 with (
                     patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
