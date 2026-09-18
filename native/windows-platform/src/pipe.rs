@@ -1250,7 +1250,7 @@ mod tests {
         });
 
         assert_eq!(
-            pipe.accept_verified_client(&logon_sid, 10_000),
+            pipe.accept_verified_client(&logon_sid, std::process::id(), 10_000),
             Err(PlatformError::PipeImpersonationLevelTooHigh)
         );
         release_tx.send(()).expect("release client");
@@ -1273,7 +1273,14 @@ mod tests {
         let (pid_tx, _pid_rx) = std::sync::mpsc::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         let name = pipe.name().to_owned();
-        let client = std::thread::spawn(move || connect_test_client(name, pid_tx, release_rx));
+        let client = std::thread::spawn(move || {
+            connect_test_client(
+                name,
+                TEST_SECURITY_SQOS_PRESENT | TEST_SECURITY_IDENTIFICATION,
+                pid_tx,
+                release_rx,
+            )
+        });
 
         assert_eq!(
             pipe.accept_verified_client("S-1-5-5-999999-999999", std::process::id(), 10_000,),
