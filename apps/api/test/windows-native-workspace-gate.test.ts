@@ -114,7 +114,7 @@ test('machine-level native proof cannot prequalify every GPU before exact accele
   await assert.rejects(
     () => ensureCompatibleMachineWorkspace(db as never, windowsWithNativeProof.id, 'cloud-desktop'),
     (error: unknown) => error instanceof Error
-      && error.message === 'cloud-desktop_workspace_runtime_unavailable',
+      && error.message === 'cloud-desktop_workspace_incompatible',
   );
   assert.equal(
     definitionUpserts,
