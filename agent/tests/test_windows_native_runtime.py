@@ -140,6 +140,27 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "native_workspace_start_media_token_required"):
                 runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
 
+    def test_launch_rejects_non_string_media_tokens_and_cleans_session(self):
+        for token in (12345678901234567890123456789012, True, ["A" * 32], {"token": "A" * 32}):
+            with (
+                self.subTest(token_type=type(token).__name__),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+                patch.object(runtime, "discover_native_application", return_value=None),
+                patch.object(
+                    runtime,
+                    "run_command",
+                    side_effect=[self._start_report(mediaToken=token), self._stop_report()],
+                ) as run,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "^native_workspace_start_media_token_required$"):
+                    runtime.launch_windows_native_workspace(
+                        "sess-1",
+                        "cloud-desktop",
+                        "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+                    )
+            self.assertEqual(run.call_count, 2)
+
     def test_launch_requires_isolated_session_and_input_boundary(self):
         for field in ("isolatedSession", "virtualDisplay", "providerDesktopExcluded", "captureReady", "mediaReady", "inputIsolation"):
             with self.subTest(field=field):
