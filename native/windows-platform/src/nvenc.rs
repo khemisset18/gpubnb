@@ -22,11 +22,11 @@ pub enum NvencProbeError {
 }
 
 pub fn decode_nvenc_api_version(raw: u32) -> Result<NvencApiVersion, NvencProbeError> {
-    // NVIDIA encodes NVENCAPI_VERSION as:
-    // major | (minor << 24).
-    let major_raw = raw & 0x00ff_ffff;
-    let minor_raw = raw >> 24;
-    if major_raw == 0 || major_raw > u8::MAX as u32 || minor_raw > u8::MAX as u32 {
+    // NvEncodeAPIGetMaxSupportedVersion uses the compact driver capability
+    // encoding shown by NVIDIA's SDK samples: (major << 4) | minor.
+    let major_raw = raw >> 4;
+    let minor_raw = raw & 0x0f;
+    if major_raw == 0 || major_raw > u8::MAX as u32 {
         return Err(NvencProbeError::InvalidVersion);
     }
     Ok(NvencApiVersion {
@@ -120,9 +120,9 @@ mod tests {
     #[test]
     fn nvidia_version_encoding_is_decoded_strictly() {
         assert_eq!(
-            decode_nvenc_api_version(13 | (1 << 24)),
+            decode_nvenc_api_version((13 << 4) | 1),
             Ok(NvencApiVersion {
-                raw: 13 | (1 << 24),
+                raw: (13 << 4) | 1,
                 major: 13,
                 minor: 1,
             })
