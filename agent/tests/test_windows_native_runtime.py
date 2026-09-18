@@ -16,7 +16,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             "schemaVersion": 1,
             "sessionId": "sess-1",
             "workspaceSlug": "cloud-desktop",
-            "gpuUuid": "GPU-EXACT",
+            "gpuUuid": "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
             "helperVersion": "0.2-test",
             "isolatedSession": True,
             "virtualDisplay": True,
@@ -40,7 +40,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             stderr="",
         )
 
-    def _preflight(self, gpu_uuid="GPU-EXACT", audio=True):
+    def _preflight(self, gpu_uuid="GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", audio=True):
         return NativeDesktopPreflight(
             True,
             "ready",
@@ -58,29 +58,29 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             patch.object(runtime, "run_command", return_value=self._start_report()) as run_command,
         ):
             handle = runtime.launch_windows_native_workspace(
-                "sess-1", "cloud-desktop", "GPU-EXACT"
+                "sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"
             )
 
         self.assertEqual(preflight.call_count, 1)
         self.assertEqual(handle.session_id, "sess-1")
         self.assertEqual(handle.workspace_slug, "cloud-desktop")
-        self.assertEqual(handle.gpu_uuid, "GPU-EXACT")
+        self.assertEqual(handle.gpu_uuid, "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
         self.assertTrue(handle.media_url.startswith("http://127.0.0.1:"))
         self.assertEqual(len(handle.media_token), 43)
         self.assertNotIn(handle.media_token, repr(handle))
         command = run_command.call_args.args[0]
         self.assertIn("--gpu-uuid", command)
-        self.assertIn("GPU-EXACT", command)
+        self.assertIn("GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", command)
         self.assertNotIn("--application", command)
 
     def test_launch_rejects_different_preflight_gpu_before_start(self):
         with (
             patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
-            patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight("GPU-OTHER")),
+            patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight("GPU-11111111-2222-3333-4444-555555555555")),
             patch.object(runtime, "run_command") as run_command,
         ):
             with self.assertRaisesRegex(RuntimeError, "native_stream_leased_gpu_mismatch"):
-                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
         run_command.assert_not_called()
 
     def test_launch_rejects_public_media_listener_and_cleans_started_session(self):
@@ -92,7 +92,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             patch.object(runtime, "run_command", side_effect=[start, self._stop_report()]) as run_command,
         ):
             with self.assertRaisesRegex(RuntimeError, "native_workspace_start_loopback_media_required"):
-                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
         self.assertEqual(run_command.call_count, 2)
         self.assertEqual(run_command.call_args_list[1].args[0][-2:], ["--session-id", "sess-1"])
 
@@ -105,7 +105,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             patch.object(runtime, "run_command", side_effect=[start, self._stop_report()]),
         ):
             with self.assertRaisesRegex(RuntimeError, "native_workspace_start_loopback_media_required"):
-                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
 
     def test_launch_requires_explicit_loopback_media_port(self):
         start = self._start_report(mediaUrl="http://127.0.0.1/session/sess-1")
@@ -116,7 +116,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             patch.object(runtime, "run_command", side_effect=[start, self._stop_report()]),
         ):
             with self.assertRaisesRegex(RuntimeError, "native_workspace_start_loopback_media_required"):
-                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
 
     def test_launch_rejects_media_token_in_url_query_and_cleans_session(self):
         start = self._start_report(mediaUrl="http://127.0.0.1:43123/session/sess-1?token=secret")
@@ -127,7 +127,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             patch.object(runtime, "run_command", side_effect=[start, self._stop_report()]),
         ):
             with self.assertRaisesRegex(RuntimeError, "native_workspace_start_loopback_media_required"):
-                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
 
     def test_launch_requires_strong_media_token_and_cleans_session(self):
         start = self._start_report(mediaToken="short")
@@ -138,7 +138,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             patch.object(runtime, "run_command", side_effect=[start, self._stop_report()]),
         ):
             with self.assertRaisesRegex(RuntimeError, "native_workspace_start_media_token_required"):
-                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
 
     def test_launch_requires_isolated_session_and_input_boundary(self):
         for field in ("isolatedSession", "virtualDisplay", "providerDesktopExcluded", "captureReady", "mediaReady", "inputIsolation"):
@@ -154,7 +154,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                     ),
                 ):
                     with self.assertRaisesRegex(RuntimeError, field):
-                        runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+                        runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
 
     def test_validation_failure_surfaces_unverified_cleanup(self):
         start = self._start_report(inputIsolation=False)
@@ -169,7 +169,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                 RuntimeError,
                 "native_workspace_start_missing_inputIsolation_cleanup_unverified",
             ):
-                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
 
     def test_malformed_media_reply_still_stops_exact_session(self):
         with (
@@ -181,7 +181,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             ]) as run,
         ):
             with self.assertRaisesRegex(RuntimeError, "^native_workspace_start_loopback_media_required$"):
-                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
         self.assertEqual(run.call_args.args[0], ["helper.exe", "--stop", "--json", "--session-id", "sess-1"])
 
     def test_failed_start_requires_verified_cleanup_even_after_crash_or_timeout(self):
@@ -204,8 +204,36 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                     if isinstance(stop, Exception) or '"stopped": false' in stop.stdout:
                         expected += "_cleanup_unverified"
                     with self.assertRaisesRegex(RuntimeError, "^" + expected + "$"):
-                        runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+                        runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
                 self.assertEqual(run.call_count, 2)
+
+    def test_ambiguous_json_and_schema_proofs_require_cleanup(self):
+        valid = self._start_report().stdout
+        reports = (
+            valid.replace('"schemaVersion": 1', '"schemaVersion": true'),
+            valid.replace('"schemaVersion": 1', '"schemaVersion": 1.0'),
+            valid.replace('"captureReady": true', '"captureReady": false, "captureReady": true'),
+        )
+        for report in reports:
+            with (
+                self.subTest(report=report),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+                patch.object(runtime, "discover_native_application", return_value=None),
+                patch.object(runtime, "run_command", side_effect=[
+                    SimpleNamespace(returncode=0, stdout=report), self._stop_report(),
+                ]) as run,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "native_workspace_start_(invalid_json|schema_mismatch)"):
+                    runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
+            self.assertEqual(run.call_count, 2)
+
+    def test_invalid_gpu_is_rejected_before_preflight(self):
+        for uuid in ("GPU-INVALID", None, 123, " GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"):
+            with self.subTest(uuid=uuid), patch.object(runtime, "windows_native_desktop_preflight") as probe:
+                with self.assertRaisesRegex(RuntimeError, "invalid_native_gpu_uuid"):
+                    runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", uuid)
+            probe.assert_not_called()
 
     def test_creator_launch_passes_discovered_blender_path(self):
         report = self._start_report(workspaceSlug="creator")
@@ -215,7 +243,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             patch.object(runtime, "discover_native_application", return_value=r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe"),
             patch.object(runtime, "run_command", return_value=report) as run_command,
         ):
-            handle = runtime.launch_windows_native_workspace("sess-1", "creator", "GPU-EXACT")
+            handle = runtime.launch_windows_native_workspace("sess-1", "creator", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
         self.assertIn("Blender", handle.application_path or "")
         self.assertIn("--application", run_command.call_args.args[0])
 
@@ -227,7 +255,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             patch.object(runtime, "run_command") as run_command,
         ):
             with self.assertRaisesRegex(RuntimeError, "creator_application_missing"):
-                runtime.launch_windows_native_workspace("sess-1", "creator", "GPU-EXACT")
+                runtime.launch_windows_native_workspace("sess-1", "creator", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
         run_command.assert_not_called()
 
     def test_gaming_requires_preflight_audio_before_start(self):
@@ -237,7 +265,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             patch.object(runtime, "run_command") as run_command,
         ):
             with self.assertRaisesRegex(RuntimeError, "workspace_audio_required"):
-                runtime.launch_windows_native_workspace("sess-1", "gaming", "GPU-EXACT")
+                runtime.launch_windows_native_workspace("sess-1", "gaming", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
         run_command.assert_not_called()
 
     def test_gaming_requires_runtime_audio_and_controller(self):
@@ -254,7 +282,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                     patch.object(runtime, "run_command", side_effect=[report, self._stop_report()]),
                 ):
                     with self.assertRaisesRegex(RuntimeError, error):
-                        runtime.launch_windows_native_workspace("sess-1", "gaming", "GPU-EXACT")
+                        runtime.launch_windows_native_workspace("sess-1", "gaming", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
 
     def test_stop_requires_helper_confirmation_for_exact_session(self):
         with (
@@ -267,7 +295,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
     def test_session_id_is_restricted_before_helper_execution(self):
         with patch.object(runtime, "run_command") as run_command:
             with self.assertRaisesRegex(RuntimeError, "invalid_native_session_id"):
-                runtime.launch_windows_native_workspace("../provider", "cloud-desktop", "GPU-EXACT", helper_path="helper.exe")
+                runtime.launch_windows_native_workspace("../provider", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", helper_path="helper.exe")
         run_command.assert_not_called()
 
 

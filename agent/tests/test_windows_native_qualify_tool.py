@@ -30,7 +30,7 @@ class WindowsNativeQualifyToolTests(unittest.TestCase):
                 qualify,
                 "windows_native_desktop_preflight",
                 return_value=NativeDesktopPreflight(
-                    True, "ready", "GPU-EXACT", "nvenc", "0.2", True
+                    True, "ready", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", "nvenc", "0.2", True
                 ),
             ) as preflight,
             patch.object(qualify, "discover_native_application", side_effect=lambda slug: apps[slug]),
@@ -74,7 +74,7 @@ class WindowsNativeQualifyToolTests(unittest.TestCase):
                 qualify,
                 "windows_native_desktop_preflight",
                 return_value=NativeDesktopPreflight(
-                    True, "ready", "GPU-EXACT", "nvenc", "0.2", True
+                    True, "ready", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", "nvenc", "0.2", True
                 ),
             ),
             patch.object(qualify, "discover_native_application", return_value=None),

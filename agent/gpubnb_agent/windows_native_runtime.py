@@ -13,15 +13,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from ipaddress import ip_address
-import json
 import subprocess
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlparse
+
+from .windows_native_protocol import json_object as _json_object, schema_v1, valid_gpu_uuid
 
 from .platform_info import run_command
 from .windows_native_workspace import (
-    SELF_TEST_SCHEMA_VERSION,
     discover_native_application,
     find_stream_helper,
     profile_for_slug,
@@ -40,14 +39,6 @@ class NativeRuntimeHandle:
     application_path: str | None
     audio_ready: bool
     controller_ready: bool
-
-
-def _json_object(stdout: str) -> dict[str, Any] | None:
-    try:
-        value = json.loads(stdout)
-    except (TypeError, json.JSONDecodeError):
-        return None
-    return value if isinstance(value, dict) else None
 
 
 def _safe_id(value: str, field: str) -> str:
@@ -142,8 +133,7 @@ def launch_windows_native_workspace(
     GPUbnb gateway can remain the network authority.
     """
     session_id = _safe_id(session_id, "native_session_id")
-    gpu_uuid = gpu_uuid.strip()
-    if not gpu_uuid or len(gpu_uuid) > 200:
+    if not valid_gpu_uuid(gpu_uuid):
         raise RuntimeError("invalid_native_gpu_uuid")
 
     profile = profile_for_slug(workspace_slug)
@@ -200,7 +190,7 @@ def launch_windows_native_workspace(
             executable, session_id, "native_workspace_start_invalid_json"
         )
     assert report is not None
-    if report.get("schemaVersion") != SELF_TEST_SCHEMA_VERSION:
+    if not schema_v1(report.get("schemaVersion")):
         _raise_after_started_session_validation_failure(
             executable, session_id, "native_workspace_start_schema_mismatch"
         )

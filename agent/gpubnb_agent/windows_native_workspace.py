@@ -13,11 +13,11 @@ for capability to be true. The provider desktop must be explicitly excluded.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 import os
 import platform
 from pathlib import Path, PureWindowsPath
-from typing import Any
+
+from .windows_native_protocol import json_object as _parse_self_test, schema_v1, valid_gpu_uuid
 
 from .platform_info import gpu_inventory, run_command
 
@@ -139,14 +139,6 @@ def find_stream_helper() -> str | None:
         return _find_absolute_windows_file(os.environ.get(WINDOWS_STREAM_HELPER_DEV_PATH_ENV))
     return None
 
-def _parse_self_test(stdout: str) -> dict[str, Any] | None:
-    try:
-        value = json.loads(stdout)
-    except (TypeError, json.JSONDecodeError):
-        return None
-    return value if isinstance(value, dict) else None
-
-
 def windows_native_desktop_preflight(
     helper_path: str | None = None,
 ) -> NativeDesktopPreflight:
@@ -186,7 +178,7 @@ def windows_native_desktop_preflight(
     report = _parse_self_test(result.stdout)
     if report is None:
         return NativeDesktopPreflight(False, "native_stream_self_test_invalid_json")
-    if report.get("schemaVersion") != SELF_TEST_SCHEMA_VERSION:
+    if not schema_v1(report.get("schemaVersion")):
         return NativeDesktopPreflight(False, "native_stream_self_test_schema_mismatch")
     if str(report.get("platform") or "").casefold() != "windows":
         return NativeDesktopPreflight(False, "native_stream_self_test_wrong_platform")
@@ -207,9 +199,11 @@ def windows_native_desktop_preflight(
     if encoder != "nvenc":
         return NativeDesktopPreflight(False, "native_stream_nvenc_required")
 
-    gpu_uuid = str(report.get("gpuUuid") or "").strip()
+    gpu_uuid = report.get("gpuUuid")
     if not gpu_uuid:
         return NativeDesktopPreflight(False, "native_stream_gpu_uuid_missing")
+    if not valid_gpu_uuid(gpu_uuid):
+        return NativeDesktopPreflight(False, "native_stream_gpu_uuid_invalid")
     local_gpu_uuids = {
         str(gpu.get("gpuUuid") or "").casefold()
         for gpu in gpu_inventory()

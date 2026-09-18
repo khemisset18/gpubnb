@@ -19,6 +19,10 @@ The helper must never capture the provider's personal desktop.
 - stdout must contain exactly one JSON object for each command invocation.
 - `schemaVersion` is integer `1` for `--self-test` and `--start` replies.
 - Unknown arguments or unsupported schema versions fail non-zero.
+- Agent parsing rejects duplicate JSON keys, non-finite JSON constants, oversized
+  replies and non-integer schema versions (including boolean true and 1.0).
+- UUID validation is shared by Agent preflight and launch; matching a malformed
+  UUID string in inventory cannot establish native readiness.
 - A non-zero `--start` exit code MUST leave no live renter session, capture,
   encoder, input hook, listener or child process behind.
 - The Agent also requests verified cleanup after a non-zero start, timeout or

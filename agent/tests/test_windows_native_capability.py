@@ -27,7 +27,7 @@ class WindowsNativeCapabilityTests(unittest.TestCase):
         preflight.assert_not_called()
 
     def test_positive_proof_is_cached_for_short_ttl(self):
-        ready = NativeDesktopPreflight(True, "ready", "GPU-EXACT", "nvenc", "0.2", True)
+        ready = NativeDesktopPreflight(True, "ready", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", "nvenc", "0.2", True)
         with (
             patch.object(capability.platform, "system", return_value="Windows"),
             patch.object(capability, "find_stream_helper", return_value="helper.exe"),
@@ -41,7 +41,7 @@ class WindowsNativeCapabilityTests(unittest.TestCase):
         self.assertEqual(preflight.call_count, 1)
 
     def test_positive_proof_expires_and_is_remeasured(self):
-        ready = NativeDesktopPreflight(True, "ready", "GPU-EXACT", "nvenc", "0.2", True)
+        ready = NativeDesktopPreflight(True, "ready", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", "nvenc", "0.2", True)
         with (
             patch.object(capability.platform, "system", return_value="Windows"),
             patch.object(capability, "find_stream_helper", return_value="helper.exe"),
@@ -70,7 +70,7 @@ class WindowsNativeCapabilityTests(unittest.TestCase):
         self.assertEqual(preflight.call_count, 2)
 
     def test_helper_identity_change_invalidates_cache_immediately(self):
-        ready = NativeDesktopPreflight(True, "ready", "GPU-EXACT", "nvenc", "0.2", True)
+        ready = NativeDesktopPreflight(True, "ready", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", "nvenc", "0.2", True)
         identities = [("helper.exe", 1, 100), ("helper.exe", 2, 101)]
         with (
             patch.object(capability.platform, "system", return_value="Windows"),
@@ -83,7 +83,7 @@ class WindowsNativeCapabilityTests(unittest.TestCase):
         self.assertEqual(preflight.call_count, 2)
 
     def test_force_bypasses_fresh_cache(self):
-        ready = NativeDesktopPreflight(True, "ready", "GPU-EXACT", "nvenc", "0.2", True)
+        ready = NativeDesktopPreflight(True, "ready", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", "nvenc", "0.2", True)
         with (
             patch.object(capability.platform, "system", return_value="Windows"),
             patch.object(capability, "find_stream_helper", return_value="helper.exe"),

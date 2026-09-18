@@ -14,7 +14,7 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
             "schemaVersion": 1,
             "platform": "windows",
             "helperVersion": "0.1-test",
-            "gpuUuid": "GPU-EXACT",
+            "gpuUuid": "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
             "isolatedSession": True,
             "virtualDisplay": True,
             "providerDesktopExcluded": True,
@@ -107,7 +107,7 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
             patch.object(native, "run_command", return_value=SimpleNamespace(returncode=1, stdout="", stderr="failed")),
             patch.object(native, "gpu_inventory", return_value=[{
                 "gpuVendor": "NVIDIA",
-                "gpuUuid": "GPU-EXACT",
+                "gpuUuid": "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
                 "vramMiB": 24576,
                 "cudaVersion": "12.8",
             }]),
@@ -122,7 +122,7 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
                 with (
                     patch.object(native.platform, "system", return_value="Windows"),
                     patch.object(native, "run_command", return_value=self._passing_report(**{field: False})),
-                    patch.object(native, "gpu_inventory", return_value=[{"gpuVendor": "NVIDIA", "gpuUuid": "GPU-EXACT"}]),
+                    patch.object(native, "gpu_inventory", return_value=[{"gpuVendor": "NVIDIA", "gpuUuid": "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"}]),
                 ):
                     result = native.windows_native_desktop_preflight("helper.exe")
                     self.assertFalse(result.available)
@@ -132,7 +132,7 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
         with (
             patch.object(native.platform, "system", return_value="Windows"),
             patch.object(native, "run_command", return_value=self._passing_report(hardwareEncoder="software")),
-            patch.object(native, "gpu_inventory", return_value=[{"gpuVendor": "NVIDIA", "gpuUuid": "GPU-EXACT"}]),
+            patch.object(native, "gpu_inventory", return_value=[{"gpuVendor": "NVIDIA", "gpuUuid": "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"}]),
         ):
             result = native.windows_native_desktop_preflight("helper.exe")
         self.assertFalse(result.available)
@@ -141,8 +141,8 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
     def test_helper_gpu_must_match_real_local_nvidia_gpu(self):
         with (
             patch.object(native.platform, "system", return_value="Windows"),
-            patch.object(native, "run_command", return_value=self._passing_report(gpuUuid="GPU-OTHER")),
-            patch.object(native, "gpu_inventory", return_value=[{"gpuVendor": "NVIDIA", "gpuUuid": "GPU-EXACT"}]),
+            patch.object(native, "run_command", return_value=self._passing_report(gpuUuid="GPU-11111111-2222-3333-4444-555555555555")),
+            patch.object(native, "gpu_inventory", return_value=[{"gpuVendor": "NVIDIA", "gpuUuid": "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"}]),
         ):
             result = native.windows_native_desktop_preflight("helper.exe")
         self.assertFalse(result.available)
@@ -152,19 +152,19 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
         with (
             patch.object(native.platform, "system", return_value="Windows"),
             patch.object(native, "run_command", return_value=self._passing_report()),
-            patch.object(native, "gpu_inventory", return_value=[{"gpuVendor": "NVIDIA", "gpuUuid": "GPU-EXACT"}]),
+            patch.object(native, "gpu_inventory", return_value=[{"gpuVendor": "NVIDIA", "gpuUuid": "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"}]),
         ):
             result = native.windows_native_desktop_preflight("helper.exe")
         self.assertTrue(result.available)
         self.assertEqual(result.reason, "ready")
-        self.assertEqual(result.gpu_uuid, "GPU-EXACT")
+        self.assertEqual(result.gpu_uuid, "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
         self.assertEqual(result.hardware_encoder, "nvenc")
         self.assertTrue(result.audio_available)
 
     def test_gaming_requires_audio_even_when_stream_preflight_passes(self):
         with (
             patch.object(native, "windows_native_desktop_preflight", return_value=native.NativeDesktopPreflight(
-                True, "ready", "GPU-EXACT", "nvenc", "0.1", False,
+                True, "ready", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", "nvenc", "0.1", False,
             )),
             patch.object(native, "discover_native_application", return_value=r"C:\Steam\steam.exe"),
         ):
@@ -175,13 +175,44 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
     def test_creator_requires_native_application_after_stream_preflight(self):
         with (
             patch.object(native, "windows_native_desktop_preflight", return_value=native.NativeDesktopPreflight(
-                True, "ready", "GPU-EXACT", "nvenc", "0.1", True,
+                True, "ready", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", "nvenc", "0.1", True,
             )),
             patch.object(native, "discover_native_application", return_value=None),
         ):
             ready, reason = native.workspace_native_ready("creator", "helper.exe")
         self.assertFalse(ready)
         self.assertEqual(reason, "creator_application_missing")
+
+    def test_invalid_uuid_and_noninteger_schema_cannot_pass_matching_inventory(self):
+        for changes in (
+            {"gpuUuid": "GPU-INVALID"}, {"gpuUuid": 123},
+            {"schemaVersion": True}, {"schemaVersion": 1.0},
+        ):
+            with (
+                self.subTest(changes=changes),
+                patch.object(native.platform, "system", return_value="Windows"),
+                patch.object(native, "run_command", return_value=self._passing_report(**changes)),
+                patch.object(native, "gpu_inventory", return_value=[{
+                    "gpuVendor": "NVIDIA", "gpuUuid": changes.get("gpuUuid"),
+                }]),
+            ):
+                self.assertFalse(native.windows_native_desktop_preflight("helper.exe").available)
+
+    def test_amd_absent_and_other_gpu_do_not_prove_selected_nvidia(self):
+        selected = "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"
+        other = "GPU-11111111-2222-3333-4444-555555555555"
+        for inventory in (
+            [], [{"gpuVendor": "AMD", "gpuUuid": selected}],
+            [{"gpuVendor": "NVIDIA", "gpuUuid": other}],
+            [{"gpuVendor": "NVIDIA", "gpuUuid": other}, {"gpuVendor": "AMD", "gpuUuid": selected}],
+        ):
+            with (
+                self.subTest(inventory=inventory),
+                patch.object(native.platform, "system", return_value="Windows"),
+                patch.object(native, "run_command", return_value=self._passing_report()),
+                patch.object(native, "gpu_inventory", return_value=inventory),
+            ):
+                self.assertFalse(native.windows_native_desktop_preflight("helper.exe").available)
 
     def test_unknown_slug_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "unsupported_windows_native_workspace"):
