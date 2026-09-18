@@ -1,5 +1,45 @@
 #include "Driver.h"
 
+static NTSTATUS GPUbnbValidateControlRequest(
+    _In_ const GPUbnbIddControlRequest* request)
+{
+    if (request == nullptr ||
+        request->Size != sizeof(GPUbnbIddControlRequest) ||
+        request->Version != GPUBNB_IDD_CONTROL_VERSION ||
+        request->Reserved != 0 ||
+        request->WindowsSessionId == 0 ||
+        request->Generation == 0 ||
+        (request->RenderAdapterLuid.LowPart == 0 && request->RenderAdapterLuid.HighPart == 0))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (request->Operation != static_cast<UINT32>(GPUbnbIddControlOperation::PlugMonitor) &&
+        request->Operation != static_cast<UINT32>(GPUbnbIddControlOperation::UnplugMonitor))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    bool noncePresent = false;
+    for (UINT32 index = 0; index < GPUBNB_IDD_DISPLAY_NONCE_SIZE; ++index)
+    {
+        noncePresent = noncePresent || request->DisplayNonce[index] != 0;
+    }
+    if (!noncePresent)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (request->Width < 640 || request->Width > 7680 ||
+        request->Height < 480 || request->Height > 4320 ||
+        request->RefreshHz < 30 || request->RefreshHz > 240)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    return STATUS_SUCCESS;
+}
+
 extern "C" BOOL WINAPI DllMain(
     _In_ HINSTANCE instance,
     _In_ UINT reason,
@@ -74,9 +114,65 @@ NTSTATUS GPUbnbDeviceAdd(
         return status;
     }
 
+    WDF_IO_QUEUE_CONFIG queueConfig;
+    WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&queueConfig, WdfIoQueueDispatchSequential);
+    queueConfig.EvtIoDeviceControl = GPUbnbEvtIoDeviceControl;
+
+    status = WdfIoQueueCreate(device, &queueConfig, WDF_NO_OBJECT_ATTRIBUTES, WDF_NO_HANDLE);
+    if (!NT_SUCCESS(status))
+    {
+        return status;
+    }
+
     auto* context = WdfObjectGet_GPUbnbDeviceContext(device);
     context->Adapter = nullptr;
     return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_
+VOID GPUbnbEvtIoDeviceControl(
+    WDFQUEUE queue,
+    WDFREQUEST request,
+    size_t outputBufferLength,
+    size_t inputBufferLength,
+    ULONG ioControlCode)
+{
+    UNREFERENCED_PARAMETER(queue);
+    UNREFERENCED_PARAMETER(outputBufferLength);
+
+    NTSTATUS status = STATUS_INVALID_DEVICE_REQUEST;
+    if (ioControlCode == IOCTL_GPUBNB_IDD_CONTROL &&
+        inputBufferLength == sizeof(GPUbnbIddControlRequest))
+    {
+        GPUbnbIddControlRequest* control = nullptr;
+        size_t controlLength = 0;
+        status = WdfRequestRetrieveInputBuffer(
+            request,
+            sizeof(GPUbnbIddControlRequest),
+            reinterpret_cast<PVOID*>(&control),
+            &controlLength);
+
+        if (NT_SUCCESS(status))
+        {
+            if (controlLength != sizeof(GPUbnbIddControlRequest))
+            {
+                status = STATUS_INFO_LENGTH_MISMATCH;
+            }
+            else
+            {
+                status = GPUbnbValidateControlRequest(control);
+                if (NT_SUCCESS(status))
+                {
+                    // Validation-only milestone. A valid request must not create,
+                    // remove or mutate a monitor until service authentication,
+                    // monitor ownership and physical qualification are complete.
+                    status = STATUS_NOT_SUPPORTED;
+                }
+            }
+        }
+    }
+
+    WdfRequestComplete(request, status);
 }
 
 _Use_decl_annotations_
