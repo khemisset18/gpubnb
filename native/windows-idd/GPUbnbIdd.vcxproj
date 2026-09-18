@@ -6,7 +6,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Driver.cpp" />
+    <ClCompile Include="SwapChainProcessor.cpp" />
     <ClInclude Include="Driver.h" />
+    <ClInclude Include="SwapChainProcessor.h" />
     <ClInclude Include="ControlProtocol.h" />
     <Inf Include="GPUbnbIdd.inf" />
   </ItemGroup>
@@ -51,7 +53,7 @@
       <PreprocessorDefinitions>_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/D_ATL_NO_WIN_SUPPORT /DUMDF_DRIVER /DIDDCX_VERSION_MAJOR=1 /DIDDCX_VERSION_MINOR=6 /DIDDCX_MINIMUM_VERSION_REQUIRED=4 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <Link><AdditionalDependencies>%(AdditionalDependencies);OneCoreUAP.lib</AdditionalDependencies></Link>
+    <Link><AdditionalDependencies>%(AdditionalDependencies);OneCoreUAP.lib;d3d11.lib;dxgi.lib</AdditionalDependencies></Link>
     <DriverSign><FileDigestAlgorithm>sha256</FileDigestAlgorithm></DriverSign>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -59,7 +61,7 @@
       <PreprocessorDefinitions>NDEBUG;_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/D_ATL_NO_WIN_SUPPORT /DUMDF_DRIVER /DIDDCX_VERSION_MAJOR=1 /DIDDCX_VERSION_MINOR=6 /DIDDCX_MINIMUM_VERSION_REQUIRED=4 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <Link><AdditionalDependencies>%(AdditionalDependencies);OneCoreUAP.lib</AdditionalDependencies><GenerateDebugInformation>true</GenerateDebugInformation></Link>
+    <Link><AdditionalDependencies>%(AdditionalDependencies);OneCoreUAP.lib;d3d11.lib;dxgi.lib</AdditionalDependencies><GenerateDebugInformation>true</GenerateDebugInformation></Link>
     <DriverSign><FileDigestAlgorithm>sha256</FileDigestAlgorithm></DriverSign>
   </ItemDefinitionGroup>
   <ItemGroup><FilesToPackage Include="$(TargetPath)" /></ItemGroup>
