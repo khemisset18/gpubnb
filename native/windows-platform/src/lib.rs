@@ -89,6 +89,8 @@ pub struct VerifiedApplicationFile {
     evidence: ApplicationFileEvidence,
     #[cfg(target_os = "windows")]
     _handle: windows_impl::OwnedHandle,
+    #[cfg(target_os = "windows")]
+    _ancestor_handles: Vec<windows_impl::OwnedHandle>,
 }
 
 impl VerifiedApplicationFile {
@@ -140,8 +142,10 @@ mod windows_impl {
     const GENERIC_READ: u32 = 0x8000_0000;
     const FILE_READ_ATTRIBUTES: u32 = 0x0080;
     const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const FILE_SHARE_WRITE: u32 = 0x0000_0002;
     const OPEN_EXISTING: u32 = 3;
     const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
     const FILE_ID_INFO_CLASS: i32 = 0x12;
     const FILE_ATTRIBUTE_TAG_INFO_CLASS: i32 = 0x09;
@@ -287,6 +291,49 @@ mod windows_impl {
         Ok(unsafe { value.assume_init() })
     }
 
+    fn open_non_reparse_ancestors(path: &Path) -> Result<Vec<OwnedHandle>, PlatformError> {
+        let mut handles = Vec::new();
+        let parent = path.parent().ok_or(PlatformError::InvalidPath)?;
+        for ancestor in parent.ancestors() {
+            if !ancestor.is_absolute() {
+                return Err(PlatformError::InvalidPath);
+            }
+            let ancestor_wide = wide(ancestor.as_os_str())?;
+
+            // Open the directory object itself rather than following a mount point,
+            // junction or symlink. FILE_SHARE_DELETE is deliberately omitted so
+            // path components cannot be renamed away while qualification is live.
+            // FILE_SHARE_WRITE remains allowed to avoid unnecessarily blocking
+            // ordinary directory activity on trusted system/application roots.
+            // SAFETY: ancestor_wide is NUL-terminated; all optional pointers are null.
+            let raw = unsafe {
+                CreateFileW(
+                    ancestor_wide.as_ptr(),
+                    FILE_READ_ATTRIBUTES,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    std::ptr::null_mut(),
+                    OPEN_EXISTING,
+                    FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
+                    0,
+                )
+            };
+            if raw == INVALID_HANDLE_VALUE {
+                return Err(PlatformError::OpenFailed);
+            }
+            let handle = OwnedHandle(raw);
+            let attributes: FileAttributeTagInfo =
+                file_info(handle.0, FILE_ATTRIBUTE_TAG_INFO_CLASS)?;
+            if attributes.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                return Err(PlatformError::ReparsePoint);
+            }
+            handles.push(handle);
+        }
+        if handles.is_empty() {
+            return Err(PlatformError::InvalidPath);
+        }
+        Ok(handles)
+    }
+
     fn fixed_local_volume(path_wide: &[u16]) -> Result<bool, PlatformError> {
         let mut root = [0u16; 1024];
         // SAFETY: path_wide is NUL-terminated and root is a writable buffer with
@@ -370,6 +417,7 @@ mod windows_impl {
         if !fixed_local_volume(&path_wide)? {
             return Err(PlatformError::NonFixedVolume);
         }
+        let ancestor_handles = open_non_reparse_ancestors(path)?;
 
         // FILE_SHARE_DELETE and FILE_SHARE_WRITE are deliberately omitted so a
         // verified executable cannot be replaced while this handle is retained.
@@ -410,6 +458,7 @@ mod windows_impl {
                 final_component_reparse_point: false,
             },
             _handle: handle,
+            _ancestor_handles: ancestor_handles,
         })
     }
 
