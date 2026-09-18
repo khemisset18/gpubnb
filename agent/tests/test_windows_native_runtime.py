@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -169,6 +170,42 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                 "native_workspace_start_missing_inputIsolation_cleanup_unverified",
             ):
                 runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+
+    def test_malformed_media_reply_still_stops_exact_session(self):
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+            patch.object(runtime, "discover_native_application", return_value=None),
+            patch.object(runtime, "run_command", side_effect=[
+                self._start_report(mediaUrl="http://[broken"), self._stop_report(),
+            ]) as run,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "^native_workspace_start_loopback_media_required$"):
+                runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+        self.assertEqual(run.call_args.args[0], ["helper.exe", "--stop", "--json", "--session-id", "sess-1"])
+
+    def test_failed_start_requires_verified_cleanup_even_after_crash_or_timeout(self):
+        failures = (
+            SimpleNamespace(returncode=127, stdout="", stderr="secret"),
+            OSError("secret"),
+            subprocess.TimeoutExpired("secret", 60),
+            UnicodeError("secret"),
+        )
+        for failure in failures:
+            for stop in (self._stop_report(), self._stop_report(stopped=False), OSError("secret")):
+                with (
+                    self.subTest(failure=type(failure), stop=type(stop)),
+                    patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                    patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+                    patch.object(runtime, "discover_native_application", return_value=None),
+                    patch.object(runtime, "run_command", side_effect=[failure, stop]) as run,
+                ):
+                    expected = "native_workspace_start_failed"
+                    if isinstance(stop, Exception) or '"stopped": false' in stop.stdout:
+                        expected += "_cleanup_unverified"
+                    with self.assertRaisesRegex(RuntimeError, "^" + expected + "$"):
+                        runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-EXACT")
+                self.assertEqual(run.call_count, 2)
 
     def test_creator_launch_passes_discovered_blender_path(self):
         report = self._start_report(workspaceSlug="creator")

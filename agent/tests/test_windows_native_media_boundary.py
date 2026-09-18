@@ -44,6 +44,28 @@ class WindowsNativeMediaBoundaryTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertIsNone(_loopback_media_url(value, self.SESSION_ID))
 
+    def test_rejects_malformed_and_normalized_urls_without_raising(self):
+        for value in (
+            None, 123, [], {},
+            "http://[::1:43123/session/sess-1",
+            "http://[invalid]:43123/session/sess-1",
+            "http://127.0.0.1:bad/session/sess-1",
+            "http://127.0.0.1:0/session/sess-1",
+            "http://127.0.0.1:65536/session/sess-1",
+            "http://@127.0.0.1:43123/session/sess-1",
+            "http://127.0.0.1:43123/session/sess-1?",
+            "http://127.0.0.1:43123/session/sess-1#",
+            "http://127.0.0.1:43123/session/sess-1;params",
+            "http://127.0.0.1:43123/session/sess-1;",
+            "http://[::1%25scope]:43123/session/sess-1",
+            "http://127.0.0.1:043123/session/sess-1",
+            " http://127.0.0.1:43123/session/sess-1",
+            "http://127.0.0.1:43123/session/sess-1\n",
+            "http://127.0.0.1:43123/ses\tsion/sess-1",
+        ):
+            with self.subTest(value=value):
+                self.assertIsNone(_loopback_media_url(value, self.SESSION_ID))
+
     def test_rejects_cross_session_path(self):
         self.assertIsNone(
             _loopback_media_url(

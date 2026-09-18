@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from ipaddress import ip_address
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -59,36 +60,30 @@ def _safe_id(value: str, field: str) -> str:
 
 
 def _loopback_media_url(value: object, expected_session_id: str) -> str | None:
-    raw = str(value or "").strip()
-    if not raw or len(raw) > 500:
+    # Reject parser normalization and ambiguous URL components before parsing.
+    if not isinstance(value, str) or not value or len(value) > 500:
         return None
-    parsed = urlparse(raw)
-    if parsed.scheme not in {"http", "https", "ws", "wss"}:
+    raw = value
+    if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in raw):
         return None
-    host = (parsed.hostname or "").strip()
-    # Never resolve a hostname here. Even "localhost" can be redirected through a
-    # modified hosts file. A literal loopback IP is the only accepted network
-    # boundary between the native helper and GPUbnb's authenticated gateway.
-    try:
-        address = ip_address(host)
-    except ValueError:
-        return None
-    if not address.is_loopback:
-        return None
-    if parsed.username or parsed.password or parsed.fragment or parsed.query:
-        return None
-    # Cross-session routing is forbidden even on loopback. The helper contract
-    # exposes exactly one media resource for the requested opaque session id.
-    if parsed.path != f"/session/{expected_session_id}":
+    if any(char in raw for char in ("?", "#", "@", "%", "\\")):
         return None
     try:
+        parsed = urlparse(raw)
+        if parsed.scheme not in {"http", "https", "ws", "wss"}:
+            return None
+        address = ip_address(parsed.hostname or "")
         port = parsed.port
     except ValueError:
         return None
-    # The native helper must bind an explicit ephemeral/local service port. Accepting
-    # an implicit 80/443 endpoint could accidentally point the gateway at an unrelated
-    # provider-local service rather than the helper instance we just launched.
-    if port is None or not 1 <= port <= 65535:
+    if not address.is_loopback or port is None or not 1 <= port <= 65535:
+        return None
+    if parsed.params or parsed.path != f"/session/{expected_session_id}":
+        return None
+    # A round trip forbids empty userinfo, semicolon parameters, whitespace,
+    # noncanonical ports and other spellings interpreted differently by clients.
+    host = f"[{address}]" if address.version == 6 else str(address)
+    if raw != f"{parsed.scheme}://{host}:{port}/session/{expected_session_id}":
         return None
     return raw
 
@@ -104,10 +99,13 @@ def _media_token(value: object) -> str | None:
 
 def _helper_stop_confirmed(executable: str, session_id: str) -> bool:
     """Best-effort helper cleanup used after a successful-but-invalid start reply."""
-    result = run_command(
-        [executable, "--stop", "--json", "--session-id", session_id],
-        timeout=30,
-    )
+    try:
+        result = run_command(
+            [executable, "--stop", "--json", "--session-id", session_id],
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        return False
     if result.returncode != 0:
         return False
     report = _json_object(result.stdout)
@@ -183,12 +181,18 @@ def launch_windows_native_workspace(
     if application:
         command.extend(["--application", str(Path(application))])
 
-    result = run_command(command, timeout=60)
+    try:
+        result = run_command(command, timeout=60)
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        # A crash/timeout can occur after resources were created. Never infer
+        # cleanup from the absence of a successful response or expose stderr.
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_failed"
+        )
     if result.returncode != 0:
-        # Helper contract: a non-zero --start must not leave a live renter session.
-        # Only a successful start reply crosses the boundary where cleanup below is
-        # mandatory before the Agent may reject the returned metadata.
-        raise RuntimeError("native_workspace_start_failed")
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_failed"
+        )
 
     report = _json_object(result.stdout)
     if report is None:

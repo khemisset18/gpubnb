@@ -21,6 +21,9 @@ The helper must never capture the provider's personal desktop.
 - Unknown arguments or unsupported schema versions fail non-zero.
 - A non-zero `--start` exit code MUST leave no live renter session, capture,
   encoder, input hook, listener or child process behind.
+- The Agent also requests verified cleanup after a non-zero start, timeout or
+  process failure: a crashed helper cannot prove that its resources are gone.
+  Failure to confirm stop is surfaced as cleanup unverified.
 - A successful `--start` reply transfers lifecycle ownership to the Agent; if
   the Agent rejects that reply it immediately calls `--stop` for the requested
   session id.
