@@ -59,6 +59,7 @@ mod windows_impl {
     type GetMaxSupportedVersion = unsafe extern "system" fn(*mut u32) -> NvencStatus;
 
     const NV_ENC_SUCCESS: NvencStatus = 0;
+    const LOAD_LIBRARY_SEARCH_SYSTEM32: u32 = 0x0000_0800;
 
     #[link(name = "kernel32")]
     unsafe extern "system" {
@@ -83,11 +84,13 @@ mod windows_impl {
     pub(super) fn query_nvenc_max_supported_version(
     ) -> Result<NvencApiVersion, NvencProbeError> {
         let name: Vec<u16> = "nvEncodeAPI64.dll".encode_utf16().chain(Some(0)).collect();
-        // Search flags are intentionally zero: nvEncodeAPI64.dll is supplied by
-        // the NVIDIA display driver and resolved through the normal system loader.
-        // No caller-controlled DLL path crosses this boundary.
+        // nvEncodeAPI64.dll is supplied by the NVIDIA display driver. Restrict
+        // resolution to System32 so a renter-writable current directory cannot
+        // substitute a same-named DLL.
         // SAFETY: name is NUL-terminated; optional file handle is null/zero.
-        let raw = unsafe { LoadLibraryExW(name.as_ptr(), 0, 0) };
+        let raw = unsafe {
+            LoadLibraryExW(name.as_ptr(), 0, LOAD_LIBRARY_SEARCH_SYSTEM32)
+        };
         if raw == 0 {
             return Err(NvencProbeError::LibraryMissing);
         }
