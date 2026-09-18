@@ -49,7 +49,7 @@ mod windows_impl {
     const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x0000_2000;
 
     #[repr(C)]
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Default)]
     struct JobObjectBasicLimitInformation {
         per_process_user_time_limit: i64,
         per_job_user_time_limit: i64,
@@ -60,22 +60,6 @@ mod windows_impl {
         affinity: usize,
         priority_class: u32,
         scheduling_class: u32,
-    }
-
-    impl Default for JobObjectBasicLimitInformation {
-        fn default() -> Self {
-            Self {
-                per_process_user_time_limit: 0,
-                per_job_user_time_limit: 0,
-                limit_flags: 0,
-                minimum_working_set_size: 0,
-                maximum_working_set_size: 0,
-                active_process_limit: 0,
-                affinity: 0,
-                priority_class: 0,
-                scheduling_class: 0,
-            }
-        }
     }
 
     #[repr(C)]
