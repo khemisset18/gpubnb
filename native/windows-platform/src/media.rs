@@ -194,8 +194,9 @@ mod windows_impl {
         let path = Path::new(TRUSTED_MEDIA_DLL);
         let verified =
             open_application_for_verification(path).map_err(|_| MediaProbeError::DllUnavailable)?;
+        let allowed_signer = trusted_media_signer()?;
         verified
-            .verify_authenticode()
+            .verify_signer_allowed_sha256(&[allowed_signer])
             .map_err(|_| MediaProbeError::DllUntrusted)?;
 
         let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
@@ -252,6 +253,17 @@ mod tests {
             height: 1080,
             refresh_hz: 60,
             capture_timeout_ms: 5_000,
+        }
+    }
+
+    #[test]
+    fn signer_policy_is_fail_closed_when_missing_or_malformed() {
+        match TRUSTED_MEDIA_SIGNER_SHA256_HEX {
+            None => assert_eq!(trusted_media_signer(), Err(MediaProbeError::DllUntrusted)),
+            Some(value) if value.len() != 64 => {
+                assert_eq!(trusted_media_signer(), Err(MediaProbeError::DllUntrusted))
+            }
+            Some(_) => assert!(trusted_media_signer().is_ok()),
         }
     }
 
