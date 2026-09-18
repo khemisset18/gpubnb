@@ -657,6 +657,23 @@ def desktop_gpu_rendering_available() -> bool:
     return docker_info()["nvidiaRuntime"]
 
 
+def windows_native_desktop_streaming_available() -> bool:
+    """Return only a measured Windows-native streaming proof, never an inference.
+
+    Import locally to avoid a module cycle: the Windows preflight itself reuses
+    gpu_inventory()/run_command() from this module. Any probe/import failure is
+    uncertainty and therefore fails closed.
+    """
+    if platform.system() != "Windows":
+        return False
+    try:
+        from .windows_native_capability import native_desktop_streaming_available_cached
+
+        return bool(native_desktop_streaming_available_cached())
+    except Exception:
+        return False
+
+
 def configured_disk_root() -> str:
     return os.environ.get("SystemDrive", "C:") + "\\" if platform.system() == "Windows" else "/"
 
@@ -712,6 +729,7 @@ def system_inventory() -> dict[str, Any]:
         "nvidiaRuntimeAvailable": docker["nvidiaRuntime"],
         "virtualizationAvailable": virtualization_available(),
         "desktopGpuRenderingAvailable": desktop_gpu_rendering_available(),
+        "nativeDesktopStreamingAvailable": windows_native_desktop_streaming_available(),
         "machineFingerprint": machine_fingerprint(),
     }
     if cycle is not None:
