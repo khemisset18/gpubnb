@@ -94,6 +94,17 @@ fn validate_renter_identity_policy(
     Ok(())
 }
 
+pub fn current_process_session_id() -> Result<u32, PlatformError> {
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::current_process_session_id()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(PlatformError::WindowsRequired)
+    }
+}
+
 pub fn query_renter_session_token(
     session_id: u32,
     expected_renter_user_sid: &str,
@@ -215,6 +226,8 @@ mod windows_impl {
         fn CloseHandle(object: Handle) -> i32;
         fn GetLastError() -> u32;
         fn LocalFree(memory: Handle) -> Handle;
+        fn GetCurrentProcessId() -> u32;
+        fn ProcessIdToSessionId(process_id: u32, session_id: *mut u32) -> i32;
     }
 
     fn token_information(token: Handle, class: u32) -> Result<TokenBuffer, PlatformError> {
@@ -336,6 +349,21 @@ mod windows_impl {
         sid_to_string(group.sid)
     }
 
+    pub(super) fn current_process_session_id() -> Result<u32, PlatformError> {
+        // SAFETY: GetCurrentProcessId has no preconditions.
+        let process_id = unsafe { GetCurrentProcessId() };
+        if process_id == 0 {
+            return Err(PlatformError::RenterTokenQueryFailed);
+        }
+        let mut session_id = 0u32;
+        // SAFETY: session_id is a valid out pointer for this live process id.
+        let ok = unsafe { ProcessIdToSessionId(process_id, &mut session_id) };
+        if ok == 0 || session_id == 0 {
+            return Err(PlatformError::InvalidWindowsSessionId);
+        }
+        Ok(session_id)
+    }
+
     pub(super) fn create_environment(
         token: &OwnedToken,
     ) -> Result<super::RenterEnvironment, PlatformError> {
@@ -424,6 +452,12 @@ mod tests {
                 .err(),
             Some(PlatformError::InvalidWindowsSessionId)
         );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn current_process_reports_nonzero_windows_session() {
+        assert!(current_process_session_id().expect("current WTS session") > 0);
     }
 
     #[cfg(target_os = "windows")]
