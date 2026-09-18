@@ -72,6 +72,12 @@ pub enum PlatformError {
     ProcessWaitFailed,
     ProcessWaitTimeout,
     ProcessExitQueryFailed,
+    IddInterfaceQueryFailed,
+    IddInterfaceMissing,
+    IddInterfaceAmbiguous,
+    IddControlOpenFailed,
+    IddControlFailed,
+    IddUnsafeOperation,
 }
 
 pub struct VerifiedApplicationFile {
