@@ -9,6 +9,7 @@ use crate::PlatformError;
 const MAX_SESSION_ID: usize = 128;
 const MAX_SID_TEXT: usize = 184;
 const RENTER_PIPE_ACCESS_MASK: u32 = 0x0012_019B;
+const PIPE_AUTH_PRELUDE: u8 = 0x47;
 
 fn safe_session_id(value: &str) -> bool {
     !value.is_empty()
@@ -139,7 +140,7 @@ pub fn current_process_logon_sid() -> Result<String, PlatformError> {
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
-    use super::{VerifiedPipeClient, WorkerPipe};
+    use super::{PIPE_AUTH_PRELUDE, VerifiedPipeClient, WorkerPipe};
     use crate::PlatformError;
     use std::ffi::{OsStr, c_void};
     use std::mem::{align_of, size_of};
@@ -159,8 +160,6 @@ mod windows_impl {
     const WAIT_OBJECT_0: u32 = 0;
     const WAIT_TIMEOUT: u32 = 258;
     const INFINITE: u32 = u32::MAX;
-    const PIPE_AUTH_PRELUDE: u8 = 0x47;
-
     const PIPE_ACCESS_DUPLEX: u32 = 0x0000_0003;
     const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x0008_0000;
     const FILE_FLAG_OVERLAPPED: u32 = 0x4000_0000;
