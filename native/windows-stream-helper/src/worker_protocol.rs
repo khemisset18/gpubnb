@@ -983,7 +983,10 @@ mod tests {
         assert_eq!(encoded.len(), WORKER_MEDIA_PROOF_FRAME_SIZE);
         let decoded = decode_worker_media_proof(&encoded).expect("decode media proof");
         assert_eq!(decoded, proof);
-        assert_eq!(validate_worker_media_proof(7, 2, 42, display, decoded), Ok(()));
+        assert_eq!(
+            validate_worker_media_proof(7, 2, 42, display, decoded),
+            Ok(())
+        );
 
         let mut replay = proof;
         replay.command_sequence = 1;
