@@ -197,17 +197,11 @@ impl QualifiedGraphicsRuntime {
 
         let proof_frame = match self.pipe.read_frame(PIPE_TIMEOUT_MS) {
             Ok(frame) => frame,
-            Err(_) => {
-                self.media_state = RuntimeMediaState::Failed;
-                return Err(ServiceRuntimeError::MediaProof);
-            }
+            Err(_) => return Err(self.fail(ServiceRuntimeError::MediaProof)),
         };
         let media = match decode_worker_media_proof(&proof_frame) {
             Ok(proof) => proof,
-            Err(_) => {
-                self.media_state = RuntimeMediaState::Failed;
-                return Err(ServiceRuntimeError::MediaProof);
-            }
+            Err(_) => return Err(self.fail(ServiceRuntimeError::MediaProof)),
         };
         if validate_worker_media_proof(
             self.generation,
@@ -218,8 +212,17 @@ impl QualifiedGraphicsRuntime {
         )
         .is_err()
         {
-            self.media_state = RuntimeMediaState::Failed;
-            return Err(ServiceRuntimeError::MediaProof);
+            return Err(self.fail(ServiceRuntimeError::MediaProof));
+        }
+
+        // A reconnect proof is only fresh if the exact NVIDIA UUID still maps to
+        // the adapter LUID used by the surviving virtual display and worker.
+        let identity = match resolve_nvidia_uuid_to_luid(&self.gpu_uuid) {
+            Ok(identity) => identity,
+            Err(_) => return Err(self.fail(ServiceRuntimeError::ExactGpu)),
+        };
+        if identity.luid != self.display_spec.adapter_luid {
+            return Err(self.fail(ServiceRuntimeError::ExactGpu));
         }
 
         if validate_graphics_proof_chain(
@@ -257,8 +260,7 @@ impl QualifiedGraphicsRuntime {
         )
         .is_err()
         {
-            self.media_state = RuntimeMediaState::Failed;
-            return Err(ServiceRuntimeError::GraphicsProof);
+            return Err(self.fail(ServiceRuntimeError::GraphicsProof));
         }
 
         self.media_state = RuntimeMediaState::Ready;
