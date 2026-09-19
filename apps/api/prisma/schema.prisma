@@ -577,6 +577,7 @@ model WorkspaceSession {
   @@unique([bookingId, machineWorkspaceId])
   @@index([renterId, createdAt])
   @@index([machineId, status])
+  @@index([machineId, runtimeBackend, status])
   @@index([bookingId])
   @@index([status, readyDeadlineAt])
 }
