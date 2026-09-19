@@ -15,11 +15,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.WDK.x64" Version="10.0.28000.2526" />
     <PackageReference Include="Microsoft.Windows.SDK.CPP.x64" Version="10.0.28000.2526" />
-    <!-- x64 driver builds invoke x86-hosted verification/PREfast tooling. Restore
-         the matching x86 families for those host-tool DLL dependencies, but do
-         not import their build assets into this x64 target. -->
-    <PackageReference Include="Microsoft.Windows.WDK.x86" Version="10.0.28000.2526" ExcludeAssets="all" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.Windows.SDK.CPP.x86" Version="10.0.28000.2526" ExcludeAssets="all" PrivateAssets="all" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{D2F8898A-863B-4FE5-8BA0-3F2D868A0B6D}</ProjectGuid>
