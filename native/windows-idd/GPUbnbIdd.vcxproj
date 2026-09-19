@@ -13,12 +13,12 @@
     <Inf Include="GPUbnbIdd.inf" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Windows.WDK.x64" Version="10.0.26100.2454" />
+    <PackageReference Include="Microsoft.Windows.WDK.x64" Version="10.0.28000.2526" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{D2F8898A-863B-4FE5-8BA0-3F2D868A0B6D}</ProjectGuid>
     <RootNamespace>GPUbnbIdd</RootNamespace>
-    <MinimumVisualStudioVersion>17.0</MinimumVisualStudioVersion>
+    <MinimumVisualStudioVersion>18.0</MinimumVisualStudioVersion>
     <Platform Condition="'$(Platform)'==''">x64</Platform>
   </PropertyGroup>
   <PropertyGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
