@@ -35,9 +35,7 @@ use gpubnb_windows_platform::pipe::{
 use gpubnb_windows_platform::process::{
     RenterWorkerLaunchSpec, RenterWorkerProcess, launch_qualified_renter_worker,
 };
-use gpubnb_windows_platform::session::{
-    RenterSessionIsolationProof, query_renter_session_token,
-};
+use gpubnb_windows_platform::session::{RenterSessionIsolationProof, query_renter_session_token};
 use std::path::Path;
 
 const WORKER_PATH: &str = r"C:\Program Files\GPUbnb\gpubnb-windows-worker.exe";
