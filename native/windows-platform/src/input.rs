@@ -6,7 +6,6 @@
 //! rather than arbitrary window messages or shell commands.
 
 use crate::session::current_process_session_id;
-use crate::PlatformError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseButton {
