@@ -333,8 +333,8 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                 }
                 WorkerCommand::ResumeAfterFreshProof => {
                     let next_state = media_state.resume()?;
-                    let spec = display_spec
-                        .ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
+                    let spec =
+                        display_spec.ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
 
                     // A resume is never an administrative toggle. Re-prove that the
                     // rented NVIDIA UUID still resolves to the exact display LUID,
