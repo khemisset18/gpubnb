@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Build immutable candidate
         run: docker build --pull=false --tag gpubnb-developer:candidate workspaces/developer
       - name: Verify tools and non-root execution
