@@ -259,7 +259,7 @@ Host: 127.0.0.1:43123\r\n\
 Connection: Upgrade\r\n\
 Upgrade: websocket\r\n\
 Sec-WebSocket-Version: 13\r\n\
-Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+Sec-WebSocket-Key: AAAAAAAAAAAAAAAAAAAAAA==\r\n\
 X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
         )
         .into_bytes()
@@ -270,7 +270,7 @@ X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
         let parsed =
             authenticate_local_media_upgrade(&request(""), SESSION, TOKEN).expect("upgrade");
         assert_eq!(parsed.session_id, SESSION);
-        assert_eq!(parsed.websocket_key, "dGhlIHNhbXBsZSBub25jZQ==");
+        assert_eq!(parsed.websocket_key, "AAAAAAAAAAAAAAAAAAAAAA==");
     }
 
     #[test]
@@ -300,7 +300,8 @@ X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
 
     #[test]
     fn media_token_whitespace_is_never_normalized() {
-        let base = std::str::from_utf8(&request("")).expect("ASCII");
+        let request_bytes = request("");
+        let base = std::str::from_utf8(&request_bytes).expect("ASCII");
         for replacement in [
             format!("X-GPUbnb-Media-Token:  {TOKEN}"),
             format!("X-GPUbnb-Media-Token: {TOKEN} "),
@@ -318,14 +319,15 @@ X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
 
     #[test]
     fn cross_session_query_and_path_extensions_are_rejected() {
+        let request_bytes = request("");
+        let base = std::str::from_utf8(&request_bytes).expect("ASCII");
         for target in [
             "/session/sess-2",
             "/session/sess-1/",
             "/session/sess-1?token=secret",
             "/session/sess-10",
         ] {
-            let value = std::str::from_utf8(&request(""))
-                .expect("ASCII")
+            let value = base
                 .replace("/session/sess-1 HTTP/1.1", &format!("{target} HTTP/1.1"))
                 .into_bytes();
             assert_eq!(
@@ -370,7 +372,8 @@ X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
 
     #[test]
     fn websocket_contract_is_exact_and_fail_closed() {
-        let base = std::str::from_utf8(&request("")).expect("ASCII");
+        let request_bytes = request("");
+        let base = std::str::from_utf8(&request_bytes).expect("ASCII");
         for (from, to, expected) in [
             ("GET ", "POST ", LocalMediaUpgradeError::Method),
             ("HTTP/1.1", "HTTP/1.0", LocalMediaUpgradeError::Version),
@@ -390,7 +393,7 @@ X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
                 LocalMediaUpgradeError::WebSocketVersion,
             ),
             (
-                "dGhlIHNhbXBsZSBub25jZQ==",
+                "AAAAAAAAAAAAAAAAAAAAAA==",
                 "not-a-websocket-key-value",
                 LocalMediaUpgradeError::WebSocketKey,
             ),
@@ -405,7 +408,8 @@ X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
 
     #[test]
     fn host_must_be_canonical_literal_loopback_with_explicit_port() {
-        let base = std::str::from_utf8(&request("")).expect("ASCII");
+        let request_bytes = request("");
+        let base = std::str::from_utf8(&request_bytes).expect("ASCII");
         for host in [
             "localhost:43123",
             "0.0.0.0:43123",
@@ -442,7 +446,8 @@ X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
             Err(LocalMediaUpgradeError::TooManyHeaders)
         );
 
-        let lf_only = std::str::from_utf8(&request(""))
+        let request_bytes = request("");
+        let lf_only = std::str::from_utf8(&request_bytes)
             .expect("ASCII")
             .replace("\r\n", "\n")
             .into_bytes();
