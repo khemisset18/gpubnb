@@ -20,13 +20,14 @@ use gpubnb_windows_platform::pipe::connect_worker_pipe_client;
 #[cfg(target_os = "windows")]
 use gpubnb_windows_platform::session::current_process_session_id;
 use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
-use gpubnb_windows_stream_helper::worker_protocol::{WorkerInputEvent, WorkerMouseButton};
 #[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::worker_protocol::{
     WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerHello, WorkerMediaProof, decode_worker_command,
-    decode_worker_display_spec, decode_worker_input, encode_worker_hello, encode_worker_media_proof,
-    validate_worker_command, validate_worker_display_spec, validate_worker_input,
+    decode_worker_display_spec, decode_worker_input, encode_worker_hello,
+    encode_worker_media_proof, validate_worker_command, validate_worker_display_spec,
+    validate_worker_input,
 };
+use gpubnb_windows_stream_helper::worker_protocol::{WorkerInputEvent, WorkerMouseButton};
 use std::env;
 use std::process::ExitCode;
 
