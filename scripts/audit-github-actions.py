@@ -79,8 +79,9 @@ def main() -> int:
             if not re.search(r"^\s+persist-credentials:\s*false\s*$", checkout_block, re.MULTILINE):
                 errors.append(f"{path}: actions/checkout must set persist-credentials: false")
 
-        if "secrets." in text and not re.search(r"^\s+environment:\s*[^\s#]+\s*$", text, re.MULTILINE):
-            errors.append(f"{path}: jobs consuming repository secrets require a protected GitHub environment")
+        for job_name, block in job_blocks(text):
+            if "secrets." in block and not re.search(r"^\s{4}environment:\s*[^\s#]+\s*$", block, re.MULTILINE):
+                errors.append(f"{path}: job {job_name} consumes repository secrets without a protected GitHub environment")
 
         for job_name, block in job_blocks(text):
             if "runs-on:" in block and "timeout-minutes:" not in block:
