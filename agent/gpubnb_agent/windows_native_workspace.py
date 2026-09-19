@@ -153,6 +153,9 @@ def windows_native_desktop_preflight(
           "helperVersion": "...",
           "gpuUuid": "GPU-...",
           "isolatedSession": true,
+          "separateRenterIdentity": true,
+          "renterSessionActive": true,
+          "providerSessionInactive": true,
           "virtualDisplay": true,
           "providerDesktopExcluded": true,
           "captureFrame": true,
@@ -191,6 +194,9 @@ def windows_native_desktop_preflight(
 
     required_true = (
         "isolatedSession",
+        "separateRenterIdentity",
+        "renterSessionActive",
+        "providerSessionInactive",
         "virtualDisplay",
         "providerDesktopExcluded",
         "captureFrame",

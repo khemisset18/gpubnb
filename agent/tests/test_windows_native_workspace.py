@@ -17,6 +17,9 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
             "helperVersion": "0.1-test",
             "gpuUuid": "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
             "isolatedSession": True,
+            "separateRenterIdentity": True,
+            "renterSessionActive": True,
+            "providerSessionInactive": True,
             "virtualDisplay": True,
             "providerDesktopExcluded": True,
             "captureFrame": True,
@@ -131,7 +134,19 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
         self.assertEqual(result.reason, "native_stream_self_test_failed")
 
     def test_self_test_requires_isolated_session_capture_media_and_input(self):
-        for field in ("isolatedSession", "virtualDisplay", "providerDesktopExcluded", "captureFrame", "exactGpuBound", "nvencReady", "mediaLoopback", "inputIsolation"):
+        for field in (
+            "isolatedSession",
+            "separateRenterIdentity",
+            "renterSessionActive",
+            "providerSessionInactive",
+            "virtualDisplay",
+            "providerDesktopExcluded",
+            "captureFrame",
+            "exactGpuBound",
+            "nvencReady",
+            "mediaLoopback",
+            "inputIsolation",
+        ):
             with self.subTest(field=field):
                 with (
                     patch.object(native.platform, "system", return_value="Windows"),

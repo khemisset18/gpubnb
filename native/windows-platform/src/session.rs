@@ -3,13 +3,44 @@
 //! The privileged service must never auto-select the console/active provider
 //! session. Callers supply a non-zero Windows session id that was provisioned for
 //! the renter. WTSQueryUserToken is then verified rather than trusted blindly.
+//! This module validates an existing interactive boundary; it deliberately does
+//! not claim that LogonUser/CreateProcessAsUser can manufacture a separate WTS
+//! session.
 
 use crate::PlatformError;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RenterSessionIsolationProof {
+    windows_session_id: u32,
+}
+
+impl RenterSessionIsolationProof {
+    const fn verified(windows_session_id: u32) -> Self {
+        Self { windows_session_id }
+    }
+
+    pub const fn windows_session_id(self) -> u32 {
+        self.windows_session_id
+    }
+
+    pub const fn separate_renter_identity(self) -> bool {
+        true
+    }
+
+    pub const fn renter_session_active(self) -> bool {
+        true
+    }
+
+    pub const fn provider_session_inactive(self) -> bool {
+        true
+    }
+}
 
 pub struct RenterSessionToken {
     session_id: u32,
     logon_sid: String,
     user_sid: String,
+    isolation: RenterSessionIsolationProof,
     #[cfg(target_os = "windows")]
     handle: windows_impl::OwnedToken,
 }
@@ -30,6 +61,10 @@ impl RenterSessionToken {
 
     pub fn user_sid(&self) -> &str {
         &self.user_sid
+    }
+
+    pub const fn isolation_proof(&self) -> RenterSessionIsolationProof {
+        self.isolation
     }
 
     pub fn create_environment(&self) -> Result<RenterEnvironment, PlatformError> {
@@ -144,7 +179,7 @@ pub fn query_renter_session_token(
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
-    use super::RenterSessionToken;
+    use super::{RenterSessionIsolationProof, RenterSessionToken};
     use crate::PlatformError;
     use std::ffi::c_void;
     use std::mem::{align_of, size_of};
@@ -483,6 +518,7 @@ mod windows_impl {
             session_id,
             logon_sid,
             user_sid,
+            isolation: RenterSessionIsolationProof::verified(session_id),
             handle,
         })
     }
@@ -491,6 +527,15 @@ mod windows_impl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn verified_isolation_proof_encodes_the_full_renter_boundary() {
+        let proof = RenterSessionIsolationProof::verified(42);
+        assert_eq!(proof.windows_session_id(), 42);
+        assert!(proof.separate_renter_identity());
+        assert!(proof.renter_session_active());
+        assert!(proof.provider_session_inactive());
+    }
 
     #[test]
     fn exclusive_session_policy_requires_only_the_renter_to_be_active() {

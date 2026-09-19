@@ -98,6 +98,9 @@ Success stdout:
   "helperVersion": "0.1.0",
   "gpuUuid": "GPU-...",
   "isolatedSession": true,
+  "separateRenterIdentity": true,
+  "renterSessionActive": true,
+  "providerSessionInactive": true,
   "virtualDisplay": true,
   "providerDesktopExcluded": true,
   "captureFrame": true,
@@ -142,6 +145,9 @@ Success stdout:
   "gpuUuid": "GPU-...",
   "helperVersion": "0.1.0",
   "isolatedSession": true,
+  "separateRenterIdentity": true,
+  "renterSessionActive": true,
+  "providerSessionInactive": true,
   "virtualDisplay": true,
   "providerDesktopExcluded": true,
   "captureReady": true,
@@ -175,9 +181,18 @@ Additional Workspace requirements:
 
 Application paths are defense-in-depth validated by both Agent and helper: local drive-qualified Windows paths only, explicit `.exe`, no PATH lookup, no UNC/network path, no Win32 device namespace, no alternate data stream and no `.`/`..` component.
 
-A helper MUST NOT return success unless both `virtualDisplay` and
-`providerDesktopExcluded` are true. It must never present a provider desktop,
-a public listener, a software encoder, the wrong GPU or an unisolated input target.
+A helper MUST NOT return success unless the renter boundary is proven before any
+graphics/media proof is accepted. In v1, `separateRenterIdentity`,
+`renterSessionActive` and `providerSessionInactive` are mandatory provenance
+claims backed by the privileged WTS/token checks: the renter user SID is distinct
+from the provider and system identities, the exact renter WTS session is active,
+and no other WTS session is active. A secondary `LogonUser` token or a
+`CreateProcessAsUser` process placed into the provider's interactive session
+cannot satisfy this contract.
+
+The helper must also prove both `virtualDisplay` and
+`providerDesktopExcluded`. It must never present a provider desktop, a public
+listener, a software encoder, the wrong GPU or an unisolated input target.
 
 ## `--stop --json`
 
@@ -204,18 +219,29 @@ session resources. Failure to verify cleanup returns non-zero or
 
 ## Isolation requirements
 
+The current native v1 runtime consumes an already-provisioned interactive renter
+session; it does not manufacture a new WTS session from a token. Windows APIs
+that create a logon token do not by themselves create a separate interactive
+WinSta0 session, and GPUbnb must not weaken this boundary by launching the renter
+inside the provider's session. Until a supported provisioning path is implemented
+and physically qualified, native Windows bookability remains disabled.
+
 The v1 implementation must demonstrate all of the following during physical
 qualification:
 
-1. Provider personal desktop pixels never enter the renter stream.
-2. Renter keyboard/mouse/controller input cannot target the provider session.
-3. Provider clipboard, profile, browser cookies, documents and personal drives
+1. The renter runs under a user identity distinct from the provider and from
+   LocalSystem/LocalService/NetworkService.
+2. The exact renter WTS session is active and the provider session is not active
+   while native capture/input is armed.
+3. Provider personal desktop pixels never enter the renter stream.
+4. Renter keyboard/mouse/controller input cannot target the provider session.
+5. Provider clipboard, profile, browser cookies, documents and personal drives
    are not inherited by default.
-4. Workspace files live under a GPUbnb-controlled renter ACL boundary.
-5. Only the exact leased GPU is used for the ready proof.
-6. Media is reachable only through the authenticated GPUbnb data plane; the
+6. Workspace files live under a GPUbnb-controlled renter ACL boundary.
+7. Only the exact leased GPU is used for the ready proof.
+8. Media is reachable only through the authenticated GPUbnb data plane; the
    helper itself exposes loopback only.
-7. Session cleanup remains verifiable after normal stop, renter disconnect,
+9. Session cleanup remains verifiable after normal stop, renter disconnect,
    helper crash and Host reboot/recovery.
 
 ## Authority and reconnect

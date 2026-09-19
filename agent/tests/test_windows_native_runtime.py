@@ -19,6 +19,9 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             "gpuUuid": "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
             "helperVersion": "0.2-test",
             "isolatedSession": True,
+            "separateRenterIdentity": True,
+            "renterSessionActive": True,
+            "providerSessionInactive": True,
             "virtualDisplay": True,
             "providerDesktopExcluded": True,
             "captureReady": True,
@@ -164,7 +167,19 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             self.assertEqual(run.call_count, 2)
 
     def test_launch_requires_isolated_session_and_input_boundary(self):
-        for field in ("isolatedSession", "virtualDisplay", "providerDesktopExcluded", "captureReady", "exactGpuBound", "nvencReady", "mediaReady", "inputIsolation"):
+        for field in (
+            "isolatedSession",
+            "separateRenterIdentity",
+            "renterSessionActive",
+            "providerSessionInactive",
+            "virtualDisplay",
+            "providerDesktopExcluded",
+            "captureReady",
+            "exactGpuBound",
+            "nvencReady",
+            "mediaReady",
+            "inputIsolation",
+        ):
             with self.subTest(field=field):
                 with (
                     patch.object(runtime, "find_stream_helper", return_value="helper.exe"),

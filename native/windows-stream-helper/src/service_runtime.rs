@@ -35,7 +35,9 @@ use gpubnb_windows_platform::pipe::{
 use gpubnb_windows_platform::process::{
     RenterWorkerLaunchSpec, RenterWorkerProcess, launch_qualified_renter_worker,
 };
-use gpubnb_windows_platform::session::query_renter_session_token;
+use gpubnb_windows_platform::session::{
+    RenterSessionIsolationProof, query_renter_session_token,
+};
 use std::path::Path;
 
 const WORKER_PATH: &str = r"C:\Program Files\GPUbnb\gpubnb-windows-worker.exe";
@@ -93,6 +95,7 @@ pub struct QualifiedGraphicsRuntime {
     display: Option<VirtualDisplayLease>,
     generation: u64,
     windows_session_id: u32,
+    renter_isolation: RenterSessionIsolationProof,
     display_spec: WorkerDisplaySpec,
     gpu_uuid: String,
     next_sequence: u64,
@@ -108,6 +111,10 @@ impl QualifiedGraphicsRuntime {
 
     pub const fn windows_session_id(&self) -> u32 {
         self.windows_session_id
+    }
+
+    pub const fn renter_isolation_proof(&self) -> RenterSessionIsolationProof {
+        self.renter_isolation
     }
 
     pub const fn display_spec(&self) -> WorkerDisplaySpec {
@@ -539,6 +546,7 @@ pub fn start_qualified_graphics_runtime(
         config.provider_user_sid,
     )
     .map_err(|_| ServiceRuntimeError::RenterSession)?;
+    let renter_isolation = renter.isolation_proof();
 
     let service_sid = current_process_user_sid().map_err(|_| ServiceRuntimeError::RenterSession)?;
     let pipe = create_worker_pipe(
@@ -667,6 +675,7 @@ pub fn start_qualified_graphics_runtime(
         display: Some(display),
         generation: config.generation,
         windows_session_id: config.windows_session_id,
+        renter_isolation,
         display_spec,
         gpu_uuid: config.gpu_uuid.to_owned(),
         next_sequence: 3,
