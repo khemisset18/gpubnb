@@ -364,7 +364,7 @@ mod windows_impl {
         let read: ReadFrameFn = unsafe { symbol(module.0, b"GPUbnbMediaReadFrame\0")? };
         let close: CloseFn = unsafe { symbol(module.0, b"GPUbnbMediaClose\0")? };
 
-        let mut raw = std::ptr::null_mut();
+        let mut raw: *mut c_void = std::ptr::null_mut();
         // SAFETY: wire is the exact fixed ABI input and raw is a writable out pointer.
         let hr = unsafe {
             open(
