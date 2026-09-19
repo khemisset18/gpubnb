@@ -87,7 +87,7 @@ jobs:
             "GPUbnbMediaReadFrame",
             "GPUbnbMediaClose"
           )) {
-            $pattern = "(?m)^\\s+\\d+\\s+[0-9A-Fa-f]+\\s+[0-9A-Fa-f]+\\s+" + [regex]::Escape($symbol) + "\\s*$"
+            $pattern = "(?m)^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+" + [regex]::Escape($symbol) + "(?:\s+=\s+" + [regex]::Escape($symbol) + ")?\s*$"
             if ($exports -notmatch $pattern) {
               Write-Host $exports
               throw "Missing required media ABI export: $symbol"
