@@ -267,12 +267,18 @@ fn verify_suspended_process_image(
     verified: &VerifiedApplicationFile,
 ) -> Result<(), PlatformError> {
     let mut buffer = vec![0u16; 32_768];
-    let mut len = u32::try_from(buffer.len()).map_err(|_| PlatformError::ProcessImageQueryFailed)?;
+    let mut len =
+        u32::try_from(buffer.len()).map_err(|_| PlatformError::ProcessImageQueryFailed)?;
     // SAFETY: worker owns a live process handle; buffer is writable for len UTF-16 units.
-    let ok = unsafe {
-        QueryFullProcessImageNameW(worker.process.0, 0, buffer.as_mut_ptr(), &mut len)
-    };
-    if ok == 0 || len == 0 || usize::try_from(len).ok().filter(|n| *n < buffer.len()).is_none() {
+    let ok =
+        unsafe { QueryFullProcessImageNameW(worker.process.0, 0, buffer.as_mut_ptr(), &mut len) };
+    if ok == 0
+        || len == 0
+        || usize::try_from(len)
+            .ok()
+            .filter(|n| *n < buffer.len())
+            .is_none()
+    {
         return Err(PlatformError::ProcessImageQueryFailed);
     }
     let image = OsString::from_wide(&buffer[..len as usize]);
