@@ -94,6 +94,12 @@ class WindowsNativeMediaBoundaryTests(unittest.TestCase):
             with self.subTest(presented=presented):
                 self.assertFalse(media_token_matches(token, presented))
 
+    def test_media_token_comparison_rejects_invalid_trusted_capability(self):
+        valid = "A" * 32 + "-_"
+        for expected in ("", "A" * 31, "A" * 201, "A" * 32 + "=", "é" * 32):
+            with self.subTest(expected=expected):
+                self.assertFalse(media_token_matches(expected, valid))
+
     def test_rejects_near_match_or_extra_path_segments(self):
         for value in (
             "http://127.0.0.1:43123/session/sess-1/",
