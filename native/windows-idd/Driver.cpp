@@ -264,6 +264,7 @@ NTSTATUS GPUbnbDeviceAdd(
 
     IDD_CX_CLIENT_CONFIG iddConfig;
     IDD_CX_CLIENT_CONFIG_INIT(&iddConfig);
+    iddConfig.EvtIddCxDeviceIoControl = GPUbnbEvtIddCxDeviceIoControl;
     iddConfig.EvtIddCxAdapterInitFinished = GPUbnbAdapterInitFinished;
     iddConfig.EvtIddCxAdapterCommitModes = GPUbnbAdapterCommitModes;
     iddConfig.EvtIddCxParseMonitorDescription = GPUbnbParseMonitorDescription;
@@ -314,16 +315,6 @@ NTSTATUS GPUbnbDeviceAdd(
         return status;
     }
 
-    WDF_IO_QUEUE_CONFIG queueConfig;
-    WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&queueConfig, WdfIoQueueDispatchSequential);
-    queueConfig.EvtIoDeviceControl = GPUbnbEvtIoDeviceControl;
-
-    status = WdfIoQueueCreate(device, &queueConfig, WDF_NO_OBJECT_ATTRIBUTES, WDF_NO_HANDLE);
-    if (!NT_SUCCESS(status))
-    {
-        return status;
-    }
-
     auto* context = WdfObjectGet_GPUbnbDeviceContext(device);
     context->Adapter = nullptr;
     context->Monitor = nullptr;
@@ -332,14 +323,13 @@ NTSTATUS GPUbnbDeviceAdd(
 }
 
 _Use_decl_annotations_
-VOID GPUbnbEvtIoDeviceControl(
-    WDFQUEUE queue,
+VOID GPUbnbEvtIddCxDeviceIoControl(
+    WDFDEVICE device,
     WDFREQUEST request,
     size_t outputBufferLength,
     size_t inputBufferLength,
     ULONG ioControlCode)
 {
-    UNREFERENCED_PARAMETER(queue);
     UNREFERENCED_PARAMETER(outputBufferLength);
 
     NTSTATUS status = STATUS_INVALID_DEVICE_REQUEST;
@@ -379,7 +369,6 @@ VOID GPUbnbEvtIoDeviceControl(
                     }
                     else
                     {
-                        WDFDEVICE device = WdfIoQueueGetDevice(queue);
                         WDFFILEOBJECT ownerFile = WdfRequestGetFileObject(request);
                         if (ownerFile == nullptr)
                         {
