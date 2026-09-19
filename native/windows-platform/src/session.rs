@@ -75,6 +75,7 @@ fn numeric_sid(value: &str) -> bool {
     fields >= 4
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn validate_exclusive_active_session(
     renter_session_id: u32,
     active_session_ids: &[u32],
@@ -557,7 +558,7 @@ mod tests {
                 "S-1-5-21-100-200-300-1000",
             )
             .err(),
-            Some(PlatformError::RenterTokenQueryFailed)
+            Some(PlatformError::RenterSessionNotActive)
         );
     }
 
