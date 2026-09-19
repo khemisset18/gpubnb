@@ -10,9 +10,11 @@
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
 #[cfg(target_os = "windows")]
 use gpubnb_windows_platform::input::inject_input;
+#[cfg(any(target_os = "windows", test))]
 use gpubnb_windows_platform::input::{
     InputEvent as PlatformInputEvent, MouseButton as PlatformMouseButton,
 };
+#[cfg(any(target_os = "windows", test))]
 use gpubnb_windows_platform::media::MediaProbeError;
 #[cfg(target_os = "windows")]
 use gpubnb_windows_platform::media::{MediaProbeRequest, MediaSession, open_media_session};
@@ -28,6 +30,7 @@ use gpubnb_windows_stream_helper::worker_protocol::{
     encode_worker_media_proof, validate_worker_command, validate_worker_display_spec,
     validate_worker_input,
 };
+#[cfg(any(target_os = "windows", test))]
 use gpubnb_windows_stream_helper::worker_protocol::{WorkerInputEvent, WorkerMouseButton};
 use std::env;
 use std::process::ExitCode;
