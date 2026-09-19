@@ -5,7 +5,9 @@
 //! fixed Program Files location and verifies Authenticode before loading it.
 
 use crate::gpu_identity::parse_nvidia_gpu_uuid;
+#[cfg(target_os = "windows")]
 use crate::open_application_for_verification;
+#[cfg(target_os = "windows")]
 use std::path::Path;
 
 pub const MEDIA_ABI_VERSION: u32 = 1;
@@ -22,11 +24,14 @@ pub const MEDIA_REQUIRED_PROOFS: u32 = MEDIA_PROOF_EXACT_GPU
     | MEDIA_PROOF_CAPTURED_FRAME
     | MEDIA_PROOF_NVENC_BITSTREAM;
 
+#[cfg(target_os = "windows")]
 const TRUSTED_MEDIA_DLL: &str = r"C:\Program Files\GPUbnb\GPUbnbWindowsMedia.dll";
 
+#[cfg(any(target_os = "windows", test))]
 const TRUSTED_MEDIA_SIGNER_SHA256_HEX: Option<&str> =
     option_env!("GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256");
 
+#[cfg(any(target_os = "windows", test))]
 fn hex_nibble(value: u8) -> Option<u8> {
     match value {
         b'0'..=b'9' => Some(value - b'0'),
@@ -36,6 +41,7 @@ fn hex_nibble(value: u8) -> Option<u8> {
     }
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn trusted_media_signer() -> Result<[u8; 32], MediaProbeError> {
     let value = TRUSTED_MEDIA_SIGNER_SHA256_HEX.ok_or(MediaProbeError::DllUntrusted)?;
     if value.len() != 64 {
@@ -89,6 +95,7 @@ pub struct EncodedMediaFrame {
 }
 
 pub struct MediaSession {
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     expected: MediaProbeRequestOwned,
     #[cfg(target_os = "windows")]
     inner: windows_impl::PersistentSession,
@@ -132,13 +139,14 @@ pub enum MediaProbeError {
     MissingProof,
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn classify_probe_hresult(hr: i32) -> MediaProbeError {
     // DXGI HRESULT values are stable Win32 ABI constants. Keep the mapping here
     // so higher layers can revoke only the proofs affected by the failure.
     match hr as u32 {
         0x887A0027 => MediaProbeError::CaptureTimeout, // DXGI_ERROR_WAIT_TIMEOUT
         0x887A0026 => MediaProbeError::CaptureAccessLost, // DXGI_ERROR_ACCESS_LOST
-        0x887A0005 | 0x887A0006 | 0x887A0007 => MediaProbeError::DeviceLost, // REMOVED / HUNG / RESET
+        0x887A0005..=0x887A0007 => MediaProbeError::DeviceLost, // REMOVED / HUNG / RESET
         _ => MediaProbeError::ProbeFailed,
     }
 }
@@ -172,6 +180,7 @@ fn encode_request(
     Ok(wire)
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, MediaProbeError> {
     let raw: [u8; 4] = bytes
         .get(offset..offset + 4)
@@ -181,6 +190,7 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, MediaProbeError> {
     Ok(u32::from_le_bytes(raw))
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, MediaProbeError> {
     let raw: [u8; 8] = bytes
         .get(offset..offset + 8)
@@ -190,6 +200,7 @@ fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, MediaProbeError> {
     Ok(u64::from_le_bytes(raw))
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn decode_result(
     wire: &[u8; MEDIA_RESULT_SIZE],
     expected: MediaProbeRequest<'_>,
