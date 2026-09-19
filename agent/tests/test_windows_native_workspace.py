@@ -103,6 +103,17 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
             [call(native.WINDOWS_STREAM_HELPER_INSTALL_PATH), call(dev)],
         )
 
+    def test_self_test_process_failures_are_stable_and_fail_closed(self):
+        for failure in (OSError("secret"), __import__("subprocess").TimeoutExpired("secret", 30), UnicodeError("secret")):
+            with (
+                self.subTest(failure=type(failure).__name__),
+                patch.object(native.platform, "system", return_value="Windows"),
+                patch.object(native, "run_command", side_effect=failure),
+            ):
+                result = native.windows_native_desktop_preflight("helper.exe")
+            self.assertFalse(result.available)
+            self.assertEqual(result.reason, "native_stream_self_test_failed")
+
     def test_cuda_or_gpu_presence_cannot_replace_real_self_test(self):
         with (
             patch.object(native.platform, "system", return_value="Windows"),
