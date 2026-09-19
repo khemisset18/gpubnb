@@ -18,6 +18,9 @@ test('workspace sessions require an explicit persisted runtime-family identity',
   assert.match(migration, /UPDATE "WorkspaceSession"[\s\S]*SET "runtimeBackend" = 'CONTAINER'/);
   assert.match(migration, /ALTER COLUMN "runtimeBackend" SET NOT NULL/);
   assert.doesNotMatch(migration, /DEFAULT 'CONTAINER'/);
+  assert.match(migration, /WorkspaceSession_runtime_backend_immutable/);
+  assert.match(migration, /BEFORE UPDATE OF "runtimeBackend" ON "WorkspaceSession"/);
+  assert.match(migration, /workspace runtime backend is immutable/);
 });
 
 test('the generic browser gateway is structurally container-only', () => {
