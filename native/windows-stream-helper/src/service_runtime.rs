@@ -276,6 +276,9 @@ impl QualifiedGraphicsRuntime {
             Ok(frame) => frame,
             Err(error) => return Err(self.fail(error)),
         };
+        if !frame.is_keyframe() {
+            return Err(self.fail(ServiceRuntimeError::MediaTransport));
+        }
         self.last_frame_sequence = frame.header.frame_sequence;
         self.pending_media_frame = Some(frame);
         self.media_state = RuntimeMediaState::Ready;
@@ -653,6 +656,9 @@ pub fn start_qualified_graphics_runtime(
         display_spec,
         config.gpu_uuid,
     )?;
+    if !initial_media_frame.is_keyframe() {
+        return Err(ServiceRuntimeError::MediaTransport);
+    }
 
     Ok(QualifiedGraphicsRuntime {
         pipe,

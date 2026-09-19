@@ -11,15 +11,17 @@ use crate::worker_protocol::{
     WORKER_MEDIA_REQUIRED_PROOF_FLAGS, WorkerDisplaySpec, WorkerMediaProof,
 };
 
-pub const MEDIA_TRANSPORT_PROTOCOL_VERSION: u16 = 1;
+pub const MEDIA_TRANSPORT_PROTOCOL_VERSION: u16 = 2;
 pub const MEDIA_FRAME_HEADER_SIZE: usize = 80;
 pub const MEDIA_H264_FRAME_MAX_BYTES: usize = 8 * 1024 * 1024;
 pub const MEDIA_CODEC_H264: u8 = 1;
+pub const MEDIA_FRAME_FLAG_KEYFRAME: u8 = 1 << 0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorkerMediaFrameHeader {
     pub protocol_version: u16,
     pub codec: u8,
+    pub frame_flags: u8,
     pub generation: u64,
     pub command_sequence: u64,
     pub windows_session_id: u32,
@@ -40,12 +42,19 @@ pub struct BoundMediaFrame {
     pub bytes: Vec<u8>,
 }
 
+impl BoundMediaFrame {
+    pub const fn is_keyframe(&self) -> bool {
+        self.header.frame_flags & MEDIA_FRAME_FLAG_KEYFRAME != 0
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaFrameError {
     InvalidLength,
     ProtocolVersion,
     HeaderSize,
     Codec,
+    FrameFlags,
     Reserved,
     Generation,
     Sequence,
@@ -84,6 +93,9 @@ fn validate_header_fields(header: WorkerMediaFrameHeader) -> Result<(), MediaFra
     }
     if header.codec != MEDIA_CODEC_H264 {
         return Err(MediaFrameError::Codec);
+    }
+    if header.frame_flags & !MEDIA_FRAME_FLAG_KEYFRAME != 0 {
+        return Err(MediaFrameError::FrameFlags);
     }
     if header.generation == 0 {
         return Err(MediaFrameError::Generation);
@@ -127,7 +139,8 @@ pub fn encode_worker_media_frame_header(
     out[0..2].copy_from_slice(&header.protocol_version.to_le_bytes());
     out[2..4].copy_from_slice(&(MEDIA_FRAME_HEADER_SIZE as u16).to_le_bytes());
     out[4] = header.codec;
-    // 5..8 are reserved and intentionally remain zero.
+    out[5] = header.frame_flags;
+    // 6..8 are reserved and intentionally remain zero.
     out[8..16].copy_from_slice(&header.generation.to_le_bytes());
     out[16..24].copy_from_slice(&header.command_sequence.to_le_bytes());
     out[24..28].copy_from_slice(&header.windows_session_id.to_le_bytes());
@@ -156,7 +169,7 @@ pub fn decode_worker_media_frame_header(
     if header_size != MEDIA_FRAME_HEADER_SIZE {
         return Err(MediaFrameError::HeaderSize);
     }
-    if frame[5..8].iter().any(|byte| *byte != 0) {
+    if frame[6..8].iter().any(|byte| *byte != 0) {
         return Err(MediaFrameError::Reserved);
     }
     let display_nonce: [u8; 16] = frame[36..52]
@@ -165,6 +178,7 @@ pub fn decode_worker_media_frame_header(
     let header = WorkerMediaFrameHeader {
         protocol_version,
         codec: frame[4],
+        frame_flags: frame[5],
         generation: read_u64(frame, 8)?,
         command_sequence: read_u64(frame, 16)?,
         windows_session_id: read_u32(frame, 24)?,
@@ -300,6 +314,7 @@ mod tests {
         WorkerMediaFrameHeader {
             protocol_version: MEDIA_TRANSPORT_PROTOCOL_VERSION,
             codec: MEDIA_CODEC_H264,
+            frame_flags: MEDIA_FRAME_FLAG_KEYFRAME,
             generation: proof.generation,
             command_sequence: proof.command_sequence,
             windows_session_id: proof.windows_session_id,
@@ -322,7 +337,8 @@ mod tests {
             &encoded[2..4],
             &(MEDIA_FRAME_HEADER_SIZE as u16).to_le_bytes()
         );
-        assert_eq!(&encoded[5..8], &[0, 0, 0]);
+        assert_eq!(encoded[5], MEDIA_FRAME_FLAG_KEYFRAME);
+        assert_eq!(&encoded[6..8], &[0, 0]);
         assert_eq!(decode_worker_media_frame_header(&encoded), Ok(header()));
     }
 
@@ -359,6 +375,16 @@ mod tests {
             bind_worker_media_payload(header(), vec![0; 5]),
             Err(MediaFrameError::EmptyPayload)
         ));
+    }
+
+    #[test]
+    fn unknown_frame_flags_are_rejected() {
+        let mut invalid = header();
+        invalid.frame_flags = 0x80;
+        assert_eq!(
+            encode_worker_media_frame_header(invalid),
+            Err(MediaFrameError::FrameFlags)
+        );
     }
 
     #[test]

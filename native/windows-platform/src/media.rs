@@ -10,7 +10,7 @@ use crate::open_application_for_verification;
 #[cfg(target_os = "windows")]
 use std::path::Path;
 
-pub const MEDIA_ABI_VERSION: u32 = 1;
+pub const MEDIA_ABI_VERSION: u32 = 2;
 pub const MEDIA_REQUEST_SIZE: usize = 64;
 pub const MEDIA_RESULT_SIZE: usize = 64;
 pub const MEDIA_FRAME_RESULT_SIZE: usize = 64;
@@ -19,6 +19,7 @@ pub const MEDIA_PROOF_EXACT_GPU: u32 = 1 << 0;
 pub const MEDIA_PROOF_DISPLAY_FOUND: u32 = 1 << 1;
 pub const MEDIA_PROOF_CAPTURED_FRAME: u32 = 1 << 2;
 pub const MEDIA_PROOF_NVENC_BITSTREAM: u32 = 1 << 3;
+pub const MEDIA_FRAME_FLAG_KEYFRAME: u32 = 1 << 0;
 pub const MEDIA_REQUIRED_PROOFS: u32 = MEDIA_PROOF_EXACT_GPU
     | MEDIA_PROOF_DISPLAY_FOUND
     | MEDIA_PROOF_CAPTURED_FRAME
@@ -83,15 +84,23 @@ pub struct MediaProbeResult {
     pub frame_sequence: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+// Encoded renter pixels are deliberately neither Debug nor Clone: diagnostics
+// must not accidentally print or duplicate H.264 payloads.
 pub struct EncodedMediaFrame {
     pub bytes: Vec<u8>,
     pub frame_sequence: u64,
     pub proof_flags: u32,
+    pub frame_flags: u32,
     pub adapter_luid: u64,
     pub width: u32,
     pub height: u32,
     pub refresh_hz: u32,
+}
+
+impl EncodedMediaFrame {
+    pub const fn is_keyframe(&self) -> bool {
+        self.frame_flags & MEDIA_FRAME_FLAG_KEYFRAME != 0
+    }
 }
 
 pub struct MediaSession {
@@ -425,6 +434,9 @@ mod windows_impl {
         let encoded_bytes = read_u32(&result, 36)? as usize;
         let frame_sequence = read_u64(&result, 40)?;
         let required_capacity = read_u32(&result, 48)? as usize;
+        let frame_flags = read_u32(&result, 52)?;
+        let reserved0 = read_u32(&result, 56)?;
+        let reserved1 = read_u32(&result, 60)?;
 
         if failed_stage != 0
             || adapter_luid != expected.adapter_luid
@@ -436,6 +448,9 @@ mod windows_impl {
             || encoded_bytes > bytes.len()
             || frame_sequence == 0
             || proof_flags & MEDIA_REQUIRED_PROOFS != MEDIA_REQUIRED_PROOFS
+            || frame_flags & !MEDIA_FRAME_FLAG_KEYFRAME != 0
+            || reserved0 != 0
+            || reserved1 != 0
         {
             return Err(MediaProbeError::InvalidResult);
         }
@@ -444,6 +459,7 @@ mod windows_impl {
             bytes,
             frame_sequence,
             proof_flags,
+            frame_flags,
             adapter_luid,
             width,
             height,
@@ -522,9 +538,19 @@ mod tests {
     }
 
     #[test]
+    fn rust_and_cpp_media_abi_version_and_frame_flags_are_locked_together() {
+        const CPP_MEDIA_HEADER: &str = include_str!("../../windows-media/Media.h");
+        assert!(CPP_MEDIA_HEADER.contains("#define GPUBNB_WINDOWS_MEDIA_ABI_VERSION 2u"));
+        assert!(CPP_MEDIA_HEADER.contains("uint32_t FrameFlags;"));
+        assert_eq!(MEDIA_ABI_VERSION, 2);
+        assert_eq!(MEDIA_FRAME_FLAG_KEYFRAME, 1);
+    }
+
+    #[test]
     fn persistent_frame_result_layout_is_pinned() {
         assert_eq!(MEDIA_FRAME_RESULT_SIZE, 64);
         assert_eq!(MAX_ENCODED_FRAME_BYTES, 8 * 1024 * 1024);
+        assert_eq!(MEDIA_FRAME_FLAG_KEYFRAME, 1);
     }
 
     #[test]
@@ -532,7 +558,7 @@ mod tests {
         let wire = encode_request(request()).expect("valid media request");
         assert_eq!(wire.len(), 64);
         assert_eq!(&wire[0..4], &64u32.to_le_bytes());
-        assert_eq!(&wire[4..8], &1u32.to_le_bytes());
+        assert_eq!(&wire[4..8], &2u32.to_le_bytes());
         assert_eq!(&wire[8..16], &0x1122_3344_5566_7788u64.to_le_bytes());
         assert_eq!(&wire[48..52], &1920u32.to_le_bytes());
         assert_eq!(&wire[52..56], &1080u32.to_le_bytes());

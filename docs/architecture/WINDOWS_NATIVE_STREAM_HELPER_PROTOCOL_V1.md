@@ -42,12 +42,19 @@ The helper must never capture the provider's personal desktop.
   MUST NOT carry H.264 payloads. Encoded H.264 travels worker -> service over a
   distinct local-only named pipe with a protected DACL, remote clients rejected,
   and the same exact renter logon SID + worker PID verification as the control pipe.
-- Each media frame starts with the fixed v1 80-byte media header and is followed
-  by exactly one bounded H.264 payload (maximum 8 MiB). The header binds the bytes
-  to generation, control-command sequence, WTS session id, adapter LUID, display
-  nonce, frame sequence, dimensions, refresh rate and the corresponding media
-  proof. Any mismatch, replay, zero/oversized length or partial proof revokes the
-  media runtime.
+- Each media frame starts with the fixed 80-byte media header and is followed
+  by exactly one bounded H.264 payload (maximum 8 MiB). Media transport protocol
+  v2 adds an explicit keyframe flag while preserving the fixed header size. The
+  header binds the bytes to generation, control-command sequence, WTS session id,
+  adapter LUID, display nonce, frame sequence, dimensions, refresh rate and the
+  corresponding media proof. Any mismatch, replay, unknown flag, zero/oversized
+  length or partial proof revokes the media runtime.
+- Media DLL ABI v2 exposes whether NVENC actually emitted an IDR frame. A newly
+  opened encoder forces IDR + SPS/PPS exactly once; steady frames use the normal
+  low-latency inter-frame path. Start and reconnect MUST receive a frame marked
+  keyframe before READY can be armed, so a browser decoder never resumes from a
+  stale P-frame. Reconnect creates a fresh media session, re-arming the one-shot
+  IDR/SPS/PPS behavior.
 - During an established stream, `DXGI_ERROR_WAIT_TIMEOUT` means only that
   Desktop Duplication produced no new desktop image within the short polling
   interval. The worker reports a typed `NoFrame` control result fenced to the

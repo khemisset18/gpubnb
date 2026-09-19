@@ -670,13 +670,18 @@ public:
         uint32_t width,
         uint32_t height,
         uint32_t* encodedBytes,
-        std::vector<uint8_t>* output = nullptr)
+        std::vector<uint8_t>* output = nullptr,
+        uint32_t* frameFlags = nullptr)
     {
         if (texture == nullptr || encodedBytes == nullptr || encoder_ == nullptr)
         {
             return E_INVALIDARG;
         }
         *encodedBytes = 0;
+        if (frameFlags != nullptr)
+        {
+            *frameFlags = 0;
+        }
 
         NV_ENC_REGISTER_RESOURCE registration = {
             NV_ENC_REGISTER_RESOURCE_VER
@@ -716,8 +721,9 @@ public:
         picture.inputHeight = height;
         picture.outputBitstream = bitstream_;
         picture.pictureStruct = NV_ENC_PIC_STRUCT_FRAME;
-        picture.encodePicFlags =
-            NV_ENC_PIC_FLAG_FORCEIDR | NV_ENC_PIC_FLAG_OUTPUT_SPSPPS;
+        picture.encodePicFlags = forceIdrNext_
+            ? (NV_ENC_PIC_FLAG_FORCEIDR | NV_ENC_PIC_FLAG_OUTPUT_SPSPPS)
+            : 0;
 
         const NVENCSTATUS encodeStatus =
             functions_.nvEncEncodePicture(encoder_, &picture);
@@ -743,6 +749,7 @@ public:
             return E_FAIL;
         }
         *encodedBytes = lock.bitstreamSizeInBytes;
+        const bool keyframe = lock.pictureType == NV_ENC_PIC_TYPE_IDR;
         if (output != nullptr)
         {
             const auto* begin =
@@ -774,6 +781,11 @@ public:
         }
         registered_ = nullptr;
 
+        if (frameFlags != nullptr)
+        {
+            *frameFlags = keyframe ? GPUBNB_MEDIA_FRAME_KEYFRAME : 0;
+        }
+        forceIdrNext_ = false;
         return S_OK;
     }
 
@@ -810,6 +822,7 @@ private:
             FreeLibrary(module_);
             module_ = nullptr;
         }
+        forceIdrNext_ = true;
     }
 
     HMODULE module_ = nullptr;
@@ -820,6 +833,7 @@ private:
     NV_ENC_REGISTERED_PTR registered_ = nullptr;
     NV_ENC_INPUT_PTR mapped_ = nullptr;
     bool locked_ = false;
+    bool forceIdrNext_ = true;
 };
 
 void InitializeResult(
@@ -1149,13 +1163,15 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
 
     result->FailedStage = GPUBNB_MEDIA_STAGE_NVENC_ENCODE;
     uint32_t encodedBytes = 0;
+    uint32_t frameFlags = 0;
     std::vector<uint8_t> encoded;
     hr = session->encoder.Encode(
         texture.Get(),
         session->request.Width,
         session->request.Height,
         &encodedBytes,
-        &encoded);
+        &encoded,
+        &frameFlags);
     if (FAILED(hr) || encodedBytes == 0 || encoded.size() != encodedBytes)
     {
         return FAILED(hr) ? hr : E_FAIL;
@@ -1163,6 +1179,7 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
 
     result->EncodedBytes = encodedBytes;
     result->RequiredCapacity = encodedBytes;
+    result->FrameFlags = frameFlags;
     result->FrameSequence = ++session->frameSequence;
     result->ProofFlags |= GPUBNB_MEDIA_PROOF_NVENC_BITSTREAM;
     result->FailedStage = GPUBNB_MEDIA_STAGE_NONE;

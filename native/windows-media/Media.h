@@ -3,7 +3,7 @@
 #include <Windows.h>
 #include <stdint.h>
 
-#define GPUBNB_WINDOWS_MEDIA_ABI_VERSION 1u
+#define GPUBNB_WINDOWS_MEDIA_ABI_VERSION 2u
 
 enum GPUbnbMediaProofFlags : uint32_t
 {
@@ -11,6 +11,11 @@ enum GPUbnbMediaProofFlags : uint32_t
     GPUBNB_MEDIA_PROOF_DISPLAY_FOUND = 1u << 1,
     GPUBNB_MEDIA_PROOF_CAPTURED_FRAME = 1u << 2,
     GPUBNB_MEDIA_PROOF_NVENC_BITSTREAM = 1u << 3,
+};
+
+enum GPUbnbMediaFrameFlags : uint32_t
+{
+    GPUBNB_MEDIA_FRAME_KEYFRAME = 1u << 0,
 };
 
 enum GPUbnbMediaProbeStage : uint32_t
@@ -69,7 +74,8 @@ struct GPUbnbMediaFrameResult
     uint32_t EncodedBytes;
     uint64_t FrameSequence;
     uint32_t RequiredCapacity;
-    uint32_t Reserved[3];
+    uint32_t FrameFlags;
+    uint32_t Reserved[2];
 };
 #pragma pack(pop)
 

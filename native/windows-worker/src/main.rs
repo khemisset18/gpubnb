@@ -30,8 +30,8 @@ use gpubnb_windows_platform::session::current_process_session_id;
 use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
 #[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::media_protocol::{
-    MEDIA_CODEC_H264, MEDIA_TRANSPORT_PROTOCOL_VERSION, WorkerMediaFrameHeader,
-    encode_worker_media_frame_header,
+    MEDIA_CODEC_H264, MEDIA_FRAME_FLAG_KEYFRAME, MEDIA_TRANSPORT_PROTOCOL_VERSION,
+    WorkerMediaFrameHeader, encode_worker_media_frame_header,
 };
 #[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::worker_protocol::{
@@ -284,6 +284,11 @@ fn send_encoded_media_frame(
     let header = encode_worker_media_frame_header(WorkerMediaFrameHeader {
         protocol_version: MEDIA_TRANSPORT_PROTOCOL_VERSION,
         codec: MEDIA_CODEC_H264,
+        frame_flags: if media.is_keyframe() {
+            MEDIA_FRAME_FLAG_KEYFRAME
+        } else {
+            0
+        },
         generation: args.generation,
         command_sequence,
         windows_session_id,
