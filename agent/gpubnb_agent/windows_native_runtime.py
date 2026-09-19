@@ -12,6 +12,7 @@ compatibility remains authoritative until this backend is physically qualified.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hmac
 from ipaddress import ip_address
 import subprocess
 from pathlib import Path
@@ -91,6 +92,14 @@ def _media_token(value: object) -> str | None:
     if any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for char in token):
         return None
     return token
+
+
+def media_token_matches(expected: str, presented: object) -> bool:
+    """Compare the local media capability without token-dependent early exit."""
+    candidate = _media_token(presented)
+    if candidate is None:
+        return False
+    return hmac.compare_digest(expected.encode("ascii"), candidate.encode("ascii"))
 
 
 def _helper_stop_confirmed(executable: str, session_id: str) -> bool:
