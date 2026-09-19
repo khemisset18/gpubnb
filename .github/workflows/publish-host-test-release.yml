@@ -26,6 +26,7 @@ concurrency:
 jobs:
   build:
     name: Build ${{ matrix.label }}
+    environment: ${{ matrix.os == 'windows-latest' && 'windows-code-signing' || null }}
     strategy:
       fail-fast: false
       matrix:
