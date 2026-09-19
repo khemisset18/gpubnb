@@ -525,6 +525,7 @@ fn read_fixed_u64(frame: &[u8], offset: usize) -> Result<u64, WorkerGraphicsFram
     Ok(u64::from_le_bytes(bytes))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn validate_display_fields(
     generation: u64,
     sequence: u64,
