@@ -11,6 +11,7 @@ USES = re.compile(r"^\s*uses:\s*([^\s#]+)", re.MULTILINE)
 TOP_LEVEL_PERMISSIONS = re.compile(r"^permissions:\s*(?:$|\n)", re.MULTILINE)
 TOP_LEVEL_CONCURRENCY = re.compile(r"^concurrency:\s*(?:$|\n)", re.MULTILINE)
 TRIGGERED_AUTOMATICALLY = re.compile(r"^\s{2}(?:pull_request|push|schedule):", re.MULTILINE)
+CHECKOUT_USE = re.compile(r"^actions/checkout@[0-9a-f]{40}$")
 
 
 def job_blocks(text: str) -> list[tuple[str, str]]:
@@ -59,6 +60,24 @@ def main() -> int:
                 continue
             if not PINNED_USE.fullmatch(use):
                 errors.append(f"{path}: external Action is not pinned by full commit SHA: {use}")
+
+        lines = text.splitlines()
+        for index, line in enumerate(lines):
+            match = re.match(r"^\s*-\s+uses:\s+([^\s#]+)", line)
+            if not match or not CHECKOUT_USE.fullmatch(match.group(1)):
+                continue
+            base_indent = len(line) - len(line.lstrip())
+            window: list[str] = []
+            for following in lines[index + 1:]:
+                stripped = following.strip()
+                if stripped:
+                    indent = len(following) - len(following.lstrip())
+                    if indent <= base_indent and (stripped.startswith("- ") or not following.startswith(" ")):
+                        break
+                window.append(following)
+            checkout_block = "\n".join(window)
+            if not re.search(r"^\s+persist-credentials:\s*false\s*$", checkout_block, re.MULTILINE):
+                errors.append(f"{path}: actions/checkout must set persist-credentials: false")
 
         for job_name, block in job_blocks(text):
             if "runs-on:" in block and "timeout-minutes:" not in block:
