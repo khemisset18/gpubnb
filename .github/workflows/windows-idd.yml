@@ -101,65 +101,55 @@ jobs:
           }
 
           $stampInf = Get-ChildItem $wdkX64Root -Recurse -File -Filter stampinf.exe |
-            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } |
+            Where-Object { $_.FullName -like "*\x64\stampinf.exe" } |
             Select-Object -First 1
-          if (-not $stampInf) {
-            throw "stampinf.exe not found in restored x64 WDK package"
-          }
-          $binRoot = Split-Path $stampInf.DirectoryName -Parent
-          $x64Tools = Join-Path $binRoot "x64"
-          $x86Tools = Join-Path $binRoot "x86"
-          $infVerif = Join-Path $x86Tools "InfVerif.dll"
-          $preFast = Join-Path $x86Tools "WindowsPrefast.dll"
-          foreach ($tool in @($stampInf.FullName, $infVerif, $preFast)) {
-            if (-not (Test-Path $tool)) {
-              throw "Required WDK host tool missing: $tool"
+          $preFast = Get-ChildItem $wdkX64Root -Recurse -File -Filter WindowsPrefast.dll |
+            Where-Object { $_.FullName -like "*\x86\WindowsPrefast.dll" } |
+            Select-Object -First 1
+          $infVerif = Get-ChildItem -Path $wdkX64Root,$wdkX86Root -Recurse -File -Filter InfVerif.dll |
+            Where-Object { $_.FullName -like "*\x86\InfVerif.dll" } |
+            Select-Object -First 1
+          foreach ($tool in @($stampInf, $preFast, $infVerif)) {
+            if (-not $tool) {
+              throw "Required WDK host tool was not restored"
             }
+            Write-Host "WDK tool: $($tool.FullName)"
           }
 
-          # x64 driver targets execute x86-hosted verifier/PREfast binaries.
-          # The matching WDK.x86 + SDK.CPP.x86 packages carry their dependent
-          # host DLLs; add their concrete tool directories without importing
-          # their build targets into the x64 project.
-          $hostToolDirs = @($x64Tools, $x86Tools)
+          # WDK verification and PREfast are x86-hosted even for an x64 target.
+          # Keep the x64 build targets authoritative, but expose matching x86 WDK
+          # and SDK DLL directories so host-tool dependency loading is complete.
+          $hostToolDirs = @(
+            $stampInf.DirectoryName,
+            $preFast.DirectoryName,
+            $infVerif.DirectoryName
+          )
           foreach ($root in @($wdkX86Root, $sdkX86Root)) {
-            $dirs = Get-ChildItem $root -Recurse -Directory |
-              Where-Object { $_.FullName -match '[\\/]bin[\\/][^\\]+[\\/]x86
-      - name: Build inert IddCx driver
-        shell: pwsh
-        run: |
-          where.exe stampinf.exe
-          $project = (Resolve-Path native/windows-idd/GPUbnbIdd.vcxproj).Path
-          if (-not $env:GPUBNB_WDK_BIN_ROOT) {
-            throw "WDK binary root was not exported"
+            $hostToolDirs += (
+              Get-ChildItem $root -Recurse -Directory -Filter x86 |
+                Where-Object { $_.FullName -like "*\bin\*\x86" } |
+                ForEach-Object { $_.FullName }
+            )
           }
-          Push-Location $env:GPUBNB_WDK_BIN_ROOT
-          try {
-            msbuild $project /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError
-          } finally {
-            Pop-Location
-          }
-
-      - name: Verify build produced driver package inputs
-        shell: pwsh
-        run: |
-          $dll = Get-ChildItem native/windows-idd -Recurse -Filter GPUbnbIdd.dll | Select-Object -First 1
-          if (-not $dll) { throw "GPUbnbIdd.dll was not produced" }
-          if (-not (Test-Path native/windows-idd/GPUbnbIdd.inf)) { throw "GPUbnbIdd.inf missing" }
-          Write-Host "Built inert IddCx DLL: $($dll.FullName)"
-          Write-Host "Driver remains non-installing and non-promotable in CI."
- }
-            $hostToolDirs += $dirs.FullName
-          }
-          $hostToolDirs = $hostToolDirs | Where-Object { $_ -and (Test-Path $_) } | Sort-Object -Unique
+          $hostToolDirs = $hostToolDirs |
+            Where-Object { $_ -and (Test-Path $_) } |
+            Sort-Object -Unique
           if ($hostToolDirs.Count -lt 3) {
             throw "Incomplete x86 host-tool dependency path set"
           }
           foreach ($dir in $hostToolDirs) {
-            Write-Host "WDK host tools: $dir"
+            Write-Host "WDK host dependency path: $dir"
             Add-Content -Path $env:GITHUB_PATH -Value $dir
           }
-          Add-Content -Path $env:GITHUB_ENV -Value "GPUBNB_WDK_BIN_ROOT=$binRoot"
+
+          # InfVerif's managed wrapper loads "x86\InfVerif.dll" relative to the
+          # process working directory. Use the concrete package bin root that
+          # actually contains the restored DLL instead of guessing from PATH.
+          $hostBinRoot = Split-Path $infVerif.DirectoryName -Parent
+          if (-not (Test-Path (Join-Path $hostBinRoot "x86\InfVerif.dll"))) {
+            throw "Resolved InfVerif host root is incoherent: $hostBinRoot"
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "GPUBNB_WDK_BIN_ROOT=$hostBinRoot"
 
       - name: Build inert IddCx driver
         shell: pwsh
