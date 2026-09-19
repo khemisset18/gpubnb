@@ -162,10 +162,7 @@ impl WorkerMediaPipe {
         expected_size: usize,
         timeout_ms: u32,
     ) -> Result<Vec<u8>, PlatformError> {
-        if expected_size == 0
-            || expected_size > WORKER_MEDIA_MESSAGE_MAX
-            || timeout_ms == 0
-        {
+        if expected_size == 0 || expected_size > WORKER_MEDIA_MESSAGE_MAX || timeout_ms == 0 {
             return Err(PlatformError::PipeProtocolFailed);
         }
         #[cfg(target_os = "windows")]
@@ -1457,20 +1454,11 @@ mod tests {
         let service_sid = current_process_user_sid().expect("current user SID");
         let logon_sid = current_process_logon_sid().expect("current logon SID");
         let generation = std::process::id() as u64;
-        let pipe = create_worker_pipe(
-            "ci-secure-pipe",
-            generation,
-            &service_sid,
-            &logon_sid,
-        )
-        .expect("secure pipe");
-        let media_pipe = create_worker_media_pipe(
-            "ci-secure-pipe",
-            generation,
-            &service_sid,
-            &logon_sid,
-        )
-        .expect("secure media pipe");
+        let pipe = create_worker_pipe("ci-secure-pipe", generation, &service_sid, &logon_sid)
+            .expect("secure pipe");
+        let media_pipe =
+            create_worker_media_pipe("ci-secure-pipe", generation, &service_sid, &logon_sid)
+                .expect("secure media pipe");
         assert!(pipe.name().starts_with(r"\\.\pipe\gpubnb-native-"));
         assert!(
             media_pipe
