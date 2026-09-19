@@ -77,7 +77,6 @@ pub struct MediaProbeResult {
     pub frame_sequence: u64,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EncodedMediaFrame {
     pub bytes: Vec<u8>,
@@ -140,13 +139,14 @@ fn classify_probe_hresult(hr: i32) -> MediaProbeError {
     match hr as u32 {
         0x887A0027 => MediaProbeError::CaptureTimeout, // DXGI_ERROR_WAIT_TIMEOUT
         0x887A0026 => MediaProbeError::CaptureAccessLost, // DXGI_ERROR_ACCESS_LOST
-        0x887A0005 | 0x887A0006 | 0x887A0007 =>
-            MediaProbeError::DeviceLost, // REMOVED / HUNG / RESET
+        0x887A0005 | 0x887A0006 | 0x887A0007 => MediaProbeError::DeviceLost, // REMOVED / HUNG / RESET
         _ => MediaProbeError::ProbeFailed,
     }
 }
 
-fn encode_request(request: MediaProbeRequest<'_>) -> Result<[u8; MEDIA_REQUEST_SIZE], MediaProbeError> {
+fn encode_request(
+    request: MediaProbeRequest<'_>,
+) -> Result<[u8; MEDIA_REQUEST_SIZE], MediaProbeError> {
     if request.adapter_luid == 0
         || request.display_nonce == [0; 16]
         || !(640..=7680).contains(&request.width)
@@ -157,8 +157,8 @@ fn encode_request(request: MediaProbeRequest<'_>) -> Result<[u8; MEDIA_REQUEST_S
     {
         return Err(MediaProbeError::InvalidRequest);
     }
-    let uuid = parse_nvidia_gpu_uuid(request.gpu_uuid)
-        .map_err(|_| MediaProbeError::InvalidRequest)?;
+    let uuid =
+        parse_nvidia_gpu_uuid(request.gpu_uuid).map_err(|_| MediaProbeError::InvalidRequest)?;
 
     let mut wire = [0u8; MEDIA_REQUEST_SIZE];
     wire[0..4].copy_from_slice(&(MEDIA_REQUEST_SIZE as u32).to_le_bytes());
@@ -195,9 +195,7 @@ fn decode_result(
     wire: &[u8; MEDIA_RESULT_SIZE],
     expected: MediaProbeRequest<'_>,
 ) -> Result<MediaProbeResult, MediaProbeError> {
-    if read_u32(wire, 0)? != MEDIA_RESULT_SIZE as u32
-        || read_u32(wire, 4)? != MEDIA_ABI_VERSION
-    {
+    if read_u32(wire, 0)? != MEDIA_RESULT_SIZE as u32 || read_u32(wire, 4)? != MEDIA_ABI_VERSION {
         return Err(MediaProbeError::InvalidResult);
     }
 
@@ -251,7 +249,9 @@ pub fn open_media_session(request: MediaProbeRequest<'_>) -> Result<MediaSession
     }
 }
 
-pub fn probe_media_frame(request: MediaProbeRequest<'_>) -> Result<MediaProbeResult, MediaProbeError> {
+pub fn probe_media_frame(
+    request: MediaProbeRequest<'_>,
+) -> Result<MediaProbeResult, MediaProbeError> {
     let wire = encode_request(request)?;
 
     #[cfg(target_os = "windows")]
@@ -276,8 +276,7 @@ mod windows_impl {
     type Hresult = i32;
     type ProbeFn = unsafe extern "system" fn(*const c_void, *mut c_void) -> Hresult;
     type OpenFn = unsafe extern "system" fn(*const c_void, *mut *mut c_void) -> Hresult;
-    type ReadFrameFn =
-        unsafe extern "system" fn(*mut c_void, *mut u8, u32, *mut c_void) -> Hresult;
+    type ReadFrameFn = unsafe extern "system" fn(*mut c_void, *mut u8, u32, *mut c_void) -> Hresult;
     type CloseFn = unsafe extern "system" fn(*mut c_void);
 
     const LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR: u32 = 0x0000_0100;
@@ -366,12 +365,7 @@ mod windows_impl {
 
         let mut raw: *mut c_void = std::ptr::null_mut();
         // SAFETY: wire is the exact fixed ABI input and raw is a writable out pointer.
-        let hr = unsafe {
-            open(
-                wire.as_ptr().cast::<c_void>(),
-                &mut raw as *mut *mut c_void,
-            )
-        };
+        let hr = unsafe { open(wire.as_ptr().cast::<c_void>(), &mut raw as *mut *mut c_void) };
         if hr < 0 || raw.is_null() {
             return Err(if hr < 0 {
                 classify_probe_hresult(hr)
@@ -553,7 +547,8 @@ mod tests {
         assert_eq!(result.encoded_bytes, 4096);
         assert_eq!(result.frame_sequence, 1);
 
-        wire[8..12].copy_from_slice(&(MEDIA_REQUIRED_PROOFS & !MEDIA_PROOF_NVENC_BITSTREAM).to_le_bytes());
+        wire[8..12]
+            .copy_from_slice(&(MEDIA_REQUIRED_PROOFS & !MEDIA_PROOF_NVENC_BITSTREAM).to_le_bytes());
         assert_eq!(
             decode_result(&wire, expected),
             Err(MediaProbeError::MissingProof)
