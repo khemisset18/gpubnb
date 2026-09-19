@@ -35,20 +35,24 @@ use gpubnb_windows_stream_helper::media_protocol::{
 };
 #[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::worker_protocol::{
-    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerDisplaySpec, WorkerHello, WorkerMediaProof,
-    decode_worker_command, decode_worker_display_spec, decode_worker_input, encode_worker_hello,
-    encode_worker_media_proof, validate_worker_command, validate_worker_display_spec,
-    validate_worker_input,
+    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerDisplaySpec, WorkerHello, WorkerMediaPollFrame,
+    WorkerMediaPollStatus, WorkerMediaProof, decode_worker_command, decode_worker_display_spec,
+    decode_worker_input, encode_worker_hello, encode_worker_media_poll, encode_worker_media_proof,
+    validate_worker_command, validate_worker_display_spec, validate_worker_input,
 };
 #[cfg(any(target_os = "windows", test))]
 use gpubnb_windows_stream_helper::worker_protocol::{WorkerInputEvent, WorkerMouseButton};
 use std::env;
 use std::process::ExitCode;
+#[cfg(target_os = "windows")]
+use std::time::{Duration, Instant};
 
 const MAX_SESSION_ID: usize = 128;
 const MAX_GPU_UUID: usize = 64;
 #[cfg(target_os = "windows")]
 const PIPE_TIMEOUT_MS: u32 = 10_000;
+#[cfg(target_os = "windows")]
+const MEDIA_POLL_TIMEOUT_MS: u32 = 250;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct WorkerArgs {
@@ -215,6 +219,41 @@ fn parse_args(args: &[String]) -> Result<WorkerArgs, WorkerError> {
 }
 
 #[cfg(target_os = "windows")]
+fn read_required_media_frame(
+    session: &mut MediaSession,
+    resume: bool,
+) -> Result<EncodedMediaFrame, WorkerError> {
+    let deadline = Instant::now() + Duration::from_millis(u64::from(PIPE_TIMEOUT_MS));
+    loop {
+        match session.read_frame() {
+            Ok(frame) => return Ok(frame),
+            Err(MediaProbeError::CaptureTimeout) if Instant::now() < deadline => continue,
+            Err(error) => return Err(media_probe_error(error, resume)),
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn send_no_frame_poll(
+    control: &WorkerPipeClient,
+    generation: u64,
+    command_sequence: u64,
+    windows_session_id: u32,
+) -> Result<(), WorkerError> {
+    let frame = encode_worker_media_poll(WorkerMediaPollFrame {
+        protocol_version: WORKER_PROTOCOL_VERSION,
+        status: WorkerMediaPollStatus::NoFrame,
+        generation,
+        command_sequence,
+        windows_session_id,
+    })
+    .map_err(|_| WorkerError::new("media_poll_encode_failed", 21))?;
+    control
+        .send_frame(&frame)
+        .map_err(|_| WorkerError::new("media_poll_send_failed", 21))
+}
+
+#[cfg(target_os = "windows")]
 fn send_encoded_media_frame(
     control: &WorkerPipeClient,
     media_pipe: &WorkerMediaPipeClient,
@@ -367,12 +406,10 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         width: spec.width,
                         height: spec.height,
                         refresh_hz: spec.refresh_hz,
-                        capture_timeout_ms: PIPE_TIMEOUT_MS,
+                        capture_timeout_ms: MEDIA_POLL_TIMEOUT_MS,
                     })
                     .map_err(|error| media_probe_error(error, false))?;
-                    let media = session
-                        .read_frame()
-                        .map_err(|error| media_probe_error(error, false))?;
+                    let media = read_required_media_frame(&mut session, false)?;
 
                     send_encoded_media_frame(
                         &client,
@@ -395,18 +432,28 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                     let session = media_session
                         .as_mut()
                         .ok_or_else(|| WorkerError::new("media_session_missing", 21))?;
-                    let media = session
-                        .read_frame()
-                        .map_err(|error| media_probe_error(error, false))?;
-                    send_encoded_media_frame(
-                        &client,
-                        &media_client,
-                        args,
-                        windows_session_id,
-                        spec,
-                        command_sequence,
-                        &media,
-                    )?;
+                    match session.read_frame() {
+                        Ok(media) => {
+                            send_encoded_media_frame(
+                                &client,
+                                &media_client,
+                                args,
+                                windows_session_id,
+                                spec,
+                                command_sequence,
+                                &media,
+                            )?;
+                        }
+                        Err(MediaProbeError::CaptureTimeout) => {
+                            send_no_frame_poll(
+                                &client,
+                                args.generation,
+                                command_sequence,
+                                windows_session_id,
+                            )?;
+                        }
+                        Err(error) => return Err(media_probe_error(error, false)),
+                    }
                 }
                 WorkerCommand::SuspendMedia => {
                     media_state = media_state.suspend()?;
@@ -453,12 +500,10 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         width: spec.width,
                         height: spec.height,
                         refresh_hz: spec.refresh_hz,
-                        capture_timeout_ms: PIPE_TIMEOUT_MS,
+                        capture_timeout_ms: MEDIA_POLL_TIMEOUT_MS,
                     })
                     .map_err(|error| media_probe_error(error, true))?;
-                    let media = session
-                        .read_frame()
-                        .map_err(|error| media_probe_error(error, true))?;
+                    let media = read_required_media_frame(&mut session, true)?;
 
                     send_encoded_media_frame(
                         &client,

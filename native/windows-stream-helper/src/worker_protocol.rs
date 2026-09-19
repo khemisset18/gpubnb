@@ -14,6 +14,7 @@ pub const MAX_WORKER_HELLO_FRAME: usize = 512;
 pub const WORKER_COMMAND_FRAME_SIZE: usize = 19;
 pub const WORKER_DISPLAY_SPEC_FRAME_SIZE: usize = 58;
 pub const WORKER_MEDIA_PROOF_FRAME_SIZE: usize = 74;
+pub const WORKER_MEDIA_POLL_FRAME_SIZE: usize = 23;
 pub const WORKER_INPUT_FRAME_SIZE: usize = 31;
 pub const WORKER_MEDIA_REQUIRED_PROOF_FLAGS: u32 = 0x0f;
 const MAX_SESSION_ID: usize = 128;
@@ -45,6 +46,130 @@ pub enum WorkerCommandError {
     InvalidCommand,
     Generation,
     Sequence,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerMediaPollStatus {
+    NoFrame,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkerMediaPollFrame {
+    pub protocol_version: u16,
+    pub status: WorkerMediaPollStatus,
+    pub generation: u64,
+    pub command_sequence: u64,
+    pub windows_session_id: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerMediaPollError {
+    InvalidLength,
+    ProtocolVersion,
+    InvalidStatus,
+    Generation,
+    Sequence,
+    WindowsSession,
+}
+
+fn media_poll_status_tag(status: WorkerMediaPollStatus) -> u8 {
+    match status {
+        WorkerMediaPollStatus::NoFrame => 1,
+    }
+}
+
+fn media_poll_status_from_tag(tag: u8) -> Result<WorkerMediaPollStatus, WorkerMediaPollError> {
+    match tag {
+        1 => Ok(WorkerMediaPollStatus::NoFrame),
+        _ => Err(WorkerMediaPollError::InvalidStatus),
+    }
+}
+
+pub fn encode_worker_media_poll(
+    frame: WorkerMediaPollFrame,
+) -> Result<[u8; WORKER_MEDIA_POLL_FRAME_SIZE], WorkerMediaPollError> {
+    if frame.protocol_version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerMediaPollError::ProtocolVersion);
+    }
+    if frame.generation == 0 {
+        return Err(WorkerMediaPollError::Generation);
+    }
+    if frame.command_sequence == 0 {
+        return Err(WorkerMediaPollError::Sequence);
+    }
+    if frame.windows_session_id == 0 {
+        return Err(WorkerMediaPollError::WindowsSession);
+    }
+
+    let mut out = [0u8; WORKER_MEDIA_POLL_FRAME_SIZE];
+    out[0..2].copy_from_slice(&frame.protocol_version.to_le_bytes());
+    out[2] = media_poll_status_tag(frame.status);
+    out[3..11].copy_from_slice(&frame.generation.to_le_bytes());
+    out[11..19].copy_from_slice(&frame.command_sequence.to_le_bytes());
+    out[19..23].copy_from_slice(&frame.windows_session_id.to_le_bytes());
+    Ok(out)
+}
+
+pub fn decode_worker_media_poll(
+    frame: &[u8],
+) -> Result<WorkerMediaPollFrame, WorkerMediaPollError> {
+    if frame.len() != WORKER_MEDIA_POLL_FRAME_SIZE {
+        return Err(WorkerMediaPollError::InvalidLength);
+    }
+    let protocol_version = u16::from_le_bytes([frame[0], frame[1]]);
+    if protocol_version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerMediaPollError::ProtocolVersion);
+    }
+    let status = media_poll_status_from_tag(frame[2])?;
+    let generation = u64::from_le_bytes(
+        frame[3..11]
+            .try_into()
+            .map_err(|_| WorkerMediaPollError::InvalidLength)?,
+    );
+    let command_sequence = u64::from_le_bytes(
+        frame[11..19]
+            .try_into()
+            .map_err(|_| WorkerMediaPollError::InvalidLength)?,
+    );
+    let windows_session_id = u32::from_le_bytes(
+        frame[19..23]
+            .try_into()
+            .map_err(|_| WorkerMediaPollError::InvalidLength)?,
+    );
+    if generation == 0 {
+        return Err(WorkerMediaPollError::Generation);
+    }
+    if command_sequence == 0 {
+        return Err(WorkerMediaPollError::Sequence);
+    }
+    if windows_session_id == 0 {
+        return Err(WorkerMediaPollError::WindowsSession);
+    }
+    Ok(WorkerMediaPollFrame {
+        protocol_version,
+        status,
+        generation,
+        command_sequence,
+        windows_session_id,
+    })
+}
+
+pub fn validate_worker_media_poll(
+    expected_generation: u64,
+    expected_command_sequence: u64,
+    expected_windows_session_id: u32,
+    frame: WorkerMediaPollFrame,
+) -> Result<WorkerMediaPollStatus, WorkerMediaPollError> {
+    if frame.generation != expected_generation {
+        return Err(WorkerMediaPollError::Generation);
+    }
+    if frame.command_sequence != expected_command_sequence {
+        return Err(WorkerMediaPollError::Sequence);
+    }
+    if frame.windows_session_id != expected_windows_session_id {
+        return Err(WorkerMediaPollError::WindowsSession);
+    }
+    Ok(frame.status)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1210,6 +1335,40 @@ mod tests {
                 ..valid
             }),
             Err(WorkerCommandError::Sequence)
+        );
+    }
+
+    #[test]
+    fn media_poll_no_frame_is_typed_and_exactly_fenced() {
+        let value = WorkerMediaPollFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            status: WorkerMediaPollStatus::NoFrame,
+            generation: 7,
+            command_sequence: 11,
+            windows_session_id: 42,
+        };
+        let encoded = encode_worker_media_poll(value).expect("encode poll");
+        assert_eq!(encoded.len(), WORKER_MEDIA_POLL_FRAME_SIZE);
+        let decoded = decode_worker_media_poll(&encoded).expect("decode poll");
+        assert_eq!(decoded, value);
+        assert_eq!(
+            validate_worker_media_poll(7, 11, 42, decoded),
+            Ok(WorkerMediaPollStatus::NoFrame)
+        );
+        assert_eq!(
+            validate_worker_media_poll(8, 11, 42, decoded),
+            Err(WorkerMediaPollError::Generation)
+        );
+        assert_eq!(
+            validate_worker_media_poll(7, 12, 42, decoded),
+            Err(WorkerMediaPollError::Sequence)
+        );
+
+        let mut bad_status = encoded;
+        bad_status[2] = 0xff;
+        assert_eq!(
+            decode_worker_media_poll(&bad_status),
+            Err(WorkerMediaPollError::InvalidStatus)
         );
     }
 

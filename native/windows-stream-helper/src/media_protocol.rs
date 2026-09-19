@@ -351,14 +351,14 @@ mod tests {
     #[test]
     fn payload_is_bounded_exact_and_nonzero() {
         assert!(bind_worker_media_payload(header(), vec![1, 2, 3, 4, 5]).is_ok());
-        assert_eq!(
+        assert!(matches!(
             bind_worker_media_payload(header(), vec![1, 2, 3, 4]),
             Err(MediaFrameError::PayloadLength)
-        );
-        assert_eq!(
+        ));
+        assert!(matches!(
             bind_worker_media_payload(header(), vec![0; 5]),
             Err(MediaFrameError::EmptyPayload)
-        );
+        ));
     }
 
     #[test]

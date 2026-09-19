@@ -1590,6 +1590,38 @@ mod tests {
 
     #[cfg(target_os = "windows")]
     #[test]
+    fn windows_round_trips_large_media_message_through_verified_pipe() {
+        let service_sid = current_process_user_sid().expect("service SID");
+        let logon_sid = current_process_logon_sid().expect("logon SID");
+        let generation = std::process::id() as u64 + 20;
+        let session = "ci-media-client";
+        let pipe = create_worker_media_pipe(session, generation, &service_sid, &logon_sid)
+            .expect("secure media pipe");
+
+        const MEDIA_TEST_BYTES: usize = 128 * 1024;
+        let client = std::thread::spawn(move || {
+            let client = connect_worker_media_pipe_client(session, generation, 10_000)
+                .expect("connect media client");
+            client
+                .send_message(&vec![0xA5; MEDIA_TEST_BYTES])
+                .expect("send media message");
+        });
+
+        let verified = pipe
+            .accept_verified_client(&logon_sid, std::process::id(), 10_000)
+            .expect("verified media client");
+        assert_eq!(verified.process_id, std::process::id());
+
+        let message = pipe
+            .read_message_exact(MEDIA_TEST_BYTES, 10_000)
+            .expect("read exact media message");
+        assert_eq!(message.len(), MEDIA_TEST_BYTES);
+        assert!(message.iter().all(|byte| *byte == 0xA5));
+        client.join().expect("media client thread");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
     fn windows_verifies_connected_client_pid_and_logon_sid() {
         let service_sid = current_process_user_sid().expect("service SID");
         let logon_sid = current_process_logon_sid().expect("logon SID");

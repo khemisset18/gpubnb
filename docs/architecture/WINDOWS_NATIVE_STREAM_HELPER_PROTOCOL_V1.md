@@ -48,6 +48,15 @@ The helper must never capture the provider's personal desktop.
   nonce, frame sequence, dimensions, refresh rate and the corresponding media
   proof. Any mismatch, replay, zero/oversized length or partial proof revokes the
   media runtime.
+- During an established stream, `DXGI_ERROR_WAIT_TIMEOUT` means only that
+  Desktop Duplication produced no new desktop image within the short polling
+  interval. The worker reports a typed `NoFrame` control result fenced to the
+  current generation, command sequence and WTS session; it does not invent or
+  replay an H.264 frame and it does not revoke READY solely because the desktop is
+  static. The service rechecks UUID -> LUID before accepting this benign result.
+  Access loss, device removal/reset/hang, identity mismatch and all other capture
+  failures remain terminal and revoke the media proof. Initial start and reconnect
+  still require a fresh real captured+NVENC frame before readiness can be armed.
 - The helper never logs provider usernames, profile paths, browser data,
   document paths, tokens or renter credentials.
 

@@ -16,10 +16,11 @@ use crate::media_protocol::{
     decode_worker_media_frame_header, validate_worker_media_frame_header,
 };
 use crate::worker_protocol::{
-    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerCommandFrame, WorkerDisplaySpec, WorkerFence,
-    WorkerInputEvent, WorkerInputFrame, WorkerMediaProof, decode_and_validate_worker_hello,
+    WORKER_MEDIA_POLL_FRAME_SIZE, WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerCommandFrame,
+    WorkerDisplaySpec, WorkerFence, WorkerInputEvent, WorkerInputFrame, WorkerMediaPollStatus,
+    WorkerMediaProof, decode_and_validate_worker_hello, decode_worker_media_poll,
     decode_worker_media_proof, encode_worker_command, encode_worker_display_spec,
-    encode_worker_input, validate_worker_media_proof,
+    encode_worker_input, validate_worker_media_poll, validate_worker_media_proof,
 };
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
 use gpubnb_windows_platform::idd_control::{
@@ -134,7 +135,7 @@ impl QualifiedGraphicsRuntime {
         self.pending_media_frame.take()
     }
 
-    pub fn read_media_frame(&mut self) -> Result<BoundMediaFrame, ServiceRuntimeError> {
+    pub fn read_media_frame(&mut self) -> Result<Option<BoundMediaFrame>, ServiceRuntimeError> {
         if !matches!(self.media_state, RuntimeMediaState::Ready) {
             return Err(ServiceRuntimeError::WorkerProtocol);
         }
@@ -142,7 +143,7 @@ impl QualifiedGraphicsRuntime {
         // that already-validated frame before asking the worker for another one so
         // callers can use one API without accidentally skipping/reordering bytes.
         if let Some(frame) = self.pending_media_frame.take() {
-            return Ok(frame);
+            return Ok(Some(frame));
         }
         let sequence = self.next_sequence;
         let next_sequence = match sequence.checked_add(1) {
@@ -161,7 +162,7 @@ impl QualifiedGraphicsRuntime {
         }
         self.next_sequence = next_sequence;
 
-        let frame = match receive_bound_media_frame(
+        let frame = match receive_polled_media_frame(
             &self.pipe,
             &self.media_pipe,
             self.generation,
@@ -170,14 +171,15 @@ impl QualifiedGraphicsRuntime {
             self.display_spec,
             &self.gpu_uuid,
         ) {
-            Ok(frame) => frame,
+            Ok(Some(frame)) => frame,
+            Ok(None) => return Ok(None),
             Err(error) => return Err(self.fail(error)),
         };
         if frame.header.frame_sequence <= self.last_frame_sequence {
             return Err(self.fail(ServiceRuntimeError::MediaTransport));
         }
         self.last_frame_sequence = frame.header.frame_sequence;
-        Ok(frame)
+        Ok(Some(frame))
     }
 
     pub fn inject_input(&mut self, event: WorkerInputEvent) -> Result<(), ServiceRuntimeError> {
@@ -334,8 +336,78 @@ fn receive_bound_media_frame(
     let proof_frame = pipe
         .read_frame(PIPE_TIMEOUT_MS)
         .map_err(|_| ServiceRuntimeError::MediaProof)?;
+    receive_bound_media_frame_after_proof(
+        &proof_frame,
+        media_pipe,
+        generation,
+        command_sequence,
+        windows_session_id,
+        display_spec,
+        gpu_uuid,
+    )
+}
+
+fn receive_polled_media_frame(
+    pipe: &WorkerPipe,
+    media_pipe: &WorkerMediaPipe,
+    generation: u64,
+    command_sequence: u64,
+    windows_session_id: u32,
+    display_spec: WorkerDisplaySpec,
+    gpu_uuid: &str,
+) -> Result<Option<BoundMediaFrame>, ServiceRuntimeError> {
+    let control_frame = pipe
+        .read_frame(PIPE_TIMEOUT_MS)
+        .map_err(|_| ServiceRuntimeError::MediaProof)?;
+
+    if control_frame.len() == WORKER_MEDIA_POLL_FRAME_SIZE {
+        let poll =
+            decode_worker_media_poll(&control_frame).map_err(|_| ServiceRuntimeError::MediaProof)?;
+        let status = validate_worker_media_poll(
+            generation,
+            command_sequence,
+            windows_session_id,
+            poll,
+        )
+        .map_err(|_| ServiceRuntimeError::MediaProof)?;
+
+        // A no-frame timeout is benign only while the exact leased GPU still maps
+        // to the display adapter. Structural DXGI/device failures never use this
+        // status and remain terminal in the worker.
+        let identity =
+            resolve_nvidia_uuid_to_luid(gpu_uuid).map_err(|_| ServiceRuntimeError::ExactGpu)?;
+        if identity.luid != display_spec.adapter_luid {
+            return Err(ServiceRuntimeError::ExactGpu);
+        }
+
+        return match status {
+            WorkerMediaPollStatus::NoFrame => Ok(None),
+        };
+    }
+
+    receive_bound_media_frame_after_proof(
+        &control_frame,
+        media_pipe,
+        generation,
+        command_sequence,
+        windows_session_id,
+        display_spec,
+        gpu_uuid,
+    )
+    .map(Some)
+}
+
+fn receive_bound_media_frame_after_proof(
+    proof_frame: &[u8],
+    media_pipe: &WorkerMediaPipe,
+    generation: u64,
+    command_sequence: u64,
+    windows_session_id: u32,
+    display_spec: WorkerDisplaySpec,
+    gpu_uuid: &str,
+) -> Result<BoundMediaFrame, ServiceRuntimeError> {
     let proof: WorkerMediaProof =
-        decode_worker_media_proof(&proof_frame).map_err(|_| ServiceRuntimeError::MediaProof)?;
+        decode_worker_media_proof(proof_frame).map_err(|_| ServiceRuntimeError::MediaProof)?;
     validate_worker_media_proof(
         generation,
         command_sequence,
