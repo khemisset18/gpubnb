@@ -178,6 +178,11 @@ enum MachineWorkspaceState {
   OWNER_DISABLED
 }
 
+enum WorkspaceRuntimeBackend {
+  CONTAINER
+  WINDOWS_NATIVE
+}
+
 enum WorkspaceSessionStatus {
   RESERVED
   PREPARING
@@ -542,6 +547,7 @@ model WorkspaceSession {
   jobId String? @unique
   status WorkspaceSessionStatus @default(RESERVED)
   isolationType String @db.VarChar(32)
+  runtimeBackend WorkspaceRuntimeBackend @default(CONTAINER)
   resourceLimits Json
   connectionType String? @db.VarChar(32)
   connectionMetadata Json?
