@@ -64,10 +64,32 @@ jobs:
             throw "WDK 28000 requires the VS2026 (18.x) toolchain"
           }
 
-      - name: Restore WDK NuGet and build inert IddCx driver
+      - name: Restore WDK NuGet packages
         shell: pwsh
         run: |
-          msbuild native/windows-idd/GPUbnbIdd.vcxproj /restore /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError
+          msbuild native/windows-idd/GPUbnbIdd.vcxproj /t:Restore /p:Configuration=Release /p:Platform=x64 /warnAsError
+
+      - name: Resolve WDK packaged build tools
+        shell: pwsh
+        run: |
+          $wdkRoot = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.windows.wdk.x64\10.0.28000.2526"
+          if (-not (Test-Path $wdkRoot)) {
+            throw "Restored WDK package root not found: $wdkRoot"
+          }
+          $stampInf = Get-ChildItem $wdkRoot -Recurse -File -Filter stampinf.exe |
+            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } |
+            Select-Object -First 1
+          if (-not $stampInf) {
+            throw "stampinf.exe not found in restored WDK package"
+          }
+          Write-Host "stampinf.exe: $($stampInf.FullName)"
+          Add-Content -Path $env:GITHUB_PATH -Value $stampInf.DirectoryName
+
+      - name: Build inert IddCx driver
+        shell: pwsh
+        run: |
+          where.exe stampinf.exe
+          msbuild native/windows-idd/GPUbnbIdd.vcxproj /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError
 
       - name: Verify build produced driver package inputs
         shell: pwsh
