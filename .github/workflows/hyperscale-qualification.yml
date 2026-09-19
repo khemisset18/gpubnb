@@ -200,8 +200,7 @@ jobs:
           set -euo pipefail
           redis_id="$(docker ps --filter 'ancestor=redis:7.4-alpine' --format '{{.ID}}' | head -n1)"
           test -n "$redis_id"
-          cleanup() { docker unpause "$redis_id" >/dev/null 2>&1 || true; }
-          trap cleanup EXIT
+          trap 'docker unpause "$redis_id" >/dev/null 2>&1 || true' EXIT
           docker pause "$redis_id" >/dev/null
           if curl --max-time 2 -fsS http://127.0.0.1:19090/readyz >/dev/null; then
             echo 'readyz incorrectly stayed healthy while Redis was paused' >&2

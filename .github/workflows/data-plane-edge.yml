@@ -164,7 +164,8 @@ jobs:
           export GPUBNB_EDGE_TLS_KEY="$TMP/tls-key.pem"
           export GPUBNB_EDGE_ID='edge_e2e_1'
           export GPUBNB_EDGE_REPLAY_DIR="$TMP/replay"
-          export GPUBNB_EDGE_AUTHORITY_PUBLIC_KEY_HEX="$(tr -d '\n' < "$TMP/authority-public.hex")"
+          GPUBNB_EDGE_AUTHORITY_PUBLIC_KEY_HEX="$(tr -d '\n' < "$TMP/authority-public.hex")"
+          export GPUBNB_EDGE_AUTHORITY_PUBLIC_KEY_HEX
           export GPUBNB_EDGE_IDLE_TIMEOUT_MS='5000'
           export GPUBNB_EDGE_MAX_CONNECTIONS='256'
 

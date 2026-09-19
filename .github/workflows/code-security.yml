@@ -18,18 +18,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  dependency-review:
+  dependency-audit:
+    name: Locked production dependency audit
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: read
+    timeout-minutes: 15
     steps:
-      - name: Dependency review
-        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          fail-on-severity: high
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+      - name: Audit API production dependencies
+        working-directory: apps/api
+        run: npm audit --omit=dev --audit-level=high
+      - name: Audit Host production dependencies
+        working-directory: apps/host-desktop
+        run: npm audit --omit=dev --audit-level=high
 
   codeql:
     name: CodeQL (${{ matrix.language }})

@@ -56,4 +56,3 @@ test('server imports the native capability authority and canonical UUID pattern'
   assert.match(server, /WINDOWS_NATIVE_GPU_UUID_RE, validateWindowsNativeCapability/);
   assert.match(server, /nativeDesktopStreamingGpuUuid:z\.string\(\)\.trim\(\)\.regex\(WINDOWS_NATIVE_GPU_UUID_RE\)/);
 });
-

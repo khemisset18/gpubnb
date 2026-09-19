@@ -70,8 +70,14 @@ jobs:
           grep -Fq "frame-ancestors 'none'" apps/web/_headers
           grep -Fq 'X-Content-Type-Options = "nosniff"' netlify.toml
           grep -Fq 'src="https://cdn.jsdelivr.net' apps/web/auth.html
-          ! grep -RInE '\.onrender\.com' apps/web scripts netlify.toml .github/workflows/deployment-readiness.yml
-          ! grep -RInE '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|seed phrase|mnemonic)' apps/web netlify.toml
+          if grep -RInE '\.onrender\.com' apps/web scripts netlify.toml .github/workflows/deployment-readiness.yml; then
+            echo 'provider-specific Render URL found in production assets' >&2
+            exit 1
+          fi
+          if grep -RInE '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|seed phrase|mnemonic)' apps/web netlify.toml; then
+            echo 'secret material pattern found in deployable web assets' >&2
+            exit 1
+          fi
 
   api-image:
     name: API container
@@ -144,7 +150,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ! grep -Fq 'ALLOW_MAINNET=true' .env.example
+          if grep -Fq 'ALLOW_MAINNET=true' .env.example; then
+            echo 'unsafe ALLOW_MAINNET=true default found' >&2
+            exit 1
+          fi
           grep -Fq '"--requirepass","change-me"' docker-compose.yml
           grep -Fq 'REDIS_URL=redis://:change-me@localhost:6379' .env.example
           grep -Fq "assert.equal(dataPlaneHostBootstrapEnabled({}), false);" apps/api/test/data-plane-host-bootstrap.test.ts

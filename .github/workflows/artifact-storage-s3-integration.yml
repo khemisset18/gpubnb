@@ -50,8 +50,8 @@ jobs:
             -p 9000:9000 \
             -e MINIO_ROOT_USER=gpubnb-ci-access \
             -e MINIO_ROOT_PASSWORD=gpubnb-ci-secret-key \
-            minio/minio:latest server /data --address :9000
-          for attempt in $(seq 1 30); do
+            quay.io/minio/minio:RELEASE.2025-09-06T17-38-46Z server /data --address :9000
+          for _ in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
               exit 0
             fi

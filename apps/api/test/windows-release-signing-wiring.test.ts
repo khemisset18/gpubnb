@@ -6,23 +6,23 @@ const workflowUrl = new URL('../../../.github/workflows/publish-host-test-releas
 const verifierUrl = new URL('../../../scripts/verify-windows-authenticode.ps1', import.meta.url);
 const signerUrl = new URL('../../../scripts/sign-windows-authenticode.ps1', import.meta.url);
 
-test('Windows publication is wired to the Authenticode verifier before artifact publication', async () => {
+test('Windows Devnet publication verifies Authenticode policy before artifact publication', async () => {
   const workflow = await readFile(workflowUrl, 'utf8');
-  const signIndex = workflow.indexOf('Sign Windows publication payloads when signing is required');
   const archiveIndex = workflow.indexOf('Finalize Windows portable archive');
   const verifyIndex = workflow.indexOf('Verify Windows Authenticode publication policy');
   const uploadIndex = workflow.indexOf('actions/upload-artifact@', verifyIndex);
-  assert.ok(signIndex >= 0, 'Windows publication must have an Authenticode signing step');
-  assert.ok(archiveIndex > signIndex, 'portable archive must be assembled after final executable signing');
+  assert.ok(archiveIndex >= 0, 'Windows portable archive must be finalized before publication');
   assert.ok(verifyIndex > archiveIndex, 'signature verification must happen after final Windows packaging');
   assert.ok(uploadIndex > verifyIndex, 'Authenticode verification must happen before release artifact upload');
 
   assert.match(workflow, /GPUBNB_WINDOWS_SIGNING_REQUIRED:\s*\$\{\{\s*vars\.GPUBNB_WINDOWS_SIGNING_REQUIRED\s*\}\}/);
-  assert.match(workflow, /sign-windows-authenticode\.ps1 -Path/);
-  assert.match(workflow, /secrets\.GPUBNB_CODESIGN_THUMBPRINT/);
-  assert.match(workflow, /vars\.GPUBNB_CODESIGN_TIMESTAMP_URL/);
   assert.match(workflow, /verify-windows-authenticode\.ps1 -Path \$paths -Required/);
   assert.match(workflow, /verify-windows-authenticode\.ps1 -Path \$paths\s*\n/);
+  assert.doesNotMatch(
+    workflow,
+    /secrets\.GPUBNB_CODESIGN_/,
+    'Devnet candidate builds must not depend on code-signing private material',
+  );
   assert.match(workflow, /release-assets\/gpubnb-host-windows-x64\.exe/);
   assert.match(workflow, /dist\/gpubnb-agent\.exe/);
   assert.match(workflow, /gpubnb-host-tunnel\.exe/);
