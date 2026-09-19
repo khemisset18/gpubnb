@@ -153,19 +153,19 @@ impl QualifiedGraphicsRuntime {
             return Err(ServiceRuntimeError::WorkerProtocol);
         }
         let sequence = self.next_sequence;
-        let next_sequence = sequence
-            .checked_add(1)
-            .ok_or(ServiceRuntimeError::WorkerProtocol)?;
+        let next_sequence = match sequence.checked_add(1) {
+            Some(value) => value,
+            None => return Err(self.fail(ServiceRuntimeError::WorkerProtocol)),
+        };
         let command = encode_worker_command(WorkerCommandFrame {
             protocol_version: WORKER_PROTOCOL_VERSION,
             command: WorkerCommand::SuspendMedia,
             generation: self.generation,
             sequence,
         })
-        .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
+        .map_err(|_| self.fail(ServiceRuntimeError::WorkerProtocol))?;
         if self.pipe.send_frame(&command).is_err() {
-            self.media_state = RuntimeMediaState::Failed;
-            return Err(ServiceRuntimeError::WorkerProtocol);
+            return Err(self.fail(ServiceRuntimeError::WorkerProtocol));
         }
         self.next_sequence = next_sequence;
         self.media_state = RuntimeMediaState::Suspended;
@@ -177,19 +177,19 @@ impl QualifiedGraphicsRuntime {
             return Err(ServiceRuntimeError::WorkerProtocol);
         }
         let sequence = self.next_sequence;
-        let next_sequence = sequence
-            .checked_add(1)
-            .ok_or(ServiceRuntimeError::WorkerProtocol)?;
+        let next_sequence = match sequence.checked_add(1) {
+            Some(value) => value,
+            None => return Err(self.fail(ServiceRuntimeError::WorkerProtocol)),
+        };
         let command = encode_worker_command(WorkerCommandFrame {
             protocol_version: WORKER_PROTOCOL_VERSION,
             command: WorkerCommand::ResumeAfterFreshProof,
             generation: self.generation,
             sequence,
         })
-        .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
+        .map_err(|_| self.fail(ServiceRuntimeError::WorkerProtocol))?;
         if self.pipe.send_frame(&command).is_err() {
-            self.media_state = RuntimeMediaState::Failed;
-            return Err(ServiceRuntimeError::WorkerProtocol);
+            return Err(self.fail(ServiceRuntimeError::WorkerProtocol));
         }
         // Once the command is on the pipe, the worker may already have consumed
         // the sequence even if its proof later fails or the process disconnects.
