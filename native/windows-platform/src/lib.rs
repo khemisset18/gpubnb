@@ -436,10 +436,8 @@ mod windows_impl {
         let module = OwnedModule(raw);
 
         type ProvData = unsafe extern "system" fn(Handle) -> *mut c_void;
-        type GetSigner =
-            unsafe extern "system" fn(*mut c_void, u32, i32, u32) -> *mut c_void;
-        type GetCert =
-            unsafe extern "system" fn(*mut c_void, u32) -> *mut CryptProviderCertPrefix;
+        type GetSigner = unsafe extern "system" fn(*mut c_void, u32, i32, u32) -> *mut c_void;
+        type GetCert = unsafe extern "system" fn(*mut c_void, u32) -> *mut CryptProviderCertPrefix;
 
         // These WinTrust helper exports intentionally have no import library.
         let prov_data: ProvData =
