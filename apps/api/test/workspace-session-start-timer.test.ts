@@ -192,7 +192,7 @@ test('workspace-sessions/:id/start formula: expiresAt tracks expectedSeconds, no
           machineId: machine.id,
           machineWorkspaceId: machineWorkspace.id,
           status: WorkspaceSessionStatus.READY,
-          isolationType: 'DOCKER',
+          isolationType: 'DOCKER', runtimeBackend: 'CONTAINER',
           resourceLimits: {},
           expiresAt: booking.endsAt, // placeholder set at creation, same as ensureComputePreparation
         },
