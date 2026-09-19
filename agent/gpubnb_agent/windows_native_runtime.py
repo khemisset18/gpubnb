@@ -42,8 +42,10 @@ class NativeRuntimeHandle:
     controller_ready: bool
 
 
-def _safe_id(value: str, field: str) -> str:
-    candidate = value.strip()
+def _safe_id(value: object, field: str) -> str:
+    if not isinstance(value, str) or value != value.strip():
+        raise RuntimeError(f"invalid_{field}")
+    candidate = value
     if not candidate or len(candidate) > 200:
         raise RuntimeError(f"invalid_{field}")
     if any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for char in candidate):
@@ -86,7 +88,9 @@ def _media_token(value: object) -> str | None:
     # authentication boundary.
     if not isinstance(value, str):
         return None
-    token = value.strip()
+    if value != value.strip():
+        return None
+    token = value
     if not 32 <= len(token) <= 200:
         return None
     if any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for char in token):
@@ -287,10 +291,13 @@ def stop_windows_native_workspace(
     executable = helper_path or find_stream_helper()
     if not executable:
         raise RuntimeError("native_stream_helper_missing")
-    result = run_command(
-        [executable, "--stop", "--json", "--session-id", session_id],
-        timeout=30,
-    )
+    try:
+        result = run_command(
+            [executable, "--stop", "--json", "--session-id", session_id],
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        raise RuntimeError("native_workspace_stop_failed") from None
     if result.returncode != 0:
         raise RuntimeError("native_workspace_stop_failed")
     report = _json_object(result.stdout)
