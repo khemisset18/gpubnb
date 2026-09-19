@@ -75,7 +75,7 @@ static GUID GPUbnbContainerIdFromNonce(_In_reads_(GPUBNB_IDD_DISPLAY_NONCE_SIZE)
 
 static NTSTATUS GPUbnbPlugMonitor(
     _In_ WDFDEVICE device,
-    _In_ WDF_FILEOBJECT ownerFile,
+    _In_ WDFFILEOBJECT ownerFile,
     _In_ const GPUbnbIddControlRequest* request)
 {
     auto* deviceContext = WdfObjectGet_GPUbnbDeviceContext(device);
@@ -141,7 +141,7 @@ static NTSTATUS GPUbnbPlugMonitor(
 
 static NTSTATUS GPUbnbUnplugMonitor(
     _In_ WDFDEVICE device,
-    _In_ WDF_FILEOBJECT ownerFile,
+    _In_ WDFFILEOBJECT ownerFile,
     _In_ const GPUbnbIddControlRequest* request)
 {
     auto* deviceContext = WdfObjectGet_GPUbnbDeviceContext(device);
@@ -278,8 +278,8 @@ NTSTATUS GPUbnbDeviceAdd(
         return status;
     }
 
-    WDF_FILEOBJECT_CONFIG fileConfig;
-    WDF_FILEOBJECT_CONFIG_INIT(
+    WDFFILEOBJECT_CONFIG fileConfig;
+    WDFFILEOBJECT_CONFIG_INIT(
         &fileConfig,
         WDF_NO_EVENT_CALLBACK,
         WDF_NO_EVENT_CALLBACK,
@@ -380,7 +380,7 @@ VOID GPUbnbEvtIoDeviceControl(
                     else
                     {
                         WDFDEVICE device = WdfIoQueueGetDevice(queue);
-                        WDF_FILEOBJECT ownerFile = WdfRequestGetFileObject(request);
+                        WDFFILEOBJECT ownerFile = WdfRequestGetFileObject(request);
                         if (ownerFile == nullptr)
                         {
                             status = STATUS_ACCESS_DENIED;
