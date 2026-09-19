@@ -99,8 +99,7 @@ mod windows_impl {
     type CuDeviceGetCount = unsafe extern "system" fn(*mut i32) -> CuResult;
     type CuDeviceGet = unsafe extern "system" fn(*mut CuDevice, i32) -> CuResult;
     type CuDeviceGetUuid = unsafe extern "system" fn(*mut CuUuid, CuDevice) -> CuResult;
-    type CuDeviceGetLuid =
-        unsafe extern "system" fn(*mut c_char, *mut u32, CuDevice) -> CuResult;
+    type CuDeviceGetLuid = unsafe extern "system" fn(*mut c_char, *mut u32, CuDevice) -> CuResult;
 
     const CUDA_SUCCESS: CuResult = 0;
     const MAX_CUDA_DEVICES: i32 = 256;
@@ -158,12 +157,8 @@ mod windows_impl {
         let cu_device_get_count: CuDeviceGetCount =
             unsafe { symbol(module.0, &[b"cuDeviceGetCount\0"])? };
         let cu_device_get: CuDeviceGet = unsafe { symbol(module.0, &[b"cuDeviceGet\0"])? };
-        let cu_device_get_uuid: CuDeviceGetUuid = unsafe {
-            symbol(
-                module.0,
-                &[b"cuDeviceGetUuid_v2\0", b"cuDeviceGetUuid\0"],
-            )?
-        };
+        let cu_device_get_uuid: CuDeviceGetUuid =
+            unsafe { symbol(module.0, &[b"cuDeviceGetUuid_v2\0", b"cuDeviceGetUuid\0"])? };
         let cu_device_get_luid: CuDeviceGetLuid =
             unsafe { symbol(module.0, &[b"cuDeviceGetLuid\0"])? };
 
@@ -236,8 +231,8 @@ mod tests {
         assert_eq!(
             parse_nvidia_gpu_uuid("GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"),
             Ok([
-                0xe8, 0x30, 0x1c, 0x16, 0x2a, 0x14, 0x2b, 0x3f,
-                0xf0, 0x57, 0xb2, 0x1f, 0x3b, 0x00, 0x52, 0x4a,
+                0xe8, 0x30, 0x1c, 0x16, 0x2a, 0x14, 0x2b, 0x3f, 0xf0, 0x57, 0xb2, 0x1f, 0x3b, 0x00,
+                0x52, 0x4a,
             ])
         );
     }
