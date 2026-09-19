@@ -17,7 +17,7 @@ on:
       - 'scripts/sign-windows-authenticode.ps1'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: publish-host-test-release
@@ -272,24 +272,69 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           path: release-assets
           merge-multiple: true
 
-      - name: Publish immutable prerelease candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Assemble binary checksums
+        shell: bash
         run: |
           set -euo pipefail
           test -s release-assets/gpubnb-host-windows-x64.exe
           test -s release-assets/gpubnb-host-windows-x64-portable.zip
           test -s release-assets/gpubnb-host-linux-x64.deb
           test -s release-assets/gpubnb-host-macos-arm64.dmg
-          (cd release-assets && cat ./*.sha256 | sort -k2 > SHA256SUMS.txt)
-          test "$(wc -l < release-assets/SHA256SUMS.txt)" -eq 4
-          (cd release-assets && sha256sum --check SHA256SUMS.txt)
+          (cd release-assets && cat ./*.sha256 | sort -k2 > ARTIFACTS_SHA256SUMS.txt)
+          test "$(wc -l < release-assets/ARTIFACTS_SHA256SUMS.txt)" -eq 4
+          (cd release-assets && sha256sum --check ARTIFACTS_SHA256SUMS.txt)
+
+      - name: Generate release SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: release-assets
+          format: spdx-json
+          output-file: release-assets/SBOM.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Finalize checksummed release manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release-assets/SBOM.spdx.json
+          (
+            cd release-assets
+            {
+              cat ARTIFACTS_SHA256SUMS.txt
+              sha256sum SBOM.spdx.json
+            } | sort -k2 > SHA256SUMS.txt
+            test "$(wc -l < SHA256SUMS.txt)" -eq 5
+            sha256sum --check SHA256SUMS.txt
+          )
+
+      - name: Attest release build provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-checksums: release-assets/SHA256SUMS.txt
+
+      - name: Attest SBOM for executable release artifacts
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3
+        with:
+          subject-checksums: release-assets/ARTIFACTS_SHA256SUMS.txt
+          sbom-path: release-assets/SBOM.spdx.json
+
+      - name: Publish immutable prerelease candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
           VERSION_TAG="host-v0.2.0-beta.${GITHUB_RUN_NUMBER}"
           if gh release view "$VERSION_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Immutable release $VERSION_TAG already exists; refusing to replace it."
@@ -299,5 +344,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "GPUbnb Host v0.2.0-beta.${GITHUB_RUN_NUMBER}" \
-            --notes "CANDIDATE non promue. Préversion immuable Devnet construite depuis ${GITHUB_SHA}. Elle devient host-test-latest uniquement après vérification post-publication sur un runner Windows indépendant. Les sommes SHA-256 sont publiées dans SHA256SUMS.txt." \
+            --notes "CANDIDATE non promue. Préversion immuable Devnet construite depuis ${GITHUB_SHA}. Elle devient host-test-latest uniquement après vérification post-publication sur un runner Windows indépendant. SHA256SUMS.txt, SBOM SPDX et attestations Sigstore/GitHub sont générés avant publication." \
             --prerelease

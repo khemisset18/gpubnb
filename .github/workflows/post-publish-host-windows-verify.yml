@@ -67,6 +67,10 @@ jobs:
             'gpubnb-host-windows-x64-portable.zip',
             'gpubnb-host-linux-x64.deb',
             'gpubnb-host-macos-arm64.dmg',
+            'ARTIFACTS_SHA256SUMS.txt',
+            'SBOM.spdx.json',
+            'ARTIFACTS_SHA256SUMS.txt',
+            'SBOM.spdx.json',
             'SHA256SUMS.txt'
           )
           foreach ($name in $required) {
@@ -84,7 +88,8 @@ jobs:
             'gpubnb-host-windows-x64.exe',
             'gpubnb-host-windows-x64-portable.zip',
             'gpubnb-host-linux-x64.deb',
-            'gpubnb-host-macos-arm64.dmg'
+            'gpubnb-host-macos-arm64.dmg',
+            'SBOM.spdx.json'
           )
           foreach ($file in $expectedFiles) {
             $line = $sumLines | Where-Object { $_ -match ("\s+" + [regex]::Escape($file) + '$') } | Select-Object -First 1
@@ -94,6 +99,24 @@ jobs:
             if ($actual -ne $expected) {
               throw "Checksum mismatch for ${file}: expected $expected, got $actual"
             }
+          }
+
+      - name: Verify GitHub/Sigstore provenance attestations
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $subjects = @(
+            'gpubnb-host-windows-x64.exe',
+            'gpubnb-host-windows-x64-portable.zip',
+            'gpubnb-host-linux-x64.deb',
+            'gpubnb-host-macos-arm64.dmg',
+            'SBOM.spdx.json'
+          )
+          foreach ($name in $subjects) {
+            gh attestation verify (Join-Path 'published-release' $name) --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw "Provenance attestation verification failed for $name" }
           }
 
       - name: Install, exercise service, and uninstall downloaded Windows candidate
@@ -153,6 +176,8 @@ jobs:
             'gpubnb-host-windows-x64-portable.zip',
             'gpubnb-host-linux-x64.deb',
             'gpubnb-host-macos-arm64.dmg',
+            'ARTIFACTS_SHA256SUMS.txt',
+            'SBOM.spdx.json',
             'SHA256SUMS.txt'
           )
           $assetNames = @($alias.assets | ForEach-Object { $_.name })
@@ -193,6 +218,8 @@ jobs:
             'gpubnb-host-windows-x64-portable.zip',
             'gpubnb-host-linux-x64.deb',
             'gpubnb-host-macos-arm64.dmg',
+            'ARTIFACTS_SHA256SUMS.txt',
+            'SBOM.spdx.json',
             'SHA256SUMS.txt'
           )
           $assetNames = @($alias.assets | ForEach-Object { $_.name })
