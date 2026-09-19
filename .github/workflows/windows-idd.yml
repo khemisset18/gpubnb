@@ -31,8 +31,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Configure MSBuild
-        uses: microsoft/setup-msbuild@v2
+      - name: Configure x64 MSBuild
+        uses: microsoft/setup-msbuild@v3
+        with:
+          msbuild-architecture: x64
 
       - name: Verify IddCx control ACL remains SYSTEM-only
         shell: pwsh
@@ -73,7 +75,7 @@ jobs:
             throw "Do not route GPUbnb IddCx control IOCTLs through a default WDF queue"
           }
 
-      - name: Verify VS2026 toolchain selected for WDK NuGet
+      - name: Verify VS2026 x64 toolchain
         shell: pwsh
         run: |
           $msbuild = (Get-Command msbuild).Source
@@ -81,90 +83,37 @@ jobs:
           if ($msbuild -notmatch '\\Microsoft Visual Studio\\18\\') {
             throw "WDK 28000 requires the VS2026 (18.x) toolchain"
           }
+          if ($msbuild -notmatch '\\MSBuild\\Current\\Bin\\amd64\\MSBuild\.exe$') {
+            throw "WDK 28000 CI must use the x64 MSBuild host"
+          }
 
       - name: Restore WDK NuGet packages
         shell: pwsh
         run: |
           msbuild native/windows-idd/GPUbnbIdd.vcxproj /t:Restore /p:Configuration=Release /p:Platform=x64 /warnAsError
 
-      - name: Resolve WDK packaged build tools
+      - name: Verify restored x64 WDK toolchain
         shell: pwsh
         run: |
-          $packageRoot = Join-Path $env:USERPROFILE ".nuget\packages"
-          $wdkX64Root = Join-Path $packageRoot "microsoft.windows.wdk.x64\10.0.28000.2526"
-          $wdkX86Root = Join-Path $packageRoot "microsoft.windows.wdk.x86\10.0.28000.2526"
-          $sdkX86Root = Join-Path $packageRoot "microsoft.windows.sdk.cpp.x86\10.0.28000.2526"
-          foreach ($root in @($wdkX64Root, $wdkX86Root, $sdkX86Root)) {
+          $wdkRoot = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.windows.wdk.x64\10.0.28000.2526"
+          $sdkRoot = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.windows.sdk.cpp.x64\10.0.28000.2526"
+          foreach ($root in @($wdkRoot, $sdkRoot)) {
             if (-not (Test-Path $root)) {
-              throw "Restored WDK/SDK package root not found: $root"
+              throw "Restored package root not found: $root"
             }
           }
-
-          $stampInf = Get-ChildItem $wdkX64Root -Recurse -File -Filter stampinf.exe |
+          $stampInf = Get-ChildItem $wdkRoot -Recurse -File -Filter stampinf.exe |
             Where-Object { $_.FullName -like "*\x64\stampinf.exe" } |
             Select-Object -First 1
-          $preFast = Get-ChildItem $wdkX64Root -Recurse -File -Filter WindowsPrefast.dll |
-            Where-Object { $_.FullName -like "*\x86\WindowsPrefast.dll" } |
-            Select-Object -First 1
-          $infVerif = Get-ChildItem -Path $wdkX64Root,$wdkX86Root -Recurse -File -Filter InfVerif.dll |
-            Where-Object { $_.FullName -like "*\x86\InfVerif.dll" } |
-            Select-Object -First 1
-          foreach ($tool in @($stampInf, $preFast, $infVerif)) {
-            if (-not $tool) {
-              throw "Required WDK host tool was not restored"
-            }
-            Write-Host "WDK tool: $($tool.FullName)"
+          if (-not $stampInf) {
+            throw "x64 stampinf.exe not found in restored WDK package"
           }
-
-          # WDK verification and PREfast are x86-hosted even for an x64 target.
-          # Keep the x64 build targets authoritative, but expose matching x86 WDK
-          # and SDK DLL directories so host-tool dependency loading is complete.
-          $hostToolDirs = @(
-            $stampInf.DirectoryName,
-            $preFast.DirectoryName,
-            $infVerif.DirectoryName
-          )
-          foreach ($root in @($wdkX86Root, $sdkX86Root)) {
-            $hostToolDirs += (
-              Get-ChildItem $root -Recurse -Directory -Filter x86 |
-                Where-Object { $_.FullName -like "*\bin\*\x86" } |
-                ForEach-Object { $_.FullName }
-            )
-          }
-          $hostToolDirs = $hostToolDirs |
-            Where-Object { $_ -and (Test-Path $_) } |
-            Sort-Object -Unique
-          if ($hostToolDirs.Count -lt 3) {
-            throw "Incomplete x86 host-tool dependency path set"
-          }
-          foreach ($dir in $hostToolDirs) {
-            Write-Host "WDK host dependency path: $dir"
-            Add-Content -Path $env:GITHUB_PATH -Value $dir
-          }
-
-          # InfVerif's managed wrapper loads "x86\InfVerif.dll" relative to the
-          # process working directory. Use the concrete package bin root that
-          # actually contains the restored DLL instead of guessing from PATH.
-          $hostBinRoot = Split-Path $infVerif.DirectoryName -Parent
-          if (-not (Test-Path (Join-Path $hostBinRoot "x86\InfVerif.dll"))) {
-            throw "Resolved InfVerif host root is incoherent: $hostBinRoot"
-          }
-          Add-Content -Path $env:GITHUB_ENV -Value "GPUBNB_WDK_BIN_ROOT=$hostBinRoot"
+          Write-Host "x64 stampinf.exe: $($stampInf.FullName)"
 
       - name: Build inert IddCx driver
         shell: pwsh
         run: |
-          where.exe stampinf.exe
-          $project = (Resolve-Path native/windows-idd/GPUbnbIdd.vcxproj).Path
-          if (-not $env:GPUBNB_WDK_BIN_ROOT) {
-            throw "WDK binary root was not exported"
-          }
-          Push-Location $env:GPUBNB_WDK_BIN_ROOT
-          try {
-            msbuild $project /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError
-          } finally {
-            Pop-Location
-          }
+          msbuild native/windows-idd/GPUbnbIdd.vcxproj /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError
 
       - name: Verify build produced driver package inputs
         shell: pwsh
