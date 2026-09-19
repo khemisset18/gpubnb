@@ -96,10 +96,11 @@ def _media_token(value: object) -> str | None:
 
 def media_token_matches(expected: str, presented: object) -> bool:
     """Compare the local media capability without token-dependent early exit."""
+    trusted = _media_token(expected)
     candidate = _media_token(presented)
-    if candidate is None:
+    if trusted is None or candidate is None:
         return False
-    return hmac.compare_digest(expected.encode("ascii"), candidate.encode("ascii"))
+    return hmac.compare_digest(trusted.encode("ascii"), candidate.encode("ascii"))
 
 
 def _helper_stop_confirmed(executable: str, session_id: str) -> bool:
