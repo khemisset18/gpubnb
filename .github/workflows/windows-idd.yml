@@ -55,6 +55,15 @@ jobs:
             throw "IddCx monitor mutation was enabled without physical qualification"
           }
 
+      - name: Verify VS2026 toolchain selected for WDK NuGet
+        shell: pwsh
+        run: |
+          $msbuild = (Get-Command msbuild).Source
+          Write-Host "MSBuild: $msbuild"
+          if ($msbuild -notmatch '\\Microsoft Visual Studio\\18\\') {
+            throw "WDK 28000 requires the VS2026 (18.x) toolchain"
+          }
+
       - name: Restore WDK NuGet and build inert IddCx driver
         shell: pwsh
         run: |
