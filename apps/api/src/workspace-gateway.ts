@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { Socket } from 'node:net';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { BookingStatus, JobStatus, MachineConnectivity, MachineOperational, ModerationStatus, PaymentStatus, Prisma, SessionTerminationReason, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
+import { BookingStatus, JobStatus, MachineConnectivity, MachineOperational, ModerationStatus, PaymentStatus, Prisma, SessionTerminationReason, WorkspaceRuntimeBackend, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 import WebSocket from 'ws';
 import { runBookingTransaction } from './booking-transaction-retry.js';
@@ -156,7 +156,7 @@ async function authenticateAgent(db:PrismaClient,redis:Redis,machineId:string,re
   if(withBody)return false;
   return verifyAgentRequest(redis,machineId,machine.agentPublicKey,request.method,routePath,request.headers['x-agent-timestamp'],request.headers['x-agent-signature']);
 }
-async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.workspaceSession.findFirst({where:{id:sessionId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR}},select:{id:true,renterId:true,machineId:true,bookingId:true,jobId:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});}
+async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.workspaceSession.findFirst({where:{id:sessionId,runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,renterId:true,machineId:true,bookingId:true,jobId:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});}
 
 // The commercial rental clock's one true start: a real upstream frame proven exchanged
 // between the container and the authenticated renter's browser (see the two call sites
@@ -173,7 +173,7 @@ async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.
 export async function activateGatewaySession(db:PrismaClient,sessionId:string,machineId:string){
   return db.$transaction(async tx=>{
     const row=await tx.workspaceSession.findFirst({
-      where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},
+      where:{id:sessionId,machineId,runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},
       select:{id:true,bookingId:true,status:true,expiresAt:true,booking:{select:{status:true,expectedSeconds:true,workspaceActivatedAt:true}}},
     });
     if(!row)return null;
@@ -182,7 +182,7 @@ export async function activateGatewaySession(db:PrismaClient,sessionId:string,ma
     const activatedAt=new Date();const expiresAt=new Date(activatedAt.getTime()+row.booking.expectedSeconds*1000);
     const sessionUpdate=await tx.workspaceSession.updateMany({where:{id:row.id,status:WorkspaceSessionStatus.READY},data:{status:WorkspaceSessionStatus.RUNNING,startedAt:activatedAt,expiresAt,preparationStep:'INTERACTIVE_WORKSPACE_CONNECTED'}});
     if(sessionUpdate.count!==1){
-      const winner=await tx.workspaceSession.findFirst({where:{id:row.id,machineId,status:WorkspaceSessionStatus.RUNNING,booking:{workspaceActivatedAt:{not:null}}},select:{expiresAt:true}});
+      const winner=await tx.workspaceSession.findFirst({where:{id:row.id,machineId,runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,status:WorkspaceSessionStatus.RUNNING,booking:{workspaceActivatedAt:{not:null}}},select:{expiresAt:true}});
       return winner?{activated:false,expiresAt:winner.expiresAt}:null;
     }
     const bookingUpdate=await tx.booking.updateMany({where:{id:row.bookingId,workspaceActivatedAt:null},data:{status:BookingStatus.ACTIVE,startsAt:activatedAt,endsAt:expiresAt,workspaceActivatedAt:activatedAt}});
@@ -214,7 +214,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   });
   app.get('/agent/workspace-gateway/:machineId/desired',async(request,reply)=>{
     const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/desired`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});
-    const rows=await db.workspaceSession.findMany({where:{machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});
+    const rows=await db.workspaceSession.findMany({where:{machineId,runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,expiresAt:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});
     // The agent needs to know which container/image to run per session - a
     // flat workspaceSlug is what workspace_gateway.py's _reconcile_sessions
     // reads (defaulting to 'developer' for any older/unrecognized value).
@@ -224,7 +224,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   app.get('/agent/workspace-gateway/:machineId/sessions/:sessionId/data-plane-host',{config:{rateLimit:{max:120,timeWindow:'1 minute'}}},async(request,reply)=>{
     const params=request.params as {machineId?:string;sessionId?:string};const machineId=String(params.machineId||'');const sessionId=String(params.sessionId||'');const route=`/agent/workspace-gateway/${machineId}/sessions/${sessionId}/data-plane-host`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});
     const runtime=loadDataPlaneHostRuntimeConfig();if(!runtime)return reply.code(404).send({error:'data_plane_disabled'});
-    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,machineId:true,bookingId:true,renterId:true}});if(!row)return reply.code(404).send({error:'workspace_session_not_available'});
+    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,machineId:true,bookingId:true,renterId:true}});if(!row)return reply.code(404).send({error:'workspace_session_not_available'});
     return issueHostTunnelBootstrap(runtime,{sessionId:row.id,machineId:row.machineId,bookingId:row.bookingId,renterUserId:row.renterId});
   });
   app.get('/agent/workspace-gateway/:machineId/next',{config:{rateLimit:{max:AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE,timeWindow:'1 minute'}}},async(request,reply)=>{const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/next`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});const raw=await waitForGatewayQueueItem(redis,machineQueue(machineId));if(!raw)return reply.code(204).send();await accountDequeuedBytes(redis,machineQueueBytesKey(machineId),raw,MACHINE_QUEUE_TTL_SECONDS);return JSON.parse(raw);});
@@ -243,7 +243,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   });
   app.post('/agent/workspace-gateway/:sessionId/register',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;runtimeId?:string;localPort?:number};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/register`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!/^[a-zA-Z0-9_.-]{6,100}$/.test(String(body.runtimeId||''))||!Number.isInteger(body.localPort)||Number(body.localPort)<1024||Number(body.localPort)>65535)return reply.code(400).send({error:'invalid_runtime_registration'});
-    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,bookingId:true,connectionMetadata:true,booking:{select:{expectedSeconds:true}}}});if(!row)return reply.code(409).send({error:'workspace_not_registerable'});
+    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,bookingId:true,connectionMetadata:true,booking:{select:{expectedSeconds:true}}}});if(!row)return reply.code(409).send({error:'workspace_not_registerable'});
     const metadata=row.connectionMetadata&&typeof row.connectionMetadata==='object'?row.connectionMetadata as Record<string,unknown>:null;
     const firstRegistration=row.status===WorkspaceSessionStatus.READY&&typeof metadata?.gatewayPath!=='string';
     const readyAt=new Date();const activationDeadline=new Date(readyAt.getTime()+INTERACTIVE_CONNECT_TIMEOUT_SECONDS*1000);
@@ -264,7 +264,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
     if(!/^\d{1,20}$/.test(String(body.counter||''))||!Number.isInteger(body.intervalSeconds)||Number(body.intervalSeconds)<1||Number(body.intervalSeconds)>30||body.available!==true)return reply.code(400).send({error:'invalid_usage_sample'});
     const counter=BigInt(String(body.counter));
-    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},readyAt:{not:null},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,bookingId:true,lastMetricCounter:true,booking:{select:{status:true,validSeconds:true,expectedSeconds:true}}}});
+    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},readyAt:{not:null},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,bookingId:true,lastMetricCounter:true,booking:{select:{status:true,validSeconds:true,expectedSeconds:true}}}});
     if(!row)return reply.code(409).send({error:'workspace_not_billable'});
     const pendingActivation=row.status===WorkspaceSessionStatus.READY&&row.booking.status===BookingStatus.STARTING;
     const billable=row.status===WorkspaceSessionStatus.RUNNING&&row.booking.status===BookingStatus.ACTIVE;
@@ -358,8 +358,8 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   });
   app.post('/agent/workspace-gateway/:sessionId/stopped',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;cleaned?:boolean};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/stopped`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
-    if(body.cleaned!==true){await runBookingTransaction(db,async tx=>{await tx.machine.update({where:{id:machineId},data:{operational:MachineOperational.UNAVAILABLE}});await enterQuarantine(tx,{machineId,reasonCode:'WORKSPACE_CLEANUP_FAILED',reason:"L'agent a signalé la fin de la session Workspace sans confirmer le nettoyage de l'environnement isolé.",details:{sessionId},source:'workspace-gateway.stopped'});await tx.workspaceSession.updateMany({where:{id:sessionId,machineId},data:{status:WorkspaceSessionStatus.QUARANTINED,endedAt:new Date()}});},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,maxWait:5_000,timeout:10_000});return reply.code(409).send({error:'workspace_cleanup_unverified'});}
-    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,status:{in:[WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.READY]}},select:{id:true,bookingId:true,startedAt:true}});if(!row)return reply.code(409).send({error:'workspace_not_stoppable'});
+    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,status:{in:[WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.READY]}},select:{id:true,bookingId:true,startedAt:true}});if(!row)return reply.code(409).send({error:'workspace_not_stoppable'});
+    if(body.cleaned!==true){await runBookingTransaction(db,async tx=>{await tx.machine.update({where:{id:machineId},data:{operational:MachineOperational.UNAVAILABLE}});await enterQuarantine(tx,{machineId,reasonCode:'WORKSPACE_CLEANUP_FAILED',reason:"L'agent a signalé la fin de la session Workspace sans confirmer le nettoyage de l'environnement isolé.",details:{sessionId},source:'workspace-gateway.stopped'});await tx.workspaceSession.updateMany({where:{id:row.id,machineId,runtimeBackend:WorkspaceRuntimeBackend.CONTAINER},data:{status:WorkspaceSessionStatus.QUARANTINED,endedAt:new Date()}});},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,maxWait:5_000,timeout:10_000});return reply.code(409).send({error:'workspace_cleanup_unverified'});}
     const neverActivated=row.startedAt===null;const endedAt=new Date();
     const release=await runBookingTransaction(db,async tx=>{
       await tx.workspaceSession.update({where:{id:row.id},data:{status:neverActivated?WorkspaceSessionStatus.TIMED_OUT:WorkspaceSessionStatus.COMPLETED,endedAt,connectionMetadata:{},...(neverActivated?{terminationReason:SessionTerminationReason.TIMEOUT,preparationStep:'INTERACTIVE_CONNECTION_TIMEOUT'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:neverActivated?'INTERACTIVE_CONNECTION_NEVER_ESTABLISHED':'GATEWAY_CLEANUP_VERIFIED'}}}});

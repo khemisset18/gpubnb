@@ -1,0 +1,20 @@
+[package]
+name = "gpubnb-windows-stream-helper"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+publish = false
+
+[[bin]]
+name = "gpubnb-windows-stream"
+path = "src/main.rs"
+
+# Keep this crate independent from the repository root workspace until the WDK /
+# IddCx integration and its own locked Windows dependency graph are ready.
+[workspace]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[target.'cfg(windows)'.dependencies]
+gpubnb-windows-platform = { path = "../windows-platform" }

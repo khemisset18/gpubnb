@@ -37,22 +37,23 @@ jobs:
             bundle: dmg
             installer_pattern: '*.dmg'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/host-desktop/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
         with:
           components: rustfmt, clippy
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: .
 
@@ -107,11 +108,11 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo test --locked -p gpubnb-host-desktop --all-targets 2>&1 | tee cargo-test-${RUNNER_OS}.log
+          cargo test --locked -p gpubnb-host-desktop --all-targets 2>&1 | tee "cargo-test-${RUNNER_OS}.log"
 
       - name: Upload native test diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: host-installer-test-${{ runner.os }}-${{ github.sha }}
           path: cargo-test-${{ runner.os }}.log
@@ -126,7 +127,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          npm run tauri:build -- --bundles ${{ matrix.bundle }} 2>&1 | tee ../../installer-build-${RUNNER_OS}.log
+          npm run tauri:build -- --bundles ${{ matrix.bundle }} 2>&1 | tee "../../installer-build-${RUNNER_OS}.log"
         env:
           GPUBNB_RELEASE_CHANNEL: development
           RUST_BACKTRACE: "1"
@@ -134,7 +135,7 @@ jobs:
 
       - name: Upload installer diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: host-installer-build-${{ runner.os }}-${{ github.sha }}
           path: installer-build-${{ runner.os }}.log
@@ -226,7 +227,7 @@ jobs:
           cp -R "$bundle_dir"/. apps/host-desktop/dist-installers/
 
       - name: Upload installer and evidence
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: gpubnb-host-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
           path: |
@@ -238,6 +239,7 @@ jobs:
   release-policy:
     name: Public release policy
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Block unsigned public release
         run: |

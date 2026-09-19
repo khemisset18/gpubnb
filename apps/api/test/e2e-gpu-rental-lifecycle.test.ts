@@ -227,7 +227,7 @@ test('full GPU rental lifecycle: heartbeat -> inventory -> publish -> booking ->
       machineWorkspaceId: machineWorkspace.id,
       jobId: job.id,
       status: WorkspaceSessionStatus.READY,
-      isolationType: 'DOCKER',
+      isolationType: 'DOCKER', runtimeBackend: 'CONTAINER',
       resourceLimits: {},
       expiresAt: endsAt,
     },

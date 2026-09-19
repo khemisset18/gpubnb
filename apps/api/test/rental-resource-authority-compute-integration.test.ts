@@ -181,7 +181,7 @@ test('buildRentalResourceAuthority resolves a real Compute/GPU_PROOF session (re
           // resolve its leased GPU - a READY session here would let this test pass
           // while the real bug (LIVE_SESSION_STATUSES excluding PREPARING) stayed live.
           status: WorkspaceSessionStatus.PREPARING,
-          isolationType: 'DOCKER',
+          isolationType: 'DOCKER', runtimeBackend: 'CONTAINER',
           resourceLimits: {},
           expiresAt: booking.endsAt,
         },

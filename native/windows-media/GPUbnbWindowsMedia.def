@@ -1,0 +1,6 @@
+LIBRARY GPUbnbWindowsMedia
+EXPORTS
+    GPUbnbProbeMediaFrame
+    GPUbnbMediaOpen
+    GPUbnbMediaReadFrame
+    GPUbnbMediaClose

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { BookingStatus, JobStatus, JobType, MachineWorkspaceState, Prisma, WorkspaceSessionStatus } from '@prisma/client';
+import { BookingStatus, JobStatus, JobType, MachineWorkspaceState, Prisma, WorkspaceRuntimeBackend, WorkspaceSessionStatus } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 
@@ -95,7 +95,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         if(stillEligible.count!==1) throw new BookingNoLongerEligibleForWorkspaceError();
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
-          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',
+          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
           resourceLimits:{maxRamMiB:4096,maxCpuCores:2,storageQuotaMiB:10240,networkAccess:'RESTRICTED',autoStopMinutes:60},
           connectionType:'GPUBNB_GATEWAY',preparationProgress:5,preparationStep:'DEVELOPER_REQUESTED',
           preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,
@@ -182,7 +182,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       return await db.$transaction(async tx=>{
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
-          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',
+          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
           resourceLimits:{maxRamMiB:4096,maxCpuCores:2,storageQuotaMiB:10240,networkAccess:'RESTRICTED',autoStopMinutes:60},
           connectionType:'GPUBNB_GATEWAY',preparationProgress:5,preparationStep:'DATA_REQUESTED',
           preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,
@@ -310,7 +310,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       return await db.$transaction(async tx=>{
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
-          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',
+          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
           resourceLimits:{maxRamMiB:8192,maxCpuCores:2,storageQuotaMiB:30720,networkAccess:'RESTRICTED',autoStopMinutes:60},
           connectionType:'GPUBNB_GATEWAY',preparationProgress:5,preparationStep:'AI_REQUESTED',
           preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,
@@ -437,7 +437,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       return await db.$transaction(async tx=>{
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
-          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',
+          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
           resourceLimits:{maxRamMiB:8192,maxCpuCores:2,storageQuotaMiB:102400,networkAccess:'RESTRICTED',autoStopMinutes:60},
           connectionType:'GPUBNB_GATEWAY',preparationProgress:5,preparationStep:'VIDEO_REQUESTED',
           preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,
@@ -561,7 +561,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       return await db.$transaction(async tx=>{
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
-          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',
+          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
           resourceLimits:{maxRamMiB:4096,maxCpuCores:2,storageQuotaMiB:40960,networkAccess:'RESTRICTED',autoStopMinutes:60},
           connectionType:'GPUBNB_GATEWAY',preparationProgress:5,preparationStep:'AUDIO_REQUESTED',
           preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,
@@ -685,7 +685,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       return await db.$transaction(async tx=>{
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
-          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',
+          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
           resourceLimits:{maxRamMiB:4096,maxCpuCores:2,storageQuotaMiB:10240,networkAccess:'RESTRICTED',autoStopMinutes:60},
           connectionType:'GPUBNB_GATEWAY',preparationProgress:5,preparationStep:'API_REQUESTED',
           preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,
@@ -809,7 +809,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       return await db.$transaction(async tx=>{
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
-          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',
+          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
           resourceLimits:{maxRamMiB:6144,maxCpuCores:2,storageQuotaMiB:61440,networkAccess:'RESTRICTED',autoStopMinutes:60},
           connectionType:'GPUBNB_GATEWAY',preparationProgress:5,preparationStep:'MOBILE_REQUESTED',
           preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,
@@ -936,7 +936,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
       return await db.$transaction(async tx=>{
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
-          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',
+          status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
           resourceLimits:{maxRamMiB:4096,maxCpuCores:2,storageQuotaMiB:20480,networkAccess:'RESTRICTED',autoStopMinutes:60},
           connectionType:'GPUBNB_GATEWAY',preparationProgress:5,preparationStep:'SECURITY_LAB_REQUESTED',
           preparationRequestedAt:new Date(),readyDeadlineAt:new Date(Math.max(Date.now(),booking.startsAt.getTime()-120_000)),expiresAt:booking.endsAt,

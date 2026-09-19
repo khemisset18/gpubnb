@@ -24,13 +24,19 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: artifact-storage-s3-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   minio-roundtrip:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
           cache: npm
@@ -44,8 +50,8 @@ jobs:
             -p 9000:9000 \
             -e MINIO_ROOT_USER=gpubnb-ci-access \
             -e MINIO_ROOT_PASSWORD=gpubnb-ci-secret-key \
-            minio/minio:latest server /data --address :9000
-          for attempt in $(seq 1 30); do
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data --address :9000
+          for _ in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
               exit 0
             fi

@@ -135,7 +135,7 @@ withPrismaAndRedis('two concurrent finalizations of the same Developer stop: onl
     const session = await prisma.workspaceSession.create({
       data: {
         bookingId: seed.booking.id, renterId: seed.renter.id, machineId: seed.machine.id, machineWorkspaceId: machineWorkspace.id,
-        status: WorkspaceSessionStatus.STOP_REQUESTED, isolationType: 'DOCKER', resourceLimits: {},
+        status: WorkspaceSessionStatus.STOP_REQUESTED, isolationType: 'DOCKER', runtimeBackend: 'CONTAINER', resourceLimits: {},
         startedAt: activatedAt, readyAt: activatedAt, expiresAt: new Date(Date.now() + 3_600_000),
       },
     });

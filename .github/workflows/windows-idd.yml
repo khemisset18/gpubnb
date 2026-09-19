@@ -1,0 +1,125 @@
+name: windows-idd-build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "native/windows-idd/**"
+      - ".github/workflows/windows-idd.yml"
+  push:
+    branches:
+      - "feat/windows-native-desktop-workspaces"
+    paths:
+      - "native/windows-idd/**"
+      - ".github/workflows/windows-idd.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-idd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Configure x64 MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+        with:
+          msbuild-architecture: x64
+
+      - name: Verify IddCx control ACL remains SYSTEM-only
+        shell: pwsh
+        run: |
+          $inf = Get-Content native/windows-idd/GPUbnbIdd.inf -Raw
+          if ($inf -notmatch 'HKR,,Security,,"D:P\(A;;GA;;;SY\)"') {
+            throw "IddCx control device must remain SYSTEM-only"
+          }
+          foreach ($forbidden in @(';;;BA)', ';;;WD)', ';;;BU)', ';;;AU)')) {
+            if ($inf.Contains($forbidden)) {
+              throw "Forbidden IddCx control ACL principal: $forbidden"
+            }
+          }
+
+      - name: Verify monitor mutation remains physically gated
+        shell: pwsh
+        run: |
+          $driver = Get-Content native/windows-idd/Driver.cpp -Raw
+          if ($driver -notmatch 'static constexpr bool GPUBNB_ENABLE_MONITOR_MUTATION = false;') {
+            throw "IddCx monitor mutation gate must remain compile-time false before physical qualification"
+          }
+          if ($driver -match 'GPUBNB_ENABLE_MONITOR_MUTATION = true;') {
+            throw "IddCx monitor mutation was enabled without physical qualification"
+          }
+
+      - name: Verify custom IOCTLs stay on the IddCx control path
+        shell: pwsh
+        run: |
+          $driver = Get-Content native/windows-idd/Driver.cpp -Raw
+          $header = Get-Content native/windows-idd/Driver.h -Raw
+          if ($driver -notmatch 'EvtIddCxDeviceIoControl\s*=\s*GPUbnbEvtIddCxDeviceIoControl') {
+            throw "GPUbnb control IOCTLs must be registered through IDD_CX_CLIENT_CONFIG"
+          }
+          if ($header -notmatch 'EVT_IDD_CX_DEVICE_IO_CONTROL\s+GPUbnbEvtIddCxDeviceIoControl') {
+            throw "GPUbnb IddCx control callback declaration is missing"
+          }
+          if ($driver -match 'EvtIoDeviceControl\s*=') {
+            throw "Do not route GPUbnb IddCx control IOCTLs through a default WDF queue"
+          }
+
+      - name: Verify VS2026 x64 toolchain
+        shell: pwsh
+        run: |
+          $msbuild = (Get-Command msbuild).Source
+          Write-Host "MSBuild: $msbuild"
+          if ($msbuild -notmatch '\\Microsoft Visual Studio\\18\\') {
+            throw "WDK 28000 requires the VS2026 (18.x) toolchain"
+          }
+          if ($msbuild -notmatch '\\MSBuild\\Current\\Bin\\amd64\\MSBuild\.exe$') {
+            throw "WDK 28000 CI must use the x64 MSBuild host"
+          }
+
+      - name: Restore WDK NuGet packages
+        shell: pwsh
+        run: |
+          msbuild native/windows-idd/GPUbnbIdd.vcxproj /t:Restore /p:Configuration=Release /p:Platform=x64 /warnAsError
+
+      - name: Verify restored x64 WDK toolchain
+        shell: pwsh
+        run: |
+          $wdkRoot = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.windows.wdk.x64\10.0.28000.2526"
+          $sdkRoot = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.windows.sdk.cpp.x64\10.0.28000.2526"
+          foreach ($root in @($wdkRoot, $sdkRoot)) {
+            if (-not (Test-Path $root)) {
+              throw "Restored package root not found: $root"
+            }
+          }
+          $stampInf = Get-ChildItem $wdkRoot -Recurse -File -Filter stampinf.exe |
+            Where-Object { $_.FullName -like "*\x64\stampinf.exe" } |
+            Select-Object -First 1
+          if (-not $stampInf) {
+            throw "x64 stampinf.exe not found in restored WDK package"
+          }
+          Write-Host "x64 stampinf.exe: $($stampInf.FullName)"
+
+      - name: Build inert IddCx driver
+        shell: pwsh
+        run: |
+          msbuild native/windows-idd/GPUbnbIdd.vcxproj /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError
+
+      - name: Verify build produced driver package inputs
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem native/windows-idd -Recurse -Filter GPUbnbIdd.dll | Select-Object -First 1
+          if (-not $dll) { throw "GPUbnbIdd.dll was not produced" }
+          if (-not (Test-Path native/windows-idd/GPUbnbIdd.inf)) { throw "GPUbnbIdd.inf missing" }
+          Write-Host "Built inert IddCx DLL: $($dll.FullName)"
+          Write-Host "Driver remains non-installing and non-promotable in CI."
