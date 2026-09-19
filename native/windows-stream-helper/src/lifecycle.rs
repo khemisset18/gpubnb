@@ -88,6 +88,16 @@ impl ReadinessProof {
         // fresh capture+encode proof before reconnect can promote the session again.
         self.invalidate_capture_chain();
     }
+
+    pub const fn can_restore_media(self, workspace: WorkspaceKind) -> bool {
+        self.isolated_session
+            && self.virtual_display
+            && self.provider_desktop_excluded
+            && self.exact_gpu_bound
+            && self.input_isolated
+            && (!workspace.requires_audio() || self.audio_ready)
+            && (!workspace.requires_controller() || self.controller_ready)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,6 +110,11 @@ pub enum SessionEvent {
     WorkerLost,
     NvencDeviceLost,
     BrowserDisconnected,
+    MediaReproved {
+        capture_ready: bool,
+        nvenc_ready: bool,
+        media_ready: bool,
+    },
     StopRequested,
     CleanupVerified,
 }
@@ -153,11 +168,37 @@ impl NativeSessionState {
                 if matches!(self.phase, SessionPhase::Stopping) {
                     return;
                 }
+
+                // Once a runtime is degraded, a generic full-proof replacement is
+                // not allowed to jump straight back to READY. Recovery must retain
+                // the still-valid non-media invariants and supply a fresh
+                // capture+NVENC+media proof through MediaReproved.
+                if matches!(self.phase, SessionPhase::Degraded) {
+                    return;
+                }
+
                 self.proof = proof;
                 self.phase = if self.proof.qualifies(self.workspace) {
                     SessionPhase::Ready
-                } else if matches!(self.phase, SessionPhase::Starting) {
+                } else {
                     SessionPhase::Starting
+                };
+            }
+            SessionEvent::MediaReproved {
+                capture_ready,
+                nvenc_ready,
+                media_ready,
+            } => {
+                if !matches!(self.phase, SessionPhase::Degraded)
+                    || !self.proof.can_restore_media(self.workspace)
+                {
+                    return;
+                }
+                self.proof.capture_ready = capture_ready;
+                self.proof.nvenc_ready = nvenc_ready;
+                self.proof.media_ready = media_ready;
+                self.phase = if self.proof.qualifies(self.workspace) {
+                    SessionPhase::Ready
                 } else {
                     SessionPhase::Degraded
                 };
@@ -289,7 +330,16 @@ mod tests {
         assert!(!state.proof().nvenc_ready);
         assert!(!state.proof().media_ready);
 
+        // A generic proof update cannot re-arm a degraded session.
         state.apply(SessionEvent::ProofsUpdated(shared_ready()));
+        assert_eq!(state.phase(), SessionPhase::Degraded);
+        assert!(!state.billable());
+
+        state.apply(SessionEvent::MediaReproved {
+            capture_ready: true,
+            nvenc_ready: true,
+            media_ready: true,
+        });
         assert_eq!(state.phase(), SessionPhase::Ready);
         assert!(state.billable());
     }
@@ -361,5 +411,86 @@ mod tests {
         state.apply(SessionEvent::CleanupVerified);
         assert_eq!(state.phase(), SessionPhase::Starting);
         assert!(!state.billable());
+    }
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+
+    fn ready() -> ReadinessProof {
+        ReadinessProof {
+            isolated_session: true,
+            virtual_display: true,
+            provider_desktop_excluded: true,
+            exact_gpu_bound: true,
+            capture_ready: true,
+            nvenc_ready: true,
+            media_ready: true,
+            input_isolated: true,
+            audio_ready: false,
+            controller_ready: false,
+        }
+    }
+
+    #[test]
+    fn browser_reconnect_requires_explicit_fresh_media_proof() {
+        let mut state = NativeSessionState::new(WorkspaceKind::CloudDesktop);
+        state.apply(SessionEvent::ProofsUpdated(ready()));
+        state.apply(SessionEvent::BrowserDisconnected);
+        assert_eq!(state.phase(), SessionPhase::Degraded);
+        assert!(!state.billable());
+
+        state.apply(SessionEvent::ProofsUpdated(ready()));
+        assert_eq!(state.phase(), SessionPhase::Degraded);
+        assert!(!state.billable());
+
+        state.apply(SessionEvent::MediaReproved {
+            capture_ready: true,
+            nvenc_ready: true,
+            media_ready: true,
+        });
+        assert_eq!(state.phase(), SessionPhase::Ready);
+        assert!(state.billable());
+    }
+
+    #[test]
+    fn media_reproof_cannot_hide_lost_gpu_display_or_worker() {
+        for loss in [
+            SessionEvent::ExactGpuLost,
+            SessionEvent::VirtualDisplayLost,
+            SessionEvent::WorkerLost,
+        ] {
+            let mut state = NativeSessionState::new(WorkspaceKind::CloudDesktop);
+            state.apply(SessionEvent::ProofsUpdated(ready()));
+            state.apply(loss);
+            state.apply(SessionEvent::MediaReproved {
+                capture_ready: true,
+                nvenc_ready: true,
+                media_ready: true,
+            });
+            assert_eq!(state.phase(), SessionPhase::Degraded);
+            assert!(!state.billable());
+        }
+    }
+
+    #[test]
+    fn partial_media_reproof_never_restores_ready() {
+        for (capture_ready, nvenc_ready, media_ready) in [
+            (false, true, true),
+            (true, false, true),
+            (true, true, false),
+        ] {
+            let mut state = NativeSessionState::new(WorkspaceKind::CloudDesktop);
+            state.apply(SessionEvent::ProofsUpdated(ready()));
+            state.apply(SessionEvent::BrowserDisconnected);
+            state.apply(SessionEvent::MediaReproved {
+                capture_ready,
+                nvenc_ready,
+                media_ready,
+            });
+            assert_eq!(state.phase(), SessionPhase::Degraded);
+            assert!(!state.billable());
+        }
     }
 }
