@@ -12,7 +12,7 @@ struct GPUbnbDeviceContext
 {
     IDDCX_ADAPTER Adapter;
     IDDCX_MONITOR Monitor;
-    WDF_FILEOBJECT MonitorOwnerFile;
+    WDFFILEOBJECT MonitorOwnerFile;
 };
 
 WDF_DECLARE_CONTEXT_TYPE(GPUbnbDeviceContext);
