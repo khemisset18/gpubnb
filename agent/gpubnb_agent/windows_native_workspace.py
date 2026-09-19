@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 import platform
+import subprocess
 from pathlib import Path, PureWindowsPath
 
 from .windows_native_protocol import json_object as _parse_self_test, schema_v1, valid_gpu_uuid
@@ -173,7 +174,10 @@ def windows_native_desktop_preflight(
     if not executable:
         return NativeDesktopPreflight(False, "native_stream_helper_missing")
 
-    result = run_command([executable, "--self-test", "--json"], timeout=30)
+    try:
+        result = run_command([executable, "--self-test", "--json"], timeout=30)
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        return NativeDesktopPreflight(False, "native_stream_self_test_failed")
     if result.returncode != 0:
         return NativeDesktopPreflight(False, "native_stream_self_test_failed")
 
