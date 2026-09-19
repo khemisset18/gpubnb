@@ -189,7 +189,7 @@ test('the workspace-gateway route filters and the executable-slug gate all agree
   const gateway=await readFile(path.join(sourceRoot,'workspace-gateway.ts'),'utf8');
   assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai','video','audio','api','mobile','security-lab','cloud-desktop','creator','cad','gaming'\]/);
   const matches=gateway.match(/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/g)??[];
-  assert.equal(matches.length,5,'all five agent-facing gateway routes (activate, desired, data-plane-host, register, usage) must use the shared slug list');
+  assert.equal(matches.length,6,'browser admission plus all five agent-facing gateway routes (activate, desired, data-plane-host, register, usage) must use the shared slug list');
   const { executableWorkspaceSlugs }=await import('../src/machine-workspace-catalog.js');
   assert.ok(executableWorkspaceSlugs.includes('data'));
   assert.ok(executableWorkspaceSlugs.includes('developer'));
