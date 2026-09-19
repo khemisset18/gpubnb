@@ -1129,6 +1129,24 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
     }
     result->ProofFlags |= GPUBNB_MEDIA_PROOF_CAPTURED_FRAME;
 
+    // Revalidate the UUID <-> LUID binding on every delivered frame. A persistent
+    // session must not keep emitting trusted media after a GPU reset/topology
+    // change invalidates the identity proof established at open time.
+    result->FailedStage = GPUBNB_MEDIA_STAGE_EXACT_GPU;
+    hr = VerifyExactGpu(
+        session->request.ExpectedGpuUuid,
+        session->request.RenderAdapterLuid);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    const HRESULT deviceReason = session->device->GetDeviceRemovedReason();
+    if (FAILED(deviceReason))
+    {
+        return deviceReason;
+    }
+
     result->FailedStage = GPUBNB_MEDIA_STAGE_NVENC_ENCODE;
     uint32_t encodedBytes = 0;
     std::vector<uint8_t> encoded;
