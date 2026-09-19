@@ -88,7 +88,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/api/package-lock.json
-      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: npm bulk advisory audit (HIGH and CRITICAL)
         id: npm-audit
         run: node scripts/npm-bulk-audit.mjs npm-audit.json
