@@ -15,6 +15,7 @@ pub struct RenterSessionIsolationProof {
 }
 
 impl RenterSessionIsolationProof {
+    #[cfg(any(target_os = "windows", test))]
     const fn verified(windows_session_id: u32) -> Self {
         Self { windows_session_id }
     }
