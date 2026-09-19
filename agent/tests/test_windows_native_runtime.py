@@ -316,10 +316,41 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
         self.assertEqual(run_command.call_args.args[0][-1], "sess-1")
 
     def test_session_id_is_restricted_before_helper_execution(self):
-        with patch.object(runtime, "run_command") as run_command:
-            with self.assertRaisesRegex(RuntimeError, "invalid_native_session_id"):
-                runtime.launch_windows_native_workspace("../provider", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", helper_path="helper.exe")
-        run_command.assert_not_called()
+        for session_id in ("../provider", " sess-1", "sess-1 ", None, 123):
+            with self.subTest(session_id=session_id), patch.object(runtime, "run_command") as run_command:
+                with self.assertRaisesRegex(RuntimeError, "invalid_native_session_id"):
+                    runtime.launch_windows_native_workspace(session_id, "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", helper_path="helper.exe")
+            run_command.assert_not_called()
+
+    def test_media_token_whitespace_is_never_normalized(self):
+        for token in (" " + "A" * 43, "A" * 43 + " ", "\t" + "A" * 43):
+            with (
+                self.subTest(token=repr(token)),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+                patch.object(runtime, "discover_native_application", return_value=None),
+                patch.object(
+                    runtime,
+                    "run_command",
+                    side_effect=[self._start_report(mediaToken=token), self._stop_report()],
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "^native_workspace_start_media_token_required$"):
+                    runtime.launch_windows_native_workspace(
+                        "sess-1",
+                        "cloud-desktop",
+                        "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+                    )
+
+    def test_stop_maps_helper_crash_timeout_and_decode_errors_to_stable_failure(self):
+        for failure in (OSError("secret"), subprocess.TimeoutExpired("secret", 30), UnicodeError("secret")):
+            with (
+                self.subTest(failure=type(failure).__name__),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(runtime, "run_command", side_effect=failure),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "^native_workspace_stop_failed$"):
+                    runtime.stop_windows_native_workspace("sess-1")
 
 
 if __name__ == "__main__":
