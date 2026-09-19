@@ -481,10 +481,13 @@ mod tests {
             VirtualDisplayOperation::UnplugMonitor,
         ] {
             assert_eq!(
-                activate_virtual_display_lease("GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", VirtualDisplayRequest {
-                    operation,
-                    ..valid()
-                })
+                activate_virtual_display_lease(
+                    "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+                    VirtualDisplayRequest {
+                        operation,
+                        ..valid()
+                    }
+                )
                 .err(),
                 Some(PlatformError::IddUnsafeOperation)
             );
