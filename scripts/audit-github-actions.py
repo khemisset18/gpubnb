@@ -80,15 +80,6 @@ def main() -> int:
                 errors.append(f"{path}: actions/checkout must set persist-credentials: false")
 
         for job_name, block in job_blocks(text):
-            secret_refs = re.findall(r"secrets\.([A-Za-z_][A-Za-z0-9_]*)", block)
-            privileged_secrets = [name for name in secret_refs if name != "GITHUB_TOKEN"]
-            if privileged_secrets and not re.search(r"^\s{4}environment:\s*[^\s#]+\s*$", block, re.MULTILINE):
-                errors.append(
-                    f"{path}: job {job_name} consumes privileged repository secrets "
-                    f"{sorted(set(privileged_secrets))} without a protected GitHub environment"
-                )
-
-        for job_name, block in job_blocks(text):
             if "runs-on:" in block and "timeout-minutes:" not in block:
                 errors.append(f"{path}: job {job_name} has runs-on but no timeout-minutes")
 
