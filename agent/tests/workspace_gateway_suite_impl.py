@@ -387,7 +387,7 @@ class DataWorkspaceLaunchTests(unittest.TestCase):
         self.assertIn(OFFICIAL_IMAGE, run)
         self.assertIn("code-server", run)
 
-    def test_unrecognized_workspace_slug_fails_closed_to_developer_rather_than_crash(self) -> None:
+    def test_unrecognized_workspace_slug_never_falls_back_to_developer(self) -> None:
         docker, api = FakeDocker(), FakeApi()
         api.sessions = [{"id": "sess-weird-1", "status": "READY", "expiresAt": _future(), "connectionMetadata": {}, "workspaceSlug": "some-future-workspace-this-agent-does-not-know"}]
         supervisor = self._supervisor(docker, api)
@@ -395,8 +395,16 @@ class DataWorkspaceLaunchTests(unittest.TestCase):
         supervisor._reconcile_sessions()
 
         workspace = names_for_session("sess-weird-1")[0]
-        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
-        self.assertIn(OFFICIAL_IMAGE, run)
+        self.assertNotIn("sess-weird-1", supervisor.runtimes)
+        self.assertFalse(
+            any(
+                call[0] == "run"
+                and "--name" in call
+                and call[call.index("--name") + 1] == workspace
+                for call in docker.calls
+            ),
+            "an explicit unknown slug must never launch a Developer fallback",
+        )
 
 
 AI_IMAGE = "quay.io/jupyter/pytorch-notebook@sha256:" + ("9" * 64)
