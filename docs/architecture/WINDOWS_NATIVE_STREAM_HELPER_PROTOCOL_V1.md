@@ -37,6 +37,12 @@ The helper must never capture the provider's personal desktop.
   listener is permitted. The Agent accepts only a literal loopback IP, an explicit
   TCP port and a path exactly `/session/<sessionId>`; credentials, query strings
   and fragments are rejected.
+- The local media WebSocket upgrade is a separate authenticated trust boundary.
+  It accepts only a bounded HTTP/1.1 `GET /session/<sessionId>` request, a
+  canonical literal-loopback `Host` with explicit non-zero port, WebSocket
+  version 13, and exactly one `X-GPUbnb-Media-Token` header. Duplicate headers,
+  request bodies, transfer encoding, folded headers, cross-session paths and token
+  whitespace normalization are rejected before any media runtime is touched.
 - Worker control and encoded media are deliberately separate local transports.
   The privileged control pipe remains capped at 512-byte command/proof frames and
   MUST NOT carry H.264 payloads. Encoded H.264 travels worker -> service over a
