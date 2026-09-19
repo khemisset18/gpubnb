@@ -361,15 +361,11 @@ fn receive_polled_media_frame(
         .map_err(|_| ServiceRuntimeError::MediaProof)?;
 
     if control_frame.len() == WORKER_MEDIA_POLL_FRAME_SIZE {
-        let poll =
-            decode_worker_media_poll(&control_frame).map_err(|_| ServiceRuntimeError::MediaProof)?;
-        let status = validate_worker_media_poll(
-            generation,
-            command_sequence,
-            windows_session_id,
-            poll,
-        )
-        .map_err(|_| ServiceRuntimeError::MediaProof)?;
+        let poll = decode_worker_media_poll(&control_frame)
+            .map_err(|_| ServiceRuntimeError::MediaProof)?;
+        let status =
+            validate_worker_media_poll(generation, command_sequence, windows_session_id, poll)
+                .map_err(|_| ServiceRuntimeError::MediaProof)?;
 
         // A no-frame timeout is benign only while the exact leased GPU still maps
         // to the display adapter. Structural DXGI/device failures never use this
