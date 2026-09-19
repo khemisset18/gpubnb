@@ -17,16 +17,26 @@ use gpubnb_windows_platform::input::{
 #[cfg(any(target_os = "windows", test))]
 use gpubnb_windows_platform::media::MediaProbeError;
 #[cfg(target_os = "windows")]
-use gpubnb_windows_platform::media::{MediaProbeRequest, MediaSession, open_media_session};
+use gpubnb_windows_platform::media::{
+    EncodedMediaFrame, MediaProbeRequest, MediaSession, open_media_session,
+};
 #[cfg(target_os = "windows")]
-use gpubnb_windows_platform::pipe::connect_worker_pipe_client;
+use gpubnb_windows_platform::pipe::{
+    WorkerMediaPipeClient, WorkerPipeClient, connect_worker_media_pipe_client,
+    connect_worker_pipe_client,
+};
 #[cfg(target_os = "windows")]
 use gpubnb_windows_platform::session::current_process_session_id;
 use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
 #[cfg(target_os = "windows")]
+use gpubnb_windows_stream_helper::media_protocol::{
+    MEDIA_CODEC_H264, MEDIA_TRANSPORT_PROTOCOL_VERSION, WorkerMediaFrameHeader,
+    encode_worker_media_frame_header,
+};
+#[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::worker_protocol::{
-    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerHello, WorkerMediaProof, decode_worker_command,
-    decode_worker_display_spec, decode_worker_input, encode_worker_hello,
+    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerDisplaySpec, WorkerHello, WorkerMediaProof,
+    decode_worker_command, decode_worker_display_spec, decode_worker_input, encode_worker_hello,
     encode_worker_media_proof, validate_worker_command, validate_worker_display_spec,
     validate_worker_input,
 };
@@ -204,6 +214,68 @@ fn parse_args(args: &[String]) -> Result<WorkerArgs, WorkerError> {
     })
 }
 
+#[cfg(target_os = "windows")]
+fn send_encoded_media_frame(
+    control: &WorkerPipeClient,
+    media_pipe: &WorkerMediaPipeClient,
+    args: &WorkerArgs,
+    windows_session_id: u32,
+    spec: WorkerDisplaySpec,
+    command_sequence: u64,
+    media: &EncodedMediaFrame,
+) -> Result<(), WorkerError> {
+    let encoded_bytes = u32::try_from(media.bytes.len())
+        .map_err(|_| WorkerError::new("media_frame_too_large", 21))?;
+    let proof_value = WorkerMediaProof {
+        protocol_version: WORKER_PROTOCOL_VERSION,
+        generation: args.generation,
+        command_sequence,
+        windows_session_id,
+        adapter_luid: media.adapter_luid,
+        display_nonce: spec.display_nonce,
+        width: media.width,
+        height: media.height,
+        refresh_hz: media.refresh_hz,
+        frame_sequence: media.frame_sequence,
+        encoded_bytes,
+        proof_flags: media.proof_flags,
+    };
+    let proof = encode_worker_media_proof(proof_value)
+        .map_err(|_| WorkerError::new("media_proof_encode_failed", 21))?;
+
+    // Send the small proof first so the service can learn the exact expected
+    // payload length before it starts the bounded media-pipe read. This avoids
+    // deadlock on a multi-megabyte local write while preserving the independent
+    // control/media trust boundaries.
+    control
+        .send_frame(&proof)
+        .map_err(|_| WorkerError::new("media_proof_send_failed", 21))?;
+
+    let header = encode_worker_media_frame_header(WorkerMediaFrameHeader {
+        protocol_version: MEDIA_TRANSPORT_PROTOCOL_VERSION,
+        codec: MEDIA_CODEC_H264,
+        generation: args.generation,
+        command_sequence,
+        windows_session_id,
+        adapter_luid: media.adapter_luid,
+        display_nonce: spec.display_nonce,
+        frame_sequence: media.frame_sequence,
+        width: media.width,
+        height: media.height,
+        refresh_hz: media.refresh_hz,
+        payload_bytes: encoded_bytes,
+        proof_flags: media.proof_flags,
+    })
+    .map_err(|_| WorkerError::new("media_header_encode_failed", 21))?;
+    media_pipe
+        .send_message(&header)
+        .map_err(|_| WorkerError::new("media_header_send_failed", 21))?;
+    media_pipe
+        .send_message(&media.bytes)
+        .map_err(|_| WorkerError::new("media_payload_send_failed", 21))?;
+    Ok(())
+}
+
 fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
     #[cfg(not(target_os = "windows"))]
     {
@@ -231,6 +303,9 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
         client
             .send_frame(&frame)
             .map_err(|_| WorkerError::new("worker_hello_send_failed", 21))?;
+        let media_client =
+            connect_worker_media_pipe_client(&args.session_id, args.generation, PIPE_TIMEOUT_MS)
+                .map_err(|_| WorkerError::new("worker_media_pipe_connect_failed", 21))?;
 
         let mut expected_sequence = 1u64;
         let mut display_spec = None;
@@ -300,27 +375,39 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         .read_frame()
                         .map_err(|error| media_probe_error(error, false))?;
 
-                    let proof = encode_worker_media_proof(WorkerMediaProof {
-                        protocol_version: WORKER_PROTOCOL_VERSION,
-                        generation: args.generation,
-                        command_sequence,
+                    send_encoded_media_frame(
+                        &client,
+                        &media_client,
+                        args,
                         windows_session_id,
-                        adapter_luid: media.adapter_luid,
-                        display_nonce: spec.display_nonce,
-                        width: media.width,
-                        height: media.height,
-                        refresh_hz: media.refresh_hz,
-                        frame_sequence: media.frame_sequence,
-                        encoded_bytes: u32::try_from(media.bytes.len())
-                            .map_err(|_| WorkerError::new("media_frame_too_large", 21))?,
-                        proof_flags: media.proof_flags,
-                    })
-                    .map_err(|_| WorkerError::new("media_proof_encode_failed", 21))?;
-                    client
-                        .send_frame(&proof)
-                        .map_err(|_| WorkerError::new("media_proof_send_failed", 21))?;
+                        spec,
+                        command_sequence,
+                        &media,
+                    )?;
                     media_session = Some(session);
                     media_state = next_state;
+                }
+                WorkerCommand::ReadMediaFrame => {
+                    if !matches!(media_state, MediaState::Ready) {
+                        return Err(WorkerError::new("media_read_requires_ready", 21));
+                    }
+                    let spec =
+                        display_spec.ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
+                    let session = media_session
+                        .as_mut()
+                        .ok_or_else(|| WorkerError::new("media_session_missing", 21))?;
+                    let media = session
+                        .read_frame()
+                        .map_err(|error| media_probe_error(error, false))?;
+                    send_encoded_media_frame(
+                        &client,
+                        &media_client,
+                        args,
+                        windows_session_id,
+                        spec,
+                        command_sequence,
+                        &media,
+                    )?;
                 }
                 WorkerCommand::SuspendMedia => {
                     media_state = media_state.suspend()?;
@@ -374,25 +461,16 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         .read_frame()
                         .map_err(|error| media_probe_error(error, true))?;
 
-                    let proof = encode_worker_media_proof(WorkerMediaProof {
-                        protocol_version: WORKER_PROTOCOL_VERSION,
-                        generation: args.generation,
-                        command_sequence,
+                    send_encoded_media_frame(
+                        &client,
+                        &media_client,
+                        args,
                         windows_session_id,
-                        adapter_luid: media.adapter_luid,
-                        display_nonce: spec.display_nonce,
-                        width: media.width,
-                        height: media.height,
-                        refresh_hz: media.refresh_hz,
-                        frame_sequence: media.frame_sequence,
-                        encoded_bytes: u32::try_from(media.bytes.len())
-                            .map_err(|_| WorkerError::new("media_frame_too_large", 21))?,
-                        proof_flags: media.proof_flags,
-                    })
-                    .map_err(|_| WorkerError::new("resume_media_proof_encode_failed", 21))?;
-                    client
-                        .send_frame(&proof)
-                        .map_err(|_| WorkerError::new("resume_media_proof_send_failed", 21))?;
+                        spec,
+                        command_sequence,
+                        &media,
+                    )
+                    .map_err(|_| WorkerError::new("resume_media_transport_failed", 21))?;
 
                     media_session = Some(session);
                     media_state = next_state;

@@ -25,6 +25,7 @@ pub enum WorkerCommand {
     StartCapture,
     SuspendMedia,
     ResumeAfterFreshProof,
+    ReadMediaFrame,
     InjectInput,
     Stop,
 }
@@ -122,6 +123,7 @@ fn command_tag(command: WorkerCommand) -> u8 {
         WorkerCommand::ResumeAfterFreshProof => 4,
         WorkerCommand::Stop => 5,
         WorkerCommand::InjectInput => 6,
+        WorkerCommand::ReadMediaFrame => 7,
     }
 }
 
@@ -133,6 +135,7 @@ fn command_from_tag(tag: u8) -> Result<WorkerCommand, WorkerCommandError> {
         4 => Ok(WorkerCommand::ResumeAfterFreshProof),
         5 => Ok(WorkerCommand::Stop),
         6 => Ok(WorkerCommand::InjectInput),
+        7 => Ok(WorkerCommand::ReadMediaFrame),
         _ => Err(WorkerCommandError::InvalidCommand),
     }
 }
@@ -1325,9 +1328,10 @@ mod tests {
             WorkerCommand::StartCapture,
             WorkerCommand::SuspendMedia,
             WorkerCommand::ResumeAfterFreshProof,
+            WorkerCommand::ReadMediaFrame,
             WorkerCommand::InjectInput,
             WorkerCommand::Stop,
         ];
-        assert_eq!(commands.len(), 6);
+        assert_eq!(commands.len(), 7);
     }
 }

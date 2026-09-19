@@ -37,6 +37,17 @@ The helper must never capture the provider's personal desktop.
   listener is permitted. The Agent accepts only a literal loopback IP, an explicit
   TCP port and a path exactly `/session/<sessionId>`; credentials, query strings
   and fragments are rejected.
+- Worker control and encoded media are deliberately separate local transports.
+  The privileged control pipe remains capped at 512-byte command/proof frames and
+  MUST NOT carry H.264 payloads. Encoded H.264 travels worker -> service over a
+  distinct local-only named pipe with a protected DACL, remote clients rejected,
+  and the same exact renter logon SID + worker PID verification as the control pipe.
+- Each media frame starts with the fixed v1 80-byte media header and is followed
+  by exactly one bounded H.264 payload (maximum 8 MiB). The header binds the bytes
+  to generation, control-command sequence, WTS session id, adapter LUID, display
+  nonce, frame sequence, dimensions, refresh rate and the corresponding media
+  proof. Any mismatch, replay, zero/oversized length or partial proof revokes the
+  media runtime.
 - The helper never logs provider usernames, profile paths, browser data,
   document paths, tokens or renter credentials.
 

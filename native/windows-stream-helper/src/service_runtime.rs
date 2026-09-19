@@ -11,9 +11,13 @@ use crate::graphics_proof::{
     validate_graphics_proof_chain,
 };
 use crate::lifecycle::WorkspaceKind;
+use crate::media_protocol::{
+    BoundMediaFrame, MEDIA_FRAME_HEADER_SIZE, bind_worker_media_payload,
+    decode_worker_media_frame_header, validate_worker_media_frame_header,
+};
 use crate::worker_protocol::{
     WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerCommandFrame, WorkerDisplaySpec, WorkerFence,
-    WorkerInputEvent, WorkerInputFrame, decode_and_validate_worker_hello,
+    WorkerInputEvent, WorkerInputFrame, WorkerMediaProof, decode_and_validate_worker_hello,
     decode_worker_media_proof, encode_worker_command, encode_worker_display_spec,
     encode_worker_input, validate_worker_media_proof,
 };
@@ -23,7 +27,10 @@ use gpubnb_windows_platform::idd_control::{
     activate_virtual_display_lease,
 };
 use gpubnb_windows_platform::open_application_for_verification;
-use gpubnb_windows_platform::pipe::{WorkerPipe, create_worker_pipe, current_process_user_sid};
+use gpubnb_windows_platform::pipe::{
+    WorkerMediaPipe, WorkerPipe, create_worker_media_pipe, create_worker_pipe,
+    current_process_user_sid,
+};
 use gpubnb_windows_platform::process::{
     RenterWorkerLaunchSpec, RenterWorkerProcess, launch_qualified_renter_worker,
 };
@@ -48,6 +55,7 @@ pub enum ServiceRuntimeError {
     VirtualDisplay,
     WorkerProtocol,
     MediaProof,
+    MediaTransport,
     GraphicsProof,
     StopUnconfirmed,
     DisplayCleanup,
@@ -79,6 +87,7 @@ pub struct QualifiedGraphicsRuntime {
     // Drop order is deliberate. Losing the pipe wakes/fails the worker, then the
     // Job Object kills any remaining worker tree, then the IddCx lease is removed.
     pipe: WorkerPipe,
+    media_pipe: WorkerMediaPipe,
     worker: Option<RenterWorkerProcess>,
     display: Option<VirtualDisplayLease>,
     generation: u64,
@@ -86,6 +95,8 @@ pub struct QualifiedGraphicsRuntime {
     display_spec: WorkerDisplaySpec,
     gpu_uuid: String,
     next_sequence: u64,
+    last_frame_sequence: u64,
+    pending_media_frame: Option<BoundMediaFrame>,
     media_state: RuntimeMediaState,
 }
 
@@ -111,8 +122,62 @@ impl QualifiedGraphicsRuntime {
     }
 
     fn fail(&mut self, error: ServiceRuntimeError) -> ServiceRuntimeError {
+        self.pending_media_frame = None;
         self.media_state = RuntimeMediaState::Failed;
         error
+    }
+
+    pub fn take_fresh_media_frame(&mut self) -> Option<BoundMediaFrame> {
+        if !matches!(self.media_state, RuntimeMediaState::Ready) {
+            return None;
+        }
+        self.pending_media_frame.take()
+    }
+
+    pub fn read_media_frame(&mut self) -> Result<BoundMediaFrame, ServiceRuntimeError> {
+        if !matches!(self.media_state, RuntimeMediaState::Ready) {
+            return Err(ServiceRuntimeError::WorkerProtocol);
+        }
+        // Initial start and reconnect both deliver a fresh IDR proof frame. Drain
+        // that already-validated frame before asking the worker for another one so
+        // callers can use one API without accidentally skipping/reordering bytes.
+        if let Some(frame) = self.pending_media_frame.take() {
+            return Ok(frame);
+        }
+        let sequence = self.next_sequence;
+        let next_sequence = match sequence.checked_add(1) {
+            Some(value) => value,
+            None => return Err(self.fail(ServiceRuntimeError::WorkerProtocol)),
+        };
+        let command = encode_worker_command(WorkerCommandFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            command: WorkerCommand::ReadMediaFrame,
+            generation: self.generation,
+            sequence,
+        })
+        .map_err(|_| self.fail(ServiceRuntimeError::WorkerProtocol))?;
+        if self.pipe.send_frame(&command).is_err() {
+            return Err(self.fail(ServiceRuntimeError::WorkerProtocol));
+        }
+        self.next_sequence = next_sequence;
+
+        let frame = match receive_bound_media_frame(
+            &self.pipe,
+            &self.media_pipe,
+            self.generation,
+            sequence,
+            self.windows_session_id,
+            self.display_spec,
+            &self.gpu_uuid,
+        ) {
+            Ok(frame) => frame,
+            Err(error) => return Err(self.fail(error)),
+        };
+        if frame.header.frame_sequence <= self.last_frame_sequence {
+            return Err(self.fail(ServiceRuntimeError::MediaTransport));
+        }
+        self.last_frame_sequence = frame.header.frame_sequence;
+        Ok(frame)
     }
 
     pub fn inject_input(&mut self, event: WorkerInputEvent) -> Result<(), ServiceRuntimeError> {
@@ -168,6 +233,8 @@ impl QualifiedGraphicsRuntime {
             return Err(self.fail(ServiceRuntimeError::WorkerProtocol));
         }
         self.next_sequence = next_sequence;
+        self.pending_media_frame = None;
+        self.last_frame_sequence = 0;
         self.media_state = RuntimeMediaState::Suspended;
         Ok(())
     }
@@ -195,74 +262,20 @@ impl QualifiedGraphicsRuntime {
         // the sequence even if its proof later fails or the process disconnects.
         self.next_sequence = next_sequence;
 
-        let proof_frame = match self.pipe.read_frame(PIPE_TIMEOUT_MS) {
-            Ok(frame) => frame,
-            Err(_) => return Err(self.fail(ServiceRuntimeError::MediaProof)),
-        };
-        let media = match decode_worker_media_proof(&proof_frame) {
-            Ok(proof) => proof,
-            Err(_) => return Err(self.fail(ServiceRuntimeError::MediaProof)),
-        };
-        if validate_worker_media_proof(
+        let frame = match receive_bound_media_frame(
+            &self.pipe,
+            &self.media_pipe,
             self.generation,
             sequence,
             self.windows_session_id,
             self.display_spec,
-            media,
-        )
-        .is_err()
-        {
-            return Err(self.fail(ServiceRuntimeError::MediaProof));
-        }
-
-        // A reconnect proof is only fresh if the exact NVIDIA UUID still maps to
-        // the adapter LUID used by the surviving virtual display and worker.
-        let identity = match resolve_nvidia_uuid_to_luid(&self.gpu_uuid) {
-            Ok(identity) => identity,
-            Err(_) => return Err(self.fail(ServiceRuntimeError::ExactGpu)),
-        };
-        if identity.luid != self.display_spec.adapter_luid {
-            return Err(self.fail(ServiceRuntimeError::ExactGpu));
-        }
-
-        if validate_graphics_proof_chain(
-            self.generation,
-            self.windows_session_id,
             &self.gpu_uuid,
-            VirtualDisplayProof {
-                generation: self.generation,
-                windows_session_id: self.windows_session_id,
-                display_nonce: self.display_spec.display_nonce,
-                adapter_luid: self.display_spec.adapter_luid,
-                width: self.display_spec.width,
-                height: self.display_spec.height,
-                refresh_hz: self.display_spec.refresh_hz,
-                provider_desktop_excluded: true,
-            },
-            CaptureFrameProof {
-                generation: self.generation,
-                windows_session_id: self.windows_session_id,
-                display_nonce: self.display_spec.display_nonce,
-                adapter_luid: self.display_spec.adapter_luid,
-                frame_sequence: media.frame_sequence,
-                width: media.width,
-                height: media.height,
-                format: PixelFormat::Bgra8Unorm,
-            },
-            &NvencProof {
-                generation: self.generation,
-                adapter_luid: self.display_spec.adapter_luid,
-                gpu_uuid: self.gpu_uuid.clone(),
-                input_frame_sequence: media.frame_sequence,
-                codec: EncodeCodec::H264,
-                encoded_bytes: u64::from(media.encoded_bytes),
-            },
-        )
-        .is_err()
-        {
-            return Err(self.fail(ServiceRuntimeError::GraphicsProof));
-        }
-
+        ) {
+            Ok(frame) => frame,
+            Err(error) => return Err(self.fail(error)),
+        };
+        self.last_frame_sequence = frame.header.frame_sequence;
+        self.pending_media_frame = Some(frame);
         self.media_state = RuntimeMediaState::Ready;
         Ok(())
     }
@@ -307,6 +320,98 @@ fn workspace_slug(workspace: WorkspaceKind) -> &'static str {
         WorkspaceKind::Cad => "cad",
         WorkspaceKind::Gaming => "gaming",
     }
+}
+
+fn receive_bound_media_frame(
+    pipe: &WorkerPipe,
+    media_pipe: &WorkerMediaPipe,
+    generation: u64,
+    command_sequence: u64,
+    windows_session_id: u32,
+    display_spec: WorkerDisplaySpec,
+    gpu_uuid: &str,
+) -> Result<BoundMediaFrame, ServiceRuntimeError> {
+    let proof_frame = pipe
+        .read_frame(PIPE_TIMEOUT_MS)
+        .map_err(|_| ServiceRuntimeError::MediaProof)?;
+    let proof: WorkerMediaProof =
+        decode_worker_media_proof(&proof_frame).map_err(|_| ServiceRuntimeError::MediaProof)?;
+    validate_worker_media_proof(
+        generation,
+        command_sequence,
+        windows_session_id,
+        display_spec,
+        proof,
+    )
+    .map_err(|_| ServiceRuntimeError::MediaProof)?;
+
+    let header_bytes = media_pipe
+        .read_message_exact(MEDIA_FRAME_HEADER_SIZE, PIPE_TIMEOUT_MS)
+        .map_err(|_| ServiceRuntimeError::MediaTransport)?;
+    let header = decode_worker_media_frame_header(&header_bytes)
+        .map_err(|_| ServiceRuntimeError::MediaTransport)?;
+    validate_worker_media_frame_header(
+        generation,
+        command_sequence,
+        windows_session_id,
+        display_spec,
+        proof,
+        header,
+    )
+    .map_err(|_| ServiceRuntimeError::MediaTransport)?;
+
+    // Header validation happens before allocation and guarantees a non-zero
+    // payload length at or below the hard 8 MiB protocol ceiling.
+    let payload = media_pipe
+        .read_message_exact(header.payload_bytes as usize, PIPE_TIMEOUT_MS)
+        .map_err(|_| ServiceRuntimeError::MediaTransport)?;
+    let frame =
+        bind_worker_media_payload(header, payload).map_err(|_| ServiceRuntimeError::MediaTransport)?;
+
+    // The media DLL revalidates UUID -> LUID for every capture; repeat the check
+    // in the privileged service before accepting the bytes into the data plane.
+    let identity =
+        resolve_nvidia_uuid_to_luid(gpu_uuid).map_err(|_| ServiceRuntimeError::ExactGpu)?;
+    if identity.luid != display_spec.adapter_luid {
+        return Err(ServiceRuntimeError::ExactGpu);
+    }
+
+    validate_graphics_proof_chain(
+        generation,
+        windows_session_id,
+        gpu_uuid,
+        VirtualDisplayProof {
+            generation,
+            windows_session_id,
+            display_nonce: display_spec.display_nonce,
+            adapter_luid: display_spec.adapter_luid,
+            width: display_spec.width,
+            height: display_spec.height,
+            refresh_hz: display_spec.refresh_hz,
+            provider_desktop_excluded: true,
+        },
+        CaptureFrameProof {
+            generation,
+            windows_session_id,
+            display_nonce: display_spec.display_nonce,
+            adapter_luid: display_spec.adapter_luid,
+            frame_sequence: proof.frame_sequence,
+            width: proof.width,
+            height: proof.height,
+            format: PixelFormat::Bgra8Unorm,
+        },
+        &NvencProof {
+            generation,
+            adapter_luid: display_spec.adapter_luid,
+            gpu_uuid: gpu_uuid.to_owned(),
+            input_frame_sequence: proof.frame_sequence,
+            codec: EncodeCodec::H264,
+            encoded_bytes: u64::from(proof.encoded_bytes),
+        },
+    )
+    .map_err(|_| ServiceRuntimeError::GraphicsProof)?;
+
+    Ok(frame)
 }
 
 fn hex_nibble(value: u8) -> Option<u8> {
@@ -372,6 +477,13 @@ pub fn start_qualified_graphics_runtime(
         renter.logon_sid(),
     )
     .map_err(|_| ServiceRuntimeError::Pipe)?;
+    let media_pipe = create_worker_media_pipe(
+        config.session_id,
+        config.generation,
+        &service_sid,
+        renter.logon_sid(),
+    )
+    .map_err(|_| ServiceRuntimeError::Pipe)?;
 
     let verified_worker = open_application_for_verification(Path::new(WORKER_PATH))
         .map_err(|_| ServiceRuntimeError::WorkerTrust)?;
@@ -405,6 +517,9 @@ pub fn start_qualified_graphics_runtime(
         &hello_frame,
     )
     .map_err(|_| ServiceRuntimeError::WorkerHandshake)?;
+    media_pipe
+        .accept_verified_client(renter.logon_sid(), worker.pid(), PIPE_TIMEOUT_MS)
+        .map_err(|_| ServiceRuntimeError::WorkerHandshake)?;
 
     let identity =
         resolve_nvidia_uuid_to_luid(config.gpu_uuid).map_err(|_| ServiceRuntimeError::ExactGpu)?;
@@ -461,59 +576,19 @@ pub fn start_qualified_graphics_runtime(
     pipe.send_frame(&capture)
         .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
 
-    let proof_frame = pipe
-        .read_frame(PIPE_TIMEOUT_MS)
-        .map_err(|_| ServiceRuntimeError::MediaProof)?;
-    let media =
-        decode_worker_media_proof(&proof_frame).map_err(|_| ServiceRuntimeError::MediaProof)?;
-    validate_worker_media_proof(
+    let initial_media_frame = receive_bound_media_frame(
+        &pipe,
+        &media_pipe,
         config.generation,
         2,
         config.windows_session_id,
         display_spec,
-        media,
-    )
-    .map_err(|_| ServiceRuntimeError::MediaProof)?;
-
-    validate_graphics_proof_chain(
-        config.generation,
-        config.windows_session_id,
         config.gpu_uuid,
-        VirtualDisplayProof {
-            generation: config.generation,
-            windows_session_id: config.windows_session_id,
-            display_nonce: config.display_nonce,
-            adapter_luid: identity.luid,
-            width: config.width,
-            height: config.height,
-            refresh_hz: config.refresh_hz,
-            // The media DLL locates the output by the GPUbnb nonce-derived
-            // ContainerId and exact LUID; it never captures an arbitrary output.
-            provider_desktop_excluded: true,
-        },
-        CaptureFrameProof {
-            generation: config.generation,
-            windows_session_id: config.windows_session_id,
-            display_nonce: config.display_nonce,
-            adapter_luid: identity.luid,
-            frame_sequence: media.frame_sequence,
-            width: media.width,
-            height: media.height,
-            format: PixelFormat::Bgra8Unorm,
-        },
-        &NvencProof {
-            generation: config.generation,
-            adapter_luid: identity.luid,
-            gpu_uuid: config.gpu_uuid.to_owned(),
-            input_frame_sequence: media.frame_sequence,
-            codec: EncodeCodec::H264,
-            encoded_bytes: u64::from(media.encoded_bytes),
-        },
-    )
-    .map_err(|_| ServiceRuntimeError::GraphicsProof)?;
+    )?;
 
     Ok(QualifiedGraphicsRuntime {
         pipe,
+        media_pipe,
         worker: Some(worker),
         display: Some(display),
         generation: config.generation,
@@ -521,6 +596,8 @@ pub fn start_qualified_graphics_runtime(
         display_spec,
         gpu_uuid: config.gpu_uuid.to_owned(),
         next_sequence: 3,
+        last_frame_sequence: initial_media_frame.header.frame_sequence,
+        pending_media_frame: Some(initial_media_frame),
         media_state: RuntimeMediaState::Ready,
     })
 }

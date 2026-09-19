@@ -11,7 +11,10 @@ const MAX_SID_TEXT: usize = 184;
 const RENTER_PIPE_ACCESS_MASK: u32 = 0x0012_019B;
 #[cfg(target_os = "windows")]
 const PIPE_AUTH_PRELUDE: u8 = 0x47;
+#[cfg(target_os = "windows")]
+const MEDIA_PIPE_AUTH_PRELUDE: u8 = 0x4d;
 pub const WORKER_PIPE_FRAME_MAX: usize = 512;
+pub const WORKER_MEDIA_MESSAGE_MAX: usize = 8 * 1024 * 1024;
 #[cfg(target_os = "windows")]
 const WORKER_PIPE_PACKET_SIZE: usize = WORKER_PIPE_FRAME_MAX + 2;
 
@@ -45,6 +48,15 @@ fn pipe_name(session_id: &str, generation: u64) -> Result<String, PlatformError>
         return Err(PlatformError::InvalidSessionId);
     }
     Ok(format!(r"\\.\pipe\gpubnb-native-{session_id}-{generation}"))
+}
+
+fn media_pipe_name(session_id: &str, generation: u64) -> Result<String, PlatformError> {
+    if !safe_session_id(session_id) || generation == 0 {
+        return Err(PlatformError::InvalidSessionId);
+    }
+    Ok(format!(
+        r"\\.\pipe\gpubnb-native-media-{session_id}-{generation}"
+    ))
 }
 
 fn security_sddl(service_sid: &str, renter_logon_sid: &str) -> Result<String, PlatformError> {
@@ -102,10 +114,98 @@ impl WorkerPipeClient {
     }
 }
 
+pub struct WorkerMediaPipeClient {
+    name: String,
+    #[cfg(target_os = "windows")]
+    _handle: windows_impl::OwnedClientHandle,
+}
+
+impl WorkerMediaPipeClient {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn send_message(&self, message: &[u8]) -> Result<(), PlatformError> {
+        if message.is_empty() || message.len() > WORKER_MEDIA_MESSAGE_MAX {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::send_media_message(&self._handle, message)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err(PlatformError::WindowsRequired)
+        }
+    }
+}
+
 pub struct WorkerPipe {
     name: String,
     #[cfg(target_os = "windows")]
     _handle: windows_impl::OwnedPipeHandle,
+}
+
+pub struct WorkerMediaPipe {
+    name: String,
+    #[cfg(target_os = "windows")]
+    _handle: windows_impl::OwnedPipeHandle,
+}
+
+impl WorkerMediaPipe {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn read_message_exact(
+        &self,
+        expected_size: usize,
+        timeout_ms: u32,
+    ) -> Result<Vec<u8>, PlatformError> {
+        if expected_size == 0
+            || expected_size > WORKER_MEDIA_MESSAGE_MAX
+            || timeout_ms == 0
+        {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::read_media_message_exact(&self._handle, expected_size, timeout_ms)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = (expected_size, timeout_ms);
+            Err(PlatformError::WindowsRequired)
+        }
+    }
+
+    pub fn accept_verified_client(
+        &self,
+        expected_logon_sid: &str,
+        expected_process_id: u32,
+        timeout_ms: u32,
+    ) -> Result<VerifiedPipeClient, PlatformError> {
+        if !numeric_sid(expected_logon_sid) || timeout_ms == 0 {
+            return Err(PlatformError::InvalidSid);
+        }
+        if expected_process_id == 0 {
+            return Err(PlatformError::PipeClientPidMismatch);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::accept_verified_media_client(
+                &self._handle,
+                expected_logon_sid,
+                expected_process_id,
+                timeout_ms,
+            )
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = (expected_process_id, timeout_ms);
+            Err(PlatformError::WindowsRequired)
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,6 +298,27 @@ pub fn connect_worker_pipe_client(
     }
 }
 
+pub fn connect_worker_media_pipe_client(
+    session_id: &str,
+    generation: u64,
+    timeout_ms: u32,
+) -> Result<WorkerMediaPipeClient, PlatformError> {
+    let name = media_pipe_name(session_id, generation)?;
+    if timeout_ms == 0 {
+        return Err(PlatformError::PipeConnectTimeout);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::connect_worker_media_pipe_client(name, timeout_ms)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (name, timeout_ms);
+        Err(PlatformError::WindowsRequired)
+    }
+}
+
 pub fn create_worker_pipe(
     session_id: &str,
     generation: u64,
@@ -210,6 +331,26 @@ pub fn create_worker_pipe(
     #[cfg(target_os = "windows")]
     {
         windows_impl::create_worker_pipe(name, &sddl)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (name, sddl);
+        Err(PlatformError::WindowsRequired)
+    }
+}
+
+pub fn create_worker_media_pipe(
+    session_id: &str,
+    generation: u64,
+    service_sid: &str,
+    renter_logon_sid: &str,
+) -> Result<WorkerMediaPipe, PlatformError> {
+    let name = media_pipe_name(session_id, generation)?;
+    let sddl = security_sddl(service_sid, renter_logon_sid)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::create_worker_media_pipe(name, &sddl)
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -241,7 +382,8 @@ pub fn current_process_logon_sid() -> Result<String, PlatformError> {
 #[cfg(target_os = "windows")]
 mod windows_impl {
     use super::{
-        PIPE_AUTH_PRELUDE, VerifiedPipeClient, WORKER_PIPE_FRAME_MAX, WORKER_PIPE_PACKET_SIZE,
+        MEDIA_PIPE_AUTH_PRELUDE, PIPE_AUTH_PRELUDE, VerifiedPipeClient, WORKER_MEDIA_MESSAGE_MAX,
+        WORKER_PIPE_FRAME_MAX, WORKER_PIPE_PACKET_SIZE, WorkerMediaPipe, WorkerMediaPipeClient,
         WorkerPipe, WorkerPipeClient,
     };
     use crate::PlatformError;
@@ -271,6 +413,7 @@ mod windows_impl {
     const WAIT_OBJECT_0: u32 = 0;
     const WAIT_TIMEOUT: u32 = 258;
     const INFINITE: u32 = u32::MAX;
+    const PIPE_ACCESS_INBOUND: u32 = 0x0000_0001;
     const PIPE_ACCESS_DUPLEX: u32 = 0x0000_0003;
     const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x0008_0000;
     const FILE_FLAG_OVERLAPPED: u32 = 0x4000_0000;
@@ -736,7 +879,11 @@ mod windows_impl {
         }
     }
 
-    fn read_auth_prelude(pipe: Handle, timeout_ms: u32) -> Result<(), PlatformError> {
+    fn read_auth_prelude(
+        pipe: Handle,
+        timeout_ms: u32,
+        expected_prelude: u8,
+    ) -> Result<(), PlatformError> {
         let event = create_event().map_err(|_| PlatformError::PipeReadFailed)?;
         let mut overlapped = Overlapped::new(event.0);
         let mut prelude = 0u8;
@@ -772,7 +919,7 @@ mod windows_impl {
                 PlatformError::PipeReadFailed,
             )?
         };
-        if transferred != 1 || prelude != PIPE_AUTH_PRELUDE {
+        if transferred != 1 || prelude != expected_prelude {
             return Err(PlatformError::PipeProtocolFailed);
         }
         Ok(())
@@ -813,6 +960,40 @@ mod windows_impl {
         write_message(handle.0, &prelude, timeout_ms)?;
 
         Ok(WorkerPipeClient {
+            name,
+            _handle: handle,
+        })
+    }
+
+    pub(super) fn connect_worker_media_pipe_client(
+        name: String,
+        timeout_ms: u32,
+    ) -> Result<WorkerMediaPipeClient, PlatformError> {
+        let wide_name = wide(OsStr::new(&name))?;
+        // SAFETY: bounded wait on a local-only named pipe.
+        let available = unsafe { WaitNamedPipeW(wide_name.as_ptr(), timeout_ms) };
+        if available == 0 {
+            return Err(PlatformError::PipeConnectTimeout);
+        }
+        // The media client is write-only. SECURITY_IDENTIFICATION limits the
+        // privileged server to identity inspection during the authentication prelude.
+        let raw = unsafe {
+            CreateFileW(
+                wide_name.as_ptr(),
+                GENERIC_WRITE,
+                0,
+                ptr::null_mut(),
+                OPEN_EXISTING,
+                SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION | FILE_FLAG_OVERLAPPED,
+                0,
+            )
+        };
+        if raw == INVALID_HANDLE_VALUE {
+            return Err(PlatformError::PipeConnectFailed);
+        }
+        let handle = OwnedClientHandle(raw);
+        write_message(handle.0, &[MEDIA_PIPE_AUTH_PRELUDE], timeout_ms)?;
+        Ok(WorkerMediaPipeClient {
             name,
             _handle: handle,
         })
@@ -885,6 +1066,16 @@ mod windows_impl {
         send_frame_handle(pipe.0, frame)
     }
 
+    pub(super) fn send_media_message(
+        client: &OwnedClientHandle,
+        message: &[u8],
+    ) -> Result<(), PlatformError> {
+        if message.is_empty() || message.len() > WORKER_MEDIA_MESSAGE_MAX {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        write_message(client.0, message, 10_000)
+    }
+
     fn read_frame_handle(handle: Handle, timeout_ms: u32) -> Result<Vec<u8>, PlatformError> {
         let event = create_event().map_err(|_| PlatformError::PipeReadFailed)?;
         let mut overlapped = Overlapped::new(event.0);
@@ -953,14 +1144,79 @@ mod windows_impl {
         read_frame_handle(client.0, timeout_ms)
     }
 
-    pub(super) fn accept_verified_client(
+    fn read_exact_message_handle(
+        handle: Handle,
+        expected_size: usize,
+        timeout_ms: u32,
+    ) -> Result<Vec<u8>, PlatformError> {
+        if expected_size == 0
+            || expected_size > WORKER_MEDIA_MESSAGE_MAX
+            || expected_size > u32::MAX as usize
+            || timeout_ms == 0
+        {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+
+        let event = create_event().map_err(|_| PlatformError::PipeReadFailed)?;
+        let mut overlapped = Overlapped::new(event.0);
+        let mut message = vec![0u8; expected_size];
+        // SAFETY: message is writable for exactly expected_size bytes and all
+        // OVERLAPPED storage remains live until completion.
+        let immediate = unsafe {
+            ReadFile(
+                handle,
+                message.as_mut_ptr().cast::<c_void>(),
+                expected_size as u32,
+                ptr::null_mut(),
+                &mut overlapped,
+            )
+        };
+        let transferred = if immediate != 0 {
+            let mut transferred = 0u32;
+            let ok = unsafe { GetOverlappedResult(handle, &mut overlapped, &mut transferred, 0) };
+            if ok == 0 {
+                return Err(PlatformError::PipeReadFailed);
+            }
+            transferred
+        } else {
+            let error = unsafe { GetLastError() };
+            if error == ERROR_MORE_DATA {
+                return Err(PlatformError::PipeProtocolFailed);
+            }
+            if error != ERROR_IO_PENDING {
+                return Err(PlatformError::PipeReadFailed);
+            }
+            wait_pending(
+                handle,
+                &mut overlapped,
+                timeout_ms,
+                PlatformError::PipeConnectTimeout,
+                PlatformError::PipeReadFailed,
+            )?
+        };
+        if transferred as usize != expected_size {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        Ok(message)
+    }
+
+    pub(super) fn read_media_message_exact(
+        pipe: &OwnedPipeHandle,
+        expected_size: usize,
+        timeout_ms: u32,
+    ) -> Result<Vec<u8>, PlatformError> {
+        read_exact_message_handle(pipe.0, expected_size, timeout_ms)
+    }
+
+    fn accept_verified_client_with_prelude(
         pipe: &OwnedPipeHandle,
         expected_logon_sid: &str,
         expected_process_id: u32,
         timeout_ms: u32,
+        expected_prelude: u8,
     ) -> Result<VerifiedPipeClient, PlatformError> {
         connect_client(pipe.0, timeout_ms)?;
-        read_auth_prelude(pipe.0, timeout_ms)?;
+        read_auth_prelude(pipe.0, timeout_ms, expected_prelude)?;
 
         let mut process_id = 0u32;
         // SAFETY: pipe is a connected server handle and process_id is a valid out pointer.
@@ -1011,6 +1267,36 @@ mod windows_impl {
         peer_result
     }
 
+    pub(super) fn accept_verified_client(
+        pipe: &OwnedPipeHandle,
+        expected_logon_sid: &str,
+        expected_process_id: u32,
+        timeout_ms: u32,
+    ) -> Result<VerifiedPipeClient, PlatformError> {
+        accept_verified_client_with_prelude(
+            pipe,
+            expected_logon_sid,
+            expected_process_id,
+            timeout_ms,
+            PIPE_AUTH_PRELUDE,
+        )
+    }
+
+    pub(super) fn accept_verified_media_client(
+        pipe: &OwnedPipeHandle,
+        expected_logon_sid: &str,
+        expected_process_id: u32,
+        timeout_ms: u32,
+    ) -> Result<VerifiedPipeClient, PlatformError> {
+        accept_verified_client_with_prelude(
+            pipe,
+            expected_logon_sid,
+            expected_process_id,
+            timeout_ms,
+            MEDIA_PIPE_AUTH_PRELUDE,
+        )
+    }
+
     pub(super) fn create_worker_pipe(
         name: String,
         sddl: &str,
@@ -1042,6 +1328,42 @@ mod windows_impl {
             return Err(PlatformError::PipeCreateFailed);
         }
         Ok(WorkerPipe {
+            name,
+            _handle: OwnedPipeHandle(raw),
+        })
+    }
+
+    pub(super) fn create_worker_media_pipe(
+        name: String,
+        sddl: &str,
+    ) -> Result<WorkerMediaPipe, PlatformError> {
+        let wide_name = wide(OsStr::new(&name))?;
+        let descriptor = security_descriptor(sddl)?;
+        let mut attributes = SecurityAttributes {
+            length: size_of::<SecurityAttributes>() as u32,
+            security_descriptor: descriptor.0,
+            inherit_handle: 0,
+        };
+
+        // Media is one-way renter worker -> privileged service. FIRST_PIPE_INSTANCE
+        // and a protected DACL prevent namespace squatting; remote clients are
+        // rejected by the kernel before the PID/SID verification prelude.
+        let raw = unsafe {
+            CreateNamedPipeW(
+                wide_name.as_ptr(),
+                PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
+                PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS,
+                1,
+                0,
+                64 * 1024,
+                5_000,
+                &mut attributes,
+            )
+        };
+        if raw == INVALID_HANDLE_VALUE {
+            return Err(PlatformError::PipeCreateFailed);
+        }
+        Ok(WorkerMediaPipe {
             name,
             _handle: OwnedPipeHandle(raw),
         })
@@ -1100,7 +1422,33 @@ mod tests {
             pipe_name("sess-1", 7).expect("valid pipe name"),
             r"\\.\pipe\gpubnb-native-sess-1-7"
         );
+        assert_eq!(
+            media_pipe_name("sess-1", 7).expect("valid media pipe name"),
+            r"\\.\pipe\gpubnb-native-media-sess-1-7"
+        );
         assert_eq!(pipe_name("sess-1", 0), Err(PlatformError::InvalidSessionId));
+        assert_eq!(
+            media_pipe_name("../provider", 7),
+            Err(PlatformError::InvalidSessionId)
+        );
+    }
+
+    #[test]
+    fn media_messages_are_bounded_before_io() {
+        #[cfg(not(target_os = "windows"))]
+        {
+            let client = WorkerMediaPipeClient {
+                name: "test-media".to_owned(),
+            };
+            assert_eq!(
+                client.send_message(&vec![0u8; WORKER_MEDIA_MESSAGE_MAX + 1]),
+                Err(PlatformError::PipeProtocolFailed)
+            );
+            assert_eq!(
+                client.send_message(&[]),
+                Err(PlatformError::PipeProtocolFailed)
+            );
+        }
     }
 
     #[cfg(target_os = "windows")]
@@ -1108,14 +1456,27 @@ mod tests {
     fn windows_creates_local_pipe_with_explicit_current_token_sids() {
         let service_sid = current_process_user_sid().expect("current user SID");
         let logon_sid = current_process_logon_sid().expect("current logon SID");
+        let generation = std::process::id() as u64;
         let pipe = create_worker_pipe(
             "ci-secure-pipe",
-            std::process::id() as u64,
+            generation,
             &service_sid,
             &logon_sid,
         )
         .expect("secure pipe");
+        let media_pipe = create_worker_media_pipe(
+            "ci-secure-pipe",
+            generation,
+            &service_sid,
+            &logon_sid,
+        )
+        .expect("secure media pipe");
         assert!(pipe.name().starts_with(r"\\.\pipe\gpubnb-native-"));
+        assert!(
+            media_pipe
+                .name()
+                .starts_with(r"\\.\pipe\gpubnb-native-media-")
+        );
     }
 
     #[cfg(target_os = "windows")]
