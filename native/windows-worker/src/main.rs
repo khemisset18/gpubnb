@@ -5,27 +5,34 @@
 //! graphical backend remains deliberately fail-closed until virtual display,
 //! DXGI capture, exact-GPU NVENC and isolated input are implemented.
 
+#[cfg(target_os = "windows")]
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
+#[cfg(target_os = "windows")]
+use gpubnb_windows_platform::input::inject_input;
 use gpubnb_windows_platform::input::{
-    InputEvent as PlatformInputEvent, MouseButton as PlatformMouseButton, inject_input,
+    InputEvent as PlatformInputEvent, MouseButton as PlatformMouseButton,
 };
-use gpubnb_windows_platform::media::{
-    MediaProbeError, MediaProbeRequest, MediaSession, open_media_session,
-};
+use gpubnb_windows_platform::media::MediaProbeError;
+#[cfg(target_os = "windows")]
+use gpubnb_windows_platform::media::{MediaProbeRequest, MediaSession, open_media_session};
+#[cfg(target_os = "windows")]
 use gpubnb_windows_platform::pipe::connect_worker_pipe_client;
+#[cfg(target_os = "windows")]
 use gpubnb_windows_platform::session::current_process_session_id;
 use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
+use gpubnb_windows_stream_helper::worker_protocol::{WorkerInputEvent, WorkerMouseButton};
+#[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::worker_protocol::{
-    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerHello, WorkerInputEvent, WorkerMediaProof,
-    WorkerMouseButton, decode_worker_command, decode_worker_display_spec, decode_worker_input,
-    encode_worker_hello, encode_worker_media_proof, validate_worker_command,
-    validate_worker_display_spec, validate_worker_input,
+    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerHello, WorkerMediaProof, decode_worker_command,
+    decode_worker_display_spec, decode_worker_input, encode_worker_hello, encode_worker_media_proof,
+    validate_worker_command, validate_worker_display_spec, validate_worker_input,
 };
 use std::env;
 use std::process::ExitCode;
 
 const MAX_SESSION_ID: usize = 128;
 const MAX_GPU_UUID: usize = 64;
+#[cfg(target_os = "windows")]
 const PIPE_TIMEOUT_MS: u32 = 10_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,6 +55,7 @@ impl WorkerError {
     }
 }
 
+#[cfg(any(target_os = "windows", test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MediaState {
     Empty,
@@ -56,6 +64,7 @@ enum MediaState {
     Suspended,
 }
 
+#[cfg(any(target_os = "windows", test))]
 impl MediaState {
     fn prepare(self) -> Result<Self, WorkerError> {
         match self {
@@ -393,6 +402,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
     }
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn platform_input(event: WorkerInputEvent) -> PlatformInputEvent {
     match event {
         WorkerInputEvent::KeyScan {
@@ -424,6 +434,7 @@ fn platform_input(event: WorkerInputEvent) -> PlatformInputEvent {
     }
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn media_probe_error(error: MediaProbeError, resume: bool) -> WorkerError {
     let code = match (resume, error) {
         (_, MediaProbeError::CaptureTimeout) => "media_capture_timeout",
