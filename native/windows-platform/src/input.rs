@@ -74,10 +74,7 @@ fn validate_event(event: InputEvent) -> Result<(), InputError> {
     Ok(())
 }
 
-pub fn inject_input(
-    expected_windows_session_id: u32,
-    event: InputEvent,
-) -> Result<(), InputError> {
+pub fn inject_input(expected_windows_session_id: u32, event: InputEvent) -> Result<(), InputError> {
     validate_event(event)?;
     if expected_windows_session_id == 0 {
         return Err(InputError::WrongSession);
