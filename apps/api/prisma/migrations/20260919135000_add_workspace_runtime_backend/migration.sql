@@ -16,3 +16,24 @@ ALTER COLUMN "runtimeBackend" SET NOT NULL;
 
 CREATE INDEX "WorkspaceSession_machineId_runtimeBackend_status_idx"
 ON "WorkspaceSession"("machineId", "runtimeBackend", "status");
+
+-- Backend identity is part of the reservation authority. Changing it after
+-- insertion would be a cross-runtime migration and is forbidden: stop the old
+-- session and create a freshly qualified one instead.
+CREATE OR REPLACE FUNCTION "guard_workspace_runtime_backend_immutable"()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW."runtimeBackend" IS DISTINCT FROM OLD."runtimeBackend" THEN
+    RAISE EXCEPTION 'workspace runtime backend is immutable'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "WorkspaceSession_runtime_backend_immutable"
+BEFORE UPDATE OF "runtimeBackend" ON "WorkspaceSession"
+FOR EACH ROW
+EXECUTE FUNCTION "guard_workspace_runtime_backend_immutable"();
