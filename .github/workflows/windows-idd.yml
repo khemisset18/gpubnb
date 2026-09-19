@@ -55,6 +55,21 @@ jobs:
             throw "IddCx monitor mutation was enabled without physical qualification"
           }
 
+      - name: Verify custom IOCTLs stay on the IddCx control path
+        shell: pwsh
+        run: |
+          $driver = Get-Content native/windows-idd/Driver.cpp -Raw
+          $header = Get-Content native/windows-idd/Driver.h -Raw
+          if ($driver -notmatch 'EvtIddCxDeviceIoControl\s*=\s*GPUbnbEvtIddCxDeviceIoControl') {
+            throw "GPUbnb control IOCTLs must be registered through IDD_CX_CLIENT_CONFIG"
+          }
+          if ($header -notmatch 'EVT_IDD_CX_DEVICE_IO_CONTROL\s+GPUbnbEvtIddCxDeviceIoControl') {
+            throw "GPUbnb IddCx control callback declaration is missing"
+          }
+          if ($driver -match 'EvtIoDeviceControl\s*=') {
+            throw "Do not route GPUbnb IddCx control IOCTLs through a default WDF queue"
+          }
+
       - name: Verify VS2026 toolchain selected for WDK NuGet
         shell: pwsh
         run: |
