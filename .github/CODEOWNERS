@@ -1,0 +1,20 @@
+# Security-sensitive ownership. Keep these paths under explicit maintainer review.
+* @khemisset18
+
+/.github/workflows/ @khemisset18
+/.github/dependabot.yml @khemisset18
+/scripts/audit-github-actions.py @khemisset18
+/scripts/sign-windows-authenticode.ps1 @khemisset18
+/scripts/verify-windows-release.ps1 @khemisset18
+
+/native/windows-idd/ @khemisset18
+/native/windows-media/ @khemisset18
+/native/windows-platform/ @khemisset18
+/native/windows-stream-helper/ @khemisset18
+/native/windows-worker/ @khemisset18
+
+/agent/gpubnb_agent/windows_native_*.py @khemisset18
+/apps/api/src/workspace-gateway*.ts @khemisset18
+/apps/api/src/machine-workspace-catalog.ts @khemisset18
+/apps/api/prisma/schema.prisma @khemisset18
+/apps/api/prisma/migrations/ @khemisset18
