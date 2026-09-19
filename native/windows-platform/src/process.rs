@@ -17,6 +17,7 @@ type Handle = isize;
 
 const CREATE_SUSPENDED: u32 = 0x0000_0004;
 const CREATE_UNICODE_ENVIRONMENT: u32 = 0x0000_0400;
+#[cfg(test)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const WAIT_OBJECT_0: u32 = 0;
 const WAIT_TIMEOUT: u32 = 258;
@@ -71,6 +72,7 @@ unsafe extern "system" {
 
 #[link(name = "kernel32")]
 unsafe extern "system" {
+    #[cfg(test)]
     fn CreateProcessW(
         application_name: *const u16,
         command_line: *mut u16,
@@ -407,6 +409,7 @@ pub fn launch_qualified_renter_worker(
     Ok(RenterWorkerProcess { _job: job, worker })
 }
 
+#[cfg(test)]
 fn spawn_suspended_current_user_validation(
     application: &Path,
     command_line: &OsStr,
