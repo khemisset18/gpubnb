@@ -70,6 +70,16 @@ The helper must never capture the provider's personal desktop.
   Access loss, device removal/reset/hang, identity mismatch and all other capture
   failures remain terminal and revoke the media proof. Initial start and reconnect
   still require a fresh real captured+NVENC frame before readiness can be armed.
+- The browser-facing binary media protocol is distinct from the privileged
+  worker-media proof protocol. It exposes only codec/keyframe state, a non-zero
+  stream epoch, frame sequence, dimensions and bounded chunk metadata; GPU UUID,
+  LUID, WTS identifiers, display nonce and capability tokens never enter browser
+  media messages. Each binary message contains a fixed 44-byte v1 header followed
+  by at most 1 MiB of one encoded H.264 frame. A frame remains bounded to 8 MiB,
+  so large IDR frames are chunked below the existing 4 MiB gateway frame ceiling.
+  Chunks are contiguous offsets into one frame and must not be combined across
+  epochs or frame sequences. Reconnect creates a new stream epoch and the first
+  delivered frame for that epoch must be the freshly proved keyframe.
 - The helper never logs provider usernames, profile paths, browser data,
   document paths, tokens or renter credentials.
 
