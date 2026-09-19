@@ -60,7 +60,27 @@ jobs:
           if ($item.Length -le 0) {
             throw "GPUbnbWindowsMedia.dll is empty"
           }
-          $exports = & dumpbin /exports $dll
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\\Installer\\vswhere.exe"
+          if (-not (Test-Path -LiteralPath $vswhere)) { throw "vswhere.exe is unavailable" }
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw "Visual C++ build tools installation was not found" }
+          $dumpbin = Get-ChildItem -Path (Join-Path $vs "VC\\Tools\\MSVC") -Filter dumpbin.exe -Recurse -File |
+            Where-Object { $_.FullName -match '\\bin\\Hostx64\\x64\\dumpbin\.exe          foreach ($symbol in @(
+            "GPUbnbProbeMediaFrame",
+            "GPUbnbMediaOpen",
+            "GPUbnbMediaReadFrame",
+            "GPUbnbMediaClose"
+          )) {
+            if ($exports -notmatch [regex]::Escape($symbol)) {
+              throw "Missing required media ABI export: $symbol"
+            }
+          }
+ } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $dumpbin) { throw "dumpbin.exe was not found in the Visual C++ toolchain" }
+          $exports = & $dumpbin.FullName /exports $dll
+          if ($LASTEXITCODE -ne 0) { throw "dumpbin failed while inspecting GPUbnbWindowsMedia.dll" }
           foreach ($symbol in @(
             "GPUbnbProbeMediaFrame",
             "GPUbnbMediaOpen",
