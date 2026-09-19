@@ -7,7 +7,7 @@
 
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
 use gpubnb_windows_platform::input::{
-    inject_input, InputEvent as PlatformInputEvent, MouseButton as PlatformMouseButton,
+    InputEvent as PlatformInputEvent, MouseButton as PlatformMouseButton, inject_input,
 };
 use gpubnb_windows_platform::media::{
     MediaProbeError, MediaProbeRequest, MediaSession, open_media_session,
@@ -60,7 +60,9 @@ impl MediaState {
     fn prepare(self) -> Result<Self, WorkerError> {
         match self {
             Self::Empty | Self::DisplayPrepared => Ok(Self::DisplayPrepared),
-            Self::Ready | Self::Suspended => Err(WorkerError::new("media_state_prepare_invalid", 21)),
+            Self::Ready | Self::Suspended => {
+                Err(WorkerError::new("media_state_prepare_invalid", 21))
+            }
         }
     }
 
@@ -68,7 +70,10 @@ impl MediaState {
         match self {
             Self::DisplayPrepared | Self::Ready => Ok(Self::Ready),
             Self::Empty => Err(WorkerError::new("display_not_prepared", 21)),
-            Self::Suspended => Err(WorkerError::new("media_suspended_requires_fresh_resume", 21)),
+            Self::Suspended => Err(WorkerError::new(
+                "media_suspended_requires_fresh_resume",
+                21,
+            )),
         }
     }
 
@@ -258,8 +263,8 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                 }
                 WorkerCommand::StartCapture => {
                     let next_state = media_state.capture()?;
-                    let spec = display_spec
-                        .ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
+                    let spec =
+                        display_spec.ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
 
                     let identity = resolve_nvidia_uuid_to_luid(&args.gpu_uuid)
                         .map_err(|_| WorkerError::new("exact_gpu_mapping_failed", 21))?;
@@ -579,7 +584,10 @@ mod tests {
         let suspended = ready.suspend().expect("suspend");
         assert_eq!(
             suspended.capture(),
-            Err(WorkerError::new("media_suspended_requires_fresh_resume", 21))
+            Err(WorkerError::new(
+                "media_suspended_requires_fresh_resume",
+                21
+            ))
         );
         assert_eq!(
             suspended.prepare(),
@@ -596,7 +604,10 @@ mod tests {
     fn media_failure_codes_are_specific_and_secret_free() {
         for (error, expected) in [
             (MediaProbeError::CaptureTimeout, "media_capture_timeout"),
-            (MediaProbeError::CaptureAccessLost, "media_capture_access_lost"),
+            (
+                MediaProbeError::CaptureAccessLost,
+                "media_capture_access_lost",
+            ),
             (MediaProbeError::DeviceLost, "media_device_lost"),
             (MediaProbeError::ProbeFailed, "media_frame_proof_failed"),
         ] {
@@ -639,19 +650,13 @@ mod tests {
         let session_id = "ci-worker-roundtrip";
         let expected_pid = std::process::id();
 
-        let pipe = create_worker_pipe(
-            session_id,
-            generation,
-            &service_sid,
-            &logon_sid,
-        )
-        .expect("secure worker pipe");
+        let pipe = create_worker_pipe(session_id, generation, &service_sid, &logon_sid)
+            .expect("secure worker pipe");
 
         let gpu = GPU.to_owned();
         let client = std::thread::spawn(move || {
-            let client =
-                connect_worker_pipe_client(session_id, generation, PIPE_TIMEOUT_MS)
-                    .expect("connect worker pipe");
+            let client = connect_worker_pipe_client(session_id, generation, PIPE_TIMEOUT_MS)
+                .expect("connect worker pipe");
             let hello = WorkerHello {
                 protocol_version: WORKER_PROTOCOL_VERSION,
                 session_id,
