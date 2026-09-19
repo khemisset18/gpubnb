@@ -115,6 +115,7 @@ pub enum SessionEvent {
         nvenc_ready: bool,
         media_ready: bool,
     },
+    RuntimeReproved(ReadinessProof),
     StopRequested,
     CleanupVerified,
 }
@@ -202,6 +203,18 @@ impl NativeSessionState {
                 } else {
                     SessionPhase::Degraded
                 };
+            }
+            SessionEvent::RuntimeReproved(proof) => {
+                // Recovery from a lost GPU/display/isolation/worker is a full
+                // requalification, not a merge with stale booleans. The caller
+                // must present every workspace proof again in one atomic snapshot.
+                if !matches!(self.phase, SessionPhase::Degraded) {
+                    return;
+                }
+                if proof.qualifies(self.workspace) {
+                    self.proof = proof;
+                    self.phase = SessionPhase::Ready;
+                }
             }
             SessionEvent::DxgiAccessLost => {
                 if !matches!(self.phase, SessionPhase::Stopping) {
@@ -471,6 +484,41 @@ mod recovery_tests {
             });
             assert_eq!(state.phase(), SessionPhase::Degraded);
             assert!(!state.billable());
+        }
+    }
+
+    #[test]
+    fn non_media_loss_requires_full_runtime_requalification() {
+        for loss in [
+            SessionEvent::ExactGpuLost,
+            SessionEvent::VirtualDisplayLost,
+            SessionEvent::IsolationLost,
+            SessionEvent::WorkerLost,
+        ] {
+            let mut state = NativeSessionState::new(WorkspaceKind::CloudDesktop);
+            state.apply(SessionEvent::ProofsUpdated(ready()));
+            state.apply(loss);
+            assert_eq!(state.phase(), SessionPhase::Degraded);
+
+            // Media-only recovery cannot repair a lost non-media invariant.
+            state.apply(SessionEvent::MediaReproved {
+                capture_ready: true,
+                nvenc_ready: true,
+                media_ready: true,
+            });
+            assert_eq!(state.phase(), SessionPhase::Degraded);
+            assert!(!state.billable());
+
+            // An incomplete full requalification also cannot restore READY.
+            let mut incomplete = ready();
+            incomplete.provider_desktop_excluded = false;
+            state.apply(SessionEvent::RuntimeReproved(incomplete));
+            assert_eq!(state.phase(), SessionPhase::Degraded);
+            assert!(!state.billable());
+
+            state.apply(SessionEvent::RuntimeReproved(ready()));
+            assert_eq!(state.phase(), SessionPhase::Ready);
+            assert!(state.billable());
         }
     }
 
