@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from gpubnb_agent.windows_native_runtime import _loopback_media_url
+from gpubnb_agent.windows_native_runtime import _loopback_media_url, media_token_matches
 
 
 class WindowsNativeMediaBoundaryTests(unittest.TestCase):
@@ -73,6 +73,26 @@ class WindowsNativeMediaBoundaryTests(unittest.TestCase):
                 self.SESSION_ID,
             )
         )
+
+    def test_media_token_comparison_is_strict_and_type_safe(self):
+        token = "A" * 32 + "-_"
+        self.assertTrue(media_token_matches(token, token))
+        for presented in (
+            "B" + token[1:],
+            token[:-1],
+            token + "A",
+            token.lower(),
+            None,
+            123,
+            True,
+            [],
+            {},
+            "A" * 31,
+            "A" * 201,
+            "A" * 32 + "=",
+        ):
+            with self.subTest(presented=presented):
+                self.assertFalse(media_token_matches(token, presented))
 
     def test_rejects_near_match_or_extra_path_segments(self):
         for value in (
