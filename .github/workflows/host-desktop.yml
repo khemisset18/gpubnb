@@ -35,10 +35,10 @@ jobs:
       run:
         working-directory: apps/host-desktop
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -67,7 +67,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - name: Materialize Windows bundle icon
@@ -81,10 +81,10 @@ jobs:
       - name: Install Tauri Linux dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: .
       - name: Require committed Cargo lock
@@ -101,7 +101,7 @@ jobs:
           cargo fmt -p gpubnb-host-desktop -- --check 2>&1 | tee cargo-fmt-${{ runner.os }}.log
       - name: Upload formatting diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cargo-fmt-${{ runner.os }}
           path: cargo-fmt-${{ runner.os }}.log
@@ -113,7 +113,7 @@ jobs:
           cargo test --locked -p gpubnb-host-desktop --all-targets 2>&1 | tee cargo-test-${{ runner.os }}.log
       - name: Upload test diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cargo-test-${{ runner.os }}
           path: cargo-test-${{ runner.os }}.log
@@ -125,7 +125,7 @@ jobs:
           cargo clippy --locked -p gpubnb-host-desktop --all-targets -- -D warnings 2>&1 | tee cargo-clippy-${{ runner.os }}.log
       - name: Upload Clippy diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cargo-clippy-${{ runner.os }}
           path: cargo-clippy-${{ runner.os }}.log
@@ -135,7 +135,7 @@ jobs:
     name: production security gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - name: Require production readiness evidence
@@ -199,7 +199,7 @@ jobs:
             printf 'source: https://github.com/Lolliedieb/lolMiner-releases/releases/tag/1.98a\n'
             sha256sum lolMiner_v1.98a_Win64.zip lolMiner.exe lolMiner_v1.98a_Lin64.tar.gz lolMiner
           } | tee miner-provenance.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lolminer-1.98a-provenance
           path: miner-provenance.txt
