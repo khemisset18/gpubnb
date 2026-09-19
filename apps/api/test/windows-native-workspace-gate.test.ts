@@ -51,6 +51,29 @@ for (const slug of ['cloud-desktop', 'creator', 'cad', 'gaming'] as const) {
   });
 }
 
+test('non-Linux operating systems cannot inherit the Linux desktop backend', async () => {
+  for (const operatingSystem of ['Darwin', 'FreeBSD', 'unknown', '']) {
+    let definitionUpserts = 0;
+    const machine = { ...highEndWindows, id: `machine-${operatingSystem || 'empty'}`, operatingSystem };
+    const db = {
+      machine: { findUnique: async () => machine },
+      workspaceDefinition: {
+        upsert: async () => {
+          definitionUpserts += 1;
+          return { id: 'definition' };
+        },
+      },
+      machineWorkspace: { upsert: async () => ({ id: 'machine-workspace' }) },
+    };
+    await assert.rejects(
+      () => ensureCompatibleMachineWorkspace(db as never, machine.id, 'cloud-desktop'),
+      (error: unknown) => error instanceof Error
+        && error.message === 'cloud-desktop_workspace_runtime_unavailable',
+    );
+    assert.equal(definitionUpserts, 0);
+  }
+});
+
 test('the Windows runtime gate does not disable the already-qualified Linux desktop backend', async () => {
   const linuxMachine = {
     ...highEndWindows,
