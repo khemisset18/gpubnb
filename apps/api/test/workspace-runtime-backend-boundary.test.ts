@@ -9,12 +9,15 @@ const migration = fs.readFileSync(
 );
 const gateway = fs.readFileSync(new URL('../src/workspace-gateway.ts', import.meta.url), 'utf8');
 
-test('workspace sessions persist an immutable runtime-family identity by default', () => {
+test('workspace sessions require an explicit persisted runtime-family identity', () => {
   assert.match(schema, /enum WorkspaceRuntimeBackend \{\s*CONTAINER\s*WINDOWS_NATIVE\s*\}/);
-  assert.match(schema, /runtimeBackend WorkspaceRuntimeBackend @default\(CONTAINER\)/);
+  assert.match(schema, /runtimeBackend WorkspaceRuntimeBackend\n/);
+  assert.doesNotMatch(schema, /runtimeBackend WorkspaceRuntimeBackend @default/);
   assert.match(schema, /@@index\(\[machineId, runtimeBackend, status\]\)/);
   assert.match(migration, /CREATE TYPE "WorkspaceRuntimeBackend" AS ENUM \('CONTAINER', 'WINDOWS_NATIVE'\)/);
-  assert.match(migration, /"runtimeBackend" "WorkspaceRuntimeBackend" NOT NULL DEFAULT 'CONTAINER'/);
+  assert.match(migration, /UPDATE "WorkspaceSession"[\s\S]*SET "runtimeBackend" = 'CONTAINER'/);
+  assert.match(migration, /ALTER COLUMN "runtimeBackend" SET NOT NULL/);
+  assert.doesNotMatch(migration, /DEFAULT 'CONTAINER'/);
 });
 
 test('the generic browser gateway is structurally container-only', () => {
