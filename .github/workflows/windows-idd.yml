@@ -83,13 +83,30 @@ jobs:
             throw "stampinf.exe not found in restored WDK package"
           }
           Write-Host "stampinf.exe: $($stampInf.FullName)"
-          Add-Content -Path $env:GITHUB_PATH -Value $stampInf.DirectoryName
+          $binRoot = Split-Path $stampInf.DirectoryName -Parent
+          $x64Tools = Join-Path $binRoot "x64"
+          $x86Tools = Join-Path $binRoot "x86"
+          if (-not (Test-Path $x64Tools) -or -not (Test-Path $x86Tools)) {
+            throw "WDK architecture tool directories are incomplete under: $binRoot"
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $x64Tools
+          Add-Content -Path $env:GITHUB_PATH -Value $x86Tools
+          Add-Content -Path $env:GITHUB_ENV -Value "GPUBNB_WDK_BIN_ROOT=$binRoot"
 
       - name: Build inert IddCx driver
         shell: pwsh
         run: |
           where.exe stampinf.exe
-          msbuild native/windows-idd/GPUbnbIdd.vcxproj /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError
+          $project = (Resolve-Path native/windows-idd/GPUbnbIdd.vcxproj).Path
+          if (-not $env:GPUBNB_WDK_BIN_ROOT) {
+            throw "WDK binary root was not exported"
+          }
+          Push-Location $env:GPUBNB_WDK_BIN_ROOT
+          try {
+            msbuild $project /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError
+          } finally {
+            Pop-Location
+          }
 
       - name: Verify build produced driver package inputs
         shell: pwsh
