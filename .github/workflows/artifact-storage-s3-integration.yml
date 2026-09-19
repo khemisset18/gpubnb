@@ -24,6 +24,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: artifact-storage-s3-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   minio-roundtrip:
     runs-on: ubuntu-latest

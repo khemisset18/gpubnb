@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: miner-provenance-audit-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   audit-lolminer:
     name: Verify pinned lolMiner release provenance

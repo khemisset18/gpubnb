@@ -35,6 +35,7 @@ jobs:
   static-site:
     name: Netlify static site
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Validate required static assets
@@ -73,6 +74,7 @@ jobs:
   api-image:
     name: API container
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Validate provider-neutral production image
@@ -94,6 +96,7 @@ jobs:
   runtime-topology:
     name: Runtime process topology
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Validate required provider-neutral process roles
@@ -126,6 +129,7 @@ jobs:
   configuration:
     name: Deployment configuration safety
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Reject unsafe defaults and verify local infrastructure contract
