@@ -133,7 +133,7 @@ impl VerifiedApplicationFile {
             return Err(PlatformError::SignerPolicyMismatch);
         }
         let signer = self.signer_sha256()?;
-        if allowed_signers.iter().any(|allowed| *allowed == signer) {
+        if allowed_signers.contains(&signer) {
             Ok(signer)
         } else {
             Err(PlatformError::SignerPolicyMismatch)
