@@ -99,9 +99,9 @@ fn valid_websocket_key(value: &str) -> bool {
     if value.len() != 24 || !value.ends_with("==") {
         return false;
     }
-    value[..22].bytes().all(|byte| {
-        byte.is_ascii_alphanumeric() || byte == b'+' || byte == b'/'
-    })
+    value[..22]
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'+' || byte == b'/')
 }
 
 pub fn authenticate_local_media_upgrade(
@@ -182,9 +182,9 @@ pub fn authenticate_local_media_upgrade(
             .split_once(':')
             .ok_or(LocalMediaUpgradeError::HeaderLine)?;
         if raw_name.is_empty()
-            || !raw_name.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')
-            })
+            || !raw_name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
         {
             return Err(LocalMediaUpgradeError::HeaderLine);
         }
@@ -195,9 +195,7 @@ pub fn authenticate_local_media_upgrade(
         // whitespace normalization must never turn " token " into "token".
         if value.is_empty()
             || value != value.trim()
-            || value
-                .bytes()
-                .any(|byte| byte < 0x20 || byte == 0x7f)
+            || value.bytes().any(|byte| byte < 0x20 || byte == 0x7f)
         {
             return Err(LocalMediaUpgradeError::HeaderLine);
         }
@@ -309,10 +307,7 @@ X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
             format!("X-GPUbnb-Media-Token:\t{TOKEN}"),
         ] {
             let value = base
-                .replace(
-                    &format!("X-GPUbnb-Media-Token: {TOKEN}"),
-                    &replacement,
-                )
+                .replace(&format!("X-GPUbnb-Media-Token: {TOKEN}"), &replacement)
                 .into_bytes();
             assert_eq!(
                 authenticate_local_media_upgrade(&value, SESSION, TOKEN),
@@ -379,10 +374,26 @@ X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
         for (from, to, expected) in [
             ("GET ", "POST ", LocalMediaUpgradeError::Method),
             ("HTTP/1.1", "HTTP/1.0", LocalMediaUpgradeError::Version),
-            ("Connection: Upgrade", "Connection: close", LocalMediaUpgradeError::Connection),
-            ("Upgrade: websocket", "Upgrade: h2c", LocalMediaUpgradeError::Upgrade),
-            ("Sec-WebSocket-Version: 13", "Sec-WebSocket-Version: 12", LocalMediaUpgradeError::WebSocketVersion),
-            ("dGhlIHNhbXBsZSBub25jZQ==", "not-a-websocket-key-value", LocalMediaUpgradeError::WebSocketKey),
+            (
+                "Connection: Upgrade",
+                "Connection: close",
+                LocalMediaUpgradeError::Connection,
+            ),
+            (
+                "Upgrade: websocket",
+                "Upgrade: h2c",
+                LocalMediaUpgradeError::Upgrade,
+            ),
+            (
+                "Sec-WebSocket-Version: 13",
+                "Sec-WebSocket-Version: 12",
+                LocalMediaUpgradeError::WebSocketVersion,
+            ),
+            (
+                "dGhlIHNhbXBsZSBub25jZQ==",
+                "not-a-websocket-key-value",
+                LocalMediaUpgradeError::WebSocketKey,
+            ),
         ] {
             let value = base.replace(from, to).into_bytes();
             assert_eq!(
@@ -414,7 +425,11 @@ X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
     #[test]
     fn request_size_line_count_and_crlf_are_bounded() {
         assert_eq!(
-            authenticate_local_media_upgrade(&vec![b'A'; LOCAL_MEDIA_REQUEST_MAX_BYTES + 1], SESSION, TOKEN),
+            authenticate_local_media_upgrade(
+                &vec![b'A'; LOCAL_MEDIA_REQUEST_MAX_BYTES + 1],
+                SESSION,
+                TOKEN
+            ),
             Err(LocalMediaUpgradeError::TooLarge)
         );
 
