@@ -255,7 +255,7 @@ impl QualifiedGraphicsRuntime {
                 gpu_uuid: self.gpu_uuid.clone(),
                 input_frame_sequence: media.frame_sequence,
                 codec: EncodeCodec::H264,
-                encoded_bytes: media.encoded_bytes,
+                encoded_bytes: u64::from(media.encoded_bytes),
             },
         )
         .is_err()
@@ -507,7 +507,7 @@ pub fn start_qualified_graphics_runtime(
             gpu_uuid: config.gpu_uuid.to_owned(),
             input_frame_sequence: media.frame_sequence,
             codec: EncodeCodec::H264,
-            encoded_bytes: media.encoded_bytes,
+            encoded_bytes: u64::from(media.encoded_bytes),
         },
     )
     .map_err(|_| ServiceRuntimeError::GraphicsProof)?;
