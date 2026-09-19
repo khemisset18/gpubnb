@@ -36,7 +36,7 @@ jobs:
     name: Netlify static site
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Validate required static assets
         shell: bash
         run: |
@@ -74,7 +74,7 @@ jobs:
     name: API container
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Validate provider-neutral production image
         shell: bash
         run: |
@@ -95,7 +95,7 @@ jobs:
     name: Runtime process topology
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Validate required provider-neutral process roles
         shell: bash
         run: |
@@ -127,7 +127,7 @@ jobs:
     name: Deployment configuration safety
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Reject unsafe defaults and verify local infrastructure contract
         shell: bash
         run: |
