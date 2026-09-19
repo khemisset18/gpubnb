@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from types import SimpleNamespace
 import unittest
 from unittest.mock import call, patch
@@ -104,7 +105,7 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
         )
 
     def test_self_test_process_failures_are_stable_and_fail_closed(self):
-        for failure in (OSError("secret"), __import__("subprocess").TimeoutExpired("secret", 30), UnicodeError("secret")):
+        for failure in (OSError("secret"), subprocess.TimeoutExpired("secret", 30), UnicodeError("secret")):
             with (
                 self.subTest(failure=type(failure).__name__),
                 patch.object(native.platform, "system", return_value="Windows"),
