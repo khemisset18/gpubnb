@@ -58,7 +58,7 @@ jobs:
       - name: Restore WDK NuGet and build inert IddCx driver
         shell: pwsh
         run: |
-          msbuild native/windows-idd/GPUbnbIdd.vcxproj /restore /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError /p:WarningsNotAsErrors=NU1603
+          msbuild native/windows-idd/GPUbnbIdd.vcxproj /restore /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError
 
       - name: Verify build produced driver package inputs
         shell: pwsh
