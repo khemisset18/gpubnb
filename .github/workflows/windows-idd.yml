@@ -87,25 +87,75 @@ jobs:
       - name: Resolve WDK packaged build tools
         shell: pwsh
         run: |
-          $wdkRoot = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.windows.wdk.x64\10.0.28000.2526"
-          if (-not (Test-Path $wdkRoot)) {
-            throw "Restored WDK package root not found: $wdkRoot"
+          $packageRoot = Join-Path $env:USERPROFILE ".nuget\packages"
+          $wdkX64Root = Join-Path $packageRoot "microsoft.windows.wdk.x64\10.0.28000.2526"
+          $wdkX86Root = Join-Path $packageRoot "microsoft.windows.wdk.x86\10.0.28000.2526"
+          $sdkX86Root = Join-Path $packageRoot "microsoft.windows.sdk.cpp.x86\10.0.28000.2526"
+          foreach ($root in @($wdkX64Root, $wdkX86Root, $sdkX86Root)) {
+            if (-not (Test-Path $root)) {
+              throw "Restored WDK/SDK package root not found: $root"
+            }
           }
-          $stampInf = Get-ChildItem $wdkRoot -Recurse -File -Filter stampinf.exe |
+
+          $stampInf = Get-ChildItem $wdkX64Root -Recurse -File -Filter stampinf.exe |
             Where-Object { $_.FullName -match '[\\/]x64[\\/]' } |
             Select-Object -First 1
           if (-not $stampInf) {
-            throw "stampinf.exe not found in restored WDK package"
+            throw "stampinf.exe not found in restored x64 WDK package"
           }
-          Write-Host "stampinf.exe: $($stampInf.FullName)"
           $binRoot = Split-Path $stampInf.DirectoryName -Parent
           $x64Tools = Join-Path $binRoot "x64"
           $x86Tools = Join-Path $binRoot "x86"
-          if (-not (Test-Path $x64Tools) -or -not (Test-Path $x86Tools)) {
-            throw "WDK architecture tool directories are incomplete under: $binRoot"
+          $infVerif = Join-Path $x86Tools "InfVerif.dll"
+          $preFast = Join-Path $x86Tools "WindowsPrefast.dll"
+          foreach ($tool in @($stampInf.FullName, $infVerif, $preFast)) {
+            if (-not (Test-Path $tool)) {
+              throw "Required WDK host tool missing: $tool"
+            }
           }
-          Add-Content -Path $env:GITHUB_PATH -Value $x64Tools
-          Add-Content -Path $env:GITHUB_PATH -Value $x86Tools
+
+          # x64 driver targets execute x86-hosted verifier/PREfast binaries.
+          # The matching WDK.x86 + SDK.CPP.x86 packages carry their dependent
+          # host DLLs; add their concrete tool directories without importing
+          # their build targets into the x64 project.
+          $hostToolDirs = @($x64Tools, $x86Tools)
+          foreach ($root in @($wdkX86Root, $sdkX86Root)) {
+            $dirs = Get-ChildItem $root -Recurse -Directory |
+              Where-Object { $_.FullName -match '[\\/]bin[\\/][^\\]+[\\/]x86
+      - name: Build inert IddCx driver
+        shell: pwsh
+        run: |
+          where.exe stampinf.exe
+          $project = (Resolve-Path native/windows-idd/GPUbnbIdd.vcxproj).Path
+          if (-not $env:GPUBNB_WDK_BIN_ROOT) {
+            throw "WDK binary root was not exported"
+          }
+          Push-Location $env:GPUBNB_WDK_BIN_ROOT
+          try {
+            msbuild $project /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError
+          } finally {
+            Pop-Location
+          }
+
+      - name: Verify build produced driver package inputs
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem native/windows-idd -Recurse -Filter GPUbnbIdd.dll | Select-Object -First 1
+          if (-not $dll) { throw "GPUbnbIdd.dll was not produced" }
+          if (-not (Test-Path native/windows-idd/GPUbnbIdd.inf)) { throw "GPUbnbIdd.inf missing" }
+          Write-Host "Built inert IddCx DLL: $($dll.FullName)"
+          Write-Host "Driver remains non-installing and non-promotable in CI."
+ }
+            $hostToolDirs += $dirs.FullName
+          }
+          $hostToolDirs = $hostToolDirs | Where-Object { $_ -and (Test-Path $_) } | Sort-Object -Unique
+          if ($hostToolDirs.Count -lt 3) {
+            throw "Incomplete x86 host-tool dependency path set"
+          }
+          foreach ($dir in $hostToolDirs) {
+            Write-Host "WDK host tools: $dir"
+            Add-Content -Path $env:GITHUB_PATH -Value $dir
+          }
           Add-Content -Path $env:GITHUB_ENV -Value "GPUBNB_WDK_BIN_ROOT=$binRoot"
 
       - name: Build inert IddCx driver
