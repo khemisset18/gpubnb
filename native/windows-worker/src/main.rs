@@ -1,9 +1,10 @@
 //! GPUbnb renter-session graphical worker bootstrap.
 //!
-//! This binary owns no privileged lifecycle authority. It can only prove its
-//! identity to the local GPUbnb service over the ACL/PID-fenced named pipe. The
-//! graphical backend remains deliberately fail-closed until virtual display,
-//! DXGI capture, exact-GPU NVENC and isolated input are implemented.
+//! This binary owns no privileged lifecycle authority. It binds its identity and
+//! typed control commands to the local ACL/PID-fenced GPUbnb pipe, then performs
+//! exact-GPU media and isolated-input work only inside the renter session. Public
+//! readiness remains fail-closed until authenticated media transport and lifecycle
+//! wiring can expose those proofs without ever capturing the provider desktop.
 
 #[cfg(target_os = "windows")]
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
