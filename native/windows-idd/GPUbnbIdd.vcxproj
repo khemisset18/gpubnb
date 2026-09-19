@@ -13,7 +13,7 @@
     <Inf Include="GPUbnbIdd.inf" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Windows.WDK.x64" Version="10.0.26100.6584" />
+    <PackageReference Include="Microsoft.Windows.WDK.x64" Version="10.0.26100.2454" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{D2F8898A-863B-4FE5-8BA0-3F2D868A0B6D}</ProjectGuid>
