@@ -130,7 +130,7 @@ impl QualifiedGraphicsRuntime {
             generation: self.generation,
             sequence,
         })
-.map_err(|_| self.fail(ServiceRuntimeError::WorkerProtocol))?;
+        .map_err(|_| self.fail(ServiceRuntimeError::WorkerProtocol))?;
         let input = encode_worker_input(WorkerInputFrame {
             protocol_version: WORKER_PROTOCOL_VERSION,
             generation: self.generation,
@@ -138,7 +138,7 @@ impl QualifiedGraphicsRuntime {
             windows_session_id: self.windows_session_id,
             event,
         })
-.map_err(|_| self.fail(ServiceRuntimeError::WorkerProtocol))?;
+        .map_err(|_| self.fail(ServiceRuntimeError::WorkerProtocol))?;
 
         if self.pipe.send_frame(&command).is_err() || self.pipe.send_frame(&input).is_err() {
             self.media_state = RuntimeMediaState::Failed;
