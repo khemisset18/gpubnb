@@ -547,7 +547,7 @@ model WorkspaceSession {
   jobId String? @unique
   status WorkspaceSessionStatus @default(RESERVED)
   isolationType String @db.VarChar(32)
-  runtimeBackend WorkspaceRuntimeBackend @default(CONTAINER)
+  runtimeBackend WorkspaceRuntimeBackend
   resourceLimits Json
   connectionType String? @db.VarChar(32)
   connectionMetadata Json?
