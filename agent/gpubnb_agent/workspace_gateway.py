@@ -771,13 +771,20 @@ class GatewaySupervisor:
         for session in sessions:
             session_id = str(session.get("id") or "")
             status = str(session.get("status") or "")
-            # Missing/unrecognized workspaceSlug defaults to "developer": every
-            # session this endpoint returned before workspaceSlug existed was a
-            # Developer one, and the API's /desired filter (workspace-gateway.ts)
-            # only ever returns slugs this gateway actually knows how to run.
-            workspace_slug = str(session.get("workspaceSlug") or "developer")
-            if workspace_slug not in GATEWAY_WORKSPACE_SLUGS:
+            # Missing workspaceSlug is the one legacy compatibility case: before
+            # the field existed, every gateway session was Developer. An explicit
+            # unknown slug is fundamentally different and must never be coerced to
+            # Developer, otherwise a control-plane/runtime rollout mismatch could
+            # launch the wrong workload under a valid rental.
+            raw_workspace_slug = session.get("workspaceSlug")
+            if raw_workspace_slug is None or raw_workspace_slug == "":
                 workspace_slug = "developer"
+            elif not isinstance(raw_workspace_slug, str) or raw_workspace_slug not in GATEWAY_WORKSPACE_SLUGS:
+                self._stop_runtime(session_id)
+                self._report_error(RuntimeError("unsupported_gateway_workspace_slug"))
+                continue
+            else:
+                workspace_slug = raw_workspace_slug
             metadata = session.get("connectionMetadata") if isinstance(session.get("connectionMetadata"), dict) else {}
             if status in {"STOP_REQUESTED", "STOPPING"} or self._expired(session.get("expiresAt")):
                 cleaned = self._stop_runtime(session_id)
