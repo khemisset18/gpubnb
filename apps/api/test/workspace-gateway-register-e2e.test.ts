@@ -217,7 +217,7 @@ test('gateway register is the only thing that makes a Developer workspace openab
     data: {
       bookingId: booking.id, renterId: renter.id, machineId: machine.id,
       machineWorkspaceId: machineWorkspace.id, jobId: job.id,
-      status: WorkspaceSessionStatus.READY, isolationType: 'DOCKER',
+      status: WorkspaceSessionStatus.READY, isolationType: 'DOCKER', runtimeBackend: 'CONTAINER',
       resourceLimits: { maxRamMiB: 4096, maxCpuCores: 2, storageQuotaMiB: 10240, networkAccess: 'RESTRICTED', autoStopMinutes: 60 },
       connectionType: 'GPUBNB_GATEWAY', preparationProgress: 100, preparationStep: 'CONNECTION_READY',
       readyAt: now, expiresAt: booking.endsAt,
