@@ -365,8 +365,8 @@ fn receive_bound_media_frame(
     let payload = media_pipe
         .read_message_exact(header.payload_bytes as usize, PIPE_TIMEOUT_MS)
         .map_err(|_| ServiceRuntimeError::MediaTransport)?;
-    let frame =
-        bind_worker_media_payload(header, payload).map_err(|_| ServiceRuntimeError::MediaTransport)?;
+    let frame = bind_worker_media_payload(header, payload)
+        .map_err(|_| ServiceRuntimeError::MediaTransport)?;
 
     // The media DLL revalidates UUID -> LUID for every capture; repeat the check
     // in the privileged service before accepting the bytes into the data plane.

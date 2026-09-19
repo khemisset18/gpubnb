@@ -242,15 +242,6 @@ fn send_encoded_media_frame(
     };
     let proof = encode_worker_media_proof(proof_value)
         .map_err(|_| WorkerError::new("media_proof_encode_failed", 21))?;
-
-    // Send the small proof first so the service can learn the exact expected
-    // payload length before it starts the bounded media-pipe read. This avoids
-    // deadlock on a multi-megabyte local write while preserving the independent
-    // control/media trust boundaries.
-    control
-        .send_frame(&proof)
-        .map_err(|_| WorkerError::new("media_proof_send_failed", 21))?;
-
     let header = encode_worker_media_frame_header(WorkerMediaFrameHeader {
         protocol_version: MEDIA_TRANSPORT_PROTOCOL_VERSION,
         codec: MEDIA_CODEC_H264,
@@ -267,6 +258,14 @@ fn send_encoded_media_frame(
         proof_flags: media.proof_flags,
     })
     .map_err(|_| WorkerError::new("media_header_encode_failed", 21))?;
+
+    // Construct and validate both envelopes before publishing the proof. An
+    // oversized/invalid frame therefore cannot leave a proof stranded on the
+    // control channel. Once valid, publish the small proof first so the service
+    // learns the exact bounded payload length before the potentially large write.
+    control
+        .send_frame(&proof)
+        .map_err(|_| WorkerError::new("media_proof_send_failed", 21))?;
     media_pipe
         .send_message(&header)
         .map_err(|_| WorkerError::new("media_header_send_failed", 21))?;

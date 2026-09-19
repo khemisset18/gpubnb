@@ -7,7 +7,9 @@
 //! IddCx display nonce, exact adapter LUID and control-command sequence as its
 //! WorkerMediaProof.
 
-use crate::worker_protocol::{WorkerDisplaySpec, WorkerMediaProof, WORKER_MEDIA_REQUIRED_PROOF_FLAGS};
+use crate::worker_protocol::{
+    WORKER_MEDIA_REQUIRED_PROOF_FLAGS, WorkerDisplaySpec, WorkerMediaProof,
+};
 
 pub const MEDIA_TRANSPORT_PROTOCOL_VERSION: u16 = 1;
 pub const MEDIA_FRAME_HEADER_SIZE: usize = 80;
@@ -31,7 +33,8 @@ pub struct WorkerMediaFrameHeader {
     pub proof_flags: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+// Intentionally no Debug/Clone derive: encoded renter pixels must not be
+// accidentally dumped into service diagnostics or duplicated by convenience APIs.
 pub struct BoundMediaFrame {
     pub header: WorkerMediaFrameHeader,
     pub bytes: Vec<u8>,
@@ -106,9 +109,7 @@ fn validate_header_fields(header: WorkerMediaFrameHeader) -> Result<(), MediaFra
     if header.frame_sequence == 0 {
         return Err(MediaFrameError::FrameSequence);
     }
-    if header.payload_bytes == 0
-        || header.payload_bytes as usize > MEDIA_H264_FRAME_MAX_BYTES
-    {
+    if header.payload_bytes == 0 || header.payload_bytes as usize > MEDIA_H264_FRAME_MAX_BYTES {
         return Err(MediaFrameError::PayloadLength);
     }
     if header.proof_flags != WORKER_MEDIA_REQUIRED_PROOF_FLAGS {
@@ -219,9 +220,7 @@ pub fn validate_worker_media_frame_header(
     {
         return Err(MediaFrameError::Dimensions);
     }
-    if header.refresh_hz != expected_display.refresh_hz
-        || header.refresh_hz != proof.refresh_hz
-    {
+    if header.refresh_hz != expected_display.refresh_hz || header.refresh_hz != proof.refresh_hz {
         return Err(MediaFrameError::RefreshRate);
     }
     if header.frame_sequence != proof.frame_sequence {
@@ -244,8 +243,7 @@ pub fn bind_worker_media_payload(
     if payload.is_empty() {
         return Err(MediaFrameError::EmptyPayload);
     }
-    if payload.len() != header.payload_bytes as usize
-        || payload.len() > MEDIA_H264_FRAME_MAX_BYTES
+    if payload.len() != header.payload_bytes as usize || payload.len() > MEDIA_H264_FRAME_MAX_BYTES
     {
         return Err(MediaFrameError::PayloadLength);
     }
@@ -320,7 +318,10 @@ mod tests {
     fn header_round_trip_is_fixed_and_reserved_bytes_are_zero() {
         let encoded = encode_worker_media_frame_header(header()).expect("header");
         assert_eq!(encoded.len(), MEDIA_FRAME_HEADER_SIZE);
-        assert_eq!(&encoded[2..4], &(MEDIA_FRAME_HEADER_SIZE as u16).to_le_bytes());
+        assert_eq!(
+            &encoded[2..4],
+            &(MEDIA_FRAME_HEADER_SIZE as u16).to_le_bytes()
+        );
         assert_eq!(&encoded[5..8], &[0, 0, 0]);
         assert_eq!(decode_worker_media_frame_header(&encoded), Ok(header()));
     }
