@@ -279,8 +279,8 @@ NTSTATUS GPUbnbDeviceAdd(
         return status;
     }
 
-    WDFFILEOBJECT_CONFIG fileConfig;
-    WDFFILEOBJECT_CONFIG_INIT(
+    WDF_FILEOBJECT_CONFIG fileConfig;
+    WDF_FILEOBJECT_CONFIG_INIT(
         &fileConfig,
         WDF_NO_EVENT_CALLBACK,
         WDF_NO_EVENT_CALLBACK,
