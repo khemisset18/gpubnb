@@ -33,7 +33,9 @@ leased GPU.
 Pinned build baseline:
 
 - x64
-- WDK NuGet Microsoft.Windows.WDK.x64 10.0.26100.6584
+- Visual Studio 2026 / MSBuild 18
+- WDK NuGet Microsoft.Windows.WDK.x64 10.0.28000.2526
+- SDK NuGet Microsoft.Windows.SDK.CPP.x64 10.0.28000.2526
 - UMDF 2.25
 - IddCx minimum behavior 1.4
 - Windows 11 target (NT 10.0...22000 in the INF)
