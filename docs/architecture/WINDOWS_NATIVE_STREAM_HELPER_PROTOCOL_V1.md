@@ -164,11 +164,15 @@ Success stdout:
 ```
 
 `mediaToken` is a fresh, high-entropy per-session secret used by the authenticated
-GPUbnb gateway when connecting to the helper. It must contain at least 32
-base64url-safe characters, must never be placed in `mediaUrl`, and must never be
-written to logs, diagnostics, persisted session metadata or renter-visible JSON.
-The helper rejects media/input requests that do not present the token through the
-dedicated local authentication mechanism.
+GPUbnb gateway when connecting to the helper. The Windows implementation generates
+256 bits from CNG `BCryptGenRandom` with
+`BCRYPT_USE_SYSTEM_PREFERRED_RNG`, encodes the 32 random bytes as 64 lowercase
+hexadecimal ASCII characters, and keeps the capability in memory only. It must
+contain at least 32 base64url-safe characters, must never be placed in
+`mediaUrl`, and must never be written to logs, diagnostics, persisted session
+metadata or renter-visible JSON. The helper rejects media/input requests that do
+not present the token through the dedicated local authentication mechanism and
+compares a correctly sized presented token without token-dependent early exit.
 
 Additional Workspace requirements:
 

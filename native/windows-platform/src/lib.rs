@@ -12,6 +12,7 @@ pub mod job;
 pub mod media;
 pub mod nvenc;
 pub mod pipe;
+pub mod secret;
 pub mod session;
 
 #[cfg(target_os = "windows")]
@@ -69,6 +70,7 @@ pub enum PlatformError {
     PipeImpersonationLevelTooHigh,
     PipePeerSidMismatch,
     RevertToSelfFailed,
+    RandomGenerationFailed,
     JobCreateFailed,
     JobConfigureFailed,
     JobQueryFailed,
