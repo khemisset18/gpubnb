@@ -58,6 +58,7 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>d3d11.lib;dxgi.lib;setupapi.lib;user32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>$(ProjectDir)GPUbnbWindowsMedia.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
 
@@ -75,6 +76,7 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>d3d11.lib;dxgi.lib;setupapi.lib;user32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>$(ProjectDir)GPUbnbWindowsMedia.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
@@ -89,6 +91,7 @@
   <ItemGroup>
     <ClCompile Include="Media.cpp" />
     <ClInclude Include="Media.h" />
+    <None Include="GPUbnbWindowsMedia.def" />
   </ItemGroup>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
