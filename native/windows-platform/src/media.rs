@@ -132,7 +132,6 @@ pub enum MediaProbeError {
     MissingProof,
 }
 
-
 fn classify_probe_hresult(hr: i32) -> MediaProbeError {
     // DXGI HRESULT values are stable Win32 ABI constants. Keep the mapping here
     // so higher layers can revoke only the proofs affected by the failure.
