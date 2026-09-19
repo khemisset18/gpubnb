@@ -26,7 +26,6 @@ concurrency:
 jobs:
   build:
     name: Build ${{ matrix.label }}
-    environment: ${{ matrix.os == 'windows-latest' && 'windows-code-signing' || null }}
     strategy:
       fail-fast: false
       matrix:
@@ -226,32 +225,6 @@ jobs:
 
           Cette version est réservée aux tests sur Devnet.
           '@ | Set-Content -Path "$portableDir/LISEZ-MOI.txt" -Encoding UTF8
-
-      - name: Sign Windows publication payloads when signing is required
-        if: runner.os == 'Windows' && vars.GPUBNB_WINDOWS_SIGNING_REQUIRED == 'true'
-        shell: pwsh
-        env:
-          GPUBNB_CODESIGN_THUMBPRINT: ${{ secrets.GPUBNB_CODESIGN_THUMBPRINT }}
-          GPUBNB_CODESIGN_TIMESTAMP_URL: ${{ vars.GPUBNB_CODESIGN_TIMESTAMP_URL }}
-        run: |
-          $portableCandidates = @(
-            'target/release/gpubnb-host-desktop.exe',
-            'apps/host-desktop/src-tauri/target/release/gpubnb-host-desktop.exe'
-          )
-          $hostExe = $portableCandidates | Where-Object { Test-Path $_ -PathType Leaf } | Select-Object -First 1
-          if (-not $hostExe) { throw 'codesign_host_exe_missing' }
-          & ./scripts/sign-windows-authenticode.ps1 -Path @(
-            'dist/gpubnb-agent.exe',
-            'services/edge/target/release/gpubnb-host-tunnel.exe',
-            $hostExe,
-            'release-assets/gpubnb-host-windows-x64.exe'
-          )
-
-          # The portable archive must be assembled only after its embedded
-          # executables have their final Authenticode bytes.
-          Copy-Item $hostExe "$portableDir/GPUbnb-Host-Portable.exe" -Force
-          Copy-Item 'dist/gpubnb-agent.exe' "$portableDir/gpubnb-agent.exe" -Force
-          Copy-Item 'services/edge/target/release/gpubnb-host-tunnel.exe' "$portableDir/gpubnb-host-tunnel.exe" -Force
 
       - name: Finalize Windows portable archive
         if: runner.os == 'Windows'
