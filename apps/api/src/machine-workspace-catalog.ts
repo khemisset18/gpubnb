@@ -26,11 +26,12 @@ function isWorkspaceRuntimeAvailable(machine: MachineCapabilities, slug: string)
   if (!isExecutableWorkspaceSlug(slug)) return false;
   if (!linuxDesktopWorkspaceSlugs.has(slug)) return true;
 
-  // Fail closed on Windows even if a malformed/spoofed inventory reports the
-  // Linux-only desktop flag. The Windows-native backend will get a distinct,
-  // physically measured capability and an explicit branch here when it exists.
+  // This capability describes the qualified Linux/Selkies path and nothing
+  // else. Require Linux positively rather than merely excluding Windows: a
+  // future/unknown OS must never inherit a desktop backend by accident. The
+  // Windows-native backend gets its own independently measured branch.
   const os = machine.operatingSystem?.trim().toLowerCase() ?? '';
-  if (os.startsWith('windows')) return false;
+  if (!os.startsWith('linux')) return false;
   return machine.desktopGpuRenderingAvailable;
 }
 
