@@ -27,6 +27,7 @@ impl MediaCapabilityToken {
         }
     }
 
+    #[cfg(any(target_os = "windows", test))]
     fn from_entropy(mut entropy: [u8; MEDIA_CAPABILITY_ENTROPY_BYTES]) -> Self {
         const HEX: &[u8; 16] = b"0123456789abcdef";
         let mut token = [0u8; MEDIA_CAPABILITY_TOKEN_BYTES];
