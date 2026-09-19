@@ -77,6 +77,17 @@ impl ReadinessProof {
         self.input_isolated = false;
         self.invalidate_capture_chain();
     }
+
+    pub const fn invalidate_worker(&mut self) {
+        self.input_isolated = false;
+        self.invalidate_capture_chain();
+    }
+
+    pub const fn invalidate_media_client(&mut self) {
+        // A disconnected browser must never leave READY/billing armed. Require a
+        // fresh capture+encode proof before reconnect can promote the session again.
+        self.invalidate_capture_chain();
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,6 +97,9 @@ pub enum SessionEvent {
     VirtualDisplayLost,
     ExactGpuLost,
     IsolationLost,
+    WorkerLost,
+    NvencDeviceLost,
+    BrowserDisconnected,
     StopRequested,
     CleanupVerified,
 }
@@ -169,6 +183,18 @@ impl NativeSessionState {
             SessionEvent::IsolationLost => {
                 if !matches!(self.phase, SessionPhase::Stopping) {
                     self.proof.invalidate_isolation();
+                    self.phase = SessionPhase::Degraded;
+                }
+            }
+            SessionEvent::WorkerLost => {
+                if !matches!(self.phase, SessionPhase::Stopping) {
+                    self.proof.invalidate_worker();
+                    self.phase = SessionPhase::Degraded;
+                }
+            }
+            SessionEvent::NvencDeviceLost | SessionEvent::BrowserDisconnected => {
+                if !matches!(self.phase, SessionPhase::Stopping) {
+                    self.proof.invalidate_media_client();
                     self.phase = SessionPhase::Degraded;
                 }
             }
@@ -281,6 +307,29 @@ mod tests {
             assert_eq!(state.phase(), SessionPhase::Degraded);
             assert!(!state.billable());
             assert!(!state.proof().media_ready);
+        }
+    }
+
+    #[test]
+    fn worker_nvenc_or_browser_loss_immediately_revokes_ready_and_billing() {
+        for event in [
+            SessionEvent::WorkerLost,
+            SessionEvent::NvencDeviceLost,
+            SessionEvent::BrowserDisconnected,
+        ] {
+            let mut state = NativeSessionState::new(WorkspaceKind::CloudDesktop);
+            state.apply(SessionEvent::ProofsUpdated(shared_ready()));
+            assert!(state.billable());
+
+            state.apply(event);
+            assert_eq!(state.phase(), SessionPhase::Degraded);
+            assert!(!state.billable());
+            assert!(!state.proof().capture_ready);
+            assert!(!state.proof().nvenc_ready);
+            assert!(!state.proof().media_ready);
+            if matches!(event, SessionEvent::WorkerLost) {
+                assert!(!state.proof().input_isolated);
+            }
         }
     }
 
