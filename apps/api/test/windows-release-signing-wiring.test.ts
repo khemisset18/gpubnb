@@ -4,15 +4,23 @@ import test from 'node:test';
 
 const workflowUrl = new URL('../../../.github/workflows/publish-host-test-release.yml', import.meta.url);
 const verifierUrl = new URL('../../../scripts/verify-windows-authenticode.ps1', import.meta.url);
+const signerUrl = new URL('../../../scripts/sign-windows-authenticode.ps1', import.meta.url);
 
 test('Windows publication is wired to the Authenticode verifier before artifact publication', async () => {
   const workflow = await readFile(workflowUrl, 'utf8');
+  const signIndex = workflow.indexOf('Sign Windows publication payloads when signing is required');
+  const archiveIndex = workflow.indexOf('Finalize Windows portable archive');
   const verifyIndex = workflow.indexOf('Verify Windows Authenticode publication policy');
-  const uploadIndex = workflow.indexOf('actions/upload-artifact@v6', verifyIndex);
-  assert.ok(verifyIndex >= 0, 'Windows publication must have an Authenticode policy step');
+  const uploadIndex = workflow.indexOf('actions/upload-artifact@', verifyIndex);
+  assert.ok(signIndex >= 0, 'Windows publication must have an Authenticode signing step');
+  assert.ok(archiveIndex > signIndex, 'portable archive must be assembled after final executable signing');
+  assert.ok(verifyIndex > archiveIndex, 'signature verification must happen after final Windows packaging');
   assert.ok(uploadIndex > verifyIndex, 'Authenticode verification must happen before release artifact upload');
 
   assert.match(workflow, /GPUBNB_WINDOWS_SIGNING_REQUIRED:\s*\$\{\{\s*vars\.GPUBNB_WINDOWS_SIGNING_REQUIRED\s*\}\}/);
+  assert.match(workflow, /sign-windows-authenticode\.ps1 -Path/);
+  assert.match(workflow, /secrets\.GPUBNB_CODESIGN_THUMBPRINT/);
+  assert.match(workflow, /vars\.GPUBNB_CODESIGN_TIMESTAMP_URL/);
   assert.match(workflow, /verify-windows-authenticode\.ps1 -Path \$paths -Required/);
   assert.match(workflow, /verify-windows-authenticode\.ps1 -Path \$paths\s*\n/);
   assert.match(workflow, /release-assets\/gpubnb-host-windows-x64\.exe/);
@@ -28,4 +36,13 @@ test('Authenticode verifier fails closed when required and rejects invalid prese
   assert.match(source, /\$signed -and -not \$valid/);
   assert.match(source, /authenticode_present_but_invalid/);
   assert.match(source, /SignatureStatus\]::Valid/);
+});
+
+test('Windows signer requires a current private-key certificate and RFC3161 timestamp endpoint', async () => {
+  const source = await readFile(signerUrl, 'utf8');
+  assert.match(source, /codesign_thumbprint_missing_on_signing_runner/);
+  assert.match(source, /codesign_timestamp_url_missing_on_signing_runner/);
+  assert.match(source, /HasPrivateKey/);
+  assert.match(source, /\/fd SHA256 \/tr \$timestampUrl \/td SHA256/);
+  assert.match(source, /verify-windows-authenticode\.ps1" -Path \$Path -Required/);
 });
