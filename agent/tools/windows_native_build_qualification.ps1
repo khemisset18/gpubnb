@@ -63,6 +63,26 @@ $mediaDllPathResolved = (Resolve-Path -LiteralPath $MediaDllPath -ErrorAction St
 $workerSigner = Get-TrustedSignerSha256 -Path $workerPathResolved
 $mediaSigner = Get-TrustedSignerSha256 -Path $mediaDllPathResolved
 
+$workerPolicyRaw = (& $workerPathResolved --build-policy --json | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) {
+    throw 'qualification_worker_build_policy_unavailable'
+}
+try {
+    $workerPolicy = $workerPolicyRaw | ConvertFrom-Json -ErrorAction Stop
+}
+catch {
+    throw 'qualification_worker_build_policy_invalid_json'
+}
+if ($workerPolicy.schemaVersion -ne 1) {
+    throw 'qualification_worker_build_policy_version'
+}
+if ([string]$workerPolicy.sourceCommit -cne $sourceCommit) {
+    throw 'qualification_worker_source_commit_mismatch'
+}
+if ([string]$workerPolicy.mediaSignerSha256 -cne $mediaSigner) {
+    throw 'qualification_worker_media_signer_mismatch'
+}
+
 $oldWorkerSigner = $env:GPUBNB_WINDOWS_WORKER_SIGNER_SHA256
 $oldMediaSigner = $env:GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256
 try {

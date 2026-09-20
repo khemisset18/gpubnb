@@ -49,6 +49,8 @@ use std::time::{Duration, Instant};
 
 const MAX_SESSION_ID: usize = 128;
 const MAX_GPU_UUID: usize = 64;
+const BUILD_MEDIA_SIGNER_SHA256: Option<&str> = option_env!("GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256");
+const BUILD_SOURCE_COMMIT: Option<&str> = option_env!("GPUBNB_SOURCE_COMMIT");
 #[cfg(target_os = "windows")]
 const PIPE_TIMEOUT_MS: u32 = 10_000;
 #[cfg(target_os = "windows")]
@@ -582,8 +584,41 @@ fn error_json(error: WorkerError) -> String {
     format!(r#"{{"ok":false,"error":"{}"}}"#, error.code)
 }
 
+fn is_lower_hex(value: &str, len: usize) -> bool {
+    value.len() == len
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+}
+
+fn build_policy_json() -> Result<String, WorkerError> {
+    let media_signer = BUILD_MEDIA_SIGNER_SHA256
+        .filter(|value| is_lower_hex(value, 64))
+        .ok_or_else(|| WorkerError::new("build_media_signer_unconfigured", 21))?;
+    let source_commit = BUILD_SOURCE_COMMIT
+        .filter(|value| is_lower_hex(value, 40))
+        .ok_or_else(|| WorkerError::new("build_source_commit_unconfigured", 21))?;
+
+    Ok(format!(
+        r#"{{"schemaVersion":1,"sourceCommit":"{source_commit}","mediaSignerSha256":"{media_signer}"}}"#
+    ))
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
+    if args == ["--build-policy", "--json"] {
+        return match build_policy_json() {
+            Ok(value) => {
+                println!("{value}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                println!("{}", error_json(error));
+                ExitCode::from(error.exit_code)
+            }
+        };
+    }
+
     match parse_args(&args).and_then(|parsed| execute(&parsed)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
@@ -764,6 +799,22 @@ mod tests {
             media_probe_error(MediaProbeError::ProbeFailed, true).code,
             "resume_media_reproof_failed"
         );
+    }
+
+    #[test]
+    fn build_policy_is_fail_closed_or_exactly_compiled() {
+        match (BUILD_SOURCE_COMMIT, BUILD_MEDIA_SIGNER_SHA256) {
+            (Some(commit), Some(signer))
+                if is_lower_hex(commit, 40) && is_lower_hex(signer, 64) =>
+            {
+                let policy = build_policy_json().expect("configured build policy");
+                assert!(policy.contains(commit));
+                assert!(policy.contains(signer));
+                assert!(!policy.contains("GPU-"));
+                assert!(!policy.contains("S-1-"));
+            }
+            _ => assert!(build_policy_json().is_err()),
+        }
     }
 
     #[test]
