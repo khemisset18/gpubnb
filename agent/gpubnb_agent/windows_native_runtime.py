@@ -91,9 +91,9 @@ def _media_token(value: object) -> str | None:
     if value != value.strip():
         return None
     token = value
-    if not 32 <= len(token) <= 200:
+    if len(token) != 64:
         return None
-    if any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for char in token):
+    if any(char not in "0123456789abcdef" for char in token):
         return None
     return token
 
