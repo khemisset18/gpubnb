@@ -38,32 +38,47 @@ nvidia-smi --query-gpu=name,uuid,memory.total,driver_version --format=csv,nohead
 python agent/tools/windows_native_qualify.py
 ```
 
-PASS requires the qualification report to be valid JSON and contain no provider
-profile/application filesystem paths. A missing helper is an expected FAIL before
-the native helper is installed; it must never be converted into a guessed success.
+The Agent-side report is inventory and production-gate evidence only at this stage.
+Because the production `gpubnb-windows-stream.exe` intentionally remains
+fail-closed until promotion, `windows_native_qualify.py` is expected to report the
+native desktop backend unavailable before that promotion. That expected failure
+must not be converted into a guessed success. The report must still be valid JSON
+and must contain no provider profile/application filesystem paths.
 
-## 2. Native helper self-test
+## 2. Qualification-only local physical smoke
 
-Run:
+Do **not** use the production helper self-test as the Stage 2 pass gate while the
+production helper remains deliberately unimplemented. After the signed worker,
+signed media DLL and qualification-enabled IddCx package are installed, use the
+dedicated physical smoke entrypoint documented below:
 
 ```powershell
-python agent/tools/windows_native_qualify.py --workspace cloud-desktop --require-ready
+powershell -NoProfile -File agent\tools\windows_native_physical_smoke.ps1 `
+  -SessionId qual-cloud-001 `
+  -WindowsSessionId <renter-wts-session-id> `
+  -GpuUuid GPU-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx `
+  -RenterUserSid S-1-... `
+  -ProviderUserSid S-1-... `
+  -Frames 8 `
+  -EvidencePath C:\ProgramData\GPUbnb\qualification\cloud-desktop-stage2.json
 ```
 
 PASS requires all of:
 
 - exact local NVIDIA GPU UUID;
-- real captured frame;
+- real captured H.264 frames;
 - `hardwareEncoder = nvenc`;
 - isolated renter session proof;
 - GPUbnb-owned virtual display proof (`virtualDisplay = true`);
 - explicit provider-desktop exclusion proof (`providerDesktopExcluded = true`);
-- input isolation proof;
-- local media loopback proof;
+- the real fenced renter input path to execute successfully (`inputIsolation = true`);
+- authenticated local media loopback proof;
 - no helper listener on LAN/public interfaces;
-- media endpoint uses a literal loopback IP, explicit port and exact `/session/<sessionId>` path;
-- fresh per-session media token is required and absent from URL/log output;
-- no leftover helper/session process after the self-test.
+- fresh per-session media token absent from URL/log/evidence output;
+- verified worker, virtual-display and loopback-listener cleanup after the smoke.
+
+A Stage 2 PASS is local physical-smoke evidence only. It is not the browser
+end-to-end qualification and does not enable Windows bookability.
 
 ## 3. Cloud Desktop end to end
 
