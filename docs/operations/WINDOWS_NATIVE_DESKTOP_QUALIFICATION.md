@@ -218,3 +218,25 @@ Build the matching IddCx qualification variant explicitly:
 
 Default Cargo and MSBuild builds keep monitor mutation disabled. CI may compile the
 qualification variants to catch regressions, but must never install or promote them.
+
+### One-command Stage 2 smoke
+
+After the qualification-enabled IddCx package and signed worker/media DLL have
+been installed on the dedicated test Host, run the smoke entrypoint as LocalSystem.
+It deliberately refuses Administrator-only execution because the WTS token proof
+requires the privileged service boundary rather than a normal elevated desktop.
+
+    powershell -NoProfile -File agent\tools\windows_native_physical_smoke.ps1 `
+      -SessionId qual-cloud-001 `
+      -WindowsSessionId <renter-wts-session-id> `
+      -GpuUuid GPU-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx `
+      -RenterUserSid S-1-... `
+      -ProviderUserSid S-1-... `
+      -Frames 8 `
+      -EvidencePath C:\ProgramData\GPUbnb\qualification\cloud-desktop-stage2.json
+
+The script checks the exact NVIDIA UUID, valid Authenticode signatures for the
+fixed worker and media DLL, one healthy GPUbnb IddCx device, the qualification
+harness result and verified cleanup. It writes no renter/provider SID and no media
+token to the evidence record. A PASS is only Stage 2 local physical smoke; it is
+not browser end-to-end qualification and does not enable Windows bookability.
