@@ -40,7 +40,10 @@ pub struct QualificationMediaServer {
 }
 
 impl QualificationMediaServer {
-    pub fn bind(session_id: &str, stream_epoch: u64) -> Result<Self, QualificationMediaServerError> {
+    pub fn bind(
+        session_id: &str,
+        stream_epoch: u64,
+    ) -> Result<Self, QualificationMediaServerError> {
         if session_id.is_empty()
             || session_id.len() > 200
             || !session_id
@@ -50,8 +53,8 @@ impl QualificationMediaServer {
         {
             return Err(QualificationMediaServerError::InvalidConfiguration);
         }
-        let listener = TcpListener::bind(("127.0.0.1", 0))
-            .map_err(|_| QualificationMediaServerError::Bind)?;
+        let listener =
+            TcpListener::bind(("127.0.0.1", 0)).map_err(|_| QualificationMediaServerError::Bind)?;
         let address = listener
             .local_addr()
             .map_err(|_| QualificationMediaServerError::Bind)?;
@@ -79,7 +82,9 @@ impl QualificationMediaServer {
         loop {
             match self.listener.accept() {
                 Ok((stream, _)) => return Ok(stream),
-                Err(error) if error.kind() == ErrorKind::WouldBlock && Instant::now() < deadline => {
+                Err(error)
+                    if error.kind() == ErrorKind::WouldBlock && Instant::now() < deadline =>
+                {
                     thread::sleep(Duration::from_millis(10));
                 }
                 Err(error) if error.kind() == ErrorKind::WouldBlock => {
@@ -229,8 +234,7 @@ pub fn websocket_accept_value(key: &str) -> String {
 }
 
 fn base64_encode(input: &[u8]) -> String {
-    const TABLE: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
     for chunk in input.chunks(3) {
         let a = chunk[0];
@@ -279,11 +283,9 @@ fn sha1(input: &[u8]) -> [u8; 20] {
             ]);
         }
         for index in 16..80 {
-            words[index] = (words[index - 3]
-                ^ words[index - 8]
-                ^ words[index - 14]
-                ^ words[index - 16])
-                .rotate_left(1);
+            words[index] =
+                (words[index - 3] ^ words[index - 8] ^ words[index - 14] ^ words[index - 16])
+                    .rotate_left(1);
         }
 
         let mut a = h0;
@@ -349,8 +351,8 @@ mod tests {
         assert_eq!(
             sha1(b"abc"),
             [
-                0xa9, 0x99, 0x3e, 0x36, 0x47, 0x06, 0x81, 0x6a, 0xba, 0x3e,
-                0x25, 0x71, 0x78, 0x50, 0xc2, 0x6c, 0x9c, 0xd0, 0xd8, 0x9d,
+                0xa9, 0x99, 0x3e, 0x36, 0x47, 0x06, 0x81, 0x6a, 0xba, 0x3e, 0x25, 0x71, 0x78, 0x50,
+                0xc2, 0x6c, 0x9c, 0xd0, 0xd8, 0x9d,
             ]
         );
     }

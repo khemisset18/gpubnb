@@ -140,8 +140,8 @@ mod windows {
     }
 
     fn qualification_nonce() -> Result<[u8; 16], &'static str> {
-        let token =
-            MediaCapabilityToken::generate().map_err(|_| "qualification_nonce_generation_failed")?;
+        let token = MediaCapabilityToken::generate()
+            .map_err(|_| "qualification_nonce_generation_failed")?;
         let bytes = token.as_str().as_bytes();
         let mut nonce = [0u8; 16];
         for (index, slot) in nonce.iter_mut().enumerate() {
@@ -233,8 +233,10 @@ mod windows {
         if !response.starts_with("HTTP/1.1 101 Switching Protocols\r\n") {
             return Err("client_upgrade_rejected");
         }
-        let expected_accept =
-            format!("Sec-WebSocket-Accept: {}\r\n", websocket_accept_value(CLIENT_KEY));
+        let expected_accept = format!(
+            "Sec-WebSocket-Accept: {}\r\n",
+            websocket_accept_value(CLIENT_KEY)
+        );
         if !response.contains(&expected_accept) {
             return Err("client_upgrade_accept_invalid");
         }
