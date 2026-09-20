@@ -35,6 +35,7 @@ use gpubnb_windows_platform::pipe::{
 use gpubnb_windows_platform::process::{
     RenterWorkerLaunchSpec, RenterWorkerProcess, launch_qualified_renter_worker,
 };
+use gpubnb_windows_platform::secret::MediaCapabilityToken;
 use gpubnb_windows_platform::session::{RenterSessionIsolationProof, query_renter_session_token};
 use std::path::Path;
 
@@ -57,6 +58,7 @@ pub enum ServiceRuntimeError {
     WorkerProtocol,
     MediaProof,
     MediaTransport,
+    MediaCapability,
     GraphicsProof,
     StopUnconfirmed,
     DisplayCleanup,
@@ -85,8 +87,10 @@ enum RuntimeMediaState {
 }
 
 pub struct QualifiedGraphicsRuntime {
-    // Drop order is deliberate. Losing the pipe wakes/fails the worker, then the
-    // Job Object kills any remaining worker tree, then the IddCx lease is removed.
+    // Drop order is deliberate. The ephemeral browser capability is wiped first,
+    // then losing the pipe wakes/fails the worker, the Job Object kills any
+    // remaining worker tree, and the IddCx lease is removed.
+    media_capability: Option<MediaCapabilityToken>,
     pipe: WorkerPipe,
     media_pipe: WorkerMediaPipe,
     worker: Option<RenterWorkerProcess>,
@@ -127,7 +131,19 @@ impl QualifiedGraphicsRuntime {
         matches!(self.media_state, RuntimeMediaState::Failed)
     }
 
+    /// Return the current ephemeral media capability only while media is ready.
+    ///
+    /// The caller must never persist or log this value. Suspend/failure/stop drop
+    /// and volatile-wipe the owned CNG capability before media can be resumed.
+    pub fn media_token(&self) -> Option<&str> {
+        if !matches!(self.media_state, RuntimeMediaState::Ready) {
+            return None;
+        }
+        self.media_capability.as_ref().map(MediaCapabilityToken::as_str)
+    }
+
     fn fail(&mut self, error: ServiceRuntimeError) -> ServiceRuntimeError {
+        self.media_capability.take();
         self.pending_media_frame = None;
         self.media_state = RuntimeMediaState::Failed;
         error
@@ -240,6 +256,9 @@ impl QualifiedGraphicsRuntime {
             return Err(self.fail(ServiceRuntimeError::WorkerProtocol));
         }
         self.next_sequence = next_sequence;
+        // Revocation precedes the suspended state. Dropping the token performs
+        // the platform crate's volatile wipe, so reconnect can never reuse it.
+        self.media_capability.take();
         self.pending_media_frame = None;
         self.last_frame_sequence = 0;
         self.media_state = RuntimeMediaState::Suspended;
@@ -284,13 +303,24 @@ impl QualifiedGraphicsRuntime {
         if !frame.is_keyframe() {
             return Err(self.fail(ServiceRuntimeError::MediaTransport));
         }
+        let media_capability = match MediaCapabilityToken::generate() {
+            Ok(token) => token,
+            Err(_) => return Err(self.fail(ServiceRuntimeError::MediaCapability)),
+        };
         self.last_frame_sequence = frame.header.frame_sequence;
         self.pending_media_frame = Some(frame);
+        self.media_capability = Some(media_capability);
         self.media_state = RuntimeMediaState::Ready;
         Ok(())
     }
 
     pub fn stop(mut self) -> Result<(), ServiceRuntimeError> {
+        // Revoke browser authority before waiting for the worker or display
+        // cleanup. A stalled stop must not leave an old media token usable.
+        self.media_capability.take();
+        self.pending_media_frame = None;
+        self.media_state = RuntimeMediaState::Failed;
+
         let mut stop_error = None;
         if let Some(worker) = self.worker.as_ref() {
             let command = encode_worker_command(WorkerCommandFrame {
@@ -665,8 +695,11 @@ pub fn start_qualified_graphics_runtime(
     if !initial_media_frame.is_keyframe() {
         return Err(ServiceRuntimeError::MediaTransport);
     }
+    let media_capability =
+        MediaCapabilityToken::generate().map_err(|_| ServiceRuntimeError::MediaCapability)?;
 
     Ok(QualifiedGraphicsRuntime {
+        media_capability: Some(media_capability),
         pipe,
         media_pipe,
         worker: Some(worker),
