@@ -6,7 +6,11 @@ EXTERN_C const GUID GUID_DEVINTERFACE_GPUBNB_IDD_CONTROL =
 // Physical qualification gate. Keep real monitor mutation compiled so WDK/ABI
 // regressions are caught, but make it unreachable in production behavior until
 // GPUbnb explicitly promotes a physically qualified build.
-static constexpr bool GPUBNB_ENABLE_MONITOR_MUTATION = false;
+#ifndef GPUBNB_PHYSICAL_QUALIFICATION_BUILD
+#define GPUBNB_PHYSICAL_QUALIFICATION_BUILD 0
+#endif
+static constexpr bool GPUBNB_ENABLE_MONITOR_MUTATION =
+    GPUBNB_PHYSICAL_QUALIFICATION_BUILD == 1;
 
 static void GPUbnbFillSignalInfo(
     _Out_ DISPLAYCONFIG_VIDEO_SIGNAL_INFO* mode,
