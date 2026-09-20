@@ -11,6 +11,9 @@ including:
 - owner-handle binding for Plug/Unplug, with automatic monitor departure if the
   privileged control handle is cleaned up;
 - a dedicated IddCx swap-chain processing thread;
+- the exact leased render-adapter LUID is set as the IddCx preferred rendering
+  adapter before monitor arrival, while swap-chain assignment still rejects any
+  different adapter actually selected by Windows;
 - D3D11 device creation on the exact render-adapter LUID;
 - strict swap-chain texture-dimension validation;
 - correct IddCx frame completion/release sequencing.

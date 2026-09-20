@@ -64,6 +64,20 @@ jobs:
             throw "Default IddCx builds must compile monitor mutation disabled"
           }
 
+      - name: Verify exact leased GPU is the preferred IddCx render adapter
+        shell: pwsh
+        run: |
+          $driver = Get-Content native/windows-idd/Driver.cpp -Raw
+          if ($driver -notmatch 'PreferredRenderAdapter\s*=\s*request->RenderAdapterLuid') {
+            throw "IddCx monitor arrival must prefer the exact leased render-adapter LUID"
+          }
+          if ($driver -notmatch 'IddCxAdapterSetRenderAdapter\(deviceContext->Adapter') {
+            throw "IddCx render-adapter preference is not applied before monitor use"
+          }
+          if ($driver -notmatch 'input->RenderAdapterLuid, context->RenderAdapterLuid') {
+            throw "Swapchain assignment must still reject an OS-selected wrong GPU"
+          }
+
       - name: Verify custom IOCTLs stay on the IddCx control path
         shell: pwsh
         run: |

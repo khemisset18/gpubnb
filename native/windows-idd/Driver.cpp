@@ -92,6 +92,13 @@ static NTSTATUS GPUbnbPlugMonitor(
         return STATUS_DEVICE_BUSY;
     }
 
+    // Prefer the exact leased NVIDIA adapter before monitor arrival. The OS can
+    // still choose another adapter, so EvtIddCxMonitorAssignSwapChain retains the
+    // mandatory exact-LUID check and abandons any mismatched swapchain.
+    IDARG_IN_ADAPTERSETRENDERADAPTER renderAdapter = {};
+    renderAdapter.PreferredRenderAdapter = request->RenderAdapterLuid;
+    IddCxAdapterSetRenderAdapter(deviceContext->Adapter, &renderAdapter);
+
     WDF_OBJECT_ATTRIBUTES monitorAttributes;
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&monitorAttributes, GPUbnbMonitorContext);
 
@@ -179,6 +186,10 @@ static NTSTATUS GPUbnbUnplugMonitor(
     {
         deviceContext->Monitor = nullptr;
         deviceContext->MonitorOwnerFile = nullptr;
+
+        IDARG_IN_ADAPTERSETRENDERADAPTER renderAdapter = {};
+        renderAdapter.PreferredRenderAdapter = {};
+        IddCxAdapterSetRenderAdapter(deviceContext->Adapter, &renderAdapter);
     }
     return status;
 }
@@ -413,6 +424,10 @@ VOID GPUbnbFileCleanup(WDFFILEOBJECT fileObject)
     {
         context->Monitor = nullptr;
         context->MonitorOwnerFile = nullptr;
+
+        IDARG_IN_ADAPTERSETRENDERADAPTER renderAdapter = {};
+        renderAdapter.PreferredRenderAdapter = {};
+        IddCxAdapterSetRenderAdapter(context->Adapter, &renderAdapter);
     }
 }
 
