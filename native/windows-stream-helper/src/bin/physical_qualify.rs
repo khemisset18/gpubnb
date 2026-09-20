@@ -153,7 +153,7 @@ mod windows {
         Ok(nonce)
     }
 
-    fn read_headers<R: BufRead>(reader: &mut R) -> Result<String, &'static str> {
+    pub(super) fn read_headers<R: BufRead>(reader: &mut R) -> Result<String, &'static str> {
         let mut bytes = Vec::with_capacity(1024);
         loop {
             let mut line = Vec::with_capacity(128);
@@ -181,7 +181,7 @@ mod windows {
         }
     }
 
-    fn read_ws_binary<R: Read>(stream: &mut R) -> Result<Vec<u8>, &'static str> {
+    pub(super) fn read_ws_binary<R: Read>(stream: &mut R) -> Result<Vec<u8>, &'static str> {
         let mut first = [0u8; 2];
         stream
             .read_exact(&mut first)
