@@ -356,17 +356,21 @@ mod windows {
         let listener_closed =
             TcpStream::connect_timeout(&endpoint, Duration::from_millis(250)).is_err();
 
+        // Revoke media authority and tear down the worker/display immediately
+        // after the server finishes, including on media-server failure. Do not
+        // keep privileged graphics resources alive while waiting for the client
+        // thread's socket timeout.
+        let stop_result = runtime
+            .stop()
+            .map_err(|_| "qualification_cleanup_unverified");
         let client_result = match client.join() {
             Ok(result) => result.map_err(|_| "qualification_client_failed"),
             Err(_) => Err("qualification_client_panicked"),
         };
-        let stop_result = runtime
-            .stop()
-            .map_err(|_| "qualification_cleanup_unverified");
 
         let sent = server_result?;
-        let received = client_result?;
         stop_result?;
+        let received = client_result?;
         if !listener_closed {
             return Err("qualification_media_listener_cleanup_unverified");
         }
