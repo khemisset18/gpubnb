@@ -139,7 +139,9 @@ impl QualifiedGraphicsRuntime {
         if !matches!(self.media_state, RuntimeMediaState::Ready) {
             return None;
         }
-        self.media_capability.as_ref().map(MediaCapabilityToken::as_str)
+        self.media_capability
+            .as_ref()
+            .map(MediaCapabilityToken::as_str)
     }
 
     fn fail(&mut self, error: ServiceRuntimeError) -> ServiceRuntimeError {
