@@ -12,8 +12,7 @@ pub const LOCAL_MEDIA_REQUEST_MAX_BYTES: usize = 8 * 1024;
 pub const LOCAL_MEDIA_HEADER_MAX_COUNT: usize = 32;
 pub const LOCAL_MEDIA_HEADER_LINE_MAX_BYTES: usize = 2 * 1024;
 const MAX_SESSION_ID_BYTES: usize = 200;
-const MIN_MEDIA_TOKEN_BYTES: usize = 32;
-const MAX_MEDIA_TOKEN_BYTES: usize = 200;
+const MEDIA_TOKEN_BYTES: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalMediaUpgrade {
@@ -55,10 +54,10 @@ fn valid_session_id(value: &str) -> bool {
 }
 
 fn valid_media_token(value: &str) -> bool {
-    (MIN_MEDIA_TOKEN_BYTES..=MAX_MEDIA_TOKEN_BYTES).contains(&value.len())
+    value.len() == MEDIA_TOKEN_BYTES
         && value
             .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn media_token_matches(expected: &str, presented: &str) -> bool {
@@ -86,6 +85,25 @@ fn valid_loopback_host(value: &str) -> bool {
         return false;
     }
     address.to_string() == value
+}
+
+/// Validate the addresses reported by the accepted TCP socket itself.
+///
+/// The HTTP Host header is defense-in-depth only. A future listener must pass
+/// the accepted stream's real local_addr() and peer_addr() through this check
+/// before reading or authenticating any WebSocket upgrade bytes.
+pub fn validate_loopback_socket_addresses(
+    local_addr: SocketAddr,
+    peer_addr: SocketAddr,
+) -> Result<(), LocalMediaUpgradeError> {
+    if !local_addr.ip().is_loopback()
+        || local_addr.port() == 0
+        || !peer_addr.ip().is_loopback()
+        || peer_addr.port() == 0
+    {
+        return Err(LocalMediaUpgradeError::Host);
+    }
+    Ok(())
 }
 
 fn contains_ascii_token(value: &str, expected: &str) -> bool {
@@ -290,10 +308,50 @@ X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
             authenticate_local_media_upgrade(&request(""), SESSION, &wrong),
             Err(LocalMediaUpgradeError::Unauthorized)
         );
-        for invalid in ["short", "A=A=A=A=A=A=A=A=A=A=A=A=A=A=A=A="] {
+        for invalid in [
+            "short",
+            "A=A=A=A=A=A=A=A=A=A=A=A=A=A=A=A=",
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ] {
             assert_eq!(
                 authenticate_local_media_upgrade(&request(""), SESSION, invalid),
                 Err(LocalMediaUpgradeError::MediaToken)
+            );
+        }
+    }
+
+    #[test]
+    fn accepted_socket_addresses_must_both_be_real_loopback_endpoints() {
+        for (local, peer) in [
+            ("127.0.0.1:43123", "127.0.0.1:53123"),
+            ("[::1]:43123", "[::1]:53123"),
+        ] {
+            assert_eq!(
+                validate_loopback_socket_addresses(
+                    local.parse().expect("local socket"),
+                    peer.parse().expect("peer socket")
+                ),
+                Ok(())
+            );
+        }
+
+        for (local, peer) in [
+            ("0.0.0.0:43123", "127.0.0.1:53123"),
+            ("192.168.1.5:43123", "127.0.0.1:53123"),
+            ("127.0.0.1:43123", "192.168.1.5:53123"),
+            ("127.0.0.1:0", "127.0.0.1:53123"),
+            ("127.0.0.1:43123", "127.0.0.1:0"),
+        ] {
+            assert_eq!(
+                validate_loopback_socket_addresses(
+                    local.parse().expect("local socket"),
+                    peer.parse().expect("peer socket")
+                ),
+                Err(LocalMediaUpgradeError::Host)
             );
         }
     }
