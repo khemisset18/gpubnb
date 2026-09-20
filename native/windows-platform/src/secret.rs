@@ -144,14 +144,14 @@ mod tests {
     }
 
     #[test]
-    fn capability_has_agent_compatible_entropy_and_alphabet() {
+    fn capability_matches_exact_agent_wire_contract() {
         let token = MediaCapabilityToken::from_entropy([0x01; MEDIA_CAPABILITY_ENTROPY_BYTES]);
-        assert!(token.as_str().len() >= 32);
+        assert_eq!(token.as_str().len(), MEDIA_CAPABILITY_TOKEN_BYTES);
         assert!(
             token
                 .as_str()
                 .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
         );
     }
 
