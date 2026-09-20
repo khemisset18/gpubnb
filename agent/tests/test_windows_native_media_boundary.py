@@ -75,28 +75,36 @@ class WindowsNativeMediaBoundaryTests(unittest.TestCase):
         )
 
     def test_media_token_comparison_is_strict_and_type_safe(self):
-        token = "A" * 32 + "-_"
+        token = "a" * 64
         self.assertTrue(media_token_matches(token, token))
         for presented in (
-            "B" + token[1:],
+            "b" + token[1:],
             token[:-1],
-            token + "A",
-            token.lower(),
+            token + "a",
+            token.upper(),
+            "a" * 63 + "-",
+            "a" * 63 + "_",
+            "g" * 64,
             None,
             123,
             True,
             [],
             {},
-            "A" * 31,
-            "A" * 201,
-            "A" * 32 + "=",
         ):
             with self.subTest(presented=presented):
                 self.assertFalse(media_token_matches(token, presented))
 
     def test_media_token_comparison_rejects_invalid_trusted_capability(self):
-        valid = "A" * 32 + "-_"
-        for expected in ("", "A" * 31, "A" * 201, "A" * 32 + "=", "é" * 32):
+        valid = "a" * 64
+        for expected in (
+            "",
+            "a" * 63,
+            "a" * 65,
+            "A" * 64,
+            "a" * 63 + "=",
+            "a" * 63 + "-",
+            "é" * 64,
+        ):
             with self.subTest(expected=expected):
                 self.assertFalse(media_token_matches(expected, valid))
 
