@@ -380,7 +380,7 @@ mod windows {
         match run() {
             Ok(frames) => {
                 println!(
-                    "{{\"ok\":true,\"workspace\":\"cloud-desktop\",\"frames\":{frames},\"isolatedSession\":true,\"virtualDisplay\":true,\"providerDesktopExcluded\":true,\"exactGpuBound\":true,\"hardwareEncoder\":\"nvenc\",\"loopbackMedia\":true,\"cleanupVerified\":true,\"bookabilityEnabled\":false}}"
+                    "{{\"ok\":true,\"workspace\":\"cloud-desktop\",\"frames\":{frames},\"isolatedSession\":true,\"virtualDisplay\":true,\"providerDesktopExcluded\":true,\"exactGpuBound\":true,\"hardwareEncoder\":\"nvenc\",\"loopbackMedia\":true,\"inputIsolation\":true,\"cleanupVerified\":true,\"bookabilityEnabled\":false}}"
                 );
                 ExitCode::SUCCESS
             }
