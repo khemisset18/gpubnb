@@ -178,7 +178,6 @@ pub fn browser_media_chunk_plan(
     Ok(chunks)
 }
 
-
 pub const BROWSER_MEDIA_REASSEMBLY_TIMEOUT_MS: u64 = 2_000;
 
 /// One complete browser-facing H.264 access unit.
@@ -261,12 +260,11 @@ impl BrowserMediaReassembler {
             Ok(header) => header,
             Err(error) => return self.reject(error),
         };
-        let expected_packet_bytes = match BROWSER_MEDIA_HEADER_SIZE
-            .checked_add(header.chunk_bytes as usize)
-        {
-            Some(value) => value,
-            None => return self.reject(BrowserMediaError::PacketLength),
-        };
+        let expected_packet_bytes =
+            match BROWSER_MEDIA_HEADER_SIZE.checked_add(header.chunk_bytes as usize) {
+                Some(value) => value,
+                None => return self.reject(BrowserMediaError::PacketLength),
+            };
         if packet.len() != expected_packet_bytes {
             return self.reject(BrowserMediaError::PacketLength);
         }
@@ -340,10 +338,7 @@ impl BrowserMediaReassembler {
         }
 
         let pending_snapshot = self.pending.as_ref().expect("pending frame established");
-        let next_offset = match pending_snapshot
-            .next_offset
-            .checked_add(header.chunk_bytes)
-        {
+        let next_offset = match pending_snapshot.next_offset.checked_add(header.chunk_bytes) {
             Some(value) => value,
             None => return self.reject(BrowserMediaError::ChunkRange),
         };
@@ -657,8 +652,7 @@ mod tests {
         next.flags = 0;
         assert!(matches!(
             reassembler.push_chunk(&packet(next, b"new"), 2),
-            Err(BrowserMediaError::FrameOrder)
-                | Err(BrowserMediaError::KeyframeRequired)
+            Err(BrowserMediaError::FrameOrder) | Err(BrowserMediaError::KeyframeRequired)
         ));
 
         next.flags = BROWSER_MEDIA_FLAG_KEYFRAME;
@@ -703,9 +697,7 @@ mod tests {
         value.frame_bytes = 3;
         value.chunk_offset = 0;
         value.chunk_bytes = 3;
-        let mut malformed = encode_browser_media_header(value)
-            .expect("header")
-            .to_vec();
+        let mut malformed = encode_browser_media_header(value).expect("header").to_vec();
         malformed.extend_from_slice(b"ab");
         assert!(matches!(
             reassembler.push_chunk(&malformed, 1),
