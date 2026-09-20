@@ -270,21 +270,20 @@ impl BrowserMediaReassembler {
         }
         let payload = &packet[BROWSER_MEDIA_HEADER_SIZE..];
 
-        if let Some(pending) = self.pending.as_ref() {
-            if header.stream_epoch != pending.stream_epoch
-                || header.frame_sequence != pending.frame_sequence
+        if let Some(pending) = self.pending.as_ref()
+            && (header.stream_epoch != pending.stream_epoch
+                || header.frame_sequence != pending.frame_sequence)
+        {
+            // A strictly newer epoch invalidates any partial frame immediately.
+            // It may start only with a fresh keyframe at offset zero.
+            if header.stream_epoch > pending.stream_epoch
+                && header.chunk_offset == 0
+                && header.is_keyframe()
             {
-                // A strictly newer epoch invalidates any partial frame immediately.
-                // It may start only with a fresh keyframe at offset zero.
-                if header.stream_epoch > pending.stream_epoch
-                    && header.chunk_offset == 0
-                    && header.is_keyframe()
-                {
-                    self.pending = None;
-                    self.require_keyframe = true;
-                } else {
-                    return self.reject(BrowserMediaError::FrameOrder);
-                }
+                self.pending = None;
+                self.require_keyframe = true;
+            } else {
+                return self.reject(BrowserMediaError::FrameOrder);
             }
         }
 
