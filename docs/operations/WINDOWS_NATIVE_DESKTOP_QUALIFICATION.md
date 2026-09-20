@@ -48,9 +48,14 @@ and must contain no provider profile/application filesystem paths.
 ## 2. Qualification-only local physical smoke
 
 Do **not** use the production helper self-test as the Stage 2 pass gate while the
-production helper remains deliberately unimplemented. After the signed worker,
-signed media DLL and qualification-enabled IddCx package are installed, use the
-dedicated physical smoke entrypoint documented below:
+production helper remains deliberately unimplemented. The current qualification
+IddCx package is a console IDD, not a Windows Remote Desktop remote-session IDD.
+For this first physical smoke on a Windows client Host, the renter identity must
+therefore own the single active **local/console** interactive session; do not run
+Stage 2 through RDP. The provider session must be inactive while capture/input is
+armed. After the signed worker, signed media DLL and qualification-enabled IddCx
+package are installed, use the dedicated physical smoke entrypoint documented
+below:
 
 ```powershell
 powershell -NoProfile -File agent\tools\windows_native_physical_smoke.ps1 `
