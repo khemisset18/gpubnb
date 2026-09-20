@@ -38,10 +38,14 @@ The helper must never capture the provider's personal desktop.
   TCP port and a path exactly `/session/<sessionId>`; credentials, query strings
   and fragments are rejected.
 - The local media WebSocket upgrade is a separate authenticated trust boundary.
+  The listener must bind to loopback and validate the accepted TCP socket's real
+  `local_addr()` and `peer_addr()` as loopback endpoints before reading upgrade
+  bytes; the HTTP `Host` header is defense-in-depth and is not socket identity.
   It accepts only a bounded HTTP/1.1 `GET /session/<sessionId>` request, a
   canonical literal-loopback `Host` with explicit non-zero port, WebSocket
-  version 13, and exactly one `X-GPUbnb-Media-Token` header. Duplicate headers,
-  request bodies, transfer encoding, folded headers, cross-session paths and token
+  version 13, and exactly one `X-GPUbnb-Media-Token` header containing the exact
+  64-character lowercase hexadecimal capability. Duplicate headers, request
+  bodies, transfer encoding, folded headers, cross-session paths and token
   whitespace normalization are rejected before any media runtime is touched.
 - Worker control and encoded media are deliberately separate local transports.
   The privileged control pipe remains capped at 512-byte command/proof frames and
@@ -175,18 +179,19 @@ Success stdout:
   "audioReady": false,
   "controllerReady": false,
   "mediaUrl": "http://127.0.0.1:43123/session/sess-...",
-  "mediaToken": "<random-base64url-secret>"
+  "mediaToken": "<64-lowercase-hex-characters>"
 }
 ```
 
 `mediaToken` is a fresh, high-entropy per-session secret used by the authenticated
 GPUbnb gateway when connecting to the helper. The Windows implementation generates
 256 bits from CNG `BCryptGenRandom` with
-`BCRYPT_USE_SYSTEM_PREFERRED_RNG`, encodes the 32 random bytes as 64 lowercase
-hexadecimal ASCII characters, and keeps the capability in memory only. It must
-contain at least 32 base64url-safe characters, must never be placed in
-`mediaUrl`, and must never be written to logs, diagnostics, persisted session
-metadata or renter-visible JSON. The helper rejects media/input requests that do
+`BCRYPT_USE_SYSTEM_PREFERRED_RNG`, encodes the 32 random bytes as exactly 64
+lowercase hexadecimal ASCII characters, and keeps the capability in memory only.
+Any other length or alphabet, including uppercase hexadecimal and base64url
+spellings, is rejected. The token must never be placed in `mediaUrl`, and must
+never be written to logs, diagnostics, persisted session metadata or
+renter-visible JSON. The helper rejects media/input requests that do
 not present the token through the dedicated local authentication mechanism and
 compares a correctly sized presented token without token-dependent early exit.
 
