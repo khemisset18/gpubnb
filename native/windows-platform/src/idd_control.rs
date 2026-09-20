@@ -495,7 +495,7 @@ mod tests {
     #[cfg(not(feature = "physical-qualification"))]
     #[test]
     fn activation_is_hard_disabled_before_physical_qualification() {
-        assert!(!IDD_MONITOR_MUTATION_ENABLED);
+        const { assert!(!IDD_MONITOR_MUTATION_ENABLED) };
         assert_eq!(
             activate_virtual_display_lease("GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", valid())
                 .err(),
