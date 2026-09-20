@@ -6,7 +6,7 @@
 //! literal loopback bind and peer address.
 
 use std::collections::BTreeSet;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, TcpStream};
 
 pub const LOCAL_MEDIA_REQUEST_MAX_BYTES: usize = 8 * 1024;
 pub const LOCAL_MEDIA_HEADER_MAX_COUNT: usize = 32;
@@ -18,6 +18,12 @@ const MEDIA_TOKEN_BYTES: usize = 64;
 pub struct LocalMediaUpgrade {
     pub session_id: String,
     pub websocket_key: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalMediaSocketError {
+    AddressUnavailable,
+    NonLoopback,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,15 +101,32 @@ fn valid_loopback_host(value: &str) -> bool {
 pub fn validate_loopback_socket_addresses(
     local_addr: SocketAddr,
     peer_addr: SocketAddr,
-) -> Result<(), LocalMediaUpgradeError> {
+) -> Result<(), LocalMediaSocketError> {
     if !local_addr.ip().is_loopback()
         || local_addr.port() == 0
         || !peer_addr.ip().is_loopback()
         || peer_addr.port() == 0
     {
-        return Err(LocalMediaUpgradeError::Host);
+        return Err(LocalMediaSocketError::NonLoopback);
     }
     Ok(())
+}
+
+/// Validate the endpoints reported by the accepted TCP stream itself.
+///
+/// Call this immediately after accept() and before reading HTTP/WebSocket bytes.
+/// It deliberately does not accept caller-supplied Host data as a substitute for
+/// the kernel-reported peer address.
+pub fn validate_accepted_loopback_stream(
+    stream: &TcpStream,
+) -> Result<(), LocalMediaSocketError> {
+    let local_addr = stream
+        .local_addr()
+        .map_err(|_| LocalMediaSocketError::AddressUnavailable)?;
+    let peer_addr = stream
+        .peer_addr()
+        .map_err(|_| LocalMediaSocketError::AddressUnavailable)?;
+    validate_loopback_socket_addresses(local_addr, peer_addr)
 }
 
 fn contains_ascii_token(value: &str, expected: &str) -> bool {
@@ -351,9 +374,22 @@ X-GPUbnb-Media-Token: {TOKEN}\r\n{extra}\r\n"
                     local.parse().expect("local socket"),
                     peer.parse().expect("peer socket")
                 ),
-                Err(LocalMediaUpgradeError::Host)
+                Err(LocalMediaSocketError::NonLoopback)
             );
         }
+    }
+
+    #[test]
+    fn accepted_tcp_stream_uses_kernel_reported_loopback_addresses() {
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+        let address = listener.local_addr().expect("listener address");
+        let client = TcpStream::connect(address).expect("connect loopback client");
+        let (server, _) = listener.accept().expect("accept loopback client");
+
+        assert_eq!(validate_accepted_loopback_stream(&server), Ok(()));
+        assert_eq!(validate_accepted_loopback_stream(&client), Ok(()));
     }
 
     #[test]
