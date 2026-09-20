@@ -92,6 +92,10 @@ jobs:
       - name: Build release Windows renter worker
         run: cargo build --locked --release --manifest-path native/windows-worker/Cargo.toml
 
+      - name: Compile physical qualification harness without enabling production helper
+        if: runner.os == 'Windows'
+        run: cargo check --locked --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification --bin gpubnb-windows-physical-qualify
+
       - name: Bootstrap renter worker must fail closed off Windows
         if: runner.os != 'Windows'
         shell: bash

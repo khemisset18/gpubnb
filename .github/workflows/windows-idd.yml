@@ -49,15 +49,19 @@ jobs:
             }
           }
 
-      - name: Verify monitor mutation remains physically gated
+      - name: Verify monitor mutation remains explicitly qualification-gated
         shell: pwsh
         run: |
           $driver = Get-Content native/windows-idd/Driver.cpp -Raw
-          if ($driver -notmatch 'static constexpr bool GPUBNB_ENABLE_MONITOR_MUTATION = false;') {
-            throw "IddCx monitor mutation gate must remain compile-time false before physical qualification"
+          $project = Get-Content native/windows-idd/GPUbnbIdd.vcxproj -Raw
+          if ($driver -notmatch 'GPUBNB_PHYSICAL_QUALIFICATION_BUILD == 1') {
+            throw "IddCx monitor mutation must remain behind the explicit physical qualification macro"
           }
-          if ($driver -match 'GPUBNB_ENABLE_MONITOR_MUTATION = true;') {
-            throw "IddCx monitor mutation was enabled without physical qualification"
+          if ($project -notmatch '<PhysicalQualificationBuild Condition=.*>false</PhysicalQualificationBuild>') {
+            throw "The IddCx project must default physical qualification builds to false"
+          }
+          if ($project -notmatch 'GPUBNB_PHYSICAL_QUALIFICATION_BUILD=0') {
+            throw "Default IddCx builds must compile monitor mutation disabled"
           }
 
       - name: Verify custom IOCTLs stay on the IddCx control path
@@ -114,6 +118,12 @@ jobs:
         shell: pwsh
         run: |
           msbuild native/windows-idd/GPUbnbIdd.vcxproj /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /warnAsError
+
+      - name: Compile qualification-only IddCx variant
+        shell: pwsh
+        run: |
+          msbuild native/windows-idd/GPUbnbIdd.vcxproj /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /p:PhysicalQualificationBuild=true /warnAsError
+          Write-Host "Qualification variant compiled only. CI does not install, sign, upload, or promote it."
 
       - name: Verify build produced driver package inputs
         shell: pwsh

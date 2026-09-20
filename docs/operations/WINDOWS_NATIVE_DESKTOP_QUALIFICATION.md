@@ -188,3 +188,33 @@ A development build may be selected only by setting both
 `GPUBNB_WINDOWS_STREAM_HELPER` path. This override is for controlled development
 and physical qualification only; release packaging must install the signed helper
 at the fixed Program Files location.
+
+## Qualification-only executable path
+
+The production `gpubnb-windows-stream.exe` remains fail-closed while the Windows-native
+service lifecycle is not promoted. Physical bring-up uses the separate
+`gpubnb-windows-physical-qualify` binary, built only with the explicit
+`physical-qualification` Cargo feature.
+
+That harness requires an already provisioned, supported WTS renter session. It does
+not manufacture a session with `LogonUserW`, does not use the provider desktop, and
+does not change marketplace bookability.
+
+It creates the GPUbnb-owned virtual display, starts the fenced renter worker, proves
+exact-GPU DXGI + NVENC, opens an authenticated loopback WebSocket, sends bounded
+browser-media chunks through a real TCP/WebSocket round trip, reassembles complete
+H.264 frames with the browser protocol, and verifies cleanup. The media token stays
+in-process and is not emitted in the sanitized qualification result.
+
+Build the Rust harness only for controlled physical qualification:
+
+    $env:GPUBNB_WINDOWS_WORKER_SIGNER_SHA256 = "<approved worker signer SHA-256>"
+    $env:GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256 = "<approved media DLL signer SHA-256>"
+    cargo build --release --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification --bin gpubnb-windows-physical-qualify
+
+Build the matching IddCx qualification variant explicitly:
+
+    msbuild native\windows-idd\GPUbnbIdd.vcxproj /m /p:Configuration=Release /p:Platform=x64 /p:PhysicalQualificationBuild=true
+
+Default Cargo and MSBuild builds keep monitor mutation disabled. CI may compile the
+qualification variants to catch regressions, but must never install or promote them.

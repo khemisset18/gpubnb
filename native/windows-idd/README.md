@@ -15,13 +15,7 @@ including:
 - strict swap-chain texture-dimension validation;
 - correct IddCx frame completion/release sequencing.
 
-This is still deliberately **not production-active**. Real monitor mutation is
-guarded by the compile-time constant:
-
-`GPUBNB_ENABLE_MONITOR_MUTATION = false`
-
-CI must keep that gate false until physical qualification explicitly promotes a
-signed build. The user-mode control plane also remains fail-closed unless it owns
+This is still deliberately **not production-active**. Real monitor mutation is guarded by `GPUBNB_PHYSICAL_QUALIFICATION_BUILD`, which defaults to `0`. A controlled qualification build may set `/p:PhysicalQualificationBuild=true`; ordinary builds stay inert. CI may compile that variant only to catch build regressions and must never install or promote it. The user-mode control plane also remains fail-closed unless it owns
 an explicit RAII display lease. A successful build therefore proves ABI/build
 compatibility, not runtime readiness or booking authority.
 
