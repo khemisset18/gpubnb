@@ -51,6 +51,12 @@ pub enum BrowserMediaError {
     FrameLength,
     ChunkLength,
     ChunkRange,
+    PacketLength,
+    FrameOrder,
+    FrameMismatch,
+    KeyframeRequired,
+    Timeout,
+    InvalidTimeout,
 }
 
 fn read_u32(frame: &[u8], offset: usize) -> Result<u32, BrowserMediaError> {
@@ -170,6 +176,204 @@ pub fn browser_media_chunk_plan(
             .ok_or(BrowserMediaError::ChunkRange)?;
     }
     Ok(chunks)
+}
+
+
+pub const BROWSER_MEDIA_REASSEMBLY_TIMEOUT_MS: u64 = 2_000;
+
+/// One complete browser-facing H.264 access unit.
+///
+/// Intentionally no Debug/Clone implementation: encoded renter pixels should not
+/// be duplicated or emitted through diagnostics by convenience derives.
+pub struct CompletedBrowserMediaFrame {
+    pub stream_epoch: u64,
+    pub frame_sequence: u64,
+    pub width: u32,
+    pub height: u32,
+    pub keyframe: bool,
+    pub bytes: Vec<u8>,
+}
+
+struct PendingBrowserMediaFrame {
+    stream_epoch: u64,
+    frame_sequence: u64,
+    width: u32,
+    height: u32,
+    frame_bytes: u32,
+    flags: u8,
+    next_offset: u32,
+    started_at_ms: u64,
+    bytes: Vec<u8>,
+}
+
+/// Strict single-frame reassembler for binary WebSocket media messages.
+///
+/// A caller supplies a monotonic millisecond clock. Only one bounded frame may be
+/// incomplete at once. Any malformed ordering, timeout, or metadata mismatch
+/// discards partial bytes and requires a fresh keyframe before decoding resumes.
+pub struct BrowserMediaReassembler {
+    pending: Option<PendingBrowserMediaFrame>,
+    last_completed: Option<(u64, u64)>,
+    require_keyframe: bool,
+    timeout_ms: u64,
+}
+
+impl BrowserMediaReassembler {
+    pub fn new(timeout_ms: u64) -> Result<Self, BrowserMediaError> {
+        if timeout_ms == 0 {
+            return Err(BrowserMediaError::InvalidTimeout);
+        }
+        Ok(Self {
+            pending: None,
+            last_completed: None,
+            require_keyframe: true,
+            timeout_ms,
+        })
+    }
+
+    fn reject<T>(&mut self, error: BrowserMediaError) -> Result<T, BrowserMediaError> {
+        self.pending = None;
+        self.require_keyframe = true;
+        Err(error)
+    }
+
+    pub fn reset(&mut self) {
+        self.pending = None;
+        self.require_keyframe = true;
+    }
+
+    pub fn push_chunk(
+        &mut self,
+        packet: &[u8],
+        now_ms: u64,
+    ) -> Result<Option<CompletedBrowserMediaFrame>, BrowserMediaError> {
+        if let Some(pending) = self.pending.as_ref()
+            && now_ms.saturating_sub(pending.started_at_ms) > self.timeout_ms
+        {
+            return self.reject(BrowserMediaError::Timeout);
+        }
+
+        if packet.len() < BROWSER_MEDIA_HEADER_SIZE {
+            return self.reject(BrowserMediaError::PacketLength);
+        }
+
+        let header = match decode_browser_media_header(&packet[..BROWSER_MEDIA_HEADER_SIZE]) {
+            Ok(header) => header,
+            Err(error) => return self.reject(error),
+        };
+        let expected_packet_bytes = match BROWSER_MEDIA_HEADER_SIZE
+            .checked_add(header.chunk_bytes as usize)
+        {
+            Some(value) => value,
+            None => return self.reject(BrowserMediaError::PacketLength),
+        };
+        if packet.len() != expected_packet_bytes {
+            return self.reject(BrowserMediaError::PacketLength);
+        }
+        let payload = &packet[BROWSER_MEDIA_HEADER_SIZE..];
+
+        if let Some(pending) = self.pending.as_ref() {
+            if header.stream_epoch != pending.stream_epoch
+                || header.frame_sequence != pending.frame_sequence
+            {
+                // A strictly newer epoch invalidates any partial frame immediately.
+                // It may start only with a fresh keyframe at offset zero.
+                if header.stream_epoch > pending.stream_epoch
+                    && header.chunk_offset == 0
+                    && header.is_keyframe()
+                {
+                    self.pending = None;
+                    self.require_keyframe = true;
+                } else {
+                    return self.reject(BrowserMediaError::FrameOrder);
+                }
+            }
+        }
+
+        if let Some(pending) = self.pending.as_ref() {
+            if header.width != pending.width
+                || header.height != pending.height
+                || header.frame_bytes != pending.frame_bytes
+                || header.flags != pending.flags
+            {
+                return self.reject(BrowserMediaError::FrameMismatch);
+            }
+            if header.chunk_offset != pending.next_offset {
+                return self.reject(BrowserMediaError::FrameOrder);
+            }
+        } else {
+            if header.chunk_offset != 0 {
+                return self.reject(BrowserMediaError::FrameOrder);
+            }
+
+            if let Some((last_epoch, last_sequence)) = self.last_completed {
+                if header.stream_epoch < last_epoch {
+                    return self.reject(BrowserMediaError::FrameOrder);
+                }
+                if header.stream_epoch == last_epoch {
+                    let Some(expected_sequence) = last_sequence.checked_add(1) else {
+                        return self.reject(BrowserMediaError::FrameOrder);
+                    };
+                    if header.frame_sequence != expected_sequence {
+                        return self.reject(BrowserMediaError::FrameOrder);
+                    }
+                } else {
+                    self.require_keyframe = true;
+                }
+            }
+
+            if self.require_keyframe && !header.is_keyframe() {
+                return self.reject(BrowserMediaError::KeyframeRequired);
+            }
+
+            self.pending = Some(PendingBrowserMediaFrame {
+                stream_epoch: header.stream_epoch,
+                frame_sequence: header.frame_sequence,
+                width: header.width,
+                height: header.height,
+                frame_bytes: header.frame_bytes,
+                flags: header.flags,
+                next_offset: 0,
+                started_at_ms: now_ms,
+                bytes: Vec::with_capacity(header.frame_bytes as usize),
+            });
+        }
+
+        let pending = self.pending.as_mut().expect("pending frame established");
+        pending.bytes.extend_from_slice(payload);
+        pending.next_offset = match pending.next_offset.checked_add(header.chunk_bytes) {
+            Some(value) => value,
+            None => return self.reject(BrowserMediaError::ChunkRange),
+        };
+
+        if pending.next_offset < pending.frame_bytes {
+            return Ok(None);
+        }
+        if pending.next_offset != pending.frame_bytes
+            || pending.bytes.len() != pending.frame_bytes as usize
+        {
+            return self.reject(BrowserMediaError::ChunkRange);
+        }
+
+        let completed = self.pending.take().expect("completed pending frame");
+        self.last_completed = Some((completed.stream_epoch, completed.frame_sequence));
+        self.require_keyframe = false;
+        Ok(Some(CompletedBrowserMediaFrame {
+            stream_epoch: completed.stream_epoch,
+            frame_sequence: completed.frame_sequence,
+            width: completed.width,
+            height: completed.height,
+            keyframe: completed.flags & BROWSER_MEDIA_FLAG_KEYFRAME != 0,
+            bytes: completed.bytes,
+        }))
+    }
+}
+
+impl Default for BrowserMediaReassembler {
+    fn default() -> Self {
+        Self::new(BROWSER_MEDIA_REASSEMBLY_TIMEOUT_MS)
+            .expect("default browser media timeout is non-zero")
+    }
 }
 
 #[cfg(test)]
@@ -330,5 +534,168 @@ mod tests {
             decode_browser_media_header(&wrong_magic),
             Err(BrowserMediaError::Magic)
         );
+    }
+
+    fn packet(mut value: BrowserMediaChunkHeader, payload: &[u8]) -> Vec<u8> {
+        value.chunk_bytes = payload.len() as u32;
+        let mut out = encode_browser_media_header(value)
+            .expect("browser header")
+            .to_vec();
+        out.extend_from_slice(payload);
+        out
+    }
+
+    #[test]
+    fn bounded_reassembler_emits_only_complete_contiguous_frames() {
+        let mut reassembler = BrowserMediaReassembler::new(1_000).expect("reassembler");
+        let mut first = header();
+        first.stream_epoch = 1;
+        first.frame_sequence = 1;
+        first.frame_bytes = 6;
+        first.chunk_offset = 0;
+        first.flags = BROWSER_MEDIA_FLAG_KEYFRAME;
+
+        assert!(
+            reassembler
+                .push_chunk(&packet(first, b"abc"), 10)
+                .expect("first chunk")
+                .is_none()
+        );
+
+        let mut second = first;
+        second.chunk_offset = 3;
+        let frame = reassembler
+            .push_chunk(&packet(second, b"def"), 20)
+            .expect("second chunk")
+            .expect("complete frame");
+        assert_eq!(frame.stream_epoch, 1);
+        assert_eq!(frame.frame_sequence, 1);
+        assert!(frame.keyframe);
+        assert_eq!(frame.bytes, b"abcdef");
+    }
+
+    #[test]
+    fn duplicate_gap_or_sequence_jump_discards_partial_state_and_requires_keyframe() {
+        let mut reassembler = BrowserMediaReassembler::new(1_000).expect("reassembler");
+        let mut first = header();
+        first.stream_epoch = 1;
+        first.frame_sequence = 1;
+        first.frame_bytes = 6;
+        first.chunk_offset = 0;
+        first.flags = BROWSER_MEDIA_FLAG_KEYFRAME;
+        assert!(
+            reassembler
+                .push_chunk(&packet(first, b"abc"), 10)
+                .expect("first chunk")
+                .is_none()
+        );
+        assert!(matches!(
+            reassembler.push_chunk(&packet(first, b"abc"), 11),
+            Err(BrowserMediaError::FrameOrder)
+        ));
+
+        let mut non_keyframe = first;
+        non_keyframe.frame_sequence = 2;
+        non_keyframe.frame_bytes = 3;
+        non_keyframe.chunk_offset = 0;
+        non_keyframe.flags = 0;
+        assert!(matches!(
+            reassembler.push_chunk(&packet(non_keyframe, b"xyz"), 12),
+            Err(BrowserMediaError::KeyframeRequired)
+        ));
+
+        let mut recovery = non_keyframe;
+        recovery.flags = BROWSER_MEDIA_FLAG_KEYFRAME;
+        let frame = reassembler
+            .push_chunk(&packet(recovery, b"xyz"), 13)
+            .expect("recovery frame")
+            .expect("complete recovery");
+        assert_eq!(frame.frame_sequence, 2);
+
+        let mut gap = recovery;
+        gap.frame_sequence = 4;
+        assert!(matches!(
+            reassembler.push_chunk(&packet(gap, b"123"), 14),
+            Err(BrowserMediaError::FrameOrder)
+        ));
+    }
+
+    #[test]
+    fn newer_epoch_invalidates_partial_frame_and_requires_fresh_keyframe() {
+        let mut reassembler = BrowserMediaReassembler::new(1_000).expect("reassembler");
+        let mut old = header();
+        old.stream_epoch = 7;
+        old.frame_sequence = 9;
+        old.frame_bytes = 6;
+        old.chunk_offset = 0;
+        old.flags = BROWSER_MEDIA_FLAG_KEYFRAME;
+        assert!(
+            reassembler
+                .push_chunk(&packet(old, b"abc"), 1)
+                .expect("old chunk")
+                .is_none()
+        );
+
+        let mut next = old;
+        next.stream_epoch = 8;
+        next.frame_sequence = 1;
+        next.frame_bytes = 3;
+        next.flags = 0;
+        assert!(matches!(
+            reassembler.push_chunk(&packet(next, b"new"), 2),
+            Err(BrowserMediaError::FrameOrder)
+                | Err(BrowserMediaError::KeyframeRequired)
+        ));
+
+        next.flags = BROWSER_MEDIA_FLAG_KEYFRAME;
+        let frame = reassembler
+            .push_chunk(&packet(next, b"new"), 3)
+            .expect("new epoch")
+            .expect("complete keyframe");
+        assert_eq!(frame.stream_epoch, 8);
+        assert_eq!(frame.bytes, b"new");
+    }
+
+    #[test]
+    fn incomplete_frame_times_out_without_emitting_pixels() {
+        let mut reassembler = BrowserMediaReassembler::new(50).expect("reassembler");
+        let mut first = header();
+        first.stream_epoch = 1;
+        first.frame_sequence = 1;
+        first.frame_bytes = 6;
+        first.chunk_offset = 0;
+        first.flags = BROWSER_MEDIA_FLAG_KEYFRAME;
+        assert!(
+            reassembler
+                .push_chunk(&packet(first, b"abc"), 10)
+                .expect("partial")
+                .is_none()
+        );
+
+        let mut second = first;
+        second.chunk_offset = 3;
+        assert!(matches!(
+            reassembler.push_chunk(&packet(second, b"def"), 61),
+            Err(BrowserMediaError::Timeout)
+        ));
+    }
+
+    #[test]
+    fn packet_length_is_exactly_header_plus_declared_chunk() {
+        let mut reassembler = BrowserMediaReassembler::default();
+        let mut value = header();
+        value.stream_epoch = 1;
+        value.frame_sequence = 1;
+        value.frame_bytes = 3;
+        value.chunk_offset = 0;
+        value.chunk_bytes = 3;
+        let mut malformed = encode_browser_media_header(value)
+            .expect("header")
+            .to_vec();
+        malformed.extend_from_slice(b"ab");
+        assert!(matches!(
+            reassembler.push_chunk(&malformed, 1),
+            Err(BrowserMediaError::PacketLength)
+        ));
     }
 }
