@@ -6,6 +6,8 @@ on:
       - native/windows-stream-helper/**
       - native/windows-platform/**
       - native/windows-worker/**
+      - apps/web/windows-native-media.js
+      - apps/web/windows-native-media.test.js
       - agent/gpubnb_agent/windows_native_*.py
       - agent/tests/test_windows_native_*.py
       - agent/tools/windows_native_qualify.py
@@ -37,6 +39,13 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+
+      - name: Browser media security contracts
+        run: node --test apps/web/windows-native-media.test.js
 
       - name: Install Agent dependencies
         run: python -m pip install ./agent
