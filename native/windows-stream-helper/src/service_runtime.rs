@@ -229,8 +229,7 @@ impl QualifiedGraphicsRuntime {
         .map_err(|_| self.fail(ServiceRuntimeError::WorkerProtocol))?;
 
         if self.pipe.send_frame(&command).is_err() || self.pipe.send_frame(&input).is_err() {
-            self.media_state = RuntimeMediaState::Failed;
-            return Err(ServiceRuntimeError::WorkerProtocol);
+            return Err(self.fail(ServiceRuntimeError::WorkerProtocol));
         }
         self.next_sequence = next_sequence;
         Ok(())
