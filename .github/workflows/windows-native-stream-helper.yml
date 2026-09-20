@@ -11,6 +11,7 @@ on:
       - agent/gpubnb_agent/windows_native_*.py
       - agent/tests/test_windows_native_*.py
       - agent/tools/windows_native_qualify.py
+      - agent/tools/windows_native_*.ps1
       - docs/operations/WINDOWS_NATIVE_DESKTOP_QUALIFICATION.md
       - docs/architecture/WINDOWS_NATIVE_*.md
       - .github/workflows/windows-native-stream-helper.yml
@@ -105,6 +106,7 @@ jobs:
         shell: pwsh
         run: |
           foreach ($path in @(
+            'agent/tools/windows_native_build_worker_qualification.ps1',
             'agent/tools/windows_native_build_qualification.ps1',
             'agent/tools/windows_native_physical_smoke.ps1'
           )) {

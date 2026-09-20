@@ -263,19 +263,39 @@ harness result and verified cleanup. It writes no renter/provider SID and no med
 token to the evidence record. A PASS is only Stage 2 local physical smoke; it is
 not browser end-to-end qualification and does not enable Windows bookability.
 
+### Build the worker against the actually signed media DLL
+
+The renter worker loads the media DLL itself, so the worker must embed the signer
+certificate fingerprint of the exact signed media DLL policy. A generic worker
+build without that policy is deliberately rejected for physical qualification.
+
+After the signed media DLL is installed at
+`C:\Program Files\GPUbnb\GPUbnbWindowsMedia.dll`, build the worker with:
+
+    powershell -NoProfile -File agent\tools\windows_native_build_worker_qualification.ps1 -Release
+
+The script derives the media signer certificate SHA-256, embeds it together with
+the exact Git source commit, builds the worker and verifies its non-secret
+`--build-policy --json` response. The script does not sign or install the worker.
+The produced worker must then be Authenticode-signed with the approved identity
+and installed at `C:\Program Files\GPUbnb\gpubnb-windows-worker.exe`.
+
 ### Build the harness against the actually signed components
 
 The native runtime pins the SHA-256 certificate hash of the worker and media DLL.
-Do not hand-copy certificate hashes. Once the signed files are installed at their
-fixed qualification paths, build the harness with:
+Do not hand-copy certificate hashes. Once the correctly built and signed worker
+and the signed media DLL are installed at their fixed qualification paths, build
+the harness with:
 
     powershell -NoProfile -File agent\tools\windows_native_build_qualification.ps1 -Release
 
-The build entrypoint verifies both Authenticode signatures, derives the same
-SHA-256 certificate property consumed by the Rust trust boundary, temporarily sets
-the two compile-time signer variables, builds only the qualification binary, then
-restores the caller environment. It does not modify bookability or the production
-helper.
+The build entrypoint verifies both Authenticode signatures, verifies that the
+installed worker reports the same source commit and media-signer policy as the
+current clean checkout and signed media DLL, derives the same certificate properties
+consumed by the Rust trust boundary, then builds the qualification binary. It also
+writes a sidecar build manifest binding the source commit and exact worker/media/
+harness hashes. The physical smoke refuses a missing or mismatched manifest. It
+does not modify bookability or the production helper.
 
 For repeated qualification attempts, pass a new non-zero `-Generation` value to
 `windows_native_physical_smoke.ps1`; generation is part of the worker/display
