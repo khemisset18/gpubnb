@@ -96,15 +96,20 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo check --locked --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification --bin gpubnb-windows-physical-qualify
 
-      - name: Parse physical smoke PowerShell entrypoint
+      - name: Parse physical qualification PowerShell entrypoints
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $source = Get-Content agent/tools/windows_native_physical_smoke.ps1 -Raw
-          [void][scriptblock]::Create($source)
-          foreach ($forbidden in @('bcdedit', 'testsigning', 'Set-ExecutionPolicy', '0.0.0.0')) {
-            if ($source -match [regex]::Escape($forbidden)) {
-              throw "Physical smoke script contains forbidden qualification shortcut: $forbidden"
+          foreach ($path in @(
+            'agent/tools/windows_native_build_qualification.ps1',
+            'agent/tools/windows_native_physical_smoke.ps1'
+          )) {
+            $source = Get-Content $path -Raw
+            [void][scriptblock]::Create($source)
+            foreach ($forbidden in @('bcdedit', 'testsigning', 'Set-ExecutionPolicy', '0.0.0.0')) {
+              if ($source -match [regex]::Escape($forbidden)) {
+                throw "Physical qualification script contains forbidden shortcut: $forbidden"
+              }
             }
           }
 

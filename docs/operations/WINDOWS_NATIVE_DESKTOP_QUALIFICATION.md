@@ -240,3 +240,21 @@ fixed worker and media DLL, one healthy GPUbnb IddCx device, the qualification
 harness result and verified cleanup. It writes no renter/provider SID and no media
 token to the evidence record. A PASS is only Stage 2 local physical smoke; it is
 not browser end-to-end qualification and does not enable Windows bookability.
+
+### Build the harness against the actually signed components
+
+The native runtime pins the SHA-256 certificate hash of the worker and media DLL.
+Do not hand-copy certificate hashes. Once the signed files are installed at their
+fixed qualification paths, build the harness with:
+
+    powershell -NoProfile -File agent\tools\windows_native_build_qualification.ps1 -Release
+
+The build entrypoint verifies both Authenticode signatures, derives the same
+SHA-256 certificate property consumed by the Rust trust boundary, temporarily sets
+the two compile-time signer variables, builds only the qualification binary, then
+restores the caller environment. It does not modify bookability or the production
+helper.
+
+For repeated qualification attempts, pass a new non-zero `-Generation` value to
+`windows_native_physical_smoke.ps1`; generation is part of the worker/display
+fencing and stale resources must never be allowed to masquerade as a fresh run.

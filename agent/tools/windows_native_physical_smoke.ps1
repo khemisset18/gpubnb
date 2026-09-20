@@ -20,6 +20,9 @@ param(
     [ValidatePattern('^S-1-(?:[0-9]+-){2,14}[0-9]+$')]
     [string]$ProviderUserSid,
 
+    [ValidateRange(1, 18446744073709551615)]
+    [UInt64]$Generation = 1,
+
     [ValidateRange(1, 120)]
     [int]$Frames = 8,
 
@@ -78,7 +81,7 @@ Assert-QualificationPrerequisite ($idd[0].Status -eq 'OK') 'physical_qualificati
 
 $arguments = @(
     '--session-id', $SessionId,
-    '--generation', '1',
+    '--generation', [string]$Generation,
     '--gpu-uuid', $GpuUuid,
     '--windows-session-id', [string]$WindowsSessionId,
     '--renter-user-sid', $RenterUserSid,
