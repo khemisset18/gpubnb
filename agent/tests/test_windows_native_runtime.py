@@ -33,7 +33,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             "audioReady": True,
             "controllerReady": True,
             "mediaUrl": "http://127.0.0.1:43123/session/sess-1",
-            "mediaToken": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "mediaToken": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         }
         report.update(overrides)
         return SimpleNamespace(returncode=0, stdout=json.dumps(report), stderr="")
@@ -71,7 +71,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
         self.assertEqual(handle.workspace_slug, "cloud-desktop")
         self.assertEqual(handle.gpu_uuid, "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
         self.assertTrue(handle.media_url.startswith("http://127.0.0.1:"))
-        self.assertEqual(len(handle.media_token), 43)
+        self.assertEqual(len(handle.media_token), 64)
         self.assertNotIn(handle.media_token, repr(handle))
         command = run_command.call_args.args[0]
         self.assertIn("--gpu-uuid", command)
@@ -144,6 +144,34 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "native_workspace_start_media_token_required"):
                 runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
+
+    def test_launch_rejects_noncanonical_media_token_alphabet_and_length(self):
+        for token in (
+            "A" * 64,
+            "a" * 63,
+            "a" * 65,
+            "a" * 63 + "-",
+            "a" * 63 + "_",
+            "g" * 64,
+        ):
+            with (
+                self.subTest(token=token[:8]),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+                patch.object(runtime, "discover_native_application", return_value=None),
+                patch.object(
+                    runtime,
+                    "run_command",
+                    side_effect=[self._start_report(mediaToken=token), self._stop_report()],
+                ) as run,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "^native_workspace_start_media_token_required$"):
+                    runtime.launch_windows_native_workspace(
+                        "sess-1",
+                        "cloud-desktop",
+                        "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+                    )
+            self.assertEqual(run.call_count, 2)
 
     def test_launch_rejects_non_string_media_tokens_and_cleans_session(self):
         for token in (12345678901234567890123456789012, True, ["A" * 32], {"token": "A" * 32}):
@@ -338,7 +366,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             run_command.assert_not_called()
 
     def test_media_token_whitespace_is_never_normalized(self):
-        for token in (" " + "A" * 43, "A" * 43 + " ", "\t" + "A" * 43):
+        for token in (" " + "a" * 64, "a" * 64 + " ", "\t" + "a" * 64):
             with (
                 self.subTest(token=repr(token)),
                 patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
