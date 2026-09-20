@@ -339,18 +339,32 @@ impl BrowserMediaReassembler {
             });
         }
 
-        let pending = self.pending.as_mut().expect("pending frame established");
-        pending.bytes.extend_from_slice(payload);
-        pending.next_offset = match pending.next_offset.checked_add(header.chunk_bytes) {
+        let pending_snapshot = self.pending.as_ref().expect("pending frame established");
+        let next_offset = match pending_snapshot
+            .next_offset
+            .checked_add(header.chunk_bytes)
+        {
             Some(value) => value,
             None => return self.reject(BrowserMediaError::ChunkRange),
         };
+        let frame_bytes = pending_snapshot.frame_bytes;
+        if next_offset > frame_bytes {
+            return self.reject(BrowserMediaError::ChunkRange);
+        }
 
-        if pending.next_offset < pending.frame_bytes {
+        {
+            let pending = self.pending.as_mut().expect("pending frame established");
+            pending.bytes.extend_from_slice(payload);
+            pending.next_offset = next_offset;
+        }
+
+        if next_offset < frame_bytes {
             return Ok(None);
         }
-        if pending.next_offset != pending.frame_bytes
-            || pending.bytes.len() != pending.frame_bytes as usize
+        if self
+            .pending
+            .as_ref()
+            .is_none_or(|pending| pending.bytes.len() != frame_bytes as usize)
         {
             return self.reject(BrowserMediaError::ChunkRange);
         }
