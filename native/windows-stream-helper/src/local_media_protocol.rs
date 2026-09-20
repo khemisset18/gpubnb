@@ -117,9 +117,7 @@ pub fn validate_loopback_socket_addresses(
 /// Call this immediately after accept() and before reading HTTP/WebSocket bytes.
 /// It deliberately does not accept caller-supplied Host data as a substitute for
 /// the kernel-reported peer address.
-pub fn validate_accepted_loopback_stream(
-    stream: &TcpStream,
-) -> Result<(), LocalMediaSocketError> {
+pub fn validate_accepted_loopback_stream(stream: &TcpStream) -> Result<(), LocalMediaSocketError> {
     let local_addr = stream
         .local_addr()
         .map_err(|_| LocalMediaSocketError::AddressUnavailable)?;
