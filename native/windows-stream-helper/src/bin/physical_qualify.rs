@@ -303,10 +303,10 @@ mod windows {
         let server_result = server
             .serve_once(&mut runtime, frames)
             .map_err(|_| "qualification_media_server_failed");
-        let client_result = client
-            .join()
-            .map_err(|_| "qualification_client_panicked")?
-            .map_err(|_| "qualification_client_failed");
+        let client_result = match client.join() {
+            Ok(result) => result.map_err(|_| "qualification_client_failed"),
+            Err(_) => Err("qualification_client_panicked"),
+        };
         let stop_result = runtime
             .stop()
             .map_err(|_| "qualification_cleanup_unverified");
