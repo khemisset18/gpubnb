@@ -17,10 +17,11 @@ mod windows {
         QualificationMediaServer, websocket_accept_value,
     };
     use gpubnb_windows_stream_helper::service_runtime::{
-        ServiceRuntimeConfig, start_qualified_graphics_runtime,
+        QualifiedGraphicsRuntime, ServiceRuntimeConfig, start_qualified_graphics_runtime,
     };
+    use gpubnb_windows_stream_helper::worker_protocol::WorkerInputEvent;
     use std::env;
-    use std::io::{Read, Write};
+    use std::io::{BufRead, BufReader, Read, Write};
     use std::net::{SocketAddr, TcpStream};
     use std::process::ExitCode;
     use std::thread;
@@ -152,28 +153,35 @@ mod windows {
         Ok(nonce)
     }
 
-    fn read_headers(stream: &mut TcpStream) -> Result<String, &'static str> {
+    fn read_headers<R: BufRead>(reader: &mut R) -> Result<String, &'static str> {
         let mut bytes = Vec::with_capacity(1024);
-        let mut buffer = [0u8; 512];
         loop {
-            let count = stream.read(&mut buffer).map_err(|_| "client_read_failed")?;
+            let mut line = Vec::with_capacity(128);
+            let count = reader
+                .read_until(b'\n', &mut line)
+                .map_err(|_| "client_read_failed")?;
             if count == 0 {
                 return Err("client_connection_closed");
             }
-            bytes.extend_from_slice(&buffer[..count]);
-            if bytes.len() > 8192 {
+            if !line.ends_with(b"\r\n") {
+                return Err("client_response_invalid");
+            }
+            let next_len = bytes
+                .len()
+                .checked_add(line.len())
+                .ok_or("client_response_too_large")?;
+            if next_len > 8192 {
                 return Err("client_response_too_large");
             }
-            if bytes.ends_with(b"\r\n\r\n") {
+            let done = line == b"\r\n";
+            bytes.extend_from_slice(&line);
+            if done {
                 return String::from_utf8(bytes).map_err(|_| "client_response_invalid");
-            }
-            if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
-                return Err("client_response_ambiguous");
             }
         }
     }
 
-    fn read_ws_binary(stream: &mut TcpStream) -> Result<Vec<u8>, &'static str> {
+    fn read_ws_binary<R: Read>(stream: &mut R) -> Result<Vec<u8>, &'static str> {
         let mut first = [0u8; 2];
         stream
             .read_exact(&mut first)
@@ -229,7 +237,8 @@ mod windows {
             .write_all(request.as_bytes())
             .map_err(|_| "client_upgrade_write_failed")?;
 
-        let response = read_headers(&mut stream)?;
+        let mut reader = BufReader::new(stream);
+        let response = read_headers(&mut reader)?;
         if !response.starts_with("HTTP/1.1 101 Switching Protocols\r\n") {
             return Err("client_upgrade_rejected");
         }
@@ -246,7 +255,7 @@ mod windows {
         let started = Instant::now();
         let mut completed = 0u32;
         while completed < expected_frames {
-            let packet = read_ws_binary(&mut stream)?;
+            let packet = read_ws_binary(&mut reader)?;
             let now_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
             if reassembler
                 .push_chunk(&packet, now_ms)
@@ -257,6 +266,39 @@ mod windows {
             }
         }
         Ok(completed)
+    }
+
+    fn prove_renter_input_isolation(
+        runtime: &mut QualifiedGraphicsRuntime,
+        expected_windows_session_id: u32,
+    ) -> Result<(), &'static str> {
+        let isolation = runtime.renter_isolation_proof();
+        if isolation.windows_session_id() != expected_windows_session_id
+            || !isolation.separate_renter_identity()
+            || !isolation.renter_session_active()
+            || !isolation.provider_session_inactive()
+        {
+            return Err("qualification_renter_isolation_failed");
+        }
+
+        // Exercise the real service -> fenced worker -> SendInput path only inside
+        // the already-proven renter WTS session. The opposite moves minimize the
+        // visible pointer disturbance. Suspend/resume then forces the worker to
+        // process both input commands and return a fresh capture+NVENC proof before
+        // the harness can continue.
+        runtime
+            .inject_input(WorkerInputEvent::MouseMoveRelative { dx: 1, dy: 0 })
+            .map_err(|_| "qualification_input_injection_failed")?;
+        runtime
+            .inject_input(WorkerInputEvent::MouseMoveRelative { dx: -1, dy: 0 })
+            .map_err(|_| "qualification_input_injection_failed")?;
+        runtime
+            .suspend_media()
+            .map_err(|_| "qualification_input_fence_failed")?;
+        runtime
+            .resume_after_fresh_proof()
+            .map_err(|_| "qualification_input_fence_failed")?;
+        Ok(())
     }
 
     fn run() -> Result<u32, &'static str> {
@@ -276,6 +318,11 @@ mod windows {
             refresh_hz: 60,
         })
         .map_err(|_| "qualification_runtime_start_failed")?;
+
+        if let Err(error) = prove_renter_input_isolation(&mut runtime, args.windows_session_id) {
+            let _ = runtime.stop();
+            return Err(error);
+        }
 
         let server = match QualificationMediaServer::bind(&args.session_id, args.generation) {
             Ok(server) => server,
@@ -305,6 +352,10 @@ mod windows {
         let server_result = server
             .serve_once(&mut runtime, frames)
             .map_err(|_| "qualification_media_server_failed");
+        drop(server);
+        let listener_closed =
+            TcpStream::connect_timeout(&endpoint, Duration::from_millis(250)).is_err();
+
         let client_result = match client.join() {
             Ok(result) => result.map_err(|_| "qualification_client_failed"),
             Err(_) => Err("qualification_client_panicked"),
@@ -316,6 +367,9 @@ mod windows {
         let sent = server_result?;
         let received = client_result?;
         stop_result?;
+        if !listener_closed {
+            return Err("qualification_media_listener_cleanup_unverified");
+        }
         if sent != frames || received != frames {
             return Err("qualification_frame_count_mismatch");
         }
@@ -342,4 +396,23 @@ mod windows {
 #[cfg(target_os = "windows")]
 fn main() -> std::process::ExitCode {
     windows::main()
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    use super::windows::{read_headers, read_ws_binary};
+    use std::io::{BufReader, Cursor};
+
+    #[test]
+    fn coalesced_upgrade_and_first_websocket_frame_are_preserved() {
+        let mut wire =
+            b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n"
+                .to_vec();
+        wire.extend_from_slice(&[0x82, 0x03, 1, 2, 3]);
+
+        let mut reader = BufReader::new(Cursor::new(wire));
+        let headers = read_headers(&mut reader).expect("headers");
+        assert!(headers.ends_with("\r\n\r\n"));
+        assert_eq!(read_ws_binary(&mut reader).expect("frame"), vec![1, 2, 3]);
+    }
 }

@@ -92,9 +92,13 @@ jobs:
       - name: Build release Windows renter worker
         run: cargo build --locked --release --manifest-path native/windows-worker/Cargo.toml
 
-      - name: Compile physical qualification harness without enabling production helper
+      - name: Test physical qualification harness without enabling production helper
         if: runner.os == 'Windows'
-        run: cargo check --locked --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification --bin gpubnb-windows-physical-qualify
+        run: cargo test --locked --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification --bin gpubnb-windows-physical-qualify
+
+      - name: Clippy physical qualification harness
+        if: runner.os == 'Windows'
+        run: cargo clippy --locked --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification --bin gpubnb-windows-physical-qualify -- -D warnings
 
       - name: Parse physical qualification PowerShell entrypoints
         if: runner.os == 'Windows'

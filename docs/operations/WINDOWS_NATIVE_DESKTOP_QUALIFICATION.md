@@ -203,8 +203,10 @@ does not change marketplace bookability.
 It creates the GPUbnb-owned virtual display, starts the fenced renter worker, proves
 exact-GPU DXGI + NVENC, opens an authenticated loopback WebSocket, sends bounded
 browser-media chunks through a real TCP/WebSocket round trip, reassembles complete
-H.264 frames with the browser protocol, and verifies cleanup. The media token stays
-in-process and is not emitted in the sanitized qualification result.
+H.264 frames with the browser protocol, exercises the fenced renter-session input
+path, forces a fresh capture/NVENC proof after that input, and verifies worker,
+display and loopback-listener cleanup. The media token stays in-process and is not
+emitted in the sanitized qualification result.
 
 Build the Rust harness only for controlled physical qualification:
 

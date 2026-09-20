@@ -107,6 +107,7 @@ foreach ($field in @(
     'providerDesktopExcluded',
     'exactGpuBound',
     'loopbackMedia',
+    'inputIsolation',
     'cleanupVerified'
 )) {
     Assert-QualificationPrerequisite ($result.$field -ceq $true) "physical_qualification_missing_$field"
@@ -147,6 +148,7 @@ $evidence = [ordered]@{
         exactGpuBound = $true
         hardwareEncoder = 'nvenc'
         loopbackMedia = $true
+        inputIsolation = $true
         cleanupVerified = $true
     }
     windowsNativeBookabilityEnabled = $false

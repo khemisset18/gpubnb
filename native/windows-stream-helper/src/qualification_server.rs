@@ -139,7 +139,10 @@ impl QualificationMediaServer {
                 .map_err(|_| QualificationMediaServerError::Media)?
             {
                 Some(frame) => frame,
-                None => continue,
+                None => {
+                    thread::sleep(Duration::from_millis(1));
+                    continue;
+                }
             };
             let chunks = browser_media_chunk_plan(frame.bytes.len())
                 .map_err(|_| QualificationMediaServerError::Protocol)?;
