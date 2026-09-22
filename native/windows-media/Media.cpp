@@ -928,7 +928,7 @@ private:
     bool forceIdrNext_ = true;
 };
 
-void InitializeResult(void InitializeResult(
+void InitializeResult(
     const GPUbnbMediaProbeRequest& request,
     GPUbnbMediaProbeResult* result)
 {
