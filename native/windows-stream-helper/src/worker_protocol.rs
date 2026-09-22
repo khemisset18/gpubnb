@@ -173,7 +173,6 @@ pub fn validate_worker_media_poll(
     Ok(frame.status)
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorkerMediaDiagnosticFrame {
     pub protocol_version: u16,
@@ -1500,13 +1499,7 @@ mod tests {
         let decoded = decode_worker_media_diagnostic(&encoded).expect("decode diagnostic");
         assert_eq!(decoded, value);
         assert_eq!(
-            validate_worker_media_diagnostic(
-                7,
-                2,
-                42,
-                0x1122_3344_5566_7788,
-                decoded,
-            ),
+            validate_worker_media_diagnostic(7, 2, 42, 0x1122_3344_5566_7788, decoded,),
             Ok(value)
         );
         assert_eq!(
