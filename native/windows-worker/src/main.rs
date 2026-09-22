@@ -15,7 +15,7 @@ use gpubnb_windows_platform::input::{
     InputEvent as PlatformInputEvent, MouseButton as PlatformMouseButton,
 };
 #[cfg(any(target_os = "windows", test))]
-use gpubnb_windows_platform::media::MediaProbeError;
+use gpubnb_windows_platform::media::{MediaFailureDiagnostic, MediaProbeError};
 #[cfg(target_os = "windows")]
 use gpubnb_windows_platform::media::{
     EncodedMediaFrame, MediaProbeRequest, MediaSession, open_media_session,
@@ -35,9 +35,10 @@ use gpubnb_windows_stream_helper::media_protocol::{
 };
 #[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::worker_protocol::{
-    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerDisplaySpec, WorkerHello, WorkerMediaPollFrame,
-    WorkerMediaPollStatus, WorkerMediaProof, decode_worker_command, decode_worker_display_spec,
-    decode_worker_input, encode_worker_hello, encode_worker_media_poll, encode_worker_media_proof,
+    WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerDisplaySpec, WorkerHello,
+    WorkerMediaDiagnosticFrame, WorkerMediaPollFrame, WorkerMediaPollStatus, WorkerMediaProof,
+    decode_worker_command, decode_worker_display_spec, decode_worker_input, encode_worker_hello,
+    encode_worker_media_diagnostic, encode_worker_media_poll, encode_worker_media_proof,
     validate_worker_command, validate_worker_display_spec, validate_worker_input,
 };
 #[cfg(any(target_os = "windows", test))]
@@ -223,6 +224,10 @@ fn parse_args(args: &[String]) -> Result<WorkerArgs, WorkerError> {
 #[cfg(target_os = "windows")]
 fn read_required_media_frame(
     session: &mut MediaSession,
+    control: &WorkerPipeClient,
+    generation: u64,
+    command_sequence: u64,
+    windows_session_id: u32,
     resume: bool,
 ) -> Result<EncodedMediaFrame, WorkerError> {
     let deadline = Instant::now() + Duration::from_millis(u64::from(PIPE_TIMEOUT_MS));
@@ -230,9 +235,54 @@ fn read_required_media_frame(
         match session.read_frame() {
             Ok(frame) => return Ok(frame),
             Err(MediaProbeError::CaptureTimeout) if Instant::now() < deadline => continue,
-            Err(error) => return Err(media_probe_error(error, resume)),
+            Err(error) => {
+                send_media_diagnostic(
+                    control,
+                    generation,
+                    command_sequence,
+                    windows_session_id,
+                    error,
+                );
+                return Err(media_probe_error(error, resume));
+            }
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+fn send_media_diagnostic(
+    control: &WorkerPipeClient,
+    generation: u64,
+    command_sequence: u64,
+    windows_session_id: u32,
+    error: MediaProbeError,
+) {
+    let MediaProbeError::Diagnostic(MediaFailureDiagnostic {
+        failed_stage,
+        hresult,
+        nvenc_status,
+        proof_flags,
+        adapter_luid,
+        ..
+    }) = error
+    else {
+        return;
+    };
+    let Ok(frame) = encode_worker_media_diagnostic(WorkerMediaDiagnosticFrame {
+        protocol_version: WORKER_PROTOCOL_VERSION,
+        generation,
+        command_sequence,
+        windows_session_id,
+        failed_stage,
+        proof_flags,
+        hresult,
+        nvenc_status,
+        adapter_luid,
+    }) else {
+        return;
+    };
+    // Best effort only: never replace the original fail-closed media error.
+    let _ = control.send_frame(&frame);
 }
 
 #[cfg(target_os = "windows")]
@@ -406,7 +456,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         return Err(WorkerError::new("capture_gpu_luid_mismatch", 21));
                     }
 
-                    let mut session = open_media_session(MediaProbeRequest {
+                    let mut session = match open_media_session(MediaProbeRequest {
                         gpu_uuid: &args.gpu_uuid,
                         adapter_luid: spec.adapter_luid,
                         display_nonce: spec.display_nonce,
@@ -414,9 +464,27 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         height: spec.height,
                         refresh_hz: spec.refresh_hz,
                         capture_timeout_ms: MEDIA_POLL_TIMEOUT_MS,
-                    })
-                    .map_err(|error| media_probe_error(error, false))?;
-                    let media = read_required_media_frame(&mut session, false)?;
+                    }) {
+                        Ok(session) => session,
+                        Err(error) => {
+                            send_media_diagnostic(
+                                &client,
+                                args.generation,
+                                command_sequence,
+                                windows_session_id,
+                                error,
+                            );
+                            return Err(media_probe_error(error, false));
+                        }
+                    };
+                    let media = read_required_media_frame(
+                        &mut session,
+                        &client,
+                        args.generation,
+                        command_sequence,
+                        windows_session_id,
+                        false,
+                    )?;
 
                     send_encoded_media_frame(
                         &client,
@@ -459,7 +527,16 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                                 windows_session_id,
                             )?;
                         }
-                        Err(error) => return Err(media_probe_error(error, false)),
+                        Err(error) => {
+                            send_media_diagnostic(
+                                &client,
+                                args.generation,
+                                command_sequence,
+                                windows_session_id,
+                                error,
+                            );
+                            return Err(media_probe_error(error, false));
+                        }
                     }
                 }
                 WorkerCommand::SuspendMedia => {
@@ -500,7 +577,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         return Err(WorkerError::new("resume_gpu_luid_mismatch", 21));
                     }
 
-                    let mut session = open_media_session(MediaProbeRequest {
+                    let mut session = match open_media_session(MediaProbeRequest {
                         gpu_uuid: &args.gpu_uuid,
                         adapter_luid: spec.adapter_luid,
                         display_nonce: spec.display_nonce,
@@ -508,9 +585,27 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         height: spec.height,
                         refresh_hz: spec.refresh_hz,
                         capture_timeout_ms: MEDIA_POLL_TIMEOUT_MS,
-                    })
-                    .map_err(|error| media_probe_error(error, true))?;
-                    let media = read_required_media_frame(&mut session, true)?;
+                    }) {
+                        Ok(session) => session,
+                        Err(error) => {
+                            send_media_diagnostic(
+                                &client,
+                                args.generation,
+                                command_sequence,
+                                windows_session_id,
+                                error,
+                            );
+                            return Err(media_probe_error(error, true));
+                        }
+                    };
+                    let media = read_required_media_frame(
+                        &mut session,
+                        &client,
+                        args.generation,
+                        command_sequence,
+                        windows_session_id,
+                        true,
+                    )?;
 
                     send_encoded_media_frame(
                         &client,
@@ -574,6 +669,16 @@ fn media_probe_error(error: MediaProbeError, resume: bool) -> WorkerError {
         (_, MediaProbeError::CaptureTimeout) => "media_capture_timeout",
         (_, MediaProbeError::CaptureAccessLost) => "media_capture_access_lost",
         (_, MediaProbeError::DeviceLost) => "media_device_lost",
+        (_, MediaProbeError::Diagnostic(diagnostic))
+            if diagnostic.hresult as u32 == 0x887A0026 =>
+        {
+            "media_capture_access_lost"
+        }
+        (_, MediaProbeError::Diagnostic(diagnostic))
+            if matches!(diagnostic.hresult as u32, 0x887A0005..=0x887A0007) =>
+        {
+            "media_device_lost"
+        }
         (true, _) => "resume_media_reproof_failed",
         (false, _) => "media_frame_proof_failed",
     };
@@ -788,6 +893,19 @@ mod tests {
             ),
             (MediaProbeError::DeviceLost, "media_device_lost"),
             (MediaProbeError::ProbeFailed, "media_frame_proof_failed"),
+            (
+                MediaProbeError::Diagnostic(MediaFailureDiagnostic {
+                    failed_stage: 9,
+                    hresult: 0x8000_4005u32 as i32,
+                    nvenc_status: 10,
+                    proof_flags: 0x07,
+                    adapter_luid: 0x1122_3344_5566_7788,
+                    width: 1920,
+                    height: 1080,
+                    refresh_hz: 60,
+                }),
+                "media_frame_proof_failed",
+            ),
         ] {
             let mapped = media_probe_error(error, false);
             assert_eq!(mapped.code, expected);

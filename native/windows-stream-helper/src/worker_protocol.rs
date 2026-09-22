@@ -15,6 +15,7 @@ pub const WORKER_COMMAND_FRAME_SIZE: usize = 19;
 pub const WORKER_DISPLAY_SPEC_FRAME_SIZE: usize = 58;
 pub const WORKER_MEDIA_PROOF_FRAME_SIZE: usize = 74;
 pub const WORKER_MEDIA_POLL_FRAME_SIZE: usize = 23;
+pub const WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE: usize = 46;
 pub const WORKER_INPUT_FRAME_SIZE: usize = 31;
 pub const WORKER_MEDIA_REQUIRED_PROOF_FLAGS: u32 = 0x0f;
 const MAX_SESSION_ID: usize = 128;
@@ -170,6 +171,149 @@ pub fn validate_worker_media_poll(
         return Err(WorkerMediaPollError::WindowsSession);
     }
     Ok(frame.status)
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkerMediaDiagnosticFrame {
+    pub protocol_version: u16,
+    pub generation: u64,
+    pub command_sequence: u64,
+    pub windows_session_id: u32,
+    pub failed_stage: u32,
+    pub proof_flags: u32,
+    pub hresult: i32,
+    pub nvenc_status: i32,
+    pub adapter_luid: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerMediaDiagnosticError {
+    InvalidLength,
+    ProtocolVersion,
+    Generation,
+    Sequence,
+    WindowsSession,
+    Stage,
+    ProofFlags,
+    Hresult,
+    AdapterLuid,
+}
+
+pub fn encode_worker_media_diagnostic(
+    frame: WorkerMediaDiagnosticFrame,
+) -> Result<[u8; WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE], WorkerMediaDiagnosticError> {
+    if frame.protocol_version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerMediaDiagnosticError::ProtocolVersion);
+    }
+    if frame.generation == 0 {
+        return Err(WorkerMediaDiagnosticError::Generation);
+    }
+    if frame.command_sequence == 0 {
+        return Err(WorkerMediaDiagnosticError::Sequence);
+    }
+    if frame.windows_session_id == 0 {
+        return Err(WorkerMediaDiagnosticError::WindowsSession);
+    }
+    if !(1..=9).contains(&frame.failed_stage) {
+        return Err(WorkerMediaDiagnosticError::Stage);
+    }
+    if frame.proof_flags & !WORKER_MEDIA_REQUIRED_PROOF_FLAGS != 0 {
+        return Err(WorkerMediaDiagnosticError::ProofFlags);
+    }
+    if frame.hresult >= 0 {
+        return Err(WorkerMediaDiagnosticError::Hresult);
+    }
+    if frame.adapter_luid == 0 {
+        return Err(WorkerMediaDiagnosticError::AdapterLuid);
+    }
+
+    let mut out = [0u8; WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE];
+    out[0..2].copy_from_slice(&frame.protocol_version.to_le_bytes());
+    out[2..10].copy_from_slice(&frame.generation.to_le_bytes());
+    out[10..18].copy_from_slice(&frame.command_sequence.to_le_bytes());
+    out[18..22].copy_from_slice(&frame.windows_session_id.to_le_bytes());
+    out[22..26].copy_from_slice(&frame.failed_stage.to_le_bytes());
+    out[26..30].copy_from_slice(&frame.proof_flags.to_le_bytes());
+    out[30..34].copy_from_slice(&frame.hresult.to_le_bytes());
+    out[34..38].copy_from_slice(&frame.nvenc_status.to_le_bytes());
+    out[38..46].copy_from_slice(&frame.adapter_luid.to_le_bytes());
+    Ok(out)
+}
+
+pub fn decode_worker_media_diagnostic(
+    frame: &[u8],
+) -> Result<WorkerMediaDiagnosticFrame, WorkerMediaDiagnosticError> {
+    if frame.len() != WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE {
+        return Err(WorkerMediaDiagnosticError::InvalidLength);
+    }
+    let value = WorkerMediaDiagnosticFrame {
+        protocol_version: u16::from_le_bytes([frame[0], frame[1]]),
+        generation: u64::from_le_bytes(
+            frame[2..10]
+                .try_into()
+                .map_err(|_| WorkerMediaDiagnosticError::InvalidLength)?,
+        ),
+        command_sequence: u64::from_le_bytes(
+            frame[10..18]
+                .try_into()
+                .map_err(|_| WorkerMediaDiagnosticError::InvalidLength)?,
+        ),
+        windows_session_id: u32::from_le_bytes(
+            frame[18..22]
+                .try_into()
+                .map_err(|_| WorkerMediaDiagnosticError::InvalidLength)?,
+        ),
+        failed_stage: u32::from_le_bytes(
+            frame[22..26]
+                .try_into()
+                .map_err(|_| WorkerMediaDiagnosticError::InvalidLength)?,
+        ),
+        proof_flags: u32::from_le_bytes(
+            frame[26..30]
+                .try_into()
+                .map_err(|_| WorkerMediaDiagnosticError::InvalidLength)?,
+        ),
+        hresult: i32::from_le_bytes(
+            frame[30..34]
+                .try_into()
+                .map_err(|_| WorkerMediaDiagnosticError::InvalidLength)?,
+        ),
+        nvenc_status: i32::from_le_bytes(
+            frame[34..38]
+                .try_into()
+                .map_err(|_| WorkerMediaDiagnosticError::InvalidLength)?,
+        ),
+        adapter_luid: u64::from_le_bytes(
+            frame[38..46]
+                .try_into()
+                .map_err(|_| WorkerMediaDiagnosticError::InvalidLength)?,
+        ),
+    };
+    encode_worker_media_diagnostic(value)?;
+    Ok(value)
+}
+
+pub fn validate_worker_media_diagnostic(
+    expected_generation: u64,
+    expected_command_sequence: u64,
+    expected_windows_session_id: u32,
+    expected_adapter_luid: u64,
+    frame: WorkerMediaDiagnosticFrame,
+) -> Result<WorkerMediaDiagnosticFrame, WorkerMediaDiagnosticError> {
+    if frame.generation != expected_generation {
+        return Err(WorkerMediaDiagnosticError::Generation);
+    }
+    if frame.command_sequence != expected_command_sequence {
+        return Err(WorkerMediaDiagnosticError::Sequence);
+    }
+    if frame.windows_session_id != expected_windows_session_id {
+        return Err(WorkerMediaDiagnosticError::WindowsSession);
+    }
+    if frame.adapter_luid != expected_adapter_luid {
+        return Err(WorkerMediaDiagnosticError::AdapterLuid);
+    }
+    Ok(frame)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1335,6 +1479,51 @@ mod tests {
                 ..valid
             }),
             Err(WorkerCommandError::Sequence)
+        );
+    }
+
+    #[test]
+    fn media_diagnostic_is_numeric_and_exactly_fenced() {
+        let value = WorkerMediaDiagnosticFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            generation: 7,
+            command_sequence: 2,
+            windows_session_id: 42,
+            failed_stage: 9,
+            proof_flags: 0x07,
+            hresult: 0x8000_4005u32 as i32,
+            nvenc_status: 10,
+            adapter_luid: 0x1122_3344_5566_7788,
+        };
+        let encoded = encode_worker_media_diagnostic(value).expect("encode diagnostic");
+        assert_eq!(encoded.len(), WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE);
+        let decoded = decode_worker_media_diagnostic(&encoded).expect("decode diagnostic");
+        assert_eq!(decoded, value);
+        assert_eq!(
+            validate_worker_media_diagnostic(
+                7,
+                2,
+                42,
+                0x1122_3344_5566_7788,
+                decoded,
+            ),
+            Ok(value)
+        );
+        assert_eq!(
+            validate_worker_media_diagnostic(8, 2, 42, value.adapter_luid, decoded),
+            Err(WorkerMediaDiagnosticError::Generation)
+        );
+        assert_eq!(
+            validate_worker_media_diagnostic(7, 3, 42, value.adapter_luid, decoded),
+            Err(WorkerMediaDiagnosticError::Sequence)
+        );
+        assert_eq!(
+            validate_worker_media_diagnostic(7, 2, 43, value.adapter_luid, decoded),
+            Err(WorkerMediaDiagnosticError::WindowsSession)
+        );
+        assert_eq!(
+            validate_worker_media_diagnostic(7, 2, 42, value.adapter_luid + 1, decoded),
+            Err(WorkerMediaDiagnosticError::AdapterLuid)
         );
     }
 

@@ -14,6 +14,8 @@ pub const MEDIA_ABI_VERSION: u32 = 2;
 pub const MEDIA_REQUEST_SIZE: usize = 64;
 pub const MEDIA_RESULT_SIZE: usize = 64;
 pub const MEDIA_FRAME_RESULT_SIZE: usize = 64;
+pub const MEDIA_DIAGNOSTIC_SIZE: usize = 64;
+pub const MEDIA_DIAGNOSTIC_VERSION: u32 = 1;
 pub const MAX_ENCODED_FRAME_BYTES: usize = 8 * 1024 * 1024;
 pub const MEDIA_PROOF_EXACT_GPU: u32 = 1 << 0;
 pub const MEDIA_PROOF_DISPLAY_FOUND: u32 = 1 << 1;
@@ -84,6 +86,18 @@ pub struct MediaProbeResult {
     pub frame_sequence: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MediaFailureDiagnostic {
+    pub failed_stage: u32,
+    pub hresult: i32,
+    pub nvenc_status: i32,
+    pub proof_flags: u32,
+    pub adapter_luid: u64,
+    pub width: u32,
+    pub height: u32,
+    pub refresh_hz: u32,
+}
+
 // Encoded renter pixels are deliberately neither Debug nor Clone: diagnostics
 // must not accidentally print or duplicate H.264 payloads.
 pub struct EncodedMediaFrame {
@@ -146,6 +160,7 @@ pub enum MediaProbeError {
     DeviceLost,
     InvalidResult,
     MissingProof,
+    Diagnostic(MediaFailureDiagnostic),
 }
 
 #[cfg(any(target_os = "windows", test))]
@@ -210,6 +225,54 @@ fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, MediaProbeError> {
 }
 
 #[cfg(any(target_os = "windows", test))]
+fn decode_diagnostic(
+    wire: &[u8; MEDIA_DIAGNOSTIC_SIZE],
+    expected: MediaProbeRequestOwned,
+) -> Result<MediaFailureDiagnostic, MediaProbeError> {
+    if read_u32(wire, 0)? != MEDIA_DIAGNOSTIC_SIZE as u32
+        || read_u32(wire, 4)? != MEDIA_DIAGNOSTIC_VERSION
+    {
+        return Err(MediaProbeError::InvalidResult);
+    }
+
+    let failed_stage = read_u32(wire, 8)?;
+    let hresult = read_u32(wire, 12)? as i32;
+    let nvenc_status = read_u32(wire, 16)? as i32;
+    let proof_flags = read_u32(wire, 20)?;
+    let adapter_luid = read_u64(wire, 24)?;
+    let width = read_u32(wire, 32)?;
+    let height = read_u32(wire, 36)?;
+    let refresh_hz = read_u32(wire, 40)?;
+
+    if !(1..=9).contains(&failed_stage)
+        || hresult >= 0
+        || proof_flags & !MEDIA_REQUIRED_PROOFS != 0
+        || adapter_luid != expected.adapter_luid
+        || width != expected.width
+        || height != expected.height
+        || refresh_hz != expected.refresh_hz
+    {
+        return Err(MediaProbeError::InvalidResult);
+    }
+    for offset in [44usize, 48, 52, 56, 60] {
+        if read_u32(wire, offset)? != 0 {
+            return Err(MediaProbeError::InvalidResult);
+        }
+    }
+
+    Ok(MediaFailureDiagnostic {
+        failed_stage,
+        hresult,
+        nvenc_status,
+        proof_flags,
+        adapter_luid,
+        width,
+        height,
+        refresh_hz,
+    })
+}
+
+#[cfg(any(target_os = "windows", test))]
 fn decode_result(
     wire: &[u8; MEDIA_RESULT_SIZE],
     expected: MediaProbeRequest<'_>,
@@ -258,7 +321,7 @@ pub fn open_media_session(request: MediaProbeRequest<'_>) -> Result<MediaSession
 
     #[cfg(target_os = "windows")]
     {
-        let inner = windows_impl::open_persistent_session(&wire)?;
+        let inner = windows_impl::open_persistent_session(&wire, expected)?;
         Ok(MediaSession { expected, inner })
     }
     #[cfg(not(target_os = "windows"))]
@@ -296,6 +359,7 @@ mod windows_impl {
     type ProbeFn = unsafe extern "system" fn(*const c_void, *mut c_void) -> Hresult;
     type OpenFn = unsafe extern "system" fn(*const c_void, *mut *mut c_void) -> Hresult;
     type ReadFrameFn = unsafe extern "system" fn(*mut c_void, *mut u8, u32, *mut c_void) -> Hresult;
+    type DiagnosticFn = unsafe extern "system" fn(*mut c_void) -> Hresult;
     type CloseFn = unsafe extern "system" fn(*mut c_void);
 
     const LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR: u32 = 0x0000_0100;
@@ -311,6 +375,7 @@ mod windows_impl {
     pub(super) struct PersistentSession {
         raw: *mut c_void,
         read: ReadFrameFn,
+        diagnostic: DiagnosticFn,
         close: CloseFn,
         _module: OwnedModule,
     }
@@ -374,28 +439,55 @@ mod windows_impl {
         Ok(unsafe { mem::transmute_copy::<*mut c_void, T>(&address) })
     }
 
+    fn error_from_last_diagnostic(
+        diagnostic: DiagnosticFn,
+        expected: MediaProbeRequestOwned,
+        fallback_hr: Hresult,
+    ) -> MediaProbeError {
+        let mut wire = [0u8; MEDIA_DIAGNOSTIC_SIZE];
+        // SAFETY: wire is a writable exact-size diagnostic ABI buffer.
+        let diagnostic_hr = unsafe { diagnostic(wire.as_mut_ptr().cast::<c_void>()) };
+        if diagnostic_hr >= 0 {
+            if let Ok(value) = decode_diagnostic(&wire, expected) {
+                // Preserve the existing retry semantics for an ordinary DXGI
+                // no-frame timeout. Every other failure keeps its full numeric
+                // diagnostic for the fenced worker/service path.
+                if value.hresult as u32 == 0x887A0027 {
+                    return MediaProbeError::CaptureTimeout;
+                }
+                return MediaProbeError::Diagnostic(value);
+            }
+        }
+        classify_probe_hresult(fallback_hr)
+    }
+
     pub(super) fn open_persistent_session(
         wire: &[u8; MEDIA_REQUEST_SIZE],
+        expected: MediaProbeRequestOwned,
     ) -> Result<PersistentSession, MediaProbeError> {
         let module = load_verified_module()?;
         let open: OpenFn = unsafe { symbol(module.0, b"GPUbnbMediaOpen\0")? };
         let read: ReadFrameFn = unsafe { symbol(module.0, b"GPUbnbMediaReadFrame\0")? };
+        let diagnostic: DiagnosticFn =
+            unsafe { symbol(module.0, b"GPUbnbMediaGetLastDiagnostic\0")? };
         let close: CloseFn = unsafe { symbol(module.0, b"GPUbnbMediaClose\0")? };
 
         let mut raw: *mut c_void = std::ptr::null_mut();
         // SAFETY: wire is the exact fixed ABI input and raw is a writable out pointer.
         let hr = unsafe { open(wire.as_ptr().cast::<c_void>(), &mut raw as *mut *mut c_void) };
         if hr < 0 || raw.is_null() {
-            return Err(if hr < 0 {
-                classify_probe_hresult(hr)
-            } else {
-                MediaProbeError::ProbeFailed
-            });
+            let fallback_hr = if hr < 0 { hr } else { 0x8000_4005u32 as i32 };
+            return Err(error_from_last_diagnostic(
+                diagnostic,
+                expected,
+                fallback_hr,
+            ));
         }
 
         Ok(PersistentSession {
             raw,
             read,
+            diagnostic,
             close,
             _module: module,
         })
@@ -418,7 +510,11 @@ mod windows_impl {
             )
         };
         if hr < 0 {
-            return Err(classify_probe_hresult(hr));
+            return Err(error_from_last_diagnostic(
+                session.diagnostic,
+                expected,
+                hr,
+            ));
         }
         if read_u32(&result, 0)? != MEDIA_FRAME_RESULT_SIZE as u32
             || read_u32(&result, 4)? != MEDIA_ABI_VERSION
@@ -473,6 +569,8 @@ mod windows_impl {
     ) -> Result<MediaProbeResult, MediaProbeError> {
         let module = load_verified_module()?;
         let probe: ProbeFn = unsafe { symbol(module.0, b"GPUbnbProbeMediaFrame\0")? };
+        let diagnostic: DiagnosticFn =
+            unsafe { symbol(module.0, b"GPUbnbMediaGetLastDiagnostic\0")? };
 
         let mut result = [0u8; MEDIA_RESULT_SIZE];
         // SAFETY: input/output buffers are exactly the fixed 64-byte ABI sizes.
@@ -483,7 +581,15 @@ mod windows_impl {
             )
         };
         if hr < 0 {
-            return Err(classify_probe_hresult(hr));
+            let owned = MediaProbeRequestOwned {
+                adapter_luid: expected.adapter_luid,
+                display_nonce: expected.display_nonce,
+                width: expected.width,
+                height: expected.height,
+                refresh_hz: expected.refresh_hz,
+                capture_timeout_ms: expected.capture_timeout_ms,
+            };
+            return Err(error_from_last_diagnostic(diagnostic, owned, hr));
         }
         decode_result(&result, expected)
     }
@@ -541,8 +647,12 @@ mod tests {
     fn rust_and_cpp_media_abi_version_and_frame_flags_are_locked_together() {
         const CPP_MEDIA_HEADER: &str = include_str!("../../windows-media/Media.h");
         assert!(CPP_MEDIA_HEADER.contains("#define GPUBNB_WINDOWS_MEDIA_ABI_VERSION 2u"));
+        assert!(CPP_MEDIA_HEADER.contains("#define GPUBNB_WINDOWS_MEDIA_DIAGNOSTIC_VERSION 1u"));
+        assert!(CPP_MEDIA_HEADER.contains("struct GPUbnbMediaDiagnostic"));
+        assert!(CPP_MEDIA_HEADER.contains("GPUbnbMediaGetLastDiagnostic"));
         assert!(CPP_MEDIA_HEADER.contains("uint32_t FrameFlags;"));
         assert_eq!(MEDIA_ABI_VERSION, 2);
+        assert_eq!(MEDIA_DIAGNOSTIC_VERSION, 1);
         assert_eq!(MEDIA_FRAME_FLAG_KEYFRAME, 1);
     }
 
@@ -551,6 +661,42 @@ mod tests {
         assert_eq!(MEDIA_FRAME_RESULT_SIZE, 64);
         assert_eq!(MAX_ENCODED_FRAME_BYTES, 8 * 1024 * 1024);
         assert_eq!(MEDIA_FRAME_FLAG_KEYFRAME, 1);
+    }
+
+    #[test]
+    fn diagnostic_wire_is_exact_numeric_failure_evidence() {
+        let request = request();
+        let expected = MediaProbeRequestOwned {
+            adapter_luid: request.adapter_luid,
+            display_nonce: request.display_nonce,
+            width: request.width,
+            height: request.height,
+            refresh_hz: request.refresh_hz,
+            capture_timeout_ms: request.capture_timeout_ms,
+        };
+        let mut wire = [0u8; MEDIA_DIAGNOSTIC_SIZE];
+        wire[0..4].copy_from_slice(&(MEDIA_DIAGNOSTIC_SIZE as u32).to_le_bytes());
+        wire[4..8].copy_from_slice(&MEDIA_DIAGNOSTIC_VERSION.to_le_bytes());
+        wire[8..12].copy_from_slice(&9u32.to_le_bytes());
+        wire[12..16].copy_from_slice(&0x8000_4005u32.to_le_bytes());
+        wire[16..20].copy_from_slice(&10i32.to_le_bytes());
+        wire[20..24].copy_from_slice(&MEDIA_PROOF_CAPTURED_FRAME.to_le_bytes());
+        wire[24..32].copy_from_slice(&expected.adapter_luid.to_le_bytes());
+        wire[32..36].copy_from_slice(&expected.width.to_le_bytes());
+        wire[36..40].copy_from_slice(&expected.height.to_le_bytes());
+        wire[40..44].copy_from_slice(&expected.refresh_hz.to_le_bytes());
+
+        let diagnostic = decode_diagnostic(&wire, expected).expect("valid diagnostic");
+        assert_eq!(diagnostic.failed_stage, 9);
+        assert_eq!(diagnostic.hresult as u32, 0x8000_4005);
+        assert_eq!(diagnostic.nvenc_status, 10);
+        assert_eq!(diagnostic.adapter_luid, expected.adapter_luid);
+
+        wire[44..48].copy_from_slice(&1u32.to_le_bytes());
+        assert_eq!(
+            decode_diagnostic(&wire, expected),
+            Err(MediaProbeError::InvalidResult)
+        );
     }
 
     #[test]

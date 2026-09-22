@@ -317,7 +317,10 @@ mod windows {
             height: 1080,
             refresh_hz: 60,
         })
-        .map_err(|_| "qualification_runtime_start_failed")?;
+        .map_err(|error| {
+            eprintln!("gpubnb_qualification runtime_start_error={error:?}");
+            "qualification_runtime_start_failed"
+        })?;
 
         if let Err(error) = prove_renter_input_isolation(&mut runtime, args.windows_session_id) {
             let _ = runtime.stop();

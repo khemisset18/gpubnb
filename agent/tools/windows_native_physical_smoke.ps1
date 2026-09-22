@@ -111,6 +111,28 @@ $arguments = @(
 
 $stdout = (& $resolvedHarness @arguments | Out-String).Trim()
 $exitCode = $LASTEXITCODE
+
+if ($EvidencePath) {
+    $evidenceFullPath = [IO.Path]::GetFullPath($EvidencePath)
+    $parent = Split-Path -Parent $evidenceFullPath
+    if ($parent) {
+        New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    }
+    [IO.File]::WriteAllText(
+        $evidenceFullPath + '.harness.stdout.log',
+        $stdout + [Environment]::NewLine,
+        [Text.UTF8Encoding]::new($false)
+    )
+    [IO.File]::WriteAllText(
+        $evidenceFullPath + '.harness-exit.json',
+        ([ordered]@{
+            harnessExitCode = [int]$exitCode
+            capturedAtUtc = [DateTime]::UtcNow.ToString('o')
+        } | ConvertTo-Json) + [Environment]::NewLine,
+        [Text.UTF8Encoding]::new($false)
+    )
+}
+
 Assert-QualificationPrerequisite ($exitCode -eq 0) "physical_qualification_harness_failed_$exitCode"
 
 try {
@@ -179,12 +201,13 @@ $evidence = [ordered]@{
 $json = $evidence | ConvertTo-Json -Depth 8
 
 if ($EvidencePath) {
-    $parent = Split-Path -Parent $EvidencePath
+    $evidenceFullPath = [IO.Path]::GetFullPath($EvidencePath)
+    $parent = Split-Path -Parent $evidenceFullPath
     if ($parent) {
         New-Item -ItemType Directory -Force -Path $parent | Out-Null
     }
     [IO.File]::WriteAllText(
-        [IO.Path]::GetFullPath($EvidencePath),
+        $evidenceFullPath,
         $json + [Environment]::NewLine,
         [Text.UTF8Encoding]::new($false)
     )

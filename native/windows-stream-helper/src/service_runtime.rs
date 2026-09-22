@@ -16,11 +16,12 @@ use crate::media_protocol::{
     decode_worker_media_frame_header, validate_worker_media_frame_header,
 };
 use crate::worker_protocol::{
-    WORKER_MEDIA_POLL_FRAME_SIZE, WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerCommandFrame,
-    WorkerDisplaySpec, WorkerFence, WorkerInputEvent, WorkerInputFrame, WorkerMediaPollStatus,
-    WorkerMediaProof, decode_and_validate_worker_hello, decode_worker_media_poll,
-    decode_worker_media_proof, encode_worker_command, encode_worker_display_spec,
-    encode_worker_input, validate_worker_media_poll, validate_worker_media_proof,
+    WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE, WORKER_MEDIA_POLL_FRAME_SIZE, WORKER_PROTOCOL_VERSION,
+    WorkerCommand, WorkerCommandFrame, WorkerDisplaySpec, WorkerFence, WorkerInputEvent,
+    WorkerInputFrame, WorkerMediaPollStatus, WorkerMediaProof, decode_and_validate_worker_hello,
+    decode_worker_media_diagnostic, decode_worker_media_poll, decode_worker_media_proof,
+    encode_worker_command, encode_worker_display_spec, encode_worker_input,
+    validate_worker_media_diagnostic, validate_worker_media_poll, validate_worker_media_proof,
 };
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
 use gpubnb_windows_platform::idd_control::{
@@ -57,6 +58,13 @@ pub enum ServiceRuntimeError {
     VirtualDisplay,
     WorkerProtocol,
     MediaProof,
+    MediaDiagnostic {
+        failed_stage: u32,
+        hresult: i32,
+        nvenc_status: i32,
+        proof_flags: u32,
+        adapter_luid: u64,
+    },
     MediaTransport,
     MediaCapability,
     GraphicsProof,
@@ -441,6 +449,26 @@ fn receive_bound_media_frame_after_proof(
     display_spec: WorkerDisplaySpec,
     gpu_uuid: &str,
 ) -> Result<BoundMediaFrame, ServiceRuntimeError> {
+    if proof_frame.len() == WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE {
+        let diagnostic = decode_worker_media_diagnostic(proof_frame)
+            .map_err(|_| ServiceRuntimeError::MediaProof)?;
+        let diagnostic = validate_worker_media_diagnostic(
+            generation,
+            command_sequence,
+            windows_session_id,
+            display_spec.adapter_luid,
+            diagnostic,
+        )
+        .map_err(|_| ServiceRuntimeError::MediaProof)?;
+        return Err(ServiceRuntimeError::MediaDiagnostic {
+            failed_stage: diagnostic.failed_stage,
+            hresult: diagnostic.hresult,
+            nvenc_status: diagnostic.nvenc_status,
+            proof_flags: diagnostic.proof_flags,
+            adapter_luid: diagnostic.adapter_luid,
+        });
+    }
+
     let proof: WorkerMediaProof =
         decode_worker_media_proof(proof_frame).map_err(|_| ServiceRuntimeError::MediaProof)?;
     validate_worker_media_proof(
