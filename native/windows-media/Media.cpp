@@ -31,6 +31,44 @@ constexpr uint32_t kMaxCaptureTimeoutMs = 30'000;
 constexpr uint32_t kMaxCudaDevices = 256;
 constexpr uint32_t kLoadLibrarySearchSystem32 = 0x00000800;
 
+thread_local GPUbnbMediaDiagnostic g_lastMediaDiagnostic = {};
+
+void ResetMediaDiagnostic(const GPUbnbMediaProbeRequest& request)
+{
+    g_lastMediaDiagnostic = {};
+    g_lastMediaDiagnostic.Size = sizeof(g_lastMediaDiagnostic);
+    g_lastMediaDiagnostic.Version = GPUBNB_WINDOWS_MEDIA_DIAGNOSTIC_VERSION;
+    g_lastMediaDiagnostic.Hresult = S_OK;
+    g_lastMediaDiagnostic.NvencStatus = NV_ENC_SUCCESS;
+    g_lastMediaDiagnostic.RenderAdapterLuid = request.RenderAdapterLuid;
+    g_lastMediaDiagnostic.Width = request.Width;
+    g_lastMediaDiagnostic.Height = request.Height;
+    g_lastMediaDiagnostic.RefreshHz = request.RefreshHz;
+}
+
+void SetMediaProofFlags(uint32_t proofFlags)
+{
+    g_lastMediaDiagnostic.ProofFlags = proofFlags;
+}
+
+HRESULT RecordMediaFailure(
+    uint32_t stage,
+    HRESULT hr,
+    NVENCSTATUS nvencStatus = NV_ENC_SUCCESS)
+{
+    g_lastMediaDiagnostic.FailedStage = stage;
+    g_lastMediaDiagnostic.Hresult = static_cast<int32_t>(hr);
+    g_lastMediaDiagnostic.NvencStatus = static_cast<int32_t>(nvencStatus);
+    return hr;
+}
+
+void RecordMediaSuccess()
+{
+    g_lastMediaDiagnostic.FailedStage = GPUBNB_MEDIA_STAGE_NONE;
+    g_lastMediaDiagnostic.Hresult = S_OK;
+    g_lastMediaDiagnostic.NvencStatus = NV_ENC_SUCCESS;
+}
+
 bool IsZero(const uint8_t* bytes, size_t size)
 {
     for (size_t index = 0; index < size; ++index)
@@ -555,7 +593,7 @@ public:
     {
         if (device == nullptr)
         {
-            return E_POINTER;
+            return RecordMediaFailure(GPUBNB_MEDIA_STAGE_NVENC_SESSION, E_POINTER);
         }
 
         module_ = LoadLibraryExW(
@@ -564,7 +602,10 @@ public:
             kLoadLibrarySearchSystem32);
         if (module_ == nullptr)
         {
-            return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
+            const DWORD error = GetLastError();
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_LOAD,
+                HRESULT_FROM_WIN32(error == ERROR_SUCCESS ? ERROR_MOD_NOT_FOUND : error));
         }
 
         using GetMaxVersion =
@@ -578,27 +619,36 @@ public:
             Proc<CreateInstance>(module_, "NvEncodeAPICreateInstance");
         if (getMaxVersion == nullptr || createInstance == nullptr)
         {
-            return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_LOAD,
+                HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND));
         }
 
         uint32_t maxVersion = 0;
-        if (getMaxVersion(&maxVersion) != NV_ENC_SUCCESS)
+        const NVENCSTATUS maxVersionStatus = getMaxVersion(&maxVersion);
+        if (maxVersionStatus != NV_ENC_SUCCESS)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_LOAD,
+                E_FAIL,
+                maxVersionStatus);
         }
-        // NvEncodeAPIGetMaxSupportedVersion returns the same packed API version
-        // format as NVENCAPI_VERSION from nvEncodeAPI.h. Compare the canonical
-        // header value directly instead of reconstructing the bit layout.
         if (NVENCAPI_VERSION > maxVersion)
         {
-            return HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH);
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_LOAD,
+                HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH));
         }
 
         functions_ = {};
         functions_.version = NV_ENCODE_API_FUNCTION_LIST_VER;
-        if (createInstance(&functions_) != NV_ENC_SUCCESS)
+        const NVENCSTATUS createStatus = createInstance(&functions_);
+        if (createStatus != NV_ENC_SUCCESS)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_LOAD,
+                E_FAIL,
+                createStatus);
         }
 
         NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS open = {
@@ -607,22 +657,31 @@ public:
         open.device = device;
         open.deviceType = NV_ENC_DEVICE_TYPE_DIRECTX;
         open.apiVersion = NVENCAPI_VERSION;
-        if (functions_.nvEncOpenEncodeSessionEx(&open, &encoder_) != NV_ENC_SUCCESS ||
-            encoder_ == nullptr)
+        const NVENCSTATUS openStatus =
+            functions_.nvEncOpenEncodeSessionEx(&open, &encoder_);
+        if (openStatus != NV_ENC_SUCCESS || encoder_ == nullptr)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_SESSION,
+                E_FAIL,
+                openStatus);
         }
 
         NV_ENC_PRESET_CONFIG preset = { NV_ENC_PRESET_CONFIG_VER };
         preset.presetCfg.version = NV_ENC_CONFIG_VER;
-        if (functions_.nvEncGetEncodePresetConfigEx(
+        const NVENCSTATUS presetStatus =
+            functions_.nvEncGetEncodePresetConfigEx(
                 encoder_,
                 NV_ENC_CODEC_H264_GUID,
                 NV_ENC_PRESET_P1_GUID,
                 NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY,
-                &preset) != NV_ENC_SUCCESS)
+                &preset);
+        if (presetStatus != NV_ENC_SUCCESS)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_SESSION,
+                E_FAIL,
+                presetStatus);
         }
 
         config_ = preset.presetCfg;
@@ -646,20 +705,28 @@ public:
         initialize.enableOutputInVidmem = 0;
         initialize.tuningInfo = NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY;
         initialize.encodeConfig = &config_;
-        if (functions_.nvEncInitializeEncoder(encoder_, &initialize) != NV_ENC_SUCCESS)
+        const NVENCSTATUS initializeStatus =
+            functions_.nvEncInitializeEncoder(encoder_, &initialize);
+        if (initializeStatus != NV_ENC_SUCCESS)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_SESSION,
+                E_FAIL,
+                initializeStatus);
         }
 
         NV_ENC_CREATE_BITSTREAM_BUFFER bitstream = {
             NV_ENC_CREATE_BITSTREAM_BUFFER_VER
         };
-        if (functions_.nvEncCreateBitstreamBuffer(
-                encoder_,
-                &bitstream) != NV_ENC_SUCCESS ||
+        const NVENCSTATUS bitstreamStatus =
+            functions_.nvEncCreateBitstreamBuffer(encoder_, &bitstream);
+        if (bitstreamStatus != NV_ENC_SUCCESS ||
             bitstream.bitstreamBuffer == nullptr)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_SESSION,
+                E_FAIL,
+                bitstreamStatus);
         }
         bitstream_ = bitstream.bitstreamBuffer;
         return S_OK;
@@ -675,7 +742,9 @@ public:
     {
         if (texture == nullptr || encodedBytes == nullptr || encoder_ == nullptr)
         {
-            return E_INVALIDARG;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_ENCODE,
+                E_INVALIDARG);
         }
         *encodedBytes = 0;
         if (frameFlags != nullptr)
@@ -692,12 +761,15 @@ public:
         registration.resourceToRegister = texture;
         registration.bufferFormat = NV_ENC_BUFFER_FORMAT_ARGB;
         registration.bufferUsage = NV_ENC_INPUT_IMAGE;
-        if (functions_.nvEncRegisterResource(
-                encoder_,
-                &registration) != NV_ENC_SUCCESS ||
+        const NVENCSTATUS registerStatus =
+            functions_.nvEncRegisterResource(encoder_, &registration);
+        if (registerStatus != NV_ENC_SUCCESS ||
             registration.registeredResource == nullptr)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_ENCODE,
+                E_FAIL,
+                registerStatus);
         }
         registered_ = registration.registeredResource;
 
@@ -705,12 +777,15 @@ public:
             NV_ENC_MAP_INPUT_RESOURCE_VER
         };
         mapping.registeredResource = registered_;
-        if (functions_.nvEncMapInputResource(
-                encoder_,
-                &mapping) != NV_ENC_SUCCESS ||
+        const NVENCSTATUS mapStatus =
+            functions_.nvEncMapInputResource(encoder_, &mapping);
+        if (mapStatus != NV_ENC_SUCCESS ||
             mapping.mappedResource == nullptr)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_ENCODE,
+                E_FAIL,
+                mapStatus);
         }
         mapped_ = mapping.mappedResource;
 
@@ -729,24 +804,32 @@ public:
             functions_.nvEncEncodePicture(encoder_, &picture);
         if (encodeStatus != NV_ENC_SUCCESS)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_ENCODE,
+                E_FAIL,
+                encodeStatus);
         }
 
         NV_ENC_LOCK_BITSTREAM lock = { NV_ENC_LOCK_BITSTREAM_VER };
         lock.outputBitstream = bitstream_;
         lock.doNotWait = 0;
-        if (functions_.nvEncLockBitstream(
-                encoder_,
-                &lock) != NV_ENC_SUCCESS)
+        const NVENCSTATUS lockStatus =
+            functions_.nvEncLockBitstream(encoder_, &lock);
+        if (lockStatus != NV_ENC_SUCCESS)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_ENCODE,
+                E_FAIL,
+                lockStatus);
         }
         locked_ = true;
 
         if (lock.bitstreamBufferPtr == nullptr ||
             lock.bitstreamSizeInBytes == 0)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_ENCODE,
+                E_FAIL);
         }
         *encodedBytes = lock.bitstreamSizeInBytes;
         const bool keyframe = lock.pictureType == NV_ENC_PIC_TYPE_IDR;
@@ -757,27 +840,36 @@ public:
             output->assign(begin, begin + lock.bitstreamSizeInBytes);
         }
 
-        if (functions_.nvEncUnlockBitstream(
-                encoder_,
-                bitstream_) != NV_ENC_SUCCESS)
+        const NVENCSTATUS unlockStatus =
+            functions_.nvEncUnlockBitstream(encoder_, bitstream_);
+        if (unlockStatus != NV_ENC_SUCCESS)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_ENCODE,
+                E_FAIL,
+                unlockStatus);
         }
         locked_ = false;
 
-        if (functions_.nvEncUnmapInputResource(
-                encoder_,
-                mapped_) != NV_ENC_SUCCESS)
+        const NVENCSTATUS unmapStatus =
+            functions_.nvEncUnmapInputResource(encoder_, mapped_);
+        if (unmapStatus != NV_ENC_SUCCESS)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_ENCODE,
+                E_FAIL,
+                unmapStatus);
         }
         mapped_ = nullptr;
 
-        if (functions_.nvEncUnregisterResource(
-                encoder_,
-                registered_) != NV_ENC_SUCCESS)
+        const NVENCSTATUS unregisterStatus =
+            functions_.nvEncUnregisterResource(encoder_, registered_);
+        if (unregisterStatus != NV_ENC_SUCCESS)
         {
-            return E_FAIL;
+            return RecordMediaFailure(
+                GPUBNB_MEDIA_STAGE_NVENC_ENCODE,
+                E_FAIL,
+                unregisterStatus);
         }
         registered_ = nullptr;
 
@@ -836,7 +928,7 @@ private:
     bool forceIdrNext_ = true;
 };
 
-void InitializeResult(
+void InitializeResult(void InitializeResult(
     const GPUbnbMediaProbeRequest& request,
     GPUbnbMediaProbeResult* result)
 {
@@ -884,8 +976,9 @@ HRESULT BuildPersistentSession(
         request.RenderAdapterLuid);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_EXACT_GPU, hr);
     }
+    SetMediaProofFlags(GPUBNB_MEDIA_PROOF_EXACT_GPU);
 
     DisplayTarget display;
     hr = FindDisplayTarget(
@@ -895,7 +988,7 @@ HRESULT BuildPersistentSession(
         &display);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
     }
 
     ComPtr<IDXGIAdapter1> adapter;
@@ -903,8 +996,11 @@ HRESULT BuildPersistentSession(
     hr = FindDxgiOutput(display, &adapter, &output);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
     }
+    SetMediaProofFlags(
+        GPUBNB_MEDIA_PROOF_EXACT_GPU |
+        GPUBNB_MEDIA_PROOF_DISPLAY_FOUND);
 
     hr = CreateCaptureDevice(
         adapter.Get(),
@@ -912,7 +1008,7 @@ HRESULT BuildPersistentSession(
         &session->context);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_D3D11, hr);
     }
 
     hr = output->DuplicateOutput(
@@ -920,7 +1016,7 @@ HRESULT BuildPersistentSession(
         &session->duplication);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DUPLICATION, hr);
     }
 
     hr = session->encoder.Initialize(
@@ -934,6 +1030,7 @@ HRESULT BuildPersistentSession(
     }
 
     session->request = request;
+    RecordMediaSuccess();
     return S_OK;
 }
 } // namespace
@@ -948,12 +1045,13 @@ HRESULT __stdcall GPUbnbProbeMediaFrame(
         return E_POINTER;
     }
 
+    ResetMediaDiagnostic(*request);
     InitializeResult(*request, result);
     result->FailedStage = GPUBNB_MEDIA_STAGE_VALIDATE;
     HRESULT hr = ValidateRequest(*request);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_VALIDATE, hr);
     }
 
     result->FailedStage = GPUBNB_MEDIA_STAGE_EXACT_GPU;
@@ -962,9 +1060,10 @@ HRESULT __stdcall GPUbnbProbeMediaFrame(
         request->RenderAdapterLuid);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_EXACT_GPU, hr);
     }
     result->ProofFlags |= GPUBNB_MEDIA_PROOF_EXACT_GPU;
+    SetMediaProofFlags(result->ProofFlags);
 
     result->FailedStage = GPUBNB_MEDIA_STAGE_DISPLAY;
     DisplayTarget display;
@@ -975,16 +1074,17 @@ HRESULT __stdcall GPUbnbProbeMediaFrame(
         &display);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
     }
     result->ProofFlags |= GPUBNB_MEDIA_PROOF_DISPLAY_FOUND;
+    SetMediaProofFlags(result->ProofFlags);
 
     ComPtr<IDXGIAdapter1> adapter;
     ComPtr<IDXGIOutput1> output;
     hr = FindDxgiOutput(display, &adapter, &output);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
     }
 
     result->FailedStage = GPUBNB_MEDIA_STAGE_D3D11;
@@ -993,7 +1093,7 @@ HRESULT __stdcall GPUbnbProbeMediaFrame(
     hr = CreateCaptureDevice(adapter.Get(), &device, &context);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_D3D11, hr);
     }
 
     result->FailedStage = GPUBNB_MEDIA_STAGE_DUPLICATION;
@@ -1001,7 +1101,7 @@ HRESULT __stdcall GPUbnbProbeMediaFrame(
     hr = output->DuplicateOutput(device.Get(), &duplication);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DUPLICATION, hr);
     }
 
     result->FailedStage = GPUBNB_MEDIA_STAGE_CAPTURE;
@@ -1013,7 +1113,7 @@ HRESULT __stdcall GPUbnbProbeMediaFrame(
         &frameResource);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE, hr);
     }
     DuplicationFrame frameGuard(duplication.Get());
     frameGuard.MarkAcquired();
@@ -1022,7 +1122,7 @@ HRESULT __stdcall GPUbnbProbeMediaFrame(
     hr = frameResource.As(&texture);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE, hr);
     }
 
     D3D11_TEXTURE2D_DESC textureDesc = {};
@@ -1031,11 +1131,14 @@ HRESULT __stdcall GPUbnbProbeMediaFrame(
         textureDesc.Height != request->Height ||
         textureDesc.Format != DXGI_FORMAT_B8G8R8A8_UNORM)
     {
-        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+        return RecordMediaFailure(
+            GPUBNB_MEDIA_STAGE_CAPTURE,
+            HRESULT_FROM_WIN32(ERROR_INVALID_DATA));
     }
 
     result->ProofFlags |= GPUBNB_MEDIA_PROOF_CAPTURED_FRAME;
     result->FrameSequence = 1;
+    SetMediaProofFlags(result->ProofFlags);
 
     result->FailedStage = GPUBNB_MEDIA_STAGE_NVENC_LOAD;
     NvencEncoder encoder;
@@ -1058,12 +1161,16 @@ HRESULT __stdcall GPUbnbProbeMediaFrame(
         &encodedBytes);
     if (FAILED(hr) || encodedBytes == 0)
     {
-        return FAILED(hr) ? hr : E_FAIL;
+        return FAILED(hr)
+            ? hr
+            : RecordMediaFailure(GPUBNB_MEDIA_STAGE_NVENC_ENCODE, E_FAIL);
     }
 
     result->EncodedBytes = encodedBytes;
     result->ProofFlags |= GPUBNB_MEDIA_PROOF_NVENC_BITSTREAM;
     result->FailedStage = GPUBNB_MEDIA_STAGE_NONE;
+    SetMediaProofFlags(result->ProofFlags);
+    RecordMediaSuccess();
     return S_OK;
 }
 
@@ -1079,10 +1186,11 @@ HRESULT __stdcall GPUbnbMediaOpen(
     }
     *session = nullptr;
 
+    ResetMediaDiagnostic(*request);
     HRESULT hr = ValidateRequest(*request);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_VALIDATE, hr);
     }
 
     auto value = std::make_unique<GPUbnbMediaSession>();
@@ -1093,6 +1201,7 @@ HRESULT __stdcall GPUbnbMediaOpen(
     }
 
     *session = value.release();
+    RecordMediaSuccess();
     return S_OK;
 }
 
@@ -1107,10 +1216,13 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
     {
         return E_POINTER;
     }
+
+    ResetMediaDiagnostic(session->request);
     InitializeFrameResult(session->request, result);
     result->ProofFlags =
         GPUBNB_MEDIA_PROOF_EXACT_GPU |
         GPUBNB_MEDIA_PROOF_DISPLAY_FOUND;
+    SetMediaProofFlags(result->ProofFlags);
     result->FailedStage = GPUBNB_MEDIA_STAGE_CAPTURE;
 
     DXGI_OUTDUPL_FRAME_INFO frameInfo = {};
@@ -1121,7 +1233,7 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
         &frameResource);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE, hr);
     }
     DuplicationFrame frameGuard(session->duplication.Get());
     frameGuard.MarkAcquired();
@@ -1130,7 +1242,7 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
     hr = frameResource.As(&texture);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE, hr);
     }
 
     D3D11_TEXTURE2D_DESC desc = {};
@@ -1139,26 +1251,26 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
         desc.Height != session->request.Height ||
         desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM)
     {
-        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+        return RecordMediaFailure(
+            GPUBNB_MEDIA_STAGE_CAPTURE,
+            HRESULT_FROM_WIN32(ERROR_INVALID_DATA));
     }
     result->ProofFlags |= GPUBNB_MEDIA_PROOF_CAPTURED_FRAME;
+    SetMediaProofFlags(result->ProofFlags);
 
-    // Revalidate the UUID <-> LUID binding on every delivered frame. A persistent
-    // session must not keep emitting trusted media after a GPU reset/topology
-    // change invalidates the identity proof established at open time.
     result->FailedStage = GPUBNB_MEDIA_STAGE_EXACT_GPU;
     hr = VerifyExactGpu(
         session->request.ExpectedGpuUuid,
         session->request.RenderAdapterLuid);
     if (FAILED(hr))
     {
-        return hr;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_EXACT_GPU, hr);
     }
 
     const HRESULT deviceReason = session->device->GetDeviceRemovedReason();
     if (FAILED(deviceReason))
     {
-        return deviceReason;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_D3D11, deviceReason);
     }
 
     result->FailedStage = GPUBNB_MEDIA_STAGE_NVENC_ENCODE;
@@ -1174,7 +1286,9 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
         &frameFlags);
     if (FAILED(hr) || encodedBytes == 0 || encoded.size() != encodedBytes)
     {
-        return FAILED(hr) ? hr : E_FAIL;
+        return FAILED(hr)
+            ? hr
+            : RecordMediaFailure(GPUBNB_MEDIA_STAGE_NVENC_ENCODE, E_FAIL);
     }
 
     result->EncodedBytes = encodedBytes;
@@ -1183,17 +1297,38 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
     result->FrameSequence = ++session->frameSequence;
     result->ProofFlags |= GPUBNB_MEDIA_PROOF_NVENC_BITSTREAM;
     result->FailedStage = GPUBNB_MEDIA_STAGE_NONE;
+    SetMediaProofFlags(result->ProofFlags);
 
     if (bitstream == nullptr || bitstreamCapacity < encodedBytes)
     {
-        return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+        return RecordMediaFailure(
+            GPUBNB_MEDIA_STAGE_NVENC_ENCODE,
+            HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER));
     }
 
     std::memcpy(bitstream, encoded.data(), encodedBytes);
+    RecordMediaSuccess();
     return S_OK;
 }
 
 extern "C" __declspec(dllexport)
+HRESULT __stdcall GPUbnbMediaGetLastDiagnostic(GPUbnbMediaDiagnostic* diagnostic)
+{
+    if (diagnostic == nullptr)
+    {
+        return E_POINTER;
+    }
+    if (g_lastMediaDiagnostic.Size != sizeof(g_lastMediaDiagnostic) ||
+        g_lastMediaDiagnostic.Version != GPUBNB_WINDOWS_MEDIA_DIAGNOSTIC_VERSION)
+    {
+        return HRESULT_FROM_WIN32(ERROR_NOT_READY);
+    }
+    *diagnostic = g_lastMediaDiagnostic;
+    return S_OK;
+}
+
+extern "C" __declspec(dllexport)
+void __stdcall GPUbnbMediaClose(extern "C" __declspec(dllexport)
 void __stdcall GPUbnbMediaClose(GPUbnbMediaSession* session)
 {
     delete session;

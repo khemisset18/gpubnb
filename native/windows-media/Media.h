@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #define GPUBNB_WINDOWS_MEDIA_ABI_VERSION 2u
+#define GPUBNB_WINDOWS_MEDIA_DIAGNOSTIC_VERSION 1u
 
 enum GPUbnbMediaProofFlags : uint32_t
 {
@@ -77,11 +78,27 @@ struct GPUbnbMediaFrameResult
     uint32_t FrameFlags;
     uint32_t Reserved[2];
 };
+
+struct GPUbnbMediaDiagnostic
+{
+    uint32_t Size;
+    uint32_t Version;
+    uint32_t FailedStage;
+    int32_t Hresult;
+    int32_t NvencStatus;
+    uint32_t ProofFlags;
+    LUID RenderAdapterLuid;
+    uint32_t Width;
+    uint32_t Height;
+    uint32_t RefreshHz;
+    uint32_t Reserved[5];
+};
 #pragma pack(pop)
 
 static_assert(sizeof(GPUbnbMediaProbeRequest) == 64, "GPUbnb media request ABI drift");
 static_assert(sizeof(GPUbnbMediaProbeResult) == 64, "GPUbnb media result ABI drift");
 static_assert(sizeof(GPUbnbMediaFrameResult) == 64, "GPUbnb media frame ABI drift");
+static_assert(sizeof(GPUbnbMediaDiagnostic) == 64, "GPUbnb media diagnostic ABI drift");
 
 struct GPUbnbMediaSession;
 
@@ -102,6 +119,9 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
     uint8_t* bitstream,
     uint32_t bitstreamCapacity,
     GPUbnbMediaFrameResult* result);
+
+extern "C" __declspec(dllexport)
+HRESULT __stdcall GPUbnbMediaGetLastDiagnostic(GPUbnbMediaDiagnostic* diagnostic);
 
 extern "C" __declspec(dllexport)
 void __stdcall GPUbnbMediaClose(GPUbnbMediaSession* session);
