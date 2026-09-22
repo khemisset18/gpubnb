@@ -447,16 +447,16 @@ mod windows_impl {
         let mut wire = [0u8; MEDIA_DIAGNOSTIC_SIZE];
         // SAFETY: wire is a writable exact-size diagnostic ABI buffer.
         let diagnostic_hr = unsafe { diagnostic(wire.as_mut_ptr().cast::<c_void>()) };
-        if diagnostic_hr >= 0 {
-            if let Ok(value) = decode_diagnostic(&wire, expected) {
-                // Preserve the existing retry semantics for an ordinary DXGI
-                // no-frame timeout. Every other failure keeps its full numeric
-                // diagnostic for the fenced worker/service path.
-                if value.hresult as u32 == 0x887A0027 {
-                    return MediaProbeError::CaptureTimeout;
-                }
-                return MediaProbeError::Diagnostic(value);
+        if diagnostic_hr >= 0
+            && let Ok(value) = decode_diagnostic(&wire, expected)
+        {
+            // Preserve the existing retry semantics for an ordinary DXGI
+            // no-frame timeout. Every other failure keeps its full numeric
+            // diagnostic for the fenced worker/service path.
+            if value.hresult as u32 == 0x887A0027 {
+                return MediaProbeError::CaptureTimeout;
             }
+            return MediaProbeError::Diagnostic(value);
         }
         classify_probe_hresult(fallback_hr)
     }

@@ -14,12 +14,12 @@ use gpubnb_windows_platform::input::inject_input;
 use gpubnb_windows_platform::input::{
     InputEvent as PlatformInputEvent, MouseButton as PlatformMouseButton,
 };
-#[cfg(any(target_os = "windows", test))]
-use gpubnb_windows_platform::media::{MediaFailureDiagnostic, MediaProbeError};
 #[cfg(target_os = "windows")]
 use gpubnb_windows_platform::media::{
     EncodedMediaFrame, MediaProbeRequest, MediaSession, open_media_session,
 };
+#[cfg(any(target_os = "windows", test))]
+use gpubnb_windows_platform::media::{MediaFailureDiagnostic, MediaProbeError};
 #[cfg(target_os = "windows")]
 use gpubnb_windows_platform::pipe::{
     WorkerMediaPipeClient, WorkerPipeClient, connect_worker_media_pipe_client,
@@ -669,9 +669,7 @@ fn media_probe_error(error: MediaProbeError, resume: bool) -> WorkerError {
         (_, MediaProbeError::CaptureTimeout) => "media_capture_timeout",
         (_, MediaProbeError::CaptureAccessLost) => "media_capture_access_lost",
         (_, MediaProbeError::DeviceLost) => "media_device_lost",
-        (_, MediaProbeError::Diagnostic(diagnostic))
-            if diagnostic.hresult as u32 == 0x887A0026 =>
-        {
+        (_, MediaProbeError::Diagnostic(diagnostic)) if diagnostic.hresult as u32 == 0x887A0026 => {
             "media_capture_access_lost"
         }
         (_, MediaProbeError::Diagnostic(diagnostic))
