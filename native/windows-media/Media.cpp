@@ -1328,7 +1328,6 @@ HRESULT __stdcall GPUbnbMediaGetLastDiagnostic(GPUbnbMediaDiagnostic* diagnostic
 }
 
 extern "C" __declspec(dllexport)
-void __stdcall GPUbnbMediaClose(extern "C" __declspec(dllexport)
 void __stdcall GPUbnbMediaClose(GPUbnbMediaSession* session)
 {
     delete session;
