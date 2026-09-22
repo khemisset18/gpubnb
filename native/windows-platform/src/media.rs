@@ -450,12 +450,9 @@ mod windows_impl {
         if diagnostic_hr >= 0
             && let Ok(value) = decode_diagnostic(&wire, expected)
         {
-            // Preserve the existing retry semantics for an ordinary DXGI
-            // no-frame timeout. Every other failure keeps its full numeric
-            // diagnostic for the fenced worker/service path.
-            if value.hresult as u32 == 0x887A0027 {
-                return MediaProbeError::CaptureTimeout;
-            }
+            // Preserve the complete numeric diagnostic, including an ordinary
+            // DXGI no-frame timeout. The worker decides whether a timeout is
+            // retryable so a terminal timeout can still reach the service.
             return MediaProbeError::Diagnostic(value);
         }
         classify_probe_hresult(fallback_hr)

@@ -689,43 +689,60 @@ pub fn start_qualified_graphics_runtime(
     )
     .map_err(|_| ServiceRuntimeError::VirtualDisplay)?;
 
-    let prepare = encode_worker_command(WorkerCommandFrame {
-        protocol_version: WORKER_PROTOCOL_VERSION,
-        command: WorkerCommand::PrepareDisplay,
-        generation: config.generation,
-        sequence: 1,
-    })
-    .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
-    let display_frame = encode_worker_display_spec(display_spec)
+    let startup = (|| -> Result<(BoundMediaFrame, MediaCapabilityToken), ServiceRuntimeError> {
+        let prepare = encode_worker_command(WorkerCommandFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            command: WorkerCommand::PrepareDisplay,
+            generation: config.generation,
+            sequence: 1,
+        })
         .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
-    pipe.send_frame(&prepare)
-        .and_then(|_| pipe.send_frame(&display_frame))
-        .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
+        let display_frame = encode_worker_display_spec(display_spec)
+            .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
+        pipe.send_frame(&prepare)
+            .and_then(|_| pipe.send_frame(&display_frame))
+            .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
 
-    let capture = encode_worker_command(WorkerCommandFrame {
-        protocol_version: WORKER_PROTOCOL_VERSION,
-        command: WorkerCommand::StartCapture,
-        generation: config.generation,
-        sequence: 2,
-    })
-    .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
-    pipe.send_frame(&capture)
+        let capture = encode_worker_command(WorkerCommandFrame {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            command: WorkerCommand::StartCapture,
+            generation: config.generation,
+            sequence: 2,
+        })
         .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
+        pipe.send_frame(&capture)
+            .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
 
-    let initial_media_frame = receive_bound_media_frame(
-        &pipe,
-        &media_pipe,
-        config.generation,
-        2,
-        config.windows_session_id,
-        display_spec,
-        config.gpu_uuid,
-    )?;
-    if !initial_media_frame.is_keyframe() {
-        return Err(ServiceRuntimeError::MediaTransport);
-    }
-    let media_capability =
-        MediaCapabilityToken::generate().map_err(|_| ServiceRuntimeError::MediaCapability)?;
+        let initial_media_frame = receive_bound_media_frame(
+            &pipe,
+            &media_pipe,
+            config.generation,
+            2,
+            config.windows_session_id,
+            display_spec,
+            config.gpu_uuid,
+        )?;
+        if !initial_media_frame.is_keyframe() {
+            return Err(ServiceRuntimeError::MediaTransport);
+        }
+        let media_capability =
+            MediaCapabilityToken::generate().map_err(|_| ServiceRuntimeError::MediaCapability)?;
+        Ok((initial_media_frame, media_capability))
+    })();
+
+    let (initial_media_frame, media_capability) = match startup {
+        Ok(value) => value,
+        Err(error) => {
+            // Match the established runtime teardown order even before the
+            // QualifiedGraphicsRuntime value exists: revoke IPC first, kill the
+            // job-owned worker tree, then remove the virtual display.
+            drop(pipe);
+            drop(media_pipe);
+            drop(worker);
+            drop(display);
+            return Err(error);
+        }
+    };
 
     Ok(QualifiedGraphicsRuntime {
         media_capability: Some(media_capability),

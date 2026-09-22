@@ -56,6 +56,8 @@ const BUILD_SOURCE_COMMIT: Option<&str> = option_env!("GPUBNB_SOURCE_COMMIT");
 const PIPE_TIMEOUT_MS: u32 = 10_000;
 #[cfg(target_os = "windows")]
 const MEDIA_POLL_TIMEOUT_MS: u32 = 250;
+#[cfg(target_os = "windows")]
+const REQUIRED_MEDIA_FRAME_DEADLINE_MS: u32 = 8_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct WorkerArgs {
@@ -221,6 +223,16 @@ fn parse_args(args: &[String]) -> Result<WorkerArgs, WorkerError> {
     })
 }
 
+#[cfg(any(target_os = "windows", test))]
+fn media_error_is_capture_timeout(error: MediaProbeError) -> bool {
+    matches!(error, MediaProbeError::CaptureTimeout)
+        || matches!(
+            error,
+            MediaProbeError::Diagnostic(diagnostic)
+                if diagnostic.hresult as u32 == 0x887A_0027
+        )
+}
+
 #[cfg(target_os = "windows")]
 fn read_required_media_frame(
     session: &mut MediaSession,
@@ -230,11 +242,16 @@ fn read_required_media_frame(
     windows_session_id: u32,
     resume: bool,
 ) -> Result<EncodedMediaFrame, WorkerError> {
-    let deadline = Instant::now() + Duration::from_millis(u64::from(PIPE_TIMEOUT_MS));
+    // Finish before the service-side 10 s pipe wait so a terminal media
+    // diagnostic has time to cross the fenced control channel.
+    let deadline =
+        Instant::now() + Duration::from_millis(u64::from(REQUIRED_MEDIA_FRAME_DEADLINE_MS));
     loop {
         match session.read_frame() {
             Ok(frame) => return Ok(frame),
-            Err(MediaProbeError::CaptureTimeout) if Instant::now() < deadline => continue,
+            Err(error) if media_error_is_capture_timeout(error) && Instant::now() < deadline => {
+                continue;
+            }
             Err(error) => {
                 send_media_diagnostic(
                     control,
@@ -519,7 +536,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                                 &media,
                             )?;
                         }
-                        Err(MediaProbeError::CaptureTimeout) => {
+                        Err(error) if media_error_is_capture_timeout(error) => {
                             send_no_frame_poll(
                                 &client,
                                 args.generation,
@@ -669,6 +686,9 @@ fn media_probe_error(error: MediaProbeError, resume: bool) -> WorkerError {
         (_, MediaProbeError::CaptureTimeout) => "media_capture_timeout",
         (_, MediaProbeError::CaptureAccessLost) => "media_capture_access_lost",
         (_, MediaProbeError::DeviceLost) => "media_device_lost",
+        (_, MediaProbeError::Diagnostic(diagnostic)) if diagnostic.hresult as u32 == 0x887A0027 => {
+            "media_capture_timeout"
+        }
         (_, MediaProbeError::Diagnostic(diagnostic)) if diagnostic.hresult as u32 == 0x887A0026 => {
             "media_capture_access_lost"
         }
@@ -890,6 +910,19 @@ mod tests {
                 "media_capture_access_lost",
             ),
             (MediaProbeError::DeviceLost, "media_device_lost"),
+            (
+                MediaProbeError::Diagnostic(MediaFailureDiagnostic {
+                    failed_stage: 6,
+                    hresult: 0x887A_0027u32 as i32,
+                    nvenc_status: 0,
+                    proof_flags: 0x03,
+                    adapter_luid: 0x1122_3344_5566_7788,
+                    width: 1920,
+                    height: 1080,
+                    refresh_hz: 60,
+                }),
+                "media_capture_timeout",
+            ),
             (MediaProbeError::ProbeFailed, "media_frame_proof_failed"),
             (
                 MediaProbeError::Diagnostic(MediaFailureDiagnostic {
@@ -911,6 +944,20 @@ mod tests {
             assert!(!json.contains("GPU-"));
             assert!(!json.contains("S-1-"));
         }
+        assert!(media_error_is_capture_timeout(MediaProbeError::CaptureTimeout));
+        assert!(media_error_is_capture_timeout(MediaProbeError::Diagnostic(
+            MediaFailureDiagnostic {
+                failed_stage: 6,
+                hresult: 0x887A_0027u32 as i32,
+                nvenc_status: 0,
+                proof_flags: 0x03,
+                adapter_luid: 0x1122_3344_5566_7788,
+                width: 1920,
+                height: 1080,
+                refresh_hz: 60,
+            }
+        )));
+        assert!(!media_error_is_capture_timeout(MediaProbeError::ProbeFailed));
         assert_eq!(
             media_probe_error(MediaProbeError::ProbeFailed, true).code,
             "resume_media_reproof_failed"

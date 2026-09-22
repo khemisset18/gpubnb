@@ -128,6 +128,17 @@ fn validate_exclusive_active_session(
     Ok(())
 }
 
+#[cfg(any(target_os = "windows", test))]
+fn validate_local_console_session(
+    renter_session_id: u32,
+    active_console_session_id: u32,
+) -> Result<(), PlatformError> {
+    if active_console_session_id == u32::MAX || active_console_session_id != renter_session_id {
+        return Err(PlatformError::RenterSessionNotConsole);
+    }
+    Ok(())
+}
+
 fn validate_renter_identity_policy(
     expected_renter_user_sid: &str,
     provider_user_sid: &str,
@@ -180,7 +191,7 @@ pub fn query_renter_session_token(
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
-    use super::{RenterSessionIsolationProof, RenterSessionToken};
+    use super::{RenterSessionIsolationProof, RenterSessionToken, validate_local_console_session};
     use crate::PlatformError;
     use std::ffi::c_void;
     use std::mem::{align_of, size_of};
@@ -294,6 +305,7 @@ mod windows_impl {
         fn CloseHandle(object: Handle) -> i32;
         fn GetLastError() -> u32;
         fn LocalFree(memory: Handle) -> Handle;
+        fn WTSGetActiveConsoleSessionId() -> u32;
         fn GetCurrentProcessId() -> u32;
         fn ProcessIdToSessionId(process_id: u32, session_id: *mut u32) -> i32;
     }
@@ -489,6 +501,10 @@ mod windows_impl {
         expected_renter_user_sid: &str,
     ) -> Result<RenterSessionToken, PlatformError> {
         super::validate_exclusive_active_session(session_id, &active_session_ids()?)?;
+        // SAFETY: this query has no preconditions and returns u32::MAX when no
+        // physical console session is attached. Stage 2 must never accept RDP.
+        let active_console_session_id = unsafe { WTSGetActiveConsoleSessionId() };
+        validate_local_console_session(session_id, active_console_session_id)?;
 
         let mut raw = 0isize;
         // SAFETY: raw is a valid out pointer. WTSQueryUserToken requires the
@@ -552,6 +568,19 @@ mod tests {
         assert_eq!(
             validate_exclusive_active_session(42, &[42, 7]),
             Err(PlatformError::AnotherInteractiveSessionActive)
+        );
+    }
+
+    #[test]
+    fn local_console_policy_rejects_rdp_or_detached_sessions() {
+        assert_eq!(validate_local_console_session(42, 42), Ok(()));
+        assert_eq!(
+            validate_local_console_session(42, 43),
+            Err(PlatformError::RenterSessionNotConsole)
+        );
+        assert_eq!(
+            validate_local_console_session(42, u32::MAX),
+            Err(PlatformError::RenterSessionNotConsole)
         );
     }
 
