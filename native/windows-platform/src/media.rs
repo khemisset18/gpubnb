@@ -510,11 +510,7 @@ mod windows_impl {
             )
         };
         if hr < 0 {
-            return Err(error_from_last_diagnostic(
-                session.diagnostic,
-                expected,
-                hr,
-            ));
+            return Err(error_from_last_diagnostic(session.diagnostic, expected, hr));
         }
         if read_u32(&result, 0)? != MEDIA_FRAME_RESULT_SIZE as u32
             || read_u32(&result, 4)? != MEDIA_ABI_VERSION
