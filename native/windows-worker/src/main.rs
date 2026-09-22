@@ -944,7 +944,9 @@ mod tests {
             assert!(!json.contains("GPU-"));
             assert!(!json.contains("S-1-"));
         }
-        assert!(media_error_is_capture_timeout(MediaProbeError::CaptureTimeout));
+        assert!(media_error_is_capture_timeout(
+            MediaProbeError::CaptureTimeout
+        ));
         assert!(media_error_is_capture_timeout(MediaProbeError::Diagnostic(
             MediaFailureDiagnostic {
                 failed_stage: 6,
@@ -957,7 +959,9 @@ mod tests {
                 refresh_hz: 60,
             }
         )));
-        assert!(!media_error_is_capture_timeout(MediaProbeError::ProbeFailed));
+        assert!(!media_error_is_capture_timeout(
+            MediaProbeError::ProbeFailed
+        ));
         assert_eq!(
             media_probe_error(MediaProbeError::ProbeFailed, true).code,
             "resume_media_reproof_failed"
