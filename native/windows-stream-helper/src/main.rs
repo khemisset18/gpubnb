@@ -25,6 +25,12 @@ enum Command {
     Stop {
         session_id: String,
     },
+    Suspend {
+        session_id: String,
+    },
+    Resume {
+        session_id: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -219,7 +225,10 @@ fn parse_start(args: &[String]) -> Result<Command, CliError> {
     })
 }
 
-fn parse_stop(args: &[String]) -> Result<Command, CliError> {
+fn parse_session_command(
+    args: &[String],
+    build: impl FnOnce(String) -> Command,
+) -> Result<Command, CliError> {
     let mut json = false;
     let mut session_id = None;
     let mut i = 1;
@@ -240,7 +249,7 @@ fn parse_stop(args: &[String]) -> Result<Command, CliError> {
     }
     let session_id = session_id.ok_or_else(|| CliError::new("missing_session_id", 2))?;
     validate_session_id(&session_id)?;
-    Ok(Command::Stop { session_id })
+    Ok(build(session_id))
 }
 
 fn parse_args(args: &[String]) -> Result<Command, CliError> {
@@ -248,7 +257,11 @@ fn parse_args(args: &[String]) -> Result<Command, CliError> {
         Some("--self-test") if args.len() == 2 && args[1] == "--json" => Ok(Command::SelfTest),
         Some("--self-test") => Err(CliError::new("invalid_self_test_arguments", 2)),
         Some("--start") => parse_start(args),
-        Some("--stop") => parse_stop(args),
+        Some("--stop") => parse_session_command(args, |session_id| Command::Stop { session_id }),
+        Some("--suspend") => {
+            parse_session_command(args, |session_id| Command::Suspend { session_id })
+        }
+        Some("--resume") => parse_session_command(args, |session_id| Command::Resume { session_id }),
         _ => Err(CliError::new("command_required", 2)),
     }
 }
@@ -265,8 +278,10 @@ fn execute(command: &Command) -> Result<(), CliError> {
                 Err(CliError::new("native_backend_not_implemented", 21))
             }
         }
-        Command::Start { .. } => Err(CliError::new("native_backend_not_implemented", 21)),
-        Command::Stop { .. } => Err(CliError::new("native_backend_not_implemented", 21)),
+        Command::Start { .. }
+        | Command::Stop { .. }
+        | Command::Suspend { .. }
+        | Command::Resume { .. } => Err(CliError::new("native_backend_not_implemented", 21)),
     }
 }
 
@@ -338,6 +353,31 @@ mod tests {
             GPU_UUID,
         ]));
         assert_eq!(bad, Err(CliError::new("invalid_session_id", 2)));
+    }
+
+    #[test]
+    fn lifecycle_commands_require_json_and_safe_session_id() {
+        for (verb, expected) in [
+            ("--stop", Command::Stop { session_id: "sess-1".into() }),
+            ("--suspend", Command::Suspend { session_id: "sess-1".into() }),
+            ("--resume", Command::Resume { session_id: "sess-1".into() }),
+        ] {
+            assert_eq!(
+                parse_args(&strings(&[verb, "--json", "--session-id", "sess-1"])),
+                Ok(expected),
+                "{verb}"
+            );
+            assert_eq!(
+                parse_args(&strings(&[verb, "--session-id", "sess-1"])),
+                Err(CliError::new("json_required", 2)),
+                "{verb}"
+            );
+            assert_eq!(
+                parse_args(&strings(&[verb, "--json", "--session-id", "../provider"])),
+                Err(CliError::new("invalid_session_id", 2)),
+                "{verb}"
+            );
+        }
     }
 
     #[test]
