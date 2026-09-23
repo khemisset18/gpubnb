@@ -65,8 +65,11 @@ test('renter marketplace and workspace chooser use exact selected GPU routes', a
   assert.match(app, /jsonFetch\('\/rental\/listings'\)/);
   assert.match(app, /x\.gpu\.model/);
   assert.doesNotMatch(app, /remote=await jsonFetch\('\/listings'\)/);
-  assert.match(chooser, /\/rental\/listings\/\$\{encodeURIComponent\(listingId\)\}\/workspaces/);
+  // The modern chooser consumes the full thirteen-workspace catalogue for the
+  // exact selected GPU, then enables only compatible + bookable cards.
+  assert.match(chooser, /\/rental\/listings\/\$\{encodeURIComponent\(listingId\)\}\/workspace-catalogue/);
   assert.match(chooser, /listing\.gpu\.model/);
+  assert.match(chooser, /workspace=>workspace\.compatible&&workspace\.bookable/);
 });
 
 test('owner machines and listings pages use server-authoritative rental views', async () => {

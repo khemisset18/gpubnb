@@ -1,0 +1,16 @@
+[package]
+name = "gpubnb-windows-platform"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+publish = false
+
+[features]
+default = []
+# Explicit opt-in used only by controlled physical qualification builds.
+physical-qualification = []
+
+[workspace]
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

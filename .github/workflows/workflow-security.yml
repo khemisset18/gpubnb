@@ -1,0 +1,44 @@
+name: workflow-security
+
+on:
+  pull_request:
+    paths:
+      - ".github/**"
+      - "scripts/audit-github-actions.py"
+  push:
+    branches:
+      - main
+      - "feat/windows-native-desktop-workspaces"
+    paths:
+      - ".github/**"
+      - "scripts/audit-github-actions.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Enforce repository workflow security policy
+        run: python scripts/audit-github-actions.py
+
+      - name: Lint GitHub Actions syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOBIN="$RUNNER_TEMP/actionlint-bin"
+          mkdir -p "$GOBIN"
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$GOBIN/actionlint" -color

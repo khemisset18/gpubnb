@@ -657,6 +657,32 @@ def desktop_gpu_rendering_available() -> bool:
     return docker_info()["nvidiaRuntime"]
 
 
+def windows_native_desktop_streaming_capability() -> dict[str, Any]:
+    """Return the measured Windows-native proof and the exact GPU it proved.
+
+    Import locally to avoid a module cycle: the Windows preflight itself reuses
+    gpu_inventory()/run_command() from this module. Unknown or partial evidence is
+    normalized to unavailable with no GPU UUID.
+    """
+    if platform.system() != "Windows":
+        return {"available": False, "gpuUuid": None}
+    try:
+        from .windows_native_capability import probe_native_desktop_capability
+
+        snapshot = probe_native_desktop_capability()
+        available = bool(snapshot.available and snapshot.gpu_uuid)
+        return {
+            "available": available,
+            "gpuUuid": snapshot.gpu_uuid if available else None,
+        }
+    except Exception:
+        return {"available": False, "gpuUuid": None}
+
+
+def windows_native_desktop_streaming_available() -> bool:
+    return bool(windows_native_desktop_streaming_capability()["available"])
+
+
 def configured_disk_root() -> str:
     return os.environ.get("SystemDrive", "C:") + "\\" if platform.system() == "Windows" else "/"
 
@@ -696,6 +722,7 @@ def system_inventory() -> dict[str, Any]:
 
     disk = shutil.disk_usage(configured_disk_root())
     docker = docker_info()
+    native_desktop = windows_native_desktop_streaming_capability()
     value = {
         "inventorySchemaVersion": 2,
         "os": platform.system(),
@@ -712,6 +739,8 @@ def system_inventory() -> dict[str, Any]:
         "nvidiaRuntimeAvailable": docker["nvidiaRuntime"],
         "virtualizationAvailable": virtualization_available(),
         "desktopGpuRenderingAvailable": desktop_gpu_rendering_available(),
+        "nativeDesktopStreamingAvailable": native_desktop["available"],
+        "nativeDesktopStreamingGpuUuid": native_desktop["gpuUuid"],
         "machineFingerprint": machine_fingerprint(),
     }
     if cycle is not None:

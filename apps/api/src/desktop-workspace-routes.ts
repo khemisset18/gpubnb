@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { BookingStatus, JobType, Prisma, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
+import { BookingStatus, JobType, Prisma, WorkspaceRuntimeBackend, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 
 import { requireSession } from './auth.js';
@@ -105,6 +105,7 @@ async function createDesktopWorkspaceSession(
           machineWorkspaceId: machineWorkspace.id,
           status: WorkspaceSessionStatus.PREPARING,
           isolationType: 'DOCKER',
+          runtimeBackend: WorkspaceRuntimeBackend.CONTAINER,
           resourceLimits: {
             maxRamMiB: spec.maxRamMiB,
             maxCpuCores: spec.maxCpuCores,
