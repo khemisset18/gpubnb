@@ -264,8 +264,12 @@ fn parse_args(args: &[String]) -> Result<Command, CliError> {
         Some("--suspend") => {
             parse_session_command(args, |session_id| Command::Suspend { session_id })
         }
-        Some("--resume") => parse_session_command(args, |session_id| Command::Resume { session_id }),
-        Some("--status") => parse_session_command(args, |session_id| Command::Status { session_id }),
+        Some("--resume") => {
+            parse_session_command(args, |session_id| Command::Resume { session_id })
+        }
+        Some("--status") => {
+            parse_session_command(args, |session_id| Command::Status { session_id })
+        }
         _ => Err(CliError::new("command_required", 2)),
     }
 }
@@ -363,10 +367,30 @@ mod tests {
     #[test]
     fn lifecycle_commands_require_json_and_safe_session_id() {
         for (verb, expected) in [
-            ("--stop", Command::Stop { session_id: "sess-1".into() }),
-            ("--suspend", Command::Suspend { session_id: "sess-1".into() }),
-            ("--resume", Command::Resume { session_id: "sess-1".into() }),
-            ("--status", Command::Status { session_id: "sess-1".into() }),
+            (
+                "--stop",
+                Command::Stop {
+                    session_id: "sess-1".into(),
+                },
+            ),
+            (
+                "--suspend",
+                Command::Suspend {
+                    session_id: "sess-1".into(),
+                },
+            ),
+            (
+                "--resume",
+                Command::Resume {
+                    session_id: "sess-1".into(),
+                },
+            ),
+            (
+                "--status",
+                Command::Status {
+                    session_id: "sess-1".into(),
+                },
+            ),
         ] {
             assert_eq!(
                 parse_args(&strings(&[verb, "--json", "--session-id", "sess-1"])),
