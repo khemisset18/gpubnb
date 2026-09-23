@@ -55,7 +55,10 @@ therefore own the single active **local/console** interactive session; do not ru
 Stage 2 through RDP. The provider session must be inactive while capture/input is
 armed. After the signed worker, signed media DLL and qualification-enabled IddCx
 package are installed, use the dedicated physical smoke entrypoint documented
-below:
+below. The qualification media path identifies the nonce-bound IddCx monitor,
+resolves that exact monitor to an HMONITOR, captures it with
+Windows.Graphics.Capture, copies/fences the BGRA frame onto the exact leased NVIDIA
+D3D11 device, and only then submits it to NVENC:
 
 ```powershell
 powershell -NoProfile -File agent\tools\windows_native_physical_smoke.ps1 `
@@ -118,16 +121,16 @@ Cloud Desktop cannot pass qualification without controlled failure tests:
 - kill/restart the native stream helper;
 - restart the GPUbnb Agent;
 - temporarily interrupt Host networking;
-- force a display mode change / desktop switch and verify DXGI access-loss recovery;
+- force a display mode change / desktop switch and verify capture-session/device-loss recovery;
 - remove/recreate the virtual display and verify the stream cannot remain READY on stale capture;
 - attempt a cross-session media route/token and verify it is rejected;
 - reboot Windows during an active test rental.
 
 For every case verify server-authoritative fencing, no free-compute window, no double
 billing, no duplicate renter session and cleanup/recovery without exposing the
-provider desktop. Any DXGI access loss, virtual-display loss or helper restart must
-clear media readiness until a fresh capture + exact-GPU + NVENC proof succeeds; the
-billable interval must not resume before that fresh proof.
+provider desktop. Any capture-session loss, render-device loss, virtual-display loss
+or helper restart must clear media readiness until a fresh capture + exact-GPU +
+NVENC proof succeeds; the billable interval must not resume before that fresh proof.
 
 ## 5. Creator / Blender
 
