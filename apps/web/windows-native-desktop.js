@@ -118,8 +118,9 @@ export class WindowsNativeDesktopClient {
   #onRendered(metadata) {
     if (this.closed) return;
     if (this.streamEpoch !== metadata.streamEpoch) {
-      this.pressedKeys.clear();
-      this.pressedButtons.clear();
+      // Release any held state through the old epoch before switching fences.
+      // A reconnect/new stream must never strand a key/button in the renter OS.
+      this.#releasePressedInput();
       this.streamEpoch = metadata.streamEpoch;
       this.input = this.inputFactory({
         streamEpoch: metadata.streamEpoch,
