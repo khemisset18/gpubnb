@@ -26,7 +26,10 @@ enum GPUbnbMediaProbeStage : uint32_t
     GPUBNB_MEDIA_STAGE_EXACT_GPU = 2,
     GPUBNB_MEDIA_STAGE_DISPLAY = 3,
     GPUBNB_MEDIA_STAGE_D3D11 = 4,
-    GPUBNB_MEDIA_STAGE_DUPLICATION = 5,
+    GPUBNB_MEDIA_STAGE_CAPTURE_SESSION = 5,
+    // Numeric ABI compatibility with existing diagnostics. Stage 5 is now the
+    // supported monitor-capture session rather than DXGI Desktop Duplication.
+    GPUBNB_MEDIA_STAGE_DUPLICATION = GPUBNB_MEDIA_STAGE_CAPTURE_SESSION,
     GPUBNB_MEDIA_STAGE_CAPTURE = 6,
     GPUBNB_MEDIA_STAGE_NVENC_LOAD = 7,
     GPUBNB_MEDIA_STAGE_NVENC_SESSION = 8,
