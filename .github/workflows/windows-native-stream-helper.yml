@@ -8,6 +8,10 @@ on:
       - native/windows-worker/**
       - apps/web/windows-native-media.js
       - apps/web/windows-native-media.test.js
+      - apps/web/windows-native-input.js
+      - apps/web/windows-native-input.test.js
+      - apps/web/windows-native-desktop.js
+      - apps/web/windows-native-desktop.test.js
       - agent/gpubnb_agent/windows_native_*.py
       - agent/tests/test_windows_native_*.py
       - agent/tools/windows_native_qualify.py
@@ -45,8 +49,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Browser media security contracts
-        run: node --test apps/web/windows-native-media.test.js
+      - name: Browser native desktop security contracts
+        run: node --test apps/web/windows-native-media.test.js apps/web/windows-native-input.test.js apps/web/windows-native-desktop.test.js
 
       - name: Install Agent dependencies
         run: python -m pip install ./agent
