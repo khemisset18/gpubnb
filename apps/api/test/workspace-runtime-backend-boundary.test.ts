@@ -23,21 +23,20 @@ test('workspace sessions require an explicit persisted runtime-family identity',
   assert.match(migration, /workspace runtime backend is immutable/);
 });
 
-test('the generic browser gateway is structurally container-only', () => {
-  assert.match(gateway, /WorkspaceRuntimeBackend\.CONTAINER/);
-  const backendGuards = gateway.match(/runtimeBackend:WorkspaceRuntimeBackend\.CONTAINER/g) ?? [];
-  assert.ok(
-    backendGuards.length >= 6,
-    'browser access, activation, desired, registration, usage and stop must all be backend-fenced',
-  );
+test('browser gateway admits only the explicit container/native runtime allowlist', () => {
+  assert.match(gateway, /gatewayRuntimeBackends\(\)/);
+  assert.match(gateway, /isWindowsNativeRuntime\(row\.runtimeBackend\)/);
+  assert.match(gateway, /windows_native_websocket_only/);
+  assert.match(gateway, /windowsNativeUpgradeAllowed\(row\.runtimeBackend/);
+  assert.match(gateway, /browserGatewayFrameAllowed\(row\.runtimeBackend/);
 });
 
-test('cleanup cannot quarantine an unrelated or Windows-native session', () => {
+test('cleanup authorizes an exact session and an explicit runtime backend before quarantine', () => {
   const stoppedRoute = gateway.indexOf("app.post('/agent/workspace-gateway/:sessionId/stopped'");
   assert.ok(stoppedRoute >= 0);
   const route = gateway.slice(stoppedRoute, gateway.indexOf("\n  });", stoppedRoute) + 5);
-  const lookup = route.indexOf('runtimeBackend:WorkspaceRuntimeBackend.CONTAINER');
+  const lookup = route.indexOf('where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()}');
   const quarantine = route.indexOf('if(body.cleaned!==true)');
-  assert.ok(lookup >= 0, 'stopped route must resolve an exact container-owned session first');
+  assert.ok(lookup >= 0, 'stopped route must resolve exact session, machine and approved backend first');
   assert.ok(quarantine > lookup, 'cleanup failure must not quarantine before backend/session authorization');
 });
