@@ -495,13 +495,13 @@ HRESULT FindDxgiOutput(
             return hr;
         }
 
-        DXGI_ADAPTER_DESC1 adapterDesc = {};
-        hr = candidateAdapter->GetDesc1(&adapterDesc);
-        if (FAILED(hr) || !LuidEqual(adapterDesc.AdapterLuid, target.adapterLuid))
-        {
-            continue;
-        }
-
+        // The DisplayConfig target/source adapter identity for an indirect
+        // display is not a safe pre-filter for DXGI output enumeration. The
+        // exact GPUbnb monitor was already proven by its nonce-derived
+        // ContainerId, and its GDI source name is session-unique. Enumerate
+        // every DXGI adapter and select the output by that exact GDI name, then
+        // return the owning adapter so DuplicateOutput receives a D3D device
+        // created on the adapter to which the output is actually connected.
         for (UINT outputIndex = 0;; ++outputIndex)
         {
             ComPtr<IDXGIOutput> candidateOutput;
