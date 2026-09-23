@@ -4,6 +4,7 @@
 //! lifecycle rules that the future service/worker/IddCx/DXGI/NVENC backend must
 //! obey before the CLI is ever allowed to report a ready renter session.
 
+pub mod browser_input_protocol;
 pub mod browser_media_protocol;
 pub mod lifecycle;
 pub mod local_media_protocol;
