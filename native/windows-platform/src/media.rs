@@ -655,6 +655,8 @@ mod tests {
         assert!(CPP_MEDIA_SOURCE.contains("CreateForMonitor"));
         assert!(CPP_MEDIA_SOURCE.contains("CreateFreeThreaded"));
         assert!(CPP_MEDIA_SOURCE.contains("IsCursorCaptureEnabled(true)"));
+        assert!(CPP_MEDIA_SOURCE.contains("item_.Closed("));
+        assert!(CPP_MEDIA_SOURCE.contains("DXGI_ERROR_ACCESS_LOST"));
         assert!(CPP_MEDIA_SOURCE.contains("D3D11_QUERY_EVENT"));
         assert!(CPP_MEDIA_SOURCE.contains("NV_ENC_BUFFER_FORMAT_ARGB"));
         assert!(CPP_MEDIA_SOURCE.contains("DXGI_FORMAT_B8G8R8A8_UNORM"));
