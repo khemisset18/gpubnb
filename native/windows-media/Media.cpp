@@ -673,6 +673,37 @@ private:
     bool initialized_ = false;
 };
 
+struct MonitorFrame
+{
+    winrt::Windows::Graphics::Capture::Direct3D11CaptureFrame frame{ nullptr };
+    ComPtr<ID3D11Texture2D> texture;
+
+    void Close() noexcept
+    {
+        try
+        {
+            if (frame)
+            {
+                frame.Close();
+            }
+        }
+        catch (...)
+        {
+        }
+        frame = nullptr;
+        texture.Reset();
+    }
+
+    ~MonitorFrame()
+    {
+        Close();
+    }
+
+    MonitorFrame() = default;
+    MonitorFrame(const MonitorFrame&) = delete;
+    MonitorFrame& operator=(const MonitorFrame&) = delete;
+};
+
 class MonitorCapture
 {
 public:
@@ -775,13 +806,13 @@ public:
 
     HRESULT AcquireNextFrame(
         uint32_t timeoutMs,
-        ComPtr<ID3D11Texture2D>* texture)
+        MonitorFrame* captured)
     {
-        if (texture == nullptr)
+        if (captured == nullptr)
         {
             return E_POINTER;
         }
-        texture->Reset();
+        captured->Close();
         if (!framePool_)
         {
             return E_UNEXPECTED;
@@ -808,16 +839,20 @@ public:
                         surface.as<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();
                     HRESULT hr = access->GetInterface(
                         __uuidof(ID3D11Texture2D),
-                        reinterpret_cast<void**>(texture->GetAddressOf()));
-                    frame.Close();
+                        reinterpret_cast<void**>(captured->texture.GetAddressOf()));
                     if (FAILED(hr))
                     {
+                        frame.Close();
                         return hr;
                     }
-                    if (!*texture)
+                    if (!captured->texture)
                     {
+                        frame.Close();
                         return E_FAIL;
                     }
+                    // Keep the frame object alive while the caller copies from
+                    // its surface. Closing it earlier permits frame-pool reuse.
+                    captured->frame = frame;
                     return S_OK;
                 }
             }
@@ -945,9 +980,42 @@ HRESULT CopyCaptureTexture(
         return hr;
     }
 
+    ComPtr<ID3D11Query> completion;
+    D3D11_QUERY_DESC queryDesc = {};
+    queryDesc.Query = D3D11_QUERY_EVENT;
+    hr = device->CreateQuery(&queryDesc, &completion);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
     context->CopyResource(owned->Get(), source);
+    context->End(completion.Get());
     context->Flush();
-    return S_OK;
+
+    const ULONGLONG started = GetTickCount64();
+    for (;;)
+    {
+        BOOL complete = FALSE;
+        const HRESULT status = context->GetData(
+            completion.Get(),
+            &complete,
+            sizeof(complete),
+            0);
+        if (status == S_OK && complete)
+        {
+            return S_OK;
+        }
+        if (FAILED(status))
+        {
+            return status;
+        }
+        if (GetTickCount64() - started >= 2'000)
+        {
+            return DXGI_ERROR_WAIT_TIMEOUT;
+        }
+        Sleep(1);
+    }
 }
 
 class NvencEncoder
@@ -1441,7 +1509,7 @@ HRESULT CaptureAndEncode(
     *frameSequence = 0;
     SetMediaProofFlags(*proofFlags);
 
-    ComPtr<ID3D11Texture2D> captured;
+    MonitorFrame captured;
     HRESULT hr = session->capture.AcquireNextFrame(
         session->request.CaptureTimeoutMs,
         &captured);
@@ -1454,12 +1522,14 @@ HRESULT CaptureAndEncode(
     hr = CopyCaptureTexture(
         session->device.Get(),
         session->context.Get(),
-        captured.Get(),
+        captured.texture.Get(),
         session->request.RenderAdapterLuid,
         session->request.Width,
         session->request.Height,
         &owned);
-    captured.Reset();
+    // The explicit GPU completion fence above makes it safe for WGC to recycle
+    // its source frame after this point.
+    captured.Close();
     if (FAILED(hr))
     {
         return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE, hr);
