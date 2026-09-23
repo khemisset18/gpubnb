@@ -1,8 +1,6 @@
 //! Loopback-only browser media transport for controlled physical qualification.
 
-use crate::browser_input_protocol::{
-    BROWSER_INPUT_FRAME_SIZE, BrowserInputFence,
-};
+use crate::browser_input_protocol::{BROWSER_INPUT_FRAME_SIZE, BrowserInputFence};
 use crate::browser_media_protocol::{
     BROWSER_MEDIA_CODEC_H264, BROWSER_MEDIA_FLAG_KEYFRAME, BROWSER_MEDIA_HEADER_SIZE,
     BROWSER_MEDIA_PROTOCOL_VERSION, BrowserMediaChunkHeader, browser_media_chunk_plan,
@@ -243,7 +241,11 @@ fn write_browser_media_frame(
         let header = BrowserMediaChunkHeader {
             protocol_version: BROWSER_MEDIA_PROTOCOL_VERSION,
             codec: BROWSER_MEDIA_CODEC_H264,
-            flags: if frame.is_keyframe() { BROWSER_MEDIA_FLAG_KEYFRAME } else { 0 },
+            flags: if frame.is_keyframe() {
+                BROWSER_MEDIA_FLAG_KEYFRAME
+            } else {
+                0
+            },
             stream_epoch,
             frame_sequence: frame.header.frame_sequence,
             width: frame.header.width,
@@ -276,7 +278,9 @@ fn read_websocket_client_frame<R: Read>(
     reader: &mut R,
 ) -> Result<ClientWebSocketFrame, QualificationMediaServerError> {
     let mut first = [0u8; 2];
-    reader.read_exact(&mut first).map_err(|_| QualificationMediaServerError::Input)?;
+    reader
+        .read_exact(&mut first)
+        .map_err(|_| QualificationMediaServerError::Input)?;
     let fin = first[0] & 0x80 != 0;
     let rsv = first[0] & 0x70;
     let opcode = first[0] & 0x0f;
@@ -290,7 +294,9 @@ fn read_websocket_client_frame<R: Read>(
         usize::from(marker)
     } else if marker == 126 {
         let mut raw = [0u8; 2];
-        reader.read_exact(&mut raw).map_err(|_| QualificationMediaServerError::Input)?;
+        reader
+            .read_exact(&mut raw)
+            .map_err(|_| QualificationMediaServerError::Input)?;
         usize::from(u16::from_be_bytes(raw))
     } else {
         return Err(QualificationMediaServerError::Input);
@@ -306,9 +312,13 @@ fn read_websocket_client_frame<R: Read>(
     }
 
     let mut mask = [0u8; 4];
-    reader.read_exact(&mut mask).map_err(|_| QualificationMediaServerError::Input)?;
+    reader
+        .read_exact(&mut mask)
+        .map_err(|_| QualificationMediaServerError::Input)?;
     let mut payload = vec![0u8; payload_len];
-    reader.read_exact(&mut payload).map_err(|_| QualificationMediaServerError::Input)?;
+    reader
+        .read_exact(&mut payload)
+        .map_err(|_| QualificationMediaServerError::Input)?;
     for (index, byte) in payload.iter_mut().enumerate() {
         *byte ^= mask[index % mask.len()];
     }
@@ -334,10 +344,14 @@ fn read_websocket_client_frame<R: Read>(
 fn try_read_websocket_client_frame(
     stream: &mut TcpStream,
 ) -> Result<Option<ClientWebSocketFrame>, QualificationMediaServerError> {
-    stream.set_nonblocking(true).map_err(|_| QualificationMediaServerError::Socket)?;
+    stream
+        .set_nonblocking(true)
+        .map_err(|_| QualificationMediaServerError::Socket)?;
     let mut header = [0u8; 2];
     let peeked = stream.peek(&mut header);
-    stream.set_nonblocking(false).map_err(|_| QualificationMediaServerError::Socket)?;
+    stream
+        .set_nonblocking(false)
+        .map_err(|_| QualificationMediaServerError::Socket)?;
     match peeked {
         Ok(0) => Ok(Some(ClientWebSocketFrame::Close(Vec::new()))),
         Ok(1) => Ok(None),
@@ -518,7 +532,12 @@ mod tests {
         let mask = [0x11u8, 0x22, 0x33, 0x44];
         let mut wire = vec![0x80 | opcode, 0x80 | payload.len() as u8];
         wire.extend_from_slice(&mask);
-        wire.extend(payload.iter().enumerate().map(|(index, byte)| byte ^ mask[index % 4]));
+        wire.extend(
+            payload
+                .iter()
+                .enumerate()
+                .map(|(index, byte)| byte ^ mask[index % 4]),
+        );
         wire
     }
 
