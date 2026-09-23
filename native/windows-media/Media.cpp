@@ -237,7 +237,6 @@ bool RefreshMatches(const DisplayTarget& target, uint32_t expectedHz)
 
 HRESULT FindDisplayTarget(
     const GUID& expectedContainerId,
-    const LUID& expectedAdapterLuid,
     uint32_t expectedRefreshHz,
     DisplayTarget* target)
 {
@@ -289,7 +288,6 @@ HRESULT FindDisplayTarget(
         for (const auto& path : paths)
         {
             if ((path.flags & DISPLAYCONFIG_PATH_ACTIVE) == 0 ||
-                !LuidEqual(path.targetInfo.adapterId, expectedAdapterLuid) ||
                 path.targetInfo.rotation != DISPLAYCONFIG_ROTATION_IDENTITY)
             {
                 continue;
@@ -996,13 +994,18 @@ HRESULT BuildPersistentSession(
     DisplayTarget display;
     hr = FindDisplayTarget(
         ContainerIdFromNonce(request.DisplayNonce),
-        request.RenderAdapterLuid,
         request.RefreshHz,
         &display);
     if (FAILED(hr))
     {
         return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
     }
+    // The display-path adapter is not the preferred IddCx render adapter.
+    // ContainerId is the exact GPUbnb monitor identity; keep exact NVIDIA
+    // identity as an independent proof and use the actual path adapter for DXGI.
+    SetMediaProofFlags(
+        GPUBNB_MEDIA_PROOF_EXACT_GPU |
+        GPUBNB_MEDIA_PROOF_DISPLAY_FOUND);
 
     ComPtr<IDXGIAdapter1> adapter;
     ComPtr<IDXGIOutput1> output;
@@ -1082,13 +1085,14 @@ HRESULT __stdcall GPUbnbProbeMediaFrame(
     DisplayTarget display;
     hr = FindDisplayTarget(
         ContainerIdFromNonce(request->DisplayNonce),
-        request->RenderAdapterLuid,
         request->RefreshHz,
         &display);
     if (FAILED(hr))
     {
         return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
     }
+    // Mark the exact nonce-bound active topology as soon as it is found.
+    // A later stage-3 failure can then be distinguished as DXGI output lookup.
     result->ProofFlags |= GPUBNB_MEDIA_PROOF_DISPLAY_FOUND;
     SetMediaProofFlags(result->ProofFlags);
 
