@@ -24,8 +24,9 @@ compatibility, not runtime readiness or booking authority.
 
 The swap-chain processor intentionally does **not** report graphical READY. It
 currently drains and validates real IddCx surfaces only. READY requires the later
-DXGI/virtual-display identity proof and a real hardware NVENC encode on the exact
-leased GPU.
+nonce-bound virtual-display identity proof, an exact-monitor Windows.Graphics.Capture
+frame copied onto the exact leased NVIDIA render device, and a real hardware NVENC
+encode from that copied frame.
 
 Pinned build baseline:
 
@@ -49,5 +50,6 @@ Security invariants:
 - no driver build artifact is installable/promotable merely because CI built it.
 
 Do not install or promote this driver from CI artifacts. Driver signing, physical
-installation, virtual-display ownership, provider-desktop exclusion, DXGI capture,
-NVENC, reconnect/failure handling and cleanup all require physical qualification.
+installation, virtual-display ownership, provider-desktop exclusion, exact-monitor
+capture, NVENC, reconnect/failure handling and cleanup all require physical
+qualification.
