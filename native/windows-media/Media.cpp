@@ -223,7 +223,6 @@ HRESULT ContainerIdForMonitorPath(const wchar_t* path, GUID* containerId)
 struct DisplayTarget
 {
     std::wstring gdiDeviceName;
-    LUID adapterLuid = {};
     UINT32 refreshNumerator = 0;
     UINT32 refreshDenominator = 0;
 };
@@ -333,7 +332,6 @@ HRESULT FindDisplayTarget(
 
             DisplayTarget candidate;
             candidate.gdiDeviceName = sourceName.viewGdiDeviceName;
-            candidate.adapterLuid = path.targetInfo.adapterId;
             candidate.refreshNumerator = path.targetInfo.refreshRate.Numerator;
             candidate.refreshDenominator = path.targetInfo.refreshRate.Denominator;
             if (!RefreshMatches(candidate, expectedRefreshHz))
@@ -971,7 +969,9 @@ HRESULT CopyCaptureTexture(
     desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    // Match NVIDIA's D3D11 NVENC input texture contract: a default BGRA render
+    // target on the same exact device used to open the encode session.
+    desc.BindFlags = D3D11_BIND_RENDER_TARGET;
 
     owned->Reset();
     hr = device->CreateTexture2D(&desc, nullptr, owned->GetAddressOf());
