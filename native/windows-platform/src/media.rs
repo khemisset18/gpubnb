@@ -1,8 +1,9 @@
 //! Trusted GPUbnb Windows media DLL boundary.
 //!
-//! The native media DLL owns the one-frame DXGI -> NVENC qualification probe.
-//! Rust never accepts a renter-controlled DLL path: production always uses the
-//! fixed Program Files location and verifies Authenticode before loading it.
+//! The native media DLL owns the exact-monitor capture -> exact-NVIDIA D3D11
+//! copy -> NVENC qualification path. Rust never accepts a renter-controlled DLL
+//! path: production always uses the fixed Program Files location and verifies
+//! Authenticode before loading it.
 
 use crate::gpu_identity::parse_nvidia_gpu_uuid;
 #[cfg(target_os = "windows")]
