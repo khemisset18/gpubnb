@@ -309,6 +309,39 @@ def _native_session_command(
     return report
 
 
+def windows_native_workspace_ready(
+    session_id: str,
+    *,
+    helper_path: str | None = None,
+) -> bool:
+    """Return live interactive readiness only from an exact helper status proof."""
+    session_id = _safe_id(session_id, "native_session_id")
+    executable = helper_path or find_stream_helper()
+    if not executable:
+        return False
+    try:
+        report = _native_session_command(executable, "--status", session_id, timeout=15)
+    except RuntimeError:
+        return False
+    required_true = (
+        "running",
+        "isolatedSession",
+        "renterSessionActive",
+        "providerSessionInactive",
+        "virtualDisplay",
+        "providerDesktopExcluded",
+        "exactGpuBound",
+        "captureReady",
+        "nvencReady",
+        "mediaReady",
+        "inputIsolation",
+        "inputReady",
+    )
+    if any(report.get(field) is not True for field in required_true):
+        return False
+    return str(report.get("hardwareEncoder") or "").casefold() == "nvenc"
+
+
 def suspend_windows_native_workspace(
     session_id: str,
     *,
