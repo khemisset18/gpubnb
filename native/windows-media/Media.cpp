@@ -7,6 +7,13 @@
 #include <d3d11.h>
 #include <dxgi1_2.h>
 #include <nvEncodeAPI.h>
+#include <roapi.h>
+#include <windows.graphics.capture.interop.h>
+#include <windows.graphics.directx.direct3d11.interop.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.Capture.h>
+#include <winrt/Windows.Graphics.DirectX.h>
+#include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
 #include <wrl/client.h>
 
 #include <algorithm>
@@ -465,15 +472,15 @@ HRESULT VerifyExactGpu(
     return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
 }
 
-HRESULT FindDxgiOutput(
+HRESULT FindDxgiMonitor(
     const DisplayTarget& target,
-    ComPtr<IDXGIAdapter1>* adapter,
-    ComPtr<IDXGIOutput1>* output)
+    HMONITOR* monitor)
 {
-    if (adapter == nullptr || output == nullptr)
+    if (monitor == nullptr)
     {
         return E_POINTER;
     }
+    *monitor = nullptr;
 
     ComPtr<IDXGIFactory1> factory;
     HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory));
@@ -495,13 +502,10 @@ HRESULT FindDxgiOutput(
             return hr;
         }
 
-        // The DisplayConfig target/source adapter identity for an indirect
-        // display is not a safe pre-filter for DXGI output enumeration. The
-        // exact GPUbnb monitor was already proven by its nonce-derived
-        // ContainerId, and its GDI source name is session-unique. Enumerate
-        // every DXGI adapter and select the output by that exact GDI name, then
-        // return the owning adapter so DuplicateOutput receives a D3D device
-        // created on the adapter to which the output is actually connected.
+        // DisplayConfig proves the exact nonce-bound GPUbnb monitor and gives
+        // its session-local GDI source name. Do not pre-filter by DisplayConfig
+        // adapter LUID: an indirect display's topology adapter and preferred
+        // render adapter are distinct identities.
         for (UINT outputIndex = 0;; ++outputIndex)
         {
             ComPtr<IDXGIOutput> candidateOutput;
@@ -525,67 +529,423 @@ HRESULT FindDxgiOutput(
             {
                 continue;
             }
-
-            ComPtr<IDXGIOutput1> output1;
-            hr = candidateOutput.As(&output1);
-            if (FAILED(hr))
+            if (outputDesc.Monitor == nullptr)
             {
-                return hr;
+                return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
             }
-            *adapter = candidateAdapter;
-            *output = output1;
+
+            *monitor = outputDesc.Monitor;
             return S_OK;
         }
-
-        return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
     }
 
     return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
 }
 
-class DuplicationFrame
-{
-public:
-    explicit DuplicationFrame(IDXGIOutputDuplication* duplication)
-        : duplication_(duplication)
-    {
-    }
-    ~DuplicationFrame()
-    {
-        if (acquired_ && duplication_ != nullptr)
-        {
-            duplication_->ReleaseFrame();
-        }
-    }
-    void MarkAcquired() { acquired_ = true; }
-
-private:
-    IDXGIOutputDuplication* duplication_ = nullptr;
-    bool acquired_ = false;
-};
-
-HRESULT CreateCaptureDevice(
-    IDXGIAdapter1* adapter,
+HRESULT CreateRenderDeviceForLuid(
+    const LUID& renderAdapterLuid,
     ID3D11Device** device,
     ID3D11DeviceContext** context)
 {
-    if (adapter == nullptr || device == nullptr || context == nullptr)
+    if (device == nullptr || context == nullptr)
     {
         return E_POINTER;
     }
 
-    D3D_FEATURE_LEVEL featureLevel = {};
-    return D3D11CreateDevice(
-        adapter,
-        D3D_DRIVER_TYPE_UNKNOWN,
-        nullptr,
-        D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-        nullptr,
-        0,
-        D3D11_SDK_VERSION,
-        device,
-        &featureLevel,
-        context);
+    ComPtr<IDXGIFactory1> factory;
+    HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory));
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    for (UINT index = 0;; ++index)
+    {
+        ComPtr<IDXGIAdapter1> adapter;
+        hr = factory->EnumAdapters1(index, &adapter);
+        if (hr == DXGI_ERROR_NOT_FOUND)
+        {
+            break;
+        }
+        if (FAILED(hr))
+        {
+            return hr;
+        }
+
+        DXGI_ADAPTER_DESC1 desc = {};
+        hr = adapter->GetDesc1(&desc);
+        if (FAILED(hr))
+        {
+            return hr;
+        }
+        if (!LuidEqual(desc.AdapterLuid, renderAdapterLuid))
+        {
+            continue;
+        }
+
+        D3D_FEATURE_LEVEL featureLevel = {};
+        return D3D11CreateDevice(
+            adapter.Get(),
+            D3D_DRIVER_TYPE_UNKNOWN,
+            nullptr,
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+            nullptr,
+            0,
+            D3D11_SDK_VERSION,
+            device,
+            &featureLevel,
+            context);
+    }
+
+    return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+}
+
+HRESULT DeviceLuid(ID3D11Device* device, LUID* luid)
+{
+    if (device == nullptr || luid == nullptr)
+    {
+        return E_POINTER;
+    }
+
+    ComPtr<IDXGIDevice> dxgiDevice;
+    HRESULT hr = device->QueryInterface(IID_PPV_ARGS(&dxgiDevice));
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    ComPtr<IDXGIAdapter> adapter;
+    hr = dxgiDevice->GetAdapter(&adapter);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    DXGI_ADAPTER_DESC desc = {};
+    hr = adapter->GetDesc(&desc);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    *luid = desc.AdapterLuid;
+    return S_OK;
+}
+
+class RoApartment
+{
+public:
+    HRESULT Initialize()
+    {
+        if (attempted_)
+        {
+            return S_OK;
+        }
+        attempted_ = true;
+
+        const HRESULT hr = RoInitialize(RO_INIT_MULTITHREADED);
+        if (SUCCEEDED(hr))
+        {
+            initialized_ = true;
+            return S_OK;
+        }
+        // A caller may already have initialized this thread as STA. Keep that
+        // valid apartment instead of changing it; CreateFreeThreaded removes the
+        // capture frame pool's DispatcherQueue dependency.
+        return hr == RPC_E_CHANGED_MODE ? S_OK : hr;
+    }
+
+    ~RoApartment()
+    {
+        if (initialized_)
+        {
+            RoUninitialize();
+        }
+    }
+
+    RoApartment(const RoApartment&) = delete;
+    RoApartment& operator=(const RoApartment&) = delete;
+
+private:
+    bool attempted_ = false;
+    bool initialized_ = false;
+};
+
+class MonitorCapture
+{
+public:
+    ~MonitorCapture()
+    {
+        Reset();
+    }
+
+    HRESULT Initialize(
+        HMONITOR monitor,
+        ID3D11Device* device,
+        uint32_t width,
+        uint32_t height)
+    {
+        if (monitor == nullptr || device == nullptr || width == 0 || height == 0)
+        {
+            return E_INVALIDARG;
+        }
+
+        HRESULT hr = apartment_.Initialize();
+        if (FAILED(hr))
+        {
+            return hr;
+        }
+
+        try
+        {
+            using namespace winrt::Windows::Graphics;
+            using namespace winrt::Windows::Graphics::Capture;
+            using namespace winrt::Windows::Graphics::DirectX;
+            using namespace winrt::Windows::Graphics::DirectX::Direct3D11;
+
+            if (!GraphicsCaptureSession::IsSupported())
+            {
+                return DXGI_ERROR_UNSUPPORTED;
+            }
+
+            auto activation =
+                winrt::get_activation_factory<GraphicsCaptureItem>();
+            auto interop = activation.as<IGraphicsCaptureItemInterop>();
+
+            GraphicsCaptureItem item{ nullptr };
+            hr = interop->CreateForMonitor(
+                monitor,
+                winrt::guid_of<GraphicsCaptureItem>(),
+                reinterpret_cast<void**>(winrt::put_abi(item)));
+            if (FAILED(hr))
+            {
+                return hr;
+            }
+
+            const SizeInt32 size = item.Size();
+            if (size.Width != static_cast<int32_t>(width) ||
+                size.Height != static_cast<int32_t>(height))
+            {
+                return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+            }
+
+            ComPtr<IDXGIDevice> dxgiDevice;
+            hr = device->QueryInterface(IID_PPV_ARGS(&dxgiDevice));
+            if (FAILED(hr))
+            {
+                return hr;
+            }
+
+            winrt::com_ptr<::IInspectable> inspectable;
+            hr = CreateDirect3D11DeviceFromDXGIDevice(
+                dxgiDevice.Get(),
+                inspectable.put());
+            if (FAILED(hr))
+            {
+                return hr;
+            }
+
+            const IDirect3DDevice winrtDevice =
+                inspectable.as<IDirect3DDevice>();
+            framePool_ = Direct3D11CaptureFramePool::CreateFreeThreaded(
+                winrtDevice,
+                DirectXPixelFormat::B8G8R8A8UIntNormalized,
+                2,
+                size);
+            session_ = framePool_.CreateCaptureSession(item);
+            item_ = item;
+            width_ = width;
+            height_ = height;
+            session_.StartCapture();
+            return S_OK;
+        }
+        catch (const winrt::hresult_error& error)
+        {
+            Reset();
+            return error.code().value;
+        }
+        catch (...)
+        {
+            Reset();
+            return E_FAIL;
+        }
+    }
+
+    HRESULT AcquireNextFrame(
+        uint32_t timeoutMs,
+        ComPtr<ID3D11Texture2D>* texture)
+    {
+        if (texture == nullptr)
+        {
+            return E_POINTER;
+        }
+        texture->Reset();
+        if (!framePool_)
+        {
+            return E_UNEXPECTED;
+        }
+
+        const ULONGLONG started = GetTickCount64();
+        for (;;)
+        {
+            try
+            {
+                auto frame = framePool_.TryGetNextFrame();
+                if (frame)
+                {
+                    const auto size = frame.ContentSize();
+                    if (size.Width != static_cast<int32_t>(width_) ||
+                        size.Height != static_cast<int32_t>(height_))
+                    {
+                        frame.Close();
+                        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+                    }
+
+                    auto surface = frame.Surface();
+                    auto access =
+                        surface.as<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();
+                    HRESULT hr = access->GetInterface(
+                        __uuidof(ID3D11Texture2D),
+                        reinterpret_cast<void**>(texture->GetAddressOf()));
+                    frame.Close();
+                    if (FAILED(hr))
+                    {
+                        return hr;
+                    }
+                    if (!*texture)
+                    {
+                        return E_FAIL;
+                    }
+                    return S_OK;
+                }
+            }
+            catch (const winrt::hresult_error& error)
+            {
+                return error.code().value;
+            }
+            catch (...)
+            {
+                return E_FAIL;
+            }
+
+            if (GetTickCount64() - started >= timeoutMs)
+            {
+                return DXGI_ERROR_WAIT_TIMEOUT;
+            }
+            Sleep(5);
+        }
+    }
+
+private:
+    void Reset() noexcept
+    {
+        try
+        {
+            if (session_)
+            {
+                session_.Close();
+            }
+        }
+        catch (...)
+        {
+        }
+        session_ = nullptr;
+
+        try
+        {
+            if (framePool_)
+            {
+                framePool_.Close();
+            }
+        }
+        catch (...)
+        {
+        }
+        framePool_ = nullptr;
+        item_ = nullptr;
+        width_ = 0;
+        height_ = 0;
+    }
+
+    RoApartment apartment_;
+    winrt::Windows::Graphics::Capture::GraphicsCaptureItem item_{ nullptr };
+    winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool framePool_{ nullptr };
+    winrt::Windows::Graphics::Capture::GraphicsCaptureSession session_{ nullptr };
+    uint32_t width_ = 0;
+    uint32_t height_ = 0;
+};
+
+HRESULT CopyCaptureTexture(
+    ID3D11Device* device,
+    ID3D11DeviceContext* context,
+    ID3D11Texture2D* source,
+    const LUID& expectedRenderLuid,
+    uint32_t width,
+    uint32_t height,
+    ComPtr<ID3D11Texture2D>* owned)
+{
+    if (device == nullptr ||
+        context == nullptr ||
+        source == nullptr ||
+        owned == nullptr)
+    {
+        return E_POINTER;
+    }
+
+    D3D11_TEXTURE2D_DESC sourceDesc = {};
+    source->GetDesc(&sourceDesc);
+    if (sourceDesc.Width != width ||
+        sourceDesc.Height != height ||
+        sourceDesc.Format != DXGI_FORMAT_B8G8R8A8_UNORM ||
+        sourceDesc.SampleDesc.Count != 1)
+    {
+        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+    }
+
+    ComPtr<ID3D11Device> sourceDevice;
+    source->GetDevice(&sourceDevice);
+    LUID sourceLuid = {};
+    HRESULT hr = DeviceLuid(sourceDevice.Get(), &sourceLuid);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+    if (!LuidEqual(sourceLuid, expectedRenderLuid))
+    {
+        return HRESULT_FROM_WIN32(ERROR_DEVICE_NOT_CONNECTED);
+    }
+
+    LUID destinationLuid = {};
+    hr = DeviceLuid(device, &destinationLuid);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+    if (!LuidEqual(destinationLuid, expectedRenderLuid))
+    {
+        return HRESULT_FROM_WIN32(ERROR_DEVICE_NOT_CONNECTED);
+    }
+
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Width = width;
+    desc.Height = height;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+
+    owned->Reset();
+    hr = device->CreateTexture2D(&desc, nullptr, owned->GetAddressOf());
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    context->CopyResource(owned->Get(), source);
+    context->Flush();
+    return S_OK;
 }
 
 class NvencEncoder
@@ -958,7 +1318,8 @@ struct GPUbnbMediaSession
     GPUbnbMediaProbeRequest request = {};
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
-    ComPtr<IDXGIOutputDuplication> duplication;
+    HMONITOR monitor = nullptr;
+    MonitorCapture capture;
     NvencEncoder encoder;
     uint64_t frameSequence = 0;
 };
@@ -1000,26 +1361,18 @@ HRESULT BuildPersistentSession(
     {
         return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
     }
-    // The display-path adapter is not the preferred IddCx render adapter.
-    // ContainerId is the exact GPUbnb monitor identity; keep exact NVIDIA
-    // identity as an independent proof and use the actual path adapter for DXGI.
     SetMediaProofFlags(
         GPUBNB_MEDIA_PROOF_EXACT_GPU |
         GPUBNB_MEDIA_PROOF_DISPLAY_FOUND);
 
-    ComPtr<IDXGIAdapter1> adapter;
-    ComPtr<IDXGIOutput1> output;
-    hr = FindDxgiOutput(display, &adapter, &output);
+    hr = FindDxgiMonitor(display, &session->monitor);
     if (FAILED(hr))
     {
         return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
     }
-    SetMediaProofFlags(
-        GPUBNB_MEDIA_PROOF_EXACT_GPU |
-        GPUBNB_MEDIA_PROOF_DISPLAY_FOUND);
 
-    hr = CreateCaptureDevice(
-        adapter.Get(),
+    hr = CreateRenderDeviceForLuid(
+        request.RenderAdapterLuid,
         &session->device,
         &session->context);
     if (FAILED(hr))
@@ -1027,12 +1380,23 @@ HRESULT BuildPersistentSession(
         return RecordMediaFailure(GPUBNB_MEDIA_STAGE_D3D11, hr);
     }
 
-    hr = output->DuplicateOutput(
+    LUID deviceLuid = {};
+    hr = DeviceLuid(session->device.Get(), &deviceLuid);
+    if (FAILED(hr) || !LuidEqual(deviceLuid, request.RenderAdapterLuid))
+    {
+        return RecordMediaFailure(
+            GPUBNB_MEDIA_STAGE_D3D11,
+            FAILED(hr) ? hr : HRESULT_FROM_WIN32(ERROR_DEVICE_NOT_CONNECTED));
+    }
+
+    hr = session->capture.Initialize(
+        session->monitor,
         session->device.Get(),
-        &session->duplication);
+        request.Width,
+        request.Height);
     if (FAILED(hr))
     {
-        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DUPLICATION, hr);
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE_SESSION, hr);
     }
 
     hr = session->encoder.Initialize(
@@ -1046,6 +1410,93 @@ HRESULT BuildPersistentSession(
     }
 
     session->request = request;
+    RecordMediaSuccess();
+    return S_OK;
+}
+
+HRESULT CaptureAndEncode(
+    GPUbnbMediaSession* session,
+    std::vector<uint8_t>* output,
+    uint32_t* encodedBytes,
+    uint32_t* frameFlags,
+    uint32_t* proofFlags,
+    uint64_t* frameSequence)
+{
+    if (session == nullptr ||
+        encodedBytes == nullptr ||
+        frameFlags == nullptr ||
+        proofFlags == nullptr ||
+        frameSequence == nullptr)
+    {
+        return E_POINTER;
+    }
+
+    *encodedBytes = 0;
+    *frameFlags = 0;
+    *proofFlags =
+        GPUBNB_MEDIA_PROOF_EXACT_GPU |
+        GPUBNB_MEDIA_PROOF_DISPLAY_FOUND;
+    *frameSequence = 0;
+    SetMediaProofFlags(*proofFlags);
+
+    ComPtr<ID3D11Texture2D> captured;
+    HRESULT hr = session->capture.AcquireNextFrame(
+        session->request.CaptureTimeoutMs,
+        &captured);
+    if (FAILED(hr))
+    {
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE, hr);
+    }
+
+    ComPtr<ID3D11Texture2D> owned;
+    hr = CopyCaptureTexture(
+        session->device.Get(),
+        session->context.Get(),
+        captured.Get(),
+        session->request.RenderAdapterLuid,
+        session->request.Width,
+        session->request.Height,
+        &owned);
+    captured.Reset();
+    if (FAILED(hr))
+    {
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE, hr);
+    }
+
+    *proofFlags |= GPUBNB_MEDIA_PROOF_CAPTURED_FRAME;
+    SetMediaProofFlags(*proofFlags);
+
+    hr = VerifyExactGpu(
+        session->request.ExpectedGpuUuid,
+        session->request.RenderAdapterLuid);
+    if (FAILED(hr))
+    {
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_EXACT_GPU, hr);
+    }
+
+    const HRESULT deviceReason = session->device->GetDeviceRemovedReason();
+    if (FAILED(deviceReason))
+    {
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_D3D11, deviceReason);
+    }
+
+    hr = session->encoder.Encode(
+        owned.Get(),
+        session->request.Width,
+        session->request.Height,
+        encodedBytes,
+        output,
+        frameFlags);
+    if (FAILED(hr) || *encodedBytes == 0)
+    {
+        return FAILED(hr)
+            ? hr
+            : RecordMediaFailure(GPUBNB_MEDIA_STAGE_NVENC_ENCODE, E_FAIL);
+    }
+
+    *proofFlags |= GPUBNB_MEDIA_PROOF_NVENC_BITSTREAM;
+    SetMediaProofFlags(*proofFlags);
+    *frameSequence = ++session->frameSequence;
     RecordMediaSuccess();
     return S_OK;
 }
@@ -1070,124 +1521,37 @@ HRESULT __stdcall GPUbnbProbeMediaFrame(
         return RecordMediaFailure(GPUBNB_MEDIA_STAGE_VALIDATE, hr);
     }
 
-    result->FailedStage = GPUBNB_MEDIA_STAGE_EXACT_GPU;
-    hr = VerifyExactGpu(
-        request->ExpectedGpuUuid,
-        request->RenderAdapterLuid);
+    GPUbnbMediaSession session;
+    hr = BuildPersistentSession(*request, &session);
     if (FAILED(hr))
     {
-        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_EXACT_GPU, hr);
-    }
-    result->ProofFlags |= GPUBNB_MEDIA_PROOF_EXACT_GPU;
-    SetMediaProofFlags(result->ProofFlags);
-
-    result->FailedStage = GPUBNB_MEDIA_STAGE_DISPLAY;
-    DisplayTarget display;
-    hr = FindDisplayTarget(
-        ContainerIdFromNonce(request->DisplayNonce),
-        request->RefreshHz,
-        &display);
-    if (FAILED(hr))
-    {
-        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
-    }
-    // Mark the exact nonce-bound active topology as soon as it is found.
-    // A later stage-3 failure can then be distinguished as DXGI output lookup.
-    result->ProofFlags |= GPUBNB_MEDIA_PROOF_DISPLAY_FOUND;
-    SetMediaProofFlags(result->ProofFlags);
-
-    ComPtr<IDXGIAdapter1> adapter;
-    ComPtr<IDXGIOutput1> output;
-    hr = FindDxgiOutput(display, &adapter, &output);
-    if (FAILED(hr))
-    {
-        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
-    }
-
-    result->FailedStage = GPUBNB_MEDIA_STAGE_D3D11;
-    ComPtr<ID3D11Device> device;
-    ComPtr<ID3D11DeviceContext> context;
-    hr = CreateCaptureDevice(adapter.Get(), &device, &context);
-    if (FAILED(hr))
-    {
-        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_D3D11, hr);
-    }
-
-    result->FailedStage = GPUBNB_MEDIA_STAGE_DUPLICATION;
-    ComPtr<IDXGIOutputDuplication> duplication;
-    hr = output->DuplicateOutput(device.Get(), &duplication);
-    if (FAILED(hr))
-    {
-        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DUPLICATION, hr);
-    }
-
-    result->FailedStage = GPUBNB_MEDIA_STAGE_CAPTURE;
-    DXGI_OUTDUPL_FRAME_INFO frameInfo = {};
-    ComPtr<IDXGIResource> frameResource;
-    hr = duplication->AcquireNextFrame(
-        request->CaptureTimeoutMs,
-        &frameInfo,
-        &frameResource);
-    if (FAILED(hr))
-    {
-        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE, hr);
-    }
-    DuplicationFrame frameGuard(duplication.Get());
-    frameGuard.MarkAcquired();
-
-    ComPtr<ID3D11Texture2D> texture;
-    hr = frameResource.As(&texture);
-    if (FAILED(hr))
-    {
-        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE, hr);
-    }
-
-    D3D11_TEXTURE2D_DESC textureDesc = {};
-    texture->GetDesc(&textureDesc);
-    if (textureDesc.Width != request->Width ||
-        textureDesc.Height != request->Height ||
-        textureDesc.Format != DXGI_FORMAT_B8G8R8A8_UNORM)
-    {
-        return RecordMediaFailure(
-            GPUBNB_MEDIA_STAGE_CAPTURE,
-            HRESULT_FROM_WIN32(ERROR_INVALID_DATA));
-    }
-
-    result->ProofFlags |= GPUBNB_MEDIA_PROOF_CAPTURED_FRAME;
-    result->FrameSequence = 1;
-    SetMediaProofFlags(result->ProofFlags);
-
-    result->FailedStage = GPUBNB_MEDIA_STAGE_NVENC_LOAD;
-    NvencEncoder encoder;
-    hr = encoder.Initialize(
-        device.Get(),
-        request->Width,
-        request->Height,
-        request->RefreshHz);
-    if (FAILED(hr))
-    {
+        result->FailedStage = g_lastMediaDiagnostic.FailedStage;
+        result->ProofFlags = g_lastMediaDiagnostic.ProofFlags;
         return hr;
     }
 
-    result->FailedStage = GPUBNB_MEDIA_STAGE_NVENC_ENCODE;
     uint32_t encodedBytes = 0;
-    hr = encoder.Encode(
-        texture.Get(),
-        request->Width,
-        request->Height,
-        &encodedBytes);
-    if (FAILED(hr) || encodedBytes == 0)
+    uint32_t frameFlags = 0;
+    uint32_t proofFlags = 0;
+    uint64_t frameSequence = 0;
+    hr = CaptureAndEncode(
+        &session,
+        nullptr,
+        &encodedBytes,
+        &frameFlags,
+        &proofFlags,
+        &frameSequence);
+    if (FAILED(hr))
     {
-        return FAILED(hr)
-            ? hr
-            : RecordMediaFailure(GPUBNB_MEDIA_STAGE_NVENC_ENCODE, E_FAIL);
+        result->FailedStage = g_lastMediaDiagnostic.FailedStage;
+        result->ProofFlags = g_lastMediaDiagnostic.ProofFlags;
+        return hr;
     }
 
-    result->EncodedBytes = encodedBytes;
-    result->ProofFlags |= GPUBNB_MEDIA_PROOF_NVENC_BITSTREAM;
+    result->ProofFlags = proofFlags;
     result->FailedStage = GPUBNB_MEDIA_STAGE_NONE;
-    SetMediaProofFlags(result->ProofFlags);
-    RecordMediaSuccess();
+    result->EncodedBytes = encodedBytes;
+    result->FrameSequence = frameSequence;
     return S_OK;
 }
 
@@ -1236,86 +1600,37 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
 
     ResetMediaDiagnostic(session->request);
     InitializeFrameResult(session->request, result);
-    result->ProofFlags =
-        GPUBNB_MEDIA_PROOF_EXACT_GPU |
-        GPUBNB_MEDIA_PROOF_DISPLAY_FOUND;
-    SetMediaProofFlags(result->ProofFlags);
-    result->FailedStage = GPUBNB_MEDIA_STAGE_CAPTURE;
 
-    DXGI_OUTDUPL_FRAME_INFO frameInfo = {};
-    ComPtr<IDXGIResource> frameResource;
-    HRESULT hr = session->duplication->AcquireNextFrame(
-        session->request.CaptureTimeoutMs,
-        &frameInfo,
-        &frameResource);
-    if (FAILED(hr))
-    {
-        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE, hr);
-    }
-    DuplicationFrame frameGuard(session->duplication.Get());
-    frameGuard.MarkAcquired();
-
-    ComPtr<ID3D11Texture2D> texture;
-    hr = frameResource.As(&texture);
-    if (FAILED(hr))
-    {
-        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE, hr);
-    }
-
-    D3D11_TEXTURE2D_DESC desc = {};
-    texture->GetDesc(&desc);
-    if (desc.Width != session->request.Width ||
-        desc.Height != session->request.Height ||
-        desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM)
-    {
-        return RecordMediaFailure(
-            GPUBNB_MEDIA_STAGE_CAPTURE,
-            HRESULT_FROM_WIN32(ERROR_INVALID_DATA));
-    }
-    result->ProofFlags |= GPUBNB_MEDIA_PROOF_CAPTURED_FRAME;
-    SetMediaProofFlags(result->ProofFlags);
-
-    result->FailedStage = GPUBNB_MEDIA_STAGE_EXACT_GPU;
-    hr = VerifyExactGpu(
-        session->request.ExpectedGpuUuid,
-        session->request.RenderAdapterLuid);
-    if (FAILED(hr))
-    {
-        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_EXACT_GPU, hr);
-    }
-
-    const HRESULT deviceReason = session->device->GetDeviceRemovedReason();
-    if (FAILED(deviceReason))
-    {
-        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_D3D11, deviceReason);
-    }
-
-    result->FailedStage = GPUBNB_MEDIA_STAGE_NVENC_ENCODE;
     uint32_t encodedBytes = 0;
     uint32_t frameFlags = 0;
+    uint32_t proofFlags = 0;
+    uint64_t frameSequence = 0;
     std::vector<uint8_t> encoded;
-    hr = session->encoder.Encode(
-        texture.Get(),
-        session->request.Width,
-        session->request.Height,
-        &encodedBytes,
+    HRESULT hr = CaptureAndEncode(
+        session,
         &encoded,
-        &frameFlags);
-    if (FAILED(hr) || encodedBytes == 0 || encoded.size() != encodedBytes)
+        &encodedBytes,
+        &frameFlags,
+        &proofFlags,
+        &frameSequence);
+    if (FAILED(hr))
     {
-        return FAILED(hr)
-            ? hr
-            : RecordMediaFailure(GPUBNB_MEDIA_STAGE_NVENC_ENCODE, E_FAIL);
+        result->FailedStage = g_lastMediaDiagnostic.FailedStage;
+        result->ProofFlags = g_lastMediaDiagnostic.ProofFlags;
+        return hr;
     }
 
     result->EncodedBytes = encodedBytes;
     result->RequiredCapacity = encodedBytes;
     result->FrameFlags = frameFlags;
-    result->FrameSequence = ++session->frameSequence;
-    result->ProofFlags |= GPUBNB_MEDIA_PROOF_NVENC_BITSTREAM;
+    result->FrameSequence = frameSequence;
+    result->ProofFlags = proofFlags;
     result->FailedStage = GPUBNB_MEDIA_STAGE_NONE;
-    SetMediaProofFlags(result->ProofFlags);
 
+    if (encoded.size() != encodedBytes)
+    {
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_NVENC_ENCODE, E_FAIL);
+    }
     if (bitstream == nullptr || bitstreamCapacity < encodedBytes)
     {
         return RecordMediaFailure(
@@ -1327,6 +1642,7 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
     RecordMediaSuccess();
     return S_OK;
 }
+
 
 extern "C" __declspec(dllexport)
 HRESULT __stdcall GPUbnbMediaGetLastDiagnostic(GPUbnbMediaDiagnostic* diagnostic)
