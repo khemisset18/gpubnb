@@ -30,6 +30,8 @@ constexpr uint32_t kMaxRefresh = 240;
 constexpr uint32_t kMaxCaptureTimeoutMs = 30'000;
 constexpr uint32_t kMaxCudaDevices = 256;
 constexpr uint32_t kLoadLibrarySearchSystem32 = 0x00000800;
+constexpr int kDisplayDiscoveryAttempts = 50;
+constexpr DWORD kDisplayDiscoveryRetryDelayMs = 100;
 
 thread_local GPUbnbMediaDiagnostic g_lastMediaDiagnostic = {};
 
@@ -244,7 +246,11 @@ HRESULT FindDisplayTarget(
         return E_POINTER;
     }
 
-    for (int attempt = 0; attempt < 3; ++attempt)
+    // IddCx monitor arrival and publication into the active Windows display
+    // topology are not observed atomically by user mode. Poll for a bounded
+    // five-second window instead of treating the first empty topology scan as
+    // a permanent failure.
+    for (int attempt = 0; attempt < kDisplayDiscoveryAttempts; ++attempt)
     {
         UINT32 pathCount = 0;
         UINT32 modeCount = 0;
@@ -268,6 +274,10 @@ HRESULT FindDisplayTarget(
             nullptr);
         if (status == ERROR_INSUFFICIENT_BUFFER)
         {
+            if (attempt + 1 == kDisplayDiscoveryAttempts)
+            {
+                return HRESULT_FROM_WIN32(ERROR_RETRY);
+            }
             continue;
         }
         if (status != ERROR_SUCCESS)
@@ -330,10 +340,13 @@ HRESULT FindDisplayTarget(
             return S_OK;
         }
 
-        return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+        if (attempt + 1 < kDisplayDiscoveryAttempts)
+        {
+            Sleep(kDisplayDiscoveryRetryDelayMs);
+        }
     }
 
-    return HRESULT_FROM_WIN32(ERROR_RETRY);
+    return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
 }
 
 class Module
