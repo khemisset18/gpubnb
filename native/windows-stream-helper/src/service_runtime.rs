@@ -417,7 +417,7 @@ fn receive_polled_media_frame(
                 .map_err(|_| ServiceRuntimeError::MediaProof)?;
 
         // A no-frame timeout is benign only while the exact leased GPU still maps
-        // to the display adapter. Structural DXGI/device failures never use this
+        // to the render adapter. Structural capture/device failures never use this
         // status and remain terminal in the worker.
         let identity =
             resolve_nvidia_uuid_to_luid(gpu_uuid).map_err(|_| ServiceRuntimeError::ExactGpu)?;
