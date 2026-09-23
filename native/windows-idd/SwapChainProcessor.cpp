@@ -168,9 +168,11 @@ static DWORD WINAPI GPUbnbSwapChainThread(_In_ LPVOID parameter)
             break;
         }
 
-        // No READY proof is emitted here. This stage only proves that the OS
-        // delivered a real frame on the exact render adapter and expected mode.
-        // NVENC must consume this surface before graphics readiness can succeed.
+        // No media READY proof is emitted here. This driver-side stage proves
+        // only that Windows is producing real IddCx surfaces on the exact render
+        // adapter and expected mode. The renter worker independently proves the
+        // nonce-bound monitor capture, exact-NVIDIA frame copy and NVENC output
+        // before the service may report graphics readiness.
         texture.Reset();
         acquired.Reset();
 
