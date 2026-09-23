@@ -650,6 +650,19 @@ mod tests {
     }
 
     #[test]
+    fn cpp_capture_backend_is_exact_monitor_wgc_not_desktop_duplication() {
+        const CPP_MEDIA_SOURCE: &str = include_str!("../../windows-media/Media.cpp");
+        assert!(CPP_MEDIA_SOURCE.contains("CreateForMonitor"));
+        assert!(CPP_MEDIA_SOURCE.contains("CreateFreeThreaded"));
+        assert!(CPP_MEDIA_SOURCE.contains("IsCursorCaptureEnabled(true)"));
+        assert!(CPP_MEDIA_SOURCE.contains("D3D11_QUERY_EVENT"));
+        assert!(CPP_MEDIA_SOURCE.contains("NV_ENC_BUFFER_FORMAT_ARGB"));
+        assert!(CPP_MEDIA_SOURCE.contains("DXGI_FORMAT_B8G8R8A8_UNORM"));
+        assert!(!CPP_MEDIA_SOURCE.contains("DuplicateOutput("));
+        assert!(!CPP_MEDIA_SOURCE.contains("IDXGIOutputDuplication"));
+    }
+
+    #[test]
     fn persistent_frame_result_layout_is_pinned() {
         assert_eq!(MEDIA_FRAME_RESULT_SIZE, 64);
         assert_eq!(MAX_ENCODED_FRAME_BYTES, 8 * 1024 * 1024);
