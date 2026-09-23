@@ -635,6 +635,8 @@ HRESULT DeviceLuid(ID3D11Device* device, LUID* luid)
 class RoApartment
 {
 public:
+    RoApartment() = default;
+
     HRESULT Initialize()
     {
         if (attempted_)
