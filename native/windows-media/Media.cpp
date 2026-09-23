@@ -787,6 +787,10 @@ public:
             item_ = item;
             width_ = width;
             height_ = height;
+            // Cursor capture is part of the qualification contract: the fenced
+            // renter input proof can therefore be followed by a fresh visual
+            // capture without touching the provider desktop.
+            session_.IsCursorCaptureEnabled(true);
             session_.StartCapture();
             return S_OK;
         }
