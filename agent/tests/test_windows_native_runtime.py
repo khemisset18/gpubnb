@@ -350,6 +350,78 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, error):
                         runtime.launch_windows_native_workspace("sess-1", "gaming", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
 
+    def test_status_is_live_proof_not_process_presence(self):
+        valid = {
+            "schemaVersion": 1,
+            "sessionId": "sess-1",
+            "running": True,
+            "isolatedSession": True,
+            "renterSessionActive": True,
+            "providerSessionInactive": True,
+            "virtualDisplay": True,
+            "providerDesktopExcluded": True,
+            "exactGpuBound": True,
+            "captureReady": True,
+            "nvencReady": True,
+            "mediaReady": True,
+            "inputIsolation": True,
+            "inputReady": True,
+            "hardwareEncoder": "nvenc",
+        }
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(
+                runtime,
+                "run_command",
+                return_value=SimpleNamespace(returncode=0, stdout=json.dumps(valid), stderr=""),
+            ) as run,
+        ):
+            self.assertTrue(runtime.windows_native_workspace_ready("sess-1"))
+        self.assertEqual(
+            run.call_args.args[0],
+            ["helper.exe", "--status", "--json", "--session-id", "sess-1"],
+        )
+
+        for field in (
+            "running",
+            "isolatedSession",
+            "renterSessionActive",
+            "providerSessionInactive",
+            "virtualDisplay",
+            "providerDesktopExcluded",
+            "exactGpuBound",
+            "captureReady",
+            "nvencReady",
+            "mediaReady",
+            "inputIsolation",
+            "inputReady",
+        ):
+            bad = dict(valid)
+            bad[field] = False
+            with (
+                self.subTest(field=field),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(
+                    runtime,
+                    "run_command",
+                    return_value=SimpleNamespace(returncode=0, stdout=json.dumps(bad), stderr=""),
+                ),
+            ):
+                self.assertFalse(runtime.windows_native_workspace_ready("sess-1"))
+
+    def test_status_failures_are_not_treated_as_ready(self):
+        for result in (
+            SimpleNamespace(returncode=1, stdout="", stderr="secret"),
+            SimpleNamespace(returncode=0, stdout='{"schemaVersion":true}', stderr=""),
+            OSError("secret"),
+        ):
+            with (
+                self.subTest(result=type(result).__name__),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(runtime, "run_command", side_effect=result if isinstance(result, Exception) else None, return_value=None if isinstance(result, Exception) else result),
+            ):
+                self.assertFalse(runtime.windows_native_workspace_ready("sess-1"))
+
     def test_suspend_revokes_media_and_input_before_confirmation(self):
         report = SimpleNamespace(
             returncode=0,
