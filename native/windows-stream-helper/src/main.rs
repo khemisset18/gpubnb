@@ -31,6 +31,9 @@ enum Command {
     Resume {
         session_id: String,
     },
+    Status {
+        session_id: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -262,6 +265,7 @@ fn parse_args(args: &[String]) -> Result<Command, CliError> {
             parse_session_command(args, |session_id| Command::Suspend { session_id })
         }
         Some("--resume") => parse_session_command(args, |session_id| Command::Resume { session_id }),
+        Some("--status") => parse_session_command(args, |session_id| Command::Status { session_id }),
         _ => Err(CliError::new("command_required", 2)),
     }
 }
@@ -281,7 +285,8 @@ fn execute(command: &Command) -> Result<(), CliError> {
         Command::Start { .. }
         | Command::Stop { .. }
         | Command::Suspend { .. }
-        | Command::Resume { .. } => Err(CliError::new("native_backend_not_implemented", 21)),
+        | Command::Resume { .. }
+        | Command::Status { .. } => Err(CliError::new("native_backend_not_implemented", 21)),
     }
 }
 
@@ -361,6 +366,7 @@ mod tests {
             ("--stop", Command::Stop { session_id: "sess-1".into() }),
             ("--suspend", Command::Suspend { session_id: "sess-1".into() }),
             ("--resume", Command::Resume { session_id: "sess-1".into() }),
+            ("--status", Command::Status { session_id: "sess-1".into() }),
         ] {
             assert_eq!(
                 parse_args(&strings(&[verb, "--json", "--session-id", "sess-1"])),
