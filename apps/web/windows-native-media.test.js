@@ -7,6 +7,9 @@ import {
   BROWSER_MEDIA_CODEC_H264,
   WindowsNativeMediaReassembler,
   BoundedWebCodecsH264Consumer,
+  CanvasVideoFrameRenderer,
+  WindowsNativeWebCodecsSession,
+  deriveAvcCodecFromAnnexB,
 } from './windows-native-media.js';
 
 function packet({
@@ -239,4 +242,198 @@ test('WebCodecs consumer decodes only complete frames and enforces bounded backp
       ),
     /windows_native_media_keyframe_required/,
   );
+});
+
+
+test('derives the exact AVC profile constraints and level from Annex-B SPS', () => {
+  const accessUnit = Uint8Array.from([
+    0, 0, 0, 1, 0x67, 0x64, 0x00, 0x28, 0xaa, 0xbb,
+    0, 0, 1, 0x68, 0xce, 0x06, 0xe2,
+    0, 0, 1, 0x65, 1, 2, 3,
+  ]);
+  assert.equal(deriveAvcCodecFromAnnexB(accessUnit), 'avc1.640028');
+  assert.throws(
+    () => deriveAvcCodecFromAnnexB(Uint8Array.from([0, 0, 1, 0x65, 1, 2, 3])),
+    /windows_native_h264_sps_required/,
+  );
+});
+
+test('WebCodecs session configures from the proved IDR SPS and binds decoded output metadata', async () => {
+  const configured = [];
+  const decoded = [];
+  const outputs = [];
+  const decoders = [];
+
+  const session = new WindowsNativeWebCodecsSession({
+    output: (frame, metadata) => outputs.push({ frame, metadata }),
+    configProbe: async (config) => ({ supported: true, config }),
+    decoderFactory: (init) => {
+      const decoder = {
+        state: 'unconfigured',
+        decodeQueueSize: 0,
+        configure(config) {
+          configured.push(config);
+          this.state = 'configured';
+        },
+        decode(chunk) {
+          decoded.push(chunk);
+          init.output({
+            timestamp: chunk.timestamp,
+            displayWidth: 1920,
+            displayHeight: 1080,
+            close() {},
+          });
+        },
+        close() {
+          this.state = 'closed';
+        },
+      };
+      decoders.push(decoder);
+      return decoder;
+    },
+    chunkFactory: (init) => init,
+  });
+
+  const bytes = Uint8Array.from([
+    0, 0, 0, 1, 0x67, 0x64, 0x00, 0x28, 0xaa,
+    0, 0, 0, 1, 0x68, 1, 2,
+    0, 0, 0, 1, 0x65, 3, 4, 5,
+  ]);
+  assert.equal(
+    await session.push(packet({
+      epoch: 5n,
+      sequence: 1n,
+      width: 1920,
+      height: 1080,
+      frameBytes: bytes.length,
+      keyframe: true,
+      payload: bytes,
+    }), 1),
+    true,
+  );
+
+  assert.equal(configured.length, 1);
+  assert.deepEqual(configured[0], {
+    codec: 'avc1.640028',
+    codedWidth: 1920,
+    codedHeight: 1080,
+    optimizeForLatency: true,
+  });
+  assert.equal(decoded.length, 1);
+  assert.equal(decoded[0].type, 'key');
+  assert.equal(outputs.length, 1);
+  assert.equal(outputs[0].metadata.streamEpoch, 5n);
+  assert.equal(outputs[0].metadata.frameSequence, 1n);
+  assert.equal(outputs[0].metadata.codec, 'avc1.640028');
+
+  const next = Uint8Array.from([0, 0, 1, 0x41, 9, 8, 7]);
+  assert.equal(
+    await session.push(packet({
+      epoch: 5n,
+      sequence: 2n,
+      width: 1920,
+      height: 1080,
+      frameBytes: next.length,
+      keyframe: false,
+      payload: next,
+    }), 2),
+    true,
+  );
+  assert.equal(configured.length, 1, 'same epoch must not guess or reconfigure the decoder');
+
+  const restart = Uint8Array.from([
+    0, 0, 1, 0x67, 0x4d, 0x00, 0x1f, 0,
+    0, 0, 1, 0x68, 1,
+    0, 0, 1, 0x65, 2,
+  ]);
+  assert.equal(
+    await session.push(packet({
+      epoch: 6n,
+      sequence: 1n,
+      width: 1920,
+      height: 1080,
+      frameBytes: restart.length,
+      keyframe: true,
+      payload: restart,
+    }), 3),
+    true,
+  );
+  assert.equal(configured.length, 2);
+  assert.equal(configured[1].codec, 'avc1.4d001f');
+  assert.equal(decoders[0].state, 'closed');
+});
+
+test('WebCodecs session fails closed when the browser does not support the exact SPS codec', async () => {
+  const session = new WindowsNativeWebCodecsSession({
+    output() {},
+    configProbe: async () => ({ supported: false }),
+    decoderFactory: () => {
+      throw new Error('decoder_must_not_be_created');
+    },
+    chunkFactory: (init) => init,
+  });
+  const bytes = Uint8Array.from([0, 0, 1, 0x67, 0x64, 0x00, 0x28, 0, 0, 1, 0x65, 1]);
+  await assert.rejects(
+    () => session.push(packet({
+      epoch: 1n,
+      sequence: 1n,
+      frameBytes: bytes.length,
+      keyframe: true,
+      payload: bytes,
+    }), 1),
+    /windows_native_webcodecs_config_unsupported/,
+  );
+});
+
+test('canvas renderer validates decoded dimensions and always closes VideoFrames', () => {
+  const calls = [];
+  const canvas = {
+    width: 0,
+    height: 0,
+    getContext() {
+      return {
+        drawImage(frame, x, y, width, height) {
+          calls.push({ frame, x, y, width, height });
+        },
+      };
+    },
+  };
+  const rendered = [];
+  const renderer = new CanvasVideoFrameRenderer({
+    canvas,
+    onRendered: (metadata) => rendered.push(metadata),
+  });
+  let closed = 0;
+  const frame = {
+    displayWidth: 1920,
+    displayHeight: 1080,
+    close() { closed += 1; },
+  };
+  renderer.render(frame, {
+    streamEpoch: 1n,
+    frameSequence: 1n,
+    width: 1920,
+    height: 1080,
+  });
+  assert.equal(canvas.width, 1920);
+  assert.equal(canvas.height, 1080);
+  assert.equal(calls.length, 1);
+  assert.equal(closed, 1);
+  assert.equal(rendered[0].renderedFrames, 1);
+
+  const bad = {
+    displayWidth: 1280,
+    displayHeight: 720,
+    close() { closed += 1; },
+  };
+  assert.throws(
+    () => renderer.render(bad, {
+      streamEpoch: 1n,
+      frameSequence: 2n,
+      width: 1920,
+      height: 1080,
+    }),
+    /windows_native_video_frame_dimensions/,
+  );
+  assert.equal(closed, 2, 'rejected decoder frames must still release GPU/browser resources');
 });
