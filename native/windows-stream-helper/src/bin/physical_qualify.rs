@@ -282,15 +282,12 @@ mod windows {
         }
 
         // Exercise the real service -> fenced worker -> SendInput path only inside
-        // the already-proven renter WTS session. The opposite moves minimize the
-        // visible pointer disturbance. Suspend/resume then forces the worker to
-        // process both input commands and return a fresh capture+NVENC proof before
-        // the harness can continue.
+        // the already-proven renter WTS session. Keep the one-pixel cursor move
+        // in effect across suspend/resume so the new capture session must prove a
+        // post-input desktop state. Restore the pointer only after fresh
+        // capture+NVENC proof succeeds.
         runtime
             .inject_input(WorkerInputEvent::MouseMoveRelative { dx: 1, dy: 0 })
-            .map_err(|_| "qualification_input_injection_failed")?;
-        runtime
-            .inject_input(WorkerInputEvent::MouseMoveRelative { dx: -1, dy: 0 })
             .map_err(|_| "qualification_input_injection_failed")?;
         runtime
             .suspend_media()
@@ -298,6 +295,9 @@ mod windows {
         runtime
             .resume_after_fresh_proof()
             .map_err(|_| "qualification_input_fence_failed")?;
+        runtime
+            .inject_input(WorkerInputEvent::MouseMoveRelative { dx: -1, dy: 0 })
+            .map_err(|_| "qualification_input_restore_failed")?;
         Ok(())
     }
 
