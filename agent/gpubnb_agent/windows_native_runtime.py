@@ -284,6 +284,84 @@ def launch_windows_native_workspace(
     )
 
 
+def _native_session_command(
+    executable: str,
+    verb: str,
+    session_id: str,
+    *,
+    timeout: int = 30,
+) -> dict[str, object]:
+    """Run one helper lifecycle command without ever echoing helper diagnostics."""
+    try:
+        result = run_command(
+            [executable, verb, "--json", "--session-id", session_id],
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        raise RuntimeError(f"native_workspace_{verb.removeprefix('--')}_failed") from None
+    if result.returncode != 0:
+        raise RuntimeError(f"native_workspace_{verb.removeprefix('--')}_failed")
+    report = _json_object(result.stdout)
+    if report is None or not schema_v1(report.get("schemaVersion")):
+        raise RuntimeError(f"native_workspace_{verb.removeprefix('--')}_invalid_response")
+    if str(report.get("sessionId") or "") != session_id:
+        raise RuntimeError(f"native_workspace_{verb.removeprefix('--')}_session_mismatch")
+    return report
+
+
+def suspend_windows_native_workspace(
+    session_id: str,
+    *,
+    helper_path: str | None = None,
+) -> None:
+    """Suspend native media/input before billing enters reconnect grace.
+
+    The helper must revoke interactive readiness before confirming suspension.
+    A caller must treat any exception as ambiguous authority and fail closed.
+    """
+    session_id = _safe_id(session_id, "native_session_id")
+    executable = helper_path or find_stream_helper()
+    if not executable:
+        raise RuntimeError("native_stream_helper_missing")
+    report = _native_session_command(executable, "--suspend", session_id)
+    if report.get("suspended") is not True:
+        raise RuntimeError("native_workspace_suspend_unconfirmed")
+    if report.get("mediaReady") is not False:
+        raise RuntimeError("native_workspace_suspend_media_still_ready")
+    if report.get("inputReady") is not False:
+        raise RuntimeError("native_workspace_suspend_input_still_ready")
+
+
+def resume_windows_native_workspace(
+    session_id: str,
+    *,
+    helper_path: str | None = None,
+) -> None:
+    """Resume only after a fresh exact-GPU capture/NVENC/input proof succeeds."""
+    session_id = _safe_id(session_id, "native_session_id")
+    executable = helper_path or find_stream_helper()
+    if not executable:
+        raise RuntimeError("native_stream_helper_missing")
+    report = _native_session_command(executable, "--resume", session_id, timeout=60)
+    required_true = (
+        "resumed",
+        "freshMediaProof",
+        "exactGpuBound",
+        "virtualDisplay",
+        "providerDesktopExcluded",
+        "captureReady",
+        "nvencReady",
+        "mediaReady",
+        "inputIsolation",
+        "inputReady",
+    )
+    missing = next((field for field in required_true if report.get(field) is not True), None)
+    if missing:
+        raise RuntimeError(f"native_workspace_resume_missing_{missing}")
+    if str(report.get("hardwareEncoder") or "").casefold() != "nvenc":
+        raise RuntimeError("native_workspace_resume_nvenc_required")
+
+
 def stop_windows_native_workspace(
     session_id: str,
     *,
