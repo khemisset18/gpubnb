@@ -16,10 +16,25 @@ export function sameOriginWebSocketUrl(value, base = globalThis.location?.href) 
   if (typeof value !== 'string' || !value || typeof base !== 'string' || !base) {
     fail('windows_native_gateway_url_invalid');
   }
+  if (value !== value.trim() || /[\u0000-\u001f\u007f]/u.test(value)) {
+    fail('windows_native_gateway_url_invalid');
+  }
+
   const baseUrl = new URL(base);
+  if (!['http:', 'https:'].includes(baseUrl.protocol) || baseUrl.username || baseUrl.password) {
+    fail('windows_native_gateway_base_invalid');
+  }
+
+  const explicitScheme = /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(value);
   const url = new URL(value, baseUrl);
+  if (!explicitScheme) {
+    url.protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+  }
   if (!['ws:', 'wss:'].includes(url.protocol)) fail('windows_native_gateway_scheme');
   if (url.host !== baseUrl.host) fail('windows_native_gateway_cross_origin');
+  if (baseUrl.protocol === 'https:' && url.protocol !== 'wss:') {
+    fail('windows_native_gateway_downgrade');
+  }
   if (url.username || url.password || url.search || url.hash) {
     fail('windows_native_gateway_url_credentials');
   }
