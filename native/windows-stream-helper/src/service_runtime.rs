@@ -42,6 +42,7 @@ use std::path::Path;
 
 const WORKER_PATH: &str = r"C:\Program Files\GPUbnb\gpubnb-windows-worker.exe";
 const PIPE_TIMEOUT_MS: u32 = 10_000;
+const MEDIA_PROOF_TIMEOUT_MS: u32 = 20_000;
 const STOP_TIMEOUT_MS: u32 = 5_000;
 const WORKER_SIGNER_SHA256_HEX: Option<&str> = option_env!("GPUBNB_WINDOWS_WORKER_SIGNER_SHA256");
 
@@ -381,7 +382,7 @@ fn receive_bound_media_frame(
     gpu_uuid: &str,
 ) -> Result<BoundMediaFrame, ServiceRuntimeError> {
     let proof_frame = pipe
-        .read_frame(PIPE_TIMEOUT_MS)
+        .read_frame(MEDIA_PROOF_TIMEOUT_MS)
         .map_err(|_| ServiceRuntimeError::MediaProof)?;
     receive_bound_media_frame_after_proof(
         &proof_frame,
@@ -765,6 +766,11 @@ pub fn start_qualified_graphics_runtime(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn media_proof_timeout_allows_bounded_display_publication_delay() {
+        assert!(MEDIA_PROOF_TIMEOUT_MS > PIPE_TIMEOUT_MS);
+    }
 
     #[test]
     fn runtime_media_state_is_fail_closed() {
