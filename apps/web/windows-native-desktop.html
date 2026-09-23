@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <title>Bureau distant — GPUbnb</title>
+  <style>
+    html,body{margin:0;min-height:100%;background:#111;color:#eee;font-family:system-ui,sans-serif}
+    body{display:flex;flex-direction:column;min-height:100vh}
+    header{display:flex;align-items:center;gap:16px;padding:10px 14px;background:#181818}
+    header strong{flex:1}
+    button{font:inherit;padding:7px 12px}
+    main{flex:1;display:grid;place-items:center;overflow:hidden}
+    canvas{max-width:100%;max-height:calc(100vh - 58px);outline:none;background:#000;touch-action:none}
+  </style>
+</head>
+<body>
+  <header>
+    <strong>GPUbnb · Bureau distant</strong>
+    <span id="nativeDesktopStatus" role="status">Connexion sécurisée…</span>
+    <button id="nativeDesktopClose" type="button">Fermer</button>
+  </header>
+  <main>
+    <canvas id="nativeDesktopCanvas" width="1280" height="720" aria-label="Bureau distant GPUbnb"></canvas>
+  </main>
+  <script type="module" src="windows-native-desktop-page.js"></script>
+</body>
+</html>
