@@ -350,6 +350,143 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, error):
                         runtime.launch_windows_native_workspace("sess-1", "gaming", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
 
+    def test_suspend_revokes_media_and_input_before_confirmation(self):
+        report = SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({
+                "schemaVersion": 1,
+                "sessionId": "sess-1",
+                "suspended": True,
+                "mediaReady": False,
+                "inputReady": False,
+            }),
+            stderr="",
+        )
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(runtime, "run_command", return_value=report) as run,
+        ):
+            runtime.suspend_windows_native_workspace("sess-1")
+        self.assertEqual(
+            run.call_args.args[0],
+            ["helper.exe", "--suspend", "--json", "--session-id", "sess-1"],
+        )
+
+    def test_suspend_fails_closed_when_media_or_input_remains_ready(self):
+        for field in ("mediaReady", "inputReady"):
+            payload = {
+                "schemaVersion": 1,
+                "sessionId": "sess-1",
+                "suspended": True,
+                "mediaReady": False,
+                "inputReady": False,
+            }
+            payload[field] = True
+            with (
+                self.subTest(field=field),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(
+                    runtime,
+                    "run_command",
+                    return_value=SimpleNamespace(
+                        returncode=0,
+                        stdout=json.dumps(payload),
+                        stderr="",
+                    ),
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, f"native_workspace_suspend_{'media_still_ready' if field == 'mediaReady' else 'input_still_ready'}"):
+                    runtime.suspend_windows_native_workspace("sess-1")
+
+    def test_resume_requires_fresh_exact_gpu_nvenc_and_input_proof(self):
+        valid = {
+            "schemaVersion": 1,
+            "sessionId": "sess-1",
+            "resumed": True,
+            "freshMediaProof": True,
+            "exactGpuBound": True,
+            "virtualDisplay": True,
+            "providerDesktopExcluded": True,
+            "captureReady": True,
+            "nvencReady": True,
+            "mediaReady": True,
+            "inputIsolation": True,
+            "inputReady": True,
+            "hardwareEncoder": "nvenc",
+        }
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(
+                runtime,
+                "run_command",
+                return_value=SimpleNamespace(
+                    returncode=0,
+                    stdout=json.dumps(valid),
+                    stderr="",
+                ),
+            ) as run,
+        ):
+            runtime.resume_windows_native_workspace("sess-1")
+        self.assertEqual(
+            run.call_args.args[0],
+            ["helper.exe", "--resume", "--json", "--session-id", "sess-1"],
+        )
+
+        for field in (
+            "resumed",
+            "freshMediaProof",
+            "exactGpuBound",
+            "virtualDisplay",
+            "providerDesktopExcluded",
+            "captureReady",
+            "nvencReady",
+            "mediaReady",
+            "inputIsolation",
+            "inputReady",
+        ):
+            bad = dict(valid)
+            bad[field] = False
+            with (
+                self.subTest(field=field),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(
+                    runtime,
+                    "run_command",
+                    return_value=SimpleNamespace(
+                        returncode=0,
+                        stdout=json.dumps(bad),
+                        stderr="",
+                    ),
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, f"native_workspace_resume_missing_{field}"):
+                    runtime.resume_windows_native_workspace("sess-1")
+
+    def test_suspend_resume_reject_wrong_session_and_malformed_schema(self):
+        for verb, call in (
+            ("suspend", runtime.suspend_windows_native_workspace),
+            ("resume", runtime.resume_windows_native_workspace),
+        ):
+            for payload, expected in (
+                ({"schemaVersion": 1, "sessionId": "other"}, f"native_workspace_{verb}_session_mismatch"),
+                ({"schemaVersion": True, "sessionId": "sess-1"}, f"native_workspace_{verb}_invalid_response"),
+            ):
+                with (
+                    self.subTest(verb=verb, expected=expected),
+                    patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                    patch.object(
+                        runtime,
+                        "run_command",
+                        return_value=SimpleNamespace(
+                            returncode=0,
+                            stdout=json.dumps(payload),
+                            stderr="",
+                        ),
+                    ),
+                ):
+                    with self.assertRaisesRegex(RuntimeError, f"^{expected}$"):
+                        call("sess-1")
+
     def test_stop_requires_helper_confirmation_for_exact_session(self):
         with (
             patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
