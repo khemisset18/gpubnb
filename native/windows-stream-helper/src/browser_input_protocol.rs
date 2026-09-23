@@ -113,10 +113,7 @@ pub fn decode_browser_input(frame: &[u8]) -> Result<BrowserInputFrame, BrowserIn
             {
                 return Err(BrowserInputError::Event);
             }
-            WorkerInputEvent::MouseMoveRelative {
-                dx: arg1,
-                dy: arg2,
-            }
+            WorkerInputEvent::MouseMoveRelative { dx: arg1, dy: arg2 }
         }
         KIND_MOUSE_ABSOLUTE => {
             if flags != 0
@@ -143,9 +140,7 @@ pub fn decode_browser_input(frame: &[u8]) -> Result<BrowserInputFrame, BrowserIn
             if flags != 0 || arg2 != 0 || arg1 == 0 || !(-1_200..=1_200).contains(&arg1) {
                 return Err(BrowserInputError::Event);
             }
-            WorkerInputEvent::MouseWheel {
-                delta: arg1 as i16,
-            }
+            WorkerInputEvent::MouseWheel { delta: arg1 as i16 }
         }
         _ => return Err(BrowserInputError::Kind),
     };
@@ -243,7 +238,10 @@ mod tests {
     fn malformed_values_fail_closed_before_worker_control() {
         let mut invalid_magic = packet(KIND_KEY, 0, 1, 1, 0x1e, 0);
         invalid_magic[0] = b'X';
-        assert_eq!(decode_browser_input(&invalid_magic), Err(BrowserInputError::Magic));
+        assert_eq!(
+            decode_browser_input(&invalid_magic),
+            Err(BrowserInputError::Magic)
+        );
         assert_eq!(
             decode_browser_input(&packet(KIND_KEY, 0x80, 1, 1, 0x1e, 0)),
             Err(BrowserInputError::Event)
