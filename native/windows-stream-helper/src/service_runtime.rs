@@ -43,6 +43,7 @@ use std::path::Path;
 const WORKER_PATH: &str = r"C:\Program Files\GPUbnb\gpubnb-windows-worker.exe";
 const PIPE_TIMEOUT_MS: u32 = 10_000;
 const MEDIA_PROOF_TIMEOUT_MS: u32 = 20_000;
+const _: () = assert!(MEDIA_PROOF_TIMEOUT_MS > PIPE_TIMEOUT_MS);
 const STOP_TIMEOUT_MS: u32 = 5_000;
 const WORKER_SIGNER_SHA256_HEX: Option<&str> = option_env!("GPUBNB_WINDOWS_WORKER_SIGNER_SHA256");
 
@@ -766,11 +767,6 @@ pub fn start_qualified_graphics_runtime(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn media_proof_timeout_allows_bounded_display_publication_delay() {
-        assert!(MEDIA_PROOF_TIMEOUT_MS > PIPE_TIMEOUT_MS);
-    }
 
     #[test]
     fn runtime_media_state_is_fail_closed() {
