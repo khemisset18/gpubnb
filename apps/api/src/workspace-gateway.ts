@@ -414,7 +414,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
 
     const match=url.pathname.match(/^\/workspace-gateway\/([^/]+)\/(.*)$/);
     if(!match){rejectWebSocketUpgrade(socket as Socket,404,'websocket_route_not_found');return;}
-    const sessionId=match[1];const token=parseCookie(request.headers.cookie,GATEWAY_COOKIE);
+    const sessionId=match[1];const targetSuffix=match[2]??'';const token=parseCookie(request.headers.cookie,GATEWAY_COOKIE);
     app.log.info({event:'workspace_gateway_upgrade_received',sessionId,hasWorkspaceCookie:!!token},'workspace gateway upgrade received');
     if(!token){app.log.warn({event:'workspace_gateway_upgrade_rejected',sessionId,reason:'cookie_missing'},'workspace gateway upgrade rejected');rejectWebSocketUpgrade(socket as Socket,401,'workspace_auth_required');return;}
 
@@ -425,13 +425,13 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       if(browser.sessionId!==sessionId){app.log.warn({event:'workspace_gateway_upgrade_rejected',sessionId,reason:'session_mismatch'},'workspace gateway upgrade rejected');rejectWebSocketUpgrade(socket as Socket,403,'workspace_session_mismatch');return;}
       const row=await activeGatewaySession(db,sessionId);
       if(!row||row.renterId!==browser.userId){app.log.warn({event:'workspace_gateway_upgrade_rejected',sessionId,reason:'workspace_unavailable'},'workspace gateway upgrade rejected');rejectWebSocketUpgrade(socket as Socket,409,'workspace_not_available');return;}
-      if(!windowsNativeUpgradeAllowed(row.runtimeBackend,match[2],url.search)){
+      if(!windowsNativeUpgradeAllowed(row.runtimeBackend,targetSuffix,url.search)){
         app.log.warn({event:'workspace_gateway_upgrade_rejected',sessionId,reason:'native_stream_path_invalid'},'workspace gateway upgrade rejected');
         rejectWebSocketUpgrade(socket as Socket,404,'websocket_route_not_found');return;
       }
 
       wss.handleUpgrade(request,socket as Socket,head,(ws:WebSocket)=>{
-        const channelId=crypto.randomUUID();const channelLogId=channelId.slice(0,8);const targetPath='/'+match[2]+url.search;const browserSessionKey=gatewaySessionKey(token);
+        const channelId=crypto.randomUUID();const channelLogId=channelId.slice(0,8);const targetPath='/'+targetSuffix+url.search;const browserSessionKey=gatewaySessionKey(token);
         const channelTtl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((row.expiresAt.getTime()-Date.now())/1000)));
         const openRequestId=crypto.randomUUID();let browserClosed=false;let browserBackpressureSince=0;
         const browserPending=new BrowserPendingBudget();
