@@ -57,7 +57,7 @@
       <AdditionalIncludeDirectories>$(NvCodecHeadersDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;setupapi.lib;user32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;setupapi.lib;runtimeobject.lib;windowsapp.lib;user32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>$(ProjectDir)GPUbnbWindowsMedia.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
@@ -75,7 +75,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;setupapi.lib;user32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;setupapi.lib;runtimeobject.lib;windowsapp.lib;user32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>$(ProjectDir)GPUbnbWindowsMedia.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
