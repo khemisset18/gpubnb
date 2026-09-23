@@ -172,6 +172,18 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 workspace_slug,
                 str(specs[0].hardware_uuid),
             )
+        except Exception as exc:
+            # The launch wrapper's *_cleanup_unverified suffix is an explicit
+            # authority boundary: never release a leased GPU if the helper may
+            # still own renter graphics/session state.
+            if str(exc).endswith("_cleanup_unverified"):
+                with self._native_lock:
+                    self._native_blocked.add(session_id)
+            else:
+                self._release_native_claims(session_id)
+            raise
+
+        try:
             websocket_url, port = _native_websocket_target(handle)
             runtime = NativeGatewayRuntime(
                 session_id=session_id,
@@ -183,9 +195,12 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             for spec in specs:
                 self.rental_preemption.mark_rental_active(spec)
         except Exception:
-            # launch_windows_native_workspace performs exact-session cleanup on
-            # every post-start validation failure. Release the local lease only
-            # after that helper contract has returned failure.
+            try:
+                stop_windows_native_workspace(session_id)
+            except Exception:
+                with self._native_lock:
+                    self._native_blocked.add(session_id)
+                raise RuntimeError("windows_native_start_cleanup_unverified") from None
             self._release_native_claims(session_id)
             raise
 
@@ -204,24 +219,29 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         return runtime
 
     def _stop_native_runtime(self, session_id: str) -> bool:
-        self._close_session_channels(session_id)
-        self.usage_last_report.pop(session_id, None)
+        # Block reconnect callbacks before closing sockets; a reader thread may
+        # observe the close concurrently and must not suspend/resume a runtime
+        # that is already being destroyed.
         with self._native_lock:
             runtime = self.native_runtimes.get(session_id)
+            self._native_blocked.add(session_id)
+        self._close_session_channels(session_id)
+        self.usage_last_report.pop(session_id, None)
+
         if runtime is None:
-            return self._release_native_claims(session_id)
+            released = self._release_native_claims(session_id)
+            if released:
+                with self._native_lock:
+                    self._native_blocked.discard(session_id)
+            return released
 
         try:
             stop_windows_native_workspace(session_id)
         except Exception:
-            with self._native_lock:
-                self._native_blocked.add(session_id)
             return False
 
         released = self._release_native_claims(session_id)
         if not released:
-            with self._native_lock:
-                self._native_blocked.add(session_id)
             return False
         with self._native_lock:
             self.native_runtimes.pop(session_id, None)
@@ -355,8 +375,11 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
     def _pause_runtime_for_reconnect(self, session_id: str) -> bool:
         with self._native_lock:
             is_native = session_id in self.native_runtimes
+            blocked = session_id in self._native_blocked
         if not is_native:
             return super()._pause_runtime_for_reconnect(session_id)
+        if blocked:
+            return False
         try:
             suspend_windows_native_workspace(session_id)
             return True
@@ -368,8 +391,11 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
     def _unpause_runtime_for_reconnect(self, session_id: str) -> bool:
         with self._native_lock:
             is_native = session_id in self.native_runtimes
+            blocked = session_id in self._native_blocked
         if not is_native:
             return super()._unpause_runtime_for_reconnect(session_id)
+        if blocked:
+            return False
         try:
             resume_windows_native_workspace(session_id)
             self.usage_last_report[session_id] = time.monotonic()
