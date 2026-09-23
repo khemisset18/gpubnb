@@ -1,4 +1,4 @@
-//! Strong identity linkage for Windows virtual-display -> DXGI -> NVENC proof.
+//! Strong identity linkage for Windows virtual-display -> monitor capture -> NVENC proof.
 //!
 //! Boolean readiness flags alone are insufficient: every stage must refer to the
 //! same renter generation, WTS session, virtual display and render adapter, and
