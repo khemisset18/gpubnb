@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <cwchar>
 #include <memory>
@@ -787,6 +788,20 @@ public:
             item_ = item;
             width_ = width;
             height_ = height;
+
+            // A capture item can be invalidated independently of the D3D device
+            // (for example if the virtual monitor departs). Keep the callback
+            // lifetime independent of this MonitorCapture object so an in-flight
+            // Closed event can never race destruction of `this`.
+            closedState_ = std::make_shared<std::atomic<bool>>(false);
+            const auto closedState = closedState_;
+            closedToken_ = item_.Closed(
+                [closedState](auto const&, auto const&) noexcept
+                {
+                    closedState->store(true, std::memory_order_release);
+                });
+            closedRegistered_ = true;
+
             // Cursor capture is part of the qualification contract: the fenced
             // renter input proof can therefore be followed by a fresh visual
             // capture without touching the provider desktop.
@@ -823,6 +838,13 @@ public:
         const ULONGLONG started = GetTickCount64();
         for (;;)
         {
+            const auto closedState = closedState_;
+            if (closedState == nullptr ||
+                closedState->load(std::memory_order_acquire))
+            {
+                return DXGI_ERROR_ACCESS_LOST;
+            }
+
             try
             {
                 auto frame = framePool_.TryGetNextFrame();
@@ -878,6 +900,18 @@ public:
 private:
     void Reset() noexcept
     {
+        if (item_ && closedRegistered_)
+        {
+            try
+            {
+                item_.Closed(closedToken_);
+            }
+            catch (...)
+            {
+            }
+        }
+        closedRegistered_ = false;
+
         try
         {
             if (session_)
@@ -902,6 +936,7 @@ private:
         }
         framePool_ = nullptr;
         item_ = nullptr;
+        closedState_.reset();
         width_ = 0;
         height_ = 0;
     }
@@ -910,6 +945,9 @@ private:
     winrt::Windows::Graphics::Capture::GraphicsCaptureItem item_{ nullptr };
     winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool framePool_{ nullptr };
     winrt::Windows::Graphics::Capture::GraphicsCaptureSession session_{ nullptr };
+    std::shared_ptr<std::atomic<bool>> closedState_;
+    winrt::event_token closedToken_{};
+    bool closedRegistered_ = false;
     uint32_t width_ = 0;
     uint32_t height_ = 0;
 };
