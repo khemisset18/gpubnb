@@ -169,18 +169,6 @@ impl QualificationMediaServer {
         &self,
         runtime: &QualifiedGraphicsRuntime,
     ) -> Result<TcpStream, QualificationMediaServerError> {
-        let mut stream = self.accept_upgraded(runtime)?;
-        Ok(stream)
-    }
-    pub fn serve_once(
-        &self,
-        runtime: &mut QualifiedGraphicsRuntime,
-        max_frames: u32,
-    ) -> Result<u32, QualificationMediaServerError> {
-        if max_frames == 0 || max_frames > 600 {
-            return Err(QualificationMediaServerError::InvalidConfiguration);
-        }
-
         let mut stream = self.accept()?;
         validate_accepted_loopback_stream(&stream)
             .map_err(|_| QualificationMediaServerError::Socket)?;
@@ -204,6 +192,18 @@ impl QualificationMediaServer {
         stream
             .write_all(response.as_bytes())
             .map_err(|_| QualificationMediaServerError::Response)?;
+        Ok(stream)
+    }
+    pub fn serve_once(
+        &self,
+        runtime: &mut QualifiedGraphicsRuntime,
+        max_frames: u32,
+    ) -> Result<u32, QualificationMediaServerError> {
+        if max_frames == 0 || max_frames > 600 {
+            return Err(QualificationMediaServerError::InvalidConfiguration);
+        }
+
+        let mut stream = self.accept_upgraded(runtime)?;
 
         let started = Instant::now();
         let mut sent = 0u32;
