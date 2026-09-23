@@ -324,3 +324,60 @@ test('DOM binding blocks browser handling only for events accepted by the native
   assert.equal(canvas.attributes.get('tabindex'), '0');
   unbind();
 });
+
+
+test('new stream epoch releases held input through the old fence before switching', async () => {
+  const socket = new FakeSocket();
+  const calls = [];
+  let output;
+  let epoch = 10n;
+  const client = new WindowsNativeDesktopClient({
+    canvas: fakeCanvas(),
+    webSocketFactory: () => socket,
+    mediaFactory: (options) => {
+      output = options.output;
+      return {
+        async push() {
+          output(
+            { displayWidth: 1920, displayHeight: 1080, close() {} },
+            { streamEpoch: epoch, frameSequence: 1n, width: 1920, height: 1080, keyframe: true, codec: 'avc1.640028' },
+          );
+          return true;
+        },
+        close() {},
+      };
+    },
+    inputFactory: ({ streamEpoch, send }) => ({
+      key(code, keyUp) {
+        calls.push([streamEpoch, 'key', code, keyUp]);
+        send(Uint8Array.of(1));
+        return true;
+      },
+      mouseAbsolute() { return true; },
+      mouseButton(button, keyUp) {
+        calls.push([streamEpoch, 'button', button, keyUp]);
+        send(Uint8Array.of(2));
+        return true;
+      },
+      mouseWheel() { return true; },
+    }),
+  });
+
+  client.start('/native/session/abc', 'https://example.test/page');
+  socket.readyState = 1;
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  await client.mediaQueue;
+  client.key('ControlLeft');
+  client.pointerButton(0);
+
+  epoch = 11n;
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  await client.mediaQueue;
+
+  assert.deepEqual(calls, [
+    [10n, 'key', 'ControlLeft', false],
+    [10n, 'button', 0, false],
+    [10n, 'key', 'ControlLeft', true],
+    [10n, 'button', 0, true],
+  ]);
+});
