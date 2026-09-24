@@ -3,7 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from gpubnb_agent.execution_control import ExecutionControlError
 from gpubnb_agent.gpu_resource_supervisor import (
