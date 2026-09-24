@@ -223,7 +223,7 @@ class GpuResourceSupervisorTests(unittest.TestCase):
                 state="STOPPED",
             )
         self.store.save(records)
-        snapshot = mining_resource_telemetry_snapshot(self.store)
+        snapshot = mining_resource_telemetry_snapshot(self.store.path)
         self.assertEqual(len(snapshot), 32)
         self.assertEqual(snapshot[0]["resourceId"], "resource_00000000")
         self.assertEqual(snapshot[-1]["resourceId"], "resource_00000031")
