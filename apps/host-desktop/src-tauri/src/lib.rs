@@ -559,6 +559,22 @@ fn mining_thermal_safety_status(
 
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
+fn set_mining_thermal_stop_celsius(
+    stop_celsius: u16,
+    state: tauri::State<'_, MiningThermalSafetyState>,
+    mining: tauri::State<'_, MiningRuntimeState>,
+) -> Result<MiningThermalSafetySnapshot, &'static str> {
+    state.set_stop_celsius(stop_celsius)?;
+    if let Ok(temperature) = mining_thermal_guard::read_native_temperature() {
+        if state.observe(temperature)? {
+            let _ = mining.thermal_safety_stop();
+        }
+    }
+    state.snapshot()
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
 fn acknowledge_mining_thermal_safety(
     state: tauri::State<'_, MiningThermalSafetyState>,
 ) -> Result<MiningThermalSafetySnapshot, &'static str> {
@@ -759,6 +775,7 @@ pub fn run() {
             mining_runtime_status,
             mining_telemetry_status,
             mining_thermal_safety_status,
+            set_mining_thermal_stop_celsius,
             acknowledge_mining_thermal_safety,
             approved_miner_status,
             install_approved_miner,
