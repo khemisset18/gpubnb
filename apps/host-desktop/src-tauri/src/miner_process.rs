@@ -315,6 +315,52 @@ fn wait_for_exit(
     }
 }
 
+fn lolminer_pool_arguments(pool_url: &str) -> Result<Vec<String>, &'static str> {
+    let (authority, requires_tls) = if let Some(value) = pool_url.strip_prefix("stratum+tcp://") {
+        (value, false)
+    } else if let Some(value) = pool_url.strip_prefix("stratum+tls://") {
+        (value, true)
+    } else if let Some(value) = pool_url.strip_prefix("stratum+ssl://") {
+        (value, true)
+    } else {
+        return Err("mining_pool_scheme_not_allowed");
+    };
+    if authority.is_empty()
+        || authority
+            .bytes()
+            .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+        || authority.contains('@')
+        || authority.contains('?')
+        || authority.contains('#')
+    {
+        return Err("mining_invalid_pool_url");
+    }
+    let port_text = if authority.starts_with('[') {
+        let end = authority.find(']').ok_or("mining_invalid_pool_host")?;
+        authority
+            .get(end + 1..)
+            .and_then(|suffix| suffix.strip_prefix(':'))
+            .ok_or("mining_pool_port_required")?
+    } else {
+        authority
+            .rsplit_once(':')
+            .map(|(_, port)| port)
+            .ok_or("mining_pool_port_required")?
+    };
+    let port = port_text
+        .parse::<u16>()
+        .map_err(|_| "mining_invalid_pool_port")?;
+    if port == 0 {
+        return Err("mining_invalid_pool_port");
+    }
+    Ok(vec![
+        "--pool".into(),
+        authority.into(),
+        "--tls".into(),
+        if requires_tls { "on" } else { "off" }.into(),
+    ])
+}
+
 fn build_approved_arguments(spec: &MiningLaunchSpec) -> Result<Vec<String>, &'static str> {
     validate_argument(&spec.pool_url)?;
     validate_argument(&spec.wallet_address)?;
@@ -326,30 +372,24 @@ fn build_approved_arguments(spec: &MiningLaunchSpec) -> Result<Vec<String>, &'st
     let user = format!("{}.{}", spec.wallet_address, spec.worker_name);
     validate_argument(&user)?;
     match spec.miner_profile_id.as_str() {
-        "lolminer_blake3" => Ok(vec![
-            "--algo".into(),
-            "ALEPH".into(),
-            "--pool".into(),
-            spec.pool_url.clone(),
-            "--user".into(),
-            user,
-        ]),
-        "lolminer_octopus" => Ok(vec![
-            "--algo".into(),
-            "OCTOPUS".into(),
-            "--pool".into(),
-            spec.pool_url.clone(),
-            "--user".into(),
-            user,
-        ]),
-        "lolminer_etchash" => Ok(vec![
-            "--algo".into(),
-            "ETCHASH".into(),
-            "--pool".into(),
-            spec.pool_url.clone(),
-            "--user".into(),
-            user,
-        ]),
+        "lolminer_blake3" => {
+            let mut arguments = vec!["--algo".into(), "ALEPH".into()];
+            arguments.extend(lolminer_pool_arguments(&spec.pool_url)?);
+            arguments.extend(["--user".into(), user]);
+            Ok(arguments)
+        }
+        "lolminer_octopus" => {
+            let mut arguments = vec!["--algo".into(), "OCTOPUS".into()];
+            arguments.extend(lolminer_pool_arguments(&spec.pool_url)?);
+            arguments.extend(["--user".into(), user]);
+            Ok(arguments)
+        }
+        "lolminer_etchash" => {
+            let mut arguments = vec!["--algo".into(), "ETCHASH".into()];
+            arguments.extend(lolminer_pool_arguments(&spec.pool_url)?);
+            arguments.extend(["--user".into(), user]);
+            Ok(arguments)
+        }
         "xmrig_randomx" => Ok(vec![
             "--algo=randomx".into(),
             format!("--url={}", spec.pool_url),
@@ -472,7 +512,8 @@ mod tests {
     fn arguments_are_structured_without_shell_fragments() {
         let args = build_approved_arguments(&spec("lolminer_blake3")).unwrap();
         assert_eq!(args[0], "--algo");
-        assert!(args.contains(&"stratum+tcp://pool.example.com:3333".to_owned()));
+        assert!(args.contains(&"pool.example.com:3333".to_owned()));
+        assert!(args.windows(2).any(|pair| pair == ["--tls", "off"]));
         assert!(!args.iter().any(|argument| argument.contains("&&")));
     }
 
@@ -489,6 +530,24 @@ mod tests {
             assert!(args.iter().any(|argument| argument == "--pool"));
             assert!(args.iter().any(|argument| argument == "--user"));
         }
+    }
+
+    #[test]
+    fn lolminer_pool_scheme_maps_to_explicit_tls_mode() {
+        let mut launch = spec("lolminer_etchash");
+        launch.pool_url = "stratum+tls://pool.example.com:443".into();
+        let args = build_approved_arguments(&launch).unwrap();
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--pool", "pool.example.com:443"]));
+        assert!(args.windows(2).any(|pair| pair == ["--tls", "on"]));
+
+        launch.pool_url = "stratum+ssl://[2606:4700:4700::1111]:5555".into();
+        let ipv6 = build_approved_arguments(&launch).unwrap();
+        assert!(ipv6
+            .windows(2)
+            .any(|pair| pair == ["--pool", "[2606:4700:4700::1111]:5555"]));
+        assert!(ipv6.windows(2).any(|pair| pair == ["--tls", "on"]));
     }
 
     #[test]
