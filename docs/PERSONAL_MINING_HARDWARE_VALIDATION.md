@@ -25,21 +25,20 @@ has been corrected.
 ## Thermal protection
 
 - The desktop backend reads the NVIDIA temperature sensor every five seconds while a miner runs.
-- A warning is displayed from 80 °C.
-- At 85 °C, mining is stopped, owner mining consent is disabled and a restart latch is set.
-- A manual rearm is accepted only after a fresh native sensor reading is at or below 75 °C.
+- The default protective stop remains 85 °C.
+- The host owner can explicitly choose a local protective-stop threshold from 85 °C through 98 °C.
+- The selected threshold is persisted locally and restored on Host Desktop restart.
+- Host Desktop displays escalating warnings at 85 °C, 90 °C, 94 °C and 97 °C while the miner continues according to the owner-selected stop threshold.
+- Selecting a threshold above 85 °C requires an explicit confirmation in the Host UI; 97–98 °C requires an additional critical confirmation.
+- A 98 °C local stop coincides with GPUbnb's separate server thermal-quarantine boundary, so choosing 98 °C can also lead to quarantine handling.
+- The protection cannot be disabled: values below 85 °C or above 98 °C are rejected.
+- The default 85 °C profile rearms after a fresh native sample at or below 75 °C. A customized higher threshold rearms only after a fresh sample at or below 80 °C.
+- If the owner lowers the configured stop threshold below the GPU's current temperature, the running miner is stopped immediately.
 - An unavailable or invalid sensor cannot clear the restart latch.
 
-### Temporary qualification thermal profile
-
-The production/default profile remains unchanged at 80 °C warning, 85 °C protective stop and
-75 °C rearm. For controlled hardware qualification only, Host Desktop accepts the explicit
-environment setting `GPUBNB_MINING_THERMAL_PROFILE=qualification`. That temporary profile uses
-88 °C warning, 92 °C protective stop and 80 °C rearm. Any missing or unrecognized value falls back
-to the production profile. The separate 98 °C server quarantine boundary is unchanged.
-
-The qualification profile must be visibly reported by Host Desktop and must not be treated as a
-production default.
+This setting is an owner-controlled local safety limit, not a claim that every GPU is designed to
+operate continuously at the chosen temperature. Host Desktop must keep the default recommendation
+visible even when the owner elects a higher threshold.
 
 ## GPU performance modes
 
