@@ -264,11 +264,11 @@ async function recordRequestedCommand(
     await tx.$executeRaw(Prisma.sql`
       INSERT INTO "MiningRuntimeEvent" (
         "id", "resourceId", "eventType", "stateBefore", "stateAfter",
-        "idempotencyKey", "payload", "occurredAt", "createdAt"
+        "idempotencyKey", "agentCounter", "payload", "occurredAt", "createdAt"
       ) VALUES (
         ${stableId('mre', commandId, eventType)}, ${resource.id}, ${eventType}::"MiningEventType",
         ${resource.runtimeState}::"MiningRuntimeState", ${targetState}::"MiningRuntimeState",
-        ${`owner-command:${commandId}:${eventType}`}, ${JSON.stringify({ commandId })}::jsonb,
+        ${`owner-command:${commandId}:${eventType}`}, 0, ${JSON.stringify({ commandId })}::jsonb,
         ${now}, CURRENT_TIMESTAMP
       )
       ON CONFLICT ("idempotencyKey") DO NOTHING
