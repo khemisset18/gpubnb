@@ -8,16 +8,16 @@ import {
 } from '../src/mining-config-policy.js';
 
 const validGpuInput = {
-  mode: 'GPUBNB_MANAGED' as const,
+  mode: 'OWNER_POOL' as const,
   resourceKind: 'GPU' as const,
   resourceId: 'gpu:machine_1:0',
-  profileId: 'trex_rvn_kawpow',
+  profileId: 'lolminer_etchash',
   walletAddress: 'RExamplePublicAddress123456',
   workerName: 'host_gpu_0',
+  ownerPoolEndpoint: 'stratum+tcp://pool.example.com:4444',
   autoResumeAfterRental: true,
   maximumTemperatureC: 85,
   maximumPowerWatts: 350,
-  gpuIntensityPercent: 90,
   expectedVersion: 2,
 };
 
@@ -61,6 +61,14 @@ describe('mining configuration policy', () => {
     assert.equal(platformFeeBasisPoints('GPUBNB_MANAGED'), 100);
     assert.equal(platformFeeBasisPoints('OWNER_POOL'), 0);
     assert.equal(platformFeeBasisPoints('DISABLED'), 0);
+  });
+
+  it('rejects the managed pool until its runtime is implemented', () => {
+    assert.throws(() => miningConfigurationInputSchema.parse({
+      ...validGpuInput,
+      mode: 'GPUBNB_MANAGED',
+      ownerPoolEndpoint: undefined,
+    }));
   });
 
   it('accepts independently configured GPU and CPU resources', () => {
@@ -145,12 +153,12 @@ describe('mining configuration policy', () => {
     throwsMessage(() => authorizeMiningConfigurationUpdate(input, { ...validContext, gpuVendor: undefined }), 'mining_profile_not_approved');
   });
 
-  it('accepts a pinned dual-vendor profile on AMD', () => {
-    const input = miningConfigurationInputSchema.parse({
-      ...validGpuInput,
-      profileId: 'lolminer_etchash',
-    });
-    assert.doesNotThrow(() => authorizeMiningConfigurationUpdate(input, { ...validContext, gpuVendor: 'AMD' }));
+  it('rejects lolMiner GPU execution on AMD until an AMD resource adapter is qualified', () => {
+    const input = miningConfigurationInputSchema.parse(validGpuInput);
+    throwsMessage(
+      () => authorizeMiningConfigurationUpdate(input, { ...validContext, gpuVendor: 'AMD' }),
+      'mining_profile_not_approved',
+    );
   });
 
   it('requires CPU-specific limits', () => {
@@ -171,7 +179,8 @@ describe('mining configuration policy', () => {
     assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 99 }));
   });
 
-  it('requires GPU intensity and rejects CPU controls on a GPU', () => {
-    assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, gpuIntensityPercent: undefined, cpuThreadLimit: 4 }));
+  it('does not require an unenforced GPU intensity and still rejects CPU controls on a GPU', () => {
+    assert.equal(miningConfigurationInputSchema.parse(validGpuInput).gpuIntensityPercent, undefined);
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, cpuThreadLimit: 4 }));
   });
 });
