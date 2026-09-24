@@ -2,7 +2,9 @@ import crypto from 'node:crypto';
 import {
   AcceleratorOperationalStatus,
   ListingResourceMode,
+  MiningRuntimeState,
   ModerationStatus,
+  Prisma,
   ResourceAllocationStatus,
   WorkspaceSessionStatus,
   type PrismaClient,
@@ -170,6 +172,97 @@ async function acquireRentalLease(
     String(RENTAL_LEASE_TTL_MS),
   );
   return decodePriorityLease(raw, resourceId, holderId, idempotencyKey);
+}
+
+function rentalRuntimeState(status: WorkspaceSessionStatus): MiningRuntimeState {
+  return status === WorkspaceSessionStatus.PREPARING || status === WorkspaceSessionStatus.READY
+    ? MiningRuntimeState.PREEMPTING
+    : MiningRuntimeState.RENTAL_BLOCKED;
+}
+
+async function markRentalResourcesOwned(
+  db: PrismaClient,
+  machineId: string,
+  sessionId: string,
+  status: WorkspaceSessionStatus,
+  resources: Array<{ resourceId: string }>,
+): Promise<void> {
+  if (!resources.length) return;
+  const targetState = rentalRuntimeState(status);
+  await db.$transaction(async (tx) => {
+    for (const resource of resources) {
+      const rows = await tx.$queryRaw<Array<{ runtimeState: MiningRuntimeState; activeRentalId: string | null }>>(Prisma.sql`
+        SELECT "runtimeState", "activeRentalId" FROM "MiningResource"
+         WHERE "id" = ${resource.resourceId} AND "machineId" = ${machineId}
+         FOR UPDATE
+      `);
+      const current = rows[0];
+      if (!current) throw new Error('rental_gpu_resource_mapping_missing');
+      if (current.activeRentalId && current.activeRentalId !== sessionId) {
+        throw new Error('rental_gpu_resource_authority_conflict');
+      }
+      if (current.runtimeState === MiningRuntimeState.QUARANTINED
+        || current.runtimeState === MiningRuntimeState.EMERGENCY_STOPPED) {
+        throw new Error('rental_gpu_resource_quarantined');
+      }
+      if (current.activeRentalId === sessionId && current.runtimeState === targetState) continue;
+
+      await tx.miningResource.update({
+        where: { id: resource.resourceId },
+        data: { activeRentalId: sessionId, runtimeState: targetState },
+      });
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "MiningRuntimeEvent" (
+          "id", "resourceId", "eventType", "stateBefore", "stateAfter", "reservationId",
+          "idempotencyKey", "payload", "occurredAt", "createdAt"
+        ) VALUES (
+          ${crypto.randomUUID()}, ${resource.resourceId}, 'RENTAL_PREEMPTED'::"MiningEventType",
+          ${current.runtimeState}::"MiningRuntimeState", ${targetState}::"MiningRuntimeState",
+          ${sessionId}, ${`rental-authority:${sessionId}:${resource.resourceId}:${targetState}`},
+          ${JSON.stringify({ source: 'rental-resource-authority' })}::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT ("idempotencyKey") DO NOTHING
+      `);
+    }
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 10_000 });
+}
+
+async function markRentalCleanupVerified(
+  db: PrismaClient,
+  machineId: string,
+  sessionId: string,
+  resourceIds: string[],
+): Promise<void> {
+  await db.$transaction(async (tx) => {
+    for (const resourceId of resourceIds) {
+      const rows = await tx.$queryRaw<Array<{ runtimeState: MiningRuntimeState; activeRentalId: string | null }>>(Prisma.sql`
+        SELECT "runtimeState", "activeRentalId" FROM "MiningResource"
+         WHERE "id" = ${resourceId} AND "machineId" = ${machineId}
+         FOR UPDATE
+      `);
+      const current = rows[0];
+      if (!current) throw new Error('rental_gpu_resource_mapping_missing');
+      if (current.activeRentalId && current.activeRentalId !== sessionId) {
+        throw new Error('rental_gpu_resource_authority_conflict');
+      }
+      await tx.miningResource.update({
+        where: { id: resourceId },
+        data: { activeRentalId: null, runtimeState: MiningRuntimeState.STOPPED },
+      });
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "MiningRuntimeEvent" (
+          "id", "resourceId", "eventType", "stateBefore", "stateAfter", "reservationId",
+          "idempotencyKey", "payload", "occurredAt", "createdAt"
+        ) VALUES (
+          ${crypto.randomUUID()}, ${resourceId}, 'CLEANUP_VERIFIED'::"MiningEventType",
+          ${current.runtimeState}::"MiningRuntimeState", 'STOPPED'::"MiningRuntimeState",
+          ${sessionId}, ${`rental-cleanup:${sessionId}:${resourceId}`},
+          ${JSON.stringify({ source: 'workspace-gateway-v5-release' })}::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT ("idempotencyKey") DO NOTHING
+      `);
+    }
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 10_000 });
 }
 
 async function ensureMiningResourceMapping(
@@ -388,6 +481,7 @@ export async function buildRentalResourceAuthority(
         lease,
       });
     }
+    await markRentalResourcesOwned(db, machineId, session.sessionId, session.status, resources);
     authoritySessions.push({ sessionId: session.sessionId, status: session.status, resources });
   }
 
@@ -423,5 +517,11 @@ export async function releaseRentalResourceAuthority(
     if (result.accepted || result.reason === 'MISSING') released += 1;
     else throw new Error('rental_resource_lease_stale');
   }
+  await markRentalCleanupVerified(
+    db,
+    machineId,
+    sessionId,
+    leases.map((lease) => lease.resourceId),
+  );
   return { released };
 }
