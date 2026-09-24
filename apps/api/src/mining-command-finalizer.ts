@@ -59,13 +59,38 @@ export async function finalizeMiningTerminalAck(
   const eventIdempotency = `command-terminal:${command.id}:${eventType}`;
 
   await db.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw<Array<{ runtimeState: MiningRuntimeState }>>(Prisma.sql`
-      SELECT "runtimeState" FROM "MiningResource"
+    const rows = await tx.$queryRaw<Array<{ runtimeState: MiningRuntimeState; activeRentalId: string | null }>>(Prisma.sql`
+      SELECT "runtimeState", "activeRentalId" FROM "MiningResource"
        WHERE "id" = ${durable.lease.resourceId} AND "machineId" = ${command.machineId}
        FOR UPDATE
     `);
     const current = rows[0];
     if (!current) throw new Error('mining_resource_not_found');
+    const expectedState = isStart ? MiningRuntimeState.STARTING : MiningRuntimeState.VERIFYING_STOP;
+    const stateStillOwned = current.runtimeState === expectedState
+      && (!isStart || current.activeRentalId === null);
+
+    if (!stateStillOwned) {
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "MiningAuditLog" (
+          "id", "machineId", "resourceId", "actorType", "actorId",
+          "action", "nextValue", "createdAt"
+        ) VALUES (
+          ${crypto.randomUUID()}, ${command.machineId}, ${durable.lease.resourceId},
+          'SYSTEM'::"MiningAuditActorType", 'delivery-worker',
+          'mining_terminal_ack_superseded',
+          ${JSON.stringify({
+            commandId: command.id,
+            ackStatus: ack.status,
+            detailCode: ack.detailCode ?? null,
+            currentState: current.runtimeState,
+            activeRental: current.activeRentalId !== null,
+          })}::jsonb,
+          CURRENT_TIMESTAMP
+        )
+      `);
+      return;
+    }
 
     await tx.$executeRaw(Prisma.sql`
       INSERT INTO "MiningRuntimeEvent" (
@@ -81,12 +106,16 @@ export async function finalizeMiningTerminalAck(
       ON CONFLICT ("idempotencyKey") DO NOTHING
     `);
 
-    await tx.$executeRaw(Prisma.sql`
-      UPDATE "MiningResource"
-         SET "runtimeState" = ${nextState}::"MiningRuntimeState",
-             "updatedAt" = CURRENT_TIMESTAMP
-       WHERE "id" = ${durable.lease.resourceId} AND "machineId" = ${command.machineId}
-    `);
+    const changed = await tx.miningResource.updateMany({
+      where: {
+        id: durable.lease.resourceId,
+        machineId: command.machineId,
+        runtimeState: expectedState,
+        ...(isStart ? { activeRentalId: null } : {}),
+      },
+      data: { runtimeState: nextState },
+    });
+    if (changed.count !== 1) throw new Error('mining_terminal_state_race');
 
     await tx.$executeRaw(Prisma.sql`
       INSERT INTO "MiningAuditLog" (
