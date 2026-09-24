@@ -1,7 +1,6 @@
 use crate::approved_miner_manifest::{approved_miner_release, validate_release_metadata};
 use crate::miner_paths;
 use crate::mining_configuration::{MiningLaunchSpec, MiningPerformanceMode};
-use crate::mining_pool_probe::MiningPoolEndpoint;
 use crate::secure_launcher;
 use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
@@ -317,17 +316,46 @@ fn wait_for_exit(
 }
 
 fn lolminer_pool_arguments(pool_url: &str) -> Result<Vec<String>, &'static str> {
-    let endpoint = MiningPoolEndpoint::parse(pool_url)?;
-    let authority = if endpoint.host.contains(':') {
-        format!("[{}]:{}", endpoint.host, endpoint.port)
+    let (authority, requires_tls) = if let Some(value) = pool_url.strip_prefix("stratum+tcp://") {
+        (value, false)
+    } else if let Some(value) = pool_url.strip_prefix("stratum+tls://") {
+        (value, true)
+    } else if let Some(value) = pool_url.strip_prefix("stratum+ssl://") {
+        (value, true)
     } else {
-        format!("{}:{}", endpoint.host, endpoint.port)
+        return Err("mining_pool_scheme_not_allowed");
     };
+    if authority.is_empty()
+        || authority.bytes().any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+        || authority.contains('@')
+        || authority.contains('?')
+        || authority.contains('#')
+    {
+        return Err("mining_invalid_pool_url");
+    }
+    let port_text = if authority.starts_with('[') {
+        let end = authority.find(']').ok_or("mining_invalid_pool_host")?;
+        authority
+            .get(end + 1..)
+            .and_then(|suffix| suffix.strip_prefix(':'))
+            .ok_or("mining_pool_port_required")?
+    } else {
+        authority
+            .rsplit_once(':')
+            .map(|(_, port)| port)
+            .ok_or("mining_pool_port_required")?
+    };
+    let port = port_text
+        .parse::<u16>()
+        .map_err(|_| "mining_invalid_pool_port")?;
+    if port == 0 {
+        return Err("mining_invalid_pool_port");
+    }
     Ok(vec![
         "--pool".into(),
-        authority,
+        authority.into(),
         "--tls".into(),
-        if endpoint.requires_tls { "on" } else { "off" }.into(),
+        if requires_tls { "on" } else { "off" }.into(),
     ])
 }
 
@@ -507,7 +535,9 @@ mod tests {
         let mut launch = spec("lolminer_etchash");
         launch.pool_url = "stratum+tls://pool.example.com:443".into();
         let args = build_approved_arguments(&launch).unwrap();
-        assert!(args.windows(2).any(|pair| pair == ["--pool", "pool.example.com:443"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--pool", "pool.example.com:443"]));
         assert!(args.windows(2).any(|pair| pair == ["--tls", "on"]));
 
         launch.pool_url = "stratum+ssl://[2606:4700:4700::1111]:5555".into();
