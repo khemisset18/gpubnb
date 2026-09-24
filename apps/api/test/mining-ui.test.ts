@@ -42,3 +42,23 @@ test('dashboard links to mining without claiming the runtime is production-ready
   assert.match(dashboard, /désactivé par défaut/);
   assert.doesNotMatch(dashboard, /Minage.*Fonctionnel/s);
 });
+
+
+test('mining UI consumes the server-authoritative runtime catalog and thermal policy', async () => {
+  const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
+  assert.match(script, /request\('\/mining\/catalog'\)/);
+  assert.match(script, /miningCatalog\.profiles\.filter/);
+  assert.match(script, /miningCatalog\.thermalLimits\[resource\.kind\]/);
+  assert.match(script, /thermalMinimum/);
+  assert.match(script, /thermalMaximum/);
+  assert.doesNotMatch(script, /trex_rvn_kawpow|teamredminer_rvn_kawpow|lolminer_etc_etchash|lolminer_erg_autolykos2|lolminer_flux_zelhash/);
+});
+
+test('mining UI displays only signed current resource telemetry without inventing revenue', async () => {
+  const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
+  assert.match(script, /lastMiningTelemetry/);
+  assert.match(script, /Hashrate/);
+  assert.match(script, /Parts A\/S\/Hw/);
+  assert.match(script, /Aucun revenu n’est estimé/);
+  assert.doesNotMatch(script, /walletAddress.*lastMiningTelemetry|lastMiningTelemetry.*walletAddress/s);
+});
