@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .accelerators import accelerator_inventory
-from .gpu_resource_supervisor import mining_resource_telemetry_snapshot
+from .mining_resource_telemetry import mining_resource_telemetry_snapshot
 from .platform_info import gpu_inventory, system_inventory
 
 
