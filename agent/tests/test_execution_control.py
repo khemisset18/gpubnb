@@ -164,6 +164,47 @@ class DirectMutationBridgeTests(unittest.TestCase):
             },
         )
 
+    def test_mining_telemetry_report_uses_dedicated_signed_endpoint_and_string_counters(self) -> None:
+        runtime = self._runtime()
+        runtime.api = object()
+        runtime.key = object()
+        sample = {
+            "resourceId": "resource_00000001",
+            "hardwareUuid": "GPU-aaaaaaaa",
+            "runtimeGeneration": 9_007_199_254_740_993,
+            "profileId": "lolminer_etchash",
+            "processPid": 4242,
+            "temperatureC": 91.0,
+            "powerWatts": 44.5,
+            "gpuUtilizationPercent": 97.0,
+            "memoryUsedMiB": 2048.0,
+            "deviceName": "GTX 1650",
+            "thermalStopCelsius": 92,
+            "hashrate": 80.5,
+            "hashrateUnit": "MH/s",
+            "acceptedShares": 4,
+            "staleShares": 0,
+            "hardwareErrors": 0,
+            "uptimeSeconds": 65,
+            "poolConnected": True,
+        }
+        with (
+            patch("gpubnb_agent.control_channel_runtime.reserve_agent_counter", return_value=123),
+            patch("gpubnb_agent.control_channel_runtime.agent_request", return_value={"accepted": True}) as request,
+        ):
+            runtime._report_mining_telemetry(sample)
+
+        args = request.call_args.args
+        self.assertEqual(args[3], "/internal/mining/telemetry")
+        self.assertEqual(args[4], "POST")
+        body = args[5]
+        self.assertEqual(body["agentCounter"], "123")
+        self.assertEqual(body["telemetry"]["runtimeGeneration"], "9007199254740993")
+        self.assertEqual(body["telemetry"]["hardwareUuid"], "GPU-aaaaaaaa")
+        self.assertNotIn("walletAddress", body["telemetry"])
+        self.assertNotIn("poolUrl", body["telemetry"])
+        self.assertNotIn("rawLog", body["telemetry"])
+
     def test_stop_mining_returns_terminal_success_only_after_verified_resource_adapter(self) -> None:
         runtime = self._runtime()
         runtime.gpu_supervisor.stop.return_value = ExecutionResult("mining_resource_stop_verified")
