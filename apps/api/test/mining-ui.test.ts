@@ -56,9 +56,16 @@ test('mining UI consumes the server-authoritative runtime catalog and thermal po
 
 test('mining UI displays only signed current resource telemetry without inventing revenue', async () => {
   const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
-  assert.match(script, /lastMiningTelemetry/);
-  assert.match(script, /Hashrate/);
-  assert.match(script, /Parts A\/S\/Hw/);
-  assert.match(script, /Aucun revenu n’est estimé/);
-  assert.doesNotMatch(script, /walletAddress.*lastMiningTelemetry|lastMiningTelemetry.*walletAddress/s);
+  const start = script.indexOf('function renderMiningTelemetry(resource)');
+  const end = script.indexOf('function renderResource(resource)', start);
+  assert.ok(start >= 0 && end > start);
+  const telemetryRenderer = script.slice(start, end);
+  assert.match(telemetryRenderer, /lastMiningTelemetry/);
+  assert.match(telemetryRenderer, /Hashrate/);
+  assert.match(telemetryRenderer, /Parts A\/S\/Hw/);
+  assert.match(telemetryRenderer, /Aucun revenu n’est estimé/);
+  assert.doesNotMatch(
+    telemetryRenderer,
+    /walletAddress|workerName|ownerPoolEndpoint|ownerPoolSecretRef|pid|executablePath|logPath|commandId/,
+  );
 });
