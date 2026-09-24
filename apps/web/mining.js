@@ -19,7 +19,7 @@ function statusBadge(resource){if(resource.quarantined)return '<span class="badg
 
 function renderResource(resource){
   const locked=resourceLocked(resource);
-  const mode=resource.mode||'DISABLED';
+  const mode=resource.mode==='OWNER_POOL'?'OWNER_POOL':'DISABLED';
   const profileChoices=profileOptions(resource);
   const noProfile=mode!=='DISABLED'&&!profileChoices;
   const disabled=locked||noProfile;
