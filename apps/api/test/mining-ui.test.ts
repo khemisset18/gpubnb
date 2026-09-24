@@ -44,17 +44,14 @@ test('dashboard links to mining without claiming the runtime is production-ready
 });
 
 
-test('mining UI mirrors enabled runtime profiles and current thermal policy', async () => {
+test('mining UI consumes the server-authoritative runtime catalog and thermal policy', async () => {
   const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
-  for (const profile of ['lolminer_blake3', 'lolminer_etchash', 'lolminer_octopus', 'xmrig_randomx']) {
-    assert.match(script, new RegExp(profile));
-  }
-  for (const disabledProfile of ['trex_rvn_kawpow', 'teamredminer_rvn_kawpow', 'lolminer_etc_etchash', 'lolminer_erg_autolykos2', 'lolminer_flux_zelhash']) {
-    assert.doesNotMatch(script, new RegExp(disabledProfile));
-  }
-  assert.match(script, /resource\.kind==='GPU'\?85:50/);
-  assert.match(script, /max="98"/);
-  assert.match(script, /maximumTemperatureC:numberValue\(form,'maximumTemperatureC',85\)/);
+  assert.match(script, /request\('\/mining\/catalog'\)/);
+  assert.match(script, /miningCatalog\.profiles\.filter/);
+  assert.match(script, /miningCatalog\.thermalLimits\[resource\.kind\]/);
+  assert.match(script, /thermalMinimum/);
+  assert.match(script, /thermalMaximum/);
+  assert.doesNotMatch(script, /trex_rvn_kawpow|teamredminer_rvn_kawpow|lolminer_etc_etchash|lolminer_erg_autolykos2|lolminer_flux_zelhash/);
 });
 
 test('mining UI displays only signed current resource telemetry without inventing revenue', async () => {
