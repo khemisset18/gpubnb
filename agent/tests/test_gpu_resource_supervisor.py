@@ -13,6 +13,7 @@ from gpubnb_agent.gpu_resource_supervisor import (
     ProcessIdentity,
     RuntimeRecord,
     RuntimeStore,
+    SystemLauncher,
     build_resource_arguments,
     parse_lolminer_telemetry,
     parse_resource_start,
@@ -142,6 +143,24 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         for item in reversed(self.patches):
             item.stop()
         self.temp.cleanup()
+
+    def test_system_launcher_refuses_unsecured_private_log_directory(self) -> None:
+        launcher = SystemLauncher()
+        with (
+            patch(
+                "gpubnb_agent.gpu_resource_supervisor.require_private_directory",
+                side_effect=RuntimeError("acl_failed"),
+            ),
+            patch("gpubnb_agent.gpu_resource_supervisor.subprocess.Popen") as popen,
+        ):
+            with self.assertRaisesRegex(ExecutionControlError, "miner_log_security_unavailable"):
+                launcher.spawn(
+                    self.binary,
+                    ["--version"],
+                    self.root,
+                    Path(self.temp.name) / "private" / "miner.log",
+                )
+        popen.assert_not_called()
 
     def test_lolminer_telemetry_parser_extracts_only_structured_metrics(self) -> None:
         telemetry = parse_lolminer_telemetry(
