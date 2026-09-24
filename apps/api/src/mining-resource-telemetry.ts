@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
 const safeId = z.string().min(8).max(200).regex(/^[A-Za-z0-9_.:-]+$/);
@@ -30,7 +30,7 @@ export const miningResourceTelemetryListSchema = z
 
 export type MiningResourceTelemetry = z.infer<typeof miningResourceTelemetrySchema>;
 
-type TelemetrySqlClient = Pick<PrismaClient, '$executeRaw'>;
+type TelemetrySqlClient = Pick<Prisma.TransactionClient, '$executeRaw'>;
 
 export const sanitizeMiningResourceTelemetry = (input: unknown): MiningResourceTelemetry[] =>
   miningResourceTelemetryListSchema.parse(input);
