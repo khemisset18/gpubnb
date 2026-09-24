@@ -72,7 +72,7 @@ test('non-zero rollout requires private gateway coordinates and a strong token',
   assert.equal(commandGatewayAssigned('machine_00000001', config), true);
 });
 
-test('protocol understands mining kinds while production dispatch keeps them dark', async () => {
+test('protocol understands mining kinds while unfenced production mining is rejected', async () => {
   assert.equal(commandKindForDurableType('stop_rental'), 'STOP_RENTAL');
   assert.equal(commandKindForDurableType('start_mining'), 'START_MINING');
   assert.equal(commandKindForDurableType('stop_mining'), 'STOP_MINING');
@@ -90,7 +90,63 @@ test('protocol understands mining kinds while production dispatch keeps them dar
         agentControlRolloutBps: 10_000,
       },
     ),
-    /machine_command_not_production_fast_path/,
+    /mining_command_durable_payload_invalid/,
+  );
+});
+
+test('fenced mining durable payload becomes an exact Gateway lease and payload', () => {
+  const envelope = controlEnvelope(command({
+    commandType: 'start_mining',
+    payload: {
+      lease: {
+        resourceId: 'resource_00000001',
+        holderId: 'mining_resource_00000001',
+        leaseId: 'lease_000000001',
+        fencingToken: '17',
+      },
+      payload: {
+        resourceId: 'resource_00000001',
+        hardwareUuid: 'GPU-aaaaaaaa',
+        runtimeGeneration: '17',
+        profileId: 'lolminer_etchash',
+        poolUrl: 'stratum+tcp://pool.example.com:4444',
+        walletAddress: 'wallet123456',
+        workerName: 'worker_1',
+        performanceMode: 'FULL',
+        maximumTemperatureC: 94,
+        maximumPowerWatts: 180,
+      },
+    },
+  }));
+  assert.deepEqual(envelope.lease, {
+    resourceId: 'resource_00000001',
+    holderId: 'mining_resource_00000001',
+    leaseId: 'lease_000000001',
+    fencingToken: '17',
+  });
+  assert.equal((envelope.payload as Record<string, unknown>).runtimeGeneration, '17');
+  assert.equal((envelope.payload as Record<string, unknown>).resourceId, 'resource_00000001');
+});
+
+test('mining envelope rejects a durable fence mismatch before Gateway dispatch', () => {
+  assert.throws(
+    () => controlEnvelope(command({
+      commandType: 'stop_mining',
+      payload: {
+        lease: {
+          resourceId: 'resource_00000001',
+          holderId: 'mining_resource_00000001',
+          leaseId: 'lease_000000001',
+          fencingToken: '18',
+        },
+        payload: {
+          resourceId: 'resource_00000001',
+          hardwareUuid: 'GPU-aaaaaaaa',
+          runtimeGeneration: '17',
+        },
+      },
+    })),
+    /mining_command_fence_mismatch/,
   );
 });
 
