@@ -29,6 +29,7 @@ from .execution_control import (
     ExecutionResult,
     _pool_endpoint,
     _resolve_public_pool_addresses,
+    _verify_pool_tls,
     _sha256,
     _validate_argument,
     _verified_binary,
@@ -766,6 +767,7 @@ class GpuResourceSupervisor:
         arguments = build_resource_arguments(spec, binding)
         if _resolve_public_pool_addresses(spec.pool_url) != spec.resolved_pool_addresses:
             raise ExecutionControlError("mining_pool_dns_rebinding_detected")
+        _verify_pool_tls(spec.pool_url, spec.resolved_pool_addresses)
 
         with self._lock:
             records = self.store.load()
