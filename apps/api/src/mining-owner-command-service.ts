@@ -135,7 +135,10 @@ function validateStartable(resource: ResourceContext): asserts resource is Resou
   if (!resource.enabled) throw new Error('mining_resource_disabled');
   if (resource.quarantined) throw new Error('mining_resource_quarantined');
   if (resource.activeRentalId) throw new Error('mining_resource_rental_active');
-  if (![MiningRuntimeState.IDLE, MiningRuntimeState.STOPPED].includes(resource.runtimeState)) {
+  if (
+    resource.runtimeState !== MiningRuntimeState.IDLE
+    && resource.runtimeState !== MiningRuntimeState.STOPPED
+  ) {
     throw new Error('mining_resource_not_startable');
   }
   if (!resource.hardwareUuid) throw new Error('mining_hardware_uuid_missing');
@@ -340,11 +343,17 @@ export async function requestOwnerMiningStop(
 ): Promise<MiningOwnerCommandResult> {
   const now = input.now ?? new Date();
   const resource = await loadResource(db, input.machineId, input.resourceId, input.ownerId);
-  if ([MiningRuntimeState.IDLE, MiningRuntimeState.STOPPED].includes(resource.runtimeState)) {
+  if (
+    resource.runtimeState === MiningRuntimeState.IDLE
+    || resource.runtimeState === MiningRuntimeState.STOPPED
+  ) {
     return { commandId: null, action: 'stop', state: resource.runtimeState, alreadySatisfied: true };
   }
   if (resource.activeRentalId) throw new Error('mining_resource_rental_active');
-  if (![MiningRuntimeState.STARTING, MiningRuntimeState.MINING].includes(resource.runtimeState)) {
+  if (
+    resource.runtimeState !== MiningRuntimeState.STARTING
+    && resource.runtimeState !== MiningRuntimeState.MINING
+  ) {
     throw new Error('mining_resource_not_stoppable');
   }
   if (resource.kind !== 'GPU' || !resource.hardwareUuid) throw new Error('mining_gpu_runtime_identity_missing');
