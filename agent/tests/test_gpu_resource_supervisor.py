@@ -9,10 +9,12 @@ from gpubnb_agent.execution_control import ExecutionControlError
 from gpubnb_agent.gpu_resource_supervisor import (
     GpuBinding,
     GpuResourceSupervisor,
+    GpuRuntimeMetrics,
     ProcessIdentity,
     RuntimeRecord,
     RuntimeStore,
     build_resource_arguments,
+    parse_lolminer_output,
     parse_resource_start,
 )
 
@@ -39,6 +41,7 @@ class FakeProcess:
         self._identity = ProcessIdentity(pid, str(executable.resolve()), f"creation-{pid}")
         inspector.identities[pid] = self._identity
         self.killed = False
+        self.output = ""
 
     @property
     def pid(self) -> int:
@@ -51,17 +54,23 @@ class FakeProcess:
         self.killed = True
         self._inspector.identities.pop(self._pid, None)
 
+    def output_tail(self) -> str:
+        return self.output
+
 
 class FakeLauncher:
     def __init__(self, inspector: FakeInspector) -> None:
         self.inspector = inspector
         self.next_pid = 1000
         self.calls: list[tuple[str, list[str]]] = []
+        self.processes: dict[int, FakeProcess] = {}
 
     def spawn(self, executable: Path, arguments: list[str], cwd: Path) -> FakeProcess:
         self.next_pid += 1
         self.calls.append((str(executable), list(arguments)))
-        return FakeProcess(self.next_pid, self.inspector, executable)
+        process = FakeProcess(self.next_pid, self.inspector, executable)
+        self.processes[process.pid] = process
+        return process
 
 
 def start_payload(resource: str, hardware: str, generation: int = 1) -> dict[str, object]:
@@ -137,6 +146,55 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         self.assertIn("--devicesbypcie", args)
         self.assertEqual(args[args.index("--devices") + 1], "65:00")
         self.assertNotIn("66:00", args)
+
+    def test_lolminer_parser_accepts_local_index_without_treating_it_as_physical_identity(self) -> None:
+        output = (
+            "Setup Miner...\n"
+            "Authorized worker: hidden-wallet\n"
+            "Statistics (01:51:00); Uptime: 0h 7m 0s\n"
+            "GPU 7 GTX 1650 113.87 333.33 2/1/0 45.6G 5.771 19.7 495 6000 93 err\n"
+        )
+        parsed = parse_lolminer_output(output)
+        self.assertEqual(parsed["hashrate"], 113.87)
+        self.assertEqual(parsed["acceptedShares"], 2)
+        self.assertEqual(parsed["staleShares"], 1)
+        self.assertEqual(parsed["hardwareErrors"], 0)
+        self.assertEqual(parsed["uptimeSeconds"], 420)
+        self.assertTrue(parsed["poolConnected"])
+
+    def test_resource_telemetry_is_bound_to_runtime_hardware_uuid(self) -> None:
+        self.supervisor.start(
+            {**start_payload("resource_00000001", "GPU-aaaaaaaa"), "thermalStopCelsius": 92},
+            "command_00000001",
+        )
+        snapshot = self.supervisor.snapshot()["resource_00000001"]
+        pid = snapshot["pid"]
+        self.launcher.processes[pid].output = (
+            "Setup Miner...\nConnected to: pool\n"
+            "Statistics (x); Uptime: 0h 1m 5s\n"
+            "GPU 0 GTX 1650 80.5 90.0 4/0/0 2G 4 20 1 1 70 ok\n"
+        )
+        self.supervisor.metrics_reader = lambda hardware_uuid: GpuRuntimeMetrics(
+            hardware_uuid=hardware_uuid,
+            device_name="GTX 1650",
+            utilization_percent=97.0,
+            memory_used_mib=2048.0,
+            temperature_celsius=71.0,
+            power_watts=44.5,
+        )
+        samples = self.supervisor.telemetry_snapshot()
+        self.assertEqual(len(samples), 1)
+        sample = samples[0]
+        self.assertEqual(sample["resourceId"], "resource_00000001")
+        self.assertEqual(sample["hardwareUuid"], "GPU-aaaaaaaa")
+        self.assertEqual(sample["processPid"], pid)
+        self.assertEqual(sample["hashrate"], 80.5)
+        self.assertEqual(sample["acceptedShares"], 4)
+        self.assertEqual(sample["temperatureC"], 71.0)
+        self.assertEqual(sample["powerWatts"], 44.5)
+        serialized = str(sample)
+        self.assertNotIn("hidden-wallet", serialized)
+        self.assertNotIn("Connected to: pool", serialized)
 
     def test_thermal_stop_range_defaults_to_85_and_rejects_out_of_range(self) -> None:
         spec = parse_resource_start(start_payload("resource_00000001", "GPU-aaaaaaaa"))
