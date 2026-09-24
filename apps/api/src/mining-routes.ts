@@ -19,7 +19,9 @@ import {
   MINING_TELEMETRY_LIVE_TTL_SECONDS,
   miningTelemetryEnvelopeSchema,
   miningTelemetryLatestKey,
+  validateMiningTelemetryAuthority,
 } from './mining-telemetry-contract.js';
+import { readResourceLease } from './resource-lease.js';
 import { registerRentalResourceAuthorityRoutes } from './rental-resource-routes.js';
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
 
@@ -317,6 +319,7 @@ export const registerMiningRoutes = (
 
     const capturedAt = new Date(envelope.capturedAt);
     try {
+      const lease = await readResourceLease(redis, envelope.resourceId);
       const persisted = await runBookingTransaction(db, async (tx) => {
         const rows = await tx.$queryRaw<Array<{
           id: string;
@@ -339,9 +342,11 @@ export const registerMiningRoutes = (
         if (resource.hardwareUuid.toLowerCase() !== envelope.telemetry.hardwareUuid.toLowerCase()) {
           throw new Error('mining_telemetry_hardware_mismatch');
         }
-        if (resource.runtimeState !== 'MINING') {
-          throw new Error('mining_resource_not_mining');
-        }
+        validateMiningTelemetryAuthority(
+          resource.runtimeState,
+          lease?.fencingToken ?? null,
+          envelope.telemetry.runtimeGeneration,
+        );
 
         const advanced = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           UPDATE "Machine"
