@@ -54,6 +54,7 @@ WATCHDOG_INTERVAL_SECONDS = 5.0
 MAX_SENSOR_FAILURES = 3
 MAX_MINER_LOG_BYTES = 2 * 1024 * 1024
 MAX_TELEMETRY_TAIL_BYTES = 256 * 1024
+MAX_HEARTBEAT_MINING_RESOURCES = 32
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 SHARES_TOKEN = re.compile(r"^(\d+)/(\d+)/(\d+)$")
 
@@ -678,6 +679,39 @@ def _record_identity(record: RuntimeRecord) -> ProcessIdentity | None:
     if record.pid is None or not record.executable_path or not record.process_creation_token:
         return None
     return ProcessIdentity(record.pid, record.executable_path, record.process_creation_token)
+
+
+def mining_resource_telemetry_snapshot(
+    store: RuntimeStore | None = None,
+) -> list[dict[str, Any]]:
+    """Return only bounded, non-secret mining metrics for signed heartbeat telemetry."""
+    records = (store or RuntimeStore()).load()
+    snapshots: list[dict[str, Any]] = []
+    for resource_id in sorted(records)[:MAX_HEARTBEAT_MINING_RESOURCES]:
+        record = records[resource_id]
+        temperature = record.last_temperature_c
+        power = record.last_power_watts
+        utilization = record.last_utilization_percent
+        hashrate = record.last_hashrate
+        snapshots.append({
+            "resourceId": record.resource_id,
+            "hardwareUuid": record.hardware_uuid,
+            "state": record.state,
+            "maximumTemperatureC": record.maximum_temperature_c,
+            "temperatureC": temperature if temperature is not None and 0 <= temperature <= 150 else None,
+            "powerWatts": power if power is not None and 0 <= power <= 5000 else None,
+            "utilizationPercent": utilization if utilization is not None and 0 <= utilization <= 100 else None,
+            "hashrate": hashrate if hashrate is not None and 0 <= hashrate <= 1_000_000_000_000_000 else None,
+            "hashrateUnit": record.last_hashrate_unit if record.last_hashrate_unit in {"H/s", "kH/s", "MH/s", "GH/s", "TH/s"} else None,
+            "acceptedShares": record.accepted_shares if record.accepted_shares is not None and record.accepted_shares >= 0 else None,
+            "staleShares": record.stale_shares if record.stale_shares is not None and record.stale_shares >= 0 else None,
+            "hardwareErrors": record.hardware_errors if record.hardware_errors is not None and record.hardware_errors >= 0 else None,
+            "uptimeSeconds": record.uptime_seconds if record.uptime_seconds is not None and 0 <= record.uptime_seconds <= 315_360_000 else None,
+            "poolConnected": record.pool_connected,
+            "sampledAtMs": record.last_sampled_at_ms if record.last_sampled_at_ms is not None and record.last_sampled_at_ms >= 0 else None,
+            "lastStopReason": record.last_stop_reason[:96] if record.last_stop_reason else None,
+        })
+    return snapshots
 
 
 class GpuResourceSupervisor:
