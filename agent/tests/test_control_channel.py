@@ -37,7 +37,7 @@ def valid_command(kind: str = "PREPARE_RENTAL", sequence: int = 1) -> dict[str, 
         "expiresAtMs": 20_000,
         "payload": {"workspace": "developer"},
     }
-    if kind in {"PREPARE_RENTAL", "START_RENTAL"}:
+    if kind in {"PREPARE_RENTAL", "START_RENTAL", "START_MINING", "STOP_MINING"}:
         command["lease"] = {
             "resourceId": "resource_00000001",
             "holderId": "booking_00000001",
@@ -129,6 +129,18 @@ class ControlChannelProtocolTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ControlChannelError, "control_command_time_window_invalid"):
             validate_command(valid_command(), MACHINE_ID, now_ms=20_000)
+
+    def test_mining_commands_require_fenced_lease_at_protocol_boundary(self) -> None:
+        for kind in ("START_MINING", "STOP_MINING"):
+            command = valid_command(kind)
+            parsed = validate_command(command, MACHINE_ID, now_ms=11_000)
+            self.assertIsNotNone(parsed.lease)
+
+            body = command["command"]
+            assert isinstance(body, dict)
+            body.pop("lease")
+            with self.assertRaisesRegex(ControlChannelError, "control_command_lease_required"):
+                validate_command(command, MACHINE_ID, now_ms=11_000)
 
     def test_v1_only_enables_safe_wake_actions(self) -> None:
         self.assertEqual(classify_command_action(validate_command(valid_command("RUN_DIAGNOSTIC"), MACHINE_ID, 11_000)), "WAKE_JOB")
