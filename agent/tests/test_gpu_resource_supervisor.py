@@ -95,6 +95,7 @@ def start_payload(resource: str, hardware: str, generation: int = 1) -> dict[str
         "walletAddress": "wallet.example-123",
         "workerName": "worker_1",
         "performanceMode": "FULL",
+        "maximumPowerWatts": 300,
     }
 
 
@@ -220,6 +221,38 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         self.assertIn("--devicesbypcie", args)
         self.assertEqual(args[args.index("--devices") + 1], "65:00")
         self.assertNotIn("66:00", args)
+
+    def test_resource_arguments_apply_owner_power_ceiling_and_thermal_tstop(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        payload["performanceMode"] = "FULL"
+        payload["maximumPowerWatts"] = 180
+        payload["maximumTemperatureC"] = 94
+        spec = parse_resource_start(payload)
+        args = build_resource_arguments(spec, self.bindings["GPU-aaaaaaaa"])
+        self.assertEqual(args[args.index("--pl") + 1], "180")
+        self.assertEqual(args[args.index("--tstop") + 1], "94")
+
+        payload["performanceMode"] = "ECO"
+        payload["maximumPowerWatts"] = 250
+        spec = parse_resource_start(payload)
+        eco_args = build_resource_arguments(spec, self.bindings["GPU-aaaaaaaa"])
+        self.assertEqual(eco_args[eco_args.index("--pl") + 1], "100")
+
+    def test_owner_power_ceiling_below_firmware_minimum_is_rejected(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        payload["maximumPowerWatts"] = 90
+        spec = parse_resource_start(payload)
+        with self.assertRaisesRegex(
+            ExecutionControlError,
+            "mining_maximum_power_below_firmware_minimum",
+        ):
+            build_resource_arguments(spec, self.bindings["GPU-aaaaaaaa"])
+
+    def test_start_rejects_invalid_power_ceiling(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        payload["maximumPowerWatts"] = 0
+        with self.assertRaisesRegex(ExecutionControlError, "mining_maximum_power_invalid"):
+            self.supervisor.start(payload, "command_00000001")
 
     def test_two_gpu_resources_can_run_and_stop_independently(self) -> None:
         one = self.supervisor.start(start_payload("resource_00000001", "GPU-aaaaaaaa"), "command_00000001")

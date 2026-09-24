@@ -15,6 +15,7 @@ export type MiningResourceStartInput = {
   workerName: string;
   performanceMode: MiningPerformanceMode;
   maximumTemperatureC: number;
+  maximumPowerWatts: number;
 };
 
 export type FencedMiningCommand = {
@@ -59,6 +60,9 @@ export function buildFencedStartMining(
   if (!Number.isInteger(input.maximumTemperatureC) || input.maximumTemperatureC < 85 || input.maximumTemperatureC > 98) {
     throw new Error('mining_maximum_temperature_invalid');
   }
+  if (!Number.isInteger(input.maximumPowerWatts) || input.maximumPowerWatts < 5 || input.maximumPowerWatts > 1500) {
+    throw new Error('mining_maximum_power_invalid');
+  }
   const generation = exactFence(lease, input.resourceId);
   return {
     lease: leaseBinding(lease),
@@ -72,6 +76,7 @@ export function buildFencedStartMining(
       workerName: input.workerName,
       performanceMode: input.performanceMode,
       maximumTemperatureC: input.maximumTemperatureC,
+      maximumPowerWatts: input.maximumPowerWatts,
     },
   };
 }

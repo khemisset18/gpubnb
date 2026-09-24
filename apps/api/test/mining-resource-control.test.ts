@@ -25,6 +25,7 @@ test('start payload binds hardware and preserves i64 fence as exact string', () 
     workerName: 'worker_1',
     performanceMode: 'FULL',
     maximumTemperatureC: 94,
+    maximumPowerWatts: 180,
   }, lease());
 
   assert.equal(command.lease.fencingToken, '9223372036854775807');
@@ -33,6 +34,7 @@ test('start payload binds hardware and preserves i64 fence as exact string', () 
   assert.equal(command.payload.resourceId, command.lease.resourceId);
   assert.equal(command.payload.hardwareUuid, 'GPU-aaaaaaaa');
   assert.equal(command.payload.maximumTemperatureC, 94);
+  assert.equal(command.payload.maximumPowerWatts, 180);
 });
 
 test('stop payload carries only resource identity and exact generation', () => {
@@ -67,7 +69,25 @@ test('start payload rejects thermal cutoffs outside the host-owner range', () =>
     walletAddress: 'wallet.example-123',
     workerName: 'worker_1',
     performanceMode: 'FULL' as const,
+    maximumPowerWatts: 180,
   };
   assert.throws(() => buildFencedStartMining({ ...base, maximumTemperatureC: 84 }, lease()), /mining_maximum_temperature_invalid/);
   assert.throws(() => buildFencedStartMining({ ...base, maximumTemperatureC: 99 }, lease()), /mining_maximum_temperature_invalid/);
+});
+
+
+test('start payload rejects invalid owner power ceiling', () => {
+  const base = {
+    machineId: 'machine_00000001',
+    resourceId: 'resource_00000001',
+    hardwareUuid: 'GPU-aaaaaaaa',
+    profileId: 'lolminer_etchash',
+    poolUrl: 'stratum+tcp://pool.example.com:4444',
+    walletAddress: 'wallet.example-123',
+    workerName: 'worker_1',
+    performanceMode: 'FULL' as const,
+    maximumTemperatureC: 94,
+  };
+  assert.throws(() => buildFencedStartMining({ ...base, maximumPowerWatts: 0 }, lease()), /mining_maximum_power_invalid/);
+  assert.throws(() => buildFencedStartMining({ ...base, maximumPowerWatts: 1501 }, lease()), /mining_maximum_power_invalid/);
 });
