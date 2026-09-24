@@ -42,3 +42,26 @@ test('dashboard links to mining without claiming the runtime is production-ready
   assert.match(dashboard, /désactivé par défaut/);
   assert.doesNotMatch(dashboard, /Minage.*Fonctionnel/s);
 });
+
+
+test('mining UI mirrors enabled runtime profiles and current thermal policy', async () => {
+  const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
+  for (const profile of ['lolminer_blake3', 'lolminer_etchash', 'lolminer_octopus', 'xmrig_randomx']) {
+    assert.match(script, new RegExp(profile));
+  }
+  for (const disabledProfile of ['trex_rvn_kawpow', 'teamredminer_rvn_kawpow', 'lolminer_etc_etchash', 'lolminer_erg_autolykos2', 'lolminer_flux_zelhash']) {
+    assert.doesNotMatch(script, new RegExp(disabledProfile));
+  }
+  assert.match(script, /resource\.kind==='GPU'\?85:50/);
+  assert.match(script, /max="98"/);
+  assert.match(script, /maximumTemperatureC:numberValue\(form,'maximumTemperatureC',85\)/);
+});
+
+test('mining UI displays only signed current resource telemetry without inventing revenue', async () => {
+  const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
+  assert.match(script, /lastMiningTelemetry/);
+  assert.match(script, /Hashrate/);
+  assert.match(script, /Parts A\/S\/Hw/);
+  assert.match(script, /Aucun revenu n’est estimé/);
+  assert.doesNotMatch(script, /walletAddress.*lastMiningTelemetry|lastMiningTelemetry.*walletAddress/s);
+});
