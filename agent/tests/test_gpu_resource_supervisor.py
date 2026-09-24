@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from gpubnb_agent.execution_control import ExecutionControlError
+from gpubnb_agent.mining_resource_telemetry import mining_resource_telemetry_snapshot
 from gpubnb_agent.gpu_resource_supervisor import (
     GpuBinding,
     GpuMetrics,
@@ -16,7 +17,6 @@ from gpubnb_agent.gpu_resource_supervisor import (
     RuntimeStore,
     SystemLauncher,
     build_resource_arguments,
-    mining_resource_telemetry_snapshot,
     parse_lolminer_telemetry,
     parse_resource_start,
 )
@@ -195,7 +195,7 @@ class GpuResourceSupervisorTests(unittest.TestCase):
             )
         })
 
-        snapshot = mining_resource_telemetry_snapshot(self.store)
+        snapshot = mining_resource_telemetry_snapshot(self.store.path)
         self.assertEqual(len(snapshot), 1)
         item = snapshot[0]
         self.assertEqual(item["resourceId"], "resource_00000001")
