@@ -2,7 +2,7 @@
 
 ## Scope
 
-This runbook covers the dark-qualified resource-scoped mining supervisor introduced above #112. Public mining command production is intentionally disabled until hardware qualification is complete.
+This runbook covers the resource-scoped mining supervisor and fenced durable mining-command path. Public rollout remains disabled by default until hardware qualification and canary evidence are complete.
 
 ## Runtime authority
 
@@ -59,9 +59,9 @@ Expected fail-closed errors include:
 - `mining_runtime_generation_fence_mismatch`
 - `mining_runtime_generation_stale`
 - `mining_runtime_generation_replay`
-- `mining_runtime_generation_future`
+Do not retry these by mutating payloads. Reconcile the server lease/command producer first. A legitimate new START obtains a current resource lease and therefore a current fence.
 
-Do not retry these by mutating payloads. Reconcile the server lease/command producer first. A legitimate new start obtains a current resource lease and therefore a current fence.
+For STOP only, a **newer** Redis-validated fence is intentionally accepted. This is the recovery path when an older mining lease expired while its exact owned miner process survived. A stale/older STOP fence remains rejected, and the Gateway must validate the newer lease against Redis before the Agent may act.
 
 ## GPU identity incidents
 
