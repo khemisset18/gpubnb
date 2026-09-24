@@ -10,9 +10,10 @@ from __future__ import annotations
 import atexit
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Any, Callable
 
-from .client import agent_request
+from .client import agent_request, reserve_agent_counter
 from .control_channel import (
     ControlChannelSupervisor,
     ControlCommand,
@@ -25,6 +26,7 @@ from .storage import load_config
 
 ASSIGNMENT_REFRESH_SECONDS = 300
 THERMAL_WATCHDOG_INTERVAL_SECONDS = 5
+MINING_TELEMETRY_INTERVAL_SECONDS = 30
 _POLICY_REJECTIONS = {
     "approved_miner_platform_unsupported",
     "approved_miner_binary_missing",
@@ -137,12 +139,20 @@ class _Runtime:
             name=f"gpubnb-thermal-{machine_id}",
             daemon=True,
         )
+        self._telemetry_thread = threading.Thread(
+            target=self._mining_telemetry_loop,
+            name=f"gpubnb-mining-telemetry-{machine_id}",
+            daemon=True,
+        )
         self._thermal_thread.start()
+        self._telemetry_thread.start()
 
     def stop(self) -> None:
         self._thermal_stop_event.set()
         if self._thermal_thread.is_alive():
             self._thermal_thread.join(timeout=2)
+        if self._telemetry_thread.is_alive():
+            self._telemetry_thread.join(timeout=2)
         self.supervisor.stop()
 
     def _poll_thermal_watchdog_once(self) -> None:
@@ -160,6 +170,62 @@ class _Runtime:
                     "type": type(exc).__name__,
                     "message": str(exc)[:160],
                 })
+
+    def _report_mining_telemetry(self, sample: dict[str, Any]) -> None:
+        counter = reserve_agent_counter()
+        resource_id = str(sample["resourceId"])
+        generation = int(sample["runtimeGeneration"])
+        payload = dict(sample)
+        # Decimal strings preserve exact monotone/fencing values beyond the
+        # JavaScript safe-integer range all the way into Zod/BigInt.
+        payload["runtimeGeneration"] = str(generation)
+        body = {
+            "machineId": self.machine_id,
+            "resourceId": resource_id,
+            "idempotencyKey": f"mining-telemetry:{resource_id}:{generation}:{counter}",
+            "agentCounter": str(counter),
+            "capturedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "telemetry": payload,
+        }
+        agent_request(
+            self.api,
+            self.key,
+            self.machine_id,
+            "/internal/mining/telemetry",
+            "POST",
+            body,
+            timeout=8,
+        )
+
+    def _mining_telemetry_loop(self) -> None:
+        while not self._thermal_stop_event.wait(MINING_TELEMETRY_INTERVAL_SECONDS):
+            try:
+                samples = self.gpu_supervisor.telemetry_snapshot()
+            except Exception as exc:
+                self.emit({
+                    "event": "mining_telemetry_collection_error",
+                    "machineId": self.machine_id,
+                    "type": type(exc).__name__,
+                    "message": str(exc)[:160],
+                })
+                continue
+            for sample in samples:
+                self.emit({
+                    "event": "mining_resource_telemetry",
+                    "machineId": self.machine_id,
+                    **sample,
+                })
+                try:
+                    self._report_mining_telemetry(sample)
+                except Exception as exc:
+                    self.emit({
+                        "event": "mining_telemetry_report_error",
+                        "machineId": self.machine_id,
+                        "resourceId": sample.get("resourceId"),
+                        "hardwareUuid": sample.get("hardwareUuid"),
+                        "type": type(exc).__name__,
+                        "message": str(exc)[:160],
+                    })
 
     def refresh_assignment_if_due(self) -> None:
         now = time.monotonic()

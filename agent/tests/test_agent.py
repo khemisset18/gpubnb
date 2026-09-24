@@ -289,6 +289,14 @@ class HeartbeatTests(unittest.TestCase):
         }
         server_last_counter = 1607 + 3  # server is 3 heartbeats ahead of the local file
         saved_counters: list[int] = []
+        local_counter = {"value": 1607}
+
+        def load_local_counter() -> int:
+            return local_counter["value"]
+
+        def save_local_counter(value: int) -> None:
+            local_counter["value"] = value
+            saved_counters.append(value)
 
         class Client:
             def request(self, path, method="GET", body=None, headers=None, timeout=12):
@@ -304,14 +312,14 @@ class HeartbeatTests(unittest.TestCase):
             patch("gpubnb_agent.client.telemetry_snapshot", return_value={"schemaVersion": 2, "accelerators": []}),
             patch("gpubnb_agent.client.detect_hardware_change", return_value=(False, None)),
             patch("gpubnb_agent.client.save_machine_fingerprint"),
-            patch("gpubnb_agent.client.load_counter", return_value=1607),
-            patch("gpubnb_agent.client.save_counter", side_effect=saved_counters.append),
+            patch("gpubnb_agent.client.load_counter", side_effect=load_local_counter),
+            patch("gpubnb_agent.client.save_counter", side_effect=save_local_counter),
         ):
             result = heartbeat(Client(), SigningKey.generate(), "machine-id")
 
         self.assertEqual(result, {"ok": True})
-        # Every burned attempt (1608, 1609, 1610) must be persisted, plus the final
-        # accepted one (1611) — never the same value reused, never a gap skipped.
+        # Every reservation is persisted before network use. Rejected values are
+        # burned and the accepted value is already durable.
         self.assertEqual(saved_counters, [1608, 1609, 1610, 1611])
 
     def test_counter_replay_gives_up_after_the_resync_limit_without_reusing_values(self):
@@ -323,6 +331,14 @@ class HeartbeatTests(unittest.TestCase):
             "temperatureC": 40, "gpuUtilization": 0, "powerWatts": 1.0, "gpuVendor": "NVIDIA",
         }
         saved_counters: list[int] = []
+        local_counter = {"value": 0}
+
+        def load_local_counter() -> int:
+            return local_counter["value"]
+
+        def save_local_counter(value: int) -> None:
+            local_counter["value"] = value
+            saved_counters.append(value)
 
         class Client:
             def request(self, path, method="GET", body=None, headers=None, timeout=12):
@@ -336,8 +352,8 @@ class HeartbeatTests(unittest.TestCase):
             patch("gpubnb_agent.client.telemetry_snapshot", return_value={"schemaVersion": 2, "accelerators": []}),
             patch("gpubnb_agent.client.detect_hardware_change", return_value=(False, None)),
             patch("gpubnb_agent.client.save_machine_fingerprint"),
-            patch("gpubnb_agent.client.load_counter", return_value=0),
-            patch("gpubnb_agent.client.save_counter", side_effect=saved_counters.append),
+            patch("gpubnb_agent.client.load_counter", side_effect=load_local_counter),
+            patch("gpubnb_agent.client.save_counter", side_effect=save_local_counter),
         ):
             with self.assertRaises(RuntimeError):
                 heartbeat(Client(), SigningKey.generate(), "machine-id")

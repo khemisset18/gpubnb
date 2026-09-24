@@ -12,6 +12,16 @@ import {
   platformFeeBasisPoints,
 } from './mining-config-policy.js';
 import { normalizeMiningGpuVendor } from './mining-profile-catalog.js';
+import {
+  MINING_TELEMETRY_DEDUPE_TTL_SECONDS,
+  MINING_TELEMETRY_HISTORY_HOURS,
+  MINING_TELEMETRY_HISTORY_INTERVAL_MS,
+  MINING_TELEMETRY_LIVE_TTL_SECONDS,
+  miningTelemetryEnvelopeSchema,
+  miningTelemetryLatestKey,
+  validateMiningTelemetryAuthority,
+} from './mining-telemetry-contract.js';
+import { readResourceLease } from './resource-lease.js';
 import { registerRentalResourceAuthorityRoutes } from './rental-resource-routes.js';
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
 
@@ -110,6 +120,49 @@ export const registerMiningRoutes = (
       if (!machine) return reply.code(404).send({ error: 'machine_not_found' });
     }
     return { resources };
+  });
+
+  app.get('/machines/:machineId/mining-resources/:resourceId/telemetry', async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const { machineId, resourceId } = resourceParamsSchema.parse(request.params);
+    const resource = await db.miningResource.findFirst({
+      where: { id: resourceId, machineId, machine: { ownerId: session.userId } },
+      select: { id: true },
+    });
+    if (!resource) return reply.code(404).send({ error: 'mining_resource_not_found' });
+
+    const [latestRaw, history] = await Promise.all([
+      redis.get(miningTelemetryLatestKey(resourceId)),
+      db.miningTelemetrySample.findMany({
+        where: {
+          resourceId,
+          capturedAt: { gte: new Date(Date.now() - MINING_TELEMETRY_HISTORY_HOURS * 60 * 60 * 1000) },
+        },
+        orderBy: { capturedAt: 'desc' },
+        take: 288,
+      }),
+    ]);
+    let latest: unknown = null;
+    if (latestRaw) {
+      try {
+        latest = JSON.parse(latestRaw);
+      } catch {
+        latest = null;
+      }
+    }
+    return {
+      latest,
+      history: history.map((sample) => ({
+        ...sample,
+        agentCounter: sample.agentCounter.toString(),
+        runtimeGeneration: sample.runtimeGeneration.toString(),
+        acceptedShares: sample.acceptedShares?.toString() ?? null,
+        staleShares: sample.staleShares?.toString() ?? null,
+        hardwareErrors: sample.hardwareErrors?.toString() ?? null,
+        uptimeSeconds: sample.uptimeSeconds?.toString() ?? null,
+      })),
+    };
   });
 
   app.put('/machines/:machineId/mining-resources/:resourceId/configuration', async (request, reply) => {
@@ -218,6 +271,153 @@ export const registerMiningRoutes = (
     } catch (error) {
       const code = error instanceof Error ? error.message : 'mining_configuration_update_failed';
       const status = code.endsWith('_not_found') ? 404 : code.includes('owner_required') ? 403 : 409;
+      return reply.code(status).send({ error: code });
+    }
+  });
+
+  app.post('/internal/mining/telemetry', async (request, reply) => {
+    const envelope = miningTelemetryEnvelopeSchema.parse(request.body);
+    const rawBody = request.rawBody;
+    if (!rawBody) {
+      await recordSecurityFailure(redis, `agent-v2:${envelope.machineId}`, 4);
+      return reply.code(400).send({ error: 'raw_body_required' });
+    }
+
+    const machine = await db.machine.findUnique({
+      where: { id: envelope.machineId },
+      select: { agentPublicKey: true, keyRevokedAt: true, moderationStatus: true },
+    });
+    if (!machine) return reply.code(404).send({ error: 'unknown_machine' });
+    if (machine.keyRevokedAt || machine.moderationStatus === 'QUARANTINED') {
+      return reply.code(403).send({ error: 'machine_not_authorized' });
+    }
+
+    const validSignature = await verifyAgentRequestV2(
+      redis,
+      envelope.machineId,
+      machine.agentPublicKey,
+      request.method,
+      '/internal/mining/telemetry',
+      rawBody,
+      {
+        timestamp: request.headers['x-agent-timestamp'],
+        nonce: request.headers['x-agent-nonce'],
+        bodySha256: request.headers['x-agent-body-sha256'],
+        signature: request.headers['x-agent-signature-v2'],
+        version: request.headers['x-agent-signature-version'],
+      },
+    );
+    if (!validSignature) {
+      await recordSecurityFailure(redis, `agent-v2:${envelope.machineId}`, 4);
+      return reply.code(401).send({ error: 'invalid_agent_request' });
+    }
+
+    const dedupeKey = `mining:telemetry:dedupe:${envelope.machineId}:${envelope.idempotencyKey}`;
+    if (await redis.set(dedupeKey, '1', 'EX', MINING_TELEMETRY_DEDUPE_TTL_SECONDS, 'NX') !== 'OK') {
+      return { accepted: false, duplicate: true };
+    }
+
+    const capturedAt = new Date(envelope.capturedAt);
+    try {
+      const lease = await readResourceLease(redis, envelope.resourceId);
+      const persisted = await runBookingTransaction(db, async (tx) => {
+        const rows = await tx.$queryRaw<Array<{
+          id: string;
+          runtimeState: string;
+          kind: string;
+          hardwareUuid: string | null;
+        }>>(Prisma.sql`
+          SELECT r."id", r."runtimeState"::text AS "runtimeState", r."kind"::text AS "kind",
+                 a."hardwareUuid"
+            FROM "MiningResource" r
+       LEFT JOIN "Accelerator" a ON a."id" = r."acceleratorId"
+           WHERE r."id" = ${envelope.resourceId} AND r."machineId" = ${envelope.machineId}
+           FOR UPDATE OF r
+        `);
+        const resource = rows[0];
+        if (!resource) throw new Error('mining_resource_not_found');
+        if (resource.kind !== 'GPU' || !resource.hardwareUuid) {
+          throw new Error('mining_telemetry_gpu_resource_required');
+        }
+        if (resource.hardwareUuid.toLowerCase() !== envelope.telemetry.hardwareUuid.toLowerCase()) {
+          throw new Error('mining_telemetry_hardware_mismatch');
+        }
+        validateMiningTelemetryAuthority(
+          resource.runtimeState,
+          lease?.fencingToken ?? null,
+          envelope.telemetry.runtimeGeneration,
+        );
+
+        const advanced = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          UPDATE "Machine"
+             SET "lastCounter" = ${envelope.agentCounter}, "keyLastUsedAt" = CURRENT_TIMESTAMP
+           WHERE "id" = ${envelope.machineId} AND "lastCounter" < ${envelope.agentCounter}
+           RETURNING "id"
+        `);
+        if (!advanced.length) throw new Error('agent_counter_replay');
+
+        const previous = await tx.miningTelemetrySample.findFirst({
+          where: { resourceId: envelope.resourceId },
+          orderBy: { capturedAt: 'desc' },
+          select: { capturedAt: true },
+        });
+        const shouldPersist = !previous
+          || capturedAt.getTime() - previous.capturedAt.getTime() >= MINING_TELEMETRY_HISTORY_INTERVAL_MS;
+        if (!shouldPersist) return false;
+
+        const telemetry = envelope.telemetry;
+        await tx.miningTelemetrySample.create({
+          data: {
+            id: crypto.randomUUID(),
+            resourceId: envelope.resourceId,
+            capturedAt,
+            agentCounter: envelope.agentCounter,
+            runtimeGeneration: BigInt(telemetry.runtimeGeneration),
+            hardwareUuid: telemetry.hardwareUuid,
+            profileId: telemetry.profileId,
+            processPid: telemetry.processPid,
+            temperatureC: telemetry.temperatureC,
+            powerWatts: telemetry.powerWatts,
+            gpuUtilizationPercent: telemetry.gpuUtilizationPercent,
+            memoryUsedMiB: telemetry.memoryUsedMiB,
+            hashrate: telemetry.hashrate,
+            hashrateUnit: telemetry.hashrateUnit,
+            acceptedShares: telemetry.acceptedShares === null ? null : BigInt(telemetry.acceptedShares),
+            staleShares: telemetry.staleShares === null ? null : BigInt(telemetry.staleShares),
+            hardwareErrors: telemetry.hardwareErrors === null ? null : BigInt(telemetry.hardwareErrors),
+            uptimeSeconds: telemetry.uptimeSeconds === null ? null : BigInt(telemetry.uptimeSeconds),
+            poolConnected: telemetry.poolConnected,
+            thermalStopCelsius: telemetry.thermalStopCelsius,
+          },
+        });
+        return true;
+      }, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: 5_000,
+        timeout: 10_000,
+      });
+
+      const live = JSON.stringify({
+        capturedAt: envelope.capturedAt,
+        ...envelope.telemetry,
+      });
+      try {
+        await redis.set(
+          miningTelemetryLatestKey(envelope.resourceId),
+          live,
+          'EX',
+          MINING_TELEMETRY_LIVE_TTL_SECONDS,
+        );
+      } catch (error) {
+        request.log.warn({ err: error, resourceId: envelope.resourceId }, 'mining_telemetry_live_cache_failed');
+      }
+      return { accepted: true, persisted };
+    } catch (error) {
+      await redis.del(dedupeKey).catch(() => undefined);
+      const code = error instanceof Error ? error.message : 'mining_telemetry_rejected';
+      const status = code === 'mining_resource_not_found' ? 404
+        : code === 'machine_not_authorized' ? 403
+          : 409;
       return reply.code(status).send({ error: code });
     }
   });

@@ -6,6 +6,7 @@ import json
 import os
 import secrets
 import ssl
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -25,6 +26,8 @@ MAX_RETRIES = 3
 RETRY_BACKOFF = 2.0
 EMPTY_BODY_SHA256 = hashlib.sha256(b"").hexdigest()
 COUNTER_REPLAY_RESYNC_LIMIT = 64
+_COUNTER_RESERVATION_LOCK = threading.Lock()
+
 # Gateway command batches can legitimately carry base64 WebSocket payloads much
 # larger than the historical 1 MB JSON cap. Keep a hard bound instead of silently
 # truncating JSON: 64 MiB is enough for four maximum-size HTTP relay commands and
@@ -183,6 +186,19 @@ def agent_request(client: ApiClient, key: SigningKey, machine_id: str, path: str
     raise last_error  # type: ignore[misc]
 
 
+def reserve_agent_counter() -> int:
+    """Reserve and persist one monotone machine counter before network I/O.
+
+    Runtime mining telemetry and the legacy heartbeat share Machine.lastCounter.
+    Persisting the reservation before use makes concurrent Agent threads safe:
+    a failed request may burn a value, but no later request can reuse it.
+    """
+    with _COUNTER_RESERVATION_LOCK:
+        counter = load_counter() + 1
+        save_counter(counter)
+        return counter
+
+
 def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, Any]:
     # A heartbeat is one inventory transaction. Legacy heartbeat fields, v2
     # telemetry and generic accelerator providers must observe the same physical
@@ -208,7 +224,6 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
     if hw_changed and previous_fp:
         print(f"AVERTISSEMENT: Empreinte matérielle modifiée (ancienne: {previous_fp[:16]}...)")
     challenge_path = f"/agent/challenge/{machine_id}"
-    counter = load_counter()
     # Every attempt below is signed once and used once: the server-issued challenge
     # is single-use (redis GETDEL) and every signature is anti-replay-locked on first
     # use (verifyAgentRequest/V2). Reusing headers computed before a failed attempt —
@@ -219,7 +234,7 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
     network_attempt = 0
     resync_attempt = 0
     while network_attempt < MAX_RETRIES:
-        counter += 1
+        counter = reserve_agent_counter()
         try:
             challenge = client.request(
                 challenge_path,
@@ -251,16 +266,16 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
                 "/agent/heartbeat", "POST", payload,
                 signed_headers(key, machine_id, "POST", "/agent/heartbeat", payload),
             )
-            save_counter(counter)
             return result
         except (urllib.error.URLError, RuntimeError, TimeoutError, OSError) as exc:
             last_error = exc
-            if "counter_replay" in str(exc) and resync_attempt < COUNTER_REPLAY_RESYNC_LIMIT:
-                # The local counter file fell behind the server's lastCounter (crash,
-                # uninstall wiping ProgramData before the last successful save could
-                # land, or two agent instances raced). This value is burned forever.
-                save_counter(counter)
+            if "counter_replay" in str(exc):
+                # The local counter file fell behind the server's lastCounter
+                # (crash, reinstall, or another signed event raced). The
+                # reservation is already durable and burned forever.
                 resync_attempt += 1
+                if resync_attempt >= COUNTER_REPLAY_RESYNC_LIMIT:
+                    raise
                 continue
             network_attempt += 1
             if network_attempt < MAX_RETRIES:
