@@ -762,6 +762,7 @@ class GpuResourceSupervisor:
                     record.state = "STOPPED"
                     record.last_stop_reason = "PROCESS_MISSING"
                     self._clear_process(record)
+                    self._process_handles.pop(resource_id, None)
                     outcome[resource_id] = record.state
                     changed = True
                     continue
@@ -775,6 +776,7 @@ class GpuResourceSupervisor:
                     try:
                         self._terminate_and_verify(expected)
                         self._clear_process(record)
+                        self._process_handles.pop(resource_id, None)
                     except ExecutionControlError:
                         pass
                     record.state = "QUARANTINED"
@@ -963,6 +965,7 @@ class GpuResourceSupervisor:
                     record.state = "STOPPED"
                     record.last_stop_reason = "PROCESS_MISSING"
                     self._clear_process(record)
+                    self._process_handles.pop(resource_id, None)
                     record.updated_at_ms = int(time.time() * 1000)
                     events.append({
                         "event": "mining_resource_stopped",
@@ -989,6 +992,7 @@ class GpuResourceSupervisor:
                     try:
                         self._terminate_and_verify(expected)
                         self._clear_process(record)
+                        self._process_handles.pop(resource_id, None)
                     except ExecutionControlError:
                         pass
                     record.state = "QUARANTINED"
@@ -1016,6 +1020,7 @@ class GpuResourceSupervisor:
                         try:
                             self._terminate_and_verify(expected)
                             self._clear_process(record)
+                        self._process_handles.pop(resource_id, None)
                         except ExecutionControlError:
                             pass
                         record.state = "QUARANTINED"
@@ -1065,6 +1070,7 @@ class GpuResourceSupervisor:
                     try:
                         self._terminate_and_verify(expected)
                         self._clear_process(record)
+                        self._process_handles.pop(resource_id, None)
                     except ExecutionControlError:
                         pass
                     record.state = "QUARANTINED"
@@ -1082,6 +1088,7 @@ class GpuResourceSupervisor:
                 if temperature >= record.thermal_stop_celsius:
                     self._terminate_and_verify(expected)
                     self._clear_process(record)
+                    self._process_handles.pop(resource_id, None)
                     record.state = "STOPPED"
                     record.last_stop_reason = "THERMAL_LIMIT"
                     events.append({
