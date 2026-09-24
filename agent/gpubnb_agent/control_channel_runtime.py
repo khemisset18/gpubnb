@@ -44,6 +44,7 @@ _POLICY_REJECTIONS = {
     "mining_wallet_invalid",
     "mining_worker_invalid",
     "mining_performance_mode_invalid",
+    "mining_maximum_temperature_invalid",
     "mining_runtime_generation_invalid",
     "mining_runtime_generation_stale",
     "mining_runtime_generation_replay",
@@ -118,7 +119,7 @@ class _Runtime:
         self._refresh_lock = threading.Lock()
         self._next_assignment_refresh = 0.0
         self._next_fallback_poll = 0.0
-        self.gpu_supervisor = GpuResourceSupervisor()
+        self.gpu_supervisor = GpuResourceSupervisor(event_sink=emit)
         self.supervisor = ControlChannelSupervisor(
             machine_id=machine_id,
             key=key,
@@ -130,6 +131,7 @@ class _Runtime:
 
     def stop(self) -> None:
         self.supervisor.stop()
+        self.gpu_supervisor.shutdown()
 
     def refresh_assignment_if_due(self) -> None:
         now = time.monotonic()
