@@ -1,6 +1,7 @@
 use crate::approved_miner_manifest::{approved_miner_release, validate_release_metadata};
 use crate::miner_paths;
 use crate::mining_configuration::{MiningLaunchSpec, MiningPerformanceMode};
+use crate::mining_pool_probe::MiningPoolEndpoint;
 use crate::secure_launcher;
 use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
@@ -315,6 +316,21 @@ fn wait_for_exit(
     }
 }
 
+fn lolminer_pool_arguments(pool_url: &str) -> Result<Vec<String>, &'static str> {
+    let endpoint = MiningPoolEndpoint::parse(pool_url)?;
+    let authority = if endpoint.host.contains(':') {
+        format!("[{}]:{}", endpoint.host, endpoint.port)
+    } else {
+        format!("{}:{}", endpoint.host, endpoint.port)
+    };
+    Ok(vec![
+        "--pool".into(),
+        authority,
+        "--tls".into(),
+        if endpoint.requires_tls { "on" } else { "off" }.into(),
+    ])
+}
+
 fn build_approved_arguments(spec: &MiningLaunchSpec) -> Result<Vec<String>, &'static str> {
     validate_argument(&spec.pool_url)?;
     validate_argument(&spec.wallet_address)?;
@@ -326,30 +342,24 @@ fn build_approved_arguments(spec: &MiningLaunchSpec) -> Result<Vec<String>, &'st
     let user = format!("{}.{}", spec.wallet_address, spec.worker_name);
     validate_argument(&user)?;
     match spec.miner_profile_id.as_str() {
-        "lolminer_blake3" => Ok(vec![
-            "--algo".into(),
-            "ALEPH".into(),
-            "--pool".into(),
-            spec.pool_url.clone(),
-            "--user".into(),
-            user,
-        ]),
-        "lolminer_octopus" => Ok(vec![
-            "--algo".into(),
-            "OCTOPUS".into(),
-            "--pool".into(),
-            spec.pool_url.clone(),
-            "--user".into(),
-            user,
-        ]),
-        "lolminer_etchash" => Ok(vec![
-            "--algo".into(),
-            "ETCHASH".into(),
-            "--pool".into(),
-            spec.pool_url.clone(),
-            "--user".into(),
-            user,
-        ]),
+        "lolminer_blake3" => {
+            let mut arguments = vec!["--algo".into(), "ALEPH".into()];
+            arguments.extend(lolminer_pool_arguments(&spec.pool_url)?);
+            arguments.extend(["--user".into(), user]);
+            Ok(arguments)
+        }
+        "lolminer_octopus" => {
+            let mut arguments = vec!["--algo".into(), "OCTOPUS".into()];
+            arguments.extend(lolminer_pool_arguments(&spec.pool_url)?);
+            arguments.extend(["--user".into(), user]);
+            Ok(arguments)
+        }
+        "lolminer_etchash" => {
+            let mut arguments = vec!["--algo".into(), "ETCHASH".into()];
+            arguments.extend(lolminer_pool_arguments(&spec.pool_url)?);
+            arguments.extend(["--user".into(), user]);
+            Ok(arguments)
+        }
         "xmrig_randomx" => Ok(vec![
             "--algo=randomx".into(),
             format!("--url={}", spec.pool_url),
