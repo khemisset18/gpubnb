@@ -13,6 +13,7 @@ import {
 } from './mining-config-policy.js';
 import { normalizeMiningGpuVendor } from './mining-profile-catalog.js';
 import { registerRentalResourceAuthorityRoutes } from './rental-resource-routes.js';
+import { requestOwnerMiningStart, requestOwnerMiningStop } from './mining-owner-command-service.js';
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
 
 const machineParamsSchema = z.object({ machineId: z.string().cuid() });
@@ -27,7 +28,7 @@ const runtimeEventSchema = z.object({
   machineId: z.string().cuid(),
   resourceId: z.string().min(3).max(128),
   eventType: z.enum([
-    'CONFIGURATION_CHANGED', 'START_REQUESTED', 'STARTED', 'STOP_REQUESTED',
+    'CONFIGURATION_CHANGED', 'START_REQUESTED', 'STARTED', 'START_FAILED', 'STOP_REQUESTED',
     'STOP_VERIFIED', 'STOP_FAILED', 'RENTAL_PREEMPTED', 'RENTAL_RELEASED',
     'CLEANUP_VERIFIED', 'AUTO_RESUME_REQUESTED', 'QUARANTINED',
     'EMERGENCY_STOPPED', 'HEARTBEAT',
@@ -139,6 +140,10 @@ export const registerMiningRoutes = (
         const current = rows[0];
         if (!current) throw new Error('mining_resource_not_found');
 
+        if (!['IDLE', 'STOPPED'].includes(current.runtimeState)) {
+          throw new Error('mining_resource_must_stop_before_configuration_update');
+        }
+
         const rentedResourceIds = current.activeRentalId
           ? new Set<string>([current.id])
           : new Set<string>();
@@ -218,6 +223,52 @@ export const registerMiningRoutes = (
     } catch (error) {
       const code = error instanceof Error ? error.message : 'mining_configuration_update_failed';
       const status = code.endsWith('_not_found') ? 404 : code.includes('owner_required') ? 403 : 409;
+      return reply.code(status).send({ error: code });
+    }
+  });
+
+  app.post('/machines/:machineId/mining-resources/:resourceId/start', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const { machineId, resourceId } = resourceParamsSchema.parse(request.params);
+    try {
+      const result = await requestOwnerMiningStart(db, redis, {
+        machineId,
+        resourceId,
+        ownerId: session.userId,
+        requestId: request.id,
+      });
+      return reply.code(202).send(result);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'mining_start_request_failed';
+      const status = code.endsWith('_not_found') ? 404
+        : code.includes('owner_required') ? 403
+        : 409;
+      return reply.code(status).send({ error: code });
+    }
+  });
+
+  app.post('/machines/:machineId/mining-resources/:resourceId/stop', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const { machineId, resourceId } = resourceParamsSchema.parse(request.params);
+    try {
+      const result = await requestOwnerMiningStop(db, redis, {
+        machineId,
+        resourceId,
+        ownerId: session.userId,
+        requestId: request.id,
+      });
+      return reply.code(result.alreadySatisfied ? 200 : 202).send(result);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'mining_stop_request_failed';
+      const status = code.endsWith('_not_found') ? 404
+        : code.includes('owner_required') ? 403
+        : 409;
       return reply.code(status).send({ error: code });
     }
   });
