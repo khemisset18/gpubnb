@@ -110,6 +110,33 @@ function selectedSession(status = WorkspaceSessionStatus.READY) {
 }
 
 function databaseWithSessions(sessions: unknown[], releaseStatus = WorkspaceSessionStatus.STOPPING): PrismaClient {
+  const states = new Map<string, { runtimeState: string; activeRentalId: string | null }>();
+  for (const session of sessions as any[]) {
+    for (const allocation of session.booking?.acceleratorAllocations ?? []) {
+      const resourceId = allocation.accelerator?.miningResource?.id;
+      if (resourceId) states.set(resourceId, { runtimeState: 'MINING', activeRentalId: null });
+    }
+    for (const accelerator of session.booking?.listing?.machine?.accelerators ?? []) {
+      const resourceId = accelerator.miningResource?.id;
+      if (resourceId && !states.has(resourceId)) states.set(resourceId, { runtimeState: 'MINING', activeRentalId: null });
+    }
+  }
+  const tx = {
+    $queryRaw: async (query: any) => {
+      const resourceId = (query.values ?? []).find((value: unknown) => typeof value === 'string' && String(value).startsWith('resource_'));
+      const state = states.get(String(resourceId));
+      return state ? [{ ...state }] : [];
+    },
+    $executeRaw: async () => 1,
+    miningResource: {
+      update: async ({ where, data }: any) => {
+        const current = states.get(where.id) ?? { runtimeState: 'STOPPED', activeRentalId: null };
+        const next = { ...current, ...data };
+        states.set(where.id, next);
+        return { id: where.id, ...next };
+      },
+    },
+  };
   return {
     workspaceSession: {
       findMany: async () => sessions,
@@ -119,6 +146,9 @@ function databaseWithSessions(sessions: unknown[], releaseStatus = WorkspaceSess
         expiresAt: new Date(Date.now() + 60_000),
       }),
     },
+    miningResource: tx.miningResource,
+    $transaction: async (callback: any) => callback(tx),
+    __runtimeStates: states,
   } as unknown as PrismaClient;
 }
 
@@ -162,6 +192,9 @@ describe('rental resource authority', () => {
     const accelerator = session.booking.acceleratorAllocations[0]!.accelerator;
     accelerator.miningResource = null;
     let upsertCalls = 0;
+    const runtimeStates = new Map<string, { runtimeState: string; activeRentalId: string | null }>([
+      ['resource_repaired_01', { runtimeState: 'STOPPED', activeRentalId: null }],
+    ]);
     const db = {
       workspaceSession: {
         findMany: async () => [session],
@@ -189,6 +222,21 @@ describe('rental resource authority', () => {
           quarantined: false,
         }),
       },
+      $transaction: async (callback: any) => callback({
+        $queryRaw: async (query: any) => {
+          const resourceId = (query.values ?? []).find((value: unknown) => typeof value === 'string' && String(value).startsWith('resource_'));
+          const state = runtimeStates.get(String(resourceId));
+          return state ? [{ ...state }] : [];
+        },
+        $executeRaw: async () => 1,
+        miningResource: {
+          update: async ({ where, data }: any) => {
+            const current = runtimeStates.get(where.id) ?? { runtimeState: 'STOPPED', activeRentalId: null };
+            runtimeStates.set(where.id, { ...current, ...data });
+            return { id: where.id };
+          },
+        },
+      }),
     } as unknown as PrismaClient;
 
     const authority = await buildRentalResourceAuthority(db, redis as unknown as Redis, 'machine_00000001');
@@ -238,7 +286,47 @@ describe('rental resource authority', () => {
       [lease],
     );
     assert.equal(released.released, 1);
+    assert.deepEqual(released.cleanupVerifiedResourceIds, ['resource_00000001']);
     assert.equal(redis.leases.has('resource_00000001'), false);
+  });
+
+  it('mirrors rental ownership and cleanup into MiningResource state without replay regression', async () => {
+    const redis = new FakeRedis();
+    const db = databaseWithSessions([selectedSession()]);
+    const authority = await buildRentalResourceAuthority(db, redis as unknown as Redis, 'machine_00000001');
+    const states = (db as any).__runtimeStates as Map<string, { runtimeState: string; activeRentalId: string | null }>;
+    assert.deepEqual(states.get('resource_00000001'), {
+      runtimeState: 'PREEMPTING',
+      activeRentalId: 'session_00000001',
+    });
+
+    const lease = authority.sessions[0]!.resources[0]!.lease;
+    const released = await releaseRentalResourceAuthority(
+      db,
+      redis as unknown as Redis,
+      'machine_00000001',
+      'session_00000001',
+      [lease],
+    );
+    assert.deepEqual(released.cleanupVerifiedResourceIds, ['resource_00000001']);
+    assert.deepEqual(states.get('resource_00000001'), {
+      runtimeState: 'STOPPED',
+      activeRentalId: null,
+    });
+
+    states.set('resource_00000001', { runtimeState: 'STARTING', activeRentalId: null });
+    const replay = await releaseRentalResourceAuthority(
+      db,
+      redis as unknown as Redis,
+      'machine_00000001',
+      'session_00000001',
+      [lease],
+    );
+    assert.deepEqual(replay.cleanupVerifiedResourceIds, []);
+    assert.deepEqual(states.get('resource_00000001'), {
+      runtimeState: 'STARTING',
+      activeRentalId: null,
+    });
   });
 
   it('does not release a live READY rental lease', async () => {
