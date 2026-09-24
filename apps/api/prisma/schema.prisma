@@ -804,6 +804,7 @@ model MiningResource {
   @@unique([machineId, resourceKey])
   @@index([machineId, kind])
   @@index([runtimeState])
+  @@index([lastTelemetryAt])
 }
 
 model MiningConfiguration {
