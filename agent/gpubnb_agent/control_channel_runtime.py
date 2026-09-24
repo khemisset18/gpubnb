@@ -46,6 +46,8 @@ _POLICY_REJECTIONS = {
     "mining_worker_invalid",
     "mining_performance_mode_invalid",
     "mining_maximum_temperature_invalid",
+    "mining_maximum_power_invalid",
+    "mining_maximum_power_below_firmware_minimum",
     "mining_runtime_generation_invalid",
     "mining_runtime_generation_stale",
     "mining_runtime_generation_replay",
