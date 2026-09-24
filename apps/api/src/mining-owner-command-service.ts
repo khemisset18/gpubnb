@@ -391,3 +391,49 @@ export async function requestOwnerMiningStop(
     throw error;
   }
 }
+
+export async function requestSystemMiningAutoResume(
+  db: PrismaClient,
+  redis: Redis,
+  input: { machineId: string; resourceId: string; requestId: string; now?: Date },
+): Promise<MiningOwnerCommandResult> {
+  const now = input.now ?? new Date();
+  const resource = await loadResource(db, input.machineId, input.resourceId);
+  if (!resource.configuration?.autoResumeAfterRental) {
+    return { commandId: null, action: 'start', state: resource.runtimeState, alreadySatisfied: true };
+  }
+  validateStartable(resource);
+
+  const leaseResult = await acquireMiningLease(redis, resource, 'start');
+  try {
+    const configuration = resource.configuration;
+    const fenced = buildFencedStartMining({
+      machineId: resource.machineId,
+      resourceId: resource.id,
+      hardwareUuid: resource.hardwareUuid,
+      profileId: configuration.profileId!,
+      poolUrl: configuration.ownerPoolEndpoint!,
+      walletAddress: configuration.walletAddress!,
+      workerName: configuration.workerName,
+      performanceMode: 'FULL',
+      maximumTemperatureC: configuration.maximumTemperatureC!,
+      maximumPowerWatts: configuration.maximumPowerWatts!,
+    }, leaseResult.lease);
+    return await recordRequestedCommand(
+      db,
+      resource,
+      { type: 'SYSTEM', id: 'rental-cleanup-auto-resume' },
+      input.requestId,
+      'start',
+      leaseResult.lease,
+      fenced,
+      now,
+      'AUTO_RESUME_REQUESTED',
+    );
+  } catch (error) {
+    if (leaseResult.acquired) {
+      await releaseResourceLease(redis, leaseResult.lease).catch(() => undefined);
+    }
+    throw error;
+  }
+}
