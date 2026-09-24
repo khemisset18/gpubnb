@@ -27,6 +27,7 @@ from .execution_control import (
     LOL_ALGORITHMS,
     ExecutionControlError,
     ExecutionResult,
+    _resolve_public_pool_addresses,
     _sha256,
     _validate_argument,
     _validate_pool_url,
@@ -68,6 +69,7 @@ class ResourceMiningSpec:
     worker_name: str
     performance_mode: str
     maximum_temperature_c: int
+    resolved_pool_addresses: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -579,6 +581,7 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         worker,
         performance,
         maximum_temperature,
+        _resolve_public_pool_addresses(pool),
     )
 
 
@@ -732,6 +735,8 @@ class GpuResourceSupervisor:
         executable = _verified_binary(spec.profile_id, root)
         binary_sha = _sha256(executable)
         arguments = build_resource_arguments(spec, binding)
+        if _resolve_public_pool_addresses(spec.pool_url) != spec.resolved_pool_addresses:
+            raise ExecutionControlError("mining_pool_dns_rebinding_detected")
 
         with self._lock:
             records = self.store.load()
