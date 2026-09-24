@@ -214,6 +214,12 @@ enum MiningMode {
   OWNER_POOL
 }
 
+enum MiningPerformanceMode {
+  ECO
+  BALANCED
+  FULL
+}
+
 enum MiningRuntimeState {
   IDLE
   STARTING
@@ -816,6 +822,7 @@ model MiningConfiguration {
   ownerPoolEndpoint String? @db.VarChar(300)
   ownerPoolSecretRef String? @db.VarChar(200)
   autoResumeAfterRental Boolean @default(false)
+  performanceMode MiningPerformanceMode @default(BALANCED)
   maximumTemperatureC Int?
   maximumPowerWatts Int?
   maximumCpuPercent Int?
