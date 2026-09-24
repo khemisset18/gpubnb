@@ -70,3 +70,14 @@ test('mining UI keeps runtime actions explicit and polls only transitional state
   assert.match(script, /runtimeBusy/);
   assert.match(script, /Le lancement distant CPU n’est pas encore activé/);
 });
+
+
+test('mining UI hides stale heartbeat telemetry instead of presenting old metrics', async () => {
+  const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
+  assert.match(script, /MINING_TELEMETRY_FRESH_MS=120000/);
+  assert.match(script, /Les anciennes mesures sont volontairement masquées/);
+  assert.match(script, /Télémétrie mining/);
+  assert.match(script, /lastTelemetryAt/);
+  assert.match(script, /lastTelemetry/);
+  assert.match(script, /Parts A\/S\/Hw/);
+});
