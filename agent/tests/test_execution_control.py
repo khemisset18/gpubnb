@@ -12,6 +12,7 @@ from gpubnb_agent.execution_control import (
     APPROVED_BINARIES,
     ExecutionControlError,
     ExecutionResult,
+    _verify_pool_tls,
     build_miner_arguments,
     parse_mining_launch_spec,
     stop_rental,
@@ -47,6 +48,40 @@ class ExecutionControlPolicyTests(unittest.TestCase):
         with patch("gpubnb_agent.execution_control.socket.getaddrinfo", side_effect=self._public_dns):
             with self.assertRaisesRegex(ExecutionControlError, "miner_secret_resolution_required"):
                 parse_mining_launch_spec({**payload, "poolCredentialRef": "vault://miners/pool"})
+
+    def test_tls_verification_uses_pinned_public_ip_and_pool_hostname(self) -> None:
+        with patch("gpubnb_agent.execution_control._tls_connect") as connect:
+            _verify_pool_tls(
+                "stratum+tls://pool.example.com:443",
+                ("93.184.216.34",),
+            )
+        connect.assert_called_once_with(
+            "93.184.216.34",
+            443,
+            "pool.example.com",
+        )
+
+    def test_tcp_pool_does_not_require_tls_handshake(self) -> None:
+        with patch("gpubnb_agent.execution_control._tls_connect") as connect:
+            _verify_pool_tls(
+                "stratum+tcp://pool.example.com:3333",
+                ("93.184.216.34",),
+            )
+        connect.assert_not_called()
+
+    def test_tls_verification_fails_closed_when_all_addresses_fail(self) -> None:
+        with patch(
+            "gpubnb_agent.execution_control._tls_connect",
+            side_effect=ExecutionControlError("mining_pool_tls_verification_failed"),
+        ):
+            with self.assertRaisesRegex(
+                ExecutionControlError,
+                "mining_pool_tls_verification_failed",
+            ):
+                _verify_pool_tls(
+                    "stratum+ssl://pool.example.com:443",
+                    ("93.184.216.34", "1.1.1.1"),
+                )
 
     def test_private_loopback_and_credentialed_pool_urls_fail_closed(self) -> None:
         base = {
