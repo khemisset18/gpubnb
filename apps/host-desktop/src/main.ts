@@ -129,10 +129,11 @@ const savedCurrency = window.localStorage.getItem('gpubnb-mining-currency');
 let displayCurrency: DisplayCurrency = DISPLAY_CURRENCIES.includes(savedCurrency as DisplayCurrency)
   ? savedCurrency as DisplayCurrency
   : 'USD';
-const savedElectricityPrice = Number(window.localStorage.getItem('gpubnb-mining-electricity-price-kwh') ?? '');
-let electricityPricePerKwh = Number.isFinite(savedElectricityPrice) && savedElectricityPrice >= 0
-  ? savedElectricityPrice
-  : 0;
+const loadElectricityPrice = (currency: DisplayCurrency): number => {
+  const saved = Number(window.localStorage.getItem(`gpubnb-mining-electricity-price-kwh-${currency}`) ?? '');
+  return Number.isFinite(saved) && saved >= 0 ? saved : 0;
+};
+let electricityPricePerKwh = loadElectricityPrice(displayCurrency);
 let refreshTimer: number | undefined;
 
 type GpuReleaseUiState = {
@@ -594,7 +595,7 @@ const bindMining = (
       return;
     }
     electricityPricePerKwh = next;
-    window.localStorage.setItem('gpubnb-mining-electricity-price-kwh', String(next));
+    window.localStorage.setItem(`gpubnb-mining-electricity-price-kwh-${displayCurrency}`, String(next));
     setMessage(`Prix d’électricité enregistré : ${next} ${displayCurrency}/kWh.`, 'success');
     void refresh(false);
   });
@@ -690,6 +691,7 @@ const bindCatalog = (): void => {
     const currency = (event.currentTarget as HTMLSelectElement).value as DisplayCurrency;
     if (!DISPLAY_CURRENCIES.includes(currency)) return;
     displayCurrency = currency;
+    electricityPricePerKwh = loadElectricityPrice(currency);
     window.localStorage.setItem('gpubnb-mining-currency', currency);
     void refresh();
   });
