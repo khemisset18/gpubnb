@@ -300,6 +300,16 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         record = self.supervisor.snapshot()["resource_00000001"]
         self.assertEqual(record["last_stop_reason"], "thermal_sensor_fail_closed")
 
+    def test_start_rejects_dns_rebinding_before_process_spawn(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        with patch(
+            "gpubnb_agent.gpu_resource_supervisor._resolve_public_pool_addresses",
+            side_effect=[("93.184.216.34",), ("1.1.1.1",)],
+        ):
+            with self.assertRaisesRegex(ExecutionControlError, "mining_pool_dns_rebinding_detected"):
+                self.supervisor.start(payload, "command_00000001")
+        self.assertEqual(self.launcher.calls, [])
+
     def test_start_rejects_temperature_outside_owner_range(self) -> None:
         payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
         payload["maximumTemperatureC"] = 99
