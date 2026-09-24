@@ -35,7 +35,7 @@ export const miningConfigurationInputSchema = z
       .optional(),
     ownerPoolSecretRef: ownerPoolSecretReferenceSchema.optional(),
     autoResumeAfterRental: z.boolean().default(false),
-    maximumTemperatureC: z.number().int().min(85).max(98),
+    maximumTemperatureC: z.number().int().min(50).max(98),
     maximumPowerWatts: z.number().int().min(5).max(1500),
     cpuThreadLimit: z.number().int().min(1).max(1024).optional(),
     cpuUtilizationLimitPercent: z.number().int().min(1).max(100).optional(),
@@ -44,6 +44,13 @@ export const miningConfigurationInputSchema = z
   })
   .superRefine((value, context) => {
     if (value.resourceKind === 'CPU') {
+      if (value.maximumTemperatureC > 95) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['maximumTemperatureC'],
+          message: 'cpu_temperature_limit_above_supported_maximum',
+        });
+      }
       if (!value.cpuThreadLimit) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
@@ -68,6 +75,13 @@ export const miningConfigurationInputSchema = z
     }
 
     if (value.resourceKind === 'GPU') {
+      if (value.maximumTemperatureC < 85) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['maximumTemperatureC'],
+          message: 'gpu_temperature_limit_below_supported_minimum',
+        });
+      }
       if (!value.gpuIntensityPercent) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
