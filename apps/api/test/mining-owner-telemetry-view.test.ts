@@ -17,3 +17,13 @@ test('owner mining resource view still does not select pool secret references', 
   const view = source.slice(start, end);
   assert.doesNotMatch(view, /ownerPoolSecretRef/);
 });
+
+test('owner mining resource view exposes only secret presence, never the secret reference', async () => {
+  const source = await readFile(new URL('../src/mining-routes.ts', import.meta.url), 'utf8');
+  const start = source.indexOf('const listOwnerResources');
+  const end = source.indexOf('export const registerMiningRoutes', start);
+  const view = source.slice(start, end);
+  assert.match(view, /ownerPoolSecretRef" IS NOT NULL/);
+  assert.match(view, /hasOwnerPoolSecret/);
+  assert.doesNotMatch(view, /c\."ownerPoolSecretRef",/);
+});
