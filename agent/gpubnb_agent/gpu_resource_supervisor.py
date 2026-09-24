@@ -571,17 +571,18 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         or not MIN_MAX_TEMPERATURE_C <= maximum_temperature <= MAX_MAX_TEMPERATURE_C
     ):
         raise ExecutionControlError("mining_maximum_temperature_invalid")
+    resolved_pool_addresses = _resolve_public_pool_addresses(pool)
     return ResourceMiningSpec(
         resource_id,
         hardware_uuid,
         _positive_generation(payload.get("runtimeGeneration")),
         profile_id,
-        _validate_pool_url(pool),
+        pool,
         wallet,
         worker,
         performance,
         maximum_temperature,
-        _resolve_public_pool_addresses(pool),
+        resolved_pool_addresses,
     )
 
 
