@@ -126,11 +126,11 @@ v1 intentionally enables only commands whose behavior can reuse an already fence
 | `RUN_DIAGNOSTIC` | wake the existing HTTPS job-lease worker |
 | `REFRESH_INVENTORY` | execute one immediate signed HTTPS telemetry heartbeat |
 | `STOP_RENTAL` | reject until a dedicated idempotent stop adapter is qualified |
-| `START_MINING` | reject until mining command fencing is wired end-to-end |
-| `STOP_MINING` | reject until mining command fencing is wired end-to-end |
+| `START_MINING` | execute the exact-GPU fenced mining adapter only with a live Redis-validated resource lease |
+| `STOP_MINING` | execute the exact-GPU fenced stop adapter; a newer validated fence may recover an older surviving miner |
 | `QUARANTINE` | reject until local quarantine semantics are independently qualified |
 
-`PREPARE_RENTAL` and `START_RENTAL` are also required by the Gateway to carry a live fenced resource lease before they can enter the delivery journal.
+`PREPARE_RENTAL`, `START_RENTAL`, `START_MINING` and `STOP_MINING` are required by the Gateway/Agent protocol to carry a live fenced resource lease. Mining durable commands additionally bind the inner `resourceId + runtimeGeneration` to that top-level lease before dispatch.
 
 The Host does not treat a wake command as ownership of a booking. The subsequent HTTPS job claim still requires the existing `attemptId` + `leaseToken` protocol and all existing job-state validation.
 
@@ -173,4 +173,4 @@ Promotion requires, per region:
 
 ## 12. Next layer
 
-After canary evidence is green, the next safe extension is to add dedicated idempotent adapters for `STOP_RENTAL` and mining lifecycle commands, then move scheduler hot-presence reads to the Gateway/Redis path. Those changes should remain separate reviews because they alter business state rather than transport only.
+The mining transport and exact-GPU adapters are implemented behind the existing rollout gates. The remaining promotion work is physical qualification, canary evidence, and production observability. Other business-state extensions should remain separate reviews from transport changes.
