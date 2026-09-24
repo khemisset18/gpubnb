@@ -27,6 +27,7 @@ from .execution_control import (
     LOL_ALGORITHMS,
     ExecutionControlError,
     ExecutionResult,
+    _pool_endpoint,
     _resolve_public_pool_addresses,
     _sha256,
     _validate_argument,
@@ -635,6 +636,17 @@ def resolve_nvidia_binding(hardware_uuid: str) -> GpuBinding:
     return matches[0]
 
 
+def _lolminer_pool_arguments(pool_url: str) -> list[str]:
+    parsed = _pool_endpoint(pool_url)
+    host = parsed.hostname or ""
+    if ":" in host and not host.startswith("["):
+        authority = f"[{host}]:{parsed.port}"
+    else:
+        authority = f"{host}:{parsed.port}"
+    tls = "on" if parsed.scheme in {"stratum+tls", "stratum+ssl"} else "off"
+    return ["--pool", authority, "--tls", tls]
+
+
 def build_resource_arguments(spec: ResourceMiningSpec, binding: GpuBinding) -> list[str]:
     user = f"{spec.wallet_address}.{spec.worker_name}"
     _validate_argument(user, "miner_argument_invalid")
@@ -643,7 +655,7 @@ def build_resource_arguments(spec: ResourceMiningSpec, binding: GpuBinding) -> l
         raise ExecutionControlError("mining_profile_not_resource_gpu_approved")
     arguments = [
         "--algo", algorithm,
-        "--pool", spec.pool_url,
+        *_lolminer_pool_arguments(spec.pool_url),
         "--user", user,
         "--devicesbypcie", "on",
         "--devices", binding.pci_selector,
