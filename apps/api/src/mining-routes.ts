@@ -61,6 +61,7 @@ type MiningResourceRow = {
   walletAddress: string | null;
   workerName: string | null;
   ownerPoolEndpoint: string | null;
+  hasOwnerPoolSecret: boolean;
   autoResumeAfterRental: boolean | null;
   maximumTemperatureC: number | null;
   maximumPowerWatts: number | null;
@@ -86,7 +87,8 @@ const listOwnerResources = async (db: PrismaClient, machineId: string, ownerId: 
            r."runtimeState", r."activeRentalId", r."lastTelemetry", r."lastTelemetryAt",
            c."id" AS "configurationId",
            c."mode", c."profileId", c."walletAddress", c."workerName",
-           c."ownerPoolEndpoint", c."autoResumeAfterRental", c."maximumTemperatureC",
+           c."ownerPoolEndpoint", (c."ownerPoolSecretRef" IS NOT NULL) AS "hasOwnerPoolSecret",
+           c."autoResumeAfterRental", c."maximumTemperatureC",
            c."maximumPowerWatts", c."maximumCpuPercent", c."cpuThreadCount",
            c."gpuIntensityPercent", c."platformFeeBasisPoints", c."version"
       FROM "MiningResource" r
@@ -131,7 +133,8 @@ export const registerMiningRoutes = (
                  r."runtimeState", r."activeRentalId", r."lastTelemetry", r."lastTelemetryAt",
            c."id" AS "configurationId",
                  c."mode", c."profileId", c."walletAddress", c."workerName",
-                 c."ownerPoolEndpoint", c."autoResumeAfterRental", c."maximumTemperatureC",
+                 c."ownerPoolEndpoint", (c."ownerPoolSecretRef" IS NOT NULL) AS "hasOwnerPoolSecret",
+           c."autoResumeAfterRental", c."maximumTemperatureC",
                  c."maximumPowerWatts", c."maximumCpuPercent", c."cpuThreadCount",
                  c."gpuIntensityPercent", c."platformFeeBasisPoints", c."version"
             FROM "MiningResource" r
