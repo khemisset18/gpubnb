@@ -30,7 +30,6 @@ from .execution_control import (
     _resolve_public_pool_addresses,
     _sha256,
     _validate_argument,
-    _validate_pool_url,
     _verified_binary,
 )
 from .mining_guard import miner_install_root
