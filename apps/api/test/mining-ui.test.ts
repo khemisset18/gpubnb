@@ -57,3 +57,16 @@ test('mining UI exposes only the currently executable operational scope', async 
   assert.doesNotMatch(script, /name="gpuIntensityPercent"/);
   assert.match(script, /secret:\/\/local\/mining\/pool-main/);
 });
+
+
+test('mining UI keeps runtime actions explicit and polls only transitional states', async () => {
+  const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
+  assert.match(script, /data-mining-start/);
+  assert.match(script, /data-mining-stop/);
+  assert.match(script, /requestRuntimeAction\(form,'start'\)/);
+  assert.match(script, /requestRuntimeAction\(form,'stop'\)/);
+  assert.match(script, /\/\$\{action\}/);
+  assert.match(script, /\['STARTING','PREEMPTING','VERIFYING_STOP'\]/);
+  assert.match(script, /runtimeBusy/);
+  assert.match(script, /Le lancement distant CPU n’est pas encore activé/);
+});
