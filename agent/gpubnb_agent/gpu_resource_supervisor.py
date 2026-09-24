@@ -27,6 +27,7 @@ from .execution_control import (
     LOL_ALGORITHMS,
     ExecutionControlError,
     ExecutionResult,
+    _pool_endpoint,
     _resolve_public_pool_addresses,
     _sha256,
     _validate_argument,
