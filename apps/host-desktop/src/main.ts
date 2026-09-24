@@ -129,6 +129,11 @@ const savedCurrency = window.localStorage.getItem('gpubnb-mining-currency');
 let displayCurrency: DisplayCurrency = DISPLAY_CURRENCIES.includes(savedCurrency as DisplayCurrency)
   ? savedCurrency as DisplayCurrency
   : 'USD';
+const loadElectricityPrice = (currency: DisplayCurrency): number => {
+  const saved = Number(window.localStorage.getItem(`gpubnb-mining-electricity-price-kwh-${currency}`) ?? '');
+  return Number.isFinite(saved) && saved >= 0 ? saved : 0;
+};
+let electricityPricePerKwh = loadElectricityPrice(displayCurrency);
 let refreshTimer: number | undefined;
 
 type GpuReleaseUiState = {
@@ -453,6 +458,10 @@ const renderMiningTelemetry = (
   const temperature = telemetry.temperatureCelsius;
   const thermalState = typeof temperature !== 'number' ? 'unknown' : temperature >= 94 ? 'danger' : temperature >= 85 ? 'warning' : 'safe';
   const warning = thermalTemperatureWarning(temperature, thermalSafety?.stopCelsius ?? 85);
+  const measuredEnergyKwh = typeof telemetry.powerWatts === 'number' && typeof telemetry.uptimeSeconds === 'number'
+    ? (telemetry.powerWatts / 1000) * (telemetry.uptimeSeconds / 3600)
+    : null;
+  const measuredEnergyCost = measuredEnergyKwh === null ? null : measuredEnergyKwh * electricityPricePerKwh;
   return `<section class="mining-performance ${thermalState}"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Tableau de minage</h2></div><span class="badge">Actualisation automatique</span></div>
     ${warning ? `<div class="thermal-alert" role="alert" aria-live="assertive"><strong>Alerte température</strong><span>${escapeHtml(warning)}</span></div>` : ''}
     <dl class="performance-grid">
@@ -463,9 +472,12 @@ const renderMiningTelemetry = (
       <div><dt>Parts A/S/Hw</dt><dd>${telemetry.acceptedShares ?? '—'} / ${telemetry.staleShares ?? '—'} / ${telemetry.hardwareErrors ?? '—'}</dd></div>
       <div><dt>Durée mesurée</dt><dd>${formatDuration(telemetry.uptimeSeconds)}</dd></div>
       <div><dt>Pool</dt><dd>${telemetry.poolConnected ? 'Connecté' : 'Non confirmé'}</dd></div>
-      <div><dt>Estimation</dt><dd>— ${displayCurrency}/jour</dd><small>Source de prix non raccordée</small></div>
+      <div><dt>Énergie mesurée</dt><dd>${measuredEnergyKwh === null ? '—' : `${measuredEnergyKwh.toFixed(4)} kWh`}</dd></div>
+      <div><dt>Coût électrique mesuré</dt><dd>${measuredEnergyCost === null ? '—' : `${measuredEnergyCost.toFixed(4)} ${displayCurrency}`}</dd></div>
+      <div><dt>Revenu crypto estimé</dt><dd>— ${displayCurrency}/jour</dd><small>Source de rendement/prix non raccordée</small></div>
     </dl>
-    <p class="performance-note">Les parts et mesures sont réelles. Le montant restera vide tant que le rendement réseau et le cours ${displayCurrency} ne sont pas disponibles de façon fiable.</p></section>`;
+    <div class="configuration-fields"><label>Prix électricité (${displayCurrency}/kWh)<input id="mining-electricity-price" type="number" min="0" step="0.001" value="${electricityPricePerKwh}" inputmode="decimal"></label></div>
+    <p class="performance-note">Le coût électrique utilise uniquement la puissance et la durée réellement mesurées. Aucun bénéfice net n’est affiché tant qu’une source de rendement réseau et de prix fiable n’est pas raccordée.</p></section>`;
 };
 
 const renderMiningRuntime = (
@@ -574,6 +586,20 @@ const bindMining = (
       .finally(() => { install.disabled = false; });
   });
 
+  const electricityPrice = document.querySelector<HTMLInputElement>('#mining-electricity-price');
+  electricityPrice?.addEventListener('change', () => {
+    const next = Number(electricityPrice.value);
+    if (!Number.isFinite(next) || next < 0 || next > 10) {
+      setMessage(`Entrez un prix d’électricité valide entre 0 et 10 ${displayCurrency}/kWh.`, 'error');
+      electricityPrice.value = String(electricityPricePerKwh);
+      return;
+    }
+    electricityPricePerKwh = next;
+    window.localStorage.setItem(`gpubnb-mining-electricity-price-kwh-${displayCurrency}`, String(next));
+    setMessage(`Prix d’électricité enregistré : ${next} ${displayCurrency}/kWh.`, 'success');
+    void refresh(false);
+  });
+
   const thermalLimit = document.querySelector<HTMLInputElement>('#mining-thermal-limit');
   const thermalLimitValue = document.querySelector<HTMLOutputElement>('#mining-thermal-limit-value');
   const thermalLimitWarning = document.querySelector<HTMLElement>('#mining-thermal-limit-warning');
@@ -665,6 +691,7 @@ const bindCatalog = (): void => {
     const currency = (event.currentTarget as HTMLSelectElement).value as DisplayCurrency;
     if (!DISPLAY_CURRENCIES.includes(currency)) return;
     displayCurrency = currency;
+    electricityPricePerKwh = loadElectricityPrice(currency);
     window.localStorage.setItem('gpubnb-mining-currency', currency);
     void refresh();
   });
