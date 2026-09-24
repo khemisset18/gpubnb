@@ -128,6 +128,12 @@ def _secure_directory(path: Path) -> bool:
         return secured
 
 
+def require_private_directory(path: Path) -> Path:
+    if not _secure_directory(path):
+        raise RuntimeError(f"private_directory_security_failed:{path.name}")
+    return path
+
+
 def _atomic_write(path: Path, content: str) -> None:
     parent_secured = _secure_directory(path.parent)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}-", dir=path.parent, text=True)
