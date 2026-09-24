@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Mutex;
@@ -33,9 +33,7 @@ impl Default for MiningThermalSettings {
 
 impl MiningThermalSettings {
     fn validate(self) -> Result<Self, &'static str> {
-        if !(MIN_THERMAL_STOP_CELSIUS..=MAX_THERMAL_STOP_CELSIUS)
-            .contains(&self.stop_celsius)
-        {
+        if !(MIN_THERMAL_STOP_CELSIUS..=MAX_THERMAL_STOP_CELSIUS).contains(&self.stop_celsius) {
             return Err("mining_thermal_stop_out_of_range");
         }
         Ok(self)
@@ -278,7 +276,9 @@ fn load_settings() -> Result<MiningThermalSettings, &'static str> {
 fn save_settings(settings: MiningThermalSettings) -> Result<(), &'static str> {
     let settings = settings.validate()?;
     let path = settings_path()?;
-    let parent = path.parent().ok_or("mining_thermal_settings_parent_missing")?;
+    let parent = path
+        .parent()
+        .ok_or("mining_thermal_settings_parent_missing")?;
     fs::create_dir_all(parent).map_err(|_| "mining_thermal_settings_directory_failed")?;
     let temporary = path.with_extension(format!("tmp-{}", std::process::id()));
     let backup = path.with_extension("bak");
@@ -288,8 +288,8 @@ fn save_settings(settings: MiningThermalSettings) -> Result<(), &'static str> {
         .write(true)
         .open(&temporary)
         .map_err(|_| "mining_thermal_settings_temp_open_failed")?;
-    let content =
-        serde_json::to_vec_pretty(&settings).map_err(|_| "mining_thermal_settings_encode_failed")?;
+    let content = serde_json::to_vec_pretty(&settings)
+        .map_err(|_| "mining_thermal_settings_encode_failed")?;
     file.write_all(&content)
         .map_err(|_| "mining_thermal_settings_write_failed")?;
     file.sync_all()
@@ -328,7 +328,9 @@ mod tests {
             MiningThermalSettings { stop_celsius: 84 }.validate(),
             Err("mining_thermal_stop_out_of_range")
         );
-        assert!(MiningThermalSettings { stop_celsius: 98 }.validate().is_ok());
+        assert!(MiningThermalSettings { stop_celsius: 98 }
+            .validate()
+            .is_ok());
         assert_eq!(
             MiningThermalSettings { stop_celsius: 99 }.validate(),
             Err("mining_thermal_stop_out_of_range")
