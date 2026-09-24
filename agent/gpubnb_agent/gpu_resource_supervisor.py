@@ -34,7 +34,7 @@ from .execution_control import (
 )
 from .mining_guard import miner_install_root
 from .platform_info import find_nvidia_smi, run_command
-from .storage import config_dir
+from .storage import config_dir, require_private_directory
 
 SCHEMA_VERSION = 1
 MAX_GENERATION = 9_223_372_036_854_775_807
@@ -261,7 +261,7 @@ class SystemLauncher:
         stderr_target: Any = subprocess.DEVNULL
         try:
             if log_path is not None:
-                log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                require_private_directory(log_path.parent)
                 if log_path.exists() and log_path.stat().st_size > MAX_MINER_LOG_BYTES:
                     log_path.unlink()
                 log_handle = open(log_path, "ab", buffering=0)
