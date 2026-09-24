@@ -15,7 +15,7 @@ const validGpuInput = {
   walletAddress: 'RExamplePublicAddress123456',
   workerName: 'host_gpu_0',
   autoResumeAfterRental: true,
-  maximumTemperatureC: 80,
+  maximumTemperatureC: 85,
   maximumPowerWatts: 350,
   gpuIntensityPercent: 90,
   expectedVersion: 2,
@@ -66,6 +66,24 @@ describe('mining configuration policy', () => {
   it('accepts independently configured GPU and CPU resources', () => {
     assert.equal(miningConfigurationInputSchema.parse(validGpuInput).resourceKind, 'GPU');
     assert.equal(miningConfigurationInputSchema.parse(validCpuInput).resourceKind, 'CPU');
+  });
+
+  it('keeps the owner thermal cutoff inside the 85-98 C safety envelope', () => {
+    assert.equal(
+      miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 85 }).maximumTemperatureC,
+      85,
+    );
+    assert.equal(
+      miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 98 }).maximumTemperatureC,
+      98,
+    );
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 84 }));
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 99 }));
+    assert.equal(
+      miningConfigurationInputSchema.parse({ ...validCpuInput, maximumTemperatureC: 95 }).maximumTemperatureC,
+      95,
+    );
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validCpuInput, maximumTemperatureC: 96 }));
   });
 
   it('accepts supported secret-manager references for owner pools', () => {

@@ -98,6 +98,18 @@ class GpuResourceSupervisorTests(unittest.TestCase):
             "GPU-aaaaaaaa": GpuBinding("GPU-aaaaaaaa", "65:00", 300.0, 100.0),
             "GPU-bbbbbbbb": GpuBinding("GPU-bbbbbbbb", "66:00", 300.0, 100.0),
         }
+        self.temperatures = {
+            "GPU-aaaaaaaa": 70.0,
+            "GPU-bbbbbbbb": 71.0,
+        }
+        self.temperature_failures: set[str] = set()
+
+        def read_temperature(hardware_uuid: str) -> float:
+            if hardware_uuid in self.temperature_failures:
+                raise ExecutionControlError("resource_gpu_temperature_unavailable")
+            return self.temperatures[hardware_uuid]
+
+        self.read_temperature = read_temperature
         self.store = RuntimeStore(Path(self.temp.name) / "runtime.json")
         self.patches = [
             patch("gpubnb_agent.gpu_resource_supervisor.miner_install_root", return_value=self.root),
@@ -111,6 +123,7 @@ class GpuResourceSupervisorTests(unittest.TestCase):
             inspector=self.inspector,
             launcher=self.launcher,
             binding_resolver=lambda hardware: self.bindings[hardware],
+            temperature_reader=self.read_temperature,
         )
 
     def tearDown(self) -> None:
@@ -124,6 +137,73 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         self.assertIn("--devicesbypcie", args)
         self.assertEqual(args[args.index("--devices") + 1], "65:00")
         self.assertNotIn("66:00", args)
+
+    def test_thermal_stop_range_defaults_to_85_and_rejects_out_of_range(self) -> None:
+        spec = parse_resource_start(start_payload("resource_00000001", "GPU-aaaaaaaa"))
+        self.assertEqual(spec.thermal_stop_celsius, 85)
+        for invalid in (84, 99, True):
+            payload = {**start_payload("resource_00000001", "GPU-aaaaaaaa"), "thermalStopCelsius": invalid}
+            with self.assertRaisesRegex(ExecutionControlError, "mining_thermal_stop_invalid"):
+                parse_resource_start(payload)
+
+    def test_start_fails_closed_when_gpu_is_already_at_selected_limit(self) -> None:
+        self.temperatures["GPU-aaaaaaaa"] = 92.0
+        payload = {
+            **start_payload("resource_00000001", "GPU-aaaaaaaa"),
+            "thermalStopCelsius": 92,
+        }
+        with self.assertRaisesRegex(ExecutionControlError, "resource_gpu_temperature_above_limit"):
+            self.supervisor.start(payload, "command_00000001")
+        self.assertEqual(self.launcher.calls, [])
+
+    def test_watchdog_warns_then_stops_exact_resource_at_selected_limit(self) -> None:
+        payload = {
+            **start_payload("resource_00000001", "GPU-aaaaaaaa"),
+            "thermalStopCelsius": 92,
+        }
+        self.supervisor.start(payload, "command_00000001")
+        pid = self.supervisor.snapshot()["resource_00000001"]["pid"]
+
+        self.temperatures["GPU-aaaaaaaa"] = 90.0
+        events = self.supervisor.poll_thermal_safety()
+        self.assertEqual(events[-1]["event"], "mining_thermal_warning")
+        self.assertEqual(events[-1]["warningLevelC"], 90)
+        self.assertIn(pid, self.inspector.identities)
+
+        self.temperatures["GPU-aaaaaaaa"] = 92.0
+        events = self.supervisor.poll_thermal_safety()
+        stop = next(event for event in events if event["event"] == "mining_thermal_stop")
+        self.assertEqual(stop["reason"], "THERMAL_LIMIT")
+        snapshot = self.supervisor.snapshot()["resource_00000001"]
+        self.assertEqual(snapshot["state"], "STOPPED")
+        self.assertEqual(snapshot["last_stop_reason"], "THERMAL_LIMIT")
+        self.assertNotIn(pid, self.inspector.identities)
+
+    def test_98c_boundary_stops_and_quarantines_resource(self) -> None:
+        payload = {
+            **start_payload("resource_00000001", "GPU-aaaaaaaa"),
+            "thermalStopCelsius": 98,
+        }
+        self.supervisor.start(payload, "command_00000001")
+        self.temperatures["GPU-aaaaaaaa"] = 98.0
+        events = self.supervisor.poll_thermal_safety()
+        stop = next(event for event in events if event["event"] == "mining_thermal_stop")
+        self.assertEqual(stop["reason"], "THERMAL_QUARANTINE")
+        self.assertEqual(self.supervisor.snapshot()["resource_00000001"]["state"], "QUARANTINED")
+
+    def test_three_temperature_sensor_failures_stop_and_quarantine(self) -> None:
+        self.supervisor.start(
+            {**start_payload("resource_00000001", "GPU-aaaaaaaa"), "thermalStopCelsius": 95},
+            "command_00000001",
+        )
+        self.temperature_failures.add("GPU-aaaaaaaa")
+        self.assertEqual(self.supervisor.poll_thermal_safety(), [])
+        self.assertEqual(self.supervisor.poll_thermal_safety(), [])
+        events = self.supervisor.poll_thermal_safety()
+        quarantined = next(event for event in events if event["event"] == "mining_resource_quarantined")
+        self.assertEqual(quarantined["reason"], "THERMAL_SENSOR_UNAVAILABLE")
+        self.assertEqual(quarantined["sensorFailures"], 3)
+        self.assertEqual(self.supervisor.snapshot()["resource_00000001"]["state"], "QUARANTINED")
 
     def test_two_gpu_resources_can_run_and_stop_independently(self) -> None:
         one = self.supervisor.start(start_payload("resource_00000001", "GPU-aaaaaaaa"), "command_00000001")
@@ -203,10 +283,40 @@ class GpuResourceSupervisorTests(unittest.TestCase):
             inspector=self.inspector,
             launcher=self.launcher,
             binding_resolver=lambda hardware: self.bindings[hardware],
+            temperature_reader=self.read_temperature,
         )
         snapshot = recovered.snapshot()
         self.assertEqual(snapshot["resource_00000001"]["state"], "MINING")
         self.assertEqual(snapshot["resource_00000002"]["state"], "STOPPED")
+
+    def test_startup_reconciliation_quarantines_changed_binary_and_stops_owned_process(self) -> None:
+        identity = ProcessIdentity(4444, str(self.binary.resolve()), "creation-4444")
+        self.inspector.identities[4444] = identity
+        self.store.save({
+            "resource_00000001": RuntimeRecord(
+                resource_id="resource_00000001",
+                hardware_uuid="GPU-aaaaaaaa",
+                runtime_generation=9,
+                state="MINING",
+                profile_id="lolminer_etchash",
+                command_id="command_00000009",
+                pid=4444,
+                executable_path=identity.executable_path,
+                binary_sha256="b" * 64,
+                process_creation_token=identity.creation_token,
+            ),
+        })
+        recovered = GpuResourceSupervisor(
+            store=self.store,
+            inspector=self.inspector,
+            launcher=self.launcher,
+            binding_resolver=lambda hardware: self.bindings[hardware],
+            temperature_reader=self.read_temperature,
+        )
+        snapshot = recovered.snapshot()["resource_00000001"]
+        self.assertEqual(snapshot["state"], "QUARANTINED")
+        self.assertEqual(snapshot["last_stop_reason"], "BINARY_INTEGRITY")
+        self.assertNotIn(4444, self.inspector.identities)
 
 
 if __name__ == "__main__":

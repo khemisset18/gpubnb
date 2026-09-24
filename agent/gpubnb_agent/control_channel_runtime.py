@@ -24,6 +24,7 @@ from .gpu_resource_supervisor import GpuResourceSupervisor
 from .storage import load_config
 
 ASSIGNMENT_REFRESH_SECONDS = 300
+THERMAL_WATCHDOG_INTERVAL_SECONDS = 5
 _POLICY_REJECTIONS = {
     "approved_miner_platform_unsupported",
     "approved_miner_binary_missing",
@@ -44,6 +45,9 @@ _POLICY_REJECTIONS = {
     "mining_wallet_invalid",
     "mining_worker_invalid",
     "mining_performance_mode_invalid",
+    "mining_thermal_stop_invalid",
+    "resource_gpu_temperature_above_limit",
+    "resource_gpu_temperature_quarantine_threshold",
     "mining_runtime_generation_invalid",
     "mining_runtime_generation_stale",
     "mining_runtime_generation_replay",
@@ -118,6 +122,7 @@ class _Runtime:
         self._refresh_lock = threading.Lock()
         self._next_assignment_refresh = 0.0
         self._next_fallback_poll = 0.0
+        self._thermal_stop_event = threading.Event()
         self.gpu_supervisor = GpuResourceSupervisor()
         self.supervisor = ControlChannelSupervisor(
             machine_id=machine_id,
@@ -127,9 +132,34 @@ class _Runtime:
             ca_file=self.config.get("controlGatewayCaFile") if isinstance(self.config.get("controlGatewayCaFile"), str) else None,
         )
         self.supervisor.start()
+        self._thermal_thread = threading.Thread(
+            target=self._thermal_watchdog_loop,
+            name=f"gpubnb-thermal-{machine_id}",
+            daemon=True,
+        )
+        self._thermal_thread.start()
 
     def stop(self) -> None:
+        self._thermal_stop_event.set()
+        if self._thermal_thread.is_alive():
+            self._thermal_thread.join(timeout=2)
         self.supervisor.stop()
+
+    def _poll_thermal_watchdog_once(self) -> None:
+        for event in self.gpu_supervisor.poll_thermal_safety():
+            self.emit({"machineId": self.machine_id, **event})
+
+    def _thermal_watchdog_loop(self) -> None:
+        while not self._thermal_stop_event.wait(THERMAL_WATCHDOG_INTERVAL_SECONDS):
+            try:
+                self._poll_thermal_watchdog_once()
+            except Exception as exc:
+                self.emit({
+                    "event": "mining_thermal_watchdog_error",
+                    "machineId": self.machine_id,
+                    "type": type(exc).__name__,
+                    "message": str(exc)[:160],
+                })
 
     def refresh_assignment_if_due(self) -> None:
         now = time.monotonic()

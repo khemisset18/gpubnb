@@ -44,6 +44,12 @@ SAFE_WALLET = re.compile(r"^[A-Za-z0-9_.:+-]{3,256}$")
 PCI_BDF = re.compile(r"^(?:[0-9A-Fa-f]{4,8}:)?([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2})\.[0-7]$")
 RESOURCE_STATES = {"MINING", "STOPPED", "QUARANTINED"}
 WINDOWS_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+DEFAULT_THERMAL_STOP_CELSIUS = 85
+MIN_THERMAL_STOP_CELSIUS = 85
+MAX_THERMAL_STOP_CELSIUS = 98
+THERMAL_QUARANTINE_CELSIUS = 98
+THERMAL_SENSOR_FAILURE_LIMIT = 3
+THERMAL_WARNING_THRESHOLDS = (85, 90, 94, 97)
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,7 @@ class ResourceMiningSpec:
     wallet_address: str
     worker_name: str
     performance_mode: str
+    thermal_stop_celsius: int
 
 
 @dataclass(frozen=True)
@@ -92,6 +99,11 @@ class RuntimeRecord:
     executable_path: str | None = None
     binary_sha256: str | None = None
     process_creation_token: str | None = None
+    thermal_stop_celsius: int = DEFAULT_THERMAL_STOP_CELSIUS
+    last_temperature_celsius: float | None = None
+    thermal_warning_level: int | None = None
+    thermal_sensor_failures: int = 0
+    last_stop_reason: str | None = None
     updated_at_ms: int = 0
 
     @classmethod
@@ -104,11 +116,30 @@ class RuntimeRecord:
             hardware_uuid = str(value["hardware_uuid"])
         except (KeyError, TypeError, ValueError):
             return None
+        thermal_stop = value.get("thermal_stop_celsius", DEFAULT_THERMAL_STOP_CELSIUS)
+        sensor_failures = value.get("thermal_sensor_failures", 0)
+        warning_level = value.get("thermal_warning_level")
+        raw_temperature = value.get("last_temperature_celsius")
         if (
             not 0 <= generation <= MAX_GENERATION
             or state not in RESOURCE_STATES
             or SAFE_ID.fullmatch(resource_id) is None
             or SAFE_GPU_ID.fullmatch(hardware_uuid) is None
+            or isinstance(thermal_stop, bool)
+            or not isinstance(thermal_stop, int)
+            or not MIN_THERMAL_STOP_CELSIUS <= thermal_stop <= MAX_THERMAL_STOP_CELSIUS
+            or isinstance(sensor_failures, bool)
+            or not isinstance(sensor_failures, int)
+            or not 0 <= sensor_failures <= THERMAL_SENSOR_FAILURE_LIMIT
+            or warning_level not in {None, *THERMAL_WARNING_THRESHOLDS}
+            or (
+                raw_temperature is not None
+                and (
+                    isinstance(raw_temperature, bool)
+                    or not isinstance(raw_temperature, (int, float))
+                    or not 0 <= float(raw_temperature) <= 150
+                )
+            )
         ):
             return None
         pid = value.get("pid")
@@ -123,6 +154,11 @@ class RuntimeRecord:
             executable_path=value.get("executable_path") if isinstance(value.get("executable_path"), str) else None,
             binary_sha256=value.get("binary_sha256") if isinstance(value.get("binary_sha256"), str) else None,
             process_creation_token=value.get("process_creation_token") if isinstance(value.get("process_creation_token"), str) else None,
+            thermal_stop_celsius=thermal_stop,
+            last_temperature_celsius=float(raw_temperature) if raw_temperature is not None else None,
+            thermal_warning_level=warning_level,
+            thermal_sensor_failures=sensor_failures,
+            last_stop_reason=value.get("last_stop_reason") if isinstance(value.get("last_stop_reason"), str) else None,
             updated_at_ms=int(value.get("updated_at_ms", 0)) if isinstance(value.get("updated_at_ms", 0), int) else 0,
         )
 
@@ -330,6 +366,7 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
     allowed = {
         "resourceId", "hardwareUuid", "runtimeGeneration", "profileId", "poolUrl",
         "walletAddress", "workerName", "performanceMode", "poolCredentialRef",
+        "thermalStopCelsius",
     }
     if set(payload) - allowed:
         raise ExecutionControlError("mining_command_payload_unknown_field")
@@ -344,6 +381,7 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
     wallet = payload.get("walletAddress")
     worker = payload.get("workerName")
     performance = payload.get("performanceMode", "BALANCED")
+    thermal_stop = payload.get("thermalStopCelsius", DEFAULT_THERMAL_STOP_CELSIUS)
     if not isinstance(pool, str):
         raise ExecutionControlError("mining_pool_url_invalid")
     if not isinstance(wallet, str) or SAFE_WALLET.fullmatch(wallet) is None:
@@ -352,6 +390,12 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         raise ExecutionControlError("mining_worker_invalid")
     if performance not in {"ECO", "BALANCED", "FULL"}:
         raise ExecutionControlError("mining_performance_mode_invalid")
+    if (
+        isinstance(thermal_stop, bool)
+        or not isinstance(thermal_stop, int)
+        or not MIN_THERMAL_STOP_CELSIUS <= thermal_stop <= MAX_THERMAL_STOP_CELSIUS
+    ):
+        raise ExecutionControlError("mining_thermal_stop_invalid")
     return ResourceMiningSpec(
         resource_id,
         hardware_uuid,
@@ -361,6 +405,7 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         wallet,
         worker,
         performance,
+        thermal_stop,
     )
 
 
@@ -401,6 +446,43 @@ def resolve_nvidia_binding(hardware_uuid: str) -> GpuBinding:
     return matches[0]
 
 
+def read_nvidia_temperature(hardware_uuid: str) -> float:
+    executable = find_nvidia_smi()
+    if not executable:
+        raise ExecutionControlError("resource_gpu_nvidia_smi_unavailable")
+    result = run_command(
+        [executable, "--query-gpu=uuid,temperature.gpu", "--format=csv,noheader,nounits"],
+        timeout=12,
+    )
+    if result.returncode != 0:
+        raise ExecutionControlError("resource_gpu_temperature_unavailable")
+    matches: list[float] = []
+    for values in csv.reader(line for line in result.stdout.splitlines() if line.strip()):
+        fields = [field.strip() for field in values]
+        if len(fields) != 2 or fields[0].casefold() != hardware_uuid.casefold():
+            continue
+        try:
+            temperature = float(fields[1])
+        except ValueError as exc:
+            raise ExecutionControlError("resource_gpu_temperature_invalid") from exc
+        if not 0 <= temperature <= 150:
+            raise ExecutionControlError("resource_gpu_temperature_invalid")
+        matches.append(temperature)
+    if len(matches) != 1:
+        raise ExecutionControlError(
+            "resource_gpu_identity_not_unique" if matches else "resource_gpu_not_present"
+        )
+    return matches[0]
+
+
+def _thermal_warning_level(temperature_celsius: float) -> int | None:
+    level: int | None = None
+    for threshold in THERMAL_WARNING_THRESHOLDS:
+        if temperature_celsius >= threshold:
+            level = threshold
+    return level
+
+
 def build_resource_arguments(spec: ResourceMiningSpec, binding: GpuBinding) -> list[str]:
     user = f"{spec.wallet_address}.{spec.worker_name}"
     _validate_argument(user, "miner_argument_invalid")
@@ -438,13 +520,41 @@ class GpuResourceSupervisor:
         inspector: ProcessInspector | None = None,
         launcher: ProcessLauncher | None = None,
         binding_resolver: Any = None,
+        temperature_reader: Any = None,
     ) -> None:
         self.store = store or RuntimeStore()
         self.inspector = inspector or SystemProcessInspector()
         self.launcher = launcher or SystemLauncher()
         self.binding_resolver = binding_resolver or resolve_nvidia_binding
+        self.temperature_reader = temperature_reader or read_nvidia_temperature
         self._lock = threading.RLock()
         self.reconcile()
+
+    def _terminate_and_verify(self, expected: ProcessIdentity, timeout_seconds: float = 30.0) -> None:
+        self.inspector.terminate(expected)
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            observed = self.inspector.inspect(expected.pid)
+            if observed is None:
+                return
+            if observed != expected:
+                raise ExecutionControlError("miner_process_identity_mismatch")
+            time.sleep(0.1)
+        raise ExecutionControlError("mining_resource_stop_unverified")
+
+    @staticmethod
+    def _clear_process(record: RuntimeRecord) -> None:
+        record.pid = None
+        record.process_creation_token = None
+
+    @staticmethod
+    def _binary_integrity_ok(record: RuntimeRecord) -> bool:
+        if not record.executable_path or not record.binary_sha256:
+            return False
+        try:
+            return _sha256(Path(record.executable_path)) == record.binary_sha256
+        except (OSError, ExecutionControlError):
+            return False
 
     def reconcile(self) -> dict[str, str]:
         with self._lock:
@@ -458,22 +568,37 @@ class GpuResourceSupervisor:
                 expected = _record_identity(record)
                 if expected is None:
                     record.state = "QUARANTINED"
+                    record.last_stop_reason = "PROCESS_IDENTITY_MISSING"
                     outcome[resource_id] = record.state
                     changed = True
                     continue
                 current = self.inspector.inspect(expected.pid)
                 if current is None:
                     record.state = "STOPPED"
-                    record.pid = None
-                    record.process_creation_token = None
+                    record.last_stop_reason = "PROCESS_MISSING"
+                    self._clear_process(record)
                     outcome[resource_id] = record.state
                     changed = True
-                elif current != expected:
+                    continue
+                if current != expected:
                     record.state = "QUARANTINED"
+                    record.last_stop_reason = "PROCESS_IDENTITY_MISMATCH"
                     outcome[resource_id] = record.state
                     changed = True
-                else:
-                    outcome[resource_id] = "MINING"
+                    continue
+                if not self._binary_integrity_ok(record):
+                    try:
+                        self._terminate_and_verify(expected)
+                        self._clear_process(record)
+                    except ExecutionControlError:
+                        pass
+                    record.state = "QUARANTINED"
+                    record.last_stop_reason = "BINARY_INTEGRITY"
+                    record.updated_at_ms = int(time.time() * 1000)
+                    outcome[resource_id] = record.state
+                    changed = True
+                    continue
+                outcome[resource_id] = "MINING"
             if changed:
                 self.store.save(records)
             return outcome
@@ -487,6 +612,11 @@ class GpuResourceSupervisor:
         executable = _verified_binary(spec.profile_id, root)
         binary_sha = _sha256(executable)
         arguments = build_resource_arguments(spec, binding)
+        temperature = self.temperature_reader(spec.hardware_uuid)
+        if temperature >= THERMAL_QUARANTINE_CELSIUS:
+            raise ExecutionControlError("resource_gpu_temperature_quarantine_threshold")
+        if temperature >= spec.thermal_stop_celsius:
+            raise ExecutionControlError("resource_gpu_temperature_above_limit")
 
         with self._lock:
             records = self.store.load()
@@ -501,7 +631,12 @@ class GpuResourceSupervisor:
                 if spec.runtime_generation == current.runtime_generation:
                     expected = _record_identity(current)
                     observed = self.inspector.inspect(expected.pid) if expected else None
-                    if current.state == "MINING" and expected is not None and observed == expected:
+                    if (
+                        current.state == "MINING"
+                        and expected is not None
+                        and observed == expected
+                        and self._binary_integrity_ok(current)
+                    ):
                         return ExecutionResult("mining_resource_already_running")
                     raise ExecutionControlError("mining_runtime_generation_replay")
                 if current.state == "MINING":
@@ -511,6 +646,7 @@ class GpuResourceSupervisor:
                         raise ExecutionControlError("mining_resource_runtime_busy")
                     if observed is not None:
                         current.state = "QUARANTINED"
+                        current.last_stop_reason = "PROCESS_IDENTITY_MISMATCH"
                         self.store.save(records)
                         raise ExecutionControlError("miner_process_identity_mismatch")
 
@@ -557,6 +693,9 @@ class GpuResourceSupervisor:
                 executable_path=identity.executable_path,
                 binary_sha256=binary_sha,
                 process_creation_token=identity.creation_token,
+                thermal_stop_celsius=spec.thermal_stop_celsius,
+                last_temperature_celsius=temperature,
+                thermal_warning_level=_thermal_warning_level(temperature),
                 updated_at_ms=int(time.time() * 1000),
             )
             self.store.save(records)
@@ -582,45 +721,196 @@ class GpuResourceSupervisor:
             expected = _record_identity(current)
             if expected is None:
                 current.state = "QUARANTINED"
+                current.last_stop_reason = "PROCESS_IDENTITY_MISSING"
                 current.updated_at_ms = int(time.time() * 1000)
                 self.store.save(records)
                 raise ExecutionControlError("miner_process_identity_missing")
             observed = self.inspector.inspect(expected.pid)
             if observed is None:
                 current.state = "STOPPED"
-                current.pid = None
-                current.process_creation_token = None
+                current.last_stop_reason = "PROCESS_MISSING"
+                self._clear_process(current)
                 current.updated_at_ms = int(time.time() * 1000)
                 self.store.save(records)
                 return ExecutionResult("mining_resource_already_stopped")
             if observed != expected:
                 current.state = "QUARANTINED"
+                current.last_stop_reason = "PROCESS_IDENTITY_MISMATCH"
                 current.updated_at_ms = int(time.time() * 1000)
                 self.store.save(records)
                 raise ExecutionControlError("miner_process_identity_mismatch")
 
-            self.inspector.terminate(expected)
-            deadline = time.monotonic() + 30.0
-            while time.monotonic() < deadline:
-                observed = self.inspector.inspect(expected.pid)
-                if observed is None:
-                    break
-                if observed != expected:
-                    current.state = "QUARANTINED"
-                    current.updated_at_ms = int(time.time() * 1000)
-                    self.store.save(records)
-                    raise ExecutionControlError("miner_process_identity_mismatch")
-                time.sleep(0.1)
-            else:
-                raise ExecutionControlError("mining_resource_stop_unverified")
-
+            self._terminate_and_verify(expected)
             current.state = "STOPPED"
-            current.pid = None
-            current.process_creation_token = None
+            current.last_stop_reason = "CONTROL_STOP"
+            self._clear_process(current)
             current.updated_at_ms = int(time.time() * 1000)
             self.store.save(records)
             return ExecutionResult("mining_resource_stop_verified")
 
+    def poll_thermal_safety(self) -> list[dict[str, Any]]:
+        events: list[dict[str, Any]] = []
+        with self._lock:
+            records = self.store.load()
+            changed = False
+            for resource_id, record in records.items():
+                if record.state != "MINING":
+                    continue
+
+                expected = _record_identity(record)
+                if expected is None:
+                    record.state = "QUARANTINED"
+                    record.last_stop_reason = "PROCESS_IDENTITY_MISSING"
+                    record.updated_at_ms = int(time.time() * 1000)
+                    events.append({
+                        "event": "mining_resource_quarantined",
+                        "resourceId": resource_id,
+                        "hardwareUuid": record.hardware_uuid,
+                        "reason": record.last_stop_reason,
+                    })
+                    changed = True
+                    continue
+
+                observed = self.inspector.inspect(expected.pid)
+                if observed is None:
+                    record.state = "STOPPED"
+                    record.last_stop_reason = "PROCESS_MISSING"
+                    self._clear_process(record)
+                    record.updated_at_ms = int(time.time() * 1000)
+                    events.append({
+                        "event": "mining_resource_stopped",
+                        "resourceId": resource_id,
+                        "hardwareUuid": record.hardware_uuid,
+                        "reason": record.last_stop_reason,
+                    })
+                    changed = True
+                    continue
+                if observed != expected:
+                    record.state = "QUARANTINED"
+                    record.last_stop_reason = "PROCESS_IDENTITY_MISMATCH"
+                    record.updated_at_ms = int(time.time() * 1000)
+                    events.append({
+                        "event": "mining_resource_quarantined",
+                        "resourceId": resource_id,
+                        "hardwareUuid": record.hardware_uuid,
+                        "reason": record.last_stop_reason,
+                    })
+                    changed = True
+                    continue
+
+                if not self._binary_integrity_ok(record):
+                    try:
+                        self._terminate_and_verify(expected)
+                        self._clear_process(record)
+                    except ExecutionControlError:
+                        pass
+                    record.state = "QUARANTINED"
+                    record.last_stop_reason = "BINARY_INTEGRITY"
+                    record.updated_at_ms = int(time.time() * 1000)
+                    events.append({
+                        "event": "mining_resource_quarantined",
+                        "resourceId": resource_id,
+                        "hardwareUuid": record.hardware_uuid,
+                        "reason": record.last_stop_reason,
+                    })
+                    changed = True
+                    continue
+
+                try:
+                    temperature = float(self.temperature_reader(record.hardware_uuid))
+                except (ExecutionControlError, OSError, TypeError, ValueError):
+                    record.thermal_sensor_failures = min(
+                        THERMAL_SENSOR_FAILURE_LIMIT,
+                        record.thermal_sensor_failures + 1,
+                    )
+                    record.updated_at_ms = int(time.time() * 1000)
+                    changed = True
+                    if record.thermal_sensor_failures >= THERMAL_SENSOR_FAILURE_LIMIT:
+                        try:
+                            self._terminate_and_verify(expected)
+                            self._clear_process(record)
+                        except ExecutionControlError:
+                            pass
+                        record.state = "QUARANTINED"
+                        record.last_stop_reason = "THERMAL_SENSOR_UNAVAILABLE"
+                        events.append({
+                            "event": "mining_resource_quarantined",
+                            "resourceId": resource_id,
+                            "hardwareUuid": record.hardware_uuid,
+                            "reason": record.last_stop_reason,
+                            "sensorFailures": record.thermal_sensor_failures,
+                        })
+                    continue
+
+                if not 0 <= temperature <= 150:
+                    record.thermal_sensor_failures = min(
+                        THERMAL_SENSOR_FAILURE_LIMIT,
+                        record.thermal_sensor_failures + 1,
+                    )
+                    changed = True
+                    continue
+
+                previous_warning = record.thermal_warning_level
+                record.last_temperature_celsius = temperature
+                record.thermal_sensor_failures = 0
+                record.thermal_warning_level = _thermal_warning_level(temperature)
+                record.updated_at_ms = int(time.time() * 1000)
+                changed = True
+
+                if (
+                    record.thermal_warning_level is not None
+                    and record.thermal_warning_level != previous_warning
+                    and (
+                        previous_warning is None
+                        or record.thermal_warning_level > previous_warning
+                    )
+                ):
+                    events.append({
+                        "event": "mining_thermal_warning",
+                        "resourceId": resource_id,
+                        "hardwareUuid": record.hardware_uuid,
+                        "temperatureC": temperature,
+                        "warningLevelC": record.thermal_warning_level,
+                        "stopCelsius": record.thermal_stop_celsius,
+                    })
+
+                if temperature >= THERMAL_QUARANTINE_CELSIUS:
+                    try:
+                        self._terminate_and_verify(expected)
+                        self._clear_process(record)
+                    except ExecutionControlError:
+                        pass
+                    record.state = "QUARANTINED"
+                    record.last_stop_reason = "THERMAL_QUARANTINE"
+                    events.append({
+                        "event": "mining_thermal_stop",
+                        "resourceId": resource_id,
+                        "hardwareUuid": record.hardware_uuid,
+                        "temperatureC": temperature,
+                        "stopCelsius": record.thermal_stop_celsius,
+                        "reason": record.last_stop_reason,
+                    })
+                    continue
+
+                if temperature >= record.thermal_stop_celsius:
+                    self._terminate_and_verify(expected)
+                    self._clear_process(record)
+                    record.state = "STOPPED"
+                    record.last_stop_reason = "THERMAL_LIMIT"
+                    events.append({
+                        "event": "mining_thermal_stop",
+                        "resourceId": resource_id,
+                        "hardwareUuid": record.hardware_uuid,
+                        "temperatureC": temperature,
+                        "stopCelsius": record.thermal_stop_celsius,
+                        "reason": record.last_stop_reason,
+                    })
+
+            if changed:
+                self.store.save(records)
+        return events
+
     def snapshot(self) -> dict[str, dict[str, Any]]:
         with self._lock:
             return {resource_id: asdict(record) for resource_id, record in self.store.load().items()}
+
