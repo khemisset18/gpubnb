@@ -68,6 +68,7 @@ class ResourceMiningSpec:
     worker_name: str
     performance_mode: str
     maximum_temperature_c: int
+    maximum_power_watts: int
     resolved_pool_addresses: tuple[str, ...]
 
 
@@ -540,7 +541,8 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         raise ExecutionControlError("mining_command_payload_invalid")
     allowed = {
         "resourceId", "hardwareUuid", "runtimeGeneration", "profileId", "poolUrl",
-        "walletAddress", "workerName", "performanceMode", "maximumTemperatureC", "poolCredentialRef",
+        "walletAddress", "workerName", "performanceMode", "maximumTemperatureC",
+        "maximumPowerWatts", "poolCredentialRef",
     }
     if set(payload) - allowed:
         raise ExecutionControlError("mining_command_payload_unknown_field")
@@ -564,12 +566,19 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
     if performance not in {"ECO", "BALANCED", "FULL"}:
         raise ExecutionControlError("mining_performance_mode_invalid")
     maximum_temperature = payload.get("maximumTemperatureC", DEFAULT_MAX_TEMPERATURE_C)
+    maximum_power = payload.get("maximumPowerWatts")
     if (
         isinstance(maximum_temperature, bool)
         or not isinstance(maximum_temperature, int)
         or not MIN_MAX_TEMPERATURE_C <= maximum_temperature <= MAX_MAX_TEMPERATURE_C
     ):
         raise ExecutionControlError("mining_maximum_temperature_invalid")
+    if (
+        isinstance(maximum_power, bool)
+        or not isinstance(maximum_power, int)
+        or not 5 <= maximum_power <= 1500
+    ):
+        raise ExecutionControlError("mining_maximum_power_invalid")
     resolved_pool_addresses = _resolve_public_pool_addresses(pool)
     return ResourceMiningSpec(
         resource_id,
@@ -581,6 +590,7 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         worker,
         performance,
         maximum_temperature,
+        maximum_power,
         resolved_pool_addresses,
     )
 
@@ -634,14 +644,18 @@ def build_resource_arguments(spec: ResourceMiningSpec, binding: GpuBinding) -> l
         "--user", user,
         "--devicesbypcie", "on",
         "--devices", binding.pci_selector,
+        "--tstop", str(spec.maximum_temperature_c),
     ]
-    if spec.performance_mode != "FULL":
-        default, minimum = binding.power_default_watts, binding.power_min_watts
-        if default is None or minimum is None or default <= 0 or minimum <= 0 or minimum > default:
-            raise ExecutionControlError("resource_gpu_power_limits_unavailable")
-        ratio = 0.66 if spec.performance_mode == "BALANCED" else 0.33
-        target = round(max(minimum, min(default, default * ratio)))
-        arguments.extend(["--pl", str(target)])
+
+    default, minimum = binding.power_default_watts, binding.power_min_watts
+    if default is None or minimum is None or default <= 0 or minimum <= 0 or minimum > default:
+        raise ExecutionControlError("resource_gpu_power_limits_unavailable")
+    if spec.maximum_power_watts < minimum:
+        raise ExecutionControlError("mining_maximum_power_below_firmware_minimum")
+    ratio = {"ECO": 0.33, "BALANCED": 0.66, "FULL": 1.0}[spec.performance_mode]
+    requested = min(default * ratio, float(spec.maximum_power_watts), default)
+    target = round(max(minimum, requested))
+    arguments.extend(["--pl", str(target)])
     return arguments
 
 
