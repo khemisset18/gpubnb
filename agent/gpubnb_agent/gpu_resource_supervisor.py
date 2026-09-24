@@ -261,7 +261,10 @@ class SystemLauncher:
         stderr_target: Any = subprocess.DEVNULL
         try:
             if log_path is not None:
-                require_private_directory(log_path.parent)
+                try:
+                    require_private_directory(log_path.parent)
+                except RuntimeError as exc:
+                    raise ExecutionControlError("miner_log_security_unavailable") from exc
                 if log_path.exists() and log_path.stat().st_size > MAX_MINER_LOG_BYTES:
                     log_path.unlink()
                 log_handle = open(log_path, "ab", buffering=0)
