@@ -93,7 +93,7 @@ test('owner START acquires a fenced lease and persists a durable STARTING comman
     resourceId: 'resource_00000001',
     ownerId: 'owner_00000001',
     requestId: 'request_00000001',
-    now: new Date('2026-09-24T20:00:10.000Z'),
+    now: new Date(),
   });
 
   assert.equal(result.action, 'start');
