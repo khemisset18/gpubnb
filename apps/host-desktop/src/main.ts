@@ -71,6 +71,7 @@ type MiningTelemetry = {
 type MiningThermalSafety = {
   latched: boolean;
   lastTemperatureCelsius?: number | null;
+  profile: 'production' | 'qualification';
   warningCelsius: number;
   stopCelsius: number;
   rearmCelsius: number;
@@ -428,9 +429,9 @@ const renderMiningTelemetry = (telemetry: MiningTelemetry | null): string => {
   if (!telemetry?.available) return `<section class="mining-performance unavailable"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Mesures en attente</h2></div><span class="badge">Aucune session mesurée</span></div>
     <p>Le tableau sera alimenté automatiquement après le démarrage du mineur.</p></section>`;
   const temperature = telemetry.temperatureCelsius;
-  const thermalState = typeof temperature !== 'number' ? 'unknown' : temperature >= 85 ? 'danger' : temperature >= 80 ? 'warning' : 'safe';
+  const thermalState = typeof temperature !== 'number' ? 'unknown' : temperature >= 92 ? 'danger' : temperature >= 88 ? 'warning' : 'safe';
   return `<section class="mining-performance ${thermalState}"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Tableau de minage</h2></div><span class="badge">Actualisation automatique</span></div>
-    ${thermalState === 'danger' ? '<div class="thermal-alert">Température excessive détectée. La protection native arrête automatiquement le minage à 85 °C.</div>' : ''}
+    ${thermalState === 'danger' ? '<div class="thermal-alert">Température très élevée détectée. Vérifiez le profil thermique actif et arrêtez le test si le refroidissement devient insuffisant.</div>' : ''}
     <dl class="performance-grid">
       <div><dt>Matériel</dt><dd>${escapeHtml(telemetry.deviceName ?? '—')}</dd></div>
       <div><dt>Hashrate</dt><dd>${formatMetric(telemetry.hashrate, telemetry.hashrateUnit ?? 'H/s')}</dd></div>
@@ -474,6 +475,10 @@ const renderMiningRuntime = (
   const gpuMining = coin.profileId?.startsWith('lolminer_') === true;
   const performanceMode = configurationMatches ? saved?.performanceMode ?? 'balanced' : 'balanced';
   const thermalLatched = thermalSafety?.latched === true;
+  const qualificationThermal = thermalSafety?.profile === 'qualification';
+  const qualificationPanel = qualificationThermal
+    ? `<div class="thermal-alert"><strong>Mode qualification thermique actif</strong><span>Temporaire pour les essais : avertissement ${thermalSafety.warningCelsius} °C, arrêt ${thermalSafety.stopCelsius} °C, réarmement à ${thermalSafety.rearmCelsius} °C. Ne pas utiliser ce profil comme réglage de production.</span></div>`
+    : '';
   const thermalPanel = thermalLatched ? `<div class="thermal-alert thermal-latched"><strong>Protection thermique déclenchée</strong><span>Le mineur a été arrêté automatiquement à ${formatMetric(thermalSafety?.lastTemperatureCelsius, '°C')}. Attendez que la carte descende à ${thermalSafety?.rearmCelsius ?? 75} °C maximum.</span><button id="acknowledge-thermal-safety" class="secondary" type="button">Vérifier et réarmer</button></div>` : '';
   const configurationPanel = installReady ? `<form id="mining-configuration" class="mining-configuration" novalidate>
     <div class="configuration-heading"><div><strong>Pool ${escapeHtml(coin.symbol)} personnel</strong><small>${configurationReady ? 'Connexion vérifiée. Le démarrage est autorisé.' : 'Enregistrez puis testez la connexion avant le démarrage.'}</small></div><span class="verification-badge ${configurationReady ? '' : 'pending'}">${configurationReady ? '✓ Prêt' : 'Test requis'}</span></div>
@@ -481,7 +486,7 @@ const renderMiningRuntime = (
       <label><input type="radio" name="performance-mode" value="eco" ${performanceMode === 'eco' ? 'checked' : ''}><strong>Éco</strong><span>33 %</span></label>
       <label><input type="radio" name="performance-mode" value="balanced" ${performanceMode === 'balanced' ? 'checked' : ''}><strong>Équilibré</strong><span>66 %</span></label>
       <label><input type="radio" name="performance-mode" value="full" ${performanceMode === 'full' ? 'checked' : ''}><strong>Pleine puissance</strong><span>100 %</span></label>
-      <small>La limite minimale NVIDIA de la carte reste prioritaire. La protection thermique arrête toujours le mineur à 85 °C.</small></fieldset>` : '<p class="cpu-mining-note">Ce profil XMR utilise le processeur sur cette machine ; les modes de puissance GPU ne s’appliquent pas.</p>'}
+      <small>La limite minimale NVIDIA de la carte reste prioritaire. Seuil thermique actif : ${thermalSafety?.stopCelsius ?? 85} °C${qualificationThermal ? ' (qualification temporaire)' : ''}.</small></fieldset>` : '<p class="cpu-mining-note">Ce profil XMR utilise le processeur sur cette machine ; les modes de puissance GPU ne s’appliquent pas.</p>'}
     <div class="configuration-fields"><label>Adresse du pool<input id="mining-pool" value="${escapeHtml(configurationMatches ? saved?.customPoolUrl ?? '' : '')}" placeholder="stratum+tls://pool.example.com:443" required></label>
     <label>Adresse du portefeuille ${escapeHtml(coin.symbol)}<input id="mining-wallet" value="${escapeHtml(configurationMatches ? saved?.walletAddress ?? '' : '')}" maxlength="192" required></label>
     <label>Nom de ce PC<input id="mining-worker" value="${escapeHtml(configurationMatches ? saved?.workerName ?? 'gpubnb-host' : 'gpubnb-host')}" maxlength="96" required></label></div>
@@ -490,7 +495,7 @@ const renderMiningRuntime = (
     <span class="status-pill ${running ? 'online' : ''}">${escapeHtml(processLabel)}</span></div>
     <dl class="runtime-details"><div><dt>Profil</dt><dd>${escapeHtml(process.profileId ?? 'Aucun')}</dd></div><div><dt>PID</dt><dd>${process.pid ?? '—'}</dd></div>
     <div><dt>Consentement</dt><dd>${escapeHtml(runtime.consent)}</dd></div><div><dt>Dernière sortie</dt><dd>${process.lastExitCode ?? '—'}</dd></div></dl>
-    ${runtime.lastError ? `<p class="runtime-error">${escapeHtml(runtime.lastError)}</p>` : ''}${thermalPanel}${renderMiningTelemetry(telemetry)}${installPanel}${configurationPanel}
+    ${runtime.lastError ? `<p class="runtime-error">${escapeHtml(runtime.lastError)}</p>` : ''}${qualificationPanel}${thermalPanel}${renderMiningTelemetry(telemetry)}${installPanel}${configurationPanel}
     <div class="mining-controls"><button id="start-mining" class="primary" ${installReady && configurationReady && !running && !thermalLatched ? '' : 'disabled'}>Démarrer le minage</button><button id="stop-mining" class="secondary" ${running ? '' : 'disabled'}>Arrêter le minage</button><button id="emergency-mining" class="danger-button">Arrêt d’urgence</button></div></section>`;
 };
 
@@ -504,7 +509,7 @@ const miningErrorMessage = (error: unknown): string => {
   if (value.includes('mining_configuration_missing')) return 'Enregistrez la configuration de minage.';
   if (value.includes('miner_binary_missing')) return 'Installez d’abord le mineur approuvé.';
   if (value.includes('thermal_safety_review_required')) return 'Le redémarrage reste bloqué après un arrêt thermique. Laissez refroidir la carte puis cliquez sur « Vérifier et réarmer ».';
-  if (value.includes('miner_temperature_still_too_high')) return 'La carte est encore trop chaude. Attendez qu’elle descende à 75 °C maximum.';
+  if (value.includes('miner_temperature_still_too_high')) return 'La carte est encore trop chaude pour le profil thermique actif. Attendez le seuil de réarmement affiché avant de recommencer.';
   if (value.includes('gpu_temperature_sensor_unavailable') || value.includes('gpu_temperature_sensor_invalid')) return 'Le capteur NVIDIA ne peut pas être vérifié. Le réarmement reste bloqué par sécurité.';
   if (value.includes('gpu_power_limit_unavailable') || value.includes('gpu_power_limit_invalid')) return 'La limite de puissance NVIDIA n’est pas disponible sur cette carte. Le mineur reste arrêté.';
   return `Opération refusée : ${value}`;
