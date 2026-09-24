@@ -45,7 +45,7 @@ describe('mining telemetry contract', () => {
 
   it('requires the envelope resource to match the signed telemetry resource', () => {
     const base = {
-      machineId: 'cm12345678901234567890123',
+      machineId: 'ck0000000000000000000000',
       resourceId: telemetry.resourceId,
       idempotencyKey: 'mining-telemetry:resource_00000001:1:1',
       agentCounter: '42',
