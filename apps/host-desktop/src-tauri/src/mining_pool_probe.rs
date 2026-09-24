@@ -106,15 +106,17 @@ fn ipv4_is_public(address: Ipv4Addr) -> bool {
 }
 
 fn ipv6_is_public(address: Ipv6Addr) -> bool {
+    let segments = address.segments();
+    let unique_local = segments[0] & 0xfe00 == 0xfc00;
+    let unicast_link_local = segments[0] & 0xffc0 == 0xfe80;
     if address.is_unspecified()
         || address.is_loopback()
-        || address.is_unique_local()
-        || address.is_unicast_link_local()
+        || unique_local
+        || unicast_link_local
         || address.is_multicast()
     {
         return false;
     }
-    let segments = address.segments();
     // Documentation prefix 2001:db8::/32.
     if segments[0] == 0x2001 && segments[1] == 0x0db8 {
         return false;
