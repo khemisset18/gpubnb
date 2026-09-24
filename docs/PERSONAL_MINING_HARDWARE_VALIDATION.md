@@ -30,6 +30,17 @@ has been corrected.
 - A manual rearm is accepted only after a fresh native sensor reading is at or below 75 °C.
 - An unavailable or invalid sensor cannot clear the restart latch.
 
+### Temporary qualification thermal profile
+
+The production/default profile remains unchanged at 80 °C warning, 85 °C protective stop and
+75 °C rearm. For controlled hardware qualification only, Host Desktop accepts the explicit
+environment setting `GPUBNB_MINING_THERMAL_PROFILE=qualification`. That temporary profile uses
+88 °C warning, 92 °C protective stop and 80 °C rearm. Any missing or unrecognized value falls back
+to the production profile. The separate 98 °C server quarantine boundary is unchanged.
+
+The qualification profile must be visibly reported by Host Desktop and must not be treated as a
+production default.
+
 ## GPU performance modes
 
 - Eco targets 33% of the NVIDIA default power limit.
