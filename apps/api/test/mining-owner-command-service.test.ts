@@ -3,7 +3,11 @@ import test from 'node:test';
 import type { PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 
-import { requestOwnerMiningStart, requestOwnerMiningStop } from '../src/mining-owner-command-service.js';
+import {
+  requestOwnerMiningStart,
+  requestOwnerMiningStop,
+  requestSystemMiningAutoResume,
+} from '../src/mining-owner-command-service.js';
 
 class FakeLeaseRedis {
   private lease: Record<string, string> | null = null;
@@ -63,6 +67,7 @@ function startableResource() {
       ownerPoolSecretRef: null,
       maximumTemperatureC: 94,
       maximumPowerWatts: 180,
+      autoResumeAfterRental: false,
       version: 3,
     },
   };
@@ -148,4 +153,41 @@ test('configuration/start remains impossible while a rental owns the resource', 
     }),
     /mining_resource_rental_active/,
   );
+});
+
+test('system auto-resume stays disabled unless explicitly opted in', async () => {
+  const resource = startableResource();
+  const { db, writes } = fakeDb(resource);
+  const result = await requestSystemMiningAutoResume(
+    db,
+    new FakeLeaseRedis() as unknown as Redis,
+    {
+      machineId: resource.machineId,
+      resourceId: resource.id,
+      requestId: 'rental-cleanup:session_1:resource_1',
+    },
+  );
+  assert.equal(result.commandId, null);
+  assert.equal(result.alreadySatisfied, true);
+  assert.equal(writes.length, 0);
+});
+
+test('system auto-resume uses a fresh fenced START only after explicit opt-in', async () => {
+  const resource = startableResource();
+  resource.configuration.autoResumeAfterRental = true;
+  resource.runtimeState = 'STOPPED';
+  const { db, transitions, writes } = fakeDb(resource);
+  const result = await requestSystemMiningAutoResume(
+    db,
+    new FakeLeaseRedis() as unknown as Redis,
+    {
+      machineId: resource.machineId,
+      resourceId: resource.id,
+      requestId: 'rental-cleanup:session_1:resource_1',
+    },
+  );
+  assert.match(result.commandId!, /^cmd_[a-f0-9]{32}$/);
+  assert.equal(result.state, 'STARTING');
+  assert.equal(transitions[0].data.runtimeState, 'STARTING');
+  assert.ok(writes.length >= 3);
 });
