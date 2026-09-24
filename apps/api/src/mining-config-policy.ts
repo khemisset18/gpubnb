@@ -111,13 +111,6 @@ export const miningConfigurationInputSchema = z
       });
     }
 
-    if (value.mode === 'GPUBNB_MANAGED' && (value.ownerPoolEndpoint || value.ownerPoolSecretRef)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['ownerPoolEndpoint'],
-        message: 'managed_pool_rejects_owner_endpoint',
-      });
-    }
   });
 
 export type MiningConfigurationInput = z.infer<typeof miningConfigurationInputSchema>;
