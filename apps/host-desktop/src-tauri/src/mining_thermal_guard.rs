@@ -281,6 +281,7 @@ fn save_settings(settings: MiningThermalSettings) -> Result<(), &'static str> {
     let parent = path.parent().ok_or("mining_thermal_settings_parent_missing")?;
     fs::create_dir_all(parent).map_err(|_| "mining_thermal_settings_directory_failed")?;
     let temporary = path.with_extension(format!("tmp-{}", std::process::id()));
+    let backup = path.with_extension("bak");
     let mut file = OpenOptions::new()
         .create(true)
         .truncate(true)
@@ -294,7 +295,24 @@ fn save_settings(settings: MiningThermalSettings) -> Result<(), &'static str> {
     file.sync_all()
         .map_err(|_| "mining_thermal_settings_sync_failed")?;
     drop(file);
-    fs::rename(&temporary, &path).map_err(|_| "mining_thermal_settings_commit_failed")
+
+    if backup.exists() {
+        fs::remove_file(&backup).map_err(|_| "mining_thermal_settings_backup_cleanup_failed")?;
+    }
+    if path.exists() {
+        fs::rename(&path, &backup).map_err(|_| "mining_thermal_settings_backup_failed")?;
+    }
+    if fs::rename(&temporary, &path).is_err() {
+        if backup.exists() {
+            let _ = fs::rename(&backup, &path);
+        }
+        let _ = fs::remove_file(&temporary);
+        return Err("mining_thermal_settings_commit_failed");
+    }
+    if backup.exists() {
+        fs::remove_file(&backup).map_err(|_| "mining_thermal_settings_backup_cleanup_failed")?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
