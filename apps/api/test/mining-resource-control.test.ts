@@ -24,6 +24,7 @@ test('start payload binds hardware and preserves i64 fence as exact string', () 
     walletAddress: 'wallet.example-123',
     workerName: 'worker_1',
     performanceMode: 'FULL',
+    thermalStopCelsius: 92,
   }, lease());
 
   assert.equal(command.lease.fencingToken, '9223372036854775807');
@@ -31,6 +32,22 @@ test('start payload binds hardware and preserves i64 fence as exact string', () 
   assert.equal(typeof command.payload.runtimeGeneration, 'string');
   assert.equal(command.payload.resourceId, command.lease.resourceId);
   assert.equal(command.payload.hardwareUuid, 'GPU-aaaaaaaa');
+  assert.equal(command.payload.thermalStopCelsius, 92);
+});
+
+test('start command rejects thermal cutoffs outside the host safety envelope', () => {
+  const base = {
+    machineId: 'machine_00000001',
+    resourceId: 'resource_00000001',
+    hardwareUuid: 'GPU-aaaaaaaa',
+    profileId: 'lolminer_etchash',
+    poolUrl: 'stratum+tcp://pool.example.com:4444',
+    walletAddress: 'wallet.example-123',
+    workerName: 'worker_1',
+    performanceMode: 'FULL' as const,
+  };
+  assert.throws(() => buildFencedStartMining({ ...base, thermalStopCelsius: 84 }, lease()), /mining_thermal_stop_invalid/);
+  assert.throws(() => buildFencedStartMining({ ...base, thermalStopCelsius: 99 }, lease()), /mining_thermal_stop_invalid/);
 });
 
 test('stop payload carries only resource identity and exact generation', () => {
