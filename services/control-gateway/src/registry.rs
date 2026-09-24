@@ -191,8 +191,12 @@ impl GatewayRegistry {
                 .map(|connection| connection.sender.clone())
                 .ok_or_else(|| anyhow::anyhow!("mining_command_requires_live_connection"))?;
             let permit = sender.try_reserve().map_err(|error| match error {
-                mpsc::error::TrySendError::Full(_) => anyhow::anyhow!("mining_command_backpressure"),
-                mpsc::error::TrySendError::Closed(_) => anyhow::anyhow!("mining_command_requires_live_connection"),
+                mpsc::error::TrySendError::Full(_) => {
+                    anyhow::anyhow!("mining_command_backpressure")
+                }
+                mpsc::error::TrySendError::Closed(_) => {
+                    anyhow::anyhow!("mining_command_requires_live_connection")
+                }
             })?;
             state.highest_sequence_seen = command.sequence;
             state.journal.push_back(command.clone());
@@ -423,7 +427,9 @@ mod tests {
         let error = registry
             .dispatch(mining_command("command_00000009", 9), 2_000)
             .unwrap_err();
-        assert!(error.to_string().contains("mining_command_requires_live_connection"));
+        assert!(error
+            .to_string()
+            .contains("mining_command_requires_live_connection"));
         assert_eq!(registry.stats().pending_commands, 0);
 
         let (tx, _rx) = mpsc::channel(2);
