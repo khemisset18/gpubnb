@@ -10,6 +10,7 @@ from gpubnb_agent.gpu_resource_supervisor import (
     GpuBinding,
     GpuMetrics,
     GpuResourceSupervisor,
+    _lolminer_pool_arguments,
     ProcessIdentity,
     RuntimeRecord,
     RuntimeStore,
@@ -214,6 +215,16 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         assert log_path is not None
         self.assertEqual(log_path.parent.name, "mining-logs")
         self.assertNotIn("resource_00000001", log_path.name)
+
+    def test_lolminer_pool_arguments_strip_stratum_scheme_and_set_tls(self) -> None:
+        self.assertEqual(
+            _lolminer_pool_arguments("stratum+tcp://1.1.1.1:4444"),
+            ["--pool", "1.1.1.1:4444", "--tls", "off"],
+        )
+        self.assertEqual(
+            _lolminer_pool_arguments("stratum+tls://[2606:4700:4700::1111]:5555"),
+            ["--pool", "[2606:4700:4700::1111]:5555", "--tls", "on"],
+        )
 
     def test_resource_arguments_pin_exact_pcie_device(self) -> None:
         spec = parse_resource_start(start_payload("resource_00000001", "GPU-aaaaaaaa"))
