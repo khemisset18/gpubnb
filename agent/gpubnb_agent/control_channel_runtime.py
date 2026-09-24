@@ -175,21 +175,23 @@ class _Runtime:
         counter = reserve_agent_counter()
         resource_id = str(sample["resourceId"])
         generation = int(sample["runtimeGeneration"])
+        payload = dict(sample)
+        # Decimal strings preserve exact monotone/fencing values beyond the
+        # JavaScript safe-integer range all the way into Zod/BigInt.
+        payload["runtimeGeneration"] = str(generation)
         body = {
             "machineId": self.machine_id,
             "resourceId": resource_id,
-            "eventType": "HEARTBEAT",
-            "stateAfter": "MINING",
-            "idempotencyKey": f"mining-heartbeat:{resource_id}:{generation}:{counter}",
-            "agentCounter": counter,
-            "occurredAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "payload": sample,
+            "idempotencyKey": f"mining-telemetry:{resource_id}:{generation}:{counter}",
+            "agentCounter": str(counter),
+            "capturedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "telemetry": payload,
         }
         agent_request(
             self.api,
             self.key,
             self.machine_id,
-            "/internal/mining/runtime-events",
+            "/internal/mining/telemetry",
             "POST",
             body,
             timeout=8,
