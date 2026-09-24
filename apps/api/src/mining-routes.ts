@@ -28,7 +28,7 @@ const MINING_TELEMETRY_DEDUPE_TTL_SECONDS = 300;
 const MINING_TELEMETRY_HISTORY_INTERVAL_MS = 5 * 60 * 1000;
 const MINING_TELEMETRY_HISTORY_HOURS = 24;
 
-const miningTelemetrySchema = z.object({
+export const miningTelemetrySchema = z.object({
   resourceId: z.string().min(3).max(128),
   hardwareUuid: z.string().min(8).max(200).regex(/^[A-Za-z0-9_.:-]+$/),
   runtimeGeneration: z.string().regex(/^[1-9][0-9]{0,18}$/),
@@ -49,7 +49,7 @@ const miningTelemetrySchema = z.object({
   poolConnected: z.boolean(),
 }).strict();
 
-const miningTelemetryEnvelopeSchema = z.object({
+export const miningTelemetryEnvelopeSchema = z.object({
   machineId: z.string().cuid(),
   resourceId: z.string().min(3).max(128),
   idempotencyKey: z.string().min(16).max(160),
