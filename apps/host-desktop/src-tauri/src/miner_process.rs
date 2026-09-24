@@ -326,7 +326,9 @@ fn lolminer_pool_arguments(pool_url: &str) -> Result<Vec<String>, &'static str> 
         return Err("mining_pool_scheme_not_allowed");
     };
     if authority.is_empty()
-        || authority.bytes().any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+        || authority
+            .bytes()
+            .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
         || authority.contains('@')
         || authority.contains('?')
         || authority.contains('#')
