@@ -13,7 +13,9 @@ from gpubnb_agent.gpu_resource_supervisor import (
     ProcessIdentity,
     RuntimeRecord,
     RuntimeStore,
+    SystemLauncher,
     build_resource_arguments,
+    parse_lolminer_telemetry,
     parse_resource_start,
 )
 
@@ -69,11 +71,17 @@ class FakeLauncher:
     def __init__(self, inspector: FakeInspector) -> None:
         self.inspector = inspector
         self.next_pid = 1000
-        self.calls: list[tuple[str, list[str]]] = []
+        self.calls: list[tuple[str, list[str], Path | None]] = []
 
-    def spawn(self, executable: Path, arguments: list[str], cwd: Path) -> FakeProcess:
+    def spawn(
+        self,
+        executable: Path,
+        arguments: list[str],
+        cwd: Path,
+        log_path: Path | None = None,
+    ) -> FakeProcess:
         self.next_pid += 1
-        self.calls.append((str(executable), list(arguments)))
+        self.calls.append((str(executable), list(arguments), log_path))
         return FakeProcess(self.next_pid, self.inspector, executable)
 
 
@@ -135,6 +143,76 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         for item in reversed(self.patches):
             item.stop()
         self.temp.cleanup()
+
+    def test_system_launcher_refuses_unsecured_private_log_directory(self) -> None:
+        launcher = SystemLauncher()
+        with (
+            patch(
+                "gpubnb_agent.gpu_resource_supervisor.require_private_directory",
+                side_effect=RuntimeError("acl_failed"),
+            ),
+            patch("gpubnb_agent.gpu_resource_supervisor.subprocess.Popen") as popen,
+        ):
+            with self.assertRaisesRegex(ExecutionControlError, "miner_log_security_unavailable"):
+                launcher.spawn(
+                    self.binary,
+                    ["--version"],
+                    self.root,
+                    Path(self.temp.name) / "private" / "miner.log",
+                )
+        popen.assert_not_called()
+
+    def test_lolminer_telemetry_parser_extracts_only_structured_metrics(self) -> None:
+        telemetry = parse_lolminer_telemetry(
+            "Setup Miner...\n"
+            "Authorized worker: wallet\n"
+            "Statistics (01:51:00); Uptime: 0h 7m 0s\n"
+            "GPU 0 GTX 1650 113.87 333.33 2/0/0 45.6G 5.771 19.7 495 6000 93 err\n"
+        )
+        self.assertEqual(telemetry.hashrate, 113.87)
+        self.assertEqual(telemetry.hashrate_unit, "MH/s")
+        self.assertEqual(telemetry.accepted_shares, 2)
+        self.assertEqual(telemetry.stale_shares, 0)
+        self.assertEqual(telemetry.hardware_errors, 0)
+        self.assertEqual(telemetry.uptime_seconds, 420)
+        self.assertTrue(telemetry.pool_connected)
+
+    def test_watchdog_persists_resource_scoped_miner_telemetry(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        payload["maximumTemperatureC"] = 98
+        self.supervisor.start(payload, "command_00000001")
+        record = self.supervisor.snapshot()["resource_00000001"]
+        log_path = Path(str(record["log_path"]))
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text(
+            "Authorized worker: wallet\n"
+            "Statistics (x); Uptime: 0h 1m 5s\n"
+            "GPU 0 GTX 1650 80.0 90.0 3/1/0 2G 4 20 1 1 70 ok\n",
+            encoding="utf-8",
+        )
+        self.sensor.metrics["GPU-aaaaaaaa"] = GpuMetrics(70.0, 20.0, 88)
+
+        self.supervisor.run_watchdog_once()
+        updated = self.supervisor.snapshot()["resource_00000001"]
+
+        self.assertEqual(updated["last_hashrate"], 80.0)
+        self.assertEqual(updated["last_hashrate_unit"], "MH/s")
+        self.assertEqual(updated["accepted_shares"], 3)
+        self.assertEqual(updated["stale_shares"], 1)
+        self.assertEqual(updated["hardware_errors"], 0)
+        self.assertEqual(updated["uptime_seconds"], 65)
+        self.assertTrue(updated["pool_connected"])
+
+    def test_launcher_receives_private_resource_log_path_not_raw_resource_name(self) -> None:
+        self.supervisor.start(
+            start_payload("resource_00000001", "GPU-aaaaaaaa"),
+            "command_00000001",
+        )
+        _, _, log_path = self.launcher.calls[-1]
+        self.assertIsNotNone(log_path)
+        assert log_path is not None
+        self.assertEqual(log_path.parent.name, "mining-logs")
+        self.assertNotIn("resource_00000001", log_path.name)
 
     def test_resource_arguments_pin_exact_pcie_device(self) -> None:
         spec = parse_resource_start(start_payload("resource_00000001", "GPU-aaaaaaaa"))
