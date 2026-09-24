@@ -55,6 +55,7 @@ type ResourceContext = {
     ownerPoolSecretRef: string | null;
     maximumTemperatureC: number | null;
     maximumPowerWatts: number | null;
+    autoResumeAfterRental: boolean;
     version: number;
   } | null;
 };
@@ -79,10 +80,14 @@ async function loadResource(
   db: PrismaClient,
   machineId: string,
   resourceId: string,
-  ownerId: string,
+  ownerId?: string,
 ): Promise<ResourceContext> {
   const resource = await db.miningResource.findFirst({
-    where: { id: resourceId, machineId, machine: { ownerId } },
+    where: {
+      id: resourceId,
+      machineId,
+      ...(ownerId ? { machine: { ownerId } } : {}),
+    },
     select: {
       id: true,
       machineId: true,
@@ -105,6 +110,7 @@ async function loadResource(
           ownerPoolSecretRef: true,
           maximumTemperatureC: true,
           maximumPowerWatts: true,
+          autoResumeAfterRental: true,
           version: true,
         },
       },
@@ -221,16 +227,17 @@ async function currentOrFreshStopLease(
 async function recordRequestedCommand(
   db: PrismaClient,
   resource: ResourceContext,
-  ownerId: string,
+  actor: { type: 'OWNER' | 'SYSTEM'; id: string },
   requestId: string,
   action: RuntimeAction,
   lease: ResourceLeaseSnapshot,
   durablePayload: Record<string, unknown>,
   now: Date,
+  requestedEventType: 'START_REQUESTED' | 'STOP_REQUESTED' | 'AUTO_RESUME_REQUESTED' = action === 'start' ? 'START_REQUESTED' : 'STOP_REQUESTED',
 ): Promise<MiningOwnerCommandResult> {
   const commandId = stableId('cmd', resource.machineId, resource.id, action, lease.leaseId);
   const idempotencyKey = `mining:${action}:${resource.id}:${lease.leaseId}`;
-  const eventType = action === 'start' ? 'START_REQUESTED' : 'STOP_REQUESTED';
+  const eventType = requestedEventType;
   const targetState = action === 'start' ? MiningRuntimeState.STARTING : MiningRuntimeState.VERIFYING_STOP;
   const allowedStates = action === 'start'
     ? [MiningRuntimeState.IDLE, MiningRuntimeState.STOPPED]
@@ -321,7 +328,7 @@ export async function requestOwnerMiningStart(
     return await recordRequestedCommand(
       db,
       resource,
-      input.ownerId,
+      { type: 'OWNER', id: input.ownerId },
       input.requestId,
       'start',
       leaseResult.lease,
@@ -368,7 +375,7 @@ export async function requestOwnerMiningStop(
     return await recordRequestedCommand(
       db,
       resource,
-      input.ownerId,
+      { type: 'OWNER', id: input.ownerId },
       input.requestId,
       'stop',
       leaseResult.lease,
