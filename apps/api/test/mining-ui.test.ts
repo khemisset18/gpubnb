@@ -42,3 +42,18 @@ test('dashboard links to mining without claiming the runtime is production-ready
   assert.match(dashboard, /désactivé par défaut/);
   assert.doesNotMatch(dashboard, /Minage.*Fonctionnel/s);
 });
+
+
+test('mining UI exposes only the currently executable operational scope', async () => {
+  const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
+  assert.match(script, /lolminer_blake3/);
+  assert.match(script, /lolminer_etchash/);
+  assert.match(script, /lolminer_octopus/);
+  assert.doesNotMatch(script, /trex_rvn_kawpow/);
+  assert.doesNotMatch(script, /teamredminer_rvn_kawpow/);
+  assert.doesNotMatch(script, /option value="GPUBNB_MANAGED"/);
+  assert.match(script, /resource\.kind==='GPU'\?85:50/);
+  assert.match(script, /max="98"/);
+  assert.doesNotMatch(script, /name="gpuIntensityPercent"/);
+  assert.match(script, /secret:\/\/local\/mining\/pool-main/);
+});
