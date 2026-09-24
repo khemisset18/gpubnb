@@ -44,6 +44,12 @@ SAFE_WALLET = re.compile(r"^[A-Za-z0-9_.:+-]{3,256}$")
 PCI_BDF = re.compile(r"^(?:[0-9A-Fa-f]{4,8}:)?([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2})\.[0-7]$")
 RESOURCE_STATES = {"MINING", "STOPPED", "QUARANTINED"}
 WINDOWS_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+DEFAULT_MAX_TEMPERATURE_C = 85
+MIN_MAX_TEMPERATURE_C = 85
+MAX_MAX_TEMPERATURE_C = 98
+THERMAL_WARNING_LEVELS = (85, 90, 94, 97)
+WATCHDOG_INTERVAL_SECONDS = 5.0
+MAX_SENSOR_FAILURES = 3
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,7 @@ class ResourceMiningSpec:
     wallet_address: str
     worker_name: str
     performance_mode: str
+    maximum_temperature_c: int
 
 
 @dataclass(frozen=True)
@@ -80,6 +87,17 @@ class ProcessIdentity:
     creation_token: str
 
 
+@dataclass(frozen=True)
+class GpuMetrics:
+    temperature_c: float
+    power_watts: float | None
+    utilization_percent: int | None
+
+
+class GpuSensor(Protocol):
+    def read(self, hardware_uuid: str) -> GpuMetrics: ...
+
+
 @dataclass
 class RuntimeRecord:
     resource_id: str
@@ -92,6 +110,13 @@ class RuntimeRecord:
     executable_path: str | None = None
     binary_sha256: str | None = None
     process_creation_token: str | None = None
+    maximum_temperature_c: int = DEFAULT_MAX_TEMPERATURE_C
+    last_temperature_c: float | None = None
+    last_power_watts: float | None = None
+    last_utilization_percent: int | None = None
+    last_sampled_at_ms: int | None = None
+    last_warning_level: int | None = None
+    last_stop_reason: str | None = None
     updated_at_ms: int = 0
 
     @classmethod
@@ -112,6 +137,13 @@ class RuntimeRecord:
         ):
             return None
         pid = value.get("pid")
+        maximum_temperature_c = value.get("maximum_temperature_c", DEFAULT_MAX_TEMPERATURE_C)
+        if (
+            isinstance(maximum_temperature_c, bool)
+            or not isinstance(maximum_temperature_c, int)
+            or not MIN_MAX_TEMPERATURE_C <= maximum_temperature_c <= MAX_MAX_TEMPERATURE_C
+        ):
+            return None
         return cls(
             resource_id=resource_id,
             hardware_uuid=hardware_uuid,
@@ -123,6 +155,13 @@ class RuntimeRecord:
             executable_path=value.get("executable_path") if isinstance(value.get("executable_path"), str) else None,
             binary_sha256=value.get("binary_sha256") if isinstance(value.get("binary_sha256"), str) else None,
             process_creation_token=value.get("process_creation_token") if isinstance(value.get("process_creation_token"), str) else None,
+            maximum_temperature_c=maximum_temperature_c,
+            last_temperature_c=float(value["last_temperature_c"]) if isinstance(value.get("last_temperature_c"), (int, float)) and not isinstance(value.get("last_temperature_c"), bool) else None,
+            last_power_watts=float(value["last_power_watts"]) if isinstance(value.get("last_power_watts"), (int, float)) and not isinstance(value.get("last_power_watts"), bool) else None,
+            last_utilization_percent=value.get("last_utilization_percent") if isinstance(value.get("last_utilization_percent"), int) and not isinstance(value.get("last_utilization_percent"), bool) else None,
+            last_sampled_at_ms=value.get("last_sampled_at_ms") if isinstance(value.get("last_sampled_at_ms"), int) and not isinstance(value.get("last_sampled_at_ms"), bool) else None,
+            last_warning_level=value.get("last_warning_level") if isinstance(value.get("last_warning_level"), int) and not isinstance(value.get("last_warning_level"), bool) else None,
+            last_stop_reason=value.get("last_stop_reason") if isinstance(value.get("last_stop_reason"), str) else None,
             updated_at_ms=int(value.get("updated_at_ms", 0)) if isinstance(value.get("updated_at_ms", 0), int) else 0,
         )
 
@@ -185,6 +224,42 @@ class SystemLauncher:
         except OSError as exc:
             raise ExecutionControlError("miner_process_spawn_failed") from exc
         return _PopenHandle(child)
+
+
+class NvidiaGpuSensor:
+    def read(self, hardware_uuid: str) -> GpuMetrics:
+        executable = find_nvidia_smi()
+        if not executable:
+            raise ExecutionControlError("resource_gpu_nvidia_smi_unavailable")
+        result = run_command(
+            [
+                executable,
+                "-i",
+                hardware_uuid,
+                "--query-gpu=temperature.gpu,power.draw,utilization.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+            timeout=10,
+        )
+        if result.returncode != 0:
+            raise ExecutionControlError("resource_gpu_thermal_sensor_unavailable")
+        rows = [row for row in csv.reader(result.stdout.splitlines()) if row]
+        if len(rows) != 1 or len(rows[0]) != 3:
+            raise ExecutionControlError("resource_gpu_thermal_sensor_invalid")
+        values = [value.strip() for value in rows[0]]
+        try:
+            temperature = float(values[0])
+            power = None if values[1].upper() in {"N/A", "[N/A]"} else float(values[1])
+            utilization = None if values[2].upper() in {"N/A", "[N/A]"} else int(float(values[2]))
+        except ValueError as exc:
+            raise ExecutionControlError("resource_gpu_thermal_sensor_invalid") from exc
+        if not 0 <= temperature <= 150:
+            raise ExecutionControlError("resource_gpu_thermal_sensor_invalid")
+        if power is not None and power < 0:
+            raise ExecutionControlError("resource_gpu_thermal_sensor_invalid")
+        if utilization is not None and not 0 <= utilization <= 100:
+            raise ExecutionControlError("resource_gpu_thermal_sensor_invalid")
+        return GpuMetrics(temperature, power, utilization)
 
 
 class SystemProcessInspector:
@@ -329,7 +404,7 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         raise ExecutionControlError("mining_command_payload_invalid")
     allowed = {
         "resourceId", "hardwareUuid", "runtimeGeneration", "profileId", "poolUrl",
-        "walletAddress", "workerName", "performanceMode", "poolCredentialRef",
+        "walletAddress", "workerName", "performanceMode", "maximumTemperatureC", "poolCredentialRef",
     }
     if set(payload) - allowed:
         raise ExecutionControlError("mining_command_payload_unknown_field")
@@ -352,6 +427,13 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         raise ExecutionControlError("mining_worker_invalid")
     if performance not in {"ECO", "BALANCED", "FULL"}:
         raise ExecutionControlError("mining_performance_mode_invalid")
+    maximum_temperature = payload.get("maximumTemperatureC", DEFAULT_MAX_TEMPERATURE_C)
+    if (
+        isinstance(maximum_temperature, bool)
+        or not isinstance(maximum_temperature, int)
+        or not MIN_MAX_TEMPERATURE_C <= maximum_temperature <= MAX_MAX_TEMPERATURE_C
+    ):
+        raise ExecutionControlError("mining_maximum_temperature_invalid")
     return ResourceMiningSpec(
         resource_id,
         hardware_uuid,
@@ -361,6 +443,7 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         wallet,
         worker,
         performance,
+        maximum_temperature,
     )
 
 
@@ -438,13 +521,30 @@ class GpuResourceSupervisor:
         inspector: ProcessInspector | None = None,
         launcher: ProcessLauncher | None = None,
         binding_resolver: Any = None,
+        sensor: GpuSensor | None = None,
+        event_sink: Any = None,
+        watchdog_interval_seconds: float = WATCHDOG_INTERVAL_SECONDS,
+        start_watchdog: bool = True,
     ) -> None:
         self.store = store or RuntimeStore()
         self.inspector = inspector or SystemProcessInspector()
         self.launcher = launcher or SystemLauncher()
         self.binding_resolver = binding_resolver or resolve_nvidia_binding
+        self.sensor = sensor or NvidiaGpuSensor()
+        self.event_sink = event_sink or (lambda _event: None)
+        self.watchdog_interval_seconds = max(0.1, float(watchdog_interval_seconds))
+        self._sensor_failures: dict[str, int] = {}
+        self._watchdog_stop = threading.Event()
+        self._watchdog_thread: threading.Thread | None = None
         self._lock = threading.RLock()
         self.reconcile()
+        if start_watchdog:
+            self._watchdog_thread = threading.Thread(
+                target=self._watchdog_loop,
+                name="gpubnb-mining-thermal-watchdog",
+                daemon=True,
+            )
+            self._watchdog_thread.start()
 
     def reconcile(self) -> dict[str, str]:
         with self._lock:
@@ -470,10 +570,20 @@ class GpuResourceSupervisor:
                     changed = True
                 elif current != expected:
                     record.state = "QUARANTINED"
+                    record.last_stop_reason = "miner_process_identity_mismatch"
                     outcome[resource_id] = record.state
                     changed = True
                 else:
-                    outcome[resource_id] = "MINING"
+                    if (
+                        not record.binary_sha256
+                        or _sha256(Path(current.executable_path)) != record.binary_sha256
+                    ):
+                        record.state = "QUARANTINED"
+                        record.last_stop_reason = "approved_miner_binary_hash_mismatch"
+                        outcome[resource_id] = record.state
+                        changed = True
+                    else:
+                        outcome[resource_id] = "MINING"
             if changed:
                 self.store.save(records)
             return outcome
@@ -557,6 +667,8 @@ class GpuResourceSupervisor:
                 executable_path=identity.executable_path,
                 binary_sha256=binary_sha,
                 process_creation_token=identity.creation_token,
+                maximum_temperature_c=spec.maximum_temperature_c,
+                last_stop_reason=None,
                 updated_at_ms=int(time.time() * 1000),
             )
             self.store.save(records)
@@ -620,6 +732,152 @@ class GpuResourceSupervisor:
             current.updated_at_ms = int(time.time() * 1000)
             self.store.save(records)
             return ExecutionResult("mining_resource_stop_verified")
+
+    def _warning_level(self, temperature_c: float) -> int | None:
+        level: int | None = None
+        for candidate in THERMAL_WARNING_LEVELS:
+            if temperature_c >= candidate:
+                level = candidate
+        return level
+
+    def _stop_owned_record(
+        self,
+        records: dict[str, RuntimeRecord],
+        record: RuntimeRecord,
+        reason: str,
+    ) -> None:
+        expected = _record_identity(record)
+        if expected is None:
+            record.state = "QUARANTINED"
+            record.last_stop_reason = "miner_process_identity_missing"
+            record.updated_at_ms = int(time.time() * 1000)
+            self.store.save(records)
+            raise ExecutionControlError("miner_process_identity_missing")
+        observed = self.inspector.inspect(expected.pid)
+        if observed is None:
+            record.state = "STOPPED"
+            record.pid = None
+            record.process_creation_token = None
+            record.last_stop_reason = reason
+            record.updated_at_ms = int(time.time() * 1000)
+            self.store.save(records)
+            return
+        if observed != expected:
+            record.state = "QUARANTINED"
+            record.last_stop_reason = "miner_process_identity_mismatch"
+            record.updated_at_ms = int(time.time() * 1000)
+            self.store.save(records)
+            raise ExecutionControlError("miner_process_identity_mismatch")
+        self.inspector.terminate(expected)
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
+            observed = self.inspector.inspect(expected.pid)
+            if observed is None:
+                break
+            if observed != expected:
+                record.state = "QUARANTINED"
+                record.last_stop_reason = "miner_process_identity_mismatch"
+                record.updated_at_ms = int(time.time() * 1000)
+                self.store.save(records)
+                raise ExecutionControlError("miner_process_identity_mismatch")
+            time.sleep(0.1)
+        else:
+            raise ExecutionControlError("mining_resource_stop_unverified")
+        record.state = "STOPPED"
+        record.pid = None
+        record.process_creation_token = None
+        record.last_stop_reason = reason
+        record.updated_at_ms = int(time.time() * 1000)
+        self.store.save(records)
+
+    def run_watchdog_once(self) -> dict[str, str]:
+        outcome: dict[str, str] = {}
+        with self._lock:
+            records = self.store.load()
+            for resource_id, record in records.items():
+                if record.state != "MINING":
+                    continue
+                try:
+                    metrics = self.sensor.read(record.hardware_uuid)
+                except ExecutionControlError as exc:
+                    failures = self._sensor_failures.get(resource_id, 0) + 1
+                    self._sensor_failures[resource_id] = failures
+                    self.event_sink({
+                        "event": "mining_gpu_sensor_failure",
+                        "resourceId": resource_id,
+                        "hardwareUuid": record.hardware_uuid,
+                        "consecutiveFailures": failures,
+                        "detailCode": str(exc)[:96],
+                    })
+                    if failures >= MAX_SENSOR_FAILURES:
+                        try:
+                            self._stop_owned_record(records, record, "thermal_sensor_fail_closed")
+                            outcome[resource_id] = "STOPPED"
+                            self.event_sink({
+                                "event": "mining_thermal_stop",
+                                "resourceId": resource_id,
+                                "hardwareUuid": record.hardware_uuid,
+                                "reason": "thermal_sensor_fail_closed",
+                            })
+                        except ExecutionControlError:
+                            outcome[resource_id] = record.state
+                    continue
+
+                self._sensor_failures.pop(resource_id, None)
+                now_ms = int(time.time() * 1000)
+                record.last_temperature_c = metrics.temperature_c
+                record.last_power_watts = metrics.power_watts
+                record.last_utilization_percent = metrics.utilization_percent
+                record.last_sampled_at_ms = now_ms
+                warning_level = self._warning_level(metrics.temperature_c)
+                if warning_level != record.last_warning_level:
+                    record.last_warning_level = warning_level
+                    if warning_level is not None:
+                        self.event_sink({
+                            "event": "mining_thermal_warning",
+                            "resourceId": resource_id,
+                            "hardwareUuid": record.hardware_uuid,
+                            "temperatureC": metrics.temperature_c,
+                            "warningLevelC": warning_level,
+                            "maximumTemperatureC": record.maximum_temperature_c,
+                        })
+                record.updated_at_ms = now_ms
+
+                if metrics.temperature_c >= record.maximum_temperature_c:
+                    try:
+                        self._stop_owned_record(records, record, "maximum_temperature_reached")
+                        outcome[resource_id] = "STOPPED"
+                        self.event_sink({
+                            "event": "mining_thermal_stop",
+                            "resourceId": resource_id,
+                            "hardwareUuid": record.hardware_uuid,
+                            "temperatureC": metrics.temperature_c,
+                            "maximumTemperatureC": record.maximum_temperature_c,
+                            "reason": "maximum_temperature_reached",
+                        })
+                    except ExecutionControlError:
+                        outcome[resource_id] = record.state
+                else:
+                    outcome[resource_id] = "MINING"
+                    self.store.save(records)
+        return outcome
+
+    def _watchdog_loop(self) -> None:
+        while not self._watchdog_stop.wait(self.watchdog_interval_seconds):
+            try:
+                self.run_watchdog_once()
+            except Exception as exc:
+                self.event_sink({
+                    "event": "mining_thermal_watchdog_error",
+                    "type": type(exc).__name__,
+                    "message": str(exc)[:160],
+                })
+
+    def shutdown(self) -> None:
+        self._watchdog_stop.set()
+        thread = self._watchdog_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=max(1.0, self.watchdog_interval_seconds + 0.5))
 
     def snapshot(self) -> dict[str, dict[str, Any]]:
         with self._lock:
