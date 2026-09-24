@@ -88,7 +88,7 @@ def _protect(plaintext: bytes) -> bytes:
     _require_supported_backend()
     win32crypt = _windows_dpapi()
     try:
-        _description, encrypted = win32crypt.CryptProtectData(
+        encrypted = win32crypt.CryptProtectData(
             plaintext,
             "GPUbnb mining pool secret",
             DPAPI_ENTROPY,
