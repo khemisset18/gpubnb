@@ -53,6 +53,8 @@ type MiningResourceRow = {
   quarantined: boolean;
   runtimeState: string;
   activeRentalId: string | null;
+  lastTelemetry: Prisma.JsonValue | null;
+  lastTelemetryAt: Date | null;
   configurationId: string | null;
   mode: 'DISABLED' | 'GPUBNB_MANAGED' | 'OWNER_POOL' | null;
   profileId: string | null;
@@ -81,7 +83,8 @@ const listOwnerResources = async (db: PrismaClient, machineId: string, ownerId: 
   db.$queryRaw<MiningResourceRow[]>(Prisma.sql`
     SELECT r."id", r."machineId", m."ownerId", r."kind", r."resourceKey",
            r."displayName", a."vendor" AS "gpuVendor", r."quarantined",
-           r."runtimeState", r."activeRentalId", c."id" AS "configurationId",
+           r."runtimeState", r."activeRentalId", r."lastTelemetry", r."lastTelemetryAt",
+           c."id" AS "configurationId",
            c."mode", c."profileId", c."walletAddress", c."workerName",
            c."ownerPoolEndpoint", c."autoResumeAfterRental", c."maximumTemperatureC",
            c."maximumPowerWatts", c."maximumCpuPercent", c."cpuThreadCount",
@@ -125,7 +128,8 @@ export const registerMiningRoutes = (
         const rows = await tx.$queryRaw<MiningResourceRow[]>(Prisma.sql`
           SELECT r."id", r."machineId", m."ownerId", r."kind", r."resourceKey",
                  r."displayName", a."vendor" AS "gpuVendor", r."quarantined",
-                 r."runtimeState", r."activeRentalId", c."id" AS "configurationId",
+                 r."runtimeState", r."activeRentalId", r."lastTelemetry", r."lastTelemetryAt",
+           c."id" AS "configurationId",
                  c."mode", c."profileId", c."walletAddress", c."workerName",
                  c."ownerPoolEndpoint", c."autoResumeAfterRental", c."maximumTemperatureC",
                  c."maximumPowerWatts", c."maximumCpuPercent", c."cpuThreadCount",
