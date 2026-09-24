@@ -14,6 +14,7 @@ import os
 import platform
 import re
 import socket
+import ssl
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -172,6 +173,43 @@ def _resolve_public_pool_addresses(value: str) -> tuple[str, ...]:
     return tuple(sorted(str(address) for address in addresses))
 
 
+def _tls_connect(address: str, port: int, hostname: str, timeout: float = 8.0) -> None:
+    ip = ipaddress.ip_address(address)
+    family = socket.AF_INET6 if ip.version == 6 else socket.AF_INET
+    raw = socket.socket(family, socket.SOCK_STREAM)
+    raw.settimeout(timeout)
+    target = (address, port, 0, 0) if family == socket.AF_INET6 else (address, port)
+    try:
+        raw.connect(target)
+        context = ssl.create_default_context()
+        with context.wrap_socket(raw, server_hostname=hostname):
+            return
+    except (OSError, ssl.SSLError, ssl.CertificateError) as exc:
+        try:
+            raw.close()
+        except OSError:
+            pass
+        raise ExecutionControlError("mining_pool_tls_verification_failed") from exc
+
+
+def _verify_pool_tls(
+    value: str,
+    resolved_addresses: tuple[str, ...] | None = None,
+) -> None:
+    parsed = _pool_endpoint(value)
+    if parsed.scheme == "stratum+tcp":
+        return
+    addresses = resolved_addresses or _resolve_public_pool_addresses(value)
+    last_error: ExecutionControlError | None = None
+    for address in addresses:
+        try:
+            _tls_connect(address, int(parsed.port), parsed.hostname.rstrip("."))
+            return
+        except ExecutionControlError as exc:
+            last_error = exc
+    raise last_error or ExecutionControlError("mining_pool_tls_verification_failed")
+
+
 def _validate_pool_url(value: str) -> str:
     _resolve_public_pool_addresses(value)
     return value
@@ -313,6 +351,7 @@ def start_mining(payload: Any, command_id: str) -> ExecutionResult:
             return ExecutionResult("mining_already_running")
         raise ExecutionControlError("miner_already_running")
     executable = _verified_binary(spec.profile_id, root)
+    _verify_pool_tls(spec.pool_url)
     arguments = build_miner_arguments(spec)
     flags = (
         subprocess.CREATE_NEW_PROCESS_GROUP | WINDOWS_CREATE_NO_WINDOW
