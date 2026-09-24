@@ -15,7 +15,7 @@ const validGpuInput = {
   walletAddress: 'RExamplePublicAddress123456',
   workerName: 'host_gpu_0',
   autoResumeAfterRental: true,
-  maximumTemperatureC: 80,
+  maximumTemperatureC: 85,
   maximumPowerWatts: 350,
   gpuIntensityPercent: 90,
   expectedVersion: 2,
