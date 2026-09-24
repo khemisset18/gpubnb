@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 
 import { enqueueMachineCommand } from './delivery-store.js';
 import { buildFencedStartMining, buildFencedStopMining } from './mining-resource-control.js';
+import { isMiningProfileApproved, normalizeMiningGpuVendor } from './mining-profile-catalog.js';
 import { acquireResourceLease, releaseResourceLease, type ResourceLeaseSnapshot } from './resource-lease.js';
 import type { MachineCommandEnvelope } from './reliable-delivery.js';
 
@@ -15,6 +16,8 @@ type MiningCommandKind = 'start_mining' | 'stop_mining';
 type MiningCommandCandidate = {
   resourceId: string;
   machineId: string;
+  machineModeration: string;
+  machineLifecycle: string;
   kind: 'GPU' | 'CPU';
   enabled: boolean;
   quarantined: boolean;
@@ -61,7 +64,10 @@ async function reserveSequence(tx: SqlClient, machineId: string): Promise<bigint
 
 async function loadCandidate(db: PrismaClient, machineId: string, resourceId: string): Promise<MiningCommandCandidate> {
   const rows = await db.$queryRaw<MiningCommandCandidate[]>(Prisma.sql`
-    SELECT r."id" AS "resourceId", r."machineId", r."kind"::text AS "kind",
+    SELECT r."id" AS "resourceId", r."machineId",
+           m."moderationStatus"::text AS "machineModeration",
+           m."lifecycleStatus"::text AS "machineLifecycle",
+           r."kind"::text AS "kind",
            r."enabled", r."quarantined", r."runtimeState"::text AS "runtimeState",
            r."activeRentalId", a."hardwareUuid", a."vendor" AS "gpuVendor",
            a."moderationStatus"::text AS "acceleratorModeration",
@@ -70,6 +76,7 @@ async function loadCandidate(db: PrismaClient, machineId: string, resourceId: st
            c."walletAddress", c."workerName", c."ownerPoolEndpoint", c."ownerPoolSecretRef",
            c."maximumTemperatureC", c."maximumPowerWatts", c."version" AS "configurationVersion"
       FROM "MiningResource" r
+      JOIN "Machine" m ON m."id" = r."machineId"
  LEFT JOIN "Accelerator" a ON a."id" = r."acceleratorId"
  LEFT JOIN "MiningConfiguration" c ON c."resourceId" = r."id"
      WHERE r."id" = ${resourceId} AND r."machineId" = ${machineId}
@@ -89,6 +96,8 @@ function assertStartCandidate(candidate: MiningCommandCandidate): asserts candid
   maximumPowerWatts: number;
 } {
   if (candidate.kind !== 'GPU') throw new Error('mining_start_gpu_only_v1');
+  if (candidate.machineModeration !== 'CLEAR') throw new Error('mining_machine_not_clear');
+  if (candidate.machineLifecycle !== 'ACTIVE') throw new Error('mining_machine_not_active');
   if (!candidate.enabled) throw new Error('mining_resource_disabled');
   if (candidate.quarantined) throw new Error('mining_resource_quarantined');
   if (candidate.activeRentalId) throw new Error('mining_resource_rented');
@@ -100,6 +109,10 @@ function assertStartCandidate(candidate: MiningCommandCandidate): asserts candid
   if (candidate.ownerPoolSecretRef) throw new Error('miner_secret_resolution_required');
   if (!candidate.hardwareUuid || !candidate.profileId || !candidate.walletAddress || !candidate.workerName || !candidate.ownerPoolEndpoint) {
     throw new Error('mining_configuration_incomplete');
+  }
+  const vendor = normalizeMiningGpuVendor(candidate.gpuVendor);
+  if (!isMiningProfileApproved(candidate.profileId, 'GPU', vendor)) {
+    throw new Error('mining_profile_not_approved');
   }
   if (candidate.maximumTemperatureC === null || candidate.maximumPowerWatts === null) {
     throw new Error('mining_configuration_limits_missing');
@@ -137,7 +150,10 @@ async function persistCommand(
   const expiresAt = new Date(Date.now() + MINING_COMMAND_TTL_MS);
   const sequence = await db.$transaction(async (tx) => {
     const current = await tx.$queryRaw<MiningCommandCandidate[]>(Prisma.sql`
-      SELECT r."id" AS "resourceId", r."machineId", r."kind"::text AS "kind",
+      SELECT r."id" AS "resourceId", r."machineId",
+           m."moderationStatus"::text AS "machineModeration",
+           m."lifecycleStatus"::text AS "machineLifecycle",
+           r."kind"::text AS "kind",
              r."enabled", r."quarantined", r."runtimeState"::text AS "runtimeState",
              r."activeRentalId", a."hardwareUuid", a."vendor" AS "gpuVendor",
              a."moderationStatus"::text AS "acceleratorModeration",
