@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { miningTelemetryEnvelopeSchema, miningTelemetrySchema } from '../src/mining-routes.js';
+import { miningTelemetryEnvelopeSchema, miningTelemetrySchema } from '../src/mining-telemetry-contract.js';
 
 const telemetry = {
   resourceId: 'resource_00000001',
