@@ -16,6 +16,7 @@ from gpubnb_agent.gpu_resource_supervisor import (
     RuntimeStore,
     SystemLauncher,
     build_resource_arguments,
+    mining_resource_telemetry_snapshot,
     parse_lolminer_telemetry,
     parse_resource_start,
 )
@@ -163,6 +164,69 @@ class GpuResourceSupervisorTests(unittest.TestCase):
                     Path(self.temp.name) / "private" / "miner.log",
                 )
         popen.assert_not_called()
+
+    def test_heartbeat_snapshot_exposes_only_bounded_non_secret_fields(self) -> None:
+        self.store.save({
+            "resource_00000001": RuntimeRecord(
+                resource_id="resource_00000001",
+                hardware_uuid="GPU-aaaaaaaa",
+                runtime_generation=7,
+                state="MINING",
+                profile_id="lolminer_etchash",
+                command_id="command-secret",
+                pid=4242,
+                executable_path="C:/secret/miner.exe",
+                binary_sha256="a" * 64,
+                process_creation_token="secret-token",
+                maximum_temperature_c=94,
+                last_temperature_c=70.5,
+                last_power_watts=82.25,
+                last_utilization_percent=91,
+                last_sampled_at_ms=1_700_000_000_000,
+                last_stop_reason="maximum_temperature_reached",
+                log_path="C:/secret/miner.log",
+                last_hashrate=42.5,
+                last_hashrate_unit="MH/s",
+                accepted_shares=5,
+                stale_shares=1,
+                hardware_errors=0,
+                uptime_seconds=600,
+                pool_connected=True,
+            )
+        })
+
+        snapshot = mining_resource_telemetry_snapshot(self.store)
+        self.assertEqual(len(snapshot), 1)
+        item = snapshot[0]
+        self.assertEqual(item["resourceId"], "resource_00000001")
+        self.assertEqual(item["hardwareUuid"], "GPU-aaaaaaaa")
+        self.assertEqual(item["hashrate"], 42.5)
+        self.assertEqual(item["maximumTemperatureC"], 94)
+        forbidden = {
+            "pid", "executablePath", "executable_path", "binarySha256", "binary_sha256",
+            "processCreationToken", "process_creation_token", "logPath", "log_path",
+            "commandId", "command_id", "poolUrl", "walletAddress", "workerName",
+        }
+        self.assertTrue(forbidden.isdisjoint(item.keys()))
+        serialized = str(item)
+        for secret in ["C:/secret/miner.exe", "secret-token", "C:/secret/miner.log", "command-secret"]:
+            self.assertNotIn(secret, serialized)
+
+    def test_heartbeat_snapshot_is_capped_at_32_resources(self) -> None:
+        records = {}
+        for index in range(40):
+            resource_id = f"resource_{index:08d}"
+            records[resource_id] = RuntimeRecord(
+                resource_id=resource_id,
+                hardware_uuid=f"GPU-{index:08d}",
+                runtime_generation=1,
+                state="STOPPED",
+            )
+        self.store.save(records)
+        snapshot = mining_resource_telemetry_snapshot(self.store)
+        self.assertEqual(len(snapshot), 32)
+        self.assertEqual(snapshot[0]["resourceId"], "resource_00000000")
+        self.assertEqual(snapshot[-1]["resourceId"], "resource_00000031")
 
     def test_lolminer_telemetry_parser_extracts_only_structured_metrics(self) -> None:
         telemetry = parse_lolminer_telemetry(
