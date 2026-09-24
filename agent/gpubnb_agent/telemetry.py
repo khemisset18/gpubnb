@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .accelerators import accelerator_inventory
+from .gpu_resource_supervisor import mining_resource_telemetry_snapshot
 from .platform_info import gpu_inventory, system_inventory
 
 
@@ -147,6 +148,7 @@ class TelemetrySampler:
             "networkTxBytesPerSecond": tx_rate,
             "gpus": gpus,
             "accelerators": accelerators,
+            "miningResources": mining_resource_telemetry_snapshot(),
             "runtime": {
                 "dockerAvailable": bool(system.get("dockerAvailable")),
                 "dockerVersion": system.get("dockerVersion"),
