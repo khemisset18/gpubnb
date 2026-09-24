@@ -75,13 +75,6 @@ export const miningConfigurationInputSchema = z
           message: 'gpu_maximum_temperature_out_of_range',
         });
       }
-      if (!value.gpuIntensityPercent) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['gpuIntensityPercent'],
-          message: 'gpu_intensity_required',
-        });
-      }
       if (value.cpuThreadLimit !== undefined || value.cpuUtilizationLimitPercent !== undefined) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
@@ -92,6 +85,15 @@ export const miningConfigurationInputSchema = z
     }
 
     if (value.mode === 'DISABLED') return;
+
+    if (value.mode === 'GPUBNB_MANAGED') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['mode'],
+        message: 'managed_pool_disabled',
+      });
+      return;
+    }
 
     if (!value.walletAddress) {
       context.addIssue({
