@@ -10,8 +10,8 @@ test('owner mining page exposes rental-first controls', async () => {
   assert.match(html, /Location avant minage/);
   assert.match(html, /data-mining-machine/);
   assert.match(html, /data-mining-resources/);
-  assert.match(html, /Commission GPUbnb\s*:\s*1 %/i);
-  assert.match(html, /Pool personnel\s*:\s*aucune commission GPUbnb/i);
+  assert.match(html, /Pool personnel opérationnel\s*:\s*aucune commission GPUbnb/i);
+  assert.match(html, /Pool GPUbnb futur\s*:\s*1 % de commission, actuellement désactivé/i);
   assert.match(html, /Reprise automatique désactivée par défaut/);
   assert.match(html, /mining\.js/);
 });
