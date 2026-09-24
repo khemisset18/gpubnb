@@ -180,6 +180,29 @@ impl GatewayRegistry {
             bail!("command_journal_capacity");
         }
 
+        let live_only_mining = matches!(
+            command.kind,
+            crate::protocol::CommandKind::StartMining | crate::protocol::CommandKind::StopMining
+        );
+        if live_only_mining {
+            let sender = state
+                .connection
+                .as_ref()
+                .map(|connection| connection.sender.clone())
+                .ok_or_else(|| anyhow::anyhow!("mining_command_requires_live_connection"))?;
+            let permit = sender.try_reserve().map_err(|error| match error {
+                mpsc::error::TrySendError::Full(_) => anyhow::anyhow!("mining_command_backpressure"),
+                mpsc::error::TrySendError::Closed(_) => anyhow::anyhow!("mining_command_requires_live_connection"),
+            })?;
+            state.highest_sequence_seen = command.sequence;
+            state.journal.push_back(command.clone());
+            self.pending_commands += 1;
+            permit.send(GatewayMessage::Command { command });
+            return Ok(DispatchOutcome {
+                status: DispatchStatus::Delivered,
+            });
+        }
+
         state.highest_sequence_seen = command.sequence;
         state.journal.push_back(command.clone());
         self.pending_commands += 1;
@@ -381,6 +404,72 @@ mod tests {
             .unwrap();
         assert!(outcome.replaced_sender.is_some());
         assert_eq!(registry.stats().active_connections, 1);
+    }
+
+    fn mining_command(id: &str, sequence: u64) -> CommandEnvelope {
+        let mut value = command(id, sequence);
+        value.kind = CommandKind::StartMining;
+        value.payload = json!({
+            "resourceId": "resource_00000001",
+            "hardwareUuid": "GPU-aaaaaaaa",
+            "runtimeGeneration": "7"
+        });
+        value
+    }
+
+    #[test]
+    fn disconnected_mining_commands_are_never_journaled_for_later_replay() {
+        let mut registry = registry();
+        let error = registry
+            .dispatch(mining_command("command_00000009", 9), 2_000)
+            .unwrap_err();
+        assert!(error.to_string().contains("mining_command_requires_live_connection"));
+        assert_eq!(registry.stats().pending_commands, 0);
+
+        let (tx, _rx) = mpsc::channel(2);
+        let outcome = registry
+            .register("machine_00000001", "conn_00000001".into(), tx, 0, 2_001)
+            .unwrap();
+        assert!(outcome.replay.is_empty());
+    }
+
+    #[test]
+    fn backpressured_mining_commands_are_not_journaled() {
+        let mut registry = registry();
+        let (tx, mut rx) = mpsc::channel(1);
+        tx.try_send(GatewayMessage::Fence {
+            reason: crate::protocol::FenceReason::GatewayDraining,
+        })
+        .unwrap();
+        registry
+            .register("machine_00000001", "conn_00000001".into(), tx, 0, 1_500)
+            .unwrap();
+
+        let error = registry
+            .dispatch(mining_command("command_00000010", 10), 2_000)
+            .unwrap_err();
+        assert!(error.to_string().contains("mining_command_backpressure"));
+        assert_eq!(registry.stats().pending_commands, 0);
+        let _ = rx.try_recv();
+    }
+
+    #[test]
+    fn connected_mining_command_is_journaled_only_after_live_send_capacity_exists() {
+        let mut registry = registry();
+        let (tx, mut rx) = mpsc::channel(2);
+        registry
+            .register("machine_00000001", "conn_00000001".into(), tx, 0, 1_500)
+            .unwrap();
+
+        let outcome = registry
+            .dispatch(mining_command("command_00000011", 11), 2_000)
+            .unwrap();
+        assert_eq!(outcome.status, DispatchStatus::Delivered);
+        assert_eq!(registry.stats().pending_commands, 1);
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            GatewayMessage::Command { .. }
+        ));
     }
 
     #[test]
