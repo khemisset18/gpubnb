@@ -40,7 +40,8 @@ function renderResource(resource){
   const noProfile=mode!=='DISABLED'&&!profileChoices;
   const runtimeBusy=['STARTING','MINING','PREEMPTING','VERIFYING_STOP'].includes(resource.runtimeState);
   const disabled=locked||noProfile||runtimeBusy;
-  const canStart=resource.kind==='GPU'&&!locked&&!noProfile&&mode==='OWNER_POOL'&&(resource.runtimeState==='IDLE'||resource.runtimeState==='STOPPED');
+  const secretRuntimeBlocked=resource.hasOwnerPoolSecret===true;
+  const canStart=resource.kind==='GPU'&&!locked&&!noProfile&&!secretRuntimeBlocked&&mode==='OWNER_POOL'&&(resource.runtimeState==='IDLE'||resource.runtimeState==='STOPPED');
   const canStop=resource.kind==='GPU'&&!locked&&(resource.runtimeState==='STARTING'||resource.runtimeState==='MINING');
   const runtimeControls=resource.kind!=='GPU'
     ? '<p class="muted">Le lancement distant CPU n’est pas encore activé.</p>'
@@ -50,7 +51,9 @@ function renderResource(resource){
         ? '<button class="button" type="button" data-mining-stop>Arrêter le minage</button>'
         : runtimeBusy
           ? '<button class="button" type="button" disabled>Transition en cours…</button>'
-          : '<span class="muted">Configurez un pool personnel puis démarrez explicitement le minage.</span>';
+          : secretRuntimeBlocked
+        ? '<span class="muted">Un secret de pool est configuré. Le démarrage reste bloqué tant que la livraison sécurisée sans argument de processus ni log n’est pas qualifiée.</span>'
+        : '<span class="muted">Configurez un pool personnel puis démarrez explicitement le minage.</span>';
   const kindControls=resource.kind==='CPU'
     ? `<div class="field"><label>Threads CPU maximum<input name="cpuThreadLimit" type="number" min="1" max="1024" value="${escapeHTML(resource.cpuThreadCount||1)}" required></label></div><div class="field"><label>Utilisation CPU maximale (%)<input name="cpuUtilizationLimitPercent" type="number" min="1" max="100" value="${escapeHTML(resource.maximumCpuPercent||75)}" required></label></div>`
     : '<p class="muted">Le runtime GPU v1 applique la température et la puissance maximales. Aucun contrôle d’intensité non vérifié n’est exposé.</p>';
