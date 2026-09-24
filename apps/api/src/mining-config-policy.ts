@@ -7,6 +7,7 @@ import {
 
 export const miningModeSchema = z.enum(['DISABLED', 'GPUBNB_MANAGED', 'OWNER_POOL']);
 export const miningResourceKindSchema = z.enum(['GPU', 'CPU']);
+export const miningPerformanceModeSchema = z.enum(['ECO', 'BALANCED', 'FULL']);
 export const MINING_THERMAL_LIMITS = {
   CPU: { minimumC: 50, maximumC: 98 },
   GPU: { minimumC: 85, maximumC: 98 },
@@ -39,6 +40,7 @@ export const miningConfigurationInputSchema = z
       .optional(),
     ownerPoolSecretRef: ownerPoolSecretReferenceSchema.optional(),
     autoResumeAfterRental: z.boolean().default(false),
+    performanceMode: miningPerformanceModeSchema.optional(),
     maximumTemperatureC: z.number().int().min(MINING_THERMAL_LIMITS.CPU.minimumC).max(MINING_THERMAL_LIMITS.CPU.maximumC),
     maximumPowerWatts: z.number().int().min(5).max(1500),
     cpuThreadLimit: z.number().int().min(1).max(1024).optional(),
@@ -62,11 +64,18 @@ export const miningConfigurationInputSchema = z
           message: 'cpu_utilization_limit_required',
         });
       }
+      if (value.performanceMode !== undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['performanceMode'],
+          message: 'cpu_resource_rejects_gpu_performance_mode',
+        });
+      }
       if (value.gpuIntensityPercent !== undefined) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['gpuIntensityPercent'],
-          message: 'cpu_resource_rejects_gpu_intensity',
+          message: 'gpu_intensity_legacy_not_supported',
         });
       }
     }
@@ -79,11 +88,18 @@ export const miningConfigurationInputSchema = z
           message: 'gpu_maximum_temperature_out_of_range',
         });
       }
-      if (!value.gpuIntensityPercent) {
+      if (value.performanceMode === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['performanceMode'],
+          message: 'gpu_performance_mode_required',
+        });
+      }
+      if (value.gpuIntensityPercent !== undefined) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['gpuIntensityPercent'],
-          message: 'gpu_intensity_required',
+          message: 'gpu_intensity_legacy_not_supported',
         });
       }
       if (value.cpuThreadLimit !== undefined || value.cpuUtilizationLimitPercent !== undefined) {
