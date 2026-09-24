@@ -287,8 +287,10 @@ async function recordRequestedCommand(
         "action", "requestId", "nextValue", "createdAt"
       ) VALUES (
         ${crypto.randomUUID()}, ${resource.machineId}, ${resource.id},
-        ${resource.configuration?.id ?? null}, 'OWNER'::"MiningAuditActorType", ${ownerId},
-        ${action === 'start' ? 'mining_start_requested' : 'mining_stop_requested'},
+        ${resource.configuration?.id ?? null}, ${actor.type}::"MiningAuditActorType", ${actor.id},
+        ${actor.type === 'SYSTEM' && action === 'start'
+          ? 'mining_auto_resume_requested'
+          : action === 'start' ? 'mining_start_requested' : 'mining_stop_requested'},
         ${requestId}, ${JSON.stringify({ commandId, targetState })}::jsonb, CURRENT_TIMESTAMP
       )
     `);
