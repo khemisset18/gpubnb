@@ -35,7 +35,7 @@ export const miningConfigurationInputSchema = z
       .optional(),
     ownerPoolSecretRef: ownerPoolSecretReferenceSchema.optional(),
     autoResumeAfterRental: z.boolean().default(false),
-    maximumTemperatureC: z.number().int().min(40).max(95),
+    maximumTemperatureC: z.number().int().min(50).max(98),
     maximumPowerWatts: z.number().int().min(5).max(1500),
     cpuThreadLimit: z.number().int().min(1).max(1024).optional(),
     cpuUtilizationLimitPercent: z.number().int().min(1).max(100).optional(),
@@ -68,6 +68,13 @@ export const miningConfigurationInputSchema = z
     }
 
     if (value.resourceKind === 'GPU') {
+      if (value.maximumTemperatureC < 85) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['maximumTemperatureC'],
+          message: 'gpu_maximum_temperature_out_of_range',
+        });
+      }
       if (!value.gpuIntensityPercent) {
         context.addIssue({
           code: z.ZodIssueCode.custom,

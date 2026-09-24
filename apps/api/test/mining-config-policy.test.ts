@@ -15,7 +15,7 @@ const validGpuInput = {
   walletAddress: 'RExamplePublicAddress123456',
   workerName: 'host_gpu_0',
   autoResumeAfterRental: true,
-  maximumTemperatureC: 80,
+  maximumTemperatureC: 85,
   maximumPowerWatts: 350,
   gpuIntensityPercent: 90,
   expectedVersion: 2,
@@ -155,6 +155,20 @@ describe('mining configuration policy', () => {
 
   it('requires CPU-specific limits', () => {
     assert.throws(() => miningConfigurationInputSchema.parse({ ...validCpuInput, cpuThreadLimit: undefined }));
+  });
+
+  it('allows CPU thermal configuration from the database minimum through 98 C', () => {
+    assert.equal(miningConfigurationInputSchema.parse({ ...validCpuInput, maximumTemperatureC: 50 }).maximumTemperatureC, 50);
+    assert.equal(miningConfigurationInputSchema.parse({ ...validCpuInput, maximumTemperatureC: 98 }).maximumTemperatureC, 98);
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validCpuInput, maximumTemperatureC: 49 }));
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validCpuInput, maximumTemperatureC: 99 }));
+  });
+
+  it('allows GPU owners to choose 85 through 98 C but not outside that range', () => {
+    assert.equal(miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 85 }).maximumTemperatureC, 85);
+    assert.equal(miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 98 }).maximumTemperatureC, 98);
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 84 }));
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 99 }));
   });
 
   it('requires GPU intensity and rejects CPU controls on a GPU', () => {

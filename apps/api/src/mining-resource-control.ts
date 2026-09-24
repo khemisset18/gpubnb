@@ -14,6 +14,7 @@ export type MiningResourceStartInput = {
   walletAddress: string;
   workerName: string;
   performanceMode: MiningPerformanceMode;
+  maximumTemperatureC: number;
 };
 
 export type FencedMiningCommand = {
@@ -55,6 +56,9 @@ export function buildFencedStartMining(
   validateIdentity(input.hardwareUuid, 'hardware_uuid', SAFE_GPU_UUID);
   validateIdentity(input.profileId, 'profile_id');
   validateIdentity(input.workerName, 'worker_name');
+  if (!Number.isInteger(input.maximumTemperatureC) || input.maximumTemperatureC < 85 || input.maximumTemperatureC > 98) {
+    throw new Error('mining_maximum_temperature_invalid');
+  }
   const generation = exactFence(lease, input.resourceId);
   return {
     lease: leaseBinding(lease),
@@ -67,6 +71,7 @@ export function buildFencedStartMining(
       walletAddress: input.walletAddress,
       workerName: input.workerName,
       performanceMode: input.performanceMode,
+      maximumTemperatureC: input.maximumTemperatureC,
     },
   };
 }
