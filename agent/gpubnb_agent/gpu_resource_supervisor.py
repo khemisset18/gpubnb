@@ -50,6 +50,8 @@ MAX_THERMAL_STOP_CELSIUS = 98
 THERMAL_QUARANTINE_CELSIUS = 98
 THERMAL_SENSOR_FAILURE_LIMIT = 3
 THERMAL_WARNING_THRESHOLDS = (85, 90, 94, 97)
+MAX_MINER_OUTPUT_BYTES = 256 * 1024
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 @dataclass(frozen=True)
@@ -171,6 +173,8 @@ class SpawnedProcess(Protocol):
 
     def terminate_owned(self) -> None: ...
 
+    def output_tail(self) -> str: ...
+
 
 class ProcessLauncher(Protocol):
     def spawn(self, executable: Path, arguments: list[str], cwd: Path) -> SpawnedProcess: ...
@@ -182,9 +186,48 @@ class ProcessInspector(Protocol):
     def terminate(self, identity: ProcessIdentity) -> None: ...
 
 
+class _BoundedOutput:
+    def __init__(self, maximum_bytes: int = MAX_MINER_OUTPUT_BYTES) -> None:
+        self.maximum_bytes = maximum_bytes
+        self._buffer = bytearray()
+        self._lock = threading.Lock()
+
+    def append(self, chunk: bytes) -> None:
+        if not chunk:
+            return
+        with self._lock:
+            self._buffer.extend(chunk)
+            overflow = len(self._buffer) - self.maximum_bytes
+            if overflow > 0:
+                del self._buffer[:overflow]
+
+    def text(self) -> str:
+        with self._lock:
+            return bytes(self._buffer).decode("utf-8", errors="replace")
+
+
+def _drain_process_output(stream: Any, output: _BoundedOutput) -> None:
+    try:
+        while True:
+            chunk = stream.read(4096)
+            if not chunk:
+                return
+            output.append(chunk)
+    except (OSError, ValueError):
+        return
+
+
 class _PopenHandle:
-    def __init__(self, process: subprocess.Popen[Any]) -> None:
+    def __init__(self, process: subprocess.Popen[Any], stream: Any) -> None:
         self._process = process
+        self._output = _BoundedOutput()
+        self._reader = threading.Thread(
+            target=_drain_process_output,
+            args=(stream, self._output),
+            name=f"gpubnb-miner-output-{process.pid}",
+            daemon=True,
+        )
+        self._reader.start()
 
     @property
     def pid(self) -> int:
@@ -199,6 +242,9 @@ class _PopenHandle:
         except OSError:
             pass
 
+    def output_tail(self) -> str:
+        return self._output.text()
+
 
 class SystemLauncher:
     def spawn(self, executable: Path, arguments: list[str], cwd: Path) -> SpawnedProcess:
@@ -212,15 +258,21 @@ class SystemLauncher:
                 [str(executable), *arguments],
                 cwd=str(cwd),
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 shell=False,
                 creationflags=flags,
                 start_new_session=os.name != "nt",
             )
         except OSError as exc:
             raise ExecutionControlError("miner_process_spawn_failed") from exc
-        return _PopenHandle(child)
+        if child.stdout is None:
+            try:
+                child.kill()
+            except OSError:
+                pass
+            raise ExecutionControlError("miner_output_capture_unavailable")
+        return _PopenHandle(child, child.stdout)
 
 
 class SystemProcessInspector:
@@ -446,6 +498,137 @@ def resolve_nvidia_binding(hardware_uuid: str) -> GpuBinding:
     return matches[0]
 
 
+@dataclass(frozen=True)
+class GpuRuntimeMetrics:
+    hardware_uuid: str
+    device_name: str | None
+    utilization_percent: float | None
+    memory_used_mib: float | None
+    temperature_celsius: float
+    power_watts: float | None
+
+
+def _optional_float(value: str) -> float | None:
+    normalized = value.strip()
+    if normalized.upper() in {"N/A", "[N/A]", ""}:
+        return None
+    try:
+        result = float(normalized)
+    except ValueError as exc:
+        raise ExecutionControlError("resource_gpu_telemetry_invalid") from exc
+    if not result >= 0:
+        raise ExecutionControlError("resource_gpu_telemetry_invalid")
+    return result
+
+
+def read_nvidia_runtime_metrics(hardware_uuid: str) -> GpuRuntimeMetrics:
+    executable = find_nvidia_smi()
+    if not executable:
+        raise ExecutionControlError("resource_gpu_nvidia_smi_unavailable")
+    query = "uuid,name,utilization.gpu,memory.used,temperature.gpu,power.draw"
+    result = run_command(
+        [executable, f"--query-gpu={query}", "--format=csv,noheader,nounits"],
+        timeout=12,
+    )
+    if result.returncode != 0:
+        raise ExecutionControlError("resource_gpu_telemetry_unavailable")
+    matches: list[GpuRuntimeMetrics] = []
+    for values in csv.reader(line for line in result.stdout.splitlines() if line.strip()):
+        fields = [field.strip() for field in values]
+        if len(fields) != 6 or fields[0].casefold() != hardware_uuid.casefold():
+            continue
+        temperature = _optional_float(fields[4])
+        if temperature is None or temperature > 150:
+            raise ExecutionControlError("resource_gpu_temperature_invalid")
+        matches.append(
+            GpuRuntimeMetrics(
+                hardware_uuid=hardware_uuid,
+                device_name=fields[1] or None,
+                utilization_percent=_optional_float(fields[2]),
+                memory_used_mib=_optional_float(fields[3]),
+                temperature_celsius=temperature,
+                power_watts=_optional_float(fields[5]),
+            )
+        )
+    if len(matches) != 1:
+        raise ExecutionControlError(
+            "resource_gpu_identity_not_unique" if matches else "resource_gpu_not_present"
+        )
+    return matches[0]
+
+
+def _parse_uptime_seconds(value: str) -> int | None:
+    total = 0
+    found = False
+    for token in value.split():
+        if len(token) < 2:
+            continue
+        suffix = token[-1]
+        multiplier = {"h": 3600, "m": 60, "s": 1}.get(suffix)
+        if multiplier is None:
+            continue
+        try:
+            amount = int(token[:-1])
+        except ValueError:
+            continue
+        if amount < 0:
+            return None
+        total += amount * multiplier
+        found = True
+    return total if found else None
+
+
+def _parse_share_triplet(value: str) -> tuple[int, int, int] | None:
+    try:
+        parts = tuple(int(item) for item in value.split("/"))
+    except ValueError:
+        return None
+    if len(parts) != 3 or any(item < 0 for item in parts):
+        return None
+    return parts[0], parts[1], parts[2]
+
+
+def parse_lolminer_output(output: str) -> dict[str, Any]:
+    session = output.rsplit("Setup Miner...", 1)[-1]
+    telemetry: dict[str, Any] = {
+        "hashrate": None,
+        "hashrateUnit": None,
+        "acceptedShares": None,
+        "staleShares": None,
+        "hardwareErrors": None,
+        "uptimeSeconds": None,
+        "poolConnected": "Authorized worker:" in session or "Connected to:" in session,
+    }
+    for raw_line in session.splitlines():
+        line = ANSI_ESCAPE.sub("", raw_line).replace("\r", "").strip()
+        if line.startswith("Statistics (") and "Uptime:" in line:
+            telemetry["uptimeSeconds"] = _parse_uptime_seconds(line.split("Uptime:", 1)[1].strip())
+            continue
+        fields = line.split()
+        if len(fields) < 8 or fields[0] != "GPU" or not fields[1].isdigit():
+            continue
+        share_index = next(
+            (index for index, field in enumerate(fields) if _parse_share_triplet(field) is not None),
+            None,
+        )
+        if share_index is None or share_index < 4:
+            continue
+        try:
+            hashrate = float(fields[share_index - 2])
+        except ValueError:
+            continue
+        shares = _parse_share_triplet(fields[share_index])
+        if shares is None or hashrate < 0:
+            continue
+        telemetry["hashrate"] = hashrate
+        # Current approved lolMiner profiles expose the primary performance
+        # column in MH/s. Association to the physical GPU comes from the exact
+        # UUID-bound process record, never from lolMiner's local GPU index.
+        telemetry["hashrateUnit"] = "MH/s"
+        telemetry["acceptedShares"], telemetry["staleShares"], telemetry["hardwareErrors"] = shares
+    return telemetry
+
+
 def read_nvidia_temperature(hardware_uuid: str) -> float:
     executable = find_nvidia_smi()
     if not executable:
@@ -527,6 +710,8 @@ class GpuResourceSupervisor:
         self.launcher = launcher or SystemLauncher()
         self.binding_resolver = binding_resolver or resolve_nvidia_binding
         self.temperature_reader = temperature_reader or read_nvidia_temperature
+        self.metrics_reader = read_nvidia_runtime_metrics
+        self._process_handles: dict[str, SpawnedProcess] = {}
         self._lock = threading.RLock()
         self.reconcile()
 
@@ -699,6 +884,7 @@ class GpuResourceSupervisor:
                 updated_at_ms=int(time.time() * 1000),
             )
             self.store.save(records)
+            self._process_handles[spec.resource_id] = child
             return ExecutionResult("mining_resource_started_verified")
 
     def stop(self, payload: Any) -> ExecutionResult:
@@ -741,6 +927,7 @@ class GpuResourceSupervisor:
                 raise ExecutionControlError("miner_process_identity_mismatch")
 
             self._terminate_and_verify(expected)
+            self._process_handles.pop(spec.resource_id, None)
             current.state = "STOPPED"
             current.last_stop_reason = "CONTROL_STOP"
             self._clear_process(current)
@@ -909,6 +1096,45 @@ class GpuResourceSupervisor:
             if changed:
                 self.store.save(records)
         return events
+
+    def telemetry_snapshot(self) -> list[dict[str, Any]]:
+        samples: list[dict[str, Any]] = []
+        with self._lock:
+            records = self.store.load()
+            for resource_id, record in records.items():
+                if record.state != "MINING":
+                    continue
+                try:
+                    metrics = self.metrics_reader(record.hardware_uuid)
+                except (ExecutionControlError, OSError, TypeError, ValueError):
+                    continue
+                miner = {
+                    "hashrate": None,
+                    "hashrateUnit": None,
+                    "acceptedShares": None,
+                    "staleShares": None,
+                    "hardwareErrors": None,
+                    "uptimeSeconds": None,
+                    "poolConnected": False,
+                }
+                handle = self._process_handles.get(resource_id)
+                if handle is not None:
+                    miner = parse_lolminer_output(handle.output_tail())
+                samples.append({
+                    "resourceId": resource_id,
+                    "hardwareUuid": record.hardware_uuid,
+                    "runtimeGeneration": record.runtime_generation,
+                    "profileId": record.profile_id,
+                    "processPid": record.pid,
+                    "temperatureC": metrics.temperature_celsius,
+                    "powerWatts": metrics.power_watts,
+                    "gpuUtilizationPercent": metrics.utilization_percent,
+                    "memoryUsedMiB": metrics.memory_used_mib,
+                    "deviceName": metrics.device_name,
+                    "thermalStopCelsius": record.thermal_stop_celsius,
+                    **miner,
+                })
+        return samples
 
     def snapshot(self) -> dict[str, dict[str, Any]]:
         with self._lock:
