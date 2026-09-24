@@ -4,11 +4,21 @@ export const MINING_TELEMETRY_LIVE_TTL_SECONDS = 90;
 export const MINING_TELEMETRY_DEDUPE_TTL_SECONDS = 300;
 export const MINING_TELEMETRY_HISTORY_INTERVAL_MS = 5 * 60 * 1000;
 export const MINING_TELEMETRY_HISTORY_HOURS = 24;
+const MAX_SIGNED_I64 = 9_223_372_036_854_775_807n;
+
+const fencingTokenSchema = z.string().regex(/^[1-9][0-9]{0,18}$/).superRefine((value, context) => {
+  if (BigInt(value) > MAX_SIGNED_I64) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'mining_telemetry_runtime_generation_out_of_range',
+    });
+  }
+});
 
 export const miningTelemetrySchema = z.object({
   resourceId: z.string().min(3).max(128),
   hardwareUuid: z.string().min(8).max(200).regex(/^[A-Za-z0-9_.:-]+$/),
-  runtimeGeneration: z.string().regex(/^[1-9][0-9]{0,18}$/),
+  runtimeGeneration: fencingTokenSchema,
   profileId: z.string().min(3).max(96).regex(/^[A-Za-z0-9_.:-]+$/).nullable(),
   processPid: z.number().int().positive().max(2_147_483_647).nullable(),
   temperatureC: z.number().finite().min(0).max(150),
@@ -30,7 +40,7 @@ export const miningTelemetryEnvelopeSchema = z.object({
   machineId: z.string().cuid(),
   resourceId: z.string().min(3).max(128),
   idempotencyKey: z.string().min(16).max(160),
-  agentCounter: z.coerce.bigint().positive(),
+  agentCounter: z.coerce.bigint().positive().max(MAX_SIGNED_I64),
   capturedAt: z.string().datetime(),
   telemetry: miningTelemetrySchema,
 }).strict().superRefine((value, context) => {
@@ -45,3 +55,19 @@ export const miningTelemetryEnvelopeSchema = z.object({
 
 export const miningTelemetryLatestKey = (resourceId: string): string =>
   `mining:telemetry:latest:${resourceId}`;
+
+export function validateMiningTelemetryAuthority(
+  runtimeState: string,
+  leaseFencingToken: string | null,
+  runtimeGeneration: string,
+): void {
+  if (runtimeState !== 'MINING') {
+    throw new Error('mining_resource_not_mining');
+  }
+  if (!leaseFencingToken) {
+    throw new Error('mining_resource_lease_missing');
+  }
+  if (leaseFencingToken !== runtimeGeneration) {
+    throw new Error('mining_runtime_generation_stale');
+  }
+}
