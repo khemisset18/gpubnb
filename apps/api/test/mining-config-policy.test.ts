@@ -157,6 +157,13 @@ describe('mining configuration policy', () => {
     assert.throws(() => miningConfigurationInputSchema.parse({ ...validCpuInput, cpuThreadLimit: undefined }));
   });
 
+  it('allows GPU owners to choose 85 through 98 C but not outside that range', () => {
+    assert.equal(miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 85 }).maximumTemperatureC, 85);
+    assert.equal(miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 98 }).maximumTemperatureC, 98);
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 84 }));
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 99 }));
+  });
+
   it('requires GPU intensity and rejects CPU controls on a GPU', () => {
     assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, gpuIntensityPercent: undefined, cpuThreadLimit: 4 }));
   });
