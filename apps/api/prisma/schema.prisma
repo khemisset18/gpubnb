@@ -840,7 +840,7 @@ model MiningRuntimeEvent {
   stateAfter MiningRuntimeState
   reservationId String?
   idempotencyKey String @unique @db.VarChar(160)
-  agentCounter BigInt?
+  agentCounter BigInt
   payload Json?
   occurredAt DateTime
   createdAt DateTime @default(now())
