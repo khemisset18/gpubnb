@@ -18,7 +18,7 @@ from gpubnb_agent.mining_secret_broker import (
 class FakeDpapi:
     @staticmethod
     def CryptProtectData(data, *_args):
-        return ("GPUbnb", b"enc:" + data[::-1])
+        return b"enc:" + data[::-1]
 
     @staticmethod
     def CryptUnprotectData(data, *_args):
