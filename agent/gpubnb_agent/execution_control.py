@@ -131,7 +131,7 @@ def _validate_argument(value: str, error: str) -> str:
     return value
 
 
-def _validate_pool_url(value: str) -> str:
+def _pool_endpoint(value: str):
     _validate_argument(value, "mining_pool_url_invalid")
     try:
         parsed = urlsplit(value)
@@ -143,6 +143,11 @@ def _validate_pool_url(value: str) -> str:
         raise ExecutionControlError("mining_pool_credentials_not_allowed")
     if parsed.port is None or not 1 <= parsed.port <= 65535:
         raise ExecutionControlError("mining_pool_port_invalid")
+    return parsed
+
+
+def _resolve_public_pool_addresses(value: str) -> tuple[str, ...]:
+    parsed = _pool_endpoint(value)
     host = parsed.hostname.rstrip(".")
     try:
         addresses = {ipaddress.ip_address(host)}
@@ -164,6 +169,11 @@ def _validate_pool_url(value: str) -> str:
         for address in addresses
     ):
         raise ExecutionControlError("mining_pool_address_not_public")
+    return tuple(sorted(str(address) for address in addresses))
+
+
+def _validate_pool_url(value: str) -> str:
+    _resolve_public_pool_addresses(value)
     return value
 
 
