@@ -68,6 +68,19 @@ describe('mining configuration policy', () => {
     assert.equal(miningConfigurationInputSchema.parse(validCpuInput).resourceKind, 'CPU');
   });
 
+  it('keeps the owner thermal cutoff inside the 85-98 C safety envelope', () => {
+    assert.equal(
+      miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 85 }).maximumTemperatureC,
+      85,
+    );
+    assert.equal(
+      miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 98 }).maximumTemperatureC,
+      98,
+    );
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 84 }));
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 99 }));
+  });
+
   it('accepts supported secret-manager references for owner pools', () => {
     for (const ownerPoolSecretRef of [
       'vault://gpubnb/mining/owner-1/cpu-0',
