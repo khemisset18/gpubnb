@@ -35,7 +35,7 @@ export const miningConfigurationInputSchema = z
       .optional(),
     ownerPoolSecretRef: ownerPoolSecretReferenceSchema.optional(),
     autoResumeAfterRental: z.boolean().default(false),
-    maximumTemperatureC: z.number().int().min(40).max(95),
+    maximumTemperatureC: z.number().int().min(85).max(98),
     maximumPowerWatts: z.number().int().min(5).max(1500),
     cpuThreadLimit: z.number().int().min(1).max(1024).optional(),
     cpuUtilizationLimitPercent: z.number().int().min(1).max(100).optional(),
