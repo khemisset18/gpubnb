@@ -79,6 +79,11 @@ describe('mining configuration policy', () => {
     );
     assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 84 }));
     assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 99 }));
+    assert.equal(
+      miningConfigurationInputSchema.parse({ ...validCpuInput, maximumTemperatureC: 95 }).maximumTemperatureC,
+      95,
+    );
+    assert.throws(() => miningConfigurationInputSchema.parse({ ...validCpuInput, maximumTemperatureC: 96 }));
   });
 
   it('accepts supported secret-manager references for owner pools', () => {
