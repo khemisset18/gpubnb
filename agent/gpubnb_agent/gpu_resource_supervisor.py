@@ -11,6 +11,7 @@ closed rather than silently falling back to machine-wide mining.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import re
@@ -50,6 +51,10 @@ MAX_MAX_TEMPERATURE_C = 98
 THERMAL_WARNING_LEVELS = (85, 90, 94, 97)
 WATCHDOG_INTERVAL_SECONDS = 5.0
 MAX_SENSOR_FAILURES = 3
+MAX_MINER_LOG_BYTES = 2 * 1024 * 1024
+MAX_TELEMETRY_TAIL_BYTES = 256 * 1024
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+SHARES_TOKEN = re.compile(r"^(\d+)/(\d+)/(\d+)$")
 
 
 @dataclass(frozen=True)
@@ -98,6 +103,17 @@ class GpuSensor(Protocol):
     def read(self, hardware_uuid: str) -> GpuMetrics: ...
 
 
+@dataclass(frozen=True)
+class MinerTelemetry:
+    hashrate: float | None = None
+    hashrate_unit: str | None = None
+    accepted_shares: int | None = None
+    stale_shares: int | None = None
+    hardware_errors: int | None = None
+    uptime_seconds: int | None = None
+    pool_connected: bool = False
+
+
 @dataclass
 class RuntimeRecord:
     resource_id: str
@@ -117,6 +133,14 @@ class RuntimeRecord:
     last_sampled_at_ms: int | None = None
     last_warning_level: int | None = None
     last_stop_reason: str | None = None
+    log_path: str | None = None
+    last_hashrate: float | None = None
+    last_hashrate_unit: str | None = None
+    accepted_shares: int | None = None
+    stale_shares: int | None = None
+    hardware_errors: int | None = None
+    uptime_seconds: int | None = None
+    pool_connected: bool = False
     updated_at_ms: int = 0
 
     @classmethod
@@ -162,6 +186,14 @@ class RuntimeRecord:
             last_sampled_at_ms=value.get("last_sampled_at_ms") if isinstance(value.get("last_sampled_at_ms"), int) and not isinstance(value.get("last_sampled_at_ms"), bool) else None,
             last_warning_level=value.get("last_warning_level") if isinstance(value.get("last_warning_level"), int) and not isinstance(value.get("last_warning_level"), bool) else None,
             last_stop_reason=value.get("last_stop_reason") if isinstance(value.get("last_stop_reason"), str) else None,
+            log_path=value.get("log_path") if isinstance(value.get("log_path"), str) else None,
+            last_hashrate=float(value["last_hashrate"]) if isinstance(value.get("last_hashrate"), (int, float)) and not isinstance(value.get("last_hashrate"), bool) else None,
+            last_hashrate_unit=value.get("last_hashrate_unit") if isinstance(value.get("last_hashrate_unit"), str) else None,
+            accepted_shares=value.get("accepted_shares") if isinstance(value.get("accepted_shares"), int) and not isinstance(value.get("accepted_shares"), bool) else None,
+            stale_shares=value.get("stale_shares") if isinstance(value.get("stale_shares"), int) and not isinstance(value.get("stale_shares"), bool) else None,
+            hardware_errors=value.get("hardware_errors") if isinstance(value.get("hardware_errors"), int) and not isinstance(value.get("hardware_errors"), bool) else None,
+            uptime_seconds=value.get("uptime_seconds") if isinstance(value.get("uptime_seconds"), int) and not isinstance(value.get("uptime_seconds"), bool) else None,
+            pool_connected=value.get("pool_connected") is True,
             updated_at_ms=int(value.get("updated_at_ms", 0)) if isinstance(value.get("updated_at_ms", 0), int) else 0,
         )
 
@@ -176,7 +208,13 @@ class SpawnedProcess(Protocol):
 
 
 class ProcessLauncher(Protocol):
-    def spawn(self, executable: Path, arguments: list[str], cwd: Path) -> SpawnedProcess: ...
+    def spawn(
+        self,
+        executable: Path,
+        arguments: list[str],
+        cwd: Path,
+        log_path: Path | None = None,
+    ) -> SpawnedProcess: ...
 
 
 class ProcessInspector(Protocol):
@@ -204,25 +242,44 @@ class _PopenHandle:
 
 
 class SystemLauncher:
-    def spawn(self, executable: Path, arguments: list[str], cwd: Path) -> SpawnedProcess:
+    def spawn(
+        self,
+        executable: Path,
+        arguments: list[str],
+        cwd: Path,
+        log_path: Path | None = None,
+    ) -> SpawnedProcess:
         flags = (
             subprocess.CREATE_NEW_PROCESS_GROUP | WINDOWS_CREATE_NO_WINDOW
             if os.name == "nt"
             else 0
         )
+        log_handle = None
+        stdout_target: Any = subprocess.DEVNULL
+        stderr_target: Any = subprocess.DEVNULL
         try:
+            if log_path is not None:
+                log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                if log_path.exists() and log_path.stat().st_size > MAX_MINER_LOG_BYTES:
+                    log_path.unlink()
+                log_handle = open(log_path, "ab", buffering=0)
+                stdout_target = log_handle
+                stderr_target = log_handle
             child = subprocess.Popen(
                 [str(executable), *arguments],
                 cwd=str(cwd),
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=stdout_target,
+                stderr=stderr_target,
                 shell=False,
                 creationflags=flags,
                 start_new_session=os.name != "nt",
             )
         except OSError as exc:
             raise ExecutionControlError("miner_process_spawn_failed") from exc
+        finally:
+            if log_handle is not None:
+                log_handle.close()
         return _PopenHandle(child)
 
 
@@ -384,6 +441,84 @@ class RuntimeStore:
             finally:
                 if os.path.exists(temporary):
                     os.unlink(temporary)
+
+
+
+def _resource_log_path(resource_id: str) -> Path:
+    digest = hashlib.sha256(resource_id.encode("utf-8")).hexdigest()[:24]
+    return config_dir() / "mining-logs" / f"{digest}.log"
+
+
+def _read_log_tail(path: Path) -> str:
+    try:
+        with path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            length = handle.tell()
+            handle.seek(max(0, length - MAX_TELEMETRY_TAIL_BYTES))
+            return handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _parse_uptime(value: str) -> int | None:
+    total = 0
+    found = False
+    for token in value.split():
+        if len(token) < 2:
+            continue
+        suffix = token[-1]
+        multiplier = {"h": 3600, "m": 60, "s": 1}.get(suffix)
+        if multiplier is None:
+            continue
+        try:
+            amount = int(token[:-1])
+        except ValueError:
+            continue
+        total += amount * multiplier
+        found = True
+    return total if found else None
+
+
+def parse_lolminer_telemetry(log: str) -> MinerTelemetry:
+    hashrate: float | None = None
+    accepted: int | None = None
+    stale: int | None = None
+    hardware: int | None = None
+    uptime: int | None = None
+    connected = False
+    for raw in log.splitlines():
+        line = ANSI_ESCAPE.sub("", raw).replace("\r", "").strip()
+        if "Authorized worker:" in line or "Connected to:" in line:
+            connected = True
+        if line.startswith("Statistics (") and "Uptime:" in line:
+            uptime = _parse_uptime(line.split("Uptime:", 1)[1].strip())
+        if not line.startswith("GPU "):
+            continue
+        fields = line.split()
+        share_index = next(
+            (index for index, field in enumerate(fields) if SHARES_TOKEN.fullmatch(field)),
+            None,
+        )
+        if share_index is None or share_index < 2:
+            continue
+        shares = SHARES_TOKEN.fullmatch(fields[share_index])
+        if shares is None:
+            continue
+        try:
+            candidate_hashrate = float(fields[share_index - 2])
+        except ValueError:
+            continue
+        hashrate = candidate_hashrate
+        accepted, stale, hardware = (int(shares.group(i)) for i in range(1, 4))
+    return MinerTelemetry(
+        hashrate=hashrate,
+        hashrate_unit="MH/s" if hashrate is not None else None,
+        accepted_shares=accepted,
+        stale_shares=stale,
+        hardware_errors=hardware,
+        uptime_seconds=uptime,
+        pool_connected=connected,
+    )
 
 
 def _positive_generation(value: Any) -> int:
@@ -633,7 +768,8 @@ class GpuResourceSupervisor:
                 if expected is not None and self.inspector.inspect(expected.pid) == expected:
                     raise ExecutionControlError("resource_gpu_already_owned")
 
-            child = self.launcher.spawn(executable, arguments, root)
+            log_path = _resource_log_path(spec.resource_id)
+            child = self.launcher.spawn(executable, arguments, root, log_path)
             time.sleep(0.05)
             if child.poll() is not None:
                 raise ExecutionControlError("miner_process_exited_during_start")
@@ -669,6 +805,7 @@ class GpuResourceSupervisor:
                 process_creation_token=identity.creation_token,
                 maximum_temperature_c=spec.maximum_temperature_c,
                 last_stop_reason=None,
+                log_path=str(log_path),
                 updated_at_ms=int(time.time() * 1000),
             )
             self.store.save(records)
@@ -829,6 +966,15 @@ class GpuResourceSupervisor:
                 record.last_power_watts = metrics.power_watts
                 record.last_utilization_percent = metrics.utilization_percent
                 record.last_sampled_at_ms = now_ms
+                if record.log_path:
+                    telemetry = parse_lolminer_telemetry(_read_log_tail(Path(record.log_path)))
+                    record.last_hashrate = telemetry.hashrate
+                    record.last_hashrate_unit = telemetry.hashrate_unit
+                    record.accepted_shares = telemetry.accepted_shares
+                    record.stale_shares = telemetry.stale_shares
+                    record.hardware_errors = telemetry.hardware_errors
+                    record.uptime_seconds = telemetry.uptime_seconds
+                    record.pool_connected = telemetry.pool_connected
                 warning_level = self._warning_level(metrics.temperature_c)
                 if warning_level != record.last_warning_level:
                     record.last_warning_level = warning_level
