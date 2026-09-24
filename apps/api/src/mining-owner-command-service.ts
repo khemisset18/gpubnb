@@ -55,6 +55,7 @@ type ResourceContext = {
     ownerPoolSecretRef: string | null;
     maximumTemperatureC: number | null;
     maximumPowerWatts: number | null;
+    autoResumeAfterRental: boolean;
     version: number;
   } | null;
 };
@@ -79,10 +80,14 @@ async function loadResource(
   db: PrismaClient,
   machineId: string,
   resourceId: string,
-  ownerId: string,
+  ownerId?: string,
 ): Promise<ResourceContext> {
   const resource = await db.miningResource.findFirst({
-    where: { id: resourceId, machineId, machine: { ownerId } },
+    where: {
+      id: resourceId,
+      machineId,
+      ...(ownerId ? { machine: { ownerId } } : {}),
+    },
     select: {
       id: true,
       machineId: true,
@@ -105,6 +110,7 @@ async function loadResource(
           ownerPoolSecretRef: true,
           maximumTemperatureC: true,
           maximumPowerWatts: true,
+          autoResumeAfterRental: true,
           version: true,
         },
       },
@@ -221,16 +227,17 @@ async function currentOrFreshStopLease(
 async function recordRequestedCommand(
   db: PrismaClient,
   resource: ResourceContext,
-  ownerId: string,
+  actor: { type: 'OWNER' | 'SYSTEM'; id: string },
   requestId: string,
   action: RuntimeAction,
   lease: ResourceLeaseSnapshot,
   durablePayload: Record<string, unknown>,
   now: Date,
+  requestedEventType: 'START_REQUESTED' | 'STOP_REQUESTED' | 'AUTO_RESUME_REQUESTED' = action === 'start' ? 'START_REQUESTED' : 'STOP_REQUESTED',
 ): Promise<MiningOwnerCommandResult> {
   const commandId = stableId('cmd', resource.machineId, resource.id, action, lease.leaseId);
   const idempotencyKey = `mining:${action}:${resource.id}:${lease.leaseId}`;
-  const eventType = action === 'start' ? 'START_REQUESTED' : 'STOP_REQUESTED';
+  const eventType = requestedEventType;
   const targetState = action === 'start' ? MiningRuntimeState.STARTING : MiningRuntimeState.VERIFYING_STOP;
   const allowedStates = action === 'start'
     ? [MiningRuntimeState.IDLE, MiningRuntimeState.STOPPED]
@@ -280,8 +287,10 @@ async function recordRequestedCommand(
         "action", "requestId", "nextValue", "createdAt"
       ) VALUES (
         ${crypto.randomUUID()}, ${resource.machineId}, ${resource.id},
-        ${resource.configuration?.id ?? null}, 'OWNER'::"MiningAuditActorType", ${ownerId},
-        ${action === 'start' ? 'mining_start_requested' : 'mining_stop_requested'},
+        ${resource.configuration?.id ?? null}, ${actor.type}::"MiningAuditActorType", ${actor.id},
+        ${actor.type === 'SYSTEM' && action === 'start'
+          ? 'mining_auto_resume_requested'
+          : action === 'start' ? 'mining_start_requested' : 'mining_stop_requested'},
         ${requestId}, ${JSON.stringify({ commandId, targetState })}::jsonb, CURRENT_TIMESTAMP
       )
     `);
@@ -321,7 +330,7 @@ export async function requestOwnerMiningStart(
     return await recordRequestedCommand(
       db,
       resource,
-      input.ownerId,
+      { type: 'OWNER', id: input.ownerId },
       input.requestId,
       'start',
       leaseResult.lease,
@@ -368,12 +377,58 @@ export async function requestOwnerMiningStop(
     return await recordRequestedCommand(
       db,
       resource,
-      input.ownerId,
+      { type: 'OWNER', id: input.ownerId },
       input.requestId,
       'stop',
       leaseResult.lease,
       fenced,
       now,
+    );
+  } catch (error) {
+    if (leaseResult.acquired) {
+      await releaseResourceLease(redis, leaseResult.lease).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+export async function requestSystemMiningAutoResume(
+  db: PrismaClient,
+  redis: Redis,
+  input: { machineId: string; resourceId: string; requestId: string; now?: Date },
+): Promise<MiningOwnerCommandResult> {
+  const now = input.now ?? new Date();
+  const resource = await loadResource(db, input.machineId, input.resourceId);
+  if (!resource.configuration?.autoResumeAfterRental) {
+    return { commandId: null, action: 'start', state: resource.runtimeState, alreadySatisfied: true };
+  }
+  validateStartable(resource);
+
+  const leaseResult = await acquireMiningLease(redis, resource, 'start');
+  try {
+    const configuration = resource.configuration;
+    const fenced = buildFencedStartMining({
+      machineId: resource.machineId,
+      resourceId: resource.id,
+      hardwareUuid: resource.hardwareUuid,
+      profileId: configuration.profileId!,
+      poolUrl: configuration.ownerPoolEndpoint!,
+      walletAddress: configuration.walletAddress!,
+      workerName: configuration.workerName,
+      performanceMode: 'FULL',
+      maximumTemperatureC: configuration.maximumTemperatureC!,
+      maximumPowerWatts: configuration.maximumPowerWatts!,
+    }, leaseResult.lease);
+    return await recordRequestedCommand(
+      db,
+      resource,
+      { type: 'SYSTEM', id: 'rental-cleanup-auto-resume' },
+      input.requestId,
+      'start',
+      leaseResult.lease,
+      fenced,
+      now,
+      'AUTO_RESUME_REQUESTED',
     );
   } catch (error) {
     if (leaseResult.acquired) {
