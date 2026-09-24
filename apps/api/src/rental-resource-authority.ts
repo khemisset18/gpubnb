@@ -53,6 +53,23 @@ const RENTABLE_ACCELERATOR_STATUSES: AcceleratorOperationalStatus[] = [
 const RENTAL_LEASE_TTL_SECONDS = RESOURCE_LEASE_DEFAULT_TTL_SECONDS;
 const RENTAL_LEASE_TTL_MS = RENTAL_LEASE_TTL_SECONDS * 1000;
 
+type RentalAuthorityDb = PrismaClient | Prisma.TransactionClient;
+
+async function withRentalTransaction<T>(
+  db: RentalAuthorityDb,
+  callback: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  const client = db as PrismaClient;
+  if ('$transaction' in client && typeof client.$transaction === 'function') {
+    return client.$transaction(callback, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: 5_000,
+      timeout: 10_000,
+    });
+  }
+  return callback(db as Prisma.TransactionClient);
+}
+
 const PRIORITY_ACQUIRE_SCRIPT = `
 local currentLeaseId = redis.call('HGET', KEYS[1], 'leaseId')
 if currentLeaseId then
@@ -181,7 +198,7 @@ function rentalRuntimeState(status: WorkspaceSessionStatus): MiningRuntimeState 
 }
 
 async function markRentalResourcesOwned(
-  db: PrismaClient,
+  db: RentalAuthorityDb,
   machineId: string,
   sessionId: string,
   status: WorkspaceSessionStatus,
@@ -189,7 +206,7 @@ async function markRentalResourcesOwned(
 ): Promise<void> {
   if (!resources.length) return;
   const targetState = rentalRuntimeState(status);
-  await db.$transaction(async (tx) => {
+  await withRentalTransaction(db, async (tx) => {
     for (const resource of resources) {
       const rows = await tx.$queryRaw<Array<{ runtimeState: MiningRuntimeState; activeRentalId: string | null }>>(Prisma.sql`
         SELECT "runtimeState", "activeRentalId" FROM "MiningResource"
@@ -214,26 +231,26 @@ async function markRentalResourcesOwned(
       await tx.$executeRaw(Prisma.sql`
         INSERT INTO "MiningRuntimeEvent" (
           "id", "resourceId", "eventType", "stateBefore", "stateAfter", "reservationId",
-          "idempotencyKey", "payload", "occurredAt", "createdAt"
+          "idempotencyKey", "agentCounter", "payload", "occurredAt", "createdAt"
         ) VALUES (
           ${crypto.randomUUID()}, ${resource.resourceId}, 'RENTAL_PREEMPTED'::"MiningEventType",
           ${current.runtimeState}::"MiningRuntimeState", ${targetState}::"MiningRuntimeState",
-          ${sessionId}, ${`rental-authority:${sessionId}:${resource.resourceId}:${targetState}`},
+          ${sessionId}, ${`rental-authority:${sessionId}:${resource.resourceId}:${targetState}`}, 0,
           ${JSON.stringify({ source: 'rental-resource-authority' })}::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )
         ON CONFLICT ("idempotencyKey") DO NOTHING
       `);
     }
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 10_000 });
+  });
 }
 
 async function markRentalCleanupVerified(
-  db: PrismaClient,
+  db: RentalAuthorityDb,
   machineId: string,
   sessionId: string,
   resourceIds: string[],
 ): Promise<string[]> {
-  return db.$transaction(async (tx) => {
+  return withRentalTransaction(db, async (tx) => {
     const cleaned: string[] = [];
     for (const resourceId of resourceIds) {
       const rows = await tx.$queryRaw<Array<{ runtimeState: MiningRuntimeState; activeRentalId: string | null }>>(Prisma.sql`
@@ -254,11 +271,11 @@ async function markRentalCleanupVerified(
       await tx.$executeRaw(Prisma.sql`
         INSERT INTO "MiningRuntimeEvent" (
           "id", "resourceId", "eventType", "stateBefore", "stateAfter", "reservationId",
-          "idempotencyKey", "payload", "occurredAt", "createdAt"
+          "idempotencyKey", "agentCounter", "payload", "occurredAt", "createdAt"
         ) VALUES (
           ${crypto.randomUUID()}, ${resourceId}, 'CLEANUP_VERIFIED'::"MiningEventType",
           ${current.runtimeState}::"MiningRuntimeState", 'STOPPED'::"MiningRuntimeState",
-          ${sessionId}, ${`rental-cleanup:${sessionId}:${resourceId}`},
+          ${sessionId}, ${`rental-cleanup:${sessionId}:${resourceId}`}, 0,
           ${JSON.stringify({ source: 'workspace-gateway-v5-release' })}::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )
         ON CONFLICT ("idempotencyKey") DO NOTHING
@@ -266,11 +283,11 @@ async function markRentalCleanupVerified(
       cleaned.push(resourceId);
     }
     return cleaned;
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 10_000 });
+  });
 }
 
 async function ensureMiningResourceMapping(
-  db: PrismaClient,
+  db: RentalAuthorityDb,
   machineId: string,
   accelerator: AcceleratorForRental,
 ): Promise<NonNullable<AcceleratorForRental['miningResource']>> {
@@ -359,7 +376,7 @@ function validateCandidates(candidates: CandidateGpu[]): string | undefined {
 }
 
 export async function buildRentalResourceAuthority(
-  db: PrismaClient,
+  db: RentalAuthorityDb,
   redis: Redis,
   machineId: string,
 ): Promise<RentalResourceAuthority> {
@@ -497,7 +514,7 @@ export async function buildRentalResourceAuthority(
 }
 
 export async function releaseRentalResourceAuthority(
-  db: PrismaClient,
+  db: RentalAuthorityDb,
   redis: Redis,
   machineId: string,
   sessionId: string,
