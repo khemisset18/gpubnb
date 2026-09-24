@@ -34,7 +34,7 @@ At the end of the rental:
 
 ## Operational milestone
 
-The first implementation must use a controlled fake miner and prove this complete lifecycle:
+The operational implementation must prove this complete lifecycle with the pinned approved miner on qualified hardware:
 
 1. owner-pool configuration;
 2. approved binary verification;
@@ -46,7 +46,7 @@ The first implementation must use a controlled fake miner and prove this complet
 8. rental finishes and cleanup is verified;
 9. mining resumes if authorized.
 
-No real mining binary may be enabled by default before this lifecycle passes CI and physical-machine validation.
+No public mining rollout may be enabled before this lifecycle passes CI and physical-machine validation. The command rollout remains fail-closed at 0 basis points by default.
 
 ## Security requirements
 
