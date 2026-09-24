@@ -752,6 +752,7 @@ class GpuResourceSupervisor:
                     continue
                 expected = _record_identity(record)
                 if expected is None:
+                    self._process_handles.pop(resource_id, None)
                     record.state = "QUARANTINED"
                     record.last_stop_reason = "PROCESS_IDENTITY_MISSING"
                     outcome[resource_id] = record.state
@@ -976,6 +977,7 @@ class GpuResourceSupervisor:
                     changed = True
                     continue
                 if observed != expected:
+                    self._process_handles.pop(resource_id, None)
                     record.state = "QUARANTINED"
                     record.last_stop_reason = "PROCESS_IDENTITY_MISMATCH"
                     record.updated_at_ms = int(time.time() * 1000)
@@ -1020,7 +1022,7 @@ class GpuResourceSupervisor:
                         try:
                             self._terminate_and_verify(expected)
                             self._clear_process(record)
-                        self._process_handles.pop(resource_id, None)
+                            self._process_handles.pop(resource_id, None)
                         except ExecutionControlError:
                             pass
                         record.state = "QUARANTINED"
