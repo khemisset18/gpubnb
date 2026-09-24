@@ -95,11 +95,11 @@ export async function finalizeMiningTerminalAck(
     await tx.$executeRaw(Prisma.sql`
       INSERT INTO "MiningRuntimeEvent" (
         "id", "resourceId", "eventType", "stateBefore", "stateAfter",
-        "idempotencyKey", "payload", "occurredAt", "createdAt"
+        "idempotencyKey", "agentCounter", "payload", "occurredAt", "createdAt"
       ) VALUES (
         ${stableId('mre', command.id, eventType)}, ${durable.lease.resourceId}, ${eventType}::"MiningEventType",
         ${current.runtimeState}::"MiningRuntimeState", ${nextState}::"MiningRuntimeState",
-        ${eventIdempotency},
+        ${eventIdempotency}, 0,
         ${JSON.stringify({ commandId: command.id, ackStatus: ack.status, detailCode: ack.detailCode ?? null })}::jsonb,
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
