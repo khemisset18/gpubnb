@@ -24,13 +24,18 @@ class TelemetryValidationTests(unittest.TestCase):
         self.assertIsNone(metric["temperatureC"])
         self.assertIsNone(metric["powerWatts"])
 
+    @patch("gpubnb_agent.telemetry.mining_resource_telemetry_snapshot", return_value=[{
+        "resourceId": "resource_00000001",
+        "hardwareUuid": "GPU-test",
+        "state": "MINING",
+    }])
     @patch("gpubnb_agent.telemetry.boot_id", return_value="boot-test")
     @patch("gpubnb_agent.telemetry.network_totals")
     @patch("gpubnb_agent.telemetry.cpu_times")
     @patch("gpubnb_agent.telemetry.gpu_inventory")
     @patch("gpubnb_agent.telemetry.system_inventory")
     def test_sampler_produces_monotonic_sequence_and_rates(
-        self, system, gpus, cpu, network, _boot_id
+        self, system, gpus, cpu, network, _boot_id, _mining_resources
     ):
         system.return_value = {
             "ramTotalMiB": 32000, "ramAvailableMiB": 12000,
@@ -57,6 +62,7 @@ class TelemetryValidationTests(unittest.TestCase):
         self.assertEqual(second["ramUsedMiB"], 20000)
         self.assertEqual(second["diskUsedMiB"], 60000)
         self.assertEqual(len(second["gpus"]), 1)
+        self.assertEqual(second["miningResources"][0]["resourceId"], "resource_00000001")
         self.assertGreaterEqual(second["networkRxBytesPerSecond"], 0)
 
     @patch("gpubnb_agent.telemetry.gpu_inventory", return_value=[])
