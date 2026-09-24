@@ -482,7 +482,8 @@ mod tests {
     fn arguments_are_structured_without_shell_fragments() {
         let args = build_approved_arguments(&spec("lolminer_blake3")).unwrap();
         assert_eq!(args[0], "--algo");
-        assert!(args.contains(&"stratum+tcp://pool.example.com:3333".to_owned()));
+        assert!(args.contains(&"pool.example.com:3333".to_owned()));
+        assert!(args.windows(2).any(|pair| pair == ["--tls", "off"]));
         assert!(!args.iter().any(|argument| argument.contains("&&")));
     }
 
@@ -499,6 +500,22 @@ mod tests {
             assert!(args.iter().any(|argument| argument == "--pool"));
             assert!(args.iter().any(|argument| argument == "--user"));
         }
+    }
+
+    #[test]
+    fn lolminer_pool_scheme_maps_to_explicit_tls_mode() {
+        let mut launch = spec("lolminer_etchash");
+        launch.pool_url = "stratum+tls://pool.example.com:443".into();
+        let args = build_approved_arguments(&launch).unwrap();
+        assert!(args.windows(2).any(|pair| pair == ["--pool", "pool.example.com:443"]));
+        assert!(args.windows(2).any(|pair| pair == ["--tls", "on"]));
+
+        launch.pool_url = "stratum+ssl://[2606:4700:4700::1111]:5555".into();
+        let ipv6 = build_approved_arguments(&launch).unwrap();
+        assert!(ipv6
+            .windows(2)
+            .any(|pair| pair == ["--pool", "[2606:4700:4700::1111]:5555"]));
+        assert!(ipv6.windows(2).any(|pair| pair == ["--tls", "on"]));
     }
 
     #[test]
