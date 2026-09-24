@@ -792,6 +792,8 @@ model MiningResource {
   runtimeState MiningRuntimeState @default(IDLE)
   activeRentalId String?
   lastSeenAt DateTime?
+  lastTelemetry Json?
+  lastTelemetryAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
@@ -802,6 +804,7 @@ model MiningResource {
   @@unique([machineId, resourceKey])
   @@index([machineId, kind])
   @@index([runtimeState])
+  @@index([lastTelemetryAt])
 }
 
 model MiningConfiguration {
