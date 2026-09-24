@@ -269,13 +269,14 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
             return result
         except (urllib.error.URLError, RuntimeError, TimeoutError, OSError) as exc:
             last_error = exc
-            if "counter_replay" in str(exc) and resync_attempt < COUNTER_REPLAY_RESYNC_LIMIT:
-                # The local counter file fell behind the server's lastCounter (crash,
-                # uninstall wiping ProgramData before the last successful save could
-                # land, or two agent instances raced). The reserved value is already
-                # persisted and therefore burned forever; reserve a fresh value.
-                resync_attempt += 1
-                continue
+            if "counter_replay" in str(exc):
+                if resync_attempt < COUNTER_REPLAY_RESYNC_LIMIT:
+                    # The local counter file fell behind the server's lastCounter
+                    # (crash, reinstall, or another signed event raced). The
+                    # reservation is already durable and burned forever.
+                    resync_attempt += 1
+                    continue
+                raise
             network_attempt += 1
             if network_attempt < MAX_RETRIES:
                 time.sleep(min(30, RETRY_BACKOFF ** network_attempt))
