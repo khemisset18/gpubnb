@@ -798,6 +798,7 @@ model MiningResource {
   accelerator Accelerator? @relation(fields: [acceleratorId], references: [id], onDelete: Cascade)
   configuration MiningConfiguration?
   runtimeEvents MiningRuntimeEvent[]
+  telemetrySamples MiningTelemetrySample[]
   auditLogs MiningAuditLog[]
   @@unique([machineId, resourceKey])
   @@index([machineId, kind])
@@ -843,6 +844,33 @@ model MiningRuntimeEvent {
   resource MiningResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
   @@index([resourceId, occurredAt])
   @@index([reservationId])
+}
+
+model MiningTelemetrySample {
+  id String @id
+  resourceId String
+  capturedAt DateTime
+  agentCounter BigInt
+  runtimeGeneration BigInt
+  hardwareUuid String @db.VarChar(200)
+  profileId String? @db.VarChar(96)
+  processPid Int?
+  temperatureC Float
+  powerWatts Float?
+  gpuUtilizationPercent Float?
+  memoryUsedMiB Float?
+  hashrate Float?
+  hashrateUnit String? @db.VarChar(16)
+  acceptedShares BigInt?
+  staleShares BigInt?
+  hardwareErrors BigInt?
+  uptimeSeconds BigInt?
+  poolConnected Boolean
+  thermalStopCelsius Int
+  createdAt DateTime @default(now())
+  resource MiningResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  @@unique([resourceId, capturedAt])
+  @@index([resourceId, capturedAt])
 }
 
 model MiningAuditLog {
