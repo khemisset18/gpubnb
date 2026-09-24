@@ -187,6 +187,15 @@ class DirectMutationBridgeTests(unittest.TestCase):
         self.assertEqual(result.detail_code, "stop_rental_workspace_not_direct")
         cleanup.assert_not_called()
 
+    def test_invalid_power_policy_is_rejected_not_retried(self) -> None:
+        runtime = self._runtime()
+        runtime.gpu_supervisor.start.side_effect = ExecutionControlError(
+            "mining_maximum_power_invalid"
+        )
+        result = runtime._run_mutation(self._mining_command("START_MINING"))
+        self.assertEqual(result.status, "REJECTED")
+        self.assertEqual(result.detail_code, "mining_maximum_power_invalid")
+
     def test_policy_failure_is_rejected_not_retried_as_execution_failure(self) -> None:
         runtime = self._runtime()
         runtime.gpu_supervisor.start.side_effect = ExecutionControlError(
