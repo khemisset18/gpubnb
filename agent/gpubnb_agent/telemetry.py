@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .accelerators import accelerator_inventory
+from .gpu_resource_supervisor import mining_runtime_telemetry_snapshot
 from .platform_info import gpu_inventory, system_inventory
 
 
@@ -130,6 +131,7 @@ class TelemetrySampler:
         gpus = [normalize_gpu_metric(gpu) for gpu in gpu_inventory()]
         gpus = [gpu for gpu in gpus if gpu is not None]
         accelerators = accelerator_inventory()
+        mining_resources = mining_runtime_telemetry_snapshot()
         ram_total = int(system.get("ramTotalMiB") or 0)
         ram_available = int(system.get("ramAvailableMiB") or 0)
         disk_total = int(system.get("diskTotalMiB") or 0)
@@ -147,6 +149,7 @@ class TelemetrySampler:
             "networkTxBytesPerSecond": tx_rate,
             "gpus": gpus,
             "accelerators": accelerators,
+            "miningResources": mining_resources,
             "runtime": {
                 "dockerAvailable": bool(system.get("dockerAvailable")),
                 "dockerVersion": system.get("dockerVersion"),
