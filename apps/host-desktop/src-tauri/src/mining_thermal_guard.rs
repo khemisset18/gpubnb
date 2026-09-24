@@ -8,10 +8,43 @@ use std::sync::Mutex;
 // Mining is stopped conservatively before hardware reaches the platform's
 // separate 98 C quarantine boundary. The user never has to manually clear a
 // server quarantine just because this local protection fired.
-pub const THERMAL_WARNING_CELSIUS: f64 = 80.0;
-pub const THERMAL_STOP_CELSIUS: f64 = 85.0;
-pub const THERMAL_REARM_CELSIUS: f64 = 75.0;
+const THERMAL_PROFILE_ENV: &str = "GPUBNB_MINING_THERMAL_PROFILE";
 pub const THERMAL_QUARANTINE_CELSIUS: f64 = 98.0;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ThermalThresholds {
+    profile: &'static str,
+    warning_celsius: f64,
+    stop_celsius: f64,
+    rearm_celsius: f64,
+}
+
+const PRODUCTION_THRESHOLDS: ThermalThresholds = ThermalThresholds {
+    profile: "production",
+    warning_celsius: 80.0,
+    stop_celsius: 85.0,
+    rearm_celsius: 75.0,
+};
+
+const QUALIFICATION_THRESHOLDS: ThermalThresholds = ThermalThresholds {
+    profile: "qualification",
+    warning_celsius: 88.0,
+    stop_celsius: 92.0,
+    rearm_celsius: 80.0,
+};
+
+fn thermal_thresholds_for(profile: Option<&str>) -> ThermalThresholds {
+    if profile == Some("qualification") {
+        QUALIFICATION_THRESHOLDS
+    } else {
+        PRODUCTION_THRESHOLDS
+    }
+}
+
+fn active_thermal_thresholds() -> ThermalThresholds {
+    let configured = std::env::var(THERMAL_PROFILE_ENV).ok();
+    thermal_thresholds_for(configured.as_deref())
+}
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -67,6 +100,7 @@ fn parse_max_temperature(output: &str) -> Result<f64, &'static str> {
 pub struct MiningThermalSafetySnapshot {
     pub latched: bool,
     pub last_temperature_celsius: Option<f64>,
+    pub profile: &'static str,
     pub warning_celsius: f64,
     pub stop_celsius: f64,
     pub rearm_celsius: f64,
@@ -80,7 +114,7 @@ struct MiningThermalGuard {
 }
 
 impl MiningThermalGuard {
-    fn observe(&mut self, temperature_celsius: f64) -> bool {
+    fn observe(&mut self, temperature_celsius: f64, thresholds: ThermalThresholds) -> bool {
         if !temperature_celsius.is_finite() {
             return false;
         }
@@ -89,20 +123,24 @@ impl MiningThermalGuard {
         // Automatic hysteresis: after a protective stop, any subsequent real
         // sensor sample at/below the cool threshold clears the local latch.
         // No acknowledgement button or PowerShell intervention is required.
-        if self.latched && temperature_celsius <= THERMAL_REARM_CELSIUS {
+        if self.latched && temperature_celsius <= thresholds.rearm_celsius {
             self.latched = false;
             return false;
         }
 
-        if temperature_celsius >= THERMAL_STOP_CELSIUS && !self.latched {
+        if temperature_celsius >= thresholds.stop_celsius && !self.latched {
             self.latched = true;
             return true;
         }
         false
     }
 
-    fn acknowledge(&mut self, temperature_celsius: f64) -> Result<(), &'static str> {
-        if !temperature_celsius.is_finite() || temperature_celsius > THERMAL_REARM_CELSIUS {
+    fn acknowledge(
+        &mut self,
+        temperature_celsius: f64,
+        thresholds: ThermalThresholds,
+    ) -> Result<(), &'static str> {
+        if !temperature_celsius.is_finite() || temperature_celsius > thresholds.rearm_celsius {
             return Err("miner_temperature_still_too_high");
         }
         self.last_temperature_celsius = Some(temperature_celsius);
@@ -110,13 +148,14 @@ impl MiningThermalGuard {
         Ok(())
     }
 
-    fn snapshot(&self) -> MiningThermalSafetySnapshot {
+    fn snapshot(&self, thresholds: ThermalThresholds) -> MiningThermalSafetySnapshot {
         MiningThermalSafetySnapshot {
             latched: self.latched,
             last_temperature_celsius: self.last_temperature_celsius,
-            warning_celsius: THERMAL_WARNING_CELSIUS,
-            stop_celsius: THERMAL_STOP_CELSIUS,
-            rearm_celsius: THERMAL_REARM_CELSIUS,
+            profile: thresholds.profile,
+            warning_celsius: thresholds.warning_celsius,
+            stop_celsius: thresholds.stop_celsius,
+            rearm_celsius: thresholds.rearm_celsius,
             quarantine_celsius: THERMAL_QUARANTINE_CELSIUS,
         }
     }
@@ -132,7 +171,7 @@ impl MiningThermalSafetyState {
         self.guard
             .lock()
             .map_err(|_| "mining_thermal_guard_unavailable")
-            .map(|mut guard| guard.observe(temperature_celsius))
+            .map(|mut guard| guard.observe(temperature_celsius, active_thermal_thresholds()))
     }
 
     pub fn ensure_start_allowed(&self) -> Result<(), &'static str> {
@@ -149,7 +188,7 @@ impl MiningThermalSafetyState {
         self.guard
             .lock()
             .map_err(|_| "mining_thermal_guard_unavailable")?
-            .acknowledge(temperature_celsius)
+            .acknowledge(temperature_celsius, active_thermal_thresholds())
     }
 
     pub fn snapshot(&self) -> Result<MiningThermalSafetySnapshot, &'static str> {
@@ -168,13 +207,13 @@ impl MiningThermalSafetyState {
                 self.guard
                     .lock()
                     .map_err(|_| "mining_thermal_guard_unavailable")?
-                    .observe(temperature);
+                    .observe(temperature, active_thermal_thresholds());
             }
         }
         self.guard
             .lock()
             .map_err(|_| "mining_thermal_guard_unavailable")
-            .map(|guard| guard.snapshot())
+            .map(|guard| guard.snapshot(active_thermal_thresholds()))
     }
 }
 
@@ -200,10 +239,24 @@ mod tests {
     #[test]
     fn real_cooldown_auto_rearms_without_user_acknowledgement() {
         let mut guard = MiningThermalGuard::default();
-        assert!(guard.observe(90.0));
+        assert!(guard.observe(90.0, PRODUCTION_THRESHOLDS));
         assert!(guard.latched);
-        assert!(!guard.observe(75.0));
+        assert!(!guard.observe(75.0, PRODUCTION_THRESHOLDS));
         assert!(!guard.latched);
+    }
+
+    #[test]
+    fn qualification_profile_requires_explicit_opt_in() {
+        assert_eq!(thermal_thresholds_for(None), PRODUCTION_THRESHOLDS);
+        assert_eq!(thermal_thresholds_for(Some("production")), PRODUCTION_THRESHOLDS);
+        assert_eq!(thermal_thresholds_for(Some("invalid")), PRODUCTION_THRESHOLDS);
+        assert_eq!(
+            thermal_thresholds_for(Some("qualification")),
+            QUALIFICATION_THRESHOLDS
+        );
+        assert_eq!(QUALIFICATION_THRESHOLDS.warning_celsius, 88.0);
+        assert_eq!(QUALIFICATION_THRESHOLDS.stop_celsius, 92.0);
+        assert_eq!(QUALIFICATION_THRESHOLDS.rearm_celsius, 80.0);
     }
 
     #[test]
