@@ -87,6 +87,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install ./agent pyinstaller==6.16.0
 
+      - name: Smoke test Windows DPAPI mining secret broker
+        shell: pwsh
+        run: |
+          $env:GPUBNB_CONFIG_DIR = Join-Path $env:RUNNER_TEMP 'gpubnb-mining-secret-smoke'
+          python -c "from pathlib import Path; from gpubnb_agent.mining_secret_broker import store_secret, resolve_secret, delete_secret; r='secret://local/mining/ci-smoke'; s='ci-ephemeral-secret-42'; store_secret(r,s); files=list((Path(__import__('os').environ['GPUBNB_CONFIG_DIR'])/'secrets'/'mining').glob('*.dpapi')); assert len(files)==1; assert s.encode() not in files[0].read_bytes(); assert resolve_secret(r)==s; delete_secret(r); assert not files[0].exists()"
+
       - name: Test agent CLI
         shell: pwsh
         run: |
