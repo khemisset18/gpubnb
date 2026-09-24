@@ -41,6 +41,7 @@ _POLICY_REJECTIONS = {
     "mining_pool_port_invalid",
     "mining_pool_dns_resolution_failed",
     "mining_pool_address_not_public",
+    "mining_pool_dns_rebinding_detected",
     "mining_wallet_invalid",
     "mining_worker_invalid",
     "mining_performance_mode_invalid",

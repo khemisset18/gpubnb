@@ -53,6 +53,23 @@ fn tls_probe_is_fail_closed_before_network_access() {
 }
 
 #[test]
+fn private_loopback_link_local_and_metadata_targets_fail_before_tcp_connect() {
+    for pool_url in [
+        "stratum+tcp://127.0.0.1:9",
+        "stratum+tcp://10.0.0.1:9",
+        "stratum+tcp://169.254.169.254:9",
+        "stratum+tcp://192.168.1.10:9",
+        "stratum+tcp://[::1]:9",
+    ] {
+        assert_eq!(
+            probe_pool_connection(pool_url, 1_000),
+            Err("mining_pool_address_not_public"),
+            "{pool_url}"
+        );
+    }
+}
+
+#[test]
 fn host_service_cannot_change_owner_pool_configuration() {
     assert_eq!(
         authorize_configuration_change(MiningConfigurationActor::HostService),

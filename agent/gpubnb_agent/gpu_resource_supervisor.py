@@ -27,9 +27,9 @@ from .execution_control import (
     LOL_ALGORITHMS,
     ExecutionControlError,
     ExecutionResult,
+    _resolve_public_pool_addresses,
     _sha256,
     _validate_argument,
-    _validate_pool_url,
     _verified_binary,
 )
 from .mining_guard import miner_install_root
@@ -68,6 +68,7 @@ class ResourceMiningSpec:
     worker_name: str
     performance_mode: str
     maximum_temperature_c: int
+    resolved_pool_addresses: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -572,16 +573,18 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         or not MIN_MAX_TEMPERATURE_C <= maximum_temperature <= MAX_MAX_TEMPERATURE_C
     ):
         raise ExecutionControlError("mining_maximum_temperature_invalid")
+    resolved_pool_addresses = _resolve_public_pool_addresses(pool)
     return ResourceMiningSpec(
         resource_id,
         hardware_uuid,
         _positive_generation(payload.get("runtimeGeneration")),
         profile_id,
-        _validate_pool_url(pool),
+        pool,
         wallet,
         worker,
         performance,
         maximum_temperature,
+        resolved_pool_addresses,
     )
 
 
@@ -735,6 +738,8 @@ class GpuResourceSupervisor:
         executable = _verified_binary(spec.profile_id, root)
         binary_sha = _sha256(executable)
         arguments = build_resource_arguments(spec, binding)
+        if _resolve_public_pool_addresses(spec.pool_url) != spec.resolved_pool_addresses:
+            raise ExecutionControlError("mining_pool_dns_rebinding_detected")
 
         with self._lock:
             records = self.store.load()
