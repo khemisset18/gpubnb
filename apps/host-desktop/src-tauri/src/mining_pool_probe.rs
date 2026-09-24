@@ -1,5 +1,5 @@
 use crate::mining_configuration::PoolConnectionEvidence;
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -80,6 +80,58 @@ pub fn probe_pool_connection(
     })
 }
 
+fn ipv4_is_public(address: Ipv4Addr) -> bool {
+    let octets = address.octets();
+    if address.is_unspecified()
+        || address.is_loopback()
+        || address.is_private()
+        || address.is_link_local()
+        || address.is_multicast()
+        || address.is_broadcast()
+        || address.is_documentation()
+    {
+        return false;
+    }
+    // Shared CGNAT, protocol-assignment, benchmarking and reserved ranges are
+    // never valid mining-pool destinations.
+    if octets[0] == 0
+        || (octets[0] == 100 && (64..=127).contains(&octets[1]))
+        || (octets[0] == 192 && octets[1] == 0 && octets[2] == 0)
+        || (octets[0] == 198 && (18..=19).contains(&octets[1]))
+        || octets[0] >= 240
+    {
+        return false;
+    }
+    true
+}
+
+fn ipv6_is_public(address: Ipv6Addr) -> bool {
+    if address.is_unspecified()
+        || address.is_loopback()
+        || address.is_unique_local()
+        || address.is_unicast_link_local()
+        || address.is_multicast()
+    {
+        return false;
+    }
+    let segments = address.segments();
+    // Documentation prefix 2001:db8::/32.
+    if segments[0] == 0x2001 && segments[1] == 0x0db8 {
+        return false;
+    }
+    if let Some(mapped) = address.to_ipv4_mapped() {
+        return ipv4_is_public(mapped);
+    }
+    true
+}
+
+fn address_is_public(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(value) => ipv4_is_public(value),
+        IpAddr::V6(value) => ipv6_is_public(value),
+    }
+}
+
 fn resolve_addresses(endpoint: &MiningPoolEndpoint) -> Result<Vec<SocketAddr>, &'static str> {
     let addresses = (endpoint.host.as_str(), endpoint.port)
         .to_socket_addrs()
@@ -88,6 +140,12 @@ fn resolve_addresses(endpoint: &MiningPoolEndpoint) -> Result<Vec<SocketAddr>, &
         .collect::<Vec<_>>();
     if addresses.is_empty() {
         return Err("mining_pool_dns_unverified");
+    }
+    if addresses
+        .iter()
+        .any(|address| !address_is_public(address.ip()))
+    {
+        return Err("mining_pool_address_not_public");
     }
     Ok(addresses)
 }
