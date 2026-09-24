@@ -44,6 +44,12 @@ SAFE_WALLET = re.compile(r"^[A-Za-z0-9_.:+-]{3,256}$")
 PCI_BDF = re.compile(r"^(?:[0-9A-Fa-f]{4,8}:)?([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2})\.[0-7]$")
 RESOURCE_STATES = {"MINING", "STOPPED", "QUARANTINED"}
 WINDOWS_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+DEFAULT_THERMAL_STOP_CELSIUS = 85
+MIN_THERMAL_STOP_CELSIUS = 85
+MAX_THERMAL_STOP_CELSIUS = 98
+THERMAL_QUARANTINE_CELSIUS = 98
+THERMAL_SENSOR_FAILURE_LIMIT = 3
+THERMAL_WARNING_THRESHOLDS = (85, 90, 94, 97)
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,7 @@ class ResourceMiningSpec:
     wallet_address: str
     worker_name: str
     performance_mode: str
+    thermal_stop_celsius: int
 
 
 @dataclass(frozen=True)
@@ -92,6 +99,11 @@ class RuntimeRecord:
     executable_path: str | None = None
     binary_sha256: str | None = None
     process_creation_token: str | None = None
+    thermal_stop_celsius: int = DEFAULT_THERMAL_STOP_CELSIUS
+    last_temperature_celsius: float | None = None
+    thermal_warning_level: int | None = None
+    thermal_sensor_failures: int = 0
+    last_stop_reason: str | None = None
     updated_at_ms: int = 0
 
     @classmethod
@@ -104,11 +116,30 @@ class RuntimeRecord:
             hardware_uuid = str(value["hardware_uuid"])
         except (KeyError, TypeError, ValueError):
             return None
+        thermal_stop = value.get("thermal_stop_celsius", DEFAULT_THERMAL_STOP_CELSIUS)
+        sensor_failures = value.get("thermal_sensor_failures", 0)
+        warning_level = value.get("thermal_warning_level")
+        raw_temperature = value.get("last_temperature_celsius")
         if (
             not 0 <= generation <= MAX_GENERATION
             or state not in RESOURCE_STATES
             or SAFE_ID.fullmatch(resource_id) is None
             or SAFE_GPU_ID.fullmatch(hardware_uuid) is None
+            or isinstance(thermal_stop, bool)
+            or not isinstance(thermal_stop, int)
+            or not MIN_THERMAL_STOP_CELSIUS <= thermal_stop <= MAX_THERMAL_STOP_CELSIUS
+            or isinstance(sensor_failures, bool)
+            or not isinstance(sensor_failures, int)
+            or not 0 <= sensor_failures <= THERMAL_SENSOR_FAILURE_LIMIT
+            or warning_level not in {None, *THERMAL_WARNING_THRESHOLDS}
+            or (
+                raw_temperature is not None
+                and (
+                    isinstance(raw_temperature, bool)
+                    or not isinstance(raw_temperature, (int, float))
+                    or not 0 <= float(raw_temperature) <= 150
+                )
+            )
         ):
             return None
         pid = value.get("pid")
@@ -123,6 +154,11 @@ class RuntimeRecord:
             executable_path=value.get("executable_path") if isinstance(value.get("executable_path"), str) else None,
             binary_sha256=value.get("binary_sha256") if isinstance(value.get("binary_sha256"), str) else None,
             process_creation_token=value.get("process_creation_token") if isinstance(value.get("process_creation_token"), str) else None,
+            thermal_stop_celsius=thermal_stop,
+            last_temperature_celsius=float(raw_temperature) if raw_temperature is not None else None,
+            thermal_warning_level=warning_level,
+            thermal_sensor_failures=sensor_failures,
+            last_stop_reason=value.get("last_stop_reason") if isinstance(value.get("last_stop_reason"), str) else None,
             updated_at_ms=int(value.get("updated_at_ms", 0)) if isinstance(value.get("updated_at_ms", 0), int) else 0,
         )
 
@@ -330,6 +366,7 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
     allowed = {
         "resourceId", "hardwareUuid", "runtimeGeneration", "profileId", "poolUrl",
         "walletAddress", "workerName", "performanceMode", "poolCredentialRef",
+        "thermalStopCelsius",
     }
     if set(payload) - allowed:
         raise ExecutionControlError("mining_command_payload_unknown_field")
@@ -344,6 +381,7 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
     wallet = payload.get("walletAddress")
     worker = payload.get("workerName")
     performance = payload.get("performanceMode", "BALANCED")
+    thermal_stop = payload.get("thermalStopCelsius", DEFAULT_THERMAL_STOP_CELSIUS)
     if not isinstance(pool, str):
         raise ExecutionControlError("mining_pool_url_invalid")
     if not isinstance(wallet, str) or SAFE_WALLET.fullmatch(wallet) is None:
@@ -352,6 +390,12 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         raise ExecutionControlError("mining_worker_invalid")
     if performance not in {"ECO", "BALANCED", "FULL"}:
         raise ExecutionControlError("mining_performance_mode_invalid")
+    if (
+        isinstance(thermal_stop, bool)
+        or not isinstance(thermal_stop, int)
+        or not MIN_THERMAL_STOP_CELSIUS <= thermal_stop <= MAX_THERMAL_STOP_CELSIUS
+    ):
+        raise ExecutionControlError("mining_thermal_stop_invalid")
     return ResourceMiningSpec(
         resource_id,
         hardware_uuid,
@@ -361,6 +405,7 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         wallet,
         worker,
         performance,
+        thermal_stop,
     )
 
 
@@ -399,6 +444,43 @@ def resolve_nvidia_binding(hardware_uuid: str) -> GpuBinding:
     if len(matches) != 1:
         raise ExecutionControlError("resource_gpu_identity_not_unique" if matches else "resource_gpu_not_present")
     return matches[0]
+
+
+def read_nvidia_temperature(hardware_uuid: str) -> float:
+    executable = find_nvidia_smi()
+    if not executable:
+        raise ExecutionControlError("resource_gpu_nvidia_smi_unavailable")
+    result = run_command(
+        [executable, "--query-gpu=uuid,temperature.gpu", "--format=csv,noheader,nounits"],
+        timeout=12,
+    )
+    if result.returncode != 0:
+        raise ExecutionControlError("resource_gpu_temperature_unavailable")
+    matches: list[float] = []
+    for values in csv.reader(line for line in result.stdout.splitlines() if line.strip()):
+        fields = [field.strip() for field in values]
+        if len(fields) != 2 or fields[0].casefold() != hardware_uuid.casefold():
+            continue
+        try:
+            temperature = float(fields[1])
+        except ValueError as exc:
+            raise ExecutionControlError("resource_gpu_temperature_invalid") from exc
+        if not 0 <= temperature <= 150:
+            raise ExecutionControlError("resource_gpu_temperature_invalid")
+        matches.append(temperature)
+    if len(matches) != 1:
+        raise ExecutionControlError(
+            "resource_gpu_identity_not_unique" if matches else "resource_gpu_not_present"
+        )
+    return matches[0]
+
+
+def _thermal_warning_level(temperature_celsius: float) -> int | None:
+    level: int | None = None
+    for threshold in THERMAL_WARNING_THRESHOLDS:
+        if temperature_celsius >= threshold:
+            level = threshold
+    return level
 
 
 def build_resource_arguments(spec: ResourceMiningSpec, binding: GpuBinding) -> list[str]:
