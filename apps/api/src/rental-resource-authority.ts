@@ -232,8 +232,9 @@ async function markRentalCleanupVerified(
   machineId: string,
   sessionId: string,
   resourceIds: string[],
-): Promise<void> {
-  await db.$transaction(async (tx) => {
+): Promise<string[]> {
+  return db.$transaction(async (tx) => {
+    const cleaned: string[] = [];
     for (const resourceId of resourceIds) {
       const rows = await tx.$queryRaw<Array<{ runtimeState: MiningRuntimeState; activeRentalId: string | null }>>(Prisma.sql`
         SELECT "runtimeState", "activeRentalId" FROM "MiningResource"
@@ -245,6 +246,7 @@ async function markRentalCleanupVerified(
       if (current.activeRentalId && current.activeRentalId !== sessionId) {
         throw new Error('rental_gpu_resource_authority_conflict');
       }
+      if (current.activeRentalId === null) continue;
       await tx.miningResource.update({
         where: { id: resourceId },
         data: { activeRentalId: null, runtimeState: MiningRuntimeState.STOPPED },
@@ -261,7 +263,9 @@ async function markRentalCleanupVerified(
         )
         ON CONFLICT ("idempotencyKey") DO NOTHING
       `);
+      cleaned.push(resourceId);
     }
+    return cleaned;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 10_000 });
 }
 
@@ -499,7 +503,7 @@ export async function releaseRentalResourceAuthority(
   sessionId: string,
   leases: Array<{ resourceId: string; holderId: string; leaseId: string; fencingToken: string }>,
   now = new Date(),
-): Promise<{ released: number }> {
+): Promise<{ released: number; cleanupVerifiedResourceIds: string[] }> {
   const session = await db.workspaceSession.findFirst({
     where: { id: sessionId, machineId },
     select: { id: true, status: true, expiresAt: true },
@@ -517,11 +521,11 @@ export async function releaseRentalResourceAuthority(
     if (result.accepted || result.reason === 'MISSING') released += 1;
     else throw new Error('rental_resource_lease_stale');
   }
-  await markRentalCleanupVerified(
+  const cleanupVerifiedResourceIds = await markRentalCleanupVerified(
     db,
     machineId,
     sessionId,
     leases.map((lease) => lease.resourceId),
   );
-  return { released };
+  return { released, cleanupVerifiedResourceIds };
 }
