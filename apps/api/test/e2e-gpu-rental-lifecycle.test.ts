@@ -19,7 +19,10 @@ import { syncGpuMiningResourcesFromAccelerators } from '../src/mining-resource-i
 import { listOwnerRentalGpus } from '../src/rental-gpu-catalog.js';
 import { createExactGpuListing } from '../src/rental-listing-service.js';
 import { allocateBookingResources, releaseBookingResources } from '../src/resource-allocation-service.js';
-import { buildRentalResourceAuthority } from '../src/rental-resource-authority.js';
+import {
+  buildRentalResourceAuthority,
+  releaseRentalResourceAuthority,
+} from '../src/rental-resource-authority.js';
 import { ensureCompatibleMachineWorkspace } from '../src/machine-workspace-catalog.js';
 import type { AcceleratorTelemetry } from '../src/accelerator-telemetry.js';
 
@@ -259,6 +262,21 @@ test('full GPU rental lifecycle: heartbeat -> inventory -> publish -> booking ->
   });
   assert.equal(releasedRow.status, ResourceAllocationStatus.RELEASED);
   assert.ok(releasedRow.releasedAt);
+
+  // The DB allocation release is not sufficient to make the physical GPU
+  // re-rentable. workspace-gateway-v5 also releases the exact fenced rental
+  // authority only after local cleanup is verified.
+  const rentalRelease = await releaseRentalResourceAuthority(
+    prisma,
+    redis,
+    machine.id,
+    session.id,
+    resolvedSession!.resources.map((resource) => resource.lease),
+  );
+  assert.equal(rentalRelease.released, 1);
+  assert.deepEqual(rentalRelease.cleanupVerifiedResourceIds, [
+    resolvedSession!.resources[0]!.resourceId,
+  ]);
 
   // --- Step 18: resource genuinely available again - proven by allocating it to a
   // second, non-overlapping booking succeeding, not merely by reading a status enum ---
