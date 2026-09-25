@@ -103,7 +103,9 @@ Tester :
 - ressource appartenant à une autre machine ;
 - compteur inférieur ou identique ;
 - doublon idempotent strictement identique ;
-- collision de clé d'idempotence avec un autre contenu.
+- collision de clé d'idempotence avec un autre contenu ;
+- seuls `QUARANTINED` et `EMERGENCY_STOPPED` sont acceptés depuis l'Agent ;
+- le payload Agent ne contient qu'un `detailCode` borné/non libre ; wallet, pool, secretRef, argv, PID, chemin exécutable/log et hash binaire sont rejetés par le schéma.
 
 ### Priorité location
 
