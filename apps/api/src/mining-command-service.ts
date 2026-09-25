@@ -187,7 +187,14 @@ export async function requestMiningStart(
            AND "activeRentalId" IS NULL AND "quarantined" = false AND "enabled" = true
       `);
       if (changed !== 1) throw new Error('mining_resource_not_startable');
-      const queued = await enqueue(tx, current, 'start_mining', String(configVersion), fenced as unknown as Record<string, unknown>, now);
+      const queued = await enqueue(
+        tx,
+        current,
+        'start_mining',
+        `${configVersion}:${acquired.lease.fencingToken}`,
+        fenced as unknown as Record<string, unknown>,
+        now,
+      );
       await tx.$executeRaw(Prisma.sql`
         INSERT INTO "MiningRuntimeEvent" (
           "id","resourceId","eventType","stateBefore","stateAfter","idempotencyKey",
@@ -363,7 +370,7 @@ export async function requestSystemMiningAutoResume(
         tx,
         current,
         'start_mining',
-        `auto-resume:${input.requestId}`,
+        `auto-resume:${input.requestId}:${acquired.lease.fencingToken}`,
         fenced as unknown as Record<string, unknown>,
         now,
       );
