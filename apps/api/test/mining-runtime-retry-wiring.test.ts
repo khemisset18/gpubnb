@@ -38,7 +38,7 @@ test('mining runtime retry is bounded and protected by the event idempotency key
 
 test('heartbeat telemetry cannot enter the runtime-event state transition authority', async () => {
   const source = await readFile(new URL('../src/mining-routes.ts', import.meta.url), 'utf8');
-  const schemaStart = source.indexOf('const runtimeEventSchema = z.object({');
+  const schemaStart = source.indexOf('const agentRuntimeEventBase = {');
   const schemaEnd = source.indexOf('type MiningResourceRow', schemaStart);
   assert.ok(schemaStart >= 0 && schemaEnd > schemaStart);
   const schema = source.slice(schemaStart, schemaEnd);
@@ -63,7 +63,7 @@ test('signed heartbeat telemetry stays on the observation-only sync path', async
 
 test('agent runtime endpoint cannot forge server-owned lifecycle or rental transitions', async () => {
   const source = await readFile(new URL('../src/mining-routes.ts', import.meta.url), 'utf8');
-  const schemaStart = source.indexOf('const runtimeEventSchema = z.discriminatedUnion');
+  const schemaStart = source.indexOf('const agentRuntimeEventBase = {');
   const schemaEnd = source.indexOf('type MiningResourceRow', schemaStart);
   assert.ok(schemaStart >= 0 && schemaEnd > schemaStart);
   const schema = source.slice(schemaStart, schemaEnd);
