@@ -70,6 +70,11 @@ test('fast-path claim serializes mining while preserving rental-stop priority', 
   );
 
   const sql = captured.strings.join('?');
+  assert.match(sql, /machine_gate AS MATERIALIZED/);
+  assert.match(sql, /FROM "Machine" machine/);
+  assert.match(sql, /FOR UPDATE SKIP LOCKED/);
+  assert.match(sql, /FROM machine_gate/);
+  assert.match(sql, /CROSS JOIN machine_gate/);
   assert.match(sql, /eligible AS MATERIALIZED/);
   assert.match(sql, /command\."status" IN \('PENDING', 'LEASED'\)/);
   assert.match(sql, /NOT EXISTS/);
