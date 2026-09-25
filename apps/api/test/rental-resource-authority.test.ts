@@ -218,6 +218,39 @@ describe('rental resource authority', () => {
     const accelerator = session.booking.acceleratorAllocations[0]!.accelerator;
     accelerator.miningResource = null;
     let upsertCalls = 0;
+    const repairedState = {
+      runtimeState: 'STOPPED',
+      activeRentalId: null as string | null,
+      resumeAfterRentalPending: false,
+      autoResumeAfterRental: false,
+    };
+    const miningResource = {
+      upsert: async () => {
+        upsertCalls += 1;
+        return {
+          id: 'resource_repaired_01',
+          acceleratorId: accelerator.id,
+          kind: MiningResourceKind.GPU,
+          enabled: true,
+          quarantined: false,
+        };
+      },
+      update: async ({ data }: any) => {
+        Object.assign(repairedState, data);
+        return {
+          id: 'resource_repaired_01',
+          kind: MiningResourceKind.GPU,
+          enabled: true,
+          quarantined: false,
+          ...repairedState,
+        };
+      },
+    };
+    const tx = {
+      $queryRaw: async () => [{ ...repairedState }],
+      $executeRaw: async () => 1,
+      miningResource,
+    };
     const db = {
       workspaceSession: {
         findMany: async () => [session],
@@ -227,24 +260,8 @@ describe('rental resource authority', () => {
           expiresAt: new Date(Date.now() + 60_000),
         }),
       },
-      miningResource: {
-        upsert: async () => {
-          upsertCalls += 1;
-          return {
-            id: 'resource_repaired_01',
-            acceleratorId: accelerator.id,
-            kind: MiningResourceKind.GPU,
-            enabled: true,
-            quarantined: false,
-          };
-        },
-        update: async () => ({
-          id: 'resource_repaired_01',
-          kind: MiningResourceKind.GPU,
-          enabled: true,
-          quarantined: false,
-        }),
-      },
+      miningResource,
+      $transaction: async (callback: any) => callback(tx),
     } as unknown as PrismaClient;
 
     const authority = await buildRentalResourceAuthority(db, redis as unknown as Redis, 'machine_00000001');
