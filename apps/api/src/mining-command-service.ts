@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 
 import { enqueueMachineCommand } from './delivery-store.js';
 import { buildFencedStartMining, buildFencedStopMining, type MiningPerformanceMode } from './mining-resource-control.js';
+import { isMiningProfileApproved, normalizeMiningGpuVendor } from './mining-profile-catalog.js';
 import { acquireResourceLease, readResourceLease, releaseResourceLease, type ResourceLeaseSnapshot } from './resource-lease.js';
 import type { MachineCommandEnvelope } from './reliable-delivery.js';
 
@@ -17,10 +18,12 @@ type ResourceForCommand = {
   machineId: string;
   ownerId: string;
   kind: 'CPU' | 'GPU';
+  enabled: boolean;
   quarantined: boolean;
   runtimeState: string;
   activeRentalId: string | null;
   hardwareUuid: string | null;
+  gpuVendor: string | null;
   mode: 'DISABLED' | 'GPUBNB_MANAGED' | 'OWNER_POOL' | null;
   profileId: string | null;
   walletAddress: string | null;
@@ -66,8 +69,8 @@ async function loadResourceForCommand(
 ): Promise<ResourceForCommand> {
   const rows = await tx.$queryRaw<ResourceForCommand[]>(Prisma.sql`
     SELECT r."id" AS "resourceId", r."machineId", m."ownerId", r."kind",
-           r."quarantined", r."runtimeState"::text AS "runtimeState", r."activeRentalId",
-           a."hardwareUuid", c."mode", c."profileId", c."walletAddress", c."workerName",
+           r."enabled", r."quarantined", r."runtimeState"::text AS "runtimeState", r."activeRentalId",
+           a."hardwareUuid", a."vendor" AS "gpuVendor", c."mode", c."profileId", c."walletAddress", c."workerName",
            c."ownerPoolEndpoint", c."ownerPoolSecretRef", c."maximumTemperatureC",
            c."maximumPowerWatts", c."version"
       FROM "MiningResource" r
@@ -85,7 +88,9 @@ async function loadResourceForCommand(
 function validateOwner(row: ResourceForCommand, ownerId: string): void {
   if (row.ownerId !== ownerId) throw new Error('mining_machine_owner_required');
   if (row.kind !== 'GPU') throw new Error('mining_gpu_runtime_required');
+  if (!row.enabled) throw new Error('mining_resource_disabled');
   if (row.quarantined) throw new Error('mining_resource_quarantined');
+  if (normalizeMiningGpuVendor(row.gpuVendor) !== 'NVIDIA') throw new Error('mining_gpu_vendor_not_qualified');
   if (row.activeRentalId) throw new Error('mining_resource_rented');
   if (!row.hardwareUuid) throw new Error('mining_hardware_uuid_missing');
 }
@@ -94,6 +99,9 @@ function startInput(row: ResourceForCommand) {
   if (row.mode !== 'OWNER_POOL') throw new Error('mining_owner_pool_required');
   if (!row.profileId || !row.walletAddress || !row.workerName || !row.ownerPoolEndpoint) {
     throw new Error('mining_configuration_incomplete');
+  }
+  if (!isMiningProfileApproved(row.profileId, 'GPU', 'NVIDIA')) {
+    throw new Error('mining_profile_not_approved');
   }
   if (row.ownerPoolSecretRef) throw new Error('miner_secret_resolution_required');
   if (row.maximumTemperatureC === null || row.maximumPowerWatts === null) {
