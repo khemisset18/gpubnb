@@ -97,3 +97,15 @@ test('owner mining UI renders only structured heartbeat metrics', async () => {
   }
   assert.doesNotMatch(block, /wallet|poolUrl|ownerPoolEndpoint|workerName|logPath|executablePath|commandId|fencingToken|runtimeGeneration/i);
 });
+
+
+test('mining UI consumes the server-authoritative runtime catalog and thermal policy', async () => {
+  const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
+  assert.match(script, /request\('\/mining\/catalog'\)/);
+  assert.match(script, /miningCatalog\.profiles\.filter/);
+  assert.match(script, /miningCatalog\.thermalLimits\[resource\.kind\]/);
+  assert.match(script, /thermalMinimum/);
+  assert.match(script, /thermalMaximum/);
+  assert.doesNotMatch(script, /const MINING_PROFILES/);
+  assert.doesNotMatch(script, /trex_rvn_kawpow|teamredminer_rvn_kawpow|lolminer_etc_etchash|lolminer_erg_autolykos2|lolminer_flux_zelhash/);
+});
