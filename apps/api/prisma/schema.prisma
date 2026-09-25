@@ -792,6 +792,7 @@ model MiningResource {
   quarantined Boolean @default(false)
   runtimeState MiningRuntimeState @default(IDLE)
   activeRentalId String?
+  resumeAfterRentalPending Boolean @default(false)
   lastSeenAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
