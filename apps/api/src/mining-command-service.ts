@@ -200,7 +200,7 @@ export async function requestMiningStop(
     const acquired = await acquireResourceLease(redis, {
       resourceId: preview.resourceId,
       holderId,
-      idempotencyKey: stableKey('mining-lease-stop', preview.resourceId, String(Date.now())),
+      idempotencyKey: stableKey('mining-lease-stop', preview.resourceId, preview.runtimeState),
       ttlSeconds: LEASE_TTL_SECONDS,
     });
     if (acquired.status === 'BUSY') throw new Error('mining_resource_lease_busy');
