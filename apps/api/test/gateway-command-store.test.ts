@@ -76,6 +76,7 @@ test('fast-path claim serializes mining while preserving rental-stop priority', 
   assert.match(sql, /earlier_command\."sequence" < current_command\."sequence"/);
   assert.match(sql, /current_command\."commandType" <> 'stop_rental'/);
   assert.match(sql, /earlier_command\."commandType" = 'stop_rental'/);
+  assert.match(sql, /ORDER BY CASE WHEN current_command\."commandType" = 'stop_rental' THEN 0 ELSE 1 END/);
   assert.match(sql, /FOR UPDATE OF command SKIP LOCKED/);
   assert.ok(captured.values.includes(1), 'claim limit must stay one command per machine');
 });
