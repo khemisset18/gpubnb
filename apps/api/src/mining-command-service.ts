@@ -22,6 +22,7 @@ type ResourceForCommand = {
   quarantined: boolean;
   runtimeState: string;
   activeRentalId: string | null;
+  resumeAfterRentalPending: boolean;
   hardwareUuid: string | null;
   gpuVendor: string | null;
   mode: 'DISABLED' | 'GPUBNB_MANAGED' | 'OWNER_POOL' | null;
@@ -32,6 +33,7 @@ type ResourceForCommand = {
   ownerPoolSecretRef: string | null;
   maximumTemperatureC: number | null;
   maximumPowerWatts: number | null;
+  autoResumeAfterRental: boolean | null;
   version: number | null;
 };
 
@@ -71,9 +73,10 @@ async function loadResourceForCommand(
   const rows = await tx.$queryRaw<ResourceForCommand[]>(Prisma.sql`
     SELECT r."id" AS "resourceId", r."machineId", m."ownerId", r."kind",
            r."enabled", r."quarantined", r."runtimeState"::text AS "runtimeState", r."activeRentalId",
+           r."resumeAfterRentalPending",
            a."hardwareUuid", a."vendor" AS "gpuVendor", c."mode", c."profileId", c."walletAddress", c."workerName",
            c."ownerPoolEndpoint", c."ownerPoolSecretRef", c."maximumTemperatureC",
-           c."maximumPowerWatts", c."version"
+           c."maximumPowerWatts", c."autoResumeAfterRental", c."version"
       FROM "MiningResource" r
       JOIN "Machine" m ON m."id" = r."machineId"
  LEFT JOIN "Accelerator" a ON a."id" = r."acceleratorId"
@@ -176,7 +179,9 @@ export async function requestMiningStart(
       const fenced = buildFencedStartMining(startInput(current), acquired.lease);
       const changed = await tx.$executeRaw(Prisma.sql`
         UPDATE "MiningResource"
-           SET "runtimeState" = 'STARTING'::"MiningRuntimeState", "updatedAt" = CURRENT_TIMESTAMP
+           SET "runtimeState" = 'STARTING'::"MiningRuntimeState",
+               "resumeAfterRentalPending" = false,
+               "updatedAt" = CURRENT_TIMESTAMP
          WHERE "id" = ${current.resourceId} AND "machineId" = ${current.machineId}
            AND "runtimeState" IN ('IDLE'::"MiningRuntimeState",'STOPPED'::"MiningRuntimeState")
            AND "activeRentalId" IS NULL AND "quarantined" = false AND "enabled" = true
@@ -299,6 +304,97 @@ export async function requestMiningStop(
     return { ...result, lease, alreadySatisfied: false };
   } catch (error) {
     if (acquiredForStop) await releaseResourceLease(redis, lease).catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function requestSystemMiningAutoResume(
+  db: PrismaClient,
+  redis: Redis,
+  input: { machineId: string; resourceId: string; requestId: string; now?: Date },
+): Promise<MiningCommandRequestResult> {
+  const now = input.now ?? new Date();
+  const preview = await db.$transaction((tx) => loadResourceForCommand(tx, input.machineId, input.resourceId));
+  if (!preview.resumeAfterRentalPending || preview.autoResumeAfterRental !== true) {
+    return { commandId: null, sequence: null, lease: null, alreadySatisfied: true };
+  }
+  validateOwner(preview, preview.ownerId);
+  if (preview.runtimeState !== 'STOPPED' || preview.activeRentalId) {
+    throw new Error('mining_auto_resume_not_ready');
+  }
+  const configVersion = preview.version;
+  if (configVersion === null || configVersion < 1) throw new Error('mining_configuration_missing');
+
+  const acquired = await acquireResourceLease(redis, {
+    resourceId: preview.resourceId,
+    holderId: `mining:${preview.resourceId}`,
+    idempotencyKey: stableKey('mining-auto-resume', preview.resourceId, String(configVersion), input.requestId),
+    ttlSeconds: LEASE_TTL_SECONDS,
+  });
+  if (acquired.status === 'BUSY') throw new Error('mining_resource_lease_busy');
+
+  try {
+    const result = await db.$transaction(async (tx) => {
+      const current = await loadResourceForCommand(tx, input.machineId, input.resourceId);
+      if (!current.resumeAfterRentalPending || current.autoResumeAfterRental !== true) {
+        throw new Error('mining_auto_resume_intent_missing');
+      }
+      validateOwner(current, current.ownerId);
+      if (current.runtimeState !== 'STOPPED' || current.activeRentalId) {
+        throw new Error('mining_auto_resume_not_ready');
+      }
+      if (current.version !== configVersion) throw new Error('mining_configuration_changed_during_start');
+
+      const fenced = buildFencedStartMining(startInput(current), acquired.lease);
+      const changed = await tx.$executeRaw(Prisma.sql`
+        UPDATE "MiningResource"
+           SET "runtimeState" = 'STARTING'::"MiningRuntimeState",
+               "resumeAfterRentalPending" = false,
+               "updatedAt" = CURRENT_TIMESTAMP
+         WHERE "id" = ${current.resourceId} AND "machineId" = ${current.machineId}
+           AND "runtimeState" = 'STOPPED'::"MiningRuntimeState"
+           AND "activeRentalId" IS NULL
+           AND "resumeAfterRentalPending" = true
+           AND "quarantined" = false AND "enabled" = true
+      `);
+      if (changed !== 1) throw new Error('mining_auto_resume_state_race');
+
+      const queued = await enqueue(
+        tx,
+        current,
+        'start_mining',
+        `auto-resume:${input.requestId}`,
+        fenced as unknown as Record<string, unknown>,
+        now,
+      );
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "MiningRuntimeEvent" (
+          "id","resourceId","eventType","stateBefore","stateAfter","idempotencyKey",
+          "agentCounter","payload","occurredAt","createdAt"
+        ) VALUES (
+          ${stableId('mre', queued.commandId, 'AUTO_RESUME_REQUESTED')}, ${current.resourceId},
+          'AUTO_RESUME_REQUESTED'::"MiningEventType", 'STOPPED'::"MiningRuntimeState",
+          'STARTING'::"MiningRuntimeState", ${stableKey('mining-event', queued.commandId, 'AUTO_RESUME_REQUESTED')},
+          0, ${JSON.stringify({ commandId: queued.commandId, source: 'rental-cleanup' })}::jsonb,
+          ${now}, CURRENT_TIMESTAMP
+        ) ON CONFLICT ("idempotencyKey") DO NOTHING
+      `);
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "MiningAuditLog" (
+          "id","machineId","resourceId","actorType","actorId","action",
+          "requestId","nextValue","createdAt"
+        ) VALUES (
+          ${crypto.randomUUID()}, ${current.machineId}, ${current.resourceId},
+          'SYSTEM'::"MiningAuditActorType", 'rental-cleanup-auto-resume',
+          'mining_auto_resume_requested', ${input.requestId},
+          ${JSON.stringify({ commandId: queued.commandId })}::jsonb, CURRENT_TIMESTAMP
+        )
+      `);
+      return queued;
+    });
+    return { ...result, lease: acquired.lease, alreadySatisfied: false };
+  } catch (error) {
+    await releaseResourceLease(redis, acquired.lease).catch(() => undefined);
     throw error;
   }
 }
