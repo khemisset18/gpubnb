@@ -203,3 +203,61 @@ fn resolve_addresses(endpoint: &MiningPoolEndpoint) -> Result<Vec<SocketAddr>, &
     }
     Ok(addresses)
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_tls_and_tcp_without_downgrade() {
+        let tls = MiningPoolEndpoint::parse("stratum+tls://pool.example.com:443").unwrap();
+        assert!(tls.requires_tls);
+        assert_eq!(tls.host, "pool.example.com");
+        assert_eq!(tls.port, 443);
+
+        let ssl = MiningPoolEndpoint::parse("stratum+ssl://pool.example.com:4444").unwrap();
+        assert!(ssl.requires_tls);
+
+        let tcp = MiningPoolEndpoint::parse("stratum+tcp://pool.example.com:3333").unwrap();
+        assert!(!tcp.requires_tls);
+
+        assert_eq!(
+            MiningPoolEndpoint::parse("https://pool.example.com:443").unwrap_err(),
+            "mining_pool_scheme_not_allowed"
+        );
+    }
+
+    #[test]
+    fn rejects_credentials_and_ambiguous_url_components() {
+        for value in [
+            "stratum+tls://user:pass@pool.example.com:443",
+            "stratum+tls://pool.example.com:443/path",
+            "stratum+tls://pool.example.com:443?region=eu",
+            "stratum+tls://pool.example.com:443#fragment",
+        ] {
+            assert!(MiningPoolEndpoint::parse(value).is_err(), "{value}");
+        }
+    }
+
+    #[test]
+    fn native_tls_connector_is_available_with_secure_policy() {
+        tls_connector().expect("native TLS connector must initialize on supported Host platforms");
+        let source = include_str!("mining_pool_probe.rs");
+        assert!(source.contains(".danger_accept_invalid_certs(false)"));
+        assert!(source.contains(".danger_accept_invalid_hostnames(false)"));
+        assert!(source.contains(".use_sni(true)"));
+        assert!(source.contains(".min_protocol_version(Some(Protocol::Tlsv12))"));
+        assert!(!source.contains(".danger_accept_invalid_certs(true)"));
+        assert!(!source.contains(".danger_accept_invalid_hostnames(true)"));
+    }
+
+    #[test]
+    fn private_addresses_remain_rejected_before_tls() {
+        assert!(!address_is_public(IpAddr::V4(Ipv4Addr::LOCALHOST)));
+        assert!(!address_is_public(IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254))));
+        assert!(!address_is_public(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))));
+        assert!(!address_is_public(IpAddr::V6(Ipv6Addr::LOCALHOST)));
+        assert!(address_is_public(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))));
+    }
+}
