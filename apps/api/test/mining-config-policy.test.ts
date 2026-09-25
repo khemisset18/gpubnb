@@ -204,8 +204,16 @@ describe('mining configuration policy', () => {
     assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, maximumTemperatureC: 99 }));
   });
 
-  it('does not require an unenforced GPU intensity and still rejects CPU controls on a GPU', () => {
+  it('rejects unenforced GPU intensity for every resource kind', () => {
     assert.equal(miningConfigurationInputSchema.parse(validGpuInput).gpuIntensityPercent, undefined);
+    assert.throws(
+      () => miningConfigurationInputSchema.parse({ ...validGpuInput, gpuIntensityPercent: 80 }),
+      /gpu_intensity_not_supported/,
+    );
+    assert.throws(
+      () => miningConfigurationInputSchema.parse({ ...validCpuInput, gpuIntensityPercent: 80 }),
+      /gpu_intensity_not_supported/,
+    );
     assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, cpuThreadLimit: 4 }));
   });
 });
