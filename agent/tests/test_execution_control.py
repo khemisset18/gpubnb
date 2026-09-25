@@ -60,6 +60,10 @@ class ExecutionControlPolicyTests(unittest.TestCase):
             parse_mining_launch_spec({**base, "poolUrl": "stratum+tcp://127.0.0.1:3333"})
         with self.assertRaisesRegex(ExecutionControlError, "mining_pool_credentials_not_allowed"):
             parse_mining_launch_spec({**base, "poolUrl": "stratum+tls://user:secret@pool.example.com:3333"})
+        with self.assertRaisesRegex(ExecutionControlError, "mining_pool_url_invalid"):
+            parse_mining_launch_spec({**base, "poolUrl": "stratum+tls://pool.example.com:3333/ignored-path"})
+        with self.assertRaisesRegex(ExecutionControlError, "mining_pool_port_invalid"):
+            parse_mining_launch_spec({**base, "poolUrl": "stratum+tls://pool.example.com"})
         with self.assertRaisesRegex(ExecutionControlError, "mining_profile_not_approved"):
             parse_mining_launch_spec({**base, "profileId": "trex_rvn_kawpow", "poolUrl": "stratum+tls://pool.example.com:3333"})
 
