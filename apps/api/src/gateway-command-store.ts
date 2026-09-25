@@ -114,7 +114,8 @@ export async function claimGatewayMachineCommands(
                 OR earlier_command."commandType" = 'stop_rental'
               )
          )
-       ORDER BY current_command."sequence"
+       ORDER BY CASE WHEN current_command."commandType" = 'stop_rental' THEN 0 ELSE 1 END,
+                current_command."sequence"
        LIMIT ${claimLimit}
        FOR UPDATE OF command SKIP LOCKED
     )
