@@ -1,0 +1,30 @@
+name: mining-host-tls-lock-helper
+
+on:
+  pull_request:
+    paths:
+      - 'Cargo.lock'
+      - 'apps/host-desktop/src-tauri/Cargo.toml'
+      - '.github/workflows/mining-host-tls-lock-helper.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-lock:
+    if: github.head_ref == 'feat/mining-host-stratum-tls-verification'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Resolve pinned Host TLS dependency
+        run: cargo check -p gpubnb-host-desktop
+      - name: Upload resolved Cargo lock
+        uses: actions/upload-artifact@v6
+        with:
+          name: mining-host-tls-cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
+          retention-days: 1
