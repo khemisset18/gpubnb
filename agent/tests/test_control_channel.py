@@ -134,7 +134,12 @@ class ControlChannelProtocolTests(unittest.TestCase):
         for kind in ("START_MINING", "STOP_MINING"):
             command = valid_command(kind)
             parsed = validate_command(command, MACHINE_ID, now_ms=11_000)
-            self.assertIsNotNone(parsed.lease)
+            self.assertEqual(parsed.lease, {
+                "resourceId": "resource_00000001",
+                "holderId": "booking_00000001",
+                "leaseId": "lease_000000001",
+                "fencingToken": "7",
+            })
 
             body = command["command"]
             assert isinstance(body, dict)
