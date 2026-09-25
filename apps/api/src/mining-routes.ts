@@ -25,23 +25,29 @@ const runtimeStates = [
   'RENTAL_BLOCKED', 'STOPPED', 'QUARANTINED', 'EMERGENCY_STOPPED',
 ] as const;
 
-const runtimeEventSchema = z.object({
+const agentRuntimeEventBase = {
   machineId: z.string().cuid(),
   resourceId: z.string().min(3).max(128),
-  eventType: z.enum([
-    'CONFIGURATION_CHANGED', 'START_REQUESTED', 'STARTED', 'START_FAILED', 'STOP_REQUESTED',
-    'STOP_VERIFIED', 'STOP_FAILED', 'RENTAL_PREEMPTED', 'RENTAL_RELEASED',
-    'CLEANUP_VERIFIED', 'AUTO_RESUME_REQUESTED', 'QUARANTINED',
-    'EMERGENCY_STOPPED', 'HEARTBEAT',
-  ]),
   stateBefore: z.enum(runtimeStates).nullable().optional(),
-  stateAfter: z.enum(runtimeStates),
-  reservationId: z.string().max(96).nullable().optional(),
+  reservationId: z.null().optional(),
   idempotencyKey: z.string().min(16).max(160),
   agentCounter: z.coerce.bigint().positive(),
   occurredAt: z.string().datetime(),
   payload: z.record(z.string(), z.unknown()).optional(),
-});
+};
+
+const runtimeEventSchema = z.discriminatedUnion('eventType', [
+  z.object({
+    ...agentRuntimeEventBase,
+    eventType: z.literal('QUARANTINED'),
+    stateAfter: z.literal('QUARANTINED'),
+  }),
+  z.object({
+    ...agentRuntimeEventBase,
+    eventType: z.literal('EMERGENCY_STOPPED'),
+    stateAfter: z.literal('EMERGENCY_STOPPED'),
+  }),
+]);
 
 type MiningResourceRow = {
   id: string;
@@ -348,12 +354,16 @@ export const registerMiningRoutes = (
 
     try {
       const inserted = await runBookingTransaction(db, async (tx) => {
-        const resource = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-          SELECT "id" FROM "MiningResource"
+        const resource = await tx.$queryRaw<Array<{
+          id: string;
+          runtimeState: typeof runtimeStates[number];
+        }>>(Prisma.sql`
+          SELECT "id", "runtimeState"::text AS "runtimeState" FROM "MiningResource"
            WHERE "id" = ${event.resourceId} AND "machineId" = ${event.machineId}
            FOR UPDATE
         `);
         if (!resource.length) throw new Error('mining_resource_not_found');
+        const current = resource[0]!;
 
         const existing = await tx.$queryRaw<ExistingRuntimeEventRow[]>(Prisma.sql`
           SELECT e."resourceId", e."eventType"::text AS "eventType",
@@ -372,6 +382,10 @@ export const registerMiningRoutes = (
             && previous.agentCounter === event.agentCounter;
           if (!sameEvent) throw new Error('idempotency_key_collision');
           return false;
+        }
+
+        if (event.stateBefore != null && event.stateBefore !== current.runtimeState) {
+          throw new Error('mining_runtime_state_precondition_failed');
         }
 
         const advanced = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -397,17 +411,7 @@ export const registerMiningRoutes = (
         await tx.$executeRaw(Prisma.sql`
           UPDATE "MiningResource"
              SET "runtimeState" = ${event.stateAfter}::"MiningRuntimeState",
-                 "activeRentalId" = CASE
-                   WHEN ${event.eventType}::"MiningEventType" IN (
-                     'RENTAL_RELEASED'::"MiningEventType", 'CLEANUP_VERIFIED'::"MiningEventType"
-                   ) THEN NULL
-                   WHEN ${event.reservationId ?? null} IS NOT NULL
-                    AND ${event.eventType}::"MiningEventType" IN (
-                      'RENTAL_PREEMPTED'::"MiningEventType", 'STOP_REQUESTED'::"MiningEventType",
-                      'STOP_VERIFIED'::"MiningEventType", 'STOP_FAILED'::"MiningEventType"
-                    ) THEN ${event.reservationId ?? null}
-                   ELSE "activeRentalId"
-                 END,
+                 "quarantined" = true,
                  "updatedAt" = CURRENT_TIMESTAMP
            WHERE "id" = ${event.resourceId}
         `);
