@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { requestMiningStart } from '../src/mining-command-service.js';
+import { requestMiningStart, requestMiningStop } from '../src/mining-command-service.js';
 
 const resource = (overrides: Record<string, unknown> = {}) => ({
   resourceId: 'resource_00000001',
@@ -44,16 +44,16 @@ function fakeDb(row = resource()) {
   return { db: db as any, writes };
 }
 
-function fakeRedis() {
+function fakeRedis(existingLease: Record<string, string> | null = null) {
   let evalCalls = 0;
   const redis = {
     eval: async (_script: string, numberOfKeys: number, ..._args: unknown[]) => {
       evalCalls += 1;
       if (numberOfKeys === 2) return [1, 'lease_000000001', '17', 300000];
-      return [1, '0'];
+      return [1, '300000'];
     },
-    hgetall: async () => ({}),
-    pttl: async () => -2,
+    hgetall: async () => existingLease ? { ...existingLease } : {},
+    pttl: async () => existingLease ? 120000 : -2,
   };
   return { redis: redis as any, evalCalls: () => evalCalls };
 }
@@ -68,10 +68,13 @@ test('owner start creates one fenced durable command from stored exact-GPU confi
   });
 
   assert.equal(result.sequence, 9n);
+  assert.ok(result.lease);
   assert.equal(result.lease.resourceId, 'resource_00000001');
   assert.equal(result.lease.fencingToken, '17');
+  assert.ok(result.commandId);
   assert.match(result.commandId, /^cmd_[a-f0-9]{32}$/);
-  assert.equal(writes.length, 2);
+  assert.equal(result.alreadySatisfied, false);
+  assert.equal(writes.length, 4);
 });
 
 test('start fails closed for an unqualified GPU vendor before durable command creation', async () => {
@@ -101,5 +104,63 @@ test('unresolved pool secret releases an acquired lease and creates no durable c
     /miner_secret_resolution_required/,
   );
   assert.equal(evalCalls(), 2);
+  assert.equal(writes.length, 0);
+});
+
+test('owner STOP is idempotent when resource is already stopped', async () => {
+  const { db, writes } = fakeDb(resource({ runtimeState: 'STOPPED' }));
+  const { redis, evalCalls } = fakeRedis();
+  const result = await requestMiningStop(db, redis, {
+    machineId: 'machine_00000001',
+    resourceId: 'resource_00000001',
+    ownerId: 'owner_00000001',
+  });
+  assert.equal(result.alreadySatisfied, true);
+  assert.equal(result.commandId, null);
+  assert.equal(result.sequence, null);
+  assert.equal(result.lease, null);
+  assert.equal(evalCalls(), 0);
+  assert.equal(writes.length, 0);
+});
+
+test('owner STOP renews an existing mining lease before creating the fenced command', async () => {
+  const { db, writes } = fakeDb(resource({ runtimeState: 'MINING' }));
+  const { redis, evalCalls } = fakeRedis({
+    holderId: 'mining:resource_00000001',
+    idempotencyKey: 'mining:start:resource_00000001:v3',
+    leaseId: 'lease_000000001',
+    fencingToken: '17',
+  });
+  const result = await requestMiningStop(db, redis, {
+    machineId: 'machine_00000001',
+    resourceId: 'resource_00000001',
+    ownerId: 'owner_00000001',
+    requestId: 'request_00000009',
+  });
+  assert.equal(result.alreadySatisfied, false);
+  assert.ok(result.lease);
+  assert.equal(result.lease.fencingToken, '17');
+  assert.equal(result.lease.ttlMs, 300000);
+  assert.equal(evalCalls(), 1);
+  assert.equal(writes.length, 4);
+});
+
+test('owner STOP refuses a foreign rental lease', async () => {
+  const { db, writes } = fakeDb(resource({ runtimeState: 'MINING' }));
+  const { redis, evalCalls } = fakeRedis({
+    holderId: 'rental:session_00000001',
+    idempotencyKey: 'rental:session_00000001:resource_00000001',
+    leaseId: 'lease_000000001',
+    fencingToken: '18',
+  });
+  await assert.rejects(
+    requestMiningStop(db, redis, {
+      machineId: 'machine_00000001',
+      resourceId: 'resource_00000001',
+      ownerId: 'owner_00000001',
+    }),
+    /mining_resource_lease_busy/,
+  );
+  assert.equal(evalCalls(), 0);
   assert.equal(writes.length, 0);
 });
