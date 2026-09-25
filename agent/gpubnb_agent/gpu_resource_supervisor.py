@@ -29,6 +29,7 @@ from .execution_control import (
     ExecutionResult,
     _pool_endpoint,
     _resolve_public_pool_addresses,
+    _verify_pool_tls,
     _sha256,
     _validate_argument,
     _verified_binary,
@@ -680,6 +681,35 @@ def _record_identity(record: RuntimeRecord) -> ProcessIdentity | None:
     return ProcessIdentity(record.pid, record.executable_path, record.process_creation_token)
 
 
+def mining_runtime_telemetry_snapshot(
+    store: RuntimeStore | None = None,
+) -> list[dict[str, Any]]:
+    """Return a bounded, non-secret mining snapshot for signed heartbeats."""
+    records = (store or RuntimeStore()).load()
+    snapshots: list[dict[str, Any]] = []
+    for resource_id in sorted(records):
+        record = records[resource_id]
+        snapshots.append({
+            "resourceId": record.resource_id,
+            "hardwareUuid": record.hardware_uuid,
+            "state": record.state,
+            "temperatureC": record.last_temperature_c,
+            "powerWatts": record.last_power_watts,
+            "utilizationPercent": record.last_utilization_percent,
+            "hashrate": record.last_hashrate,
+            "hashrateUnit": record.last_hashrate_unit,
+            "acceptedShares": record.accepted_shares,
+            "staleShares": record.stale_shares,
+            "hardwareErrors": record.hardware_errors,
+            "uptimeSeconds": record.uptime_seconds,
+            "poolConnected": record.pool_connected,
+            "sampledAtMs": record.last_sampled_at_ms,
+        })
+        if len(snapshots) >= 64:
+            break
+    return snapshots
+
+
 class GpuResourceSupervisor:
     def __init__(
         self,
@@ -766,6 +796,7 @@ class GpuResourceSupervisor:
         arguments = build_resource_arguments(spec, binding)
         if _resolve_public_pool_addresses(spec.pool_url) != spec.resolved_pool_addresses:
             raise ExecutionControlError("mining_pool_dns_rebinding_detected")
+        _verify_pool_tls(spec.pool_url, spec.resolved_pool_addresses)
 
         with self._lock:
             records = self.store.load()

@@ -10,9 +10,10 @@ import { runBookingTransaction } from './booking-transaction-retry.js';
 import {
   authorizeMiningConfigurationUpdate,
   miningConfigurationInputSchema,
+  MINING_THERMAL_LIMITS,
   platformFeeBasisPoints,
 } from './mining-config-policy.js';
-import { normalizeMiningGpuVendor } from './mining-profile-catalog.js';
+import { MINING_PROFILE_CATALOG, normalizeMiningGpuVendor } from './mining-profile-catalog.js';
 import { requestMiningStart, requestMiningStop } from './mining-command-service.js';
 import { registerRentalResourceAuthorityRoutes } from './rental-resource-routes.js';
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
@@ -54,6 +55,9 @@ type MiningResourceRow = {
   quarantined: boolean;
   runtimeState: string;
   activeRentalId: string | null;
+  lastTelemetry: Prisma.JsonValue | null;
+  lastTelemetryAt: Date | null;
+  ownerPoolSecretConfigured: boolean;
   configurationId: string | null;
   mode: 'DISABLED' | 'GPUBNB_MANAGED' | 'OWNER_POOL' | null;
   profileId: string | null;
@@ -82,7 +86,9 @@ const listOwnerResources = async (db: PrismaClient, machineId: string, ownerId: 
   db.$queryRaw<MiningResourceRow[]>(Prisma.sql`
     SELECT r."id", r."machineId", m."ownerId", r."kind", r."resourceKey",
            r."displayName", a."vendor" AS "gpuVendor", r."quarantined",
-           r."runtimeState", r."activeRentalId", c."id" AS "configurationId",
+           r."runtimeState", r."activeRentalId", r."lastTelemetry", r."lastTelemetryAt",
+           (c."ownerPoolSecretRef" IS NOT NULL) AS "ownerPoolSecretConfigured",
+           c."id" AS "configurationId",
            c."mode", c."profileId", c."walletAddress", c."workerName",
            c."ownerPoolEndpoint", c."autoResumeAfterRental", c."maximumTemperatureC",
            c."maximumPowerWatts", c."maximumCpuPercent", c."cpuThreadCount",
@@ -101,6 +107,24 @@ export const registerMiningRoutes = (
   redis: Redis,
 ): void => {
   registerRentalResourceAuthorityRoutes(app, db, redis);
+
+  app.get('/mining/catalog', async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    return {
+      profiles: MINING_PROFILE_CATALOG
+        .filter((profile) => profile.enabled)
+        .map((profile) => ({
+          id: profile.id,
+          resourceKind: profile.resourceKind,
+          cryptocurrency: profile.cryptocurrency,
+          algorithm: profile.algorithm,
+          miner: profile.miner,
+          gpuVendors: profile.gpuVendors ?? [],
+        })),
+      thermalLimits: MINING_THERMAL_LIMITS,
+    };
+  });
 
   app.get('/machines/:machineId/mining-resources', async (request, reply) => {
     const session = await requireSession(request, reply, redis);
@@ -126,7 +150,9 @@ export const registerMiningRoutes = (
         const rows = await tx.$queryRaw<MiningResourceRow[]>(Prisma.sql`
           SELECT r."id", r."machineId", m."ownerId", r."kind", r."resourceKey",
                  r."displayName", a."vendor" AS "gpuVendor", r."quarantined",
-                 r."runtimeState", r."activeRentalId", c."id" AS "configurationId",
+                 r."runtimeState", r."activeRentalId", r."lastTelemetry", r."lastTelemetryAt",
+                 (c."ownerPoolSecretRef" IS NOT NULL) AS "ownerPoolSecretConfigured",
+                 c."id" AS "configurationId",
                  c."mode", c."profileId", c."walletAddress", c."workerName",
                  c."ownerPoolEndpoint", c."autoResumeAfterRental", c."maximumTemperatureC",
                  c."maximumPowerWatts", c."maximumCpuPercent", c."cpuThreadCount",
@@ -185,7 +211,7 @@ export const registerMiningRoutes = (
             "walletAddress" = EXCLUDED."walletAddress",
             "workerName" = EXCLUDED."workerName",
             "ownerPoolEndpoint" = EXCLUDED."ownerPoolEndpoint",
-            "ownerPoolSecretRef" = EXCLUDED."ownerPoolSecretRef",
+            "ownerPoolSecretRef" = COALESCE(EXCLUDED."ownerPoolSecretRef", "MiningConfiguration"."ownerPoolSecretRef"),
             "autoResumeAfterRental" = EXCLUDED."autoResumeAfterRental",
             "maximumTemperatureC" = EXCLUDED."maximumTemperatureC",
             "maximumPowerWatts" = EXCLUDED."maximumPowerWatts",
@@ -200,6 +226,8 @@ export const registerMiningRoutes = (
                     ${session.userId}::text AS "ownerId", ${input.resourceKind}::"MiningResourceKind" AS "kind",
                     ''::text AS "resourceKey", ''::text AS "displayName", NULL::text AS "gpuVendor",
                     false AS "quarantined", 'IDLE'::text AS "runtimeState", NULL::text AS "activeRentalId",
+                    NULL::jsonb AS "lastTelemetry", NULL::timestamp AS "lastTelemetryAt",
+                    ("ownerPoolSecretRef" IS NOT NULL) AS "ownerPoolSecretConfigured",
                     "mode", "profileId", "walletAddress", "workerName", "ownerPoolEndpoint",
                     "autoResumeAfterRental", "maximumTemperatureC", "maximumPowerWatts",
                     "maximumCpuPercent", "cpuThreadCount", "gpuIntensityPercent",

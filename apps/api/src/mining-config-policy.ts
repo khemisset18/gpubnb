@@ -7,6 +7,10 @@ import {
 
 export const miningModeSchema = z.enum(['DISABLED', 'GPUBNB_MANAGED', 'OWNER_POOL']);
 export const miningResourceKindSchema = z.enum(['GPU', 'CPU']);
+export const MINING_THERMAL_LIMITS = {
+  CPU: { minimumC: 50, maximumC: 98 },
+  GPU: { minimumC: 85, maximumC: 98 },
+} as const;
 
 const resourceIdentifierSchema = z.string().trim().min(3).max(128).regex(/^[A-Za-z0-9:_-]+$/);
 const ownerPoolSecretReferenceSchema = z
@@ -35,7 +39,7 @@ export const miningConfigurationInputSchema = z
       .optional(),
     ownerPoolSecretRef: ownerPoolSecretReferenceSchema.optional(),
     autoResumeAfterRental: z.boolean().default(false),
-    maximumTemperatureC: z.number().int().min(50).max(98),
+    maximumTemperatureC: z.number().int().min(MINING_THERMAL_LIMITS.CPU.minimumC).max(MINING_THERMAL_LIMITS.CPU.maximumC),
     maximumPowerWatts: z.number().int().min(5).max(1500),
     cpuThreadLimit: z.number().int().min(1).max(1024).optional(),
     cpuUtilizationLimitPercent: z.number().int().min(1).max(100).optional(),
@@ -68,18 +72,11 @@ export const miningConfigurationInputSchema = z
     }
 
     if (value.resourceKind === 'GPU') {
-      if (value.maximumTemperatureC < 85) {
+      if (value.maximumTemperatureC < MINING_THERMAL_LIMITS.GPU.minimumC) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['maximumTemperatureC'],
           message: 'gpu_maximum_temperature_out_of_range',
-        });
-      }
-      if (!value.gpuIntensityPercent) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['gpuIntensityPercent'],
-          message: 'gpu_intensity_required',
         });
       }
       if (value.cpuThreadLimit !== undefined || value.cpuUtilizationLimitPercent !== undefined) {
@@ -92,6 +89,15 @@ export const miningConfigurationInputSchema = z
     }
 
     if (value.mode === 'DISABLED') return;
+
+    if (value.mode === 'GPUBNB_MANAGED') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['mode'],
+        message: 'managed_pool_disabled',
+      });
+      return;
+    }
 
     if (!value.walletAddress) {
       context.addIssue({
@@ -109,13 +115,6 @@ export const miningConfigurationInputSchema = z
       });
     }
 
-    if (value.mode === 'GPUBNB_MANAGED' && (value.ownerPoolEndpoint || value.ownerPoolSecretRef)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['ownerPoolEndpoint'],
-        message: 'managed_pool_rejects_owner_endpoint',
-      });
-    }
   });
 
 export type MiningConfigurationInput = z.infer<typeof miningConfigurationInputSchema>;

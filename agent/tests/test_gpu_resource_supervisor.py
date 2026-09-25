@@ -3,7 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from gpubnb_agent.execution_control import ExecutionControlError
 from gpubnb_agent.gpu_resource_supervisor import (
@@ -16,6 +16,7 @@ from gpubnb_agent.gpu_resource_supervisor import (
     RuntimeStore,
     SystemLauncher,
     build_resource_arguments,
+    mining_runtime_telemetry_snapshot,
     parse_lolminer_telemetry,
     parse_resource_start,
 )
@@ -163,6 +164,53 @@ class GpuResourceSupervisorTests(unittest.TestCase):
                     Path(self.temp.name) / "private" / "miner.log",
                 )
         popen.assert_not_called()
+
+    def test_heartbeat_snapshot_is_bounded_and_excludes_sensitive_runtime_fields(self) -> None:
+        records = {}
+        for index in range(70):
+            resource_id = f"resource_{index:08d}"
+            records[resource_id] = RuntimeRecord(
+                resource_id=resource_id,
+                hardware_uuid=f"GPU-{index:08d}",
+                runtime_generation=1,
+                state="MINING",
+                profile_id="lolminer_etchash",
+                command_id="command_sensitive",
+                pid=1234,
+                executable_path="C:/secret/path/lolMiner.exe",
+                binary_sha256="a" * 64,
+                process_creation_token="creation-sensitive",
+                log_path="C:/private/miner.log",
+                last_hashrate=42.5,
+                last_hashrate_unit="MH/s",
+                accepted_shares=3,
+                stale_shares=1,
+                hardware_errors=0,
+                uptime_seconds=60,
+                pool_connected=True,
+                last_temperature_c=70.0,
+                last_power_watts=80.0,
+                last_utilization_percent=90,
+                last_sampled_at_ms=123456,
+            )
+        store = Mock()
+        store.load.return_value = records
+        snapshots = mining_runtime_telemetry_snapshot(store)
+        self.assertEqual(len(snapshots), 64)
+        serialized = repr(snapshots)
+        for forbidden in (
+            "command_sensitive",
+            "C:/secret/path/lolMiner.exe",
+            "creation-sensitive",
+            "C:/private/miner.log",
+            "binary_sha256",
+            "executable_path",
+            "log_path",
+            "pid",
+        ):
+            self.assertNotIn(forbidden, serialized)
+        self.assertEqual(snapshots[0]["hashrate"], 42.5)
+        self.assertEqual(snapshots[0]["powerWatts"], 80.0)
 
     def test_lolminer_telemetry_parser_extracts_only_structured_metrics(self) -> None:
         telemetry = parse_lolminer_telemetry(
