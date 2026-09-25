@@ -52,8 +52,8 @@ test('non-Developer rental stops remain outside the direct production path', () 
 function queryCapturingDb() {
   const queries: string[] = [];
   const db = {
-    $queryRaw: async (query: { strings?: readonly string[] }) => {
-      queries.push((query.strings ?? []).join('?'));
+    $queryRaw: async (query: { sql?: string; strings?: readonly string[] }) => {
+      queries.push(query.sql ?? (query.strings ?? []).join('?'));
       return [];
     },
   } as unknown as PrismaClient;
