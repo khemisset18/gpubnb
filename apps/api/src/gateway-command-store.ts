@@ -75,6 +75,7 @@ export async function claimGatewayMachineCommands(
   validateDeliveryKey(machineId, 'command_machine_id');
   validateDeliveryKey(workerId, 'worker_id');
   const batch = clampBatchSize(requestedBatch, DELIVERY_LIMITS.machineCommandBatch);
+  const claimLimit = Math.min(batch, 1);
   const lease = clampLeaseSeconds(requestedLeaseSeconds, DELIVERY_LIMITS.maxCommandLeaseSeconds);
   return db.$queryRaw<ClaimedMachineCommand[]>(Prisma.sql`
     WITH expired AS (
@@ -86,19 +87,30 @@ export async function claimGatewayMachineCommands(
          AND command."status" IN ('PENDING', 'LEASED')
          AND command."expiresAt" <= CURRENT_TIMESTAMP
       RETURNING command."id"
-    ), candidates AS (
-      SELECT command."id"
+    ), eligible AS MATERIALIZED (
+      SELECT command."id", command."sequence", command."status",
+             command."availableAt", command."leaseExpiresAt"
         FROM "MachineCommand" command
        WHERE command."machineId" = ${machineId}
          AND ${FAST_PATH_PREDICATE}
          AND command."expiresAt" > CURRENT_TIMESTAMP
-         AND (
-           (command."status" = 'PENDING' AND command."availableAt" <= CURRENT_TIMESTAMP)
-           OR (command."status" = 'LEASED' AND command."leaseExpiresAt" <= CURRENT_TIMESTAMP)
+         AND command."status" IN ('PENDING', 'LEASED')
+    ), candidates AS (
+      SELECT command."id"
+        FROM "MachineCommand" command
+        JOIN eligible current_command ON current_command."id" = command."id"
+       WHERE (
+         (current_command."status" = 'PENDING' AND current_command."availableAt" <= CURRENT_TIMESTAMP)
+         OR (current_command."status" = 'LEASED' AND current_command."leaseExpiresAt" <= CURRENT_TIMESTAMP)
+       )
+         AND NOT EXISTS (
+           SELECT 1
+             FROM eligible earlier_command
+            WHERE earlier_command."sequence" < current_command."sequence"
          )
-       ORDER BY command."sequence"
-       LIMIT ${batch}
-       FOR UPDATE SKIP LOCKED
+       ORDER BY current_command."sequence"
+       LIMIT ${claimLimit}
+       FOR UPDATE OF command SKIP LOCKED
     )
     UPDATE "MachineCommand" command
        SET "status" = 'LEASED', "leaseOwner" = ${workerId},
