@@ -32,7 +32,7 @@ const runtimeEventSchema = z.object({
     'CONFIGURATION_CHANGED', 'START_REQUESTED', 'STARTED', 'START_FAILED', 'STOP_REQUESTED',
     'STOP_VERIFIED', 'STOP_FAILED', 'RENTAL_PREEMPTED', 'RENTAL_RELEASED',
     'CLEANUP_VERIFIED', 'AUTO_RESUME_REQUESTED', 'QUARANTINED',
-    'EMERGENCY_STOPPED', 'HEARTBEAT',
+    'EMERGENCY_STOPPED',
   ]),
   stateBefore: z.enum(runtimeStates).nullable().optional(),
   stateAfter: z.enum(runtimeStates),
