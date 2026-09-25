@@ -65,7 +65,6 @@ type MiningResourceRow = {
   maximumPowerWatts: number | null;
   maximumCpuPercent: number | null;
   cpuThreadCount: number | null;
-  gpuIntensityPercent: number | null;
   platformFeeBasisPoints: number | null;
   version: number | null;
 };
@@ -86,7 +85,7 @@ const listOwnerResources = async (db: PrismaClient, machineId: string, ownerId: 
            c."mode", c."profileId", c."walletAddress", c."workerName",
            c."ownerPoolEndpoint", c."autoResumeAfterRental", c."maximumTemperatureC",
            c."maximumPowerWatts", c."maximumCpuPercent", c."cpuThreadCount",
-           c."gpuIntensityPercent", c."platformFeeBasisPoints", c."version"
+           c."platformFeeBasisPoints", c."version"
       FROM "MiningResource" r
       JOIN "Machine" m ON m."id" = r."machineId"
  LEFT JOIN "Accelerator" a ON a."id" = r."acceleratorId"
@@ -130,7 +129,7 @@ export const registerMiningRoutes = (
                  c."mode", c."profileId", c."walletAddress", c."workerName",
                  c."ownerPoolEndpoint", c."autoResumeAfterRental", c."maximumTemperatureC",
                  c."maximumPowerWatts", c."maximumCpuPercent", c."cpuThreadCount",
-                 c."gpuIntensityPercent", c."platformFeeBasisPoints", c."version"
+                 c."platformFeeBasisPoints", c."version"
             FROM "MiningResource" r
             JOIN "Machine" m ON m."id" = r."machineId"
        LEFT JOIN "Accelerator" a ON a."id" = r."acceleratorId"
@@ -177,7 +176,7 @@ export const registerMiningRoutes = (
             ${input.ownerPoolSecretRef ?? null}, ${input.autoResumeAfterRental},
             ${input.maximumTemperatureC}, ${input.maximumPowerWatts},
             ${input.cpuUtilizationLimitPercent ?? null}, ${input.cpuThreadLimit ?? null},
-            ${input.gpuIntensityPercent ?? null}, ${feeBps}, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            NULL, ${feeBps}, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
           )
           ON CONFLICT ("resourceId") DO UPDATE SET
             "mode" = EXCLUDED."mode",
@@ -191,7 +190,7 @@ export const registerMiningRoutes = (
             "maximumPowerWatts" = EXCLUDED."maximumPowerWatts",
             "maximumCpuPercent" = EXCLUDED."maximumCpuPercent",
             "cpuThreadCount" = EXCLUDED."cpuThreadCount",
-            "gpuIntensityPercent" = EXCLUDED."gpuIntensityPercent",
+            "gpuIntensityPercent" = NULL,
             "platformFeeBasisPoints" = EXCLUDED."platformFeeBasisPoints",
             "version" = "MiningConfiguration"."version" + 1,
             "updatedAt" = CURRENT_TIMESTAMP
@@ -202,7 +201,7 @@ export const registerMiningRoutes = (
                     false AS "quarantined", 'IDLE'::text AS "runtimeState", NULL::text AS "activeRentalId",
                     "mode", "profileId", "walletAddress", "workerName", "ownerPoolEndpoint",
                     "autoResumeAfterRental", "maximumTemperatureC", "maximumPowerWatts",
-                    "maximumCpuPercent", "cpuThreadCount", "gpuIntensityPercent",
+                    "maximumCpuPercent", "cpuThreadCount",
                     "platformFeeBasisPoints", "version"
         `);
         if (!updated.length) throw new Error('mining_configuration_version_conflict');
