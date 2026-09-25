@@ -339,8 +339,7 @@ mod tests {
 
     #[test]
     fn trusted_valid_certificate_and_hostname_complete_tls() {
-        let (identity, root) =
-            test_identity("pool.test", (2025, 1, 1), (2035, 1, 1));
+        let (identity, root) = test_identity("pool.test", (2025, 1, 1), (2035, 1, 1));
         let (address, server) = spawn_tls_server(identity);
         let connector = connector_with_test_root(root);
         let endpoint = local_endpoint("pool.test", address.port());
@@ -354,8 +353,7 @@ mod tests {
 
     #[test]
     fn hostname_mismatch_is_rejected() {
-        let (identity, root) =
-            test_identity("pool.test", (2025, 1, 1), (2035, 1, 1));
+        let (identity, root) = test_identity("pool.test", (2025, 1, 1), (2035, 1, 1));
         let (address, server) = spawn_tls_server(identity);
         let connector = connector_with_test_root(root);
         let endpoint = local_endpoint("wrong.test", address.port());
@@ -369,8 +367,7 @@ mod tests {
 
     #[test]
     fn untrusted_certificate_is_rejected() {
-        let (identity, _root) =
-            test_identity("pool.test", (2025, 1, 1), (2035, 1, 1));
+        let (identity, _root) = test_identity("pool.test", (2025, 1, 1), (2035, 1, 1));
         let (address, server) = spawn_tls_server(identity);
         let connector = tls_connector().expect("build system-root TLS connector");
         let endpoint = local_endpoint("pool.test", address.port());
@@ -384,8 +381,7 @@ mod tests {
 
     #[test]
     fn expired_certificate_is_rejected() {
-        let (identity, root) =
-            test_identity("pool.test", (2018, 1, 1), (2019, 1, 1));
+        let (identity, root) = test_identity("pool.test", (2018, 1, 1), (2019, 1, 1));
         let (address, server) = spawn_tls_server(identity);
         let connector = connector_with_test_root(root);
         let endpoint = local_endpoint("pool.test", address.port());
@@ -400,7 +396,9 @@ mod tests {
     #[test]
     fn private_addresses_remain_rejected_before_tls() {
         assert!(!address_is_public(IpAddr::V4(Ipv4Addr::LOCALHOST)));
-        assert!(!address_is_public(IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254))));
+        assert!(!address_is_public(IpAddr::V4(Ipv4Addr::new(
+            169, 254, 169, 254
+        ))));
         assert!(!address_is_public(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))));
         assert!(!address_is_public(IpAddr::V6(Ipv6Addr::LOCALHOST)));
         assert!(address_is_public(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))));
