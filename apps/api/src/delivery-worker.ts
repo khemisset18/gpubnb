@@ -22,7 +22,11 @@ import {
   type CommandDispatchConfig,
   type TerminalGatewayAck,
 } from './control-command-dispatch.js';
-import { claimGatewayMachineCommands, gatewayCommandMachineIds } from './gateway-command-store.js';
+import {
+  GATEWAY_FAST_PATH_PER_MACHINE_CONCURRENCY,
+  claimGatewayMachineCommands,
+  gatewayCommandMachineIds,
+} from './gateway-command-store.js';
 import { validateDeliveryKey } from './reliable-delivery.js';
 import { reconcileDevelopmentBookingsScheduled } from './development-booking-scheduler.js';
 import { finalizeVerifiedDeveloperStop } from './workspace-stop-finalizer.js';
@@ -185,10 +189,16 @@ async function main(): Promise<void> {
         const machineIds = await gatewayCommandMachineIds(db, 100);
         for (const machineId of machineIds) {
           if (!commandGatewayAssigned(machineId, dispatchConfig)) continue;
-          const commands = await claimGatewayMachineCommands(db, machineId, workerId, 16, 15);
+          const commands = await claimGatewayMachineCommands(
+            db,
+            machineId,
+            workerId,
+            GATEWAY_FAST_PATH_PER_MACHINE_CONCURRENCY,
+            15,
+          );
           claimedCommands += commands.length;
           inFlight += commands.length;
-          await runBounded(commands, Math.min(MAX_IN_FLIGHT, 8), async (command) => {
+          await runBounded(commands, GATEWAY_FAST_PATH_PER_MACHINE_CONCURRENCY, async (command) => {
             try {
               const existingAck = await readTerminalGatewayAck(redis, command);
               if (existingAck) {

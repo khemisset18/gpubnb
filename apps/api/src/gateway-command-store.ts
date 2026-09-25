@@ -7,6 +7,8 @@ import type { ClaimedMachineCommand } from './delivery-store.js';
 // when their durable representation already contains an exact resource lease
 // whose resource/fence matches the inner Agent payload. The TypeScript dispatcher
 // performs the complete structural validation before sending anything.
+export const GATEWAY_FAST_PATH_PER_MACHINE_CONCURRENCY = 1;
+
 const FAST_PATH_PREDICATE = Prisma.sql`(
   (
     command."commandType" = 'stop_rental'
@@ -75,30 +77,54 @@ export async function claimGatewayMachineCommands(
   validateDeliveryKey(machineId, 'command_machine_id');
   validateDeliveryKey(workerId, 'worker_id');
   const batch = clampBatchSize(requestedBatch, DELIVERY_LIMITS.machineCommandBatch);
+  const claimLimit = Math.min(batch, GATEWAY_FAST_PATH_PER_MACHINE_CONCURRENCY);
   const lease = clampLeaseSeconds(requestedLeaseSeconds, DELIVERY_LIMITS.maxCommandLeaseSeconds);
   return db.$queryRaw<ClaimedMachineCommand[]>(Prisma.sql`
-    WITH expired AS (
+    WITH machine_gate AS MATERIALIZED (
+      SELECT machine."id"
+        FROM "Machine" machine
+       WHERE machine."id" = ${machineId}
+       FOR UPDATE SKIP LOCKED
+    ), expired AS (
       UPDATE "MachineCommand" command
          SET "status" = 'EXPIRED', "lastError" = 'command_expired',
              "leaseOwner" = NULL, "leaseExpiresAt" = NULL
-       WHERE command."machineId" = ${machineId}
+        FROM machine_gate
+       WHERE command."machineId" = machine_gate."id"
          AND ${FAST_PATH_PREDICATE}
          AND command."status" IN ('PENDING', 'LEASED')
          AND command."expiresAt" <= CURRENT_TIMESTAMP
       RETURNING command."id"
-    ), candidates AS (
-      SELECT command."id"
+    ), eligible AS MATERIALIZED (
+      SELECT command."id", command."commandType", command."sequence", command."status",
+             command."availableAt", command."leaseExpiresAt"
         FROM "MachineCommand" command
        WHERE command."machineId" = ${machineId}
          AND ${FAST_PATH_PREDICATE}
          AND command."expiresAt" > CURRENT_TIMESTAMP
-         AND (
-           (command."status" = 'PENDING' AND command."availableAt" <= CURRENT_TIMESTAMP)
-           OR (command."status" = 'LEASED' AND command."leaseExpiresAt" <= CURRENT_TIMESTAMP)
+         AND command."status" IN ('PENDING', 'LEASED')
+    ), candidates AS (
+      SELECT command."id"
+        FROM "MachineCommand" command
+        JOIN eligible current_command ON current_command."id" = command."id"
+       CROSS JOIN machine_gate
+       WHERE (
+         (current_command."status" = 'PENDING' AND current_command."availableAt" <= CURRENT_TIMESTAMP)
+         OR (current_command."status" = 'LEASED' AND current_command."leaseExpiresAt" <= CURRENT_TIMESTAMP)
+       )
+         AND NOT EXISTS (
+           SELECT 1
+             FROM eligible earlier_command
+            WHERE earlier_command."sequence" < current_command."sequence"
+              AND (
+                current_command."commandType" <> 'stop_rental'
+                OR earlier_command."commandType" = 'stop_rental'
+              )
          )
-       ORDER BY command."sequence"
-       LIMIT ${batch}
-       FOR UPDATE SKIP LOCKED
+       ORDER BY CASE WHEN current_command."commandType" = 'stop_rental' THEN 0 ELSE 1 END,
+                current_command."sequence"
+       LIMIT ${claimLimit}
+       FOR UPDATE OF command SKIP LOCKED
     )
     UPDATE "MachineCommand" command
        SET "status" = 'LEASED', "leaseOwner" = ${workerId},
