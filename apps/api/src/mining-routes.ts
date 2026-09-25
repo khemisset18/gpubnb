@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 
 import { requireSession } from './auth.js';
+import { commandDispatchConfigFromEnv, commandGatewayAssigned } from './control-command-dispatch.js';
 import { runBookingTransaction } from './booking-transaction-retry.js';
 import {
   authorizeMiningConfigurationUpdate,
@@ -232,6 +233,15 @@ export const registerMiningRoutes = (
     const session = await requireSession(request, reply, redis);
     if (!session) return;
     const { machineId, resourceId } = resourceParamsSchema.parse(request.params);
+    let dispatchConfig;
+    try {
+      dispatchConfig = commandDispatchConfigFromEnv();
+    } catch {
+      return reply.code(503).send({ error: 'mining_remote_control_unavailable' });
+    }
+    if (!commandGatewayAssigned(machineId, dispatchConfig)) {
+      return reply.code(503).send({ error: 'mining_remote_control_not_enabled' });
+    }
     try {
       const result = await requestMiningStart(db, redis, {
         machineId,
@@ -263,6 +273,15 @@ export const registerMiningRoutes = (
     const session = await requireSession(request, reply, redis);
     if (!session) return;
     const { machineId, resourceId } = resourceParamsSchema.parse(request.params);
+    let dispatchConfig;
+    try {
+      dispatchConfig = commandDispatchConfigFromEnv();
+    } catch {
+      return reply.code(503).send({ error: 'mining_remote_control_unavailable' });
+    }
+    if (!commandGatewayAssigned(machineId, dispatchConfig)) {
+      return reply.code(503).send({ error: 'mining_remote_control_not_enabled' });
+    }
     try {
       const result = await requestMiningStop(db, redis, {
         machineId,
