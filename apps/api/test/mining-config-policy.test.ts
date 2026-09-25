@@ -91,6 +91,27 @@ describe('mining configuration policy', () => {
     }
   });
 
+
+  it('rejects ambiguous owner-pool endpoints before they can become durable commands', () => {
+    for (const ownerPoolEndpoint of [
+      'stratum+tcp://pool.example.com',
+      'stratum+tcp://user:secret@pool.example.com:4444',
+      'stratum+tls://pool.example.com:4444/path',
+      'stratum+tls://pool.example.com:4444?region=eu',
+      'stratum+ssl://pool.example.com:4444#fragment',
+      'https://pool.example.com:4444',
+    ]) {
+      assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, ownerPoolEndpoint }));
+    }
+    assert.equal(
+      miningConfigurationInputSchema.parse({
+        ...validGpuInput,
+        ownerPoolEndpoint: 'stratum+tls://pool.example.com:4444/',
+      }).ownerPoolEndpoint,
+      'stratum+tls://pool.example.com:4444/',
+    );
+  });
+
   it('rejects raw owner-pool passwords and unsupported secret references', () => {
     for (const ownerPoolSecretRef of [
       'super-secret-password',
