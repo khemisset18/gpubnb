@@ -1,0 +1,38 @@
+name: mining-host-tls-test-lock
+
+on:
+  pull_request:
+    paths:
+      - 'apps/host-desktop/src-tauri/Cargo.toml'
+      - '.github/workflows/mining-host-tls-test-lock.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-and-commit:
+    if: github.head_ref == 'feat/mining-host-stratum-tls-verification'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Resolve pinned test-only TLS dependency
+        run: cargo check -p gpubnb-host-desktop --tests
+      - name: Commit only Cargo.lock when changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Cargo.lock; then
+            echo 'Cargo.lock already resolved.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Cargo.lock
+          test "$(git diff --cached --name-only)" = "Cargo.lock"
+          git commit -m 'build(mining): lock portable Host TLS test server'
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
