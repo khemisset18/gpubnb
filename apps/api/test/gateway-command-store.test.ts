@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { productionGatewayCommandEligible } from '../src/gateway-command-store.js';
+import { claimGatewayMachineCommands, productionGatewayCommandEligible } from '../src/gateway-command-store.js';
 
 const fenced = (generation = '17') => ({
   lease: {
@@ -42,4 +42,30 @@ test('production fast path keeps unfenced or mismatched mining dark', () => {
 
 test('non-Developer rental stops remain outside the direct production path', () => {
   assert.equal(productionGatewayCommandEligible('stop_rental', { workspaceSlug: 'compute' }), false);
+});
+
+test('fast-path claim serializes nonterminal command sequences per machine', async () => {
+  let captured: any;
+  const db = {
+    $queryRaw: async (query: any) => {
+      captured = query;
+      return [];
+    },
+  } as any;
+
+  await claimGatewayMachineCommands(
+    db,
+    'machine_00000001',
+    'worker_00000001',
+    16,
+    15,
+  );
+
+  const sql = captured.strings.join('?');
+  assert.match(sql, /eligible AS MATERIALIZED/);
+  assert.match(sql, /command\."status" IN \('PENDING', 'LEASED'\)/);
+  assert.match(sql, /NOT EXISTS/);
+  assert.match(sql, /earlier_command\."sequence" < current_command\."sequence"/);
+  assert.match(sql, /FOR UPDATE OF command SKIP LOCKED/);
+  assert.ok(captured.values.includes(1), 'claim limit must stay one command per machine');
 });
