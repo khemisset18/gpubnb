@@ -1,4 +1,5 @@
 use crate::mining_configuration::PoolConnectionEvidence;
+use native_tls::{Protocol, TlsConnector};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
@@ -26,13 +27,18 @@ impl MiningPoolEndpoint {
             return Err("mining_pool_scheme_not_allowed");
         };
 
-        if authority.contains('@') || authority.contains('?') || authority.contains('#') {
+        if authority.contains('@')
+            || authority.contains('?')
+            || authority.contains('#')
+            || authority.contains('/')
+        {
             return Err("mining_pool_url_contains_forbidden_components");
         }
 
         let (host, port) = authority
             .rsplit_once(':')
             .ok_or("mining_pool_port_required")?;
+        let host = host.trim_matches(['[', ']']);
         if host.is_empty() || host.len() > 253 {
             return Err("mining_invalid_pool_host");
         }
@@ -45,7 +51,7 @@ impl MiningPoolEndpoint {
 
         Ok(Self {
             pool_url: pool_url.to_owned(),
-            host: host.trim_matches(['[', ']']).to_owned(),
+            host: host.to_owned(),
             port,
             requires_tls,
         })
@@ -58,17 +64,16 @@ pub fn probe_pool_connection(
 ) -> Result<PoolConnectionEvidence, &'static str> {
     let endpoint = MiningPoolEndpoint::parse(pool_url)?;
     let addresses = resolve_addresses(&endpoint)?;
+
+    if endpoint.requires_tls {
+        return probe_tls_connection(&endpoint, &addresses, now_unix_seconds);
+    }
+
     let tcp_connected = addresses
         .iter()
         .any(|address| TcpStream::connect_timeout(address, CONNECT_TIMEOUT).is_ok());
     if !tcp_connected {
         return Err("mining_pool_tcp_unverified");
-    }
-
-    // TLS pools remain fail-closed until a certificate-verifying native TLS
-    // implementation is wired into every supported desktop platform.
-    if endpoint.requires_tls {
-        return Err("mining_pool_tls_probe_unavailable");
     }
 
     Ok(PoolConnectionEvidence {
@@ -78,6 +83,56 @@ pub fn probe_pool_connection(
         tls_verified: false,
         verified_at_unix_seconds: now_unix_seconds,
     })
+}
+
+fn tls_connector() -> Result<TlsConnector, &'static str> {
+    let mut builder = TlsConnector::builder();
+    builder
+        .min_protocol_version(Some(Protocol::Tlsv12))
+        .use_sni(true)
+        .danger_accept_invalid_certs(false)
+        .danger_accept_invalid_hostnames(false);
+    builder
+        .build()
+        .map_err(|_| "mining_pool_tls_connector_unavailable")
+}
+
+fn probe_tls_connection(
+    endpoint: &MiningPoolEndpoint,
+    addresses: &[SocketAddr],
+    now_unix_seconds: u64,
+) -> Result<PoolConnectionEvidence, &'static str> {
+    let connector = tls_connector()?;
+    let mut tcp_connected = false;
+
+    for address in addresses {
+        let stream = match TcpStream::connect_timeout(address, CONNECT_TIMEOUT) {
+            Ok(stream) => {
+                tcp_connected = true;
+                stream
+            }
+            Err(_) => continue,
+        };
+        let _ = stream.set_read_timeout(Some(CONNECT_TIMEOUT));
+        let _ = stream.set_write_timeout(Some(CONNECT_TIMEOUT));
+
+        // Connect to the already-public IP while preserving the original
+        // hostname for both SNI and certificate hostname verification.
+        if connector.connect(endpoint.host.as_str(), stream).is_ok() {
+            return Ok(PoolConnectionEvidence {
+                pool_url: endpoint.pool_url.clone(),
+                dns_resolved: true,
+                tcp_connected: true,
+                tls_verified: true,
+                verified_at_unix_seconds: now_unix_seconds,
+            });
+        }
+    }
+
+    if !tcp_connected {
+        return Err("mining_pool_tcp_unverified");
+    }
+    Err("mining_pool_tls_unverified")
 }
 
 fn ipv4_is_public(address: Ipv4Addr) -> bool {
@@ -92,8 +147,6 @@ fn ipv4_is_public(address: Ipv4Addr) -> bool {
     {
         return false;
     }
-    // Shared CGNAT, protocol-assignment, benchmarking and reserved ranges are
-    // never valid mining-pool destinations.
     if octets[0] == 0
         || (octets[0] == 100 && (64..=127).contains(&octets[1]))
         || (octets[0] == 192 && octets[1] == 0 && octets[2] == 0)
@@ -117,7 +170,6 @@ fn ipv6_is_public(address: Ipv6Addr) -> bool {
     {
         return false;
     }
-    // Documentation prefix 2001:db8::/32.
     if segments[0] == 0x2001 && segments[1] == 0x0db8 {
         return false;
     }
