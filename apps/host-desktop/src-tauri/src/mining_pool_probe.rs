@@ -1,5 +1,5 @@
 use crate::mining_configuration::PoolConnectionEvidence;
-use native_tls::{Protocol, TlsConnector};
+use native_tls::{Protocol, TlsConnector, TlsConnectorBuilder};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
@@ -85,7 +85,7 @@ pub fn probe_pool_connection(
     })
 }
 
-fn tls_connector() -> Result<TlsConnector, &'static str> {
+fn tls_connector_builder() -> TlsConnectorBuilder {
     let mut builder = TlsConnector::builder();
     builder
         .min_protocol_version(Some(Protocol::Tlsv12))
@@ -93,6 +93,10 @@ fn tls_connector() -> Result<TlsConnector, &'static str> {
         .danger_accept_invalid_certs(false)
         .danger_accept_invalid_hostnames(false);
     builder
+}
+
+fn tls_connector() -> Result<TlsConnector, &'static str> {
+    tls_connector_builder()
         .build()
         .map_err(|_| "mining_pool_tls_connector_unavailable")
 }
@@ -103,6 +107,15 @@ fn probe_tls_connection(
     now_unix_seconds: u64,
 ) -> Result<PoolConnectionEvidence, &'static str> {
     let connector = tls_connector()?;
+    probe_tls_connection_with_connector(&connector, endpoint, addresses, now_unix_seconds)
+}
+
+fn probe_tls_connection_with_connector(
+    connector: &TlsConnector,
+    endpoint: &MiningPoolEndpoint,
+    addresses: &[SocketAddr],
+    now_unix_seconds: u64,
+) -> Result<PoolConnectionEvidence, &'static str> {
     let mut tcp_connected = false;
 
     for address in addresses {
@@ -116,8 +129,9 @@ fn probe_tls_connection(
         let _ = stream.set_read_timeout(Some(CONNECT_TIMEOUT));
         let _ = stream.set_write_timeout(Some(CONNECT_TIMEOUT));
 
-        // Connect to the already-public IP while preserving the original
-        // hostname for both SNI and certificate hostname verification.
+        // The socket is connected to the already-public IP selected above. The
+        // original hostname is passed to native-tls for both SNI and hostname
+        // certificate verification, so DNS cannot redirect the TLS handshake.
         if connector.connect(endpoint.host.as_str(), stream).is_ok() {
             return Ok(PoolConnectionEvidence {
                 pool_url: endpoint.pool_url.clone(),
@@ -204,10 +218,81 @@ fn resolve_addresses(endpoint: &MiningPoolEndpoint) -> Result<Vec<SocketAddr>, &
     Ok(addresses)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use native_tls::{Certificate as NativeCertificate, Identity, TlsAcceptor};
+    use rcgen::{
+        date_time_ymd, BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, Issuer,
+        KeyPair, KeyUsagePurpose,
+    };
+    use std::net::TcpListener;
+    use std::thread;
+
+    fn test_identity(
+        hostname: &str,
+        not_before: (i32, u8, u8),
+        not_after: (i32, u8, u8),
+    ) -> (Identity, NativeCertificate) {
+        let mut ca_params =
+            CertificateParams::new(Vec::<String>::new()).expect("empty CA SAN is valid");
+        ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        ca_params.key_usages = vec![
+            KeyUsagePurpose::DigitalSignature,
+            KeyUsagePurpose::KeyCertSign,
+        ];
+        let ca_key = KeyPair::generate().expect("generate CA key");
+        let ca_cert = ca_params.self_signed(&ca_key).expect("self-sign CA");
+        let issuer = Issuer::new(ca_params, ca_key);
+
+        let mut leaf_params =
+            CertificateParams::new(vec![hostname.to_owned()]).expect("valid DNS SAN");
+        leaf_params.not_before = date_time_ymd(not_before.0, not_before.1, not_before.2);
+        leaf_params.not_after = date_time_ymd(not_after.0, not_after.1, not_after.2);
+        leaf_params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+        leaf_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+        let leaf_key = KeyPair::generate().expect("generate leaf key");
+        let leaf_cert = leaf_params
+            .signed_by(&leaf_key, &issuer)
+            .expect("sign leaf with test CA");
+
+        let identity = Identity::from_pkcs8(
+            leaf_cert.pem().as_bytes(),
+            leaf_key.serialize_pem().as_bytes(),
+        )
+        .expect("native TLS accepts generated PKCS#8 identity");
+        let root = NativeCertificate::from_der(ca_cert.der().as_ref())
+            .expect("native TLS accepts generated CA");
+        (identity, root)
+    }
+
+    fn spawn_tls_server(identity: Identity) -> (SocketAddr, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind TLS test server");
+        let address = listener.local_addr().expect("TLS test server address");
+        let acceptor = TlsAcceptor::new(identity).expect("build TLS test acceptor");
+        let handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept TLS test client");
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
+            let _ = stream.set_write_timeout(Some(Duration::from_secs(3)));
+            let _ = acceptor.accept(stream);
+        });
+        (address, handle)
+    }
+
+    fn connector_with_test_root(root: NativeCertificate) -> TlsConnector {
+        let mut builder = tls_connector_builder();
+        builder.add_root_certificate(root);
+        builder.build().expect("build TLS connector with test root")
+    }
+
+    fn local_endpoint(hostname: &str, port: u16) -> MiningPoolEndpoint {
+        MiningPoolEndpoint {
+            pool_url: format!("stratum+tls://{hostname}:{port}"),
+            host: hostname.to_owned(),
+            port,
+            requires_tls: true,
+        }
+    }
 
     #[test]
     fn parses_tls_and_tcp_without_downgrade() {
@@ -250,6 +335,66 @@ mod tests {
         assert!(source.contains(".min_protocol_version(Some(Protocol::Tlsv12))"));
         assert!(!source.contains(".danger_accept_invalid_certs(true)"));
         assert!(!source.contains(".danger_accept_invalid_hostnames(true)"));
+    }
+
+    #[test]
+    fn trusted_valid_certificate_and_hostname_complete_tls() {
+        let (identity, root) =
+            test_identity("pool.test", (2025, 1, 1), (2035, 1, 1));
+        let (address, server) = spawn_tls_server(identity);
+        let connector = connector_with_test_root(root);
+        let endpoint = local_endpoint("pool.test", address.port());
+
+        let evidence =
+            probe_tls_connection_with_connector(&connector, &endpoint, &[address], 123).unwrap();
+        assert!(evidence.tls_verified);
+        assert!(evidence.tcp_connected);
+        server.join().expect("join TLS test server");
+    }
+
+    #[test]
+    fn hostname_mismatch_is_rejected() {
+        let (identity, root) =
+            test_identity("pool.test", (2025, 1, 1), (2035, 1, 1));
+        let (address, server) = spawn_tls_server(identity);
+        let connector = connector_with_test_root(root);
+        let endpoint = local_endpoint("wrong.test", address.port());
+
+        assert_eq!(
+            probe_tls_connection_with_connector(&connector, &endpoint, &[address], 123),
+            Err("mining_pool_tls_unverified")
+        );
+        server.join().expect("join TLS test server");
+    }
+
+    #[test]
+    fn untrusted_certificate_is_rejected() {
+        let (identity, _root) =
+            test_identity("pool.test", (2025, 1, 1), (2035, 1, 1));
+        let (address, server) = spawn_tls_server(identity);
+        let connector = tls_connector().expect("build system-root TLS connector");
+        let endpoint = local_endpoint("pool.test", address.port());
+
+        assert_eq!(
+            probe_tls_connection_with_connector(&connector, &endpoint, &[address], 123),
+            Err("mining_pool_tls_unverified")
+        );
+        server.join().expect("join TLS test server");
+    }
+
+    #[test]
+    fn expired_certificate_is_rejected() {
+        let (identity, root) =
+            test_identity("pool.test", (2018, 1, 1), (2019, 1, 1));
+        let (address, server) = spawn_tls_server(identity);
+        let connector = connector_with_test_root(root);
+        let endpoint = local_endpoint("pool.test", address.port());
+
+        assert_eq!(
+            probe_tls_connection_with_connector(&connector, &endpoint, &[address], 123),
+            Err("mining_pool_tls_unverified")
+        );
+        server.join().expect("join TLS test server");
     }
 
     #[test]
