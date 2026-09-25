@@ -44,7 +44,7 @@ test('non-Developer rental stops remain outside the direct production path', () 
   assert.equal(productionGatewayCommandEligible('stop_rental', { workspaceSlug: 'compute' }), false);
 });
 
-test('fast-path claim serializes nonterminal command sequences per machine', async () => {
+test('fast-path claim serializes mining while preserving rental-stop priority', async () => {
   let captured: any;
   const db = {
     $queryRaw: async (query: any) => {
@@ -66,6 +66,8 @@ test('fast-path claim serializes nonterminal command sequences per machine', asy
   assert.match(sql, /command\."status" IN \('PENDING', 'LEASED'\)/);
   assert.match(sql, /NOT EXISTS/);
   assert.match(sql, /earlier_command\."sequence" < current_command\."sequence"/);
+  assert.match(sql, /current_command\."commandType" <> 'stop_rental'/);
+  assert.match(sql, /earlier_command\."commandType" = 'stop_rental'/);
   assert.match(sql, /FOR UPDATE OF command SKIP LOCKED/);
   assert.ok(captured.values.includes(1), 'claim limit must stay one command per machine');
 });
