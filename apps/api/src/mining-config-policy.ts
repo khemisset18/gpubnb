@@ -15,19 +15,9 @@ const ownerPoolSecretReferenceSchema = z
   .min(12)
   .max(200)
   .regex(
-    /^(?:vault|secret|aws-secretsmanager|gcp-secretmanager|azure-keyvault):\/\/[A-Za-z0-9][A-Za-z0-9._~:/?#\[\]@!const ownerPoolSecretReferenceSchema = z
-  .string()
-  .trim()
-  .min(12)
-  .max(200)
-  .regex(
     /^(?:vault|secret|aws-secretsmanager|gcp-secretmanager|azure-keyvault):\/\/[A-Za-z0-9][A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*$/,
     'owner_pool_secret_reference_required',
   );
-'()*+,;=%-]*$/,
-    'owner_pool_secret_reference_required',
-  );
-
 
 const ownerPoolEndpointSchema = z
   .string()
