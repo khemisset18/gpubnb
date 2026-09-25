@@ -80,11 +80,17 @@ export async function claimGatewayMachineCommands(
   const claimLimit = Math.min(batch, GATEWAY_FAST_PATH_PER_MACHINE_CONCURRENCY);
   const lease = clampLeaseSeconds(requestedLeaseSeconds, DELIVERY_LIMITS.maxCommandLeaseSeconds);
   return db.$queryRaw<ClaimedMachineCommand[]>(Prisma.sql`
-    WITH expired AS (
+    WITH machine_gate AS MATERIALIZED (
+      SELECT machine."id"
+        FROM "Machine" machine
+       WHERE machine."id" = ${machineId}
+       FOR UPDATE SKIP LOCKED
+    ), expired AS (
       UPDATE "MachineCommand" command
          SET "status" = 'EXPIRED', "lastError" = 'command_expired',
              "leaseOwner" = NULL, "leaseExpiresAt" = NULL
-       WHERE command."machineId" = ${machineId}
+        FROM machine_gate
+       WHERE command."machineId" = machine_gate."id"
          AND ${FAST_PATH_PREDICATE}
          AND command."status" IN ('PENDING', 'LEASED')
          AND command."expiresAt" <= CURRENT_TIMESTAMP
@@ -101,6 +107,7 @@ export async function claimGatewayMachineCommands(
       SELECT command."id"
         FROM "MachineCommand" command
         JOIN eligible current_command ON current_command."id" = command."id"
+       CROSS JOIN machine_gate
        WHERE (
          (current_command."status" = 'PENDING' AND current_command."availableAt" <= CURRENT_TIMESTAMP)
          OR (current_command."status" = 'LEASED' AND current_command."leaseExpiresAt" <= CURRENT_TIMESTAMP)
