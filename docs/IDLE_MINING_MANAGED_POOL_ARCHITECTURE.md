@@ -129,7 +129,7 @@ Avant une ouverture publique des pools personnalisés, compléter les protection
 
 ## Authentification Ed25519 V2 des événements runtime
 
-`POST /internal/mining/runtime-events` utilise une signature propre à chaque machine.
+`POST /internal/mining/runtime-events` utilise une signature propre à chaque machine. Ce canal Agent est limité aux événements de sécurité `QUARANTINED` et `EMERGENCY_STOPPED`; les transitions START/STOP/rental restent exclusivement produites par les autorités serveur et les ACK fenced.
 
 La donnée signée contient :
 
