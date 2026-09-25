@@ -225,7 +225,7 @@ export async function dispatchToGateway(
   } else {
     // Parsing here is intentional defense in depth. The SQL fast-path filter is
     // coarse; only a structurally fenced mining command may reach the Gateway.
-    miningGatewayParts(command.payload);
+    miningGatewayParts(kind, command.payload);
   }
   if (!config.adminUrl || !config.internalToken) throw new Error('control_gateway_admin_not_configured');
   const controller = new AbortController();
