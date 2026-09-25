@@ -100,3 +100,40 @@ test('agent safety events preserve rental ownership and require current-state pr
   assert.match(body, /"quarantined" = true/);
   assert.doesNotMatch(body, /SET[\s\S]{0,500}"activeRentalId"\s*=/);
 });
+
+
+test('Agent safety-event payload is strict, bounded, and cannot carry mining secrets or process metadata', async () => {
+  const source = await readFile(new URL('../src/mining-routes.ts', import.meta.url), 'utf8');
+  const baseStart = source.indexOf('const agentRuntimeEventBase = {');
+  const schemaStart = source.indexOf("const runtimeEventSchema = z.discriminatedUnion", baseStart);
+  assert.ok(baseStart >= 0 && schemaStart > baseStart);
+  const base = source.slice(baseStart, schemaStart);
+
+  assert.match(base, /payload: z\.object\(\{/);
+  assert.match(base, /detailCode: z\.string\(\)\.min\(1\)\.max\(96\)/);
+  assert.match(base, /\}\)\.strict\(\)\.optional\(\)/);
+  assert.doesNotMatch(base, /z\.record\(/);
+
+  for (const forbidden of [
+    'walletAddress',
+    'ownerPoolEndpoint',
+    'ownerPoolSecretRef',
+    'poolUrl',
+    'poolPassword',
+    'argv',
+    'commandId',
+    'pid',
+    'executablePath',
+    'logPath',
+    'binarySha256',
+    'seedPhrase',
+    'privateKey',
+  ]) {
+    assert.doesNotMatch(base, new RegExp(forbidden));
+  }
+});
+
+test('safety detailCode is deliberately non-freeform to avoid secret-bearing error text', async () => {
+  const source = await readFile(new URL('../src/mining-routes.ts', import.meta.url), 'utf8');
+  assert.match(source, /detailCode: z\.string\(\)\.min\(1\)\.max\(96\)\.regex\(\/\^\[A-Za-z0-9_\.:-\]\+\$\//);
+});
