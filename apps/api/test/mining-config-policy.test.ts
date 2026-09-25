@@ -29,7 +29,7 @@ const validCpuInput = {
   walletAddress: '4ExamplePublicAddress123456',
   workerName: 'host_cpu_0',
   ownerPoolEndpoint: 'stratum+ssl://pool.example.com:443',
-  ownerPoolSecretRef: 'secret://owner/pool/cpu-0',
+  ownerPoolSecretRef: 'secret://local/mining/cpu-0',
   autoResumeAfterRental: true,
   maximumTemperatureC: 85,
   maximumPowerWatts: 180,
@@ -76,13 +76,11 @@ describe('mining configuration policy', () => {
     assert.equal(miningConfigurationInputSchema.parse(validCpuInput).resourceKind, 'CPU');
   });
 
-  it('accepts supported secret-manager references for owner pools', () => {
+  it('accepts only the qualified local mining secret reference shape', () => {
     for (const ownerPoolSecretRef of [
-      'vault://gpubnb/mining/owner-1/cpu-0',
-      'secret://owner/pool/cpu-0',
-      'aws-secretsmanager://prod/gpubnb/mining/cpu-0',
-      'gcp-secretmanager://projects/gpubnb/secrets/cpu-0/versions/latest',
-      'azure-keyvault://gpubnb-vault/secrets/cpu-0',
+      'secret://local/mining/pool-main',
+      'secret://local/mining/cpu-0',
+      'secret://local/mining/owner_pool.01',
     ]) {
       assert.equal(
         miningConfigurationInputSchema.parse({ ...validCpuInput, ownerPoolSecretRef }).ownerPoolSecretRef,
@@ -118,6 +116,12 @@ describe('mining configuration policy', () => {
       'password=miner123',
       'https://vault.example.com/secrets/cpu-0',
       'env://MINING_POOL_PASSWORD',
+      'vault://gpubnb/mining/owner-1/cpu-0',
+      'secret://owner/pool/cpu-0',
+      'aws-secretsmanager://prod/gpubnb/mining/cpu-0',
+      'gcp-secretmanager://projects/gpubnb/secrets/cpu-0/versions/latest',
+      'azure-keyvault://gpubnb-vault/secrets/cpu-0',
+      'secret://local/mining/x',
     ]) {
       assert.throws(() => miningConfigurationInputSchema.parse({ ...validCpuInput, ownerPoolSecretRef }));
     }
