@@ -15,9 +15,43 @@ const ownerPoolSecretReferenceSchema = z
   .min(12)
   .max(200)
   .regex(
+    /^(?:vault|secret|aws-secretsmanager|gcp-secretmanager|azure-keyvault):\/\/[A-Za-z0-9][A-Za-z0-9._~:/?#\[\]@!const ownerPoolSecretReferenceSchema = z
+  .string()
+  .trim()
+  .min(12)
+  .max(200)
+  .regex(
     /^(?:vault|secret|aws-secretsmanager|gcp-secretmanager|azure-keyvault):\/\/[A-Za-z0-9][A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*$/,
     'owner_pool_secret_reference_required',
   );
+'()*+,;=%-]*$/,
+    'owner_pool_secret_reference_required',
+  );
+
+
+const ownerPoolEndpointSchema = z
+  .string()
+  .trim()
+  .max(300)
+  .superRefine((value, context) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(value);
+    } catch {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'owner_pool_endpoint_invalid' });
+      return;
+    }
+    if (!['stratum+tcp:', 'stratum+ssl:', 'stratum+tls:'].includes(parsed.protocol)
+      || !parsed.hostname
+      || !parsed.port
+      || parsed.username
+      || parsed.password
+      || parsed.search
+      || parsed.hash
+      || (parsed.pathname !== '' && parsed.pathname !== '/')) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'owner_pool_endpoint_invalid' });
+    }
+  });
 
 export const miningConfigurationInputSchema = z
   .object({
@@ -27,12 +61,7 @@ export const miningConfigurationInputSchema = z
     profileId: z.string().trim().min(3).max(96).regex(/^[a-z0-9_-]+$/),
     walletAddress: z.string().trim().min(8).max(160).optional(),
     workerName: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/),
-    ownerPoolEndpoint: z
-      .string()
-      .trim()
-      .max(300)
-      .regex(/^stratum\+(tcp|ssl|tls):\/\//)
-      .optional(),
+    ownerPoolEndpoint: ownerPoolEndpointSchema.optional(),
     ownerPoolSecretRef: ownerPoolSecretReferenceSchema.optional(),
     autoResumeAfterRental: z.boolean().default(false),
     maximumTemperatureC: z.number().int().min(50).max(98),
