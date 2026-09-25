@@ -184,7 +184,7 @@ async function main(): Promise<void> {
         }
         try {
           const terminalMining = await reconcileTerminalMiningCommands(db, 32);
-          if (terminalMining.quarantined > 0 || terminalMining.superseded > 0) {
+          if (terminalMining.expired > 0 || terminalMining.quarantined > 0 || terminalMining.superseded > 0) {
             console.warn(JSON.stringify({
               level: 'warn',
               message: 'mining_terminal_delivery_reconciled',
