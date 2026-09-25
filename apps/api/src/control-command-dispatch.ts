@@ -47,13 +47,22 @@ function parseMiningLease(value: unknown): GatewayLeaseBinding {
   return { resourceId, holderId, leaseId, fencingToken };
 }
 
-function miningGatewayParts(durablePayload: Record<string, unknown>): GatewayCommandParts {
+function miningGatewayParts(
+  kind: 'START_MINING' | 'STOP_MINING',
+  durablePayload: Record<string, unknown>,
+): GatewayCommandParts {
   if (Object.keys(durablePayload).sort().join(',') !== 'lease,payload') {
     throw new Error('mining_command_durable_payload_invalid');
   }
   const lease = parseMiningLease(durablePayload.lease);
   if (!plainObject(durablePayload.payload)) throw new Error('mining_command_payload_invalid');
   const payload = durablePayload.payload;
+  const expectedPayloadKeys = kind === 'START_MINING'
+    ? 'hardwareUuid,maximumPowerWatts,maximumTemperatureC,performanceMode,poolUrl,profileId,resourceId,runtimeGeneration,walletAddress,workerName'
+    : 'hardwareUuid,resourceId,runtimeGeneration';
+  if (Object.keys(payload).sort().join(',') !== expectedPayloadKeys) {
+    throw new Error('mining_command_payload_shape_invalid');
+  }
   if (payload.resourceId !== lease.resourceId || payload.runtimeGeneration !== lease.fencingToken) {
     throw new Error('mining_command_fence_mismatch');
   }
@@ -129,7 +138,7 @@ export function commandKindForDurableType(commandType: string): GatewayCommandKi
 
 function gatewayParts(kind: GatewayCommandKind, durablePayload: Record<string, unknown>): GatewayCommandParts {
   if (kind === 'START_MINING' || kind === 'STOP_MINING') {
-    return miningGatewayParts(durablePayload);
+    return miningGatewayParts(kind, durablePayload);
   }
   const sessionId = durablePayload.sessionId;
   const workspaceSlug = durablePayload.workspaceSlug;
