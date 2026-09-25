@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
 import { requestSystemMiningAutoResume } from './mining-command-service.js';
+import { commandDispatchConfigFromEnv, commandGatewayAssigned } from './control-command-dispatch.js';
 import {
   buildRentalResourceAuthority,
   releaseRentalResourceAuthority,
@@ -110,7 +111,20 @@ export function registerRentalResourceAuthorityRoutes(
         skipped: [] as string[],
         failed: [] as Array<{ resourceId: string; error: string }>,
       };
+      let remoteControlEnabled = false;
+      try {
+        remoteControlEnabled = commandGatewayAssigned(machineId, commandDispatchConfigFromEnv());
+      } catch {
+        remoteControlEnabled = false;
+      }
       for (const resourceId of released.autoResumeResourceIds) {
+        if (!remoteControlEnabled) {
+          // Preserve resumeAfterRentalPending in the DB. A future qualified
+          // reconciler/owner action can consume it once remote control is live;
+          // never transition to STARTING when no delivery path is enabled.
+          autoResume.skipped.push(resourceId);
+          continue;
+        }
         try {
           const result = await requestSystemMiningAutoResume(db, redis, {
             machineId,
