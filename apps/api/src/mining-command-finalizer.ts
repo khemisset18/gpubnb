@@ -156,7 +156,7 @@ export async function finalizeMiningTerminalAck(
     timeout: 10_000,
   });
 
-  if (mapping.releaseLease) {
+  if (mapping.releaseLease && result === 'UPDATED') {
     const released = await releaseResourceLease(redis, durable.lease);
     if (!released.accepted && released.reason !== 'MISSING' && released.reason !== 'STALE_LEASE') {
       throw new Error('mining_terminal_lease_release_failed');
