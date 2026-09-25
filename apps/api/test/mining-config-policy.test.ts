@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   authorizeMiningConfigurationUpdate,
   miningConfigurationInputSchema,
+  MINING_THERMAL_LIMITS,
   platformFeeBasisPoints,
   resourceMustStopForRental,
 } from '../src/mining-config-policy.js';
@@ -182,5 +183,13 @@ describe('mining configuration policy', () => {
   it('does not require an unenforced GPU intensity and still rejects CPU controls on a GPU', () => {
     assert.equal(miningConfigurationInputSchema.parse(validGpuInput).gpuIntensityPercent, undefined);
     assert.throws(() => miningConfigurationInputSchema.parse({ ...validGpuInput, cpuThreadLimit: 4 }));
+  });
+});
+
+
+it('exports the exact CPU and GPU thermal contract used by the owner UI', () => {
+  assert.deepEqual(MINING_THERMAL_LIMITS, {
+    CPU: { minimumC: 50, maximumC: 98 },
+    GPU: { minimumC: 85, maximumC: 98 },
   });
 });
