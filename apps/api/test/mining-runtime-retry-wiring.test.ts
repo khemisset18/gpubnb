@@ -59,3 +59,44 @@ test('signed heartbeat telemetry stays on the observation-only sync path', async
   assert.match(sync, /"lastTelemetry"/);
   assert.match(sync, /"lastTelemetryAt"/);
 });
+
+
+test('agent runtime endpoint cannot forge server-owned lifecycle or rental transitions', async () => {
+  const source = await readFile(new URL('../src/mining-routes.ts', import.meta.url), 'utf8');
+  const schemaStart = source.indexOf('const runtimeEventSchema = z.discriminatedUnion');
+  const schemaEnd = source.indexOf('type MiningResourceRow', schemaStart);
+  assert.ok(schemaStart >= 0 && schemaEnd > schemaStart);
+  const schema = source.slice(schemaStart, schemaEnd);
+
+  assert.match(schema, /eventType: z\.literal\('QUARANTINED'\)/);
+  assert.match(schema, /stateAfter: z\.literal\('QUARANTINED'\)/);
+  assert.match(schema, /eventType: z\.literal\('EMERGENCY_STOPPED'\)/);
+  assert.match(schema, /stateAfter: z\.literal\('EMERGENCY_STOPPED'\)/);
+  for (const serverOwned of [
+    'START_REQUESTED',
+    'STARTED',
+    'START_FAILED',
+    'STOP_REQUESTED',
+    'STOP_VERIFIED',
+    'STOP_FAILED',
+    'RENTAL_PREEMPTED',
+    'RENTAL_RELEASED',
+    'CLEANUP_VERIFIED',
+    'AUTO_RESUME_REQUESTED',
+  ]) {
+    assert.doesNotMatch(schema, new RegExp(`'${serverOwned}'`));
+  }
+  assert.match(schema, /reservationId: z\.null\(\)\.optional\(\)/);
+});
+
+test('agent safety events preserve rental ownership and require current-state precondition', async () => {
+  const source = await readFile(new URL('../src/mining-routes.ts', import.meta.url), 'utf8');
+  const start = source.indexOf("app.post('/internal/mining/runtime-events'");
+  assert.ok(start >= 0);
+  const body = source.slice(start);
+
+  assert.match(body, /event\.stateBefore !== current\.runtimeState/);
+  assert.match(body, /mining_runtime_state_precondition_failed/);
+  assert.match(body, /"quarantined" = true/);
+  assert.doesNotMatch(body, /SET[\s\S]{0,500}"activeRentalId"\s*=/);
+});
