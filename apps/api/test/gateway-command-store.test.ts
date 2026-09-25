@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { claimGatewayMachineCommands, productionGatewayCommandEligible } from '../src/gateway-command-store.js';
+import {
+  GATEWAY_FAST_PATH_PER_MACHINE_CONCURRENCY,
+  claimGatewayMachineCommands,
+  productionGatewayCommandEligible,
+} from '../src/gateway-command-store.js';
 
 const fenced = (generation = '17') => ({
   lease: {
@@ -42,6 +46,10 @@ test('production fast path keeps unfenced or mismatched mining dark', () => {
 
 test('non-Developer rental stops remain outside the direct production path', () => {
   assert.equal(productionGatewayCommandEligible('stop_rental', { workspaceSlug: 'compute' }), false);
+});
+
+test('fast-path delivery is intentionally single-flight per machine', () => {
+  assert.equal(GATEWAY_FAST_PATH_PER_MACHINE_CONCURRENCY, 1);
 });
 
 test('fast-path claim serializes mining while preserving rental-stop priority', async () => {
