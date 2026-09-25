@@ -32,3 +32,4 @@ tauri = { version = "=2.11.5", features = [], optional = true }
 tauri-plugin-opener = { version = "2", optional = true }
 
 [dev-dependencies]
+rcgen = "=0.14.7"
