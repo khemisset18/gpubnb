@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { finalizeMiningTerminalAck } from '../src/mining-command-finalizer.js';
+import {
+  finalizeMiningTerminalAck,
+  reconcileTerminalMiningCommands,
+} from '../src/mining-command-finalizer.js';
 
 const command = (commandType: 'start_mining' | 'stop_mining') => ({
   id: `command_${commandType}_0001`,
@@ -153,4 +156,108 @@ test('terminal ACK rejects a fence mismatch before touching DB or Redis', async 
   );
   assert.equal(transactions, 0);
   assert.equal(releases(), 0);
+});
+
+function terminalDb(options: {
+  commandType: 'start_mining' | 'stop_mining';
+  status: 'DEAD' | 'EXPIRED';
+  runtimeState: string;
+  activeRentalId?: string | null;
+  hardwareUuid?: string | null;
+  commandHardwareUuid?: string;
+  fenceValid?: boolean;
+}) {
+  const transitions: any[] = [];
+  const writes: any[] = [];
+  const resourceId = 'resource_00000001';
+  const generation = '17';
+  const row = {
+    id: 'command_terminal_0001',
+    machineId: 'machine_00000001',
+    commandType: options.commandType,
+    sequence: 9n,
+    status: options.status,
+    payload: {
+      lease: {
+        resourceId,
+        holderId: 'mining:resource_00000001',
+        leaseId: 'lease_000000001',
+        fencingToken: options.fenceValid === false ? '18' : generation,
+      },
+      payload: {
+        resourceId,
+        hardwareUuid: options.commandHardwareUuid ?? 'GPU-aaaaaaaa',
+        runtimeGeneration: generation,
+      },
+    },
+  };
+  const tx = {
+    $queryRaw: async () => [{
+      runtimeState: options.runtimeState,
+      activeRentalId: options.activeRentalId ?? null,
+      hardwareUuid: options.hardwareUuid ?? 'GPU-aaaaaaaa',
+    }],
+    $executeRaw: async (query: any) => { writes.push(query); return 1; },
+    miningResource: {
+      updateMany: async (args: any) => { transitions.push(args); return { count: 1 }; },
+    },
+  };
+  const db = {
+    $queryRaw: async () => [row],
+    $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+  } as any;
+  return { db, transitions, writes };
+}
+
+test('DEAD START without terminal ACK quarantines instead of leaving STARTING stuck', async () => {
+  const { db, transitions, writes } = terminalDb({
+    commandType: 'start_mining',
+    status: 'DEAD',
+    runtimeState: 'STARTING',
+  });
+  const result = await reconcileTerminalMiningCommands(db);
+  assert.deepEqual(result, { quarantined: 1, superseded: 0 });
+  assert.equal(transitions[0].data.runtimeState, 'QUARANTINED');
+  assert.equal(transitions[0].data.quarantined, true);
+  assert.equal(writes.length, 2);
+});
+
+test('EXPIRED STOP without terminal ACK quarantines instead of claiming a verified stop', async () => {
+  const { db, transitions } = terminalDb({
+    commandType: 'stop_mining',
+    status: 'EXPIRED',
+    runtimeState: 'VERIFYING_STOP',
+  });
+  const result = await reconcileTerminalMiningCommands(db);
+  assert.deepEqual(result, { quarantined: 1, superseded: 0 });
+  assert.equal(transitions[0].where.runtimeState, 'VERIFYING_STOP');
+  assert.equal(transitions[0].data.runtimeState, 'QUARANTINED');
+});
+
+test('terminal delivery reconciliation never overwrites rental preemption', async () => {
+  const { db, transitions, writes } = terminalDb({
+    commandType: 'start_mining',
+    status: 'DEAD',
+    runtimeState: 'PREEMPTING',
+    activeRentalId: 'session_00000001',
+  });
+  const result = await reconcileTerminalMiningCommands(db);
+  assert.deepEqual(result, { quarantined: 0, superseded: 1 });
+  assert.equal(transitions.length, 0);
+  assert.equal(writes.length, 0);
+});
+
+test('invalid fence or hardware identity stays fail-closed on the exact resource', async () => {
+  const { db, transitions } = terminalDb({
+    commandType: 'stop_mining',
+    status: 'DEAD',
+    runtimeState: 'VERIFYING_STOP',
+    fenceValid: false,
+    hardwareUuid: 'GPU-bbbbbbbb',
+    commandHardwareUuid: 'GPU-aaaaaaaa',
+  });
+  const result = await reconcileTerminalMiningCommands(db);
+  assert.deepEqual(result, { quarantined: 1, superseded: 0 });
+  assert.equal(transitions[0].where.id, 'resource_00000001');
+  assert.equal(transitions[0].data.runtimeState, 'QUARANTINED');
 });
