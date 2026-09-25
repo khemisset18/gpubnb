@@ -220,7 +220,7 @@ Pour le runtime GPU v1 NVIDIA OWNER_POOL, l'activation publique nécessite encor
 
 - validation physique E2E du chemin durable ci-dessus ;
 - validation antivirus et licences des binaires épinglés ;
-- maintien des protections SSRF et DNS rebinding ;
+- maintien des protections OWNER_POOL : endpoint Stratum exact côté API, résolution vers adresses publiques côté Agent et re-résolution anti-DNS-rebinding juste avant lancement ;
 - TLS Stratum Agent qualifié ; le probe TLS Host Desktop doit rester fail-closed tant qu'il ne possède pas une validation certificat/hostname équivalente ;
 - aucune utilisation de `ownerPoolSecretRef` tant que le chemin de livraison du secret au mineur n'est pas prouvé sans fuite argv/log ;
 - monitoring, alertes et procédure d'incident ;

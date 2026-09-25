@@ -141,6 +141,8 @@ def _pool_endpoint(value: str):
         raise ExecutionControlError("mining_pool_url_invalid")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ExecutionControlError("mining_pool_credentials_not_allowed")
+    if parsed.path not in {"", "/"}:
+        raise ExecutionControlError("mining_pool_url_invalid")
     if parsed.port is None or not 1 <= parsed.port <= 65535:
         raise ExecutionControlError("mining_pool_port_invalid")
     return parsed
