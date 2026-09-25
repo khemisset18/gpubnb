@@ -10,9 +10,10 @@ import { runBookingTransaction } from './booking-transaction-retry.js';
 import {
   authorizeMiningConfigurationUpdate,
   miningConfigurationInputSchema,
+  MINING_THERMAL_LIMITS,
   platformFeeBasisPoints,
 } from './mining-config-policy.js';
-import { normalizeMiningGpuVendor } from './mining-profile-catalog.js';
+import { MINING_PROFILE_CATALOG, normalizeMiningGpuVendor } from './mining-profile-catalog.js';
 import { requestMiningStart, requestMiningStop } from './mining-command-service.js';
 import { registerRentalResourceAuthorityRoutes } from './rental-resource-routes.js';
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
@@ -104,6 +105,24 @@ export const registerMiningRoutes = (
   redis: Redis,
 ): void => {
   registerRentalResourceAuthorityRoutes(app, db, redis);
+
+  app.get('/mining/catalog', async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    return {
+      profiles: MINING_PROFILE_CATALOG
+        .filter((profile) => profile.enabled)
+        .map((profile) => ({
+          id: profile.id,
+          resourceKind: profile.resourceKind,
+          cryptocurrency: profile.cryptocurrency,
+          algorithm: profile.algorithm,
+          miner: profile.miner,
+          gpuVendors: profile.gpuVendors ?? [],
+        })),
+      thermalLimits: MINING_THERMAL_LIMITS,
+    };
+  });
 
   app.get('/machines/:machineId/mining-resources', async (request, reply) => {
     const session = await requireSession(request, reply, redis);
