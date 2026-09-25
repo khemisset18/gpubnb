@@ -33,3 +33,4 @@ tauri-plugin-opener = { version = "2", optional = true }
 
 [dev-dependencies]
 rcgen = "=0.14.7"
+rustls = { version = "=0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
