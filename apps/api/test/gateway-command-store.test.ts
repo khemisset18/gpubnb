@@ -79,3 +79,17 @@ test('gateway claim cannot skip a lower active fast-path sequence under concurre
   assert.match(queries[0], /prior\."sequence" < command\."sequence"/);
   assert.match(queries[0], /FOR UPDATE SKIP LOCKED/);
 });
+
+
+test('rental fast path remains claimable while mining rollout is disabled', async () => {
+  const discovery = queryCapturingDb();
+  await gatewayCommandMachineIds(discovery.db, 100, false);
+  assert.match(discovery.queries[0], /stop_rental/);
+  assert.doesNotMatch(discovery.queries[0], /start_mining|stop_mining/);
+
+  const claim = queryCapturingDb();
+  await claimGatewayMachineCommands(claim.db, 'machine_00000001', 'worker_00000001', 16, 15, false);
+  assert.match(claim.queries[0], /stop_rental/);
+  assert.doesNotMatch(claim.queries[0], /start_mining|stop_mining/);
+  assert.match(claim.queries[0], /prior\."commandType" = 'stop_rental'/);
+});
