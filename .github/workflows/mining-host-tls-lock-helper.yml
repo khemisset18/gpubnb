@@ -28,3 +28,33 @@ jobs:
           path: Cargo.lock
           if-no-files-found: error
           retention-days: 1
+
+  commit-lock:
+    needs: resolve-lock
+    if: github.head_ref == 'feat/mining-host-stratum-tls-verification'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/download-artifact@v6
+        with:
+          name: mining-host-tls-cargo-lock
+          path: /tmp/mining-host-tls-lock
+      - name: Commit only the Cargo lock artifact when changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/mining-host-tls-lock/Cargo.lock Cargo.lock
+          if git diff --quiet -- Cargo.lock; then
+            echo 'Cargo.lock already matches the resolved artifact.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Cargo.lock
+          test "$(git diff --cached --name-only)" = "Cargo.lock"
+          git commit -m 'build(mining): lock Host native TLS dependency'
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
