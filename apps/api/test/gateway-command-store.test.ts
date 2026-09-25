@@ -31,6 +31,10 @@ test('production fast path keeps unfenced or mismatched mining dark', () => {
   }), false);
   assert.equal(productionGatewayCommandEligible('start_mining', {
     ...fenced(),
+    lease: { ...fenced().lease, resourceId: 'resource_00000002' },
+  }), false);
+  assert.equal(productionGatewayCommandEligible('start_mining', {
+    ...fenced(),
     payload: { ...fenced().payload, hardwareUuid: '' },
   }), false);
   assert.equal(productionGatewayCommandEligible('prepare_rental', fenced()), false);
