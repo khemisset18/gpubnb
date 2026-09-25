@@ -23,6 +23,7 @@ type TerminalMiningDeliveryRow = {
 };
 
 export type MiningTerminalReconciliation = {
+  expired: number;
   quarantined: number;
   superseded: number;
 };
@@ -311,6 +312,35 @@ export async function reconcileTerminalMiningCommands(
   const limit = Number.isFinite(requestedLimit)
     ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 100)
     : 1;
+
+  // Expiry must not depend on the command rollout being enabled. Otherwise a
+  // rollout rollback can strand STARTING / VERIFYING_STOP forever. Do not steal
+  // a command that is still actively leased by another delivery worker.
+  const expired = await db.$executeRaw(Prisma.sql`
+    WITH candidates AS (
+      SELECT command."id"
+        FROM "MachineCommand" command
+       WHERE command."commandType" IN ('start_mining', 'stop_mining')
+         AND command."status" IN ('PENDING', 'LEASED')
+         AND command."expiresAt" <= CURRENT_TIMESTAMP
+         AND (
+           command."status" = 'PENDING'
+           OR command."leaseExpiresAt" IS NULL
+           OR command."leaseExpiresAt" <= CURRENT_TIMESTAMP
+         )
+       ORDER BY command."expiresAt", command."sequence"
+       LIMIT ${limit}
+       FOR UPDATE SKIP LOCKED
+    )
+    UPDATE "MachineCommand" command
+       SET "status" = 'EXPIRED',
+           "leaseOwner" = NULL,
+           "leaseExpiresAt" = NULL,
+           "lastError" = 'command_expired'
+      FROM candidates
+     WHERE command."id" = candidates."id"
+  `);
+
   const commands = await db.$queryRaw<TerminalMiningDeliveryRow[]>(Prisma.sql`
     SELECT command."id", command."machineId", command."commandType",
            command."payload", command."status", command."sequence"
@@ -344,6 +374,6 @@ export async function reconcileTerminalMiningCommands(
     if (result === 'QUARANTINED') quarantined += 1;
     else superseded += 1;
   }
-  return { quarantined, superseded };
+  return { expired, quarantined, superseded };
 }
 
