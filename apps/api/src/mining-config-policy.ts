@@ -12,11 +12,10 @@ const resourceIdentifierSchema = z.string().trim().min(3).max(128).regex(/^[A-Za
 const ownerPoolSecretReferenceSchema = z
   .string()
   .trim()
-  .min(12)
-  .max(200)
+  .max(128)
   .regex(
-    /^(?:vault|secret|aws-secretsmanager|gcp-secretmanager|azure-keyvault):\/\/[A-Za-z0-9][A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*$/,
-    'owner_pool_secret_reference_required',
+    /^secret:\/\/local\/mining\/[A-Za-z0-9][A-Za-z0-9._-]{2,95}$/,
+    'owner_pool_local_secret_reference_required',
   );
 
 const ownerPoolEndpointSchema = z
