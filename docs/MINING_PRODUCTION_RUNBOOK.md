@@ -186,8 +186,11 @@ Un lease rental/étranger reste bloquant. Si aucun lease n'existe, STOP peut acq
 fence plus récent ; l'Agent autorise ce fence plus récent uniquement pour arrêter un ancien mineur
 survivant.
 
-Le rollout Gateway reste à 0 par défaut tant que la validation physique E2E ci-dessous n'est pas
-terminée.
+Le rollout des commandes mining est séparé du rollout MachineCommand utilisé par la location.
+`MINING_COMMAND_GATEWAY_ROLLOUT_BPS` reste à `0` par défaut tant que la validation physique E2E
+ci-dessous n'est pas terminée. Il ne peut jamais dépasser `MACHINE_COMMAND_GATEWAY_ROLLOUT_BPS`,
+qui reste lui-même borné par le rollout du canal Agent. Ainsi, activer le fast path rental ne rend
+jamais START_MINING / STOP_MINING publics par effet de bord.
 
 ## Validation physique E2E avant rollout
 
