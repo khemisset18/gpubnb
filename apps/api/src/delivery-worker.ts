@@ -26,7 +26,7 @@ import { claimGatewayMachineCommands, gatewayCommandMachineIds } from './gateway
 import { validateDeliveryKey } from './reliable-delivery.js';
 import { reconcileDevelopmentBookingsScheduled } from './development-booking-scheduler.js';
 import { finalizeVerifiedDeveloperStop } from './workspace-stop-finalizer.js';
-import { finalizeMiningTerminalAck } from './mining-command-finalizer.js';
+import { finalizeMiningTerminalAck, reconcileUncertainMiningDelivery } from './mining-command-finalizer.js';
 
 const POLL_INTERVAL_MS = 250;
 const HEALTH_INTERVAL_MS = 15_000;
@@ -160,9 +160,11 @@ async function main(): Promise<void> {
     while (!stopping) {
       const now = Date.now();
       if (now - lastReconcileAt >= RECONCILE_INTERVAL_MS) {
+        let rentalReconcileSucceeded = false;
         try {
           const scheduled = await reconcileDevelopmentBookingsScheduled(redis, db, new Date(now));
           const reconciliation = scheduled.result;
+          rentalReconcileSucceeded = true;
           if (scheduled.leaseLost) {
             console.warn(JSON.stringify({ level: 'warn', message: 'distributed_task_lease_lost', task: 'development-bookings', workerId }));
           }
@@ -176,6 +178,29 @@ async function main(): Promise<void> {
             message: 'gpu_booking_reconcile_failed',
             error: error instanceof Error ? error.message.slice(0, 300) : 'unknown_error',
           }));
+        }
+
+        // Rental authority reconciles first. If that pass fails, leave uncertain
+        // mining lifecycle untouched for this tick rather than racing a pending
+        // rental takeover. Delivery uncertainty remains fail-closed.
+        if (rentalReconcileSucceeded) {
+          try {
+            const reconciliation = await reconcileUncertainMiningDelivery(db, new Date(now));
+            if (reconciliation.updated > 0 || reconciliation.stale > 0) {
+              console.warn(JSON.stringify({
+                level: 'warn',
+                message: 'mining_delivery_uncertainty_reconciled',
+                ...reconciliation,
+              }));
+            }
+          } catch (error) {
+            failed += 1;
+            console.error(JSON.stringify({
+              level: 'error',
+              message: 'mining_delivery_uncertainty_reconcile_failed',
+              error: error instanceof Error ? error.message.slice(0, 300) : 'unknown_error',
+            }));
+          }
         }
         lastReconcileAt = now;
       }
