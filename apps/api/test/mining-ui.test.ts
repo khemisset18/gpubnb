@@ -30,9 +30,11 @@ test('mining UI never asks owners for a raw pool password', async () => {
   const html = await readFile(path.join(webRoot, 'mining.html'), 'utf8');
   const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
   assert.doesNotMatch(html, /type=["']password["']/i);
-  assert.match(script, /Référence du secret/);
+  assert.match(script, /Référence locale du secret/);
   assert.match(script, /Ne saisissez jamais un mot de passe brut/);
   assert.match(script, /ownerPoolSecretRef/);
+  assert.match(script, /maxlength="128"/);
+  assert.match(script, /secret:\/\/local\/mining\/\[A-Za-z0-9\]/);
 });
 
 test('dashboard links to mining without claiming the runtime is production-ready', async () => {
