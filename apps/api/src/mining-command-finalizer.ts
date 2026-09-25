@@ -12,6 +12,21 @@ type DurableMiningPayload = {
   payload: { resourceId: string; hardwareUuid: string; runtimeGeneration: string };
 };
 
+
+type TerminalMiningDeliveryRow = {
+  id: string;
+  machineId: string;
+  commandType: 'start_mining' | 'stop_mining';
+  payload: Record<string, unknown>;
+  status: 'DEAD' | 'EXPIRED';
+  sequence: bigint;
+};
+
+export type MiningTerminalReconciliation = {
+  quarantined: number;
+  superseded: number;
+};
+
 function stableId(prefix: string, ...parts: string[]): string {
   return `${prefix}_${crypto.createHash('sha256').update(parts.join('\n')).digest('hex').slice(0, 32)}`;
 }
@@ -164,3 +179,171 @@ export async function finalizeMiningTerminalAck(
   }
   return result;
 }
+
+function plainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function deliveryTerminalIdentity(command: TerminalMiningDeliveryRow): {
+  resourceId: string;
+  hardwareUuid: string | null;
+  fenceValid: boolean;
+} {
+  const inner = plainObject(command.payload.payload) ? command.payload.payload : null;
+  const lease = plainObject(command.payload.lease) ? command.payload.lease : null;
+  const resourceId = typeof inner?.resourceId === 'string' ? inner.resourceId : '';
+  if (!resourceId) throw new Error('mining_delivery_terminal_resource_missing');
+  const hardwareUuid = typeof inner?.hardwareUuid === 'string' && inner.hardwareUuid
+    ? inner.hardwareUuid
+    : null;
+  const runtimeGeneration = typeof inner?.runtimeGeneration === 'string' ? inner.runtimeGeneration : null;
+  const fenceValid = lease !== null
+    && typeof lease.resourceId === 'string'
+    && lease.resourceId === resourceId
+    && typeof lease.holderId === 'string'
+    && lease.holderId.length > 0
+    && typeof lease.leaseId === 'string'
+    && lease.leaseId.length > 0
+    && typeof lease.fencingToken === 'string'
+    && lease.fencingToken.length > 0
+    && lease.fencingToken === runtimeGeneration;
+  return { resourceId, hardwareUuid, fenceValid };
+}
+
+async function finalizeMiningDeliveryTerminal(
+  db: PrismaClient,
+  command: TerminalMiningDeliveryRow,
+): Promise<'QUARANTINED' | 'STALE_STATE'> {
+  const identity = deliveryTerminalIdentity(command);
+  const expected = command.commandType === 'start_mining'
+    ? MiningRuntimeState.STARTING
+    : MiningRuntimeState.VERIFYING_STOP;
+  const eventType = command.commandType === 'start_mining' ? 'START_FAILED' : 'STOP_FAILED';
+  const reason = command.status === 'EXPIRED'
+    ? 'mining_command_expired_without_terminal_ack'
+    : 'mining_command_dead_without_terminal_ack';
+
+  return db.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<Array<{
+      runtimeState: MiningRuntimeState;
+      activeRentalId: string | null;
+      hardwareUuid: string | null;
+    }>>(Prisma.sql`
+      SELECT r."runtimeState", r."activeRentalId", a."hardwareUuid"
+        FROM "MiningResource" r
+   LEFT JOIN "Accelerator" a ON a."id" = r."acceleratorId"
+       WHERE r."id" = ${identity.resourceId} AND r."machineId" = ${command.machineId}
+       FOR UPDATE OF r
+    `);
+    const current = rows[0];
+    if (!current) throw new Error('mining_resource_not_found');
+
+    const stateStillOwned = current.runtimeState === expected
+      && (command.commandType !== 'start_mining' || current.activeRentalId === null);
+    if (!stateStillOwned) return 'STALE_STATE' as const;
+
+    const hardwareIdentityMatches = identity.hardwareUuid !== null
+      && current.hardwareUuid === identity.hardwareUuid;
+    const changed = await tx.miningResource.updateMany({
+      where: {
+        id: identity.resourceId,
+        machineId: command.machineId,
+        runtimeState: expected,
+        ...(command.commandType === 'start_mining' ? { activeRentalId: null } : {}),
+      },
+      data: {
+        runtimeState: MiningRuntimeState.QUARANTINED,
+        quarantined: true,
+      },
+    });
+    if (changed.count !== 1) throw new Error('mining_delivery_terminal_state_race');
+
+    const eventIdempotency = `command-delivery-terminal:${command.id}:${command.status}`;
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO "MiningRuntimeEvent" (
+        "id","resourceId","eventType","stateBefore","stateAfter",
+        "idempotencyKey","agentCounter","payload","occurredAt","createdAt"
+      ) VALUES (
+        ${stableId('mre', command.id, command.status, eventType)}, ${identity.resourceId},
+        ${eventType}::"MiningEventType", ${current.runtimeState}::"MiningRuntimeState",
+        'QUARANTINED'::"MiningRuntimeState", ${eventIdempotency}, 0,
+        ${JSON.stringify({
+          commandId: command.id,
+          deliveryStatus: command.status,
+          detailCode: reason,
+          fenceValid: identity.fenceValid,
+          hardwareIdentityMatches,
+        })}::jsonb,
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      ) ON CONFLICT ("idempotencyKey") DO NOTHING
+    `);
+
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO "MiningAuditLog" (
+        "id","machineId","resourceId","actorType","actorId","action","nextValue","createdAt"
+      ) VALUES (
+        ${crypto.randomUUID()}, ${command.machineId}, ${identity.resourceId},
+        'SYSTEM'::"MiningAuditActorType", 'delivery-worker',
+        'mining_delivery_terminal_without_ack',
+        ${JSON.stringify({
+          commandId: command.id,
+          deliveryStatus: command.status,
+          state: MiningRuntimeState.QUARANTINED,
+          detailCode: reason,
+          fenceValid: identity.fenceValid,
+          hardwareIdentityMatches,
+        })}::jsonb,
+        CURRENT_TIMESTAMP
+      )
+    `);
+    return 'QUARANTINED' as const;
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    maxWait: 5_000,
+    timeout: 10_000,
+  });
+}
+
+export async function reconcileTerminalMiningCommands(
+  db: PrismaClient,
+  requestedLimit = 32,
+): Promise<MiningTerminalReconciliation> {
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 100)
+    : 1;
+  const commands = await db.$queryRaw<TerminalMiningDeliveryRow[]>(Prisma.sql`
+    SELECT command."id", command."machineId", command."commandType",
+           command."payload", command."status", command."sequence"
+      FROM "MachineCommand" command
+      JOIN "MiningResource" resource
+        ON resource."id" = command."payload" -> 'payload' ->> 'resourceId'
+       AND resource."machineId" = command."machineId"
+     WHERE command."commandType" IN ('start_mining', 'stop_mining')
+       AND command."status" IN ('DEAD', 'EXPIRED')
+       AND jsonb_typeof(command."payload" -> 'payload') = 'object'
+       AND (
+         (
+           command."commandType" = 'start_mining'
+           AND resource."runtimeState" = 'STARTING'::"MiningRuntimeState"
+           AND resource."activeRentalId" IS NULL
+         )
+         OR
+         (
+           command."commandType" = 'stop_mining'
+           AND resource."runtimeState" = 'VERIFYING_STOP'::"MiningRuntimeState"
+         )
+       )
+     ORDER BY command."sequence"
+     LIMIT ${limit}
+  `);
+
+  let quarantined = 0;
+  let superseded = 0;
+  for (const command of commands) {
+    const result = await finalizeMiningDeliveryTerminal(db, command);
+    if (result === 'QUARANTINED') quarantined += 1;
+    else superseded += 1;
+  }
+  return { quarantined, superseded };
+}
+
