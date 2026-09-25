@@ -166,9 +166,11 @@ function terminalDb(options: {
   hardwareUuid?: string | null;
   commandHardwareUuid?: string;
   fenceValid?: boolean;
+  expiredCount?: number;
 }) {
   const transitions: any[] = [];
   const writes: any[] = [];
+  const expiryQueries: any[] = [];
   const resourceId = 'resource_00000001';
   const generation = '17';
   const row = {
@@ -203,10 +205,14 @@ function terminalDb(options: {
     },
   };
   const db = {
+    $executeRaw: async (query: any) => {
+      expiryQueries.push(query);
+      return options.expiredCount ?? 0;
+    },
     $queryRaw: async () => [row],
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
   } as any;
-  return { db, transitions, writes };
+  return { db, transitions, writes, expiryQueries };
 }
 
 test('DEAD START without terminal ACK quarantines instead of leaving STARTING stuck', async () => {
@@ -216,7 +222,7 @@ test('DEAD START without terminal ACK quarantines instead of leaving STARTING st
     runtimeState: 'STARTING',
   });
   const result = await reconcileTerminalMiningCommands(db);
-  assert.deepEqual(result, { quarantined: 1, superseded: 0 });
+  assert.deepEqual(result, { expired: 0, quarantined: 1, superseded: 0 });
   assert.equal(transitions[0].data.runtimeState, 'QUARANTINED');
   assert.equal(transitions[0].data.quarantined, true);
   assert.equal(writes.length, 2);
@@ -229,7 +235,7 @@ test('EXPIRED STOP without terminal ACK quarantines instead of claiming a verifi
     runtimeState: 'VERIFYING_STOP',
   });
   const result = await reconcileTerminalMiningCommands(db);
-  assert.deepEqual(result, { quarantined: 1, superseded: 0 });
+  assert.deepEqual(result, { expired: 0, quarantined: 1, superseded: 0 });
   assert.equal(transitions[0].where.runtimeState, 'VERIFYING_STOP');
   assert.equal(transitions[0].data.runtimeState, 'QUARANTINED');
 });
@@ -242,7 +248,7 @@ test('terminal delivery reconciliation never overwrites rental preemption', asyn
     activeRentalId: 'session_00000001',
   });
   const result = await reconcileTerminalMiningCommands(db);
-  assert.deepEqual(result, { quarantined: 0, superseded: 1 });
+  assert.deepEqual(result, { expired: 0, quarantined: 0, superseded: 1 });
   assert.equal(transitions.length, 0);
   assert.equal(writes.length, 0);
 });
@@ -257,7 +263,26 @@ test('invalid fence or hardware identity stays fail-closed on the exact resource
     commandHardwareUuid: 'GPU-aaaaaaaa',
   });
   const result = await reconcileTerminalMiningCommands(db);
-  assert.deepEqual(result, { quarantined: 1, superseded: 0 });
+  assert.deepEqual(result, { expired: 0, quarantined: 1, superseded: 0 });
   assert.equal(transitions[0].where.id, 'resource_00000001');
+  assert.equal(transitions[0].data.runtimeState, 'QUARANTINED');
+});
+
+
+test('overdue mining commands expire even when normal delivery is not claiming them', async () => {
+  const { db, transitions, expiryQueries } = terminalDb({
+    commandType: 'start_mining',
+    status: 'EXPIRED',
+    runtimeState: 'STARTING',
+    expiredCount: 1,
+  });
+  const result = await reconcileTerminalMiningCommands(db);
+  assert.deepEqual(result, { expired: 1, quarantined: 1, superseded: 0 });
+  assert.equal(expiryQueries.length, 1);
+  const sql = expiryQueries[0]?.sql ?? (expiryQueries[0]?.strings ?? []).join('?');
+  assert.match(sql, /command\."expiresAt" <= CURRENT_TIMESTAMP/);
+  assert.match(sql, /command\."status" = 'PENDING'/);
+  assert.match(sql, /command\."leaseExpiresAt" <= CURRENT_TIMESTAMP/);
+  assert.match(sql, /FOR UPDATE SKIP LOCKED/);
   assert.equal(transitions[0].data.runtimeState, 'QUARANTINED');
 });
