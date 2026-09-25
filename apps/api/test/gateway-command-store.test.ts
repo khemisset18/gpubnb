@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type { PrismaClient } from '@prisma/client';
 
-import { productionGatewayCommandEligible } from '../src/gateway-command-store.js';
+import {
+  claimGatewayMachineCommands,
+  gatewayCommandMachineIds,
+  productionGatewayCommandEligible,
+} from '../src/gateway-command-store.js';
 
 const fenced = (generation = '17') => ({
   lease: {
@@ -42,4 +47,35 @@ test('production fast path keeps unfenced or mismatched mining dark', () => {
 
 test('non-Developer rental stops remain outside the direct production path', () => {
   assert.equal(productionGatewayCommandEligible('stop_rental', { workspaceSlug: 'compute' }), false);
+});
+
+function queryCapturingDb() {
+  const queries: string[] = [];
+  const db = {
+    $queryRaw: async (query: { sql?: string; strings?: readonly string[] }) => {
+      queries.push(query.sql ?? (query.strings ?? []).join('?'));
+      return [];
+    },
+  } as unknown as PrismaClient;
+  return { db, queries };
+}
+
+test('gateway discovery only exposes the earliest active fast-path command per machine', async () => {
+  const { db, queries } = queryCapturingDb();
+  await gatewayCommandMachineIds(db);
+  assert.equal(queries.length, 1);
+  assert.match(queries[0], /NOT EXISTS/);
+  assert.match(queries[0], /prior\."machineId" = command\."machineId"/);
+  assert.match(queries[0], /prior\."sequence" < command\."sequence"/);
+  assert.match(queries[0], /prior\."status" IN \('PENDING', 'LEASED'\)/);
+  assert.match(queries[0], /prior\."expiresAt" > CURRENT_TIMESTAMP/);
+});
+
+test('gateway claim cannot skip a lower active fast-path sequence under concurrent workers', async () => {
+  const { db, queries } = queryCapturingDb();
+  await claimGatewayMachineCommands(db, 'machine_00000001', 'worker_00000001');
+  assert.equal(queries.length, 1);
+  assert.match(queries[0], /NOT EXISTS/);
+  assert.match(queries[0], /prior\."sequence" < command\."sequence"/);
+  assert.match(queries[0], /FOR UPDATE SKIP LOCKED/);
 });
