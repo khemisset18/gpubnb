@@ -185,10 +185,10 @@ async function main(): Promise<void> {
         const machineIds = await gatewayCommandMachineIds(db, 100);
         for (const machineId of machineIds) {
           if (!commandGatewayAssigned(machineId, dispatchConfig)) continue;
-          const commands = await claimGatewayMachineCommands(db, machineId, workerId, 16, 15);
+          const commands = await claimGatewayMachineCommands(db, machineId, workerId, 1, 15);
           claimedCommands += commands.length;
           inFlight += commands.length;
-          await runBounded(commands, Math.min(MAX_IN_FLIGHT, 8), async (command) => {
+          await runBounded(commands, 1, async (command) => {
             try {
               const existingAck = await readTerminalGatewayAck(redis, command);
               if (existingAck) {
