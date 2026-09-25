@@ -35,6 +35,7 @@ test('mining heartbeat telemetry is scoped by machine, resource and hardware UUI
   assert.match(sql, /r\."machineId"/);
   assert.match(sql, /r\."id"/);
   assert.match(sql, /a\."hardwareUuid"/);
+  assert.doesNotMatch(sql, /"runtimeState"\s*=/);
   assert.ok(query.values.includes('machine_00000001'));
   assert.ok(query.values.includes('resource_00000001'));
   assert.ok(query.values.includes('GPU-aaaaaaaa'));
@@ -65,4 +66,18 @@ test('mining heartbeat telemetry is capped at 64 resource updates', async () => 
   }));
   await syncMiningHeartbeatTelemetry(tx as any, 'machine_00000001', snapshots);
   assert.equal(calls, 64);
+});
+
+test('heartbeat wiring accepts bounded mining observations without creating a lifecycle authority', async () => {
+  const source = await import('node:fs/promises').then(({ readFile }) =>
+    readFile(new URL('../src/server.ts', import.meta.url), 'utf8')
+  );
+  assert.match(source, /miningResources:z\.array\(/);
+  assert.match(source, /\.max\(64\)\.optional\(\)/);
+  assert.match(source, /syncMiningHeartbeatTelemetry\(tx,m\.id,b\.telemetry\.miningResources\)/);
+  assert.doesNotMatch(
+    source,
+    /syncMiningHeartbeatTelemetry[\s\S]{0,500}runtimeState/,
+    'heartbeat telemetry must not become mining lifecycle authority',
+  );
 });
