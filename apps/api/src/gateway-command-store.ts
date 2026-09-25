@@ -7,6 +7,8 @@ import type { ClaimedMachineCommand } from './delivery-store.js';
 // when their durable representation already contains an exact resource lease
 // whose resource/fence matches the inner Agent payload. The TypeScript dispatcher
 // performs the complete structural validation before sending anything.
+export const GATEWAY_FAST_PATH_PER_MACHINE_CONCURRENCY = 1;
+
 const FAST_PATH_PREDICATE = Prisma.sql`(
   (
     command."commandType" = 'stop_rental'
@@ -75,7 +77,7 @@ export async function claimGatewayMachineCommands(
   validateDeliveryKey(machineId, 'command_machine_id');
   validateDeliveryKey(workerId, 'worker_id');
   const batch = clampBatchSize(requestedBatch, DELIVERY_LIMITS.machineCommandBatch);
-  const claimLimit = Math.min(batch, 1);
+  const claimLimit = Math.min(batch, GATEWAY_FAST_PATH_PER_MACHINE_CONCURRENCY);
   const lease = clampLeaseSeconds(requestedLeaseSeconds, DELIVERY_LIMITS.maxCommandLeaseSeconds);
   return db.$queryRaw<ClaimedMachineCommand[]>(Prisma.sql`
     WITH expired AS (
