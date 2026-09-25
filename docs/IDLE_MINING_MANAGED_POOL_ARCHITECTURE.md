@@ -159,7 +159,7 @@ Chaque événement possède une `idempotencyKey`.
 - Le compteur machine n'avance que pour un nouvel événement accepté.
 - Un compteur inférieur ou égal au compteur durable est rejeté par `agent_counter_replay`.
 
-Les événements ordinaires, notamment les heartbeats, ne peuvent pas effacer accidentellement une location active. Seuls les événements de libération et de nettoyage autorisés peuvent supprimer `activeRentalId`.
+Les heartbeats ne sont plus des événements lifecycle : leur télémétrie structurée passe uniquement par le heartbeat V2 signé et met à jour `lastTelemetry` / `lastTelemetryAt`, jamais `runtimeState`. `POST /internal/mining/runtime-events` accepte uniquement des transitions lifecycle explicites. Seuls les événements de libération et de nettoyage autorisés peuvent supprimer `activeRentalId`.
 
 ## Observabilité et audit
 
