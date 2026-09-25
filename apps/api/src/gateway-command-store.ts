@@ -25,6 +25,34 @@ const FAST_PATH_PREDICATE = Prisma.sql`(
   )
 )`;
 
+const PRIOR_FAST_PATH_PREDICATE = Prisma.sql`(
+  (
+    prior."commandType" = 'stop_rental'
+    AND prior."payload" ->> 'workspaceSlug' = 'developer'
+  )
+  OR
+  (
+    prior."commandType" IN ('start_mining', 'stop_mining')
+    AND jsonb_typeof(prior."payload" -> 'lease') = 'object'
+    AND jsonb_typeof(prior."payload" -> 'payload') = 'object'
+    AND prior."payload" -> 'lease' ->> 'resourceId'
+        = prior."payload" -> 'payload' ->> 'resourceId'
+    AND prior."payload" -> 'lease' ->> 'fencingToken'
+        = prior."payload" -> 'payload' ->> 'runtimeGeneration'
+    AND COALESCE(prior."payload" -> 'payload' ->> 'hardwareUuid', '') <> ''
+  )
+)`;
+
+const NO_PRIOR_ACTIVE_FAST_PATH = Prisma.sql`NOT EXISTS (
+  SELECT 1
+    FROM "MachineCommand" prior
+   WHERE prior."machineId" = command."machineId"
+     AND prior."sequence" < command."sequence"
+     AND ${PRIOR_FAST_PATH_PREDICATE}
+     AND prior."status" IN ('PENDING', 'LEASED')
+     AND prior."expiresAt" > CURRENT_TIMESTAMP
+)`;
+
 export function productionGatewayCommandEligible(
   commandType: string,
   payload: Record<string, unknown>,
@@ -55,6 +83,7 @@ export async function gatewayCommandMachineIds(
       FROM "MachineCommand" command
      WHERE ${FAST_PATH_PREDICATE}
        AND command."expiresAt" > CURRENT_TIMESTAMP
+       AND ${NO_PRIOR_ACTIVE_FAST_PATH}
        AND (
          (command."status" = 'PENDING' AND command."availableAt" <= CURRENT_TIMESTAMP)
          OR (command."status" = 'LEASED' AND command."leaseExpiresAt" <= CURRENT_TIMESTAMP)
@@ -92,6 +121,7 @@ export async function claimGatewayMachineCommands(
        WHERE command."machineId" = ${machineId}
          AND ${FAST_PATH_PREDICATE}
          AND command."expiresAt" > CURRENT_TIMESTAMP
+         AND ${NO_PRIOR_ACTIVE_FAST_PATH}
          AND (
            (command."status" = 'PENDING' AND command."availableAt" <= CURRENT_TIMESTAMP)
            OR (command."status" = 'LEASED' AND command."leaseExpiresAt" <= CURRENT_TIMESTAMP)
