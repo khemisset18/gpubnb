@@ -31,6 +31,20 @@ const command = (commandType: 'start_mining' | 'stop_mining') => ({
   createdAt: new Date(),
 }) as any;
 
+function fakeDb(runtimeState: string, activeRentalId: string | null = null, hardwareUuid = 'GPU-aaaaaaaa') {
+  const transitions: any[] = [];
+  const writes: any[] = [];
+  const tx = {
+    $queryRaw: async () => [{ runtimeState, activeRentalId, hardwareUuid }],
+    $executeRaw: async (query: any) => { writes.push(query); return 1; },
+    miningResource: {
+      updateMany: async (args: any) => { transitions.push(args); return { count: 1 }; },
+    },
+  };
+  const db = { $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx) } as any;
+  return { db, transitions, writes };
+}
+
 function fakeRedis() {
   let releases = 0;
   return {
@@ -47,58 +61,74 @@ function fakeRedis() {
   };
 }
 
-test('successful START finalizes only STARTING resource to MINING and releases exact lease', async () => {
-  let query: any;
-  const db = { $queryRaw: async (value: any) => { query = value; return [{ id: 'resource_00000001' }]; } } as any;
+test('successful START finalizes STARTING to MINING and deliberately keeps the mining lease', async () => {
+  const { db, transitions } = fakeDb('STARTING');
   const { redis, releases } = fakeRedis();
   const outcome = await finalizeMiningTerminalAck(db, redis, command('start_mining'), { status: 'SUCCEEDED' });
   assert.equal(outcome, 'UPDATED');
-  assert.equal(releases(), 1);
-  assert.ok(query.values.includes('STARTING'));
-  assert.ok(query.values.includes('MINING'));
-  assert.ok(query.values.includes('resource_00000001'));
-  assert.ok(query.values.includes('GPU-aaaaaaaa'));
+  assert.equal(transitions[0].data.runtimeState, 'MINING');
+  assert.equal(releases(), 0);
 });
 
-test('rejected START returns to STOPPED without quarantine', async () => {
-  let query: any;
-  const db = { $queryRaw: async (value: any) => { query = value; return [{ id: 'resource_00000001' }]; } } as any;
-  const { redis } = fakeRedis();
+test('rejected START returns to STOPPED and releases lease without quarantine', async () => {
+  const { db, transitions } = fakeDb('STARTING');
+  const { redis, releases } = fakeRedis();
   await finalizeMiningTerminalAck(db, redis, command('start_mining'), { status: 'REJECTED', detailCode: 'mining_runtime_generation_stale' });
-  assert.ok(query.values.includes('STARTING'));
-  assert.ok(query.values.includes('STOPPED'));
-  assert.ok(query.values.includes(false));
+  assert.equal(transitions[0].data.runtimeState, 'STOPPED');
+  assert.equal(transitions[0].data.quarantined, undefined);
+  assert.equal(releases(), 1);
 });
 
-test('failed START quarantines because process outcome was not verified', async () => {
-  let query: any;
-  const db = { $queryRaw: async (value: any) => { query = value; return [{ id: 'resource_00000001' }]; } } as any;
-  const { redis } = fakeRedis();
+test('failed START quarantines because process outcome is not verified and releases lease', async () => {
+  const { db, transitions } = fakeDb('STARTING');
+  const { redis, releases } = fakeRedis();
   await finalizeMiningTerminalAck(db, redis, command('start_mining'), { status: 'FAILED', detailCode: 'miner_process_identity_mismatch' });
-  assert.ok(query.values.includes('QUARANTINED'));
-  assert.ok(query.values.includes(true));
+  assert.equal(transitions[0].data.runtimeState, 'QUARANTINED');
+  assert.equal(transitions[0].data.quarantined, true);
+  assert.equal(releases(), 1);
 });
 
-test('successful STOP finalizes VERIFYING_STOP to STOPPED', async () => {
-  let query: any;
-  const db = { $queryRaw: async (value: any) => { query = value; return [{ id: 'resource_00000001' }]; } } as any;
-  const { redis } = fakeRedis();
+test('successful STOP finalizes VERIFYING_STOP to STOPPED and releases lease', async () => {
+  const { db, transitions } = fakeDb('VERIFYING_STOP');
+  const { redis, releases } = fakeRedis();
   await finalizeMiningTerminalAck(db, redis, command('stop_mining'), { status: 'SUCCEEDED', detailCode: 'mining_resource_stop_verified' });
-  assert.ok(query.values.includes('VERIFYING_STOP'));
-  assert.ok(query.values.includes('STOPPED'));
+  assert.equal(transitions[0].data.runtimeState, 'STOPPED');
+  assert.equal(releases(), 1);
 });
 
-test('late terminal ACK cannot overwrite a newer resource state', async () => {
-  const db = { $queryRaw: async () => [] } as any;
+test('failed STOP quarantines and keeps lease for recovery fencing', async () => {
+  const { db, transitions } = fakeDb('VERIFYING_STOP');
+  const { redis, releases } = fakeRedis();
+  await finalizeMiningTerminalAck(db, redis, command('stop_mining'), { status: 'FAILED', detailCode: 'mining_resource_stop_unverified' });
+  assert.equal(transitions[0].data.runtimeState, 'QUARANTINED');
+  assert.equal(transitions[0].data.quarantined, true);
+  assert.equal(releases(), 0);
+});
+
+test('late terminal ACK is audited but cannot overwrite a newer state', async () => {
+  const { db, transitions, writes } = fakeDb('MINING');
   const { redis, releases } = fakeRedis();
   const outcome = await finalizeMiningTerminalAck(db, redis, command('stop_mining'), { status: 'SUCCEEDED' });
   assert.equal(outcome, 'STALE_STATE');
+  assert.equal(transitions.length, 0);
+  assert.equal(writes.length, 1);
   assert.equal(releases(), 1);
 });
 
+test('terminal ACK rejects hardware identity mismatch before state transition', async () => {
+  const { db, transitions } = fakeDb('VERIFYING_STOP', null, 'GPU-bbbbbbbb');
+  const { redis, releases } = fakeRedis();
+  await assert.rejects(
+    finalizeMiningTerminalAck(db, redis, command('stop_mining'), { status: 'SUCCEEDED' }),
+    /mining_terminal_hardware_identity_conflict/,
+  );
+  assert.equal(transitions.length, 0);
+  assert.equal(releases(), 0);
+});
+
 test('terminal ACK rejects a fence mismatch before touching DB or Redis', async () => {
-  let dbCalls = 0;
-  const db = { $queryRaw: async () => { dbCalls += 1; return []; } } as any;
+  let transactions = 0;
+  const db = { $transaction: async () => { transactions += 1; } } as any;
   const { redis, releases } = fakeRedis();
   const bad = command('stop_mining');
   bad.payload.payload.runtimeGeneration = '18';
@@ -106,6 +136,6 @@ test('terminal ACK rejects a fence mismatch before touching DB or Redis', async 
     finalizeMiningTerminalAck(db, redis, bad, { status: 'SUCCEEDED' }),
     /mining_terminal_fence_mismatch/,
   );
-  assert.equal(dbCalls, 0);
+  assert.equal(transactions, 0);
   assert.equal(releases(), 0);
 });
