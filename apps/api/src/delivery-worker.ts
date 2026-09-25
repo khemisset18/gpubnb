@@ -26,6 +26,7 @@ import { claimGatewayMachineCommands, gatewayCommandMachineIds } from './gateway
 import { validateDeliveryKey } from './reliable-delivery.js';
 import { reconcileDevelopmentBookingsScheduled } from './development-booking-scheduler.js';
 import { finalizeVerifiedDeveloperStop } from './workspace-stop-finalizer.js';
+import { finalizeMiningTerminalAck } from './mining-command-finalizer.js';
 
 const POLL_INTERVAL_MS = 250;
 const HEALTH_INTERVAL_MS = 15_000;
@@ -106,9 +107,15 @@ async function finishTerminalCommand(
       // worker retries this idempotent finalization without re-running Docker.
       await finalizeVerifiedDeveloperStop(db, redis, sessionId, command.machineId);
     }
+    if (command.commandType === 'start_mining' || command.commandType === 'stop_mining') {
+      await finalizeMiningTerminalAck(db, redis, command, ack);
+    }
     return await acknowledgeMachineCommand(db, command.id, command.machineId, workerId)
       ? 'ACKNOWLEDGED'
       : 'LEASE_LOST';
+  }
+  if (command.commandType === 'start_mining' || command.commandType === 'stop_mining') {
+    await finalizeMiningTerminalAck(db, redis, command, ack);
   }
   const reason = `${ack.status.toLowerCase()}:${ack.detailCode ?? 'agent_terminal_failure'}`;
   return await failMachineCommandTerminal(db, command.id, command.machineId, workerId, reason)

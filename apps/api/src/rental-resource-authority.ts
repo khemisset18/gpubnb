@@ -2,7 +2,9 @@ import crypto from 'node:crypto';
 import {
   AcceleratorOperationalStatus,
   ListingResourceMode,
+  MiningRuntimeState,
   ModerationStatus,
+  Prisma,
   ResourceAllocationStatus,
   WorkspaceSessionStatus,
   type PrismaClient,
@@ -50,6 +52,23 @@ const RENTABLE_ACCELERATOR_STATUSES: AcceleratorOperationalStatus[] = [
 
 const RENTAL_LEASE_TTL_SECONDS = RESOURCE_LEASE_DEFAULT_TTL_SECONDS;
 const RENTAL_LEASE_TTL_MS = RENTAL_LEASE_TTL_SECONDS * 1000;
+
+type RentalAuthorityDb = PrismaClient | Prisma.TransactionClient;
+
+async function withRentalTransaction<T>(
+  db: RentalAuthorityDb,
+  callback: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  const client = db as PrismaClient;
+  if ('$transaction' in client && typeof client.$transaction === 'function') {
+    return client.$transaction(callback, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: 5_000,
+      timeout: 10_000,
+    });
+  }
+  return callback(db as Prisma.TransactionClient);
+}
 
 const PRIORITY_ACQUIRE_SCRIPT = `
 local currentLeaseId = redis.call('HGET', KEYS[1], 'leaseId')
@@ -172,8 +191,138 @@ async function acquireRentalLease(
   return decodePriorityLease(raw, resourceId, holderId, idempotencyKey);
 }
 
+function rentalRuntimeState(status: WorkspaceSessionStatus): MiningRuntimeState {
+  return status === WorkspaceSessionStatus.PREPARING || status === WorkspaceSessionStatus.READY
+    ? MiningRuntimeState.PREEMPTING
+    : MiningRuntimeState.RENTAL_BLOCKED;
+}
+
+async function markRentalResourcesOwned(
+  db: RentalAuthorityDb,
+  machineId: string,
+  sessionId: string,
+  status: WorkspaceSessionStatus,
+  resources: Array<{ resourceId: string }>,
+): Promise<void> {
+  if (!resources.length) return;
+  const targetState = rentalRuntimeState(status);
+  await withRentalTransaction(db, async (tx) => {
+    for (const resource of resources) {
+      const rows = await tx.$queryRaw<Array<{
+        runtimeState: MiningRuntimeState;
+        activeRentalId: string | null;
+        resumeAfterRentalPending: boolean;
+        autoResumeAfterRental: boolean;
+      }>>(Prisma.sql`
+        SELECT r."runtimeState", r."activeRentalId", r."resumeAfterRentalPending",
+               COALESCE(c."autoResumeAfterRental", false) AS "autoResumeAfterRental"
+          FROM "MiningResource" r
+     LEFT JOIN "MiningConfiguration" c ON c."resourceId" = r."id"
+         WHERE r."id" = ${resource.resourceId} AND r."machineId" = ${machineId}
+         FOR UPDATE OF r
+      `);
+      const current = rows[0];
+      if (!current) throw new Error('rental_gpu_resource_mapping_missing');
+      if (current.activeRentalId && current.activeRentalId !== sessionId) {
+        throw new Error('rental_gpu_resource_authority_conflict');
+      }
+      if (current.runtimeState === MiningRuntimeState.QUARANTINED
+        || current.runtimeState === MiningRuntimeState.EMERGENCY_STOPPED) {
+        throw new Error('rental_gpu_resource_quarantined');
+      }
+      if (current.activeRentalId === sessionId && current.runtimeState === targetState) continue;
+
+      const firstTakeover = current.activeRentalId === null;
+      const resumePending = current.resumeAfterRentalPending
+        || (firstTakeover
+          && current.runtimeState === MiningRuntimeState.MINING
+          && current.autoResumeAfterRental);
+
+      await tx.miningResource.update({
+        where: { id: resource.resourceId },
+        data: {
+          activeRentalId: sessionId,
+          runtimeState: targetState,
+          resumeAfterRentalPending: resumePending,
+        },
+      });
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "MiningRuntimeEvent" (
+          "id", "resourceId", "eventType", "stateBefore", "stateAfter", "reservationId",
+          "idempotencyKey", "agentCounter", "payload", "occurredAt", "createdAt"
+        ) VALUES (
+          ${crypto.randomUUID()}, ${resource.resourceId}, 'RENTAL_PREEMPTED'::"MiningEventType",
+          ${current.runtimeState}::"MiningRuntimeState", ${targetState}::"MiningRuntimeState",
+          ${sessionId}, ${`rental-authority:${sessionId}:${resource.resourceId}:${targetState}`}, 0,
+          ${JSON.stringify({
+            source: 'rental-resource-authority',
+            wasMiningBeforeRental: current.runtimeState === MiningRuntimeState.MINING,
+            autoResumeArmed: resumePending,
+          })}::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT ("idempotencyKey") DO NOTHING
+      `);
+    }
+  });
+}
+
+async function markRentalCleanupVerified(
+  db: RentalAuthorityDb,
+  machineId: string,
+  sessionId: string,
+  resourceIds: string[],
+): Promise<{ cleaned: string[]; autoResume: string[] }> {
+  return withRentalTransaction(db, async (tx) => {
+    const cleaned: string[] = [];
+    const autoResume: string[] = [];
+    for (const resourceId of resourceIds) {
+      const rows = await tx.$queryRaw<Array<{
+        runtimeState: MiningRuntimeState;
+        activeRentalId: string | null;
+        resumeAfterRentalPending: boolean;
+      }>>(Prisma.sql`
+        SELECT "runtimeState", "activeRentalId", "resumeAfterRentalPending"
+          FROM "MiningResource"
+         WHERE "id" = ${resourceId} AND "machineId" = ${machineId}
+         FOR UPDATE
+      `);
+      const current = rows[0];
+      if (!current) throw new Error('rental_gpu_resource_mapping_missing');
+      if (current.activeRentalId && current.activeRentalId !== sessionId) {
+        throw new Error('rental_gpu_resource_authority_conflict');
+      }
+      if (current.activeRentalId === null) {
+        if (current.resumeAfterRentalPending) autoResume.push(resourceId);
+        continue;
+      }
+      await tx.miningResource.update({
+        where: { id: resourceId },
+        data: { activeRentalId: null, runtimeState: MiningRuntimeState.STOPPED },
+      });
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "MiningRuntimeEvent" (
+          "id", "resourceId", "eventType", "stateBefore", "stateAfter", "reservationId",
+          "idempotencyKey", "agentCounter", "payload", "occurredAt", "createdAt"
+        ) VALUES (
+          ${crypto.randomUUID()}, ${resourceId}, 'CLEANUP_VERIFIED'::"MiningEventType",
+          ${current.runtimeState}::"MiningRuntimeState", 'STOPPED'::"MiningRuntimeState",
+          ${sessionId}, ${`rental-cleanup:${sessionId}:${resourceId}`}, 0,
+          ${JSON.stringify({
+            source: 'workspace-gateway-v5-release',
+            autoResumePending: current.resumeAfterRentalPending,
+          })}::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT ("idempotencyKey") DO NOTHING
+      `);
+      cleaned.push(resourceId);
+      if (current.resumeAfterRentalPending) autoResume.push(resourceId);
+    }
+    return { cleaned, autoResume };
+  });
+}
+
 async function ensureMiningResourceMapping(
-  db: PrismaClient,
+  db: RentalAuthorityDb,
   machineId: string,
   accelerator: AcceleratorForRental,
 ): Promise<NonNullable<AcceleratorForRental['miningResource']>> {
@@ -262,7 +411,7 @@ function validateCandidates(candidates: CandidateGpu[]): string | undefined {
 }
 
 export async function buildRentalResourceAuthority(
-  db: PrismaClient,
+  db: RentalAuthorityDb,
   redis: Redis,
   machineId: string,
 ): Promise<RentalResourceAuthority> {
@@ -388,6 +537,7 @@ export async function buildRentalResourceAuthority(
         lease,
       });
     }
+    await markRentalResourcesOwned(db, machineId, session.sessionId, session.status, resources);
     authoritySessions.push({ sessionId: session.sessionId, status: session.status, resources });
   }
 
@@ -399,13 +549,13 @@ export async function buildRentalResourceAuthority(
 }
 
 export async function releaseRentalResourceAuthority(
-  db: PrismaClient,
+  db: RentalAuthorityDb,
   redis: Redis,
   machineId: string,
   sessionId: string,
   leases: Array<{ resourceId: string; holderId: string; leaseId: string; fencingToken: string }>,
   now = new Date(),
-): Promise<{ released: number }> {
+): Promise<{ released: number; cleanupVerifiedResourceIds: string[]; autoResumeResourceIds: string[] }> {
   const session = await db.workspaceSession.findFirst({
     where: { id: sessionId, machineId },
     select: { id: true, status: true, expiresAt: true },
@@ -423,5 +573,15 @@ export async function releaseRentalResourceAuthority(
     if (result.accepted || result.reason === 'MISSING') released += 1;
     else throw new Error('rental_resource_lease_stale');
   }
-  return { released };
+  const cleanup = await markRentalCleanupVerified(
+    db,
+    machineId,
+    sessionId,
+    leases.map((lease) => lease.resourceId),
+  );
+  return {
+    released,
+    cleanupVerifiedResourceIds: cleanup.cleaned,
+    autoResumeResourceIds: cleanup.autoResume,
+  };
 }

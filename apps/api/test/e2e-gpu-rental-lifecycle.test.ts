@@ -19,7 +19,10 @@ import { syncGpuMiningResourcesFromAccelerators } from '../src/mining-resource-i
 import { listOwnerRentalGpus } from '../src/rental-gpu-catalog.js';
 import { createExactGpuListing } from '../src/rental-listing-service.js';
 import { allocateBookingResources, releaseBookingResources } from '../src/resource-allocation-service.js';
-import { buildRentalResourceAuthority } from '../src/rental-resource-authority.js';
+import {
+  buildRentalResourceAuthority,
+  releaseRentalResourceAuthority,
+} from '../src/rental-resource-authority.js';
 import { ensureCompatibleMachineWorkspace } from '../src/machine-workspace-catalog.js';
 import type { AcceleratorTelemetry } from '../src/accelerator-telemetry.js';
 
@@ -246,13 +249,47 @@ test('full GPU rental lifecycle: heartbeat -> inventory -> publish -> booking ->
   assert.ok(resolvedSession!.resources[0]!.lease.leaseId, 'a real Redis lease must be issued for this exact resource');
 
   // --- Step 12-16: GPU proof executes physically - BLOCKED here, see final report.
-  // Simulate the job/booking reaching a terminal successful state the way
-  // /agent/jobs/:id/finalize-proof would leave it. ---
+  // Simulate successful workload completion and, critically, the same ordered
+  // cleanup contract used by workspace_gateway_v5:
+  //   workload done -> STOPPING -> exact GPU cleanup proof -> release rental
+  //   resource lease -> only then mark the session/booking terminal.
+  // Releasing only AcceleratorAllocation rows is deliberately insufficient now:
+  // MiningResource.activeRentalId remains authoritative until the Agent has
+  // actually proved the exact GPU is quiescent.
   await prisma.job.update({ where: { id: job.id }, data: { status: 'COMPLETED', finishedAt: new Date() } });
-  await prisma.workspaceSession.update({ where: { id: session.id }, data: { status: WorkspaceSessionStatus.COMPLETED, endedAt: new Date() } });
+  await prisma.workspaceSession.update({
+    where: { id: session.id },
+    data: { status: WorkspaceSessionStatus.STOPPING },
+  });
+
+  const cleanupProof = await releaseRentalResourceAuthority(
+    prisma,
+    redis,
+    machine.id,
+    session.id,
+    resolvedSession!.resources.map((resource) => resource.lease),
+  );
+  assert.equal(cleanupProof.released, 1);
+  assert.deepEqual(
+    cleanupProof.cleanupVerifiedResourceIds,
+    [accelerator.miningResource!.id],
+    'the exact MiningResource must be cleanup-verified before it becomes rentable again',
+  );
+  const cleanedMiningResource = await prisma.miningResource.findUniqueOrThrow({
+    where: { id: accelerator.miningResource!.id },
+    select: { activeRentalId: true, runtimeState: true },
+  });
+  assert.equal(cleanedMiningResource.activeRentalId, null);
+  assert.equal(cleanedMiningResource.runtimeState, 'STOPPED');
+
+  await prisma.workspaceSession.update({
+    where: { id: session.id },
+    data: { status: WorkspaceSessionStatus.COMPLETED, endedAt: new Date() },
+  });
   await prisma.booking.update({ where: { id: booking.id }, data: { status: BookingStatus.COMPLETED } });
 
-  // --- Step 17: cleanup / resource released, through the real transactional service ---
+  // --- Step 17: allocation rows are released only after exact GPU cleanup authority
+  // has been cleared. ---
   await releaseBookingResources(prisma, booking.id);
   const releasedRow = await prisma.acceleratorAllocation.findFirstOrThrow({
     where: { bookingId: booking.id, acceleratorId: accelerator.id },

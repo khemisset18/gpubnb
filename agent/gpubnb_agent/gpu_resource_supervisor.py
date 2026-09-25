@@ -857,7 +857,13 @@ class GpuResourceSupervisor:
             if spec.runtime_generation < current.runtime_generation:
                 raise ExecutionControlError("mining_runtime_generation_stale")
             if spec.runtime_generation > current.runtime_generation:
-                raise ExecutionControlError("mining_runtime_generation_future")
+                # A newer fence is safe for STOP: the Gateway has already proven
+                # this exact lease against Redis. Accepting it lets the owner
+                # recover and stop an older surviving miner after the previous
+                # mining lease expired, without weakening stale-command fencing.
+                current.runtime_generation = spec.runtime_generation
+                current.updated_at_ms = int(time.time() * 1000)
+                self.store.save(records)
             if current.state == "STOPPED":
                 return ExecutionResult("mining_resource_already_stopped")
             if current.state == "QUARANTINED":

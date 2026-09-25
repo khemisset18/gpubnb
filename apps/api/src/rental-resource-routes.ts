@@ -4,6 +4,8 @@ import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
+import { requestSystemMiningAutoResume } from './mining-command-service.js';
+import { commandDispatchConfigFromEnv, commandGatewayAssigned } from './control-command-dispatch.js';
 import {
   buildRentalResourceAuthority,
   releaseRentalResourceAuthority,
@@ -103,7 +105,46 @@ export function registerRentalResourceAuthorityRoutes(
     }
     const body = releaseBodySchema.parse(request.body);
     try {
-      return await releaseRentalResourceAuthority(db, redis, machineId, sessionId, body.leases);
+      const released = await releaseRentalResourceAuthority(db, redis, machineId, sessionId, body.leases);
+      const autoResume = {
+        requested: [] as string[],
+        skipped: [] as string[],
+        failed: [] as Array<{ resourceId: string; error: string }>,
+      };
+      let remoteControlEnabled = false;
+      try {
+        remoteControlEnabled = commandGatewayAssigned(machineId, commandDispatchConfigFromEnv());
+      } catch {
+        remoteControlEnabled = false;
+      }
+      for (const resourceId of released.autoResumeResourceIds) {
+        if (!remoteControlEnabled) {
+          // Preserve resumeAfterRentalPending in the DB. A future qualified
+          // reconciler/owner action can consume it once remote control is live;
+          // never transition to STARTING when no delivery path is enabled.
+          autoResume.skipped.push(resourceId);
+          continue;
+        }
+        try {
+          const result = await requestSystemMiningAutoResume(db, redis, {
+            machineId,
+            resourceId,
+            requestId: `rental-cleanup:${sessionId}:${resourceId}`,
+          });
+          if (result.commandId) autoResume.requested.push(resourceId);
+          else autoResume.skipped.push(resourceId);
+        } catch (error) {
+          autoResume.failed.push({
+            resourceId,
+            error: error instanceof Error ? error.message : 'mining_auto_resume_failed',
+          });
+        }
+      }
+      return {
+        released: released.released,
+        cleanupVerifiedResourceIds: released.cleanupVerifiedResourceIds,
+        autoResume,
+      };
     } catch (error) {
       const code = error instanceof Error ? error.message : 'rental_resource_release_failed';
       const status = code.endsWith('_not_found') ? 404 : code.includes('not_releasable') ? 409 : 409;

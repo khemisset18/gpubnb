@@ -7,6 +7,70 @@ const MAX_CONTROL_PAYLOAD_BYTES = 48 * 1024;
 const DISPATCH_TIMEOUT_MS = 2_000;
 const TERMINAL_ACKS = new Set(['SUCCEEDED', 'FAILED', 'REJECTED']);
 const STOP_REASONS = new Set(['renter', 'owner', 'platform']);
+const CONTROL_ID = /^[A-Za-z0-9][A-Za-z0-9:._-]{7,191}$/;
+const FENCE = /^[1-9]\d{0,18}$/;
+
+export type GatewayLeaseBinding = {
+  resourceId: string;
+  holderId: string;
+  leaseId: string;
+  fencingToken: string;
+};
+
+type GatewayCommandParts = {
+  payload: Record<string, unknown>;
+  lease?: GatewayLeaseBinding;
+};
+
+function plainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+    && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+function parseMiningLease(value: unknown): GatewayLeaseBinding {
+  if (!plainObject(value) || Object.keys(value).sort().join(',') !== 'fencingToken,holderId,leaseId,resourceId') {
+    throw new Error('mining_command_lease_invalid');
+  }
+  const resourceId = value.resourceId;
+  const holderId = value.holderId;
+  const leaseId = value.leaseId;
+  const fencingToken = value.fencingToken;
+  if (
+    typeof resourceId !== 'string' || !CONTROL_ID.test(resourceId)
+    || typeof holderId !== 'string' || !CONTROL_ID.test(holderId)
+    || typeof leaseId !== 'string' || !CONTROL_ID.test(leaseId)
+    || typeof fencingToken !== 'string' || !FENCE.test(fencingToken)
+    || BigInt(fencingToken) > 9_223_372_036_854_775_807n
+  ) {
+    throw new Error('mining_command_lease_invalid');
+  }
+  return { resourceId, holderId, leaseId, fencingToken };
+}
+
+function miningGatewayParts(
+  kind: 'START_MINING' | 'STOP_MINING',
+  durablePayload: Record<string, unknown>,
+): GatewayCommandParts {
+  if (Object.keys(durablePayload).sort().join(',') !== 'lease,payload') {
+    throw new Error('mining_command_durable_payload_invalid');
+  }
+  const lease = parseMiningLease(durablePayload.lease);
+  if (!plainObject(durablePayload.payload)) throw new Error('mining_command_payload_invalid');
+  const payload = durablePayload.payload;
+  const expectedPayloadKeys = kind === 'START_MINING'
+    ? 'hardwareUuid,maximumPowerWatts,maximumTemperatureC,performanceMode,poolUrl,profileId,resourceId,runtimeGeneration,walletAddress,workerName'
+    : 'hardwareUuid,resourceId,runtimeGeneration';
+  if (Object.keys(payload).sort().join(',') !== expectedPayloadKeys) {
+    throw new Error('mining_command_payload_shape_invalid');
+  }
+  if (payload.resourceId !== lease.resourceId || payload.runtimeGeneration !== lease.fencingToken) {
+    throw new Error('mining_command_fence_mismatch');
+  }
+  if (typeof payload.hardwareUuid !== 'string' || !CONTROL_ID.test(payload.hardwareUuid)) {
+    throw new Error('mining_command_hardware_uuid_invalid');
+  }
+  return { lease, payload };
+}
 
 export type GatewayCommandKind = 'STOP_RENTAL' | 'START_MINING' | 'STOP_MINING';
 
@@ -72,8 +136,10 @@ export function commandKindForDurableType(commandType: string): GatewayCommandKi
   }
 }
 
-function gatewayPayload(kind: GatewayCommandKind, durablePayload: Record<string, unknown>): Record<string, unknown> {
-  if (kind !== 'STOP_RENTAL') return durablePayload;
+function gatewayParts(kind: GatewayCommandKind, durablePayload: Record<string, unknown>): GatewayCommandParts {
+  if (kind === 'START_MINING' || kind === 'STOP_MINING') {
+    return miningGatewayParts(kind, durablePayload);
+  }
   const sessionId = durablePayload.sessionId;
   const workspaceSlug = durablePayload.workspaceSlug;
   const reason = durablePayload.reason;
@@ -87,9 +153,11 @@ function gatewayPayload(kind: GatewayCommandKind, durablePayload: Record<string,
     throw new Error('stop_rental_reason_invalid');
   }
   return {
-    sessionId,
-    workspaceSlug,
-    ...(typeof reason === 'string' ? { reason } : {}),
+    payload: {
+      sessionId,
+      workspaceSlug,
+      ...(typeof reason === 'string' ? { reason } : {}),
+    },
   };
 }
 
@@ -99,7 +167,8 @@ export function controlEnvelope(command: ClaimedMachineCommand): Record<string, 
   if (command.sequence > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error('machine_command_sequence_not_json_safe');
   }
-  const payload = gatewayPayload(kind, command.payload);
+  const parts = gatewayParts(kind, command.payload);
+  const payload = parts.payload;
   const payloadBytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
   if (payloadBytes > MAX_CONTROL_PAYLOAD_BYTES) throw new Error('machine_command_payload_too_large_for_gateway');
   const issuedAtMs = command.createdAt.getTime();
@@ -115,6 +184,7 @@ export function controlEnvelope(command: ClaimedMachineCommand): Record<string, 
     kind,
     issuedAtMs,
     expiresAtMs,
+    ...(parts.lease ? { lease: parts.lease } : {}),
     payload,
   };
 }
@@ -146,10 +216,16 @@ export async function dispatchToGateway(
   command: ClaimedMachineCommand,
   config: CommandDispatchConfig,
 ): Promise<'DELIVERED' | 'QUEUED_DISCONNECTED' | 'QUEUED_BACKPRESSURE' | 'EXISTING'> {
-  // Mining kinds are intentionally dark-qualified only in this layer. Even if a
-  // future SQL change accidentally claims one, production dispatch refuses it.
-  if (command.commandType !== 'stop_rental' || command.payload.workspaceSlug !== 'developer') {
-    throw new Error('machine_command_not_production_fast_path');
+  const kind = commandKindForDurableType(command.commandType);
+  if (!kind) throw new Error('machine_command_not_production_fast_path');
+  if (kind === 'STOP_RENTAL') {
+    if (command.payload.workspaceSlug !== 'developer') {
+      throw new Error('machine_command_not_production_fast_path');
+    }
+  } else {
+    // Parsing here is intentional defense in depth. The SQL fast-path filter is
+    // coarse; only a structurally fenced mining command may reach the Gateway.
+    miningGatewayParts(kind, command.payload);
   }
   if (!config.adminUrl || !config.internalToken) throw new Error('control_gateway_admin_not_configured');
   const controller = new AbortController();

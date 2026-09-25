@@ -72,7 +72,7 @@ test('non-zero rollout requires private gateway coordinates and a strong token',
   assert.equal(commandGatewayAssigned('machine_00000001', config), true);
 });
 
-test('protocol understands mining kinds while production dispatch keeps them dark', async () => {
+test('protocol understands mining kinds while unfenced production mining is rejected', async () => {
   assert.equal(commandKindForDurableType('stop_rental'), 'STOP_RENTAL');
   assert.equal(commandKindForDurableType('start_mining'), 'START_MINING');
   assert.equal(commandKindForDurableType('stop_mining'), 'STOP_MINING');
@@ -90,7 +90,213 @@ test('protocol understands mining kinds while production dispatch keeps them dar
         agentControlRolloutBps: 10_000,
       },
     ),
-    /machine_command_not_production_fast_path/,
+    /mining_command_durable_payload_invalid/,
+  );
+});
+
+test('fenced mining durable payload becomes an exact Gateway lease and payload', () => {
+  const envelope = controlEnvelope(command({
+    commandType: 'start_mining',
+    payload: {
+      lease: {
+        resourceId: 'resource_00000001',
+        holderId: 'mining_resource_00000001',
+        leaseId: 'lease_000000001',
+        fencingToken: '17',
+      },
+      payload: {
+        resourceId: 'resource_00000001',
+        hardwareUuid: 'GPU-aaaaaaaa',
+        runtimeGeneration: '17',
+        profileId: 'lolminer_etchash',
+        poolUrl: 'stratum+tcp://pool.example.com:4444',
+        walletAddress: 'wallet123456',
+        workerName: 'worker_1',
+        performanceMode: 'FULL',
+        maximumTemperatureC: 94,
+        maximumPowerWatts: 180,
+      },
+    },
+  }));
+  assert.deepEqual(envelope.lease, {
+    resourceId: 'resource_00000001',
+    holderId: 'mining_resource_00000001',
+    leaseId: 'lease_000000001',
+    fencingToken: '17',
+  });
+  assert.equal((envelope.payload as Record<string, unknown>).runtimeGeneration, '17');
+  assert.equal((envelope.payload as Record<string, unknown>).resourceId, 'resource_00000001');
+});
+
+test('fenced STOP_MINING becomes an exact Gateway lease with the minimal stop payload', () => {
+  const envelope = controlEnvelope(command({
+    commandType: 'stop_mining',
+    payload: {
+      lease: {
+        resourceId: 'resource_00000001',
+        holderId: 'mining_resource_00000001',
+        leaseId: 'lease_000000001',
+        fencingToken: '17',
+      },
+      payload: {
+        resourceId: 'resource_00000001',
+        hardwareUuid: 'GPU-aaaaaaaa',
+        runtimeGeneration: '17',
+      },
+    },
+  }));
+  assert.deepEqual(envelope.lease, {
+    resourceId: 'resource_00000001',
+    holderId: 'mining_resource_00000001',
+    leaseId: 'lease_000000001',
+    fencingToken: '17',
+  });
+  assert.deepEqual(envelope.payload, {
+    resourceId: 'resource_00000001',
+    hardwareUuid: 'GPU-aaaaaaaa',
+    runtimeGeneration: '17',
+  });
+});
+
+test('mining envelope rejects missing lease, resource mismatch, and invalid lease fences', () => {
+  assert.throws(
+    () => controlEnvelope(command({
+      commandType: 'start_mining',
+      payload: {
+        payload: {
+          resourceId: 'resource_00000001',
+          hardwareUuid: 'GPU-aaaaaaaa',
+          runtimeGeneration: '17',
+        },
+      },
+    })),
+    /mining_command_durable_payload_invalid/,
+  );
+
+  assert.throws(
+    () => controlEnvelope(command({
+      commandType: 'stop_mining',
+      payload: {
+        lease: {
+          resourceId: 'resource_00000002',
+          holderId: 'mining_resource_00000001',
+          leaseId: 'lease_000000001',
+          fencingToken: '17',
+        },
+        payload: {
+          resourceId: 'resource_00000001',
+          hardwareUuid: 'GPU-aaaaaaaa',
+          runtimeGeneration: '17',
+        },
+      },
+    })),
+    /mining_command_fence_mismatch/,
+  );
+
+  for (const fencingToken of ['0', '01', '9223372036854775808']) {
+    assert.throws(
+      () => controlEnvelope(command({
+        commandType: 'stop_mining',
+        payload: {
+          lease: {
+            resourceId: 'resource_00000001',
+            holderId: 'mining_resource_00000001',
+            leaseId: 'lease_000000001',
+            fencingToken,
+          },
+          payload: {
+            resourceId: 'resource_00000001',
+            hardwareUuid: 'GPU-aaaaaaaa',
+            runtimeGeneration: fencingToken,
+          },
+        },
+      })),
+      /mining_command_lease_invalid/,
+    );
+  }
+});
+
+test('mining durable wrapper and Agent payload are exact and reject secret or unused fields', () => {
+  const lease = {
+    resourceId: 'resource_00000001',
+    holderId: 'mining_resource_00000001',
+    leaseId: 'lease_000000001',
+    fencingToken: '17',
+  };
+  const startPayload = {
+    resourceId: 'resource_00000001',
+    hardwareUuid: 'GPU-aaaaaaaa',
+    runtimeGeneration: '17',
+    profileId: 'lolminer_etchash',
+    poolUrl: 'stratum+tcp://pool.example.com:4444',
+    walletAddress: 'wallet123456',
+    workerName: 'worker_1',
+    performanceMode: 'FULL',
+    maximumTemperatureC: 94,
+    maximumPowerWatts: 180,
+  };
+
+  assert.throws(
+    () => controlEnvelope(command({
+      commandType: 'start_mining',
+      payload: { lease, payload: startPayload, debug: true },
+    })),
+    /mining_command_durable_payload_invalid/,
+  );
+
+  for (const injected of [
+    { ownerPoolSecretRef: 'secret://local/mining/pool-main' },
+    { poolPassword: 'must-never-cross-control-plane' },
+    { debug: true },
+  ]) {
+    assert.throws(
+      () => controlEnvelope(command({
+        commandType: 'start_mining',
+        payload: { lease, payload: { ...startPayload, ...injected } },
+      })),
+      /mining_command_payload_shape_invalid/,
+    );
+  }
+
+  const envelope = controlEnvelope(command({
+    commandType: 'start_mining',
+    payload: { lease, payload: startPayload },
+  }));
+  assert.deepEqual(Object.keys(envelope.payload as Record<string, unknown>).sort(), [
+    'hardwareUuid',
+    'maximumPowerWatts',
+    'maximumTemperatureC',
+    'performanceMode',
+    'poolUrl',
+    'profileId',
+    'resourceId',
+    'runtimeGeneration',
+    'walletAddress',
+    'workerName',
+  ]);
+  assert.equal(JSON.stringify(envelope).includes('ownerPoolSecretRef'), false);
+  assert.equal(JSON.stringify(envelope).includes('poolPassword'), false);
+});
+
+test('mining envelope rejects a durable fence mismatch before Gateway dispatch', () => {
+  assert.throws(
+    () => controlEnvelope(command({
+      commandType: 'stop_mining',
+      payload: {
+        lease: {
+          resourceId: 'resource_00000001',
+          holderId: 'mining_resource_00000001',
+          leaseId: 'lease_000000001',
+          fencingToken: '18',
+        },
+        payload: {
+          resourceId: 'resource_00000001',
+          hardwareUuid: 'GPU-aaaaaaaa',
+          runtimeGeneration: '17',
+        },
+      },
+    })),
+    /mining_command_fence_mismatch/,
   );
 });
 

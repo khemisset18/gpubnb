@@ -292,6 +292,23 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         with self.assertRaisesRegex(ExecutionControlError, "mining_runtime_generation_replay"):
             self.supervisor.start(payload, "command_00000001")
 
+    def test_newer_fenced_stop_can_recover_after_previous_mining_lease_expires(self) -> None:
+        self.supervisor.start(
+            start_payload("resource_00000001", "GPU-aaaaaaaa", 7),
+            "command_00000007",
+        )
+        pid = self.supervisor.snapshot()["resource_00000001"]["pid"]
+
+        stopped = self.supervisor.stop(
+            stop_payload("resource_00000001", "GPU-aaaaaaaa", 8)
+        )
+
+        self.assertEqual(stopped.detail_code, "mining_resource_stop_verified")
+        record = self.supervisor.snapshot()["resource_00000001"]
+        self.assertEqual(record["runtime_generation"], 8)
+        self.assertEqual(record["state"], "STOPPED")
+        self.assertNotIn(pid, self.inspector.identities)
+
     def test_stale_stop_cannot_kill_new_generation(self) -> None:
         self.supervisor.start(start_payload("resource_00000001", "GPU-aaaaaaaa", 1), "command_00000001")
         self.supervisor.stop(stop_payload("resource_00000001", "GPU-aaaaaaaa", 1))
