@@ -1,24 +1,27 @@
-import { Prisma, type PrismaClient } from '@prisma/client';
+import crypto from 'node:crypto';
+
+import { MiningRuntimeState, Prisma, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 
-import type { TerminalGatewayAck } from './control-command-dispatch.js';
 import type { ClaimedMachineCommand } from './delivery-store.js';
+import type { TerminalGatewayAck } from './control-command-dispatch.js';
 import { releaseResourceLease } from './resource-lease.js';
-
-type MiningCommandType = 'start_mining' | 'stop_mining';
 
 type DurableMiningPayload = {
   lease: { resourceId: string; holderId: string; leaseId: string; fencingToken: string };
   payload: { resourceId: string; hardwareUuid: string; runtimeGeneration: string };
 };
 
+function stableId(prefix: string, ...parts: string[]): string {
+  return `${prefix}_${crypto.createHash('sha256').update(parts.join('\n')).digest('hex').slice(0, 32)}`;
+}
+
 function parseDurableMiningPayload(command: ClaimedMachineCommand): DurableMiningPayload {
   if (command.commandType !== 'start_mining' && command.commandType !== 'stop_mining') {
     throw new Error('mining_terminal_command_type_invalid');
   }
-  const outer = command.payload;
-  const lease = outer.lease;
-  const payload = outer.payload;
+  const lease = command.payload.lease;
+  const payload = command.payload.payload;
   if (!lease || typeof lease !== 'object' || Array.isArray(lease)) throw new Error('mining_terminal_lease_missing');
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('mining_terminal_payload_missing');
   const l = lease as Record<string, unknown>;
@@ -34,10 +37,10 @@ function parseDurableMiningPayload(command: ClaimedMachineCommand): DurableMinin
   }
   return {
     lease: {
-      resourceId: l.resourceId as string,
-      holderId: l.holderId as string,
-      leaseId: l.leaseId as string,
-      fencingToken: l.fencingToken as string,
+      resourceId: String(l.resourceId),
+      holderId: String(l.holderId),
+      leaseId: String(l.leaseId),
+      fencingToken: String(l.fencingToken),
     },
     payload: {
       resourceId: p.resourceId,
@@ -47,18 +50,21 @@ function parseDurableMiningPayload(command: ClaimedMachineCommand): DurableMinin
   };
 }
 
-function targetState(commandType: MiningCommandType, ack: TerminalGatewayAck): {
-  expected: 'STARTING' | 'VERIFYING_STOP';
-  next: 'MINING' | 'STOPPED' | 'QUARANTINED';
-  quarantine: boolean;
-} {
-  if (commandType === 'start_mining') {
-    if (ack.status === 'SUCCEEDED') return { expected: 'STARTING', next: 'MINING', quarantine: false };
-    if (ack.status === 'REJECTED') return { expected: 'STARTING', next: 'STOPPED', quarantine: false };
-    return { expected: 'STARTING', next: 'QUARANTINED', quarantine: true };
+function terminalMapping(commandType: 'start_mining' | 'stop_mining', ack: TerminalGatewayAck) {
+  const isStart = commandType === 'start_mining';
+  if (isStart && ack.status === 'SUCCEEDED') {
+    return { expected: MiningRuntimeState.STARTING, next: MiningRuntimeState.MINING, eventType: 'STARTED', quarantine: false, releaseLease: false } as const;
   }
-  if (ack.status === 'SUCCEEDED') return { expected: 'VERIFYING_STOP', next: 'STOPPED', quarantine: false };
-  return { expected: 'VERIFYING_STOP', next: 'QUARANTINED', quarantine: true };
+  if (isStart && ack.status === 'REJECTED') {
+    return { expected: MiningRuntimeState.STARTING, next: MiningRuntimeState.STOPPED, eventType: 'START_FAILED', quarantine: false, releaseLease: true } as const;
+  }
+  if (isStart) {
+    return { expected: MiningRuntimeState.STARTING, next: MiningRuntimeState.QUARANTINED, eventType: 'START_FAILED', quarantine: true, releaseLease: true } as const;
+  }
+  if (ack.status === 'SUCCEEDED') {
+    return { expected: MiningRuntimeState.VERIFYING_STOP, next: MiningRuntimeState.STOPPED, eventType: 'STOP_VERIFIED', quarantine: false, releaseLease: true } as const;
+  }
+  return { expected: MiningRuntimeState.VERIFYING_STOP, next: MiningRuntimeState.QUARANTINED, eventType: 'STOP_FAILED', quarantine: true, releaseLease: false } as const;
 }
 
 export async function finalizeMiningTerminalAck(
@@ -67,26 +73,94 @@ export async function finalizeMiningTerminalAck(
   command: ClaimedMachineCommand,
   ack: TerminalGatewayAck,
 ): Promise<'UPDATED' | 'STALE_STATE'> {
-  const commandType = command.commandType as MiningCommandType;
-  const durable = parseDurableMiningPayload(command);
-  const target = targetState(commandType, ack);
-  const rows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    UPDATE "MiningResource" AS r
-       SET "runtimeState" = ${target.next}::"MiningRuntimeState",
-           "quarantined" = CASE WHEN ${target.quarantine} THEN true ELSE r."quarantined" END,
-           "updatedAt" = CURRENT_TIMESTAMP
-      FROM "Accelerator" AS a
-     WHERE r."acceleratorId" = a."id"
-       AND r."id" = ${durable.payload.resourceId}
-       AND r."machineId" = ${command.machineId}
-       AND a."hardwareUuid" = ${durable.payload.hardwareUuid}
-       AND r."runtimeState" = ${target.expected}::"MiningRuntimeState"
-    RETURNING r."id"
-  `);
-
-  const release = await releaseResourceLease(redis, durable.lease).catch(() => null);
-  if (release && !release.accepted && release.reason !== 'MISSING' && release.reason !== 'STALE_LEASE') {
-    throw new Error('mining_terminal_lease_release_failed');
+  if (command.commandType !== 'start_mining' && command.commandType !== 'stop_mining') {
+    throw new Error('mining_terminal_command_type_invalid');
   }
-  return rows[0]?.id ? 'UPDATED' : 'STALE_STATE';
+  const durable = parseDurableMiningPayload(command);
+  const mapping = terminalMapping(command.commandType, ack);
+  const result = await db.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<Array<{ runtimeState: MiningRuntimeState; activeRentalId: string | null; hardwareUuid: string | null }>>(Prisma.sql`
+      SELECT r."runtimeState", r."activeRentalId", a."hardwareUuid"
+        FROM "MiningResource" r
+   LEFT JOIN "Accelerator" a ON a."id" = r."acceleratorId"
+       WHERE r."id" = ${durable.lease.resourceId} AND r."machineId" = ${command.machineId}
+       FOR UPDATE OF r
+    `);
+    const current = rows[0];
+    if (!current) throw new Error('mining_resource_not_found');
+    if (current.hardwareUuid !== durable.payload.hardwareUuid) throw new Error('mining_terminal_hardware_identity_conflict');
+
+    const stateStillOwned = current.runtimeState === mapping.expected
+      && (command.commandType !== 'start_mining' || current.activeRentalId === null);
+    if (!stateStillOwned) {
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "MiningAuditLog" (
+          "id","machineId","resourceId","actorType","actorId","action","nextValue","createdAt"
+        ) VALUES (
+          ${crypto.randomUUID()}, ${command.machineId}, ${durable.lease.resourceId},
+          'SYSTEM'::"MiningAuditActorType", 'delivery-worker', 'mining_terminal_ack_superseded',
+          ${JSON.stringify({
+            commandId: command.id,
+            ackStatus: ack.status,
+            detailCode: ack.detailCode ?? null,
+            currentState: current.runtimeState,
+            activeRental: current.activeRentalId !== null,
+          })}::jsonb, CURRENT_TIMESTAMP
+        )
+      `);
+      return 'STALE_STATE' as const;
+    }
+
+    const eventIdempotency = `command-terminal:${command.id}:${mapping.eventType}`;
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO "MiningRuntimeEvent" (
+        "id","resourceId","eventType","stateBefore","stateAfter",
+        "idempotencyKey","agentCounter","payload","occurredAt","createdAt"
+      ) VALUES (
+        ${stableId('mre', command.id, mapping.eventType)}, ${durable.lease.resourceId},
+        ${mapping.eventType}::"MiningEventType", ${current.runtimeState}::"MiningRuntimeState",
+        ${mapping.next}::"MiningRuntimeState", ${eventIdempotency}, 0,
+        ${JSON.stringify({ commandId: command.id, ackStatus: ack.status, detailCode: ack.detailCode ?? null })}::jsonb,
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      ) ON CONFLICT ("idempotencyKey") DO NOTHING
+    `);
+
+    const changed = await tx.miningResource.updateMany({
+      where: {
+        id: durable.lease.resourceId,
+        machineId: command.machineId,
+        runtimeState: mapping.expected,
+        ...(command.commandType === 'start_mining' ? { activeRentalId: null } : {}),
+      },
+      data: { runtimeState: mapping.next, ...(mapping.quarantine ? { quarantined: true } : {}) },
+    });
+    if (changed.count !== 1) throw new Error('mining_terminal_state_race');
+
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO "MiningAuditLog" (
+        "id","machineId","resourceId","actorType","actorId","action","nextValue","createdAt"
+      ) VALUES (
+        ${crypto.randomUUID()}, ${command.machineId}, ${durable.lease.resourceId},
+        'SYSTEM'::"MiningAuditActorType", 'delivery-worker',
+        ${ack.status === 'SUCCEEDED'
+          ? (command.commandType === 'start_mining' ? 'mining_start_verified' : 'mining_stop_verified')
+          : (command.commandType === 'start_mining' ? 'mining_start_failed' : 'mining_stop_failed')},
+        ${JSON.stringify({ commandId: command.id, state: mapping.next, detailCode: ack.detailCode ?? null })}::jsonb,
+        CURRENT_TIMESTAMP
+      )
+    `);
+    return 'UPDATED' as const;
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    maxWait: 5_000,
+    timeout: 10_000,
+  });
+
+  if (mapping.releaseLease) {
+    const released = await releaseResourceLease(redis, durable.lease);
+    if (!released.accepted && released.reason !== 'MISSING' && released.reason !== 'STALE_LEASE') {
+      throw new Error('mining_terminal_lease_release_failed');
+    }
+  }
+  return result;
 }
