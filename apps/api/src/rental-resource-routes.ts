@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
+import { requestSystemMiningAutoResume } from './mining-command-service.js';
 import {
   buildRentalResourceAuthority,
   releaseRentalResourceAuthority,
@@ -103,7 +104,33 @@ export function registerRentalResourceAuthorityRoutes(
     }
     const body = releaseBodySchema.parse(request.body);
     try {
-      return await releaseRentalResourceAuthority(db, redis, machineId, sessionId, body.leases);
+      const released = await releaseRentalResourceAuthority(db, redis, machineId, sessionId, body.leases);
+      const autoResume = {
+        requested: [] as string[],
+        skipped: [] as string[],
+        failed: [] as Array<{ resourceId: string; error: string }>,
+      };
+      for (const resourceId of released.autoResumeResourceIds) {
+        try {
+          const result = await requestSystemMiningAutoResume(db, redis, {
+            machineId,
+            resourceId,
+            requestId: `rental-cleanup:${sessionId}:${resourceId}`,
+          });
+          if (result.commandId) autoResume.requested.push(resourceId);
+          else autoResume.skipped.push(resourceId);
+        } catch (error) {
+          autoResume.failed.push({
+            resourceId,
+            error: error instanceof Error ? error.message : 'mining_auto_resume_failed',
+          });
+        }
+      }
+      return {
+        released: released.released,
+        cleanupVerifiedResourceIds: released.cleanupVerifiedResourceIds,
+        autoResume,
+      };
     } catch (error) {
       const code = error instanceof Error ? error.message : 'rental_resource_release_failed';
       const status = code.endsWith('_not_found') ? 404 : code.includes('not_releasable') ? 409 : 409;
