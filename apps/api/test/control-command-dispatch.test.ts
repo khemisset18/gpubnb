@@ -128,6 +128,156 @@ test('fenced mining durable payload becomes an exact Gateway lease and payload',
   assert.equal((envelope.payload as Record<string, unknown>).resourceId, 'resource_00000001');
 });
 
+test('fenced STOP_MINING becomes an exact Gateway lease with the minimal stop payload', () => {
+  const envelope = controlEnvelope(command({
+    commandType: 'stop_mining',
+    payload: {
+      lease: {
+        resourceId: 'resource_00000001',
+        holderId: 'mining_resource_00000001',
+        leaseId: 'lease_000000001',
+        fencingToken: '17',
+      },
+      payload: {
+        resourceId: 'resource_00000001',
+        hardwareUuid: 'GPU-aaaaaaaa',
+        runtimeGeneration: '17',
+      },
+    },
+  }));
+  assert.deepEqual(envelope.lease, {
+    resourceId: 'resource_00000001',
+    holderId: 'mining_resource_00000001',
+    leaseId: 'lease_000000001',
+    fencingToken: '17',
+  });
+  assert.deepEqual(envelope.payload, {
+    resourceId: 'resource_00000001',
+    hardwareUuid: 'GPU-aaaaaaaa',
+    runtimeGeneration: '17',
+  });
+});
+
+test('mining envelope rejects missing lease, resource mismatch, and invalid lease fences', () => {
+  assert.throws(
+    () => controlEnvelope(command({
+      commandType: 'start_mining',
+      payload: {
+        payload: {
+          resourceId: 'resource_00000001',
+          hardwareUuid: 'GPU-aaaaaaaa',
+          runtimeGeneration: '17',
+        },
+      },
+    })),
+    /mining_command_durable_payload_invalid/,
+  );
+
+  assert.throws(
+    () => controlEnvelope(command({
+      commandType: 'stop_mining',
+      payload: {
+        lease: {
+          resourceId: 'resource_00000002',
+          holderId: 'mining_resource_00000001',
+          leaseId: 'lease_000000001',
+          fencingToken: '17',
+        },
+        payload: {
+          resourceId: 'resource_00000001',
+          hardwareUuid: 'GPU-aaaaaaaa',
+          runtimeGeneration: '17',
+        },
+      },
+    })),
+    /mining_command_fence_mismatch/,
+  );
+
+  for (const fencingToken of ['0', '01', '9223372036854775808']) {
+    assert.throws(
+      () => controlEnvelope(command({
+        commandType: 'stop_mining',
+        payload: {
+          lease: {
+            resourceId: 'resource_00000001',
+            holderId: 'mining_resource_00000001',
+            leaseId: 'lease_000000001',
+            fencingToken,
+          },
+          payload: {
+            resourceId: 'resource_00000001',
+            hardwareUuid: 'GPU-aaaaaaaa',
+            runtimeGeneration: fencingToken,
+          },
+        },
+      })),
+      /mining_command_lease_invalid/,
+    );
+  }
+});
+
+test('mining durable wrapper and Agent payload are exact and reject secret or unused fields', () => {
+  const lease = {
+    resourceId: 'resource_00000001',
+    holderId: 'mining_resource_00000001',
+    leaseId: 'lease_000000001',
+    fencingToken: '17',
+  };
+  const startPayload = {
+    resourceId: 'resource_00000001',
+    hardwareUuid: 'GPU-aaaaaaaa',
+    runtimeGeneration: '17',
+    profileId: 'lolminer_etchash',
+    poolUrl: 'stratum+tcp://pool.example.com:4444',
+    walletAddress: 'wallet123456',
+    workerName: 'worker_1',
+    performanceMode: 'FULL',
+    maximumTemperatureC: 94,
+    maximumPowerWatts: 180,
+  };
+
+  assert.throws(
+    () => controlEnvelope(command({
+      commandType: 'start_mining',
+      payload: { lease, payload: startPayload, debug: true },
+    })),
+    /mining_command_durable_payload_invalid/,
+  );
+
+  for (const injected of [
+    { ownerPoolSecretRef: 'secret://local/mining/pool-main' },
+    { poolPassword: 'must-never-cross-control-plane' },
+    { debug: true },
+  ]) {
+    assert.throws(
+      () => controlEnvelope(command({
+        commandType: 'start_mining',
+        payload: { lease, payload: { ...startPayload, ...injected } },
+      })),
+      /mining_command_payload_shape_invalid/,
+    );
+  }
+
+  const envelope = controlEnvelope(command({
+    commandType: 'start_mining',
+    payload: { lease, payload: startPayload },
+  }));
+  assert.deepEqual(Object.keys(envelope.payload as Record<string, unknown>).sort(), [
+    'hardwareUuid',
+    'maximumPowerWatts',
+    'maximumTemperatureC',
+    'performanceMode',
+    'poolUrl',
+    'profileId',
+    'resourceId',
+    'runtimeGeneration',
+    'walletAddress',
+    'workerName',
+  ]);
+  assert.equal(JSON.stringify(envelope).includes('ownerPoolSecretRef'), false);
+  assert.equal(JSON.stringify(envelope).includes('poolPassword'), false);
+});
+
 test('mining envelope rejects a durable fence mismatch before Gateway dispatch', () => {
   assert.throws(
     () => controlEnvelope(command({
