@@ -20,12 +20,12 @@ test('owner START route authenticates then delegates all runtime authority to mi
   );
   assert.match(body, /requireSession\(request, reply, redis\)/);
   assert.match(body, /commandDispatchConfigFromEnv\(\)/);
-  assert.match(body, /commandGatewayAssigned\(machineId, dispatchConfig\)/);
+  assert.match(body, /miningCommandGatewayAssigned\(machineId, dispatchConfig\)/);
   assert.match(body, /mining_remote_control_not_enabled/);
   assert.ok(
-    body.indexOf('commandGatewayAssigned(machineId, dispatchConfig)')
+    body.indexOf('miningCommandGatewayAssigned(machineId, dispatchConfig)')
       < body.indexOf('requestMiningStart(db, redis, {'),
-    'rollout gate must run before any START mutation',
+    'mining rollout gate must run before any START mutation',
   );
   assert.match(body, /requestMiningStart\(db, redis, \{/);
   assert.match(body, /ownerId: session\.userId/);
@@ -43,12 +43,12 @@ test('owner STOP route is idempotent and accepts no browser-supplied runtime aut
   );
   assert.match(body, /requireSession\(request, reply, redis\)/);
   assert.match(body, /commandDispatchConfigFromEnv\(\)/);
-  assert.match(body, /commandGatewayAssigned\(machineId, dispatchConfig\)/);
+  assert.match(body, /miningCommandGatewayAssigned\(machineId, dispatchConfig\)/);
   assert.match(body, /mining_remote_control_not_enabled/);
   assert.ok(
-    body.indexOf('commandGatewayAssigned(machineId, dispatchConfig)')
+    body.indexOf('miningCommandGatewayAssigned(machineId, dispatchConfig)')
       < body.indexOf('requestMiningStop(db, redis, {'),
-    'rollout gate must run before any STOP mutation',
+    'mining rollout gate must run before any STOP mutation',
   );
   assert.match(body, /requestMiningStop\(db, redis, \{/);
   assert.match(body, /reply\.code\(result\.alreadySatisfied \? 200 : 202\)/);

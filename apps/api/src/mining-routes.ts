@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 
 import { requireSession } from './auth.js';
-import { commandDispatchConfigFromEnv, commandGatewayAssigned } from './control-command-dispatch.js';
+import { commandDispatchConfigFromEnv, miningCommandGatewayAssigned } from './control-command-dispatch.js';
 import { runBookingTransaction } from './booking-transaction-retry.js';
 import {
   authorizeMiningConfigurationUpdate,
@@ -239,7 +239,7 @@ export const registerMiningRoutes = (
     } catch {
       return reply.code(503).send({ error: 'mining_remote_control_unavailable' });
     }
-    if (!commandGatewayAssigned(machineId, dispatchConfig)) {
+    if (!miningCommandGatewayAssigned(machineId, dispatchConfig)) {
       return reply.code(503).send({ error: 'mining_remote_control_not_enabled' });
     }
     try {
@@ -279,7 +279,7 @@ export const registerMiningRoutes = (
     } catch {
       return reply.code(503).send({ error: 'mining_remote_control_unavailable' });
     }
-    if (!commandGatewayAssigned(machineId, dispatchConfig)) {
+    if (!miningCommandGatewayAssigned(machineId, dispatchConfig)) {
       return reply.code(503).send({ error: 'mining_remote_control_not_enabled' });
     }
     try {

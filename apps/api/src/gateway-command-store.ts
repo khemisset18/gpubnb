@@ -3,55 +3,68 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { DELIVERY_LIMITS, clampBatchSize, clampLeaseSeconds, validateDeliveryKey } from './reliable-delivery.js';
 import type { ClaimedMachineCommand } from './delivery-store.js';
 
-// Production fast path accepts direct Developer stop plus mining commands only
-// when their durable representation already contains an exact resource lease
-// whose resource/fence matches the inner Agent payload. The TypeScript dispatcher
-// performs the complete structural validation before sending anything.
+// Rental stop remains independently eligible. Mining joins the production fast
+// path only when the caller explicitly enables the separate mining rollout.
+const RENTAL_FAST_PATH_PREDICATE = Prisma.sql`(
+  command."commandType" = 'stop_rental'
+  AND command."payload" ->> 'workspaceSlug' = 'developer'
+)`;
+
+const MINING_FAST_PATH_PREDICATE = Prisma.sql`(
+  command."commandType" IN ('start_mining', 'stop_mining')
+  AND jsonb_typeof(command."payload" -> 'lease') = 'object'
+  AND jsonb_typeof(command."payload" -> 'payload') = 'object'
+  AND command."payload" -> 'lease' ->> 'resourceId'
+      = command."payload" -> 'payload' ->> 'resourceId'
+  AND command."payload" -> 'lease' ->> 'fencingToken'
+      = command."payload" -> 'payload' ->> 'runtimeGeneration'
+  AND COALESCE(command."payload" -> 'payload' ->> 'hardwareUuid', '') <> ''
+)`;
+
 const FAST_PATH_PREDICATE = Prisma.sql`(
-  (
-    command."commandType" = 'stop_rental'
-    AND command."payload" ->> 'workspaceSlug' = 'developer'
-  )
+  ${RENTAL_FAST_PATH_PREDICATE}
   OR
-  (
-    command."commandType" IN ('start_mining', 'stop_mining')
-    AND jsonb_typeof(command."payload" -> 'lease') = 'object'
-    AND jsonb_typeof(command."payload" -> 'payload') = 'object'
-    AND command."payload" -> 'lease' ->> 'resourceId'
-        = command."payload" -> 'payload' ->> 'resourceId'
-    AND command."payload" -> 'lease' ->> 'fencingToken'
-        = command."payload" -> 'payload' ->> 'runtimeGeneration'
-    AND COALESCE(command."payload" -> 'payload' ->> 'hardwareUuid', '') <> ''
-  )
+  ${MINING_FAST_PATH_PREDICATE}
+)`;
+
+const PRIOR_RENTAL_FAST_PATH_PREDICATE = Prisma.sql`(
+  prior."commandType" = 'stop_rental'
+  AND prior."payload" ->> 'workspaceSlug' = 'developer'
+)`;
+
+const PRIOR_MINING_FAST_PATH_PREDICATE = Prisma.sql`(
+  prior."commandType" IN ('start_mining', 'stop_mining')
+  AND jsonb_typeof(prior."payload" -> 'lease') = 'object'
+  AND jsonb_typeof(prior."payload" -> 'payload') = 'object'
+  AND prior."payload" -> 'lease' ->> 'resourceId'
+      = prior."payload" -> 'payload' ->> 'resourceId'
+  AND prior."payload" -> 'lease' ->> 'fencingToken'
+      = prior."payload" -> 'payload' ->> 'runtimeGeneration'
+  AND COALESCE(prior."payload" -> 'payload' ->> 'hardwareUuid', '') <> ''
 )`;
 
 const PRIOR_FAST_PATH_PREDICATE = Prisma.sql`(
-  (
-    prior."commandType" = 'stop_rental'
-    AND prior."payload" ->> 'workspaceSlug' = 'developer'
-  )
+  ${PRIOR_RENTAL_FAST_PATH_PREDICATE}
   OR
-  (
-    prior."commandType" IN ('start_mining', 'stop_mining')
-    AND jsonb_typeof(prior."payload" -> 'lease') = 'object'
-    AND jsonb_typeof(prior."payload" -> 'payload') = 'object'
-    AND prior."payload" -> 'lease' ->> 'resourceId'
-        = prior."payload" -> 'payload' ->> 'resourceId'
-    AND prior."payload" -> 'lease' ->> 'fencingToken'
-        = prior."payload" -> 'payload' ->> 'runtimeGeneration'
-    AND COALESCE(prior."payload" -> 'payload' ->> 'hardwareUuid', '') <> ''
-  )
+  ${PRIOR_MINING_FAST_PATH_PREDICATE}
 )`;
 
-const NO_PRIOR_ACTIVE_FAST_PATH = Prisma.sql`NOT EXISTS (
-  SELECT 1
-    FROM "MachineCommand" prior
-   WHERE prior."machineId" = command."machineId"
-     AND prior."sequence" < command."sequence"
-     AND ${PRIOR_FAST_PATH_PREDICATE}
-     AND prior."status" IN ('PENDING', 'LEASED')
-     AND prior."expiresAt" > CURRENT_TIMESTAMP
-)`;
+function fastPathPredicate(allowMining: boolean) {
+  return allowMining ? FAST_PATH_PREDICATE : RENTAL_FAST_PATH_PREDICATE;
+}
+
+function noPriorActiveFastPath(allowMining: boolean) {
+  const priorPredicate = allowMining ? PRIOR_FAST_PATH_PREDICATE : PRIOR_RENTAL_FAST_PATH_PREDICATE;
+  return Prisma.sql`NOT EXISTS (
+    SELECT 1
+      FROM "MachineCommand" prior
+     WHERE prior."machineId" = command."machineId"
+       AND prior."sequence" < command."sequence"
+       AND ${priorPredicate}
+       AND prior."status" IN ('PENDING', 'LEASED')
+       AND prior."expiresAt" > CURRENT_TIMESTAMP
+  )`;
+}
 
 export function productionGatewayCommandEligible(
   commandType: string,
@@ -76,14 +89,17 @@ export function productionGatewayCommandEligible(
 export async function gatewayCommandMachineIds(
   db: PrismaClient,
   requestedLimit = DELIVERY_LIMITS.machineCommandBatch,
+  allowMining = true,
 ): Promise<string[]> {
   const limit = clampBatchSize(requestedLimit, DELIVERY_LIMITS.machineCommandBatch);
+  const predicate = fastPathPredicate(allowMining);
+  const ordering = noPriorActiveFastPath(allowMining);
   const rows = await db.$queryRaw<Array<{ machineId: string }>>(Prisma.sql`
     SELECT DISTINCT command."machineId"
       FROM "MachineCommand" command
-     WHERE ${FAST_PATH_PREDICATE}
+     WHERE ${predicate}
        AND command."expiresAt" > CURRENT_TIMESTAMP
-       AND ${NO_PRIOR_ACTIVE_FAST_PATH}
+       AND ${ordering}
        AND (
          (command."status" = 'PENDING' AND command."availableAt" <= CURRENT_TIMESTAMP)
          OR (command."status" = 'LEASED' AND command."leaseExpiresAt" <= CURRENT_TIMESTAMP)
@@ -100,18 +116,21 @@ export async function claimGatewayMachineCommands(
   workerId: string,
   requestedBatch = 16,
   requestedLeaseSeconds = 15,
+  allowMining = true,
 ): Promise<ClaimedMachineCommand[]> {
   validateDeliveryKey(machineId, 'command_machine_id');
   validateDeliveryKey(workerId, 'worker_id');
   const batch = clampBatchSize(requestedBatch, DELIVERY_LIMITS.machineCommandBatch);
   const lease = clampLeaseSeconds(requestedLeaseSeconds, DELIVERY_LIMITS.maxCommandLeaseSeconds);
+  const predicate = fastPathPredicate(allowMining);
+  const ordering = noPriorActiveFastPath(allowMining);
   return db.$queryRaw<ClaimedMachineCommand[]>(Prisma.sql`
     WITH expired AS (
       UPDATE "MachineCommand" command
          SET "status" = 'EXPIRED', "lastError" = 'command_expired',
              "leaseOwner" = NULL, "leaseExpiresAt" = NULL
        WHERE command."machineId" = ${machineId}
-         AND ${FAST_PATH_PREDICATE}
+         AND ${predicate}
          AND command."status" IN ('PENDING', 'LEASED')
          AND command."expiresAt" <= CURRENT_TIMESTAMP
       RETURNING command."id"
@@ -119,9 +138,9 @@ export async function claimGatewayMachineCommands(
       SELECT command."id"
         FROM "MachineCommand" command
        WHERE command."machineId" = ${machineId}
-         AND ${FAST_PATH_PREDICATE}
+         AND ${predicate}
          AND command."expiresAt" > CURRENT_TIMESTAMP
-         AND ${NO_PRIOR_ACTIVE_FAST_PATH}
+         AND ${ordering}
          AND (
            (command."status" = 'PENDING' AND command."availableAt" <= CURRENT_TIMESTAMP)
            OR (command."status" = 'LEASED' AND command."leaseExpiresAt" <= CURRENT_TIMESTAMP)

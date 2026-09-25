@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
 import { requestSystemMiningAutoResume } from './mining-command-service.js';
-import { commandDispatchConfigFromEnv, commandGatewayAssigned } from './control-command-dispatch.js';
+import { commandDispatchConfigFromEnv, miningCommandGatewayAssigned } from './control-command-dispatch.js';
 import {
   buildRentalResourceAuthority,
   releaseRentalResourceAuthority,
@@ -113,7 +113,7 @@ export function registerRentalResourceAuthorityRoutes(
       };
       let remoteControlEnabled = false;
       try {
-        remoteControlEnabled = commandGatewayAssigned(machineId, commandDispatchConfigFromEnv());
+        remoteControlEnabled = miningCommandGatewayAssigned(machineId, commandDispatchConfigFromEnv());
       } catch {
         remoteControlEnabled = false;
       }

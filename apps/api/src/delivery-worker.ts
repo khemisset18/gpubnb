@@ -17,6 +17,7 @@ import {
 import {
   commandDispatchConfigFromEnv,
   commandGatewayAssigned,
+  miningCommandGatewayAssigned,
   dispatchToGateway,
   readTerminalGatewayAck,
   type CommandDispatchConfig,
@@ -158,6 +159,7 @@ async function main(): Promise<void> {
       message: 'delivery_worker_started',
       workerId,
       machineCommandGatewayRolloutBps: dispatchConfig.rolloutBps,
+      miningCommandGatewayRolloutBps: dispatchConfig.miningRolloutBps,
     }));
 
     while (!stopping) {
@@ -202,10 +204,11 @@ async function main(): Promise<void> {
 
       let claimedCommands = 0;
       if (dispatchConfig.rolloutBps > 0) {
-        const machineIds = await gatewayCommandMachineIds(db, 100);
+        const machineIds = await gatewayCommandMachineIds(db, 100, dispatchConfig.miningRolloutBps > 0);
         for (const machineId of machineIds) {
           if (!commandGatewayAssigned(machineId, dispatchConfig)) continue;
-          const commands = await claimGatewayMachineCommands(db, machineId, workerId, 16, 15);
+          const allowMining = miningCommandGatewayAssigned(machineId, dispatchConfig);
+          const commands = await claimGatewayMachineCommands(db, machineId, workerId, 16, 15, allowMining);
           claimedCommands += commands.length;
           inFlight += commands.length;
           await runBounded(commands, Math.min(MAX_IN_FLIGHT, 8), async (command) => {
@@ -280,6 +283,7 @@ async function main(): Promise<void> {
             level: 'info', message: 'delivery_worker_health', workerId,
             published, failed, leaseLost, commandDispatched, commandAcknowledged, commandTerminalFailed,
             machineCommandGatewayRolloutBps: dispatchConfig.rolloutBps,
+            miningCommandGatewayRolloutBps: dispatchConfig.miningRolloutBps,
             backlog: Object.fromEntries(Object.entries(backlog).map(([key, value]) => [key, value.toString()])),
           }));
           lastHealthAt = now;

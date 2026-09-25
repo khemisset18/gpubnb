@@ -6,6 +6,7 @@ import {
   commandAckKey,
   commandDispatchConfigFromEnv,
   commandGatewayAssigned,
+  miningCommandGatewayAssigned,
   commandKindForDurableType,
   controlEnvelope,
   dispatchToGateway,
@@ -41,8 +42,10 @@ const command = (overrides: Partial<ClaimedMachineCommand> = {}): ClaimedMachine
 test('gateway command rollout is fail closed by default', () => {
   const config = commandDispatchConfigFromEnv({});
   assert.equal(config.rolloutBps, 0);
+  assert.equal(config.miningRolloutBps, 0);
   assert.equal(config.agentControlRolloutBps, 0);
   assert.equal(commandGatewayAssigned('machine_00000001', config), false);
+  assert.equal(miningCommandGatewayAssigned('machine_00000001', config), false);
 });
 
 test('command rollout must be nested inside Agent QUIC rollout', () => {
@@ -53,6 +56,35 @@ test('command rollout must be nested inside Agent QUIC rollout', () => {
     }),
     /machine_command_rollout_exceeds_agent_control_rollout/,
   );
+});
+
+test('mining rollout is independently dark and must stay inside MachineCommand rollout', () => {
+  assert.throws(
+    () => commandDispatchConfigFromEnv({
+      MINING_COMMAND_GATEWAY_ROLLOUT_BPS: '1000',
+      MACHINE_COMMAND_GATEWAY_ROLLOUT_BPS: '100',
+      AGENT_CONTROL_CHANNEL_ROLLOUT_BPS: '1000',
+    }),
+    /mining_command_rollout_exceeds_machine_command_rollout/,
+  );
+
+  const rentalOnly = commandDispatchConfigFromEnv({
+    MACHINE_COMMAND_GATEWAY_ROLLOUT_BPS: '10000',
+    AGENT_CONTROL_CHANNEL_ROLLOUT_BPS: '10000',
+    CONTROL_GATEWAY_ADMIN_URL: 'http://control-gateway.internal:9090',
+    CONTROL_GATEWAY_INTERNAL_TOKEN: 'x'.repeat(48),
+  });
+  assert.equal(commandGatewayAssigned('machine_00000001', rentalOnly), true);
+  assert.equal(miningCommandGatewayAssigned('machine_00000001', rentalOnly), false);
+
+  const miningEnabled = commandDispatchConfigFromEnv({
+    MINING_COMMAND_GATEWAY_ROLLOUT_BPS: '10000',
+    MACHINE_COMMAND_GATEWAY_ROLLOUT_BPS: '10000',
+    AGENT_CONTROL_CHANNEL_ROLLOUT_BPS: '10000',
+    CONTROL_GATEWAY_ADMIN_URL: 'http://control-gateway.internal:9090',
+    CONTROL_GATEWAY_INTERNAL_TOKEN: 'x'.repeat(48),
+  });
+  assert.equal(miningCommandGatewayAssigned('machine_00000001', miningEnabled), true);
 });
 
 test('non-zero rollout requires private gateway coordinates and a strong token', () => {
@@ -87,10 +119,43 @@ test('protocol understands mining kinds while unfenced production mining is reje
         adminUrl: 'http://control-gateway.internal:9090',
         internalToken: 'x'.repeat(48),
         rolloutBps: 10_000,
+        miningRolloutBps: 10_000,
         agentControlRolloutBps: 10_000,
       },
     ),
     /mining_command_durable_payload_invalid/,
+  );
+});
+
+
+test('fenced mining dispatch remains dark when only the rental MachineCommand rollout is enabled', async () => {
+  await assert.rejects(
+    dispatchToGateway(
+      command({
+        commandType: 'stop_mining',
+        payload: {
+          lease: {
+            resourceId: 'resource_00000001',
+            holderId: 'mining_resource_00000001',
+            leaseId: 'lease_000000001',
+            fencingToken: '17',
+          },
+          payload: {
+            resourceId: 'resource_00000001',
+            hardwareUuid: 'GPU-aaaaaaaa',
+            runtimeGeneration: '17',
+          },
+        },
+      }),
+      {
+        adminUrl: 'http://control-gateway.internal:9090',
+        internalToken: 'x'.repeat(48),
+        rolloutBps: 10_000,
+        miningRolloutBps: 0,
+        agentControlRolloutBps: 10_000,
+      },
+    ),
+    /mining_command_rollout_not_enabled/,
   );
 });
 

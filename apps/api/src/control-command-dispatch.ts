@@ -78,6 +78,7 @@ export type CommandDispatchConfig = {
   adminUrl?: string | undefined;
   internalToken?: string | undefined;
   rolloutBps: number;
+  miningRolloutBps: number;
   agentControlRolloutBps: number;
 };
 
@@ -96,9 +97,13 @@ function parseRolloutBps(value: string | undefined, error: string): number {
 
 export function commandDispatchConfigFromEnv(env: NodeJS.ProcessEnv = process.env): CommandDispatchConfig {
   const rolloutBps = parseRolloutBps(env.MACHINE_COMMAND_GATEWAY_ROLLOUT_BPS, 'machine_command_rollout_bps_invalid');
+  const miningRolloutBps = parseRolloutBps(env.MINING_COMMAND_GATEWAY_ROLLOUT_BPS, 'mining_command_rollout_bps_invalid');
   const agentControlRolloutBps = parseRolloutBps(env.AGENT_CONTROL_CHANNEL_ROLLOUT_BPS, 'agent_control_rollout_bps_invalid');
   if (rolloutBps > agentControlRolloutBps) {
     throw new Error('machine_command_rollout_exceeds_agent_control_rollout');
+  }
+  if (miningRolloutBps > rolloutBps) {
+    throw new Error('mining_command_rollout_exceeds_machine_command_rollout');
   }
   const adminUrl = env.CONTROL_GATEWAY_ADMIN_URL?.trim() || undefined;
   const internalToken = env.CONTROL_GATEWAY_INTERNAL_TOKEN?.trim() || undefined;
@@ -116,7 +121,7 @@ export function commandDispatchConfigFromEnv(env: NodeJS.ProcessEnv = process.en
       throw new Error('control_gateway_admin_url_invalid');
     }
   }
-  return { adminUrl, internalToken, rolloutBps, agentControlRolloutBps };
+  return { adminUrl, internalToken, rolloutBps, miningRolloutBps, agentControlRolloutBps };
 }
 
 export function commandGatewayAssigned(machineId: string, config: CommandDispatchConfig): boolean {
@@ -125,6 +130,13 @@ export function commandGatewayAssigned(machineId: string, config: CommandDispatc
     && config.rolloutBps > 0
     && bucket < config.rolloutBps
     && bucket < config.agentControlRolloutBps;
+}
+
+export function miningCommandGatewayAssigned(machineId: string, config: CommandDispatchConfig): boolean {
+  const bucket = controlChannelBucket(machineId);
+  return commandGatewayAssigned(machineId, config)
+    && config.miningRolloutBps > 0
+    && bucket < config.miningRolloutBps;
 }
 
 export function commandKindForDurableType(commandType: string): GatewayCommandKind | undefined {
@@ -223,6 +235,9 @@ export async function dispatchToGateway(
       throw new Error('machine_command_not_production_fast_path');
     }
   } else {
+    if (!miningCommandGatewayAssigned(command.machineId, config)) {
+      throw new Error('mining_command_rollout_not_enabled');
+    }
     // Parsing here is intentional defense in depth. The SQL fast-path filter is
     // coarse; only a structurally fenced mining command may reach the Gateway.
     miningGatewayParts(kind, command.payload);
