@@ -216,6 +216,22 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         self.assertEqual(log_path.parent.name, "mining-logs")
         self.assertNotIn("resource_00000001", log_path.name)
 
+    def test_tls_verification_failure_blocks_resource_spawn(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        payload["poolUrl"] = "stratum+tls://1.1.1.1:4444"
+        with patch(
+            "gpubnb_agent.gpu_resource_supervisor._verify_pool_tls",
+            side_effect=ExecutionControlError("mining_pool_tls_verification_failed"),
+        ) as verify:
+            with self.assertRaisesRegex(
+                ExecutionControlError,
+                "mining_pool_tls_verification_failed",
+            ):
+                self.supervisor.start(payload, "command_00000001")
+        verify.assert_called_once_with("stratum+tls://1.1.1.1:4444", ("1.1.1.1",))
+        self.assertEqual(self.launcher.calls, [])
+        self.assertEqual(self.supervisor.snapshot(), {})
+
     def test_lolminer_pool_arguments_strip_stratum_scheme_and_set_tls(self) -> None:
         self.assertEqual(
             _lolminer_pool_arguments("stratum+tcp://1.1.1.1:4444"),
