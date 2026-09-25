@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { finalizeMiningTerminalAck } from '../src/mining-command-finalizer.js';
+import {
+  finalizeMiningTerminalAck,
+  reconcileUncertainMiningDelivery,
+} from '../src/mining-command-finalizer.js';
 
 const command = (commandType: 'start_mining' | 'stop_mining') => ({
   id: `command_${commandType}_0001`,
@@ -43,6 +46,44 @@ function fakeDb(runtimeState: string, activeRentalId: string | null = null, hard
   };
   const db = { $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx) } as any;
   return { db, transitions, writes };
+}
+
+
+function fakeReconciliationDb(
+  row: any,
+  runtimeState: string,
+  activeRentalId: string | null = null,
+  hardwareUuid = 'GPU-aaaaaaaa',
+) {
+  const transitions: any[] = [];
+  const writes: any[] = [];
+  let discoveryQueries = 0;
+  const tx = {
+    $queryRaw: async () => [{ runtimeState, activeRentalId, hardwareUuid }],
+    $executeRaw: async (query: any) => { writes.push(query); return 1; },
+    miningResource: {
+      updateMany: async (args: any) => { transitions.push(args); return { count: 1 }; },
+    },
+  };
+  const db = {
+    $queryRaw: async () => {
+      discoveryQueries += 1;
+      return [row];
+    },
+    $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+  } as any;
+  return { db, transitions, writes, discoveryQueries: () => discoveryQueries };
+}
+
+function uncertainCommand(
+  commandType: 'start_mining' | 'stop_mining',
+  status: 'PENDING' | 'LEASED' | 'DEAD' | 'EXPIRED' = 'DEAD',
+) {
+  return {
+    ...command(commandType),
+    status,
+    expiresAt: new Date(Date.now() - 60_000),
+  };
 }
 
 function fakeRedis() {
@@ -153,4 +194,61 @@ test('terminal ACK rejects a fence mismatch before touching DB or Redis', async 
   );
   assert.equal(transactions, 0);
   assert.equal(releases(), 0);
+});
+
+test('DEAD START without terminal ACK quarantines instead of assuming STOPPED or MINING', async () => {
+  const row = uncertainCommand('start_mining', 'DEAD');
+  const { db, transitions, writes, discoveryQueries } = fakeReconciliationDb(row, 'STARTING');
+  const result = await reconcileUncertainMiningDelivery(db, new Date());
+
+  assert.deepEqual(result, { scanned: 1, updated: 1, stale: 0 });
+  assert.equal(discoveryQueries(), 1);
+  assert.equal(transitions.length, 1);
+  assert.equal(transitions[0].where.runtimeState, 'STARTING');
+  assert.equal(transitions[0].where.activeRentalId, null);
+  assert.equal(transitions[0].data.runtimeState, 'QUARANTINED');
+  assert.equal(transitions[0].data.quarantined, true);
+  assert.equal(writes.length, 3);
+});
+
+test('expired STOP without terminal ACK quarantines VERIFYING_STOP and terminalizes the command', async () => {
+  const row = uncertainCommand('stop_mining', 'LEASED');
+  const { db, transitions, writes } = fakeReconciliationDb(row, 'VERIFYING_STOP');
+  const result = await reconcileUncertainMiningDelivery(db, new Date());
+
+  assert.deepEqual(result, { scanned: 1, updated: 1, stale: 0 });
+  assert.equal(transitions.length, 1);
+  assert.equal(transitions[0].where.runtimeState, 'VERIFYING_STOP');
+  assert.equal(transitions[0].data.runtimeState, 'QUARANTINED');
+  assert.equal(writes.length, 3);
+});
+
+test('uncertain mining delivery cannot overwrite a rental-owned resource', async () => {
+  const row = uncertainCommand('start_mining', 'EXPIRED');
+  const { db, transitions, writes } = fakeReconciliationDb(
+    row,
+    'STARTING',
+    'session_00000001',
+  );
+  const result = await reconcileUncertainMiningDelivery(db, new Date());
+
+  assert.deepEqual(result, { scanned: 1, updated: 0, stale: 1 });
+  assert.equal(transitions.length, 0);
+  assert.equal(writes.length, 0);
+});
+
+test('uncertain mining delivery rejects changed GPU hardware identity before lifecycle mutation', async () => {
+  const row = uncertainCommand('stop_mining', 'DEAD');
+  const { db, transitions, writes } = fakeReconciliationDb(
+    row,
+    'VERIFYING_STOP',
+    null,
+    'GPU-bbbbbbbb',
+  );
+  await assert.rejects(
+    reconcileUncertainMiningDelivery(db, new Date()),
+    /mining_terminal_hardware_identity_conflict/,
+  );
+  assert.equal(transitions.length, 0);
+  assert.equal(writes.length, 0);
 });
