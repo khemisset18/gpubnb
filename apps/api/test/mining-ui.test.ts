@@ -57,3 +57,23 @@ test('mining UI exposes only the currently executable operational scope', async 
   assert.doesNotMatch(script, /name="gpuIntensityPercent"/);
   assert.match(script, /secret:\/\/local\/mining\/pool-main/);
 });
+
+
+test('mining runtime controls call owner start-stop endpoints without browser-supplied runtime payloads', async () => {
+  const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
+  assert.match(script, /data-start-mining/);
+  assert.match(script, /data-stop-mining/);
+  assert.match(script, /mining-resources\/\$\{encodeURIComponent\(form\.dataset\.resourceId\)\}\/\$\{action\}/);
+  assert.match(script, /\{method:'POST'\}/);
+  const runtimeActionStart = script.indexOf('async function requestRuntimeAction');
+  const runtimeActionEnd = script.indexOf('async function saveConfiguration', runtimeActionStart);
+  const runtimeAction = script.slice(runtimeActionStart, runtimeActionEnd);
+  assert.doesNotMatch(runtimeAction, /ownerPoolEndpoint|walletAddress|hardwareUuid|runtimeGeneration|fencingToken|maximumTemperatureC|maximumPowerWatts/);
+});
+
+test('mining runtime buttons fail closed during rental quarantine and transitional states', async () => {
+  const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
+  assert.match(script, /\['STARTING','VERIFYING_STOP','PREEMPTING'\]/);
+  assert.match(script, /!resourceLocked\(resource\)/);
+  assert.match(script, /resource\.runtimeState==='MINING'/);
+});
