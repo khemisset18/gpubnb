@@ -61,6 +61,14 @@ export const miningConfigurationInputSchema = z
     expectedVersion: z.number().int().nonnegative(),
   })
   .superRefine((value, context) => {
+    if (value.gpuIntensityPercent !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['gpuIntensityPercent'],
+        message: 'gpu_intensity_not_supported',
+      });
+    }
+
     if (value.resourceKind === 'CPU') {
       if (!value.cpuThreadLimit) {
         context.addIssue({
@@ -74,13 +82,6 @@ export const miningConfigurationInputSchema = z
           code: z.ZodIssueCode.custom,
           path: ['cpuUtilizationLimitPercent'],
           message: 'cpu_utilization_limit_required',
-        });
-      }
-      if (value.gpuIntensityPercent !== undefined) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['gpuIntensityPercent'],
-          message: 'cpu_resource_rejects_gpu_intensity',
         });
       }
     }
