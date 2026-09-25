@@ -44,12 +44,12 @@ function fakeDb(row = resource()) {
   return { db: db as any, writes };
 }
 
-function fakeRedis(existingLease: Record<string, string> | null = null) {
+function fakeRedis(existingLease: Record<string, string> | null = null, acquiredFence = '17') {
   let evalCalls = 0;
   const redis = {
     eval: async (_script: string, numberOfKeys: number, ..._args: unknown[]) => {
       evalCalls += 1;
-      if (numberOfKeys === 2) return [1, 'lease_000000001', '17', 300000];
+      if (numberOfKeys === 2) return [1, 'lease_000000001', acquiredFence, 300000];
       return [1, '300000'];
     },
     hgetall: async () => existingLease ? { ...existingLease } : {},
@@ -75,6 +75,29 @@ test('owner start creates one fenced durable command from stored exact-GPU confi
   assert.match(result.commandId, /^cmd_[a-f0-9]{32}$/);
   assert.equal(result.alreadySatisfied, false);
   assert.equal(writes.length, 4);
+});
+
+test('a new fencing generation produces a new durable START identity while the same fence is deterministic', async () => {
+  const first = await requestMiningStart(fakeDb().db, fakeRedis(null, '17').redis, {
+    machineId: 'machine_00000001',
+    resourceId: 'resource_00000001',
+    ownerId: 'owner_00000001',
+  });
+  const replayFence = await requestMiningStart(fakeDb().db, fakeRedis(null, '17').redis, {
+    machineId: 'machine_00000001',
+    resourceId: 'resource_00000001',
+    ownerId: 'owner_00000001',
+  });
+  const newerFence = await requestMiningStart(fakeDb().db, fakeRedis(null, '18').redis, {
+    machineId: 'machine_00000001',
+    resourceId: 'resource_00000001',
+    ownerId: 'owner_00000001',
+  });
+
+  assert.equal(first.commandId, replayFence.commandId);
+  assert.notEqual(first.commandId, newerFence.commandId);
+  assert.equal(first.lease?.fencingToken, '17');
+  assert.equal(newerFence.lease?.fencingToken, '18');
 });
 
 test('start fails closed for an unqualified GPU vendor before durable command creation', async () => {
