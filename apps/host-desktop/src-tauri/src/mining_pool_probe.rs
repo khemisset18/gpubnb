@@ -221,19 +221,23 @@ fn resolve_addresses(endpoint: &MiningPoolEndpoint) -> Result<Vec<SocketAddr>, &
 #[cfg(test)]
 mod tests {
     use super::*;
-    use native_tls::{Certificate as NativeCertificate, Identity, TlsAcceptor};
+    use native_tls::Certificate as NativeCertificate;
     use rcgen::{
         date_time_ymd, BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, Issuer,
         KeyPair, KeyUsagePurpose,
     };
+    use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
+    use rustls::{ServerConfig, ServerConnection, StreamOwned};
+    use std::io::Read;
     use std::net::TcpListener;
+    use std::sync::Arc;
     use std::thread;
 
-    fn test_identity(
+    fn test_server_config(
         hostname: &str,
         not_before: (i32, u8, u8),
         not_after: (i32, u8, u8),
-    ) -> (Identity, NativeCertificate) {
+    ) -> (Arc<ServerConfig>, NativeCertificate) {
         let mut ca_params =
             CertificateParams::new(Vec::<String>::new()).expect("empty CA SAN is valid");
         ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
@@ -256,25 +260,28 @@ mod tests {
             .signed_by(&leaf_key, &issuer)
             .expect("sign leaf with test CA");
 
-        let identity = Identity::from_pkcs8(
-            leaf_cert.pem().as_bytes(),
-            leaf_key.serialize_pem().as_bytes(),
-        )
-        .expect("native TLS accepts generated PKCS#8 identity");
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let private_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(leaf_key.serialize_der()));
+        let server = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![leaf_cert.der().clone()], private_key)
+            .expect("build portable Rustls test server");
         let root = NativeCertificate::from_der(ca_cert.der().as_ref())
             .expect("native TLS accepts generated CA");
-        (identity, root)
+        (Arc::new(server), root)
     }
 
-    fn spawn_tls_server(identity: Identity) -> (SocketAddr, thread::JoinHandle<()>) {
+    fn spawn_tls_server(config: Arc<ServerConfig>) -> (SocketAddr, thread::JoinHandle<()>) {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind TLS test server");
         let address = listener.local_addr().expect("TLS test server address");
-        let acceptor = TlsAcceptor::new(identity).expect("build TLS test acceptor");
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().expect("accept TLS test client");
             let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
             let _ = stream.set_write_timeout(Some(Duration::from_secs(3)));
-            let _ = acceptor.accept(stream);
+            let connection = ServerConnection::new(config).expect("create TLS server connection");
+            let mut tls = StreamOwned::new(connection, stream);
+            let mut byte = [0_u8; 1];
+            let _ = tls.read(&mut byte);
         });
         (address, handle)
     }
@@ -329,18 +336,23 @@ mod tests {
     fn native_tls_connector_is_available_with_secure_policy() {
         tls_connector().expect("native TLS connector must initialize on supported Host platforms");
         let source = include_str!("mining_pool_probe.rs");
-        assert!(source.contains(".danger_accept_invalid_certs(false)"));
-        assert!(source.contains(".danger_accept_invalid_hostnames(false)"));
-        assert!(source.contains(".use_sni(true)"));
-        assert!(source.contains(".min_protocol_version(Some(Protocol::Tlsv12))"));
-        assert!(!source.contains(".danger_accept_invalid_certs(true)"));
-        assert!(!source.contains(".danger_accept_invalid_hostnames(true)"));
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production source precedes tests");
+        assert!(production.contains(".danger_accept_invalid_certs(false)"));
+        assert!(production.contains(".danger_accept_invalid_hostnames(false)"));
+        assert!(production.contains(".use_sni(true)"));
+        assert!(production.contains(".min_protocol_version(Some(Protocol::Tlsv12))"));
+        assert!(!production.contains(".danger_accept_invalid_certs(true)"));
+        assert!(!production.contains(".danger_accept_invalid_hostnames(true)"));
     }
 
     #[test]
     fn trusted_valid_certificate_and_hostname_complete_tls() {
-        let (identity, root) = test_identity("pool.test", (2025, 1, 1), (2035, 1, 1));
-        let (address, server) = spawn_tls_server(identity);
+        let (server_config, root) =
+            test_server_config("pool.test", (2025, 1, 1), (2035, 1, 1));
+        let (address, server) = spawn_tls_server(server_config);
         let connector = connector_with_test_root(root);
         let endpoint = local_endpoint("pool.test", address.port());
 
@@ -353,8 +365,9 @@ mod tests {
 
     #[test]
     fn hostname_mismatch_is_rejected() {
-        let (identity, root) = test_identity("pool.test", (2025, 1, 1), (2035, 1, 1));
-        let (address, server) = spawn_tls_server(identity);
+        let (server_config, root) =
+            test_server_config("pool.test", (2025, 1, 1), (2035, 1, 1));
+        let (address, server) = spawn_tls_server(server_config);
         let connector = connector_with_test_root(root);
         let endpoint = local_endpoint("wrong.test", address.port());
 
@@ -367,8 +380,9 @@ mod tests {
 
     #[test]
     fn untrusted_certificate_is_rejected() {
-        let (identity, _root) = test_identity("pool.test", (2025, 1, 1), (2035, 1, 1));
-        let (address, server) = spawn_tls_server(identity);
+        let (server_config, _root) =
+            test_server_config("pool.test", (2025, 1, 1), (2035, 1, 1));
+        let (address, server) = spawn_tls_server(server_config);
         let connector = tls_connector().expect("build system-root TLS connector");
         let endpoint = local_endpoint("pool.test", address.port());
 
@@ -381,8 +395,9 @@ mod tests {
 
     #[test]
     fn expired_certificate_is_rejected() {
-        let (identity, root) = test_identity("pool.test", (2018, 1, 1), (2019, 1, 1));
-        let (address, server) = spawn_tls_server(identity);
+        let (server_config, root) =
+            test_server_config("pool.test", (2018, 1, 1), (2019, 1, 1));
+        let (address, server) = spawn_tls_server(server_config);
         let connector = connector_with_test_root(root);
         let endpoint = local_endpoint("pool.test", address.port());
 
