@@ -33,7 +33,9 @@ const agentRuntimeEventBase = {
   idempotencyKey: z.string().min(16).max(160),
   agentCounter: z.coerce.bigint().positive(),
   occurredAt: z.string().datetime(),
-  payload: z.record(z.string(), z.unknown()).optional(),
+  payload: z.object({
+    detailCode: z.string().min(1).max(96).regex(/^[A-Za-z0-9_.:-]+$/).optional(),
+  }).strict().optional(),
 };
 
 const runtimeEventSchema = z.discriminatedUnion('eventType', [
