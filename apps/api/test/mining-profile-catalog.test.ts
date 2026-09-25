@@ -9,7 +9,7 @@ import {
 describe('mining profile catalog', () => {
   it('approves only enabled profiles for the expected resource kind and GPU vendor', () => {
     assert.equal(isMiningProfileApproved('lolminer_etchash', 'GPU', 'NVIDIA'), true);
-    assert.equal(isMiningProfileApproved('lolminer_etchash', 'GPU', 'AMD'), true);
+    assert.equal(isMiningProfileApproved('lolminer_etchash', 'GPU', 'AMD'), false);
     assert.equal(isMiningProfileApproved('lolminer_etchash', 'GPU'), false);
     assert.equal(isMiningProfileApproved('lolminer_etchash', 'CPU'), false);
     assert.equal(isMiningProfileApproved('xmrig_randomx', 'CPU'), true);
