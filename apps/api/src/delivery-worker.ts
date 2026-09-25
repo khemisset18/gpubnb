@@ -26,7 +26,10 @@ import { claimGatewayMachineCommands, gatewayCommandMachineIds } from './gateway
 import { validateDeliveryKey } from './reliable-delivery.js';
 import { reconcileDevelopmentBookingsScheduled } from './development-booking-scheduler.js';
 import { finalizeVerifiedDeveloperStop } from './workspace-stop-finalizer.js';
-import { finalizeMiningTerminalAck } from './mining-command-finalizer.js';
+import {
+  finalizeMiningTerminalAck,
+  reconcileTerminalMiningCommands,
+} from './mining-command-finalizer.js';
 
 const POLL_INTERVAL_MS = 250;
 const HEALTH_INTERVAL_MS = 15_000;
@@ -174,6 +177,23 @@ async function main(): Promise<void> {
           console.error(JSON.stringify({
             level: 'error',
             message: 'gpu_booking_reconcile_failed',
+            error: error instanceof Error ? error.message.slice(0, 300) : 'unknown_error',
+          }));
+        }
+        try {
+          const terminalMining = await reconcileTerminalMiningCommands(db, 32);
+          if (terminalMining.quarantined > 0 || terminalMining.superseded > 0) {
+            console.warn(JSON.stringify({
+              level: 'warn',
+              message: 'mining_terminal_delivery_reconciled',
+              ...terminalMining,
+            }));
+          }
+        } catch (error) {
+          failed += 1;
+          console.error(JSON.stringify({
+            level: 'error',
+            message: 'mining_terminal_delivery_reconcile_failed',
             error: error instanceof Error ? error.message.slice(0, 300) : 'unknown_error',
           }));
         }
