@@ -109,7 +109,60 @@ function selectedSession(status = WorkspaceSessionStatus.READY) {
   };
 }
 
-function databaseWithSessions(sessions: unknown[], releaseStatus = WorkspaceSessionStatus.STOPPING): PrismaClient {
+function databaseWithSessions(
+  sessions: unknown[],
+  releaseStatus = WorkspaceSessionStatus.STOPPING,
+  options: { initialState?: string; autoResumeAfterRental?: boolean } = {},
+): PrismaClient {
+  const states = new Map<string, {
+    runtimeState: string;
+    activeRentalId: string | null;
+    resumeAfterRentalPending: boolean;
+    autoResumeAfterRental: boolean;
+  }>();
+  for (const session of sessions as any[]) {
+    for (const allocation of session.booking?.acceleratorAllocations ?? []) {
+      const resourceId = allocation.accelerator?.miningResource?.id;
+      if (resourceId) states.set(resourceId, {
+        runtimeState: options.initialState ?? 'MINING',
+        activeRentalId: null,
+        resumeAfterRentalPending: false,
+        autoResumeAfterRental: options.autoResumeAfterRental ?? true,
+      });
+    }
+    for (const accelerator of session.booking?.listing?.machine?.accelerators ?? []) {
+      const resourceId = accelerator.miningResource?.id;
+      if (resourceId && !states.has(resourceId)) states.set(resourceId, {
+        runtimeState: options.initialState ?? 'MINING',
+        activeRentalId: null,
+        resumeAfterRentalPending: false,
+        autoResumeAfterRental: options.autoResumeAfterRental ?? true,
+      });
+    }
+  }
+  const tx = {
+    $queryRaw: async (query: any) => {
+      const resourceId = (query.values ?? []).find(
+        (value: unknown) => typeof value === 'string' && String(value).startsWith('resource_'),
+      );
+      const state = states.get(String(resourceId));
+      return state ? [{ ...state }] : [];
+    },
+    $executeRaw: async () => 1,
+    miningResource: {
+      update: async ({ where, data }: any) => {
+        const current = states.get(where.id) ?? {
+          runtimeState: 'STOPPED',
+          activeRentalId: null,
+          resumeAfterRentalPending: false,
+          autoResumeAfterRental: false,
+        };
+        const next = { ...current, ...data };
+        states.set(where.id, next);
+        return { id: where.id, ...next };
+      },
+    },
+  };
   return {
     workspaceSession: {
       findMany: async () => sessions,
@@ -119,6 +172,9 @@ function databaseWithSessions(sessions: unknown[], releaseStatus = WorkspaceSess
         expiresAt: new Date(Date.now() + 60_000),
       }),
     },
+    miningResource: tx.miningResource,
+    $transaction: async (callback: any) => callback(tx),
+    __runtimeStates: states,
   } as unknown as PrismaClient;
 }
 
@@ -238,7 +294,66 @@ describe('rental resource authority', () => {
       [lease],
     );
     assert.equal(released.released, 1);
+    assert.deepEqual(released.cleanupVerifiedResourceIds, ['resource_00000001']);
+    assert.deepEqual(released.autoResumeResourceIds, ['resource_00000001']);
     assert.equal(redis.leases.has('resource_00000001'), false);
+  });
+
+  it('arms auto-resume only when the GPU was actually mining before rental', async () => {
+    const redis = new FakeRedis();
+    const miningDb = databaseWithSessions([selectedSession()], WorkspaceSessionStatus.STOPPING, {
+      initialState: 'MINING',
+      autoResumeAfterRental: true,
+    });
+    await buildRentalResourceAuthority(miningDb, redis as unknown as Redis, 'machine_00000001');
+    const miningStates = (miningDb as any).__runtimeStates as Map<string, any>;
+    assert.equal(miningStates.get('resource_00000001').resumeAfterRentalPending, true);
+
+    const stoppedDb = databaseWithSessions([selectedSession()], WorkspaceSessionStatus.STOPPING, {
+      initialState: 'STOPPED',
+      autoResumeAfterRental: true,
+    });
+    await buildRentalResourceAuthority(stoppedDb, new FakeRedis() as unknown as Redis, 'machine_00000001');
+    const stoppedStates = (stoppedDb as any).__runtimeStates as Map<string, any>;
+    assert.equal(stoppedStates.get('resource_00000001').resumeAfterRentalPending, false);
+
+    const disabledDb = databaseWithSessions([selectedSession()], WorkspaceSessionStatus.STOPPING, {
+      initialState: 'MINING',
+      autoResumeAfterRental: false,
+    });
+    await buildRentalResourceAuthority(disabledDb, new FakeRedis() as unknown as Redis, 'machine_00000001');
+    const disabledStates = (disabledDb as any).__runtimeStates as Map<string, any>;
+    assert.equal(disabledStates.get('resource_00000001').resumeAfterRentalPending, false);
+  });
+
+  it('cleanup preserves armed resume intent for safe retry until a resume command consumes it', async () => {
+    const redis = new FakeRedis();
+    const db = databaseWithSessions([selectedSession()]);
+    const authority = await buildRentalResourceAuthority(db, redis as unknown as Redis, 'machine_00000001');
+    const lease = authority.sessions[0]!.resources[0]!.lease;
+    const first = await releaseRentalResourceAuthority(
+      db,
+      redis as unknown as Redis,
+      'machine_00000001',
+      'session_00000001',
+      [lease],
+    );
+    assert.deepEqual(first.autoResumeResourceIds, ['resource_00000001']);
+    const states = (db as any).__runtimeStates as Map<string, any>;
+    assert.equal(states.get('resource_00000001').runtimeState, 'STOPPED');
+    assert.equal(states.get('resource_00000001').activeRentalId, null);
+    assert.equal(states.get('resource_00000001').resumeAfterRentalPending, true);
+
+    const replay = await releaseRentalResourceAuthority(
+      db,
+      redis as unknown as Redis,
+      'machine_00000001',
+      'session_00000001',
+      [lease],
+    );
+    assert.deepEqual(replay.cleanupVerifiedResourceIds, []);
+    assert.deepEqual(replay.autoResumeResourceIds, ['resource_00000001']);
+    assert.equal(states.get('resource_00000001').runtimeState, 'STOPPED');
   });
 
   it('does not release a live READY rental lease', async () => {
