@@ -34,3 +34,28 @@ test('mining runtime retry is bounded and protected by the event idempotency key
   assert.match(body, /maxWait:5_000/);
   assert.match(body, /timeout:10_000/);
 });
+
+
+test('heartbeat telemetry cannot enter the runtime-event state transition authority', async () => {
+  const source = await readFile(new URL('../src/mining-routes.ts', import.meta.url), 'utf8');
+  const schemaStart = source.indexOf('const runtimeEventSchema = z.object({');
+  const schemaEnd = source.indexOf('type MiningResourceRow', schemaStart);
+  assert.ok(schemaStart >= 0 && schemaEnd > schemaStart);
+  const schema = source.slice(schemaStart, schemaEnd);
+  assert.doesNotMatch(schema, /'HEARTBEAT'/);
+
+  const routeStart = source.indexOf("app.post('/internal/mining/runtime-events'");
+  assert.ok(routeStart >= 0);
+  const route = source.slice(routeStart);
+  assert.match(route, /SET "runtimeState" = \$\{event\.stateAfter\}/);
+});
+
+test('signed heartbeat telemetry stays on the observation-only sync path', async () => {
+  const server = await readFile(new URL('../src/server.ts', import.meta.url), 'utf8');
+  assert.match(server, /syncMiningHeartbeatTelemetry\(tx,m\.id,b\.telemetry\.miningResources\)/);
+
+  const sync = await readFile(new URL('../src/mining-heartbeat-telemetry.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(sync, /"runtimeState"\s*=/);
+  assert.match(sync, /"lastTelemetry"/);
+  assert.match(sync, /"lastTelemetryAt"/);
+});
