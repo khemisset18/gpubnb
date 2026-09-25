@@ -12,6 +12,7 @@ import {
   platformFeeBasisPoints,
 } from './mining-config-policy.js';
 import { normalizeMiningGpuVendor } from './mining-profile-catalog.js';
+import { requestMiningStart, requestMiningStop } from './mining-command-service.js';
 import { registerRentalResourceAuthorityRoutes } from './rental-resource-routes.js';
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
 
@@ -218,6 +219,60 @@ export const registerMiningRoutes = (
     } catch (error) {
       const code = error instanceof Error ? error.message : 'mining_configuration_update_failed';
       const status = code.endsWith('_not_found') ? 404 : code.includes('owner_required') ? 403 : 409;
+      return reply.code(status).send({ error: code });
+    }
+  });
+
+  app.post('/machines/:machineId/mining-resources/:resourceId/start', async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const { machineId, resourceId } = resourceParamsSchema.parse(request.params);
+    try {
+      const result = await requestMiningStart(db, redis, {
+        machineId,
+        resourceId,
+        ownerId: session.userId,
+      });
+      return reply.code(202).send({
+        accepted: true,
+        commandId: result.commandId,
+        sequence: result.sequence.toString(),
+        resourceId,
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'mining_start_rejected';
+      const status = code === 'mining_resource_not_found'
+        ? 404
+        : code === 'mining_machine_owner_required'
+          ? 403
+          : 409;
+      return reply.code(status).send({ error: code });
+    }
+  });
+
+  app.post('/machines/:machineId/mining-resources/:resourceId/stop', async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    const { machineId, resourceId } = resourceParamsSchema.parse(request.params);
+    try {
+      const result = await requestMiningStop(db, redis, {
+        machineId,
+        resourceId,
+        ownerId: session.userId,
+      });
+      return reply.code(202).send({
+        accepted: true,
+        commandId: result.commandId,
+        sequence: result.sequence.toString(),
+        resourceId,
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'mining_stop_rejected';
+      const status = code === 'mining_resource_not_found'
+        ? 404
+        : code === 'mining_machine_owner_required'
+          ? 403
+          : 409;
       return reply.code(status).send({ error: code });
     }
   });
