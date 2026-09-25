@@ -88,7 +88,7 @@ export async function claimGatewayMachineCommands(
          AND command."expiresAt" <= CURRENT_TIMESTAMP
       RETURNING command."id"
     ), eligible AS MATERIALIZED (
-      SELECT command."id", command."sequence", command."status",
+      SELECT command."id", command."commandType", command."sequence", command."status",
              command."availableAt", command."leaseExpiresAt"
         FROM "MachineCommand" command
        WHERE command."machineId" = ${machineId}
@@ -107,6 +107,10 @@ export async function claimGatewayMachineCommands(
            SELECT 1
              FROM eligible earlier_command
             WHERE earlier_command."sequence" < current_command."sequence"
+              AND (
+                current_command."commandType" <> 'stop_rental'
+                OR earlier_command."commandType" = 'stop_rental'
+              )
          )
        ORDER BY current_command."sequence"
        LIMIT ${claimLimit}
