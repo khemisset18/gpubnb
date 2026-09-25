@@ -5,7 +5,7 @@ import type { Redis } from 'ioredis';
 import { enqueueMachineCommand } from './delivery-store.js';
 import { buildFencedStartMining, buildFencedStopMining, type MiningPerformanceMode } from './mining-resource-control.js';
 import { isMiningProfileApproved, normalizeMiningGpuVendor } from './mining-profile-catalog.js';
-import { acquireResourceLease, readResourceLease, releaseResourceLease, type ResourceLeaseSnapshot } from './resource-lease.js';
+import { acquireResourceLease, readResourceLease, releaseResourceLease, renewResourceLease, type ResourceLeaseSnapshot } from './resource-lease.js';
 import type { MachineCommandEnvelope } from './reliable-delivery.js';
 
 const COMMAND_TTL_MS = 240_000;
@@ -36,9 +36,10 @@ type ResourceForCommand = {
 };
 
 export type MiningCommandRequestResult = {
-  commandId: string;
-  sequence: bigint;
-  lease: ResourceLeaseSnapshot;
+  commandId: string | null;
+  sequence: bigint | null;
+  lease: ResourceLeaseSnapshot | null;
+  alreadySatisfied: boolean;
 };
 
 function digest(...parts: string[]): string {
@@ -127,6 +128,7 @@ async function enqueue(
   commandType: 'start_mining' | 'stop_mining',
   idempotencySeed: string,
   payload: Record<string, unknown>,
+  now: Date,
 ): Promise<{ commandId: string; sequence: bigint }> {
   const sequence = await reserveSequence(tx, row.machineId);
   const commandId = stableId('cmd', row.machineId, row.resourceId, commandType, idempotencySeed);
@@ -136,7 +138,7 @@ async function enqueue(
     commandType,
     sequence,
     idempotencyKey: stableKey('mining-command', row.machineId, row.resourceId, commandType, idempotencySeed),
-    expiresAt: new Date(Date.now() + COMMAND_TTL_MS),
+    expiresAt: new Date(now.getTime() + COMMAND_TTL_MS),
     payload,
   };
   await enqueueMachineCommand(tx, command);
@@ -146,8 +148,9 @@ async function enqueue(
 export async function requestMiningStart(
   db: PrismaClient,
   redis: Redis,
-  input: { machineId: string; resourceId: string; ownerId: string },
+  input: { machineId: string; resourceId: string; ownerId: string; requestId?: string; now?: Date },
 ): Promise<MiningCommandRequestResult> {
+  const now = input.now ?? new Date();
   const preview = await db.$transaction((tx) => loadResourceForCommand(tx, input.machineId, input.resourceId));
   validateOwner(preview, input.ownerId);
   if (preview.runtimeState === 'MINING' || preview.runtimeState === 'STARTING') {
@@ -171,15 +174,39 @@ export async function requestMiningStart(
       validateOwner(current, input.ownerId);
       if (current.version !== configVersion) throw new Error('mining_configuration_changed_during_start');
       const fenced = buildFencedStartMining(startInput(current), acquired.lease);
-      const queued = await enqueue(tx, current, 'start_mining', String(configVersion), fenced as unknown as Record<string, unknown>);
-      await tx.$executeRaw(Prisma.sql`
+      const changed = await tx.$executeRaw(Prisma.sql`
         UPDATE "MiningResource"
            SET "runtimeState" = 'STARTING'::"MiningRuntimeState", "updatedAt" = CURRENT_TIMESTAMP
          WHERE "id" = ${current.resourceId} AND "machineId" = ${current.machineId}
+           AND "runtimeState" IN ('IDLE'::"MiningRuntimeState",'STOPPED'::"MiningRuntimeState")
+           AND "activeRentalId" IS NULL AND "quarantined" = false AND "enabled" = true
+      `);
+      if (changed !== 1) throw new Error('mining_resource_not_startable');
+      const queued = await enqueue(tx, current, 'start_mining', String(configVersion), fenced as unknown as Record<string, unknown>, now);
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "MiningRuntimeEvent" (
+          "id","resourceId","eventType","stateBefore","stateAfter","idempotencyKey",
+          "agentCounter","payload","occurredAt","createdAt"
+        ) VALUES (
+          ${stableId('mre', queued.commandId, 'START_REQUESTED')}, ${current.resourceId},
+          'START_REQUESTED'::"MiningEventType", ${current.runtimeState}::"MiningRuntimeState",
+          'STARTING'::"MiningRuntimeState", ${stableKey('mining-event', queued.commandId, 'START_REQUESTED')},
+          0, ${JSON.stringify({commandId: queued.commandId})}::jsonb, ${now}, CURRENT_TIMESTAMP
+        ) ON CONFLICT ("idempotencyKey") DO NOTHING
+      `);
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "MiningAuditLog" (
+          "id","machineId","resourceId","configurationId","actorType","actorId","action",
+          "requestId","nextValue","createdAt"
+        ) VALUES (
+          ${crypto.randomUUID()}, ${current.machineId}, ${current.resourceId}, NULL,
+          'OWNER'::"MiningAuditActorType", ${input.ownerId}, 'mining_start_requested',
+          ${input.requestId ?? null}, ${JSON.stringify({commandId: queued.commandId})}::jsonb, CURRENT_TIMESTAMP
+        )
       `);
       return queued;
     });
-    return { ...result, lease: acquired.lease };
+    return { ...result, lease: acquired.lease, alreadySatisfied: false };
   } catch (error) {
     await releaseResourceLease(redis, acquired.lease).catch(() => undefined);
     throw error;
@@ -189,12 +216,16 @@ export async function requestMiningStart(
 export async function requestMiningStop(
   db: PrismaClient,
   redis: Redis,
-  input: { machineId: string; resourceId: string; ownerId: string },
+  input: { machineId: string; resourceId: string; ownerId: string; requestId?: string; now?: Date },
 ): Promise<MiningCommandRequestResult> {
+  const now = input.now ?? new Date();
   const preview = await db.$transaction((tx) => loadResourceForCommand(tx, input.machineId, input.resourceId));
   validateOwner(preview, input.ownerId);
   if (preview.runtimeState === 'IDLE' || preview.runtimeState === 'STOPPED') {
-    throw new Error('mining_resource_already_stopped');
+    return { commandId: null, sequence: null, lease: null, alreadySatisfied: true };
+  }
+  if (preview.runtimeState !== 'STARTING' && preview.runtimeState !== 'MINING') {
+    throw new Error('mining_resource_not_stoppable');
   }
 
   const holderId = `mining:${preview.resourceId}`;
@@ -203,7 +234,15 @@ export async function requestMiningStop(
   let acquiredForStop = false;
   if (currentLease) {
     if (currentLease.holderId !== holderId) throw new Error('mining_resource_lease_busy');
-    lease = currentLease;
+    const renewed = await renewResourceLease(redis, {
+      resourceId: currentLease.resourceId,
+      holderId: currentLease.holderId,
+      leaseId: currentLease.leaseId,
+      fencingToken: currentLease.fencingToken,
+      ttlSeconds: LEASE_TTL_SECONDS,
+    });
+    if (!renewed.accepted) throw new Error('mining_resource_lease_stale');
+    lease = { ...currentLease, ttlMs: renewed.ttlMs };
   } else {
     const acquired = await acquireResourceLease(redis, {
       resourceId: preview.resourceId,
@@ -225,15 +264,39 @@ export async function requestMiningStop(
         resourceId: current.resourceId,
         hardwareUuid: current.hardwareUuid!,
       }, lease);
-      const queued = await enqueue(tx, current, 'stop_mining', lease.fencingToken, fenced as unknown as Record<string, unknown>);
-      await tx.$executeRaw(Prisma.sql`
+      const changed = await tx.$executeRaw(Prisma.sql`
         UPDATE "MiningResource"
            SET "runtimeState" = 'VERIFYING_STOP'::"MiningRuntimeState", "updatedAt" = CURRENT_TIMESTAMP
          WHERE "id" = ${current.resourceId} AND "machineId" = ${current.machineId}
+           AND "runtimeState" IN ('STARTING'::"MiningRuntimeState",'MINING'::"MiningRuntimeState")
+           AND "activeRentalId" IS NULL
+      `);
+      if (changed !== 1) throw new Error('mining_resource_not_stoppable');
+      const queued = await enqueue(tx, current, 'stop_mining', lease.fencingToken, fenced as unknown as Record<string, unknown>, now);
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "MiningRuntimeEvent" (
+          "id","resourceId","eventType","stateBefore","stateAfter","idempotencyKey",
+          "agentCounter","payload","occurredAt","createdAt"
+        ) VALUES (
+          ${stableId('mre', queued.commandId, 'STOP_REQUESTED')}, ${current.resourceId},
+          'STOP_REQUESTED'::"MiningEventType", ${current.runtimeState}::"MiningRuntimeState",
+          'VERIFYING_STOP'::"MiningRuntimeState", ${stableKey('mining-event', queued.commandId, 'STOP_REQUESTED')},
+          0, ${JSON.stringify({commandId: queued.commandId})}::jsonb, ${now}, CURRENT_TIMESTAMP
+        ) ON CONFLICT ("idempotencyKey") DO NOTHING
+      `);
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "MiningAuditLog" (
+          "id","machineId","resourceId","configurationId","actorType","actorId","action",
+          "requestId","nextValue","createdAt"
+        ) VALUES (
+          ${crypto.randomUUID()}, ${current.machineId}, ${current.resourceId}, NULL,
+          'OWNER'::"MiningAuditActorType", ${input.ownerId}, 'mining_stop_requested',
+          ${input.requestId ?? null}, ${JSON.stringify({commandId: queued.commandId})}::jsonb, CURRENT_TIMESTAMP
+        )
       `);
       return queued;
     });
-    return { ...result, lease };
+    return { ...result, lease, alreadySatisfied: false };
   } catch (error) {
     if (acquiredForStop) await releaseResourceLease(redis, lease).catch(() => undefined);
     throw error;
