@@ -82,7 +82,7 @@ Ne pas utiliser `prisma db push` en production.
 - le pool GPUbnb géré reste refusé tant que son runtime n'est pas qualifié ;
 - le pool propriétaire opérationnel applique 0 point de base ;
 - un mot de passe brut est rejeté dans `ownerPoolSecretRef` ;
-- une référence de coffre autorisée est acceptée ;
+- seule une référence locale qualifiée `secret://local/mining/<id>` est acceptée ;
 - la référence de coffre n'apparaît pas dans les réponses de liste.
 
 ### Sécurité des événements runtime
@@ -222,7 +222,7 @@ Pour le runtime GPU v1 NVIDIA OWNER_POOL, l'activation publique nécessite encor
 - validation antivirus et licences des binaires épinglés ;
 - maintien des protections OWNER_POOL : endpoint Stratum exact côté API, résolution vers adresses publiques côté Agent et re-résolution anti-DNS-rebinding juste avant lancement ;
 - TLS Stratum Agent qualifié ; le probe TLS Host Desktop doit rester fail-closed tant qu'il ne possède pas une validation certificat/hostname équivalente ;
-- aucune utilisation de `ownerPoolSecretRef` tant que le chemin de livraison du secret au mineur n'est pas prouvé sans fuite argv/log ;
+- `ownerPoolSecretRef` reste limité à `secret://local/mining/<id>` et ne doit pas être utilisé au lancement tant que le chemin vers le mineur n'est pas prouvé sans fuite argv/log ;
 - monitoring, alertes et procédure d'incident ;
 - revue juridique, fiscale et sanctions applicable au service.
 
