@@ -139,6 +139,9 @@ export const registerMiningRoutes = (
         `);
         const current = rows[0];
         if (!current) throw new Error('mining_resource_not_found');
+        if (!['IDLE', 'STOPPED'].includes(current.runtimeState)) {
+          throw new Error('mining_resource_must_stop_before_configuration_update');
+        }
 
         const rentedResourceIds = current.activeRentalId
           ? new Set<string>([current.id])
@@ -223,7 +226,9 @@ export const registerMiningRoutes = (
     }
   });
 
-  app.post('/machines/:machineId/mining-resources/:resourceId/start', async (request, reply) => {
+  app.post('/machines/:machineId/mining-resources/:resourceId/start', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     const session = await requireSession(request, reply, redis);
     if (!session) return;
     const { machineId, resourceId } = resourceParamsSchema.parse(request.params);
@@ -232,12 +237,14 @@ export const registerMiningRoutes = (
         machineId,
         resourceId,
         ownerId: session.userId,
+        requestId: request.id,
       });
       return reply.code(202).send({
         accepted: true,
         commandId: result.commandId,
-        sequence: result.sequence.toString(),
+        sequence: result.sequence?.toString() ?? null,
         resourceId,
+        alreadySatisfied: result.alreadySatisfied,
       });
     } catch (error) {
       const code = error instanceof Error ? error.message : 'mining_start_rejected';
@@ -250,7 +257,9 @@ export const registerMiningRoutes = (
     }
   });
 
-  app.post('/machines/:machineId/mining-resources/:resourceId/stop', async (request, reply) => {
+  app.post('/machines/:machineId/mining-resources/:resourceId/stop', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     const session = await requireSession(request, reply, redis);
     if (!session) return;
     const { machineId, resourceId } = resourceParamsSchema.parse(request.params);
@@ -259,12 +268,14 @@ export const registerMiningRoutes = (
         machineId,
         resourceId,
         ownerId: session.userId,
+        requestId: request.id,
       });
-      return reply.code(202).send({
+      return reply.code(result.alreadySatisfied ? 200 : 202).send({
         accepted: true,
         commandId: result.commandId,
-        sequence: result.sequence.toString(),
+        sequence: result.sequence?.toString() ?? null,
         resourceId,
+        alreadySatisfied: result.alreadySatisfied,
       });
     } catch (error) {
       const code = error instanceof Error ? error.message : 'mining_stop_rejected';
