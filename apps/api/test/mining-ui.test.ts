@@ -77,3 +77,23 @@ test('mining runtime buttons fail closed during rental quarantine and transition
   assert.match(script, /!resourceLocked\(resource\)/);
   assert.match(script, /resource\.runtimeState==='MINING'/);
 });
+
+
+test('owner mining UI marks heartbeat telemetry stale after two minutes', async () => {
+  const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
+  assert.match(script, /MINING_TELEMETRY_FRESH_MS=120000/);
+  assert.match(script, /Télémétrie Agent périmée/);
+  assert.match(script, /Les anciennes métriques ne sont pas affichées comme valeurs actuelles/);
+  assert.match(script, /Télémétrie fraîche/);
+});
+
+test('owner mining UI renders only structured heartbeat metrics', async () => {
+  const script = await readFile(path.join(webRoot, 'mining.js'), 'utf8');
+  const start = script.indexOf('function renderLiveTelemetry');
+  const end = script.indexOf('function runtimeControls', start);
+  const block = script.slice(start, end);
+  for (const field of ['hashrate','hashrateUnit','temperatureC','powerWatts','utilizationPercent','acceptedShares','staleShares','hardwareErrors','poolConnected','uptimeSeconds']) {
+    assert.match(block, new RegExp(field));
+  }
+  assert.doesNotMatch(block, /wallet|poolUrl|ownerPoolEndpoint|workerName|logPath|executablePath|commandId|fencingToken|runtimeGeneration/i);
+});
