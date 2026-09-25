@@ -105,14 +105,29 @@ test('failed STOP quarantines and keeps lease for recovery fencing', async () =>
   assert.equal(releases(), 0);
 });
 
-test('late terminal ACK is audited but cannot overwrite a newer state', async () => {
+test('late terminal ACK is audited but cannot overwrite a newer state or release its lease', async () => {
   const { db, transitions, writes } = fakeDb('MINING');
   const { redis, releases } = fakeRedis();
   const outcome = await finalizeMiningTerminalAck(db, redis, command('stop_mining'), { status: 'SUCCEEDED' });
   assert.equal(outcome, 'STALE_STATE');
   assert.equal(transitions.length, 0);
   assert.equal(writes.length, 1);
-  assert.equal(releases(), 1);
+  assert.equal(releases(), 0);
+});
+
+test('late START failure cannot release the lease reused by an in-flight STOP', async () => {
+  const { db, transitions, writes } = fakeDb('VERIFYING_STOP');
+  const { redis, releases } = fakeRedis();
+  const outcome = await finalizeMiningTerminalAck(
+    db,
+    redis,
+    command('start_mining'),
+    { status: 'FAILED', detailCode: 'late_start_failure' },
+  );
+  assert.equal(outcome, 'STALE_STATE');
+  assert.equal(transitions.length, 0);
+  assert.equal(writes.length, 1);
+  assert.equal(releases(), 0);
 });
 
 test('terminal ACK rejects hardware identity mismatch before state transition', async () => {
