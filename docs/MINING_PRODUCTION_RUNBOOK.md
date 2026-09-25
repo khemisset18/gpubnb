@@ -79,8 +79,8 @@ Ne pas utiliser `prisma db push` en production.
 - une ressource louée refuse une modification de configuration ;
 - une ressource en quarantaine refuse l'activation du minage ;
 - une version obsolète retourne un conflit ;
-- le pool géré applique 100 points de base ;
-- le pool propriétaire applique 0 point de base ;
+- le pool GPUbnb géré reste refusé tant que son runtime n'est pas qualifié ;
+- le pool propriétaire opérationnel applique 0 point de base ;
 - un mot de passe brut est rejeté dans `ownerPoolSecretRef` ;
 - une référence de coffre autorisée est acceptée ;
 - la référence de coffre n'apparaît pas dans les réponses de liste.
@@ -160,18 +160,71 @@ Si une migration provoque une défaillance :
 
 Le trigger de redaction d'audit peut rester actif même si le volet minage est temporairement désactivé.
 
+## Chemin durable START/STOP GPU v1
+
+Le runtime GPU v1 est NVIDIA uniquement.
+
+Le démarrage owner-pool suit obligatoirement ce chemin :
+
+1. le navigateur envoie uniquement `POST .../start`, sans pool, wallet, UUID, fence ni paramètres runtime ;
+2. l'API recharge la configuration propriétaire et l'Accelerator exact ;
+3. l'API refuse ressource désactivée, louée, quarantined, GPU non-NVIDIA ou profil non approuvé ;
+4. l'API acquiert un ResourceLease Redis de 300 secondes ;
+5. le fencing token du lease devient exactement `runtimeGeneration` ;
+6. l'API crée une MachineCommand durable d'une durée maximale de 240 secondes ;
+7. le claim SQL refuse toute commande mining non clôturée ;
+8. le dispatcher TypeScript vérifie de nouveau `resourceId` et le fence ;
+9. le Gateway Rust vérifie que le lease est encore exactement actif dans Redis ;
+10. l'Agent exige le lease au décodage puis applique de nouveau le fence localement ;
+11. un ACK terminal réussi START fait passer uniquement `STARTING -> MINING` ;
+12. un ACK terminal réussi STOP fait passer uniquement `VERIFYING_STOP -> STOPPED` ;
+13. un ACK tardif ne peut pas écraser un état serveur plus récent ;
+14. un échec d'exécution non vérifié place la ressource en quarantaine fail-closed.
+
+Le STOP propriétaire réutilise uniquement un lease mining appartenant à la même ressource.
+Un lease rental/étranger reste bloquant. Si aucun lease n'existe, STOP peut acquérir un nouveau
+fence plus récent ; l'Agent autorise ce fence plus récent uniquement pour arrêter un ancien mineur
+survivant.
+
+Le rollout Gateway reste à 0 par défaut tant que la validation physique E2E ci-dessous n'est pas
+terminée.
+
+## Validation physique E2E avant rollout
+
+Sur une machine NVIDIA de test :
+
+1. vérifier la configuration OWNER_POOL sans secret de pool ;
+2. démarrer depuis le portail owner ;
+3. confirmer `STARTING -> MINING` après ACK terminal ;
+4. confirmer que l'UUID NVIDIA exécuté correspond exactement au MiningResource ;
+5. confirmer réception de jobs et au moins une share acceptée ;
+6. vérifier télémétrie température, watts, utilisation, hashrate, shares et uptime ;
+7. vérifier les avertissements thermiques 85 / 90 / 94 / 97 °C ;
+8. vérifier l'arrêt exact au seuil propriétaire choisi ;
+9. relancer puis arrêter depuis le portail ;
+10. confirmer `VERIFYING_STOP -> STOPPED` et absence du processus ;
+11. simuler perte capteur et confirmer arrêt fail-closed après trois échecs consécutifs ;
+12. lancer une location prioritaire et confirmer qu'aucune location ne démarre avant arrêt vérifié ;
+13. vérifier qu'un ACK/fence ancien est rejeté ;
+14. redémarrer l'Agent pendant/après minage et confirmer la réconciliation PID + creation token + chemin + SHA-256 ;
+15. vérifier qu'aucun wallet, pool secret, token, argument sensible ou chemin privé n'apparaît dans les logs/API.
+
 ## Critères d'activation publique
 
 La fusion du code dans `main` ne signifie pas que le minage public est autorisé.
 
-L'activation publique nécessite encore :
+Pour le runtime GPU v1 NVIDIA OWNER_POOL, l'activation publique nécessite encore :
 
-- tests physiques NVIDIA et AMD ;
-- validation antivirus et licences ;
-- audit SSRF/DNS rebinding ;
-- coffre de secrets réellement exploité et rotation testée ;
-- monitoring, alertes et astreinte ;
-- validation des paiements et de la réconciliation 99 % / 1 % ;
-- revue juridique, fiscale et sanctions.
+- validation physique E2E du chemin durable ci-dessus ;
+- validation antivirus et licences des binaires épinglés ;
+- maintien des protections SSRF et DNS rebinding ;
+- TLS Stratum Agent qualifié ; le probe TLS Host Desktop doit rester fail-closed tant qu'il ne possède pas une validation certificat/hostname équivalente ;
+- aucune utilisation de `ownerPoolSecretRef` tant que le chemin de livraison du secret au mineur n'est pas prouvé sans fuite argv/log ;
+- monitoring, alertes et procédure d'incident ;
+- revue juridique, fiscale et sanctions applicable au service.
 
-Tant que ces éléments ne sont pas terminés, garder les profils concernés désactivés et limiter les essais à un environnement contrôlé.
+AMD reste hors périmètre GPU v1 jusqu'à implémentation et qualification d'un adapter resource-scoped dédié.
+Le pool GPUbnb géré et sa commission future restent hors périmètre tant que leur runtime et leur
+comptabilité ne sont pas implémentés et qualifiés.
+
+Tant que ces éléments ne sont pas terminés, garder le rollout public à 0 et limiter les essais à un environnement contrôlé.
