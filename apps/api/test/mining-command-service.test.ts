@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { requestMiningStart, requestMiningStop } from '../src/mining-command-service.js';
+import {
+  requestMiningStart,
+  requestMiningStop,
+  requestSystemMiningAutoResume,
+} from '../src/mining-command-service.js';
 
 const resource = (overrides: Record<string, unknown> = {}) => ({
   resourceId: 'resource_00000001',
@@ -115,7 +119,7 @@ test('start fails closed for an unqualified GPU vendor before durable command cr
   assert.equal(writes.length, 0);
 });
 
-test('unresolved pool secret releases an acquired lease and creates no durable command', async () => {
+test('unresolved pool secret fails before lease acquisition or durable mutation', async () => {
   const { db, writes } = fakeDb(resource({ ownerPoolSecretRef: 'secret://local/mining/pool-main' }));
   const { redis, evalCalls } = fakeRedis();
   await assert.rejects(
@@ -126,7 +130,27 @@ test('unresolved pool secret releases an acquired lease and creates no durable c
     }),
     /miner_secret_resolution_required/,
   );
-  assert.equal(evalCalls(), 2);
+  assert.equal(evalCalls(), 0);
+  assert.equal(writes.length, 0);
+});
+
+test('auto-resume with unresolved pool secret fails before lease acquisition', async () => {
+  const { db, writes } = fakeDb(resource({
+    runtimeState: 'STOPPED',
+    resumeAfterRentalPending: true,
+    autoResumeAfterRental: true,
+    ownerPoolSecretRef: 'secret://local/mining/pool-main',
+  }));
+  const { redis, evalCalls } = fakeRedis();
+  await assert.rejects(
+    requestSystemMiningAutoResume(db, redis, {
+      machineId: 'machine_00000001',
+      resourceId: 'resource_00000001',
+      requestId: 'request_auto_resume_0001',
+    }),
+    /miner_secret_resolution_required/,
+  );
+  assert.equal(evalCalls(), 0);
   assert.equal(writes.length, 0);
 });
 
