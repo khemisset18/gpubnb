@@ -150,13 +150,14 @@ fn probe_tls_connection_with_config(
             Err(_) => continue,
         };
 
-        let handshake = while connection.is_handshaking() {
-            match connection.complete_io(&mut stream) {
-                Ok(_) => continue,
-                Err(_) => break false,
+        let mut handshake_ok = true;
+        while connection.is_handshaking() {
+            if connection.complete_io(&mut stream).is_err() {
+                handshake_ok = false;
+                break;
             }
-        };
-        if handshake || !connection.is_handshaking() {
+        }
+        if handshake_ok && !connection.is_handshaking() {
             return Ok(PoolConnectionEvidence {
                 pool_url: endpoint.pool_url.clone(),
                 dns_resolved: true,
@@ -377,8 +378,7 @@ mod tests {
 
     #[test]
     fn trusted_valid_certificate_and_hostname_complete_tls() {
-        let (server_config, root) =
-            test_server_config("pool.test", (2025, 1, 1), (2035, 1, 1));
+        let (server_config, root) = test_server_config("pool.test", (2025, 1, 1), (2035, 1, 1));
         let (address, server) = spawn_tls_server(server_config);
         let config = client_config_with_test_root(root);
         let endpoint = local_endpoint("pool.test", address.port());
@@ -392,8 +392,7 @@ mod tests {
 
     #[test]
     fn hostname_mismatch_is_rejected() {
-        let (server_config, root) =
-            test_server_config("pool.test", (2025, 1, 1), (2035, 1, 1));
+        let (server_config, root) = test_server_config("pool.test", (2025, 1, 1), (2035, 1, 1));
         let (address, server) = spawn_tls_server(server_config);
         let config = client_config_with_test_root(root);
         let endpoint = local_endpoint("wrong.test", address.port());
@@ -407,8 +406,7 @@ mod tests {
 
     #[test]
     fn untrusted_certificate_is_rejected() {
-        let (server_config, _root) =
-            test_server_config("pool.test", (2025, 1, 1), (2035, 1, 1));
+        let (server_config, _root) = test_server_config("pool.test", (2025, 1, 1), (2035, 1, 1));
         let (address, server) = spawn_tls_server(server_config);
         let connector = tls_connector().expect("build system-root TLS connector");
         let endpoint = local_endpoint("pool.test", address.port());
@@ -422,8 +420,7 @@ mod tests {
 
     #[test]
     fn expired_certificate_is_rejected() {
-        let (server_config, root) =
-            test_server_config("pool.test", (2018, 1, 1), (2019, 1, 1));
+        let (server_config, root) = test_server_config("pool.test", (2018, 1, 1), (2019, 1, 1));
         let (address, server) = spawn_tls_server(server_config);
         let config = client_config_with_test_root(root);
         let endpoint = local_endpoint("pool.test", address.port());
