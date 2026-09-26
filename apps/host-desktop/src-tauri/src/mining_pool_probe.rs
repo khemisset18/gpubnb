@@ -408,7 +408,7 @@ mod tests {
     fn untrusted_certificate_is_rejected() {
         let (server_config, _root) = test_server_config("pool.test", (2025, 1, 1), (2035, 1, 1));
         let (address, server) = spawn_tls_server(server_config);
-        let connector = tls_connector().expect("build system-root TLS connector");
+        let config = client_config_without_test_root();
         let endpoint = local_endpoint("pool.test", address.port());
 
         assert_eq!(
