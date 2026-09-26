@@ -1,6 +1,8 @@
 use crate::mining_configuration::PoolConnectionEvidence;
-use native_tls::{Protocol, TlsConnector, TlsConnectorBuilder};
+use rustls::pki_types::ServerName;
+use rustls::{ClientConfig, ClientConnection, RootCertStore};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream, ToSocketAddrs};
+use std::sync::Arc;
 use std::time::Duration;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -85,20 +87,32 @@ pub fn probe_pool_connection(
     })
 }
 
-fn tls_connector_builder() -> TlsConnectorBuilder {
-    let mut builder = TlsConnector::builder();
-    builder
-        .min_protocol_version(Some(Protocol::Tlsv12))
-        .use_sni(true)
-        .danger_accept_invalid_certs(false)
-        .danger_accept_invalid_hostnames(false);
-    builder
+fn client_config_with_roots(
+    roots: RootCertStore,
+) -> Result<Arc<ClientConfig>, &'static str> {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let mut config = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(|_| "mining_pool_tls_connector_unavailable")?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    config.enable_sni = true;
+    Ok(Arc::new(config))
 }
 
-fn tls_connector() -> Result<TlsConnector, &'static str> {
-    tls_connector_builder()
-        .build()
-        .map_err(|_| "mining_pool_tls_connector_unavailable")
+fn tls_client_config() -> Result<Arc<ClientConfig>, &'static str> {
+    let native = rustls_native_certs::load_native_certs();
+    if native.certs.is_empty() {
+        return Err("mining_pool_tls_root_store_unavailable");
+    }
+
+    let mut roots = RootCertStore::empty();
+    for certificate in native.certs {
+        roots
+            .add(certificate)
+            .map_err(|_| "mining_pool_tls_root_store_unavailable")?;
+    }
+    client_config_with_roots(roots)
 }
 
 fn probe_tls_connection(
@@ -106,20 +120,22 @@ fn probe_tls_connection(
     addresses: &[SocketAddr],
     now_unix_seconds: u64,
 ) -> Result<PoolConnectionEvidence, &'static str> {
-    let connector = tls_connector()?;
-    probe_tls_connection_with_connector(&connector, endpoint, addresses, now_unix_seconds)
+    let config = tls_client_config()?;
+    probe_tls_connection_with_config(&config, endpoint, addresses, now_unix_seconds)
 }
 
-fn probe_tls_connection_with_connector(
-    connector: &TlsConnector,
+fn probe_tls_connection_with_config(
+    config: &Arc<ClientConfig>,
     endpoint: &MiningPoolEndpoint,
     addresses: &[SocketAddr],
     now_unix_seconds: u64,
 ) -> Result<PoolConnectionEvidence, &'static str> {
+    let server_name = ServerName::try_from(endpoint.host.clone())
+        .map_err(|_| "mining_invalid_pool_host")?;
     let mut tcp_connected = false;
 
     for address in addresses {
-        let stream = match TcpStream::connect_timeout(address, CONNECT_TIMEOUT) {
+        let mut stream = match TcpStream::connect_timeout(address, CONNECT_TIMEOUT) {
             Ok(stream) => {
                 tcp_connected = true;
                 stream
@@ -129,10 +145,18 @@ fn probe_tls_connection_with_connector(
         let _ = stream.set_read_timeout(Some(CONNECT_TIMEOUT));
         let _ = stream.set_write_timeout(Some(CONNECT_TIMEOUT));
 
-        // The socket is connected to the already-public IP selected above. The
-        // original hostname is passed to native-tls for both SNI and hostname
-        // certificate verification, so DNS cannot redirect the TLS handshake.
-        if connector.connect(endpoint.host.as_str(), stream).is_ok() {
+        let mut connection = match ClientConnection::new(config.clone(), server_name.clone()) {
+            Ok(connection) => connection,
+            Err(_) => continue,
+        };
+
+        let handshake = while connection.is_handshaking() {
+            match connection.complete_io(&mut stream) {
+                Ok(_) => continue,
+                Err(_) => break false,
+            }
+        };
+        if handshake || !connection.is_handshaking() {
             return Ok(PoolConnectionEvidence {
                 pool_url: endpoint.pool_url.clone(),
                 dns_resolved: true,
@@ -221,12 +245,11 @@ fn resolve_addresses(endpoint: &MiningPoolEndpoint) -> Result<Vec<SocketAddr>, &
 #[cfg(test)]
 mod tests {
     use super::*;
-    use native_tls::Certificate as NativeCertificate;
     use rcgen::{
         date_time_ymd, BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, Issuer,
         KeyPair, KeyUsagePurpose,
     };
-    use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
     use rustls::{ServerConfig, ServerConnection, StreamOwned};
     use std::io::Read;
     use std::net::TcpListener;
@@ -237,7 +260,7 @@ mod tests {
         hostname: &str,
         not_before: (i32, u8, u8),
         not_after: (i32, u8, u8),
-    ) -> (Arc<ServerConfig>, NativeCertificate) {
+    ) -> (Arc<ServerConfig>, CertificateDer<'static>) {
         let mut ca_params =
             CertificateParams::new(Vec::<String>::new()).expect("empty CA SAN is valid");
         ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
@@ -260,15 +283,15 @@ mod tests {
             .signed_by(&leaf_key, &issuer)
             .expect("sign leaf with test CA");
 
-        let _ = rustls::crypto::ring::default_provider().install_default();
         let private_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(leaf_key.serialize_der()));
-        let server = ServerConfig::builder()
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let server = ServerConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .expect("safe TLS protocol versions")
             .with_no_client_auth()
             .with_single_cert(vec![leaf_cert.der().clone()], private_key)
             .expect("build portable Rustls test server");
-        let root = NativeCertificate::from_der(ca_cert.der().as_ref())
-            .expect("native TLS accepts generated CA");
-        (Arc::new(server), root)
+        (Arc::new(server), ca_cert.der().clone())
     }
 
     fn spawn_tls_server(config: Arc<ServerConfig>) -> (SocketAddr, thread::JoinHandle<()>) {
@@ -286,10 +309,15 @@ mod tests {
         (address, handle)
     }
 
-    fn connector_with_test_root(root: NativeCertificate) -> TlsConnector {
-        let mut builder = tls_connector_builder();
-        builder.add_root_certificate(root);
-        builder.build().expect("build TLS connector with test root")
+    fn client_config_with_test_root(root: CertificateDer<'static>) -> Arc<ClientConfig> {
+        let mut roots = RootCertStore::empty();
+        roots.add(root).expect("add generated test CA");
+        client_config_with_roots(roots).expect("build Rustls client with test root")
+    }
+
+    fn client_config_without_test_root() -> Arc<ClientConfig> {
+        client_config_with_roots(RootCertStore::empty())
+            .expect("build Rustls client with empty test roots")
     }
 
     fn local_endpoint(hostname: &str, port: u16) -> MiningPoolEndpoint {
@@ -333,19 +361,18 @@ mod tests {
     }
 
     #[test]
-    fn native_tls_connector_is_available_with_secure_policy() {
-        tls_connector().expect("native TLS connector must initialize on supported Host platforms");
+    fn rustls_native_trust_is_available_with_secure_policy() {
+        tls_client_config().expect("native certificate roots must initialize on Host platforms");
         let source = include_str!("mining_pool_probe.rs");
         let production = source
             .split("#[cfg(test)]")
             .next()
             .expect("production source precedes tests");
-        assert!(production.contains(".danger_accept_invalid_certs(false)"));
-        assert!(production.contains(".danger_accept_invalid_hostnames(false)"));
-        assert!(production.contains(".use_sni(true)"));
-        assert!(production.contains(".min_protocol_version(Some(Protocol::Tlsv12))"));
-        assert!(!production.contains(".danger_accept_invalid_certs(true)"));
-        assert!(!production.contains(".danger_accept_invalid_hostnames(true)"));
+        assert!(production.contains("rustls_native_certs::load_native_certs()"));
+        assert!(production.contains("with_safe_default_protocol_versions()"));
+        assert!(production.contains("config.enable_sni = true"));
+        assert!(!production.contains("dangerous()"));
+        assert!(!production.contains("with_custom_certificate_verifier"));
     }
 
     #[test]
@@ -353,11 +380,11 @@ mod tests {
         let (server_config, root) =
             test_server_config("pool.test", (2025, 1, 1), (2035, 1, 1));
         let (address, server) = spawn_tls_server(server_config);
-        let connector = connector_with_test_root(root);
+        let config = client_config_with_test_root(root);
         let endpoint = local_endpoint("pool.test", address.port());
 
         let evidence =
-            probe_tls_connection_with_connector(&connector, &endpoint, &[address], 123).unwrap();
+            probe_tls_connection_with_config(&config, &endpoint, &[address], 123).unwrap();
         assert!(evidence.tls_verified);
         assert!(evidence.tcp_connected);
         server.join().expect("join TLS test server");
@@ -368,11 +395,11 @@ mod tests {
         let (server_config, root) =
             test_server_config("pool.test", (2025, 1, 1), (2035, 1, 1));
         let (address, server) = spawn_tls_server(server_config);
-        let connector = connector_with_test_root(root);
+        let config = client_config_with_test_root(root);
         let endpoint = local_endpoint("wrong.test", address.port());
 
         assert_eq!(
-            probe_tls_connection_with_connector(&connector, &endpoint, &[address], 123),
+            probe_tls_connection_with_config(&config, &endpoint, &[address], 123),
             Err("mining_pool_tls_unverified")
         );
         server.join().expect("join TLS test server");
@@ -387,7 +414,7 @@ mod tests {
         let endpoint = local_endpoint("pool.test", address.port());
 
         assert_eq!(
-            probe_tls_connection_with_connector(&connector, &endpoint, &[address], 123),
+            probe_tls_connection_with_config(&config, &endpoint, &[address], 123),
             Err("mining_pool_tls_unverified")
         );
         server.join().expect("join TLS test server");
@@ -398,11 +425,11 @@ mod tests {
         let (server_config, root) =
             test_server_config("pool.test", (2018, 1, 1), (2019, 1, 1));
         let (address, server) = spawn_tls_server(server_config);
-        let connector = connector_with_test_root(root);
+        let config = client_config_with_test_root(root);
         let endpoint = local_endpoint("pool.test", address.port());
 
         assert_eq!(
-            probe_tls_connection_with_connector(&connector, &endpoint, &[address], 123),
+            probe_tls_connection_with_config(&config, &endpoint, &[address], 123),
             Err("mining_pool_tls_unverified")
         );
         server.join().expect("join TLS test server");
