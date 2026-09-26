@@ -6,6 +6,7 @@ on:
       - 'apps/host-desktop/src-tauri/Cargo.toml'
       - '.github/workflows/mining-host-tls-lock-export.yml'
 
+# Temporary read-only lock export; removed before final qualification.
 permissions:
   contents: read
 
