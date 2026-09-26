@@ -161,6 +161,9 @@ export async function requestMiningStart(
   }
   const configVersion = preview.version;
   if (configVersion === null || configVersion < 1) throw new Error('mining_configuration_missing');
+  // Fail before touching Redis for any configuration the current runtime cannot execute.
+  // The transaction repeats this validation after locking the resource to cover config races.
+  startInput(preview);
   const leaseIdempotency = stableKey('mining-lease-start', preview.resourceId, String(configVersion));
   const holderId = `mining:${preview.resourceId}`;
   const acquired = await acquireResourceLease(redis, {
@@ -331,6 +334,9 @@ export async function requestSystemMiningAutoResume(
   }
   const configVersion = preview.version;
   if (configVersion === null || configVersion < 1) throw new Error('mining_configuration_missing');
+  // Auto-resume must be just as fail-closed as an owner START: unsupported
+  // configuration never acquires a fence or mutates runtime intent.
+  startInput(preview);
 
   const acquired = await acquireResourceLease(redis, {
     resourceId: preview.resourceId,
