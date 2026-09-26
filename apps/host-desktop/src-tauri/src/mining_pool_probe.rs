@@ -87,9 +87,7 @@ pub fn probe_pool_connection(
     })
 }
 
-fn client_config_with_roots(
-    roots: RootCertStore,
-) -> Result<Arc<ClientConfig>, &'static str> {
+fn client_config_with_roots(roots: RootCertStore) -> Result<Arc<ClientConfig>, &'static str> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let mut config = ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
@@ -130,8 +128,8 @@ fn probe_tls_connection_with_config(
     addresses: &[SocketAddr],
     now_unix_seconds: u64,
 ) -> Result<PoolConnectionEvidence, &'static str> {
-    let server_name = ServerName::try_from(endpoint.host.clone())
-        .map_err(|_| "mining_invalid_pool_host")?;
+    let server_name =
+        ServerName::try_from(endpoint.host.clone()).map_err(|_| "mining_invalid_pool_host")?;
     let mut tcp_connected = false;
 
     for address in addresses {
