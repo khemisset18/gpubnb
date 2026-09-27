@@ -225,6 +225,69 @@ class MiningSecretRuntimeTests(unittest.TestCase):
                 prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
             self.assertFalse(path.exists())
 
+    @unittest.skipIf(os.name == "nt", "POSIX chmod failure path")
+    def test_post_publish_cleanup_retries_after_first_unlink_failure(self) -> None:
+        original_unlink = Path.unlink
+        target = runtime_secret_config_path(self.RESOURCE, 7)
+        target_attempts = 0
+
+        def flaky_unlink(path: Path, *args, **kwargs):
+            nonlocal target_attempts
+            if path == target:
+                target_attempts += 1
+                if target_attempts == 1:
+                    raise OSError("transient-unlink-denied")
+            return original_unlink(path, *args, **kwargs)
+
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch(
+                "gpubnb_agent.mining_secret_runtime.require_private_directory",
+                side_effect=lambda path: path.mkdir(parents=True, exist_ok=True) or path,
+            ),
+            patch("gpubnb_agent.mining_secret_runtime.resolve_secret", return_value="safe-secret"),
+            patch.object(Path, "chmod", side_effect=OSError("chmod-denied")),
+            patch.object(Path, "unlink", new=flaky_unlink),
+        ):
+            with self.assertRaisesRegex(
+                MiningSecretRuntimeError,
+                "miner_secret_config_write_failed",
+            ):
+                prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
+
+        self.assertGreaterEqual(target_attempts, 2)
+        self.assertFalse(target.exists())
+
+    @unittest.skipIf(os.name == "nt", "POSIX chmod failure path")
+    def test_post_publish_persistent_cleanup_failure_surfaces_fail_closed_code(self) -> None:
+        original_unlink = Path.unlink
+        target = runtime_secret_config_path(self.RESOURCE, 7)
+
+        def denied_target_unlink(path: Path, *args, **kwargs):
+            if path == target:
+                raise OSError("persistent-unlink-denied")
+            return original_unlink(path, *args, **kwargs)
+
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch(
+                "gpubnb_agent.mining_secret_runtime.require_private_directory",
+                side_effect=lambda path: path.mkdir(parents=True, exist_ok=True) or path,
+            ),
+            patch("gpubnb_agent.mining_secret_runtime.resolve_secret", return_value="safe-secret"),
+            patch.object(Path, "chmod", side_effect=OSError("chmod-denied")),
+            patch.object(Path, "unlink", new=denied_target_unlink),
+        ):
+            with self.assertRaisesRegex(
+                MiningSecretRuntimeError,
+                "miner_secret_config_cleanup_failed",
+            ) as raised:
+                prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
+
+        self.assertIsNone(raised.exception.__cause__)
+        self.assertTrue(raised.exception.__suppress_context__)
+        self.assertTrue(target.exists())
+
     def test_cleanup_failure_is_fail_closed(self) -> None:
         with patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root):
             root = self.root / "mining-runtime-secrets"
