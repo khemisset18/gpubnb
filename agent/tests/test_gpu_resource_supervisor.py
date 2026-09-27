@@ -334,6 +334,55 @@ class GpuResourceSupervisorTests(unittest.TestCase):
             self.assertNotIn(forbidden, runtime)
             self.assertNotIn(forbidden, telemetry)
 
+    def test_real_local_credential_value_stays_inside_private_config(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        reference = "secret://local/mining/pool-main"
+        credential = "gpubnb-ci-credential-probe-123"
+        payload["poolCredentialRef"] = reference
+        agent_config = Path(self.temp.name) / "agent-config"
+
+        with (
+            patch(
+                "gpubnb_agent.mining_secret_runtime.config_dir",
+                return_value=agent_config,
+            ),
+            patch(
+                "gpubnb_agent.mining_secret_runtime.resolve_secret",
+                return_value=credential,
+            ),
+        ):
+            result = self.supervisor.start(payload, "command_00000001")
+            self.assertEqual(result.detail_code, "mining_resource_started_verified")
+
+            _executable, arguments, log_path = self.launcher.calls[-1]
+            serialized_argv = repr(arguments)
+            self.assertIn("--config", arguments)
+            self.assertNotIn("--pass", arguments)
+            self.assertNotIn(credential, serialized_argv)
+            self.assertNotIn(reference, serialized_argv)
+
+            config_path = Path(arguments[arguments.index("--config") + 1])
+            self.assertEqual(
+                config_path.read_text(encoding="utf-8"),
+                f"pass={credential}\n",
+            )
+            self.assertNotIn("pool-main", config_path.name)
+
+            for surface in (
+                repr(self.supervisor.snapshot()),
+                repr(mining_runtime_telemetry_snapshot(self.store)),
+                repr(self.events),
+                repr(log_path),
+            ):
+                self.assertNotIn(credential, surface)
+                self.assertNotIn(reference, surface)
+                self.assertNotIn(str(config_path), surface)
+
+            self.supervisor.stop(
+                stop_payload("resource_00000001", "GPU-aaaaaaaa")
+            )
+            self.assertFalse(config_path.exists())
+
     def test_missing_local_secret_fails_closed_before_process_spawn(self) -> None:
         payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
         payload["poolCredentialRef"] = "secret://local/mining/missing"
