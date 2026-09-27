@@ -104,16 +104,17 @@ class MiningSecretRuntimeTests(unittest.TestCase):
         self.assertIsNone(raised.exception.__context__)
 
     def test_cleanup_failure_is_fail_closed(self) -> None:
-        root = self.root / "mining-runtime-secrets"
-        root.mkdir(parents=True)
-        candidate = runtime_secret_config_path(self.RESOURCE, 7)
-        candidate.write_text("pass=safe-secret\n", encoding="utf-8")
-        with (
-            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
-            patch.object(Path, "unlink", side_effect=OSError("denied")),
-        ):
-            with self.assertRaisesRegex(MiningSecretRuntimeError, "miner_secret_config_cleanup_failed"):
-                cleanup_lolminer_secret_configs(self.RESOURCE)
+        with patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root):
+            root = self.root / "mining-runtime-secrets"
+            root.mkdir(parents=True)
+            candidate = runtime_secret_config_path(self.RESOURCE, 7)
+            candidate.write_text("pass=safe-secret\n", encoding="utf-8")
+            with patch.object(Path, "unlink", side_effect=OSError("denied")):
+                with self.assertRaisesRegex(
+                    MiningSecretRuntimeError,
+                    "miner_secret_config_cleanup_failed",
+                ):
+                    cleanup_lolminer_secret_configs(self.RESOURCE)
 
 
 if __name__ == "__main__":
