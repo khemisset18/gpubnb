@@ -37,6 +37,7 @@ from .execution_control import (
 from .mining_guard import miner_install_root
 from .mining_secret_runtime import (
     MiningSecretRuntimeError,
+    cleanup_all_lolminer_secret_configs,
     cleanup_lolminer_secret_configs,
     prepare_lolminer_secret_config,
 )
@@ -769,6 +770,14 @@ class GpuResourceSupervisor:
 
     def reconcile(self) -> dict[str, str]:
         with self._lock:
+            # Crash recovery must not rely only on RuntimeRecord membership:
+            # power loss can leave a published or temporary credential file
+            # before the resource record is durably committed. Scrub the
+            # dedicated runtime-secret directory before adopting any process.
+            try:
+                cleanup_all_lolminer_secret_configs()
+            except MiningSecretRuntimeError as exc:
+                raise ExecutionControlError(str(exc)) from None
             records = self.store.load()
             changed = False
             outcome: dict[str, str] = {}
