@@ -115,19 +115,21 @@ test('start fails closed for an unqualified GPU vendor before durable command cr
   assert.equal(writes.length, 0);
 });
 
-test('unresolved pool secret releases an acquired lease and creates no durable command', async () => {
-  const { db, writes } = fakeDb(resource({ ownerPoolSecretRef: 'secret://local/mining/pool-main' }));
+test('owner pool secret reference is carried into the durable fenced START without plaintext', async () => {
+  const reference = 'secret://local/mining/pool-main';
+  const { db, writes } = fakeDb(resource({ ownerPoolSecretRef: reference }));
   const { redis, evalCalls } = fakeRedis();
-  await assert.rejects(
-    requestMiningStart(db, redis, {
-      machineId: 'machine_00000001',
-      resourceId: 'resource_00000001',
-      ownerId: 'owner_00000001',
-    }),
-    /miner_secret_resolution_required/,
-  );
-  assert.equal(evalCalls(), 2);
-  assert.equal(writes.length, 0);
+  const result = await requestMiningStart(db, redis, {
+    machineId: 'machine_00000001',
+    resourceId: 'resource_00000001',
+    ownerId: 'owner_00000001',
+  });
+  assert.equal(result.alreadySatisfied, false);
+  assert.equal(evalCalls(), 1);
+  assert.ok(writes.length > 0);
+  const serialized = JSON.stringify(writes, (_key, value) => typeof value === 'bigint' ? value.toString() : value);
+  assert.match(serialized, /secret:\/\/local\/mining\/pool-main/);
+  assert.doesNotMatch(serialized, /pool-password|private-key|seed-phrase/i);
 });
 
 test('owner STOP is idempotent when resource is already stopped', async () => {
