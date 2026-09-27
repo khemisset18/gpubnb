@@ -208,6 +208,14 @@ jobs:
             exit 1
           fi
 
+          printf 'gpubnb_unknown_config_probe=1\n' > lolMiner-invalid.cfg
+          chmod 600 lolMiner-invalid.cfg
+          if timeout 20s ./lolMiner --config "$PWD/lolMiner-invalid.cfg" --list-algos >lolminer-invalid-probe.out 2>&1; then
+            echo 'lolMiner accepted an intentionally unknown config key; config parsing was not proven fail-closed' >&2
+            cat lolminer-invalid-probe.out >&2
+            exit 1
+          fi
+
           if ! grep -Eiq 'etchash|ethash' lolminer-config-probe.out; then
             echo 'lolMiner config probe did not reach the pinned miner algorithm listing' >&2
             sed "s/$probe_secret/[REDACTED]/g" lolminer-config-probe.out >&2
@@ -221,7 +229,7 @@ jobs:
             echo 'lolMiner 1.98a no longer advertises a configuration-file option' >&2
             exit 1
           fi
-          rm -f lolMiner.cfg lolminer-config-probe.out lolminer-help.out
+          rm -f lolMiner.cfg lolMiner-invalid.cfg lolminer-config-probe.out lolminer-invalid-probe.out lolminer-help.out
       - name: Write provenance report
         shell: bash
         run: |
