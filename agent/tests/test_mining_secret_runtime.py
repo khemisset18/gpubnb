@@ -102,7 +102,7 @@ class MiningSecretRuntimeTests(unittest.TestCase):
                 prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
         self.assertIsNone(raised.exception.__cause__)
         self.assertTrue(raised.exception.__suppress_context__)
-        self.assertNotIn("mining_secret_not_found", repr(raised.exception.__context__))
+        self.assertEqual(str(raised.exception), "mining_secret_not_found")
 
     def test_cleanup_failure_is_fail_closed(self) -> None:
         with patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root):
