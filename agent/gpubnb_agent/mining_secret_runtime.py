@@ -31,6 +31,7 @@ _WINDOWS_BROAD_ALLOW_SIDS = (
     "S-1-5-11",      # Authenticated Users
     "S-1-1-0",       # Everyone
     "S-1-3-0",       # CREATOR OWNER
+    "S-1-3-4",       # OWNER RIGHTS
 )
 
 
