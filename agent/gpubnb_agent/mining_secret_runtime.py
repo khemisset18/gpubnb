@@ -11,6 +11,7 @@ import os
 import re
 import stat
 import tempfile
+import threading
 from pathlib import Path
 
 from .mining_secret_broker import MiningSecretError, resolve_secret
@@ -20,10 +21,26 @@ SAFE_LOLMINER_PASSWORD = re.compile(
     r"^[A-Za-z0-9._~!$&()*+,/:@%?=\-]{1,256}$"
 )
 MAX_GENERATION = 9_223_372_036_854_775_807
+_RESOURCE_LOCKS_GUARD = threading.Lock()
+_RESOURCE_LOCKS: dict[str, threading.RLock] = {}
 
 
 class MiningSecretRuntimeError(RuntimeError):
     pass
+
+
+def _resource_lock(resource_id: str) -> threading.RLock:
+    # The Agent is a single process, but mining START, reconciliation, watchdog,
+    # and rental preemption can execute on different threads. Serialize all
+    # credential-file mutations for one resource so an older cleanup cannot race
+    # a newer generation's atomic publish.
+    key = _resource_prefix(resource_id)
+    with _RESOURCE_LOCKS_GUARD:
+        lock = _RESOURCE_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _RESOURCE_LOCKS[key] = lock
+        return lock
 
 
 def _resource_prefix(resource_id: str) -> str:
@@ -135,22 +152,23 @@ def cleanup_lolminer_secret_configs(
     *,
     keep_generation: int | None = None,
 ) -> None:
-    root = _validated_runtime_secret_root(create=False)
-    if root is None:
-        return
-    keep = (
-        runtime_secret_config_path(resource_id, keep_generation)
-        if keep_generation is not None
-        else None
-    )
-    prefix = f"{_resource_prefix(resource_id)}-"
-    try:
-        for candidate in root.glob(f"{prefix}*.cfg"):
-            if keep is not None and candidate == keep:
-                continue
-            candidate.unlink(missing_ok=True)
-    except OSError:
-        raise MiningSecretRuntimeError("miner_secret_config_cleanup_failed") from None
+    with _resource_lock(resource_id):
+        root = _validated_runtime_secret_root(create=False)
+        if root is None:
+            return
+        keep = (
+            runtime_secret_config_path(resource_id, keep_generation)
+            if keep_generation is not None
+            else None
+        )
+        prefix = f"{_resource_prefix(resource_id)}-"
+        try:
+            for candidate in root.glob(f"{prefix}*.cfg"):
+                if keep is not None and candidate == keep:
+                    continue
+                candidate.unlink(missing_ok=True)
+        except OSError:
+            raise MiningSecretRuntimeError("miner_secret_config_cleanup_failed") from None
 
 
 def prepare_lolminer_secret_config(
@@ -158,12 +176,13 @@ def prepare_lolminer_secret_config(
     resource_id: str,
     runtime_generation: int,
 ) -> Path:
-    path = runtime_secret_config_path(resource_id, runtime_generation)
-    cleanup_lolminer_secret_configs(resource_id)
-    try:
-        secret = resolve_secret(reference)
-    except MiningSecretError as exc:
-        raise MiningSecretRuntimeError(str(exc)) from None
-    content = _render_lolminer_secret_config(secret)
-    _private_atomic_write(path, content)
-    return path
+    with _resource_lock(resource_id):
+        path = runtime_secret_config_path(resource_id, runtime_generation)
+        cleanup_lolminer_secret_configs(resource_id)
+        try:
+            secret = resolve_secret(reference)
+        except MiningSecretError as exc:
+            raise MiningSecretRuntimeError(str(exc)) from None
+        content = _render_lolminer_secret_config(secret)
+        _private_atomic_write(path, content)
+        return path
