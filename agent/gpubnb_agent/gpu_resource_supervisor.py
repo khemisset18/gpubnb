@@ -774,22 +774,43 @@ class GpuResourceSupervisor:
             outcome: dict[str, str] = {}
             for resource_id, record in records.items():
                 if record.state != "MINING":
+                    try:
+                        self._cleanup_secret_config(resource_id)
+                    except ExecutionControlError as exc:
+                        record.state = "QUARANTINED"
+                        record.last_stop_reason = str(exc)
+                        changed = True
                     outcome[resource_id] = record.state
                     continue
                 expected = _record_identity(record)
                 if expected is None:
+                    try:
+                        self._cleanup_secret_config(resource_id)
+                    except ExecutionControlError:
+                        pass
                     record.state = "QUARANTINED"
+                    record.last_stop_reason = "miner_process_identity_missing"
                     outcome[resource_id] = record.state
                     changed = True
                     continue
                 current = self.inspector.inspect(expected.pid)
                 if current is None:
-                    record.state = "STOPPED"
-                    record.pid = None
-                    record.process_creation_token = None
+                    try:
+                        self._cleanup_secret_config(resource_id)
+                    except ExecutionControlError as exc:
+                        record.state = "QUARANTINED"
+                        record.last_stop_reason = str(exc)
+                    else:
+                        record.state = "STOPPED"
+                        record.pid = None
+                        record.process_creation_token = None
                     outcome[resource_id] = record.state
                     changed = True
                 elif current != expected:
+                    try:
+                        self._cleanup_secret_config(resource_id)
+                    except ExecutionControlError:
+                        pass
                     record.state = "QUARANTINED"
                     record.last_stop_reason = "miner_process_identity_mismatch"
                     outcome[resource_id] = record.state
@@ -799,6 +820,10 @@ class GpuResourceSupervisor:
                         not record.binary_sha256
                         or _sha256(Path(current.executable_path)) != record.binary_sha256
                     ):
+                        try:
+                            self._cleanup_secret_config(resource_id)
+                        except ExecutionControlError:
+                            pass
                         record.state = "QUARANTINED"
                         record.last_stop_reason = "approved_miner_binary_hash_mismatch"
                         outcome[resource_id] = record.state
@@ -850,6 +875,7 @@ class GpuResourceSupervisor:
                 if spec.runtime_generation < current.runtime_generation:
                     raise ExecutionControlError("mining_runtime_generation_stale")
                 if current.state == "QUARANTINED":
+                    self._cleanup_secret_config(spec.resource_id)
                     raise ExecutionControlError("mining_resource_quarantined")
                 if spec.runtime_generation == current.runtime_generation:
                     expected = _record_identity(current)
@@ -863,7 +889,12 @@ class GpuResourceSupervisor:
                     if expected is not None and observed == expected:
                         raise ExecutionControlError("mining_resource_runtime_busy")
                     if observed is not None:
+                        try:
+                            self._cleanup_secret_config(spec.resource_id)
+                        except ExecutionControlError:
+                            pass
                         current.state = "QUARANTINED"
+                        current.last_stop_reason = "miner_process_identity_mismatch"
                         self.store.save(records)
                         raise ExecutionControlError("miner_process_identity_mismatch")
 
@@ -954,9 +985,14 @@ class GpuResourceSupervisor:
                 self._cleanup_secret_config(spec.resource_id)
                 return ExecutionResult("mining_resource_already_stopped")
             if current.state == "QUARANTINED":
+                self._cleanup_secret_config(spec.resource_id)
                 raise ExecutionControlError("mining_resource_quarantined")
             expected = _record_identity(current)
             if expected is None:
+                try:
+                    self._cleanup_secret_config(spec.resource_id)
+                except ExecutionControlError:
+                    pass
                 current.state = "QUARANTINED"
                 current.updated_at_ms = int(time.time() * 1000)
                 self.store.save(records)
@@ -971,6 +1007,10 @@ class GpuResourceSupervisor:
                 self.store.save(records)
                 return ExecutionResult("mining_resource_already_stopped")
             if observed != expected:
+                try:
+                    self._cleanup_secret_config(spec.resource_id)
+                except ExecutionControlError:
+                    pass
                 current.state = "QUARANTINED"
                 current.updated_at_ms = int(time.time() * 1000)
                 self.store.save(records)
@@ -983,6 +1023,10 @@ class GpuResourceSupervisor:
                 if observed is None:
                     break
                 if observed != expected:
+                    try:
+                        self._cleanup_secret_config(spec.resource_id)
+                    except ExecutionControlError:
+                        pass
                     current.state = "QUARANTINED"
                     current.updated_at_ms = int(time.time() * 1000)
                     self.store.save(records)
@@ -1014,6 +1058,10 @@ class GpuResourceSupervisor:
     ) -> None:
         expected = _record_identity(record)
         if expected is None:
+            try:
+                self._cleanup_secret_config(record.resource_id)
+            except ExecutionControlError:
+                pass
             record.state = "QUARANTINED"
             record.last_stop_reason = "miner_process_identity_missing"
             record.updated_at_ms = int(time.time() * 1000)
@@ -1021,6 +1069,7 @@ class GpuResourceSupervisor:
             raise ExecutionControlError("miner_process_identity_missing")
         observed = self.inspector.inspect(expected.pid)
         if observed is None:
+            self._cleanup_secret_config(record.resource_id)
             record.state = "STOPPED"
             record.pid = None
             record.process_creation_token = None
@@ -1029,6 +1078,10 @@ class GpuResourceSupervisor:
             self.store.save(records)
             return
         if observed != expected:
+            try:
+                self._cleanup_secret_config(record.resource_id)
+            except ExecutionControlError:
+                pass
             record.state = "QUARANTINED"
             record.last_stop_reason = "miner_process_identity_mismatch"
             record.updated_at_ms = int(time.time() * 1000)
@@ -1041,6 +1094,10 @@ class GpuResourceSupervisor:
             if observed is None:
                 break
             if observed != expected:
+                try:
+                    self._cleanup_secret_config(record.resource_id)
+                except ExecutionControlError:
+                    pass
                 record.state = "QUARANTINED"
                 record.last_stop_reason = "miner_process_identity_mismatch"
                 record.updated_at_ms = int(time.time() * 1000)
@@ -1049,6 +1106,7 @@ class GpuResourceSupervisor:
             time.sleep(0.1)
         else:
             raise ExecutionControlError("mining_resource_stop_unverified")
+        self._cleanup_secret_config(record.resource_id)
         record.state = "STOPPED"
         record.pid = None
         record.process_creation_token = None
