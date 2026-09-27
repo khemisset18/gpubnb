@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -55,6 +56,56 @@ class MiningSecretRuntimeTests(unittest.TestCase):
             second = prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 8)
             self.assertFalse(first.exists())
             self.assertTrue(second.exists())
+
+    def test_concurrent_generations_cannot_publish_stale_credential_last(self) -> None:
+        first_resolving = threading.Event()
+        release_first = threading.Event()
+        errors: list[BaseException] = []
+
+        def resolve(reference: str) -> str:
+            if reference.endswith("/pool-old"):
+                first_resolving.set()
+                if not release_first.wait(timeout=2):
+                    raise RuntimeError("test_timeout")
+                return "old-secret"
+            return "new-secret"
+
+        def prepare(reference: str, generation: int) -> None:
+            try:
+                prepare_lolminer_secret_config(reference, self.RESOURCE, generation)
+            except BaseException as exc:
+                errors.append(exc)
+
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch(
+                "gpubnb_agent.mining_secret_runtime.require_private_directory",
+                side_effect=lambda path: path.mkdir(parents=True, exist_ok=True) or path,
+            ),
+            patch("gpubnb_agent.mining_secret_runtime.resolve_secret", side_effect=resolve),
+        ):
+            old = threading.Thread(
+                target=prepare,
+                args=("secret://local/mining/pool-old", 7),
+            )
+            new = threading.Thread(
+                target=prepare,
+                args=("secret://local/mining/pool-new", 8),
+            )
+            old.start()
+            self.assertTrue(first_resolving.wait(timeout=2))
+            new.start()
+            release_first.set()
+            old.join(timeout=2)
+            new.join(timeout=2)
+
+            self.assertFalse(old.is_alive())
+            self.assertFalse(new.is_alive())
+            self.assertEqual(errors, [])
+            old_path = runtime_secret_config_path(self.RESOURCE, 7)
+            new_path = runtime_secret_config_path(self.RESOURCE, 8)
+            self.assertFalse(old_path.exists())
+            self.assertEqual(new_path.read_text(encoding="utf-8"), "pass=new-secret\n")
 
     def test_cleanup_removes_only_target_resource_secret_configs(self) -> None:
         with (
