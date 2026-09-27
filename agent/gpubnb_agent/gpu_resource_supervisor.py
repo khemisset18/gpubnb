@@ -882,6 +882,14 @@ class GpuResourceSupervisor:
                     observed = self.inspector.inspect(expected.pid) if expected else None
                     if current.state == "MINING" and expected is not None and observed == expected:
                         return ExecutionResult("mining_resource_already_running")
+                    if current.state == "MINING":
+                        # A same-generation redelivery may arrive after the miner
+                        # exited but before the periodic watchdog observed it.
+                        # Reconcile that exact recorded process first so its
+                        # credential file cannot survive a crash/replay window.
+                        self._stop_owned_record(records, current, "miner_process_exited")
+                    else:
+                        self._cleanup_secret_config(spec.resource_id)
                     raise ExecutionControlError("mining_runtime_generation_replay")
                 if current.state == "MINING":
                     expected = _record_identity(current)
@@ -1219,6 +1227,22 @@ class GpuResourceSupervisor:
             for resource_id, record in records.items():
                 if record.state != "MINING":
                     continue
+
+                # Thermal supervision also owns the periodic process-liveness
+                # check. A miner that exits must not leave a credential config
+                # resident until the Agent happens to restart/reconcile.
+                expected = _record_identity(record)
+                observed = self.inspector.inspect(expected.pid) if expected else None
+                if expected is None or observed != expected:
+                    self._sensor_failures.pop(resource_id, None)
+                    try:
+                        self._stop_owned_record(records, record, "miner_process_exited")
+                    except ExecutionControlError:
+                        outcome[resource_id] = record.state
+                    else:
+                        outcome[resource_id] = record.state
+                    continue
+
                 try:
                     metrics = self.sensor.read(record.hardware_uuid)
                 except ExecutionControlError as exc:
