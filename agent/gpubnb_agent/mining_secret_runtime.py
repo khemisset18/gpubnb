@@ -1,0 +1,121 @@
+"""Ephemeral lolMiner credential configuration.
+
+This is the only mining-runtime module allowed to resolve a local secret
+reference. It returns only a private configuration path to the GPU supervisor;
+the plaintext is never returned to control-channel or supervisor code.
+"""
+from __future__ import annotations
+
+import hashlib
+import os
+import re
+import tempfile
+from pathlib import Path
+
+from .mining_secret_broker import MiningSecretError, resolve_secret
+from .storage import config_dir, require_private_directory
+
+SAFE_LOLMINER_PASSWORD = re.compile(
+    r"^[A-Za-z0-9._~!$&()*+,/:@%?=\-]{1,256}$"
+)
+MAX_GENERATION = 9_223_372_036_854_775_807
+
+
+class MiningSecretRuntimeError(RuntimeError):
+    pass
+
+
+def _resource_prefix(resource_id: str) -> str:
+    return hashlib.sha256(resource_id.encode("utf-8")).hexdigest()[:24]
+
+
+def _runtime_secret_root() -> Path:
+    return config_dir() / "mining-runtime-secrets"
+
+
+def runtime_secret_config_path(resource_id: str, runtime_generation: int) -> Path:
+    if (
+        isinstance(runtime_generation, bool)
+        or not isinstance(runtime_generation, int)
+        or not 1 <= runtime_generation <= MAX_GENERATION
+    ):
+        raise MiningSecretRuntimeError("mining_runtime_generation_invalid")
+    return _runtime_secret_root() / f"{_resource_prefix(resource_id)}-{runtime_generation}.cfg"
+
+
+def _render_lolminer_secret_config(secret: str) -> str:
+    if not isinstance(secret, str) or SAFE_LOLMINER_PASSWORD.fullmatch(secret) is None:
+        raise MiningSecretRuntimeError("miner_secret_value_unsupported")
+    return f"pass={secret}\n"
+
+
+def _private_atomic_write(path: Path, content: str) -> None:
+    try:
+        require_private_directory(path.parent)
+    except RuntimeError:
+        raise MiningSecretRuntimeError("miner_secret_config_security_unavailable") from None
+
+    fd, temporary = tempfile.mkstemp(
+        prefix=".pool-credential-",
+        suffix=".cfg",
+        dir=path.parent,
+        text=True,
+    )
+    try:
+        if os.name != "nt":
+            os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        if os.name != "nt":
+            path.chmod(0o600)
+    except OSError:
+        raise MiningSecretRuntimeError("miner_secret_config_write_failed") from None
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+
+def cleanup_lolminer_secret_configs(
+    resource_id: str,
+    *,
+    keep_generation: int | None = None,
+) -> None:
+    root = _runtime_secret_root()
+    if not root.exists():
+        return
+    keep = (
+        runtime_secret_config_path(resource_id, keep_generation)
+        if keep_generation is not None
+        else None
+    )
+    prefix = f"{_resource_prefix(resource_id)}-"
+    try:
+        for candidate in root.glob(f"{prefix}*.cfg"):
+            if keep is not None and candidate == keep:
+                continue
+            candidate.unlink(missing_ok=True)
+    except OSError:
+        raise MiningSecretRuntimeError("miner_secret_config_cleanup_failed") from None
+
+
+def prepare_lolminer_secret_config(
+    reference: str,
+    resource_id: str,
+    runtime_generation: int,
+) -> Path:
+    path = runtime_secret_config_path(resource_id, runtime_generation)
+    cleanup_lolminer_secret_configs(resource_id)
+    try:
+        secret = resolve_secret(reference)
+    except MiningSecretError as exc:
+        raise MiningSecretRuntimeError(str(exc)) from None
+    content = _render_lolminer_secret_config(secret)
+    _private_atomic_write(path, content)
+    return path
