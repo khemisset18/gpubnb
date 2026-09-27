@@ -999,7 +999,14 @@ class GpuResourceSupervisor:
                 raise ExecutionControlError("miner_process_identity_missing")
             observed = self.inspector.inspect(expected.pid)
             if observed is None:
-                self._cleanup_secret_config(spec.resource_id)
+                try:
+                    self._cleanup_secret_config(spec.resource_id)
+                except ExecutionControlError as exc:
+                    current.state = "QUARANTINED"
+                    current.last_stop_reason = str(exc)
+                    current.updated_at_ms = int(time.time() * 1000)
+                    self.store.save(records)
+                    raise
                 current.state = "STOPPED"
                 current.pid = None
                 current.process_creation_token = None
@@ -1035,7 +1042,14 @@ class GpuResourceSupervisor:
             else:
                 raise ExecutionControlError("mining_resource_stop_unverified")
 
-            self._cleanup_secret_config(spec.resource_id)
+            try:
+                self._cleanup_secret_config(spec.resource_id)
+            except ExecutionControlError as exc:
+                current.state = "QUARANTINED"
+                current.last_stop_reason = str(exc)
+                current.updated_at_ms = int(time.time() * 1000)
+                self.store.save(records)
+                raise
             current.state = "STOPPED"
             current.pid = None
             current.process_creation_token = None
@@ -1069,7 +1083,14 @@ class GpuResourceSupervisor:
             raise ExecutionControlError("miner_process_identity_missing")
         observed = self.inspector.inspect(expected.pid)
         if observed is None:
-            self._cleanup_secret_config(record.resource_id)
+            try:
+                self._cleanup_secret_config(record.resource_id)
+            except ExecutionControlError as exc:
+                record.state = "QUARANTINED"
+                record.last_stop_reason = str(exc)
+                record.updated_at_ms = int(time.time() * 1000)
+                self.store.save(records)
+                raise
             record.state = "STOPPED"
             record.pid = None
             record.process_creation_token = None
@@ -1106,7 +1127,14 @@ class GpuResourceSupervisor:
             time.sleep(0.1)
         else:
             raise ExecutionControlError("mining_resource_stop_unverified")
-        self._cleanup_secret_config(record.resource_id)
+        try:
+            self._cleanup_secret_config(record.resource_id)
+        except ExecutionControlError as exc:
+            record.state = "QUARANTINED"
+            record.last_stop_reason = str(exc)
+            record.updated_at_ms = int(time.time() * 1000)
+            self.store.save(records)
+            raise
         record.state = "STOPPED"
         record.pid = None
         record.process_creation_token = None
