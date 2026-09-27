@@ -122,6 +122,24 @@ class MiningSecretRuntimeTests(unittest.TestCase):
         resolve.assert_not_called()
         self.assertEqual(list(outside.iterdir()), [])
 
+    @unittest.skipIf(os.name == "nt", "symlink creation is privilege-dependent on Windows CI")
+    def test_redirected_agent_config_root_is_rejected_before_secret_resolution(self) -> None:
+        real = self.root / "real-config"
+        real.mkdir()
+        redirected = self.root / "agent-config-link"
+        redirected.symlink_to(real, target_is_directory=True)
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=redirected),
+            patch("gpubnb_agent.mining_secret_runtime.resolve_secret") as resolve,
+        ):
+            with self.assertRaisesRegex(
+                MiningSecretRuntimeError,
+                "miner_secret_config_path_unsafe",
+            ):
+                prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
+        resolve.assert_not_called()
+        self.assertEqual(list(real.iterdir()), [])
+
     def test_reparse_point_flag_is_rejected_without_resolving_secret(self) -> None:
         fake_stat = type("FakeStat", (), {"st_file_attributes": 0x400})()
         with (
