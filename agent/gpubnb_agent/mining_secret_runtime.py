@@ -10,6 +10,7 @@ import hashlib
 import os
 import re
 import stat
+import subprocess
 import tempfile
 import threading
 from pathlib import Path
@@ -23,6 +24,14 @@ SAFE_LOLMINER_PASSWORD = re.compile(
 MAX_GENERATION = 9_223_372_036_854_775_807
 _RESOURCE_LOCKS_GUARD = threading.Lock()
 _RESOURCE_LOCKS: dict[str, threading.RLock] = {}
+
+_WINDOWS_BROAD_ALLOW_SIDS = (
+    "S-1-5-32-544",  # BUILTIN\\Administrators
+    "S-1-5-32-545",  # BUILTIN\\Users
+    "S-1-5-11",      # Authenticated Users
+    "S-1-1-0",       # Everyone
+    "S-1-3-0",       # CREATOR OWNER
+)
 
 
 class MiningSecretRuntimeError(RuntimeError):
@@ -65,6 +74,30 @@ def _is_link_or_reparse_point(path: Path) -> bool:
     return bool(attributes & reparse_flag)
 
 
+def _remove_windows_broad_allow_aces(path: Path) -> None:
+    if os.name != "nt":
+        return
+    try:
+        result = subprocess.run(
+            [
+                "icacls",
+                str(path),
+                "/remove:g",
+                *(f"*{sid}" for sid in _WINDOWS_BROAD_ALLOW_SIDS),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            shell=False,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
+        )
+    except OSError:
+        raise OSError("runtime_credential_acl_hardening_failed") from None
+    if result.returncode != 0:
+        raise OSError("runtime_credential_acl_hardening_failed")
+
+
 def _validated_runtime_secret_root(*, create: bool) -> Path | None:
     base_entry = config_dir()
     root = base_entry / "mining-runtime-secrets"
@@ -89,6 +122,10 @@ def _validated_runtime_secret_root(*, create: bool) -> Path | None:
             raise MiningSecretRuntimeError("miner_secret_config_security_unavailable") from None
     if _is_link_or_reparse_point(root):
         raise MiningSecretRuntimeError("miner_secret_config_path_unsafe")
+    try:
+        _remove_windows_broad_allow_aces(root)
+    except OSError:
+        raise MiningSecretRuntimeError("miner_secret_config_security_unavailable") from None
     try:
         base = base_entry.resolve(strict=True)
         resolved = root.resolve(strict=True)
@@ -138,6 +175,8 @@ def _private_atomic_write(path: Path, content: str) -> None:
         published = True
         if os.name != "nt":
             path.chmod(0o600)
+        else:
+            _remove_windows_broad_allow_aces(path)
     except OSError:
         if published:
             try:
