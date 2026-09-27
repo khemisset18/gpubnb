@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import stat
 import tempfile
 from pathlib import Path
 
@@ -33,6 +34,50 @@ def _runtime_secret_root() -> Path:
     return config_dir() / "mining-runtime-secrets"
 
 
+def _is_link_or_reparse_point(path: Path) -> bool:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        raise MiningSecretRuntimeError("miner_secret_config_security_unavailable") from None
+    if path.is_symlink():
+        return True
+    attributes = getattr(metadata, "st_file_attributes", 0)
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return bool(attributes & reparse_flag)
+
+
+def _validated_runtime_secret_root(*, create: bool) -> Path | None:
+    root = _runtime_secret_root()
+    # Check the directory entry before chmod/ACL operations: chmod follows POSIX
+    # symlinks, and Windows junctions/reparse points must never redirect secrets.
+    if _is_link_or_reparse_point(root):
+        raise MiningSecretRuntimeError("miner_secret_config_path_unsafe")
+    if not os.path.lexists(root):
+        if not create:
+            return None
+        try:
+            require_private_directory(root)
+        except RuntimeError:
+            raise MiningSecretRuntimeError("miner_secret_config_security_unavailable") from None
+    else:
+        try:
+            require_private_directory(root)
+        except RuntimeError:
+            raise MiningSecretRuntimeError("miner_secret_config_security_unavailable") from None
+    if _is_link_or_reparse_point(root):
+        raise MiningSecretRuntimeError("miner_secret_config_path_unsafe")
+    try:
+        base = config_dir().resolve(strict=True)
+        resolved = root.resolve(strict=True)
+    except OSError:
+        raise MiningSecretRuntimeError("miner_secret_config_security_unavailable") from None
+    if resolved.parent != base:
+        raise MiningSecretRuntimeError("miner_secret_config_path_unsafe")
+    return root
+
+
 def runtime_secret_config_path(resource_id: str, runtime_generation: int) -> Path:
     if (
         isinstance(runtime_generation, bool)
@@ -50,10 +95,9 @@ def _render_lolminer_secret_config(secret: str) -> str:
 
 
 def _private_atomic_write(path: Path, content: str) -> None:
-    try:
-        require_private_directory(path.parent)
-    except RuntimeError:
-        raise MiningSecretRuntimeError("miner_secret_config_security_unavailable") from None
+    root = _validated_runtime_secret_root(create=True)
+    if root is None or path.parent != root:
+        raise MiningSecretRuntimeError("miner_secret_config_path_unsafe")
 
     fd, temporary = tempfile.mkstemp(
         prefix=".pool-credential-",
@@ -87,8 +131,8 @@ def cleanup_lolminer_secret_configs(
     *,
     keep_generation: int | None = None,
 ) -> None:
-    root = _runtime_secret_root()
-    if not root.exists():
+    root = _validated_runtime_secret_root(create=False)
+    if root is None:
         return
     keep = (
         runtime_secret_config_path(resource_id, keep_generation)
