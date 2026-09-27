@@ -116,9 +116,11 @@ test('start fails closed for an unqualified GPU vendor before durable command cr
   assert.equal(writes.length, 0);
 });
 
-test('owner pool secret reference no longer blocks durable fenced START creation', async () => {
+test('owner pool secret reference no longer blocks durable fenced START creation without plaintext persistence', async () => {
+  const reference = 'secret://local/mining/pool-main';
+  const plaintextSentinel = 'gpubnb-plaintext-secret-probe-never-control-plane';
   const { db, writes } = fakeDb(resource({
-    ownerPoolSecretRef: 'secret://local/mining/pool-main',
+    ownerPoolSecretRef: reference,
   }));
   const { redis, evalCalls } = fakeRedis();
   const result = await requestMiningStart(db, redis, {
@@ -129,6 +131,14 @@ test('owner pool secret reference no longer blocks durable fenced START creation
   assert.equal(result.alreadySatisfied, false);
   assert.equal(evalCalls(), 1);
   assert.equal(writes.length, 4);
+
+  const persisted = JSON.stringify(
+    writes,
+    (_key, value) => typeof value === 'bigint' ? value.toString() : value,
+  );
+  assert.match(persisted, /secret:\/\/local\/mining\/pool-main/);
+  assert.doesNotMatch(persisted, new RegExp(plaintextSentinel));
+  assert.doesNotMatch(persisted, /poolPassword|poolSecretValue|secretValue|seedPhrase|privateKey/);
 });
 
 test('command service maps only the stored secret reference into fenced START input', async () => {
