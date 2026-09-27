@@ -132,13 +132,20 @@ test('owner pool secret reference no longer blocks durable fenced START creation
   assert.equal(evalCalls(), 1);
   assert.equal(writes.length, 4);
 
-  const persisted = JSON.stringify(
-    writes,
+  const serializedWrites = writes.map((write) => JSON.stringify(
+    write,
     (_key, value) => typeof value === 'bigint' ? value.toString() : value,
-  );
-  assert.match(persisted, /secret:\/\/local\/mining\/pool-main/);
-  assert.doesNotMatch(persisted, new RegExp(plaintextSentinel));
-  assert.doesNotMatch(persisted, /poolPassword|poolSecretValue|secretValue|seedPhrase|privateKey/);
+  ));
+  const machineCommandWrite = serializedWrites[1] ?? '';
+  assert.match(machineCommandWrite, /secret:\/\/local\/mining\/pool-main/);
+
+  for (const persisted of serializedWrites) {
+    assert.doesNotMatch(persisted, new RegExp(plaintextSentinel));
+    assert.doesNotMatch(persisted, /poolPassword|poolSecretValue|secretValue|seedPhrase|privateKey/);
+  }
+  for (const nonCommandWrite of [serializedWrites[0], serializedWrites[2], serializedWrites[3]]) {
+    assert.doesNotMatch(nonCommandWrite ?? '', /secret:\/\/local\/mining\/pool-main/);
+  }
 });
 
 test('command service maps only the stored secret reference into fenced START input', async () => {
