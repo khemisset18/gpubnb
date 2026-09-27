@@ -94,6 +94,40 @@ jobs:
           python -c "from pathlib import Path; from gpubnb_agent.mining_secret_broker import store_secret, resolve_secret, delete_secret; r='secret://local/mining/ci-smoke'; s='ci-ephemeral-secret-42'; store_secret(r,s); files=list((Path(__import__('os').environ['GPUBNB_CONFIG_DIR'])/'secrets'/'mining').glob('*.dpapi')); assert len(files)==1; assert s.encode() not in files[0].read_bytes(); assert resolve_secret(r)==s; delete_secret(r); assert not files[0].exists()"
 
 
+      - name: Smoke test Windows runtime mining credential ACL
+        shell: pwsh
+        run: |
+          $env:GPUBNB_CONFIG_DIR = Join-Path $env:RUNNER_TEMP 'gpubnb-mining-runtime-secret-smoke'
+          $reference = 'secret://local/mining/runtime-ci-smoke'
+          $resource = 'resource_runtime_ci_smoke'
+          try {
+            python -c "from gpubnb_agent.mining_secret_broker import store_secret; store_secret('$reference','ci-runtime-secret-42')"
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to seed the local mining secret.' }
+
+            $runtimeConfig = (python -c "from gpubnb_agent.mining_secret_runtime import prepare_lolminer_secret_config; print(prepare_lolminer_secret_config('$reference','$resource',7))" | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0 -or -not $runtimeConfig -or -not (Test-Path -LiteralPath $runtimeConfig -PathType Leaf)) {
+              throw 'Runtime mining credential config was not created.'
+            }
+            if ($runtimeConfig -match 'runtime-ci-smoke') {
+              throw 'Secret reference material leaked into the runtime credential filename.'
+            }
+
+            $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            $allowedSids = @($currentSid, 'S-1-5-18')
+            $acl = Get-Acl -LiteralPath $runtimeConfig
+            foreach ($rule in $acl.Access) {
+              if ($rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
+              $sid = $rule.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
+              if ($allowedSids -notcontains $sid) {
+                throw "Runtime mining credential config has unexpected Allow ACE for SID $sid."
+              }
+            }
+          }
+          finally {
+            python -c "from gpubnb_agent.mining_secret_runtime import cleanup_lolminer_secret_configs; from gpubnb_agent.mining_secret_broker import delete_secret; cleanup_lolminer_secret_configs('$resource'); delete_secret('$reference')"
+            Remove-Item -LiteralPath $env:GPUBNB_CONFIG_DIR -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
       - name: Test agent CLI
         shell: pwsh
         run: |
