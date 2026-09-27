@@ -253,8 +253,8 @@ class RentalPreemptionTests(unittest.TestCase):
         )
 
     def test_existing_quiescent_claim_rechecks_secret_cleanup_before_return(self) -> None:
-        spec = rental_spec(generation=2)
-        self.preemption._write_claim(spec, "QUIESCENT")
+        rental = spec("resource_00000001", "GPU-aaaaaaaa", 2)
+        self.supervisor._write_claim(rental, "QUIESCENT")
         with patch.object(
             self.mining,
             "_cleanup_secret_config",
@@ -264,12 +264,12 @@ class RentalPreemptionTests(unittest.TestCase):
                 ExecutionControlError,
                 "miner_secret_config_cleanup_failed",
             ):
-                self.preemption.preempt_for_rental(spec)
-        self.assertEqual(self.claims.load()[spec.resource_id].state, "QUARANTINED")
+                self.supervisor.preempt_for_rental(rental)
+        self.assertEqual(self.claim_store.load()[rental.resource_id].state, "QUARANTINED")
 
     def test_mark_rental_active_rechecks_secret_cleanup_fail_closed(self) -> None:
-        spec = rental_spec(generation=2)
-        self.preemption._write_claim(spec, "QUIESCENT")
+        rental = spec("resource_00000001", "GPU-aaaaaaaa", 2)
+        self.supervisor._write_claim(rental, "QUIESCENT")
         with patch.object(
             self.mining,
             "_cleanup_secret_config",
@@ -279,8 +279,8 @@ class RentalPreemptionTests(unittest.TestCase):
                 ExecutionControlError,
                 "miner_secret_config_cleanup_failed",
             ):
-                self.preemption.mark_rental_active(spec)
-        self.assertEqual(self.claims.load()[spec.resource_id].state, "QUARANTINED")
+                self.supervisor.mark_rental_active(rental)
+        self.assertEqual(self.claim_store.load()[rental.resource_id].state, "QUARANTINED")
 
     def test_rental_preemption_quarantines_when_credential_cleanup_fails(self) -> None:
         self._seed_two_miners()
