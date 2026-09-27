@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from gpubnb_agent.execution_control import ExecutionControlError
+from gpubnb_agent.mining_secret_runtime import MiningSecretRuntimeError
 from gpubnb_agent.gpu_resource_supervisor import (
     GpuBinding,
     GpuMetrics,
@@ -290,6 +291,81 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         self.assertEqual(
             _lolminer_pool_arguments("stratum+tls://[2606:4700:4700::1111]:5555"),
             ["--pool", "[2606:4700:4700::1111]:5555", "--tls", "on"],
+        )
+
+    def test_resource_start_accepts_only_local_secret_reference(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        payload["poolCredentialRef"] = "secret://local/mining/pool-main"
+        spec = parse_resource_start(payload)
+        self.assertEqual(spec.pool_credential_ref, "secret://local/mining/pool-main")
+
+        payload["poolCredentialRef"] = "vault://remote/mining/pool-main"
+        with self.assertRaisesRegex(
+            ExecutionControlError,
+            "mining_pool_secret_reference_invalid",
+        ):
+            parse_resource_start(payload)
+
+    def test_resource_arguments_use_private_config_path_without_secret_or_reference(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        reference = "secret://local/mining/pool-main"
+        payload["poolCredentialRef"] = reference
+        secret = "PoolSecret-Should-Never-Be-In-Argv"
+        config_path = Path(self.temp.name) / "private" / "credential.cfg"
+
+        with patch(
+            "gpubnb_agent.gpu_resource_supervisor.prepare_lolminer_secret_config",
+            return_value=config_path,
+        ) as prepare:
+            self.supervisor.start(payload, "command_00000001")
+
+        prepare.assert_called_once_with(reference, "resource_00000001", 1)
+        _executable, arguments, _log = self.launcher.calls[-1]
+        self.assertIn("--config", arguments)
+        self.assertEqual(arguments[arguments.index("--config") + 1], str(config_path))
+        serialized = repr(arguments)
+        self.assertNotIn(reference, serialized)
+        self.assertNotIn(secret, serialized)
+        self.assertNotIn("--pass", arguments)
+
+        runtime = repr(self.supervisor.snapshot())
+        telemetry = repr(mining_runtime_telemetry_snapshot(self.store))
+        for forbidden in (reference, secret, str(config_path), "pool_credential_ref"):
+            self.assertNotIn(forbidden, runtime)
+            self.assertNotIn(forbidden, telemetry)
+
+    def test_missing_local_secret_fails_closed_before_process_spawn(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        payload["poolCredentialRef"] = "secret://local/mining/missing"
+        with patch(
+            "gpubnb_agent.gpu_resource_supervisor.prepare_lolminer_secret_config",
+            side_effect=MiningSecretRuntimeError("mining_secret_not_found"),
+        ):
+            with self.assertRaisesRegex(ExecutionControlError, "mining_secret_not_found"):
+                self.supervisor.start(payload, "command_00000001")
+        self.assertEqual(self.launcher.calls, [])
+        self.assertEqual(self.supervisor.snapshot(), {})
+
+    def test_verified_stop_cleans_private_secret_config(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        payload["poolCredentialRef"] = "secret://local/mining/pool-main"
+        config_path = Path(self.temp.name) / "private" / "credential.cfg"
+
+        with (
+            patch(
+                "gpubnb_agent.gpu_resource_supervisor.prepare_lolminer_secret_config",
+                return_value=config_path,
+            ),
+            patch(
+                "gpubnb_agent.gpu_resource_supervisor.cleanup_lolminer_secret_configs",
+            ) as cleanup,
+        ):
+            self.supervisor.start(payload, "command_00000001")
+            self.supervisor.stop(stop_payload("resource_00000001", "GPU-aaaaaaaa"))
+
+        self.assertGreaterEqual(cleanup.call_count, 2)
+        self.assertTrue(
+            any(call.args == ("resource_00000001",) for call in cleanup.call_args_list)
         )
 
     def test_resource_arguments_pin_exact_pcie_device(self) -> None:
