@@ -914,7 +914,16 @@ class GpuResourceSupervisor:
             except Exception:
                 self._cleanup_secret_config(spec.resource_id)
                 raise
-            log_path = _resource_log_path(spec.resource_id)
+            # Authenticated pool credentials must never be exposed through raw
+            # miner stdout/stderr. The pinned parser probe proves config parsing,
+            # but cannot prove every future network/auth diagnostic is secret-free.
+            # Disable miner log capture for credentialed pools rather than relying
+            # on best-effort redaction. Thermal safety telemetry remains independent.
+            log_path = (
+                None
+                if spec.pool_credential_ref is not None
+                else _resource_log_path(spec.resource_id)
+            )
             try:
                 child = self.launcher.spawn(executable, arguments, root, log_path)
             except Exception:
