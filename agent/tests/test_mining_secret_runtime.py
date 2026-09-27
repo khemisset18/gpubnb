@@ -228,7 +228,7 @@ class MiningSecretRuntimeTests(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "POSIX chmod failure path")
     def test_post_publish_cleanup_retries_after_first_unlink_failure(self) -> None:
         original_unlink = Path.unlink
-        target = runtime_secret_config_path(self.RESOURCE, 7)
+        target: Path | None = None
         target_attempts = 0
 
         def flaky_unlink(path: Path, *args, **kwargs):
@@ -249,6 +249,7 @@ class MiningSecretRuntimeTests(unittest.TestCase):
             patch.object(Path, "chmod", side_effect=OSError("chmod-denied")),
             patch.object(Path, "unlink", new=flaky_unlink),
         ):
+            target = runtime_secret_config_path(self.RESOURCE, 7)
             with self.assertRaisesRegex(
                 MiningSecretRuntimeError,
                 "miner_secret_config_write_failed",
@@ -256,12 +257,13 @@ class MiningSecretRuntimeTests(unittest.TestCase):
                 prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
 
         self.assertGreaterEqual(target_attempts, 2)
+        self.assertIsNotNone(target)
         self.assertFalse(target.exists())
 
     @unittest.skipIf(os.name == "nt", "POSIX chmod failure path")
     def test_post_publish_persistent_cleanup_failure_surfaces_fail_closed_code(self) -> None:
         original_unlink = Path.unlink
-        target = runtime_secret_config_path(self.RESOURCE, 7)
+        target: Path | None = None
 
         def denied_target_unlink(path: Path, *args, **kwargs):
             if path == target:
@@ -278,6 +280,7 @@ class MiningSecretRuntimeTests(unittest.TestCase):
             patch.object(Path, "chmod", side_effect=OSError("chmod-denied")),
             patch.object(Path, "unlink", new=denied_target_unlink),
         ):
+            target = runtime_secret_config_path(self.RESOURCE, 7)
             with self.assertRaisesRegex(
                 MiningSecretRuntimeError,
                 "miner_secret_config_cleanup_failed",
@@ -286,6 +289,7 @@ class MiningSecretRuntimeTests(unittest.TestCase):
 
         self.assertIsNone(raised.exception.__cause__)
         self.assertTrue(raised.exception.__suppress_context__)
+        self.assertIsNotNone(target)
         self.assertTrue(target.exists())
 
     def test_cleanup_failure_is_fail_closed(self) -> None:
