@@ -206,6 +206,25 @@ class MiningSecretRuntimeTests(unittest.TestCase):
                 prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
         resolve.assert_not_called()
 
+    @unittest.skipIf(os.name == "nt", "POSIX chmod failure path")
+    def test_post_publish_permission_failure_removes_credential_file(self) -> None:
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch(
+                "gpubnb_agent.mining_secret_runtime.require_private_directory",
+                side_effect=lambda path: path.mkdir(parents=True, exist_ok=True) or path,
+            ),
+            patch("gpubnb_agent.mining_secret_runtime.resolve_secret", return_value="safe-secret"),
+            patch.object(Path, "chmod", side_effect=OSError("chmod-denied")),
+        ):
+            path = runtime_secret_config_path(self.RESOURCE, 7)
+            with self.assertRaisesRegex(
+                MiningSecretRuntimeError,
+                "miner_secret_config_write_failed",
+            ):
+                prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
+            self.assertFalse(path.exists())
+
     def test_cleanup_failure_is_fail_closed(self) -> None:
         with patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root):
             root = self.root / "mining-runtime-secrets"
