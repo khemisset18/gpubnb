@@ -968,7 +968,7 @@ class GpuResourceSupervisor:
                 process_creation_token=identity.creation_token,
                 maximum_temperature_c=spec.maximum_temperature_c,
                 last_stop_reason=None,
-                log_path=str(log_path),
+                log_path=str(log_path) if log_path is not None else None,
                 updated_at_ms=int(time.time() * 1000),
             )
             try:
