@@ -104,6 +104,39 @@ class MiningSecretRuntimeTests(unittest.TestCase):
         self.assertTrue(raised.exception.__suppress_context__)
         self.assertEqual(str(raised.exception), "mining_secret_not_found")
 
+    @unittest.skipIf(os.name == "nt", "symlink creation is privilege-dependent on Windows CI")
+    def test_redirected_runtime_secret_directory_is_rejected_before_secret_resolution(self) -> None:
+        outside = self.root / "outside"
+        outside.mkdir()
+        redirected = self.root / "mining-runtime-secrets"
+        redirected.symlink_to(outside, target_is_directory=True)
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch("gpubnb_agent.mining_secret_runtime.resolve_secret") as resolve,
+        ):
+            with self.assertRaisesRegex(
+                MiningSecretRuntimeError,
+                "miner_secret_config_path_unsafe",
+            ):
+                prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
+        resolve.assert_not_called()
+        self.assertEqual(list(outside.iterdir()), [])
+
+    def test_reparse_point_flag_is_rejected_without_resolving_secret(self) -> None:
+        fake_stat = type("FakeStat", (), {"st_file_attributes": 0x400})()
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch.object(Path, "lstat", return_value=fake_stat),
+            patch.object(Path, "is_symlink", return_value=False),
+            patch("gpubnb_agent.mining_secret_runtime.resolve_secret") as resolve,
+        ):
+            with self.assertRaisesRegex(
+                MiningSecretRuntimeError,
+                "miner_secret_config_path_unsafe",
+            ):
+                prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
+        resolve.assert_not_called()
+
     def test_cleanup_failure_is_fail_closed(self) -> None:
         with patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root):
             root = self.root / "mining-runtime-secrets"
