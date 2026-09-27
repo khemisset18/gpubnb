@@ -942,6 +942,14 @@ class GpuResourceSupervisor:
                 self._cleanup_secret_config(spec.resource_id)
                 raise ExecutionControlError("miner_process_identity_mismatch")
 
+            # lolMiner has already parsed --config by this point. Do not retain
+            # plaintext pool credentials for the lifetime of the mining process.
+            try:
+                self._cleanup_secret_config(spec.resource_id)
+            except ExecutionControlError:
+                child.terminate_owned()
+                raise
+
             records[spec.resource_id] = RuntimeRecord(
                 resource_id=spec.resource_id,
                 hardware_uuid=spec.hardware_uuid,
