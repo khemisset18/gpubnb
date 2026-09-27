@@ -383,6 +383,46 @@ class GpuResourceSupervisorTests(unittest.TestCase):
             )
             self.assertFalse(config_path.exists())
 
+    def test_new_generation_cleans_stale_credential_before_spawn(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa", generation=8)
+        payload["poolCredentialRef"] = "secret://local/mining/pool-main"
+        config_path = Path(self.temp.name) / "private" / "generation-8.cfg"
+        order: list[str] = []
+
+        def cleanup(resource_id: str) -> None:
+            self.assertEqual(resource_id, "resource_00000001")
+            order.append("cleanup")
+
+        def prepare(reference: str, resource_id: str, generation: int) -> Path:
+            self.assertEqual(reference, "secret://local/mining/pool-main")
+            self.assertEqual(resource_id, "resource_00000001")
+            self.assertEqual(generation, 8)
+            self.assertEqual(order, ["cleanup"])
+            order.append("prepare")
+            return config_path
+
+        original_spawn = self.launcher.spawn
+
+        def spawn(executable, arguments, cwd, log_path=None):
+            self.assertEqual(order, ["cleanup", "prepare"])
+            order.append("spawn")
+            return original_spawn(executable, arguments, cwd, log_path)
+
+        with (
+            patch(
+                "gpubnb_agent.gpu_resource_supervisor.cleanup_lolminer_secret_configs",
+                side_effect=cleanup,
+            ),
+            patch(
+                "gpubnb_agent.gpu_resource_supervisor.prepare_lolminer_secret_config",
+                side_effect=prepare,
+            ),
+            patch.object(self.launcher, "spawn", side_effect=spawn),
+        ):
+            self.supervisor.start(payload, "command_00000008")
+
+        self.assertEqual(order, ["cleanup", "prepare", "spawn"])
+
     def test_missing_local_secret_fails_closed_before_process_spawn(self) -> None:
         payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
         payload["poolCredentialRef"] = "secret://local/mining/missing"
