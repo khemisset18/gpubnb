@@ -207,6 +207,13 @@ jobs:
           tar -xOzf lolMiner_v1.98a_Lin64.tar.gz "$linux_entry" > lolMiner
           test -s lolMiner.exe
           test -s lolMiner
+          # Bind the official archive provenance to the exact executables that
+          # execution_control.py permits at runtime. Archive verification alone
+          # must not silently qualify a different extracted miner binary.
+          printf '%s  %s\n' \
+            45d54e54e0bfcae4f983a8c5db88d1e3fed1618b26d4461c76af8027c4ec4616 lolMiner.exe \
+            23c3719c7f949d6074fd3505928116df52de0e95e18a0a9e8c966b276b08e4ee lolMiner \
+            | sha256sum --check --strict
       - name: Qualify lolMiner 1.98a private password config parsing
         shell: bash
         run: |
