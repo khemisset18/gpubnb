@@ -126,6 +126,7 @@ def _private_atomic_write(path: Path, content: str) -> None:
         dir=path.parent,
         text=True,
     )
+    published = False
     try:
         if os.name != "nt":
             os.fchmod(fd, 0o600)
@@ -134,9 +135,15 @@ def _private_atomic_write(path: Path, content: str) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
+        published = True
         if os.name != "nt":
             path.chmod(0o600)
     except OSError:
+        if published:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
         raise MiningSecretRuntimeError("miner_secret_config_write_failed") from None
     finally:
         try:
