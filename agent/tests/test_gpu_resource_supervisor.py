@@ -654,6 +654,64 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         with self.assertRaisesRegex(ExecutionControlError, "mining_runtime_generation_replay"):
             self.supervisor.start(payload, "command_00000001")
 
+    def test_same_generation_replay_after_process_exit_scrubs_credential(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        payload["poolCredentialRef"] = "secret://local/mining/pool-main"
+        credential = "CrashReplaySecret-123"
+        agent_config = Path(self.temp.name) / "agent-config"
+
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=agent_config),
+            patch("gpubnb_agent.mining_secret_runtime.resolve_secret", return_value=credential),
+        ):
+            self.supervisor.start(payload, "command_00000001")
+            _executable, arguments, _log = self.launcher.calls[-1]
+            config_path = Path(arguments[arguments.index("--config") + 1])
+            self.assertTrue(config_path.exists())
+
+            pid = int(self.supervisor.snapshot()["resource_00000001"]["pid"])
+            self.inspector.identities.pop(pid, None)
+
+            with self.assertRaisesRegex(
+                ExecutionControlError,
+                "mining_runtime_generation_replay",
+            ) as raised:
+                self.supervisor.start(payload, "command_00000001")
+
+            self.assertFalse(config_path.exists())
+            record = self.supervisor.snapshot()["resource_00000001"]
+            self.assertEqual(record["state"], "STOPPED")
+            self.assertEqual(record["last_stop_reason"], "miner_process_exited")
+            self.assertNotIn(credential, str(raised.exception))
+            self.assertNotIn(credential, repr(record))
+
+    def test_watchdog_process_exit_scrubs_credential_before_sensor_sampling(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        payload["poolCredentialRef"] = "secret://local/mining/pool-main"
+        credential = "CrashWatchdogSecret-123"
+        agent_config = Path(self.temp.name) / "agent-config"
+
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=agent_config),
+            patch("gpubnb_agent.mining_secret_runtime.resolve_secret", return_value=credential),
+        ):
+            self.supervisor.start(payload, "command_00000001")
+            _executable, arguments, _log = self.launcher.calls[-1]
+            config_path = Path(arguments[arguments.index("--config") + 1])
+            pid = int(self.supervisor.snapshot()["resource_00000001"]["pid"])
+            self.inspector.identities.pop(pid, None)
+            self.sensor.errors["GPU-aaaaaaaa"] = "sensor_should_not_run_after_process_exit"
+
+            outcome = self.supervisor.run_watchdog_once()
+
+            self.assertEqual(outcome["resource_00000001"], "STOPPED")
+            self.assertFalse(config_path.exists())
+            record = self.supervisor.snapshot()["resource_00000001"]
+            self.assertEqual(record["state"], "STOPPED")
+            self.assertEqual(record["last_stop_reason"], "miner_process_exited")
+            for surface in (repr(record), repr(self.events), repr(outcome)):
+                self.assertNotIn(credential, surface)
+
     def test_newer_fenced_stop_can_recover_after_previous_mining_lease_expires(self) -> None:
         self.supervisor.start(
             start_payload("resource_00000001", "GPU-aaaaaaaa", 7),
