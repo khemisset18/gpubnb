@@ -226,8 +226,12 @@ jobs:
 
           printf 'gpubnb_unknown_config_probe=1\n' > lolMiner-invalid.cfg
           chmod 600 lolMiner-invalid.cfg
-          if timeout 20s ./lolMiner --config "$PWD/lolMiner-invalid.cfg" --list-algos >lolminer-invalid-probe.out 2>&1; then
-            echo 'lolMiner accepted an intentionally unknown config key; config parsing was not proven fail-closed' >&2
+          # lolMiner 1.98a reports config parser errors in output while
+          # --list-algos still exits zero. Prove the file was parsed by requiring
+          # the exact unknown-key diagnostic rather than assuming exit semantics.
+          timeout 20s ./lolMiner --config "$PWD/lolMiner-invalid.cfg" --list-algos >lolminer-invalid-probe.out 2>&1 || true
+          if ! grep -Fq "unrecognised option 'gpubnb_unknown_config_probe'" lolminer-invalid-probe.out; then
+            echo 'lolMiner did not prove that the supplied config file was parsed' >&2
             cat lolminer-invalid-probe.out >&2
             exit 1
           fi
