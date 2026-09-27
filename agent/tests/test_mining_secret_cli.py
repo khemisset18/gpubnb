@@ -27,6 +27,21 @@ class MiningSecretCliTests(unittest.TestCase):
         self.assertTrue(payload["present"])
         self.assertNotIn("top-secret", repr(payload))
 
+    def test_rotate_reads_new_secret_from_masked_prompt_and_never_prints_it(self) -> None:
+        args = argparse.Namespace(reference=self.REFERENCE)
+        status = MiningSecretStatus(self.REFERENCE, "linux-secret-service-user", True)
+        with (
+            patch("gpubnb_agent.cli.getpass.getpass", side_effect=["rotated-secret", "rotated-secret"]),
+            patch("gpubnb_agent.mining_secret_broker.rotate_secret", return_value=status) as rotate,
+            patch("gpubnb_agent.cli.print_json") as output,
+        ):
+            self.assertEqual(cli.command_mining_secret_rotate(args), 0)
+
+        rotate.assert_called_once_with(self.REFERENCE, "rotated-secret")
+        payload = output.call_args.args[0]
+        self.assertEqual(payload["backend"], "linux-secret-service-user")
+        self.assertNotIn("rotated-secret", repr(payload))
+
     def test_set_rejects_confirmation_mismatch_before_storage(self) -> None:
         args = argparse.Namespace(reference=self.REFERENCE)
         with (
@@ -38,15 +53,16 @@ class MiningSecretCliTests(unittest.TestCase):
         store.assert_not_called()
 
     def test_parser_has_no_plaintext_secret_argument(self) -> None:
-        parsed = cli.parser().parse_args(["mining-secrets", "set", self.REFERENCE])
-        self.assertEqual(parsed.reference, self.REFERENCE)
-        with self.assertRaises(SystemExit):
-            cli.parser().parse_args([
-                "mining-secrets",
-                "set",
-                self.REFERENCE,
-                "must-not-be-an-argv-secret",
-            ])
+        for action in ("set", "rotate"):
+            parsed = cli.parser().parse_args(["mining-secrets", action, self.REFERENCE])
+            self.assertEqual(parsed.reference, self.REFERENCE)
+            with self.assertRaises(SystemExit):
+                cli.parser().parse_args([
+                    "mining-secrets",
+                    action,
+                    self.REFERENCE,
+                    "must-not-be-an-argv-secret",
+                ])
 
     def test_delete_requires_explicit_confirmation(self) -> None:
         args = argparse.Namespace(reference=self.REFERENCE, yes=False)
