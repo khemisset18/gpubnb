@@ -357,6 +357,7 @@ class GpuResourceSupervisorTests(unittest.TestCase):
             _executable, arguments, log_path = self.launcher.calls[-1]
             serialized_argv = repr(arguments)
             self.assertIn("--config", arguments)
+            self.assertIsNone(log_path)
             self.assertNotIn("--pass", arguments)
             self.assertNotIn(credential, serialized_argv)
             self.assertNotIn(reference, serialized_argv)
