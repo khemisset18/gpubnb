@@ -2,6 +2,7 @@ import type { ResourceLeaseSnapshot } from './resource-lease.js';
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9:._-]{7,191}$/;
 const SAFE_GPU_UUID = /^[A-Za-z0-9][A-Za-z0-9:._-]{7,199}$/;
+const SAFE_LOCAL_SECRET_REF = /^secret:\/\/local\/mining\/[A-Za-z0-9][A-Za-z0-9._-]{2,95}$/;
 
 export type MiningPerformanceMode = 'ECO' | 'BALANCED' | 'FULL';
 
@@ -16,6 +17,7 @@ export type MiningResourceStartInput = {
   performanceMode: MiningPerformanceMode;
   maximumTemperatureC: number;
   maximumPowerWatts: number;
+  poolCredentialRef?: string | null;
 };
 
 export type FencedMiningCommand = {
@@ -63,6 +65,12 @@ export function buildFencedStartMining(
   if (!Number.isInteger(input.maximumPowerWatts) || input.maximumPowerWatts < 5 || input.maximumPowerWatts > 1500) {
     throw new Error('mining_maximum_power_invalid');
   }
+  if (
+    input.poolCredentialRef != null
+    && !SAFE_LOCAL_SECRET_REF.test(input.poolCredentialRef)
+  ) {
+    throw new Error('mining_pool_secret_reference_invalid');
+  }
   const generation = exactFence(lease, input.resourceId);
   return {
     lease: leaseBinding(lease),
@@ -77,6 +85,7 @@ export function buildFencedStartMining(
       performanceMode: input.performanceMode,
       maximumTemperatureC: input.maximumTemperatureC,
       maximumPowerWatts: input.maximumPowerWatts,
+      ...(input.poolCredentialRef ? { poolCredentialRef: input.poolCredentialRef } : {}),
     },
   };
 }

@@ -26,6 +26,7 @@ test('start payload binds hardware and preserves i64 fence as exact string', () 
     performanceMode: 'FULL',
     maximumTemperatureC: 94,
     maximumPowerWatts: 180,
+    poolCredentialRef: 'secret://local/mining/pool-main',
   }, lease());
 
   assert.equal(command.lease.fencingToken, '9223372036854775807');
@@ -35,6 +36,7 @@ test('start payload binds hardware and preserves i64 fence as exact string', () 
   assert.equal(command.payload.hardwareUuid, 'GPU-aaaaaaaa');
   assert.equal(command.payload.maximumTemperatureC, 94);
   assert.equal(command.payload.maximumPowerWatts, 180);
+  assert.equal(command.payload.poolCredentialRef, 'secret://local/mining/pool-main');
 });
 
 test('stop payload carries only resource identity and exact generation', () => {
@@ -90,4 +92,21 @@ test('start payload rejects invalid owner power ceiling', () => {
   };
   assert.throws(() => buildFencedStartMining({ ...base, maximumPowerWatts: 0 }, lease()), /mining_maximum_power_invalid/);
   assert.throws(() => buildFencedStartMining({ ...base, maximumPowerWatts: 1501 }, lease()), /mining_maximum_power_invalid/);
+});
+
+
+test('start payload rejects non-local pool credential references', () => {
+  assert.throws(() => buildFencedStartMining({
+    machineId: 'machine_00000001',
+    resourceId: 'resource_00000001',
+    hardwareUuid: 'GPU-aaaaaaaa',
+    profileId: 'lolminer_etchash',
+    poolUrl: 'stratum+tcp://pool.example.com:4444',
+    walletAddress: 'wallet.example-123',
+    workerName: 'worker_1',
+    performanceMode: 'FULL',
+    maximumTemperatureC: 94,
+    maximumPowerWatts: 180,
+    poolCredentialRef: 'vault://remote/mining/pool-main',
+  }, lease()), /mining_pool_secret_reference_invalid/);
 });
