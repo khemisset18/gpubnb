@@ -238,6 +238,44 @@ class RentalPreemptionTests(unittest.TestCase):
         self.assertEqual(self.probe.calls, ["GPU-aaaaaaaa"])
         self.assertEqual(self.claim_store.load()["resource_00000001"].state, "QUIESCENT")
 
+    def test_rental_preemption_scrubs_mining_credential_config_before_quiescence(self) -> None:
+        self._seed_two_miners()
+        with patch.object(self.mining, "_cleanup_secret_config") as cleanup:
+            proof = self.supervisor.preempt_for_rental(
+                spec("resource_00000001", "GPU-aaaaaaaa", 9)
+            )
+
+        self.assertEqual(proof.hardware_uuid, "GPU-aaaaaaaa")
+        cleanup.assert_called_with("resource_00000001")
+        self.assertEqual(
+            self.claim_store.load()["resource_00000001"].state,
+            "QUIESCENT",
+        )
+
+    def test_rental_preemption_quarantines_when_credential_cleanup_fails(self) -> None:
+        self._seed_two_miners()
+        with patch.object(
+            self.mining,
+            "_cleanup_secret_config",
+            side_effect=ExecutionControlError("miner_secret_config_cleanup_failed"),
+        ):
+            with self.assertRaisesRegex(
+                ExecutionControlError,
+                "miner_secret_config_cleanup_failed",
+            ):
+                self.supervisor.preempt_for_rental(
+                    spec("resource_00000001", "GPU-aaaaaaaa", 9)
+                )
+
+        self.assertEqual(
+            self.claim_store.load()["resource_00000001"].state,
+            "QUARANTINED",
+        )
+        self.assertEqual(
+            self.runtime_store.load()["resource_00000001"].state,
+            "QUARANTINED",
+        )
+
     def test_preempting_claim_is_persisted_before_owned_process_termination(self) -> None:
         self._seed_two_miners()
         observed_states: list[str] = []
