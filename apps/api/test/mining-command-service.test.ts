@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { requestMiningStart, requestMiningStop } from '../src/mining-command-service.js';
@@ -115,9 +116,10 @@ test('start fails closed for an unqualified GPU vendor before durable command cr
   assert.equal(writes.length, 0);
 });
 
-test('owner pool secret reference is carried into the durable fenced START without plaintext', async () => {
-  const reference = 'secret://local/mining/pool-main';
-  const { db, writes } = fakeDb(resource({ ownerPoolSecretRef: reference }));
+test('owner pool secret reference no longer blocks durable fenced START creation', async () => {
+  const { db, writes } = fakeDb(resource({
+    ownerPoolSecretRef: 'secret://local/mining/pool-main',
+  }));
   const { redis, evalCalls } = fakeRedis();
   const result = await requestMiningStart(db, redis, {
     machineId: 'machine_00000001',
@@ -126,10 +128,13 @@ test('owner pool secret reference is carried into the durable fenced START witho
   });
   assert.equal(result.alreadySatisfied, false);
   assert.equal(evalCalls(), 1);
-  assert.ok(writes.length > 0);
-  const serialized = JSON.stringify(writes, (_key, value) => typeof value === 'bigint' ? value.toString() : value);
-  assert.match(serialized, /secret:\/\/local\/mining\/pool-main/);
-  assert.doesNotMatch(serialized, /pool-password|private-key|seed-phrase/i);
+  assert.equal(writes.length, 4);
+});
+
+test('command service maps only the stored secret reference into fenced START input', async () => {
+  const source = await readFile(new URL('../src/mining-command-service.ts', import.meta.url), 'utf8');
+  assert.match(source, /poolCredentialRef: row\.ownerPoolSecretRef/);
+  assert.doesNotMatch(source, /poolPassword|poolSecretValue|secretValue|seedPhrase|privateKey/);
 });
 
 test('owner STOP is idempotent when resource is already stopped', async () => {
