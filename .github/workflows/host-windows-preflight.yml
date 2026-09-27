@@ -101,7 +101,9 @@ jobs:
           $reference = 'secret://local/mining/runtime-ci-smoke'
           $resource = 'resource_runtime_ci_smoke'
           try {
-            python -c "from gpubnb_agent.mining_secret_broker import store_secret; store_secret('$reference','ci-runtime-secret-42')"
+            $env:GPUBNB_CI_RUNTIME_SECRET = 'ci-runtime-secret-42'
+            python -c "import os; from gpubnb_agent.mining_secret_broker import store_secret; store_secret('$reference', os.environ.pop('GPUBNB_CI_RUNTIME_SECRET'))"
+            Remove-Item Env:GPUBNB_CI_RUNTIME_SECRET -ErrorAction SilentlyContinue
             if ($LASTEXITCODE -ne 0) { throw 'Unable to seed the local mining secret.' }
 
             $runtimeConfig = (python -c "from gpubnb_agent.mining_secret_runtime import prepare_lolminer_secret_config; print(prepare_lolminer_secret_config('$reference','$resource',7))" | Out-String).Trim()
@@ -124,6 +126,7 @@ jobs:
             }
           }
           finally {
+            Remove-Item Env:GPUBNB_CI_RUNTIME_SECRET -ErrorAction SilentlyContinue
             python -c "from gpubnb_agent.mining_secret_runtime import cleanup_lolminer_secret_configs; from gpubnb_agent.mining_secret_broker import delete_secret; cleanup_lolminer_secret_configs('$resource'); delete_secret('$reference')"
             Remove-Item -LiteralPath $env:GPUBNB_CONFIG_DIR -Recurse -Force -ErrorAction SilentlyContinue
           }
