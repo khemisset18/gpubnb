@@ -450,6 +450,11 @@ class RentalPreemptionSupervisor:
         self._lock = threading.RLock()
 
     def _quarantine(self, spec: RentalResourceSpec, error: str) -> None:
+        cleanup_error: str | None = None
+        try:
+            self.mining._cleanup_secret_config(spec.resource_id)
+        except ExecutionControlError as exc:
+            cleanup_error = str(exc)
         claims = self.claims.load()
         claims[spec.resource_id] = RentalClaimRecord(
             session_id=spec.session_id,
@@ -469,7 +474,7 @@ class RentalPreemptionSupervisor:
             record.state = "QUARANTINED"
             record.updated_at_ms = int(time.time() * 1000)
             self.mining.store.save(records)
-        raise ExecutionControlError(error)
+        raise ExecutionControlError(cleanup_error or error)
 
     def _write_claim(self, spec: RentalResourceSpec, state: str, verified_at_ms: int | None = None) -> None:
         claims = self.claims.load()
@@ -549,6 +554,11 @@ class RentalPreemptionSupervisor:
                         time.sleep(0.1)
                     else:
                         self._quarantine(spec, "rental_miner_process_stop_unverified")
+
+            try:
+                self.mining._cleanup_secret_config(spec.resource_id)
+            except ExecutionControlError as exc:
+                self._quarantine(spec, str(exc))
 
             if current is not None:
                 current.runtime_generation = spec.runtime_generation
