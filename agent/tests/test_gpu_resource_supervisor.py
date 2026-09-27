@@ -435,6 +435,67 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         self.assertEqual(self.launcher.calls, [])
         self.assertEqual(self.supervisor.snapshot(), {})
 
+    def test_argument_build_failure_cleans_prepared_secret_before_spawn(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        payload["poolCredentialRef"] = "secret://local/mining/pool-main"
+        payload["maximumPowerWatts"] = 90
+        config_path = Path(self.temp.name) / "private" / "credential.cfg"
+
+        with (
+            patch(
+                "gpubnb_agent.gpu_resource_supervisor.prepare_lolminer_secret_config",
+                return_value=config_path,
+            ),
+            patch(
+                "gpubnb_agent.gpu_resource_supervisor.cleanup_lolminer_secret_configs",
+            ) as cleanup,
+        ):
+            with self.assertRaisesRegex(
+                ExecutionControlError,
+                "mining_maximum_power_below_firmware_minimum",
+            ):
+                self.supervisor.start(payload, "command_00000001")
+
+        self.assertEqual(self.launcher.calls, [])
+        self.assertGreaterEqual(cleanup.call_count, 2)
+        self.assertEqual(cleanup.call_args_list[-1].args, ("resource_00000001",))
+
+    def test_runtime_store_failure_terminates_spawned_miner_before_secret_cleanup(self) -> None:
+        payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
+        payload["poolCredentialRef"] = "secret://local/mining/pool-main"
+        config_path = Path(self.temp.name) / "private" / "credential.cfg"
+        order: list[str] = []
+
+        original_terminate = self.inspector.terminate
+
+        def terminate(identity: ProcessIdentity) -> None:
+            order.append("terminate")
+            original_terminate(identity)
+
+        def cleanup(resource_id: str) -> None:
+            self.assertEqual(resource_id, "resource_00000001")
+            if self.launcher.calls:
+                order.append("cleanup")
+                self.assertFalse(self.inspector.identities)
+
+        with (
+            patch(
+                "gpubnb_agent.gpu_resource_supervisor.prepare_lolminer_secret_config",
+                return_value=config_path,
+            ),
+            patch(
+                "gpubnb_agent.gpu_resource_supervisor.cleanup_lolminer_secret_configs",
+                side_effect=cleanup,
+            ),
+            patch.object(self.inspector, "terminate", side_effect=terminate),
+            patch.object(self.store, "save", side_effect=OSError("disk-full")),
+        ):
+            with self.assertRaisesRegex(OSError, "disk-full"):
+                self.supervisor.start(payload, "command_00000001")
+
+        self.assertEqual(order[-2:], ["terminate", "cleanup"])
+        self.assertFalse(self.inspector.identities)
+
     def test_verified_stop_cleans_private_secret_config(self) -> None:
         payload = start_payload("resource_00000001", "GPU-aaaaaaaa")
         payload["poolCredentialRef"] = "secret://local/mining/pool-main"
