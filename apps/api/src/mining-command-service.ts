@@ -107,7 +107,6 @@ function startInput(row: ResourceForCommand) {
   if (!isMiningProfileApproved(row.profileId, 'GPU', 'NVIDIA')) {
     throw new Error('mining_profile_not_approved');
   }
-  if (row.ownerPoolSecretRef) throw new Error('miner_secret_resolution_required');
   if (row.maximumTemperatureC === null || row.maximumPowerWatts === null) {
     throw new Error('mining_limits_missing');
   }
@@ -122,6 +121,7 @@ function startInput(row: ResourceForCommand) {
     performanceMode: 'FULL' as MiningPerformanceMode,
     maximumTemperatureC: row.maximumTemperatureC,
     maximumPowerWatts: row.maximumPowerWatts,
+    poolCredentialRef: row.ownerPoolSecretRef,
   };
 }
 
