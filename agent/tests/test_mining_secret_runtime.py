@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from gpubnb_agent.mining_secret_runtime import (
+    MiningSecretRuntimeError,
+    cleanup_lolminer_secret_configs,
+    prepare_lolminer_secret_config,
+    runtime_secret_config_path,
+)
+
+
+class MiningSecretRuntimeTests(unittest.TestCase):
+    REFERENCE = "secret://local/mining/pool-main"
+    RESOURCE = "resource_00000001"
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def test_prepare_writes_only_private_lolminer_pass_config(self) -> None:
+        secret = "PoolSecret-123_abc"
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch(
+                "gpubnb_agent.mining_secret_runtime.require_private_directory",
+                side_effect=lambda path: path.mkdir(parents=True, exist_ok=True) or path,
+            ),
+            patch("gpubnb_agent.mining_secret_runtime.resolve_secret", return_value=secret),
+        ):
+            path = prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
+            self.assertEqual(path, runtime_secret_config_path(self.RESOURCE, 7))
+            self.assertEqual(path.read_text(encoding="utf-8"), f"pass={secret}\n")
+            self.assertNotIn("pool-main", path.name)
+            if os.name != "nt":
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_prepare_cleans_previous_generation_before_writing_new_one(self) -> None:
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch(
+                "gpubnb_agent.mining_secret_runtime.require_private_directory",
+                side_effect=lambda path: path.mkdir(parents=True, exist_ok=True) or path,
+            ),
+            patch("gpubnb_agent.mining_secret_runtime.resolve_secret", return_value="safe-secret"),
+        ):
+            first = prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
+            second = prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 8)
+            self.assertFalse(first.exists())
+            self.assertTrue(second.exists())
+
+    def test_cleanup_removes_only_target_resource_secret_configs(self) -> None:
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch(
+                "gpubnb_agent.mining_secret_runtime.require_private_directory",
+                side_effect=lambda path: path.mkdir(parents=True, exist_ok=True) or path,
+            ),
+            patch("gpubnb_agent.mining_secret_runtime.resolve_secret", return_value="safe-secret"),
+        ):
+            target = prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
+            other = prepare_lolminer_secret_config(
+                "secret://local/mining/other-pool",
+                "resource_00000002",
+                7,
+            )
+            cleanup_lolminer_secret_configs(self.RESOURCE)
+            self.assertFalse(target.exists())
+            self.assertTrue(other.exists())
+
+    def test_unsupported_config_characters_fail_before_file_write(self) -> None:
+        for secret in ("line1\nline2", "has space", "comment#marker", "quote\"value"):
+            with (
+                patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+                patch(
+                    "gpubnb_agent.mining_secret_runtime.require_private_directory",
+                    side_effect=lambda path: path.mkdir(parents=True, exist_ok=True) or path,
+                ),
+                patch("gpubnb_agent.mining_secret_runtime.resolve_secret", return_value=secret),
+            ):
+                with self.assertRaisesRegex(MiningSecretRuntimeError, "miner_secret_value_unsupported"):
+                    prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
+
+    def test_backend_error_is_redacted_and_not_chained(self) -> None:
+        from gpubnb_agent.mining_secret_broker import MiningSecretError
+
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch(
+                "gpubnb_agent.mining_secret_runtime.resolve_secret",
+                side_effect=MiningSecretError("mining_secret_not_found"),
+            ),
+        ):
+            with self.assertRaisesRegex(MiningSecretRuntimeError, "mining_secret_not_found") as raised:
+                prepare_lolminer_secret_config(self.REFERENCE, self.RESOURCE, 7)
+        self.assertIsNone(raised.exception.__cause__)
+        self.assertIsNone(raised.exception.__context__)
+
+    def test_cleanup_failure_is_fail_closed(self) -> None:
+        root = self.root / "mining-runtime-secrets"
+        root.mkdir(parents=True)
+        candidate = runtime_secret_config_path(self.RESOURCE, 7)
+        candidate.write_text("pass=safe-secret\n", encoding="utf-8")
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch.object(Path, "unlink", side_effect=OSError("denied")),
+        ):
+            with self.assertRaisesRegex(MiningSecretRuntimeError, "miner_secret_config_cleanup_failed"):
+                cleanup_lolminer_secret_configs(self.RESOURCE)
+
+
+if __name__ == "__main__":
+    unittest.main()
