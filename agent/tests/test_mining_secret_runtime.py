@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from gpubnb_agent.mining_secret_runtime import (
     MiningSecretRuntimeError,
+    cleanup_all_lolminer_secret_configs,
     cleanup_lolminer_secret_configs,
     prepare_lolminer_secret_config,
     runtime_secret_config_path,
@@ -106,6 +107,44 @@ class MiningSecretRuntimeTests(unittest.TestCase):
             new_path = runtime_secret_config_path(self.RESOURCE, 8)
             self.assertFalse(old_path.exists())
             self.assertEqual(new_path.read_text(encoding="utf-8"), "pass=new-secret\n")
+
+    def test_global_cleanup_removes_orphan_final_and_temporary_credentials(self) -> None:
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch(
+                "gpubnb_agent.mining_secret_runtime.require_private_directory",
+                side_effect=lambda path: path.mkdir(parents=True, exist_ok=True) or path,
+            ),
+        ):
+            runtime_root = self.root / "mining-runtime-secrets"
+            runtime_root.mkdir(parents=True, exist_ok=True)
+            final = runtime_secret_config_path(self.RESOURCE, 7)
+            temporary = runtime_root / ".pool-credential-orphan.cfg"
+            final.write_text("pass=orphan-final\n", encoding="utf-8")
+            temporary.write_text("pass=orphan-temporary\n", encoding="utf-8")
+
+            cleanup_all_lolminer_secret_configs()
+
+            self.assertEqual(list(runtime_root.iterdir()), [])
+
+    def test_global_cleanup_fails_closed_for_unremovable_runtime_entry(self) -> None:
+        with (
+            patch("gpubnb_agent.mining_secret_runtime.config_dir", return_value=self.root),
+            patch(
+                "gpubnb_agent.mining_secret_runtime.require_private_directory",
+                side_effect=lambda path: path.mkdir(parents=True, exist_ok=True) or path,
+            ),
+        ):
+            runtime_root = self.root / "mining-runtime-secrets"
+            runtime_root.mkdir(parents=True, exist_ok=True)
+            unexpected_directory = runtime_root / "unexpected-directory"
+            unexpected_directory.mkdir()
+
+            with self.assertRaisesRegex(
+                MiningSecretRuntimeError,
+                "miner_secret_config_cleanup_failed",
+            ):
+                cleanup_all_lolminer_secret_configs()
 
     def test_cleanup_removes_only_target_resource_secret_configs(self) -> None:
         with (
