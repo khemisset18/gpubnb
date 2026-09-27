@@ -49,9 +49,13 @@ def _is_link_or_reparse_point(path: Path) -> bool:
 
 
 def _validated_runtime_secret_root(*, create: bool) -> Path | None:
-    root = _runtime_secret_root()
-    # Check the directory entry before chmod/ACL operations: chmod follows POSIX
-    # symlinks, and Windows junctions/reparse points must never redirect secrets.
+    base_entry = config_dir()
+    root = base_entry / "mining-runtime-secrets"
+    # Neither the Agent config root nor the credential directory may be redirected.
+    # This check happens before chmod/ACL operations because chmod follows POSIX
+    # symlinks and Windows junctions/reparse points can redirect secret writes.
+    if _is_link_or_reparse_point(base_entry):
+        raise MiningSecretRuntimeError("miner_secret_config_path_unsafe")
     if _is_link_or_reparse_point(root):
         raise MiningSecretRuntimeError("miner_secret_config_path_unsafe")
     if not os.path.lexists(root):
@@ -69,7 +73,7 @@ def _validated_runtime_secret_root(*, create: bool) -> Path | None:
     if _is_link_or_reparse_point(root):
         raise MiningSecretRuntimeError("miner_secret_config_path_unsafe")
     try:
-        base = config_dir().resolve(strict=True)
+        base = base_entry.resolve(strict=True)
         resolved = root.resolve(strict=True)
     except OSError:
         raise MiningSecretRuntimeError("miner_secret_config_security_unavailable") from None
