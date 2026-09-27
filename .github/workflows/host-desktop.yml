@@ -191,6 +191,29 @@ jobs:
           tar -xOzf lolMiner_v1.98a_Lin64.tar.gz "$linux_entry" > lolMiner
           test -s lolMiner.exe
           test -s lolMiner
+      - name: Qualify lolMiner 1.98a private password config parsing
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./lolMiner
+          probe_secret='gpubnb-ci-config-probe-123'
+          printf 'pass=%s\n' "$probe_secret" > lolMiner.cfg
+          chmod 600 lolMiner.cfg
+          if ! timeout 20s ./lolMiner --config "$PWD/lolMiner.cfg" --list-algos >lolminer-config-probe.out 2>&1; then
+            sed "s/$probe_secret/[REDACTED]/g" lolminer-config-probe.out >&2
+            exit 1
+          fi
+          if grep -Fq "$probe_secret" lolminer-config-probe.out; then
+            echo 'lolMiner leaked the config password to output' >&2
+            exit 1
+          fi
+
+          printf 'gpubnb_invalid_option_for_parser_probe=1\n' > lolMiner-invalid.cfg
+          if timeout 20s ./lolMiner --config "$PWD/lolMiner-invalid.cfg" --list-algos >lolminer-invalid-probe.out 2>&1; then
+            echo 'lolMiner accepted an invalid config option; parser proof is inconclusive' >&2
+            exit 1
+          fi
+          rm -f lolMiner.cfg lolMiner-invalid.cfg lolminer-config-probe.out lolminer-invalid-probe.out
       - name: Write provenance report
         shell: bash
         run: |
