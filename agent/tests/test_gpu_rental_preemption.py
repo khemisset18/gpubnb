@@ -252,6 +252,36 @@ class RentalPreemptionTests(unittest.TestCase):
             "QUIESCENT",
         )
 
+    def test_existing_quiescent_claim_rechecks_secret_cleanup_before_return(self) -> None:
+        spec = rental_spec(generation=2)
+        self.preemption._write_claim(spec, "QUIESCENT")
+        with patch.object(
+            self.mining,
+            "_cleanup_secret_config",
+            side_effect=ExecutionControlError("miner_secret_config_cleanup_failed"),
+        ):
+            with self.assertRaisesRegex(
+                ExecutionControlError,
+                "miner_secret_config_cleanup_failed",
+            ):
+                self.preemption.preempt_for_rental(spec)
+        self.assertEqual(self.claims.load()[spec.resource_id].state, "QUARANTINED")
+
+    def test_mark_rental_active_rechecks_secret_cleanup_fail_closed(self) -> None:
+        spec = rental_spec(generation=2)
+        self.preemption._write_claim(spec, "QUIESCENT")
+        with patch.object(
+            self.mining,
+            "_cleanup_secret_config",
+            side_effect=ExecutionControlError("miner_secret_config_cleanup_failed"),
+        ):
+            with self.assertRaisesRegex(
+                ExecutionControlError,
+                "miner_secret_config_cleanup_failed",
+            ):
+                self.preemption.mark_rental_active(spec)
+        self.assertEqual(self.claims.load()[spec.resource_id].state, "QUARANTINED")
+
     def test_rental_preemption_quarantines_when_credential_cleanup_fails(self) -> None:
         self._seed_two_miners()
         with patch.object(
