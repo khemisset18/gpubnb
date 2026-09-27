@@ -369,8 +369,10 @@ class GpuResourceSupervisorTests(unittest.TestCase):
             )
             self.assertNotIn("pool-main", config_path.name)
 
+            snapshot = self.supervisor.snapshot()
+            self.assertIsNone(snapshot["resource_00000001"]["log_path"])
             for surface in (
-                repr(self.supervisor.snapshot()),
+                repr(snapshot),
                 repr(mining_runtime_telemetry_snapshot(self.store)),
                 repr(self.events),
                 repr(log_path),
