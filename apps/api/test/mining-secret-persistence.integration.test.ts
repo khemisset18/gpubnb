@@ -109,10 +109,13 @@ test('real PostgreSQL START persistence contains only the local secret reference
       });
       assert.ok(result.commandId);
 
-      const command = await tx.machineCommand.findUniqueOrThrow({
-        where: { id: result.commandId! },
-      });
-      const commandJson = JSON.stringify(command.payload);
+      const commands = await tx.$queryRaw<Array<{ payload: unknown }>>`
+        SELECT "payload"
+          FROM "MachineCommand"
+         WHERE "id" = ${result.commandId!}
+      `;
+      assert.equal(commands.length, 1);
+      const commandJson = JSON.stringify(commands[0]!.payload);
       assert.ok(commandJson.includes(reference));
       assert.ok(!commandJson.includes(plaintextSentinel));
       assert.doesNotMatch(commandJson, /poolPassword|poolSecretValue|secretValue|seedPhrase|privateKey/);
