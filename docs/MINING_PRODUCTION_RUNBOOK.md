@@ -83,11 +83,14 @@ Ne pas utiliser `prisma db push` en production.
 - le pool propriétaire opérationnel applique 0 point de base ;
 - un mot de passe brut est rejeté dans `ownerPoolSecretRef` ;
 - seule une référence locale qualifiée `secret://local/mining/<id>` est acceptée ;
-- sur Windows, le broker local stocke uniquement un blob DPAPI machine-scope sous ACL owner/SYSTEM ;
-- `gpubnb-agent mining-secrets set` lit le secret via prompt masqué, jamais via argv ;
-- macOS/Linux restent explicitement unsupported pour ce broker ;
+- Windows : blob DPAPI machine-scope sous ACL owner/SYSTEM ;
+- macOS : mot de passe générique dans le Keychain de l'utilisateur via Security.framework, sans appel CLI contenant le secret ;
+- Linux : Secret Service via `secret-tool` ; le secret est fourni uniquement sur stdin et jamais dans argv ;
+- `gpubnb-agent mining-secrets set` et `rotate` lisent le secret via prompt masqué ;
+- `status` et `delete` n'affichent jamais le plaintext ;
+- backend indisponible, coffre verrouillé ou secret absent => échec fail-closed ;
 - la référence de coffre n'apparaît pas dans les réponses de liste ;
-- le broker reste volontairement déconnecté du lancement mineur : `miner_secret_resolution_required` doit rester fail-closed.
+- le broker reste volontairement déconnecté du lancement mineur : `miner_secret_resolution_required` doit rester fail-closed tant que l'injection sans argv/log n'est pas qualifiée.
 
 ### Sécurité des événements runtime
 
