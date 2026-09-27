@@ -35,6 +35,11 @@ from .execution_control import (
     _verified_binary,
 )
 from .mining_guard import miner_install_root
+from .mining_secret_runtime import (
+    MiningSecretRuntimeError,
+    cleanup_lolminer_secret_configs,
+    prepare_lolminer_secret_config,
+)
 from .platform_info import find_nvidia_smi, run_command
 from .storage import config_dir, require_private_directory
 
@@ -44,6 +49,9 @@ SAFE_ID = re.compile(r"^[A-Za-z0-9_.:-]{8,160}$")
 SAFE_GPU_ID = re.compile(r"^[A-Za-z0-9_.:-]{8,200}$")
 SAFE_WORKER = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
 SAFE_WALLET = re.compile(r"^[A-Za-z0-9_.:+-]{3,256}$")
+SAFE_LOCAL_SECRET_REF = re.compile(
+    r"^secret://local/mining/[A-Za-z0-9][A-Za-z0-9._-]{2,95}$"
+)
 PCI_BDF = re.compile(r"^(?:[0-9A-Fa-f]{4,8}:)?([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2})\.[0-7]$")
 RESOURCE_STATES = {"MINING", "STOPPED", "QUARANTINED"}
 WINDOWS_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
@@ -71,6 +79,7 @@ class ResourceMiningSpec:
     performance_mode: str
     maximum_temperature_c: int
     maximum_power_watts: int
+    pool_credential_ref: str | None
     resolved_pool_addresses: tuple[str, ...]
 
 
@@ -551,8 +560,17 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
     }
     if set(payload) - allowed:
         raise ExecutionControlError("mining_command_payload_unknown_field")
-    if payload.get("poolCredentialRef") not in {None, ""}:
-        raise ExecutionControlError("miner_secret_resolution_required")
+    credential_ref = payload.get("poolCredentialRef")
+    if credential_ref == "":
+        credential_ref = None
+    if (
+        credential_ref is not None
+        and (
+            not isinstance(credential_ref, str)
+            or SAFE_LOCAL_SECRET_REF.fullmatch(credential_ref) is None
+        )
+    ):
+        raise ExecutionControlError("mining_pool_secret_reference_invalid")
     resource_id = _required_text(payload, "resourceId", SAFE_ID, "mining_resource_id_invalid")
     hardware_uuid = _required_text(payload, "hardwareUuid", SAFE_GPU_ID, "mining_hardware_uuid_invalid")
     profile_id = payload.get("profileId")
@@ -596,6 +614,7 @@ def parse_resource_start(payload: Any) -> ResourceMiningSpec:
         performance,
         maximum_temperature,
         maximum_power,
+        credential_ref,
         resolved_pool_addresses,
     )
 
@@ -648,13 +667,18 @@ def _lolminer_pool_arguments(pool_url: str) -> list[str]:
     return ["--pool", authority, "--tls", tls]
 
 
-def build_resource_arguments(spec: ResourceMiningSpec, binding: GpuBinding) -> list[str]:
+def build_resource_arguments(
+    spec: ResourceMiningSpec,
+    binding: GpuBinding,
+    secret_config_path: Path | None = None,
+) -> list[str]:
     user = f"{spec.wallet_address}.{spec.worker_name}"
     _validate_argument(user, "miner_argument_invalid")
     algorithm = LOL_ALGORITHMS.get(spec.profile_id)
     if algorithm is None:
         raise ExecutionControlError("mining_profile_not_resource_gpu_approved")
     arguments = [
+        *(["--config", str(secret_config_path)] if secret_config_path is not None else []),
         "--algo", algorithm,
         *_lolminer_pool_arguments(spec.pool_url),
         "--user", user,
@@ -785,6 +809,26 @@ class GpuResourceSupervisor:
                 self.store.save(records)
             return outcome
 
+    @staticmethod
+    def _cleanup_secret_config(resource_id: str) -> None:
+        try:
+            cleanup_lolminer_secret_configs(resource_id)
+        except MiningSecretRuntimeError as exc:
+            raise ExecutionControlError(str(exc)) from None
+
+    @staticmethod
+    def _prepare_secret_config(spec: ResourceMiningSpec) -> Path | None:
+        if spec.pool_credential_ref is None:
+            return None
+        try:
+            return prepare_lolminer_secret_config(
+                spec.pool_credential_ref,
+                spec.resource_id,
+                spec.runtime_generation,
+            )
+        except MiningSecretRuntimeError as exc:
+            raise ExecutionControlError(str(exc)) from None
+
     def start(self, payload: Any, command_id: str) -> ExecutionResult:
         spec = parse_resource_start(payload)
         if SAFE_ID.fullmatch(command_id) is None:
@@ -793,7 +837,6 @@ class GpuResourceSupervisor:
         root = miner_install_root()
         executable = _verified_binary(spec.profile_id, root)
         binary_sha = _sha256(executable)
-        arguments = build_resource_arguments(spec, binding)
         if _resolve_public_pool_addresses(spec.pool_url) != spec.resolved_pool_addresses:
             raise ExecutionControlError("mining_pool_dns_rebinding_detected")
         _verify_pool_tls(spec.pool_url, spec.resolved_pool_addresses)
@@ -833,10 +876,18 @@ class GpuResourceSupervisor:
                 if expected is not None and self.inspector.inspect(expected.pid) == expected:
                     raise ExecutionControlError("resource_gpu_already_owned")
 
+            self._cleanup_secret_config(spec.resource_id)
+            secret_config_path = self._prepare_secret_config(spec)
+            arguments = build_resource_arguments(spec, binding, secret_config_path)
             log_path = _resource_log_path(spec.resource_id)
-            child = self.launcher.spawn(executable, arguments, root, log_path)
+            try:
+                child = self.launcher.spawn(executable, arguments, root, log_path)
+            except Exception:
+                self._cleanup_secret_config(spec.resource_id)
+                raise
             time.sleep(0.05)
             if child.poll() is not None:
+                self._cleanup_secret_config(spec.resource_id)
                 raise ExecutionControlError("miner_process_exited_during_start")
             identity: ProcessIdentity | None = None
             deadline = time.monotonic() + 2.0
@@ -847,14 +898,17 @@ class GpuResourceSupervisor:
                 time.sleep(0.05)
             if identity is None:
                 child.terminate_owned()
+                self._cleanup_secret_config(spec.resource_id)
                 raise ExecutionControlError("miner_process_identity_unavailable")
             try:
                 canonical_executable = str(executable.resolve(strict=True))
             except OSError as exc:
                 child.terminate_owned()
+                self._cleanup_secret_config(spec.resource_id)
                 raise ExecutionControlError("approved_miner_binary_missing") from exc
             if identity.executable_path != canonical_executable:
                 child.terminate_owned()
+                self._cleanup_secret_config(spec.resource_id)
                 raise ExecutionControlError("miner_process_identity_mismatch")
 
             records[spec.resource_id] = RuntimeRecord(
@@ -882,6 +936,7 @@ class GpuResourceSupervisor:
             records = self.store.load()
             current = records.get(spec.resource_id)
             if current is None:
+                self._cleanup_secret_config(spec.resource_id)
                 return ExecutionResult("mining_resource_already_stopped")
             if current.hardware_uuid.casefold() != spec.hardware_uuid.casefold():
                 raise ExecutionControlError("mining_resource_hardware_identity_conflict")
@@ -896,6 +951,7 @@ class GpuResourceSupervisor:
                 current.updated_at_ms = int(time.time() * 1000)
                 self.store.save(records)
             if current.state == "STOPPED":
+                self._cleanup_secret_config(spec.resource_id)
                 return ExecutionResult("mining_resource_already_stopped")
             if current.state == "QUARANTINED":
                 raise ExecutionControlError("mining_resource_quarantined")
@@ -907,6 +963,7 @@ class GpuResourceSupervisor:
                 raise ExecutionControlError("miner_process_identity_missing")
             observed = self.inspector.inspect(expected.pid)
             if observed is None:
+                self._cleanup_secret_config(spec.resource_id)
                 current.state = "STOPPED"
                 current.pid = None
                 current.process_creation_token = None
@@ -934,6 +991,7 @@ class GpuResourceSupervisor:
             else:
                 raise ExecutionControlError("mining_resource_stop_unverified")
 
+            self._cleanup_secret_config(spec.resource_id)
             current.state = "STOPPED"
             current.pid = None
             current.process_creation_token = None
