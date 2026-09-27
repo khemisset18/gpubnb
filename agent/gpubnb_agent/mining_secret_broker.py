@@ -6,8 +6,9 @@ Backends are local-only:
 - Linux: Secret Service via secret-tool, with plaintext supplied only on stdin.
 
 The raw secret never appears in argv, logs, control-plane payloads or the
-MiningConfiguration database. resolve_secret() remains an internal primitive;
-the miner runtime deliberately does not import this module yet.
+MiningConfiguration database. resolve_secret() remains an internal primitive:
+only mining_secret_runtime may import it, and that boundary returns a private
+configuration path rather than plaintext to the GPU supervisor.
 """
 from __future__ import annotations
 
