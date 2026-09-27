@@ -909,7 +909,11 @@ class GpuResourceSupervisor:
 
             self._cleanup_secret_config(spec.resource_id)
             secret_config_path = self._prepare_secret_config(spec)
-            arguments = build_resource_arguments(spec, binding, secret_config_path)
+            try:
+                arguments = build_resource_arguments(spec, binding, secret_config_path)
+            except Exception:
+                self._cleanup_secret_config(spec.resource_id)
+                raise
             log_path = _resource_log_path(spec.resource_id)
             try:
                 child = self.launcher.spawn(executable, arguments, root, log_path)
@@ -958,7 +962,34 @@ class GpuResourceSupervisor:
                 log_path=str(log_path),
                 updated_at_ms=int(time.time() * 1000),
             )
-            self.store.save(records)
+            try:
+                self.store.save(records)
+            except Exception:
+                # A miner that was spawned but whose ownership record was not
+                # durably committed must never survive as an untracked process.
+                # At this point the exact process identity has been proven, so
+                # terminate only that identity and verify it is gone before
+                # deleting the credential file.
+                try:
+                    self.inspector.terminate(identity)
+                    deadline = time.monotonic() + 30.0
+                    while time.monotonic() < deadline:
+                        observed = self.inspector.inspect(identity.pid)
+                        if observed is None:
+                            break
+                        if observed != identity:
+                            raise ExecutionControlError("miner_process_identity_mismatch")
+                        time.sleep(0.1)
+                    else:
+                        raise ExecutionControlError("miner_process_stop_unverified")
+                except ExecutionControlError:
+                    # Do not delete a credential while an untracked miner may
+                    # still be alive and using it. The failed START remains
+                    # fail-closed and rental quiescence must independently prove
+                    # the GPU safe before ownership can move.
+                    raise
+                self._cleanup_secret_config(spec.resource_id)
+                raise
             return ExecutionResult("mining_resource_started_verified")
 
     def stop(self, payload: Any) -> ExecutionResult:
