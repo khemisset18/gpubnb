@@ -223,6 +223,11 @@ jobs:
             echo 'lolMiner leaked the config password to output' >&2
             exit 1
           fi
+          if grep -Fq "unrecognised option 'pass'" lolminer-config-probe.out; then
+            echo 'lolMiner 1.98a does not accept pass= in the simple config format' >&2
+            sed "s/$probe_secret/[REDACTED]/g" lolminer-config-probe.out >&2
+            exit 1
+          fi
 
           printf 'gpubnb_unknown_config_probe=1\n' > lolMiner-invalid.cfg
           chmod 600 lolMiner-invalid.cfg
