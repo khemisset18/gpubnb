@@ -848,6 +848,38 @@ class GpuResourceSupervisorTests(unittest.TestCase):
         self.assertEqual(record["last_stop_reason"], "approved_miner_binary_hash_mismatch")
         self.assertIn(4444, self.inspector.identities)
 
+    def test_startup_reconciliation_scrubs_orphan_runtime_credentials(self) -> None:
+        agent_config = Path(self.temp.name) / "agent-config"
+        runtime_root = agent_config / "mining-runtime-secrets"
+        runtime_root.mkdir(parents=True)
+        orphan_final = runtime_root / "orphan-final.cfg"
+        orphan_temporary = runtime_root / ".pool-credential-orphan.cfg"
+        orphan_final.write_text("pass=orphan-final\n", encoding="utf-8")
+        orphan_temporary.write_text("pass=orphan-temporary\n", encoding="utf-8")
+
+        with (
+            patch(
+                "gpubnb_agent.mining_secret_runtime.config_dir",
+                return_value=agent_config,
+            ),
+            patch(
+                "gpubnb_agent.mining_secret_runtime.require_private_directory",
+                side_effect=lambda path: path.mkdir(parents=True, exist_ok=True) or path,
+            ),
+        ):
+            recovered = GpuResourceSupervisor(
+                store=self.store,
+                inspector=self.inspector,
+                launcher=self.launcher,
+                binding_resolver=lambda hardware: self.bindings[hardware],
+                sensor=self.sensor,
+                event_sink=self.events.append,
+                start_watchdog=False,
+            )
+
+        self.assertEqual(recovered.snapshot(), {})
+        self.assertEqual(list(runtime_root.iterdir()), [])
+
     def test_startup_reconciliation_adopts_exact_process_and_marks_missing_stopped(self) -> None:
         identity = ProcessIdentity(2222, str(self.binary.resolve()), "creation-2222")
         self.inspector.identities[2222] = identity
