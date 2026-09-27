@@ -191,5 +191,22 @@ def prepare_lolminer_secret_config(
         except MiningSecretError as exc:
             raise MiningSecretRuntimeError(str(exc)) from None
         content = _render_lolminer_secret_config(secret)
-        _private_atomic_write(path, content)
+        try:
+            _private_atomic_write(path, content)
+        except MiningSecretRuntimeError as exc:
+            if str(exc) != "miner_secret_config_write_failed":
+                raise
+            # Atomic publish can fail after os.replace (for example while
+            # tightening final POSIX permissions). _private_atomic_write makes
+            # one best-effort removal; perform a second resource-scoped cleanup
+            # before returning failure so a transient unlink error cannot leave
+            # plaintext behind. If cleanup itself is unavailable, surface that
+            # stronger fail-closed condition so the START is quarantinable.
+            try:
+                cleanup_lolminer_secret_configs(resource_id)
+            except MiningSecretRuntimeError:
+                raise MiningSecretRuntimeError(
+                    "miner_secret_config_cleanup_failed"
+                ) from None
+            raise
         return path
