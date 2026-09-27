@@ -507,6 +507,10 @@ class RentalPreemptionSupervisor:
                 if previous_claim.state == "RENTAL_ACTIVE":
                     raise ExecutionControlError("rental_resource_already_active")
                 if previous_claim.state == "QUIESCENT":
+                    try:
+                        self.mining._cleanup_secret_config(spec.resource_id)
+                    except ExecutionControlError as exc:
+                        self._quarantine(spec, str(exc))
                     return self.probe.prove(spec.hardware_uuid)
                 if previous_claim.state == "QUARANTINED":
                     raise ExecutionControlError("rental_resource_claim_quarantined")
@@ -603,6 +607,10 @@ class RentalPreemptionSupervisor:
                 raise ExecutionControlError("rental_resource_claim_quarantined")
             if claim.state != "QUIESCENT":
                 raise ExecutionControlError("rental_resource_not_quiescent")
+            try:
+                self.mining._cleanup_secret_config(spec.resource_id)
+            except ExecutionControlError as exc:
+                self._quarantine(spec, str(exc))
             claim.state = "RENTAL_ACTIVE"
             claim.verified_at_ms = int(time.time() * 1000)
             claims[spec.resource_id] = claim
