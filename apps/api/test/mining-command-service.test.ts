@@ -37,7 +37,7 @@ function fakeDb(row = resource()) {
       if (queryCount === 3) return [{ sequence: 9n }];
       throw new Error(`unexpected_query_${queryCount}`);
     },
-    $executeRaw: async (query: unknown) => { writes.push(query); return 1; },
+    $executeRaw: async (...query: unknown[]) => { writes.push(query); return 1; },
   };
   const db = {
     $transaction: async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
