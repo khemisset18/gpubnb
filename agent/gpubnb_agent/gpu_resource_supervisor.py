@@ -992,10 +992,14 @@ class GpuResourceSupervisor:
                     else:
                         raise ExecutionControlError("miner_process_stop_unverified")
                 except ExecutionControlError:
-                    # Do not delete a credential while an untracked miner may
-                    # still be alive and using it. The failed START remains
-                    # fail-closed and rental quiescence must independently prove
-                    # the GPU safe before ownership can move.
+                    # The credential file is startup material, not a process
+                    # lifetime dependency. Even when termination cannot be
+                    # verified, remove it before propagating the fail-closed
+                    # error so no untracked plaintext survives on disk.
+                    try:
+                        self._cleanup_secret_config(spec.resource_id)
+                    except ExecutionControlError:
+                        pass
                     raise
                 self._cleanup_secret_config(spec.resource_id)
                 raise
@@ -1080,6 +1084,19 @@ class GpuResourceSupervisor:
                     raise ExecutionControlError("miner_process_identity_mismatch")
                 time.sleep(0.1)
             else:
+                cleanup_error: ExecutionControlError | None = None
+                try:
+                    self._cleanup_secret_config(spec.resource_id)
+                except ExecutionControlError as exc:
+                    cleanup_error = exc
+                current.state = "QUARANTINED"
+                current.last_stop_reason = str(
+                    cleanup_error or ExecutionControlError("mining_resource_stop_unverified")
+                )
+                current.updated_at_ms = int(time.time() * 1000)
+                self.store.save(records)
+                if cleanup_error is not None:
+                    raise cleanup_error
                 raise ExecutionControlError("mining_resource_stop_unverified")
 
             try:
@@ -1166,6 +1183,19 @@ class GpuResourceSupervisor:
                 raise ExecutionControlError("miner_process_identity_mismatch")
             time.sleep(0.1)
         else:
+            cleanup_error: ExecutionControlError | None = None
+            try:
+                self._cleanup_secret_config(record.resource_id)
+            except ExecutionControlError as exc:
+                cleanup_error = exc
+            record.state = "QUARANTINED"
+            record.last_stop_reason = str(
+                cleanup_error or ExecutionControlError("mining_resource_stop_unverified")
+            )
+            record.updated_at_ms = int(time.time() * 1000)
+            self.store.save(records)
+            if cleanup_error is not None:
+                raise cleanup_error
             raise ExecutionControlError("mining_resource_stop_unverified")
         try:
             self._cleanup_secret_config(record.resource_id)
