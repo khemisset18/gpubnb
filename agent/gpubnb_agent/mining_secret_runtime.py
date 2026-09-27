@@ -24,6 +24,7 @@ SAFE_LOLMINER_PASSWORD = re.compile(
 MAX_GENERATION = 9_223_372_036_854_775_807
 _RESOURCE_LOCKS_GUARD = threading.Lock()
 _RESOURCE_LOCKS: dict[str, threading.RLock] = {}
+_ALL_CONFIGS_LOCK = threading.RLock()
 
 _WINDOWS_BROAD_ALLOW_SIDS = (
     "S-1-5-32-544",  # BUILTIN\\Administrators
@@ -194,12 +195,31 @@ def _private_atomic_write(path: Path, content: str) -> None:
             pass
 
 
+def cleanup_all_lolminer_secret_configs() -> None:
+    """Scrub every runtime credential artifact after Agent crash/restart.
+
+    The directory is dedicated to ephemeral mining credentials. A hard process
+    crash can occur before a resource RuntimeRecord is durably written, so
+    resource-scoped reconciliation alone cannot discover every orphaned final
+    config or mkstemp file. Any unremovable entry is a fail-closed condition.
+    """
+    with _ALL_CONFIGS_LOCK:
+        root = _validated_runtime_secret_root(create=False)
+        if root is None:
+            return
+        try:
+            for candidate in root.iterdir():
+                candidate.unlink(missing_ok=True)
+        except OSError:
+            raise MiningSecretRuntimeError("miner_secret_config_cleanup_failed") from None
+
+
 def cleanup_lolminer_secret_configs(
     resource_id: str,
     *,
     keep_generation: int | None = None,
 ) -> None:
-    with _resource_lock(resource_id):
+    with _ALL_CONFIGS_LOCK, _resource_lock(resource_id):
         root = _validated_runtime_secret_root(create=False)
         if root is None:
             return
@@ -223,7 +243,7 @@ def prepare_lolminer_secret_config(
     resource_id: str,
     runtime_generation: int,
 ) -> Path:
-    with _resource_lock(resource_id):
+    with _ALL_CONFIGS_LOCK, _resource_lock(resource_id):
         path = runtime_secret_config_path(resource_id, runtime_generation)
         cleanup_lolminer_secret_configs(resource_id)
         try:
