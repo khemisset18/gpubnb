@@ -565,10 +565,12 @@ fn set_mining_thermal_stop_celsius(
     mining: tauri::State<'_, MiningRuntimeState>,
 ) -> Result<MiningThermalSafetySnapshot, &'static str> {
     state.set_stop_celsius(stop_celsius)?;
-    if let Ok(temperature) = mining_thermal_guard::read_native_temperature() {
-        if state.observe(temperature)? {
-            let _ = mining.thermal_safety_stop();
-        }
+    let temperature = mining_thermal_guard::read_native_temperature()?;
+    let was_latched = state.snapshot()?.latched;
+    if was_latched {
+        state.reevaluate_after_setting_change(temperature)?;
+    } else if state.observe(temperature)? {
+        let _ = mining.thermal_safety_stop();
     }
     state.snapshot()
 }
