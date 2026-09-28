@@ -109,8 +109,7 @@ fn hex_nibble(value: u8) -> Option<u8> {
 }
 
 fn random_runtime_identity() -> Result<(u64, [u8; 16]), AuthorityError> {
-    let token =
-        MediaCapabilityToken::generate().map_err(|_| AuthorityError::RandomGeneration)?;
+    let token = MediaCapabilityToken::generate().map_err(|_| AuthorityError::RandomGeneration)?;
     let bytes = token.as_str().as_bytes();
     if bytes.len() != 64 {
         return Err(AuthorityError::RandomGeneration);
@@ -155,7 +154,9 @@ fn runtime_config<'a>(
     }
 }
 
-fn verified_lease(gpu_uuid: &str) -> Result<crate::renter_lease::RenterSessionLease, AuthorityError> {
+fn verified_lease(
+    gpu_uuid: &str,
+) -> Result<crate::renter_lease::RenterSessionLease, AuthorityError> {
     let lease = load_renter_session_lease().map_err(|_| AuthorityError::LeaseUnavailable)?;
     if !lease.gpu_uuid.eq_ignore_ascii_case(gpu_uuid) {
         return Err(AuthorityError::LeaseGpuMismatch);
@@ -259,21 +260,19 @@ pub fn run_self_test() -> Result<SelfTestReport, AuthorityError> {
     }
     #[cfg(target_os = "windows")]
     {
-        let lease =
-            load_renter_session_lease().map_err(|_| AuthorityError::LeaseUnavailable)?;
+        let lease = load_renter_session_lease().map_err(|_| AuthorityError::LeaseUnavailable)?;
         resolve_nvidia_uuid_to_luid(&lease.gpu_uuid)
             .map_err(|_| AuthorityError::LeaseGpuMismatch)?;
         let session_id = format!("selftest-{}", std::process::id());
         let (generation, display_nonce) = random_runtime_identity()?;
-        let mut runtime =
-            start_qualified_graphics_runtime(runtime_config(
-                &session_id,
-                &lease.gpu_uuid,
-                &lease,
-                generation,
-                display_nonce,
-            ))
-            .map_err(|_| AuthorityError::RuntimeStart)?;
+        let mut runtime = start_qualified_graphics_runtime(runtime_config(
+            &session_id,
+            &lease.gpu_uuid,
+            &lease,
+            generation,
+            display_nonce,
+        ))
+        .map_err(|_| AuthorityError::RuntimeStart)?;
 
         let proof_result = (|| {
             runtime
@@ -429,12 +428,7 @@ pub fn start_session(
 }
 
 pub fn status_session(session_id: &str) -> Result<AuthorityStatus, AuthorityError> {
-    let response = control_request(
-        session_id,
-        "STATUS",
-        CONTROL_CONNECT_TIMEOUT_MS,
-        10_000,
-    )?;
+    let response = control_request(session_id, "STATUS", CONTROL_CONNECT_TIMEOUT_MS, 10_000)?;
     match response.as_str() {
         "STATUS|ready" => Ok(AuthorityStatus::Ready),
         "STATUS|suspended" => Ok(AuthorityStatus::Suspended),
@@ -564,8 +558,8 @@ pub fn run_authority_child(
 
         let owner_sid = current_process_user_sid().map_err(|_| AuthorityError::ControlPipe)?;
         // FIRST_PIPE_INSTANCE is the single-authority lock for this GPUbnb session.
-        let control =
-            create_authority_pipe(session_id, &owner_sid).map_err(|_| AuthorityError::AlreadyRunning)?;
+        let control = create_authority_pipe(session_id, &owner_sid)
+            .map_err(|_| AuthorityError::AlreadyRunning)?;
 
         let lease = verified_lease(gpu_uuid)?;
         let (generation, display_nonce) = random_runtime_identity()?;
@@ -578,8 +572,8 @@ pub fn run_authority_child(
         ))
         .map_err(|_| AuthorityError::RuntimeStart)?;
 
-        let server =
-            QualificationMediaServer::bind(session_id, generation).map_err(|_| AuthorityError::MediaBind)?;
+        let server = QualificationMediaServer::bind(session_id, generation)
+            .map_err(|_| AuthorityError::MediaBind)?;
         let endpoint = server.endpoint().map_err(|_| AuthorityError::MediaBind)?;
         let media_token = runtime
             .media_token()
@@ -613,15 +607,14 @@ pub fn run_authority_child(
                     format!("READY|{generation}|{}|{media_token}", endpoint.port())
                 }
                 "START" => "ERR|already_running".to_owned(),
-                "STATUS" => match runtime_status(
-                    &runtime,
-                    endpoint_alive.load(Ordering::SeqCst),
-                    gpu_uuid,
-                ) {
-                    AuthorityStatus::Ready => "STATUS|ready".to_owned(),
-                    AuthorityStatus::Suspended => "STATUS|suspended".to_owned(),
-                    AuthorityStatus::Degraded => "STATUS|degraded".to_owned(),
-                },
+                "STATUS" => {
+                    match runtime_status(&runtime, endpoint_alive.load(Ordering::SeqCst), gpu_uuid)
+                    {
+                        AuthorityStatus::Ready => "STATUS|ready".to_owned(),
+                        AuthorityStatus::Suspended => "STATUS|suspended".to_owned(),
+                        AuthorityStatus::Degraded => "STATUS|degraded".to_owned(),
+                    }
+                }
                 "SUSPEND" => {
                     let result = runtime
                         .lock()
@@ -686,7 +679,8 @@ mod tests {
 
     #[test]
     fn ready_response_is_strict() {
-        let value = "READY|42|54321|0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let value =
+            "READY|42|54321|0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         let parsed = parse_ready(value).expect("ready");
         assert_eq!(parsed.generation, 42);
         assert_eq!(parsed.media_port, 54321);
