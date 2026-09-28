@@ -273,11 +273,7 @@ impl WorkerPipe {
         }
         #[cfg(target_os = "windows")]
         {
-            windows_impl::accept_verified_user_client(
-                &self._handle,
-                expected_user_sid,
-                timeout_ms,
-            )
+            windows_impl::accept_verified_user_client(&self._handle, expected_user_sid, timeout_ms)
         }
         #[cfg(not(target_os = "windows"))]
         {
@@ -469,9 +465,10 @@ pub fn current_process_logon_sid() -> Result<String, PlatformError> {
 #[cfg(target_os = "windows")]
 mod windows_impl {
     use super::{
-        AUTHORITY_PIPE_AUTH_PRELUDE, MEDIA_PIPE_AUTH_PRELUDE, PIPE_AUTH_PRELUDE, VerifiedPipeClient, WORKER_MEDIA_MESSAGE_MAX,
-        WORKER_PIPE_FRAME_MAX, WORKER_PIPE_PACKET_SIZE, WorkerMediaPipe, WorkerMediaPipeClient,
-        WorkerPipe, WorkerPipeClient,
+        AUTHORITY_PIPE_AUTH_PRELUDE, MEDIA_PIPE_AUTH_PRELUDE, PIPE_AUTH_PRELUDE,
+        VerifiedPipeClient, WORKER_MEDIA_MESSAGE_MAX, WORKER_PIPE_FRAME_MAX,
+        WORKER_PIPE_PACKET_SIZE, WorkerMediaPipe, WorkerMediaPipeClient, WorkerPipe,
+        WorkerPipeClient,
     };
     use crate::PlatformError;
     use std::ffi::{OsStr, c_void};
@@ -1424,8 +1421,8 @@ mod windows_impl {
             if level > SECURITY_IDENTIFICATION_LEVEL {
                 return Err(PlatformError::PipeImpersonationLevelTooHigh);
             }
-            let actual =
-                sid_from_token(&token, false).map_err(|_| PlatformError::PipeImpersonationFailed)?;
+            let actual = sid_from_token(&token, false)
+                .map_err(|_| PlatformError::PipeImpersonationFailed)?;
             if !actual.eq_ignore_ascii_case(expected_user_sid) {
                 return Err(PlatformError::PipePeerSidMismatch);
             }
