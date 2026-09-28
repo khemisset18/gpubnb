@@ -486,6 +486,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             "inputIsolation": True,
             "inputReady": True,
             "hardwareEncoder": "nvenc",
+            "mediaToken": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         }
         with (
             patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
