@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from gpubnb_agent import windows_native_runtime as runtime
+from gpubnb_agent import workspace_gateway_v10 as gateway_v10
 from gpubnb_agent.windows_native_workspace import NativeDesktopPreflight
 
 
@@ -601,6 +603,49 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                 ):
                     with self.assertRaisesRegex(RuntimeError, f"^{expected}$"):
                         call("sess-1")
+
+    def test_gateway_reconnect_replaces_revoked_media_capability(self):
+        old_token = "a" * 64
+        new_token = "b" * 64
+        handle = runtime.NativeRuntimeHandle(
+            session_id="sess-1",
+            workspace_slug="cloud-desktop",
+            gpu_uuid="GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+            helper_version="0.2-test",
+            media_url="http://127.0.0.1:43123/session/sess-1",
+            media_token=old_token,
+            application_path=None,
+            audio_ready=False,
+            controller_ready=False,
+        )
+        native = gateway_v10.NativeGatewayRuntime(
+            session_id="sess-1",
+            runtime_id="gpubnb-native-sess-1",
+            port=43123,
+            websocket_url="ws://127.0.0.1:43123/session/sess-1",
+            handle=handle,
+        )
+        supervisor = object.__new__(gateway_v10.GatewaySupervisor)
+        supervisor._native_lock = threading.RLock()
+        supervisor.native_runtimes = {"sess-1": native}
+        supervisor._native_blocked = set()
+        supervisor.usage_last_report = {}
+        supervisor._report_error = Mock()
+        supervisor._native_stop_and_report = Mock(return_value=True)
+
+        with patch.object(
+            gateway_v10,
+            "resume_windows_native_workspace",
+            return_value=new_token,
+        ):
+            resumed = gateway_v10.GatewaySupervisor._unpause_runtime_for_reconnect(
+                supervisor, "sess-1"
+            )
+
+        self.assertTrue(resumed)
+        self.assertEqual(supervisor.native_runtimes["sess-1"].handle.media_token, new_token)
+        self.assertNotEqual(supervisor.native_runtimes["sess-1"].handle.media_token, old_token)
+        supervisor._native_stop_and_report.assert_not_called()
 
     def test_stop_requires_helper_confirmation_for_exact_session(self):
         with (
