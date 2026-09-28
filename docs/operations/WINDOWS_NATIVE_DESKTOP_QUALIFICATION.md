@@ -38,24 +38,25 @@ nvidia-smi --query-gpu=name,uuid,memory.total,driver_version --format=csv,nohead
 python agent/tools/windows_native_qualify.py
 ```
 
-The Agent-side report is inventory and production-gate evidence only at this stage.
-Because the production `gpubnb-windows-stream.exe` intentionally remains
-fail-closed until promotion, `windows_native_qualify.py` is expected to report the
-native desktop backend unavailable before that promotion. That expected failure
-must not be converted into a guessed success. The report must still be valid JSON
-and must contain no provider profile/application filesystem paths.
+The Agent-side report is inventory and production-gate evidence. The production
+`gpubnb-windows-stream.exe` now contains the Cloud Desktop candidate authority,
+but it remains fail-closed unless an exact pre-provisioned renter lease and every
+real graphics/media proof are available. Before the renter lease is armed,
+`windows_native_qualify.py` must still report the native desktop backend
+unavailable; never convert that expected failure into a guessed success. The
+report must remain valid JSON and contain no provider profile/application paths.
 
 ## 2. Qualification-only local physical smoke
 
-Do **not** use the production helper self-test as the Stage 2 pass gate while the
-production helper remains deliberately unimplemented. The current qualification
-IddCx package is a console IDD, not a Windows Remote Desktop remote-session IDD.
-For this first physical smoke on a Windows client Host, the renter identity must
-therefore own the single active **local/console** interactive session; do not run
-Stage 2 through RDP. The provider session must be inactive while capture/input is
-armed. After the signed worker, signed media DLL and qualification-enabled IddCx
-package are installed, use the dedicated physical smoke entrypoint documented
-below. The qualification media path identifies the nonce-bound IddCx monitor,
+Stage 2 continues to use the dedicated physical harness so the native primitives
+can be qualified independently from the long-lived production authority. The
+current qualification IddCx package is a console IDD, not a Windows Remote Desktop
+remote-session IDD. For this physical smoke on a Windows client Host, the renter
+identity must therefore own the single active **local/console** interactive
+session; do not run Stage 2 through RDP. The provider session must be inactive
+while capture/input is armed. After the signed worker, signed media DLL and
+qualification-enabled IddCx package are installed, use the dedicated physical
+smoke entrypoint documented below. The qualification media path identifies the nonce-bound IddCx monitor,
 resolves that exact monitor to an HMONITOR, captures it with
 Windows.Graphics.Capture, copies/fences the BGRA frame onto the exact leased NVIDIA
 D3D11 device, and only then submits it to NVENC:
@@ -87,6 +88,49 @@ PASS requires all of:
 
 A Stage 2 PASS is local physical-smoke evidence only. It is not the browser
 end-to-end qualification and does not enable Windows bookability.
+
+## 2.5 Arm the production Cloud Desktop authority
+
+Stage 3 uses the production helper, not the one-shot harness. The helper consumes
+an already-provisioned renter WTS session and deliberately does not manufacture a
+fake interactive session from a logon token.
+
+The protected identity lease is:
+
+`C:\ProgramData\GPUbnb\windows-renter-lease.txt`
+
+with the exact format:
+
+```text
+schema=1
+windows_session_id=<non-zero renter WTS session id>
+renter_user_sid=<numeric SID of the dedicated renter identity>
+provider_user_sid=<numeric SID of the provider identity>
+gpu_uuid=GPU-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+The file contains no password or media token. It must live under the existing
+protected GPUbnb ProgramData ACL. Derive the SIDs and session id from the actual
+test identities; never substitute a guessed SID. The renter session must be the
+single active console session while the provider session is inactive.
+
+Before Stage 3, rebuild the worker first and then run:
+
+```powershell
+powershell -NoProfile -File agent\tools\windows_native_build_qualification.ps1 -Release
+```
+
+That command now builds both the qualification harness and the production
+`gpubnb-windows-stream.exe` candidate using the signer policy derived from the
+installed signed worker/media artifacts and the exact clean Git source commit.
+Sign the resulting helper with the approved qualification identity before
+installing it at `C:\Program Files\GPUbnb\gpubnb-windows-stream.exe`.
+
+After installation, run the helper self-test and Agent preflight from the
+LocalSystem Agent boundary. A normal Administrator shell is not a substitute for
+the WTS token privilege boundary. Stage 3 must not start unless both proofs are
+green and the installed helper/worker/media artifacts have recorded coherent
+source/signing provenance.
 
 ## 3. Cloud Desktop end to end
 
@@ -212,16 +256,17 @@ A development build may be selected only by setting both
 and physical qualification only; release packaging must install the signed helper
 at the fixed Program Files location.
 
-## Qualification-only executable path
+## Qualification executable paths
 
-The production `gpubnb-windows-stream.exe` remains fail-closed while the Windows-native
-service lifecycle is not promoted. Physical bring-up uses the separate
-`gpubnb-windows-physical-qualify` binary, built only with the explicit
-`physical-qualification` Cargo feature.
+The one-shot `gpubnb-windows-physical-qualify` binary remains the Stage 2
+component harness and is built only with the explicit `physical-qualification`
+Cargo feature. The production `gpubnb-windows-stream.exe` is the Stage 3 Cloud
+Desktop authority candidate and remains unavailable until the protected renter
+lease and real physical proofs succeed.
 
-That harness requires an already provisioned, supported WTS renter session. It does
-not manufacture a session with `LogonUserW`, does not use the provider desktop, and
-does not change marketplace bookability.
+Both paths require an already provisioned, supported WTS renter session. Neither
+manufactures a session with `LogonUserW`, neither may use the provider desktop,
+and neither changes marketplace bookability.
 
 It creates the GPUbnb-owned virtual display, starts the fenced renter worker, proves
 exact-GPU DXGI + NVENC, opens an authenticated loopback WebSocket, sends bounded
@@ -294,11 +339,13 @@ the harness with:
 
 The build entrypoint verifies both Authenticode signatures, verifies that the
 installed worker reports the same source commit and media-signer policy as the
-current clean checkout and signed media DLL, derives the same certificate properties
-consumed by the Rust trust boundary, then builds the qualification binary. It also
-writes a sidecar build manifest binding the source commit and exact worker/media/
-harness hashes. The physical smoke refuses a missing or mismatched manifest. It
-does not modify bookability or the production helper.
+current clean checkout and signed media DLL, derives the same certificate
+properties consumed by the Rust trust boundary, then builds both the production
+stream-helper candidate and the qualification harness. It writes a sidecar build
+manifest binding the source commit and exact worker/media/harness hashes plus the
+pre-signing helper hash. The physical smoke refuses a missing or mismatched
+harness manifest. The script does not sign/install artifacts and does not modify
+bookability.
 
 For repeated qualification attempts, pass a new non-zero `-Generation` value to
 `windows_native_physical_smoke.ps1`; generation is part of the worker/display
