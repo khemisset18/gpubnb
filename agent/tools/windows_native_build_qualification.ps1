@@ -85,9 +85,25 @@ if ([string]$workerPolicy.mediaSignerSha256 -cne $mediaSigner) {
 
 $oldWorkerSigner = $env:GPUBNB_WINDOWS_WORKER_SIGNER_SHA256
 $oldMediaSigner = $env:GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256
+$oldSourceCommit = $env:GPUBNB_SOURCE_COMMIT
 try {
     $env:GPUBNB_WINDOWS_WORKER_SIGNER_SHA256 = $workerSigner
     $env:GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256 = $mediaSigner
+    $env:GPUBNB_SOURCE_COMMIT = $sourceCommit
+
+    $helperArgs = @(
+        'build',
+        '--locked',
+        '--manifest-path', (Join-Path $repoRoot 'native\windows-stream-helper\Cargo.toml'),
+        '--bin', 'gpubnb-windows-stream'
+    )
+    if ($Release) {
+        $helperArgs += '--release'
+    }
+    & $cargo.Source @helperArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "qualification_helper_build_failed_$LASTEXITCODE"
+    }
 
     $cargoArgs = @(
         'build',
@@ -108,9 +124,14 @@ try {
 finally {
     $env:GPUBNB_WINDOWS_WORKER_SIGNER_SHA256 = $oldWorkerSigner
     $env:GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256 = $oldMediaSigner
+    $env:GPUBNB_SOURCE_COMMIT = $oldSourceCommit
 }
 
 $profile = if ($Release) { 'release' } else { 'debug' }
+$helper = Join-Path $repoRoot "native\windows-stream-helper\target\$profile\gpubnb-windows-stream.exe"
+$helperResolved = (Resolve-Path -LiteralPath $helper -ErrorAction Stop).Path
+$helperSha256BeforeSigning = (Get-FileHash -LiteralPath $helperResolved -Algorithm SHA256).Hash.ToLowerInvariant()
+
 $harness = Join-Path $repoRoot "native\windows-stream-helper\target\$profile\gpubnb-windows-physical-qualify.exe"
 $resolved = (Resolve-Path -LiteralPath $harness -ErrorAction Stop).Path
 $harnessSha256 = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -122,6 +143,7 @@ $manifest = [ordered]@{
     schemaVersion = 1
     sourceCommit = $sourceCommit
     harnessSha256 = $harnessSha256
+    helperSha256BeforeSigning = $helperSha256BeforeSigning
     workerSha256 = $workerSha256
     mediaDllSha256 = $mediaDllSha256
     workerSignerCertificateSha256 = $workerSigner
@@ -138,6 +160,8 @@ $manifest = [ordered]@{
 [ordered]@{
     ok = $true
     sourceCommit = $sourceCommit
+    helperPath = $helperResolved
+    helperSha256BeforeSigning = $helperSha256BeforeSigning
     harnessPath = $resolved
     harnessSha256 = $harnessSha256
     manifestPath = $manifestPath
