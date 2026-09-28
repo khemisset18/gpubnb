@@ -8,12 +8,18 @@
 //! The lease contains identity only; it contains no password, token or credential.
 //! It lives under the already ACL-protected GPUbnb ProgramData directory.
 
+#[cfg(any(target_os = "windows", test))]
 use gpubnb_windows_platform::gpu_identity::parse_nvidia_gpu_uuid;
+#[cfg(target_os = "windows")]
 use std::fs;
-use std::path::{Path, PathBuf};
+#[cfg(target_os = "windows")]
+use std::path::Path;
+use std::path::PathBuf;
 
 const DEFAULT_LEASE_PATH: &str = r"C:\ProgramData\GPUbnb\windows-renter-lease.txt";
+#[cfg(any(target_os = "windows", test))]
 const MAX_LEASE_BYTES: u64 = 4096;
+#[cfg(any(target_os = "windows", test))]
 const MAX_SID_TEXT: usize = 184;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +45,7 @@ pub enum RenterLeaseError {
     InvalidGpuUuid,
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn numeric_sid(value: &str) -> bool {
     if value.is_empty() || value.len() > MAX_SID_TEXT || !value.starts_with("S-1-") {
         return false;
@@ -56,6 +63,7 @@ fn numeric_sid(value: &str) -> bool {
     fields >= 4
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn parse_lease_text(value: &str) -> Result<RenterSessionLease, RenterLeaseError> {
     if value.is_empty()
         || value.len() > MAX_LEASE_BYTES as usize
@@ -137,6 +145,7 @@ fn parse_lease_text(value: &str) -> Result<RenterSessionLease, RenterLeaseError>
     })
 }
 
+#[cfg(target_os = "windows")]
 fn read_lease(path: &Path) -> Result<RenterSessionLease, RenterLeaseError> {
     let metadata = fs::symlink_metadata(path).map_err(|_| RenterLeaseError::Missing)?;
     if !metadata.is_file() || metadata.file_type().is_symlink() {
