@@ -241,24 +241,29 @@ impl QualificationMediaServer {
                 }
             }
 
-            let frame = {
-                let mut guard = runtime
-                    .lock()
-                    .map_err(|_| QualificationMediaServerError::Media)?;
-                let active = guard.as_mut().ok_or(QualificationMediaServerError::Media)?;
-                require_connection_epoch(stream_epoch, active.stream_epoch())?;
-                active
-                    .read_media_frame()
-                    .map_err(|_| QualificationMediaServerError::Media)?
-            };
-            match frame {
+            let mut guard = runtime
+                .lock()
+                .map_err(|_| QualificationMediaServerError::Media)?;
+            let active = guard.as_mut().ok_or(QualificationMediaServerError::Media)?;
+            require_connection_epoch(stream_epoch, active.stream_epoch())?;
+            match active
+                .read_media_frame()
+                .map_err(|_| QualificationMediaServerError::Media)?
+            {
                 Some(frame) => {
+                    // Keep the runtime lock through the socket write. SUSPEND
+                    // uses the same lock, so it cannot confirm capability
+                    // revocation while a pre-suspend frame is still being
+                    // delivered on an authenticated connection.
                     write_browser_media_frame(&mut stream, stream_epoch, &frame)?;
                     sent = sent
                         .checked_add(1)
                         .ok_or(QualificationMediaServerError::Protocol)?;
                 }
-                None => thread::sleep(Duration::from_millis(1)),
+                None => {
+                    drop(guard);
+                    thread::sleep(Duration::from_millis(1));
+                }
             }
         }
     }
