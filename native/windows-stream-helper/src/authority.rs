@@ -477,14 +477,21 @@ pub fn resume_session(session_id: &str) -> Result<(), AuthorityError> {
 }
 
 pub fn stop_session(session_id: &str) -> Result<(), AuthorityError> {
-    match control_request(
+    let response = match control_request(
         session_id,
         "STOP",
         CONTROL_CONNECT_TIMEOUT_MS,
         CONTROL_READ_TIMEOUT_MS,
-    )?
-    .as_str()
-    {
+    ) {
+        Ok(response) => response,
+        // The authority pipe is created before runtime resources and held for the
+        // entire authority lifetime. If no pipe exists, no authority can still own
+        // the Job Object, display lease or media listener; process teardown drops
+        // those handles. Treat that already-clean state as idempotent STOP.
+        Err(AuthorityError::ControlPipe) => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    match response.as_str() {
         "OK|stopped" => Ok(()),
         "ERR|stop_failed" => Err(AuthorityError::Stop),
         _ => Err(AuthorityError::ControlProtocol),
