@@ -454,16 +454,24 @@ pub fn suspend_session(session_id: &str) -> Result<(), AuthorityError> {
     }
 }
 
-pub fn resume_session(session_id: &str) -> Result<(), AuthorityError> {
-    match control_request(
+pub fn resume_session(session_id: &str) -> Result<String, AuthorityError> {
+    let response = control_request(
         session_id,
         "RESUME",
         CONTROL_CONNECT_TIMEOUT_MS,
         CONTROL_READ_TIMEOUT_MS,
-    )?
-    .as_str()
-    {
-        "OK|resumed" => Ok(()),
+    )?;
+    if let Some(token) = response.strip_prefix("OK|resumed|") {
+        if token.len() == 64
+            && token
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+        {
+            return Ok(token.to_owned());
+        }
+        return Err(AuthorityError::ControlProtocol);
+    }
+    match response.as_str() {
         "ERR|not_running" => Err(AuthorityError::NotRunning),
         "ERR|media_endpoint_lost" => Err(AuthorityError::Degraded),
         _ => Err(AuthorityError::ControlProtocol),
@@ -585,7 +593,7 @@ pub fn run_authority_child(
         let media_runtime = Arc::clone(&runtime);
         let media_alive = Arc::clone(&endpoint_alive);
         thread::spawn(move || {
-            let _ = server.serve_interactive_shared_once(&media_runtime);
+            let _ = server.serve_interactive_shared(&media_runtime, &media_alive);
             media_alive.store(false, Ordering::SeqCst);
         });
 
@@ -632,14 +640,13 @@ pub fn run_authority_child(
                     if !endpoint_alive.load(Ordering::SeqCst) {
                         "ERR|media_endpoint_lost".to_owned()
                     } else {
-                        let result = runtime
-                            .lock()
-                            .map_err(|_| AuthorityError::ControlPipe)?
-                            .as_mut()
-                            .ok_or(AuthorityError::NotRunning)?
-                            .resume_after_fresh_proof();
-                        if result.is_ok() {
-                            "OK|resumed".to_owned()
+                        let mut guard =
+                            runtime.lock().map_err(|_| AuthorityError::ControlPipe)?;
+                        let active = guard.as_mut().ok_or(AuthorityError::NotRunning)?;
+                        if active.resume_after_fresh_proof().is_err() {
+                            "ERR|degraded".to_owned()
+                        } else if let Some(token) = active.media_token() {
+                            format!("OK|resumed|{token}")
                         } else {
                             "ERR|degraded".to_owned()
                         }
