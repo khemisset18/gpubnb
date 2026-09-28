@@ -19,6 +19,8 @@ pub mod capture_policy;
 pub mod graphics_proof;
 
 #[cfg(target_os = "windows")]
+pub mod authority;
+#[cfg(target_os = "windows")]
 pub mod qualification_server;
 #[cfg(target_os = "windows")]
 pub mod service_runtime;
