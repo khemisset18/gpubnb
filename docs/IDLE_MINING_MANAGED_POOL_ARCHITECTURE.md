@@ -19,8 +19,10 @@ Principes non négociables :
 Chaque ressource CPU ou GPU possède une configuration indépendante :
 
 1. `DISABLED` : aucun minage hors location ;
-2. `GPUBNB_MANAGED` : utilisation d'un profil approuvé et du pool géré GPUbnb, avec 100 points de base, soit 1 %, de frais de plateforme ;
-3. `OWNER_POOL` : utilisation du pool personnel du propriétaire, avec 0 % de frais GPUbnb.
+2. `GPUBNB_MANAGED` : réservé pour une évolution future et explicitement désactivé dans le contrat opérationnel actuel ;
+3. `OWNER_POOL` : seul mode de pool activable actuellement, avec 0 % de frais GPUbnb.
+
+Le modèle futur `GPUBNB_MANAGED` conserve une cible de 100 points de base (1 %) uniquement comme hypothèse d'architecture ; il ne doit pas être exposé ni activé par le runtime actuel.
 
 Les calculs monétaires futurs doivent utiliser des unités atomiques entières et conserver l'invariant :
 
@@ -113,19 +115,15 @@ Les endpoints de pool doivent utiliser explicitement :
 - `stratum+ssl://`
 - `stratum+tls://`
 
-`ownerPoolSecretRef` ne peut pas contenir un mot de passe brut. Les préfixes de références autorisés sont :
+`ownerPoolSecretRef` ne peut jamais contenir un mot de passe brut. Le seul format opérationnel accepté est :
 
-- `vault://`
-- `secret://`
-- `aws-secretsmanager://`
-- `gcp-secretmanager://`
-- `azure-keyvault://`
+- `secret://local/mining/<id>`
 
-La valeur désigne un secret dans un coffre externe. Elle n'est pas renvoyée par la route de liste des ressources.
+La référence désigne un secret conservé exclusivement dans le broker local de l'Agent (DPAPI Windows, Keychain macOS ou Secret Service Linux). Aucun backend Vault/AWS/GCP/Azure n'est annoncé tant qu'il n'est pas implémenté et qualifié. La référence n'est pas renvoyée par la route de liste des ressources et le plaintext ne traverse jamais le control-plane.
 
 Une migration PostgreSQL installe également un trigger défensif sur `MiningAuditLog`. Avant chaque insertion ou modification, la base supprime automatiquement `ownerPoolSecretRef` de `previousValue` et `nextValue`, même si une future route oublie de le masquer.
 
-Avant une ouverture publique des pools personnalisés, compléter les protections réseau : résolution DNS contrôlée, défense contre le DNS rebinding, blocage des adresses loopback, link-local, privées de contrôle et des métadonnées cloud.
+Les pools personnalisés restent soumis aux protections réseau déjà qualifiées : résolution vers adresses publiques uniquement, défense contre le DNS rebinding, blocage loopback/link-local/privé/réservé et validation TLS/hostname. Ces protections restent fail-closed et le rollout public mining reste désactivé.
 
 ## Authentification Ed25519 V2 des événements runtime
 

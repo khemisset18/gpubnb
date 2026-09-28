@@ -171,6 +171,32 @@ impl MiningThermalSafetyState {
         Ok(())
     }
 
+    /// Re-evaluates an existing thermal stop after the owner deliberately changes
+    /// the limit. This is intentionally stricter than merely checking the new stop:
+    /// the sensor must be valid, the GPU must be below the selected limit, and the
+    /// platform's absolute quarantine boundary can never be bypassed.
+    pub fn reevaluate_after_setting_change(
+        &self,
+        temperature_celsius: f64,
+    ) -> Result<(), &'static str> {
+        let settings = self.settings()?;
+        if !temperature_celsius.is_finite() {
+            return Err("gpu_temperature_sensor_invalid");
+        }
+        if temperature_celsius >= THERMAL_QUARANTINE_CELSIUS
+            || temperature_celsius >= f64::from(settings.stop_celsius)
+        {
+            return Err("miner_temperature_still_too_high");
+        }
+        let mut guard = self
+            .guard
+            .lock()
+            .map_err(|_| "mining_thermal_guard_unavailable")?;
+        guard.last_temperature_celsius = Some(temperature_celsius);
+        guard.latched = false;
+        Ok(())
+    }
+
     pub fn snapshot(&self) -> Result<MiningThermalSafetySnapshot, &'static str> {
         let settings = self.settings()?;
         let latched = self
@@ -367,6 +393,40 @@ mod tests {
         assert_eq!(snapshot.rearm_celsius, 80.0);
         assert_eq!(snapshot.quarantine_celsius, 98.0);
         assert!(snapshot.customized);
+    }
+
+    #[test]
+    fn deliberate_higher_limit_can_release_previous_thermal_latch_when_now_below_limit() {
+        let state = MiningThermalSafetyState {
+            guard: Mutex::new(MiningThermalGuard {
+                latched: true,
+                last_temperature_celsius: Some(86.0),
+            }),
+            settings: Mutex::new(MiningThermalSettings { stop_celsius: 92 }),
+        };
+        assert_eq!(state.reevaluate_after_setting_change(86.0), Ok(()));
+        assert!(!state.guard.lock().unwrap().latched);
+    }
+
+    #[test]
+    fn reevaluation_never_bypasses_selected_or_absolute_thermal_boundary() {
+        let state = MiningThermalSafetyState {
+            guard: Mutex::new(MiningThermalGuard {
+                latched: true,
+                last_temperature_celsius: Some(92.0),
+            }),
+            settings: Mutex::new(MiningThermalSettings { stop_celsius: 92 }),
+        };
+        assert_eq!(
+            state.reevaluate_after_setting_change(92.0),
+            Err("miner_temperature_still_too_high")
+        );
+        assert!(state.guard.lock().unwrap().latched);
+        assert_eq!(
+            state.reevaluate_after_setting_change(98.0),
+            Err("miner_temperature_still_too_high")
+        );
+        assert!(state.guard.lock().unwrap().latched);
     }
 
     #[test]

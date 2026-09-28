@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { requestMiningStart, requestMiningStop } from '../src/mining-command-service.js';
@@ -36,7 +37,7 @@ function fakeDb(row = resource()) {
       if (queryCount === 3) return [{ sequence: 9n }];
       throw new Error(`unexpected_query_${queryCount}`);
     },
-    $executeRaw: async (query: unknown) => { writes.push(query); return 1; },
+    $executeRaw: async (...query: unknown[]) => { writes.push(query); return 1; },
   };
   const db = {
     $transaction: async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
@@ -115,19 +116,42 @@ test('start fails closed for an unqualified GPU vendor before durable command cr
   assert.equal(writes.length, 0);
 });
 
-test('unresolved pool secret releases an acquired lease and creates no durable command', async () => {
-  const { db, writes } = fakeDb(resource({ ownerPoolSecretRef: 'secret://local/mining/pool-main' }));
+test('owner pool secret reference no longer blocks durable fenced START creation without plaintext persistence', async () => {
+  const reference = 'secret://local/mining/pool-main';
+  const plaintextSentinel = 'gpubnb-plaintext-secret-probe-never-control-plane';
+  const { db, writes } = fakeDb(resource({
+    ownerPoolSecretRef: reference,
+  }));
   const { redis, evalCalls } = fakeRedis();
-  await assert.rejects(
-    requestMiningStart(db, redis, {
-      machineId: 'machine_00000001',
-      resourceId: 'resource_00000001',
-      ownerId: 'owner_00000001',
-    }),
-    /miner_secret_resolution_required/,
-  );
-  assert.equal(evalCalls(), 2);
-  assert.equal(writes.length, 0);
+  const result = await requestMiningStart(db, redis, {
+    machineId: 'machine_00000001',
+    resourceId: 'resource_00000001',
+    ownerId: 'owner_00000001',
+  });
+  assert.equal(result.alreadySatisfied, false);
+  assert.equal(evalCalls(), 1);
+  assert.equal(writes.length, 4);
+
+  const serializedWrites = writes.map((write) => JSON.stringify(
+    write,
+    (_key, value) => typeof value === 'bigint' ? value.toString() : value,
+  ));
+  const machineCommandWrite = serializedWrites[1] ?? '';
+  assert.match(machineCommandWrite, /secret:\/\/local\/mining\/pool-main/);
+
+  for (const persisted of serializedWrites) {
+    assert.doesNotMatch(persisted, new RegExp(plaintextSentinel));
+    assert.doesNotMatch(persisted, /poolPassword|poolSecretValue|secretValue|seedPhrase|privateKey/);
+  }
+  for (const nonCommandWrite of [serializedWrites[0], serializedWrites[2], serializedWrites[3]]) {
+    assert.doesNotMatch(nonCommandWrite ?? '', /secret:\/\/local\/mining\/pool-main/);
+  }
+});
+
+test('command service maps only the stored secret reference into fenced START input', async () => {
+  const source = await readFile(new URL('../src/mining-command-service.ts', import.meta.url), 'utf8');
+  assert.match(source, /poolCredentialRef: row\.ownerPoolSecretRef/);
+  assert.doesNotMatch(source, /poolPassword|poolSecretValue|secretValue|seedPhrase|privateKey/);
 });
 
 test('owner STOP is idempotent when resource is already stopped', async () => {

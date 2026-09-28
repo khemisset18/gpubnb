@@ -450,6 +450,11 @@ class RentalPreemptionSupervisor:
         self._lock = threading.RLock()
 
     def _quarantine(self, spec: RentalResourceSpec, error: str) -> None:
+        cleanup_error: str | None = None
+        try:
+            self.mining._cleanup_secret_config(spec.resource_id)
+        except ExecutionControlError as exc:
+            cleanup_error = str(exc)
         claims = self.claims.load()
         claims[spec.resource_id] = RentalClaimRecord(
             session_id=spec.session_id,
@@ -469,7 +474,7 @@ class RentalPreemptionSupervisor:
             record.state = "QUARANTINED"
             record.updated_at_ms = int(time.time() * 1000)
             self.mining.store.save(records)
-        raise ExecutionControlError(error)
+        raise ExecutionControlError(cleanup_error or error)
 
     def _write_claim(self, spec: RentalResourceSpec, state: str, verified_at_ms: int | None = None) -> None:
         claims = self.claims.load()
@@ -502,6 +507,10 @@ class RentalPreemptionSupervisor:
                 if previous_claim.state == "RENTAL_ACTIVE":
                     raise ExecutionControlError("rental_resource_already_active")
                 if previous_claim.state == "QUIESCENT":
+                    try:
+                        self.mining._cleanup_secret_config(spec.resource_id)
+                    except ExecutionControlError as exc:
+                        self._quarantine(spec, str(exc))
                     return self.probe.prove(spec.hardware_uuid)
                 if previous_claim.state == "QUARANTINED":
                     raise ExecutionControlError("rental_resource_claim_quarantined")
@@ -550,6 +559,11 @@ class RentalPreemptionSupervisor:
                     else:
                         self._quarantine(spec, "rental_miner_process_stop_unverified")
 
+            try:
+                self.mining._cleanup_secret_config(spec.resource_id)
+            except ExecutionControlError as exc:
+                self._quarantine(spec, str(exc))
+
             if current is not None:
                 current.runtime_generation = spec.runtime_generation
                 current.state = "STOPPED"
@@ -593,6 +607,10 @@ class RentalPreemptionSupervisor:
                 raise ExecutionControlError("rental_resource_claim_quarantined")
             if claim.state != "QUIESCENT":
                 raise ExecutionControlError("rental_resource_not_quiescent")
+            try:
+                self.mining._cleanup_secret_config(spec.resource_id)
+            except ExecutionControlError as exc:
+                self._quarantine(spec, str(exc))
             claim.state = "RENTAL_ACTIVE"
             claim.verified_at_ms = int(time.time() * 1000)
             claims[spec.resource_id] = claim

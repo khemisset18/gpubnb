@@ -83,11 +83,20 @@ Ne pas utiliser `prisma db push` en production.
 - le pool propriétaire opérationnel applique 0 point de base ;
 - un mot de passe brut est rejeté dans `ownerPoolSecretRef` ;
 - seule une référence locale qualifiée `secret://local/mining/<id>` est acceptée ;
-- sur Windows, le broker local stocke uniquement un blob DPAPI machine-scope sous ACL owner/SYSTEM ;
-- `gpubnb-agent mining-secrets set` lit le secret via prompt masqué, jamais via argv ;
-- macOS/Linux restent explicitement unsupported pour ce broker ;
+- Windows : blob DPAPI machine-scope sous ACL owner/SYSTEM ;
+- macOS : mot de passe générique dans le Keychain de l'utilisateur via Security.framework, sans appel CLI contenant le secret ;
+- Linux : Secret Service via `secret-tool` ; le secret est fourni uniquement sur stdin et jamais dans argv ;
+- `gpubnb-agent mining-secrets set` et `rotate` lisent le secret via prompt masqué ;
+- `status` et `delete` n'affichent jamais le plaintext ;
+- backend indisponible, coffre verrouillé ou secret absent => échec fail-closed ;
 - la référence de coffre n'apparaît pas dans les réponses de liste ;
-- le broker reste volontairement déconnecté du lancement mineur : `miner_secret_resolution_required` doit rester fail-closed.
+- le chemin START transporte uniquement `poolCredentialRef=secret://local/mining/<id>` ; jamais le plaintext ;
+- l'Agent résout la référence localement dans un module dédié et écrit un `lolMiner.cfg` éphémère sous répertoire privé ;
+- le fichier contient uniquement `pass=<secret>`, avec mode `0600` sur POSIX et ACL owner/SYSTEM héritée sur Windows ;
+- argv contient uniquement `--config <chemin privé>` : `--pass <secret>` est interdit ;
+- le chemin du fichier, la référence et le secret ne sont pas persistés dans `RuntimeRecord` ni dans la télémétrie heartbeat ;
+- le fichier credential reste local pendant la vie du processus puis est supprimé sur STOP, watchdog, crash/reconcile et préemption rental ;
+- si la suppression ne peut pas être prouvée, la ressource passe en `QUARANTINED` fail-closed.
 
 ### Sécurité des événements runtime
 
@@ -216,7 +225,10 @@ Sur une machine NVIDIA de test :
 12. lancer une location prioritaire et confirmer qu'aucune location ne démarre avant arrêt vérifié ;
 13. vérifier qu'un ACK/fence ancien est rejeté ;
 14. redémarrer l'Agent pendant/après minage et confirmer la réconciliation PID + creation token + chemin + SHA-256 ;
-15. vérifier qu'aucun wallet, pool secret, token, argument sensible ou chemin privé n'apparaît dans les logs/API.
+15. configurer une référence locale de secret et confirmer que le mineur authentifie le pool sans `--pass` dans argv ;
+16. pendant le minage, confirmer que le fichier `lolMiner.cfg` local est privé et absent des logs/API/télémétrie ;
+17. arrêter, préempter par une location et simuler un crash/reconcile pour confirmer la suppression du fichier credential ;
+18. vérifier qu'aucun wallet secret, pool secret, token ou argument sensible n'apparaît dans les logs/API.
 
 ## Critères d'activation publique
 

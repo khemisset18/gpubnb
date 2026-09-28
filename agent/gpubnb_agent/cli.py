@@ -982,7 +982,26 @@ def command_mining_secret_set(args: argparse.Namespace) -> int:
     try:
         status = store_secret(args.reference, secret)
     except MiningSecretError as exc:
-        raise RuntimeError(str(exc)) from exc
+        raise RuntimeError(str(exc)) from None
+    print_json({
+        "reference": status.reference,
+        "backend": status.backend,
+        "present": status.present,
+    })
+    return 0
+
+
+def command_mining_secret_rotate(args: argparse.Namespace) -> int:
+    from .mining_secret_broker import MiningSecretError, rotate_secret
+
+    secret = getpass.getpass("Nouveau secret du pool : ")
+    confirmation = getpass.getpass("Confirmez le nouveau secret : ")
+    if secret != confirmation:
+        raise RuntimeError("mining_secret_confirmation_mismatch")
+    try:
+        status = rotate_secret(args.reference, secret)
+    except MiningSecretError as exc:
+        raise RuntimeError(str(exc)) from None
     print_json({
         "reference": status.reference,
         "backend": status.backend,
@@ -997,7 +1016,7 @@ def command_mining_secret_status(args: argparse.Namespace) -> int:
     try:
         status = secret_status(args.reference)
     except MiningSecretError as exc:
-        raise RuntimeError(str(exc)) from exc
+        raise RuntimeError(str(exc)) from None
     print_json({
         "reference": status.reference,
         "backend": status.backend,
@@ -1018,7 +1037,7 @@ def command_mining_secret_delete(args: argparse.Namespace) -> int:
     try:
         status = delete_secret(args.reference)
     except MiningSecretError as exc:
-        raise RuntimeError(str(exc)) from exc
+        raise RuntimeError(str(exc)) from None
     print_json({
         "reference": status.reference,
         "backend": status.backend,
@@ -1257,6 +1276,12 @@ def parser() -> argparse.ArgumentParser:
     )
     mining_secret_set.add_argument("reference")
     mining_secret_set.set_defaults(handler=command_mining_secret_set)
+    mining_secret_rotate = mining_secret_commands.add_parser(
+        "rotate",
+        help="remplacer explicitement un secret existant via prompt masqué",
+    )
+    mining_secret_rotate.add_argument("reference")
+    mining_secret_rotate.set_defaults(handler=command_mining_secret_rotate)
     mining_secret_status = mining_secret_commands.add_parser(
         "status",
         help="vérifier si une référence locale existe sans afficher le secret",

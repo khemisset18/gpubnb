@@ -58,7 +58,7 @@ function stableKey(namespace: string, ...parts: string[]): string {
 
 async function reserveSequence(tx: SqlClient, machineId: string): Promise<bigint> {
   const rows = await tx.$queryRaw<Array<{ sequence: bigint }>>(Prisma.sql`
-    SELECT reserve_machine_sequence(${machineId}) AS "sequence"
+    SELECT reserve_machine_command_sequence(${machineId}) AS "sequence"
   `);
   const sequence = rows[0]?.sequence;
   if (sequence === undefined || sequence < 1n) throw new Error('machine_sequence_reservation_failed');
@@ -107,7 +107,6 @@ function startInput(row: ResourceForCommand) {
   if (!isMiningProfileApproved(row.profileId, 'GPU', 'NVIDIA')) {
     throw new Error('mining_profile_not_approved');
   }
-  if (row.ownerPoolSecretRef) throw new Error('miner_secret_resolution_required');
   if (row.maximumTemperatureC === null || row.maximumPowerWatts === null) {
     throw new Error('mining_limits_missing');
   }
@@ -122,6 +121,7 @@ function startInput(row: ResourceForCommand) {
     performanceMode: 'FULL' as MiningPerformanceMode,
     maximumTemperatureC: row.maximumTemperatureC,
     maximumPowerWatts: row.maximumPowerWatts,
+    poolCredentialRef: row.ownerPoolSecretRef,
   };
 }
 
