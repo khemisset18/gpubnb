@@ -248,8 +248,18 @@ The current native v1 runtime consumes an already-provisioned interactive renter
 session; it does not manufacture a new WTS session from a token. Windows APIs
 that create a logon token do not by themselves create a separate interactive
 WinSta0 session, and GPUbnb must not weaken this boundary by launching the renter
-inside the provider's session. Until a supported provisioning path is implemented
-and physically qualified, native Windows bookability remains disabled.
+inside the provider's session.
+
+The authority reads only non-secret renter identity metadata from the protected
+`C:\ProgramData\GPUbnb\windows-renter-lease.txt` file: schema version, exact
+WTS session id, renter SID, provider SID and canonical NVIDIA GPU UUID. Unknown
+or duplicate fields, system-service renter identities, provider/renter identity
+collisions and non-canonical GPU UUIDs fail closed. The lease contains no password,
+logon token or media capability. The privileged runtime still re-proves the live
+WTS token/session state before creating graphics resources.
+
+Until this pre-provisioned session model and the native authority are physically
+qualified, native Windows bookability remains disabled.
 
 The v1 implementation must demonstrate all of the following during physical
 qualification:
@@ -276,6 +286,20 @@ resume. Existing GPUbnb server authority remains responsible for the 10-minute
 reconnect grace and valid-service-time billing. The Agent may pause/stop native
 runtime work according to that authority, and every resume must still be fenced
 to the same booking/session/GPU allocation.
+
+For Cloud Desktop, one detached local authority process owns the live
+`QualifiedGraphicsRuntime` for the lifetime of the GPUbnb session. Separate
+`--status`, `--suspend`, `--resume` and `--stop` CLI invocations use a
+local-only named pipe restricted to the authority-launching Windows identity.
+The authority does not serialize runtime handles or media capabilities to disk.
+
+`--suspend` revokes the current media capability before it confirms suspension.
+A successful `--resume` requires a fresh exact-GPU capture/NVENC proof and returns
+a newly generated 64-lowercase-hex `mediaToken`. The Agent must replace the old
+in-memory capability before reconnecting the browser; the previous token must
+never authenticate a resumed stream. The loopback listener survives normal
+browser disconnect/reconnect and rejects stale-token attempts without destroying
+the graphics authority.
 
 ## Promotion gate
 
