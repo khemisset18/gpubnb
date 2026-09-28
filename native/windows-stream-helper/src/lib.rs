@@ -7,6 +7,7 @@
 pub mod browser_input_protocol;
 pub mod browser_media_protocol;
 pub mod lifecycle;
+pub mod renter_lease;
 pub mod local_media_protocol;
 pub mod media_protocol;
 
