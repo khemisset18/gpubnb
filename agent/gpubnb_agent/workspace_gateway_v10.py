@@ -25,7 +25,7 @@ import platform
 import re
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -397,7 +397,12 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         if blocked:
             return False
         try:
-            resume_windows_native_workspace(session_id)
+            media_token = resume_windows_native_workspace(session_id)
+            with self._native_lock:
+                runtime = self.native_runtimes.get(session_id)
+                if runtime is None or session_id in self._native_blocked:
+                    raise RuntimeError("windows_native_runtime_not_ready")
+                runtime.handle = replace(runtime.handle, media_token=media_token)
             self.usage_last_report[session_id] = time.monotonic()
             return True
         except Exception:
