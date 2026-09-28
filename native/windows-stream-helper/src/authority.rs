@@ -599,10 +599,11 @@ pub fn run_authority_child(
         let endpoint_alive = Arc::new(AtomicBool::new(true));
         let media_runtime = Arc::clone(&runtime);
         let media_alive = Arc::clone(&endpoint_alive);
-        thread::spawn(move || {
-            let _ = server.serve_interactive_shared(&media_runtime, &media_alive);
+        let mut media_thread = Some(thread::spawn(move || {
+            let result = server.serve_interactive_shared(&media_runtime, &media_alive);
             media_alive.store(false, Ordering::SeqCst);
-        });
+            result
+        }));
 
         let mut start_reported = false;
         loop {
@@ -668,9 +669,14 @@ pub fn run_authority_child(
                 "STOP" => {
                     endpoint_alive.store(false, Ordering::SeqCst);
                     exit_after_response = true;
-                    match stop_owned_runtime(&runtime) {
-                        Ok(()) => "OK|stopped".to_owned(),
-                        Err(_) => "ERR|stop_failed".to_owned(),
+                    let runtime_stopped = stop_owned_runtime(&runtime).is_ok();
+                    let media_stopped = media_thread
+                        .take()
+                        .is_some_and(|thread| matches!(thread.join(), Ok(Ok(()))));
+                    if runtime_stopped && media_stopped {
+                        "OK|stopped".to_owned()
+                    } else {
+                        "ERR|stop_failed".to_owned()
                     }
                 }
                 _ => "ERR|protocol".to_owned(),
