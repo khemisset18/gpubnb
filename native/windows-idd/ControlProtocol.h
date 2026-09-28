@@ -14,6 +14,7 @@ enum class GPUbnbIddControlOperation : UINT32
     PlugMonitor = 1u,
     UnplugMonitor = 2u,
     ValidateOnly = 3u,
+    AssertNoMonitor = 4u,
 };
 
 struct GPUbnbIddControlRequest
