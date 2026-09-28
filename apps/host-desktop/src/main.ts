@@ -463,7 +463,12 @@ const renderMiningTelemetry = (
     ? (telemetry.powerWatts / 1000) * (telemetry.uptimeSeconds / 3600)
     : null;
   const measuredEnergyCost = measuredEnergyKwh === null ? null : measuredEnergyKwh * electricityPricePerKwh;
-  return `<section class="mining-performance ${thermalState}"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Tableau de minage</h2></div><span class="badge">Actualisation automatique</span></div>
+  const telemetryModeLabel = miningActive ? 'En direct · actualisation automatique' : 'Dernière mesure · session arrêtée';
+  const telemetryContext = miningActive
+    ? 'Mesures de la session active, actualisées automatiquement.'
+    : 'Valeurs conservées de la dernière session. Elles ne représentent pas nécessairement l’état actuel du GPU.';
+  return `<section class="mining-performance ${thermalState}"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Tableau de minage</h2></div><span class="badge">${telemetryModeLabel}</span></div>
+    <p class="performance-note">${telemetryContext}</p>
     ${warning ? `<div class="thermal-alert" role="alert" aria-live="assertive"><strong>Alerte température</strong><span>${escapeHtml(warning)}</span></div>` : ''}
     <dl class="performance-grid">
       <div><dt>Matériel</dt><dd>${escapeHtml(telemetry.deviceName ?? '—')}</dd></div>
