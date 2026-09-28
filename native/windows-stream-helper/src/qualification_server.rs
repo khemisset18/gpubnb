@@ -261,7 +261,9 @@ impl QualificationMediaServer {
                         && runtime
                             .lock()
                             .ok()
-                            .and_then(|guard| guard.as_ref().map(QualifiedGraphicsRuntime::suspended))
+                            .and_then(|guard| {
+                                guard.as_ref().map(QualifiedGraphicsRuntime::suspended)
+                            })
                             .unwrap_or(false) =>
                 {
                     continue;
