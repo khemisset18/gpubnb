@@ -95,6 +95,7 @@ try {
         'build',
         '--locked',
         '--manifest-path', (Join-Path $repoRoot 'native\windows-stream-helper\Cargo.toml'),
+        '--features', 'physical-qualification',
         '--bin', 'gpubnb-windows-stream'
     )
     if ($Release) {
@@ -144,6 +145,7 @@ $manifest = [ordered]@{
     sourceCommit = $sourceCommit
     harnessSha256 = $harnessSha256
     helperSha256BeforeSigning = $helperSha256BeforeSigning
+    helperPhysicalQualificationFeature = $true
     workerSha256 = $workerSha256
     mediaDllSha256 = $mediaDllSha256
     workerSignerCertificateSha256 = $workerSigner
@@ -162,6 +164,7 @@ $manifest = [ordered]@{
     sourceCommit = $sourceCommit
     helperPath = $helperResolved
     helperSha256BeforeSigning = $helperSha256BeforeSigning
+    helperPhysicalQualificationFeature = $true
     harnessPath = $resolved
     harnessSha256 = $harnessSha256
     manifestPath = $manifestPath
