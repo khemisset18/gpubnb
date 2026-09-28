@@ -113,8 +113,7 @@ fn parse_lease_text(value: &str) -> Result<RenterSessionLease, RenterLeaseError>
     if schema.as_deref() != Some("1") {
         return Err(RenterLeaseError::InvalidFormat);
     }
-    let windows_session_id =
-        windows_session_id.ok_or(RenterLeaseError::InvalidSessionId)?;
+    let windows_session_id = windows_session_id.ok_or(RenterLeaseError::InvalidSessionId)?;
     if windows_session_id == 0 {
         return Err(RenterLeaseError::InvalidSessionId);
     }
@@ -190,10 +189,7 @@ mod tests {
     fn strict_lease_parses() {
         let lease = parse_lease_text(GOOD).expect("lease");
         assert_eq!(lease.windows_session_id, 42);
-        assert_eq!(
-            lease.gpu_uuid,
-            "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"
-        );
+        assert_eq!(lease.gpu_uuid, "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a");
     }
 
     #[test]
@@ -235,10 +231,9 @@ mod tests {
             Err(RenterLeaseError::InvalidSessionId)
         );
         assert_eq!(
-            parse_lease_text(&GOOD.replace(
-                "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
-                "GPU-EXACT"
-            )),
+            parse_lease_text(
+                &GOOD.replace("GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", "GPU-EXACT")
+            ),
             Err(RenterLeaseError::InvalidGpuUuid)
         );
     }
