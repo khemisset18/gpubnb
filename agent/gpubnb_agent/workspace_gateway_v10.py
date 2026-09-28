@@ -117,6 +117,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         self._native_desired_sessions: list[dict[str, Any]] = []
         self._native_blocked: set[str] = set()
         self._native_lock = threading.RLock()
+        self._native_resume_locks: dict[str, threading.Lock] = {}
 
     def _request(
         self,
@@ -371,6 +372,28 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         # that stack can ever interpret them as Docker workloads.
         super()._reconcile_sessions()
         self._reconcile_native_sessions()
+
+    def _native_resume_lock(self, session_id: str) -> threading.Lock:
+        with self._native_lock:
+            lock = self._native_resume_locks.get(session_id)
+            if lock is None:
+                lock = threading.Lock()
+                self._native_resume_locks[session_id] = lock
+            return lock
+
+    def _resume_before_relay(self, session_id: str) -> bool:
+        with self._native_lock:
+            is_native = session_id in self.native_runtimes
+        if not is_native:
+            return super()._resume_before_relay(session_id)
+
+        # The base reconnect layer is intentionally idempotent for Docker
+        # unpause, but native RESUME rotates a security capability and requires a
+        # one-time fresh proof. Serialize the complete physical+API transition
+        # so simultaneous browser channels cannot issue a second RESUME after
+        # the first one has already made the helper Ready.
+        with self._native_resume_lock(session_id):
+            return super()._resume_before_relay(session_id)
 
     def _pause_runtime_for_reconnect(self, session_id: str) -> bool:
         with self._native_lock:
