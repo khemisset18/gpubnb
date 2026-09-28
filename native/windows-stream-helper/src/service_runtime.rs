@@ -332,9 +332,9 @@ impl QualifiedGraphicsRuntime {
         // Rotate the browser-visible epoch independently from the secret token.
         // A connection authenticated before SUSPEND must not become usable again
         // merely because the media thread missed the short Suspended state.
-        let stream_epoch = match self.stream_epoch.checked_add(1) {
-            Some(value) if value != 0 => value,
-            _ => return Err(self.fail(ServiceRuntimeError::MediaCapability)),
+        let stream_epoch = match next_stream_epoch(self.stream_epoch) {
+            Ok(value) => value,
+            Err(error) => return Err(self.fail(error)),
         };
         self.last_frame_sequence = frame.header.frame_sequence;
         self.pending_media_frame = Some(frame);
@@ -598,6 +598,13 @@ fn worker_signer() -> Result<[u8; 32], ServiceRuntimeError> {
     Ok(out)
 }
 
+fn next_stream_epoch(current: u64) -> Result<u64, ServiceRuntimeError> {
+    match current.checked_add(1) {
+        Some(value) if value != 0 => Ok(value),
+        _ => Err(ServiceRuntimeError::MediaCapability),
+    }
+}
+
 fn validate_config(config: ServiceRuntimeConfig<'_>) -> Result<(), ServiceRuntimeError> {
     if config.session_id.is_empty()
         || config.generation == 0
@@ -787,6 +794,15 @@ pub fn start_qualified_graphics_runtime(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reconnect_stream_epoch_rotates_and_never_wraps_to_zero() {
+        assert_eq!(next_stream_epoch(7), Ok(8));
+        assert_eq!(
+            next_stream_epoch(u64::MAX),
+            Err(ServiceRuntimeError::MediaCapability)
+        );
+    }
 
     #[test]
     fn runtime_media_state_is_fail_closed() {
