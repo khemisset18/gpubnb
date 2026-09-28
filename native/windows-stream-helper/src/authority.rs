@@ -494,12 +494,14 @@ pub fn stop_session(session_id: &str) -> Result<(), AuthorityError> {
             let owner_sid = current_process_user_sid().map_err(|_| AuthorityError::ControlPipe)?;
             match create_authority_pipe(session_id, &owner_sid) {
                 Ok(proof_of_absence) => {
-                    drop(proof_of_absence);
-                    // FIRST_PIPE_INSTANCE proves the authority process is gone,
-                    // but a crashed owner could have left an IDD departure
-                    // failure behind. Never report idempotent STOP until the
-                    // driver also proves that no GPUbnb monitor remains.
+                    // Keep FIRST_PIPE_INSTANCE held while checking the display:
+                    // a concurrent START must not create a new authority between
+                    // the authority-absence proof and the IDD-absence proof.
+                    // A crashed owner could have left an IddCx departure failure
+                    // behind, so never report idempotent STOP until the driver
+                    // also proves that no GPUbnb monitor remains.
                     verify_virtual_display_absent().map_err(|_| AuthorityError::Cleanup)?;
+                    drop(proof_of_absence);
                     return Ok(());
                 }
                 Err(_) => return Err(AuthorityError::ControlPipe),
