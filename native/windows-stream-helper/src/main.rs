@@ -260,7 +260,6 @@ fn parse_session_command(
     Ok(build(session_id))
 }
 
-
 fn parse_authority_child(args: &[String]) -> Result<Command, CliError> {
     if args.len() != 7
         || args[1] != "--session-id"
@@ -342,9 +341,7 @@ fn execute(command: &Command) -> Result<String, CliError> {
             #[cfg(target_os = "windows")]
             {
                 let report = gpubnb_windows_stream_helper::authority::start_session(
-                    session_id,
-                    workspace,
-                    gpu_uuid,
+                    session_id, workspace, gpu_uuid,
                 )
                 .map_err(authority_error)?;
                 Ok(format!(
@@ -364,9 +361,8 @@ fn execute(command: &Command) -> Result<String, CliError> {
             #[cfg(target_os = "windows")]
             {
                 use gpubnb_windows_stream_helper::authority::AuthorityStatus;
-                let status =
-                    gpubnb_windows_stream_helper::authority::status_session(session_id)
-                        .map_err(authority_error)?;
+                let status = gpubnb_windows_stream_helper::authority::status_session(session_id)
+                    .map_err(authority_error)?;
                 let (ready, suspended) = match status {
                     AuthorityStatus::Ready => (true, false),
                     AuthorityStatus::Suspended => (false, true),
@@ -435,9 +431,7 @@ fn execute(command: &Command) -> Result<String, CliError> {
             #[cfg(target_os = "windows")]
             {
                 gpubnb_windows_stream_helper::authority::run_authority_child(
-                    session_id,
-                    workspace,
-                    gpu_uuid,
+                    session_id, workspace, gpu_uuid,
                 )
                 .map_err(authority_error)?;
                 Ok(r#"{"ok":true,"authorityStopped":true}"#.to_owned())
@@ -458,7 +452,7 @@ fn main() -> ExitCode {
         Ok(value) => {
             println!("{value}");
             ExitCode::SUCCESS
-        },
+        }
         Err(error) => {
             println!("{}", error_json(error));
             eprintln!("error:{}", error.code);
