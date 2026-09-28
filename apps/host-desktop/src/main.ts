@@ -452,17 +452,23 @@ const thermalTemperatureWarning = (temperature: number | null | undefined, stopC
 const renderMiningTelemetry = (
   telemetry: MiningTelemetry | null,
   thermalSafety: MiningThermalSafety | null,
+  miningActive: boolean,
 ): string => {
   if (!telemetry?.available) return `<section class="mining-performance unavailable"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Mesures en attente</h2></div><span class="badge">Aucune session mesurée</span></div>
     <p>Le tableau sera alimenté automatiquement après le démarrage du mineur.</p></section>`;
   const temperature = telemetry.temperatureCelsius;
   const thermalState = typeof temperature !== 'number' ? 'unknown' : temperature >= 94 ? 'danger' : temperature >= 85 ? 'warning' : 'safe';
-  const warning = thermalTemperatureWarning(temperature, thermalSafety?.stopCelsius ?? 85);
+  const warning = miningActive ? thermalTemperatureWarning(temperature, thermalSafety?.stopCelsius ?? 85) : '';
   const measuredEnergyKwh = typeof telemetry.powerWatts === 'number' && typeof telemetry.uptimeSeconds === 'number'
     ? (telemetry.powerWatts / 1000) * (telemetry.uptimeSeconds / 3600)
     : null;
   const measuredEnergyCost = measuredEnergyKwh === null ? null : measuredEnergyKwh * electricityPricePerKwh;
-  return `<section class="mining-performance ${thermalState}"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Tableau de minage</h2></div><span class="badge">Actualisation automatique</span></div>
+  const telemetryModeLabel = miningActive ? 'En direct · actualisation automatique' : 'Dernière mesure · session arrêtée';
+  const telemetryContext = miningActive
+    ? 'Mesures de la session active, actualisées automatiquement.'
+    : 'Valeurs conservées de la dernière session. Elles ne représentent pas nécessairement l’état actuel du GPU.';
+  return `<section class="mining-performance ${thermalState}"><div class="performance-heading"><div><p class="eyebrow">Rendement réel</p><h2>Tableau de minage</h2></div><span class="badge">${telemetryModeLabel}</span></div>
+    <p class="performance-note">${telemetryContext}</p>
     ${warning ? `<div class="thermal-alert" role="alert" aria-live="assertive"><strong>Alerte température</strong><span>${escapeHtml(warning)}</span></div>` : ''}
     <dl class="performance-grid">
       <div><dt>Matériel</dt><dd>${escapeHtml(telemetry.deviceName ?? '—')}</dd></div>
@@ -535,7 +541,7 @@ const renderMiningRuntime = (
     <span class="status-pill ${running ? 'online' : ''}">${escapeHtml(processLabel)}</span></div>
     <dl class="runtime-details"><div><dt>Profil</dt><dd>${escapeHtml(process.profileId ?? 'Aucun')}</dd></div><div><dt>PID</dt><dd>${process.pid ?? '—'}</dd></div>
     <div><dt>Consentement</dt><dd>${escapeHtml(runtime.consent)}</dd></div><div><dt>Dernière sortie</dt><dd>${process.lastExitCode ?? '—'}</dd></div></dl>
-    ${runtime.lastError ? `<p class="runtime-error">${escapeHtml(runtime.lastError)}</p>` : ''}${thermalSettingsPanel}${thermalPanel}${renderMiningTelemetry(telemetry, thermalSafety)}${installPanel}${configurationPanel}
+    ${runtime.lastError ? `<p class="runtime-error">${escapeHtml(runtime.lastError)}</p>` : ''}${thermalSettingsPanel}${thermalPanel}${renderMiningTelemetry(telemetry, thermalSafety, running)}${installPanel}${configurationPanel}
     <div class="mining-controls"><button id="start-mining" class="primary" ${installReady && configurationReady && !running && !thermalLatched ? '' : 'disabled'}>Démarrer le minage</button><button id="stop-mining" class="secondary" ${running ? '' : 'disabled'}>Arrêter le minage</button><button id="emergency-mining" class="danger-button">Arrêt d’urgence</button></div></section>`;
 };
 
