@@ -162,14 +162,20 @@ test('CI parses every physical qualification PowerShell helper before merge', as
   }
 });
 
-test('current gate advertises tooling but remains NOT YET PASSED and evidence bundles are gitignored', async () => {
+test('current gate preserves the beta.85 physical baseline while keeping the full deployment lock fail-closed', async () => {
   const current = await read('docs/CURRENT_PHYSICAL_QUALIFICATION.md');
+  const baseline = await read('docs/PHYSICAL_BASELINE_2026-09-11_BETA85.md');
   const ignore = await read('.gitignore');
-  assert.match(current, /Status: \*\*NOT YET PASSED for the current release\*\*/);
+
+  assert.match(current, /HOST\/WORKSPACE PHYSICAL BASELINE PASSED/);
+  assert.match(current, /full all-component release identity lock remains pending/);
   assert.match(current, /## Qualification tooling/);
   assert.match(current, /qualification-preflight-pc-a\.ps1/);
   assert.match(current, /qualification-preflight-pc-b\.ps1/);
   assert.match(current, /qualification-evidence\.ps1/);
-  assert.match(current, /do \*\*not\*\* mark this gate PASSED/);
+  assert.match(current, /do \*\*not\*\* mark a release PASSED by themselves/);
+  assert.match(current, /PHYSICAL_BASELINE_2026-09-11_BETA85\.md/);
+  assert.match(baseline, /PHYSICALLY PASSED for the Host\/Workspace\/GPU\/cleanup path/);
+  assert.match(baseline, /baseline\/physical-pass-beta85-2026-09-11/);
   assert.match(ignore, /^qualification-evidence\/$/m);
 });
