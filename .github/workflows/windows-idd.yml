@@ -93,6 +93,27 @@ jobs:
             throw "Do not route GPUbnb IddCx control IOCTLs through a default WDF queue"
           }
 
+      - name: Verify crash cleanup and absence proof stay fail-closed
+        shell: pwsh
+        run: |
+          $driver = Get-Content native/windows-idd/Driver.cpp -Raw
+          $protocol = Get-Content native/windows-idd/ControlProtocol.h -Raw
+          if ($driver -notmatch 'GPUbnbFileCleanup') {
+            throw "IddCx owner-file cleanup callback is required"
+          }
+          if ($driver -notmatch 'MonitorOwnerFile\s*!=\s*fileObject') {
+            throw "IddCx cleanup must remain bound to the exact owner file"
+          }
+          if ($protocol -notmatch 'AssertNoMonitor\s*=\s*4u') {
+            throw "Read-only IddCx absence proof operation is missing"
+          }
+          if ($driver -notmatch 'GPUbnbIddControlOperation::AssertNoMonitor') {
+            throw "Driver must implement the read-only IddCx absence proof"
+          }
+          if ($driver -notmatch 'context->Monitor\s*==\s*nullptr') {
+            throw "IddCx absence proof must require no active GPUbnb monitor"
+          }
+
       - name: Verify VS2026 x64 toolchain
         shell: pwsh
         run: |
