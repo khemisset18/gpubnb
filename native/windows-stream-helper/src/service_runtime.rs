@@ -137,6 +137,10 @@ impl QualifiedGraphicsRuntime {
         matches!(self.media_state, RuntimeMediaState::Ready)
     }
 
+    pub const fn suspended(&self) -> bool {
+        matches!(self.media_state, RuntimeMediaState::Suspended)
+    }
+
     pub const fn failed(&self) -> bool {
         matches!(self.media_state, RuntimeMediaState::Failed)
     }
