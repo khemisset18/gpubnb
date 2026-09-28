@@ -486,11 +486,20 @@ pub fn stop_session(session_id: &str) -> Result<(), AuthorityError> {
         CONTROL_READ_TIMEOUT_MS,
     ) {
         Ok(response) => response,
-        // The authority pipe is created before runtime resources and held for the
-        // entire authority lifetime. If no pipe exists, no authority can still own
-        // the Job Object, display lease or media listener; process teardown drops
-        // those handles. Treat that already-clean state as idempotent STOP.
-        Err(AuthorityError::ControlPipe) => return Ok(()),
+        // A connection failure alone is ambiguous: the authority could be busy
+        // or wedged. Prove absence by acquiring FIRST_PIPE_INSTANCE ourselves.
+        // Only then is idempotent STOP allowed to report an already-clean state.
+        Err(AuthorityError::ControlPipe) => {
+            let owner_sid =
+                current_process_user_sid().map_err(|_| AuthorityError::ControlPipe)?;
+            match create_authority_pipe(session_id, &owner_sid) {
+                Ok(proof_of_absence) => {
+                    drop(proof_of_absence);
+                    return Ok(());
+                }
+                Err(_) => return Err(AuthorityError::ControlPipe),
+            }
+        }
         Err(error) => return Err(error),
     };
     match response.as_str() {
