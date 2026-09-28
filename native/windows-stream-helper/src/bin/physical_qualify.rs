@@ -327,7 +327,8 @@ mod windows {
             return Err(error);
         }
 
-        let server = match QualificationMediaServer::bind(&args.session_id, args.generation) {
+        let stream_epoch = runtime.stream_epoch();
+        let server = match QualificationMediaServer::bind(&args.session_id, stream_epoch) {
             Ok(server) => server,
             Err(_) => {
                 let _ = runtime.stop();
@@ -352,9 +353,10 @@ mod windows {
         let session_id = args.session_id.clone();
         let frames = args.frames;
         let client = thread::spawn(move || run_client(endpoint, session_id, token, frames));
-        let server_result = server
-            .serve_once(&mut runtime, frames)
-            .map_err(|_| "qualification_media_server_failed");
+        let server_result = server.serve_once(&mut runtime, frames).map_err(|error| {
+            eprintln!("gpubnb_qualification media_server_error={error:?}");
+            "qualification_media_server_failed"
+        });
         drop(server);
         let listener_closed =
             TcpStream::connect_timeout(&endpoint, Duration::from_millis(250)).is_err();
