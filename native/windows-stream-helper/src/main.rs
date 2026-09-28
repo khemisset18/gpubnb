@@ -396,10 +396,11 @@ fn execute(command: &Command) -> Result<String, CliError> {
             }
             #[cfg(target_os = "windows")]
             {
-                gpubnb_windows_stream_helper::authority::resume_session(session_id)
-                    .map_err(authority_error)?;
+                let media_token =
+                    gpubnb_windows_stream_helper::authority::resume_session(session_id)
+                        .map_err(authority_error)?;
                 Ok(format!(
-                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","resumed":true,"freshMediaProof":true,"exactGpuBound":true,"virtualDisplay":true,"providerDesktopExcluded":true,"captureReady":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true}}"#
+                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","resumed":true,"freshMediaProof":true,"exactGpuBound":true,"virtualDisplay":true,"providerDesktopExcluded":true,"captureReady":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true,"mediaToken":"{media_token}"}}"#
                 ))
             }
         }
