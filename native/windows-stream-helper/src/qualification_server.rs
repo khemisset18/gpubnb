@@ -166,7 +166,6 @@ impl QualificationMediaServer {
         Ok((sent, accepted_input))
     }
 
-
     /// Long-lived authority transport. The runtime remains owned by the authority
     /// process and is borrowed only for one bounded input/media operation at a
     /// time so STATUS/SUSPEND/RESUME/STOP can acquire the same mutex between
@@ -198,9 +197,7 @@ impl QualificationMediaServer {
                         let mut guard = runtime
                             .lock()
                             .map_err(|_| QualificationMediaServerError::Input)?;
-                        let active = guard
-                            .as_mut()
-                            .ok_or(QualificationMediaServerError::Input)?;
+                        let active = guard.as_mut().ok_or(QualificationMediaServerError::Input)?;
                         active
                             .inject_input(event)
                             .map_err(|_| QualificationMediaServerError::Input)?;
@@ -222,9 +219,7 @@ impl QualificationMediaServer {
                 let mut guard = runtime
                     .lock()
                     .map_err(|_| QualificationMediaServerError::Media)?;
-                let active = guard
-                    .as_mut()
-                    .ok_or(QualificationMediaServerError::Media)?;
+                let active = guard.as_mut().ok_or(QualificationMediaServerError::Media)?;
                 active
                     .read_media_frame()
                     .map_err(|_| QualificationMediaServerError::Media)?
@@ -269,9 +264,8 @@ impl QualificationMediaServer {
                 .map(str::to_owned)
                 .ok_or(QualificationMediaServerError::Upgrade)?
         };
-        let upgrade =
-            authenticate_local_media_upgrade(&request, &self.session_id, &media_token)
-                .map_err(|_| QualificationMediaServerError::Upgrade)?;
+        let upgrade = authenticate_local_media_upgrade(&request, &self.session_id, &media_token)
+            .map_err(|_| QualificationMediaServerError::Upgrade)?;
         let accept = websocket_accept_value(&upgrade.websocket_key);
         let response = format!(
             "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
