@@ -32,7 +32,10 @@ The helper must never capture the provider's personal desktop.
   the Agent rejects that reply it immediately calls `--stop` for the requested
   session id.
 - `--stop` is idempotent: an already-clean session still returns `stopped:true`
-  for the requested session id after verifying no owned process/listener remains.
+  for the requested session id only after proving that the authority/listener is
+  absent and the GPUbnb IddCx control plane reports no active GPUbnb monitor.
+  A missing GPUbnb IddCx device interface counts as absence; ambiguous/query/open
+  failures do not.
 - Media listeners bind loopback only. No `0.0.0.0`, LAN, public or wildcard
   listener is permitted. The Agent accepts only a literal loopback IP, an explicit
   TCP port and a path exactly `/session/<sessionId>`; credentials, query strings
@@ -239,8 +242,13 @@ Success stdout after verified cleanup:
 Before returning `stopped:true`, the helper verifies that all resources owned by
 that renter session are gone: application/process tree, capture source, encoder,
 media listener, input hook, temporary credentials/tokens and renter-scoped
-session resources. Failure to verify cleanup returns non-zero or
-`stopped:false`; the Agent treats that as cleanup unverified.
+session resources. If the authority pipe is already absent, acquiring the
+first-instance pipe proves that no authority process owns that session name, and
+a separate read-only IddCx `AssertNoMonitor` operation must also prove that no
+GPUbnb virtual monitor remains. A missing GPUbnb IddCx interface is equivalent
+to no GPUbnb monitor; any ambiguous interface, control-open failure or active
+monitor fails cleanup verification. Failure to verify cleanup returns non-zero
+or `stopped:false`; the Agent treats that as cleanup unverified.
 
 ## Isolation requirements
 
@@ -293,7 +301,9 @@ For Cloud Desktop, one detached local authority process owns the live
 local-only named pipe restricted to the authority-launching Windows identity.
 The authority does not serialize runtime handles or media capabilities to disk.
 
-`--suspend` revokes the current media capability before it confirms suspension.
+`--suspend` is serialized against browser media writes and revokes the current
+media capability before it confirms suspension; after a successful suspend reply,
+no pre-suspend media write remains in flight.
 A successful `--resume` requires a fresh exact-GPU capture/NVENC proof and returns
 a newly generated 64-lowercase-hex `mediaToken`. The Agent must replace the old
 in-memory capability before reconnecting the browser; the previous token must
