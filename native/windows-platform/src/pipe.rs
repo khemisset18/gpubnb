@@ -469,7 +469,7 @@ pub fn current_process_logon_sid() -> Result<String, PlatformError> {
 #[cfg(target_os = "windows")]
 mod windows_impl {
     use super::{
-        MEDIA_PIPE_AUTH_PRELUDE, PIPE_AUTH_PRELUDE, VerifiedPipeClient, WORKER_MEDIA_MESSAGE_MAX,
+        AUTHORITY_PIPE_AUTH_PRELUDE, MEDIA_PIPE_AUTH_PRELUDE, PIPE_AUTH_PRELUDE, VerifiedPipeClient, WORKER_MEDIA_MESSAGE_MAX,
         WORKER_PIPE_FRAME_MAX, WORKER_PIPE_PACKET_SIZE, WorkerMediaPipe, WorkerMediaPipeClient,
         WorkerPipe, WorkerPipeClient,
     };
