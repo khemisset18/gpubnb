@@ -348,7 +348,7 @@ fn execute(command: &Command) -> Result<String, CliError> {
                 )
                 .map_err(authority_error)?;
                 Ok(format!(
-                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","workspaceSlug":"{workspace}","gpuUuid":"{gpu_uuid}","helperVersion":"{}","isolatedSession":true,"separateRenterIdentity":true,"renterSessionActive":true,"providerSessionInactive":true,"virtualDisplay":true,"providerDesktopExcluded":true,"captureReady":true,"exactGpuBound":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true,"mediaUrl":"ws://127.0.0.1:{}/session/{session_id}","mediaToken":"{}","audioReady":false,"controllerReady":false}}"#,
+                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","workspaceSlug":"{workspace}","gpuUuid":"{gpu_uuid}","helperVersion":"{}","isolatedSession":true,"separateRenterIdentity":true,"renterSessionActive":true,"providerSessionInactive":true,"virtualDisplay":true,"providerDesktopExcluded":true,"captureReady":true,"exactGpuBound":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true,"mediaUrl":"http://127.0.0.1:{}/session/{session_id}","mediaToken":"{}","audioReady":false,"controllerReady":false}}"#,
                     env!("CARGO_PKG_VERSION"),
                     report.media_port,
                     report.media_token
