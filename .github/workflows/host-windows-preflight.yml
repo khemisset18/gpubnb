@@ -87,6 +87,23 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install ./agent pyinstaller==6.16.0
 
+      - name: Stamp Agent build provenance
+        shell: pwsh
+        run: |
+          $commit = '${{ github.event.pull_request.head.sha || github.sha }}'
+          if ($commit -notmatch '^[0-9a-f]{40}$') {
+            throw "Unexpected source commit: $commit"
+          }
+          $short = $commit.Substring(0, 12)
+          $path = 'agent/gpubnb_agent/_build_info.py'
+          $content = Get-Content $path -Raw
+          $updated = [regex]::Replace($content, 'BUILD_COMMIT = "[^"]+"', "BUILD_COMMIT = `"$short`"")
+          if ($updated -eq $content) {
+            throw 'Unable to stamp Agent BUILD_COMMIT.'
+          }
+          Set-Content $path $updated -Encoding utf8
+          Write-Host "Stamped Agent build commit $short"
+
       - name: Test agent CLI
         shell: pwsh
         run: |
@@ -134,6 +151,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Standalone agent version command failed.' }
           if ($standaloneVersion -ne $expectedAgentVersion) {
             throw "Standalone Agent version mismatch: expected $expectedAgentVersion, got $standaloneVersion."
+          }
+          $expectedCommit = '${{ github.event.pull_request.head.sha || github.sha }}'.Substring(0, 12)
+          $buildInfo = (& ./dist/gpubnb-agent.exe build-info | Out-String) | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone agent build-info command failed.' }
+          if (-not $buildInfo.frozen) { throw 'Standalone agent does not report itself as frozen.' }
+          if ($buildInfo.buildCommit -ne $expectedCommit) {
+            throw "Standalone Agent build commit mismatch: expected $expectedCommit, got $($buildInfo.buildCommit)."
           }
           & ./dist/gpubnb-agent.exe status
           if ($LASTEXITCODE -ne 0) { throw 'Standalone agent status command failed.' }
@@ -200,6 +224,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'The installed agent sidecar is not executable.' }
           if ($installedAgentVersion -ne $expectedAgentVersion) {
             throw "Installed Agent version mismatch: expected $expectedAgentVersion, got $installedAgentVersion."
+          }
+          $expectedCommit = '${{ github.event.pull_request.head.sha || github.sha }}'.Substring(0, 12)
+          $installedBuildInfo = (& $installedSidecar build-info | Out-String) | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Installed agent build-info command failed.' }
+          if (-not $installedBuildInfo.frozen) { throw 'Installed agent does not report itself as frozen.' }
+          if ($installedBuildInfo.buildCommit -ne $expectedCommit) {
+            throw "Installed Agent build commit mismatch: expected $expectedCommit, got $($installedBuildInfo.buildCommit)."
           }
           $service = Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
           if (-not $service) { throw 'The installer did not register the GPUbnbAgent service.' }
@@ -278,7 +309,7 @@ jobs:
       - name: Upload Windows preflight artifact
         uses: actions/upload-artifact@v6
         with:
-          name: gpubnb-host-windows-preflight-${{ github.sha }}
+          name: gpubnb-host-windows-preflight-${{ github.event.pull_request.head.sha || github.sha }}
           path: apps/host-desktop/dist-windows/**
           if-no-files-found: error
           retention-days: 14

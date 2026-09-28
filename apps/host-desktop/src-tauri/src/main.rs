@@ -1,5 +1,6 @@
 #[path = "installation_identity.rs"]
 mod installation_identity;
+mod windows_host_bootstrap;
 
 #[cfg(test)]
 mod resource_state;
@@ -20,6 +21,10 @@ fn main() {
         eprintln!("GPUbnb Host startup failed: {error}");
         std::process::exit(1);
     }
+    // On Windows this idempotently registers GPUbnb Host for the owner's next
+    // logon and starts Docker Desktop in that interactive user session before the
+    // Tauri UI is launched. The Agent service itself already starts at system boot.
+    windows_host_bootstrap::prepare_host_startup();
     gpubnb_host_desktop_lib::run();
 }
 
