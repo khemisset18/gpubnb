@@ -106,6 +106,7 @@ pub struct QualifiedGraphicsRuntime {
     worker: Option<RenterWorkerProcess>,
     display: Option<VirtualDisplayLease>,
     generation: u64,
+    stream_epoch: u64,
     windows_session_id: u32,
     renter_isolation: RenterSessionIsolationProof,
     display_spec: WorkerDisplaySpec,
@@ -119,6 +120,12 @@ pub struct QualifiedGraphicsRuntime {
 impl QualifiedGraphicsRuntime {
     pub const fn generation(&self) -> u64 {
         self.generation
+    }
+
+    /// Browser-visible reconnect fence. This is independent from the secret
+    /// media capability and rotates after every successful suspend/resume proof.
+    pub const fn stream_epoch(&self) -> u64 {
+        self.stream_epoch
     }
 
     pub const fn windows_session_id(&self) -> u32 {
@@ -322,9 +329,17 @@ impl QualifiedGraphicsRuntime {
             Ok(token) => token,
             Err(_) => return Err(self.fail(ServiceRuntimeError::MediaCapability)),
         };
+        // Rotate the browser-visible epoch independently from the secret token.
+        // A connection authenticated before SUSPEND must not become usable again
+        // merely because the media thread missed the short Suspended state.
+        let stream_epoch = match self.stream_epoch.checked_add(1) {
+            Some(value) if value != 0 => value,
+            _ => return Err(self.fail(ServiceRuntimeError::MediaCapability)),
+        };
         self.last_frame_sequence = frame.header.frame_sequence;
         self.pending_media_frame = Some(frame);
         self.media_capability = Some(media_capability);
+        self.stream_epoch = stream_epoch;
         self.media_state = RuntimeMediaState::Ready;
         Ok(())
     }
@@ -757,6 +772,7 @@ pub fn start_qualified_graphics_runtime(
         worker: Some(worker),
         display: Some(display),
         generation: config.generation,
+        stream_epoch: config.generation,
         windows_session_id: config.windows_session_id,
         renter_isolation,
         display_spec,
