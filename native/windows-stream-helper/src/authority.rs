@@ -289,7 +289,8 @@ pub fn run_self_test() -> Result<SelfTestReport, AuthorityError> {
                 .inject_input(WorkerInputEvent::MouseMoveRelative { dx: -1, dy: 0 })
                 .map_err(|_| AuthorityError::InputProof)?;
 
-            let server = QualificationMediaServer::bind(&session_id, generation)
+            let stream_epoch = runtime.stream_epoch();
+            let server = QualificationMediaServer::bind(&session_id, stream_epoch)
                 .map_err(|_| AuthorityError::MediaBind)?;
             let endpoint = server.endpoint().map_err(|_| AuthorityError::MediaBind)?;
             let token = runtime
@@ -298,10 +299,14 @@ pub fn run_self_test() -> Result<SelfTestReport, AuthorityError> {
                 .to_owned();
             let client_session = session_id.clone();
             let client = thread::spawn(move || run_probe_client(endpoint, client_session, token));
-            let sent = server
-                .serve_once(&mut runtime, 1)
-                .map_err(|_| AuthorityError::MediaProof)?;
+            let sent = server.serve_once(&mut runtime, 1).map_err(|error| {
+                eprintln!("gpubnb_self_test media_server_error={error:?}");
+                AuthorityError::MediaProof
+            })?;
             let client_result = client.join().map_err(|_| AuthorityError::MediaProof)?;
+            if let Err(error) = &client_result {
+                eprintln!("gpubnb_self_test client_error={error:?}");
+            }
             client_result?;
             if sent != 1 {
                 return Err(AuthorityError::MediaProof);
