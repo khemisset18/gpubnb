@@ -3,9 +3,17 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   api:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: apps/api
@@ -28,13 +36,15 @@ jobs:
       SOLANA_CLUSTER: devnet
       ALLOW_MAINNET: "false"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Generate ephemeral CI secrets
         shell: bash
         run: |
           echo "SESSION_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
           echo "INTERNAL_SERVICE_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
@@ -49,7 +59,7 @@ jobs:
           npm test 2>&1 | tee api-test.log
       - name: Upload API test diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: api-test-diagnostics
           path: apps/api/api-test.log
@@ -67,7 +77,7 @@ jobs:
           npx tsc -p tsconfig.json --noEmit 2>&1 | tee api-tsc.log
       - name: Upload API build diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: api-build-diagnostics
           path: |
@@ -78,44 +88,26 @@ jobs:
 
   dependency-audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: apps/api
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/api/package-lock.json
-      - run: npm ci --ignore-scripts
-      - name: npm audit (HIGH and CRITICAL)
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: npm bulk advisory audit (HIGH and CRITICAL)
         id: npm-audit
-        shell: bash
-        run: |
-          set +e
-          npm audit --audit-level=high --json > npm-audit.json
-          audit_status=$?
-          set -e
-          node - <<'NODE'
-          const fs = require('node:fs');
-          const report = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));
-          const vulnerabilities = report.vulnerabilities || {};
-          const blocking = Object.entries(vulnerabilities)
-            .filter(([, value]) => value.severity === 'high' || value.severity === 'critical')
-            .map(([name, value]) => ({
-              name,
-              severity: value.severity,
-              direct: Boolean(value.isDirect),
-              via: (value.via || []).map(item => typeof item === 'string' ? item : item.url || item.title).slice(0, 4),
-              fixAvailable: value.fixAvailable,
-            }));
-          console.log(JSON.stringify({blockingCount: blocking.length, blocking}, null, 2));
-          NODE
-          exit "$audit_status"
+        run: node scripts/npm-bulk-audit.mjs npm-audit.json
       - name: Upload npm audit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: npm-audit-report
           path: apps/api/npm-audit.json
@@ -124,9 +116,12 @@ jobs:
 
   agent:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with: { python-version: '3.12' }
       - run: python -m pip install --disable-pip-version-check -e agent
       - run: python -m py_compile agent/agent.py agent/gpubnb_agent/*.py
@@ -134,21 +129,27 @@ jobs:
 
   contract:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: programs/gpu_escrow
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: programs/gpu_escrow
       - run: cargo test
 
   production-gates:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - run: python3 -m py_compile agent/agent.py
       - run: node --check apps/web/app.js
       - run: node --check apps/web/config.js
@@ -186,12 +187,14 @@ jobs:
 
   security-static-analysis:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          persist-credentials: false
           fetch-depth: 0
       - name: Gitleaks secret scan
         shell: bash
@@ -203,7 +206,7 @@ jobs:
             detect --source=/repo --config=/repo/.gitleaks.toml \
             --redact --verbose --no-banner --no-git
       - name: Trivy filesystem report
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -247,7 +250,7 @@ jobs:
           PY
       - name: Upload Trivy report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: trivy-filesystem-report
           path: trivy-results.json

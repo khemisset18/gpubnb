@@ -117,9 +117,9 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
             ], timeout=legacy.START_TIMEOUT_SECONDS)
             return
         if workspace_slug in ("cloud-desktop", "creator", "cad", "gaming"):
-            # NOT REAL_WORKING, NOT bookable - unreachable in production
-            # (none of these four slugs is in GATEWAY_WORKSPACE_SLUGS).
-            # Mirrors legacy._launch_workspace_container's own
+            # Qualified Linux/Selkies desktop path. workspace_gateway_v9 admits
+            # these slugs only on Linux, so Windows-native sessions can never
+            # reach this Docker launcher. Mirrors legacy._launch_workspace_container's
             # cloud-desktop/creator/cad/gaming branch exactly (same
             # deliberate absence of --read-only/--cap-drop=ALL, same
             # /config volume, same "graphics,display,utility,compute"

@@ -5,6 +5,7 @@ import {
   MachineOperational,
   ModerationStatus,
   Prisma,
+  WorkspaceRuntimeBackend,
   WorkspaceSessionStatus,
   type PrismaClient,
 } from '@prisma/client';
@@ -107,6 +108,7 @@ export async function completeGpuProofJob(
             machineWorkspaceId: developerWorkspaceCompatible.id,
             status: WorkspaceSessionStatus.PREPARING,
             isolationType: 'DOCKER',
+            runtimeBackend: WorkspaceRuntimeBackend.CONTAINER,
             resourceLimits: {
               maxRamMiB: 4096,
               maxCpuCores: 2,

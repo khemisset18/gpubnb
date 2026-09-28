@@ -37,15 +37,15 @@ jobs:
           --health-timeout 2s
           --health-retries 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
         with:
           components: rustfmt, clippy
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: services/control-gateway
 
@@ -388,8 +388,8 @@ jobs:
           set +e
           mkdir -p /tmp/gpubnb-distributed
           for pair in '19101 eu' '19102 us' '19103 ap'; do
-            set -- $pair
-            curl --max-time 2 -fsS "http://127.0.0.1:$1/metrics" >"/tmp/gpubnb-distributed/$2-metrics.prom" || true
+            read -r port region <<<"$pair"
+            curl --max-time 2 -fsS "http://127.0.0.1:$port/metrics" >"/tmp/gpubnb-distributed/$region-metrics.prom" || true
           done
           for region in eu us ap; do
             if test -f "/tmp/gpubnb-distributed/${region}.pid"; then
@@ -414,7 +414,7 @@ jobs:
 
       - name: Upload distributed qualification evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: distributed-load-lab-evidence
           path: /tmp/gpubnb-distributed/

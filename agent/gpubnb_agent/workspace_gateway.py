@@ -88,12 +88,10 @@ GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai", "video", "audio"
 # workspace on this platform (see rental-resource-authority.ts) - the
 # renter is still renting the whole machine.
 #
-# Creator/Cloud Desktop/CAD/Gaming ARE included here (real GPU-accelerated
-# desktop rendering genuinely needs the device attached) even though none
-# of the four is REAL_WORKING or in GATEWAY_WORKSPACE_SLUGS yet - this is
-# prepared, unit-tested-with-mocks code, unreachable in production until a
-# real Linux GPU host validates it and that slug is deliberately added to
-# GATEWAY_WORKSPACE_SLUGS too. See docs/SESSION_RESUME.md section 8/9.
+# Creator/Cloud Desktop/CAD/Gaming are the qualified Linux/Selkies desktop
+# family and genuinely need the leased GPU attached. workspace_gateway_v9 adds
+# those slugs only on Linux; Windows must never reach these Docker profiles and
+# uses the separate fail-closed native backend instead.
 GPU_ATTACHED_WORKSPACE_SLUGS = frozenset({
     "developer", "ai", "video",
     "creator", "cloud-desktop", "cad", "gaming",
@@ -265,11 +263,9 @@ class GatewaySupervisor:
             if not PINNED_SECURITY_LAB_IMAGE.fullmatch(image):
                 raise RuntimeError("security_lab_workspace_image_must_be_locally_built_and_digest_pinned")
             return image
-        # Creator / Cloud Desktop / CAD / Gaming - NOT REAL_WORKING, NOT
-        # bookable (not in GATEWAY_WORKSPACE_SLUGS - see that constant's
-        # comment). This branch exists only so the launch logic below is
-        # real and unit-testable with mocks ahead of a future Linux GPU
-        # host validating it - see docs/SESSION_RESUME.md section 8/9.
+        # Creator / Cloud Desktop / CAD / Gaming are Linux/Selkies profiles.
+        # workspace_gateway_v9 exposes them only on Linux. Keeping image
+        # validation here does not authorize Windows to execute this path.
         if workspace_slug == "cloud-desktop":
             if not PINNED_CLOUD_DESKTOP_IMAGE.fullmatch(image):
                 raise RuntimeError("cloud_desktop_workspace_image_must_be_locally_built_and_digest_pinned")
@@ -439,7 +435,7 @@ class GatewaySupervisor:
         if workspace_slug in ("cloud-desktop", "creator", "cad", "gaming"):
             # NOT REAL_WORKING, NOT bookable - unreachable in production
             # because none of these four slugs is in
-            # GATEWAY_WORKSPACE_SLUGS. Prepared ahead of a future Linux GPU
+            # GATEWAY_WORKSPACE_SLUGS only on Linux by workspace_gateway_v9.
             # host per docs/SESSION_RESUME.md section 8/9. All four share
             # one real, live-confirmed launch profile (linuxserver/webtop,
             # ubuntu-xfce base): deliberately NO --read-only and NO
@@ -771,13 +767,20 @@ class GatewaySupervisor:
         for session in sessions:
             session_id = str(session.get("id") or "")
             status = str(session.get("status") or "")
-            # Missing/unrecognized workspaceSlug defaults to "developer": every
-            # session this endpoint returned before workspaceSlug existed was a
-            # Developer one, and the API's /desired filter (workspace-gateway.ts)
-            # only ever returns slugs this gateway actually knows how to run.
-            workspace_slug = str(session.get("workspaceSlug") or "developer")
-            if workspace_slug not in GATEWAY_WORKSPACE_SLUGS:
+            # Missing workspaceSlug is the one legacy compatibility case: before
+            # the field existed, every gateway session was Developer. An explicit
+            # unknown slug is fundamentally different and must never be coerced to
+            # Developer, otherwise a control-plane/runtime rollout mismatch could
+            # launch the wrong workload under a valid rental.
+            raw_workspace_slug = session.get("workspaceSlug")
+            if raw_workspace_slug is None or raw_workspace_slug == "":
                 workspace_slug = "developer"
+            elif not isinstance(raw_workspace_slug, str) or raw_workspace_slug not in GATEWAY_WORKSPACE_SLUGS:
+                self._stop_runtime(session_id)
+                self._report_error(RuntimeError("unsupported_gateway_workspace_slug"))
+                continue
+            else:
+                workspace_slug = raw_workspace_slug
             metadata = session.get("connectionMetadata") if isinstance(session.get("connectionMetadata"), dict) else {}
             if status in {"STOP_REQUESTED", "STOPPING"} or self._expired(session.get("expiresAt")):
                 cleaned = self._stop_runtime(session_id)

@@ -1,39 +1,28 @@
-# Modèle de sécurité
+# Security Policy
 
-## Garanties implémentées
-- Nonces d'authentification consommés une seule fois dans Redis.
-- Cookies de session opaques HttpOnly/SameSite.
-- CORS limité à l'origine publique.
-- Heartbeats avec challenge à usage unique, compteur monotone et fenêtre temporelle.
-- États de connectivité, exploitation et modération séparés.
-- DTO public sans clé d'agent ni portefeuille complet.
-- Tous les montants restent en `bigint` et sont sérialisés en chaînes.
-- Endpoint de maintenance protégé par secret de service.
-- Règlement testé avec invariant de conservation des lamports.
+GPUbnb treats the control plane, host agent, Windows native runtime, release pipeline, renter isolation and billing authority as security-sensitive components.
 
-## GPUbnb Host Desktop
+## Reporting a vulnerability
 
-L'application hôte reste pré-production et doit échouer de manière fermée tant que la barrière de préparation n'est pas satisfaite.
+Do not disclose suspected vulnerabilities in a public issue.
 
-Invariants bloquant toute publication :
+Use GitHub's private vulnerability reporting / Security Advisory flow for this repository when available. If private reporting is unavailable, contact the repository maintainer privately before publishing technical details.
 
-- aucune charge locataire ne peut accéder au bureau, au dossier personnel, au profil navigateur, au presse-papiers, aux identifiants, aux périphériques ou aux sockets non autorisés de l'hôte ;
-- les opérations privilégiées s'exécutent uniquement dans un service minimal et signé ;
-- les requêtes du service sont authentifiées, limitées à une liste blanche, protégées contre le rejeu et soumises à une fenêtre temporelle stricte ;
-- les identifiants et espaces de travail locataire sont éphémères et détruits après chaque session ;
-- l'arrêt d'urgence reste disponible pendant la préparation, la location et le nettoyage ;
-- aucune location ne démarre tant que le mineur détient le GPU ou que l'isolation, le stockage et le réseau ne sont pas attestés ;
-- toute preuve manquante, ancienne, ambiguë ou invalide bloque l'hébergement.
+Include:
+- affected commit or release;
+- affected component and operating system;
+- reproduction steps;
+- expected and observed trust boundary;
+- whether credentials, renter/provider isolation, billing authority, signing, update integrity or remote code execution may be affected.
 
-## Signalement responsable
+## Security invariants
 
-Ne publiez pas de vulnérabilité exploitable dans une issue publique. Utilisez le signalement privé de vulnérabilité GitHub lorsqu'il est activé et fournissez le commit affecté, les étapes de reproduction, l'impact et une mitigation proposée. N'incluez jamais de vrais secrets, clés privées, données locataire ou fichiers personnels.
+Changes must remain fail-closed. In particular:
+- an unqualified runtime must never become bookable;
+- a Windows-native session must never fall back to the container/Selkies runtime, or vice versa;
+- provider desktop/files/credentials must remain outside the renter boundary;
+- exact leased GPU identity must be preserved through capture and encode;
+- workflow and release artifacts must not bypass signature, provenance or cleanup checks;
+- cleanup failure is a security failure, not a successful stop.
 
-## Limites obligatoires avant Mainnet et production
-- Audit indépendant du programme Anchor compilé et de son ID réel.
-- Multisig pour admin, oracle et upgrade authority.
-- Oracle redondant : l'agent fournisseur seul n'est jamais une preuve suffisante.
-- Sandbox GPU testée contre l'évasion, idéalement microVM/Kata selon le matériel.
-- Tests dynamiques avec validateur Solana local, chaos réseau et pannes électriques.
-- Pentest de l'infrastructure réellement déployée.
-- CI multi-OS, analyse statique, revue des dépendances, artefacts signés et revue indépendante de la frontière d'isolation du Host Desktop.
+Security fixes should include regression tests whenever practical.

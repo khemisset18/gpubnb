@@ -1,0 +1,91 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:15"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /apps/api
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:30"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /apps/host-desktop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:45"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: pip
+    directory: /agent
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: cargo
+    directory: /services/edge
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:15"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: cargo
+    directory: /apps/host-desktop/src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:30"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: cargo
+    directory: /native/windows-platform
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:45"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: cargo
+    directory: /native/windows-stream-helper
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: cargo
+    directory: /native/windows-worker
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:15"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5

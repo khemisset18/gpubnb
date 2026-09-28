@@ -178,6 +178,11 @@ enum MachineWorkspaceState {
   OWNER_DISABLED
 }
 
+enum WorkspaceRuntimeBackend {
+  CONTAINER
+  WINDOWS_NATIVE
+}
+
 enum WorkspaceSessionStatus {
   RESERVED
   PREPARING
@@ -308,6 +313,8 @@ model Machine {
   nvidiaRuntimeAvailable Boolean @default(false)
   virtualizationAvailable Boolean @default(false)
   desktopGpuRenderingAvailable Boolean @default(false)
+  nativeDesktopStreamingAvailable Boolean @default(false)
+  nativeDesktopStreamingGpuUuid String? @db.VarChar(200)
   connectivity MachineConnectivity @default(OFFLINE)
   operational MachineOperational @default(UNAVAILABLE)
   moderationStatus ModerationStatus @default(CLEAR)
@@ -540,6 +547,7 @@ model WorkspaceSession {
   jobId String? @unique
   status WorkspaceSessionStatus @default(RESERVED)
   isolationType String @db.VarChar(32)
+  runtimeBackend WorkspaceRuntimeBackend
   resourceLimits Json
   connectionType String? @db.VarChar(32)
   connectionMetadata Json?
@@ -569,6 +577,7 @@ model WorkspaceSession {
   @@unique([bookingId, machineWorkspaceId])
   @@index([renterId, createdAt])
   @@index([machineId, status])
+  @@index([machineId, runtimeBackend, status])
   @@index([bookingId])
   @@index([status, readyDeadlineAt])
 }

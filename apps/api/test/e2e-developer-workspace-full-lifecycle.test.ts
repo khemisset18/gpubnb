@@ -173,7 +173,7 @@ test('Developer Workspace full lifecycle: booking -> GPU proof -> Workspace read
   const session = await prisma.workspaceSession.create({
     data: {
       bookingId: booking.id, renterId: renter.id, machineId: machine.id, machineWorkspaceId: machineWorkspace.id, jobId: prepareJob.id,
-      status: WorkspaceSessionStatus.PREPARING, isolationType: 'DOCKER',
+      status: WorkspaceSessionStatus.PREPARING, isolationType: 'DOCKER', runtimeBackend: 'CONTAINER',
       resourceLimits: { maxRamMiB: 4096, maxCpuCores: 2, storageQuotaMiB: 10240, networkAccess: 'RESTRICTED', autoStopMinutes: 60 },
       connectionType: 'GPUBNB_GATEWAY', preparationProgress: 5, preparationStep: 'DEVELOPER_REQUESTED',
       preparationRequestedAt: now, readyDeadlineAt: new Date(startsAt.getTime() - 120_000), expiresAt: booking.endsAt,

@@ -13,6 +13,8 @@ before a job can be created. No fallback to Developer is permitted for these slu
 """
 from __future__ import annotations
 
+import platform
+
 from . import workspace_gateway as legacy
 
 DESKTOP_GATEWAY_WORKSPACE_SLUGS = frozenset({
@@ -24,7 +26,14 @@ DESKTOP_GATEWAY_WORKSPACE_SLUGS = frozenset({
 
 
 def install() -> None:
-    """Allow the four Selkies runtimes through the already-qualified gateway."""
+    """Enable Selkies desktop slugs only on the qualified Linux backend.
+
+    Windows desktop sessions belong exclusively to the separate Windows-native
+    runtime. Keeping these slugs out of the Docker gateway on every non-Linux
+    host is defense in depth against a stale or malformed control-plane session.
+    """
+    if platform.system() != "Linux":
+        return
     legacy.GATEWAY_WORKSPACE_SLUGS = frozenset(
         set(legacy.GATEWAY_WORKSPACE_SLUGS) | set(DESKTOP_GATEWAY_WORKSPACE_SLUGS)
     )

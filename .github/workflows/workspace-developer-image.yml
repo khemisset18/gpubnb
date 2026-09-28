@@ -13,11 +13,18 @@ on:
 permissions:
   contents: read
   packages: write
+concurrency:
+  group: workspace-developer-image-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-scan-publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Build immutable candidate
         run: docker build --pull=false --tag gpubnb-developer:candidate workspaces/developer
       - name: Verify tools and non-root execution
@@ -58,7 +65,7 @@ jobs:
           PY
       - name: Upload Developer Workspace Trivy report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: trivy-developer-workspace
           path: trivy-developer.json

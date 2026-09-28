@@ -1,0 +1,15 @@
+[package]
+name = "gpubnb-windows-worker"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+publish = false
+
+[dependencies]
+gpubnb-windows-platform = { path = "../windows-platform" }
+gpubnb-windows-stream-helper = { path = "../windows-stream-helper" }
+
+[workspace]
+
+[lints.rust]
+unsafe_code = "forbid"
