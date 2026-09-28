@@ -46,6 +46,9 @@ Security invariants:
 - a monitor belongs to the exact handle that created it;
 - another handle cannot unplug that monitor;
 - closing/crashing the owner handle triggers the driver cleanup backstop;
+- the privileged helper can issue the read-only `AssertNoMonitor` control
+  operation after an authority crash; it succeeds only when no GPUbnb monitor is
+  active and never bypasses the physical-mutation gate;
 - provider physical outputs are never valid capture targets;
 - no driver build artifact is installable/promotable merely because CI built it.
 
