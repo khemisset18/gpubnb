@@ -36,6 +36,7 @@ pub enum QualificationMediaServerError {
     Media,
     Input,
     Protocol,
+    StaleConnection,
     InvalidConfiguration,
 }
 
@@ -194,8 +195,8 @@ impl QualificationMediaServer {
         runtime: &Arc<Mutex<Option<QualifiedGraphicsRuntime>>>,
         running: &AtomicBool,
     ) -> Result<(u64, u64), QualificationMediaServerError> {
-        let mut stream = self.accept_upgraded_shared(runtime, running)?;
-        let mut input_fence = BrowserInputFence::new(self.stream_epoch)
+        let (mut stream, stream_epoch) = self.accept_upgraded_shared(runtime, running)?;
+        let mut input_fence = BrowserInputFence::new(stream_epoch)
             .map_err(|_| QualificationMediaServerError::Input)?;
         let mut sent = 0u64;
         let mut accepted_input = 0u64;
@@ -212,6 +213,9 @@ impl QualificationMediaServer {
                             .lock()
                             .map_err(|_| QualificationMediaServerError::Input)?;
                         let active = guard.as_mut().ok_or(QualificationMediaServerError::Input)?;
+                        if active.stream_epoch() != stream_epoch {
+                            return Err(QualificationMediaServerError::StaleConnection);
+                        }
                         active
                             .inject_input(event)
                             .map_err(|_| QualificationMediaServerError::Input)?;
@@ -234,13 +238,16 @@ impl QualificationMediaServer {
                     .lock()
                     .map_err(|_| QualificationMediaServerError::Media)?;
                 let active = guard.as_mut().ok_or(QualificationMediaServerError::Media)?;
+                if active.stream_epoch() != stream_epoch {
+                    return Err(QualificationMediaServerError::StaleConnection);
+                }
                 active
                     .read_media_frame()
                     .map_err(|_| QualificationMediaServerError::Media)?
             };
             match frame {
                 Some(frame) => {
-                    write_browser_media_frame(&mut stream, self.stream_epoch, &frame)?;
+                    write_browser_media_frame(&mut stream, stream_epoch, &frame)?;
                     sent = sent
                         .checked_add(1)
                         .ok_or(QualificationMediaServerError::Protocol)?;
@@ -269,6 +276,7 @@ impl QualificationMediaServer {
                 | Err(QualificationMediaServerError::Response)
                 | Err(QualificationMediaServerError::Input)
                 | Err(QualificationMediaServerError::Protocol)
+                | Err(QualificationMediaServerError::StaleConnection)
                     if running.load(Ordering::SeqCst) =>
                 {
                     continue;
@@ -295,7 +303,7 @@ impl QualificationMediaServer {
         &self,
         runtime: &Arc<Mutex<Option<QualifiedGraphicsRuntime>>>,
         running: &AtomicBool,
-    ) -> Result<TcpStream, QualificationMediaServerError> {
+    ) -> Result<(TcpStream, u64), QualificationMediaServerError> {
         let mut stream = self.accept_shared(running)?;
         validate_accepted_loopback_stream(&stream)
             .map_err(|_| QualificationMediaServerError::Socket)?;
@@ -310,15 +318,18 @@ impl QualificationMediaServer {
         // Fetch the capability only after the connection arrives. A SUSPEND
         // revokes the previous token and RESUME creates a fresh token, so a
         // listener that was already waiting must never authenticate stale bytes.
-        let media_token = {
+        let (media_token, stream_epoch) = {
             let guard = runtime
                 .lock()
                 .map_err(|_| QualificationMediaServerError::Upgrade)?;
-            guard
+            let active = guard
                 .as_ref()
-                .and_then(QualifiedGraphicsRuntime::media_token)
+                .ok_or(QualificationMediaServerError::Upgrade)?;
+            let media_token = active
+                .media_token()
                 .map(str::to_owned)
-                .ok_or(QualificationMediaServerError::Upgrade)?
+                .ok_or(QualificationMediaServerError::Upgrade)?;
+            (media_token, active.stream_epoch())
         };
         let upgrade = authenticate_local_media_upgrade(&request, &self.session_id, &media_token)
             .map_err(|_| QualificationMediaServerError::Upgrade)?;
@@ -329,7 +340,7 @@ impl QualificationMediaServer {
         stream
             .write_all(response.as_bytes())
             .map_err(|_| QualificationMediaServerError::Response)?;
-        Ok(stream)
+        Ok((stream, stream_epoch))
     }
 
     fn accept_upgraded(
