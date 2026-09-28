@@ -490,8 +490,7 @@ pub fn stop_session(session_id: &str) -> Result<(), AuthorityError> {
         // or wedged. Prove absence by acquiring FIRST_PIPE_INSTANCE ourselves.
         // Only then is idempotent STOP allowed to report an already-clean state.
         Err(AuthorityError::ControlPipe) => {
-            let owner_sid =
-                current_process_user_sid().map_err(|_| AuthorityError::ControlPipe)?;
+            let owner_sid = current_process_user_sid().map_err(|_| AuthorityError::ControlPipe)?;
             match create_authority_pipe(session_id, &owner_sid) {
                 Ok(proof_of_absence) => {
                     drop(proof_of_absence);
@@ -649,8 +648,7 @@ pub fn run_authority_child(
                     if !endpoint_alive.load(Ordering::SeqCst) {
                         "ERR|media_endpoint_lost".to_owned()
                     } else {
-                        let mut guard =
-                            runtime.lock().map_err(|_| AuthorityError::ControlPipe)?;
+                        let mut guard = runtime.lock().map_err(|_| AuthorityError::ControlPipe)?;
                         let active = guard.as_mut().ok_or(AuthorityError::NotRunning)?;
                         if active.resume_after_fresh_proof().is_err() {
                             "ERR|degraded".to_owned()
