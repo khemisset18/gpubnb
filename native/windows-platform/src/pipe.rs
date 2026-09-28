@@ -13,6 +13,8 @@ const RENTER_PIPE_ACCESS_MASK: u32 = 0x0012_019B;
 const PIPE_AUTH_PRELUDE: u8 = 0x47;
 #[cfg(target_os = "windows")]
 const MEDIA_PIPE_AUTH_PRELUDE: u8 = 0x4d;
+#[cfg(target_os = "windows")]
+const AUTHORITY_PIPE_AUTH_PRELUDE: u8 = 0x41;
 pub const WORKER_PIPE_FRAME_MAX: usize = 512;
 pub const WORKER_MEDIA_MESSAGE_MAX: usize = 8 * 1024 * 1024;
 #[cfg(target_os = "windows")]
@@ -50,6 +52,13 @@ fn pipe_name(session_id: &str, generation: u64) -> Result<String, PlatformError>
     Ok(format!(r"\\.\pipe\gpubnb-native-{session_id}-{generation}"))
 }
 
+fn authority_pipe_name(session_id: &str) -> Result<String, PlatformError> {
+    if !safe_session_id(session_id) {
+        return Err(PlatformError::InvalidSessionId);
+    }
+    Ok(format!(r"\\.\pipe\gpubnb-native-authority-{session_id}"))
+}
+
 fn media_pipe_name(session_id: &str, generation: u64) -> Result<String, PlatformError> {
     if !safe_session_id(session_id) || generation == 0 {
         return Err(PlatformError::InvalidSessionId);
@@ -57,6 +66,15 @@ fn media_pipe_name(session_id: &str, generation: u64) -> Result<String, Platform
     Ok(format!(
         r"\\.\pipe\gpubnb-native-media-{session_id}-{generation}"
     ))
+}
+
+fn authority_security_sddl(owner_sid: &str) -> Result<String, PlatformError> {
+    if !numeric_sid(owner_sid) {
+        return Err(PlatformError::InvalidSid);
+    }
+    // The authority control pipe is private to the identity that launched the
+    // authority process. In production this is LocalSystem via GPUbnbAgent.
+    Ok(format!("D:P(A;;GA;;;{owner_sid})"))
 }
 
 fn security_sddl(service_sid: &str, renter_logon_sid: &str) -> Result<String, PlatformError> {
@@ -176,6 +194,40 @@ impl WorkerMediaPipe {
         }
     }
 
+    pub fn accept_verified_user_client(
+        &self,
+        expected_user_sid: &str,
+        timeout_ms: u32,
+    ) -> Result<VerifiedPipeClient, PlatformError> {
+        if !numeric_sid(expected_user_sid) || timeout_ms == 0 {
+            return Err(PlatformError::InvalidSid);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::accept_verified_user_client(
+                &self._handle,
+                expected_user_sid,
+                timeout_ms,
+            )
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = timeout_ms;
+            Err(PlatformError::WindowsRequired)
+        }
+    }
+
+    pub fn disconnect_client(&self) -> Result<(), PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::disconnect_pipe(&self._handle)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err(PlatformError::WindowsRequired)
+        }
+    }
+
     pub fn accept_verified_client(
         &self,
         expected_logon_sid: &str,
@@ -274,6 +326,26 @@ impl WorkerPipe {
     }
 }
 
+pub fn connect_authority_pipe_client(
+    session_id: &str,
+    timeout_ms: u32,
+) -> Result<WorkerPipeClient, PlatformError> {
+    let name = authority_pipe_name(session_id)?;
+    if timeout_ms == 0 {
+        return Err(PlatformError::PipeConnectTimeout);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::connect_authority_pipe_client(name, timeout_ms)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (name, timeout_ms);
+        Err(PlatformError::WindowsRequired)
+    }
+}
+
 pub fn connect_worker_pipe_client(
     session_id: &str,
     generation: u64,
@@ -312,6 +384,24 @@ pub fn connect_worker_media_pipe_client(
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (name, timeout_ms);
+        Err(PlatformError::WindowsRequired)
+    }
+}
+
+pub fn create_authority_pipe(
+    session_id: &str,
+    owner_sid: &str,
+) -> Result<WorkerPipe, PlatformError> {
+    let name = authority_pipe_name(session_id)?;
+    let sddl = authority_security_sddl(owner_sid)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::create_worker_pipe(name, &sddl)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (name, sddl);
         Err(PlatformError::WindowsRequired)
     }
 }
@@ -489,6 +579,7 @@ mod windows_impl {
         ) -> i32;
         fn CancelIoEx(file: Handle, overlapped: *mut Overlapped) -> i32;
         fn ConnectNamedPipe(pipe: Handle, overlapped: *mut Overlapped) -> i32;
+        fn DisconnectNamedPipe(pipe: Handle) -> i32;
         fn ReadFile(
             file: Handle,
             buffer: *mut c_void,
@@ -922,6 +1013,46 @@ mod windows_impl {
         Ok(())
     }
 
+    fn connect_duplex_pipe_client(
+        name: String,
+        timeout_ms: u32,
+        prelude: u8,
+    ) -> Result<WorkerPipeClient, PlatformError> {
+        let wide_name = wide(OsStr::new(&name))?;
+        let available = unsafe { WaitNamedPipeW(wide_name.as_ptr(), timeout_ms) };
+        if available == 0 {
+            return Err(PlatformError::PipeConnectTimeout);
+        }
+
+        let raw = unsafe {
+            CreateFileW(
+                wide_name.as_ptr(),
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                ptr::null_mut(),
+                OPEN_EXISTING,
+                SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION | FILE_FLAG_OVERLAPPED,
+                0,
+            )
+        };
+        if raw == INVALID_HANDLE_VALUE {
+            return Err(PlatformError::PipeConnectFailed);
+        }
+        let handle = OwnedClientHandle(raw);
+        write_message(handle.0, &[prelude], timeout_ms)?;
+        Ok(WorkerPipeClient {
+            name,
+            _handle: handle,
+        })
+    }
+
+    pub(super) fn connect_authority_pipe_client(
+        name: String,
+        timeout_ms: u32,
+    ) -> Result<WorkerPipeClient, PlatformError> {
+        connect_duplex_pipe_client(name, timeout_ms, AUTHORITY_PIPE_AUTH_PRELUDE)
+    }
+
     pub(super) fn connect_worker_pipe_client(
         name: String,
         timeout_ms: u32,
@@ -1262,6 +1393,59 @@ mod windows_impl {
             std::process::abort();
         }
         peer_result
+    }
+
+    pub(super) fn accept_verified_user_client(
+        pipe: &OwnedPipeHandle,
+        expected_user_sid: &str,
+        timeout_ms: u32,
+    ) -> Result<VerifiedPipeClient, PlatformError> {
+        connect_client(pipe.0, timeout_ms)?;
+        read_auth_prelude(pipe.0, timeout_ms, AUTHORITY_PIPE_AUTH_PRELUDE)?;
+
+        let mut process_id = 0u32;
+        let pid_ok = unsafe { GetNamedPipeClientProcessId(pipe.0, &mut process_id) };
+        if pid_ok == 0 || process_id == 0 {
+            return Err(PlatformError::PipeClientPidFailed);
+        }
+
+        let impersonated = unsafe { ImpersonateNamedPipeClient(pipe.0) };
+        if impersonated == 0 {
+            return Err(PlatformError::PipeImpersonationFailed);
+        }
+
+        let peer_result = (|| {
+            let token =
+                open_current_thread_token().map_err(|_| PlatformError::PipeImpersonationFailed)?;
+            let level =
+                impersonation_level(&token).map_err(|_| PlatformError::PipeImpersonationFailed)?;
+            if level > SECURITY_IDENTIFICATION_LEVEL {
+                return Err(PlatformError::PipeImpersonationLevelTooHigh);
+            }
+            let actual =
+                sid_from_token(&token, false).map_err(|_| PlatformError::PipeImpersonationFailed)?;
+            if !actual.eq_ignore_ascii_case(expected_user_sid) {
+                return Err(PlatformError::PipePeerSidMismatch);
+            }
+            Ok(VerifiedPipeClient {
+                process_id,
+                logon_sid: actual,
+            })
+        })();
+
+        let reverted = unsafe { RevertToSelf() };
+        if reverted == 0 {
+            std::process::abort();
+        }
+        peer_result
+    }
+
+    pub(super) fn disconnect_pipe(pipe: &OwnedPipeHandle) -> Result<(), PlatformError> {
+        let ok = unsafe { DisconnectNamedPipe(pipe.0) };
+        if ok == 0 {
+            return Err(PlatformError::PipeConnectFailed);
+        }
+        Ok(())
     }
 
     pub(super) fn accept_verified_client(
