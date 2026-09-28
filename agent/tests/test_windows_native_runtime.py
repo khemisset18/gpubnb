@@ -367,6 +367,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             "inputIsolation": True,
             "inputReady": True,
             "hardwareEncoder": "nvenc",
+            "mediaToken": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         }
         with (
             patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
@@ -498,7 +499,11 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                 ),
             ) as run,
         ):
-            runtime.resume_windows_native_workspace("sess-1")
+            media_token = runtime.resume_windows_native_workspace("sess-1")
+        self.assertEqual(
+            media_token,
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        )
         self.assertEqual(
             run.call_args.args[0],
             ["helper.exe", "--resume", "--json", "--session-id", "sess-1"],
@@ -532,6 +537,43 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                 ),
             ):
                 with self.assertRaisesRegex(RuntimeError, f"native_workspace_resume_missing_{field}"):
+                    runtime.resume_windows_native_workspace("sess-1")
+
+    def test_resume_requires_fresh_media_capability(self):
+        valid = {
+            "schemaVersion": 1,
+            "sessionId": "sess-1",
+            "resumed": True,
+            "freshMediaProof": True,
+            "exactGpuBound": True,
+            "virtualDisplay": True,
+            "providerDesktopExcluded": True,
+            "captureReady": True,
+            "nvencReady": True,
+            "mediaReady": True,
+            "inputIsolation": True,
+            "inputReady": True,
+            "hardwareEncoder": "nvenc",
+        }
+        for token in (None, "short", "A" * 64, "g" * 64):
+            payload = dict(valid)
+            payload["mediaToken"] = token
+            with (
+                self.subTest(token=token),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(
+                    runtime,
+                    "run_command",
+                    return_value=SimpleNamespace(
+                        returncode=0,
+                        stdout=json.dumps(payload),
+                        stderr="",
+                    ),
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError, "^native_workspace_resume_media_token_required$"
+                ):
                     runtime.resume_windows_native_workspace("sess-1")
 
     def test_suspend_resume_reject_wrong_session_and_malformed_schema(self):
