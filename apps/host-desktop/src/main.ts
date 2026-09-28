@@ -517,7 +517,7 @@ const renderMiningRuntime = (
     <input id="mining-thermal-limit" type="range" min="85" max="98" step="1" value="${thermalStop}">
     <div><output id="mining-thermal-limit-value">${thermalStop} °C</output> <span id="mining-thermal-limit-warning">${escapeHtml(thermalLimitAdvice(thermalStop))}</span></div>
     <small>Repères : 85 °C défaut · 90 °C élevé · 94 °C très élevé · 97 °C critique · 98 °C maximum/quarantaine.</small>
-    <div class="configuration-actions"><button id="save-mining-thermal-limit" class="secondary" type="button">Modifier la température de sécurité</button></div>
+    <div class="configuration-actions"><button id="save-mining-thermal-limit" class="secondary" type="button">Enregistrer et réévaluer</button></div>
   </section>` : '';
   const thermalPanel = thermalLatched ? `<div class="thermal-alert thermal-latched"><strong>Protection thermique déclenchée</strong><span>Le mineur a été arrêté automatiquement à ${formatMetric(thermalSafety?.lastTemperatureCelsius, '°C')}. Attendez que la carte descende à ${thermalSafety?.rearmCelsius ?? 75} °C maximum.</span><button id="acknowledge-thermal-safety" class="secondary" type="button">Vérifier et réarmer</button></div>` : '';
   const configurationPanel = installReady ? `<form id="mining-configuration" class="mining-configuration" novalidate>
