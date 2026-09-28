@@ -120,9 +120,13 @@ Before Stage 3, rebuild the worker first and then run:
 powershell -NoProfile -File agent\tools\windows_native_build_qualification.ps1 -Release
 ```
 
-That command now builds both the qualification harness and the production
-`gpubnb-windows-stream.exe` candidate using the signer policy derived from the
-installed signed worker/media artifacts and the exact clean Git source commit.
+That command now builds both the qualification harness and the production-path
+`gpubnb-windows-stream.exe` Stage 3 candidate using the signer policy derived
+from the installed signed worker/media artifacts and the exact clean Git source
+commit. The Stage 3 helper is explicitly built with the
+`physical-qualification` Cargo feature because default builds keep IddCx monitor
+mutation disabled until promotion. This feature is qualification-only and does
+not enable marketplace bookability.
 Sign the resulting helper with the approved qualification identity before
 installing it at `C:\Program Files\GPUbnb\gpubnb-windows-stream.exe`.
 
