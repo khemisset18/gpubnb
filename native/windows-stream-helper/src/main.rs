@@ -1,9 +1,10 @@
 //! GPUbnb Windows-native stream helper authority boundary.
 //!
-//! This bootstrap binary is intentionally fail-closed. It implements the strict
-//! CLI/input contract and owns no capture/session resources yet. A future Windows
-//! backend may return success only after the IddCx virtual-display, DXGI capture,
-//! exact-GPU NVENC and input-isolation proofs required by the Agent all pass.
+//! Cloud Desktop uses a persistent per-session authority backed by the real
+//! renter-session, IddCx virtual-display, capture, exact-GPU NVENC, media and
+//! input proof chain. Unsupported Windows Workspaces and missing physical renter
+//! prerequisites remain fail-closed; no success-shaped reply is emitted for a
+//! partial or simulated backend.
 
 use std::env;
 use std::process::ExitCode;
