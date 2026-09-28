@@ -175,17 +175,7 @@ impl QualificationMediaServer {
         &self,
         runtime: &Arc<Mutex<Option<QualifiedGraphicsRuntime>>>,
     ) -> Result<(u64, u64), QualificationMediaServerError> {
-        let token = {
-            let guard = runtime
-                .lock()
-                .map_err(|_| QualificationMediaServerError::Media)?;
-            guard
-                .as_ref()
-                .and_then(QualifiedGraphicsRuntime::media_token)
-                .map(str::to_owned)
-                .ok_or(QualificationMediaServerError::Upgrade)?
-        };
-        let mut stream = self.accept_upgraded_with_token(&token)?;
+        let mut stream = self.accept_upgraded_shared(runtime)?;
         let mut input_fence = BrowserInputFence::new(self.stream_epoch)
             .map_err(|_| QualificationMediaServerError::Input)?;
         let started = Instant::now();
@@ -249,6 +239,47 @@ impl QualificationMediaServer {
                 None => thread::sleep(Duration::from_millis(1)),
             }
         }
+    }
+
+    fn accept_upgraded_shared(
+        &self,
+        runtime: &Arc<Mutex<Option<QualifiedGraphicsRuntime>>>,
+    ) -> Result<TcpStream, QualificationMediaServerError> {
+        let mut stream = self.accept()?;
+        validate_accepted_loopback_stream(&stream)
+            .map_err(|_| QualificationMediaServerError::Socket)?;
+        stream
+            .set_read_timeout(Some(IO_TIMEOUT))
+            .map_err(|_| QualificationMediaServerError::Socket)?;
+        stream
+            .set_write_timeout(Some(IO_TIMEOUT))
+            .map_err(|_| QualificationMediaServerError::Socket)?;
+
+        let request = read_upgrade_request(&mut stream)?;
+        // Fetch the capability only after the connection arrives. A SUSPEND
+        // revokes the previous token and RESUME creates a fresh token, so a
+        // listener that was already waiting must never authenticate stale bytes.
+        let media_token = {
+            let guard = runtime
+                .lock()
+                .map_err(|_| QualificationMediaServerError::Upgrade)?;
+            guard
+                .as_ref()
+                .and_then(QualifiedGraphicsRuntime::media_token)
+                .map(str::to_owned)
+                .ok_or(QualificationMediaServerError::Upgrade)?
+        };
+        let upgrade =
+            authenticate_local_media_upgrade(&request, &self.session_id, &media_token)
+                .map_err(|_| QualificationMediaServerError::Upgrade)?;
+        let accept = websocket_accept_value(&upgrade.websocket_key);
+        let response = format!(
+            "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+        );
+        stream
+            .write_all(response.as_bytes())
+            .map_err(|_| QualificationMediaServerError::Response)?;
+        Ok(stream)
     }
 
     fn accept_upgraded(
