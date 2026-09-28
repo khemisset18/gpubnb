@@ -101,6 +101,22 @@ impl QualificationMediaServer {
         }
     }
 
+    fn accept_shared(
+        &self,
+        running: &AtomicBool,
+    ) -> Result<TcpStream, QualificationMediaServerError> {
+        while running.load(Ordering::SeqCst) {
+            match self.listener.accept() {
+                Ok((stream, _)) => return Ok(stream),
+                Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(_) => return Err(QualificationMediaServerError::Socket),
+            }
+        }
+        Err(QualificationMediaServerError::AcceptTimeout)
+    }
+
     /// Controlled full-duplex browser proof transport.
     ///
     /// This reuses the Stage 2 loopback authentication/media framing and adds
@@ -176,8 +192,9 @@ impl QualificationMediaServer {
     pub fn serve_interactive_shared_once(
         &self,
         runtime: &Arc<Mutex<Option<QualifiedGraphicsRuntime>>>,
+        running: &AtomicBool,
     ) -> Result<(u64, u64), QualificationMediaServerError> {
-        let mut stream = self.accept_upgraded_shared(runtime)?;
+        let mut stream = self.accept_upgraded_shared(runtime, running)?;
         let mut input_fence = BrowserInputFence::new(self.stream_epoch)
             .map_err(|_| QualificationMediaServerError::Input)?;
         let mut sent = 0u64;
@@ -244,7 +261,7 @@ impl QualificationMediaServer {
         running: &AtomicBool,
     ) -> Result<(), QualificationMediaServerError> {
         while running.load(Ordering::SeqCst) {
-            match self.serve_interactive_shared_once(runtime) {
+            match self.serve_interactive_shared_once(runtime, running) {
                 Ok(_) => continue,
                 Err(QualificationMediaServerError::AcceptTimeout)
                 | Err(QualificationMediaServerError::Request)
@@ -277,8 +294,9 @@ impl QualificationMediaServer {
     fn accept_upgraded_shared(
         &self,
         runtime: &Arc<Mutex<Option<QualifiedGraphicsRuntime>>>,
+        running: &AtomicBool,
     ) -> Result<TcpStream, QualificationMediaServerError> {
-        let mut stream = self.accept()?;
+        let mut stream = self.accept_shared(running)?;
         validate_accepted_loopback_stream(&stream)
             .map_err(|_| QualificationMediaServerError::Socket)?;
         stream
