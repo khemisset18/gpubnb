@@ -328,6 +328,18 @@ fn list_running_containers() -> Result<Vec<String>, &'static str> {
         .output()
         .map_err(|_| "container_enumeration_failed")?;
     if !output.status.success() {
+        #[cfg(target_os = "windows")]
+        {
+            // Personal mining does not require Docker. When Docker Desktop's Linux
+            // engine is actually stopped, its named pipe does not exist and no Linux
+            // rental container can still be executing. Treat that precise condition
+            // as an empty container set. Any other Docker failure (permissions,
+            // malformed output, unexpected engine error, etc.) remains fail-closed.
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if windows_docker_desktop_engine_is_stopped(&stderr) {
+                return Ok(Vec::new());
+            }
+        }
         return Err("container_enumeration_failed");
     }
     Ok(String::from_utf8_lossy(&output.stdout)
@@ -336,6 +348,13 @@ fn list_running_containers() -> Result<Vec<String>, &'static str> {
         .filter(|line| !line.is_empty())
         .map(str::to_owned)
         .collect())
+}
+
+#[cfg(target_os = "windows")]
+fn windows_docker_desktop_engine_is_stopped(stderr: &str) -> bool {
+    let normalized = stderr.to_ascii_lowercase();
+    normalized.contains("dockerdesktoplinuxengine")
+        && normalized.contains("the system cannot find the file specified")
 }
 
 #[cfg(target_os = "windows")]
@@ -563,6 +582,21 @@ mod tests {
             crate::rental_mining_coordinator::CoordinatedGpuState::Quarantined
         );
         assert!(inspector.terminated.lock().unwrap().is_empty());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn stopped_docker_desktop_engine_is_recognized_without_weakening_other_failures() {
+        assert!(windows_docker_desktop_engine_is_stopped(
+            "failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; \
+             open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified."
+        ));
+        assert!(!windows_docker_desktop_engine_is_stopped(
+            "permission denied while connecting to dockerDesktopLinuxEngine"
+        ));
+        assert!(!windows_docker_desktop_engine_is_stopped(
+            "Cannot connect to the Docker daemon at unix:///var/run/docker.sock"
+        ));
     }
 
     #[test]
