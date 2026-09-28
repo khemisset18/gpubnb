@@ -391,7 +391,7 @@ pub fn start_session(
         }
         let _lease = verified_lease(gpu_uuid)?;
 
-        if control_request(session_id, "START", 100, 1_000).is_ok() {
+        if control_request(session_id, "STATUS", 100, 1_000).is_ok() {
             return Err(AuthorityError::AlreadyRunning);
         }
 
