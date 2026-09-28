@@ -369,8 +369,8 @@ def resume_windows_native_workspace(
     session_id: str,
     *,
     helper_path: str | None = None,
-) -> None:
-    """Resume only after a fresh exact-GPU capture/NVENC/input proof succeeds."""
+) -> str:
+    """Resume after fresh proof and return the rotated local media capability."""
     session_id = _safe_id(session_id, "native_session_id")
     executable = helper_path or find_stream_helper()
     if not executable:
@@ -393,6 +393,10 @@ def resume_windows_native_workspace(
         raise RuntimeError(f"native_workspace_resume_missing_{missing}")
     if str(report.get("hardwareEncoder") or "").casefold() != "nvenc":
         raise RuntimeError("native_workspace_resume_nvenc_required")
+    media_token = _media_token(report.get("mediaToken"))
+    if media_token is None:
+        raise RuntimeError("native_workspace_resume_media_token_required")
+    return media_token
 
 
 def stop_windows_native_workspace(
