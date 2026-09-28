@@ -194,40 +194,6 @@ impl WorkerMediaPipe {
         }
     }
 
-    pub fn accept_verified_user_client(
-        &self,
-        expected_user_sid: &str,
-        timeout_ms: u32,
-    ) -> Result<VerifiedPipeClient, PlatformError> {
-        if !numeric_sid(expected_user_sid) || timeout_ms == 0 {
-            return Err(PlatformError::InvalidSid);
-        }
-        #[cfg(target_os = "windows")]
-        {
-            windows_impl::accept_verified_user_client(
-                &self._handle,
-                expected_user_sid,
-                timeout_ms,
-            )
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            let _ = timeout_ms;
-            Err(PlatformError::WindowsRequired)
-        }
-    }
-
-    pub fn disconnect_client(&self) -> Result<(), PlatformError> {
-        #[cfg(target_os = "windows")]
-        {
-            windows_impl::disconnect_pipe(&self._handle)
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            Err(PlatformError::WindowsRequired)
-        }
-    }
-
     pub fn accept_verified_client(
         &self,
         expected_logon_sid: &str,
@@ -293,6 +259,40 @@ impl WorkerPipe {
         #[cfg(not(target_os = "windows"))]
         {
             let _ = timeout_ms;
+            Err(PlatformError::WindowsRequired)
+        }
+    }
+
+    pub fn accept_verified_user_client(
+        &self,
+        expected_user_sid: &str,
+        timeout_ms: u32,
+    ) -> Result<VerifiedPipeClient, PlatformError> {
+        if !numeric_sid(expected_user_sid) || timeout_ms == 0 {
+            return Err(PlatformError::InvalidSid);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::accept_verified_user_client(
+                &self._handle,
+                expected_user_sid,
+                timeout_ms,
+            )
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = timeout_ms;
+            Err(PlatformError::WindowsRequired)
+        }
+    }
+
+    pub fn disconnect_client(&self) -> Result<(), PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::disconnect_pipe(&self._handle)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
             Err(PlatformError::WindowsRequired)
         }
     }
