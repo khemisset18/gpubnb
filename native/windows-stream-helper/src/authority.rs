@@ -11,6 +11,7 @@ use crate::service_runtime::{
 };
 use crate::worker_protocol::WorkerInputEvent;
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
+use gpubnb_windows_platform::idd_control::verify_virtual_display_absent;
 use gpubnb_windows_platform::pipe::{
     connect_authority_pipe_client, create_authority_pipe, current_process_user_sid,
 };
@@ -494,6 +495,11 @@ pub fn stop_session(session_id: &str) -> Result<(), AuthorityError> {
             match create_authority_pipe(session_id, &owner_sid) {
                 Ok(proof_of_absence) => {
                     drop(proof_of_absence);
+                    // FIRST_PIPE_INSTANCE proves the authority process is gone,
+                    // but a crashed owner could have left an IDD departure
+                    // failure behind. Never report idempotent STOP until the
+                    // driver also proves that no GPUbnb monitor remains.
+                    verify_virtual_display_absent().map_err(|_| AuthorityError::Cleanup)?;
                     return Ok(());
                 }
                 Err(_) => return Err(AuthorityError::ControlPipe),
