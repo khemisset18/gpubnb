@@ -19,6 +19,7 @@ pub enum VirtualDisplayOperation {
     PlugMonitor = 1,
     UnplugMonitor = 2,
     ValidateOnly = 3,
+    AssertNoMonitor = 4,
 }
 
 pub struct VirtualDisplayLease {
@@ -95,6 +96,7 @@ pub enum VirtualDisplayRequestError {
     DisplayNonce,
     Dimensions,
     RefreshRate,
+    AbsenceProbeFields,
 }
 
 pub fn display_container_id_from_nonce(
@@ -115,6 +117,19 @@ pub fn display_container_id_from_nonce(
 pub fn validate_virtual_display_request(
     request: VirtualDisplayRequest,
 ) -> Result<(), VirtualDisplayRequestError> {
+    if request.operation == VirtualDisplayOperation::AssertNoMonitor {
+        if request.generation != 0
+            || request.windows_session_id != 0
+            || request.render_adapter_luid != 0
+            || request.display_nonce != [0; 16]
+            || request.width != 0
+            || request.height != 0
+            || request.refresh_hz != 0
+        {
+            return Err(VirtualDisplayRequestError::AbsenceProbeFields);
+        }
+        return Ok(());
+    }
     if request.generation == 0 {
         return Err(VirtualDisplayRequestError::Generation);
     }
@@ -183,6 +198,30 @@ pub fn activate_virtual_display_lease(
             handle,
             active: true,
         })
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = wire;
+        Err(PlatformError::WindowsRequired)
+    }
+}
+
+pub fn verify_virtual_display_absent() -> Result<(), PlatformError> {
+    let wire = encode_virtual_display_request(VirtualDisplayRequest {
+        operation: VirtualDisplayOperation::AssertNoMonitor,
+        generation: 0,
+        windows_session_id: 0,
+        render_adapter_luid: 0,
+        display_nonce: [0; 16],
+        width: 0,
+        height: 0,
+        refresh_hz: 0,
+    })
+    .map_err(|_| PlatformError::IddControlFailed)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::send_assert_no_monitor(&wire)
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -431,6 +470,18 @@ mod windows_impl {
         send_control(&handle, wire)
     }
 
+    pub(super) fn send_assert_no_monitor(
+        wire: &[u8; IDD_CONTROL_REQUEST_SIZE],
+    ) -> Result<(), PlatformError> {
+        match open_control() {
+            Ok(handle) => send_control(&handle, wire),
+            // If the GPUbnb IddCx interface is not installed/present, no
+            // GPUbnb-owned monitor can be live. Query/ACL ambiguity still fails.
+            Err(PlatformError::IddInterfaceMissing) => Ok(()),
+            Err(error) => Err(error),
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -477,6 +528,7 @@ mod tests {
         for operation in [
             VirtualDisplayOperation::ValidateOnly,
             VirtualDisplayOperation::UnplugMonitor,
+            VirtualDisplayOperation::AssertNoMonitor,
         ] {
             assert_eq!(
                 activate_virtual_display_lease(
@@ -583,6 +635,40 @@ mod tests {
         };
         let wire = encode_virtual_display_request(request).expect("encode validate-only");
         assert_eq!(u32::from_le_bytes(wire[8..12].try_into().unwrap()), 3);
+    }
+
+    #[test]
+    fn absence_probe_is_read_only_and_zero_fenced() {
+        let request = VirtualDisplayRequest {
+            operation: VirtualDisplayOperation::AssertNoMonitor,
+            generation: 0,
+            windows_session_id: 0,
+            render_adapter_luid: 0,
+            display_nonce: [0; 16],
+            width: 0,
+            height: 0,
+            refresh_hz: 0,
+        };
+        let wire = encode_virtual_display_request(request).expect("encode absence probe");
+        assert_eq!(u32::from_le_bytes(wire[8..12].try_into().unwrap()), 4);
+        assert_eq!(&wire[12..64], &[0; 52]);
+
+        assert_eq!(
+            validate_virtual_display_request(VirtualDisplayRequest {
+                generation: 1,
+                ..request
+            }),
+            Err(VirtualDisplayRequestError::AbsenceProbeFields)
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn absence_probe_fails_closed_off_windows() {
+        assert_eq!(
+            verify_virtual_display_absent(),
+            Err(PlatformError::WindowsRequired)
+        );
     }
 
     #[test]
