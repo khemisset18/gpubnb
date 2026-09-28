@@ -647,6 +647,66 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
         self.assertNotEqual(supervisor.native_runtimes["sess-1"].handle.media_token, old_token)
         supervisor._native_stop_and_report.assert_not_called()
 
+    def test_gateway_serializes_concurrent_native_resume_cycles(self):
+        supervisor = object.__new__(gateway_v10.GatewaySupervisor)
+        supervisor._native_lock = threading.RLock()
+        supervisor._native_resume_locks = {}
+        supervisor.native_runtimes = {"sess-1": object()}
+
+        first_entered = threading.Event()
+        release_first = threading.Event()
+        second_started = threading.Event()
+        second_entered = threading.Event()
+        counter_lock = threading.Lock()
+        call_count = 0
+        results: list[bool] = []
+
+        def parent_resume(_self, session_id):
+            nonlocal call_count
+            self.assertEqual(session_id, "sess-1")
+            with counter_lock:
+                call_count += 1
+                current = call_count
+            if current == 1:
+                first_entered.set()
+                self.assertTrue(release_first.wait(2))
+            else:
+                second_entered.set()
+            return True
+
+        def invoke(*, second=False):
+            if second:
+                second_started.set()
+            results.append(
+                gateway_v10.GatewaySupervisor._resume_before_relay(
+                    supervisor, "sess-1"
+                )
+            )
+
+        with patch.object(
+            gateway_v10.reconnect.GatewaySupervisor,
+            "_resume_before_relay",
+            parent_resume,
+        ):
+            first = threading.Thread(target=invoke)
+            first.start()
+            self.assertTrue(first_entered.wait(2))
+
+            second = threading.Thread(target=invoke, kwargs={"second": True})
+            second.start()
+            self.assertTrue(second_started.wait(2))
+            self.assertFalse(second_entered.wait(0.05))
+
+            release_first.set()
+            first.join(2)
+            second.join(2)
+
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertTrue(second_entered.is_set())
+        self.assertEqual(results, [True, True])
+        self.assertEqual(call_count, 2)
+
     def test_stop_requires_helper_confirmation_for_exact_session(self):
         with (
             patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
