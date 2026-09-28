@@ -96,7 +96,7 @@ fn rental_preempts_active_mining_and_resumes_only_when_enabled() {
 }
 
 #[test]
-fn default_policy_does_not_resume_after_verified_cleanup() {
+fn explicit_mining_start_resumes_after_verified_cleanup() {
     let mut coordinator = RentalMiningCoordinator::default();
     coordinator
         .set_owner_consent(MiningConsent::ManagedPool)
@@ -107,8 +107,29 @@ fn default_policy_does_not_resume_after_verified_cleanup() {
     complete_verified_rental(&mut coordinator, "reservation_default_off");
 
     let snapshot = coordinator.snapshot();
-    assert!(!snapshot.auto_resume_after_rental);
-    assert!(!snapshot.should_start_mining);
+    assert!(snapshot.auto_resume_after_rental);
+    assert!(snapshot.should_start_mining);
+}
+
+#[test]
+fn owner_stop_disables_resume_intent() {
+    let mut coordinator = RentalMiningCoordinator::default();
+    coordinator
+        .set_owner_consent(MiningConsent::OwnerPool)
+        .unwrap();
+    coordinator.request_idle_mining_start().unwrap();
+    coordinator.confirm_mining_started().unwrap();
+    assert!(coordinator.snapshot().auto_resume_after_rental);
+
+    coordinator
+        .set_owner_consent(MiningConsent::Disabled)
+        .unwrap();
+    coordinator.confirm_owner_mining_stopped(true).unwrap();
+
+    let stopped = coordinator.snapshot();
+    assert_eq!(stopped.state, CoordinatedGpuState::Idle);
+    assert!(!stopped.auto_resume_after_rental);
+    assert!(!stopped.should_start_mining);
 }
 
 #[test]
