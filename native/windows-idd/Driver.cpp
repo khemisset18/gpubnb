@@ -200,17 +200,42 @@ static NTSTATUS GPUbnbValidateControlRequest(
     if (request == nullptr ||
         request->Size != sizeof(GPUbnbIddControlRequest) ||
         request->Version != GPUBNB_IDD_CONTROL_VERSION ||
-        request->Reserved != 0 ||
-        request->WindowsSessionId == 0 ||
-        request->Generation == 0 ||
-        (request->RenderAdapterLuid.LowPart == 0 && request->RenderAdapterLuid.HighPart == 0))
+        request->Reserved != 0)
     {
         return STATUS_INVALID_PARAMETER;
     }
 
     if (request->Operation != static_cast<UINT32>(GPUbnbIddControlOperation::PlugMonitor) &&
         request->Operation != static_cast<UINT32>(GPUbnbIddControlOperation::UnplugMonitor) &&
-        request->Operation != static_cast<UINT32>(GPUbnbIddControlOperation::ValidateOnly))
+        request->Operation != static_cast<UINT32>(GPUbnbIddControlOperation::ValidateOnly) &&
+        request->Operation != static_cast<UINT32>(GPUbnbIddControlOperation::AssertNoMonitor))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (request->Operation == static_cast<UINT32>(GPUbnbIddControlOperation::AssertNoMonitor))
+    {
+        const bool zeroLuid =
+            request->RenderAdapterLuid.LowPart == 0 && request->RenderAdapterLuid.HighPart == 0;
+        bool zeroNonce = true;
+        for (UINT32 index = 0; index < GPUBNB_IDD_DISPLAY_NONCE_SIZE; ++index)
+        {
+            zeroNonce = zeroNonce && request->DisplayNonce[index] == 0;
+        }
+        return request->WindowsSessionId == 0 &&
+                request->Generation == 0 &&
+                zeroLuid &&
+                zeroNonce &&
+                request->Width == 0 &&
+                request->Height == 0 &&
+                request->RefreshHz == 0
+            ? STATUS_SUCCESS
+            : STATUS_INVALID_PARAMETER;
+    }
+
+    if (request->WindowsSessionId == 0 ||
+        request->Generation == 0 ||
+        (request->RenderAdapterLuid.LowPart == 0 && request->RenderAdapterLuid.HighPart == 0))
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -374,6 +399,14 @@ VOID GPUbnbEvtIddCxDeviceIoControl(
                             GPUbnbIddControlOperation::ValidateOnly))
                     {
                         status = STATUS_SUCCESS;
+                    }
+                    else if (control->Operation == static_cast<UINT32>(
+                                 GPUbnbIddControlOperation::AssertNoMonitor))
+                    {
+                        const auto* context = WdfObjectGet_GPUbnbDeviceContext(device);
+                        status = context->Monitor == nullptr
+                            ? STATUS_SUCCESS
+                            : STATUS_DEVICE_BUSY;
                     }
                     else if (!GPUBNB_ENABLE_MONITOR_MUTATION)
                     {
