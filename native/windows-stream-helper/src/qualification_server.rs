@@ -13,6 +13,7 @@ use crate::local_media_protocol::{
 use crate::service_runtime::QualifiedGraphicsRuntime;
 use std::io::{ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -165,9 +166,104 @@ impl QualificationMediaServer {
         Ok((sent, accepted_input))
     }
 
+
+    /// Long-lived authority transport. The runtime remains owned by the authority
+    /// process and is borrowed only for one bounded input/media operation at a
+    /// time so STATUS/SUSPEND/RESUME/STOP can acquire the same mutex between
+    /// frames. No runtime or capability token is serialized to disk.
+    pub fn serve_interactive_shared_once(
+        &self,
+        runtime: &Arc<Mutex<Option<QualifiedGraphicsRuntime>>>,
+    ) -> Result<(u64, u64), QualificationMediaServerError> {
+        let token = {
+            let guard = runtime
+                .lock()
+                .map_err(|_| QualificationMediaServerError::Media)?;
+            guard
+                .as_ref()
+                .and_then(QualifiedGraphicsRuntime::media_token)
+                .map(str::to_owned)
+                .ok_or(QualificationMediaServerError::Upgrade)?
+        };
+        let mut stream = self.accept_upgraded_with_token(&token)?;
+        let mut input_fence = BrowserInputFence::new(self.stream_epoch)
+            .map_err(|_| QualificationMediaServerError::Input)?;
+        let started = Instant::now();
+        let authority_stream_timeout = Duration::from_secs(30 * 60);
+        let mut sent = 0u64;
+        let mut accepted_input = 0u64;
+
+        loop {
+            if started.elapsed() > authority_stream_timeout {
+                return Err(QualificationMediaServerError::Media);
+            }
+
+            loop {
+                match try_read_websocket_client_frame(&mut stream)? {
+                    None => break,
+                    Some(ClientWebSocketFrame::Input(payload)) => {
+                        let event = input_fence
+                            .accept(&payload)
+                            .map_err(|_| QualificationMediaServerError::Input)?;
+                        let mut guard = runtime
+                            .lock()
+                            .map_err(|_| QualificationMediaServerError::Input)?;
+                        let active = guard
+                            .as_mut()
+                            .ok_or(QualificationMediaServerError::Input)?;
+                        active
+                            .inject_input(event)
+                            .map_err(|_| QualificationMediaServerError::Input)?;
+                        accepted_input = accepted_input
+                            .checked_add(1)
+                            .ok_or(QualificationMediaServerError::Protocol)?;
+                    }
+                    Some(ClientWebSocketFrame::Ping(payload)) => {
+                        write_websocket_control(&mut stream, 0x0A, &payload)?;
+                    }
+                    Some(ClientWebSocketFrame::Close(payload)) => {
+                        write_websocket_control(&mut stream, 0x08, &payload)?;
+                        return Ok((sent, accepted_input));
+                    }
+                }
+            }
+
+            let frame = {
+                let mut guard = runtime
+                    .lock()
+                    .map_err(|_| QualificationMediaServerError::Media)?;
+                let active = guard
+                    .as_mut()
+                    .ok_or(QualificationMediaServerError::Media)?;
+                active
+                    .read_media_frame()
+                    .map_err(|_| QualificationMediaServerError::Media)?
+            };
+            match frame {
+                Some(frame) => {
+                    write_browser_media_frame(&mut stream, self.stream_epoch, &frame)?;
+                    sent = sent
+                        .checked_add(1)
+                        .ok_or(QualificationMediaServerError::Protocol)?;
+                }
+                None => thread::sleep(Duration::from_millis(1)),
+            }
+        }
+    }
+
     fn accept_upgraded(
         &self,
         runtime: &QualifiedGraphicsRuntime,
+    ) -> Result<TcpStream, QualificationMediaServerError> {
+        let media_token = runtime
+            .media_token()
+            .ok_or(QualificationMediaServerError::Upgrade)?;
+        self.accept_upgraded_with_token(media_token)
+    }
+
+    fn accept_upgraded_with_token(
+        &self,
+        media_token: &str,
     ) -> Result<TcpStream, QualificationMediaServerError> {
         let mut stream = self.accept()?;
         validate_accepted_loopback_stream(&stream)
@@ -180,14 +276,11 @@ impl QualificationMediaServer {
             .map_err(|_| QualificationMediaServerError::Socket)?;
 
         let request = read_upgrade_request(&mut stream)?;
-        let media_token = runtime
-            .media_token()
-            .ok_or(QualificationMediaServerError::Upgrade)?;
         let upgrade = authenticate_local_media_upgrade(&request, &self.session_id, media_token)
             .map_err(|_| QualificationMediaServerError::Upgrade)?;
         let accept = websocket_accept_value(&upgrade.websocket_key);
         let response = format!(
-            "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+            "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
         );
         stream
             .write_all(response.as_bytes())
