@@ -34,6 +34,11 @@ enum Command {
     Status {
         session_id: String,
     },
+    AuthorityChild {
+        session_id: String,
+        workspace: String,
+        gpu_uuid: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -255,8 +260,34 @@ fn parse_session_command(
     Ok(build(session_id))
 }
 
+
+fn parse_authority_child(args: &[String]) -> Result<Command, CliError> {
+    if args.len() != 7
+        || args[1] != "--session-id"
+        || args[3] != "--workspace"
+        || args[5] != "--gpu-uuid"
+    {
+        return Err(CliError::new("invalid_authority_arguments", 2));
+    }
+    let session_id = args[2].clone();
+    let workspace = args[4].clone();
+    let gpu_uuid = args[6].clone();
+    validate_session_id(&session_id)?;
+    validate_workspace(&workspace)?;
+    validate_gpu_uuid(&gpu_uuid)?;
+    if workspace != "cloud-desktop" {
+        return Err(CliError::new("workspace_not_implemented", 21));
+    }
+    Ok(Command::AuthorityChild {
+        session_id,
+        workspace,
+        gpu_uuid,
+    })
+}
+
 fn parse_args(args: &[String]) -> Result<Command, CliError> {
     match args.first().map(String::as_str) {
+        Some("--authority-child") => parse_authority_child(args),
         Some("--self-test") if args.len() == 2 && args[1] == "--json" => Ok(Command::SelfTest),
         Some("--self-test") => Err(CliError::new("invalid_self_test_arguments", 2)),
         Some("--start") => parse_start(args),
@@ -274,7 +305,12 @@ fn parse_args(args: &[String]) -> Result<Command, CliError> {
     }
 }
 
-fn execute(command: &Command) -> Result<(), CliError> {
+#[cfg(target_os = "windows")]
+fn authority_error(error: gpubnb_windows_stream_helper::authority::AuthorityError) -> CliError {
+    CliError::new(error.code(), 21)
+}
+
+fn execute(command: &Command) -> Result<String, CliError> {
     match command {
         Command::SelfTest => {
             #[cfg(not(target_os = "windows"))]
@@ -283,14 +319,130 @@ fn execute(command: &Command) -> Result<(), CliError> {
             }
             #[cfg(target_os = "windows")]
             {
-                Err(CliError::new("native_backend_not_implemented", 21))
+                let report = gpubnb_windows_stream_helper::authority::run_self_test()
+                    .map_err(authority_error)?;
+                Ok(format!(
+                    r#"{{"schemaVersion":1,"platform":"windows","helperVersion":"{}","gpuUuid":"{}","isolatedSession":true,"separateRenterIdentity":true,"renterSessionActive":true,"providerSessionInactive":true,"virtualDisplay":true,"providerDesktopExcluded":true,"captureFrame":true,"exactGpuBound":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaLoopback":true,"inputIsolation":true,"audioAvailable":false}}"#,
+                    env!("CARGO_PKG_VERSION"),
+                    report.gpu_uuid
+                ))
             }
         }
-        Command::Start { .. }
-        | Command::Stop { .. }
-        | Command::Suspend { .. }
-        | Command::Resume { .. }
-        | Command::Status { .. } => Err(CliError::new("native_backend_not_implemented", 21)),
+        Command::Start {
+            session_id,
+            workspace,
+            gpu_uuid,
+            application: _,
+        } => {
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = (session_id, workspace, gpu_uuid);
+                Err(CliError::new("windows_required", 20))
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let report = gpubnb_windows_stream_helper::authority::start_session(
+                    session_id,
+                    workspace,
+                    gpu_uuid,
+                )
+                .map_err(authority_error)?;
+                Ok(format!(
+                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","workspaceSlug":"{workspace}","gpuUuid":"{gpu_uuid}","helperVersion":"{}","isolatedSession":true,"separateRenterIdentity":true,"renterSessionActive":true,"providerSessionInactive":true,"virtualDisplay":true,"providerDesktopExcluded":true,"captureReady":true,"exactGpuBound":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true,"mediaUrl":"ws://127.0.0.1:{}/session/{session_id}","mediaToken":"{}","audioReady":false,"controllerReady":false}}"#,
+                    env!("CARGO_PKG_VERSION"),
+                    report.media_port,
+                    report.media_token
+                ))
+            }
+        }
+        Command::Status { session_id } => {
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = session_id;
+                Err(CliError::new("windows_required", 20))
+            }
+            #[cfg(target_os = "windows")]
+            {
+                use gpubnb_windows_stream_helper::authority::AuthorityStatus;
+                let status =
+                    gpubnb_windows_stream_helper::authority::status_session(session_id)
+                        .map_err(authority_error)?;
+                let (ready, suspended) = match status {
+                    AuthorityStatus::Ready => (true, false),
+                    AuthorityStatus::Suspended => (false, true),
+                    AuthorityStatus::Degraded => (false, false),
+                };
+                Ok(format!(
+                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","running":true,"suspended":{suspended},"isolatedSession":true,"renterSessionActive":true,"providerSessionInactive":true,"virtualDisplay":true,"providerDesktopExcluded":true,"exactGpuBound":true,"captureReady":{ready},"nvencReady":{ready},"hardwareEncoder":"nvenc","mediaReady":{ready},"inputIsolation":true,"inputReady":{ready}}}"#
+                ))
+            }
+        }
+        Command::Suspend { session_id } => {
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = session_id;
+                Err(CliError::new("windows_required", 20))
+            }
+            #[cfg(target_os = "windows")]
+            {
+                gpubnb_windows_stream_helper::authority::suspend_session(session_id)
+                    .map_err(authority_error)?;
+                Ok(format!(
+                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","suspended":true,"mediaReady":false,"inputReady":false}}"#
+                ))
+            }
+        }
+        Command::Resume { session_id } => {
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = session_id;
+                Err(CliError::new("windows_required", 20))
+            }
+            #[cfg(target_os = "windows")]
+            {
+                gpubnb_windows_stream_helper::authority::resume_session(session_id)
+                    .map_err(authority_error)?;
+                Ok(format!(
+                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","resumed":true,"freshMediaProof":true,"exactGpuBound":true,"virtualDisplay":true,"providerDesktopExcluded":true,"captureReady":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true}}"#
+                ))
+            }
+        }
+        Command::Stop { session_id } => {
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = session_id;
+                Err(CliError::new("windows_required", 20))
+            }
+            #[cfg(target_os = "windows")]
+            {
+                gpubnb_windows_stream_helper::authority::stop_session(session_id)
+                    .map_err(authority_error)?;
+                Ok(format!(
+                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","stopped":true}}"#
+                ))
+            }
+        }
+        Command::AuthorityChild {
+            session_id,
+            workspace,
+            gpu_uuid,
+        } => {
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = (session_id, workspace, gpu_uuid);
+                Err(CliError::new("windows_required", 20))
+            }
+            #[cfg(target_os = "windows")]
+            {
+                gpubnb_windows_stream_helper::authority::run_authority_child(
+                    session_id,
+                    workspace,
+                    gpu_uuid,
+                )
+                .map_err(authority_error)?;
+                Ok(r#"{"ok":true,"authorityStopped":true}"#.to_owned())
+            }
+        }
     }
 }
 
@@ -303,7 +455,10 @@ fn error_json(error: CliError) -> String {
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     match parse_args(&args).and_then(|command| execute(&command)) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(value) => {
+            println!("{value}");
+            ExitCode::SUCCESS
+        },
         Err(error) => {
             println!("{}", error_json(error));
             eprintln!("error:{}", error.code);
@@ -562,8 +717,9 @@ mod tests {
         assert!(!error_json(error).contains("\\"));
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
-    fn bootstrap_backend_can_never_report_success() {
+    fn native_backend_fails_closed_off_windows() {
         let commands = [
             Command::SelfTest,
             Command::Start {
