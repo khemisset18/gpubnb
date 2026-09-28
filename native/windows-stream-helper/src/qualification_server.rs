@@ -256,6 +256,16 @@ impl QualificationMediaServer {
                 {
                     continue;
                 }
+                Err(QualificationMediaServerError::Media)
+                    if running.load(Ordering::SeqCst)
+                        && runtime
+                            .lock()
+                            .ok()
+                            .and_then(|guard| guard.as_ref().map(QualifiedGraphicsRuntime::suspended))
+                            .unwrap_or(false) =>
+                {
+                    continue;
+                }
                 Err(error) => return Err(error),
             }
         }
