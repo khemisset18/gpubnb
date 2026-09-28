@@ -591,10 +591,9 @@ pub fn run_authority_child(
         let server = QualificationMediaServer::bind(session_id, generation)
             .map_err(|_| AuthorityError::MediaBind)?;
         let endpoint = server.endpoint().map_err(|_| AuthorityError::MediaBind)?;
-        let media_token = runtime
-            .media_token()
-            .ok_or(AuthorityError::MediaProof)?
-            .to_owned();
+        if runtime.media_token().is_none() {
+            return Err(AuthorityError::MediaProof);
+        }
 
         let runtime = Arc::new(Mutex::new(Some(runtime)));
         let endpoint_alive = Arc::new(AtomicBool::new(true));
@@ -619,6 +618,13 @@ pub fn run_authority_child(
             let mut exit_after_response = false;
             let response = match request {
                 "START" if !start_reported => {
+                    let media_token = runtime
+                        .lock()
+                        .map_err(|_| AuthorityError::ControlPipe)?
+                        .as_ref()
+                        .and_then(QualifiedGraphicsRuntime::media_token)
+                        .map(str::to_owned)
+                        .ok_or(AuthorityError::MediaProof)?;
                     start_reported = true;
                     format!("READY|{generation}|{}|{media_token}", endpoint.port())
                 }
