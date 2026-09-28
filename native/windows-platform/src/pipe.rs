@@ -497,6 +497,7 @@ mod windows_impl {
     const ERROR_PIPE_CONNECTED: u32 = 535;
     const ERROR_IO_PENDING: u32 = 997;
     const ERROR_MORE_DATA: u32 = 234;
+    const ERROR_PIPE_NOT_CONNECTED: u32 = 233;
     const WAIT_OBJECT_0: u32 = 0;
     const WAIT_TIMEOUT: u32 = 258;
     const INFINITE: u32 = u32::MAX;
@@ -580,6 +581,7 @@ mod windows_impl {
         fn CancelIoEx(file: Handle, overlapped: *mut Overlapped) -> i32;
         fn ConnectNamedPipe(pipe: Handle, overlapped: *mut Overlapped) -> i32;
         fn DisconnectNamedPipe(pipe: Handle) -> i32;
+        fn FlushFileBuffers(file: Handle) -> i32;
         fn ReadFile(
             file: Handle,
             buffer: *mut c_void,
@@ -1441,9 +1443,19 @@ mod windows_impl {
     }
 
     pub(super) fn disconnect_pipe(pipe: &OwnedPipeHandle) -> Result<(), PlatformError> {
+        // Flush blocks until the connected client has consumed the response. This
+        // prevents DisconnectNamedPipe from discarding the final control frame.
+        // A client that already closed is harmless; DisconnectNamedPipe below
+        // handles the resulting not-connected state as successful cleanup.
+        unsafe {
+            let _ = FlushFileBuffers(pipe.0);
+        }
         let ok = unsafe { DisconnectNamedPipe(pipe.0) };
         if ok == 0 {
-            return Err(PlatformError::PipeConnectFailed);
+            let error = unsafe { GetLastError() };
+            if error != ERROR_PIPE_NOT_CONNECTED {
+                return Err(PlatformError::PipeConnectFailed);
+            }
         }
         Ok(())
     }
