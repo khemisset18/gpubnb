@@ -297,9 +297,13 @@ The authority does not serialize runtime handles or media capabilities to disk.
 A successful `--resume` requires a fresh exact-GPU capture/NVENC proof and returns
 a newly generated 64-lowercase-hex `mediaToken`. The Agent must replace the old
 in-memory capability before reconnecting the browser; the previous token must
-never authenticate a resumed stream. The loopback listener survives normal
-browser disconnect/reconnect and rejects stale-token attempts without destroying
-the graphics authority.
+never authenticate a resumed stream. Resume also rotates the browser-visible
+stream epoch independently from the secret token. Every accepted media/input
+connection is bound to the epoch captured at authentication and must fail closed
+if the runtime epoch changes, so an already-open pre-suspend socket cannot become
+usable again even if it races past the transient suspended state. The loopback
+listener survives normal browser disconnect/reconnect and rejects stale-token or
+stale-epoch attempts without destroying the graphics authority.
 
 ## Promotion gate
 
