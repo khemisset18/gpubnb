@@ -24,7 +24,10 @@ fn assert_failure(args: &[&str], code: i32, reason: &str) {
 fn assert_success(args: &[&str], expected_stdout: &str) {
     let output = run(args);
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), expected_stdout);
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap().trim(),
+        expected_stdout
+    );
     assert_eq!(String::from_utf8(output.stderr).unwrap().trim(), "");
 }
 
