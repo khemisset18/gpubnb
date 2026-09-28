@@ -46,6 +46,16 @@ pub struct QualificationMediaServer {
     stream_epoch: u64,
 }
 
+fn require_connection_epoch(
+    connection_epoch: u64,
+    runtime_epoch: u64,
+) -> Result<(), QualificationMediaServerError> {
+    if connection_epoch == 0 || runtime_epoch == 0 || connection_epoch != runtime_epoch {
+        return Err(QualificationMediaServerError::StaleConnection);
+    }
+    Ok(())
+}
+
 impl QualificationMediaServer {
     pub fn bind(
         session_id: &str,
@@ -213,9 +223,7 @@ impl QualificationMediaServer {
                             .lock()
                             .map_err(|_| QualificationMediaServerError::Input)?;
                         let active = guard.as_mut().ok_or(QualificationMediaServerError::Input)?;
-                        if active.stream_epoch() != stream_epoch {
-                            return Err(QualificationMediaServerError::StaleConnection);
-                        }
+                        require_connection_epoch(stream_epoch, active.stream_epoch())?;
                         active
                             .inject_input(event)
                             .map_err(|_| QualificationMediaServerError::Input)?;
@@ -238,9 +246,7 @@ impl QualificationMediaServer {
                     .lock()
                     .map_err(|_| QualificationMediaServerError::Media)?;
                 let active = guard.as_mut().ok_or(QualificationMediaServerError::Media)?;
-                if active.stream_epoch() != stream_epoch {
-                    return Err(QualificationMediaServerError::StaleConnection);
-                }
+                require_connection_epoch(stream_epoch, active.stream_epoch())?;
                 active
                     .read_media_frame()
                     .map_err(|_| QualificationMediaServerError::Media)?
@@ -724,6 +730,19 @@ mod tests {
                 .map(|(index, byte)| byte ^ mask[index % 4]),
         );
         wire
+    }
+
+    #[test]
+    fn resumed_runtime_epoch_invalidates_pre_suspend_connection() {
+        assert_eq!(require_connection_epoch(7, 7), Ok(()));
+        assert_eq!(
+            require_connection_epoch(7, 8),
+            Err(QualificationMediaServerError::StaleConnection)
+        );
+        assert_eq!(
+            require_connection_epoch(0, 8),
+            Err(QualificationMediaServerError::StaleConnection)
+        );
     }
 
     #[test]
