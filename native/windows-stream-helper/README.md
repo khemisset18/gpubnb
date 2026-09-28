@@ -75,6 +75,16 @@ cargo build --locked --release --manifest-path native/windows-stream-helper/Carg
 
 A physical qualification build must also compile the worker/media artifacts with
 the same source provenance and signing policy expected by the native runtime.
+After the exact signed worker and media DLL are installed, use:
+
+```powershell
+powershell -NoProfile -File agent\tools\windows_native_build_qualification.ps1 -Release
+```
+
+That entrypoint verifies worker/media Authenticode policy against the clean source
+commit and produces both the production `gpubnb-windows-stream.exe` candidate
+and the one-shot physical qualification harness. It does not sign/install either
+binary and does not change bookability.
 
 ## Qualification order
 
