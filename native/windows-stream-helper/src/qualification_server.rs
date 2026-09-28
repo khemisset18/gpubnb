@@ -13,7 +13,10 @@ use crate::local_media_protocol::{
 use crate::service_runtime::QualifiedGraphicsRuntime;
 use std::io::{ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -177,16 +180,10 @@ impl QualificationMediaServer {
         let mut stream = self.accept_upgraded_shared(runtime)?;
         let mut input_fence = BrowserInputFence::new(self.stream_epoch)
             .map_err(|_| QualificationMediaServerError::Input)?;
-        let started = Instant::now();
-        let authority_stream_timeout = Duration::from_secs(30 * 60);
         let mut sent = 0u64;
         let mut accepted_input = 0u64;
 
         loop {
-            if started.elapsed() > authority_stream_timeout {
-                return Err(QualificationMediaServerError::Media);
-            }
-
             loop {
                 match try_read_websocket_client_frame(&mut stream)? {
                     None => break,
@@ -234,6 +231,35 @@ impl QualificationMediaServer {
                 None => thread::sleep(Duration::from_millis(1)),
             }
         }
+    }
+
+    /// Persistent loopback transport for the authority process.
+    ///
+    /// Browser disconnects, stale-token reconnects and malformed client frames
+    /// are scoped to one connection and never tear down the graphics authority.
+    /// Fatal socket/media failures do fail closed and mark the listener dead.
+    pub fn serve_interactive_shared(
+        &self,
+        runtime: &Arc<Mutex<Option<QualifiedGraphicsRuntime>>>,
+        running: &AtomicBool,
+    ) -> Result<(), QualificationMediaServerError> {
+        while running.load(Ordering::SeqCst) {
+            match self.serve_interactive_shared_once(runtime) {
+                Ok(_) => continue,
+                Err(QualificationMediaServerError::AcceptTimeout)
+                | Err(QualificationMediaServerError::Request)
+                | Err(QualificationMediaServerError::Upgrade)
+                | Err(QualificationMediaServerError::Response)
+                | Err(QualificationMediaServerError::Input)
+                | Err(QualificationMediaServerError::Protocol)
+                    if running.load(Ordering::SeqCst) =>
+                {
+                    continue;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
     }
 
     fn accept_upgraded_shared(
