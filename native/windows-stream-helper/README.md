@@ -82,9 +82,11 @@ powershell -NoProfile -File agent\tools\windows_native_build_qualification.ps1 -
 ```
 
 That entrypoint verifies worker/media Authenticode policy against the clean source
-commit and produces both the production `gpubnb-windows-stream.exe` candidate
-and the one-shot physical qualification harness. It does not sign/install either
-binary and does not change bookability.
+commit and produces both the production-path `gpubnb-windows-stream.exe` Stage 3
+candidate and the one-shot physical qualification harness. Both are built with the
+explicit `physical-qualification` gate so the qualification IddCx monitor can be
+mutated; ordinary builds remain hard-disabled for monitor mutation. The script
+does not sign/install either binary and does not change bookability.
 
 ## Qualification order
 
