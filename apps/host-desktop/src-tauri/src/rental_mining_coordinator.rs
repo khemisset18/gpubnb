@@ -101,6 +101,7 @@ impl RentalMiningCoordinator {
         }
         self.consent = consent;
         if consent == MiningConsent::Disabled {
+            self.auto_resume_after_rental = false;
             self.resume_requested = false;
             if matches!(
                 self.state,
@@ -136,6 +137,7 @@ impl RentalMiningCoordinator {
         if self.state != CoordinatedGpuState::Idle {
             return Err("gpu_not_idle");
         }
+        self.auto_resume_after_rental = true;
         self.resume_requested = false;
         self.state = CoordinatedGpuState::MiningStarting;
         Ok(())
@@ -373,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn auto_resume_is_disabled_by_default() {
+    fn starting_mining_enables_resume_intent_until_owner_stop() {
         let mut coordinator = RentalMiningCoordinator::default();
         coordinator
             .set_owner_consent(MiningConsent::ManagedPool)
@@ -385,8 +387,8 @@ mod tests {
 
         let snapshot = coordinator.snapshot();
         assert_eq!(snapshot.state, CoordinatedGpuState::Idle);
-        assert!(!snapshot.auto_resume_after_rental);
-        assert!(!snapshot.should_start_mining);
+        assert!(snapshot.auto_resume_after_rental);
+        assert!(snapshot.should_start_mining);
     }
 
     #[test]
