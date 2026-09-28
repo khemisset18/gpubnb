@@ -372,6 +372,9 @@ mod windows {
             Ok(result) => result.map_err(|_| "qualification_client_failed"),
             Err(_) => Err("qualification_client_panicked"),
         };
+        if let Err(error) = &client_result {
+            eprintln!("gpubnb_qualification client_error={error}");
+        }
 
         let sent = server_result?;
         stop_result?;
