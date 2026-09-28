@@ -25,5 +25,5 @@ physical-qualification = ["gpubnb-windows-platform/physical-qualification"]
 [lints.rust]
 unsafe_code = "forbid"
 
-[target.'cfg(windows)'.dependencies]
+[dependencies]
 gpubnb-windows-platform = { path = "../windows-platform" }
