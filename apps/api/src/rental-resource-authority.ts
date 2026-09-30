@@ -4,6 +4,7 @@ import {
   ListingResourceMode,
   ModerationStatus,
   ResourceAllocationStatus,
+  WorkspaceRuntimeBackend,
   WorkspaceSessionStatus,
   type PrismaClient,
 } from '@prisma/client';
@@ -280,7 +281,21 @@ export async function buildRentalResourceAuthority(
       // Compute session and always answered
       // rental_resource_authority_missing_for_session for the one path renters
       // actually use.
-      machineWorkspace: { workspace: { slug: { in: ['developer', 'compute', 'data', 'ai', 'video', 'audio', 'api', 'mobile', 'security-lab'] } } },
+      OR: [
+        {
+          machineWorkspace: {
+            workspace: {
+              slug: {
+                in: ['developer', 'compute', 'data', 'ai', 'video', 'audio', 'api', 'mobile', 'security-lab'],
+              },
+            },
+          },
+        },
+        {
+          runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+          machineWorkspace: { workspace: { slug: 'cloud-desktop' } },
+        },
+      ],
     },
     select: {
       id: true,
