@@ -1,9 +1,12 @@
+import { randomUUID } from 'node:crypto';
+
 import type { FastifyInstance } from 'fastify';
 import {
   AcceleratorOperationalStatus,
   BookingStatus,
   JobType,
   ListingResourceMode,
+  ListingStatus,
   MachineConnectivity,
   MachineOperational,
   MachineWorkspaceState,
@@ -23,6 +26,10 @@ import { ensureCompatibleMachineWorkspace, type ExecutableWorkspaceSlug } from '
 import { evaluateWorkspaceAccess } from './workspace-access-policy.js';
 import { issueWorkspaceAccessGrant } from './workspace-access.js';
 import { isWorkspaceGatewayLive } from './workspace-gateway-liveness.js';
+import {
+  allocateWindowsNativeQualificationBookingResources,
+  ResourceAllocationError,
+} from './resource-allocation-service.js';
 import { preparationPhase, safeConnection } from './workspace-renter-routes.js';
 import { WINDOWS_NATIVE_GPU_UUID_RE } from './windows-native-capability.js';
 
@@ -30,6 +37,15 @@ const desktopWorkspaceSlugs = ['cloud-desktop', 'creator', 'cad', 'gaming'] as c
 type DesktopWorkspaceSlug = typeof desktopWorkspaceSlugs[number];
 
 const activeBookings: BookingStatus[] = [BookingStatus.FUNDED, BookingStatus.STARTING, BookingStatus.ACTIVE];
+
+const qualificationBookingStatuses: BookingStatus[] = [
+  BookingStatus.AWAITING_DEPOSIT,
+  BookingStatus.FUNDED,
+  BookingStatus.STARTING,
+  BookingStatus.ACTIVE,
+];
+
+const WINDOWS_NATIVE_QUALIFICATION_SECONDS = 30 * 60;
 
 const activeAllocations: ResourceAllocationStatus[] = [
   ResourceAllocationStatus.HELD,
@@ -100,6 +116,269 @@ const workspaceSpec: Record<DesktopWorkspaceSlug, {
 
 function executableSlug(slug: DesktopWorkspaceSlug): ExecutableWorkspaceSlug {
   return slug;
+}
+
+
+async function createWindowsNativeQualificationBooking(
+  db: PrismaClient,
+  renterId: string,
+) {
+  if (!windowsNativePrivateQualificationEnabled()) {
+    return { error: 'windows_native_qualification_disabled' as const };
+  }
+
+  const now = new Date();
+  const existing = await db.booking.findFirst({
+    where: {
+      buyerId: renterId,
+      status: { in: qualificationBookingStatuses },
+      endsAt: { gt: now },
+      listing: {
+        status: ListingStatus.HIDDEN_OFFLINE,
+        resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
+        machine: { nativeDesktopStreamingAvailable: true },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      status: true,
+      startsAt: true,
+      endsAt: true,
+      expectedSeconds: true,
+    },
+  });
+  if (existing) return { booking: existing, created: false };
+
+  const candidates = await db.gpuListing.findMany({
+    where: {
+      status: ListingStatus.HIDDEN_OFFLINE,
+      resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
+      ownerId: { not: renterId },
+      machine: {
+        connectivity: MachineConnectivity.ONLINE,
+        moderationStatus: ModerationStatus.CLEAR,
+        nativeDesktopStreamingAvailable: true,
+      },
+    },
+    take: 3,
+    select: {
+      id: true,
+      hourlyLamports: true,
+      machine: {
+        select: {
+          id: true,
+          operatingSystem: true,
+          operational: true,
+          lastHeartbeatAt: true,
+          nativeDesktopStreamingGpuUuid: true,
+        },
+      },
+      accelerators: {
+        select: {
+          accelerator: {
+            select: {
+              id: true,
+              machineId: true,
+              hardwareUuid: true,
+              vendor: true,
+              moderationStatus: true,
+              status: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const heartbeatFresh = (lastHeartbeatAt: Date | null) =>
+    lastHeartbeatAt !== null
+    && lastHeartbeatAt.getTime() <= now.getTime()
+    && now.getTime() - lastHeartbeatAt.getTime()
+      <= config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS * 1000;
+
+  const eligible = candidates.filter((listing) => {
+    const machine = listing.machine;
+    const nativeGpuUuid = machine.nativeDesktopStreamingGpuUuid?.trim() ?? '';
+    const accelerator = listing.accelerators[0]?.accelerator;
+    const os = machine.operatingSystem?.trim().toLowerCase() ?? '';
+
+    return (
+      listing.accelerators.length === 1
+      && Boolean(accelerator)
+      && os.startsWith('windows')
+      && WINDOWS_NATIVE_GPU_UUID_RE.test(nativeGpuUuid)
+      && heartbeatFresh(machine.lastHeartbeatAt)
+      && (
+        machine.operational === MachineOperational.AVAILABLE
+        || machine.operational === MachineOperational.RESERVED
+        || machine.operational === MachineOperational.RUNNING
+      )
+      && accelerator?.machineId === machine.id
+      && accelerator.vendor?.trim().toUpperCase() === 'NVIDIA'
+      && accelerator.moderationStatus === ModerationStatus.CLEAR
+      && rentableAccelerators.includes(accelerator.status)
+      && accelerator.hardwareUuid.toLowerCase() === nativeGpuUuid.toLowerCase()
+    );
+  });
+
+  if (eligible.length === 0) {
+    return { error: 'windows_native_qualification_host_not_ready' as const };
+  }
+  if (eligible.length !== 1) {
+    return { error: 'windows_native_qualification_exactly_one_host_required' as const };
+  }
+
+  const target = eligible[0]!;
+  const startsAt = now;
+  const endsAt = new Date(now.getTime() + WINDOWS_NATIVE_QUALIFICATION_SECONDS * 1000);
+  const quotedLamports =
+    target.hourlyLamports * BigInt(WINDOWS_NATIVE_QUALIFICATION_SECONDS) / 3600n;
+
+  if (quotedLamports <= 0n) {
+    return { error: 'windows_native_qualification_quote_too_small' as const };
+  }
+
+  let booking: {
+    id: string;
+    status: BookingStatus;
+    startsAt: Date;
+    endsAt: Date;
+    expectedSeconds: number;
+  };
+
+  try {
+    booking = await runBookingTransaction(db, async (tx) => {
+      const fresh = await tx.gpuListing.findFirst({
+        where: {
+          id: target.id,
+          status: ListingStatus.HIDDEN_OFFLINE,
+          resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
+          ownerId: { not: renterId },
+        },
+        select: {
+          id: true,
+          machineId: true,
+          machine: {
+            select: {
+              operatingSystem: true,
+              connectivity: true,
+              operational: true,
+              moderationStatus: true,
+              lastHeartbeatAt: true,
+              nativeDesktopStreamingAvailable: true,
+              nativeDesktopStreamingGpuUuid: true,
+            },
+          },
+          accelerators: {
+            select: {
+              accelerator: {
+                select: {
+                  id: true,
+                  machineId: true,
+                  hardwareUuid: true,
+                  vendor: true,
+                  moderationStatus: true,
+                  status: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!fresh) throw new Error('windows_native_qualification_host_not_ready');
+
+      const nativeGpuUuid = fresh.machine.nativeDesktopStreamingGpuUuid?.trim() ?? '';
+      const accelerator = fresh.accelerators[0]?.accelerator;
+      const os = fresh.machine.operatingSystem?.trim().toLowerCase() ?? '';
+      const freshNow = new Date();
+      const freshHeartbeat =
+        fresh.machine.lastHeartbeatAt !== null
+        && fresh.machine.lastHeartbeatAt.getTime() <= freshNow.getTime()
+        && freshNow.getTime() - fresh.machine.lastHeartbeatAt.getTime()
+          <= config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS * 1000;
+
+      if (
+        fresh.accelerators.length !== 1
+        || !accelerator
+        || !os.startsWith('windows')
+        || fresh.machine.connectivity !== MachineConnectivity.ONLINE
+        || fresh.machine.moderationStatus !== ModerationStatus.CLEAR
+        || fresh.machine.nativeDesktopStreamingAvailable !== true
+        || !WINDOWS_NATIVE_GPU_UUID_RE.test(nativeGpuUuid)
+        || !freshHeartbeat
+        || !(
+          fresh.machine.operational === MachineOperational.AVAILABLE
+          || fresh.machine.operational === MachineOperational.RESERVED
+          || fresh.machine.operational === MachineOperational.RUNNING
+        )
+        || accelerator.machineId !== fresh.machineId
+        || accelerator.vendor?.trim().toUpperCase() !== 'NVIDIA'
+        || accelerator.moderationStatus !== ModerationStatus.CLEAR
+        || !rentableAccelerators.includes(accelerator.status)
+        || accelerator.hardwareUuid.toLowerCase() !== nativeGpuUuid.toLowerCase()
+      ) {
+        throw new Error('windows_native_qualification_host_not_ready');
+      }
+
+      const overlap = await tx.booking.count({
+        where: {
+          listingId: fresh.id,
+          status: { in: qualificationBookingStatuses },
+          startsAt: { lt: endsAt },
+          endsAt: { gt: startsAt },
+        },
+      });
+      if (overlap !== 0) throw new Error('windows_native_qualification_host_reserved');
+
+      return tx.booking.create({
+        data: {
+          buyerId: renterId,
+          listingId: fresh.id,
+          startsAt,
+          endsAt,
+          quotedLamports,
+          expectedSeconds: WINDOWS_NATIVE_QUALIFICATION_SECONDS,
+          idempotencyKey: randomUUID(),
+          status: BookingStatus.AWAITING_DEPOSIT,
+        },
+        select: {
+          id: true,
+          status: true,
+          startsAt: true,
+          endsAt: true,
+          expectedSeconds: true,
+        },
+      });
+    });
+  } catch (error) {
+    if (
+      error instanceof Error
+      && (
+        error.message === 'windows_native_qualification_host_not_ready'
+        || error.message === 'windows_native_qualification_host_reserved'
+      )
+    ) {
+      return { error: error.message };
+    }
+    throw error;
+  }
+
+  try {
+    await allocateWindowsNativeQualificationBookingResources(db, {
+      bookingId: booking.id,
+      buyerId: renterId,
+    });
+  } catch (error) {
+    await db.booking.delete({ where: { id: booking.id } }).catch(() => {});
+    if (error instanceof ResourceAllocationError) {
+      return { error: `windows_native_qualification_${error.code}` };
+    }
+    throw error;
+  }
+
+  return { booking, created: true };
 }
 
 
@@ -509,6 +788,25 @@ async function createDesktopWorkspaceSession(
 }
 
 export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaClient, redis: Redis): void {
+  app.post('/qualification/windows-native/booking', {
+    config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+  }, async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+
+    const result = await createWindowsNativeQualificationBooking(db, session.userId);
+    if ('error' in result) return reply.code(409).send({ error: result.error });
+
+    return reply.code(result.created ? 201 : 200).send({
+      bookingId: result.booking.id,
+      status: result.booking.status,
+      startsAt: result.booking.startsAt,
+      endsAt: result.booking.endsAt,
+      expectedSeconds: result.booking.expectedSeconds,
+      created: result.created,
+    });
+  });
+
   for (const slug of desktopWorkspaceSlugs) {
     app.post(`/bookings/:bookingId/workspace/${slug}`, async (request, reply) => {
       const session = await requireSession(request, reply, redis);
