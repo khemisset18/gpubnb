@@ -94,6 +94,15 @@ def install_runtime_layers() -> None:
     from .workspace_gateway_v9 import install as install_workspace_gateway_v9
 
     install_workspace_gateway_v9()
+
+    # Windows-native Cloud Desktop is deliberately layered last. On Windows this
+    # v10 supervisor intercepts WINDOWS_NATIVE desired sessions before the legacy
+    # Docker reconciler can interpret cloud-desktop as a container workload. On
+    # non-Windows hosts install() is a no-op, so the qualified Linux/Selkies path
+    # remains unchanged.
+    from .workspace_gateway_v10 import install as install_workspace_gateway_v10
+
+    install_workspace_gateway_v10()
     _runtime_layers_installed = True
 
 
