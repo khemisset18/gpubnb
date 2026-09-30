@@ -1,9 +1,16 @@
-// URL publique de l’API vue par le navigateur. En production, le build garde
-// `/api` et génère un proxy Netlify vers GPUBNB_API_ORIGIN.
-window.GPUBNB_API_URL = window.GPUBNB_API_URL || "/api";
-// Le build remplace cette valeur de développement par GPUBNB_GATEWAY_ORIGIN
-// (ou GPUBNB_API_ORIGIN lorsque API et gateway partagent le même runtime).
-window.GPUBNB_GATEWAY_URL = window.GPUBNB_GATEWAY_URL || "http://localhost:3000";
+// URL publique de l’API vue par le navigateur.
+// Private Stage 3 Render deployments are intentionally same-origin so PC2 can
+// authenticate and open the native desktop without changing the public Netlify site.
+const GPUBNB_STAGE3_RENDER_SAME_ORIGIN =
+  window.location?.protocol === "https:" &&
+  window.location?.hostname?.endsWith(".onrender.com");
+
+window.GPUBNB_API_URL = window.GPUBNB_API_URL ||
+  (GPUBNB_STAGE3_RENDER_SAME_ORIGIN ? window.location.origin : "/api");
+
+window.GPUBNB_GATEWAY_URL = window.GPUBNB_GATEWAY_URL ||
+  (GPUBNB_STAGE3_RENDER_SAME_ORIGIN ? window.location.origin : "http://localhost:3000");
+
 window.GPUBNB_CONFIG = {
   apiBase: window.GPUBNB_API_URL,
   workspaceGatewayBase: window.GPUBNB_GATEWAY_URL,
