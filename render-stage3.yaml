@@ -16,10 +16,7 @@ services:
       - key: PORT
         value: "10000"
       - key: PUBLIC_APP_DOMAIN
-        fromService:
-          type: web
-          name: gpubnb-stage3-private
-          envVarKey: RENDER_EXTERNAL_HOSTNAME
+        value: gpubnb-stage3-private.onrender.com
       - key: TRUST_PROXY
         value: "true"
       - key: BETA_TEST_DEV_BYPASS
