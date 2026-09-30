@@ -72,3 +72,18 @@ test('private qualification only reads the global Cloud Desktop definition', () 
   assert.doesNotMatch(desktop, /workspaceDefinition\.upsert/);
   assert.doesNotMatch(desktop, /WorkspaceRelease\.UPCOMING/);
 });
+
+
+test('private qualification rearm only releases its own never-started AGENT_OFFLINE allocation', () => {
+  assert.match(desktop, /SessionTerminationReason\.AGENT_OFFLINE/);
+  assert.match(desktop, /startedAt: null/);
+  assert.match(desktop, /gatewayLastSeenAt: null/);
+  assert.match(desktop, /liveMachineAllocations\.length === 0/);
+  assert.match(desktop, /liveAcceleratorAllocations\.length === 1/);
+  assert.match(
+    desktop,
+    /liveAcceleratorAllocations\[0\]\?\.bookingId === priorQualification\.id/,
+  );
+  assert.match(desktop, /status: ResourceAllocationStatus\.RELEASED/);
+  assert.match(desktop, /bookingId: priorQualification\.id/);
+});
