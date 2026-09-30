@@ -154,7 +154,11 @@ async function createWindowsNativeQualificationBooking(
     where: {
       status: ListingStatus.HIDDEN_OFFLINE,
       resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
-      ownerId: { not: renterId },
+      // Qualification is a private, no-payment beta path. Unlike the public
+      // marketplace, it intentionally permits the provider account to act as
+      // the renter so the two-PC isolation proof does not require a second
+      // GPUbnb account. The listing remains HIDDEN_OFFLINE and all Windows
+      // native capability checks below still apply.
       machine: {
         connectivity: MachineConnectivity.ONLINE,
         moderationStatus: ModerationStatus.CLEAR,
@@ -254,7 +258,6 @@ async function createWindowsNativeQualificationBooking(
           id: target.id,
           status: ListingStatus.HIDDEN_OFFLINE,
           resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
-          ownerId: { not: renterId },
         },
         select: {
           id: true,
