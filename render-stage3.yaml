@@ -1,0 +1,101 @@
+services:
+  - type: web
+    name: gpubnb-stage3-private
+    runtime: docker
+    plan: free
+    region: frankfurt
+    repo: https://github.com/khemisset18/gpubnb
+    branch: qualification/stage3-windows-native-private-3c3e21e6
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: PUBLIC_APP_DOMAIN
+        fromService:
+          type: web
+          name: gpubnb-stage3-private
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
+      - key: TRUST_PROXY
+        value: "true"
+      - key: BETA_TEST_DEV_BYPASS
+        fromService:
+          type: web
+          name: gpubnb
+          envVarKey: BETA_TEST_DEV_BYPASS
+      - key: DATABASE_URL
+        fromService:
+          type: web
+          name: gpubnb
+          envVarKey: DATABASE_URL
+      - key: REDIS_URL
+        fromService:
+          type: web
+          name: gpubnb
+          envVarKey: REDIS_URL
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: INTERNAL_SERVICE_TOKEN
+        generateValue: true
+      - key: SESSION_COOKIE_NAME
+        value: gpubnb_stage3_session
+      - key: SESSION_TTL_SECONDS
+        value: "86400"
+      - key: SUPABASE_URL
+        fromService:
+          type: web
+          name: gpubnb
+          envVarKey: SUPABASE_URL
+      - key: SUPABASE_ANON_KEY
+        fromService:
+          type: web
+          name: gpubnb
+          envVarKey: SUPABASE_ANON_KEY
+      - key: PLATFORM_WALLET
+        fromService:
+          type: web
+          name: gpubnb
+          envVarKey: PLATFORM_WALLET
+      - key: SOLANA_CLUSTER
+        fromService:
+          type: web
+          name: gpubnb
+          envVarKey: SOLANA_CLUSTER
+      - key: SOLANA_RPC_URL
+        fromService:
+          type: web
+          name: gpubnb
+          envVarKey: SOLANA_RPC_URL
+      - key: ESCROW_PROGRAM_ID
+        fromService:
+          type: web
+          name: gpubnb
+          envVarKey: ESCROW_PROGRAM_ID
+      - key: ALLOW_MAINNET
+        value: "false"
+      - key: HEARTBEAT_MAX_AGE_SECONDS
+        fromService:
+          type: web
+          name: gpubnb
+          envVarKey: HEARTBEAT_MAX_AGE_SECONDS
+      - key: HEARTBEAT_OFFLINE_SECONDS
+        fromService:
+          type: web
+          name: gpubnb
+          envVarKey: HEARTBEAT_OFFLINE_SECONDS
+      - key: COMMISSION_BPS
+        value: "500"
+      - key: GPUBNB_DATA_PLANE_EDGE_ENABLED
+        value: "false"
+      - key: GPUBNB_DATA_PLANE_EDGE_QUIC
+        value: "false"
+      - key: GPUBNB_DATA_PLANE_DIRECT_QUIC
+        value: "false"
+      - key: GPUBNB_DATA_PLANE_BROWSER_WEBTRANSPORT
+        value: "false"
+      - key: GPUBNB_DATA_PLANE_CANARY_PERCENT
+        value: "0"
