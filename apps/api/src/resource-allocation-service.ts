@@ -1,8 +1,10 @@
 import {
+  AcceleratorOperationalStatus,
   BookingStatus,
   ListingResourceMode,
   ListingStatus,
   MachineOperational,
+  MiningRuntimeState,
   ModerationStatus,
   Prisma,
   PrismaClient,
@@ -239,13 +241,40 @@ async function allocateInTransaction(
 
   const now = new Date();
   const heartbeatStaleAfterSeconds = rentalHeartbeatOfflineSeconds();
+  const fresh = (value: Date | null) =>
+    Boolean(value && value.getTime() >= now.getTime() - heartbeatStaleAfterSeconds * 1000);
+
   for (const acceleratorId of selectedIds) {
     const accelerator = machineAccelerators.get(acceleratorId);
-    if (
-      !accelerator ||
-      !isExactGpuPubliclyHealthy(accelerator, now, heartbeatStaleAfterSeconds) ||
-      accelerator.miningResource?.activeRentalId
-    ) {
+
+    const privateWindowsNativeHealthy = Boolean(
+      input.allowHiddenWindowsNativeQualification === true
+      && accelerator
+      && (
+        accelerator.status === AcceleratorOperationalStatus.AVAILABLE
+        || accelerator.status === AcceleratorOperationalStatus.RESERVED
+        || accelerator.status === AcceleratorOperationalStatus.RUNNING
+      )
+      && accelerator.moderationStatus === ModerationStatus.CLEAR
+      && accelerator.verifiedAt !== null
+      && fresh(accelerator.lastSeenAt)
+      && accelerator.miningResource !== null
+      && accelerator.miningResource.enabled
+      && !accelerator.miningResource.quarantined
+      && accelerator.miningResource.runtimeState === MiningRuntimeState.IDLE
+      && accelerator.miningResource.activeRentalId === null
+      && fresh(accelerator.miningResource.lastSeenAt)
+    );
+
+    const healthy = input.allowHiddenWindowsNativeQualification === true
+      ? privateWindowsNativeHealthy
+      : Boolean(
+        accelerator
+        && isExactGpuPubliclyHealthy(accelerator, now, heartbeatStaleAfterSeconds)
+        && !accelerator.miningResource?.activeRentalId
+      );
+
+    if (!healthy) {
       throw new ResourceAllocationError('accelerator_not_rentable');
     }
   }
