@@ -15,6 +15,7 @@ import {
   ModerationStatus,
   Prisma,
   ResourceAllocationStatus,
+  SessionTerminationReason,
   WorkspaceRuntimeBackend,
   WorkspaceSessionStatus,
   type PrismaClient,
@@ -241,7 +242,7 @@ async function rearmTimedOutWindowsNativeQualificationHost(
     );
     if (!physicalProofSafe) return false;
 
-    const priorTimedOutQualification = await tx.booking.findFirst({
+    const priorQualification = await tx.booking.findFirst({
       where: {
         buyerId: renterId,
         listingId: listing.id,
@@ -249,16 +250,46 @@ async function rearmTimedOutWindowsNativeQualificationHost(
         workspaceSessions: {
           some: {
             runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
-            status: WorkspaceSessionStatus.TIMED_OUT,
             startedAt: null,
             gatewayLastSeenAt: null,
+            OR: [
+              { status: WorkspaceSessionStatus.TIMED_OUT },
+              {
+                status: WorkspaceSessionStatus.FAILED,
+                terminationReason: SessionTerminationReason.AGENT_OFFLINE,
+              },
+            ],
           },
         },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        workspaceSessions: {
+          where: {
+            runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+            startedAt: null,
+            gatewayLastSeenAt: null,
+            OR: [
+              { status: WorkspaceSessionStatus.TIMED_OUT },
+              {
+                status: WorkspaceSessionStatus.FAILED,
+                terminationReason: SessionTerminationReason.AGENT_OFFLINE,
+              },
+            ],
+          },
+          select: { status: true, terminationReason: true },
+          take: 1,
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
-    if (!priorTimedOutQualification) return false;
+    if (!priorQualification) return false;
+
+    const recoverableOfflineFailure = priorQualification.workspaceSessions.some(
+      (workspace) =>
+        workspace.status === WorkspaceSessionStatus.FAILED
+        && workspace.terminationReason === SessionTerminationReason.AGENT_OFFLINE,
+    );
 
     const [
       liveSessions,
@@ -280,14 +311,16 @@ async function rearmTimedOutWindowsNativeQualificationHost(
       tx.job.count({
         where: { machineId: listing.machineId, status: { in: activeQualificationJobs } },
       }),
-      tx.machineAllocation.count({
+      tx.machineAllocation.findMany({
         where: { machineId: listing.machineId, status: { in: activeAllocations } },
+        select: { id: true, bookingId: true },
       }),
-      tx.acceleratorAllocation.count({
+      tx.acceleratorAllocation.findMany({
         where: {
           accelerator: { machineId: listing.machineId },
           status: { in: activeAllocations },
         },
+        select: { id: true, bookingId: true },
       }),
     ]);
 
@@ -295,10 +328,35 @@ async function rearmTimedOutWindowsNativeQualificationHost(
       liveSessions !== 0
       || activeBookingsCount !== 0
       || activeJobs !== 0
-      || liveMachineAllocations !== 0
-      || liveAcceleratorAllocations !== 0
     ) {
       return false;
+    }
+
+    const noLiveAllocations =
+      liveMachineAllocations.length === 0
+      && liveAcceleratorAllocations.length === 0;
+
+    const onlyFailedQualificationAllocation =
+      recoverableOfflineFailure
+      && liveMachineAllocations.length === 0
+      && liveAcceleratorAllocations.length === 1
+      && liveAcceleratorAllocations[0]?.bookingId === priorQualification.id;
+
+    if (!noLiveAllocations && !onlyFailedQualificationAllocation) return false;
+
+    if (onlyFailedQualificationAllocation) {
+      const released = await tx.acceleratorAllocation.updateMany({
+        where: {
+          id: liveAcceleratorAllocations[0]!.id,
+          bookingId: priorQualification.id,
+          status: { in: activeAllocations },
+        },
+        data: {
+          status: ResourceAllocationStatus.RELEASED,
+          releasedAt: now,
+        },
+      });
+      if (released.count !== 1) return false;
     }
 
     const updated = await tx.machine.updateMany({
