@@ -50,6 +50,10 @@ export type AllocateBookingResourcesInput = {
   acceleratorIds?: string[];
 };
 
+type AllocateBookingResourcesInternalInput = AllocateBookingResourcesInput & {
+  allowHiddenWindowsNativeQualification?: boolean;
+};
+
 export type BookingResourceAllocation = {
   bookingId: string;
   machineId: string;
@@ -87,7 +91,7 @@ function canTransitionAllocation(
 
 async function allocateInTransaction(
   tx: Prisma.TransactionClient,
-  input: AllocateBookingResourcesInput,
+  input: AllocateBookingResourcesInternalInput,
 ): Promise<BookingResourceAllocation> {
   const booking = await tx.booking.findFirst({
     where: { id: input.bookingId, buyerId: input.buyerId },
@@ -157,8 +161,15 @@ async function allocateInTransaction(
   if (booking.machineAllocation || booking.acceleratorAllocations.length > 0) {
     throw new ResourceAllocationError('allocation_already_exists');
   }
+  const listingStatusAllowed = input.allowHiddenWindowsNativeQualification === true
+    ? (
+      booking.listing.status === ListingStatus.HIDDEN_OFFLINE
+      && booking.listing.resourceMode === ListingResourceMode.SELECTED_ACCELERATORS
+    )
+    : booking.listing.status === ListingStatus.ACTIVE;
+
   if (
-    booking.listing.status !== ListingStatus.ACTIVE ||
+    !listingStatusAllowed ||
     booking.listing.machine.moderationStatus !== ModerationStatus.CLEAR ||
     booking.listing.machine.operational === MachineOperational.UNAVAILABLE
   ) {
@@ -257,9 +268,9 @@ async function allocateInTransaction(
   };
 }
 
-export async function allocateBookingResources(
+async function allocateBookingResourcesWithPolicy(
   db: PrismaClient,
-  input: AllocateBookingResourcesInput,
+  input: AllocateBookingResourcesInternalInput,
 ): Promise<BookingResourceAllocation> {
   try {
     // Safe to retry as a whole: assertSchedulerMachinePresence (inside the transaction) is
@@ -284,6 +295,23 @@ export async function allocateBookingResources(
     if (isResourceConflict(error)) throw new ResourceAllocationError('resource_conflict');
     throw error;
   }
+}
+
+export async function allocateBookingResources(
+  db: PrismaClient,
+  input: AllocateBookingResourcesInput,
+): Promise<BookingResourceAllocation> {
+  return allocateBookingResourcesWithPolicy(db, input);
+}
+
+export async function allocateWindowsNativeQualificationBookingResources(
+  db: PrismaClient,
+  input: AllocateBookingResourcesInput,
+): Promise<BookingResourceAllocation> {
+  return allocateBookingResourcesWithPolicy(db, {
+    ...input,
+    allowHiddenWindowsNativeQualification: true,
+  });
 }
 
 export async function transitionBookingResources(
