@@ -4,12 +4,14 @@ import type { FastifyInstance } from 'fastify';
 import {
   AcceleratorOperationalStatus,
   BookingStatus,
+  JobStatus,
   JobType,
   ListingResourceMode,
   ListingStatus,
   MachineConnectivity,
   MachineOperational,
   MachineWorkspaceState,
+  MiningRuntimeState,
   ModerationStatus,
   Prisma,
   ResourceAllocationStatus,
@@ -67,6 +69,15 @@ const liveWorkspaceSessions: WorkspaceSessionStatus[] = [
   WorkspaceSessionStatus.STOPPING,
 ];
 
+const activeQualificationJobs: JobStatus[] = [
+  JobStatus.ASSIGNED,
+  JobStatus.DOWNLOADING,
+  JobStatus.PREPARING,
+  JobStatus.RUNNING,
+  JobStatus.UPLOADING_RESULTS,
+  JobStatus.CANCEL_REQUESTED,
+];
+
 function windowsNativePrivateQualificationEnabled(): boolean {
   return config.BETA_TEST_DEV_BYPASS === 'true'
     && config.ESCROW_PROGRAM_ID === 'NOT_DEPLOYED_YET';
@@ -119,6 +130,197 @@ function executableSlug(slug: DesktopWorkspaceSlug): ExecutableWorkspaceSlug {
 }
 
 
+async function rearmTimedOutWindowsNativeQualificationHost(
+  db: PrismaClient,
+  renterId: string,
+): Promise<boolean> {
+  if (!windowsNativePrivateQualificationEnabled()) return false;
+
+  const now = new Date();
+  const candidates = await db.gpuListing.findMany({
+    where: {
+      status: ListingStatus.HIDDEN_OFFLINE,
+      resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
+      machine: {
+        connectivity: MachineConnectivity.ONLINE,
+        moderationStatus: ModerationStatus.CLEAR,
+        operational: MachineOperational.DEGRADED,
+        nativeDesktopStreamingAvailable: true,
+      },
+    },
+    take: 3,
+    select: { id: true, machineId: true },
+  });
+
+  if (candidates.length !== 1 || !candidates[0]) return false;
+  const target = candidates[0];
+
+  return runBookingTransaction(db, async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${target.machineId}, 1))`;
+
+    const listing = await tx.gpuListing.findFirst({
+      where: {
+        id: target.id,
+        machineId: target.machineId,
+        status: ListingStatus.HIDDEN_OFFLINE,
+        resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
+      },
+      select: {
+        id: true,
+        machineId: true,
+        machine: {
+          select: {
+            operatingSystem: true,
+            connectivity: true,
+            operational: true,
+            moderationStatus: true,
+            lastHeartbeatAt: true,
+            nativeDesktopStreamingAvailable: true,
+            nativeDesktopStreamingGpuUuid: true,
+          },
+        },
+        accelerators: {
+          select: {
+            accelerator: {
+              select: {
+                id: true,
+                machineId: true,
+                hardwareUuid: true,
+                vendor: true,
+                status: true,
+                moderationStatus: true,
+                lastSeenAt: true,
+                miningResource: {
+                  select: {
+                    enabled: true,
+                    quarantined: true,
+                    runtimeState: true,
+                    activeRentalId: true,
+                    lastSeenAt: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!listing) return false;
+
+    const machine = listing.machine;
+    const accelerator = listing.accelerators[0]?.accelerator;
+    const nativeGpuUuid = machine.nativeDesktopStreamingGpuUuid?.trim() ?? '';
+    const maxAgeMs = config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS * 1000;
+    const fresh = (value: Date | null) =>
+      value !== null
+      && value.getTime() <= now.getTime()
+      && now.getTime() - value.getTime() <= maxAgeMs;
+
+    const physicalProofSafe = Boolean(
+      listing.accelerators.length === 1
+      && accelerator
+      && machine.operatingSystem?.trim().toLowerCase().startsWith('windows')
+      && machine.connectivity === MachineConnectivity.ONLINE
+      && machine.operational === MachineOperational.DEGRADED
+      && machine.moderationStatus === ModerationStatus.CLEAR
+      && machine.nativeDesktopStreamingAvailable === true
+      && WINDOWS_NATIVE_GPU_UUID_RE.test(nativeGpuUuid)
+      && fresh(machine.lastHeartbeatAt)
+      && accelerator.machineId === listing.machineId
+      && accelerator.vendor?.trim().toUpperCase() === 'NVIDIA'
+      && accelerator.status === AcceleratorOperationalStatus.AVAILABLE
+      && accelerator.moderationStatus === ModerationStatus.CLEAR
+      && accelerator.hardwareUuid.toLowerCase() === nativeGpuUuid.toLowerCase()
+      && fresh(accelerator.lastSeenAt)
+      && accelerator.miningResource !== null
+      && accelerator.miningResource.enabled
+      && !accelerator.miningResource.quarantined
+      && accelerator.miningResource.runtimeState === MiningRuntimeState.IDLE
+      && accelerator.miningResource.activeRentalId === null
+      && fresh(accelerator.miningResource.lastSeenAt)
+    );
+    if (!physicalProofSafe) return false;
+
+    const priorTimedOutQualification = await tx.booking.findFirst({
+      where: {
+        buyerId: renterId,
+        listingId: listing.id,
+        status: BookingStatus.DEGRADED,
+        workspaceSessions: {
+          some: {
+            runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+            status: WorkspaceSessionStatus.TIMED_OUT,
+            startedAt: null,
+            gatewayLastSeenAt: null,
+          },
+        },
+      },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!priorTimedOutQualification) return false;
+
+    const [
+      liveSessions,
+      activeBookingsCount,
+      activeJobs,
+      liveMachineAllocations,
+      liveAcceleratorAllocations,
+    ] = await Promise.all([
+      tx.workspaceSession.count({
+        where: { machineId: listing.machineId, status: { in: liveWorkspaceSessions } },
+      }),
+      tx.booking.count({
+        where: {
+          listing: { machineId: listing.machineId },
+          status: { in: qualificationBookingStatuses },
+          endsAt: { gt: now },
+        },
+      }),
+      tx.job.count({
+        where: { machineId: listing.machineId, status: { in: activeQualificationJobs } },
+      }),
+      tx.machineAllocation.count({
+        where: { machineId: listing.machineId, status: { in: activeAllocations } },
+      }),
+      tx.acceleratorAllocation.count({
+        where: {
+          accelerator: { machineId: listing.machineId },
+          status: { in: activeAllocations },
+        },
+      }),
+    ]);
+
+    if (
+      liveSessions !== 0
+      || activeBookingsCount !== 0
+      || activeJobs !== 0
+      || liveMachineAllocations !== 0
+      || liveAcceleratorAllocations !== 0
+    ) {
+      return false;
+    }
+
+    const updated = await tx.machine.updateMany({
+      where: {
+        id: listing.machineId,
+        connectivity: MachineConnectivity.ONLINE,
+        operational: MachineOperational.DEGRADED,
+        moderationStatus: ModerationStatus.CLEAR,
+        nativeDesktopStreamingAvailable: true,
+      },
+      data: { operational: MachineOperational.AVAILABLE },
+    });
+
+    return updated.count === 1;
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    maxWait: 5_000,
+    timeout: 10_000,
+  });
+}
+
+
 async function createWindowsNativeQualificationBooking(
   db: PrismaClient,
   renterId: string,
@@ -126,6 +328,11 @@ async function createWindowsNativeQualificationBooking(
   if (!windowsNativePrivateQualificationEnabled()) {
     return { error: 'windows_native_qualification_disabled' as const };
   }
+
+  // A never-opened private qualification deliberately leaves the Host DEGRADED.
+  // Once its session has timed out and every live authority/resource is gone,
+  // re-arm only this private qualification Host from fresh signed physical proof.
+  await rearmTimedOutWindowsNativeQualificationHost(db, renterId);
 
   const now = new Date();
   const existing = await db.booking.findFirst({
