@@ -27,6 +27,21 @@ test('Windows-native Stage 3 qualification remains private and explicit', () => 
   assert.match(desktop, /runBookingTransaction\(db, async \(tx\) =>/);
 });
 
+test('private qualification accepts only non-public listing states', () => {
+  assert.match(
+    desktop,
+    /windowsNativePrivateQualificationListingStatuses:[\s\S]*ListingStatus\.HIDDEN_OFFLINE[\s\S]*ListingStatus\.PAUSED/,
+  );
+  assert.doesNotMatch(
+    desktop,
+    /windowsNativePrivateQualificationListingStatuses:[\s\S]{0,200}ListingStatus\.ACTIVE/,
+  );
+  assert.match(
+    desktop,
+    /status: \{ in: windowsNativePrivateQualificationListingStatuses \}/,
+  );
+});
+
 test('qualification requires current native Host proof and exact allocated GPU UUID', () => {
   assert.match(desktop, /nativeDesktopStreamingAvailable === true/);
   assert.match(desktop, /nativeDesktopStreamingGpuUuid/);
