@@ -186,3 +186,15 @@ test('cleanup is fail closed and expired sessions are stopped',()=>{
   assert.match(api,/enterQuarantine\(tx,\{machineId,reasonCode:'WORKSPACE_CLEANUP_FAILED'/);
   assert.match(agent,/self\._expired\(session\.get\("expiresAt"\)\)/);
 });
+
+
+test('windows native grant redirect stays root-absolute', () => {
+  assert.match(
+    source,
+    /\.code\(302\)[\s\S]*\.header\('Location', `\/windows-native-desktop\.html\?session=\$\{encodeURIComponent\(sessionId\)\}`\)[\s\S]*\.send\(\)/,
+  );
+  assert.doesNotMatch(
+    source,
+    /reply\.redirect\(`\/windows-native-desktop\.html\?session=/,
+  );
+});
