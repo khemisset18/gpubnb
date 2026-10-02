@@ -85,7 +85,6 @@ impl AuthorityError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 fn bounded_runtime_failure_code(value: &str) -> Option<&'static str> {
     match value {
         "invalid_configuration" => Some("invalid_configuration"),
@@ -109,6 +108,7 @@ fn bounded_runtime_failure_code(value: &str) -> Option<&'static str> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelfTestReport {
     pub gpu_uuid: String,
 }
@@ -483,9 +483,11 @@ pub fn suspend_session(session_id: &str) -> Result<(), AuthorityError> {
         "ERR|degraded" => Err(AuthorityError::Degraded),
         _ => {
             if let Some(code) = response.strip_prefix("ERR|degraded|") {
-                return bounded_runtime_failure_code(code)
-                    .map(AuthorityError::RuntimeFailure)
-                    .ok_or(AuthorityError::ControlProtocol);
+                return Err(
+                    bounded_runtime_failure_code(code)
+                        .map(AuthorityError::RuntimeFailure)
+                        .unwrap_or(AuthorityError::ControlProtocol),
+                );
             }
             Err(AuthorityError::ControlProtocol)
         }
@@ -551,9 +553,11 @@ pub fn stop_session(session_id: &str) -> Result<(), AuthorityError> {
         "ERR|stop_failed" => Err(AuthorityError::Stop),
         _ => {
             if let Some(code) = response.strip_prefix("ERR|stop_failed|") {
-                return bounded_runtime_failure_code(code)
-                    .map(AuthorityError::RuntimeFailure)
-                    .ok_or(AuthorityError::ControlProtocol);
+                return Err(
+                    bounded_runtime_failure_code(code)
+                        .map(AuthorityError::RuntimeFailure)
+                        .unwrap_or(AuthorityError::ControlProtocol),
+                );
             }
             Err(AuthorityError::ControlProtocol)
         }
