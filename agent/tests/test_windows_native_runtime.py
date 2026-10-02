@@ -440,6 +440,40 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             ):
                 self.assertFalse(runtime.windows_native_workspace_ready("sess-1"))
 
+    def test_helper_failure_class_is_bounded_and_never_echoes_untrusted_text(self):
+        safe = SimpleNamespace(
+            returncode=21,
+            stdout=json.dumps({"ok": False, "error": "media_transport"}),
+            stderr="secret-token-should-never-surface",
+        )
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(runtime, "run_command", return_value=safe),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "^native_workspace_suspend_failed:media_transport$",
+            ):
+                runtime.suspend_windows_native_workspace("sess-1")
+
+        unsafe = SimpleNamespace(
+            returncode=21,
+            stdout=json.dumps({
+                "ok": False,
+                "error": r"media_transport:C:\private\token",
+            }),
+            stderr="another-secret",
+        )
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(runtime, "run_command", return_value=unsafe),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "^native_workspace_suspend_failed$",
+            ):
+                runtime.suspend_windows_native_workspace("sess-1")
+
     def test_suspend_revokes_media_and_input_before_confirmation(self):
         report = SimpleNamespace(
             returncode=0,
