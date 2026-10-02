@@ -59,6 +59,15 @@ def _native_error_code(error: Exception) -> str:
     return type(error).__name__
 
 
+def _native_websocket_error_code(error: Exception) -> str:
+    """Return only non-secret WebSocket failure metadata for Stage 3 diagnosis."""
+    kind = type(error).__name__
+    status = getattr(error, "status_code", None)
+    if isinstance(status, int) and 100 <= status <= 599:
+        return f"{kind}:http{status}"
+    return kind
+
+
 @dataclass
 class NativeGatewayRuntime:
     session_id: str
@@ -542,7 +551,12 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 name=f"gpubnb-native-ws-{channel_id[:8]}",
             )
             reader.start()
-        except Exception:
+        except Exception as exc:
+            self._trace(
+                "native_media_connect_failed",
+                session_id=session_id,
+                detail=f"code={_native_websocket_error_code(exc)}",
+            )
             self.channels.pop(channel_id, None)
             self.session_channels.get(session_id, set()).discard(channel_id)
             if ws is not None:
