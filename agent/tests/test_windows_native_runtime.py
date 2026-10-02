@@ -427,6 +427,115 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             ):
                 self.assertFalse(runtime.windows_native_workspace_ready("sess-1"))
 
+    def test_status_suspended_proof_requires_revoked_media_and_input(self):
+        valid = {
+            "schemaVersion": 1,
+            "sessionId": "sess-1",
+            "running": True,
+            "suspended": True,
+            "isolatedSession": True,
+            "renterSessionActive": True,
+            "providerSessionInactive": True,
+            "virtualDisplay": True,
+            "providerDesktopExcluded": True,
+            "exactGpuBound": True,
+            "captureReady": False,
+            "nvencReady": False,
+            "mediaReady": False,
+            "inputIsolation": True,
+            "inputReady": False,
+            "hardwareEncoder": "nvenc",
+        }
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(
+                runtime,
+                "run_command",
+                return_value=SimpleNamespace(returncode=0, stdout=json.dumps(valid), stderr=""),
+            ),
+        ):
+            self.assertTrue(runtime.windows_native_workspace_suspended("sess-1"))
+
+        for field, value in (
+            ("suspended", False),
+            ("mediaReady", True),
+            ("inputReady", True),
+            ("providerSessionInactive", False),
+        ):
+            bad = dict(valid)
+            bad[field] = value
+            with (
+                self.subTest(field=field),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(
+                    runtime,
+                    "run_command",
+                    return_value=SimpleNamespace(returncode=0, stdout=json.dumps(bad), stderr=""),
+                ),
+            ):
+                self.assertFalse(runtime.windows_native_workspace_suspended("sess-1"))
+
+    def test_paused_native_usage_validates_suspended_proof_and_reports_liveness(self):
+        supervisor = object.__new__(gateway_v10.GatewaySupervisor)
+        supervisor.machine_id = "machine-1"
+        supervisor._reconnect_lock = threading.Lock()
+        supervisor._reconnect_paused_sessions = {"sess-1"}
+        supervisor._reconnect_last_liveness = {"sess-1": 0.0}
+        supervisor.usage_last_report = {"sess-1": 0.0}
+        supervisor._report_error = Mock()
+        supervisor._native_stop_and_report = Mock(return_value=True)
+        supervisor._reconnect_event = Mock(return_value={"paused": True})
+        native = SimpleNamespace(session_id="sess-1")
+
+        with (
+            patch.object(gateway_v10.time, "monotonic", return_value=20.0),
+            patch.object(
+                gateway_v10,
+                "windows_native_workspace_suspended",
+                return_value=True,
+            ) as suspended,
+            patch.object(
+                gateway_v10,
+                "windows_native_workspace_ready",
+                side_effect=AssertionError("ready proof must not run while paused"),
+            ),
+        ):
+            gateway_v10.GatewaySupervisor._report_native_usage(supervisor, native)
+
+        suspended.assert_called_once_with("sess-1")
+        supervisor._reconnect_event.assert_called_once_with("sess-1", "LIVENESS")
+        supervisor._native_stop_and_report.assert_not_called()
+        supervisor._report_error.assert_not_called()
+
+    def test_paused_native_usage_hard_stops_when_suspended_proof_is_lost(self):
+        supervisor = object.__new__(gateway_v10.GatewaySupervisor)
+        supervisor.machine_id = "machine-1"
+        supervisor._reconnect_lock = threading.Lock()
+        supervisor._reconnect_paused_sessions = {"sess-1"}
+        supervisor._reconnect_last_liveness = {"sess-1": 0.0}
+        supervisor.usage_last_report = {"sess-1": 0.0}
+        supervisor._report_error = Mock()
+        supervisor._native_stop_and_report = Mock(return_value=True)
+        supervisor._reconnect_event = Mock()
+        native = SimpleNamespace(session_id="sess-1")
+
+        with (
+            patch.object(gateway_v10.time, "monotonic", return_value=20.0),
+            patch.object(
+                gateway_v10,
+                "windows_native_workspace_suspended",
+                return_value=False,
+            ),
+        ):
+            gateway_v10.GatewaySupervisor._report_native_usage(supervisor, native)
+
+        supervisor._native_stop_and_report.assert_called_once_with("sess-1")
+        supervisor._reconnect_event.assert_not_called()
+        self.assertEqual(
+            str(supervisor._report_error.call_args.args[0]),
+            "windows_native_suspended_proof_lost",
+        )
+
     def test_status_failures_are_not_treated_as_ready(self):
         for result in (
             SimpleNamespace(returncode=1, stdout="", stderr="secret"),
@@ -790,6 +899,22 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                         "cloud-desktop",
                         "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
                     )
+
+    def test_stop_preserves_bounded_helper_failure_class(self):
+        failed = SimpleNamespace(
+            returncode=21,
+            stdout=json.dumps({"ok": False, "error": "media_transport"}),
+            stderr="secret-must-not-surface",
+        )
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(runtime, "run_command", return_value=failed),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "^native_workspace_stop_failed:media_transport$",
+            ):
+                runtime.stop_windows_native_workspace("sess-1")
 
     def test_stop_maps_helper_crash_timeout_and_decode_errors_to_stable_failure(self):
         for failure in (OSError("secret"), subprocess.TimeoutExpired("secret", 30), UnicodeError("secret")):
