@@ -139,6 +139,17 @@ fn validate_local_console_session(
     Ok(())
 }
 
+fn provider_process_contaminates_renter_session(
+    renter_session_id: u32,
+    provider_user_sid: &str,
+    process_session_id: u32,
+    process_user_sid: &str,
+) -> bool {
+    renter_session_id != 0
+        && process_session_id == renter_session_id
+        && process_user_sid.eq_ignore_ascii_case(provider_user_sid)
+}
+
 fn validate_renter_identity_policy(
     expected_renter_user_sid: &str,
     provider_user_sid: &str,
@@ -557,7 +568,12 @@ mod windows_impl {
                 continue;
             }
             let process_user_sid = sid_to_string(process.user_sid)?;
-            if process_user_sid.eq_ignore_ascii_case(provider_user_sid) {
+            if super::provider_process_contaminates_renter_session(
+                session_id,
+                provider_user_sid,
+                process.session_id,
+                &process_user_sid,
+            ) {
                 return Err(PlatformError::ProviderProcessInRenterSession);
             }
         }
@@ -689,6 +705,23 @@ mod tests {
             ),
             Err(PlatformError::InvalidRenterUserSid)
         );
+    }
+
+    #[test]
+    fn provider_process_policy_rejects_same_session_provider_sid() {
+        let provider = "S-1-5-21-100-200-300-1000";
+        assert!(provider_process_contaminates_renter_session(
+            42, provider, 42, provider,
+        ));
+        assert!(provider_process_contaminates_renter_session(
+            42, provider, 42, "s-1-5-21-100-200-300-1000",
+        ));
+        assert!(!provider_process_contaminates_renter_session(
+            42, provider, 43, provider,
+        ));
+        assert!(!provider_process_contaminates_renter_session(
+            42, provider, 42, "S-1-5-21-100-200-300-1001",
+        ));
     }
 
     #[test]
