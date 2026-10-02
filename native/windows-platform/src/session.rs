@@ -158,6 +158,27 @@ fn validate_renter_identity_policy(
     Ok(())
 }
 
+pub fn ensure_provider_process_absent(
+    session_id: u32,
+    provider_user_sid: &str,
+) -> Result<(), PlatformError> {
+    if session_id == 0 {
+        return Err(PlatformError::InvalidWindowsSessionId);
+    }
+    if !numeric_sid(provider_user_sid) {
+        return Err(PlatformError::InvalidRenterUserSid);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::ensure_provider_process_absent(session_id, provider_user_sid)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(PlatformError::WindowsRequired)
+    }
+}
+
 pub fn current_process_session_id() -> Result<u32, PlatformError> {
     #[cfg(target_os = "windows")]
     {
@@ -181,6 +202,7 @@ pub fn query_renter_session_token(
 
     #[cfg(target_os = "windows")]
     {
+        windows_impl::ensure_provider_process_absent(session_id, provider_user_sid)?;
         windows_impl::query_renter_session_token(session_id, expected_renter_user_sid)
     }
     #[cfg(not(target_os = "windows"))]
@@ -223,6 +245,14 @@ mod windows_impl {
         session_id: u32,
         win_station_name: *mut u16,
         state: u32,
+    }
+
+    #[repr(C)]
+    struct WtsProcessInfoW {
+        session_id: u32,
+        process_id: u32,
+        process_name: *mut u16,
+        user_sid: *mut c_void,
     }
 
     pub(super) struct OwnedToken(pub(super) Handle);
@@ -273,6 +303,13 @@ mod windows_impl {
             reserved: u32,
             version: u32,
             sessions: *mut *mut WtsSessionInfoW,
+            count: *mut u32,
+        ) -> i32;
+        fn WTSEnumerateProcessesW(
+            server: Handle,
+            reserved: u32,
+            version: u32,
+            processes: *mut *mut WtsProcessInfoW,
             count: *mut u32,
         ) -> i32;
         fn WTSFreeMemory(memory: *mut c_void);
@@ -481,6 +518,52 @@ mod windows_impl {
             .collect())
     }
 
+    pub(super) fn ensure_provider_process_absent(
+        session_id: u32,
+        provider_user_sid: &str,
+    ) -> Result<(), PlatformError> {
+        let mut raw: *mut WtsProcessInfoW = ptr::null_mut();
+        let mut count = 0u32;
+        // SAFETY: raw/count are valid out pointers. A null server handle means
+        // the local machine. The returned SID pointers remain valid until the
+        // enclosing WTS allocation is released below.
+        let ok = unsafe { WTSEnumerateProcessesW(0, 0, 1, &mut raw, &mut count) };
+        if ok == 0 {
+            return Err(PlatformError::RenterTokenQueryFailed);
+        }
+
+        struct OwnedWtsProcessMemory(*mut c_void);
+        impl Drop for OwnedWtsProcessMemory {
+            fn drop(&mut self) {
+                if !self.0.is_null() {
+                    // SAFETY: memory came from WTSEnumerateProcessesW.
+                    unsafe { WTSFreeMemory(self.0) };
+                }
+            }
+        }
+
+        let _memory = OwnedWtsProcessMemory(raw.cast::<c_void>());
+        if count == 0 {
+            return Ok(());
+        }
+        if raw.is_null() || count > 65_536 {
+            return Err(PlatformError::RenterTokenQueryFailed);
+        }
+
+        // SAFETY: WTSEnumerateProcessesW returned count contiguous entries.
+        let processes = unsafe { std::slice::from_raw_parts(raw, count as usize) };
+        for process in processes {
+            if process.session_id != session_id || process.user_sid.is_null() {
+                continue;
+            }
+            let process_user_sid = sid_to_string(process.user_sid)?;
+            if process_user_sid.eq_ignore_ascii_case(provider_user_sid) {
+                return Err(PlatformError::ProviderProcessInRenterSession);
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn create_environment(
         token: &OwnedToken,
     ) -> Result<super::RenterEnvironment, PlatformError> {
@@ -604,6 +687,18 @@ mod tests {
                 "S-1-5-21-100)(A;;GA;;;WD",
                 "S-1-5-21-100-200-300-1000",
             ),
+            Err(PlatformError::InvalidRenterUserSid)
+        );
+    }
+
+    #[test]
+    fn provider_process_guard_rejects_provider_identity_in_renter_session() {
+        assert_eq!(
+            ensure_provider_process_absent(0, "S-1-5-21-100-200-300-1000"),
+            Err(PlatformError::InvalidWindowsSessionId)
+        );
+        assert_eq!(
+            ensure_provider_process_absent(42, "not-a-sid"),
             Err(PlatformError::InvalidRenterUserSid)
         );
     }
