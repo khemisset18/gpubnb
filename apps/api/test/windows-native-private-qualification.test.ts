@@ -17,6 +17,11 @@ const authority = fs.readFileSync(
   'utf8',
 );
 
+const allocation = fs.readFileSync(
+  new URL('../src/resource-allocation-service.ts', import.meta.url),
+  'utf8',
+);
+
 test('Windows-native Stage 3 qualification remains private and explicit', () => {
   assert.match(desktop, /qualification === 'windows-native'/);
   assert.match(desktop, /config\.BETA_TEST_DEV_BYPASS === 'true'/);
@@ -111,4 +116,20 @@ test('private qualification host-gate trace stays secret-free', () => {
   assert.match(desktop, /acceleratorUuidMatch/);
   assert.doesNotMatch(desktop, /windows_native_qualification_host_not_ready[\s\S]{0,1200}mediaToken/);
   assert.doesNotMatch(desktop, /windows_native_qualification_host_not_ready[\s\S]{0,1200}accessGrant/);
+});
+
+
+test('private qualification allocation accepts the same non-public listing states', () => {
+  assert.match(
+    allocation,
+    /PRIVATE_WINDOWS_NATIVE_QUALIFICATION_LISTING_STATUSES:[\s\S]*ListingStatus\.HIDDEN_OFFLINE[\s\S]*ListingStatus\.PAUSED/,
+  );
+  assert.match(
+    allocation,
+    /PRIVATE_WINDOWS_NATIVE_QUALIFICATION_LISTING_STATUSES\.includes\(booking\.listing\.status\)/,
+  );
+  assert.match(
+    allocation,
+    /: booking\.listing\.status === ListingStatus\.ACTIVE/,
+  );
 });
