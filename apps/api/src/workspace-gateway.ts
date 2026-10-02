@@ -214,7 +214,10 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     // HttpOnly, Secure and the per-session Path keep it scoped to this gateway.
     reply.setCookie(GATEWAY_COOKIE,browserToken,{httpOnly:true,secure:true,sameSite:'lax',path:`/workspace-gateway/${sessionId}`});
     if(isWindowsNativeRuntime(row.runtimeBackend)){
-      return reply.redirect(`/windows-native-desktop.html?session=${encodeURIComponent(sessionId)}`);
+      return reply
+        .code(302)
+        .header('Location', `/windows-native-desktop.html?session=${encodeURIComponent(sessionId)}`)
+        .send();
     }
     return reply.redirect(`/workspace-gateway/${sessionId}/`);
   });
