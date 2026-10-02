@@ -214,10 +214,13 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     // HttpOnly, Secure and the per-session Path keep it scoped to this gateway.
     reply.setCookie(GATEWAY_COOKIE,browserToken,{httpOnly:true,secure:true,sameSite:'lax',path:`/workspace-gateway/${sessionId}`});
     if(isWindowsNativeRuntime(row.runtimeBackend)){
-      return reply
-        .code(302)
-        .header('Location', `/windows-native-desktop.html?session=${encodeURIComponent(sessionId)}`)
-        .send();
+      const host=String(request.headers.host||'').trim();
+      if(!host)return reply.code(400).send({error:'workspace_host_required'});
+      const target=new URL(
+        `/windows-native-desktop.html?session=${encodeURIComponent(sessionId)}`,
+        `https://${host}`,
+      ).toString();
+      return reply.code(302).header('Location',target).send();
     }
     return reply.redirect(`/workspace-gateway/${sessionId}/`);
   });
