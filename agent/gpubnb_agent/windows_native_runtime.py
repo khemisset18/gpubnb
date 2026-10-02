@@ -387,6 +387,44 @@ def windows_native_workspace_ready(
     return str(report.get("hardwareEncoder") or "").casefold() == "nvenc"
 
 
+def windows_native_workspace_suspended(
+    session_id: str,
+    *,
+    helper_path: str | None = None,
+) -> bool:
+    """Return reconnect-safe suspension only from an exact helper status proof."""
+    session_id = _safe_id(session_id, "native_session_id")
+    executable = helper_path or find_stream_helper()
+    if not executable:
+        return False
+    try:
+        report = _native_session_command(executable, "--status", session_id, timeout=15)
+    except RuntimeError:
+        return False
+    required_true = (
+        "running",
+        "suspended",
+        "isolatedSession",
+        "renterSessionActive",
+        "providerSessionInactive",
+        "virtualDisplay",
+        "providerDesktopExcluded",
+        "exactGpuBound",
+        "inputIsolation",
+    )
+    required_false = (
+        "captureReady",
+        "nvencReady",
+        "mediaReady",
+        "inputReady",
+    )
+    if any(report.get(field) is not True for field in required_true):
+        return False
+    if any(report.get(field) is not False for field in required_false):
+        return False
+    return str(report.get("hardwareEncoder") or "").casefold() == "nvenc"
+
+
 def suspend_windows_native_workspace(
     session_id: str,
     *,
@@ -462,6 +500,9 @@ def stop_windows_native_workspace(
     except (OSError, subprocess.SubprocessError, UnicodeError):
         raise RuntimeError("native_workspace_stop_failed") from None
     if result.returncode != 0:
+        failure_class = _bounded_helper_failure_class(result.stdout)
+        if failure_class is not None:
+            raise RuntimeError(f"native_workspace_stop_failed:{failure_class}")
         raise RuntimeError("native_workspace_stop_failed")
     report = _json_object(result.stdout)
     if report is None or report.get("stopped") is not True:
