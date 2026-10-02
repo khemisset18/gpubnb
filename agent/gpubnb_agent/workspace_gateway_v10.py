@@ -51,6 +51,14 @@ WINDOWS_NATIVE_START_RETRY_MAX_SECONDS = 60.0
 _NATIVE_SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,200}$")
 
 
+def _native_error_code(error: Exception) -> str:
+    """Return a bounded non-secret diagnostic code for native start failures."""
+    message = str(error)
+    if re.fullmatch(r"[A-Za-z0-9_:-]{1,120}", message):
+        return message
+    return type(error).__name__
+
+
 @dataclass
 class NativeGatewayRuntime:
     session_id: str
@@ -161,12 +169,29 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         session_id: str,
         workspace_slug: str,
     ) -> NativeGatewayRuntime:
+        self._trace("native_start_begin", session_id=session_id)
         if workspace_slug not in WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS:
             raise RuntimeError("windows_native_workspace_not_promoted")
         specs = self._native_specs(session_id)
+        self._trace(
+            "native_specs_ready",
+            session_id=session_id,
+            detail=f"resources={len(specs)}",
+        )
         for spec in specs:
+            self._trace(
+                "native_preempt_begin",
+                session_id=session_id,
+                detail=f"generation={spec.runtime_generation}",
+            )
             self.rental_preemption.preempt_for_rental(spec)
+            self._trace(
+                "native_preempt_quiescent",
+                session_id=session_id,
+                detail=f"generation={spec.runtime_generation}",
+            )
 
+        self._trace("native_helper_start_begin", session_id=session_id)
         try:
             handle = launch_windows_native_workspace(
                 session_id,
@@ -174,6 +199,12 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 str(specs[0].hardware_uuid),
             )
         except Exception as exc:
+            code = _native_error_code(exc)
+            self._trace(
+                "native_helper_start_failed",
+                session_id=session_id,
+                detail=f"code={code}",
+            )
             # The launch wrapper's *_cleanup_unverified suffix is an explicit
             # authority boundary: never release a leased GPU if the helper may
             # still own renter graphics/session state.
@@ -183,9 +214,15 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             else:
                 self._release_native_claims(session_id)
             raise
+        self._trace("native_helper_start_ready", session_id=session_id)
 
         try:
             websocket_url, port = _native_websocket_target(handle)
+            self._trace(
+                "native_media_target_ready",
+                session_id=session_id,
+                detail=f"port={port}",
+            )
             runtime = NativeGatewayRuntime(
                 session_id=session_id,
                 runtime_id=_native_runtime_id(session_id),
@@ -194,8 +231,24 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 handle=handle,
             )
             for spec in specs:
+                self._trace(
+                    "native_mark_active_begin",
+                    session_id=session_id,
+                    detail=f"generation={spec.runtime_generation}",
+                )
                 self.rental_preemption.mark_rental_active(spec)
-        except Exception:
+                self._trace(
+                    "native_mark_active_done",
+                    session_id=session_id,
+                    detail=f"generation={spec.runtime_generation}",
+                )
+        except Exception as exc:
+            code = _native_error_code(exc)
+            self._trace(
+                "native_post_start_failed",
+                session_id=session_id,
+                detail=f"code={code}",
+            )
             try:
                 stop_windows_native_workspace(session_id)
             except Exception:
@@ -209,6 +262,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             self.native_runtimes[session_id] = runtime
             self._native_blocked.discard(session_id)
         self.usage_last_report[session_id] = time.monotonic()
+        self._trace("native_runtime_ready", session_id=session_id)
         return runtime
 
     def _native_runtime(self, session_id: str) -> NativeGatewayRuntime:
@@ -271,6 +325,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             and metadata.get("localPort") == runtime.port
         ):
             return
+        self._trace("native_register_begin", session_id=runtime.session_id)
         self._request(
             f"/agent/workspace-gateway/{runtime.session_id}/register",
             "POST",
@@ -280,6 +335,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 "localPort": runtime.port,
             },
         )
+        self._trace("native_register_done", session_id=runtime.session_id)
 
     def _report_native_usage(self, runtime: NativeGatewayRuntime) -> None:
         now = time.monotonic()
@@ -346,14 +402,18 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                     continue
                 try:
                     runtime = self._start_native_runtime(session_id, workspace_slug)
-                except Exception:
+                except Exception as exc:
                     failures = self.start_failures.get(session_id, 0) + 1
                     self.start_failures[session_id] = failures
                     self.start_retry_at[session_id] = time.monotonic() + min(
                         WINDOWS_NATIVE_START_RETRY_MAX_SECONDS,
                         5.0 * (2 ** min(failures - 1, 4)),
                     )
-                    self._report_error(RuntimeError("windows_native_runtime_start_failed"))
+                    self._report_error(
+                        RuntimeError(
+                            f"windows_native_runtime_start_failed:{_native_error_code(exc)}"
+                        )
+                    )
                     continue
                 self.start_failures.pop(session_id, None)
                 self.start_retry_at.pop(session_id, None)
