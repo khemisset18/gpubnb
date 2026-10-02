@@ -21,6 +21,9 @@ from urllib.parse import urlparse
 from .windows_native_protocol import json_object as _json_object, schema_v1, valid_gpu_uuid
 
 from .platform_info import run_command
+WINDOWS_NATIVE_START_COMMAND_TIMEOUT_SECONDS = 135
+
+
 from .windows_native_workspace import (
     discover_native_application,
     find_stream_helper,
@@ -191,7 +194,12 @@ def launch_windows_native_workspace(
         command.extend(["--application", str(Path(application))])
 
     try:
-        result = run_command(command, timeout=60)
+        # The helper owns a 60s START deadline and its control read can itself
+        # remain blocked for up to 60s. The Agent timeout must be strictly larger
+        # than that combined helper-side envelope; using the same 60s deadline
+        # can kill the short-lived parent just as the detached authority becomes
+        # ready, leaving an unadoptable live authority behind.
+        result = run_command(command, timeout=WINDOWS_NATIVE_START_COMMAND_TIMEOUT_SECONDS)
     except (OSError, subprocess.SubprocessError, UnicodeError):
         # A crash/timeout can occur after resources were created. Never infer
         # cleanup from the absence of a successful response or expose stderr.
