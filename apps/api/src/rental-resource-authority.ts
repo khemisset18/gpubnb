@@ -501,7 +501,8 @@ export async function authorizeWindowsNativeStaleClaimRecovery(
     return deny('stale_claim_new_runtime_not_windows_native');
   }
   if (
-    ![WorkspaceSessionStatus.READY, WorkspaceSessionStatus.RUNNING].includes(newSession.status)
+    (newSession.status !== WorkspaceSessionStatus.READY
+      && newSession.status !== WorkspaceSessionStatus.RUNNING)
     || newSession.endedAt !== null
     || newSession.expiresAt <= now
   ) {
