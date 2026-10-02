@@ -76,6 +76,35 @@ pub enum ServiceRuntimeError {
     DisplayCleanup,
 }
 
+impl ServiceRuntimeError {
+    /// Stable, bounded, secret-free diagnostic class for physical qualification.
+    ///
+    /// Never include SIDs, GPU identifiers, tokens, paths or renter-controlled
+    /// values here. The authority may return this code across its local control
+    /// pipe so the Agent can distinguish fail-closed runtime classes.
+    pub const fn diagnostic_code(self) -> &'static str {
+        match self {
+            Self::InvalidConfiguration => "invalid_configuration",
+            Self::WorkerSignerPolicy => "worker_signer_policy",
+            Self::RenterSession => "renter_session",
+            Self::Pipe => "pipe",
+            Self::WorkerTrust => "worker_trust",
+            Self::WorkerLaunch => "worker_launch",
+            Self::WorkerHandshake => "worker_handshake",
+            Self::ExactGpu => "exact_gpu",
+            Self::VirtualDisplay => "virtual_display",
+            Self::WorkerProtocol => "worker_protocol",
+            Self::MediaProof => "media_proof",
+            Self::MediaDiagnostic { .. } => "media_diagnostic",
+            Self::MediaTransport => "media_transport",
+            Self::MediaCapability => "media_capability",
+            Self::GraphicsProof => "graphics_proof",
+            Self::StopUnconfirmed => "stop_unconfirmed",
+            Self::DisplayCleanup => "display_cleanup",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ServiceRuntimeConfig<'a> {
     pub session_id: &'a str,
@@ -118,6 +147,7 @@ pub struct QualifiedGraphicsRuntime {
     last_frame_sequence: u64,
     pending_media_frame: Option<BoundMediaFrame>,
     media_state: RuntimeMediaState,
+    last_failure: Option<ServiceRuntimeError>,
 }
 
 impl QualifiedGraphicsRuntime {
@@ -155,6 +185,13 @@ impl QualifiedGraphicsRuntime {
         matches!(self.media_state, RuntimeMediaState::Failed)
     }
 
+    pub const fn failure_code(&self) -> Option<&'static str> {
+        match self.last_failure {
+            Some(error) => Some(error.diagnostic_code()),
+            None => None,
+        }
+    }
+
     /// Return the current ephemeral media capability only while media is ready.
     ///
     /// The caller must never persist or log this value. Suspend/failure/stop drop
@@ -172,6 +209,7 @@ impl QualifiedGraphicsRuntime {
         self.media_capability.take();
         self.pending_media_frame = None;
         self.media_state = RuntimeMediaState::Failed;
+        self.last_failure = Some(error);
         error
     }
 
@@ -825,6 +863,7 @@ pub fn start_qualified_graphics_runtime(
         last_frame_sequence: initial_media_frame.header.frame_sequence,
         pending_media_frame: Some(initial_media_frame),
         media_state: RuntimeMediaState::Ready,
+        last_failure: None,
     })
 }
 
@@ -846,6 +885,33 @@ mod tests {
         assert!(matches!(RuntimeMediaState::Ready, RuntimeMediaState::Ready));
         assert_ne!(RuntimeMediaState::Ready, RuntimeMediaState::Suspended);
         assert_ne!(RuntimeMediaState::Suspended, RuntimeMediaState::Failed);
+    }
+
+    #[test]
+    fn runtime_error_diagnostics_are_bounded_classes() {
+        assert_eq!(
+            ServiceRuntimeError::RenterSession.diagnostic_code(),
+            "renter_session"
+        );
+        assert_eq!(
+            ServiceRuntimeError::MediaTransport.diagnostic_code(),
+            "media_transport"
+        );
+        assert_eq!(
+            ServiceRuntimeError::MediaDiagnostic {
+                failed_stage: 7,
+                hresult: -1,
+                nvenc_status: 5,
+                proof_flags: 0,
+                adapter_luid: 42,
+            }
+            .diagnostic_code(),
+            "media_diagnostic"
+        );
+        assert_eq!(
+            ServiceRuntimeError::DisplayCleanup.diagnostic_code(),
+            "display_cleanup"
+        );
     }
 
     #[test]
