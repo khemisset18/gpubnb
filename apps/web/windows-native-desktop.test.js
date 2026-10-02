@@ -187,7 +187,7 @@ test('input is impossible until a real decoded frame is rendered and then stays 
   assert.equal(client.pointerButton(0), true);
   assert.equal(client.wheel(120), true);
   assert.equal(socket.sent.length, 4);
-  assert.ok(socket.sent.every((item) => item instanceof Uint8Array));
+  assert.ok(socket.sent.every((item) => item instanceof ArrayBuffer));
   assert.deepEqual(
     inputCalls.map((item) => item.kind),
     ['key', 'absolute', 'button', 'wheel'],
