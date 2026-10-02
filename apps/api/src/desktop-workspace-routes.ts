@@ -497,6 +497,44 @@ async function createWindowsNativeQualificationBooking(
   });
 
   if (eligible.length === 0) {
+    const diagnostics = candidates.map((listing) => {
+      const machine = listing.machine;
+      const nativeGpuUuid = machine.nativeDesktopStreamingGpuUuid?.trim() ?? '';
+      const accelerator = listing.accelerators[0]?.accelerator;
+      const os = machine.operatingSystem?.trim().toLowerCase() ?? '';
+      const heartbeatAgeSeconds = machine.lastHeartbeatAt === null
+        ? null
+        : Math.max(0, Math.round((now.getTime() - machine.lastHeartbeatAt.getTime()) / 1000));
+
+      return {
+        listingStatusEligible: windowsNativePrivateQualificationListingStatuses.includes(listing.status),
+        acceleratorCount: listing.accelerators.length,
+        osWindows: os.startsWith('windows'),
+        nativeGpuUuidShape: WINDOWS_NATIVE_GPU_UUID_RE.test(nativeGpuUuid),
+        heartbeatAgeSeconds,
+        heartbeatMaxAgeSeconds: config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS,
+        heartbeatFresh: heartbeatFresh(machine.lastHeartbeatAt),
+        operationalAllowed:
+          machine.operational === MachineOperational.AVAILABLE
+          || machine.operational === MachineOperational.RESERVED
+          || machine.operational === MachineOperational.RUNNING,
+        acceleratorMachineMatch: Boolean(accelerator && accelerator.machineId === machine.id),
+        acceleratorVendorNvidia: accelerator?.vendor?.trim().toUpperCase() === 'NVIDIA',
+        acceleratorModerationClear: accelerator?.moderationStatus === ModerationStatus.CLEAR,
+        acceleratorOperationalRentable: Boolean(accelerator && rentableAccelerators.includes(accelerator.status)),
+        acceleratorUuidMatch: Boolean(
+          accelerator
+          && accelerator.hardwareUuid.toLowerCase() === nativeGpuUuid.toLowerCase()
+        ),
+      };
+    });
+
+    console.warn(JSON.stringify({
+      event: 'windows_native_qualification_host_not_ready',
+      candidateCount: candidates.length,
+      diagnostics,
+    }));
+
     return { error: 'windows_native_qualification_host_not_ready' as const };
   }
   if (eligible.length !== 1) {
