@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from nacl.signing import SigningKey
 
@@ -116,6 +116,36 @@ class PlatformTests(unittest.TestCase):
         version_calls = [timeout for command, timeout in calls if command[1] == "version"]
         self.assertEqual(info_calls, [20], "the info probe must request the longer, proven-necessary timeout")
         self.assertEqual(version_calls, [8], "the cheaper version probe is unaffected - still uses the default")
+
+    @unittest.skipUnless(os.name == "nt", "Windows-only process inheritance regression")
+    def test_run_command_windows_uses_files_not_pipes(self):
+        fake = Mock()
+        fake.wait.return_value = 0
+
+        with patch.object(platform_info.subprocess, "Popen", return_value=fake) as popen:
+            result = platform_info.run_command(["cmd.exe", "/c", "exit", "0"], timeout=3)
+
+        self.assertEqual(result.returncode, 0)
+        kwargs = popen.call_args.kwargs
+        self.assertIsNot(kwargs["stdout"], subprocess.PIPE)
+        self.assertIsNot(kwargs["stderr"], subprocess.PIPE)
+        self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+
+    @unittest.skipUnless(os.name == "nt", "Windows-only process inheritance regression")
+    def test_run_command_windows_timeout_is_bounded_without_communicate(self):
+        fake = Mock()
+        fake.wait.side_effect = [
+            subprocess.TimeoutExpired(cmd=["helper.exe"], timeout=3),
+            1,
+        ]
+
+        with patch.object(platform_info.subprocess, "Popen", return_value=fake):
+            result = platform_info.run_command(["helper.exe"], timeout=3)
+
+        self.assertEqual(result.returncode, 127)
+        fake.kill.assert_called_once()
+        self.assertEqual(fake.wait.call_count, 2)
+        self.assertFalse(hasattr(fake, "communicate") and fake.communicate.called)
 
     def test_docker_info_still_reports_false_on_a_genuine_timeout(self):
         # The longer timeout must not turn into "never times out": a daemon that
