@@ -37,7 +37,9 @@ use gpubnb_windows_platform::process::{
     RenterWorkerLaunchSpec, RenterWorkerProcess, launch_qualified_renter_worker,
 };
 use gpubnb_windows_platform::secret::MediaCapabilityToken;
-use gpubnb_windows_platform::session::{RenterSessionIsolationProof, query_renter_session_token};
+use gpubnb_windows_platform::session::{
+    RenterSessionIsolationProof, ensure_provider_process_absent, query_renter_session_token,
+};
 use std::path::Path;
 
 const WORKER_PATH: &str = r"C:\Program Files\GPUbnb\gpubnb-windows-worker.exe";
@@ -108,6 +110,7 @@ pub struct QualifiedGraphicsRuntime {
     generation: u64,
     stream_epoch: u64,
     windows_session_id: u32,
+    provider_user_sid: String,
     renter_isolation: RenterSessionIsolationProof,
     display_spec: WorkerDisplaySpec,
     gpu_uuid: String,
@@ -172,8 +175,23 @@ impl QualifiedGraphicsRuntime {
         error
     }
 
+    fn ensure_provider_boundary(&mut self) -> Result<(), ServiceRuntimeError> {
+        if ensure_provider_process_absent(
+            self.windows_session_id,
+            &self.provider_user_sid,
+        )
+        .is_err()
+        {
+            return Err(self.fail(ServiceRuntimeError::RenterSession));
+        }
+        Ok(())
+    }
+
     pub fn take_fresh_media_frame(&mut self) -> Option<BoundMediaFrame> {
         if !matches!(self.media_state, RuntimeMediaState::Ready) {
+            return None;
+        }
+        if self.ensure_provider_boundary().is_err() {
             return None;
         }
         self.pending_media_frame.take()
@@ -183,6 +201,7 @@ impl QualifiedGraphicsRuntime {
         if !matches!(self.media_state, RuntimeMediaState::Ready) {
             return Err(ServiceRuntimeError::WorkerProtocol);
         }
+        self.ensure_provider_boundary()?;
         // Initial start and reconnect both deliver a fresh IDR proof frame. Drain
         // that already-validated frame before asking the worker for another one so
         // callers can use one API without accidentally skipping/reordering bytes.
@@ -230,6 +249,7 @@ impl QualifiedGraphicsRuntime {
         if !matches!(self.media_state, RuntimeMediaState::Ready) {
             return Err(ServiceRuntimeError::WorkerProtocol);
         }
+        self.ensure_provider_boundary()?;
         let sequence = self.next_sequence;
         let next_sequence = match sequence.checked_add(1) {
             Some(value) => value,
@@ -291,6 +311,7 @@ impl QualifiedGraphicsRuntime {
         if !matches!(self.media_state, RuntimeMediaState::Suspended) {
             return Err(ServiceRuntimeError::WorkerProtocol);
         }
+        self.ensure_provider_boundary()?;
         let sequence = self.next_sequence;
         let next_sequence = match sequence.checked_add(1) {
             Some(value) => value,
@@ -781,6 +802,7 @@ pub fn start_qualified_graphics_runtime(
         generation: config.generation,
         stream_epoch: config.generation,
         windows_session_id: config.windows_session_id,
+        provider_user_sid: config.provider_user_sid.to_owned(),
         renter_isolation,
         display_spec,
         gpu_uuid: config.gpu_uuid.to_owned(),
