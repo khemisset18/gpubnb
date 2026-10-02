@@ -102,3 +102,13 @@ test('private qualification rearm only releases its own never-started AGENT_OFFL
   assert.match(desktop, /status: ResourceAllocationStatus\.RELEASED/);
   assert.match(desktop, /bookingId: priorQualification\.id/);
 });
+
+
+test('private qualification host-gate trace stays secret-free', () => {
+  assert.match(desktop, /event: 'windows_native_qualification_host_not_ready'/);
+  assert.match(desktop, /heartbeatAgeSeconds/);
+  assert.match(desktop, /heartbeatMaxAgeSeconds/);
+  assert.match(desktop, /acceleratorUuidMatch/);
+  assert.doesNotMatch(desktop, /windows_native_qualification_host_not_ready[\s\S]{0,1200}mediaToken/);
+  assert.doesNotMatch(desktop, /windows_native_qualification_host_not_ready[\s\S]{0,1200}accessGrant/);
+});
