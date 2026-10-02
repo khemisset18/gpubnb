@@ -507,7 +507,6 @@ async function createWindowsNativeQualificationBooking(
         : Math.max(0, Math.round((now.getTime() - machine.lastHeartbeatAt.getTime()) / 1000));
 
       return {
-        listingStatusEligible: windowsNativePrivateQualificationListingStatuses.includes(listing.status),
         acceleratorCount: listing.accelerators.length,
         osWindows: os.startsWith('windows'),
         nativeGpuUuidShape: WINDOWS_NATIVE_GPU_UUID_RE.test(nativeGpuUuid),
