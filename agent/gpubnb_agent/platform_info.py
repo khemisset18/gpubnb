@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import locale
 import os
 import platform
 import re
@@ -16,6 +17,7 @@ import shutil
 import subprocess
 import threading
 import time
+import tempfile
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -94,28 +96,75 @@ def find_xpu_smi() -> str | None:
     )
 
 
+def _read_command_temp(stream: Any, limit: int) -> str:
+    stream.seek(0)
+    raw = stream.read(limit + 1)
+    encoding = locale.getpreferredencoding(False) or "utf-8"
+    return raw.decode(encoding, errors="replace")[:limit]
+
+
 def run_command(command: list[str], timeout: int = 8) -> subprocess.CompletedProcess[str]:
     """Run an allowlisted executable without a shell and with bounded output.
 
     Windows service builds must never flash a child console on the provider's
     desktop. CREATE_NO_WINDOW applies to every command launched through this
     helper, including PowerShell/CIM and GPU/runtime probes.
+
+    On Windows, never use PIPE/capture_output here. A direct child may spawn a
+    detached authority process and then exit; inherited pipe handles in that
+    descendant can make subprocess.run() block forever in its post-timeout
+    communicate() cleanup even though the direct child is already gone. Regular
+    temporary files preserve bounded diagnostics without coupling completion to
+    descendant handle lifetime.
     """
+    if os.name != "nt":
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+                shell=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return subprocess.CompletedProcess(command, 127, "", "command unavailable")
+        result.stdout = result.stdout[:MAX_COMMAND_OUTPUT]
+        result.stderr = result.stderr[:16384]
+        return result
+
     try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-            shell=False,
-            creationflags=WINDOWS_CREATE_NO_WINDOW if os.name == "nt" else 0,
-        )
-    except (OSError, subprocess.TimeoutExpired):
+        with tempfile.TemporaryFile(mode="w+b") as stdout_file, tempfile.TemporaryFile(
+            mode="w+b"
+        ) as stderr_file:
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                shell=False,
+                creationflags=WINDOWS_CREATE_NO_WINDOW,
+            )
+            try:
+                returncode = process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+                try:
+                    process.wait(timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+                return subprocess.CompletedProcess(
+                    command, 127, "", "command unavailable"
+                )
+
+            stdout = _read_command_temp(stdout_file, MAX_COMMAND_OUTPUT)
+            stderr = _read_command_temp(stderr_file, 16384)
+            return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+    except OSError:
         return subprocess.CompletedProcess(command, 127, "", "command unavailable")
-    result.stdout = result.stdout[:MAX_COMMAND_OUTPUT]
-    result.stderr = result.stderr[:16384]
-    return result
 
 
 def _number(value: Any, default: float = 0) -> float:
