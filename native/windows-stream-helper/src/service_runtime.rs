@@ -231,6 +231,7 @@ impl QualifiedGraphicsRuntime {
             self.generation,
             sequence,
             self.windows_session_id,
+            &self.provider_user_sid,
             self.display_spec,
             &self.gpu_uuid,
         ) {
@@ -337,6 +338,7 @@ impl QualifiedGraphicsRuntime {
             self.generation,
             sequence,
             self.windows_session_id,
+            &self.provider_user_sid,
             self.display_spec,
             &self.gpu_uuid,
         ) {
@@ -419,6 +421,7 @@ fn receive_bound_media_frame(
     generation: u64,
     command_sequence: u64,
     windows_session_id: u32,
+    provider_user_sid: &str,
     display_spec: WorkerDisplaySpec,
     gpu_uuid: &str,
 ) -> Result<BoundMediaFrame, ServiceRuntimeError> {
@@ -431,6 +434,7 @@ fn receive_bound_media_frame(
         generation,
         command_sequence,
         windows_session_id,
+        provider_user_sid,
         display_spec,
         gpu_uuid,
     )
@@ -442,6 +446,7 @@ fn receive_polled_media_frame(
     generation: u64,
     command_sequence: u64,
     windows_session_id: u32,
+    provider_user_sid: &str,
     display_spec: WorkerDisplaySpec,
     gpu_uuid: &str,
 ) -> Result<Option<BoundMediaFrame>, ServiceRuntimeError> {
@@ -476,6 +481,7 @@ fn receive_polled_media_frame(
         generation,
         command_sequence,
         windows_session_id,
+        provider_user_sid,
         display_spec,
         gpu_uuid,
     )
@@ -488,6 +494,7 @@ fn receive_bound_media_frame_after_proof(
     generation: u64,
     command_sequence: u64,
     windows_session_id: u32,
+    provider_user_sid: &str,
     display_spec: WorkerDisplaySpec,
     gpu_uuid: &str,
 ) -> Result<BoundMediaFrame, ServiceRuntimeError> {
@@ -553,6 +560,13 @@ fn receive_bound_media_frame_after_proof(
         return Err(ServiceRuntimeError::ExactGpu);
     }
 
+    let provider_desktop_excluded = ensure_provider_process_absent(
+        windows_session_id,
+        provider_user_sid,
+    )
+    .map(|_| true)
+    .map_err(|_| ServiceRuntimeError::RenterSession)?;
+
     validate_graphics_proof_chain(
         generation,
         windows_session_id,
@@ -565,7 +579,7 @@ fn receive_bound_media_frame_after_proof(
             width: display_spec.width,
             height: display_spec.height,
             refresh_hz: display_spec.refresh_hz,
-            provider_desktop_excluded: true,
+            provider_desktop_excluded,
         },
         CaptureFrameProof {
             generation,
@@ -768,6 +782,7 @@ pub fn start_qualified_graphics_runtime(
             config.generation,
             2,
             config.windows_session_id,
+            config.provider_user_sid,
             display_spec,
             config.gpu_uuid,
         )?;
