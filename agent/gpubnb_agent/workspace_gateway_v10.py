@@ -301,7 +301,12 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
 
         try:
             stop_windows_native_workspace(session_id)
-        except Exception:
+        except Exception as exc:
+            self._trace(
+                "native_stop_failed",
+                session_id=session_id,
+                detail=f"code={_native_error_code(exc)}",
+            )
             return False
 
         released = self._release_native_claims(session_id)
@@ -475,8 +480,14 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         try:
             suspend_windows_native_workspace(session_id)
             return True
-        except Exception:
-            self._report_error(RuntimeError("windows_native_suspend_failed"))
+        except Exception as exc:
+            code = _native_error_code(exc)
+            self._trace(
+                "native_suspend_failed",
+                session_id=session_id,
+                detail=f"code={code}",
+            )
+            self._report_error(RuntimeError(f"windows_native_suspend_failed:{code}"))
             self._native_stop_and_report(session_id)
             return False
 
@@ -497,8 +508,14 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 runtime.handle = replace(runtime.handle, media_token=media_token)
             self.usage_last_report[session_id] = time.monotonic()
             return True
-        except Exception:
-            self._report_error(RuntimeError("windows_native_resume_reproof_failed"))
+        except Exception as exc:
+            code = _native_error_code(exc)
+            self._trace(
+                "native_resume_failed",
+                session_id=session_id,
+                detail=f"code={code}",
+            )
+            self._report_error(RuntimeError(f"windows_native_resume_reproof_failed:{code}"))
             self._native_stop_and_report(session_id)
             return False
 
