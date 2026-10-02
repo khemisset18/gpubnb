@@ -6,12 +6,14 @@ import {
   MiningResourceKind,
   ModerationStatus,
   ResourceAllocationStatus,
+  WorkspaceRuntimeBackend,
   WorkspaceSessionStatus,
   type PrismaClient,
 } from '@prisma/client';
 import type { Redis } from 'ioredis';
 
 import {
+  authorizeWindowsNativeStaleClaimRecovery,
   buildRentalResourceAuthority,
   releaseRentalResourceAuthority,
 } from '../src/rental-resource-authority.js';
@@ -252,4 +254,134 @@ describe('rental resource authority', () => {
     );
     assert.equal(redis.leases.has('resource_00000001'), true);
   });
+
+  it('attests stale native recovery only after the old native session is terminal and fully deallocated', async () => {
+    const now = new Date('2026-10-02T08:00:00.000Z');
+    const rows = new Map<string, unknown>([
+      ['session_old0001', {
+        id: 'session_old0001',
+        status: WorkspaceSessionStatus.QUARANTINED,
+        runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+        endedAt: new Date('2026-10-02T07:00:00.000Z'),
+        expiresAt: new Date('2026-10-02T07:30:00.000Z'),
+        booking: {
+          machineAllocation: null,
+          acceleratorAllocations: [{ status: ResourceAllocationStatus.RELEASED }],
+        },
+      }],
+      ['session_new0001', {
+        id: 'session_new0001',
+        status: WorkspaceSessionStatus.READY,
+        runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+        endedAt: null,
+        expiresAt: new Date('2026-10-02T08:30:00.000Z'),
+        booking: {
+          machineAllocation: null,
+          acceleratorAllocations: [{ status: ResourceAllocationStatus.CONFIRMED }],
+        },
+      }],
+    ]);
+    const db = {
+      workspaceSession: {
+        findFirst: async ({ where }: { where: { id: string } }) => rows.get(where.id) ?? null,
+      },
+    } as unknown as PrismaClient;
+
+    const decision = await authorizeWindowsNativeStaleClaimRecovery(
+      db,
+      'machine_00000001',
+      'session_old0001',
+      'session_new0001',
+      now,
+    );
+    assert.equal(decision.allowed, true);
+    assert.equal(decision.oldRuntimeBackend, WorkspaceRuntimeBackend.WINDOWS_NATIVE);
+  });
+
+  it('denies stale native recovery while the old allocation is still live', async () => {
+    const now = new Date('2026-10-02T08:00:00.000Z');
+    const rows = new Map<string, unknown>([
+      ['session_old0001', {
+        id: 'session_old0001',
+        status: WorkspaceSessionStatus.QUARANTINED,
+        runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+        endedAt: new Date('2026-10-02T07:00:00.000Z'),
+        expiresAt: new Date('2026-10-02T07:30:00.000Z'),
+        booking: {
+          machineAllocation: null,
+          acceleratorAllocations: [{ status: ResourceAllocationStatus.ACTIVE }],
+        },
+      }],
+      ['session_new0001', {
+        id: 'session_new0001',
+        status: WorkspaceSessionStatus.READY,
+        runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+        endedAt: null,
+        expiresAt: new Date('2026-10-02T08:30:00.000Z'),
+        booking: {
+          machineAllocation: null,
+          acceleratorAllocations: [{ status: ResourceAllocationStatus.CONFIRMED }],
+        },
+      }],
+    ]);
+    const db = {
+      workspaceSession: {
+        findFirst: async ({ where }: { where: { id: string } }) => rows.get(where.id) ?? null,
+      },
+    } as unknown as PrismaClient;
+
+    const decision = await authorizeWindowsNativeStaleClaimRecovery(
+      db,
+      'machine_00000001',
+      'session_old0001',
+      'session_new0001',
+      now,
+    );
+    assert.equal(decision.allowed, false);
+    assert.equal(decision.reason, 'stale_claim_old_allocation_live');
+  });
+
+  it('denies stale native recovery for an old container session', async () => {
+    const now = new Date('2026-10-02T08:00:00.000Z');
+    const rows = new Map<string, unknown>([
+      ['session_old0001', {
+        id: 'session_old0001',
+        status: WorkspaceSessionStatus.COMPLETED,
+        runtimeBackend: WorkspaceRuntimeBackend.CONTAINER,
+        endedAt: new Date('2026-10-02T07:00:00.000Z'),
+        expiresAt: new Date('2026-10-02T07:30:00.000Z'),
+        booking: {
+          machineAllocation: null,
+          acceleratorAllocations: [{ status: ResourceAllocationStatus.RELEASED }],
+        },
+      }],
+      ['session_new0001', {
+        id: 'session_new0001',
+        status: WorkspaceSessionStatus.READY,
+        runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+        endedAt: null,
+        expiresAt: new Date('2026-10-02T08:30:00.000Z'),
+        booking: {
+          machineAllocation: null,
+          acceleratorAllocations: [{ status: ResourceAllocationStatus.CONFIRMED }],
+        },
+      }],
+    ]);
+    const db = {
+      workspaceSession: {
+        findFirst: async ({ where }: { where: { id: string } }) => rows.get(where.id) ?? null,
+      },
+    } as unknown as PrismaClient;
+
+    const decision = await authorizeWindowsNativeStaleClaimRecovery(
+      db,
+      'machine_00000001',
+      'session_old0001',
+      'session_new0001',
+      now,
+    );
+    assert.equal(decision.allowed, false);
+    assert.equal(decision.reason, 'stale_claim_old_runtime_not_windows_native');
+  });
+
 });
