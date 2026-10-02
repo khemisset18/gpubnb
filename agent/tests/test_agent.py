@@ -686,3 +686,12 @@ class FileTransferSigningTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+def test_native_websocket_error_code_is_bounded_to_class_and_status():
+    from gpubnb_agent.workspace_gateway_v10 import _native_websocket_error_code
+
+    class HandshakeFailure(Exception):
+        status_code = 401
+
+    assert _native_websocket_error_code(HandshakeFailure("do-not-log")) == "HandshakeFailure:http401"
+    assert _native_websocket_error_code(RuntimeError("do-not-log")) == "RuntimeError"
