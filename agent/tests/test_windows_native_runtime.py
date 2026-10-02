@@ -79,6 +79,21 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
         self.assertIn("--gpu-uuid", command)
         self.assertIn("GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", command)
         self.assertNotIn("--application", command)
+        self.assertEqual(
+            run_command.call_args.kwargs["timeout"],
+            runtime.WINDOWS_NATIVE_START_COMMAND_TIMEOUT_SECONDS,
+        )
+        self.assertGreater(runtime.WINDOWS_NATIVE_START_COMMAND_TIMEOUT_SECONDS, 120)
+
+    def test_native_error_code_never_exposes_unstructured_text(self):
+        self.assertEqual(
+            gateway_v10._native_error_code(RuntimeError("native_workspace_start_failed")),
+            "native_workspace_start_failed",
+        )
+        self.assertEqual(
+            gateway_v10._native_error_code(RuntimeError(r"unexpected C:\\private\\value")),
+            "RuntimeError",
+        )
 
     def test_launch_rejects_different_preflight_gpu_before_start(self):
         with (
