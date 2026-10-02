@@ -112,7 +112,10 @@ export class WindowsNativeDesktopClient {
     ) {
       fail('windows_native_input_channel_not_ready');
     }
-    this.socket.send(frame);
+    // Send an exact standalone ArrayBuffer so the browser WebSocket frame is
+    // unambiguously binary across engines/proxies; the API still requires the
+    // fixed 32-byte native input contract.
+    this.socket.send(frame.slice().buffer);
   }
 
   #onRendered(metadata) {
