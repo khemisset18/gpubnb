@@ -34,6 +34,7 @@ import websocket
 from . import workspace_gateway as legacy
 from . import workspace_gateway_v8 as reconnect
 from .execution_control import ExecutionControlError
+from .gpu_rental_preemption import _resource_transition_lock
 from .windows_native_runtime import (
     NativeRuntimeHandle,
     launch_windows_native_workspace,
@@ -173,6 +174,141 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         self._release_server_leases(session_id, released)
         return True
 
+    @staticmethod
+    def _strict_stale_native_successor(previous: Any, spec: Any) -> bool:
+        return (
+            previous.state in {"RENTAL_ACTIVE", "QUIESCENT"}
+            and previous.session_id != spec.session_id
+            and _NATIVE_SESSION_ID.fullmatch(previous.session_id) is not None
+            and previous.resource_id == spec.resource_id
+            and previous.hardware_uuid.casefold() == spec.hardware_uuid.casefold()
+            and previous.holder_id == f"rental:{previous.session_id}"
+            and spec.holder_id == f"rental:{spec.session_id}"
+            and previous.fencing_token == str(previous.runtime_generation)
+            and spec.fencing_token == str(spec.runtime_generation)
+            and spec.runtime_generation > previous.runtime_generation
+            and spec.lease_id != previous.lease_id
+        )
+
+    def _stale_native_runtime_recoverable(self, previous: Any, spec: Any) -> bool:
+        records = self.rental_preemption.mining.store.load()
+        record = records.get(spec.resource_id)
+        return bool(
+            record is not None
+            and record.hardware_uuid.casefold() == spec.hardware_uuid.casefold()
+            and record.runtime_generation == previous.runtime_generation
+            and record.state == "STOPPED"
+            and record.pid is None
+            and record.process_creation_token is None
+            and record.command_id is None
+        )
+
+    def _authorize_stale_native_claim_recovery(
+        self,
+        old_session_id: str,
+        new_session_id: str,
+    ) -> bool:
+        try:
+            result = self._request(
+                f"/agent/mining/{self.machine_id}/rental-authority/native-claim-recovery",
+                "POST",
+                {
+                    "oldSessionId": old_session_id,
+                    "newSessionId": new_session_id,
+                },
+            )
+        except Exception:
+            raise ExecutionControlError(
+                "rental_resource_stale_claim_recovery_authority_unavailable"
+            ) from None
+        return bool(
+            isinstance(result, dict)
+            and result.get("protocolVersion") == 1
+            and result.get("allowed") is True
+            and result.get("oldSessionId") == old_session_id
+            and result.get("newSessionId") == new_session_id
+            and result.get("oldRuntimeBackend") == WINDOWS_NATIVE_RUNTIME_BACKEND
+        )
+
+    def _recover_stale_native_claim(self, spec: Any) -> bool:
+        claims = self.rental_preemption.claims.load()
+        previous = claims.get(spec.resource_id)
+        if previous is None:
+            return False
+
+        same = (
+            previous.session_id == spec.session_id
+            and previous.hardware_uuid.casefold() == spec.hardware_uuid.casefold()
+            and previous.runtime_generation == spec.runtime_generation
+            and previous.lease_id == spec.lease_id
+        )
+        if same or not self._strict_stale_native_successor(previous, spec):
+            return False
+
+        old_claims = self.rental_preemption.claims_for_session(previous.session_id)
+        if (
+            len(old_claims) != 1
+            or old_claims[0].resource_id != spec.resource_id
+            or not self._stale_native_runtime_recoverable(previous, spec)
+        ):
+            raise ExecutionControlError("rental_resource_stale_claim_runtime_unsafe")
+
+        if not self._authorize_stale_native_claim_recovery(
+            previous.session_id,
+            spec.session_id,
+        ):
+            raise ExecutionControlError(
+                "rental_resource_stale_claim_recovery_not_authorized"
+            )
+
+        self._trace(
+            "native_stale_claim_cleanup_begin",
+            session_id=spec.session_id,
+            detail=f"generation={previous.runtime_generation}",
+        )
+        try:
+            # stop_windows_native_workspace is an idempotent physical cleanup
+            # proof. If the old authority child is already absent it acquires
+            # the first-pipe-instance fence and verifies the virtual display is
+            # absent before reporting success.
+            stop_windows_native_workspace(previous.session_id)
+        except Exception as exc:
+            self._trace(
+                "native_stale_claim_cleanup_failed",
+                session_id=spec.session_id,
+                detail=f"code={_native_error_code(exc)}",
+            )
+            raise ExecutionControlError(
+                "rental_resource_stale_claim_cleanup_unverified"
+            ) from None
+
+        try:
+            released = self.rental_preemption.release_after_cleanup(previous.session_id)
+        except ExecutionControlError as exc:
+            self._trace(
+                "native_stale_claim_quiescence_failed",
+                session_id=spec.session_id,
+                detail=f"code={_native_error_code(exc)}",
+            )
+            raise
+        if len(released) != 1 or released[0].resource_id != spec.resource_id:
+            raise ExecutionControlError("rental_resource_stale_claim_release_invalid")
+
+        self._trace(
+            "native_stale_claim_recovered",
+            session_id=spec.session_id,
+            detail=f"old_generation={previous.runtime_generation}:new_generation={spec.runtime_generation}",
+        )
+        return True
+
+    def _preempt_native_spec(self, spec: Any) -> Any:
+        # Keep stale-claim retirement and the successor PREEMPTING write under
+        # one resource RLock. A mining command can therefore never slip into the
+        # interval between the two fenced ownership states.
+        with _resource_transition_lock(spec.resource_id):
+            self._recover_stale_native_claim(spec)
+            return self.rental_preemption.preempt_for_rental(spec)
+
     def _start_native_runtime(
         self,
         session_id: str,
@@ -193,7 +329,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 session_id=session_id,
                 detail=f"generation={spec.runtime_generation}",
             )
-            self.rental_preemption.preempt_for_rental(spec)
+            self._preempt_native_spec(spec)
             self._trace(
                 "native_preempt_quiescent",
                 session_id=session_id,
