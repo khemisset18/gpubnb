@@ -504,7 +504,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
           let frame:Buffer;
           try{frame=websocketDataToBuffer(data);}catch(error){gatewayLog.error({err:error,event:'workspace_gateway_browser_frame_invalid',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser frame invalid');browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1003,'unsupported websocket frame');return;}
           if(!browserGatewayFrameAllowed(row.runtimeBackend,isBinary,frame.length)){
-            gatewayLog.warn({event:'windows_native_browser_input_rejected',sessionId,machineId:row.machineId,channel:channelLogId,frameBytes:frame.length,binary:isBinary},'windows native browser input rejected');
+            gatewayLog.warn({event:'windows_native_browser_input_rejected',sessionId,machineId:row.machineId,channel:channelLogId,frameBytes:frame.length,binary:isBinary,frameKind:isBinary?'binary':'text'},'windows native browser input rejected');
             browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1003,'invalid native input frame');return;
           }
           if(frame.length>WS_MAX_FRAME_BYTES||!browserPending.tryAcquire(frame.length)){
