@@ -25,6 +25,11 @@ const LIVE_ALLOCATION_STATUSES: ResourceAllocationStatus[] = [
   ResourceAllocationStatus.ACTIVE,
 ];
 
+const PRIVATE_WINDOWS_NATIVE_QUALIFICATION_LISTING_STATUSES: ListingStatus[] = [
+  ListingStatus.HIDDEN_OFFLINE,
+  ListingStatus.PAUSED,
+];
+
 export class ResourceAllocationError extends Error {
   constructor(
     public readonly code:
@@ -165,7 +170,7 @@ async function allocateInTransaction(
   }
   const listingStatusAllowed = input.allowHiddenWindowsNativeQualification === true
     ? (
-      booking.listing.status === ListingStatus.HIDDEN_OFFLINE
+      PRIVATE_WINDOWS_NATIVE_QUALIFICATION_LISTING_STATUSES.includes(booking.listing.status)
       && booking.listing.resourceMode === ListingResourceMode.SELECTED_ACCELERATORS
     )
     : booking.listing.status === ListingStatus.ACTIVE;
