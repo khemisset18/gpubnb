@@ -84,6 +84,11 @@ function windowsNativePrivateQualificationEnabled(): boolean {
     && config.ESCROW_PROGRAM_ID === 'NOT_DEPLOYED_YET';
 }
 
+const windowsNativePrivateQualificationListingStatuses: ListingStatus[] = [
+  ListingStatus.HIDDEN_OFFLINE,
+  ListingStatus.PAUSED,
+];
+
 const workspaceSpec: Record<DesktopWorkspaceSlug, {
   requestedStep: string;
   requestedEvent: string;
@@ -140,7 +145,7 @@ async function rearmTimedOutWindowsNativeQualificationHost(
   const now = new Date();
   const candidates = await db.gpuListing.findMany({
     where: {
-      status: ListingStatus.HIDDEN_OFFLINE,
+      status: { in: windowsNativePrivateQualificationListingStatuses },
       resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
       machine: {
         connectivity: MachineConnectivity.ONLINE,
@@ -163,7 +168,7 @@ async function rearmTimedOutWindowsNativeQualificationHost(
       where: {
         id: target.id,
         machineId: target.machineId,
-        status: ListingStatus.HIDDEN_OFFLINE,
+        status: { in: windowsNativePrivateQualificationListingStatuses },
         resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
       },
       select: {
@@ -399,7 +404,7 @@ async function createWindowsNativeQualificationBooking(
       status: { in: qualificationBookingStatuses },
       endsAt: { gt: now },
       listing: {
-        status: ListingStatus.HIDDEN_OFFLINE,
+        status: { in: windowsNativePrivateQualificationListingStatuses },
         resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
         machine: { nativeDesktopStreamingAvailable: true },
       },
@@ -417,7 +422,7 @@ async function createWindowsNativeQualificationBooking(
 
   const candidates = await db.gpuListing.findMany({
     where: {
-      status: ListingStatus.HIDDEN_OFFLINE,
+      status: { in: windowsNativePrivateQualificationListingStatuses },
       resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
       // Qualification is a private, no-payment beta path. Unlike the public
       // marketplace, it intentionally permits the provider account to act as
@@ -521,7 +526,7 @@ async function createWindowsNativeQualificationBooking(
       const fresh = await tx.gpuListing.findFirst({
         where: {
           id: target.id,
-          status: ListingStatus.HIDDEN_OFFLINE,
+          status: { in: windowsNativePrivateQualificationListingStatuses },
           resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
         },
         select: {
