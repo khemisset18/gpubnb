@@ -56,6 +56,7 @@ pub enum PlatformError {
     RenterSessionNotActive,
     RenterSessionNotConsole,
     AnotherInteractiveSessionActive,
+    ProviderProcessInRenterSession,
     EnvironmentCreateFailed,
     InvalidSid,
     SecurityDescriptorFailed,
