@@ -413,6 +413,117 @@ export async function buildRentalResourceAuthority(
   };
 }
 
+
+const TERMINAL_SESSION_STATUSES = new Set<WorkspaceSessionStatus>([
+  WorkspaceSessionStatus.COMPLETED,
+  WorkspaceSessionStatus.FAILED,
+  WorkspaceSessionStatus.CANCELLED,
+  WorkspaceSessionStatus.TIMED_OUT,
+  WorkspaceSessionStatus.QUARANTINED,
+]);
+
+export type WindowsNativeStaleClaimRecoveryDecision = {
+  protocolVersion: 1;
+  allowed: boolean;
+  oldSessionId: string;
+  newSessionId: string;
+  oldRuntimeBackend?: WorkspaceRuntimeBackend;
+  reason?: string;
+};
+
+/**
+ * Read-only server attestation used before the Agent retires a stale local
+ * RENTAL_ACTIVE/QUIESCENT claim from an older Windows-native session.
+ *
+ * This does not create/release a resource lease and does not mutate booking,
+ * allocation or moderation state. The caller must already hold a newer signed
+ * rental authority; this decision only proves that the previous session is
+ * terminal, was Windows-native, and no longer owns a live allocation.
+ */
+export async function authorizeWindowsNativeStaleClaimRecovery(
+  db: PrismaClient,
+  machineId: string,
+  oldSessionId: string,
+  newSessionId: string,
+  now = new Date(),
+): Promise<WindowsNativeStaleClaimRecoveryDecision> {
+  const deny = (reason: string): WindowsNativeStaleClaimRecoveryDecision => ({
+    protocolVersion: 1,
+    allowed: false,
+    oldSessionId,
+    newSessionId,
+    reason,
+  });
+  if (oldSessionId === newSessionId) return deny('stale_claim_same_session');
+
+  const select = {
+    id: true,
+    status: true,
+    runtimeBackend: true,
+    endedAt: true,
+    expiresAt: true,
+    booking: {
+      select: {
+        machineAllocation: { select: { status: true } },
+        acceleratorAllocations: { select: { status: true } },
+      },
+    },
+  } as const;
+
+  const [oldSession, newSession] = await Promise.all([
+    db.workspaceSession.findFirst({
+      where: { id: oldSessionId, machineId },
+      select,
+    }),
+    db.workspaceSession.findFirst({
+      where: { id: newSessionId, machineId },
+      select,
+    }),
+  ]);
+  if (!oldSession) return deny('stale_claim_old_session_not_found');
+  if (!newSession) return deny('stale_claim_new_session_not_found');
+
+  if (oldSession.runtimeBackend !== WorkspaceRuntimeBackend.WINDOWS_NATIVE) {
+    return deny('stale_claim_old_runtime_not_windows_native');
+  }
+  if (!TERMINAL_SESSION_STATUSES.has(oldSession.status) || oldSession.endedAt === null) {
+    return deny('stale_claim_old_session_not_terminal');
+  }
+
+  const oldHasLiveAllocation =
+    (oldSession.booking.machineAllocation !== null
+      && LIVE_ALLOCATION_STATUSES.includes(oldSession.booking.machineAllocation.status))
+    || oldSession.booking.acceleratorAllocations.some((row) =>
+      LIVE_ALLOCATION_STATUSES.includes(row.status));
+  if (oldHasLiveAllocation) return deny('stale_claim_old_allocation_live');
+
+  if (newSession.runtimeBackend !== WorkspaceRuntimeBackend.WINDOWS_NATIVE) {
+    return deny('stale_claim_new_runtime_not_windows_native');
+  }
+  if (
+    ![WorkspaceSessionStatus.READY, WorkspaceSessionStatus.RUNNING].includes(newSession.status)
+    || newSession.endedAt !== null
+    || newSession.expiresAt <= now
+  ) {
+    return deny('stale_claim_new_session_not_live');
+  }
+
+  const newHasLiveAllocation =
+    (newSession.booking.machineAllocation !== null
+      && LIVE_ALLOCATION_STATUSES.includes(newSession.booking.machineAllocation.status))
+    || newSession.booking.acceleratorAllocations.some((row) =>
+      LIVE_ALLOCATION_STATUSES.includes(row.status));
+  if (!newHasLiveAllocation) return deny('stale_claim_new_allocation_not_live');
+
+  return {
+    protocolVersion: 1,
+    allowed: true,
+    oldSessionId,
+    newSessionId,
+    oldRuntimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+  };
+}
+
 export async function releaseRentalResourceAuthority(
   db: PrismaClient,
   redis: Redis,
