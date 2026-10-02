@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { buildHostPowerPolicy } from './host-power-policy.js';
 import { recordSecurityFailure, verifyAgentRequestV2 } from './security.js';
 import {
+  authorizeWindowsNativeStaleClaimRecovery,
   buildRentalResourceAuthority,
   releaseRentalResourceAuthority,
 } from './rental-resource-authority.js';
@@ -22,6 +23,11 @@ const RENTAL_AUTHORITY_RATE_LIMIT_PER_MINUTE = 180;
 // from rental authority so an idle-but-listed machine does not add a database
 // listing lookup to the gateway's once-per-second authority reconciliation.
 const HOST_POWER_POLICY_RATE_LIMIT_PER_MINUTE = 30;
+const staleNativeClaimRecoveryBodySchema = z.object({
+  oldSessionId: z.string().cuid(),
+  newSessionId: z.string().cuid(),
+}).strict();
+
 const releaseBodySchema = z.object({
   leases: z.array(z.object({
     resourceId: z.string().min(8).max(191),
@@ -124,6 +130,22 @@ export function registerRentalResourceAuthorityRoutes(
       request.log.warn({ machineId, code }, 'rental_resource_authority_failed');
       return reply.code(code.endsWith('_conflict') ? 409 : 503).send({ error: code });
     }
+  });
+
+
+  app.post('/agent/mining/:machineId/rental-authority/native-claim-recovery', async (request, reply) => {
+    const { machineId } = machineParamsSchema.parse(request.params);
+    const route = `/agent/mining/${machineId}/rental-authority/native-claim-recovery`;
+    if (!await authenticateAgent(db, redis, machineId, request, route)) {
+      return reply.code(401).send({ error: 'invalid_agent_request' });
+    }
+    const body = staleNativeClaimRecoveryBodySchema.parse(request.body);
+    return authorizeWindowsNativeStaleClaimRecovery(
+      db,
+      machineId,
+      body.oldSessionId,
+      body.newSessionId,
+    );
   });
 
   app.post('/agent/mining/:machineId/rental-authority/:sessionId/release', async (request, reply) => {
