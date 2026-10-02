@@ -23,6 +23,26 @@ from .windows_native_protocol import json_object as _json_object, schema_v1, val
 from .platform_info import run_command
 WINDOWS_NATIVE_START_COMMAND_TIMEOUT_SECONDS = 135
 
+_SAFE_HELPER_FAILURE_CLASSES = frozenset({
+    "invalid_configuration",
+    "worker_signer_policy",
+    "renter_session",
+    "pipe",
+    "worker_trust",
+    "worker_launch",
+    "worker_handshake",
+    "exact_gpu",
+    "virtual_display",
+    "worker_protocol",
+    "media_proof",
+    "media_diagnostic",
+    "media_transport",
+    "media_capability",
+    "graphics_proof",
+    "stop_unconfirmed",
+    "display_cleanup",
+})
+
 
 from .windows_native_workspace import (
     discover_native_application,
@@ -292,6 +312,18 @@ def launch_windows_native_workspace(
     )
 
 
+def _bounded_helper_failure_class(stdout: object) -> str | None:
+    if not isinstance(stdout, str):
+        return None
+    report = _json_object(stdout)
+    if report is None or report.get("ok") is not False:
+        return None
+    code = report.get("error")
+    if isinstance(code, str) and code in _SAFE_HELPER_FAILURE_CLASSES:
+        return code
+    return None
+
+
 def _native_session_command(
     executable: str,
     verb: str,
@@ -300,15 +332,20 @@ def _native_session_command(
     timeout: int = 30,
 ) -> dict[str, object]:
     """Run one helper lifecycle command without ever echoing helper diagnostics."""
+    action = verb.removeprefix("--")
+    base_error = f"native_workspace_{action}_failed"
     try:
         result = run_command(
             [executable, verb, "--json", "--session-id", session_id],
             timeout=timeout,
         )
     except (OSError, subprocess.SubprocessError, UnicodeError):
-        raise RuntimeError(f"native_workspace_{verb.removeprefix('--')}_failed") from None
+        raise RuntimeError(base_error) from None
     if result.returncode != 0:
-        raise RuntimeError(f"native_workspace_{verb.removeprefix('--')}_failed")
+        failure_class = _bounded_helper_failure_class(result.stdout)
+        if failure_class is not None:
+            raise RuntimeError(f"{base_error}:{failure_class}")
+        raise RuntimeError(base_error)
     report = _json_object(result.stdout)
     if report is None or not schema_v1(report.get("schemaVersion")):
         raise RuntimeError(f"native_workspace_{verb.removeprefix('--')}_invalid_response")
