@@ -188,13 +188,17 @@ test('cleanup is fail closed and expired sessions are stopped',()=>{
 });
 
 
-test('windows native grant redirect stays root-absolute', () => {
+test('windows native grant redirect is an absolute HTTPS URL', () => {
   assert.match(
     source,
-    /\.code\(302\)[\s\S]*\.header\('Location', `\/windows-native-desktop\.html\?session=\$\{encodeURIComponent\(sessionId\)\}`\)[\s\S]*\.send\(\)/,
+    /const host=String\(request\.headers\.host\|\|''\)\.trim\(\);/,
   );
-  assert.doesNotMatch(
+  assert.match(
     source,
-    /reply\.redirect\(`\/windows-native-desktop\.html\?session=/,
+    /new URL\([\s\S]*\/windows-native-desktop\.html\?session=\$\{encodeURIComponent\(sessionId\)\}[\s\S]*`https:\/\/\$\{host\}`[\s\S]*\)\.toString\(\)/,
+  );
+  assert.match(
+    source,
+    /\.code\(302\)\.header\('Location',target\)\.send\(\)/,
   );
 });
