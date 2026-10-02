@@ -7,7 +7,8 @@
 use crate::qualification_server::QualificationMediaServer;
 use crate::renter_lease::load_renter_session_lease;
 use crate::service_runtime::{
-    QualifiedGraphicsRuntime, ServiceRuntimeConfig, start_qualified_graphics_runtime,
+    QualifiedGraphicsRuntime, ServiceRuntimeConfig, ServiceRuntimeError,
+    start_qualified_graphics_runtime,
 };
 use crate::worker_protocol::WorkerInputEvent;
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
@@ -53,6 +54,7 @@ pub enum AuthorityError {
     NotRunning,
     Suspended,
     Degraded,
+    RuntimeFailure(&'static str),
     Stop,
     Cleanup,
 }
@@ -76,6 +78,7 @@ impl AuthorityError {
             Self::NotRunning => "native_session_not_running",
             Self::Suspended => "native_session_suspended",
             Self::Degraded => "native_session_degraded",
+            Self::RuntimeFailure(code) => code,
             Self::Stop => "native_session_stop_failed",
             Self::Cleanup => "native_session_cleanup_failed",
         }
@@ -83,6 +86,29 @@ impl AuthorityError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+fn bounded_runtime_failure_code(value: &str) -> Option<&'static str> {
+    match value {
+        "invalid_configuration" => Some("invalid_configuration"),
+        "worker_signer_policy" => Some("worker_signer_policy"),
+        "renter_session" => Some("renter_session"),
+        "pipe" => Some("pipe"),
+        "worker_trust" => Some("worker_trust"),
+        "worker_launch" => Some("worker_launch"),
+        "worker_handshake" => Some("worker_handshake"),
+        "exact_gpu" => Some("exact_gpu"),
+        "virtual_display" => Some("virtual_display"),
+        "worker_protocol" => Some("worker_protocol"),
+        "media_proof" => Some("media_proof"),
+        "media_diagnostic" => Some("media_diagnostic"),
+        "media_transport" => Some("media_transport"),
+        "media_capability" => Some("media_capability"),
+        "graphics_proof" => Some("graphics_proof"),
+        "stop_unconfirmed" => Some("stop_unconfirmed"),
+        "display_cleanup" => Some("display_cleanup"),
+        _ => None,
+    }
+}
+
 pub struct SelfTestReport {
     pub gpu_uuid: String,
 }
@@ -445,18 +471,24 @@ pub fn status_session(session_id: &str) -> Result<AuthorityStatus, AuthorityErro
 }
 
 pub fn suspend_session(session_id: &str) -> Result<(), AuthorityError> {
-    match control_request(
+    let response = control_request(
         session_id,
         "SUSPEND",
         CONTROL_CONNECT_TIMEOUT_MS,
         CONTROL_READ_TIMEOUT_MS,
-    )?
-    .as_str()
-    {
+    )?;
+    match response.as_str() {
         "OK|suspended" => Ok(()),
         "ERR|not_running" => Err(AuthorityError::NotRunning),
         "ERR|degraded" => Err(AuthorityError::Degraded),
-        _ => Err(AuthorityError::ControlProtocol),
+        _ => {
+            if let Some(code) = response.strip_prefix("ERR|degraded|") {
+                return bounded_runtime_failure_code(code)
+                    .map(AuthorityError::RuntimeFailure)
+                    .ok_or(AuthorityError::ControlProtocol);
+            }
+            Err(AuthorityError::ControlProtocol)
+        }
     }
 }
 
@@ -517,7 +549,14 @@ pub fn stop_session(session_id: &str) -> Result<(), AuthorityError> {
     match response.as_str() {
         "OK|stopped" => Ok(()),
         "ERR|stop_failed" => Err(AuthorityError::Stop),
-        _ => Err(AuthorityError::ControlProtocol),
+        _ => {
+            if let Some(code) = response.strip_prefix("ERR|stop_failed|") {
+                return bounded_runtime_failure_code(code)
+                    .map(AuthorityError::RuntimeFailure)
+                    .ok_or(AuthorityError::ControlProtocol);
+            }
+            Err(AuthorityError::ControlProtocol)
+        }
     }
 }
 
@@ -555,13 +594,13 @@ fn runtime_status(
 
 fn stop_owned_runtime(
     runtime: &Arc<Mutex<Option<QualifiedGraphicsRuntime>>>,
-) -> Result<(), AuthorityError> {
+) -> Result<(), ServiceRuntimeError> {
     let owned = {
-        let mut guard = runtime.lock().map_err(|_| AuthorityError::Stop)?;
+        let mut guard = runtime.lock().map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
         guard.take()
     };
     match owned {
-        Some(runtime) => runtime.stop().map_err(|_| AuthorityError::Cleanup),
+        Some(runtime) => runtime.stop(),
         None => Ok(()),
     }
 }
@@ -652,16 +691,16 @@ pub fn run_authority_child(
                     }
                 }
                 "SUSPEND" => {
-                    let result = runtime
-                        .lock()
-                        .map_err(|_| AuthorityError::ControlPipe)?
-                        .as_mut()
-                        .ok_or(AuthorityError::NotRunning)?
-                        .suspend_media();
-                    if result.is_ok() {
-                        "OK|suspended".to_owned()
-                    } else {
-                        "ERR|degraded".to_owned()
+                    let mut guard = runtime.lock().map_err(|_| AuthorityError::ControlPipe)?;
+                    let active = guard.as_mut().ok_or(AuthorityError::NotRunning)?;
+                    match active.suspend_media() {
+                        Ok(()) => "OK|suspended".to_owned(),
+                        Err(error) => {
+                            let code = active
+                                .failure_code()
+                                .unwrap_or_else(|| error.diagnostic_code());
+                            format!("ERR|degraded|{code}")
+                        }
                     }
                 }
                 "RESUME" => {
@@ -682,14 +721,23 @@ pub fn run_authority_child(
                 "STOP" => {
                     endpoint_alive.store(false, Ordering::SeqCst);
                     exit_after_response = true;
-                    let runtime_stopped = stop_owned_runtime(&runtime).is_ok();
+                    let prior_failure = runtime
+                        .lock()
+                        .ok()
+                        .and_then(|guard| guard.as_ref().and_then(QualifiedGraphicsRuntime::failure_code));
+                    let runtime_stop = stop_owned_runtime(&runtime);
                     let media_stopped = media_thread
                         .take()
                         .is_some_and(|thread| matches!(thread.join(), Ok(Ok(()))));
-                    if runtime_stopped && media_stopped {
+                    if runtime_stop.is_ok() && media_stopped {
                         "OK|stopped".to_owned()
                     } else {
-                        "ERR|stop_failed".to_owned()
+                        let code = runtime_stop
+                            .err()
+                            .map(ServiceRuntimeError::diagnostic_code)
+                            .or(prior_failure)
+                            .unwrap_or("worker_protocol");
+                        format!("ERR|stop_failed|{code}")
                     }
                 }
                 _ => "ERR|protocol".to_owned(),
@@ -715,6 +763,20 @@ pub fn run_authority_child(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_runtime_failure_codes_reject_unstructured_text() {
+        assert_eq!(
+            bounded_runtime_failure_code("media_transport"),
+            Some("media_transport")
+        );
+        assert_eq!(
+            bounded_runtime_failure_code("renter_session"),
+            Some("renter_session")
+        );
+        assert_eq!(bounded_runtime_failure_code("media_transport:token"), None);
+        assert_eq!(bounded_runtime_failure_code(""), None);
+    }
 
     #[test]
     fn ready_response_is_strict() {
