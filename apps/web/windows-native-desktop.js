@@ -112,10 +112,10 @@ export class WindowsNativeDesktopClient {
     ) {
       fail('windows_native_input_channel_not_ready');
     }
-    // Send an exact standalone ArrayBuffer so the browser WebSocket frame is
-    // unambiguously binary across engines/proxies; the API still requires the
-    // fixed 32-byte native input contract.
-    this.socket.send(frame.slice().buffer);
+    // Blob is always emitted as a binary WebSocket message by browsers.
+    // Keep a detached byte copy so the fixed native input frame cannot be
+    // mutated after send().
+    this.socket.send(new Blob([frame.slice()], { type: 'application/octet-stream' }));
   }
 
   #onRendered(metadata) {
