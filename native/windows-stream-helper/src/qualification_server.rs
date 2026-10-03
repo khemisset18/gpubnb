@@ -7,7 +7,7 @@ use crate::browser_media_protocol::{
     encode_browser_media_header,
 };
 use crate::local_media_protocol::{
-    LOCAL_MEDIA_REQUEST_MAX_BYTES, authenticate_local_media_upgrade,
+    LOCAL_MEDIA_REQUEST_MAX_BYTES, LocalMediaUpgradeError, authenticate_local_media_upgrade,
     validate_accepted_loopback_stream,
 };
 use crate::service_runtime::QualifiedGraphicsRuntime;
@@ -38,6 +38,23 @@ pub enum QualificationMediaServerError {
     Protocol,
     StaleConnection,
     InvalidConfiguration,
+}
+
+fn local_upgrade_rejection_status(error: LocalMediaUpgradeError) -> &'static str {
+    match error {
+        LocalMediaUpgradeError::Unauthorized => "401 Unauthorized",
+        _ => "400 Bad Request",
+    }
+}
+
+fn write_local_upgrade_rejection(
+    stream: &mut TcpStream,
+    status: &'static str,
+) {
+    let response = format!(
+        "HTTP/1.1 {status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+    );
+    let _ = stream.write_all(response.as_bytes());
 }
 
 pub struct QualificationMediaServer {
@@ -334,7 +351,13 @@ impl QualificationMediaServer {
             .set_write_timeout(Some(IO_TIMEOUT))
             .map_err(|_| QualificationMediaServerError::Socket)?;
 
-        let request = read_upgrade_request(&mut stream)?;
+        let request = match read_upgrade_request(&mut stream) {
+            Ok(request) => request,
+            Err(error) => {
+                write_local_upgrade_rejection(&mut stream, "400 Bad Request");
+                return Err(error);
+            }
+        };
         // Fetch the capability only after the connection arrives. A SUSPEND
         // revokes the previous token and RESUME creates a fresh token, so a
         // listener that was already waiting must never authenticate stale bytes.
@@ -351,8 +374,17 @@ impl QualificationMediaServer {
                 .ok_or(QualificationMediaServerError::Upgrade)?;
             (media_token, active.stream_epoch())
         };
-        let upgrade = authenticate_local_media_upgrade(&request, &self.session_id, &media_token)
-            .map_err(|_| QualificationMediaServerError::Upgrade)?;
+        let upgrade = match authenticate_local_media_upgrade(&request, &self.session_id, &media_token)
+        {
+            Ok(upgrade) => upgrade,
+            Err(error) => {
+                write_local_upgrade_rejection(
+                    &mut stream,
+                    local_upgrade_rejection_status(error),
+                );
+                return Err(QualificationMediaServerError::Upgrade);
+            }
+        };
         let accept = websocket_accept_value(&upgrade.websocket_key);
         let response = format!(
             "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
@@ -387,9 +419,24 @@ impl QualificationMediaServer {
             .set_write_timeout(Some(IO_TIMEOUT))
             .map_err(|_| QualificationMediaServerError::Socket)?;
 
-        let request = read_upgrade_request(&mut stream)?;
-        let upgrade = authenticate_local_media_upgrade(&request, &self.session_id, media_token)
-            .map_err(|_| QualificationMediaServerError::Upgrade)?;
+        let request = match read_upgrade_request(&mut stream) {
+            Ok(request) => request,
+            Err(error) => {
+                write_local_upgrade_rejection(&mut stream, "400 Bad Request");
+                return Err(error);
+            }
+        };
+        let upgrade = match authenticate_local_media_upgrade(&request, &self.session_id, media_token)
+        {
+            Ok(upgrade) => upgrade,
+            Err(error) => {
+                write_local_upgrade_rejection(
+                    &mut stream,
+                    local_upgrade_rejection_status(error),
+                );
+                return Err(QualificationMediaServerError::Upgrade);
+            }
+        };
         let accept = websocket_accept_value(&upgrade.websocket_key);
         let response = format!(
             "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
@@ -764,6 +811,22 @@ mod tests {
         assert_eq!(
             handle.join().expect("media thread"),
             Ok(())
+        );
+    }
+
+    #[test]
+    fn local_upgrade_rejection_status_is_bounded_and_secret_free() {
+        assert_eq!(
+            local_upgrade_rejection_status(LocalMediaUpgradeError::Unauthorized),
+            "401 Unauthorized"
+        );
+        assert_eq!(
+            local_upgrade_rejection_status(LocalMediaUpgradeError::Host),
+            "400 Bad Request"
+        );
+        assert_eq!(
+            local_upgrade_rejection_status(LocalMediaUpgradeError::MediaToken),
+            "400 Bad Request"
         );
     }
 
