@@ -1,6 +1,6 @@
 'use strict';
 
-import { WindowsNativeDesktopClient } from './windows-native-desktop.js';
+import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261003-input-arraybuffer-1';
 
 export function nativeDesktopStreamPath(sessionId) {
   if (
