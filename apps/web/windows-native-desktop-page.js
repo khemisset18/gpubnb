@@ -5,7 +5,7 @@ function safeNativeDesktopErrorCode(error) {
   return /^[A-Za-z0-9_:-]{1,120}$/u.test(message) ? message : 'windows_native_client_failed';
 }
 
-import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261003-input-arraybuffer-1';
+import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261003-input-blob-1';
 
 export function nativeDesktopStreamPath(sessionId) {
   if (
