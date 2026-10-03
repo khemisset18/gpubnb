@@ -279,7 +279,19 @@ impl QualificationMediaServer {
         running: &AtomicBool,
     ) -> Result<(), QualificationMediaServerError> {
         while running.load(Ordering::SeqCst) {
-            match self.serve_interactive_shared_once(runtime, running) {
+            let result = self.serve_interactive_shared_once(runtime, running);
+
+            // STOP revokes endpoint authority before joining this thread. If that
+            // revocation wakes an idle accept (or interrupts an active socket),
+            // the resulting transport error belongs to the requested shutdown,
+            // not to the graphics runtime. Returning it as a media-thread failure
+            // makes an otherwise clean STOP look like worker_protocol and can
+            // quarantine the host even though runtime cleanup succeeded.
+            if !running.load(Ordering::SeqCst) {
+                return Ok(());
+            }
+
+            match result {
                 Ok(_) => continue,
                 Err(QualificationMediaServerError::AcceptTimeout)
                 | Err(QualificationMediaServerError::Request)
@@ -287,20 +299,17 @@ impl QualificationMediaServer {
                 | Err(QualificationMediaServerError::Response)
                 | Err(QualificationMediaServerError::Input)
                 | Err(QualificationMediaServerError::Protocol)
-                | Err(QualificationMediaServerError::StaleConnection)
-                    if running.load(Ordering::SeqCst) =>
-                {
+                | Err(QualificationMediaServerError::StaleConnection) => {
                     continue;
                 }
                 Err(QualificationMediaServerError::Media)
-                    if running.load(Ordering::SeqCst)
-                        && runtime
-                            .lock()
-                            .ok()
-                            .and_then(|guard| {
-                                guard.as_ref().map(QualifiedGraphicsRuntime::suspended)
-                            })
-                            .unwrap_or(false) =>
+                    if runtime
+                        .lock()
+                        .ok()
+                        .and_then(|guard| {
+                            guard.as_ref().map(QualifiedGraphicsRuntime::suspended)
+                        })
+                        .unwrap_or(false) =>
                 {
                     continue;
                 }
@@ -735,6 +744,27 @@ mod tests {
                 .map(|(index, byte)| byte ^ mask[index % 4]),
         );
         wire
+    }
+
+    #[test]
+    fn explicit_shutdown_while_idle_accept_is_clean() {
+        let server = QualificationMediaServer::bind("shutdown-test", 1).expect("bind");
+        let running = Arc::new(AtomicBool::new(true));
+        let runtime = Arc::new(Mutex::new(None));
+
+        let thread_running = Arc::clone(&running);
+        let thread_runtime = Arc::clone(&runtime);
+        let handle = thread::spawn(move || {
+            server.serve_interactive_shared(&thread_runtime, &thread_running)
+        });
+
+        thread::sleep(Duration::from_millis(25));
+        running.store(false, Ordering::SeqCst);
+
+        assert_eq!(
+            handle.join().expect("media thread"),
+            Ok(())
+        );
     }
 
     #[test]
