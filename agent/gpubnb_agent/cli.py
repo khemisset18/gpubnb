@@ -347,6 +347,22 @@ def heartbeat_loop(
     job_thread: threading.Thread | None = None
     diagnostic_thread: threading.Thread | None = None
 
+    def emit_native_capability_snapshot() -> None:
+        if os.name != "nt":
+            return
+        # Observe only the snapshot already measured by system_inventory() in the
+        # heartbeat. Never trigger a second expensive Windows-native self-test.
+        from .windows_native_capability import cached_native_desktop_capability_snapshot
+
+        snapshot = cached_native_desktop_capability_snapshot()
+        if snapshot is None:
+            return
+        emit({
+            "event": "windows_native_capability_snapshot",
+            "available": bool(snapshot.available),
+            "reason": str(snapshot.reason)[:200],
+        })
+
     def gateway_error(exc: Exception) -> None:
         message = str(exc)[:300]
         event: dict[str, Any] = {
@@ -453,6 +469,7 @@ def heartbeat_loop(
         while stop_event is None or not stop_event.is_set():
             try:
                 result = heartbeat(client(config), key, machine_id)
+                emit_native_capability_snapshot()
                 emit({"event": "heartbeat", "result": result})
                 if job_thread is None or not job_thread.is_alive():
                     job_thread = threading.Thread(
@@ -470,6 +487,7 @@ def heartbeat_loop(
                     diagnostic_thread.start()
                 failures = 0
             except Exception as exc:
+                emit_native_capability_snapshot()
                 failures = min(failures + 1, 8)
                 emit({"event": "heartbeat_error", "type": type(exc).__name__, "message": str(exc)[:300]})
             delay = min(300, interval * (2 ** failures)) if failures else interval

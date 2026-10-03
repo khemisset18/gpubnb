@@ -30,6 +30,33 @@ WINDOWS_STREAM_HELPER_INSTALL_PATH = r"C:\\Program Files\\GPUbnb\\gpubnb-windows
 WINDOWS_STREAM_HELPER_DEV_PATH_ENV = "GPUBNB_WINDOWS_STREAM_HELPER"
 WINDOWS_STREAM_HELPER_DEV_ALLOW_ENV = "GPUBNB_WINDOWS_STREAM_HELPER_DEV_ALLOW"
 
+# Only compile-time helper error classes that can be emitted by --self-test are
+# accepted here. Unknown or caller-controlled text remains collapsed to the
+# generic fail-closed reason and is never surfaced to Agent logs.
+SELF_TEST_SAFE_FAILURE_REASONS = frozenset(
+    {
+        "windows_required",
+        "renter_session_lease_unavailable",
+        "renter_session_lease_gpu_mismatch",
+        "authority_random_generation_failed",
+        "native_runtime_start_failed",
+        "native_input_proof_failed",
+        "native_media_bind_failed",
+        "native_media_proof_failed",
+        "native_session_cleanup_failed",
+    }
+)
+
+
+def _bounded_self_test_failure_reason(stdout: str) -> str:
+    report = _parse_self_test(stdout)
+    if report is None or report.get("ok") is not False:
+        return "native_stream_self_test_failed"
+    error = report.get("error")
+    if isinstance(error, str) and error in SELF_TEST_SAFE_FAILURE_REASONS:
+        return error
+    return "native_stream_self_test_failed"
+
 
 @dataclass(frozen=True)
 class NativeWorkspaceProfile:
@@ -182,7 +209,7 @@ def windows_native_desktop_preflight(
     except (OSError, subprocess.SubprocessError, UnicodeError):
         return NativeDesktopPreflight(False, "native_stream_self_test_failed")
     if result.returncode != 0:
-        return NativeDesktopPreflight(False, "native_stream_self_test_failed")
+        return NativeDesktopPreflight(False, _bounded_self_test_failure_reason(result.stdout))
 
     report = _parse_self_test(result.stdout)
     if report is None:

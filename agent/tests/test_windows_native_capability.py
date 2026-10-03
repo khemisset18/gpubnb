@@ -94,6 +94,28 @@ class WindowsNativeCapabilityTests(unittest.TestCase):
             capability.probe_native_desktop_capability(force=True, clock=lambda: 11.0)
         self.assertEqual(preflight.call_count, 2)
 
+    def test_cached_snapshot_accessor_never_reprobes(self):
+        ready = NativeDesktopPreflight(
+            True,
+            "ready",
+            "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+            "nvenc",
+            "0.2",
+            True,
+        )
+        with (
+            patch.object(capability.platform, "system", return_value="Windows"),
+            patch.object(capability, "find_stream_helper", return_value="helper.exe"),
+            patch.object(capability, "_helper_identity", return_value=("helper.exe", 1, 100)),
+            patch.object(capability, "windows_native_desktop_preflight", return_value=ready) as preflight,
+        ):
+            self.assertIsNone(capability.cached_native_desktop_capability_snapshot())
+            measured = capability.probe_native_desktop_capability(clock=lambda: 10.0)
+            cached = capability.cached_native_desktop_capability_snapshot()
+
+        self.assertIs(cached, measured)
+        self.assertEqual(preflight.call_count, 1)
+
     def test_unexpected_probe_exception_fails_closed_and_is_cacheable(self):
         with (
             patch.object(capability.platform, "system", return_value="Windows"),

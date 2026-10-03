@@ -67,6 +67,12 @@ def invalidate_native_desktop_capability_cache() -> None:
         _CACHE = None
 
 
+def cached_native_desktop_capability_snapshot() -> NativeDesktopCapabilitySnapshot | None:
+    """Return the latest measured snapshot without triggering a new physical probe."""
+    with _CACHE_LOCK:
+        return _CACHE[3] if _CACHE is not None else None
+
+
 def probe_native_desktop_capability(
     *,
     force: bool = False,
