@@ -55,6 +55,8 @@ const BUILD_SOURCE_COMMIT: Option<&str> = option_env!("GPUBNB_SOURCE_COMMIT");
 #[cfg(target_os = "windows")]
 const PIPE_TIMEOUT_MS: u32 = 10_000;
 #[cfg(target_os = "windows")]
+const WORKER_COMMAND_WAIT_MS: u32 = u32::MAX;
+#[cfg(target_os = "windows")]
 const MEDIA_POLL_TIMEOUT_MS: u32 = 250;
 #[cfg(target_os = "windows")]
 const REQUIRED_MEDIA_FRAME_DEADLINE_MS: u32 = 8_000;
@@ -424,8 +426,12 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
         let mut media_state = MediaState::Empty;
         let mut media_session: Option<MediaSession> = None;
         loop {
+            // This worker is persistent for the lifetime of the native desktop
+            // session. Idleness is not a protocol failure: wait indefinitely for
+            // the next command, while still failing immediately if the service
+            // closes/breaks the named pipe or the Job Object terminates us.
             let frame = client
-                .read_frame(PIPE_TIMEOUT_MS)
+                .read_frame(WORKER_COMMAND_WAIT_MS)
                 .map_err(|_| WorkerError::new("worker_command_read_failed", 21))?;
             let command_frame = decode_worker_command(&frame)
                 .map_err(|_| WorkerError::new("worker_command_invalid", 21))?;
@@ -966,6 +972,13 @@ mod tests {
             media_probe_error(MediaProbeError::ProbeFailed, true).code,
             "resume_media_reproof_failed"
         );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn persistent_command_wait_never_expires_from_idle_time() {
+        assert_eq!(WORKER_COMMAND_WAIT_MS, u32::MAX);
+        assert_ne!(WORKER_COMMAND_WAIT_MS, PIPE_TIMEOUT_MS);
     }
 
     #[test]
