@@ -1,5 +1,10 @@
 'use strict';
 
+function safeNativeDesktopErrorCode(error) {
+  const message = error instanceof Error ? error.message : '';
+  return /^[A-Za-z0-9_:-]{1,120}$/u.test(message) ? message : 'windows_native_client_failed';
+}
+
 import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261003-input-arraybuffer-1';
 
 export function nativeDesktopStreamPath(sessionId) {
@@ -46,7 +51,7 @@ export function mountWindowsNativeDesktop({
       }[state?.state] ?? 'État inconnu';
       setStatus(label);
     },
-    onError: () => setStatus('Connexion interrompue — aucune commande supplémentaire n’est envoyée.'),
+    onError: (error) => setStatus(`Connexion interrompue — ${safeNativeDesktopErrorCode(error)}`),
   });
 
   const unbind = client.bindDom({ keyboardTarget: documentObject, pointerTarget: canvas });
