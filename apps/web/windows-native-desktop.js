@@ -3,10 +3,10 @@
 import {
   CanvasVideoFrameRenderer,
   WindowsNativeWebCodecsSession,
-} from './windows-native-media.js';
+} from './windows-native-media.js?v=20261003-input-arraybuffer-1';
 import {
   WindowsNativeInputEncoder,
-} from './windows-native-input.js';
+} from './windows-native-input.js?v=20261003-input-arraybuffer-1';
 
 function fail(code) {
   throw new Error(code);
