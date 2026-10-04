@@ -23,12 +23,12 @@ use crate::worker_protocol::{
     encode_worker_command, encode_worker_display_spec, encode_worker_input,
     validate_worker_media_diagnostic, validate_worker_media_poll, validate_worker_media_proof,
 };
+use gpubnb_windows_platform::PlatformError;
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
 use gpubnb_windows_platform::idd_control::{
     VirtualDisplayLease, VirtualDisplayOperation, VirtualDisplayRequest,
     activate_virtual_display_lease,
 };
-use gpubnb_windows_platform::PlatformError;
 use gpubnb_windows_platform::open_application_for_verification;
 use gpubnb_windows_platform::pipe::{
     WorkerMediaPipe, WorkerPipe, create_worker_media_pipe, create_worker_pipe,
@@ -136,12 +136,16 @@ fn map_renter_session_error(error: PlatformError) -> ServiceRuntimeError {
         PlatformError::ProviderProcessInRenterSession => ServiceRuntimeError::RenterProviderProcess,
         PlatformError::RenterTokenQueryFailed => ServiceRuntimeError::RenterTokenQuery,
         PlatformError::RenterTokenNotPrimary => ServiceRuntimeError::RenterTokenNotPrimary,
-        PlatformError::RenterTokenSessionMismatch => ServiceRuntimeError::RenterTokenSessionMismatch,
+        PlatformError::RenterTokenSessionMismatch => {
+            ServiceRuntimeError::RenterTokenSessionMismatch
+        }
         PlatformError::RenterTokenUserMismatch => ServiceRuntimeError::RenterTokenUserMismatch,
         PlatformError::InvalidWindowsSessionId
         | PlatformError::InvalidRenterUserSid
         | PlatformError::RenterSystemIdentityForbidden
-        | PlatformError::RenterProviderIdentityForbidden => ServiceRuntimeError::RenterIdentityPolicy,
+        | PlatformError::RenterProviderIdentityForbidden => {
+            ServiceRuntimeError::RenterIdentityPolicy
+        }
         _ => ServiceRuntimeError::RenterSession,
     }
 }
@@ -255,10 +259,9 @@ impl QualifiedGraphicsRuntime {
     }
 
     fn ensure_provider_boundary(&mut self) -> Result<(), ServiceRuntimeError> {
-        if let Err(error) = ensure_provider_process_absent(
-            self.windows_session_id,
-            &self.provider_user_sid,
-        ) {
+        if let Err(error) =
+            ensure_provider_process_absent(self.windows_session_id, &self.provider_user_sid)
+        {
             return Err(self.fail(map_renter_session_error(error)));
         }
         Ok(())
@@ -637,12 +640,10 @@ fn receive_bound_media_frame_after_proof(
         return Err(ServiceRuntimeError::ExactGpu);
     }
 
-    let provider_desktop_excluded = ensure_provider_process_absent(
-        windows_session_id,
-        provider_user_sid,
-    )
-    .map(|_| true)
-    .map_err(|_| ServiceRuntimeError::RenterSession)?;
+    let provider_desktop_excluded =
+        ensure_provider_process_absent(windows_session_id, provider_user_sid)
+            .map(|_| true)
+            .map_err(map_renter_session_error)?;
 
     validate_graphics_proof_chain(
         generation,
