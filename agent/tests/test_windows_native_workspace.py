@@ -154,6 +154,24 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
         self.assertFalse(result.available)
         self.assertEqual(result.reason, "renter_token_query")
 
+    def test_bounded_virtual_display_subcause_is_propagated_without_stderr(self):
+        with (
+            patch.object(native.platform, "system", return_value="Windows"),
+            patch.object(
+                native,
+                "run_command",
+                return_value=SimpleNamespace(
+                    returncode=21,
+                    stdout='{"ok":false,"error":"virtual_display_control_open"}',
+                    stderr="device-path-or-handle-must-not-surface",
+                ),
+            ),
+        ):
+            result = native.windows_native_desktop_preflight("helper.exe")
+
+        self.assertFalse(result.available)
+        self.assertEqual(result.reason, "virtual_display_control_open")
+
     def test_unknown_helper_self_test_error_stays_generic(self):
         with (
             patch.object(native.platform, "system", return_value="Windows"),
