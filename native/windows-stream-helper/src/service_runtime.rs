@@ -28,6 +28,7 @@ use gpubnb_windows_platform::idd_control::{
     VirtualDisplayLease, VirtualDisplayOperation, VirtualDisplayRequest,
     activate_virtual_display_lease,
 };
+use gpubnb_windows_platform::PlatformError;
 use gpubnb_windows_platform::open_application_for_verification;
 use gpubnb_windows_platform::pipe::{
     WorkerMediaPipe, WorkerPipe, create_worker_media_pipe, create_worker_pipe,
@@ -54,6 +55,16 @@ pub enum ServiceRuntimeError {
     InvalidConfiguration,
     WorkerSignerPolicy,
     RenterSession,
+    RenterSessionNotActive,
+    RenterSessionNotConsole,
+    RenterAnotherInteractiveSession,
+    RenterProviderProcess,
+    RenterTokenQuery,
+    RenterTokenNotPrimary,
+    RenterTokenSessionMismatch,
+    RenterTokenUserMismatch,
+    RenterIdentityPolicy,
+    ServiceIdentity,
     Pipe,
     WorkerTrust,
     WorkerLaunch,
@@ -87,6 +98,16 @@ impl ServiceRuntimeError {
             Self::InvalidConfiguration => "invalid_configuration",
             Self::WorkerSignerPolicy => "worker_signer_policy",
             Self::RenterSession => "renter_session",
+            Self::RenterSessionNotActive => "renter_session_not_active",
+            Self::RenterSessionNotConsole => "renter_session_not_console",
+            Self::RenterAnotherInteractiveSession => "renter_another_interactive_session",
+            Self::RenterProviderProcess => "renter_provider_process",
+            Self::RenterTokenQuery => "renter_token_query",
+            Self::RenterTokenNotPrimary => "renter_token_not_primary",
+            Self::RenterTokenSessionMismatch => "renter_token_session_mismatch",
+            Self::RenterTokenUserMismatch => "renter_token_user_mismatch",
+            Self::RenterIdentityPolicy => "renter_identity_policy",
+            Self::ServiceIdentity => "service_identity",
             Self::Pipe => "pipe",
             Self::WorkerTrust => "worker_trust",
             Self::WorkerLaunch => "worker_launch",
@@ -102,6 +123,26 @@ impl ServiceRuntimeError {
             Self::StopUnconfirmed => "stop_unconfirmed",
             Self::DisplayCleanup => "display_cleanup",
         }
+    }
+}
+
+fn map_renter_session_error(error: PlatformError) -> ServiceRuntimeError {
+    match error {
+        PlatformError::RenterSessionNotActive => ServiceRuntimeError::RenterSessionNotActive,
+        PlatformError::RenterSessionNotConsole => ServiceRuntimeError::RenterSessionNotConsole,
+        PlatformError::AnotherInteractiveSessionActive => {
+            ServiceRuntimeError::RenterAnotherInteractiveSession
+        }
+        PlatformError::ProviderProcessInRenterSession => ServiceRuntimeError::RenterProviderProcess,
+        PlatformError::RenterTokenQueryFailed => ServiceRuntimeError::RenterTokenQuery,
+        PlatformError::RenterTokenNotPrimary => ServiceRuntimeError::RenterTokenNotPrimary,
+        PlatformError::RenterTokenSessionMismatch => ServiceRuntimeError::RenterTokenSessionMismatch,
+        PlatformError::RenterTokenUserMismatch => ServiceRuntimeError::RenterTokenUserMismatch,
+        PlatformError::InvalidWindowsSessionId
+        | PlatformError::InvalidRenterUserSid
+        | PlatformError::RenterSystemIdentityForbidden
+        | PlatformError::RenterProviderIdentityForbidden => ServiceRuntimeError::RenterIdentityPolicy,
+        _ => ServiceRuntimeError::RenterSession,
     }
 }
 
@@ -214,13 +255,11 @@ impl QualifiedGraphicsRuntime {
     }
 
     fn ensure_provider_boundary(&mut self) -> Result<(), ServiceRuntimeError> {
-        if ensure_provider_process_absent(
+        if let Err(error) = ensure_provider_process_absent(
             self.windows_session_id,
             &self.provider_user_sid,
-        )
-        .is_err()
-        {
-            return Err(self.fail(ServiceRuntimeError::RenterSession));
+        ) {
+            return Err(self.fail(map_renter_session_error(error)));
         }
         Ok(())
     }
@@ -703,10 +742,11 @@ pub fn start_qualified_graphics_runtime(
         config.renter_user_sid,
         config.provider_user_sid,
     )
-    .map_err(|_| ServiceRuntimeError::RenterSession)?;
+    .map_err(map_renter_session_error)?;
     let renter_isolation = renter.isolation_proof();
 
-    let service_sid = current_process_user_sid().map_err(|_| ServiceRuntimeError::RenterSession)?;
+    let service_sid =
+        current_process_user_sid().map_err(|_| ServiceRuntimeError::ServiceIdentity)?;
     let pipe = create_worker_pipe(
         config.session_id,
         config.generation,
@@ -894,6 +934,18 @@ mod tests {
             "renter_session"
         );
         assert_eq!(
+            ServiceRuntimeError::RenterTokenQuery.diagnostic_code(),
+            "renter_token_query"
+        );
+        assert_eq!(
+            ServiceRuntimeError::RenterTokenUserMismatch.diagnostic_code(),
+            "renter_token_user_mismatch"
+        );
+        assert_eq!(
+            ServiceRuntimeError::ServiceIdentity.diagnostic_code(),
+            "service_identity"
+        );
+        assert_eq!(
             ServiceRuntimeError::MediaTransport.diagnostic_code(),
             "media_transport"
         );
@@ -911,6 +963,50 @@ mod tests {
         assert_eq!(
             ServiceRuntimeError::DisplayCleanup.diagnostic_code(),
             "display_cleanup"
+        );
+    }
+
+    #[test]
+    fn renter_platform_errors_map_to_bounded_classes() {
+        assert_eq!(
+            map_renter_session_error(PlatformError::RenterSessionNotActive),
+            ServiceRuntimeError::RenterSessionNotActive
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::RenterSessionNotConsole),
+            ServiceRuntimeError::RenterSessionNotConsole
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::AnotherInteractiveSessionActive),
+            ServiceRuntimeError::RenterAnotherInteractiveSession
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::ProviderProcessInRenterSession),
+            ServiceRuntimeError::RenterProviderProcess
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::RenterTokenQueryFailed),
+            ServiceRuntimeError::RenterTokenQuery
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::RenterTokenNotPrimary),
+            ServiceRuntimeError::RenterTokenNotPrimary
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::RenterTokenSessionMismatch),
+            ServiceRuntimeError::RenterTokenSessionMismatch
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::RenterTokenUserMismatch),
+            ServiceRuntimeError::RenterTokenUserMismatch
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::InvalidRenterUserSid),
+            ServiceRuntimeError::RenterIdentityPolicy
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::PipeCreateFailed),
+            ServiceRuntimeError::RenterSession
         );
     }
 
