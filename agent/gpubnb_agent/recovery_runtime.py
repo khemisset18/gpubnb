@@ -69,6 +69,27 @@ def install(cli_module: Any) -> None:
             time.sleep(seconds)
             return False
 
+        def emit_native_capability_snapshot() -> None:
+            if os.name != "nt":
+                return
+            try:
+                from .windows_native_capability import cached_native_desktop_capability_snapshot
+
+                snapshot = cached_native_desktop_capability_snapshot()
+            except Exception as exc:
+                emit({
+                    "event": "windows_native_capability_snapshot_error",
+                    "type": type(exc).__name__,
+                })
+                return
+            if snapshot is None:
+                return
+            emit({
+                "event": "windows_native_capability_snapshot",
+                "available": bool(snapshot.available),
+                "reason": str(snapshot.reason)[:200],
+            })
+
         def gateway_error(exc: Exception) -> None:
             message = str(exc)[:300]
             event: dict[str, Any] = {
@@ -248,6 +269,7 @@ def install(cli_module: Any) -> None:
                         key,
                         machine_id,
                     )
+                    emit_native_capability_snapshot()
                     emit({"event": "heartbeat", "result": result})
                     if job_thread is None or not job_thread.is_alive():
                         job_thread = threading.Thread(
@@ -260,6 +282,7 @@ def install(cli_module: Any) -> None:
                     if wait_service(float(interval)):
                         break
                 except Exception as exc:
+                    emit_native_capability_snapshot()
                     mode, reason, delay = supervisor_wait(
                         exc,
                         recovery_attempt,
