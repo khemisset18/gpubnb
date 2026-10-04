@@ -71,6 +71,12 @@ pub enum ServiceRuntimeError {
     WorkerHandshake,
     ExactGpu,
     VirtualDisplay,
+    VirtualDisplayInterfaceQuery,
+    VirtualDisplayInterfaceMissing,
+    VirtualDisplayInterfaceAmbiguous,
+    VirtualDisplayControlOpen,
+    VirtualDisplayControl,
+    VirtualDisplayGate,
     WorkerProtocol,
     MediaProof,
     MediaDiagnostic {
@@ -114,6 +120,12 @@ impl ServiceRuntimeError {
             Self::WorkerHandshake => "worker_handshake",
             Self::ExactGpu => "exact_gpu",
             Self::VirtualDisplay => "virtual_display",
+            Self::VirtualDisplayInterfaceQuery => "virtual_display_interface_query",
+            Self::VirtualDisplayInterfaceMissing => "virtual_display_interface_missing",
+            Self::VirtualDisplayInterfaceAmbiguous => "virtual_display_interface_ambiguous",
+            Self::VirtualDisplayControlOpen => "virtual_display_control_open",
+            Self::VirtualDisplayControl => "virtual_display_control",
+            Self::VirtualDisplayGate => "virtual_display_gate",
             Self::WorkerProtocol => "worker_protocol",
             Self::MediaProof => "media_proof",
             Self::MediaDiagnostic { .. } => "media_diagnostic",
@@ -123,6 +135,22 @@ impl ServiceRuntimeError {
             Self::StopUnconfirmed => "stop_unconfirmed",
             Self::DisplayCleanup => "display_cleanup",
         }
+    }
+}
+
+fn map_virtual_display_error(error: PlatformError) -> ServiceRuntimeError {
+    match error {
+        PlatformError::IddInterfaceQueryFailed => ServiceRuntimeError::VirtualDisplayInterfaceQuery,
+        PlatformError::IddInterfaceMissing => ServiceRuntimeError::VirtualDisplayInterfaceMissing,
+        PlatformError::IddInterfaceAmbiguous => {
+            ServiceRuntimeError::VirtualDisplayInterfaceAmbiguous
+        }
+        PlatformError::IddControlOpenFailed => ServiceRuntimeError::VirtualDisplayControlOpen,
+        PlatformError::IddControlFailed => ServiceRuntimeError::VirtualDisplayControl,
+        PlatformError::IddUnsafeOperation => ServiceRuntimeError::VirtualDisplayGate,
+        PlatformError::GpuGraphicsIdentityUnavailable
+        | PlatformError::GpuGraphicsIdentityMismatch => ServiceRuntimeError::ExactGpu,
+        _ => ServiceRuntimeError::VirtualDisplay,
     }
 }
 
@@ -829,7 +857,7 @@ pub fn start_qualified_graphics_runtime(
             refresh_hz: config.refresh_hz,
         },
     )
-    .map_err(|_| ServiceRuntimeError::VirtualDisplay)?;
+    .map_err(map_virtual_display_error)?;
 
     let startup = (|| -> Result<(BoundMediaFrame, MediaCapabilityToken), ServiceRuntimeError> {
         let prepare = encode_worker_command(WorkerCommandFrame {
@@ -964,6 +992,42 @@ mod tests {
         assert_eq!(
             ServiceRuntimeError::DisplayCleanup.diagnostic_code(),
             "display_cleanup"
+        );
+    }
+
+    #[test]
+    fn virtual_display_platform_errors_map_to_bounded_classes() {
+        assert_eq!(
+            map_virtual_display_error(PlatformError::IddInterfaceQueryFailed),
+            ServiceRuntimeError::VirtualDisplayInterfaceQuery
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::IddInterfaceMissing),
+            ServiceRuntimeError::VirtualDisplayInterfaceMissing
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::IddInterfaceAmbiguous),
+            ServiceRuntimeError::VirtualDisplayInterfaceAmbiguous
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::IddControlOpenFailed),
+            ServiceRuntimeError::VirtualDisplayControlOpen
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::IddControlFailed),
+            ServiceRuntimeError::VirtualDisplayControl
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::IddUnsafeOperation),
+            ServiceRuntimeError::VirtualDisplayGate
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::GpuGraphicsIdentityMismatch),
+            ServiceRuntimeError::ExactGpu
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::PipeCreateFailed),
+            ServiceRuntimeError::VirtualDisplay
         );
     }
 
