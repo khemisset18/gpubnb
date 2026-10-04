@@ -136,6 +136,24 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
         self.assertFalse(result.available)
         self.assertEqual(result.reason, "native_runtime_start_failed")
 
+    def test_bounded_renter_subcause_is_propagated_without_stderr(self):
+        with (
+            patch.object(native.platform, "system", return_value="Windows"),
+            patch.object(
+                native,
+                "run_command",
+                return_value=SimpleNamespace(
+                    returncode=21,
+                    stdout='{"ok":false,"error":"renter_token_query"}',
+                    stderr="sid-pid-or-path-must-not-surface",
+                ),
+            ),
+        ):
+            result = native.windows_native_desktop_preflight("helper.exe")
+
+        self.assertFalse(result.available)
+        self.assertEqual(result.reason, "renter_token_query")
+
     def test_unknown_helper_self_test_error_stays_generic(self):
         with (
             patch.object(native.platform, "system", return_value="Windows"),
