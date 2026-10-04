@@ -44,6 +44,23 @@ SELF_TEST_SAFE_FAILURE_REASONS = frozenset(
         "native_media_bind_failed",
         "native_media_proof_failed",
         "native_session_cleanup_failed",
+        "invalid_configuration",
+        "worker_signer_policy",
+        "renter_session",
+        "pipe",
+        "worker_trust",
+        "worker_launch",
+        "worker_handshake",
+        "exact_gpu",
+        "virtual_display",
+        "worker_protocol",
+        "media_proof",
+        "media_diagnostic",
+        "media_transport",
+        "media_capability",
+        "graphics_proof",
+        "stop_unconfirmed",
+        "display_cleanup",
     }
 )
 
