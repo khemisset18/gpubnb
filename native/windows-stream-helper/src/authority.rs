@@ -106,6 +106,12 @@ fn bounded_runtime_failure_code(value: &str) -> Option<&'static str> {
         "worker_handshake" => Some("worker_handshake"),
         "exact_gpu" => Some("exact_gpu"),
         "virtual_display" => Some("virtual_display"),
+        "virtual_display_interface_query" => Some("virtual_display_interface_query"),
+        "virtual_display_interface_missing" => Some("virtual_display_interface_missing"),
+        "virtual_display_interface_ambiguous" => Some("virtual_display_interface_ambiguous"),
+        "virtual_display_control_open" => Some("virtual_display_control_open"),
+        "virtual_display_control" => Some("virtual_display_control"),
+        "virtual_display_gate" => Some("virtual_display_gate"),
         "worker_protocol" => Some("worker_protocol"),
         "media_proof" => Some("media_proof"),
         "media_diagnostic" => Some("media_diagnostic"),
@@ -803,6 +809,14 @@ mod tests {
         assert_eq!(
             bounded_runtime_failure_code("service_identity"),
             Some("service_identity")
+        );
+        assert_eq!(
+            bounded_runtime_failure_code("virtual_display_control_open"),
+            Some("virtual_display_control_open")
+        );
+        assert_eq!(
+            bounded_runtime_failure_code("virtual_display_interface_missing"),
+            Some("virtual_display_interface_missing")
         );
         assert_eq!(bounded_runtime_failure_code("media_transport:token"), None);
         assert_eq!(bounded_runtime_failure_code(""), None);
