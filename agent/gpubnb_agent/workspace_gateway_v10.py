@@ -35,7 +35,7 @@ import websocket
 from . import workspace_gateway as legacy
 from . import workspace_gateway_v8 as reconnect
 from .execution_control import ExecutionControlError
-from .gpu_rental_preemption import _resource_transition_lock
+from .gpu_rental_preemption import TRANSIENT_QUIESCENCE_REASONS, _resource_transition_lock
 from .windows_native_runtime import (
     NativeRuntimeHandle,
     launch_windows_native_workspace,
@@ -208,13 +208,31 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             raise RuntimeError("windows_native_gpu_uuid_required")
         return specs
 
-    def _release_native_claims(self, session_id: str) -> bool:
+    def _release_native_claims(self, session_id: str) -> bool | None:
         claims = self.rental_preemption.claims_for_session(session_id)
         if not claims:
             return True
         try:
             released = self.rental_preemption.release_after_cleanup(session_id)
-        except ExecutionControlError:
+        except ExecutionControlError as exc:
+            code = str(exc)
+            if code in TRANSIENT_QUIESCENCE_REASONS:
+                # The native helper has already stopped, but Windows/NVIDIA may
+                # still report short-lived utilization or memory/process state.
+                # Keep the rental fence and retry on the next reconciliation
+                # tick. Reporting cleaned=false here would quarantine the whole
+                # machine before a transient condition has a chance to settle.
+                self._trace(
+                    "native_release_deferred",
+                    session_id=session_id,
+                    detail=f"code={_native_error_code(exc)}",
+                )
+                return None
+            self._trace(
+                "native_release_failed",
+                session_id=session_id,
+                detail=f"code={_native_error_code(exc)}",
+            )
             return False
         self._release_server_leases(session_id, released)
         return True
@@ -463,7 +481,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             raise RuntimeError("windows_native_runtime_not_ready")
         return runtime
 
-    def _stop_native_runtime(self, session_id: str) -> bool:
+    def _stop_native_runtime(self, session_id: str) -> bool | None:
         # Block reconnect callbacks before closing sockets; a reader thread may
         # observe the close concurrently and must not suspend/resume a runtime
         # that is already being destroyed.
@@ -500,6 +518,12 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
 
     def _native_stop_and_report(self, session_id: str) -> bool:
         cleaned = self._stop_native_runtime(session_id)
+        if cleaned is None:
+            # Cleanup is physically safe but the second GPU quiescence proof is
+            # transiently inconclusive. Do not tell the control plane cleanup
+            # failed: that would quarantine the Host immediately. The desired
+            # STOP state remains authoritative and the next tick retries.
+            return False
         try:
             self._request(
                 f"/agent/workspace-gateway/{session_id}/stopped",
