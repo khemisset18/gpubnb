@@ -593,6 +593,15 @@ fn read_websocket_client_frame<R: Read>(
     }
 }
 
+fn peer_disconnect_error(kind: ErrorKind) -> bool {
+    matches!(
+        kind,
+        ErrorKind::ConnectionReset
+            | ErrorKind::ConnectionAborted
+            | ErrorKind::NotConnected
+    )
+}
+
 fn try_read_websocket_client_frame(
     stream: &mut TcpStream,
 ) -> Result<Option<ClientWebSocketFrame>, QualificationMediaServerError> {
@@ -609,6 +618,14 @@ fn try_read_websocket_client_frame(
         Ok(1) => Ok(None),
         Ok(_) => read_websocket_client_frame(stream).map(Some),
         Err(error) if error.kind() == ErrorKind::WouldBlock => Ok(None),
+        // Winsock reports an abortive peer close as WSAECONNRESET instead of
+        // the zero-byte graceful-close path. A browser reload can therefore
+        // surface as ConnectionReset/ConnectionAborted even though only this
+        // WebSocket peer disappeared. Scope that condition to the connection;
+        // the authority listener must stay alive for the reconnect grace path.
+        Err(error) if peer_disconnect_error(error.kind()) => {
+            Ok(Some(ClientWebSocketFrame::Close(Vec::new())))
+        }
         Err(_) => Err(QualificationMediaServerError::Socket),
     }
 }
@@ -841,6 +858,15 @@ mod tests {
             require_connection_epoch(0, 8),
             Err(QualificationMediaServerError::StaleConnection)
         );
+    }
+
+    #[test]
+    fn peer_disconnect_errors_are_connection_scoped() {
+        assert!(peer_disconnect_error(ErrorKind::ConnectionReset));
+        assert!(peer_disconnect_error(ErrorKind::ConnectionAborted));
+        assert!(peer_disconnect_error(ErrorKind::NotConnected));
+        assert!(!peer_disconnect_error(ErrorKind::WouldBlock));
+        assert!(!peer_disconnect_error(ErrorKind::Other));
     }
 
     #[test]
