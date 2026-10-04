@@ -79,6 +79,15 @@ jobs:
       - name: Build release helper
         run: cargo build --locked --release --manifest-path native/windows-stream-helper/Cargo.toml
 
+      - name: Upload Windows stream helper artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: gpubnb-windows-stream-helper-${{ github.event.pull_request.head.sha || github.sha }}
+          path: native/windows-stream-helper/target/release/gpubnb-windows-stream.exe
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Format Windows platform adapter
         run: cargo fmt --manifest-path native/windows-platform/Cargo.toml -- --check
 
