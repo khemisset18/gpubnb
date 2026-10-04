@@ -299,7 +299,11 @@ pub fn run_self_test() -> Result<SelfTestReport, AuthorityError> {
             generation,
             display_nonce,
         ))
-        .map_err(|_| AuthorityError::RuntimeStart)?;
+        .map_err(|error| {
+            bounded_runtime_failure_code(error.diagnostic_code())
+                .map(AuthorityError::RuntimeFailure)
+                .unwrap_or(AuthorityError::RuntimeStart)
+        })?;
 
         let proof_result = (|| {
             runtime
