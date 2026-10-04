@@ -77,7 +77,7 @@ jobs:
       - name: Build release helper
         env:
           GPUBNB_WINDOWS_WORKER_SIGNER_SHA256: 200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a
-        run: cargo build --locked --release --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification
+        run: cargo build --locked --release --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification --bin gpubnb-windows-stream
 
       - name: Upload Windows stream helper artifact
         if: runner.os == 'Windows'
