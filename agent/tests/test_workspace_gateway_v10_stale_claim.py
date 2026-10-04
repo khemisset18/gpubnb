@@ -219,6 +219,39 @@ class WindowsNativeStaleClaimRecoveryTests(unittest.TestCase):
         self.assertEqual(self.runtime.load()[RESOURCE].runtime_generation, 70)
         self.assertEqual(self.probe.calls, [])
 
+    def test_transient_cleanup_defers_stopped_callback(self) -> None:
+        session = NEW_SESSION
+        self.claims.save({RESOURCE: claim_for(self.new, "RENTAL_ACTIVE")})
+
+        self.supervisor.native_runtimes = {session: object()}
+        self.supervisor._native_blocked = set()
+        self.supervisor._native_lock = __import__("threading").RLock()
+        self.supervisor.usage_last_report = {}
+        self.supervisor._close_session_channels = lambda _session_id: None
+        self.supervisor._release_server_leases = lambda *_args, **_kwargs: None
+        self.supervisor._report_error = lambda *_args, **_kwargs: None
+
+        requests: list[tuple[str, str, dict[str, object] | None]] = []
+        self.supervisor._request = lambda path, method="GET", body=None: requests.append(
+            (path, method, body)
+        ) or {}
+
+        with patch(
+            "gpubnb_agent.workspace_gateway_v10.stop_windows_native_workspace",
+            return_value=None,
+        ), patch.object(
+            self.preemption,
+            "release_after_cleanup",
+            side_effect=ExecutionControlError("rental_gpu_utilization_not_quiescent"),
+        ):
+            cleaned = self.supervisor._native_stop_and_report(session)
+
+        self.assertFalse(cleaned)
+        self.assertEqual(requests, [])
+        self.assertIn(session, self.supervisor.native_runtimes)
+        self.assertIn(session, self.supervisor._native_blocked)
+
+
 
 if __name__ == "__main__":
     unittest.main()
