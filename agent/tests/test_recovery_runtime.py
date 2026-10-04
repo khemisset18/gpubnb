@@ -187,6 +187,51 @@ class RecoveryRuntimeTests(unittest.TestCase):
         self.assertEqual(recovery[0]["reason"], "agent_auth_rejected")
         self.assertEqual(recovery[0]["retryAfterSeconds"], None)
 
+    def test_windows_recovery_loop_preserves_native_capability_snapshot_event(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            module = fake_cli(
+                tmp,
+                lambda *_a: {"ok": True},
+                lambda *_a, **_k: None,
+                lambda *_a, **_k: None,
+            )
+            install(module)
+            stop = ScriptedServiceStop([True])
+            snapshot = SimpleNamespace(
+                available=False,
+                reason="renter_session_lease_unavailable",
+            )
+            with (
+                patch("gpubnb_agent.recovery_runtime.os.name", "nt"),
+                patch(
+                    "gpubnb_agent.windows_native_capability.cached_native_desktop_capability_snapshot",
+                    return_value=snapshot,
+                ),
+                patch(
+                    "gpubnb_agent.workspace_gateway.run_workspace_gateway_forever",
+                    side_effect=lambda stop_event=None, **_kwargs: stop_event.wait(1),
+                ),
+            ):
+                module.heartbeat_loop(
+                    stop_event=stop,
+                    process_mode="_service",
+                    event_sink=module.events.append,
+                )
+
+        snapshots = [
+            event
+            for event in module.events
+            if event.get("event") == "windows_native_capability_snapshot"
+        ]
+        self.assertEqual(
+            snapshots,
+            [{
+                "event": "windows_native_capability_snapshot",
+                "available": False,
+                "reason": "renter_session_lease_unavailable",
+            }],
+        )
+
     def test_install_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             module = fake_cli(tmp, lambda *_a: {"ok": True}, lambda *_a, **_k: None, lambda *_a, **_k: None)
