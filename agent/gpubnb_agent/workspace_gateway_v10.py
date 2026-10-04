@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import platform
 import re
+import socket
 import threading
 import time
 from dataclasses import dataclass, replace
@@ -106,6 +107,49 @@ def _native_websocket_target(handle: NativeRuntimeHandle) -> tuple[str, int]:
     scheme = "wss" if parsed.scheme in {"https", "wss"} else "ws"
     host = "[::1]" if parsed.hostname == "::1" else "127.0.0.1"
     return f"{scheme}://{host}:{port}{parsed.path}", port
+
+
+def _connect_native_websocket(runtime: NativeGatewayRuntime) -> websocket.WebSocket:
+    """Connect to the privileged helper over a kernel-direct loopback socket.
+
+    websocket-client consults HTTP_PROXY/http_proxy unless its normal connection
+    path decides the target is excluded. Supplying an already-connected socket
+    makes the loopback security boundary explicit and prevents a proxy from ever
+    seeing the ephemeral media capability.
+    """
+    try:
+        parsed = urlsplit(runtime.websocket_url)
+        if (
+            parsed.scheme != "ws"
+            or parsed.hostname not in {"127.0.0.1", "::1"}
+            or parsed.port != runtime.port
+            or parsed.path != f"/session/{runtime.session_id}"
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("endpoint")
+    except (TypeError, ValueError):
+        raise RuntimeError("windows_native_media_endpoint_invalid") from None
+
+    direct_socket = socket.create_connection(
+        (parsed.hostname, runtime.port),
+        timeout=10.0,
+    )
+    try:
+        origin_host = "[::1]" if parsed.hostname == "::1" else "127.0.0.1"
+        return websocket.create_connection(
+            runtime.websocket_url,
+            socket=direct_socket,
+            header=[f"{WINDOWS_NATIVE_MEDIA_HEADER}: {runtime.handle.media_token}"],
+            origin=f"http://{origin_host}:{runtime.port}",
+            timeout=10.0,
+            enable_multithread=True,
+        )
+    except Exception:
+        direct_socket.close()
+        raise
 
 
 def _split_desired_sessions(payload: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -706,14 +750,8 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             runtime = self._native_runtime(session_id)
             # No browser header, cookie, subprotocol or authorization value is
             # forwarded to the privileged helper. Its capability is injected
-            # exclusively by the Agent on loopback.
-            ws = websocket.create_connection(
-                runtime.websocket_url,
-                header=[f"{WINDOWS_NATIVE_MEDIA_HEADER}: {runtime.handle.media_token}"],
-                origin=f"http://127.0.0.1:{runtime.port}",
-                timeout=10.0,
-                enable_multithread=True,
-            )
+            # exclusively by the Agent over a kernel-direct loopback socket.
+            ws = _connect_native_websocket(runtime)
             set_timeout = getattr(ws, "settimeout", None)
             if callable(set_timeout):
                 set_timeout(None)
