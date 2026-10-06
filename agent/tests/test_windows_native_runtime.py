@@ -479,6 +479,8 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
         supervisor = object.__new__(gateway_v10.GatewaySupervisor)
         supervisor.machine_id = "machine-1"
         supervisor._reconnect_lock = threading.Lock()
+        supervisor._native_lock = threading.RLock()
+        supervisor._native_resume_locks = {}
         supervisor._reconnect_paused_sessions = {"sess-1"}
         supervisor._reconnect_last_liveness = {"sess-1": 0.0}
         supervisor.usage_last_report = {"sess-1": 0.0}
@@ -511,6 +513,8 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
         supervisor = object.__new__(gateway_v10.GatewaySupervisor)
         supervisor.machine_id = "machine-1"
         supervisor._reconnect_lock = threading.Lock()
+        supervisor._native_lock = threading.RLock()
+        supervisor._native_resume_locks = {}
         supervisor._reconnect_paused_sessions = {"sess-1"}
         supervisor._reconnect_last_liveness = {"sess-1": 0.0}
         supervisor.usage_last_report = {"sess-1": 0.0}
