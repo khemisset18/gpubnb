@@ -189,7 +189,7 @@ fi
 redeem_txid="${expected_redeem_txid}"
 
 redeem_block="$("${CLI[@]}" generatetoaddress 1 "${mine_address}" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0])')"
-conf="$("${CLI[@]}" getrawtransaction "${redeem_txid}" true | python3 -c 'import json,sys; print(json.load(sys.stdin).get("confirmations",0))')
+conf="$("${CLI[@]}" getrawtransaction "${redeem_txid}" true | python3 -c 'import json,sys; print(json.load(sys.stdin).get("confirmations",0))')"
 if (( conf < 1 )); then echo "ERROR: redeem did not confirm"; exit 1; fi
 
 # Simulated crash after confirmation but before application state commit.
