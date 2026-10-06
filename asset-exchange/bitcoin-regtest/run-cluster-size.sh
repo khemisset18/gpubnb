@@ -7,9 +7,9 @@ set -euo pipefail
 CLI=("${BITCOIN_BIN_DIR}/bitcoin-cli" -regtest -datadir="${BITCOIN_REGTEST_DATADIR}")
 WCLI=("${BITCOIN_BIN_DIR}/bitcoin-cli" -regtest -datadir="${BITCOIN_REGTEST_DATADIR}" -rpcwallet=ae-ci)
 
-limit_kvb="$("${CLI[@]}" getmempoolinfo | python3 -c 'import json,sys; print(json.load(sys.stdin)["limitclustersize"])')"
-if [[ "${limit_kvb}" != "101" ]]; then
-  echo "ERROR: expected Bitcoin Core 31.1 default cluster size limit 101 kvB, got ${limit_kvb}"
+limit_vbytes="$("${CLI[@]}" getmempoolinfo | python3 -c 'import json,sys; print(json.load(sys.stdin)["limitclustersize"])')"
+if [[ "${limit_vbytes}" != "101000" ]]; then
+  echo "ERROR: expected Bitcoin Core 31.1 default cluster size limit 101000 vbytes, got ${limit_vbytes}"
   exit 1
 fi
 
@@ -165,7 +165,7 @@ print(d["txcount"], d["clusterweight"])
 PY
 )
 
-limit_weight="$((limit_kvb * 1000 * 4))"
+limit_weight="$((limit_vbytes * 4))"
 if (( accepted_weight >= limit_weight )); then
   echo "ERROR: accepted cluster already exceeds configured size boundary"
   exit 1
@@ -208,7 +208,7 @@ if "${CLI[@]}" getmempoolentry "${child2_txid}" >/dev/null 2>&1; then
 fi
 
 echo "Bitcoin Core cluster-size test passed."
-echo "limitclustersize_kvb=${limit_kvb}"
+echo "limitclustersize_vbytes=${limit_vbytes}"
 echo "accepted_cluster_txcount=${accepted_count}"
 echo "accepted_clusterweight=${accepted_weight}"
 echo "child1_vsize=${child1_vsize}"
