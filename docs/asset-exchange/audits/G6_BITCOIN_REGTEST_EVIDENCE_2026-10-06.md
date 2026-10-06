@@ -243,7 +243,36 @@ This demonstrates that refund fee-bump logic cannot reason only about the origin
 
 It is still not proof against every larger package/cluster topology.
 
-## 10. Security findings discovered during implementation
+
+## 10. Bitcoin Core cluster-count boundary
+
+The regtest harness now verifies the Bitcoin Core 31.1 cluster-count policy directly.
+
+Scenario:
+1. inspect `getmempoolinfo.limitclustercount`;
+2. construct a chain of 64 explicitly connected transactions;
+3. verify `getmempoolcluster.txcount == 64`;
+4. construct and sign transaction #65 spending the accepted cluster tip;
+5. require `testmempoolaccept` to reject transaction #65 for the cluster boundary;
+6. mine the accepted 64-transaction cluster so later tests start from a clean mempool.
+
+Observed run:
+- workflow: Asset Exchange Bitcoin Regtest;
+- run id: `37419738616`;
+- source commit: `dacc2c1e0864a3242141b471a6b165225ad54470`;
+- conclusion: SUCCESS.
+
+Observed values:
+- `limitclustercount=64`;
+- accepted cluster txcount: `64`;
+- accepted clusterweight: `28281`;
+- transaction #65 rejection reason: `too-large-cluster`.
+
+This is direct evidence that the pinned Bitcoin Core 31.1 node enforces the expected 64-transaction cluster-count boundary.
+
+It does NOT yet prove the separate default cluster-size boundary of approximately 101 kvB.
+
+## 11. Security findings discovered during implementation
 
 ### G6-F001 — Preimage length initially enforced only by application
 Initial script checked SHA256 preimage equality but did not constrain the preimage byte length on-chain.
@@ -307,7 +336,7 @@ None were bypassed. Each was corrected and rerun.
 
 Disposition: FIXED.
 
-## 11. What this evidence DOES prove
+## 12. What this evidence DOES prove
 
 Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - reviewed P2WSH script and canonical Miniscript descriptor agree;
@@ -316,6 +345,7 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - CLTV refund timing works;
 - refund replacement works in the tested singleton RBF scenario;
 - a costly descendant can pin a modest replacement, while a sufficiently funded parent replacement evicts the parent+child cluster;
+- the pinned Bitcoin Core 31.1 node accepts a 64-transaction cluster and rejects transaction #65 with `too-large-cluster`;
 - redeem/refund confirmations respond safely to forced one-block reorgs;
 - two independent nodes can diverge, report UNCERTAIN tips, and converge to the heavier chain;
 - a transaction with two confirmations on the losing fork returns to zero confirmations after reorg;
@@ -325,12 +355,12 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - encrypted recovery material can be exported before funding;
 - a refund can execute after the wallet is unloaded.
 
-## 12. What this evidence does NOT prove
+## 13. What this evidence does NOT prove
 
 STOP-SHIP remains for Mainnet until at least:
 - production timeout derivation is reviewed;
 - deeper/multi-block reorg matrix beyond the tested two-vs-four-block fork passes;
-- deeper package/cluster-limit topologies beyond the tested single-descendant pinning case pass;
+- the separate default cluster-size (~101 kvB) boundary and deeper package topologies pass;
 - hardware-wallet / external signer compatibility matrix passes;
 - standalone recovery tooling is packaged/reproducibly released;
 - dependency/SBOM/provenance release evidence is complete;
