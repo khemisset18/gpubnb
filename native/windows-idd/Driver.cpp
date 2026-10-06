@@ -17,9 +17,11 @@ EXTERN_C const GUID GUID_DEVINTERFACE_GPUBNB_IDD_CONTROL =
 static_assert(
     !(GPUBNB_PHYSICAL_QUALIFICATION_BUILD == 1 && GPUBNB_RELEASE_CANDIDATE_BUILD == 1),
     "qualification and release-candidate mutation authorities are mutually exclusive");
-static constexpr bool GPUBNB_ENABLE_MONITOR_MUTATION =
-    GPUBNB_PHYSICAL_QUALIFICATION_BUILD == 1 ||
-    GPUBNB_RELEASE_CANDIDATE_BUILD == 1;
+#if GPUBNB_PHYSICAL_QUALIFICATION_BUILD == 1 || GPUBNB_RELEASE_CANDIDATE_BUILD == 1
+static constexpr bool GPUBNB_ENABLE_MONITOR_MUTATION = true;
+#else
+static constexpr bool GPUBNB_ENABLE_MONITOR_MUTATION = false;
+#endif
 
 static void GPUbnbFillSignalInfo(
     _Out_ DISPLAYCONFIG_VIDEO_SIGNAL_INFO* mode,
