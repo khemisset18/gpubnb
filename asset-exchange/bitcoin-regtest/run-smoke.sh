@@ -12,6 +12,10 @@ ROOT="${RUNNER_TEMP:-/tmp}/gpubnb-bitcoin-regtest-${RANDOM}-${RANDOM}"
 DATA_DIR="${ROOT}/node"
 mkdir -p "${DATA_DIR}"
 
+MOCK_SIGNER="$(pwd)/asset-exchange/bitcoin-regtest/mock-external-signer.py"
+chmod +x "${MOCK_SIGNER}"
+export GPUBNB_MOCK_SIGNER="${MOCK_SIGNER}"
+
 cleanup() {
   set +e
   "${BITCOIN_CLI}" -regtest -datadir="${DATA_DIR}" stop >/dev/null 2>&1 || true
@@ -35,7 +39,7 @@ rpcallowip=127.0.0.1
 fallbackfee=0.00010000
 EOF
 
-"${BITCOIND}" -datadir="${DATA_DIR}" -daemonwait
+"${BITCOIND}" -datadir="${DATA_DIR}" -signer="${MOCK_SIGNER}" -daemonwait
 
 CLI=("${BITCOIN_CLI}" -regtest -datadir="${DATA_DIR}")
 
@@ -50,6 +54,9 @@ if [[ "${connections}" != "0" ]]; then
   echo "ERROR: isolated regtest unexpectedly has P2P connections: ${connections}"
   exit 1
 fi
+
+BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
+  asset-exchange/bitcoin-regtest/run-external-signer-contract.sh
 
 "${CLI[@]}" createwallet "ae-ci" false false "" false true >/dev/null
 WCLI=("${BITCOIN_CLI}" -regtest -datadir="${DATA_DIR}" -rpcwallet=ae-ci)
