@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createPostgresOfferRepository, withTransaction } from "../src/postgres-offer-repository.mjs";
-import { createUnsignedOffer, createAcceptance, offerDigestHex, acceptanceDigestHex } from "../../core/src/index.mjs";
+import { createUnsignedOffer, createAcceptance, offerDigestHex, acceptanceDigestHex } from "../../core/src/index.mjs";\n\nconst fixtureRequestId = (label) => `fixture-${label}-request-0001`;
 
 function fakePool(script = []) {
   const calls = [];
@@ -78,7 +78,7 @@ test("repository calls parameterized publish function and never interpolates off
     offer,
     offerHash: offerDigestHex(offer),
     signature: "sig",
-    idempotencyKey: "publish-offer-0001"
+    idempotencyKey: fixtureRequestId("publish")
   });
 
   assert.equal(result.status, "OPEN");
@@ -109,7 +109,7 @@ test("repository accept call binds deployment, offer hash and acceptance hash as
     acceptance,
     acceptanceHash: acceptanceDigestHex(acceptance),
     signature: "sig",
-    idempotencyKey: "accept-offer-0001"
+    idempotencyKey: fixtureRequestId("accept")
   });
 
   assert.equal(result.tradeId, "trade-00000001");

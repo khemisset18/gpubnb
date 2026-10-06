@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createUnsignedOffer, offerDigestHex } from "../../core/src/index.mjs";
 import { createOfferService } from "../src/offer-service.mjs";
 
-const actorMaker = { subject: "maker:test:001", sessionId: "session-maker-001", authnMethod: "EXCHANGE_SESSION" };
+const actorMaker = { subject: "maker:test:001", sessionId: "session-maker-001", authnMethod: "EXCHANGE_SESSION" };\nconst fixtureRequestId = (label) => `fixture-${label}-request-0001`;
 const actorTaker = { subject: "taker:test:001", sessionId: "session-taker-001", authnMethod: "EXCHANGE_SESSION" };
 
 const rawOffer = {
@@ -57,7 +57,7 @@ test("publishing requires maker object authorization and verified signature", as
     actor: { ...actorMaker, subject: "other:test:001" },
     offer: rawOffer,
     signature: "sig",
-    idempotencyKey: "publish-offer-0001"
+    idempotencyKey: fixtureRequestId("publish-denied")
   }));
 
   const rejecting = service(repo, { verifyOfferSignature: async () => false });
@@ -65,14 +65,14 @@ test("publishing requires maker object authorization and verified signature", as
     actor: actorMaker,
     offer: rawOffer,
     signature: "sig",
-    idempotencyKey: "publish-offer-0002"
+    idempotencyKey: fixtureRequestId("publish-badsig")
   }));
 
   const result = await svc.publishOffer({
     actor: actorMaker,
     offer: rawOffer,
     signature: "sig",
-    idempotencyKey: "publish-offer-0003"
+    idempotencyKey: fixtureRequestId("publish-good")
   });
   assert.equal(result.status, "OPEN");
 });
@@ -84,13 +84,13 @@ test("cancel uses stored maker identity, not caller-supplied ownership", async (
   await assert.rejects(() => svc.cancelOffer({
     actor: actorTaker,
     offerId: rawOffer.offerId,
-    idempotencyKey: "cancel-offer-0001"
+    idempotencyKey: fixtureRequestId("cancel-denied")
   }));
 
   const result = await svc.cancelOffer({
     actor: actorMaker,
     offerId: rawOffer.offerId,
-    idempotencyKey: "cancel-offer-0002"
+    idempotencyKey: fixtureRequestId("cancel-good")
   });
   assert.equal(result.status, "CANCELLED");
 });
@@ -116,7 +116,7 @@ test("acceptance binds taker, offer hash and policy epoch for atomic repository 
     actor: actorTaker,
     acceptance,
     signature: "sig",
-    idempotencyKey: "accept-offer-0001"
+    idempotencyKey: fixtureRequestId("accept-good")
   });
 
   assert.equal(result.status, "CONSUMED");
@@ -145,7 +145,7 @@ test("acceptance rejects wrong actor and invalid signature before repository mut
     actor: actorMaker,
     acceptance,
     signature: "sig",
-    idempotencyKey: "accept-offer-0002"
+    idempotencyKey: fixtureRequestId("accept-wrongactor")
   }));
 
   const rejecting = service(repo, { verifyAcceptanceSignature: async () => false });
@@ -153,7 +153,7 @@ test("acceptance rejects wrong actor and invalid signature before repository mut
     actor: actorTaker,
     acceptance,
     signature: "sig",
-    idempotencyKey: "accept-offer-0003"
+    idempotencyKey: fixtureRequestId("accept-badsig")
   }));
 
   assert.equal(repo.calls.filter(([name]) => name === "accept").length, 0);
@@ -178,7 +178,7 @@ test("cross-deployment replay is rejected before persistence", async () => {
     actor: actorTaker,
     acceptance,
     signature: "sig",
-    idempotencyKey: "accept-replay-0001"
+    idempotencyKey: fixtureRequestId("accept-replay")
   }));
   assert.equal(repo.calls.filter(([name]) => name === "accept").length, 0);
 });
@@ -202,6 +202,6 @@ test("acceptance timestamp cannot be far in the future", async () => {
     actor: actorTaker,
     acceptance,
     signature: "sig",
-    idempotencyKey: "accept-future-0001"
+    idempotencyKey: fixtureRequestId("accept-future")
   }));
 });

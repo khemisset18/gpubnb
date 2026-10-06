@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCommandEnvelope, assertCommandEpoch, commandClass } from "../src/command-envelope.mjs";
+import { createCommandEnvelope, assertCommandEpoch, commandClass } from "../src/command-envelope.mjs";\n\nconst fixtureRequestId = (label) => `fixture-${label}-request-0001`;
 
 const base = {
   commandId: "command-00000001",
   tradeId: "trade-00000001",
   policyEpoch: 5,
-  idempotencyKey: "idempotency-key-0001",
+  idempotencyKey: fixtureRequestId("command"),
   requestHash: "a".repeat(64),
   createdAtUnixMs: 2000000000000
 };
