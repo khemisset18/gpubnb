@@ -1,9 +1,11 @@
 ---- MODULE AssetExchangeV1 ----
 EXTENDS Naturals, FiniteSets, TLC
 
-CONSTANTS Maker, Taker1, Taker2, MaxEpoch
+CONSTANTS Maker, Taker1, Taker2, MaxEpoch, DeploymentA, DeploymentB
 
 Actors == {Maker, Taker1, Taker2}
+Deployments == {DeploymentA, DeploymentB}
+CurrentDeployment == DeploymentA
 
 OfferStates == {"OPEN", "RESERVED", "CANCELLED", "CONSUMED"}
 TradeStates == {"NONE", "TERMS_SIGNED", "A_LOCKED", "B_LOCKED",
@@ -35,13 +37,14 @@ VARIABLES
   newLocksEnabled,
   coreAvailable,
   replayConsumed,
-  lockCreatedEpoch
+  lockCreatedEpoch,
+  offerDeployment
 
 vars == <<offerState, acceptedBy, tradeState, termsSigned, lockBroadcast,
           bundleGenerated, bundleValidated, bundleExported, policyEpoch,
           commandEpoch, mode, targetMode, chainA, chainB, feeState, kycStatus,
           recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed,
-          lockCreatedEpoch>>
+          lockCreatedEpoch, offerDeployment>>
 
 Init ==
   /\ offerState = "OPEN"
@@ -65,10 +68,12 @@ Init ==
   /\ coreAvailable = TRUE
   /\ replayConsumed = FALSE
   /\ lockCreatedEpoch = 0
+  /\ offerDeployment \in Deployments
 
 CanAccept(t) ==
   /\ t \in {Taker1, Taker2}
   /\ offerState = "OPEN"
+  /\ offerDeployment = CurrentDeployment
   /\ IF mode = "CONFORMITE" THEN kycStatus = "APPROVED" ELSE kycStatus \in KycStates
   /\ mode # "TRANSITION"
 
@@ -80,7 +85,7 @@ Accept(t) ==
                   bundleGenerated, bundleValidated, bundleExported,
                   policyEpoch, commandEpoch, mode, targetMode, chainA, chainB,
                   feeState, kycStatus, recoveryEnabled, newLocksEnabled,
-                  coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 Cancel ==
   /\ offerState = "OPEN"
@@ -89,7 +94,7 @@ Cancel ==
                   bundleGenerated, bundleValidated, bundleExported,
                   policyEpoch, commandEpoch, mode, targetMode, chainA, chainB,
                   feeState, kycStatus, recoveryEnabled, newLocksEnabled,
-                  coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 SignTerms ==
   /\ offerState = "RESERVED"
@@ -101,7 +106,7 @@ SignTerms ==
   /\ UNCHANGED <<acceptedBy, lockBroadcast, bundleGenerated, bundleValidated,
                   bundleExported, policyEpoch, commandEpoch, mode, targetMode,
                   chainA, chainB, feeState, kycStatus, recoveryEnabled,
-                  newLocksEnabled, coreAvailable, lockCreatedEpoch>>
+                  newLocksEnabled, coreAvailable, lockCreatedEpoch, offerDeployment>>
 
 GenerateBundle ==
   /\ termsSigned
@@ -109,7 +114,7 @@ GenerateBundle ==
   /\ UNCHANGED <<offerState, acceptedBy, tradeState, termsSigned, lockBroadcast,
                   bundleValidated, bundleExported, policyEpoch, commandEpoch,
                   mode, targetMode, chainA, chainB, feeState, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 ValidateBundle ==
   /\ bundleGenerated
@@ -117,7 +122,7 @@ ValidateBundle ==
   /\ UNCHANGED <<offerState, acceptedBy, tradeState, termsSigned, lockBroadcast,
                   bundleGenerated, bundleExported, policyEpoch, commandEpoch,
                   mode, targetMode, chainA, chainB, feeState, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 ExportBundle ==
   /\ bundleValidated
@@ -125,7 +130,7 @@ ExportBundle ==
   /\ UNCHANGED <<offerState, acceptedBy, tradeState, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, policyEpoch, commandEpoch,
                   mode, targetMode, chainA, chainB, feeState, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 BroadcastALock ==
   /\ termsSigned
@@ -142,7 +147,8 @@ BroadcastALock ==
   /\ UNCHANGED <<offerState, acceptedBy, termsSigned, bundleGenerated,
                   bundleValidated, bundleExported, policyEpoch, commandEpoch,
                   mode, targetMode, chainB, feeState, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed,
+                  offerDeployment>>
 
 ConfirmA ==
   /\ tradeState = "A_LOCKED"
@@ -151,7 +157,7 @@ ConfirmA ==
   /\ UNCHANGED <<offerState, acceptedBy, tradeState, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, policyEpoch,
                   commandEpoch, mode, targetMode, chainB, feeState, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 BroadcastBLock ==
   /\ chainA = "CONFIRMED"
@@ -163,7 +169,7 @@ BroadcastBLock ==
   /\ UNCHANGED <<offerState, acceptedBy, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, policyEpoch,
                   commandEpoch, mode, targetMode, chainA, feeState, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 ConfirmB ==
   /\ tradeState = "B_LOCKED"
@@ -172,7 +178,7 @@ ConfirmB ==
   /\ UNCHANGED <<offerState, acceptedBy, tradeState, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, policyEpoch,
                   commandEpoch, mode, targetMode, chainA, feeState, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 RevealSecret ==
   /\ chainA = "CONFIRMED"
@@ -183,7 +189,7 @@ RevealSecret ==
   /\ UNCHANGED <<offerState, acceptedBy, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, policyEpoch,
                   commandEpoch, mode, targetMode, chainA, feeState, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 ConfirmCounterRedeem ==
   /\ tradeState = "SECRET_REVEALED"
@@ -194,7 +200,7 @@ ConfirmCounterRedeem ==
   /\ UNCHANGED <<offerState, acceptedBy, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, policyEpoch,
                   commandEpoch, mode, targetMode, chainB, feeState, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 Complete ==
   /\ chainA = "SPENT_REDEEM"
@@ -205,7 +211,7 @@ Complete ==
   /\ UNCHANGED <<offerState, acceptedBy, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, policyEpoch,
                   commandEpoch, mode, targetMode, chainA, chainB, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 BecomeRefundEligible ==
   /\ tradeState \in {"A_LOCKED", "B_LOCKED", "REORG_HOLD"}
@@ -215,7 +221,7 @@ BecomeRefundEligible ==
   /\ UNCHANGED <<offerState, acceptedBy, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, policyEpoch,
                   commandEpoch, mode, targetMode, chainA, chainB, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 Refund ==
   /\ tradeState = "REFUND_ELIGIBLE"
@@ -225,7 +231,7 @@ Refund ==
   /\ UNCHANGED <<offerState, acceptedBy, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, policyEpoch,
                   commandEpoch, mode, targetMode, chainA, chainB, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 ReorgA ==
   /\ chainA \in {"CONFIRMED", "SPENT_REDEEM"}
@@ -234,7 +240,7 @@ ReorgA ==
   /\ UNCHANGED <<offerState, acceptedBy, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, policyEpoch,
                   commandEpoch, mode, targetMode, chainB, feeState, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 BeginModeTransition(newMode) ==
   /\ newMode \in {"CONFORMITE", "SOUVERAIN"}
@@ -248,7 +254,7 @@ BeginModeTransition(newMode) ==
   /\ UNCHANGED <<offerState, acceptedBy, tradeState, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, commandEpoch,
                   chainA, chainB, feeState, kycStatus, recoveryEnabled,
-                  coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 ActivateTargetMode ==
   /\ mode = "TRANSITION"
@@ -258,7 +264,7 @@ ActivateTargetMode ==
   /\ UNCHANGED <<offerState, acceptedBy, tradeState, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, policyEpoch,
                   targetMode, chainA, chainB, feeState, kycStatus,
-                  recoveryEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 ChangeKycStatus(s) ==
   /\ s \in KycStates
@@ -266,14 +272,14 @@ ChangeKycStatus(s) ==
   /\ UNCHANGED <<offerState, acceptedBy, tradeState, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, policyEpoch,
                   commandEpoch, mode, targetMode, chainA, chainB, feeState,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 AssetExchangeOutage ==
   /\ coreAvailable' = TRUE
   /\ UNCHANGED <<offerState, acceptedBy, tradeState, termsSigned, lockBroadcast,
                   bundleGenerated, bundleValidated, bundleExported, policyEpoch,
                   commandEpoch, mode, targetMode, chainA, chainB, feeState,
-                  kycStatus, recoveryEnabled, newLocksEnabled, replayConsumed, lockCreatedEpoch>>
+                  kycStatus, recoveryEnabled, newLocksEnabled, replayConsumed, lockCreatedEpoch, offerDeployment>>
 
 Next ==
   \/ \E t \in {Taker1, Taker2}: Accept(t)
@@ -320,6 +326,7 @@ TypeOK ==
   /\ coreAvailable \in BOOLEAN
   /\ replayConsumed \in BOOLEAN
   /\ lockCreatedEpoch \in 0..MaxEpoch
+  /\ offerDeployment \in Deployments
 
 NoDoubleFill == Cardinality(acceptedBy) <= 1
 
@@ -349,6 +356,10 @@ FeeDoesNotGateRecovery ==
 
 CompletedRequiresRedeems ==
   tradeState = "COMPLETED" => (chainA = "SPENT_REDEEM" /\ chainB = "SPENT_REDEEM")
+
+CrossDeploymentReplayBlocked ==
+  (offerState \in {"RESERVED", "CONSUMED"} \/ lockBroadcast)
+    => offerDeployment = CurrentDeployment
 
 Spec == Init /\ [][Next]_vars
 
