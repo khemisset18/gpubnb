@@ -8,6 +8,43 @@ function canonicalId(value, field) {
   return value;
 }
 
+export function createTipEvidence(input) {
+  invariant(input && typeof input === "object" && !Array.isArray(input), "TIP_EVIDENCE_TYPE", "tip evidence must be an object");
+  const allowed = new Set(["chainId","networkId","sourceId","tipHash","tipHeight","observedAtUnixMs"]);
+  for (const key of Object.keys(input)) invariant(allowed.has(key), "TIP_EVIDENCE_UNKNOWN_FIELD", `unknown tip evidence field: ${key}`);
+
+  const chainId = canonicalId(input.chainId, "chainId");
+  const networkId = canonicalId(input.networkId, "networkId");
+  const sourceId = canonicalId(input.sourceId, "sourceId");
+  invariant(typeof input.tipHash === "string" && /^[0-9a-fA-F]{16,128}$/.test(input.tipHash), "TIP_EVIDENCE_HASH", "invalid tip hash");
+  invariant(Number.isSafeInteger(input.tipHeight) && input.tipHeight >= 0, "TIP_EVIDENCE_HEIGHT", "invalid tip height");
+  invariant(Number.isSafeInteger(input.observedAtUnixMs) && input.observedAtUnixMs > 0, "TIP_EVIDENCE_TIME", "invalid observation timestamp");
+
+  return Object.freeze({
+    chainId,
+    networkId,
+    sourceId,
+    tipHash: input.tipHash.toLowerCase(),
+    tipHeight: input.tipHeight,
+    observedAtUnixMs: input.observedAtUnixMs
+  });
+}
+
+export function tipEvidenceConsistency(evidences) {
+  invariant(Array.isArray(evidences) && evidences.length >= 2, "TIP_EVIDENCE_QUORUM", "at least two independent tip sources required");
+  const parsed = evidences.map(createTipEvidence);
+  const sourceIds = new Set(parsed.map((item) => item.sourceId));
+  invariant(sourceIds.size === parsed.length, "TIP_EVIDENCE_DUPLICATE_SOURCE", "duplicate tip source is not an independent witness");
+
+  const first = parsed[0];
+  for (const item of parsed.slice(1)) {
+    if (item.chainId !== first.chainId || item.networkId !== first.networkId) return "CONFLICT";
+    if (item.tipHash === first.tipHash && item.tipHeight !== first.tipHeight) return "CONFLICT";
+    if (item.tipHash !== first.tipHash || item.tipHeight !== first.tipHeight) return "UNCERTAIN";
+  }
+  return "CONSISTENT";
+}
+
 export function createChainEvidence(input) {
   invariant(input && typeof input === "object" && !Array.isArray(input), "EVIDENCE_TYPE", "chain evidence must be an object");
 
