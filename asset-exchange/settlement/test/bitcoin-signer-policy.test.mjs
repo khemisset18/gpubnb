@@ -1,8 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { canonicalBytes } from "../../core/src/canonical.mjs";
-import { assertDecodedPsbtMatchesSignerIntent, bitcoinSignerIntentDigestHex, createBitcoinSignerIntent } from "../src/bitcoin-signer-policy.mjs";
+import { assertDecodedPsbtMatchesSignerIntent, bitcoinPsbtDigestHex, bitcoinSignerIntentDigestHex, createBitcoinSignerIntent } from "../src/bitcoin-signer-policy.mjs";
 
 const decoded = {
   tx: {
@@ -27,7 +25,8 @@ const decoded = {
   }]
 };
 
-const psbtDigestHex = createHash("sha256").update(canonicalBytes(decoded)).digest("hex");
+const psbtBase64 = Buffer.concat([Buffer.from([0x70,0x73,0x62,0x74,0xff]), Buffer.from("fixture-v1")]).toString("base64");
+const psbtDigestHex = bitcoinPsbtDigestHex(psbtBase64);
 
 const base = {
   deploymentId: "ae-test-01",
@@ -61,27 +60,27 @@ test("signer intent binds fingerprint, exact values, fee, locktime and SIGHASH_A
   assert.equal(intent.signerFingerprint, "deadbeef");
   assert.equal(intent.feeSats, "10000");
   assert.match(bitcoinSignerIntentDigestHex(base), /^[0-9a-f]{64}$/);
-  assert.equal(assertDecodedPsbtMatchesSignerIntent(decoded, base), true);
+  assert.equal(assertDecodedPsbtMatchesSignerIntent(decoded, base, psbtBase64), true);
 });
 
 test("PSBT output substitution is rejected before external signer call", () => {
   const tampered = structuredClone(decoded);
   tampered.tx.vout[0].scriptPubKey.hex = "0014" + "99".repeat(20);
-  assert.throws(() => assertDecodedPsbtMatchesSignerIntent(tampered, { ...base, psbtDigestHex: createHash("sha256").update(canonicalBytes(tampered)).digest("hex") }));
+  assert.throws(() => assertDecodedPsbtMatchesSignerIntent(tampered, base, psbtBase64));
 });
 
 test("input amount, sequence and sighash substitution are rejected", () => {
   const amount = structuredClone(decoded);
   amount.inputs[0].witness_utxo.amount = 0.009;
-  assert.throws(() => assertDecodedPsbtMatchesSignerIntent(amount, { ...base, psbtDigestHex: createHash("sha256").update(canonicalBytes(amount)).digest("hex") }));
+  assert.throws(() => assertDecodedPsbtMatchesSignerIntent(amount, base, psbtBase64));
 
   const sequence = structuredClone(decoded);
   sequence.tx.vin[0].sequence = 0xffffffff;
-  assert.throws(() => assertDecodedPsbtMatchesSignerIntent(sequence, { ...base, psbtDigestHex: createHash("sha256").update(canonicalBytes(sequence)).digest("hex") }));
+  assert.throws(() => assertDecodedPsbtMatchesSignerIntent(sequence, base, psbtBase64));
 
   const sighash = structuredClone(decoded);
   sighash.inputs[0].sighash = "NONE";
-  assert.throws(() => assertDecodedPsbtMatchesSignerIntent(sighash, { ...base, psbtDigestHex: createHash("sha256").update(canonicalBytes(sighash)).digest("hex") }));
+  assert.throws(() => assertDecodedPsbtMatchesSignerIntent(sighash, base, psbtBase64));
 });
 
 test("fee cannot exceed signed maximum or disagree with value conservation", () => {
@@ -95,8 +94,12 @@ test("wrong network and malformed signer fingerprint fail closed", () => {
   assert.throws(() => createBitcoinSignerIntent({ ...base, signerFingerprint: "deadbeef00" }));
 });
 
-test("decoded PSBT must match the pre-authorized digest exactly", () => {
-  const altered = structuredClone(decoded);
-  altered.extra = { proprietary: "unexpected" };
-  assert.throws(() => assertDecodedPsbtMatchesSignerIntent(altered, base));
+test("binary PSBT must match the pre-authorized digest exactly", () => {
+  const alteredPsbt = Buffer.concat([Buffer.from([0x70,0x73,0x62,0x74,0xff]), Buffer.from("fixture-v2")]).toString("base64");
+  assert.throws(() => assertDecodedPsbtMatchesSignerIntent(decoded, base, alteredPsbt));
+});
+
+test("invalid PSBT base64 or magic is rejected before signer invocation", () => {
+  assert.throws(() => bitcoinPsbtDigestHex("not_base64!"));
+  assert.throws(() => bitcoinPsbtDigestHex(Buffer.from("not-a-psbt").toString("base64")));
 });
