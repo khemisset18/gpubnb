@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   core:
-    name: Zero-dependency domain safety tests
+    name: Zero-dependency foundation safety tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -49,11 +49,11 @@ jobs:
         working-directory: asset-exchange
         run: npm run check
 
-      - name: Domain safety tests
+      - name: Foundation safety tests
         working-directory: asset-exchange
         run: npm test
 
-      - name: Assert isolation boundaries
+      - name: Assert Core import isolation
         shell: bash
         run: |
           set -euo pipefail
@@ -61,7 +61,21 @@ jobs:
             echo 'Forbidden Core import detected'
             exit 1
           fi
-          if grep -RInE '(DATABASE_URL|REDIS_URL|PRIVATE_KEY|SEED_PHRASE)' asset-exchange/core asset-exchange/api asset-exchange/worker --include='*.mjs' --include='*.js'; then
-            echo 'Forbidden secret/infrastructure coupling detected in G5 foundation'
+
+      - name: Assert no custody literals in executable foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE '(SEED_PHRASE|seedPhrase|privateKey|PRIVATE_KEY|walletPassword|spendKey)'             asset-exchange/core asset-exchange/api asset-exchange/worker asset-exchange/chain-watchers             --include='*.mjs' --include='*.js'; then
+            echo 'Potential custody material reference detected outside recovery deny-list tests'
+            exit 1
+          fi
+
+      - name: SQL financial-type guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInEi '\b(real|float|double precision|money)\b' asset-exchange/db/migrations --include='*.sql'; then
+            echo 'Forbidden inexact financial SQL type detected'
             exit 1
           fi

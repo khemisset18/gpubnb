@@ -5,7 +5,7 @@
   "type": "module",
   "engines": {"node": ">=22.0.0"},
   "scripts": {
-    "test": "node --test core/test/*.test.mjs",
-    "check": "node --check core/src/*.mjs"
+    "test": "node --test core/test/*.test.mjs api/test/*.test.mjs worker/test/*.test.mjs chain-watchers/test/*.test.mjs recovery/test/*.test.mjs",
+    "check": "node --check core/src/*.mjs api/src/*.mjs worker/src/*.mjs chain-watchers/src/*.mjs recovery/src/*.mjs"
   }
 }
