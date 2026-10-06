@@ -6,7 +6,8 @@ CONSTANTS Maker, Taker1, Taker2
 Actors == {Maker, Taker1, Taker2}
 
 OfferStates == {"OPEN", "RESERVED", "CANCELLED", "CONSUMED"}
-TradeStates == {"NONE", "TERMS_SIGNED", "A_LOCKED", "B_LOCKED", "COMPLETED",
+TradeStates == {"NONE", "TERMS_SIGNED", "A_LOCKED", "B_LOCKED",
+                "SECRET_REVEALED", "COUNTER_REDEEM_CONFIRMED", "COMPLETED",
                 "REFUND_ELIGIBLE", "REFUNDED", "REORG_HOLD"}
 Modes == {"CONFORMITE", "SOUVERAIN", "TRANSITION"}
 ChainStates == {"UNSEEN", "MEMPOOL", "CONFIRMED", "REORGED", "SPENT_REDEEM", "SPENT_REFUND"}
@@ -173,10 +174,32 @@ ConfirmB ==
                   commandEpoch, mode, targetMode, chainA, feeState, kycStatus,
                   recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
 
-Complete ==
+RevealSecret ==
   /\ chainA = "CONFIRMED"
   /\ chainB = "CONFIRMED"
   /\ tradeState = "B_LOCKED"
+  /\ chainB' = "SPENT_REDEEM"
+  /\ tradeState' = "SECRET_REVEALED"
+  /\ UNCHANGED <<offerState, acceptedBy, termsSigned, lockBroadcast,
+                  bundleGenerated, bundleValidated, bundleExported, policyEpoch,
+                  commandEpoch, mode, targetMode, chainA, feeState, kycStatus,
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+
+ConfirmCounterRedeem ==
+  /\ tradeState = "SECRET_REVEALED"
+  /\ chainB = "SPENT_REDEEM"
+  /\ chainA = "CONFIRMED"
+  /\ chainA' = "SPENT_REDEEM"
+  /\ tradeState' = "COUNTER_REDEEM_CONFIRMED"
+  /\ UNCHANGED <<offerState, acceptedBy, termsSigned, lockBroadcast,
+                  bundleGenerated, bundleValidated, bundleExported, policyEpoch,
+                  commandEpoch, mode, targetMode, chainB, feeState, kycStatus,
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+
+Complete ==
+  /\ chainA = "SPENT_REDEEM"
+  /\ chainB = "SPENT_REDEEM"
+  /\ tradeState = "COUNTER_REDEEM_CONFIRMED"
   /\ tradeState' = "COMPLETED"
   /\ feeState' = "CLAIMABLE"
   /\ UNCHANGED <<offerState, acceptedBy, termsSigned, lockBroadcast,
@@ -205,7 +228,7 @@ Refund ==
                   recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
 
 ReorgA ==
-  /\ chainA = "CONFIRMED"
+  /\ chainA \in {"CONFIRMED", "SPENT_REDEEM"}
   /\ chainA' = "REORGED"
   /\ tradeState' = "REORG_HOLD"
   /\ UNCHANGED <<offerState, acceptedBy, termsSigned, lockBroadcast,
@@ -262,6 +285,8 @@ Next ==
   \/ ConfirmA
   \/ BroadcastBLock
   \/ ConfirmB
+  \/ RevealSecret
+  \/ ConfirmCounterRedeem
   \/ Complete
   \/ BecomeRefundEligible
   \/ Refund
@@ -319,6 +344,9 @@ KycCannotDisableRecovery ==
 
 FeeDoesNotGateRecovery ==
   tradeState = "REFUND_ELIGIBLE" => recoveryEnabled
+
+CompletedRequiresRedeems ==
+  tradeState = "COMPLETED" => (chainA = "SPENT_REDEEM" /\ chainB = "SPENT_REDEEM")
 
 Spec == Init /\ [][Next]_vars
 
