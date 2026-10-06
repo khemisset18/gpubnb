@@ -139,6 +139,7 @@ fn validate_local_console_session(
     Ok(())
 }
 
+#[cfg(any(windows, test))]
 fn provider_process_contaminates_renter_session(
     renter_session_id: u32,
     provider_user_sid: &str,
