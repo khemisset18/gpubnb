@@ -1,0 +1,183 @@
+name: Asset Exchange Source Audit Artifact
+
+on:
+  push:
+    branches:
+      - asset-exchange/secure-foundation-v1
+    paths:
+      - 'asset-exchange/**'
+      - 'docs/asset-exchange/**'
+      - '.github/workflows/asset-exchange-*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: asset-exchange-source-artifact-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Reproducible source audit bundle + provenance
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          check-latest: false
+
+      - name: Resolve source identity
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "epoch=$(git show -s --format=%ct "${GITHUB_SHA}")" >> "${GITHUB_OUTPUT}"
+          echo "tree=$(git rev-parse "${GITHUB_SHA}^{tree}")" >> "${GITHUB_OUTPUT}"
+
+      - name: Build source audit bundle twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x asset-exchange/release/source-bundle/build-reproducible-source.sh
+          chmod +x asset-exchange/release/source-bundle/verify-source-artifact.sh
+          asset-exchange/release/source-bundle/build-reproducible-source.sh "${RUNNER_TEMP}/source-build-a" "${GITHUB_SHA}" "${{ steps.source.outputs.epoch }}"
+          asset-exchange/release/source-bundle/build-reproducible-source.sh "${RUNNER_TEMP}/source-build-b" "${GITHUB_SHA}" "${{ steps.source.outputs.epoch }}"
+
+      - name: Prove byte-for-byte reproducibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp "${RUNNER_TEMP}/source-build-a/dist/gpu.k.p2p-asset-exchange-source-v1.tar.gz" "${RUNNER_TEMP}/source-build-b/dist/gpu.k.p2p-asset-exchange-source-v1.tar.gz"
+          cmp "${RUNNER_TEMP}/source-build-a/dist/gpu.k.p2p-asset-exchange-source-v1.spdx.json" "${RUNNER_TEMP}/source-build-b/dist/gpu.k.p2p-asset-exchange-source-v1.spdx.json"
+          cmp "${RUNNER_TEMP}/source-build-a/dist/SHA256SUMS" "${RUNNER_TEMP}/source-build-b/dist/SHA256SUMS"
+
+      - name: Stage and verify source audit artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/source
+          cp "${RUNNER_TEMP}/source-build-a/dist/"* dist/source/
+          asset-exchange/release/source-bundle/verify-source-artifact.sh dist/source "${GITHUB_SHA}" "${{ steps.source.outputs.tree }}"
+
+      - name: Attest SLSA build provenance
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/source/gpu.k.p2p-asset-exchange-source-v1.tar.gz
+          show-summary: true
+
+      - name: Attest SPDX SBOM
+        id: sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/source/gpu.k.p2p-asset-exchange-source-v1.tar.gz
+          sbom-path: dist/source/gpu.k.p2p-asset-exchange-source-v1.spdx.json
+          show-summary: true
+
+      - name: Collect attestation bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "${{ steps.provenance.outputs.bundle-path }}" dist/source/provenance.sigstore.json
+          cp "${{ steps.sbom.outputs.bundle-path }}" dist/source/sbom-attestation.sigstore.json
+
+      - name: Upload source audit evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asset-exchange-source-audit-${{ github.sha }}
+          path: dist/source/
+          if-no-files-found: error
+          retention-days: 30
+
+  consumer-verify:
+    name: Independent source audit verification
+    needs: package
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout verifier source at exact build commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve exact Git tree
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "tree=$(git rev-parse "${GITHUB_SHA}^{tree}")" >> "${GITHUB_OUTPUT}"
+
+      - name: Download source audit evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: asset-exchange-source-audit-${{ github.sha }}
+          path: dist/source
+
+      - name: Verify source bundle scope, hashes, SBOM, and source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x asset-exchange/release/source-bundle/verify-source-artifact.sh
+          asset-exchange/release/source-bundle/verify-source-artifact.sh dist/source "${GITHUB_SHA}" "${{ steps.source.outputs.tree }}"
+
+      - name: Verify provenance against exact repository and source commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh attestation verify \
+            dist/source/gpu.k.p2p-asset-exchange-source-v1.tar.gz \
+            --repo "${GITHUB_REPOSITORY}" \
+            --source-digest "${GITHUB_SHA}" \
+            --format json \
+            > dist/source/consumer-provenance-verification.json
+
+      - name: Verify SPDX SBOM attestation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh attestation verify \
+            dist/source/gpu.k.p2p-asset-exchange-source-v1.tar.gz \
+            --repo "${GITHUB_REPOSITORY}" \
+            --source-digest "${GITHUB_SHA}" \
+            --predicate-type https://spdx.dev/Document/v2.3 \
+            --format json \
+            > dist/source/consumer-sbom-verification.json
+
+      - name: Verify consumer result structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for name in [
+              "consumer-provenance-verification.json",
+              "consumer-sbom-verification.json",
+          ]:
+              data=json.loads(Path("dist/source", name).read_text())
+              if not isinstance(data, list) or not data:
+                  raise SystemExit(f"{name}: no verified attestation result")
+          print("Independent Asset Exchange source audit verification passed.")
+          PY
