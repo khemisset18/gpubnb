@@ -122,6 +122,9 @@ BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
 BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
   asset-exchange/bitcoin-regtest/run-recovery-before-lock.sh
 
+BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
+  asset-exchange/bitcoin-regtest/run-cluster-limit.sh
+
 asset-exchange/bitcoin-regtest/run-multinode-reorg.sh
 
 echo "Bitcoin Core regtest isolation/reorg smoke test passed."
