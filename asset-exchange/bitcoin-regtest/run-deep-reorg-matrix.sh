@@ -99,7 +99,9 @@ run_scenario() {
   local name="$1" losing_depth="$2" winning_depth="$3" rpc_base="$4"
   local a_rpc="${rpc_base}" a_p2p="$((rpc_base + 1))"
   local b_rpc="$((rpc_base + 10))" b_p2p="$((rpc_base + 11))"
-  local dir="${ROOT}/${name}" a_dir="${dir}/node-a" b_dir="${dir}/node-b"
+  local dir="${ROOT}/${name}"
+  local a_dir="${dir}/node-a"
+  local b_dir="${dir}/node-b"
   mkdir -p "${a_dir}" "${b_dir}"
 
   write_conf "${a_dir}" "${a_rpc}" "${a_p2p}"
