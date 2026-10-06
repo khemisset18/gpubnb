@@ -570,65 +570,65 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         self._trace("native_register_done", session_id=runtime.session_id)
 
     def _report_native_usage(self, runtime: NativeGatewayRuntime) -> None:
-        if self._reconnect_is_paused(runtime.session_id):
-            # RESUME deliberately makes the helper physically Ready before the
-            # API clears reconnect state. Without sharing the native resume lock,
-            # the reconcile thread can observe "commercially paused" while the
-            # helper is already Ready and falsely hard-stop a healthy reconnect
-            # as windows_native_suspended_proof_lost. Serialize only this paused
-            # proof with the existing resume transition, then re-check server
-            # pause state after acquiring the lock.
-            with self._native_resume_lock(runtime.session_id):
-                if self._reconnect_is_paused(runtime.session_id):
-                    now = time.monotonic()
-                    with self._reconnect_lock:
-                        previous = self._reconnect_last_liveness.get(
-                            runtime.session_id,
-                            now,
-                        )
-                        if now - previous < reconnect.RECONNECT_LIVENESS_INTERVAL_SECONDS:
-                            return
-                        self._reconnect_last_liveness[runtime.session_id] = now
-
-                    if not windows_native_workspace_suspended(runtime.session_id):
-                        self._report_error(
-                            RuntimeError("windows_native_suspended_proof_lost")
-                        )
-                        self._native_stop_and_report(runtime.session_id)
+        live_proof_lost = False
+        # SUSPEND revokes helper READY before the reconnect API/local pause bit
+        # is committed, while RESUME makes helper READY before that bit clears.
+        # Serialize both proof modes with the complete native reconnect
+        # transition so usage can never misclassify either half-state.
+        with self._native_resume_lock(runtime.session_id):
+            if self._reconnect_is_paused(runtime.session_id):
+                now = time.monotonic()
+                with self._reconnect_lock:
+                    previous = self._reconnect_last_liveness.get(
+                        runtime.session_id,
+                        now,
+                    )
+                    if now - previous < reconnect.RECONNECT_LIVENESS_INTERVAL_SECONDS:
                         return
+                    self._reconnect_last_liveness[runtime.session_id] = now
 
-                    try:
-                        self._reconnect_event(runtime.session_id, "LIVENESS")
-                    except Exception as exc:
-                        # Keep the native runtime physically suspended if
-                        # control-plane liveness reporting fails; never convert
-                        # grace into billable usage.
-                        self._report_error(exc)
+                if not windows_native_workspace_suspended(runtime.session_id):
+                    self._report_error(
+                        RuntimeError("windows_native_suspended_proof_lost")
+                    )
+                    self._native_stop_and_report(runtime.session_id)
                     return
 
-        now = time.monotonic()
-        previous = self.usage_last_report.setdefault(runtime.session_id, now)
-        elapsed = int(now - previous)
-        if elapsed < WINDOWS_NATIVE_USAGE_INTERVAL_SECONDS:
-            return
+                try:
+                    self._reconnect_event(runtime.session_id, "LIVENESS")
+                except Exception as exc:
+                    # Keep the native runtime physically suspended if
+                    # control-plane liveness reporting fails; never convert
+                    # grace into billable usage.
+                    self._report_error(exc)
+                return
 
-        if not windows_native_workspace_ready(runtime.session_id):
+            now = time.monotonic()
+            previous = self.usage_last_report.setdefault(runtime.session_id, now)
+            elapsed = int(now - previous)
+            if elapsed < WINDOWS_NATIVE_USAGE_INTERVAL_SECONDS:
+                return
+
+            if not windows_native_workspace_ready(runtime.session_id):
+                live_proof_lost = True
+            else:
+                interval = max(1, min(30, elapsed))
+                self._request(
+                    f"/agent/workspace-gateway/{runtime.session_id}/usage",
+                    "POST",
+                    {
+                        "machineId": self.machine_id,
+                        "counter": str(int(time.time() * 1000)),
+                        "intervalSeconds": interval,
+                        "available": True,
+                    },
+                )
+                self.usage_last_report[runtime.session_id] = now
+                return
+
+        if live_proof_lost:
             self._report_error(RuntimeError("windows_native_live_proof_lost"))
             self._native_stop_and_report(runtime.session_id)
-            return
-
-        interval = max(1, min(30, elapsed))
-        self._request(
-            f"/agent/workspace-gateway/{runtime.session_id}/usage",
-            "POST",
-            {
-                "machineId": self.machine_id,
-                "counter": str(int(time.time() * 1000)),
-                "intervalSeconds": interval,
-                "available": True,
-            },
-        )
-        self.usage_last_report[runtime.session_id] = now
 
     def _reconcile_native_sessions(self) -> None:
         with self._native_lock:
@@ -719,6 +719,19 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 lock = threading.Lock()
                 self._native_resume_locks[session_id] = lock
             return lock
+
+    def _begin_reconnect_grace(self, session_id: str) -> None:
+        with self._native_lock:
+            is_native = session_id in self.native_runtimes
+        if not is_native:
+            return super()._begin_reconnect_grace(session_id)
+
+        # SUSPEND makes the helper physically non-READY before the reconnect API
+        # marks the session paused. Hold the same transition lock used by RESUME
+        # and native usage proof across the entire base transition so the usage
+        # thread cannot observe that intentional half-state as live-proof loss.
+        with self._native_resume_lock(session_id):
+            return super()._begin_reconnect_grace(session_id)
 
     def _resume_before_relay(self, session_id: str) -> bool:
         with self._native_lock:
