@@ -1,0 +1,107 @@
+name: Asset Exchange Recovery Artifact
+
+on:
+  push:
+    branches:
+      - asset-exchange/secure-foundation-v1
+    paths:
+      - 'asset-exchange/recovery/**'
+      - 'asset-exchange/core/src/canonical.mjs'
+      - 'asset-exchange/core/src/errors.mjs'
+      - 'asset-exchange/core/src/deployment.mjs'
+      - '.github/workflows/asset-exchange-recovery-artifact.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: asset-exchange-recovery-artifact-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Reproducible recovery artifact + provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          check-latest: false
+
+      - name: Run recovery tests
+        working-directory: asset-exchange
+        run: node --test recovery/test/*.test.mjs
+
+      - name: Resolve deterministic build timestamp
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          epoch="$(git show -s --format=%ct "${GITHUB_SHA}")"
+          echo "epoch=${epoch}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x asset-exchange/recovery/release/build-reproducible.sh
+          chmod +x asset-exchange/recovery/release/verify-artifact.sh
+          asset-exchange/recovery/release/build-reproducible.sh "${RUNNER_TEMP}/recovery-build-a" "${GITHUB_SHA}" "${{ steps.source.outputs.epoch }}"
+          asset-exchange/recovery/release/build-reproducible.sh "${RUNNER_TEMP}/recovery-build-b" "${GITHUB_SHA}" "${{ steps.source.outputs.epoch }}"
+
+      - name: Prove byte-for-byte reproducibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp "${RUNNER_TEMP}/recovery-build-a/dist/gpu.k.p2p-recovery-tool-v1.tar.gz" "${RUNNER_TEMP}/recovery-build-b/dist/gpu.k.p2p-recovery-tool-v1.tar.gz"
+          cmp "${RUNNER_TEMP}/recovery-build-a/dist/gpu.k.p2p-recovery-tool-v1.spdx.json" "${RUNNER_TEMP}/recovery-build-b/dist/gpu.k.p2p-recovery-tool-v1.spdx.json"
+          cmp "${RUNNER_TEMP}/recovery-build-a/dist/SHA256SUMS" "${RUNNER_TEMP}/recovery-build-b/dist/SHA256SUMS"
+
+      - name: Stage and verify artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/recovery
+          cp "${RUNNER_TEMP}/recovery-build-a/dist/"* dist/recovery/
+          asset-exchange/recovery/release/verify-artifact.sh dist/recovery
+
+      - name: Attest SLSA build provenance
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/recovery/gpu.k.p2p-recovery-tool-v1.tar.gz
+          show-summary: true
+
+      - name: Attest SPDX SBOM
+        id: sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/recovery/gpu.k.p2p-recovery-tool-v1.tar.gz
+          sbom-path: dist/recovery/gpu.k.p2p-recovery-tool-v1.spdx.json
+          show-summary: true
+
+      - name: Collect attestation bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "${{ steps.provenance.outputs.bundle-path }}" dist/recovery/provenance.sigstore.json
+          cp "${{ steps.sbom.outputs.bundle-path }}" dist/recovery/sbom-attestation.sigstore.json
+
+      - name: Upload recovery evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: asset-exchange-recovery-artifact-${{ github.sha }}
+          path: dist/recovery/
+          if-no-files-found: error
+          retention-days: 30
