@@ -95,6 +95,7 @@ jobs:
             echo "tla_sha256=${TLA_SHA256}"
             sha256sum "${FORMAL_DIR}/AssetExchangeV1.tla"
             sha256sum "${FORMAL_DIR}/AssetExchangeV1.cfg"
+            sha256sum "${FORMAL_DIR}/AssetExchangeV1.expanded.cfg"
             sha256sum "${FORMAL_DIR}/AssetExchangeV1.cooperative.cfg"
             sha256sum "${FORMAL_DIR}/AssetExchangeV1.recovery.cfg"
             sha256sum "${FORMAL_DIR}/AssetExchangeV1.transition.cfg"

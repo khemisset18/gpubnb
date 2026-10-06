@@ -8,6 +8,7 @@ EVIDENCE_DIR="${ROOT_DIR}/evidence"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 CONFIGS=(
   "AssetExchangeV1.cfg"
+  "AssetExchangeV1.expanded.cfg"
   "AssetExchangeV1.cooperative.cfg"
   "AssetExchangeV1.recovery.cfg"
   "AssetExchangeV1.transition.cfg"
@@ -36,6 +37,7 @@ for config in "${CONFIGS[@]}"; do
   label="${config#AssetExchangeV1.}"
   label="${label%.cfg}"
   [[ "${config}" == "AssetExchangeV1.cfg" ]] && label="safety"
+  [[ "${config}" == "AssetExchangeV1.expanded.cfg" ]] && label="safety-expanded"
   CONFIG_SHA256="$(sha256sum "${ROOT_DIR}/${config}" | awk '{print $1}')"
   OUT="${EVIDENCE_DIR}/tlc-${label}-${STAMP}.log"
 
