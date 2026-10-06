@@ -283,6 +283,51 @@ jobs:
           ) {
             throw 'Windows Service recovery is not configured.'
           }
+
+          $requiredPrivileges = @(
+            'SeTcbPrivilege',
+            'SeAssignPrimaryTokenPrivilege',
+            'SeIncreaseQuotaPrivilege'
+          )
+          $privileges = (& sc.exe qprivs GPUbnbAgent 8192) -join "`n"
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Unable to query GPUbnbAgent required privileges.'
+          }
+          foreach ($privilege in $requiredPrivileges) {
+            if ($privileges -notmatch [regex]::Escape($privilege)) {
+              throw "GPUbnbAgent is missing required privilege $privilege."
+            }
+          }
+          foreach ($forbiddenPrivilege in @(
+            'SeDebugPrivilege',
+            'SeBackupPrivilege',
+            'SeRestorePrivilege',
+            'SeImpersonatePrivilege',
+            'SeTakeOwnershipPrivilege'
+          )) {
+            if ($privileges -match [regex]::Escape($forbiddenPrivilege)) {
+              throw "GPUbnbAgent retains unnecessary privilege $forbiddenPrivilege."
+            }
+          }
+
+          $serviceSddl = (& sc.exe sdshow GPUbnbAgent | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($serviceSddl)) {
+            throw 'Unable to read GPUbnbAgent service security descriptor.'
+          }
+          $descriptor = [System.Security.AccessControl.RawSecurityDescriptor]::new($serviceSddl)
+          $broadServicePrincipals = @('S-1-1-0', 'S-1-5-11', 'S-1-5-32-545')
+          $dangerousServiceRights = 0x00000002 -bor 0x00000010 -bor 0x00000020 -bor 0x00010000 -bor 0x00040000 -bor 0x00080000
+          foreach ($ace in $descriptor.DiscretionaryAcl) {
+            if (
+              $ace -is [System.Security.AccessControl.CommonAce] -and
+              $ace.AceQualifier -eq [System.Security.AccessControl.AceQualifier]::AccessAllowed -and
+              $broadServicePrincipals -contains $ace.SecurityIdentifier.Value -and
+              (($ace.AccessMask -band $dangerousServiceRights) -ne 0)
+            ) {
+              throw "Broad principal $($ace.SecurityIdentifier.Value) has dangerous GPUbnbAgent service rights."
+            }
+          }
+
           & $installedSidecar service restart
           if ($LASTEXITCODE -ne 0) { throw 'The installed service could not be restarted.' }
           $service = Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
