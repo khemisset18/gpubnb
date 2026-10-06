@@ -97,8 +97,11 @@ If TLC reports a violation:
 
 Model present: YES.
 Runner present: YES.
-TLC executed in repository CI: NOT YET.
-G4 PASS: NO.
+TLC executed in repository CI: YES.
+Safety bounded model: PASS.
+Initial liveness scenarios: PASS under explicit weak-fairness assumptions.
+Latest accepted run: 37520577666 at commit 2746c6f890b6e0eba70c0e992a04d09e1a533dcf.
+G4 PASS: NO — richer crash/replay/reorg/race liveness and independent review remain required.
 
 
 ## Initial liveness scenarios

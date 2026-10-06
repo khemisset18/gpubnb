@@ -544,10 +544,19 @@ G4 remains BLOCKED until these are executed.
 
 ## 32. Current status
 
-Formal contract: DRAFTED.
-Executable model: INITIAL SKELETON TO BE ADDED.
-TLC run: NOT YET EXECUTED.
-Counterexamples: NOT YET COLLECTED.
-G4: BLOCKED.
+Formal contract: ACTIVE / PRE-PRODUCTION.
+Executable model: PRESENT.
+TLC safety run: PASS for current bounded model.
+Initial liveness scenarios: PASS for cooperative completion, recovery while Exchange is unavailable, and unblocked mode transition under explicit weak-fairness assumptions.
+Latest accepted formal run: GitHub Actions run 37520577666 at source commit 2746c6f890b6e0eba70c0e992a04d09e1a533dcf.
+Latest bounded state counts:
+- safety: 208484 generated / 19360 distinct / depth 21;
+- cooperative completion: 40 generated / 13 distinct / depth 13;
+- recovery: 4 generated / 4 distinct / depth 4;
+- transition: 2 generated / 2 distinct / depth 2.
+
+A counterexample/model defect was discovered in the first liveness attempt: BroadcastALock failed to preserve the newly introduced refundMatured/exchangeAvailable variables, causing TLC to expose undefined state. The model was corrected without weakening any invariant or liveness property and rerun from clean CI evidence.
+
+G4 overall: STILL BLOCKED pending richer executable modeling of crash idempotency, replay isolation, uncertain-chain blocking, refund/redeem race, and larger/fault-combination liveness bounds plus independent review.
 Real funds: FORBIDDEN.
 Mainnet: FORBIDDEN.
