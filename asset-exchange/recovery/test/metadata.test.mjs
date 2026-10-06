@@ -11,6 +11,7 @@ test("recovery artifact rejects private-key-like fields recursively", () => {
 test("minimal recovery metadata contains no custody material", () => {
   const metadata = createRecoveryMetadata({
     bundleVersion: 1,
+    deploymentId: "ae-test-01",
     tradeId: "trade-00000001",
     protocolId: "GPUBNB-ASSET-EXCHANGE-UTXO-HTLC-V1",
     protocolVersion: 1,
@@ -20,4 +21,5 @@ test("minimal recovery metadata contains no custody material", () => {
     createdAtUnixMs: 2000000000000
   });
   assert.equal(metadata.bundleVersion, 1);
+  assert.equal(metadata.deploymentId, "ae-test-01");
 });
