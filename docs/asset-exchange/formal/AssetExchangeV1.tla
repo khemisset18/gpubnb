@@ -152,7 +152,7 @@ BroadcastALock ==
                   bundleValidated, bundleExported, policyEpoch, commandEpoch,
                   mode, targetMode, chainB, feeState, kycStatus,
                   recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed,
-                  offerDeployment>>
+                  offerDeployment, refundMatured, exchangeAvailable>>
 
 ConfirmA ==
   /\ tradeState = "A_LOCKED"
