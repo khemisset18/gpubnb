@@ -121,6 +121,7 @@ fi
 
 losing_destination="$(awcli getnewaddress "losing-fork-tx" bech32)"
 losing_txid="$(awcli sendtoaddress "${losing_destination}" 1.00000000)"
+losing_raw="$(acli getrawtransaction "${losing_txid}")"
 
 acli generatetoaddress 2 "${a_addr}" >/dev/null
 losing_conf_before="$(awcli gettransaction "${losing_txid}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["confirmations"])')"
@@ -203,12 +204,17 @@ fi
 
 acli getmempoolentry "${losing_txid}" >/dev/null
 
-for _ in $(seq 1 100); do
-  if bcli getmempoolentry "${losing_txid}" >/dev/null 2>&1; then break; fi
-  sleep 0.1
-done
-if ! bcli getmempoolentry "${losing_txid}" >/dev/null 2>&1; then
-  echo "ERROR: reorged transaction was not relayed to winning node mempool"
+rebroadcast_check="$(bcli testmempoolaccept "[\"${losing_raw}\"]")"
+rebroadcast_allowed="$(printf '%s' "${rebroadcast_check}" | python3 -c 'import json,sys; print("yes" if json.load(sys.stdin)[0]["allowed"] else "no")')"
+if [[ "${rebroadcast_allowed}" != "yes" ]]; then
+  echo "ERROR: winning node rejected exact reorged transaction rebroadcast"
+  printf '%s\n' "${rebroadcast_check}"
+  exit 1
+fi
+
+rebroadcast_txid="$(bcli sendrawtransaction "${losing_raw}")"
+if [[ "${rebroadcast_txid}" != "${losing_txid}" ]]; then
+  echo "ERROR: exact rebroadcast changed transaction identity"
   exit 1
 fi
 
@@ -232,5 +238,6 @@ echo "converged_height=${final_height_a}"
 echo "losing_fork_txid=${losing_txid}"
 echo "losing_fork_confirmations_before=${losing_conf_before}"
 echo "losing_fork_confirmations_after_reorg=${losing_conf_after}"
+echo "losing_fork_rebroadcast_txid=${rebroadcast_txid}"
 echo "losing_fork_reconfirmed=${reconf}"
 echo "reconfirm_block=${reconfirm_block}"
