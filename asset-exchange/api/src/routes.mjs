@@ -6,8 +6,8 @@ function errorResponse(error) {
   if (!(error instanceof DomainError)) return { statusCode: 500, body: { error: "internal_error" } };
 
   if (["AUTH_REQUIRED", "SESSION_EXPIRED", "SSO_SIGNATURE_INVALID", "SSO_REPLAY", "SSO_EXPIRED", "SSO_ISSUER_MISMATCH", "SSO_AUDIENCE_MISMATCH", "SSO_DEPLOYMENT_MISMATCH"].includes(error.code)) return { statusCode: 401, body: { error: "authentication_required" } };
-  if (["CSRF_REQUIRED", "CSRF_INVALID", "OBJECT_AUTHZ", "ORIGIN_FORBIDDEN", "FETCH_SITE_FORBIDDEN"].includes(error.code)) return { statusCode: 403, body: { error: "forbidden" } };
-  if (["OFFER_NOT_OPEN", "STALE_EPOCH", "DEPLOYMENT_MISMATCH"].includes(error.code)) return { statusCode: 409, body: { error: "conflict" } };
+  if (["CSRF_REQUIRED", "CSRF_INVALID", "OBJECT_AUTHZ", "ORIGIN_FORBIDDEN", "FETCH_SITE_FORBIDDEN", "ADMIN_NOT_AUTHORIZED", "ADMIN_ASSERTION_INVALID", "ADMIN_USER_VERIFICATION"].includes(error.code)) return { statusCode: 403, body: { error: "forbidden" } };
+  if (["OFFER_NOT_OPEN", "STALE_EPOCH", "DEPLOYMENT_MISMATCH", "ADMIN_CHALLENGE_REPLAY", "ADMIN_CHALLENGE_EXPIRED", "ADMIN_TRANSITION_BLOCKED", "ADMIN_DEPLOYMENT_MISMATCH"].includes(error.code)) return { statusCode: 409, body: { error: "conflict" } };
   if (error.code.startsWith("RATE_")) return { statusCode: 429, body: { error: "rate_limited" } };
   if (error.code === "BODY_TOO_LARGE") return { statusCode: 413, body: { error: "payload_too_large" } };
   return { statusCode: 400, body: { error: "invalid_request" } };
@@ -23,6 +23,7 @@ export function createBusinessRouter({
   sessionManager,
   offerService,
   ssoService = null,
+  adminFeeService = null,
   rateLimiter,
   allowedOrigins,
   maxBodyBytes = 64 * 1024
@@ -41,11 +42,13 @@ export function createBusinessRouter({
     const pathname = new URL(req.url, "http://asset-exchange.invalid").pathname;
     const exchangeSession = req.method === "POST" && pathname === "/v1/session/exchange";
     const logout = req.method === "POST" && pathname === "/v1/session/logout";
+    const adminFeeChallenge = req.method === "POST" && pathname === "/v1/admin/fee-policy/challenge";
+    const adminFeeActivate = req.method === "POST" && pathname === "/v1/admin/fee-policy/activate";
     const publish = req.method === "POST" && pathname === "/v1/offers";
     const cancelMatch = req.method === "POST" && pathname.match(/^\/v1\/offers\/([^/]+)\/cancel$/);
     const acceptMatch = req.method === "POST" && pathname.match(/^\/v1\/offers\/([^/]+)\/accept$/);
 
-    if (!exchangeSession && !logout && !publish && !cancelMatch && !acceptMatch) return false;
+    if (!exchangeSession && !logout && !adminFeeChallenge && !adminFeeActivate && !publish && !cancelMatch && !acceptMatch) return false;
 
     try {
       const origin = req.headers.origin;
@@ -72,7 +75,7 @@ export function createBusinessRouter({
       const actor = await sessionManager.authenticateRequest(req);
       await sessionManager.assertCsrf(req, actor);
 
-      const routeClass = logout ? "logout" : publish ? "publish" : cancelMatch ? "cancel" : "accept";
+      const routeClass = logout ? "logout" : adminFeeChallenge ? "admin-fee-challenge" : adminFeeActivate ? "admin-fee-activate" : publish ? "publish" : cancelMatch ? "cancel" : "accept";
       const rate = await rateLimiter.consume(`${actor.subject}:${routeClass}`);
       if (!rate.allowed) {
         sendJson(429, { error: "rate_limited" }, { "retry-after": "60" });
@@ -84,6 +87,29 @@ export function createBusinessRouter({
         sendJson(200, { status: "logged_out" }, {
           "set-cookie": "__Host-gpubnb-ae-session=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0"
         });
+        return true;
+      }
+
+      if (adminFeeChallenge) {
+        invariant(adminFeeService && typeof adminFeeService.createFeeChallenge === "function", "ADMIN_DISABLED", "admin fee service disabled");
+        const body = await readStrictJson(req, { maxBytes: maxBodyBytes });
+        const result = await adminFeeService.createFeeChallenge({
+          actorSubject: actor.subject,
+          proposedPolicy: body.policy
+        });
+        sendJson(200, result);
+        return true;
+      }
+
+      if (adminFeeActivate) {
+        invariant(adminFeeService && typeof adminFeeService.activateFeePolicy === "function", "ADMIN_DISABLED", "admin fee service disabled");
+        const body = await readStrictJson(req, { maxBytes: maxBodyBytes });
+        invariant(body.intent?.actorSubject === actor.subject, "OBJECT_AUTHZ", "admin intent/session subject mismatch");
+        const result = await adminFeeService.activateFeePolicy({
+          intent: body.intent,
+          assertion: body.assertion
+        });
+        sendJson(200, result);
         return true;
       }
 

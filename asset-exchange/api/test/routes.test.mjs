@@ -254,3 +254,77 @@ test("signed SSO HTTP exchange creates session and replay is rejected", async ()
     assert.equal(replay.status, 401);
   } finally { await new Promise((r) => server.close(r)); }
 });
+
+test("admin fee routes bind WYSIWYS intent to authenticated session subject", async () => {
+  const sessionManager = createSessionManager({ store: createMemorySessionStore() });
+  const issued = await sessionManager.issue({ subject: "owner:test:001" });
+  const cookie = issued.cookie.split(";")[0];
+  const calls = [];
+  const adminFeeService = {
+    async createFeeChallenge(input) {
+      calls.push(["challenge", input]);
+      return {
+        intent: { actorSubject: input.actorSubject, policy: input.proposedPolicy },
+        challengeHash: "a".repeat(64)
+      };
+    },
+    async activateFeePolicy(input) {
+      calls.push(["activate", input]);
+      return { status: "ACTIVE", rateBps: input.intent.policy.rateBps };
+    }
+  };
+  const router = createBusinessRouter({
+    sessionManager,
+    adminFeeService,
+    rateLimiter: createMemoryFixedWindowRateLimiter(),
+    allowedOrigins: ["https://exchange.example"],
+    offerService: {
+      async publishOffer() { throw new Error("unexpected"); },
+      async cancelOffer() { throw new Error("unexpected"); },
+      async acceptOffer() { throw new Error("unexpected"); }
+    }
+  });
+  const server = createApiServer({ businessRouter: router });
+  const port = await listen(server);
+  const policy = {
+    policyId: "owner-fee-v2",
+    version: 2,
+    rateBps: 75,
+    payerRole: "TAKER",
+    feeAssetKey: "bitcoin|regtest|NATIVE|BTC_NATIVE|8",
+    recipient: "treasury:test"
+  };
+  try {
+    const challenge = await request(port, {
+      path: "/v1/admin/fee-policy/challenge",
+      cookie,
+      csrf: issued.csrfToken,
+      body: JSON.stringify({ policy })
+    });
+    assert.equal(challenge.status, 200);
+    assert.equal(calls[0][1].actorSubject, "owner:test:001");
+
+    const parsed = JSON.parse(challenge.body);
+    const activate = await request(port, {
+      path: "/v1/admin/fee-policy/activate",
+      cookie,
+      csrf: issued.csrfToken,
+      body: JSON.stringify({ intent: parsed.intent, assertion: { opaque: true } })
+    });
+    assert.equal(activate.status, 200);
+    assert.equal(calls[1][0], "activate");
+
+    const mismatch = await request(port, {
+      path: "/v1/admin/fee-policy/activate",
+      cookie,
+      csrf: issued.csrfToken,
+      idempotency: "idempotency-key-admin-2",
+      body: JSON.stringify({
+        intent: { ...parsed.intent, actorSubject: "other:test:999" },
+        assertion: { opaque: true }
+      })
+    });
+    assert.equal(mismatch.status, 403);
+    assert.equal(calls.filter(([name]) => name === "activate").length, 1);
+  } finally { await new Promise((r) => server.close(r)); }
+});
