@@ -107,7 +107,7 @@ Runner present: YES.
 TLC executed in repository CI: YES.
 Safety bounded model: PASS.
 Initial liveness scenarios: PASS under explicit weak-fairness assumptions.
-Latest accepted integrated run before terms-immutability extension: 37531026000 at commit f6aa4cc5d3882d7e74de1a52c527a9f8f988a50f.
+Latest accepted integrated run: 37531780257 at commit 5f80ef3e11baa9867f3a84058ff342fcaa6b30f4.
 
 Accepted evidence from that run:
 - main safety: 296444 generated / 26560 distinct / depth 22 / queue 0;
@@ -122,9 +122,18 @@ Accepted evidence from that run:
 - evidence artifact ID: 11444416474;
 - evidence ZIP SHA-256: db3540e5eb88d02f537a5002c7d885cdd0406790764dcf466f0dc7ac5aa12407.
 
-The same run explicitly verifies UncertainChainStopsAdvance for both chain legs.
+The integrated run explicitly verifies UncertainChainStopsAdvance for both chain legs.
 
-G4 PASS: NO — terms immutability requires its new TLC run, and richer composed fault/replay bounds plus independent review remain required.
+Additional terms-immutability model evidence:
+- terms immutability: 156 generated / 32 distinct / depth 4 / queue 0;
+- TermsImmutable: PASS within bounded model;
+- FeeTermsImmutable: PASS within bounded model;
+- LockUsesSignedTerms: PASS within bounded model;
+- post-sign mutation attempts cannot change the signed snapshots: PASS;
+- evidence artifact ID: 11444467368;
+- evidence ZIP SHA-256: de674e7fa53768c0733bd682e20bcd44aa570efa81a86971540e0b8b2fb0838c.
+
+G4 PASS: NO — richer composed multi-fault bounds, stronger honest-recovery composition, larger bounds and independent review remain required.
 
 
 ## Initial liveness scenarios
