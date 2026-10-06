@@ -129,9 +129,15 @@ export function createBusinessRouter({
       }
 
       if (cancelMatch) {
-        invariant(req.headers["content-length"] === undefined || req.headers["content-length"] === "0", "CANCEL_BODY", "cancel request must not include a body");
+        const body = await readStrictJson(req, { maxBytes: maxBodyBytes });
         const offerId = decodeURIComponent(cancelMatch[1]);
-        const result = await offerService.cancelOffer({ actor, offerId, idempotencyKey });
+        invariant(body.cancellation?.offerId === offerId, "CANCEL_PATH_MISMATCH", "path/body offer mismatch");
+        const result = await offerService.cancelOffer({
+          actor,
+          cancellation: body.cancellation,
+          signature: signatureFromBody(body),
+          idempotencyKey
+        });
         sendJson(200, result);
         return true;
       }

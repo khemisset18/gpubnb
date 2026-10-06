@@ -328,3 +328,65 @@ test("admin fee routes bind WYSIWYS intent to authenticated session subject", as
     assert.equal(calls.filter(([name]) => name === "activate").length, 1);
   } finally { await new Promise((r) => server.close(r)); }
 });
+
+
+test("cancel route requires signed JSON intent and binds path offer id", async () => {
+  const calls = [];
+  const sessionManager = createSessionManager({ store: createMemorySessionStore() });
+  const issued = await sessionManager.issue({ subject: "maker:test:001" });
+  const cookie = issued.cookie.split(";")[0];
+  const router = createBusinessRouter({
+    sessionManager,
+    rateLimiter: createMemoryFixedWindowRateLimiter(),
+    allowedOrigins: ["https://exchange.example"],
+    offerService: {
+      async publishOffer() { throw new Error("unexpected"); },
+      async acceptOffer() { throw new Error("unexpected"); },
+      async cancelOffer(v) { calls.push(v); return { status: "CANCELLED", offerId: v.cancellation.offerId }; }
+    }
+  });
+  const server = createApiServer({ businessRouter: router });
+  const port = await listen(server);
+  const cancellation = {
+    offerId: "offer-00000001",
+    deploymentId: "ae-test-01",
+    maker: "maker:test:001",
+    offerHash: "a".repeat(64),
+    cancelledAtUnixMs: 1000,
+    expiryUnixMs: 2000,
+    nonce: "cancelNonce000001",
+    policyEpoch: 7
+  };
+  try {
+    const good = await request(port, {
+      path: "/v1/offers/offer-00000001/cancel",
+      cookie,
+      csrf: issued.csrfToken,
+      body: JSON.stringify({ cancellation, signature: "sig" })
+    });
+    assert.equal(good.status, 200);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].signature, "sig");
+
+    const mismatch = await request(port, {
+      path: "/v1/offers/offer-00000002/cancel",
+      cookie,
+      csrf: issued.csrfToken,
+      idempotency: "idempotency-key-cancel-2",
+      body: JSON.stringify({ cancellation, signature: "sig" })
+    });
+    assert.equal(mismatch.status, 400);
+    assert.equal(calls.length, 1);
+
+    const empty = await request(port, {
+      path: "/v1/offers/offer-00000001/cancel",
+      cookie,
+      csrf: issued.csrfToken,
+      idempotency: "idempotency-key-cancel-3"
+    });
+    assert.equal(empty.status, 400);
+    assert.equal(calls.length, 1);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

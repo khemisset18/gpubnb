@@ -1,5 +1,6 @@
 import { createUnsignedOffer, offerDigestHex } from "../../core/src/offer.mjs";
 import { createAcceptance, acceptanceDigestHex } from "../../core/src/acceptance.mjs";
+import { createCancellation, cancellationDigestHex } from "../../core/src/cancellation.mjs";
 import { invariant } from "../../core/src/errors.mjs";
 import { validateDeploymentId } from "../../core/src/deployment.mjs";
 import { assertSameSubject, createActor, validateIdempotencyKey } from "./authz.mjs";
@@ -17,6 +18,7 @@ export function createOfferService({
   repository,
   verifyOfferSignature,
   verifyAcceptanceSignature,
+  verifyCancellationSignature,
   deploymentId,
   maxClockSkewMs = 120_000,
   now = () => Date.now()
@@ -27,6 +29,7 @@ export function createOfferService({
   }
   invariant(typeof verifyOfferSignature === "function", "OFFER_SIGNATURE_VERIFIER", "offer signature verifier required");
   invariant(typeof verifyAcceptanceSignature === "function", "ACCEPT_SIGNATURE_VERIFIER", "acceptance signature verifier required");
+  invariant(typeof verifyCancellationSignature === "function", "CANCEL_SIGNATURE_VERIFIER", "cancellation signature verifier required");
   invariant(typeof now === "function", "CLOCK", "authoritative clock required");
   const serviceDeploymentId = validateDeploymentId(deploymentId);
   invariant(Number.isSafeInteger(maxClockSkewMs) && maxClockSkewMs >= 0 && maxClockSkewMs <= 300_000, "CLOCK_SKEW", "invalid max clock skew");
@@ -61,20 +64,41 @@ export function createOfferService({
       });
     },
 
-    async cancelOffer({ actor, offerId, idempotencyKey }) {
+    async cancelOffer({ actor, cancellation, signature, idempotencyKey }) {
       const parsedActor = createActor(actor);
+      const parsedCancellation = createCancellation(cancellation);
       validateIdempotencyKey(idempotencyKey);
-      invariant(typeof offerId === "string" && offerId.length >= 8 && offerId.length <= 128, "OFFER_ID", "invalid offerId");
+      opaqueSignature(signature);
 
-      const stored = await repository.getOfferById(offerId);
+      assertSameSubject(parsedActor, parsedCancellation.maker);
+      invariant(parsedCancellation.deploymentId === serviceDeploymentId, "DEPLOYMENT_MISMATCH", "cancellation belongs to another deployment");
+
+      const stored = await repository.getOfferById(parsedCancellation.offerId);
       invariant(stored !== null && stored !== undefined, "OFFER_NOT_FOUND", "offer not found");
       assertSameSubject(parsedActor, stored.makerSubject);
       invariant(stored.state === "OPEN", "OFFER_NOT_OPEN", "offer is not open");
+      invariant(stored.offerHash === parsedCancellation.offerHash, "CANCEL_OFFER_HASH_MISMATCH", "cancellation offer hash mismatch");
+      invariant(stored.policyEpoch === parsedCancellation.policyEpoch, "CANCEL_EPOCH_MISMATCH", "cancellation policy epoch mismatch");
+
+      const currentTime = now();
+      invariant(Number.isSafeInteger(currentTime), "CLOCK_VALUE", "clock must return integer milliseconds");
+      invariant(parsedCancellation.cancelledAtUnixMs <= currentTime + maxClockSkewMs, "CANCEL_FUTURE", "cancellation timestamp is too far in the future");
+      invariant(currentTime < parsedCancellation.expiryUnixMs, "CANCEL_EXPIRED", "cancellation expired");
+
+      const digestHex = cancellationDigestHex(parsedCancellation);
+      const verified = await verifyCancellationSignature({
+        actor: parsedActor,
+        cancellation: parsedCancellation,
+        digestHex,
+        signature
+      });
+      invariant(verified === true, "CANCEL_SIGNATURE_INVALID", "cancellation signature verification failed");
 
       return repository.cancelOfferAtomic({
-        offerId,
+        cancellation: parsedCancellation,
+        cancellationHash: digestHex,
+        signature,
         makerSubject: parsedActor.subject,
-        nowUnixMs: now(),
         idempotencyKey
       });
     },

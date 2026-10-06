@@ -110,19 +110,31 @@ export function createPostgresOfferRepository({ pool, deploymentId }) {
       }
     },
 
-    async cancelOfferAtomic({ offerId, makerSubject, idempotencyKey }) {
+    async cancelOfferAtomic({ cancellation, cancellationHash, signature, makerSubject, idempotencyKey }) {
+      invariant(cancellation.deploymentId === scopedDeploymentId, "PG_DEPLOYMENT_MISMATCH", "cancellation deployment mismatch");
+      invariant(cancellation.maker === makerSubject, "PG_MAKER_MISMATCH", "cancellation maker mismatch");
+      const sig = signatureBytes(signature);
       const reqHash = requestHash({
         operation: "CANCEL_OFFER",
         deploymentId: scopedDeploymentId,
-        offerId,
-        makerSubject
+        makerSubject,
+        cancellationHash,
+        signatureHash: createHash("sha256").update(sig).digest("hex")
       });
 
       return withTransaction(pool, async (client) => {
         const result = await client.query({
           text: `SELECT status, offer_id
-                 FROM asset_exchange.cancel_offer_atomic($1,$2,$3,$4,$5)`,
-          values: [scopedDeploymentId, offerId, makerSubject, idempotencyKey, reqHash]
+                 FROM asset_exchange.cancel_offer_atomic($1,$2,$3,$4,$5,$6,$7)`,
+          values: [
+            scopedDeploymentId,
+            cancellation.offerId,
+            makerSubject,
+            cancellationHash,
+            sig,
+            idempotencyKey,
+            reqHash
+          ]
         });
         invariant(result.rows?.length === 1, "PG_CANCEL_RESULT", "unexpected cancel result");
         return { status: result.rows[0].status, offerId: result.rows[0].offer_id };

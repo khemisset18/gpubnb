@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createPostgresOfferRepository, withTransaction } from "../src/postgres-offer-repository.mjs";
-import { createUnsignedOffer, createAcceptance, offerDigestHex, acceptanceDigestHex } from "../../core/src/index.mjs";
+import { createUnsignedOffer, createAcceptance, createCancellation, offerDigestHex, acceptanceDigestHex, cancellationDigestHex } from "../../core/src/index.mjs";
 
 const fixtureRequestId = (label) => `fixture-${label}-request-0001`;
 
@@ -119,4 +119,38 @@ test("repository accept call binds deployment, offer hash and acceptance hash as
   assert.equal(query.values[0], "ae-test-01");
   assert.equal(query.values[4], acceptance.offerHash);
   assert.equal(query.values[6], acceptanceDigestHex(acceptance));
+});
+
+
+test("repository cancel call persists signed cancellation evidence as parameters", async () => {
+  const pool = fakePool([{ rows: [{ status: "CANCELLED", offer_id: "offer-00000001" }] }]);
+  const repository = createPostgresOfferRepository({ pool, deploymentId: "ae-test-01" });
+  const cancellation = createCancellation({
+    offerId: "offer-00000001",
+    deploymentId: "ae-test-01",
+    maker: "maker:test:001",
+    offerHash: "a".repeat(64),
+    cancelledAtUnixMs: 1000,
+    expiryUnixMs: 2000,
+    nonce: "cancelNonce000001",
+    policyEpoch: 7
+  });
+  const hash = cancellationDigestHex(cancellation);
+
+  const result = await repository.cancelOfferAtomic({
+    cancellation,
+    cancellationHash: hash,
+    signature: "sig",
+    makerSubject: cancellation.maker,
+    idempotencyKey: fixtureRequestId("cancel")
+  });
+
+  assert.equal(result.offerId, cancellation.offerId);
+  const query = pool.calls.find((call) => typeof call === "object" && call?.text?.includes("cancel_offer_atomic"));
+  assert.ok(query);
+  assert.equal(query.values.length, 7);
+  assert.equal(query.values[0], "ae-test-01");
+  assert.equal(query.values[1], cancellation.offerId);
+  assert.equal(query.values[3], hash);
+  assert.equal(Buffer.isBuffer(query.values[4]), true);
 });

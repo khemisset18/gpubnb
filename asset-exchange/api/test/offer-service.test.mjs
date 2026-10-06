@@ -33,7 +33,17 @@ function fakeRepository() {
   return {
     calls,
     async insertOfferAtomic(input) { calls.push(["insert", input]); return { status: "OPEN", offerId: input.offer.offerId }; },
-    async getOfferById(offerId) { calls.push(["get", offerId]); return { offerId, makerSubject: actorMaker.subject, state: "OPEN" }; },
+    async getOfferById(offerId) {
+      calls.push(["get", offerId]);
+      const offer = createUnsignedOffer(rawOffer);
+      return {
+        offerId,
+        makerSubject: actorMaker.subject,
+        state: "OPEN",
+        offerHash: offerDigestHex(offer),
+        policyEpoch: offer.policyEpoch
+      };
+    },
     async cancelOfferAtomic(input) { calls.push(["cancel", input]); return { status: "CANCELLED", offerId: input.offerId }; },
     async acceptOfferAtomic(input) { calls.push(["accept", input]); return { status: "CONSUMED", tradeId: input.acceptance.tradeId }; }
   };
@@ -44,6 +54,7 @@ function service(repo, overrides = {}) {
     repository: repo,
     verifyOfferSignature: async () => true,
     verifyAcceptanceSignature: async () => true,
+    verifyCancellationSignature: async () => true,
     deploymentId: "ae-test-01",
     now: () => 1000,
     ...overrides
@@ -78,22 +89,79 @@ test("publishing requires maker object authorization and verified signature", as
   assert.equal(result.status, "OPEN");
 });
 
-test("cancel uses stored maker identity, not caller-supplied ownership", async () => {
+test("cancel requires stored maker identity and verified signed cancellation intent", async () => {
   const repo = fakeRepository();
   const svc = service(repo);
+  const offer = createUnsignedOffer(rawOffer);
+  const cancellation = {
+    offerId: offer.offerId,
+    deploymentId: offer.deploymentId,
+    maker: actorMaker.subject,
+    offerHash: offerDigestHex(offer),
+    cancelledAtUnixMs: 1000,
+    expiryUnixMs: 2000,
+    nonce: "cancelNonce000001",
+    policyEpoch: offer.policyEpoch
+  };
 
   await assert.rejects(() => svc.cancelOffer({
     actor: actorTaker,
-    offerId: rawOffer.offerId,
+    cancellation,
+    signature: "sig",
     idempotencyKey: fixtureRequestId("cancel-denied")
+  }));
+
+  const rejecting = service(repo, { verifyCancellationSignature: async () => false });
+  await assert.rejects(() => rejecting.cancelOffer({
+    actor: actorMaker,
+    cancellation,
+    signature: "sig",
+    idempotencyKey: fixtureRequestId("cancel-badsig")
   }));
 
   const result = await svc.cancelOffer({
     actor: actorMaker,
-    offerId: rawOffer.offerId,
+    cancellation,
+    signature: "sig",
     idempotencyKey: fixtureRequestId("cancel-good")
   });
   assert.equal(result.status, "CANCELLED");
+  const call = repo.calls.find(([name]) => name === "cancel");
+  assert.equal(call[1].cancellation.offerHash, offerDigestHex(offer));
+  assert.match(call[1].cancellationHash, /^[0-9a-f]{64}$/);
+});
+
+test("cancel rejects hash, epoch, deployment, timestamp and expiry mismatch before mutation", async () => {
+  const repo = fakeRepository();
+  const svc = service(repo, { maxClockSkewMs: 50 });
+  const offer = createUnsignedOffer(rawOffer);
+  const baseCancellation = {
+    offerId: offer.offerId,
+    deploymentId: offer.deploymentId,
+    maker: actorMaker.subject,
+    offerHash: offerDigestHex(offer),
+    cancelledAtUnixMs: 1000,
+    expiryUnixMs: 2000,
+    nonce: "cancelNonce000001",
+    policyEpoch: offer.policyEpoch
+  };
+
+  for (const patch of [
+    { offerHash: "b".repeat(64) },
+    { policyEpoch: offer.policyEpoch + 1 },
+    { deploymentId: "ae-other-01" },
+    { cancelledAtUnixMs: 1100 },
+    { expiryUnixMs: 1001 }
+  ]) {
+    await assert.rejects(() => svc.cancelOffer({
+      actor: actorMaker,
+      cancellation: { ...baseCancellation, ...patch },
+      signature: "sig",
+      idempotencyKey: fixtureRequestId("cancel-mismatch")
+    }));
+  }
+
+  assert.equal(repo.calls.filter(([name]) => name === "cancel").length, 0);
 });
 
 test("acceptance binds taker, offer hash and policy epoch for atomic repository verification", async () => {

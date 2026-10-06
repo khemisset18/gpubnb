@@ -6,5 +6,6 @@ export * from "./canonical.mjs";
 export * from "./fee-policy.mjs";
 export * from "./offer.mjs";
 export * from "./acceptance.mjs";
+export * from "./cancellation.mjs";
 export * from "./offer-state.mjs";
 export * from "./state-machine.mjs";
