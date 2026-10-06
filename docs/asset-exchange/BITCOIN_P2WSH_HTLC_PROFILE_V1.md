@@ -174,7 +174,9 @@ Therefore:
 
 Production timeout selection is NOT specified here.
 
-Regtest vectors may use deterministic heights for testing only. They MUST NOT be copied into Mainnet policy.
+Timeout derivation is defined separately in `BITCOIN_TIMEOUT_AND_CONFIRMATION_POLICY.md`. The signed settlement terms bind the complete timeout policy, its derivation anchor, freshness deadline, and derived refund height.
+
+Regtest vectors may use deterministic block budgets for testing only. They MUST NOT be copied into Mainnet policy.
 
 ## 8. Funding output validation
 
@@ -267,6 +269,8 @@ Bitcoin settlement terms MUST bind at least:
 - redeem pubkey;
 - refund pubkey;
 - refund lock height;
+- complete timeout policy + timeout policy hash;
+- timeout derivation anchor and maximum funding broadcast height;
 - confirmation policy;
 - funding amount in satoshis;
 - allowed sighash;

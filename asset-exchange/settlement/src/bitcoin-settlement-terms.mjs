@@ -3,6 +3,7 @@ import { canonicalBytes } from "../../core/src/canonical.mjs";
 import { invariant } from "../../core/src/errors.mjs";
 import { validateDeploymentId } from "../../core/src/deployment.mjs";
 import { BTC_HTLC_PROTOCOL_ID, buildBitcoinHtlcV1 } from "./bitcoin-htlc-v1.mjs";
+import { deriveBitcoinRefundTimeoutV1 } from "./bitcoin-timeout-policy.mjs";
 
 export const BTC_SETTLEMENT_TERMS_DOMAIN = "GPUBNB:ASSET-EXCHANGE:SETTLEMENT:BTC:v1";
 
@@ -23,7 +24,8 @@ export function createBitcoinSettlementTerms(input) {
     "deploymentId","tradeId","network","protocolId","protocolVersion",
     "fundingAmountSats","secretHashHex","redeemPubkeyHex","refundPubkeyHex",
     "refundLockHeight","witnessScriptHashHex","scriptPubKeyHex",
-    "requiredConfirmations","sighashType","feePolicyId","feePolicyVersion"
+    "requiredConfirmations","sighashType","feePolicyId","feePolicyVersion",
+    "timeoutPolicy","timeoutAnchorHeight"
   ]);
   for (const key of Object.keys(input)) invariant(allowed.has(key), "BTC_TERMS_UNKNOWN_FIELD", `unknown bitcoin settlement term: ${key}`);
 
@@ -36,10 +38,25 @@ export function createBitcoinSettlementTerms(input) {
   const amount = BigInt(input.fundingAmountSats);
   invariant(amount > 0n && amount <= 2_100_000_000_000_000n, "BTC_TERMS_AMOUNT_RANGE", "bitcoin amount outside valid range");
 
+  const timeout = deriveBitcoinRefundTimeoutV1({
+    anchorHeight: input.timeoutAnchorHeight,
+    policy: input.timeoutPolicy
+  });
+
+  invariant(
+    input.requiredConfirmations === timeout.policy.fundingConfirmations,
+    "BTC_TERMS_CONFIRMATION_POLICY",
+    "required confirmations must match signed timeout policy"
+  );
+  invariant(
+    input.refundLockHeight === timeout.refundLockHeight,
+    "BTC_TERMS_TIMEOUT_HEIGHT",
+    "refund lock height must be derived from signed timeout policy"
+  );
+
   const secretHashHex = hex64(input.secretHashHex, "secret hash");
   const redeemPubkeyHex = compressedKey(input.redeemPubkeyHex, "redeem pubkey");
   const refundPubkeyHex = compressedKey(input.refundPubkeyHex, "refund pubkey");
-  invariant(Number.isSafeInteger(input.refundLockHeight) && input.refundLockHeight >= 0 && input.refundLockHeight < 500_000_000, "BTC_TERMS_LOCK_HEIGHT", "invalid refund lock height");
   invariant(Number.isSafeInteger(input.requiredConfirmations) && input.requiredConfirmations >= 1 && input.requiredConfirmations <= 144, "BTC_TERMS_CONFIRMATIONS", "invalid confirmation policy");
   invariant(input.sighashType === 0x01, "BTC_TERMS_SIGHASH", "V1 requires SIGHASH_ALL");
   invariant(typeof input.feePolicyId === "string" && input.feePolicyId.length >= 8 && input.feePolicyId.length <= 128, "BTC_TERMS_FEE_POLICY", "invalid fee policy id");
@@ -49,7 +66,7 @@ export function createBitcoinSettlementTerms(input) {
     secretHashHex,
     redeemPubkeyHex,
     refundPubkeyHex,
-    refundLockHeight: input.refundLockHeight
+    refundLockHeight: timeout.refundLockHeight
   });
 
   invariant(input.witnessScriptHashHex === built.witnessScriptHashHex, "BTC_TERMS_WITNESS_HASH", "witness script hash mismatch");
@@ -67,7 +84,13 @@ export function createBitcoinSettlementTerms(input) {
     secretHashHex,
     redeemPubkeyHex,
     refundPubkeyHex,
-    refundLockHeight: input.refundLockHeight,
+    timeoutPolicy: timeout.policy,
+    timeoutPolicyHash: timeout.policyHash,
+    timeoutAnchorHeight: timeout.anchorHeight,
+    maxFundingBroadcastHeight: timeout.maxFundingBroadcastHeight,
+    operationalSafetyBlocks: timeout.operationalSafetyBlocks,
+    refundWindowBlocks: timeout.refundWindowBlocks,
+    refundLockHeight: timeout.refundLockHeight,
     witnessScriptHashHex: built.witnessScriptHashHex,
     scriptPubKeyHex: built.scriptPubKeyHex,
     requiredConfirmations: input.requiredConfirmations,
@@ -89,6 +112,8 @@ export function bitcoinSettlementTermsDigestHex(termsInput) {
         secretHashHex: termsInput.secretHashHex,
         redeemPubkeyHex: termsInput.redeemPubkeyHex,
         refundPubkeyHex: termsInput.refundPubkeyHex,
+        timeoutPolicy: termsInput.timeoutPolicy,
+        timeoutAnchorHeight: termsInput.timeoutAnchorHeight,
         refundLockHeight: termsInput.refundLockHeight,
         witnessScriptHashHex: termsInput.witnessScriptHashHex,
         scriptPubKeyHex: termsInput.scriptPubKeyHex,

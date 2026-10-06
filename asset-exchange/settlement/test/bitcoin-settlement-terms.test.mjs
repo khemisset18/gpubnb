@@ -1,16 +1,37 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildBitcoinHtlcV1 } from "../src/bitcoin-htlc-v1.mjs";
+import { deriveBitcoinRefundTimeoutV1 } from "../src/bitcoin-timeout-policy.mjs";
 import { createBitcoinSettlementTerms, bitcoinSettlementTermsDigestHex } from "../src/bitcoin-settlement-terms.mjs";
 
 const redeem = "03c150061989643d77162902b725409087959f15914649d4f06b6cc3f8c87bb238";
 const refund = "020461e6025e68bdc5a1d6730b2fb13c4c62d295f226f0c3dbd0b713530897a6b4";
 const secretHash = "33".repeat(32);
+
+const timeoutPolicy = {
+  policyId: "btc-regtest-risk-v1",
+  network: "regtest",
+  maxFundingBroadcastDelayBlocks: 2,
+  fundingConfirmations: 2,
+  counterpartyActionBudgetBlocks: 3,
+  watcherUncertaintyBudgetBlocks: 1,
+  reorgSafetyBlocks: 6,
+  feeBumpBudgetBlocks: 2,
+  recoveryExecutionBlocks: 2,
+  operatorFallbackBlocks: 4,
+  additionalSafetyBlocks: 2
+};
+
+const timeout = deriveBitcoinRefundTimeoutV1({
+  anchorHeight: 400,
+  policy: timeoutPolicy
+});
+
 const built = buildBitcoinHtlcV1({
   secretHashHex: secretHash,
   redeemPubkeyHex: redeem,
   refundPubkeyHex: refund,
-  refundLockHeight: 500
+  refundLockHeight: timeout.refundLockHeight
 });
 
 const base = {
@@ -23,7 +44,9 @@ const base = {
   secretHashHex: secretHash,
   redeemPubkeyHex: redeem,
   refundPubkeyHex: refund,
-  refundLockHeight: 500,
+  timeoutPolicy,
+  timeoutAnchorHeight: 400,
+  refundLockHeight: timeout.refundLockHeight,
   witnessScriptHashHex: built.witnessScriptHashHex,
   scriptPubKeyHex: built.scriptPubKeyHex,
   requiredConfirmations: 2,
@@ -32,7 +55,28 @@ const base = {
   feePolicyVersion: 1
 };
 
-test("settlement digest binds every economic and script-critical field", () => {
+function rebuildForTimeout({ policy = timeoutPolicy, anchorHeight = 400 } = {}) {
+  const changedTimeout = deriveBitcoinRefundTimeoutV1({
+    anchorHeight,
+    policy
+  });
+  const changedScript = buildBitcoinHtlcV1({
+    secretHashHex: secretHash,
+    redeemPubkeyHex: redeem,
+    refundPubkeyHex: refund,
+    refundLockHeight: changedTimeout.refundLockHeight
+  });
+  return {
+    timeoutPolicy: policy,
+    timeoutAnchorHeight: anchorHeight,
+    refundLockHeight: changedTimeout.refundLockHeight,
+    witnessScriptHashHex: changedScript.witnessScriptHashHex,
+    scriptPubKeyHex: changedScript.scriptPubKeyHex,
+    requiredConfirmations: changedTimeout.policy.fundingConfirmations
+  };
+}
+
+test("settlement digest binds every economic, script, and timeout-critical field", () => {
   const original = createBitcoinSettlementTerms(base);
   const digest = bitcoinSettlementTermsDigestHex(original);
   assert.match(digest, /^[0-9a-f]{64}$/);
@@ -42,14 +86,19 @@ test("settlement digest binds every economic and script-critical field", () => {
     secretHashHex: changedSecret,
     redeemPubkeyHex: redeem,
     refundPubkeyHex: refund,
-    refundLockHeight: 500
+    refundLockHeight: timeout.refundLockHeight
   });
-  const changedHeightScript = buildBitcoinHtlcV1({
-    secretHashHex: secretHash,
-    redeemPubkeyHex: redeem,
-    refundPubkeyHex: refund,
-    refundLockHeight: 501
-  });
+
+  const shiftedRiskPolicy = {
+    ...timeoutPolicy,
+    watcherUncertaintyBudgetBlocks: 0,
+    additionalSafetyBlocks: 3
+  };
+
+  const changedConfirmationsPolicy = {
+    ...timeoutPolicy,
+    fundingConfirmations: 3
+  };
 
   const variants = [
     { fundingAmountSats: "100001" },
@@ -58,12 +107,11 @@ test("settlement digest binds every economic and script-critical field", () => {
       witnessScriptHashHex: changedSecretScript.witnessScriptHashHex,
       scriptPubKeyHex: changedSecretScript.scriptPubKeyHex
     },
+    rebuildForTimeout({ anchorHeight: 401 }),
+    rebuildForTimeout({ policy: changedConfirmationsPolicy }),
     {
-      refundLockHeight: 501,
-      witnessScriptHashHex: changedHeightScript.witnessScriptHashHex,
-      scriptPubKeyHex: changedHeightScript.scriptPubKeyHex
+      timeoutPolicy: shiftedRiskPolicy
     },
-    { requiredConfirmations: 3 },
     { feePolicyVersion: 2 },
     { deploymentId: "ae-test-02" },
     { tradeId: "trade-00000002" }
@@ -75,7 +123,11 @@ test("settlement digest binds every economic and script-critical field", () => {
   }
 });
 
-test("terms reject script substitution even when other fields look valid", () => {
+test("terms reject timeout/script substitution even when other fields look valid", () => {
+  assert.throws(() => createBitcoinSettlementTerms({
+    ...base,
+    refundLockHeight: base.refundLockHeight + 1
+  }));
   assert.throws(() => createBitcoinSettlementTerms({
     ...base,
     witnessScriptHashHex: "00".repeat(32)
@@ -83,6 +135,13 @@ test("terms reject script substitution even when other fields look valid", () =>
   assert.throws(() => createBitcoinSettlementTerms({
     ...base,
     scriptPubKeyHex: "0020" + "00".repeat(32)
+  }));
+});
+
+test("confirmation policy must match signed timeout policy", () => {
+  assert.throws(() => createBitcoinSettlementTerms({
+    ...base,
+    requiredConfirmations: 3
   }));
 });
 
