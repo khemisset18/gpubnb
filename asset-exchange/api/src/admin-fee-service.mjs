@@ -48,6 +48,7 @@ export function createFeePolicyAdminIntent(input) {
 export function createAdminFeeService({
   repository,
   verifyStrongAdminAssertion,
+  authorizeAdminSubject,
   challengeStore,
   deploymentId,
   maxOperatorRateBps = 10_000,
@@ -56,6 +57,7 @@ export function createAdminFeeService({
 }) {
   invariant(repository && typeof repository.getOperatorState === "function" && typeof repository.activateFeePolicyAtomic === "function", "ADMIN_REPOSITORY", "admin repository required");
   invariant(typeof verifyStrongAdminAssertion === "function", "ADMIN_ASSERTION_VERIFIER", "strong admin assertion verifier required");
+  invariant(typeof authorizeAdminSubject === "function", "ADMIN_AUTHORIZER", "admin subject authorizer required");
   invariant(challengeStore && typeof challengeStore.put === "function" && typeof challengeStore.consume === "function", "ADMIN_CHALLENGE_STORE", "challenge store required");
   const scopedDeploymentId = validateDeploymentId(deploymentId);
   invariant(Number.isSafeInteger(maxOperatorRateBps) && maxOperatorRateBps >= 0 && maxOperatorRateBps <= 10_000, "ADMIN_MAX_RATE", "invalid operator max rate");
@@ -63,6 +65,8 @@ export function createAdminFeeService({
 
   return Object.freeze({
     async createFeeChallenge({ actorSubject, proposedPolicy }) {
+      const authorized = await authorizeAdminSubject({ actorSubject, action: "ACTIVATE_FEE_POLICY" });
+      invariant(authorized === true, "ADMIN_NOT_AUTHORIZED", "actor is not authorized for admin action");
       const operator = await repository.getOperatorState();
       invariant(operator.mode !== "TRANSITION", "ADMIN_TRANSITION_BLOCKED", "admin fee change blocked during transition");
       const policy = createFeePolicy(proposedPolicy, { maxRateBps: maxOperatorRateBps });
@@ -91,6 +95,8 @@ export function createAdminFeeService({
     async activateFeePolicy({ intent, assertion }) {
       const parsed = createFeePolicyAdminIntent(intent);
       invariant(parsed.deploymentId === scopedDeploymentId, "ADMIN_DEPLOYMENT_MISMATCH", "wrong deployment");
+      const authorized = await authorizeAdminSubject({ actorSubject: parsed.actorSubject, action: parsed.action });
+      invariant(authorized === true, "ADMIN_NOT_AUTHORIZED", "actor is not authorized for admin action");
       const currentTime = now();
       invariant(parsed.expiresAtUnixMs > currentTime, "ADMIN_CHALLENGE_EXPIRED", "admin challenge expired");
       const challengeHash = hashHex(parsed);
