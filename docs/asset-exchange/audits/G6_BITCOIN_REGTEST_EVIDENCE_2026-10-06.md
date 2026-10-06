@@ -202,7 +202,48 @@ Observed values:
 
 This proves, in the isolated two-node regtest scenario, that an application MUST treat confirmation as reversible evidence until the configured confirmation policy is satisfied. A transaction that leaves the active chain is reconciled and the exact same signed transaction can be rebroadcast without constructing a second economic action.
 
-## 9. Security findings discovered during implementation
+
+## 9. Refund descendant pinning pressure
+
+The refund RBF harness now includes an adversarial descendant cluster.
+
+Scenario:
+1. broadcast a valid low-fee refund parent;
+2. attach a high-fee child spending the refund output;
+3. attempt a modest parent replacement;
+4. require that Bitcoin Core reject the modest replacement because it does not pay enough to evict the parent+child cluster;
+5. construct a substantially stronger parent replacement;
+6. require that the strong replacement evict both parent and child;
+7. continue through confirmation and reorg handling.
+
+Observed run:
+- workflow: Asset Exchange Bitcoin Regtest;
+- run id: `37416889748`;
+- source commit: `e40267d3f7a35919831ff460cc40d69ddbc45a07`;
+- conclusion: SUCCESS.
+
+Observed mempool values:
+- original refund fee: `0.000002 BTC` (200 sats);
+- child fee: `0.000098 BTC` (9,800 sats);
+- total evicted cluster fee: `0.000100 BTC` (10,000 sats);
+- strong replacement fee: `0.0002 BTC` (20,000 sats);
+- original vsize: `131 vB`;
+- child vsize: `110 vB`;
+- replacement vsize: `131 vB`;
+- moderate replacement: rejected;
+- strong replacement: accepted.
+
+Observed child txid:
+- `13f7e0087f1a47f1e118393ca0e5e47768173b6f7cb0a32ac08d2e6844bba97d`
+
+Observed replacement refund txid:
+- `c2af40b08bba167cbd8eadbfc0cf007a9adacbd576f41fa1f0826f11c75042e0`
+
+This demonstrates that refund fee-bump logic cannot reason only about the original transaction fee. It must account for the fee burden of mempool descendants that would be evicted by replacement.
+
+It is still not proof against every larger package/cluster topology.
+
+## 10. Security findings discovered during implementation
 
 ### G6-F001 — Preimage length initially enforced only by application
 Initial script checked SHA256 preimage equality but did not constrain the preimage byte length on-chain.
@@ -266,7 +307,7 @@ None were bypassed. Each was corrected and rerun.
 
 Disposition: FIXED.
 
-## 10. What this evidence DOES prove
+## 11. What this evidence DOES prove
 
 Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - reviewed P2WSH script and canonical Miniscript descriptor agree;
@@ -274,6 +315,7 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - incorrect redeem conditions fail;
 - CLTV refund timing works;
 - refund replacement works in the tested singleton RBF scenario;
+- a costly descendant can pin a modest replacement, while a sufficiently funded parent replacement evicts the parent+child cluster;
 - redeem/refund confirmations respond safely to forced one-block reorgs;
 - two independent nodes can diverge, report UNCERTAIN tips, and converge to the heavier chain;
 - a transaction with two confirmations on the losing fork returns to zero confirmations after reorg;
@@ -283,12 +325,12 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - encrypted recovery material can be exported before funding;
 - a refund can execute after the wallet is unloaded.
 
-## 11. What this evidence does NOT prove
+## 12. What this evidence does NOT prove
 
 STOP-SHIP remains for Mainnet until at least:
 - production timeout derivation is reviewed;
 - deeper/multi-block reorg matrix beyond the tested two-vs-four-block fork passes;
-- package/cluster/pinning adversarial fee tests pass;
+- deeper package/cluster-limit topologies beyond the tested single-descendant pinning case pass;
 - hardware-wallet / external signer compatibility matrix passes;
 - standalone recovery tooling is packaged/reproducibly released;
 - dependency/SBOM/provenance release evidence is complete;
