@@ -272,7 +272,48 @@ This is direct evidence that the pinned Bitcoin Core 31.1 node enforces the expe
 
 It does NOT yet prove the separate default cluster-size boundary of approximately 101 kvB.
 
-## 11. Security findings discovered during implementation
+
+## 11. Bitcoin Core cluster-size boundary
+
+The regtest harness now verifies the separate Bitcoin Core 31.1 cluster-size policy.
+
+The node exposes:
+- `limitclustersize=101000` vbytes, corresponding to the default 101 kB virtual-size policy.
+
+Scenario:
+1. create a root transaction;
+2. add two connected standard transactions of approximately 40,912 vB each;
+3. verify the resulting connected cluster remains below the configured size boundary;
+4. construct and sign a third transaction of the same approximate vsize;
+5. calculate the projected cluster weight;
+6. require `testmempoolaccept` to reject the candidate for the cluster boundary;
+7. mine the accepted cluster before continuing to later recovery tests.
+
+Observed run:
+- workflow: Asset Exchange Bitcoin Regtest;
+- run id: `37420517525`;
+- source commit: `a040ca987ba8e90a1abad712fec6f6b5169a6861`;
+- conclusion: SUCCESS.
+
+Observed values:
+- `limitclustersize_vbytes=101000`;
+- accepted cluster txcount: `3`;
+- accepted clusterweight: `328122`;
+- child 1 vsize: `40912`;
+- child 2 vsize: `40912`;
+- candidate vsize: `40912`;
+- projected clusterweight: `491770`;
+- candidate rejection reason: `too-large-cluster`.
+
+The configured size boundary corresponds to `404000` weight units. The accepted cluster remained below it; the candidate would have pushed the cluster above it and was rejected by Bitcoin Core.
+
+This directly validates both default cluster dimensions used by the pinned node:
+- transaction count: 64;
+- virtual size: 101000 vbytes.
+
+It does not prove every possible graph topology or replacement interaction near both limits simultaneously.
+
+## 12. Security findings discovered during implementation
 
 ### G6-F001 — Preimage length initially enforced only by application
 Initial script checked SHA256 preimage equality but did not constrain the preimage byte length on-chain.
@@ -336,7 +377,7 @@ None were bypassed. Each was corrected and rerun.
 
 Disposition: FIXED.
 
-## 12. What this evidence DOES prove
+## 13. What this evidence DOES prove
 
 Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - reviewed P2WSH script and canonical Miniscript descriptor agree;
@@ -346,6 +387,7 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - refund replacement works in the tested singleton RBF scenario;
 - a costly descendant can pin a modest replacement, while a sufficiently funded parent replacement evicts the parent+child cluster;
 - the pinned Bitcoin Core 31.1 node accepts a 64-transaction cluster and rejects transaction #65 with `too-large-cluster`;
+- the pinned node enforces the separate 101000-vbyte cluster-size boundary and rejects a candidate that would exceed it;
 - redeem/refund confirmations respond safely to forced one-block reorgs;
 - two independent nodes can diverge, report UNCERTAIN tips, and converge to the heavier chain;
 - a transaction with two confirmations on the losing fork returns to zero confirmations after reorg;
@@ -355,12 +397,12 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - encrypted recovery material can be exported before funding;
 - a refund can execute after the wallet is unloaded.
 
-## 13. What this evidence does NOT prove
+## 14. What this evidence does NOT prove
 
 STOP-SHIP remains for Mainnet until at least:
 - production timeout derivation is reviewed;
 - deeper/multi-block reorg matrix beyond the tested two-vs-four-block fork passes;
-- the separate default cluster-size (~101 kvB) boundary and deeper package topologies pass;
+- more complex package/cluster graph topologies and near-limit RBF interactions pass;
 - hardware-wallet / external signer compatibility matrix passes;
 - standalone recovery tooling is packaged/reproducibly released;
 - dependency/SBOM/provenance release evidence is complete;
