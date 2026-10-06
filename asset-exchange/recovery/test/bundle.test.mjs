@@ -41,10 +41,14 @@ test("tampered ciphertext, tag, AAD or wrong key fails authentication", () => {
   const key = randomBytes(32);
   const envelope = encryptRecoveryPayload(payload(), key);
 
-  const tamperedCiphertext = { ...envelope, ciphertext: envelope.ciphertext.slice(0, -1) + (envelope.ciphertext.endsWith("A") ? "B" : "A") };
+  const ciphertextBytes = Buffer.from(envelope.ciphertext, "base64url");
+  ciphertextBytes[0] ^= 0x01;
+  const tamperedCiphertext = { ...envelope, ciphertext: ciphertextBytes.toString("base64url") };
   assert.throws(() => decryptRecoveryEnvelope(tamperedCiphertext, key));
 
-  const tamperedTag = { ...envelope, tag: envelope.tag.slice(0, -1) + (envelope.tag.endsWith("A") ? "B" : "A") };
+  const tagBytes = Buffer.from(envelope.tag, "base64url");
+  tagBytes[0] ^= 0x01;
+  const tamperedTag = { ...envelope, tag: tagBytes.toString("base64url") };
   assert.throws(() => decryptRecoveryEnvelope(tamperedTag, key));
 
   const tamperedAad = { ...envelope, aadHash: "0".repeat(64) };
