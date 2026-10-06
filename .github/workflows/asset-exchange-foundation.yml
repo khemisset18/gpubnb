@@ -66,8 +66,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RInE '(SEED_PHRASE|seedPhrase|privateKey|PRIVATE_KEY|walletPassword|spendKey)'             asset-exchange/core asset-exchange/api asset-exchange/worker asset-exchange/chain-watchers             --include='*.mjs' --include='*.js'; then
-            echo 'Potential custody material reference detected outside recovery deny-list tests'
+          if grep -RInE '(SEED_PHRASE|seedPhrase|privateKey|PRIVATE_KEY|walletPassword|spendKey)' \
+            asset-exchange/core/src \
+            asset-exchange/api/src \
+            asset-exchange/worker/src \
+            asset-exchange/chain-watchers/src \
+            --include='*.mjs' --include='*.js'; then
+            echo 'Potential custody material reference detected in executable foundation code'
             exit 1
           fi
 
