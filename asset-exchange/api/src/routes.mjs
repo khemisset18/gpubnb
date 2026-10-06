@@ -6,7 +6,7 @@ function errorResponse(error) {
   if (!(error instanceof DomainError)) return { statusCode: 500, body: { error: "internal_error" } };
 
   if (["AUTH_REQUIRED", "SESSION_EXPIRED"].includes(error.code)) return { statusCode: 401, body: { error: "authentication_required" } };
-  if (["CSRF_REQUIRED", "CSRF_INVALID", "OBJECT_AUTHZ"].includes(error.code)) return { statusCode: 403, body: { error: "forbidden" } };
+  if (["CSRF_REQUIRED", "CSRF_INVALID", "OBJECT_AUTHZ", "ORIGIN_FORBIDDEN", "FETCH_SITE_FORBIDDEN"].includes(error.code)) return { statusCode: 403, body: { error: "forbidden" } };
   if (["OFFER_NOT_OPEN", "STALE_EPOCH", "DEPLOYMENT_MISMATCH"].includes(error.code)) return { statusCode: 409, body: { error: "conflict" } };
   if (error.code.startsWith("RATE_")) return { statusCode: 429, body: { error: "rate_limited" } };
   if (error.code === "BODY_TOO_LARGE") return { statusCode: 413, body: { error: "payload_too_large" } };
@@ -23,11 +23,18 @@ export function createBusinessRouter({
   sessionManager,
   offerService,
   rateLimiter,
+  allowedOrigins,
   maxBodyBytes = 64 * 1024
 }) {
   invariant(sessionManager && typeof sessionManager.authenticateRequest === "function" && typeof sessionManager.assertCsrf === "function", "ROUTER_SESSION", "session manager required");
   invariant(offerService && typeof offerService.publishOffer === "function", "ROUTER_OFFER_SERVICE", "offer service required");
   invariant(rateLimiter && typeof rateLimiter.consume === "function", "ROUTER_RATE_LIMIT", "rate limiter required");
+  invariant(Array.isArray(allowedOrigins) && allowedOrigins.length > 0, "ROUTER_ORIGINS", "allowed origins required");
+  const originSet = new Set(allowedOrigins);
+  invariant(originSet.size === allowedOrigins.length, "ROUTER_ORIGIN_DUPLICATE", "duplicate allowed origin");
+  for (const origin of originSet) {
+    invariant(typeof origin === "string" && /^https:\/\/[A-Za-z0-9.-]+(?::[0-9]{1,5})?$/.test(origin), "ROUTER_ORIGIN_FORMAT", "allowed origins must be explicit https origins");
+  }
 
   return async function route(req, sendJson) {
     const pathname = new URL(req.url, "http://asset-exchange.invalid").pathname;
@@ -39,6 +46,10 @@ export function createBusinessRouter({
 
     try {
       const actor = await sessionManager.authenticateRequest(req);
+      const origin = req.headers.origin;
+      invariant(typeof origin === "string" && originSet.has(origin), "ORIGIN_FORBIDDEN", "request origin not allowed");
+      const fetchSite = req.headers["sec-fetch-site"];
+      invariant(fetchSite === undefined || fetchSite === "same-origin" || fetchSite === "same-site", "FETCH_SITE_FORBIDDEN", "cross-site browser request forbidden");
       await sessionManager.assertCsrf(req, actor);
 
       const routeClass = publish ? "publish" : cancelMatch ? "cancel" : "accept";

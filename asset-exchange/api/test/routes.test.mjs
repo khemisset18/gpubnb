@@ -14,7 +14,7 @@ async function listen(server) {
   return server.address().port;
 }
 
-function request(port, { path, body, cookie, csrf, idempotency = "idempotency-key-001" }) {
+function request(port, { path, body, cookie, csrf, origin = "https://exchange.example", fetchSite = "same-origin", idempotency = "idempotency-key-001" }) {
   const payload = body === undefined ? null : Buffer.from(body, "utf8");
   return new Promise((resolve, reject) => {
     const req = http.request({
@@ -24,6 +24,8 @@ function request(port, { path, body, cookie, csrf, idempotency = "idempotency-ke
         ...(payload ? { "content-type": "application/json", "content-length": String(payload.length) } : {}),
         ...(cookie ? { cookie } : {}),
         ...(csrf ? { "x-csrf-token": csrf } : {}),
+        ...(origin ? { origin } : {}),
+        ...(fetchSite ? { "sec-fetch-site": fetchSite } : {}),
         "idempotency-key": idempotency
       }
     }, (res) => {
@@ -43,6 +45,7 @@ test("business route requires session and csrf before service mutation", async (
   const router = createBusinessRouter({
     sessionManager,
     rateLimiter: createMemoryFixedWindowRateLimiter(),
+    allowedOrigins: ["https://exchange.example"],
     offerService: {
       async publishOffer(v) { calls.push(v); return { status: "OPEN" }; },
       async cancelOffer() { throw new Error("unexpected"); },
@@ -66,6 +69,7 @@ test("valid session+csrf routes publish request and duplicate JSON keys are reje
   const router = createBusinessRouter({
     sessionManager,
     rateLimiter: createMemoryFixedWindowRateLimiter(),
+    allowedOrigins: ["https://exchange.example"],
     offerService: {
       async publishOffer(v) { calls.push(v); return { status: "OPEN", offerId: "offer-1" }; },
       async cancelOffer() { throw new Error("unexpected"); },
@@ -101,6 +105,7 @@ test("rate limit blocks repeated business flow", async () => {
   const router = createBusinessRouter({
     sessionManager,
     rateLimiter: createMemoryFixedWindowRateLimiter({ limit: 1 }),
+    allowedOrigins: ["https://exchange.example"],
     offerService: {
       async publishOffer() { return { status: "OPEN" }; },
       async cancelOffer() { throw new Error("unexpected"); },
@@ -114,5 +119,42 @@ test("rate limit blocks repeated business flow", async () => {
     const second = await request(port, { path: "/v1/offers", cookie, csrf: issued.csrfToken, idempotency: "idempotency-key-003", body: '{"offer":{},"signature":"sig"}' });
     assert.equal(first.status, 201);
     assert.equal(second.status, 429);
+  } finally { await new Promise((r) => server.close(r)); }
+});
+
+test("mutating business routes reject untrusted or cross-site origins", async () => {
+  const calls = [];
+  const sessionManager = createSessionManager({ store: createMemorySessionStore() });
+  const issued = await sessionManager.issue({ subject: "maker:test:001" });
+  const cookie = issued.cookie.split(";")[0];
+  const router = createBusinessRouter({
+    sessionManager,
+    rateLimiter: createMemoryFixedWindowRateLimiter(),
+    allowedOrigins: ["https://exchange.example"],
+    offerService: {
+      async publishOffer(v) { calls.push(v); return { status: "OPEN" }; },
+      async cancelOffer() { throw new Error("unexpected"); },
+      async acceptOffer() { throw new Error("unexpected"); }
+    }
+  });
+  const server = createApiServer({ businessRouter: router });
+  const port = await listen(server);
+  try {
+    const evil = await request(port, {
+      path: "/v1/offers",
+      cookie, csrf: issued.csrfToken,
+      origin: "https://evil.example",
+      body: '{"offer":{},"signature":"sig"}'
+    });
+    assert.equal(evil.status, 403);
+
+    const crossSite = await request(port, {
+      path: "/v1/offers",
+      cookie, csrf: issued.csrfToken,
+      fetchSite: "cross-site",
+      body: '{"offer":{},"signature":"sig"}'
+    });
+    assert.equal(crossSite.status, 403);
+    assert.equal(calls.length, 0);
   } finally { await new Promise((r) => server.close(r)); }
 });
