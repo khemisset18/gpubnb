@@ -998,7 +998,245 @@ Gate: G3/G7/G9
 
 ---
 
-## K. Formal invariants to prove/model
+## K. P2P discovery / network threats
+
+### AE-P2P-001 — Sybil peers dominate discovery
+Component: libp2p discovery / Gossipsub
+Severity: HIGH
+Threat source: attacker creating many Peer IDs
+Preconditions: peer count or IP count treated as trust
+Failure path: attacker floods mesh/index with attacker-controlled identities
+Impact: degraded availability, stale offers, biased discovery, censorship pressure
+Prevention:
+- economic validity comes only from signatures;
+- peer score is advisory, never settlement authority;
+- per-peer and per-prefix connection/message limits;
+- diverse bootstrap/peer sources;
+- no single-peer quorum for economic state.
+Detection:
+- Peer-ID churn metrics;
+- mesh diversity metrics;
+- invalid/replayed offer ratios;
+- abnormal concentration by IP/prefix/ASN where available.
+Recovery:
+- prune/graylist abusive peers;
+- switch bootstrap sources;
+- fall back to centralized/federated discovery without affecting settlement/recovery.
+Mandatory test:
+- large Sybil swarm cannot forge offer validity, reopen consumed offers, or disable recovery.
+Gate: future P2P discovery gate
+
+### AE-P2P-002 — Eclipse attack hides cancellations or market state
+Component: peer selection / bootstrap
+Severity: HIGH
+Threat source: coordinated malicious peers/bootstrap nodes
+Preconditions: victim peer view dominated by attacker
+Failure path: victim sees stale open offers or attacker-selected subset of market
+Impact: wasted acceptance attempts, censorship, privacy loss, stale state
+Prevention:
+- multiple independent bootstrap sources;
+- peer diversity;
+- signed cancellation tombstones;
+- authoritative acceptance race remains outside gossip in V1;
+- optional centralized/federated cross-check during hybrid rollout.
+Detection:
+- peer-source concentration;
+- divergent discovery views;
+- cancellation propagation delay metrics.
+Recovery:
+- reconnect through independent sources;
+- refresh offer state through authoritative API before acceptance;
+- retain refund/recovery independent of discovery.
+Mandatory test:
+- partition/eclipsed client cannot finalize acceptance from stale gossip alone.
+Gate: future P2P discovery gate
+
+### AE-P2P-003 — Stale offer replay after signed cancellation
+Component: P2P offer cache / gossip
+Severity: HIGH
+Threat source: malicious peer replay
+Preconditions: cancellation tombstones expire too early or offer replay not correlated
+Failure path: cancelled signed offer is re-announced as apparently open
+Impact: repeated acceptance attempts; inconsistent UX; potential race pressure
+Prevention:
+- signed cancellation tombstones;
+- offerHash binding;
+- bounded replay cache;
+- cancellation retention exceeding offer lifetime;
+- authoritative DB check before acceptance.
+Detection:
+- replay counters;
+- tombstone-hit telemetry.
+Recovery:
+- suppress stale offer locally;
+- propagate valid cancellation;
+- do not create new financial state.
+Mandatory test:
+- replay cancelled offer after partition/reconnect and verify it never becomes accept-authoritative.
+Gate: G2 / future P2P discovery gate
+
+### AE-P2P-004 — Message flood exhausts CPU via signature verification
+Component: Gossipsub validation / offer fetch
+Severity: HIGH
+Threat source: remote attacker
+Preconditions: expensive crypto verification occurs before cheap bounds
+Failure path: attacker sends high-rate malformed/oversized signed-message candidates
+Impact: node CPU/memory exhaustion; discovery outage
+Prevention:
+- strict byte-size limits before parse;
+- structural/schema validation before crypto;
+- per-peer/topic rate limits;
+- verification concurrency budget;
+- duplicate suppression before signature verification;
+- backoff/graylist.
+Detection:
+- verification queue depth;
+- invalid-message rate;
+- CPU budget alarms.
+Recovery:
+- shed low-priority peers/topics;
+- temporary peer bans;
+- centralized/federated fallback.
+Mandatory test:
+- malformed flood cannot starve refund/recovery services.
+Gate: G1 / future P2P discovery gate
+
+### AE-P2P-005 — Relay or bootstrap becomes hidden authority
+Component: Circuit Relay v2 / bootstrap
+Severity: CRITICAL
+Threat source: architecture error or malicious infrastructure operator
+Preconditions: client depends on relay/bootstrap for economic truth or recovery
+Failure path: relay/bootstrap blocks, rewrites, or withholds required settlement control messages
+Impact: censorship or stranded funds
+Prevention:
+- relays/bootstraps carry connectivity/discovery only;
+- end-to-end signatures;
+- no recovery secret at relay;
+- no authoritative trade state at bootstrap;
+- settlement/recovery paths independent.
+Detection:
+- relay availability and path-diversity monitoring.
+Recovery:
+- alternate relays/bootstrap;
+- direct connection where possible;
+- recovery remains functional with P2P entirely offline.
+Mandatory test:
+- remove all relays/bootstrap nodes during active locked trade; refund/recovery still works.
+Gate: G3 / future P2P discovery gate
+
+### AE-P2P-006 — DHT poisoning or unbounded record retention
+Component: Kademlia DHT / provider records
+Severity: MEDIUM/HIGH
+Threat source: malicious peers
+Preconditions: DHT records treated as truth or lack TTL/size/signature bounds
+Failure path: attacker injects fake endpoints, stale offers, or resource-amplifying records
+Impact: discovery poisoning, SSRF-like fetches, resource exhaustion
+Prevention:
+- DHT stores only discovery/index hints;
+- signed bounded records;
+- strict TTL;
+- canonical offerHash references;
+- endpoint allow/deny validation;
+- never store KYC/recovery material.
+Detection:
+- invalid-record counters;
+- conflicting-provider metrics.
+Recovery:
+- discard unverified records;
+- alternate discovery source.
+Mandatory test:
+- poisoned DHT cannot create valid offer, cancel, settlement state, or internal-network fetch.
+Gate: future P2P discovery gate
+
+### AE-P2P-007 — P2P metadata deanonymizes trader activity
+Component: peer identity / topics / relay paths
+Severity: HIGH
+Threat source: passive observer, relay, malicious peer
+Preconditions: long-lived Peer IDs and fine-grained topic subscriptions correlate activity
+Failure path: timing/topic/IP data linked to market interests or wallet behavior
+Impact: privacy loss, profiling, compliance leakage
+Prevention:
+- no KYC data on P2P network;
+- coarse topic partitioning;
+- no wallet address in topic names;
+- document that relay is not anonymity;
+- minimize long-lived correlation identifiers;
+- privacy review before public rollout.
+Detection:
+- privacy telemetry review;
+- red-team traffic analysis.
+Recovery:
+- rotate transport metadata where protocol allows;
+- change topic strategy;
+- disable P2P discovery without affecting funds.
+Mandatory test:
+- traffic-analysis review quantifies metadata leakage before public rollout.
+Gate: privacy review / future P2P discovery gate
+
+### AE-P2P-008 — Malicious peer triggers internal or private-network connections
+Component: peer retrieval / multiaddr handling
+Severity: CRITICAL
+Threat source: malicious peer
+Preconditions: untrusted peer supplies arbitrary address/redirect
+Failure path: node dials localhost, metadata service, DB/Redis/internal service
+Impact: SSRF, credential exposure, lateral movement
+Prevention:
+- multiaddr/IP validation;
+- deny loopback/private/link-local/metadata/internal ranges by default;
+- no HTTP redirect trust;
+- dedicated network namespace/egress ACL;
+- explicit exception only for local wallet-agent channel outside P2P path.
+Detection:
+- denied-dial telemetry;
+- network flow logs.
+Recovery:
+- disconnect peer; quarantine offending record/source.
+Mandatory test:
+- peer-supplied localhost/RFC1918/cloud-metadata destinations are rejected.
+Gate: G1 / future P2P discovery gate
+
+### AE-P2P-009 — Peer score mistaken for economic trust
+Component: Gossipsub scoring
+Severity: HIGH
+Threat source: design error
+Preconditions: high network reputation bypasses signature/state checks
+Failure path: well-scored peer sends stale or malicious economic message accepted without full verification
+Impact: integrity failure
+Prevention:
+- score gates transport only;
+- every offer/cancel/accept validated cryptographically and against state;
+- no score-based bypass.
+Detection:
+- code review/static policy checks.
+Recovery:
+- revoke bypass; replay authoritative state.
+Mandatory test:
+- highest-scored peer with invalid signature is rejected identically to unknown peer.
+Gate: G2 / future P2P discovery gate
+
+### AE-P2P-010 — Discovery outage blocks active trade recovery
+Component: P2P discovery availability
+Severity: CRITICAL
+Threat source: network partition, DDoS, software failure
+Preconditions: recovery instructions or counterparty data fetched only from discovery network
+Failure path: P2P unavailable during refund window
+Impact: stranded funds
+Prevention:
+- export recovery bundle before lock;
+- final terms stored locally;
+- no active-trade recovery dependency on Gossipsub/DHT/bootstrap.
+Detection:
+- disaster drill;
+- dependency graph audit.
+Recovery:
+- standalone recovery tool / chain RPC path.
+Mandatory test:
+- disable entire discovery subsystem after lock and complete refund independently.
+Gate: G3/G7
+
+---
+
+## L. Formal invariants to prove/model
 
 At minimum the formal model must enforce:
 
@@ -1018,7 +1256,7 @@ Gate: G4
 
 ---
 
-## L. Current release blockers
+## M. Current release blockers
 
 Before any executable settlement code:
 - G0 isolation evidence incomplete;
@@ -1040,7 +1278,7 @@ Before any real funds:
 
 ---
 
-## M. Review rule
+## N. Review rule
 
 After completing any security work item:
 
