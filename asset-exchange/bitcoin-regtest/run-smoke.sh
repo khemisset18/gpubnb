@@ -114,6 +114,9 @@ BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
   asset-exchange/bitcoin-regtest/validate-htlc-vector.sh
 
 BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
+  asset-exchange/bitcoin-regtest/run-htlc-redeem.sh
+
+BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
   asset-exchange/bitcoin-regtest/run-htlc-refund.sh
 
 echo "Bitcoin Core regtest isolation/reorg smoke test passed."
