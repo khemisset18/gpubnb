@@ -118,6 +118,16 @@ test("settlement digest binds every economic, script, and timeout-critical field
     fundingConfirmations: 3
   };
 
+  const confirmationPolicyForThree = {
+    ...confirmationPolicy,
+    riskFloors: {
+      LOW: 1,
+      STANDARD: 3,
+      HIGH: 3,
+      EXTREME: 6
+    }
+  };
+
   const variants = [
     { fundingAmountSats: "100001" },
     {
@@ -126,7 +136,10 @@ test("settlement digest binds every economic, script, and timeout-critical field
       scriptPubKeyHex: changedSecretScript.scriptPubKeyHex
     },
     rebuildForTimeout({ anchorHeight: 401 }),
-    rebuildForTimeout({ policy: changedConfirmationsPolicy }),
+    {
+      ...rebuildForTimeout({ policy: changedConfirmationsPolicy }),
+      confirmationPolicy: confirmationPolicyForThree
+    },
     {
       timeoutPolicy: shiftedRiskPolicy
     },
