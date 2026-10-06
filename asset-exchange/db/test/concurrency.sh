@@ -31,7 +31,7 @@ assert_scalar() {
   fi
 }
 
-echo "[1/5] accept-vs-accept"
+echo "[1/6] accept-vs-accept"
 reset_fixture
 
 (
@@ -89,7 +89,7 @@ assert_scalar "SELECT count(*) FROM asset_exchange.trades WHERE offer_id='offer-
 assert_scalar "SELECT state FROM asset_exchange.offers WHERE offer_id='offer-00000001';" "CONSUMED"
 assert_scalar "SELECT accepted_trade_id FROM asset_exchange.offers WHERE offer_id='offer-00000001';" "trade-00000001"
 
-echo "[2/5] accept-vs-cancel"
+echo "[2/6] accept-vs-cancel"
 reset_fixture
 
 (
@@ -143,7 +143,7 @@ fi
 assert_scalar "SELECT state FROM asset_exchange.offers WHERE offer_id='offer-00000001';" "CANCELLED"
 assert_scalar "SELECT count(*) FROM asset_exchange.trades WHERE offer_id='offer-00000001';" "0"
 
-echo "[3/5] idempotent retry"
+echo "[3/6] idempotent retry"
 reset_fixture
 cat <<'SQL' | psql_ci >/dev/null
 SELECT * FROM asset_exchange.accept_offer_atomic(
@@ -174,7 +174,7 @@ SQL
 assert_scalar "SELECT count(*) FROM asset_exchange.trades WHERE trade_id='trade-00000004';" "1"
 assert_scalar "SELECT count(*) FROM asset_exchange.trade_events WHERE trade_id='trade-00000004';" "1"
 
-echo "[4/5] idempotency key mismatch fails"
+echo "[4/6] idempotency key mismatch fails"
 set +e
 cat <<'SQL' | psql_ci >/tmp/ae-idempotency-mismatch.log 2>&1
 SELECT * FROM asset_exchange.accept_offer_atomic(
@@ -197,7 +197,7 @@ if [[ "${mismatch_status}" -eq 0 ]]; then
   exit 1
 fi
 
-echo "[5/5] transition epoch blocks new acceptance"
+echo "[5/6] transition epoch blocks new acceptance"
 reset_fixture
 cat <<'SQL' | psql_ci >/dev/null
 UPDATE asset_exchange.operator_state
@@ -234,4 +234,88 @@ fi
 assert_scalar "SELECT count(*) FROM asset_exchange.trades;" "0"
 assert_scalar "SELECT state FROM asset_exchange.offers WHERE offer_id='offer-00000001';" "OPEN"
 
-echo "All PostgreSQL concurrency/idempotency tests passed."
+echo "[6/6] financial immutability guards"
+reset_fixture
+
+set +e
+printf "%s\n" "UPDATE asset_exchange.offers SET give_amount_atomic=1 WHERE offer_id='offer-00000001';" | psql_ci >/tmp/ae-mutate-offer.log 2>&1
+mutate_offer_status=$?
+set -e
+if [[ "${mutate_offer_status}" -eq 0 ]]; then
+  echo "ERROR: signed offer amount mutation unexpectedly succeeded"
+  exit 1
+fi
+
+cat <<'SQL' | psql_ci >/dev/null
+SELECT * FROM asset_exchange.cancel_offer_atomic(
+  'ae-test-01',
+  'offer-00000001',
+  'maker:test:001',
+  repeat('c', 64),
+  decode('33', 'hex'),
+  'cancel-key-immutable01',
+  repeat('f', 64)
+);
+SQL
+
+set +e
+printf "%s\n" "UPDATE asset_exchange.offers SET cancellation_hash=repeat('d',64) WHERE offer_id='offer-00000001';" | psql_ci >/tmp/ae-mutate-cancel.log 2>&1
+mutate_cancel_status=$?
+set -e
+if [[ "${mutate_cancel_status}" -eq 0 ]]; then
+  echo "ERROR: signed cancellation evidence mutation unexpectedly succeeded"
+  exit 1
+fi
+
+reset_fixture
+cat <<'SQL' | psql_ci >/dev/null
+SELECT * FROM asset_exchange.accept_offer_atomic(
+  'ae-test-01',
+  'offer-00000001',
+  'trade-immutable01',
+  'taker:test:immutable',
+  repeat('a', 64),
+  7,
+  repeat('3', 64),
+  decode('44', 'hex'),
+  'accept-key-immutable01',
+  repeat('4', 64)
+);
+SQL
+
+set +e
+printf "%s\n" "UPDATE asset_exchange.trades SET acceptance_hash=repeat('e',64) WHERE trade_id='trade-immutable01';" | psql_ci >/tmp/ae-mutate-acceptance.log 2>&1
+mutate_acceptance_status=$?
+set -e
+if [[ "${mutate_acceptance_status}" -eq 0 ]]; then
+  echo "ERROR: acceptance evidence mutation unexpectedly succeeded"
+  exit 1
+fi
+
+cat <<'SQL' | psql_ci >/dev/null
+UPDATE asset_exchange.trades
+SET terms_hash=repeat('7',64),
+    signed_terms_a=decode('aa','hex'),
+    signed_terms_b=decode('bb','hex')
+WHERE trade_id='trade-immutable01';
+SQL
+
+set +e
+printf "%s\n" "UPDATE asset_exchange.trades SET terms_hash=repeat('8',64) WHERE trade_id='trade-immutable01';" | psql_ci >/tmp/ae-mutate-terms.log 2>&1
+mutate_terms_status=$?
+set -e
+if [[ "${mutate_terms_status}" -eq 0 ]]; then
+  echo "ERROR: finalized terms hash rewrite unexpectedly succeeded"
+  exit 1
+fi
+
+set +e
+printf "%s\n" "UPDATE asset_exchange.trade_events SET evidence='{}'::jsonb WHERE trade_id='trade-immutable01';" | psql_ci >/tmp/ae-mutate-event.log 2>&1
+mutate_event_status=$?
+set -e
+if [[ "${mutate_event_status}" -eq 0 ]]; then
+  echo "ERROR: append-only trade event mutation unexpectedly succeeded"
+  exit 1
+fi
+
+echo "All PostgreSQL concurrency/idempotency/immutability tests passed."
