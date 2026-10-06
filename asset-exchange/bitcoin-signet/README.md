@@ -29,7 +29,7 @@ After qualification, network activity is explicitly disabled and peer count must
 
 The gate verifies values from the Bitcoin Core v31.1 source profile:
 - genesis: `00000008819873e925422c1ff0f99f7cc9bbb232af63a077a480a3633bee1ef6`;
-- known chain hash at height 160000: `0000003ca3c99aff040f2563c2ad8f8ec88bd0fd6b8f0895cfaf1ef90353a62c`;
+- known signet block hash indexed at height 160000: `0000003ca3c99aff040f2563c2ad8f8ec88bd0fd6b8f0895cfaf1ef90353a62c`;
 - default signet target spacing: 600 seconds.
 
 The 600-second target is not treated as a timing guarantee.
@@ -39,7 +39,7 @@ The 600-second target is not treated as a timing guarantee.
 Passing shows:
 - Bitcoin Core is running the signet chain;
 - outbound signet peer discovery/connectivity works;
-- headers reach a chain history pinned in Bitcoin Core 31.1;
+- header sync reaches at least height 160000 and Bitcoin Core's block index contains the exact v31.1-known signet header at that height;
 - at least one non-genesis signet block is validated;
 - no wallet is created;
 - no transaction is broadcast.
@@ -54,3 +54,11 @@ It does not prove:
 - Mainnet readiness.
 
 A later G7 transaction qualification must use valueless test coins and must remain non-custodial.
+
+## Header-vs-block validation note
+
+The gate deliberately does not call `getblockhash 160000` before full block sync.
+
+Bitcoin Core's `getblockhash(height)` reads the active fully validated chain and therefore rejects heights above the current block tip. In contrast, `getblockheader(hash)` looks up the header in Core's block index. The read-only qualification waits until the best-header height is at least 160000, then queries the exact known v31.1 signet block hash and requires Core to report `height=160000`.
+
+This validates the public signet header-chain identity without requiring a 160000-block initial block download merely for the network-identity gate.

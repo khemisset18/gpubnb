@@ -58,11 +58,12 @@ if [[ "${network_active}" != "yes" ]]; then
   exit 1
 fi
 
-# Bitcoin Core 31.1 default signet chainparams include an assumeutxo/checkpoint
-# reference at height 160000. Header sync is sufficient to validate that the
-# active chain at that height matches the pinned Core 31.1 source profile.
-checkpoint_height=160000
-expected_checkpoint="0000003ca3c99aff040f2563c2ad8f8ec88bd0fd6b8f0895cfaf1ef90353a62c"
+# Bitcoin Core 31.1 default signet chainparams contain a known signet block
+# hash at height 160000. Header sync is sufficient to require that this exact
+# block header is present in Core's block index; full block sync to height
+# 160000 is intentionally NOT required for this read-only identity gate.
+known_header_height=160000
+known_header_hash="0000003ca3c99aff040f2563c2ad8f8ec88bd0fd6b8f0895cfaf1ef90353a62c"
 
 deadline="$((SECONDS + 240))"
 while (( SECONDS < deadline )); do
@@ -71,7 +72,7 @@ while (( SECONDS < deadline )); do
   blocks="$(printf '%s' "${info}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["blocks"])')"
   connections="$("${CLI[@]}" getconnectioncount)"
 
-  if (( connections >= 1 && headers >= checkpoint_height && blocks >= 1 )); then
+  if (( connections >= 1 && headers >= known_header_height && blocks >= 1 )); then
     break
   fi
   sleep 2
@@ -86,7 +87,7 @@ if (( connections < 1 )); then
   echo "ERROR: no default signet peers connected"
   exit 1
 fi
-if (( headers < checkpoint_height )); then
+if (( headers < known_header_height )); then
   echo "ERROR: signet header sync did not reach pinned checkpoint height: ${headers}"
   exit 1
 fi
@@ -95,11 +96,20 @@ if (( blocks < 1 )); then
   exit 1
 fi
 
-checkpoint="$("${CLI[@]}" getblockhash "${checkpoint_height}")"
-if [[ "${checkpoint}" != "${expected_checkpoint}" ]]; then
-  echo "ERROR: signet checkpoint hash mismatch at height ${checkpoint_height}"
-  echo "expected=${expected_checkpoint}"
-  echo "actual=${checkpoint}"
+known_header="$("${CLI[@]}" getblockheader "${known_header_hash}" true)"
+read -r observed_header_hash observed_header_height < <(
+  printf '%s' "${known_header}" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+print(d["hash"], d["height"])
+'
+)
+if [[ "${observed_header_hash}" != "${known_header_hash}" ]]; then
+  echo "ERROR: signet known header hash mismatch"
+  exit 1
+fi
+if [[ "${observed_header_height}" != "${known_header_height}" ]]; then
+  echo "ERROR: signet known header height mismatch: expected ${known_header_height}, got ${observed_header_height}"
   exit 1
 fi
 
@@ -124,7 +134,7 @@ fi
 echo "Bitcoin Core default signet read-only qualification passed."
 echo "chain=${chain}"
 echo "genesis=${genesis}"
-echo "checkpoint_height=${checkpoint_height}"
+echo "known_header_height=${known_header_height}"
 echo "checkpoint_hash=${checkpoint}"
 echo "headers=${headers}"
 echo "validated_blocks=${blocks}"
