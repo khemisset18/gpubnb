@@ -7,9 +7,12 @@ Status: PRE-IMPLEMENTATION / NO REAL FUNDS
 This directory contains the initial TLA+ model and reproducible TLC runner for G4.
 
 Files:
-- AssetExchangeV1.tla — executable abstract model;
-- AssetExchangeV1.cfg — TLC configuration and invariants;
-- run-tlc.sh — runner that records hashes and TLC output;
+- AssetExchangeV1.tla — executable abstract safety model plus bounded liveness scenarios;
+- AssetExchangeV1.cfg — unrestricted safety-model configuration;
+- AssetExchangeV1.cooperative.cfg — cooperative-completion liveness scenario;
+- AssetExchangeV1.recovery.cfg — refund/recovery liveness with Exchange unavailable;
+- AssetExchangeV1.transition.cfg — mode-transition completion liveness scenario;
+- run-tlc.sh — runner that executes every config and records separate hashes/output;
 - evidence/ — generated verification evidence, not committed by default unless explicitly reviewed.
 
 ## Trust rule
@@ -96,3 +99,16 @@ Model present: YES.
 Runner present: YES.
 TLC executed in repository CI: NOT YET.
 G4 PASS: NO.
+
+
+## Initial liveness scenarios
+
+The runner checks three bounded liveness properties with explicit weak-fairness assumptions:
+
+- cooperative settlement eventually reaches COMPLETED;
+- an already-funded refundable leg eventually reaches REFUNDED while the Asset Exchange is unavailable, once chain time matures;
+- an unblocked TRANSITION eventually activates its target mode.
+
+These scenarios are deliberately separate from the unrestricted safety model. They do not assume progress under permanent chain halt, permanent network failure, or a user who never performs an action required by the scenario.
+
+`AdvanceRefundTime` makes chain-time progress explicit. The recovery scenario starts with `exchangeAvailable = FALSE`, so refund liveness cannot depend on the marketplace API/frontend/workers.

@@ -22,9 +22,9 @@ concurrency:
 
 jobs:
   tla-tlc:
-    name: TLA+ / TLC safety invariants
+    name: TLA+ / TLC safety and liveness
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     env:
       TLA_VERSION: '1.7.4'
@@ -59,7 +59,7 @@ jobs:
           cd "${FORMAL_DIR}"
           java -cp "${RUNNER_TEMP}/tlaplus/tla2tools.jar" tla2sany.SANY AssetExchangeV1.tla             2>&1 | tee sany.log
 
-      - name: Run TLC invariants
+      - name: Run TLC safety and liveness scenarios
         shell: bash
         env:
           TLA2TOOLS_JAR: ${{ runner.temp }}/tlaplus/tla2tools.jar
@@ -83,6 +83,9 @@ jobs:
             echo "tla_sha256=${TLA_SHA256}"
             sha256sum "${FORMAL_DIR}/AssetExchangeV1.tla"
             sha256sum "${FORMAL_DIR}/AssetExchangeV1.cfg"
+            sha256sum "${FORMAL_DIR}/AssetExchangeV1.cooperative.cfg"
+            sha256sum "${FORMAL_DIR}/AssetExchangeV1.recovery.cfg"
+            sha256sum "${FORMAL_DIR}/AssetExchangeV1.transition.cfg"
             sha256sum "${FORMAL_DIR}/run-tlc.sh"
           } > "${FORMAL_DIR}/evidence-manifest.txt"
 
