@@ -250,8 +250,8 @@ bool InstallOrUpdateDriver(
     const std::wstring& infPath,
     bool& rebootRequired) {
   BOOL reboot = FALSE;
-  // Do not use INSTALLFLAG_FORCE. Windows driver ranking must remain authoritative
-  // so this installer cannot downgrade a newer/better matching package.
+  // Keep Windows driver ranking authoritative so this installer cannot
+  // downgrade a newer or better matching package.
   if (!UpdateDriverForPlugAndPlayDevicesW(
           nullptr,
           kHardwareId,
