@@ -24,7 +24,7 @@ test("P2WSH HTLC builder produces exact reviewed opcode structure", () => {
     refundLockHeight: 500
   });
 
-  assert.match(out.witnessScriptHex, /^63a820/);
+  assert.match(out.witnessScriptHex, /^6382012088a820/);
   assert.ok(out.witnessScriptHex.includes("88" + "21" + redeem + "ac67"));
   assert.ok(out.witnessScriptHex.endsWith("21" + refund + "ac68"));
   assert.match(out.scriptPubKeyHex, /^0020[0-9a-f]{64}$/);
@@ -62,4 +62,14 @@ test("refund transaction policy requires CLTV-active RBF sequence and SIGHASH_AL
 
   assert.throws(() => validateRefundTransactionPolicy({ version: 2, lockTime: 500, sequence: 0xffffffff, sighashType: 0x01 }));
   assert.throws(() => validateRefundTransactionPolicy({ version: 2, lockTime: 500, sequence: 0xfffffffd, sighashType: 0x02 }));
+});
+
+test("redeem branch enforces 32-byte preimage on-chain before hashing", () => {
+  const out = buildBitcoinHtlcV1({
+    secretHashHex: secretHash,
+    redeemPubkeyHex: redeem,
+    refundPubkeyHex: refund,
+    refundLockHeight: 500
+  });
+  assert.match(out.witnessScriptHex, /^6382012088a8/);
 });

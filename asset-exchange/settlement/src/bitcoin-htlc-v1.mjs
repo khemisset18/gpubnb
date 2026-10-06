@@ -43,7 +43,9 @@ export function buildBitcoinHtlcV1({ secretHashHex, redeemPubkeyHex, refundPubke
   const lock = encodeMinimalScriptNumber(refundLockHeight);
 
   const witnessScript = Buffer.concat([
-    Buffer.from([0x63, 0xa8]),
+    Buffer.from([0x63, 0x82]),
+    minimalPush(Buffer.from([0x20])),
+    Buffer.from([0x88, 0xa8]),
     minimalPush(secretHash),
     Buffer.from([0x88]),
     minimalPush(redeem),

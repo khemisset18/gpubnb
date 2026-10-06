@@ -40,6 +40,9 @@ ASM:
 
 ```
 OP_IF
+  OP_SIZE
+  <32>
+  OP_EQUALVERIFY
   OP_SHA256
   <32-byte secret_hash>
   OP_EQUALVERIFY
@@ -68,6 +71,7 @@ The script MUST NOT contain:
 Fixed opcodes:
 
 - OP_IF = `0x63`
+- OP_SIZE = `0x82`
 - OP_SHA256 = `0xa8`
 - OP_EQUALVERIFY = `0x88`
 - OP_CHECKSIG = `0xac`
@@ -78,6 +82,7 @@ Fixed opcodes:
 
 Fixed pushes:
 
+- expected secret length 32: minimal script-number push `0x01 0x20`;
 - secret hash: `0x20 || secret_hash[32]`
 - compressed public key: `0x21 || pubkey[33]`
 
@@ -115,7 +120,9 @@ Conceptually:
 <witness_script>
 ```
 
-The implementation MUST reject:
+The consensus script itself MUST reject a secret whose byte length is not exactly 32 using `OP_SIZE 32 OP_EQUALVERIFY`.
+
+The implementation MUST also reject:
 - secret length != 32;
 - wrong hash;
 - wrong signing key;
@@ -289,5 +296,7 @@ STOP-SHIP if:
 - reorg produces duplicate economic action;
 - fee-bump path is not available under the documented assumptions;
 - recovery bundle cannot reconstruct/execute refund independently.
+
+Security revision: the redeem path enforces the 32-byte preimage length on-chain before hashing, matching the documented protocol invariant and avoiding reliance on application-only validation.
 
 This specification remains REGTEST ONLY until audited against the G6 acceptance contract.
