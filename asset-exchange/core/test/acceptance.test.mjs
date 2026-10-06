@@ -5,6 +5,7 @@ import { createAcceptance, acceptanceDigestHex } from "../src/index.mjs";
 const input = {
   offerId: "offer-00000001",
   tradeId: "trade-00000001",
+  deploymentId: "ae-test-01",
   taker: "taker:test:001",
   offerHash: "a".repeat(64),
   acceptedAtUnixMs: 1000,
@@ -20,7 +21,8 @@ test("acceptance digest binds offer hash, taker and trade id", () => {
   for (const patch of [
     { offerHash: "b".repeat(64) },
     { taker: "taker:test:002" },
-    { tradeId: "trade-00000002" }
+    { tradeId: "trade-00000002" },
+    { deploymentId: "ae-test-02" }
   ]) {
     const changed = createAcceptance({ ...input, ...patch });
     assert.notEqual(acceptanceDigestHex(a), acceptanceDigestHex(changed));

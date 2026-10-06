@@ -8,6 +8,7 @@ const actorTaker = { subject: "taker:test:001", sessionId: "session-taker-001", 
 
 const rawOffer = {
   offerId: "offer-00000001",
+  deploymentId: "ae-test-01",
   maker: actorMaker.subject,
   giveAsset: { chainId: "bitcoin", networkId: "regtest", assetType: "NATIVE", assetId: "BTC_NATIVE", decimals: 8 },
   giveAmountAtomic: "100000000",
@@ -42,6 +43,7 @@ function service(repo, overrides = {}) {
     repository: repo,
     verifyOfferSignature: async () => true,
     verifyAcceptanceSignature: async () => true,
+    deploymentId: "ae-test-01",
     now: () => 1000,
     ...overrides
   });
@@ -101,6 +103,7 @@ test("acceptance binds taker, offer hash and policy epoch for atomic repository 
   const acceptance = {
     offerId: offer.offerId,
     tradeId: "trade-00000001",
+    deploymentId: "ae-test-01",
     taker: actorTaker.subject,
     offerHash: offerDigestHex(offer),
     acceptedAtUnixMs: 1000,
@@ -128,6 +131,7 @@ test("acceptance rejects wrong actor and invalid signature before repository mut
   const acceptance = {
     offerId: offer.offerId,
     tradeId: "trade-00000001",
+    deploymentId: "ae-test-01",
     taker: actorTaker.subject,
     offerHash: offerDigestHex(offer),
     acceptedAtUnixMs: 1000,
@@ -153,4 +157,51 @@ test("acceptance rejects wrong actor and invalid signature before repository mut
   }));
 
   assert.equal(repo.calls.filter(([name]) => name === "accept").length, 0);
+});
+
+test("cross-deployment replay is rejected before persistence", async () => {
+  const repo = fakeRepository();
+  const svc = service(repo);
+  const offer = createUnsignedOffer(rawOffer);
+  const acceptance = {
+    offerId: offer.offerId,
+    tradeId: "trade-00000009",
+    deploymentId: "ae-other-01",
+    taker: actorTaker.subject,
+    offerHash: offerDigestHex(offer),
+    acceptedAtUnixMs: 1000,
+    expiryUnixMs: 2000,
+    nonce: "deploymentReplay01",
+    policyEpoch: offer.policyEpoch
+  };
+  await assert.rejects(() => svc.acceptOffer({
+    actor: actorTaker,
+    acceptance,
+    signature: "sig",
+    idempotencyKey: "accept-replay-0001"
+  }));
+  assert.equal(repo.calls.filter(([name]) => name === "accept").length, 0);
+});
+
+test("acceptance timestamp cannot be far in the future", async () => {
+  const repo = fakeRepository();
+  const svc = service(repo, { maxClockSkewMs: 100 });
+  const offer = createUnsignedOffer(rawOffer);
+  const acceptance = {
+    offerId: offer.offerId,
+    tradeId: "trade-00000010",
+    deploymentId: "ae-test-01",
+    taker: actorTaker.subject,
+    offerHash: offerDigestHex(offer),
+    acceptedAtUnixMs: 1200,
+    expiryUnixMs: 2200,
+    nonce: "futureTimestamp01",
+    policyEpoch: offer.policyEpoch
+  };
+  await assert.rejects(() => svc.acceptOffer({
+    actor: actorTaker,
+    acceptance,
+    signature: "sig",
+    idempotencyKey: "accept-future-0001"
+  }));
 });

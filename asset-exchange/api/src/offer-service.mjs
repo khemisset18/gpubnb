@@ -1,6 +1,7 @@
 import { createUnsignedOffer, offerDigestHex } from "../../core/src/offer.mjs";
 import { createAcceptance, acceptanceDigestHex } from "../../core/src/acceptance.mjs";
 import { invariant } from "../../core/src/errors.mjs";
+import { validateDeploymentId } from "../../core/src/deployment.mjs";
 import { assertSameSubject, createActor, validateIdempotencyKey } from "./authz.mjs";
 
 function opaqueSignature(signature) {
@@ -16,6 +17,8 @@ export function createOfferService({
   repository,
   verifyOfferSignature,
   verifyAcceptanceSignature,
+  deploymentId,
+  maxClockSkewMs = 120_000,
   now = () => Date.now()
 }) {
   invariant(repository && typeof repository === "object", "OFFER_REPOSITORY", "repository required");
@@ -25,12 +28,15 @@ export function createOfferService({
   invariant(typeof verifyOfferSignature === "function", "OFFER_SIGNATURE_VERIFIER", "offer signature verifier required");
   invariant(typeof verifyAcceptanceSignature === "function", "ACCEPT_SIGNATURE_VERIFIER", "acceptance signature verifier required");
   invariant(typeof now === "function", "CLOCK", "authoritative clock required");
+  const serviceDeploymentId = validateDeploymentId(deploymentId);
+  invariant(Number.isSafeInteger(maxClockSkewMs) && maxClockSkewMs >= 0 && maxClockSkewMs <= 300_000, "CLOCK_SKEW", "invalid max clock skew");
 
   return Object.freeze({
     async publishOffer({ actor, offer, signature, idempotencyKey }) {
       const parsedActor = createActor(actor);
       const parsedOffer = createUnsignedOffer(offer);
       assertSameSubject(parsedActor, parsedOffer.maker);
+      invariant(parsedOffer.deploymentId === serviceDeploymentId, "DEPLOYMENT_MISMATCH", "offer belongs to another deployment");
       validateIdempotencyKey(idempotencyKey);
       opaqueSignature(signature);
 
@@ -77,11 +83,13 @@ export function createOfferService({
       const parsedActor = createActor(actor);
       const parsedAcceptance = createAcceptance(acceptance);
       assertSameSubject(parsedActor, parsedAcceptance.taker);
+      invariant(parsedAcceptance.deploymentId === serviceDeploymentId, "DEPLOYMENT_MISMATCH", "acceptance belongs to another deployment");
       validateIdempotencyKey(idempotencyKey);
       opaqueSignature(signature);
 
       const currentTime = now();
       invariant(Number.isSafeInteger(currentTime), "CLOCK_VALUE", "clock must return integer milliseconds");
+      invariant(parsedAcceptance.acceptedAtUnixMs <= currentTime + maxClockSkewMs, "ACCEPTANCE_FUTURE", "acceptance timestamp is too far in the future");
       invariant(currentTime < parsedAcceptance.expiryUnixMs, "ACCEPTANCE_EXPIRED", "acceptance expired");
 
       const verified = await verifyAcceptanceSignature({

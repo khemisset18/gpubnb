@@ -1,4 +1,5 @@
 export * from "./errors.mjs";
+export * from "./deployment.mjs";
 export * from "./amount.mjs";
 export * from "./asset.mjs";
 export * from "./canonical.mjs";

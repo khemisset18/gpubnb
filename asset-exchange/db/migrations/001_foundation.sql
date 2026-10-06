@@ -34,6 +34,7 @@ CREATE TABLE fee_policies (
 
 CREATE TABLE offers (
   offer_id text PRIMARY KEY,
+  deployment_id text NOT NULL,
   maker_subject text NOT NULL,
   offer_hash char(64) NOT NULL UNIQUE CHECK (offer_hash ~ '^[0-9a-f]{64}$'),
   signed_offer bytea NOT NULL,
@@ -69,6 +70,7 @@ CREATE INDEX offers_open_expiry_idx
 
 CREATE TABLE trades (
   trade_id text PRIMARY KEY,
+  deployment_id text NOT NULL,
   offer_id text NOT NULL UNIQUE REFERENCES offers(offer_id),
   offer_hash char(64) NOT NULL CHECK (offer_hash ~ '^[0-9a-f]{64}$'),
   maker_subject text NOT NULL,
