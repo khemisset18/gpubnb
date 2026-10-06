@@ -1,0 +1,99 @@
+name: Asset Exchange Formal Verification
+
+on:
+  push:
+    branches:
+      - asset-exchange/secure-foundation-v1
+    paths:
+      - 'docs/asset-exchange/formal/**'
+      - '.github/workflows/asset-exchange-formal.yml'
+  pull_request:
+    paths:
+      - 'docs/asset-exchange/formal/**'
+      - '.github/workflows/asset-exchange-formal.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: asset-exchange-formal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tla-tlc:
+    name: TLA+ / TLC safety invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      TLA_VERSION: '1.7.4'
+      TLA_URL: 'https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar'
+      TLA_SHA256: '936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88'
+      FORMAL_DIR: 'docs/asset-exchange/formal'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Verify Java runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -version
+
+      - name: Download pinned TLA+ tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/tlaplus"
+          curl --fail --location --proto '=https' --tlsv1.2             --retry 3 --retry-delay 2             --output "${RUNNER_TEMP}/tlaplus/tla2tools.jar"             "${TLA_URL}"
+          printf '%s  %s\n' "${TLA_SHA256}" "${RUNNER_TEMP}/tlaplus/tla2tools.jar"             | sha256sum --check --strict
+
+      - name: Parse model with SANY
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${FORMAL_DIR}"
+          java -cp "${RUNNER_TEMP}/tlaplus/tla2tools.jar" tla2sany.SANY AssetExchangeV1.tla             2>&1 | tee sany.log
+
+      - name: Run TLC invariants
+        shell: bash
+        env:
+          TLA2TOOLS_JAR: ${{ runner.temp }}/tlaplus/tla2tools.jar
+        run: |
+          set -euo pipefail
+          chmod +x "${FORMAL_DIR}/run-tlc.sh"
+          "${FORMAL_DIR}/run-tlc.sh"
+
+      - name: Build evidence manifest
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "workflow_run_id=${GITHUB_RUN_ID}"
+            echo "workflow_run_attempt=${GITHUB_RUN_ATTEMPT}"
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "git_sha=${GITHUB_SHA}"
+            echo "ref=${GITHUB_REF}"
+            echo "tla_version=${TLA_VERSION}"
+            echo "tla_sha256=${TLA_SHA256}"
+            sha256sum "${FORMAL_DIR}/AssetExchangeV1.tla"
+            sha256sum "${FORMAL_DIR}/AssetExchangeV1.cfg"
+            sha256sum "${FORMAL_DIR}/run-tlc.sh"
+          } > "${FORMAL_DIR}/evidence-manifest.txt"
+
+      - name: Upload formal verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: asset-exchange-formal-${{ github.sha }}
+          path: |
+            docs/asset-exchange/formal/sany.log
+            docs/asset-exchange/formal/evidence-manifest.txt
+            docs/asset-exchange/formal/evidence/*.log
+          if-no-files-found: warn
+          retention-days: 30
