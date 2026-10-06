@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { createTradeState, transitionTrade, createOpenOfferState, acceptOffer, cancelOffer } from "../src/index.mjs";
 
 test("lock cannot happen before recovery bundle readiness", () => {
-  const s = createTradeState({ tradeId: "trade-00000001", policyEpoch: 4 });
+  const s = createTradeState({ tradeId: "trade-00000001", policyEpoch: 4, termsFinalized: true });
   assert.throws(() => transitionTrade(s, { type: "BROADCAST_A_LOCK", policyEpoch: 4 }));
 });
 
 test("stale epoch cannot create a new lock", () => {
-  let s = createTradeState({ tradeId: "trade-00000001", policyEpoch: 4 });
+  let s = createTradeState({ tradeId: "trade-00000001", policyEpoch: 4, termsFinalized: true });
   s = transitionTrade(s, { type: "MARK_RECOVERY_READY" });
   assert.throws(() => transitionTrade(s, { type: "BROADCAST_A_LOCK", policyEpoch: 3 }));
   s = transitionTrade(s, { type: "BROADCAST_A_LOCK", policyEpoch: 4 });
@@ -16,7 +16,7 @@ test("stale epoch cannot create a new lock", () => {
 });
 
 test("refund requires chain timeout evidence", () => {
-  let s = createTradeState({ tradeId: "trade-00000001", policyEpoch: 1 });
+  let s = createTradeState({ tradeId: "trade-00000001", policyEpoch: 1, termsFinalized: true });
   s = transitionTrade(s, { type: "MARK_RECOVERY_READY" });
   s = transitionTrade(s, { type: "BROADCAST_A_LOCK", policyEpoch: 1 });
   assert.throws(() => transitionTrade(s, { type: "MARK_REFUND_ELIGIBLE", chainTimeoutSatisfied: false }));
@@ -26,7 +26,7 @@ test("refund requires chain timeout evidence", () => {
 });
 
 test("trade cannot complete from lock confirmations alone", () => {
-  let s = createTradeState({ tradeId: "trade-00000001", policyEpoch: 1 });
+  let s = createTradeState({ tradeId: "trade-00000001", policyEpoch: 1, termsFinalized: true });
   s = transitionTrade(s, { type: "MARK_RECOVERY_READY" });
   s = transitionTrade(s, { type: "BROADCAST_A_LOCK", policyEpoch: 1 });
   s = transitionTrade(s, { type: "CONFIRM_A_LOCK" });
@@ -40,7 +40,7 @@ test("trade cannot complete from lock confirmations alone", () => {
 });
 
 test("FAIL_SAFE cannot strand already locked funds", () => {
-  let s = createTradeState({ tradeId: "trade-00000001", policyEpoch: 2 });
+  let s = createTradeState({ tradeId: "trade-00000001", policyEpoch: 2, termsFinalized: true });
   s = transitionTrade(s, { type: "MARK_RECOVERY_READY" });
   s = transitionTrade(s, { type: "BROADCAST_A_LOCK", policyEpoch: 2 });
   assert.throws(() => transitionTrade(s, { type: "FAIL_SAFE" }));
@@ -55,4 +55,17 @@ test("accept/cancel race has a single winner in the pure model", () => {
   const cancelled = cancelOffer(open, { nowUnixMs: 100 });
   assert.equal(cancelled.state, "CANCELLED");
   assert.throws(() => acceptOffer(cancelled, { tradeId: "trade-00000002", nowUnixMs: 101, policyEpoch: 9 }));
+});
+
+
+test("trade state cannot enter TERMS_SIGNED without finalized two-party terms", () => {
+  assert.throws(() => createTradeState({
+    tradeId: "trade-00000001",
+    policyEpoch: 4,
+    termsFinalized: false
+  }));
+  assert.throws(() => createTradeState({
+    tradeId: "trade-00000001",
+    policyEpoch: 4
+  }));
 });

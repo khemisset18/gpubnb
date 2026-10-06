@@ -18,8 +18,9 @@ export const TradeState = Object.freeze({
 
 const TERMINAL = new Set([TradeState.COMPLETED, TradeState.REFUNDED, TradeState.FAILED_SAFE]);
 
-export function createTradeState({ tradeId, policyEpoch }) {
+export function createTradeState({ tradeId, policyEpoch, termsFinalized }) {
   invariant(typeof tradeId === "string" && tradeId.length >= 8, "TRADE_ID", "invalid tradeId");
+  invariant(termsFinalized === true, "TERMS_NOT_FINALIZED", "trade state requires both parties to have finalized identical settlement terms");
   invariant(Number.isSafeInteger(policyEpoch) && policyEpoch >= 0, "TRADE_EPOCH", "invalid policy epoch");
   return Object.freeze({
     tradeId,
