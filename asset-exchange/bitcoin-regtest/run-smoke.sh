@@ -123,6 +123,9 @@ BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
   asset-exchange/bitcoin-regtest/run-cluster-limit.sh
 
 BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
+  asset-exchange/bitcoin-regtest/run-cluster-size.sh
+
+BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
   asset-exchange/bitcoin-regtest/run-recovery-before-lock.sh
 
 asset-exchange/bitcoin-regtest/run-multinode-reorg.sh
