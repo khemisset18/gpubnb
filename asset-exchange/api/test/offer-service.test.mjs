@@ -67,7 +67,7 @@ test("publishing requires maker object authorization and verified signature", as
 
   await assert.rejects(() => svc.publishOffer({
     actor: { ...actorMaker, subject: "other:test:001" },
-    offer: rawOffer,
+    offer: createUnsignedOffer(rawOffer),
     signature: "sig",
     idempotencyKey: fixtureRequestId("publish-denied")
   }));
@@ -75,14 +75,14 @@ test("publishing requires maker object authorization and verified signature", as
   const rejecting = service(repo, { verifyOfferSignature: async () => false });
   await assert.rejects(() => rejecting.publishOffer({
     actor: actorMaker,
-    offer: rawOffer,
+    offer: createUnsignedOffer(rawOffer),
     signature: "sig",
     idempotencyKey: fixtureRequestId("publish-badsig")
   }));
 
   const result = await svc.publishOffer({
     actor: actorMaker,
-    offer: rawOffer,
+    offer: createUnsignedOffer(rawOffer),
     signature: "sig",
     idempotencyKey: fixtureRequestId("publish-good")
   });

@@ -1,4 +1,4 @@
-import { createUnsignedOffer, offerDigestHex } from "../../core/src/offer.mjs";
+import { parseSignedOffer, offerDigestHex } from "../../core/src/offer.mjs";
 import { createAcceptance, acceptanceDigestHex } from "../../core/src/acceptance.mjs";
 import { createCancellation, cancellationDigestHex } from "../../core/src/cancellation.mjs";
 import { invariant } from "../../core/src/errors.mjs";
@@ -37,7 +37,7 @@ export function createOfferService({
   return Object.freeze({
     async publishOffer({ actor, offer, signature, idempotencyKey }) {
       const parsedActor = createActor(actor);
-      const parsedOffer = createUnsignedOffer(offer);
+      const parsedOffer = parseSignedOffer(offer);
       assertSameSubject(parsedActor, parsedOffer.maker);
       invariant(parsedOffer.deploymentId === serviceDeploymentId, "DEPLOYMENT_MISMATCH", "offer belongs to another deployment");
       validateIdempotencyKey(idempotencyKey);
