@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from gpubnb_agent import platform_info
 
@@ -32,16 +32,17 @@ class WindowsInventoryHeartbeatHardeningTests(unittest.TestCase):
         }
 
     def test_run_command_hides_child_console_on_windows(self) -> None:
-        completed = subprocess.CompletedProcess(["powershell.exe"], 0, "ok", "")
+        process = MagicMock()
+        process.wait.return_value = 0
         with (
             patch.object(platform_info.os, "name", "nt"),
-            patch.object(platform_info.subprocess, "run", return_value=completed) as run,
+            patch.object(platform_info.subprocess, "Popen", return_value=process) as popen,
         ):
             result = platform_info.run_command(["powershell.exe"])
 
         self.assertEqual(result.returncode, 0)
         self.assertEqual(
-            run.call_args.kwargs["creationflags"],
+            popen.call_args.kwargs["creationflags"],
             platform_info.WINDOWS_CREATE_NO_WINDOW,
         )
 
