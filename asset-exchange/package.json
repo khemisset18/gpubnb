@@ -1,0 +1,11 @@
+{
+  "name": "@gpubnb/asset-exchange",
+  "private": true,
+  "version": "0.0.0-g5",
+  "type": "module",
+  "engines": {"node": ">=22.0.0"},
+  "scripts": {
+    "test": "node --test core/test/*.test.mjs",
+    "check": "node --check core/src/*.mjs"
+  }
+}
