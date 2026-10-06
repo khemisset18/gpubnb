@@ -41,7 +41,7 @@ export function createPostgresAdminRepository({ pool, deploymentId }) {
           const result = await client.query({
             text: `SELECT status, policy_id, policy_version, rate_bps
                    FROM asset_exchange.activate_fee_policy_atomic(
-                     $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15
+                     $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
                    )`,
             values: [
               scopedDeploymentId,
