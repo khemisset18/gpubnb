@@ -103,6 +103,8 @@ SELECT * FROM asset_exchange.cancel_offer_atomic(
   'ae-test-01',
   'offer-00000001',
   'maker:test:001',
+  repeat('c', 64),
+  decode('33', 'hex'),
   'cancel-key-0000001',
   repeat('f', 64)
 );
