@@ -396,6 +396,20 @@ The consumer job has read-only permissions for contents/actions/attestations and
 
 This is build-and-attestation evidence. It does NOT by itself constitute a public production release or Mainnet authorization.
 
+Internal tarball-to-SBOM binding hardening:
+- workflow run id: `37527653333`;
+- source commit: `a8466cf160c21f3725caf25a4cb5b847da0dc857`;
+- producer job: SUCCESS;
+- independent consumer verification job: SUCCESS;
+- archive paths are checked for traversal, links, and unsupported entry types;
+- tarball file allow-list is verified exactly;
+- every embedded file SHA-1/SHA-256 is recomputed and matched to SPDX;
+- SPDX packageVerificationCode is recomputed;
+- `BUILD_INFO.json.sourceCommit`, SPDX document namespace, versionInfo, and source-commit reference are bound to the exact source SHA;
+- SLSA provenance and SPDX SBOM attestations are independently verified after artifact download.
+
+This closes the prior gap where the SBOM was attested but internal file hashes were not revalidated against the downloaded tarball by the consumer job.
+
 
 ## 14. RBF feerate-diagram enforcement
 
@@ -428,7 +442,33 @@ Observed values:
 
 This directly validates that increasing absolute fee alone is not sufficient under Bitcoin Core 31.1 replacement policy. The replacement must also improve the mempool feerate diagram.
 
-## 15. Security findings discovered during implementation
+## 15. Deep multi-block reorg matrix
+
+The isolated two-node regtest harness now includes deeper competing-fork scenarios beyond the earlier two-vs-four-block partition.
+
+Observed run:
+- workflow: Asset Exchange Bitcoin Regtest;
+- run id: `37524548309`;
+- source commit: `897660c4383166028aad878531075a5970df6ecf`;
+- conclusion: SUCCESS.
+
+Scenarios:
+- losing branch depth `3` vs winning branch depth `6`;
+- losing branch depth `24` vs winning branch depth `25`.
+
+Observed transaction behavior:
+- three-vs-six scenario: `confirmations_before=3`, `confirmations_after=0`, `reconfirmed=1`;
+- twentyfour-vs-twentyfive scenario: `confirmations_before=24`, `confirmations_after=0`, `reconfirmed=1`;
+- both scenarios use explicit rebroadcast of the exact same signed transaction after reorg;
+- no second economic action is constructed.
+
+Observed txids:
+- three-vs-six: `818613e17bcb3c602692370e753aa9dda6ea6a6f4adee61501b64bb0658714dd`;
+- twentyfour-vs-twentyfive: `fd973cb0b6846287cb200211d4f5583c49c3088a281a3770a3c7fc59459227a5`.
+
+This is bounded regtest evidence, not a claim that arbitrarily deep real-world reorgs are impossible or fully modeled.
+
+## 16. Security findings discovered during implementation
 
 ### G6-F001 — Preimage length initially enforced only by application
 Initial script checked SHA256 preimage equality but did not constrain the preimage byte length on-chain.
@@ -492,7 +532,7 @@ None were bypassed. Each was corrected and rerun.
 
 Disposition: FIXED.
 
-## 16. What this evidence DOES prove
+## 17. What this evidence DOES prove
 
 Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - reviewed P2WSH script and canonical Miniscript descriptor agree;
@@ -505,6 +545,7 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - the pinned node enforces the separate 101000-vbyte cluster-size boundary and rejects a candidate that would exceed it;
 - a replacement conflicting with 101 distinct clusters is rejected, while 100 conflicts are accepted with sufficient fee;
 - redeem/refund confirmations respond safely to forced one-block reorgs;
+- deeper competing forks of 3-vs-6 and 24-vs-25 blocks reorg safely in the bounded isolated harness;
 - two independent nodes can diverge, report UNCERTAIN tips, and converge to the heavier chain;
 - a transaction with two confirmations on the losing fork returns to zero confirmations after reorg;
 - the exact same signed losing-fork transaction can be rebroadcast with identical txid and reconfirmed;
@@ -516,11 +557,10 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - a fresh read-only consumer job can independently verify the recovery artifact checksum, SLSA provenance, and SPDX SBOM attestation against the exact repository/source commit;
 - Bitcoin Core rejects a higher-absolute-fee replacement that worsens the feerate diagram and accepts a sufficiently funded replacement that improves it.
 
-## 17. What this evidence does NOT prove
+## 18. What this evidence does NOT prove
 
 STOP-SHIP remains for Mainnet until at least:
 - production timeout derivation is reviewed;
-- deeper/multi-block reorg matrix beyond the tested two-vs-four-block fork passes;
 - more complex package-RBF graph topologies and additional feerate-diagram edge cases beyond the tested cases pass;
 - hardware-wallet / external signer compatibility matrix passes;
 - controlled release/distribution policy is completed;
