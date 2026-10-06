@@ -5,7 +5,7 @@ import { readStrictJson } from "./strict-json.mjs";
 function errorResponse(error) {
   if (!(error instanceof DomainError)) return { statusCode: 500, body: { error: "internal_error" } };
 
-  if (["AUTH_REQUIRED", "SESSION_EXPIRED"].includes(error.code)) return { statusCode: 401, body: { error: "authentication_required" } };
+  if (["AUTH_REQUIRED", "SESSION_EXPIRED", "SSO_SIGNATURE_INVALID", "SSO_REPLAY", "SSO_EXPIRED", "SSO_ISSUER_MISMATCH", "SSO_AUDIENCE_MISMATCH", "SSO_DEPLOYMENT_MISMATCH"].includes(error.code)) return { statusCode: 401, body: { error: "authentication_required" } };
   if (["CSRF_REQUIRED", "CSRF_INVALID", "OBJECT_AUTHZ", "ORIGIN_FORBIDDEN", "FETCH_SITE_FORBIDDEN"].includes(error.code)) return { statusCode: 403, body: { error: "forbidden" } };
   if (["OFFER_NOT_OPEN", "STALE_EPOCH", "DEPLOYMENT_MISMATCH"].includes(error.code)) return { statusCode: 409, body: { error: "conflict" } };
   if (error.code.startsWith("RATE_")) return { statusCode: 429, body: { error: "rate_limited" } };
@@ -22,6 +22,7 @@ function signatureFromBody(body) {
 export function createBusinessRouter({
   sessionManager,
   offerService,
+  ssoService = null,
   rateLimiter,
   allowedOrigins,
   maxBodyBytes = 64 * 1024
@@ -38,19 +39,37 @@ export function createBusinessRouter({
 
   return async function route(req, sendJson) {
     const pathname = new URL(req.url, "http://asset-exchange.invalid").pathname;
+    const exchangeSession = req.method === "POST" && pathname === "/v1/session/exchange";
     const logout = req.method === "POST" && pathname === "/v1/session/logout";
     const publish = req.method === "POST" && pathname === "/v1/offers";
     const cancelMatch = req.method === "POST" && pathname.match(/^\/v1\/offers\/([^/]+)\/cancel$/);
     const acceptMatch = req.method === "POST" && pathname.match(/^\/v1\/offers\/([^/]+)\/accept$/);
 
-    if (!logout && !publish && !cancelMatch && !acceptMatch) return false;
+    if (!exchangeSession && !logout && !publish && !cancelMatch && !acceptMatch) return false;
 
     try {
-      const actor = await sessionManager.authenticateRequest(req);
       const origin = req.headers.origin;
       invariant(typeof origin === "string" && originSet.has(origin), "ORIGIN_FORBIDDEN", "request origin not allowed");
       const fetchSite = req.headers["sec-fetch-site"];
       invariant(fetchSite === undefined || fetchSite === "same-origin" || fetchSite === "same-site", "FETCH_SITE_FORBIDDEN", "cross-site browser request forbidden");
+
+      if (exchangeSession) {
+        invariant(ssoService && typeof ssoService.exchange === "function", "SSO_DISABLED", "SSO exchange is disabled");
+        const remote = req.socket?.remoteAddress ?? "unknown";
+        const rate = await rateLimiter.consume(`sso:${remote}`);
+        if (!rate.allowed) {
+          sendJson(429, { error: "rate_limited" }, { "retry-after": "60" });
+          return true;
+        }
+        const body = await readStrictJson(req, { maxBytes: maxBodyBytes });
+        const issued = await ssoService.exchange({ ticket: body.ticket, signature: body.signature });
+        sendJson(200, { status: "session_created", csrfToken: issued.csrfToken, expiresAtUnixMs: issued.expiresAtUnixMs }, {
+          "set-cookie": issued.cookie
+        });
+        return true;
+      }
+
+      const actor = await sessionManager.authenticateRequest(req);
       await sessionManager.assertCsrf(req, actor);
 
       const routeClass = logout ? "logout" : publish ? "publish" : cancelMatch ? "cancel" : "accept";
