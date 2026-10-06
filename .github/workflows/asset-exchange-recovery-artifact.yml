@@ -76,7 +76,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist/recovery
           cp "${RUNNER_TEMP}/recovery-build-a/dist/"* dist/recovery/
-          asset-exchange/recovery/release/verify-artifact.sh dist/recovery
+          asset-exchange/recovery/release/verify-artifact.sh dist/recovery "${GITHUB_SHA}"
 
       - name: Attest SLSA build provenance
         id: provenance
@@ -120,18 +120,23 @@ jobs:
     timeout-minutes: 8
 
     steps:
+      - name: Checkout verifier source at exact build commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Download packaged recovery evidence
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: asset-exchange-recovery-artifact-${{ github.sha }}
           path: dist/recovery
 
-      - name: Verify published checksums
+      - name: Verify packaged files, SBOM hashes, and source binding
         shell: bash
         run: |
           set -euo pipefail
-          cd dist/recovery
-          sha256sum --check --strict SHA256SUMS
+          chmod +x asset-exchange/recovery/release/verify-artifact.sh
+          asset-exchange/recovery/release/verify-artifact.sh dist/recovery "${GITHUB_SHA}"
 
       - name: Verify provenance against exact repository and source commit
         shell: bash
