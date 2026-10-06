@@ -342,7 +342,49 @@ This directly validates the v31 replacement-policy cap that a single replacement
 
 It does not prove every package-RBF graph topology or feerate-diagram interaction.
 
-## 13. Security findings discovered during implementation
+
+## 13. Reproducible standalone recovery artifact and attestations
+
+The standalone recovery CLI is now packaged by a dedicated deterministic build workflow.
+
+Build properties:
+- explicit file allow-list;
+- no `node_modules`;
+- normalized file modes;
+- sorted tar entries;
+- normalized uid/gid;
+- mtimes derived from the source commit timestamp;
+- gzip timestamps disabled;
+- SPDX 2.3 SBOM generated deterministically from the packaged files;
+- two independent builds must be byte-for-byte identical before attestation.
+
+Observed run:
+- workflow: Asset Exchange Recovery Artifact;
+- run id: `37522091087`;
+- source commit: `b84999210517303b009341353779bb523b1a297c`;
+- conclusion: SUCCESS.
+
+Observed artifact:
+- recovery tarball SHA-256: `a56a4f260c2efafd5ab63c7f8a607f11552a0c8409710912b4eef4102376dce8`;
+- uploaded GitHub artifact ID: `11440247795`;
+- uploaded artifact ZIP digest: `sha256:05eb73e15345822e05cf0bd44231200955dda8f6a4682f7d20196c3e486ea4e1`.
+
+Supply-chain evidence:
+- SLSA build-provenance attestation ID: `53317568`;
+- SPDX SBOM attestation ID: `53317576`;
+- both attest the same recovery tarball digest;
+- attestations are signed using GitHub's Public Good Sigstore integration and recorded through the GitHub artifact-attestation flow;
+- build, SBOM, and upload actions are pinned by immutable commit SHA.
+
+The dedicated workflow uses current Node-24-native official actions:
+- `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1` (v7.0.1);
+- `actions/setup-node@820762786026740c76f36085b0efc47a31fe5020` (v7.0.0);
+- `actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` (v7.0.1);
+- `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6` (v4.2.2).
+
+This is build-and-attestation evidence. It does NOT by itself constitute a public production release or Mainnet authorization.
+
+## 14. Security findings discovered during implementation
 
 ### G6-F001 — Preimage length initially enforced only by application
 Initial script checked SHA256 preimage equality but did not constrain the preimage byte length on-chain.
@@ -406,7 +448,7 @@ None were bypassed. Each was corrected and rerun.
 
 Disposition: FIXED.
 
-## 14. What this evidence DOES prove
+## 15. What this evidence DOES prove
 
 Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - reviewed P2WSH script and canonical Miniscript descriptor agree;
@@ -425,16 +467,17 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - exact signed transaction rebroadcast/reconciliation is idempotent;
 - a signed refund can be prepared before funding broadcast;
 - encrypted recovery material can be exported before funding;
-- a refund can execute after the wallet is unloaded.
+- a refund can execute after the wallet is unloaded;
+- the standalone recovery tool can be packaged reproducibly with deterministic SHA-256/SBOM output and signed provenance/SBOM attestations.
 
-## 15. What this evidence does NOT prove
+## 16. What this evidence does NOT prove
 
 STOP-SHIP remains for Mainnet until at least:
 - production timeout derivation is reviewed;
 - deeper/multi-block reorg matrix beyond the tested two-vs-four-block fork passes;
 - more complex package-RBF graph topologies and feerate-diagram edge cases pass;
 - hardware-wallet / external signer compatibility matrix passes;
-- standalone recovery tooling is packaged/reproducibly released;
+- controlled release/distribution policy and an independent consumer verification drill are completed;
 - dependency/SBOM/provenance release evidence is complete;
 - liveness/fairness formal model is expanded;
 - independent external audit/red-team is completed;
