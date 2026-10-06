@@ -1,0 +1,82 @@
+name: Asset Exchange Bitcoin Signet Readonly
+
+on:
+  push:
+    branches:
+      - asset-exchange/secure-foundation-v1
+    paths:
+      - 'asset-exchange/bitcoin-signet/**'
+      - 'asset-exchange/bitcoin-regtest/BITCOIN_CORE_TOOLCHAIN.lock'
+      - '.github/workflows/asset-exchange-bitcoin-signet.yml'
+  pull_request:
+    paths:
+      - 'asset-exchange/bitcoin-signet/**'
+      - 'asset-exchange/bitcoin-regtest/BITCOIN_CORE_TOOLCHAIN.lock'
+      - '.github/workflows/asset-exchange-bitcoin-signet.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: asset-exchange-bitcoin-signet-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  signet-readonly:
+    name: Bitcoin Core 31.1 default signet read-only qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Load pinned Bitcoin Core toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat asset-exchange/bitcoin-regtest/BITCOIN_CORE_TOOLCHAIN.lock >> "${GITHUB_ENV}"
+
+      - name: Download official Bitcoin Core release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bitcoin-core"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --retry 3 --retry-delay 2 \
+            --output "${RUNNER_TEMP}/bitcoin-core/${BITCOIN_CORE_ARCHIVE}" \
+            "${BITCOIN_CORE_URL}"
+
+      - name: Verify pinned release hash before extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' \
+            "${BITCOIN_CORE_SHA256}" \
+            "${RUNNER_TEMP}/bitcoin-core/${BITCOIN_CORE_ARCHIVE}" \
+            | sha256sum --check --strict
+
+      - name: Extract Bitcoin Core
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -xzf "${RUNNER_TEMP}/bitcoin-core/${BITCOIN_CORE_ARCHIVE}" \
+            -C "${RUNNER_TEMP}/bitcoin-core"
+          echo "BITCOIN_BIN_DIR=${RUNNER_TEMP}/bitcoin-core/bitcoin-${BITCOIN_CORE_VERSION}/bin" >> "${GITHUB_ENV}"
+
+      - name: Verify Bitcoin Core binary version
+        shell: bash
+        run: |
+          set -euo pipefail
+          "${BITCOIN_BIN_DIR}/bitcoind" --version
+          "${BITCOIN_BIN_DIR}/bitcoin-cli" --version
+
+      - name: Qualify default signet read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x asset-exchange/bitcoin-signet/run-readonly-smoke.sh
+          asset-exchange/bitcoin-signet/run-readonly-smoke.sh
