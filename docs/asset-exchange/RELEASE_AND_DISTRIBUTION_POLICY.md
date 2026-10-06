@@ -59,6 +59,8 @@ At minimum, before a candidate can be promoted:
 - Asset Exchange Bitcoin Regtest: SUCCESS for Bitcoin settlement builds;
 - Asset Exchange Recovery Artifact producer: SUCCESS;
 - Asset Exchange Recovery Artifact independent consumer verification: SUCCESS;
+- Asset Exchange Source Audit Artifact producer: SUCCESS;
+- Asset Exchange Source Audit Artifact independent consumer verification: SUCCESS;
 - required external signer compatibility checks: SUCCESS for the declared signer profile;
 - security audit evidence updated for the exact protocol/release revision.
 
@@ -127,7 +129,22 @@ For the standalone recovery tool:
 - package verification code MUST verify;
 - source commit metadata MUST match the release commit.
 
-Future web/API/worker/container releases require their own dependency/SBOM evidence. The recovery SBOM does not cover the whole product.
+The Asset Exchange Source Audit Bundle additionally provides a reproducible SPDX 2.3 inventory of the committed Asset Exchange source boundary:
+- `asset-exchange/**`;
+- `docs/asset-exchange/**`;
+- dedicated `.github/workflows/asset-exchange-*.yml`.
+
+Its producer and independent consumer MUST verify:
+- exact source commit and Git tree;
+- archive SHA-256;
+- per-file SHA-1/SHA-256;
+- package verification code;
+- GitHub/Sigstore provenance;
+- SPDX attestation.
+
+This source bundle is an audit artifact, not a runtime dependency SBOM.
+
+Future web/API/worker/container releases require their own runtime/package/container dependency SBOM and provenance. Neither the recovery SBOM nor the source audit SBOM covers the final deployed product by itself.
 
 ## 10. Release manifest
 
@@ -204,15 +221,36 @@ No source commit or CI green state alone authorizes Mainnet.
 As of this policy revision:
 - reproducible standalone recovery artifact: PASS;
 - recovery SBOM/provenance attestation: PASS;
-- independent consumer verification: PASS;
+- recovery independent consumer verification: PASS;
+- reproducible Asset Exchange source audit bundle: PASS;
+- source bundle SPDX/provenance attestation: PASS;
+- source bundle independent consumer verification: PASS;
 - deep bounded regtest reorg scenarios: PASS;
+- Bitcoin default signet read-only qualification: PASS;
+- transactional signet settlement qualification: NOT COMPLETE;
 - GitHub repository rulesets: NOT PRESENT when last queried;
 - immutable Asset Exchange release setting: NOT VERIFIED / historical releases are not immutable;
 - protected release environment: NOT VERIFIED;
 - protected branch status: NOT VERIFIED through current connector;
-- full-product SBOM/provenance: NOT COMPLETE;
+- runtime/container/package dependency SBOM/provenance: NOT COMPLETE;
 - external audit: NOT COMPLETE;
-- signet/testnet qualification: NOT COMPLETE;
+- transactional signet/testnet qualification: NOT COMPLETE;
 - Mainnet: BLOCKED.
 
 Therefore this policy is defined, but controlled release distribution is NOT YET AUTHORIZED.
+
+## 15. Source audit bundle evidence
+
+Latest verified source audit workflow:
+- source commit: `762b7f01e3a3f1b414006650ea166ecb3c6d9627`;
+- workflow: `Asset Exchange Source Audit Artifact`;
+- run id: `37532079754`;
+- producer job: SUCCESS;
+- independent consumer verification: SUCCESS;
+- G5 on same source commit: SUCCESS, run `37532079726`.
+
+The source bundle is built twice from Git objects at the exact source SHA. Byte-for-byte archive/SBOM/checksum equality is required before attestation.
+
+The independent consumer verifies the downloaded bundle against the exact repository/source SHA and Git tree, then verifies both GitHub/Sigstore provenance and the SPDX SBOM attestation.
+
+This evidence improves audit/review reproducibility. It does not authorize a production release or replace future runtime dependency/container SBOMs.
