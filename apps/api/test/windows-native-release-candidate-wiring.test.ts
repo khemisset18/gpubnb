@@ -35,6 +35,9 @@ test('Stage 4 user-mode candidate build is ordered by signer trust and remains n
   assert.match(source, /worker_source_commit_mismatch/);
   assert.match(source, /release_candidate_user_mode_publisher_mismatch/);
 
+  assert.match(source, /nvencApi = '13\.0'/);
+  assert.match(source, /minimumNvidiaWindowsDriver = '570\.00'/);
+  assert.match(source, /SDK 13\.1 requires NVIDIA Windows driver 610\+/);
   assert.match(source, /iddDriverProductionSigningRequired = \$true/);
   assert.match(source, /iddDriverIncluded = \$false/);
   assert.match(source, /publicBookabilityEnabled = \$false/);
