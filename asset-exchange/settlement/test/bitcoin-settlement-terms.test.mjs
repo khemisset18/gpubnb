@@ -37,14 +37,31 @@ test("settlement digest binds every economic and script-critical field", () => {
   const digest = bitcoinSettlementTermsDigestHex(original);
   assert.match(digest, /^[0-9a-f]{64}$/);
 
+  const changedSecret = "44".repeat(32);
+  const changedSecretScript = buildBitcoinHtlcV1({
+    secretHashHex: changedSecret,
+    redeemPubkeyHex: redeem,
+    refundPubkeyHex: refund,
+    refundLockHeight: 500
+  });
+  const changedHeightScript = buildBitcoinHtlcV1({
+    secretHashHex: secretHash,
+    redeemPubkeyHex: redeem,
+    refundPubkeyHex: refund,
+    refundLockHeight: 501
+  });
+
   const variants = [
     { fundingAmountSats: "100001" },
-    { secretHashHex: "44".repeat(32) },
-    { refundLockHeight: 501,
-      ...(() => {
-        const b = buildBitcoinHtlcV1({ secretHashHex: secretHash, redeemPubkeyHex: redeem, refundPubkeyHex: refund, refundLockHeight: 501 });
-        return { witnessScriptHashHex: b.witnessScriptHashHex, scriptPubKeyHex: b.scriptPubKeyHex };
-      })()
+    {
+      secretHashHex: changedSecret,
+      witnessScriptHashHex: changedSecretScript.witnessScriptHashHex,
+      scriptPubKeyHex: changedSecretScript.scriptPubKeyHex
+    },
+    {
+      refundLockHeight: 501,
+      witnessScriptHashHex: changedHeightScript.witnessScriptHashHex,
+      scriptPubKeyHex: changedHeightScript.scriptPubKeyHex
     },
     { requiredConfirmations: 3 },
     { feePolicyVersion: 2 },
