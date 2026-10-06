@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Preflight', 'HelperCrash', 'AgentRestart')]
+    [ValidateSet('Preflight', 'HelperCrash', 'AgentRestart', 'NetworkInterruption', 'RebootPrepare', 'RebootVerify')]
     [string]$Scenario,
 
     [Parameter(Mandatory = $true)]
@@ -15,9 +15,14 @@ param(
     [ValidateRange(15, 300)]
     [int]$RecoveryTimeoutSeconds = 90,
 
+    [ValidateRange(60, 120)]
+    [int]$NetworkBlockSeconds = 75,
+
     [switch]$ArmFaults,
 
-    [string]$EvidencePath
+    [string]$EvidencePath,
+
+    [string]$RebootMarkerPath
 )
 
 Set-StrictMode -Version Latest
@@ -81,6 +86,29 @@ function Invoke-HelperStatus {
     return $value
 }
 
+function Test-HelperReady {
+    param($Status)
+    if ($null -eq $Status) { return $false }
+    foreach ($field in @(
+        'running',
+        'isolatedSession',
+        'renterSessionActive',
+        'providerSessionInactive',
+        'virtualDisplay',
+        'providerDesktopExcluded',
+        'exactGpuBound',
+        'captureReady',
+        'nvencReady',
+        'mediaReady',
+        'inputIsolation',
+        'inputReady'
+    )) {
+        if ($Status.$field -ne $true) { return $false }
+    }
+    if ($Status.suspended -eq $true) { return $false }
+    return ([string]$Status.hardwareEncoder).ToLowerInvariant() -eq 'nvenc'
+}
+
 function Get-AuthorityProcesses {
     $all = @(Get-CimInstance Win32_Process -Filter "Name='gpubnb-windows-stream.exe'")
     $result = @()
@@ -107,7 +135,8 @@ function Get-AuthorityProcesses {
             continue
         }
         $escapedSession = [regex]::Escape($SessionId)
-        if ($command -notmatch "(?i)(^|\s)--session-id\s+`"?$escapedSession`"?(\s|$)") {
+        $sessionPattern = '(?i)(^|\s)--session-id\s+"?' + $escapedSession + '"?(\s|$)'
+        if ($command -notmatch $sessionPattern) {
             continue
         }
         $result += $process
@@ -137,6 +166,57 @@ function Wait-For {
         Start-Sleep -Milliseconds 500
     } while ((Get-Date) -lt $deadline)
     throw $FailureCode
+}
+
+function Observe-NativePostFaultOutcome {
+    param(
+        [Parameter(Mandatory = $true)][uint32]$OldAuthorityPid,
+        [switch]$AllowSameAuthority
+    )
+    $deadline = (Get-Date).AddSeconds($RecoveryTimeoutSeconds)
+    $noAuthoritySince = $null
+
+    do {
+        $matches = @(Get-AuthorityProcesses)
+        $status = $null
+        try {
+            $status = Invoke-HelperStatus
+        }
+        catch {
+            $status = $null
+        }
+
+        if ($matches.Count -eq 1 -and (Test-HelperReady -Status $status)) {
+            $pid = [uint32]$matches[0].ProcessId
+            if ($AllowSameAuthority -or $pid -ne $OldAuthorityPid) {
+                return [ordered]@{
+                    outcome = 'recovered'
+                    authorityPid = $pid
+                    helperStatus = $status
+                }
+            }
+        }
+
+        if ($matches.Count -eq 0 -and $null -eq $status) {
+            if ($null -eq $noAuthoritySince) {
+                $noAuthoritySince = Get-Date
+            }
+            elseif (((Get-Date) - $noAuthoritySince).TotalSeconds -ge 5) {
+                return [ordered]@{
+                    outcome = 'fail_closed'
+                    authorityPid = $null
+                    helperStatus = $null
+                }
+            }
+        }
+        else {
+            $noAuthoritySince = $null
+        }
+
+        Start-Sleep -Milliseconds 500
+    } while ((Get-Date) -lt $deadline)
+
+    throw 'stage4_native_post_fault_outcome_timeout'
 }
 
 function Get-ServiceProof {
@@ -181,25 +261,81 @@ function Assert-FaultsArmed {
     }
 }
 
+function Get-Stage4Root {
+    $root = Join-Path $env:ProgramData 'GPUbnb\qualification\stage4'
+    New-Item -ItemType Directory -Path $root -Force | Out-Null
+    return $root
+}
+
+function Get-RebootMarkerPath {
+    if (-not [string]::IsNullOrWhiteSpace($RebootMarkerPath)) {
+        return [IO.Path]::GetFullPath($RebootMarkerPath)
+    }
+    return Join-Path (Get-Stage4Root) ("reboot-$SessionId.json")
+}
+
+function Remove-Stage4FirewallRules {
+    param([string[]]$Names)
+    foreach ($name in $Names) {
+        Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue |
+            Remove-NetFirewallRule -ErrorAction SilentlyContinue
+    }
+}
+
+function Start-FirewallRollbackWatchdog {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$RuleNames,
+        [Parameter(Mandatory = $true)][int]$DelaySeconds
+    )
+    $root = Get-Stage4Root
+    $watchdogPath = Join-Path $root ("network-watchdog-$SessionId-$([Guid]::NewGuid().ToString('N')).ps1")
+    $quotedRules = ($RuleNames | ForEach-Object { "'$($_.Replace("'", "''"))'" }) -join ','
+    $watchdog = @'
+Start-Sleep -Seconds __DELAY__
+foreach ($name in @(__RULES__)) {
+    Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue |
+        Remove-NetFirewallRule -ErrorAction SilentlyContinue
+}
+Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+'@
+    $watchdog = $watchdog.Replace('__DELAY__', [string]$DelaySeconds)
+    $watchdog = $watchdog.Replace('__RULES__', $quotedRules)
+    [IO.File]::WriteAllText($watchdogPath, $watchdog, [Text.UTF8Encoding]::new($false))
+    $powershell = Join-Path $PSHOME 'powershell.exe'
+    Start-Process -FilePath $powershell -ArgumentList @(
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        $watchdogPath
+    ) -WindowStyle Hidden | Out-Null
+    return $watchdogPath
+}
+
 Assert-Administrator
 $script:HelperCanonical = Resolve-CanonicalFile -Path $HelperPath
 $helperProof = Get-SignedFileProof -Path $script:HelperCanonical
-$initialStatus = Invoke-HelperStatus
-if ($null -eq $initialStatus -or $initialStatus.suspended -eq $true) {
-    throw 'stage4_helper_not_ready_before_fault'
-}
-$initialAuthority = Get-SingleAuthorityProcess
 $initialService = Get-ServiceProof
+$initialStatus = $null
+$initialAuthority = $null
+
+if ($Scenario -ne 'RebootVerify') {
+    $initialStatus = Invoke-HelperStatus
+    if (-not (Test-HelperReady -Status $initialStatus)) {
+        throw 'stage4_helper_not_ready_before_fault'
+    }
+    $initialAuthority = Get-SingleAuthorityProcess
+}
 
 $startedAt = (Get-Date).ToUniversalTime()
 $evidence = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     scenario = $Scenario
     sessionId = $SessionId
     startedAt = $startedAt.ToString('o')
     helper = $helperProof
     initial = [ordered]@{
-        authorityPid = [uint32]$initialAuthority.ProcessId
+        authorityPid = if ($null -ne $initialAuthority) { [uint32]$initialAuthority.ProcessId } else { $null }
         helperStatus = $initialStatus
         agentService = $initialService
     }
@@ -209,7 +345,7 @@ $evidence = [ordered]@{
 switch ($Scenario) {
     'Preflight' {
         $evidence.result = [ordered]@{
-            pass = $true
+            localSafetyPass = $true
             faultInjected = $false
             authorityPid = [uint32]$initialAuthority.ProcessId
             helperReady = $true
@@ -230,31 +366,16 @@ switch ($Scenario) {
             return $true
         } | Out-Null
 
-        $recovered = Wait-For -FailureCode 'stage4_helper_recovery_timeout' -Probe {
-            try {
-                $process = Get-SingleAuthorityProcess
-                if ([uint32]$process.ProcessId -eq $oldPid) { return $null }
-                $status = Invoke-HelperStatus
-                if ($null -eq $status -or $status.suspended -eq $true -or $status.mediaReady -ne $true) {
-                    return $null
-                }
-                return [ordered]@{
-                    authorityPid = [uint32]$process.ProcessId
-                    helperStatus = $status
-                }
-            }
-            catch {
-                return $null
-            }
-        }
-
+        $postFault = Observe-NativePostFaultOutcome -OldAuthorityPid $oldPid
         $evidence.result = [ordered]@{
-            pass = $true
+            localSafetyPass = $true
+            overallAcceptancePendingServerEvidence = $true
             faultInjected = $true
             oldAuthorityPid = $oldPid
-            newAuthorityPid = $recovered.authorityPid
-            recoveredHelperStatus = $recovered.helperStatus
-            displayRecreatedByFreshAuthority = $true
+            outcome = $postFault.outcome
+            authorityPidAfterFault = $postFault.authorityPid
+            helperStatusAfterFault = $postFault.helperStatus
+            staleReadyRejected = $true
         }
     }
 
@@ -266,11 +387,15 @@ switch ($Scenario) {
         }
 
         $beforePid = [uint32](Get-ServiceProof).processId
+        $oldAuthorityPid = [uint32]$initialAuthority.ProcessId
+
         Stop-Service -Name $ServiceName -ErrorAction Stop
+        $service = Get-Service -Name $ServiceName -ErrorAction Stop
         $service.WaitForStatus(
             [ServiceProcess.ServiceControllerStatus]::Stopped,
             [TimeSpan]::FromSeconds(30)
         )
+
         Start-Service -Name $ServiceName -ErrorAction Stop
         $service = Get-Service -Name $ServiceName -ErrorAction Stop
         $service.WaitForStatus(
@@ -291,27 +416,189 @@ switch ($Scenario) {
             }
         }
 
-        $recoveredStatus = Wait-For -FailureCode 'stage4_helper_not_ready_after_agent_restart' -Probe {
-            try {
-                $status = Invoke-HelperStatus
-                if ($null -eq $status -or $status.suspended -eq $true -or $status.mediaReady -ne $true) {
-                    return $null
-                }
-                return $status
-            }
-            catch {
-                return $null
-            }
-        }
-
-        $afterAuthority = Get-SingleAuthorityProcess
+        $postFault = Observe-NativePostFaultOutcome -OldAuthorityPid $oldAuthorityPid -AllowSameAuthority
         $evidence.result = [ordered]@{
-            pass = $true
+            localSafetyPass = $true
+            overallAcceptancePendingServerEvidence = $true
             faultInjected = $true
             oldAgentPid = $beforePid
             newAgentPid = [uint32]$afterService.processId
-            authorityPidAfterRestart = [uint32]$afterAuthority.ProcessId
-            recoveredHelperStatus = $recoveredStatus
+            outcome = $postFault.outcome
+            authorityPidAfterFault = $postFault.authorityPid
+            helperStatusAfterFault = $postFault.helperStatus
+        }
+    }
+
+    'NetworkInterruption' {
+        Assert-FaultsArmed
+
+        if ($initialService.state -ne 'Running' -or [uint32]$initialService.processId -eq 0) {
+            throw 'stage4_agent_not_running_before_network_fault'
+        }
+
+        $agentPath = [string]$initialService.executable.path
+        $installDirectory = Split-Path -Parent $agentPath
+        $tunnelPath = Join-Path $installDirectory 'gpubnb-host-tunnel.exe'
+        $tunnelProof = Get-SignedFileProof -Path $tunnelPath
+
+        $agentRule = "GPUbnbStage4-$SessionId-Agent443"
+        $tunnelRule = "GPUbnbStage4-$SessionId-Tunnel443"
+        $ruleNames = @($agentRule, $tunnelRule)
+
+        foreach ($name in $ruleNames) {
+            if (Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue) {
+                throw "stage4_firewall_rule_already_exists:$name"
+            }
+        }
+
+        $watchdogSeconds = $NetworkBlockSeconds + 15
+        $watchdogPath = Start-FirewallRollbackWatchdog -RuleNames $ruleNames -DelaySeconds $watchdogSeconds
+        $blockStartedAt = (Get-Date).ToUniversalTime()
+
+        try {
+            New-NetFirewallRule -Name $agentRule -DisplayName $agentRule -Direction Outbound -Action Block -Program $agentPath -Protocol TCP -RemotePort 443 -Profile Any | Out-Null
+            New-NetFirewallRule -Name $tunnelRule -DisplayName $tunnelRule -Direction Outbound -Action Block -Program ([string]$tunnelProof.path) -Protocol TCP -RemotePort 443 -Profile Any | Out-Null
+
+            foreach ($name in $ruleNames) {
+                $rule = Get-NetFirewallRule -Name $name -ErrorAction Stop
+                if ($rule.Enabled -ne 'True' -or $rule.Action -ne 'Block' -or $rule.Direction -ne 'Outbound') {
+                    throw "stage4_firewall_rule_invalid:$name"
+                }
+            }
+
+            Start-Sleep -Seconds $NetworkBlockSeconds
+        }
+        finally {
+            Remove-Stage4FirewallRules -Names $ruleNames
+        }
+
+        foreach ($name in $ruleNames) {
+            if (Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue) {
+                throw "stage4_firewall_rule_cleanup_failed:$name"
+            }
+        }
+
+        $serviceAfter = Wait-For -FailureCode 'stage4_agent_service_not_running_after_network_fault' -Probe {
+            try {
+                $proof = Get-ServiceProof
+                if ($proof.state -eq 'Running' -and [uint32]$proof.processId -ne 0) {
+                    return $proof
+                }
+            }
+            catch {}
+            return $null
+        }
+
+        $postFault = Observe-NativePostFaultOutcome -OldAuthorityPid ([uint32]$initialAuthority.ProcessId) -AllowSameAuthority
+
+        $evidence.result = [ordered]@{
+            localSafetyPass = $true
+            overallAcceptancePendingServerEvidence = $true
+            faultInjected = $true
+            networkScope = 'GPUbnb executables outbound TCP/443 only'
+            blockedSeconds = $NetworkBlockSeconds
+            blockStartedAt = $blockStartedAt.ToString('o')
+            blockEndedAt = (Get-Date).ToUniversalTime().ToString('o')
+            watchdogPath = $watchdogPath
+            tunnel = $tunnelProof
+            agentServiceAfterFault = $serviceAfter
+            outcome = $postFault.outcome
+            authorityPidAfterFault = $postFault.authorityPid
+            helperStatusAfterFault = $postFault.helperStatus
+            firewallRulesRemoved = $true
+        }
+    }
+
+    'RebootPrepare' {
+        Assert-FaultsArmed
+        $markerPath = Get-RebootMarkerPath
+        $markerParent = Split-Path -Parent $markerPath
+        New-Item -ItemType Directory -Path $markerParent -Force | Out-Null
+
+        $marker = [ordered]@{
+            schemaVersion = 1
+            sessionId = $SessionId
+            preparedAt = (Get-Date).ToUniversalTime().ToString('o')
+            helperSha256 = [string]$helperProof.sha256
+            agentSha256 = [string]$initialService.executable.sha256
+            authorityPid = [uint32]$initialAuthority.ProcessId
+            agentPid = [uint32]$initialService.processId
+        }
+        [IO.File]::WriteAllText(
+            $markerPath,
+            ($marker | ConvertTo-Json -Depth 8) + [Environment]::NewLine,
+            [Text.UTF8Encoding]::new($false)
+        )
+
+        $evidence.result = [ordered]@{
+            localSafetyPass = $true
+            faultInjected = $false
+            manualRebootRequired = $true
+            markerPath = $markerPath
+            automatedRebootCommandIssued = $false
+        }
+    }
+
+    'RebootVerify' {
+        $markerPath = Get-RebootMarkerPath
+        if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf)) {
+            throw 'stage4_reboot_marker_missing'
+        }
+
+        try {
+            $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+        }
+        catch {
+            throw 'stage4_reboot_marker_invalid'
+        }
+
+        if ([int]$marker.schemaVersion -ne 1 -or [string]$marker.sessionId -cne $SessionId) {
+            throw 'stage4_reboot_marker_identity_mismatch'
+        }
+        if ([string]$marker.helperSha256 -cne [string]$helperProof.sha256) {
+            throw 'stage4_reboot_helper_changed'
+        }
+        if ([string]$marker.agentSha256 -cne [string]$initialService.executable.sha256) {
+            throw 'stage4_reboot_agent_changed'
+        }
+
+        $preparedAt = [DateTime]::Parse([string]$marker.preparedAt).ToUniversalTime()
+        $os = Get-CimInstance Win32_OperatingSystem
+        $bootAt = ([DateTime]$os.LastBootUpTime).ToUniversalTime()
+        if ($bootAt -le $preparedAt) {
+            throw 'stage4_reboot_not_observed'
+        }
+
+        if ($initialService.state -ne 'Running' -or [uint32]$initialService.processId -eq 0) {
+            throw 'stage4_agent_not_running_after_reboot'
+        }
+
+        $oldSessionAuthorities = @(Get-AuthorityProcesses)
+        if ($oldSessionAuthorities.Count -ne 0) {
+            throw 'stage4_stale_authority_survived_reboot'
+        }
+
+        $oldSessionStatus = $null
+        try {
+            $oldSessionStatus = Invoke-HelperStatus
+        }
+        catch {
+            $oldSessionStatus = $null
+        }
+        if ($null -ne $oldSessionStatus) {
+            throw 'stage4_stale_session_ready_after_reboot'
+        }
+
+        $evidence.result = [ordered]@{
+            localSafetyPass = $true
+            overallAcceptancePendingServerEvidence = $true
+            faultInjected = $true
+            preparedAt = $preparedAt.ToString('o')
+            bootAt = $bootAt.ToString('o')
+            agentServiceAfterReboot = $initialService
+            staleAuthorityRejected = $true
+            staleHelperStatusRejected = $true
+            manualRebootObserved = $true
         }
     }
 }
@@ -319,8 +606,7 @@ switch ($Scenario) {
 $evidence.finishedAt = (Get-Date).ToUniversalTime().ToString('o')
 
 if ([string]::IsNullOrWhiteSpace($EvidencePath)) {
-    $root = Join-Path $env:ProgramData 'GPUbnb\qualification\stage4'
-    New-Item -ItemType Directory -Path $root -Force | Out-Null
+    $root = Get-Stage4Root
     $EvidencePath = Join-Path $root ("windows-native-$($Scenario.ToLowerInvariant())-$SessionId.json")
 }
 else {

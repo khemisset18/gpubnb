@@ -6,6 +6,7 @@ on:
       - agent/**
       - services/edge/**
       - scripts/build-windows-native-release-candidate.ps1
+      - scripts/windows-native-stage4-failure-qualification.ps1
       - apps/host-desktop/**
       - Cargo.toml
       - Cargo.lock
@@ -39,6 +40,39 @@ jobs:
           }
           if ($source -match 'physical-qualification') {
             throw 'Stage 4 native candidate builder must never use the physical-qualification gate.'
+          }
+
+      - name: Parse Stage 4 physical failure harness
+        shell: pwsh
+        run: |
+          $path = 'scripts/windows-native-stage4-failure-qualification.ps1'
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            $path,
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'Stage 4 physical failure harness contains PowerShell parse errors.'
+          }
+          $source = Get-Content $path -Raw
+          foreach ($required in @(
+            "'HelperCrash'",
+            "'AgentRestart'",
+            "'NetworkInterruption'",
+            "'RebootPrepare'",
+            "'RebootVerify'",
+            'stage4_faults_not_armed',
+            'overallAcceptancePendingServerEvidence'
+          )) {
+            if ($source -notmatch [regex]::Escape($required)) {
+              throw "Stage 4 physical failure harness is missing required contract: $required"
+            }
+          }
+          if ($source -match 'Disable-NetAdapter|Restart-Computer|shutdown\.exe') {
+            throw 'Stage 4 physical failure harness contains a forbidden broad host mutation.'
           }
 
       - name: Validate language-independent installer ACLs

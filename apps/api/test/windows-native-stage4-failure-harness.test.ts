@@ -7,7 +7,7 @@ const harness = new URL('../../../scripts/windows-native-stage4-failure-qualific
 test('Stage 4 Windows native physical fault harness is explicitly armed and narrowly scoped', async () => {
   const source = await readFile(harness, 'utf8');
 
-  assert.match(source, /ValidateSet\('Preflight', 'HelperCrash', 'AgentRestart'\)/);
+  assert.match(source, /ValidateSet\('Preflight', 'HelperCrash', 'AgentRestart', 'NetworkInterruption', 'RebootPrepare', 'RebootVerify'\)/);
   assert.match(source, /\[switch\]\$ArmFaults/);
   assert.match(source, /stage4_faults_not_armed/);
 
@@ -22,6 +22,20 @@ test('Stage 4 Windows native physical fault harness is explicitly armed and narr
   assert.doesNotMatch(source, /pnputil/i);
   assert.doesNotMatch(source, /Disable-NetAdapter/i);
   assert.doesNotMatch(source, /Restart-Computer/i);
+  assert.doesNotMatch(source, /shutdown\.exe/i);
+});
+
+test('Stage 4 helper and Agent faults accept only recovery or fail-closed local outcomes', async () => {
+  const source = await readFile(harness, 'utf8');
+
+  assert.match(source, /Observe-NativePostFaultOutcome/);
+  assert.match(source, /outcome = 'recovered'/);
+  assert.match(source, /outcome = 'fail_closed'/);
+  assert.match(source, /overallAcceptancePendingServerEvidence = \$true/);
+  assert.match(source, /staleReadyRejected = \$true/);
+
+  assert.doesNotMatch(source, /displayRecreatedByFreshAuthority = \$true/);
+  assert.doesNotMatch(source, /newAuthorityPid = \$recovered/);
 });
 
 test('Stage 4 harness proves signatures and uses SCM for Agent restart', async () => {
@@ -38,13 +52,38 @@ test('Stage 4 harness proves signatures and uses SCM for Agent restart', async (
   assert.match(source, /WaitForStatus/);
 });
 
-test('Stage 4 harness requires ready native authority before injecting a fault and records sanitized evidence', async () => {
+test('network interruption is application-scoped and automatically rolled back', async () => {
+  const source = await readFile(harness, 'utf8');
+
+  assert.match(source, /gpubnb-host-tunnel\.exe/);
+  assert.match(source, /New-NetFirewallRule/);
+  assert.match(source, /-Direction Outbound/);
+  assert.match(source, /-Action Block/);
+  assert.match(source, /-Protocol TCP -RemotePort 443/);
+  assert.match(source, /Start-FirewallRollbackWatchdog/);
+  assert.match(source, /Remove-Stage4FirewallRules/);
+  assert.match(source, /firewallRulesRemoved = \$true/);
+
+  assert.doesNotMatch(source, /Set-NetFirewallProfile/i);
+});
+
+test('reboot qualification is prepare/verify only and never reboots the host itself', async () => {
+  const source = await readFile(harness, 'utf8');
+
+  assert.match(source, /manualRebootRequired = \$true/);
+  assert.match(source, /automatedRebootCommandIssued = \$false/);
+  assert.match(source, /Get-CimInstance Win32_OperatingSystem/);
+  assert.match(source, /stage4_reboot_not_observed/);
+  assert.match(source, /stage4_stale_authority_survived_reboot/);
+  assert.match(source, /stage4_stale_session_ready_after_reboot/);
+});
+
+test('Stage 4 harness requires ready native authority before live faults and records sanitized evidence', async () => {
   const source = await readFile(harness, 'utf8');
 
   assert.match(source, /--status' '--json' '--session-id'/);
   assert.match(source, /stage4_helper_not_ready_before_fault/);
-  assert.match(source, /mediaReady -ne \$true/);
-  assert.match(source, /schemaVersion = 1/);
+  assert.match(source, /schemaVersion = 2/);
   assert.match(source, /signerCertificateSha256/);
   assert.match(source, /finishedAt/);
 
