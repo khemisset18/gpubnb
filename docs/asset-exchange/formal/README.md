@@ -12,7 +12,10 @@ Files:
 - AssetExchangeV1.cooperative.cfg — cooperative-completion liveness scenario;
 - AssetExchangeV1.recovery.cfg — refund/recovery liveness with Exchange unavailable;
 - AssetExchangeV1.transition.cfg — mode-transition completion liveness scenario;
-- run-tlc.sh — runner that executes every config and records separate hashes/output;
+- AssetExchangeFaultsV1.tla — crash idempotency, replay isolation and uncertain-evidence fault model;
+- AssetExchangeSpendRaceV1.tla — refund/redeem race and terminal convergence model;
+- AssetExchangeTermsV1.tla — signed business/fee terms immutability model;
+- run-tlc.sh plus dedicated fault/race/terms runners — reproducible bounded model checks;
 - evidence/ — generated verification evidence, not committed by default unless explicitly reviewed.
 
 ## Trust rule
@@ -55,16 +58,20 @@ The cfg currently asks TLC to check:
 - CompletedNotRefunded;
 - RefundedNotCompleted;
 - KycCannotDisableRecovery;
-- FeeDoesNotGateRecovery.
+- FeeDoesNotGateRecovery;
+- CompletedRequiresRedeems;
+- CrossDeploymentReplayBlocked;
+- UncertainChainStopsAdvance.
 
-This list is only the first model slice. The G4 plan requires additional executable properties for:
-- immutable terms;
-- explicit replay isolation;
-- crash idempotency;
-- uncertain-chain blocking;
-- principal recovery independent of fee collection;
-- mode transition semantics;
-- liveness/fairness.
+Dedicated bounded models additionally check:
+- CrashIdempotency;
+- ReplayIsolation;
+- crash-after-broadcast reconciliation;
+- refund/redeem race exclusivity and convergence;
+- TermsImmutable;
+- FeeTermsImmutable.
+
+G4 still requires richer composition/fault bounds and independent review; bounded model success is not production proof.
 
 ## Evidence acceptance
 
@@ -100,8 +107,24 @@ Runner present: YES.
 TLC executed in repository CI: YES.
 Safety bounded model: PASS.
 Initial liveness scenarios: PASS under explicit weak-fairness assumptions.
-Latest accepted run: 37520577666 at commit 2746c6f890b6e0eba70c0e992a04d09e1a533dcf.
-G4 PASS: NO — richer crash/replay/reorg/race liveness and independent review remain required.
+Latest accepted integrated run before terms-immutability extension: 37531026000 at commit f6aa4cc5d3882d7e74de1a52c527a9f8f988a50f.
+
+Accepted evidence from that run:
+- main safety: 296444 generated / 26560 distinct / depth 22 / queue 0;
+- cooperative liveness: 40 / 13 / depth 13;
+- recovery liveness: 4 / 4 / depth 4;
+- transition liveness: 2 / 2 / depth 2;
+- fault safety: 2017 / 256 / depth 10;
+- crash reconciliation: 3 / 3 / depth 3;
+- spend-race safety: 32 / 21 / depth 7;
+- spend-race convergence: 7 / 7 / depth 4;
+- all scenarios exit_status=0 with no TLC error;
+- evidence artifact ID: 11444416474;
+- evidence ZIP SHA-256: db3540e5eb88d02f537a5002c7d885cdd0406790764dcf466f0dc7ac5aa12407.
+
+The same run explicitly verifies UncertainChainStopsAdvance for both chain legs.
+
+G4 PASS: NO — terms immutability requires its new TLC run, and richer composed fault/replay bounds plus independent review remain required.
 
 
 ## Initial liveness scenarios
