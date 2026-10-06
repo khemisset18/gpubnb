@@ -113,11 +113,11 @@ build_large_child() {
   vsize="$(printf '%s' "${decoded}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["vsize"])')"
 
   read -r observed_vout observed_sats < <(
-    TX_JSON="${decoded}" TARGET_ADDRESS="${continuation_address}" python3 <<'PY'
+    printf '%s' "${decoded}" | python3 -c '
 from decimal import Decimal
-import json, os
-data=json.loads(os.environ["TX_JSON"])
-target=os.environ["TARGET_ADDRESS"]
+import json, sys
+data=json.load(sys.stdin)
+target=sys.argv[1]
 matches=[]
 for v in data["vout"]:
     if v["scriptPubKey"].get("address") == target:
@@ -126,7 +126,7 @@ for v in data["vout"]:
 if len(matches) != 1:
     raise SystemExit(f"expected one continuation output, found {len(matches)}")
 print(matches[0][0], matches[0][1])
-PY
+' "${continuation_address}"
   )
 
   if [[ "${observed_sats}" != "${continuation_sats}" ]]; then
