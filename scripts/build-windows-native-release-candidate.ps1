@@ -23,7 +23,7 @@ function Get-ValidSigner {
 
     $signature = Get-AuthenticodeSignature -LiteralPath $Path
     if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-        throw "release_candidate_signature_invalid:$Path:$($signature.Status)"
+        throw "release_candidate_signature_invalid:${Path}:$($signature.Status)"
     }
     if ($null -eq $signature.SignerCertificate) {
         throw "release_candidate_signer_missing:$Path"
