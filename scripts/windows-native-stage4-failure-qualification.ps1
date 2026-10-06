@@ -20,6 +20,9 @@ param(
 
     [switch]$ArmFaults,
 
+    # Internal marker used only by the temporary Task Scheduler relay.
+    [switch]$SystemRelay,
+
     [string]$EvidencePath,
 
     [string]$RebootMarkerPath
@@ -312,7 +315,162 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
     return $watchdogPath
 }
 
+function Test-LocalSystem {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    return (
+        $null -ne $identity.User -and
+        [string]$identity.User.Value -eq 'S-1-5-18'
+    )
+}
+
+function Assert-LocalSystem {
+    if (-not (Test-LocalSystem)) {
+        throw 'stage4_localsystem_required'
+    }
+}
+
+function Invoke-LocalSystemRelay {
+    if ($SystemRelay) {
+        throw 'stage4_system_relay_identity_invalid'
+    }
+    if ([string]::IsNullOrWhiteSpace($PSCommandPath) -or
+        -not (Test-Path -LiteralPath $PSCommandPath -PathType Leaf)) {
+        throw 'stage4_system_relay_source_missing'
+    }
+
+    $root = Get-Stage4Root
+    $nonce = [Guid]::NewGuid().ToString('N')
+    $taskName = "GPUbnb-Stage4-$nonce"
+    $runnerPath = Join-Path $root ("relay-runner-$nonce.ps1")
+    $wrapperPath = Join-Path $root ("relay-wrapper-$nonce.ps1")
+    $inputPath = Join-Path $root ("relay-input-$nonce.json")
+    $resultPath = Join-Path $root ("relay-result-$nonce.json")
+    $childEvidencePath = if ([string]::IsNullOrWhiteSpace($EvidencePath)) {
+        Join-Path $root ("windows-native-$($Scenario.ToLowerInvariant())-$SessionId.json")
+    }
+    else {
+        [IO.Path]::GetFullPath($EvidencePath)
+    }
+
+    Copy-Item -LiteralPath $PSCommandPath -Destination $runnerPath -Force
+
+    $relayInput = [ordered]@{
+        scenario = $Scenario
+        sessionId = $SessionId
+        helperPath = $HelperPath
+        serviceName = $ServiceName
+        recoveryTimeoutSeconds = $RecoveryTimeoutSeconds
+        networkBlockSeconds = $NetworkBlockSeconds
+        armFaults = [bool]$ArmFaults
+        evidencePath = $childEvidencePath
+        rebootMarkerPath = $RebootMarkerPath
+    }
+    [IO.File]::WriteAllText(
+        $inputPath,
+        ($relayInput | ConvertTo-Json -Depth 6) + [Environment]::NewLine,
+        [Text.UTF8Encoding]::new($false)
+    )
+
+    $wrapper = @'
+$ErrorActionPreference = 'Stop'
+$inputPath = '__INPUT__'
+$runnerPath = '__RUNNER__'
+$resultPath = '__RESULT__'
+$exitCode = 1
+$output = ''
+try {
+    $p = Get-Content -LiteralPath $inputPath -Raw | ConvertFrom-Json
+    $invoke = @{
+        Scenario = [string]$p.scenario
+        SessionId = [string]$p.sessionId
+        HelperPath = [string]$p.helperPath
+        ServiceName = [string]$p.serviceName
+        RecoveryTimeoutSeconds = [int]$p.recoveryTimeoutSeconds
+        NetworkBlockSeconds = [int]$p.networkBlockSeconds
+        EvidencePath = [string]$p.evidencePath
+        SystemRelay = $true
+    }
+    if ([bool]$p.armFaults) { $invoke.ArmFaults = $true }
+    if (-not [string]::IsNullOrWhiteSpace([string]$p.rebootMarkerPath)) {
+        $invoke.RebootMarkerPath = [string]$p.rebootMarkerPath
+    }
+    $output = (& $runnerPath @invoke 2>&1 | Out-String)
+    $exitCode = 0
+}
+catch {
+    $output = ($_ | Out-String)
+    $exitCode = 1
+}
+$result = [ordered]@{ exitCode = $exitCode; output = $output }
+[IO.File]::WriteAllText(
+    $resultPath,
+    ($result | ConvertTo-Json -Depth 4) + [Environment]::NewLine,
+    [Text.UTF8Encoding]::new($false)
+)
+exit $exitCode
+'@
+    $wrapper = $wrapper.Replace('__INPUT__', $inputPath.Replace("'", "''"))
+    $wrapper = $wrapper.Replace('__RUNNER__', $runnerPath.Replace("'", "''"))
+    $wrapper = $wrapper.Replace('__RESULT__', $resultPath.Replace("'", "''"))
+    [IO.File]::WriteAllText($wrapperPath, $wrapper, [Text.UTF8Encoding]::new($false))
+
+    $registered = $false
+    try {
+        $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        $action = New-ScheduledTaskAction -Execute $powershell -Argument (
+            '-NoProfile -ExecutionPolicy Bypass -File "' + $wrapperPath + '"'
+        )
+        $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+        Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Force | Out-Null
+        $registered = $true
+        Start-ScheduledTask -TaskName $taskName
+
+        $relayTimeoutSeconds = [Math]::Max(
+            300,
+            $RecoveryTimeoutSeconds + $NetworkBlockSeconds + 120
+        )
+        $deadline = (Get-Date).AddSeconds($relayTimeoutSeconds)
+        while (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) {
+            if ((Get-Date) -ge $deadline) { throw 'stage4_system_relay_timeout' }
+            Start-Sleep -Milliseconds 250
+        }
+
+        try {
+            $relayResult = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+        }
+        catch {
+            throw 'stage4_system_relay_result_invalid'
+        }
+        if ($null -eq $relayResult.exitCode) {
+            throw 'stage4_system_relay_result_invalid'
+        }
+
+        $relayOutput = [string]$relayResult.output
+        if (-not [string]::IsNullOrWhiteSpace($relayOutput)) {
+            Write-Output $relayOutput.TrimEnd()
+        }
+        if ([int]$relayResult.exitCode -ne 0) {
+            throw 'stage4_system_relay_failed'
+        }
+    }
+    finally {
+        if ($registered) {
+            Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        }
+        Remove-Item -LiteralPath $runnerPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $wrapperPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $inputPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $resultPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Assert-Administrator
+if (-not (Test-LocalSystem)) {
+    Invoke-LocalSystemRelay
+    return
+}
+Assert-LocalSystem
 $script:HelperCanonical = Resolve-CanonicalFile -Path $HelperPath
 $helperProof = Get-SignedFileProof -Path $script:HelperCanonical
 $initialService = Get-ServiceProof
