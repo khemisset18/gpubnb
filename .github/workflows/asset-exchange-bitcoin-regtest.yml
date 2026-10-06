@@ -73,10 +73,3 @@ jobs:
           set -euo pipefail
           chmod +x asset-exchange/bitcoin-regtest/run-smoke.sh
           asset-exchange/bitcoin-regtest/run-smoke.sh
-
-      - name: Cross-check HTLC script with Bitcoin Core interpreter
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x asset-exchange/bitcoin-regtest/validate-htlc-vector.sh
-          asset-exchange/bitcoin-regtest/validate-htlc-vector.sh

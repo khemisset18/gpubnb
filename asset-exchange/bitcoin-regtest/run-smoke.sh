@@ -110,6 +110,9 @@ if (( restored_confirmations < 1 )); then
   exit 1
 fi
 
+BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
+  asset-exchange/bitcoin-regtest/validate-htlc-vector.sh
+
 echo "Bitcoin Core regtest isolation/reorg smoke test passed."
 echo "txid=${txid}"
 echo "blockhash=${blockhash}"

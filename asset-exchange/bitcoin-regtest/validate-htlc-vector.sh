@@ -3,6 +3,7 @@ set -euo pipefail
 
 : "${BITCOIN_BIN_DIR:?BITCOIN_BIN_DIR required}"
 CLI="${BITCOIN_BIN_DIR}/bitcoin-cli"
+: "${BITCOIN_REGTEST_DATADIR:?BITCOIN_REGTEST_DATADIR required}"
 
 json="$(
   node --input-type=module <<'NODE'
@@ -21,7 +22,7 @@ witness_script="$(printf '%s' "${json}" | python3 -c 'import json,sys; print(jso
 script_pubkey="$(printf '%s' "${json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["scriptPubKeyHex"])')"
 witness_hash="$(printf '%s' "${json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["witnessScriptHashHex"])')"
 
-decoded="$("${CLI}" -regtest decodescript "${witness_script}")"
+decoded="$("${CLI}" -regtest -datadir="${BITCOIN_REGTEST_DATADIR}" decodescript "${witness_script}")"
 asm="$(printf '%s' "${decoded}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["asm"])')"
 
 for opcode in OP_IF OP_SHA256 OP_EQUALVERIFY OP_CHECKSIG OP_ELSE OP_CHECKLOCKTIMEVERIFY OP_DROP OP_ENDIF; do
