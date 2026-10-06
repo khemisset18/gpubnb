@@ -22,7 +22,8 @@ export function createBitcoinSettlementTerms(input) {
   invariant(input && typeof input === "object" && !Array.isArray(input), "BTC_TERMS_TYPE", "bitcoin settlement terms required");
 
   const allowed = new Set([
-    "deploymentId","tradeId","network","protocolId","protocolVersion",
+    "deploymentId","tradeId","offerHash","makerSubject","takerSubject","policyEpoch",
+    "network","protocolId","protocolVersion",
     "fundingAmountSats","secretHashHex","redeemPubkeyHex","refundPubkeyHex",
     "refundLockHeight","witnessScriptHashHex","scriptPubKeyHex",
     "requiredConfirmations","sighashType","feePolicyId","feePolicyVersion",
@@ -33,6 +34,11 @@ export function createBitcoinSettlementTerms(input) {
 
   const deploymentId = validateDeploymentId(input.deploymentId);
   invariant(typeof input.tradeId === "string" && input.tradeId.length >= 8 && input.tradeId.length <= 128, "BTC_TERMS_TRADE", "invalid tradeId");
+  const offerHash = hex64(input.offerHash, "offer hash");
+  invariant(typeof input.makerSubject === "string" && input.makerSubject.length >= 3 && input.makerSubject.length <= 256, "BTC_TERMS_MAKER", "invalid maker subject");
+  invariant(typeof input.takerSubject === "string" && input.takerSubject.length >= 3 && input.takerSubject.length <= 256, "BTC_TERMS_TAKER", "invalid taker subject");
+  invariant(input.makerSubject !== input.takerSubject, "BTC_TERMS_PARTIES", "maker and taker must be distinct");
+  invariant(Number.isSafeInteger(input.policyEpoch) && input.policyEpoch >= 0, "BTC_TERMS_EPOCH", "invalid policy epoch");
   invariant(input.network === "regtest", "BTC_TERMS_NETWORK", "V1 settlement terms are regtest-only");
   invariant(input.protocolId === BTC_HTLC_PROTOCOL_ID, "BTC_TERMS_PROTOCOL", "unexpected bitcoin protocol id");
   invariant(input.protocolVersion === 1, "BTC_TERMS_PROTOCOL_VERSION", "unsupported bitcoin protocol version");
@@ -90,6 +96,10 @@ export function createBitcoinSettlementTerms(input) {
     version: 1,
     deploymentId,
     tradeId: input.tradeId,
+    offerHash,
+    makerSubject: input.makerSubject,
+    takerSubject: input.takerSubject,
+    policyEpoch: input.policyEpoch,
     network: "regtest",
     protocolId: BTC_HTLC_PROTOCOL_ID,
     protocolVersion: 1,
@@ -124,6 +134,10 @@ export function bitcoinSettlementTermsDigestHex(termsInput) {
     ? createBitcoinSettlementTerms({
         deploymentId: termsInput.deploymentId,
         tradeId: termsInput.tradeId,
+        offerHash: termsInput.offerHash,
+        makerSubject: termsInput.makerSubject,
+        takerSubject: termsInput.takerSubject,
+        policyEpoch: termsInput.policyEpoch,
         network: termsInput.network,
         protocolId: termsInput.protocolId,
         protocolVersion: termsInput.protocolVersion,

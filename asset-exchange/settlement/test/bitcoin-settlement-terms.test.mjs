@@ -53,6 +53,10 @@ const built = buildBitcoinHtlcV1({
 const base = {
   deploymentId: "ae-test-01",
   tradeId: "trade-00000001",
+  offerHash: "aa".repeat(32),
+  makerSubject: "maker:test:001",
+  takerSubject: "taker:test:001",
+  policyEpoch: 7,
   network: "regtest",
   protocolId: "GPUBNB-ASSET-EXCHANGE-BTC-P2WSH-HTLC-V1",
   protocolVersion: 1,
@@ -153,6 +157,10 @@ test("settlement digest binds every economic, script, and timeout-critical field
       }
     },
     { feePolicyVersion: 2 },
+    { offerHash: "bb".repeat(32) },
+    { makerSubject: "maker:test:002" },
+    { takerSubject: "taker:test:002" },
+    { policyEpoch: 8 },
     { deploymentId: "ae-test-02" },
     { tradeId: "trade-00000002" }
   ];
@@ -205,4 +213,12 @@ test("V1 terms refuse non-regtest, alternate sighash and invalid amounts", () =>
 test("normalized terms round-trip to same digest", () => {
   const normalized = createBitcoinSettlementTerms(base);
   assert.equal(bitcoinSettlementTermsDigestHex(normalized), bitcoinSettlementTermsDigestHex(base));
+});
+
+
+test("settlement terms bind accepted-trade lineage and distinct parties", () => {
+  assert.throws(() => createBitcoinSettlementTerms({ ...base, offerHash: "00" }));
+  assert.throws(() => createBitcoinSettlementTerms({ ...base, makerSubject: "" }));
+  assert.throws(() => createBitcoinSettlementTerms({ ...base, takerSubject: base.makerSubject }));
+  assert.throws(() => createBitcoinSettlementTerms({ ...base, policyEpoch: -1 }));
 });

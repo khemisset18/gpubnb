@@ -262,6 +262,10 @@ If a confirmed spend is reorged:
 
 Bitcoin settlement terms MUST bind at least:
 
+- deployment id and trade id;
+- accepted offer hash;
+- maker subject and taker subject;
+- policy epoch;
 - protocol id/version;
 - Bitcoin network;
 - witness script hash;
@@ -278,7 +282,7 @@ Bitcoin settlement terms MUST bind at least:
 - deployment id;
 - trade id.
 
-Changing any field requires a new signed settlement agreement.
+Changing any field — including party identity, accepted offer hash or policy epoch — requires a new signed settlement agreement.
 
 ## 15. Explicit exclusions
 
