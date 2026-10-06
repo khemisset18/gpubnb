@@ -13,11 +13,15 @@ function hashHex(value) {
 export function createFeePolicyAdminIntent(input) {
   invariant(input && typeof input === "object" && !Array.isArray(input), "ADMIN_INTENT_TYPE", "admin intent required");
   const allowed = new Set([
+    "domain","version","action",
     "deploymentId","actorSubject","currentMode","currentPolicyEpoch","currentConfigHash",
     "policy","challengeId","issuedAtUnixMs","expiresAtUnixMs"
   ]);
   for (const key of Object.keys(input)) invariant(allowed.has(key), "ADMIN_INTENT_UNKNOWN_FIELD", `unknown admin intent field: ${key}`);
 
+  if (input.domain !== undefined) invariant(input.domain === ADMIN_DOMAIN, "ADMIN_DOMAIN", "invalid admin domain");
+  if (input.version !== undefined) invariant(input.version === 1, "ADMIN_VERSION", "unsupported admin version");
+  if (input.action !== undefined) invariant(input.action === "ACTIVATE_FEE_POLICY", "ADMIN_ACTION", "unsupported admin action");
   const deploymentId = validateDeploymentId(input.deploymentId);
   invariant(typeof input.actorSubject === "string" && input.actorSubject.length >= 3 && input.actorSubject.length <= 256, "ADMIN_ACTOR", "invalid admin actor");
   invariant(["CONFORMITE","SOUVERAIN"].includes(input.currentMode), "ADMIN_MODE", "fee changes unavailable during transition");
