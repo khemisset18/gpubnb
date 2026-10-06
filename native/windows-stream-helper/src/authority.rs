@@ -503,11 +503,9 @@ pub fn suspend_session(session_id: &str) -> Result<(), AuthorityError> {
         "ERR|degraded" => Err(AuthorityError::Degraded),
         _ => {
             if let Some(code) = response.strip_prefix("ERR|degraded|") {
-                return Err(
-                    bounded_runtime_failure_code(code)
-                        .map(AuthorityError::RuntimeFailure)
-                        .unwrap_or(AuthorityError::ControlProtocol),
-                );
+                return Err(bounded_runtime_failure_code(code)
+                    .map(AuthorityError::RuntimeFailure)
+                    .unwrap_or(AuthorityError::ControlProtocol));
             }
             Err(AuthorityError::ControlProtocol)
         }
@@ -573,11 +571,9 @@ pub fn stop_session(session_id: &str) -> Result<(), AuthorityError> {
         "ERR|stop_failed" => Err(AuthorityError::Stop),
         _ => {
             if let Some(code) = response.strip_prefix("ERR|stop_failed|") {
-                return Err(
-                    bounded_runtime_failure_code(code)
-                        .map(AuthorityError::RuntimeFailure)
-                        .unwrap_or(AuthorityError::ControlProtocol),
-                );
+                return Err(bounded_runtime_failure_code(code)
+                    .map(AuthorityError::RuntimeFailure)
+                    .unwrap_or(AuthorityError::ControlProtocol));
             }
             Err(AuthorityError::ControlProtocol)
         }
@@ -620,7 +616,9 @@ fn stop_owned_runtime(
     runtime: &Arc<Mutex<Option<QualifiedGraphicsRuntime>>>,
 ) -> Result<(), ServiceRuntimeError> {
     let owned = {
-        let mut guard = runtime.lock().map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
+        let mut guard = runtime
+            .lock()
+            .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
         guard.take()
     };
     match owned {
@@ -745,10 +743,11 @@ pub fn run_authority_child(
                 "STOP" => {
                     endpoint_alive.store(false, Ordering::SeqCst);
                     exit_after_response = true;
-                    let prior_failure = runtime
-                        .lock()
-                        .ok()
-                        .and_then(|guard| guard.as_ref().and_then(QualifiedGraphicsRuntime::failure_code));
+                    let prior_failure = runtime.lock().ok().and_then(|guard| {
+                        guard
+                            .as_ref()
+                            .and_then(QualifiedGraphicsRuntime::failure_code)
+                    });
                     let runtime_stop = stop_owned_runtime(&runtime);
                     let media_stopped = media_thread
                         .take()

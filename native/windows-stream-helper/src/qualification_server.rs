@@ -47,13 +47,8 @@ fn local_upgrade_rejection_status(error: LocalMediaUpgradeError) -> &'static str
     }
 }
 
-fn write_local_upgrade_rejection(
-    stream: &mut TcpStream,
-    status: &'static str,
-) {
-    let response = format!(
-        "HTTP/1.1 {status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
-    );
+fn write_local_upgrade_rejection(stream: &mut TcpStream, status: &'static str) {
+    let response = format!("HTTP/1.1 {status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
     let _ = stream.write_all(response.as_bytes());
 }
 
@@ -323,9 +318,7 @@ impl QualificationMediaServer {
                     if runtime
                         .lock()
                         .ok()
-                        .and_then(|guard| {
-                            guard.as_ref().map(QualifiedGraphicsRuntime::suspended)
-                        })
+                        .and_then(|guard| guard.as_ref().map(QualifiedGraphicsRuntime::suspended))
                         .unwrap_or(false) =>
                 {
                     continue;
@@ -374,17 +367,17 @@ impl QualificationMediaServer {
                 .ok_or(QualificationMediaServerError::Upgrade)?;
             (media_token, active.stream_epoch())
         };
-        let upgrade = match authenticate_local_media_upgrade(&request, &self.session_id, &media_token)
-        {
-            Ok(upgrade) => upgrade,
-            Err(error) => {
-                write_local_upgrade_rejection(
-                    &mut stream,
-                    local_upgrade_rejection_status(error),
-                );
-                return Err(QualificationMediaServerError::Upgrade);
-            }
-        };
+        let upgrade =
+            match authenticate_local_media_upgrade(&request, &self.session_id, &media_token) {
+                Ok(upgrade) => upgrade,
+                Err(error) => {
+                    write_local_upgrade_rejection(
+                        &mut stream,
+                        local_upgrade_rejection_status(error),
+                    );
+                    return Err(QualificationMediaServerError::Upgrade);
+                }
+            };
         let accept = websocket_accept_value(&upgrade.websocket_key);
         let response = format!(
             "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
@@ -426,17 +419,17 @@ impl QualificationMediaServer {
                 return Err(error);
             }
         };
-        let upgrade = match authenticate_local_media_upgrade(&request, &self.session_id, media_token)
-        {
-            Ok(upgrade) => upgrade,
-            Err(error) => {
-                write_local_upgrade_rejection(
-                    &mut stream,
-                    local_upgrade_rejection_status(error),
-                );
-                return Err(QualificationMediaServerError::Upgrade);
-            }
-        };
+        let upgrade =
+            match authenticate_local_media_upgrade(&request, &self.session_id, media_token) {
+                Ok(upgrade) => upgrade,
+                Err(error) => {
+                    write_local_upgrade_rejection(
+                        &mut stream,
+                        local_upgrade_rejection_status(error),
+                    );
+                    return Err(QualificationMediaServerError::Upgrade);
+                }
+            };
         let accept = websocket_accept_value(&upgrade.websocket_key);
         let response = format!(
             "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
@@ -596,9 +589,7 @@ fn read_websocket_client_frame<R: Read>(
 fn peer_disconnect_error(kind: ErrorKind) -> bool {
     matches!(
         kind,
-        ErrorKind::ConnectionReset
-            | ErrorKind::ConnectionAborted
-            | ErrorKind::NotConnected
+        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::NotConnected
     )
 }
 
@@ -825,10 +816,7 @@ mod tests {
         thread::sleep(Duration::from_millis(25));
         running.store(false, Ordering::SeqCst);
 
-        assert_eq!(
-            handle.join().expect("media thread"),
-            Ok(())
-        );
+        assert_eq!(handle.join().expect("media thread"), Ok(()));
     }
 
     #[test]
