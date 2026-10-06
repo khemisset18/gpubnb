@@ -1,0 +1,67 @@
+name: Asset Exchange G5 Foundation
+
+on:
+  push:
+    branches:
+      - asset-exchange/secure-foundation-v1
+    paths:
+      - 'asset-exchange/**'
+      - '.github/workflows/asset-exchange-foundation.yml'
+  pull_request:
+    paths:
+      - 'asset-exchange/**'
+      - '.github/workflows/asset-exchange-foundation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: asset-exchange-foundation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Zero-dependency domain safety tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          check-latest: false
+
+      - name: Verify runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          npm --version
+
+      - name: Syntax check
+        working-directory: asset-exchange
+        run: npm run check
+
+      - name: Domain safety tests
+        working-directory: asset-exchange
+        run: npm test
+
+      - name: Assert isolation boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'from .*(apps/api|schema\.prisma)|require\(.*(apps/api|schema\.prisma)' asset-exchange --include='*.mjs' --include='*.js'; then
+            echo 'Forbidden Core import detected'
+            exit 1
+          fi
+          if grep -RInE '(DATABASE_URL|REDIS_URL|PRIVATE_KEY|SEED_PHRASE)' asset-exchange/core asset-exchange/api asset-exchange/worker --include='*.mjs' --include='*.js'; then
+            echo 'Forbidden secret/infrastructure coupling detected in G5 foundation'
+            exit 1
+          fi
