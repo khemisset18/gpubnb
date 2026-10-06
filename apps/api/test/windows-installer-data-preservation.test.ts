@@ -52,3 +52,14 @@ test('uninstall removes the service while persistent data deletion remains a sep
 test('installer never changes the owner Windows power plan', () => {
   assert.doesNotMatch(source, /powercfg/i);
 });
+
+test('hung-service fallback targets only the SCM-owned Agent PID after executable-path verification', () => {
+  assert.doesNotMatch(source, /taskkill\.exe[^\r\n]*\/IM\s+gpubnb-agent\.exe/i);
+  assert.match(source, /Get-CimInstance Win32_Service -Filter 'Name=''GPUbnbAgent'''/);
+  assert.match(source, /\$\$servicePid = \[uint32\]\$\$service\.ProcessId/);
+  assert.match(source, /Get-CimInstance Win32_Process -Filter \$\$processFilter/);
+  assert.match(source, /\$\$process\.ExecutablePath/);
+  assert.match(source, /service\/process executable mismatch/);
+  assert.match(source, /Stop-Process -Id \$\$servicePid -Force/);
+  assert.doesNotMatch(source, /Get-CimInstance Win32_Process\s*(?:\r?\n|\|)/, 'process enumeration must stay PID-filtered');
+});
