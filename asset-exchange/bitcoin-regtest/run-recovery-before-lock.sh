@@ -70,9 +70,9 @@ funding_psbt="$(printf '%s' "${funded}" | python3 -c 'import json,sys; print(jso
 # Stable outpoint requirement: every funding input in this proof must be native
 # SegWit so witness signatures cannot mutate the txid.
 funding_psbt_decoded="$("${CLI[@]}" decodepsbt "${funding_psbt}")"
-python3 - "${funding_psbt_decoded}" <<'PY'
+printf '%s' "${funding_psbt_decoded}" | python3 -c '
 import json, sys
-data=json.loads(sys.argv[1])
+data=json.load(sys.stdin)
 if not data["inputs"]:
     raise SystemExit("funding PSBT has no inputs")
 for i, inp in enumerate(data["inputs"]):
@@ -82,7 +82,7 @@ for i, inp in enumerate(data["inputs"]):
     typ=utxo["scriptPubKey"].get("type")
     if typ not in {"witness_v0_keyhash","witness_v0_scripthash","witness_v1_taproot"}:
         raise SystemExit(f"funding input {i} is not native SegWit: {typ}")
-PY
+'
 
 signed_funding="$("${WCLI[@]}" walletprocesspsbt "${funding_psbt}" true ALL true true)"
 funding_complete="$(printf '%s' "${signed_funding}" | python3 -c 'import json,sys; print("yes" if json.load(sys.stdin).get("complete") else "no")')"
@@ -136,18 +136,18 @@ refund_psbt="$(
 )"
 
 decoded_refund_psbt="$("${CLI[@]}" decodepsbt "${refund_psbt}")"
-python3 - "${decoded_refund_psbt}" "${script_pubkey}" <<'PY'
+printf '%s' "${decoded_refund_psbt}" | python3 -c '
 from decimal import Decimal
 import json, sys
-inp=json.loads(sys.argv[1])["inputs"][0]
+inp=json.load(sys.stdin)["inputs"][0]
 utxo=inp.get("witness_utxo")
 if not utxo:
     raise SystemExit("offline refund PSBT missing witness_utxo")
 if Decimal(str(utxo["amount"])) != Decimal("0.01000000"):
     raise SystemExit("offline refund witness_utxo amount mismatch")
-if utxo["scriptPubKey"]["hex"] != sys.argv[2]:
+if utxo["scriptPubKey"]["hex"] != sys.argv[1]:
     raise SystemExit("offline refund witness_utxo script mismatch")
-PY
+' "${script_pubkey}"
 
 private_descriptor="wsh(or_i(and_v(v:sha256(${secret_hash}),pk(${REDEEM_WIF})),and_v(v:after(${refund_lock_height}),pk(${REFUND_WIF}))))"
 descriptors_json="$(python3 - "${private_descriptor}" <<'PY'
