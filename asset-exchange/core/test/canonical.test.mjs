@@ -14,17 +14,11 @@ test("canonical object sorting follows RFC 8785 UTF-16 ordering", () => {
   };
 
   const serialized = stableStringify(input);
-  const keys = Object.keys(JSON.parse(serialized));
 
-  assert.deepEqual(keys, [
-    "\r",
-    "1",
-    "\u0080",
-    "\u00f6",
-    "\u20ac",
-    "\ud83d\ude00",
-    "\ufb33"
-  ]);
+  assert.equal(
+    serialized,
+    '{"\\r":"carriage-return","1":"one","":"control","ö":"latin","€":"euro","😀":"emoji","דּ":"hebrew"}'
+  );
 });
 
 test("canonical serialization is recursive and preserves array order", () => {
