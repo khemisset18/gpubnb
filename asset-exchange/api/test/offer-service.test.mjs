@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { createUnsignedOffer, offerDigestHex } from "../../core/src/index.mjs";
 import { createOfferService } from "../src/offer-service.mjs";
 
-const actorMaker = { subject: "maker:test:001", sessionId: "session-maker-001", authnMethod: "EXCHANGE_SESSION" };\nconst fixtureRequestId = (label) => `fixture-${label}-request-0001`;
+const actorMaker = { subject: "maker:test:001", sessionId: "session-maker-001", authnMethod: "EXCHANGE_SESSION" };
+const fixtureRequestId = (label) => `fixture-${label}-request-0001`;
 const actorTaker = { subject: "taker:test:001", sessionId: "session-taker-001", authnMethod: "EXCHANGE_SESSION" };
 
 const rawOffer = {

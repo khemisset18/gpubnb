@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createPostgresOfferRepository, withTransaction } from "../src/postgres-offer-repository.mjs";
-import { createUnsignedOffer, createAcceptance, offerDigestHex, acceptanceDigestHex } from "../../core/src/index.mjs";\n\nconst fixtureRequestId = (label) => `fixture-${label}-request-0001`;
+import { createUnsignedOffer, createAcceptance, offerDigestHex, acceptanceDigestHex } from "../../core/src/index.mjs";
+
+const fixtureRequestId = (label) => `fixture-${label}-request-0001`;
 
 function fakePool(script = []) {
   const calls = [];

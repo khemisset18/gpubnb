@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCommandEnvelope, assertCommandEpoch, commandClass } from "../src/command-envelope.mjs";\n\nconst fixtureRequestId = (label) => `fixture-${label}-request-0001`;
+import { createCommandEnvelope, assertCommandEpoch, commandClass } from "../src/command-envelope.mjs";
+
+const fixtureRequestId = (label) => `fixture-${label}-request-0001`;
 
 const base = {
   commandId: "command-00000001",
