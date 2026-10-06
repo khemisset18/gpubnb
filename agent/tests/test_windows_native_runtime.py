@@ -865,6 +865,59 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
         self.assertEqual(results, [True, True])
         self.assertEqual(call_count, 2)
 
+    def test_gateway_runtime_missing_cleanup_still_requires_idempotent_helper_stop(self):
+        supervisor = object.__new__(gateway_v10.GatewaySupervisor)
+        supervisor._native_lock = threading.RLock()
+        supervisor.native_runtimes = {}
+        supervisor._native_blocked = set()
+        supervisor.usage_last_report = {"sess-1": 10.0}
+        supervisor._close_session_channels = Mock()
+        supervisor._release_native_claims = Mock(return_value=True)
+        supervisor._trace = Mock()
+
+        with patch.object(
+            gateway_v10,
+            "stop_windows_native_workspace",
+            return_value=None,
+        ) as stop:
+            cleaned = gateway_v10.GatewaySupervisor._stop_native_runtime(
+                supervisor, "sess-1"
+            )
+
+        self.assertTrue(cleaned)
+        stop.assert_called_once_with("sess-1")
+        supervisor._release_native_claims.assert_called_once_with("sess-1")
+        supervisor._close_session_channels.assert_called_once_with("sess-1")
+        self.assertNotIn("sess-1", supervisor._native_blocked)
+
+    def test_gateway_running_session_without_runtime_fails_closed_instead_of_restarting(self):
+        supervisor = object.__new__(gateway_v10.GatewaySupervisor)
+        supervisor._native_lock = threading.RLock()
+        supervisor._native_desired_sessions = [{
+            "id": "sess-1",
+            "status": "RUNNING",
+            "workspaceSlug": "cloud-desktop",
+            "connectionMetadata": {},
+            "expiresAt": "2099-01-01T00:00:00Z",
+        }]
+        supervisor.native_runtimes = {}
+        supervisor._native_blocked = set()
+        supervisor.start_retry_at = {}
+        supervisor.start_failures = {}
+        supervisor._report_error = Mock()
+        supervisor._native_stop_and_report = Mock(return_value=True)
+        supervisor._start_native_runtime = Mock()
+        supervisor._expired = Mock(return_value=False)
+
+        gateway_v10.GatewaySupervisor._reconcile_native_sessions(supervisor)
+
+        supervisor._native_stop_and_report.assert_called_once_with("sess-1")
+        supervisor._start_native_runtime.assert_not_called()
+        self.assertEqual(
+            str(supervisor._report_error.call_args.args[0]),
+            "windows_native_running_state_lost",
+        )
+
     def test_stop_requires_helper_confirmation_for_exact_session(self):
         with (
             patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
