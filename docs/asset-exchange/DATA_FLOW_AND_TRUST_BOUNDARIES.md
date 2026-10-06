@@ -5,7 +5,7 @@ Status: WORKING DRAFT / PRE-DEVELOPMENT / NO REAL FUNDS
 ## 1. Purpose
 
 This document defines the initial data-flow model, trust boundaries, failure isolation rules and
-allowed integration surfaces for the GPUbnb Asset Exchange ("P2P Market").
+allowed integration surfaces for the GPUbnb Asset Exchange, branded "gpu.k.p2p" in the user interface.
 
 It is a security architecture document. It does not authorize real-funds settlement.
 
