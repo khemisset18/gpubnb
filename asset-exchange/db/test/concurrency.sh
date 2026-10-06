@@ -37,8 +37,8 @@ reset_fixture
 (
   cat <<'SQL' | psql_ci >/tmp/ae-accept-winner.log 2>&1
 BEGIN;
-SELECT offer_id FROM asset_exchange.offers
-WHERE offer_id = 'offer-00000001'
+SELECT singleton FROM asset_exchange.operator_state
+WHERE singleton = TRUE
 FOR UPDATE;
 SELECT pg_sleep(1);
 SELECT * FROM asset_exchange.accept_offer_atomic(

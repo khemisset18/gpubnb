@@ -66,9 +66,9 @@ BEGIN
       USING ERRCODE = '55000';
   END IF;
 
-  SELECT * INTO v_offer
-  FROM asset_exchange.offers
-  WHERE offer_id = p_offer_id
+  SELECT o.* INTO v_offer
+  FROM asset_exchange.offers AS o
+  WHERE o.offer_id = p_offer_id
   FOR UPDATE;
 
   IF NOT FOUND THEN
@@ -230,11 +230,11 @@ BEGIN
     RAISE EXCEPTION 'offer is not open' USING ERRCODE = '55000';
   END IF;
 
-  UPDATE asset_exchange.offers
+  UPDATE asset_exchange.offers AS o
   SET state = 'CANCELLED',
       cancelled_at = clock_timestamp()
-  WHERE offer_id = p_offer_id
-    AND state = 'OPEN';
+  WHERE o.offer_id = p_offer_id
+    AND o.state = 'OPEN';
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'offer lost cancellation race' USING ERRCODE = '40001';
