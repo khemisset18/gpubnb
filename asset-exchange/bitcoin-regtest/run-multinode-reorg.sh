@@ -119,7 +119,16 @@ if [[ "$(acli getconnectioncount)" != "0" || "$(bcli getconnectioncount)" != "0"
   exit 1
 fi
 
+losing_destination="$(awcli getnewaddress "losing-fork-tx" bech32)"
+losing_txid="$(awcli sendtoaddress "${losing_destination}" 1.00000000)"
+
 acli generatetoaddress 2 "${a_addr}" >/dev/null
+losing_conf_before="$(awcli gettransaction "${losing_txid}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["confirmations"])')"
+if (( losing_conf_before < 1 )); then
+  echo "ERROR: losing-fork transaction did not confirm before partition reorg"
+  exit 1
+fi
+
 bcli generatetoaddress 4 "${b_addr}" >/dev/null
 
 a_height="$(acli getblockcount)"
@@ -186,8 +195,42 @@ const result = tipEvidenceConsistency([a,b]);
 if (result !== "CONSISTENT") throw new Error(`expected CONSISTENT after convergence, got ${result}`);
 NODE
 
+losing_conf_after="$(awcli gettransaction "${losing_txid}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["confirmations"])')"
+if (( losing_conf_after != 0 )); then
+  echo "ERROR: losing-fork transaction should return to zero confirmations after reorg, got ${losing_conf_after}"
+  exit 1
+fi
+
+acli getmempoolentry "${losing_txid}" >/dev/null
+
+for _ in $(seq 1 100); do
+  if bcli getmempoolentry "${losing_txid}" >/dev/null 2>&1; then break; fi
+  sleep 0.1
+done
+if ! bcli getmempoolentry "${losing_txid}" >/dev/null 2>&1; then
+  echo "ERROR: reorged transaction was not relayed to winning node mempool"
+  exit 1
+fi
+
+reconfirm_block="$(bcli generatetoaddress 1 "${b_addr}" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0])')"
+for _ in $(seq 1 100); do
+  reconf="$(awcli gettransaction "${losing_txid}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["confirmations"])')"
+  (( reconf >= 1 )) && break
+  sleep 0.1
+done
+reconf="$(awcli gettransaction "${losing_txid}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["confirmations"])')"
+if (( reconf < 1 )); then
+  echo "ERROR: losing-fork transaction did not reconfirm on winning chain"
+  exit 1
+fi
+
 echo "Bitcoin two-node conflicting-tip/reorg test passed."
 echo "partition_tip_a=${a_tip}"
 echo "partition_tip_b=${b_tip}"
 echo "converged_tip=${final_a}"
 echo "converged_height=${final_height_a}"
+echo "losing_fork_txid=${losing_txid}"
+echo "losing_fork_confirmations_before=${losing_conf_before}"
+echo "losing_fork_confirmations_after_reorg=${losing_conf_after}"
+echo "losing_fork_reconfirmed=${reconf}"
+echo "reconfirm_block=${reconfirm_block}"
