@@ -59,6 +59,7 @@ jobs:
           cd "${FORMAL_DIR}"
           java -cp "${RUNNER_TEMP}/tlaplus/tla2tools.jar" tla2sany.SANY AssetExchangeV1.tla 2>&1 | tee sany.log
           java -cp "${RUNNER_TEMP}/tlaplus/tla2tools.jar" tla2sany.SANY AssetExchangeFaultsV1.tla 2>&1 | tee sany-faults.log
+          java -cp "${RUNNER_TEMP}/tlaplus/tla2tools.jar" tla2sany.SANY AssetExchangeSpendRaceV1.tla 2>&1 | tee sany-spend-race.log
 
       - name: Run TLC safety and liveness scenarios
         shell: bash
@@ -70,6 +71,8 @@ jobs:
           "${FORMAL_DIR}/run-tlc.sh"
           chmod +x "${FORMAL_DIR}/run-faults-tlc.sh"
           "${FORMAL_DIR}/run-faults-tlc.sh"
+          chmod +x "${FORMAL_DIR}/run-spend-race-tlc.sh"
+          "${FORMAL_DIR}/run-spend-race-tlc.sh"
 
       - name: Build evidence manifest
         if: always()
@@ -94,6 +97,10 @@ jobs:
             sha256sum "${FORMAL_DIR}/AssetExchangeFaultsV1.cfg"
             sha256sum "${FORMAL_DIR}/AssetExchangeFaultsV1.crash.cfg"
             sha256sum "${FORMAL_DIR}/run-faults-tlc.sh"
+            sha256sum "${FORMAL_DIR}/AssetExchangeSpendRaceV1.tla"
+            sha256sum "${FORMAL_DIR}/AssetExchangeSpendRaceV1.cfg"
+            sha256sum "${FORMAL_DIR}/AssetExchangeSpendRaceV1.race.cfg"
+            sha256sum "${FORMAL_DIR}/run-spend-race-tlc.sh"
           } > "${FORMAL_DIR}/evidence-manifest.txt"
 
       - name: Upload formal verification evidence
@@ -104,6 +111,7 @@ jobs:
           path: |
             docs/asset-exchange/formal/sany.log
             docs/asset-exchange/formal/sany-faults.log
+            docs/asset-exchange/formal/sany-spend-race.log
             docs/asset-exchange/formal/evidence-manifest.txt
             docs/asset-exchange/formal/evidence/*.log
           if-no-files-found: warn
