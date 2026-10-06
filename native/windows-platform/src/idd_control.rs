@@ -12,8 +12,10 @@ pub const IDD_CONTROL_REQUEST_SIZE: usize = 64;
 // Explicit mutation gate mirrored from the UMDF driver. Physical qualification
 // and Stage 4 release-candidate builds are distinct authorities; both default
 // off and neither changes public bookability on its own.
-pub const IDD_MONITOR_MUTATION_ENABLED: bool =
-    cfg!(any(feature = "physical-qualification", feature = "release-candidate"));
+pub const IDD_MONITOR_MUTATION_ENABLED: bool = cfg!(any(
+    feature = "physical-qualification",
+    feature = "release-candidate"
+));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
