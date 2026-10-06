@@ -6,10 +6,12 @@ on:
       - asset-exchange/secure-foundation-v1
     paths:
       - 'asset-exchange/bitcoin-regtest/**'
+      - 'asset-exchange/settlement/**'
       - '.github/workflows/asset-exchange-bitcoin-regtest.yml'
   pull_request:
     paths:
       - 'asset-exchange/bitcoin-regtest/**'
+      - 'asset-exchange/settlement/**'
       - '.github/workflows/asset-exchange-bitcoin-regtest.yml'
   workflow_dispatch:
 
@@ -71,3 +73,10 @@ jobs:
           set -euo pipefail
           chmod +x asset-exchange/bitcoin-regtest/run-smoke.sh
           asset-exchange/bitcoin-regtest/run-smoke.sh
+
+      - name: Cross-check HTLC script with Bitcoin Core interpreter
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x asset-exchange/bitcoin-regtest/validate-htlc-vector.sh
+          asset-exchange/bitcoin-regtest/validate-htlc-vector.sh
