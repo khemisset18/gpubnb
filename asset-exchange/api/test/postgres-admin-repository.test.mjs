@@ -37,6 +37,8 @@ test("admin repository parameterizes fee activation and transaction", async () =
   const q = calls.find((x) => typeof x === "object" && x.text.includes("activate_fee_policy_atomic"));
   assert.equal(q.values[0], "ae-test-01");
   assert.equal(q.values[7], 75);
+  assert.equal(q.values.length, 16);
+  assert.match(q.text, /\$16/);
   assert.equal(calls.at(-2), "COMMIT");
   assert.equal(calls.at(-1), "RELEASE");
 });
