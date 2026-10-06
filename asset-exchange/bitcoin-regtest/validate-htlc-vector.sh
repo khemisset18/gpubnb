@@ -5,13 +5,35 @@ set -euo pipefail
 CLI="${BITCOIN_BIN_DIR}/bitcoin-cli"
 : "${BITCOIN_REGTEST_DATADIR:?BITCOIN_REGTEST_DATADIR required}"
 
+REDEEM_WIF='cUeKHd5orzT3mz8P9pxyREHfsWtVfgsfDjiZZBcjUBAaGk1BTj7N'
+REFUND_WIF='cVKpPfVKSJxKqVpE9awvXNWuLHCa5j5tiE7K6zbUSptFpTEtiFrA'
+
+pubkey_from_wif() {
+  local wif="$1"
+  local info desc
+  info="$("${CLI}" -regtest -datadir="${BITCOIN_REGTEST_DATADIR}" getdescriptorinfo "pk(${wif})")"
+  desc="$(printf '%s' "${info}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["descriptor"])')"
+  python3 - "${desc}" <<'PY'
+import re, sys
+m = re.search(r'pk\(([0-9a-fA-F]{66})\)', sys.argv[1])
+if not m:
+    raise SystemExit("unable to derive compressed pubkey from descriptor")
+print(m.group(1).lower())
+PY
+}
+
+redeem_pubkey="$(pubkey_from_wif "${REDEEM_WIF}")"
+refund_pubkey="$(pubkey_from_wif "${REFUND_WIF}")"
+secret_hash="$(printf '33%.0s' {1..32})"
+
 json="$(
+  REDEEM_PUBKEY="${redeem_pubkey}" REFUND_PUBKEY="${refund_pubkey}" SECRET_HASH="${secret_hash}" \
   node --input-type=module <<'NODE'
 import { buildBitcoinHtlcV1 } from "./asset-exchange/settlement/src/bitcoin-htlc-v1.mjs";
 const out = buildBitcoinHtlcV1({
-  secretHashHex: "33".repeat(32),
-  redeemPubkeyHex: "02" + "11".repeat(32),
-  refundPubkeyHex: "03" + "22".repeat(32),
+  secretHashHex: process.env.SECRET_HASH,
+  redeemPubkeyHex: process.env.REDEEM_PUBKEY,
+  refundPubkeyHex: process.env.REFUND_PUBKEY,
   refundLockHeight: 500
 });
 process.stdout.write(JSON.stringify(out));
@@ -39,7 +61,7 @@ if [[ "${count_checksig}" != "2" ]]; then
   exit 1
 fi
 
-canonical_miniscript="wsh(or_i(and_v(v:sha256(${secret_hash:-$(printf '33%.0s' {1..32})}),pk(02$(printf '11%.0s' {1..32}))),and_v(v:after(500),pk(03$(printf '22%.0s' {1..32})))))"
+canonical_miniscript="wsh(or_i(and_v(v:sha256(${secret_hash}),pk(${redeem_pubkey})),and_v(v:after(500),pk(${refund_pubkey}))))"
 descriptor_info="$("${CLI}" -regtest -datadir="${BITCOIN_REGTEST_DATADIR}" getdescriptorinfo "${canonical_miniscript}")"
 descriptor="$(printf '%s' "${descriptor_info}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["descriptor"])')"
 descriptor_address="$("${CLI}" -regtest -datadir="${BITCOIN_REGTEST_DATADIR}" deriveaddresses "${descriptor}" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0])')"

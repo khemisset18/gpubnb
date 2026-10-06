@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { buildBitcoinHtlcV1 } from "../src/bitcoin-htlc-v1.mjs";
 import { createBitcoinSettlementTerms, bitcoinSettlementTermsDigestHex } from "../src/bitcoin-settlement-terms.mjs";
 
-const redeem = "02" + "11".repeat(32);
-const refund = "03" + "22".repeat(32);
+const redeem = "03c150061989643d77162902b725409087959f15914649d4f06b6cc3f8c87bb238";
+const refund = "020461e6025e68bdc5a1d6730b2fb13c4c62d295f226f0c3dbd0b713530897a6b4";
 const secretHash = "33".repeat(32);
 const built = buildBitcoinHtlcV1({
   secretHashHex: secretHash,

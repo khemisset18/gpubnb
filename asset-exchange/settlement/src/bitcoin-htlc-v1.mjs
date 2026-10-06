@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, ECDH } from "node:crypto";
 import { invariant } from "../../core/src/errors.mjs";
 
 export const BTC_HTLC_PROTOCOL_ID = "GPUBNB-ASSET-EXCHANGE-BTC-P2WSH-HTLC-V1";
@@ -11,6 +11,12 @@ function hexBytes(value, expectedBytes, field) {
 function compressedPubkey(value, field) {
   const key = hexBytes(value, 33, field);
   invariant(key[0] === 0x02 || key[0] === 0x03, "BTC_HTLC_PUBKEY", `${field} must be compressed secp256k1 pubkey`);
+  try {
+    const normalized = ECDH.convertKey(key, "secp256k1", undefined, undefined, "compressed");
+    invariant(Buffer.from(normalized).equals(key), "BTC_HTLC_PUBKEY", `${field} is not canonical compressed secp256k1 point`);
+  } catch {
+    invariant(false, "BTC_HTLC_PUBKEY", `${field} is not a valid secp256k1 point`);
+  }
   return key;
 }
 

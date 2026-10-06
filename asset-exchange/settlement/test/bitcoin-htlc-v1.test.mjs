@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildBitcoinHtlcV1, encodeMinimalScriptNumber, validateRefundTransactionPolicy } from "../src/bitcoin-htlc-v1.mjs";
 
-const redeem = "02" + "11".repeat(32);
-const refund = "03" + "22".repeat(32);
+const redeem = "03c150061989643d77162902b725409087959f15914649d4f06b6cc3f8c87bb238";
+const refund = "020461e6025e68bdc5a1d6730b2fb13c4c62d295f226f0c3dbd0b713530897a6b4";
 const secretHash = "33".repeat(32);
 
 test("minimal script number encoding is deterministic at sign-bit boundaries", () => {
@@ -79,4 +79,13 @@ test("redeem branch enforces 32-byte preimage on-chain before hashing", () => {
     refundLockHeight: 500
   });
   assert.match(out.witnessScriptHex, /^6382012088a8/);
+});
+
+test("builder rejects prefix-looking bytes that are not a secp256k1 point", () => {
+  assert.throws(() => buildBitcoinHtlcV1({
+    secretHashHex: secretHash,
+    redeemPubkeyHex: "02" + "11".repeat(32),
+    refundPubkeyHex: refund,
+    refundLockHeight: 500
+  }));
 });
