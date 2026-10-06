@@ -133,7 +133,23 @@ Additional terms-immutability model evidence:
 - evidence artifact ID: 11444467368;
 - evidence ZIP SHA-256: de674e7fa53768c0733bd682e20bcd44aa570efa81a86971540e0b8b2fb0838c.
 
-G4 PASS: NO — richer composed multi-fault bounds, stronger honest-recovery composition, larger bounds and independent review remain required.
+Recovery-composition evidence at commit 6feac6056dc01afd04c831b96029d9d11001a054:
+- composed recovery safety: 282 generated / 96 distinct / depth 8 / queue 0;
+- composed outage liveness: 4 generated / 4 distinct / depth 4 / queue 0;
+- Exchange unavailable + fee collector unavailable + KYC unavailable + mode TRANSITION still preserves recovery under explicit assumptions;
+- HonestRecoveryPath: PASS within bounded model;
+- RecoveryDuringMarketplaceStop: PASS within bounded model;
+- evidence artifact ID: 11444128908;
+- evidence ZIP SHA-256: cb8ab3cb4304a3eb231144099ebc1d775b467f76d959dfa44879215919ff4acd.
+
+Expanded safety-bound evidence at commit bef36cb9f45bb130b0533d9aea39f6573d894255:
+- MaxEpoch increased from 2 to 3 without weakening invariants;
+- 521132 states generated / 46160 distinct / depth 24 / queue 0;
+- no TLC error;
+- evidence artifact ID: 11444334024;
+- evidence ZIP SHA-256: e3218b721301ee67886b2b4677ccd99c3e298827d79cdaad3293bb37e6f835dc.
+
+G4 PASS: NO — model-to-code traceability, broader composed fault bounds, further liveness assumptions review and independent formal review remain required.
 
 
 ## Initial liveness scenarios
