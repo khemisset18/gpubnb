@@ -31,7 +31,7 @@ function request(port, { path, body, cookie, csrf, origin = "https://exchange.ex
     }, (res) => {
       const chunks = [];
       res.on("data", (c) => chunks.push(c));
-      res.on("end", () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString("utf8") }));
+      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString("utf8") }));
     });
     req.on("error", reject);
     if (payload) req.write(payload);
@@ -156,5 +156,41 @@ test("mutating business routes reject untrusted or cross-site origins", async ()
     });
     assert.equal(crossSite.status, 403);
     assert.equal(calls.length, 0);
+  } finally { await new Promise((r) => server.close(r)); }
+});
+
+test("logout revokes current session and expires hardened cookie", async () => {
+  const store = createMemorySessionStore();
+  const sessionManager = createSessionManager({ store });
+  const issued = await sessionManager.issue({ subject: "maker:test:001" });
+  const cookie = issued.cookie.split(";")[0];
+  const router = createBusinessRouter({
+    sessionManager,
+    rateLimiter: createMemoryFixedWindowRateLimiter(),
+    allowedOrigins: ["https://exchange.example"],
+    offerService: {
+      async publishOffer() { throw new Error("unexpected"); },
+      async cancelOffer() { throw new Error("unexpected"); },
+      async acceptOffer() { throw new Error("unexpected"); }
+    }
+  });
+  const server = createApiServer({ businessRouter: router });
+  const port = await listen(server);
+  try {
+    const out = await request(port, {
+      path: "/v1/session/logout",
+      cookie,
+      csrf: issued.csrfToken
+    });
+    assert.equal(out.status, 200);
+    assert.match(out.headers["set-cookie"][0], /Max-Age=0/);
+
+    const after = await request(port, {
+      path: "/v1/offers",
+      cookie,
+      csrf: issued.csrfToken,
+      body: '{"offer":{},"signature":"sig"}'
+    });
+    assert.equal(after.status, 401);
   } finally { await new Promise((r) => server.close(r)); }
 });

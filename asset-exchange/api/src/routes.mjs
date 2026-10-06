@@ -26,7 +26,7 @@ export function createBusinessRouter({
   allowedOrigins,
   maxBodyBytes = 64 * 1024
 }) {
-  invariant(sessionManager && typeof sessionManager.authenticateRequest === "function" && typeof sessionManager.assertCsrf === "function", "ROUTER_SESSION", "session manager required");
+  invariant(sessionManager && typeof sessionManager.authenticateRequest === "function" && typeof sessionManager.assertCsrf === "function" && typeof sessionManager.revokeRequest === "function", "ROUTER_SESSION", "session manager required");
   invariant(offerService && typeof offerService.publishOffer === "function", "ROUTER_OFFER_SERVICE", "offer service required");
   invariant(rateLimiter && typeof rateLimiter.consume === "function", "ROUTER_RATE_LIMIT", "rate limiter required");
   invariant(Array.isArray(allowedOrigins) && allowedOrigins.length > 0, "ROUTER_ORIGINS", "allowed origins required");
@@ -38,11 +38,12 @@ export function createBusinessRouter({
 
   return async function route(req, sendJson) {
     const pathname = new URL(req.url, "http://asset-exchange.invalid").pathname;
+    const logout = req.method === "POST" && pathname === "/v1/session/logout";
     const publish = req.method === "POST" && pathname === "/v1/offers";
     const cancelMatch = req.method === "POST" && pathname.match(/^\/v1\/offers\/([^/]+)\/cancel$/);
     const acceptMatch = req.method === "POST" && pathname.match(/^\/v1\/offers\/([^/]+)\/accept$/);
 
-    if (!publish && !cancelMatch && !acceptMatch) return false;
+    if (!logout && !publish && !cancelMatch && !acceptMatch) return false;
 
     try {
       const actor = await sessionManager.authenticateRequest(req);
@@ -52,10 +53,18 @@ export function createBusinessRouter({
       invariant(fetchSite === undefined || fetchSite === "same-origin" || fetchSite === "same-site", "FETCH_SITE_FORBIDDEN", "cross-site browser request forbidden");
       await sessionManager.assertCsrf(req, actor);
 
-      const routeClass = publish ? "publish" : cancelMatch ? "cancel" : "accept";
+      const routeClass = logout ? "logout" : publish ? "publish" : cancelMatch ? "cancel" : "accept";
       const rate = await rateLimiter.consume(`${actor.subject}:${routeClass}`);
       if (!rate.allowed) {
         sendJson(429, { error: "rate_limited" }, { "retry-after": "60" });
+        return true;
+      }
+
+      if (logout) {
+        await sessionManager.revokeRequest(req);
+        sendJson(200, { status: "logged_out" }, {
+          "set-cookie": "__Host-gpubnb-ae-session=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0"
+        });
         return true;
       }
 
