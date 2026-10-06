@@ -5,7 +5,7 @@ Status: PRE-DEVELOPMENT / NO REAL FUNDS
 ## Purpose
 
 This branch contains the isolated foundation for the future GPUbnb Asset Exchange.
-The user-facing product may be branded "P2P Market", but the technical subsystem is named
+The user-facing product is branded "gpu.k.p2p", while the technical subsystem remains named
 `asset-exchange` to avoid confusion with GPUbnb's existing QUIC/serverless P2P data plane.
 
 ## Non-negotiable isolation invariants
