@@ -163,10 +163,42 @@ if [[ "${allowed}" != "yes" ]]; then
   exit 1
 fi
 
-redeem_txid="$("${CLI[@]}" sendrawtransaction "${redeem_hex}")"
+recovery_file="${BITCOIN_REGTEST_DATADIR}/htlc-redeem-signed.hex"
+umask 077
+printf '%s\n' "${redeem_hex}" > "${recovery_file}"
+
+expected_redeem_txid="$(printf '%s' "${redeem_decoded}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["txid"])')"
+
+# Simulated crash before broadcast: a fresh reconciler sees no tx and broadcasts
+# exactly the persisted signed transaction.
+first_recovery="$(asset-exchange/bitcoin-regtest/reconcile-signed-tx.sh "${recovery_file}")"
+if [[ "${first_recovery}" != "BROADCAST:${expected_redeem_txid}" ]]; then
+  echo "ERROR: pre-broadcast recovery did not broadcast expected tx"
+  echo "${first_recovery}"
+  exit 1
+fi
+
+# Simulated lost RPC response / crash after broadcast: same raw tx is reconciled
+# from mempool and rebroadcast idempotently, never reconstructed.
+second_recovery="$(asset-exchange/bitcoin-regtest/reconcile-signed-tx.sh "${recovery_file}")"
+if [[ "${second_recovery}" != "MEMPOOL:${expected_redeem_txid}" ]]; then
+  echo "ERROR: post-broadcast recovery did not recognize mempool tx"
+  echo "${second_recovery}"
+  exit 1
+fi
+redeem_txid="${expected_redeem_txid}"
+
 redeem_block="$("${CLI[@]}" generatetoaddress 1 "${mine_address}" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0])')"
-conf="$("${CLI[@]}" getrawtransaction "${redeem_txid}" true | python3 -c 'import json,sys; print(json.load(sys.stdin).get("confirmations",0))')"
+conf="$("${CLI[@]}" getrawtransaction "${redeem_txid}" true | python3 -c 'import json,sys; print(json.load(sys.stdin).get("confirmations",0))')
 if (( conf < 1 )); then echo "ERROR: redeem did not confirm"; exit 1; fi
+
+# Simulated crash after confirmation but before application state commit.
+third_recovery="$(asset-exchange/bitcoin-regtest/reconcile-signed-tx.sh "${recovery_file}")"
+if [[ "${third_recovery}" != "CONFIRMED:${redeem_txid}" ]]; then
+  echo "ERROR: confirmed transaction was not reconciled as confirmed"
+  echo "${third_recovery}"
+  exit 1
+fi
 
 "${CLI[@]}" invalidateblock "${redeem_block}"
 "${CLI[@]}" getmempoolentry "${redeem_txid}" >/dev/null
@@ -177,4 +209,5 @@ if (( restored < 1 )); then echo "ERROR: redeem confirmation not restored"; exit
 echo "HTLC redeem path regtest passed."
 echo "funding_txid=${funding_txid}"
 echo "redeem_txid=${redeem_txid}"
+echo "crash_recovery_states=BROADCAST,MEMPOOL,CONFIRMED"
 echo "refund_lock_height=${refund_lock_height}"
