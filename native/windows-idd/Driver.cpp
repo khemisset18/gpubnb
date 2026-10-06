@@ -3,14 +3,23 @@
 EXTERN_C const GUID GUID_DEVINTERFACE_GPUBNB_IDD_CONTROL =
 { 0x3f4c6f31, 0x4e7c, 0x4de7, { 0x9f, 0xd8, 0x72, 0x18, 0xb3, 0x88, 0x1a, 0x55 } };
 
-// Physical qualification gate. Keep real monitor mutation compiled so WDK/ABI
-// regressions are caught, but make it unreachable in production behavior until
-// GPUbnb explicitly promotes a physically qualified build.
+// Monitor mutation has two explicit, compile-time authorities:
+// - physical qualification: laboratory proof only;
+// - release candidate: Stage 4 failure-injection/promotion candidate only.
+// Both default off. They are mutually exclusive, cannot be toggled at runtime,
+// and neither is itself a public-bookability switch.
 #ifndef GPUBNB_PHYSICAL_QUALIFICATION_BUILD
 #define GPUBNB_PHYSICAL_QUALIFICATION_BUILD 0
 #endif
+#ifndef GPUBNB_RELEASE_CANDIDATE_BUILD
+#define GPUBNB_RELEASE_CANDIDATE_BUILD 0
+#endif
+static_assert(
+    !(GPUBNB_PHYSICAL_QUALIFICATION_BUILD == 1 && GPUBNB_RELEASE_CANDIDATE_BUILD == 1),
+    "qualification and release-candidate mutation authorities are mutually exclusive");
 static constexpr bool GPUBNB_ENABLE_MONITOR_MUTATION =
-    GPUBNB_PHYSICAL_QUALIFICATION_BUILD == 1;
+    GPUBNB_PHYSICAL_QUALIFICATION_BUILD == 1 ||
+    GPUBNB_RELEASE_CANDIDATE_BUILD == 1;
 
 static void GPUbnbFillSignalInfo(
     _Out_ DISPLAYCONFIG_VIDEO_SIGNAL_INFO* mode,
@@ -410,9 +419,9 @@ VOID GPUbnbEvtIddCxDeviceIoControl(
                     }
                     else if (!GPUBNB_ENABLE_MONITOR_MUTATION)
                     {
-                        // Fail closed before physical qualification. This gate is
-                        // compile-time false and cannot be toggled by a renter,
-                        // environment variable, registry value or API request.
+                        // Fail closed without an explicit compile-time mutation
+                        // authority. A renter, environment variable, registry
+                        // value or API request cannot enable this path.
                         status = STATUS_NOT_SUPPORTED;
                     }
                     else
