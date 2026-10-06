@@ -27,27 +27,51 @@ Examples observed in 2026:
 
 gpu.k.p2p should not copy a competitor blindly. Its security model is different because settlement is non-custodial and cross-chain.
 
-## 3. Recommended V1 pricing
+## 3. Operator-configurable pricing
+
+The owner/operator of a gpu.k.p2p deployment chooses the platform commission schedule.
+
+The software ships with conservative recommended defaults, but these values are NOT protocol constants.
+
+Recommended initial defaults:
+- fungible swaps: maker 0.00%, taker 0.35%;
+- NFT sales: seller 1.00%, buyer 0.00%.
+
+The operator may configure different percentages for its deployment, including:
+- maker fee;
+- taker fee;
+- NFT seller fee;
+- NFT buyer fee;
+- optional volume tiers;
+- optional promotional 0% periods;
+- optional minimum/maximum fee where chain economics permit.
+
+The operator UI must make the active rate explicit and versioned.
+
+Safety constraints:
+- changing a percentage affects NEW signed trades only;
+- an operator cannot retroactively change an accepted trade;
+- every rate is shown to users before signing;
+- every rate is bound into signed FeePolicy;
+- fee percentages cannot bypass dust/economic-safety checks;
+- operator configuration cannot weaken refund/redeem/recovery;
+- rate and recipient changes require strong admin authentication and audit.
 
 ### Fungible asset swaps
 
-Standard platform success fee:
-- 0.35% of the taker's received asset value.
+Recommended default:
+- maker: 0.00%;
+- taker: 0.35%.
 
-High-volume tier candidate:
-- 0.25%.
-
-Market-maker / strategic liquidity tier candidate:
-- 0.15%.
-
-Launch recommendation:
-- keep one simple public rate of 0.35% until meaningful volume exists;
-- introduce tiers only after operational data exists.
+This is a default business profile, not a mandatory value.
 
 ### NFT trades
 
-Platform fee:
-- 1.00% of successful NFT sale value.
+Recommended default:
+- seller: 1.00%;
+- buyer: 0.00%.
+
+This is a default business profile, not a mandatory value.
 
 Listing fee:
 - 0%.
@@ -74,9 +98,9 @@ Creator royalty
 Network fee
 Total received / total paid
 
-## 4. Why 0.35% for fungible swaps
+## 4. Why 0.35% remains the recommended fungible default
 
-0.35% is intended as a commercial starting point balancing:
+0.35% is only a commercial starting point balancing:
 - sustainable platform revenue;
 - lower friction than many centralized retail schedules;
 - ability to fund security/audits/infrastructure;
@@ -85,11 +109,13 @@ Total received / total paid
 
 It is not a permanent protocol constant.
 
+The deployment owner can change it through the protected admin fee-policy workflow.
+
 Fee schedules are versioned configuration and are pinned into signed trade terms.
 
-## 5. Why 1% for NFTs
+## 5. Why 1% remains the recommended NFT default
 
-A 1% NFT platform fee is:
+A 1% NFT platform fee is a recommended starting profile because it is:
 - simple;
 - competitive against current NFT marketplaces;
 - large enough to support marketplace operations;
@@ -406,7 +432,9 @@ Advantages:
 Future:
 maker rebate or lower taker fee can be introduced by volume.
 
-## 27. Recommended launch schedule
+## 27. Default deployment schedule
+
+The software may ship with the following recommended defaults:
 
 Fungible swaps:
 - Maker: 0.00%
@@ -421,7 +449,13 @@ NFT:
 Network fees:
 - paid by whoever creates/broadcasts the relevant transaction.
 
-This should be treated as a commercial starting point, not a permanent promise.
+The deployment owner can replace these percentages through the protected fee-policy configuration.
+
+The currently active percentages must always be:
+- visible to users before signature;
+- versioned;
+- included in signed terms;
+- immutable for already accepted trades.
 
 ## 28. Failed trade policy
 
@@ -478,14 +512,27 @@ For protocol designs where fee collection is optional after success:
 
 ## 33. Fee policy change
 
+The deployment owner/operator is explicitly allowed to change commission percentages.
+
 Changing rates:
 - affects new terms only;
 - version increments;
-- admin strong reauthentication;
-- audit event;
-- UI notice where appropriate.
+- requires admin strong reauthentication;
+- requires WYSIWYS review of old rate -> new rate;
+- creates an immutable audit event;
+- updates the public fee display before new users sign.
 
-Existing signed trades keep original fee policy.
+Existing signed trades keep their original fee policy.
+
+The operator may set a fee to 0% or another commercially chosen percentage, subject to configured safety bounds and applicable law.
+
+A future implementation should support configurable safety guardrails such as:
+- maximum allowed percentage;
+- change-delay for unusually large fee increases;
+- optional second approval;
+- emergency 0% mode.
+
+These guardrails protect against account compromise without removing legitimate owner control.
 
 ## 34. Fee kill switch
 
@@ -749,7 +796,9 @@ Dashboard is read-only from financial truth sources.
 
 ## 55. Business recommendation
 
-Recommended commercial launch:
+The product must be sold/configured so the site owner controls its commission schedule.
+
+Recommended factory defaults:
 
 CRYPTO / FUNGIBLE
 - maker: 0%
@@ -766,9 +815,17 @@ NFT
 - creator royalty: separate and explicitly displayed
 - network cost: separate
 
+OWNER / OPERATOR CONTROL
+- commission rates configurable from protected administration;
+- separate rates per supported trade category where useful;
+- new policy version on every change;
+- no retroactive modification of accepted trades;
+- exact active rate shown before signature;
+- fee recipient separately protected and audited.
+
 ENTERPRISE / SOUVERAIN
-- optional software/SLA/license revenue
-- configurable operator fee policy within security constraints
+- optional software/SLA/license revenue;
+- configurable operator fee policy within security constraints.
 
 ## 56. Why this model
 
