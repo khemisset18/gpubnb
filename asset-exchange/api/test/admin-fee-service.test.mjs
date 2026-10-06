@@ -33,7 +33,8 @@ test("owner can choose fee percentage within deployment safety maximum", async (
     deploymentId: "ae-test-01",
     maxOperatorRateBps: 500,
     now: () => 1000,
-    verifyStrongAdminAssertion: async () => ({ verified: true, userVerified: true, credentialId: "passkey-credential-001" })
+    verifyStrongAdminAssertion: async () => ({ verified: true, userVerified: true, credentialId: "passkey-credential-001" }),
+    authorizeAdminSubject: async ({ actorSubject }) => actorSubject === "owner:test:001"
   });
   const { intent } = await svc.createFeeChallenge({ actorSubject: "owner:test:001", proposedPolicy: policy });
   const result = await svc.activateFeePolicy({ intent, assertion: { opaque: true } });
@@ -47,7 +48,8 @@ test("fee above configured owner safety cap is rejected before challenge", async
     challengeStore: createMemoryAdminChallengeStore(),
     deploymentId: "ae-test-01",
     maxOperatorRateBps: 500,
-    verifyStrongAdminAssertion: async () => ({ verified: true, userVerified: true, credentialId: "passkey-credential-001" })
+    verifyStrongAdminAssertion: async () => ({ verified: true, userVerified: true, credentialId: "passkey-credential-001" }),
+    authorizeAdminSubject: async ({ actorSubject }) => actorSubject === "owner:test:001"
   });
   await assert.rejects(() => svc.createFeeChallenge({
     actorSubject: "owner:test:001",
@@ -63,7 +65,8 @@ test("challenge is one-time and strong user verification is mandatory", async ()
     challengeStore: challenges,
     deploymentId: "ae-test-01",
     now: () => 1000,
-    verifyStrongAdminAssertion: async () => ({ verified: true, userVerified: true, credentialId: "passkey-credential-001" })
+    verifyStrongAdminAssertion: async () => ({ verified: true, userVerified: true, credentialId: "passkey-credential-001" }),
+    authorizeAdminSubject: async ({ actorSubject }) => actorSubject === "owner:test:001"
   });
   const { intent } = await svc.createFeeChallenge({ actorSubject: "owner:test:001", proposedPolicy: policy });
   await svc.activateFeePolicy({ intent, assertion: {} });
@@ -74,8 +77,26 @@ test("challenge is one-time and strong user verification is mandatory", async ()
     challengeStore: createMemoryAdminChallengeStore(),
     deploymentId: "ae-test-01",
     now: () => 1000,
-    verifyStrongAdminAssertion: async () => ({ verified: true, userVerified: false, credentialId: "passkey-credential-001" })
+    verifyStrongAdminAssertion: async () => ({ verified: true, userVerified: false, credentialId: "passkey-credential-001" }),
+    authorizeAdminSubject: async ({ actorSubject }) => actorSubject === "owner:test:001"
   });
   const next = await weak.createFeeChallenge({ actorSubject: "owner:test:001", proposedPolicy: { ...policy, policyId: "owner-fee-v3", version: 3 } });
   await assert.rejects(() => weak.activateFeePolicy({ intent: next.intent, assertion: {} }));
+});
+
+test("strong authentication cannot replace admin authorization", async () => {
+  const repo = repository();
+  const svc = createAdminFeeService({
+    repository: repo,
+    challengeStore: createMemoryAdminChallengeStore(),
+    deploymentId: "ae-test-01",
+    verifyStrongAdminAssertion: async () => ({ verified: true, userVerified: true, credentialId: "user-passkey-001" }),
+    authorizeAdminSubject: async () => false
+  });
+
+  await assert.rejects(() => svc.createFeeChallenge({
+    actorSubject: "user:test:999",
+    proposedPolicy: policy
+  }));
+  assert.equal(repo.calls.length, 0);
 });
