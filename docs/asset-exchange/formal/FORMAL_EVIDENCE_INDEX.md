@@ -62,3 +62,35 @@ It does not yet prove:
 - production readiness.
 
 G4 therefore remains open.
+
+
+## Accepted fault-model run — 2026-10-06
+
+- Workflow: Asset Exchange Formal Verification
+- GitHub Actions run id: `37521050532`
+- Source commit: `38f5bc2665822cdf039703eb8c5f54f10f539916`
+- TLA+ tools: `1.7.4`
+- SANY main model: PASS
+- SANY fault model: PASS
+- fault-safety TLC: PASS
+- crash-recovery liveness TLC: PASS
+
+### Fault-model metrics
+
+| Scenario | Generated states | Distinct states | Depth | Result |
+|---|---:|---:|---:|---|
+| Fault safety | 2017 | 256 | 10 | PASS |
+| Crash-after-broadcast reconciliation | 3 | 3 | 3 | PASS |
+
+### Fault properties checked
+
+- durable broadcast intent precedes the modeled chain effect;
+- duplicate delivery cannot create a second modeled economic effect;
+- a result cannot be recorded before the chain effect exists;
+- replay authorization cannot authorize the other modeled trade;
+- only one trade is authorized by the modeled signed authorization;
+- an irreversible advance records that its authorizing chain evidence was CONSISTENT;
+- recovery remains enabled across modeled crash/replay/evidence faults;
+- after a crash with a durable intent and one existing chain effect, weakly fair restart/reconciliation eventually records the result without creating another effect.
+
+This is a small abstract fault model. It does not replace implementation crash/reorg tests or prove arbitrary multi-trade behavior.
