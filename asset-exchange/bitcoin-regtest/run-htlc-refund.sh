@@ -86,7 +86,9 @@ fi
 
 refund_destination="$("${WCLI[@]}" getnewaddress "htlc-refund-destination" bech32)"
 low_fee_refund_amount='0.00999800'
-high_fee_refund_amount='0.00999000'
+moderate_fee_refund_amount='0.00999000'
+strong_fee_refund_amount='0.00980000'
+child_output_amount='0.00990000'
 
 inputs_json="$(
   python3 - "${funding_txid}" "${funding_vout}" <<'PY'
@@ -177,11 +179,62 @@ fi
 original_refund_txid="$("${CLI[@]}" sendrawtransaction "${refund_hex}")"
 original_entry="$("${CLI[@]}" getmempoolentry "${original_refund_txid}")"
 
-replacement_hex="$(build_signed_refund "${high_fee_refund_amount}")"
+# Build a costly descendant from the refund output. This simulates a cluster
+# that raises the absolute fee required to replace the parent.
+original_decoded="$("${CLI[@]}" decoderawtransaction "${refund_hex}")"
+read -r original_refund_vout original_refund_value < <(
+  REFUND_JSON="${original_decoded}" python3 <<'PY'
+import json, os
+tx=json.loads(os.environ["REFUND_JSON"])
+if len(tx["vout"]) != 1:
+    raise SystemExit("expected exactly one refund output")
+v=tx["vout"][0]
+print(v["n"], format(v["value"], ".8f"))
+PY
+)
+
+child_destination="$("${WCLI[@]}" getnewaddress "refund-descendant" bech32)"
+child_inputs="$(
+  python3 - "${original_refund_txid}" "${original_refund_vout}" <<'PY'
+import json,sys
+print(json.dumps([{"txid":sys.argv[1],"vout":int(sys.argv[2]),"sequence":0xfffffffd}], separators=(",",":")))
+PY
+)"
+child_outputs="$(
+  python3 - "${child_destination}" "${child_output_amount}" <<'PY'
+import json,sys
+print(json.dumps({sys.argv[1]:float(sys.argv[2])}, separators=(",",":")))
+PY
+)"
+child_raw="$("${CLI[@]}" -named createrawtransaction inputs="${child_inputs}" outputs="${child_outputs}" locktime=0 replaceable=true version=2)"
+child_signed="$("${WCLI[@]}" signrawtransactionwithwallet "${child_raw}")"
+child_complete="$(printf '%s' "${child_signed}" | python3 -c 'import json,sys; print("yes" if json.load(sys.stdin).get("complete") else "no")')"
+if [[ "${child_complete}" != "yes" ]]; then
+  echo "ERROR: wallet could not sign adversarial refund descendant"
+  printf '%s\n' "${child_signed}"
+  exit 1
+fi
+child_hex="$(printf '%s' "${child_signed}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["hex"])')"
+child_txid="$("${CLI[@]}" sendrawtransaction "${child_hex}")"
+child_entry="$("${CLI[@]}" getmempoolentry "${child_txid}")"
+
+# A modest parent replacement is deliberately insufficient once the costly
+# descendant must also be evicted.
+moderate_hex="$(build_signed_refund "${moderate_fee_refund_amount}")"
+moderate_test="$("${CLI[@]}" testmempoolaccept "[\"${moderate_hex}\"]")"
+moderate_allowed="$(printf '%s' "${moderate_test}" | python3 -c 'import json,sys; print("yes" if json.load(sys.stdin)[0]["allowed"] else "no")')"
+if [[ "${moderate_allowed}" != "no" ]]; then
+  echo "ERROR: insufficient replacement unexpectedly evicted parent+descendant cluster"
+  exit 1
+fi
+
+# A substantially stronger replacement must pay enough absolute fee and
+# improve the mempool feerate diagram.
+replacement_hex="$(build_signed_refund "${strong_fee_refund_amount}")"
 replacement_test="$("${CLI[@]}" testmempoolaccept "[\"${replacement_hex}\"]")"
 replacement_allowed="$(printf '%s' "${replacement_test}" | python3 -c 'import json,sys; print("yes" if json.load(sys.stdin)[0]["allowed"] else "no")')"
 if [[ "${replacement_allowed}" != "yes" ]]; then
-  echo "ERROR: higher-fee refund replacement rejected"
+  echo "ERROR: strong parent replacement rejected under descendant pinning test"
   printf '%s\n' "${replacement_test}"
   exit 1
 fi
@@ -196,22 +249,33 @@ if "${CLI[@]}" getmempoolentry "${original_refund_txid}" >/dev/null 2>&1; then
   echo "ERROR: original refund remained in mempool after accepted replacement"
   exit 1
 fi
+if "${CLI[@]}" getmempoolentry "${child_txid}" >/dev/null 2>&1; then
+  echo "ERROR: descendant remained in mempool after parent replacement"
+  exit 1
+fi
 
 replacement_entry="$("${CLI[@]}" getmempoolentry "${refund_txid}")"
-python3 - "${original_entry}" "${replacement_entry}" <<'PY'
+python3 - "${original_entry}" "${child_entry}" "${replacement_entry}" <<'PY'
 from decimal import Decimal
 import json, sys
 old=json.loads(sys.argv[1])
-new=json.loads(sys.argv[2])
+child=json.loads(sys.argv[2])
+new=json.loads(sys.argv[3])
 old_fee=Decimal(str(old["fees"]["base"]))
+child_fee=Decimal(str(child["fees"]["base"]))
 new_fee=Decimal(str(new["fees"]["base"]))
 old_vsize=int(old["vsize"])
+child_vsize=int(child["vsize"])
 new_vsize=int(new["vsize"])
-if new_fee <= old_fee:
-    raise SystemExit("replacement absolute fee did not increase")
+if new_fee <= old_fee + child_fee:
+    raise SystemExit("replacement fee did not exceed evicted cluster absolute fee")
 if new_fee / new_vsize <= old_fee / old_vsize:
-    raise SystemExit("replacement feerate did not increase")
-print(f"RBF old_fee_btc={old_fee} old_vsize={old_vsize} new_fee_btc={new_fee} new_vsize={new_vsize}")
+    raise SystemExit("replacement feerate did not improve over original parent")
+print(
+    f"RBF_CLUSTER old_fee_btc={old_fee} child_fee_btc={child_fee} "
+    f"evicted_fee_btc={old_fee + child_fee} replacement_fee_btc={new_fee} "
+    f"old_vsize={old_vsize} child_vsize={child_vsize} new_vsize={new_vsize}"
+)
 PY
 
 refund_block="$("${CLI[@]}" generatetoaddress 1 "${mine_address}" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0])')"
@@ -238,5 +302,7 @@ fi
 echo "HTLC refund path regtest passed."
 echo "funding_txid=${funding_txid}"
 echo "original_refund_txid=${original_refund_txid}"
+echo "adversarial_child_txid=${child_txid}"
+echo "moderate_replacement_allowed=${moderate_allowed}"
 echo "replacement_refund_txid=${refund_txid}"
 echo "refund_lock_height=${refund_lock_height}"
