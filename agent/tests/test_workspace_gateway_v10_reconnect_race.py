@@ -5,6 +5,7 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
+from gpubnb_agent import workspace_gateway_v8 as reconnect
 from gpubnb_agent.windows_native_runtime import NativeRuntimeHandle
 from gpubnb_agent.workspace_gateway_v10 import GatewaySupervisor, NativeGatewayRuntime
 
@@ -99,6 +100,70 @@ class WindowsNativeReconnectRaceTests(unittest.TestCase):
         self.assertFalse(worker.is_alive())
         suspended_proof.assert_not_called()
         supervisor._native_stop_and_report.assert_not_called()
+
+    def test_live_usage_rechecks_state_after_suspend_transition_lock(self) -> None:
+        supervisor = make_supervisor()
+        runtime = native_runtime()
+        supervisor.native_runtimes[SESSION] = runtime
+        supervisor.usage_last_report[SESSION] = (
+            time.monotonic() - 2 * 10.0
+        )
+
+        gate = _BlockingResumeProofGate()
+        supervisor._native_resume_lock = lambda _session_id: gate  # type: ignore[method-assign]
+        supervisor._native_stop_and_report = MagicMock(return_value=True)  # type: ignore[method-assign]
+
+        with (
+            patch(
+                "gpubnb_agent.workspace_gateway_v10.windows_native_workspace_ready",
+                return_value=False,
+            ) as ready_proof,
+            patch(
+                "gpubnb_agent.workspace_gateway_v10.windows_native_workspace_suspended",
+                return_value=True,
+            ) as suspended_proof,
+        ):
+            worker = threading.Thread(
+                target=supervisor._report_native_usage,
+                args=(runtime,),
+                daemon=True,
+            )
+            worker.start()
+
+            self.assertTrue(
+                gate.entered.wait(1.0),
+                "live native usage must serialize with the SUSPEND transition",
+            )
+            supervisor._reconnect_mark_paused(SESSION)
+            gate.release.set()
+            worker.join(timeout=2.0)
+
+        self.assertFalse(worker.is_alive())
+        ready_proof.assert_not_called()
+        suspended_proof.assert_called_once_with(SESSION)
+        supervisor._native_stop_and_report.assert_not_called()
+
+    def test_native_suspend_transition_holds_usage_proof_lock(self) -> None:
+        supervisor = make_supervisor()
+        supervisor.native_runtimes[SESSION] = native_runtime()
+        transition_lock = supervisor._native_resume_lock(SESSION)
+        lock_observations: list[bool] = []
+
+        def fake_begin_reconnect_grace(_self: object, session_id: str) -> None:
+            self.assertEqual(session_id, SESSION)
+            acquired = transition_lock.acquire(blocking=False)
+            lock_observations.append(acquired)
+            if acquired:
+                transition_lock.release()
+
+        with patch.object(
+            reconnect.GatewaySupervisor,
+            "_begin_reconnect_grace",
+            new=fake_begin_reconnect_grace,
+        ):
+            supervisor._begin_reconnect_grace(SESSION)
+
+        self.assertEqual(lock_observations, [False])
 
 
 if __name__ == "__main__":
