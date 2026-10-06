@@ -1,0 +1,13 @@
+# gpu.k.p2p formal verification toolchain lock
+
+TLA2TOOLS_VERSION=1.7.4
+TLA2TOOLS_URL=https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar
+TLA2TOOLS_SHA256=936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
+
+# Upstream release SHA-1 published by TLA+:
+# bee4a54f3ee3d4afc347c3240ec2d9e93b075104
+#
+# Security rationale:
+# - v1.7.4 is a stable release that includes a fix for a multi-worker liveness-checking unsoundness.
+# - Do not replace with rolling/pre-release artifacts without security review.
+# - CI verifies SHA-256 before running the JAR.
