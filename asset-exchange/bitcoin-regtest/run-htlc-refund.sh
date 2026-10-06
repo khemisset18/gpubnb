@@ -67,10 +67,10 @@ mine_address="$("${WCLI[@]}" getnewaddress "htlc-funding-confirm" bech32)"
 
 funding_json="$("${CLI[@]}" getrawtransaction "${funding_txid}" true)"
 read -r funding_vout observed_amount observed_spk < <(
-  printf '%s' "${funding_json}" | python3 - "${script_pubkey}" <<'PY'
-import json, sys
-target = sys.argv[1]
-data = json.load(sys.stdin)
+  FUNDING_JSON="${funding_json}" SCRIPT_PUBKEY="${script_pubkey}" python3 <<'PY'
+import json, os
+target = os.environ["SCRIPT_PUBKEY"]
+data = json.loads(os.environ["FUNDING_JSON"])
 matches = [v for v in data["vout"] if v["scriptPubKey"]["hex"] == target]
 if len(matches) != 1:
     raise SystemExit(f"expected one HTLC output, found {len(matches)}")
