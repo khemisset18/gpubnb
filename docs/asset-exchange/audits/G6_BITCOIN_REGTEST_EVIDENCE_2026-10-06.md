@@ -468,7 +468,45 @@ Observed txids:
 
 This is bounded regtest evidence, not a claim that arbitrarily deep real-world reorgs are impossible or fully modeled.
 
-## 16. Security findings discovered during implementation
+
+## 16. Amount/risk-aware confirmation policy binding
+
+The Bitcoin settlement terms now bind an explicit confirmation policy instead of accepting a free-form confirmation count.
+
+Policy properties:
+- exact satoshi amount bands;
+- strictly increasing band thresholds;
+- non-decreasing confirmation requirement as amount increases;
+- explicit final catch-all band;
+- explicit LOW / STANDARD / HIGH / EXTREME risk floors;
+- non-decreasing risk floors;
+- required confirmations = max(amount-band requirement, risk-floor requirement);
+- no hidden defaults;
+- V1 remains regtest-only.
+
+The selected confirmation count must also equal `timeoutPolicy.fundingConfirmations`. A mismatch between amount/risk policy, timeout policy, or signed terms fails closed.
+
+Observed evidence:
+- source commit: `fd91b0f3110ec9f0723d6765b4ad34d6a59e571a`;
+- Asset Exchange G5 Foundation run: `37530576612` — SUCCESS;
+- Asset Exchange Bitcoin Regtest run: `37530576542` — SUCCESS.
+
+The policy module and settlement terms also bind:
+- complete confirmation policy;
+- confirmation policy hash;
+- selected risk class;
+- selected amount-band index;
+- band confirmation requirement;
+- risk-floor confirmation requirement;
+- final required confirmation count.
+
+The research basis intentionally does not encode one universal Mainnet confirmation constant. Bitcoin documentation treats higher confirmation counts as increased confidence and describes six confirmations for high-value use as a common but somewhat arbitrary convention.
+
+This closes the implementation gap where `requiredConfirmations` was not independently derived from amount and risk.
+
+It does NOT authorize the current regtest fixture thresholds for Mainnet.
+
+## 17. Security findings discovered during implementation
 
 ### G6-F001 — Preimage length initially enforced only by application
 Initial script checked SHA256 preimage equality but did not constrain the preimage byte length on-chain.
@@ -532,7 +570,7 @@ None were bypassed. Each was corrected and rerun.
 
 Disposition: FIXED.
 
-## 17. What this evidence DOES prove
+## 18. What this evidence DOES prove
 
 Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - reviewed P2WSH script and canonical Miniscript descriptor agree;
@@ -555,19 +593,20 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - a refund can execute after the wallet is unloaded;
 - the standalone recovery tool can be packaged reproducibly with deterministic SHA-256/SBOM output and signed provenance/SBOM attestations;
 - a fresh read-only consumer job can independently verify the recovery artifact checksum, SLSA provenance, and SPDX SBOM attestation against the exact repository/source commit;
-- Bitcoin Core rejects a higher-absolute-fee replacement that worsens the feerate diagram and accepts a sufficiently funded replacement that improves it.
+- Bitcoin Core rejects a higher-absolute-fee replacement that worsens the feerate diagram and accepts a sufficiently funded replacement that improves it;
+- funding confirmation count is derived fail-closed from explicit amount bands plus an explicit risk-class floor and is bound to timeout + settlement terms.
 
-## 18. What this evidence does NOT prove
+## 19. What this evidence does NOT prove
 
 STOP-SHIP remains for Mainnet until at least:
 - production timeout derivation is reviewed;
 - more complex package-RBF graph topologies and additional feerate-diagram edge cases beyond the tested cases pass;
-- hardware-wallet / external signer compatibility matrix passes;
-- controlled release/distribution policy is completed;
+- physical hardware-wallet / external signer device+firmware compatibility evidence is completed for any claimed supported device;
+- repository-level controlled release protections (environment reviewers, immutable releases, protected source/rulesets) are independently verified;
 - full product dependency/SBOM/provenance release evidence beyond the standalone recovery artifact is complete;
-- formal liveness/fairness coverage is expanded beyond the currently bounded cooperative/recovery/transition/fault scenarios;
+- richer formal liveness/fairness coverage and independent formal review are completed beyond the current bounded scenarios;
 - independent external audit/red-team is completed;
-- signet/testnet qualification passes;
+- transactional signet/testnet qualification with valueless test coins passes;
 - explicit owner authorization is given for any Mainnet canary.
 
 No Mainnet authorization.
