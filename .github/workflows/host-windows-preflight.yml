@@ -5,6 +5,7 @@ on:
     paths:
       - agent/**
       - services/edge/**
+      - scripts/build-windows-native-release-candidate.ps1
       - apps/host-desktop/**
       - Cargo.toml
       - Cargo.lock
@@ -27,6 +28,18 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+
+      - name: Parse Stage 4 native release-candidate builder
+        shell: pwsh
+        run: |
+          $source = Get-Content 'scripts/build-windows-native-release-candidate.ps1' -Raw
+          [void][scriptblock]::Create($source)
+          if ($source -notmatch "'--features', 'release-candidate'") {
+            throw 'Stage 4 native candidate builder must use the release-candidate gate.'
+          }
+          if ($source -match 'physical-qualification') {
+            throw 'Stage 4 native candidate builder must never use the physical-qualification gate.'
+          }
 
       - name: Validate language-independent installer ACLs
         shell: pwsh
