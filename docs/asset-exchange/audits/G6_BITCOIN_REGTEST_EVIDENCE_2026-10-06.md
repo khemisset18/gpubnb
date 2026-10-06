@@ -165,7 +165,44 @@ Standalone refund txid:
 
 These txids are valueless regtest evidence only.
 
-## 8. Security findings discovered during implementation
+
+## 8. Multi-node conflicting tips and losing-fork transaction recovery
+
+A separate two-node isolated regtest scenario now exercises an actual network partition.
+
+Topology:
+- node A and node B bind P2P only on loopback;
+- both begin on the same 101-block baseline;
+- the nodes disconnect completely;
+- node A extends a shorter fork;
+- node B extends a longer fork;
+- watcher tip evidence is evaluated while both honest nodes disagree;
+- the nodes reconnect and converge to the heavier chain.
+
+Security evidence:
+- during partition, distinct honest tips produce `UNCERTAIN`;
+- duplicate source IDs cannot satisfy the tip quorum;
+- the shorter fork does not win after reconnect;
+- both watchers return `CONSISTENT` only after identical tip hash and height.
+
+A transaction was also confirmed on node A's losing fork before reconnect.
+
+Observed run:
+- workflow: Asset Exchange Bitcoin Regtest;
+- run id: `37416646935`;
+- source commit: `e44b6681a88a8af6ab3811e390d370389158cce7`;
+- conclusion: SUCCESS.
+
+Observed values:
+- losing-fork txid: `4cc02c0f5dc2d689c5f6ca608c50f5d98bcb0c7c36c9c5166943934b20cb8803`;
+- confirmations before reorg: `2`;
+- confirmations after reorg: `0`;
+- explicit rebroadcast txid: identical to original;
+- reconfirmed on winning chain: `1` confirmation.
+
+This proves, in the isolated two-node regtest scenario, that an application MUST treat confirmation as reversible evidence until the configured confirmation policy is satisfied. A transaction that leaves the active chain is reconciled and the exact same signed transaction can be rebroadcast without constructing a second economic action.
+
+## 9. Security findings discovered during implementation
 
 ### G6-F001 — Preimage length initially enforced only by application
 Initial script checked SHA256 preimage equality but did not constrain the preimage byte length on-chain.
@@ -229,7 +266,7 @@ None were bypassed. Each was corrected and rerun.
 
 Disposition: FIXED.
 
-## 9. What this evidence DOES prove
+## 10. What this evidence DOES prove
 
 Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - reviewed P2WSH script and canonical Miniscript descriptor agree;
@@ -238,17 +275,19 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - CLTV refund timing works;
 - refund replacement works in the tested singleton RBF scenario;
 - redeem/refund confirmations respond safely to forced one-block reorgs;
+- two independent nodes can diverge, report UNCERTAIN tips, and converge to the heavier chain;
+- a transaction with two confirmations on the losing fork returns to zero confirmations after reorg;
+- the exact same signed losing-fork transaction can be rebroadcast with identical txid and reconfirmed;
 - exact signed transaction rebroadcast/reconciliation is idempotent;
 - a signed refund can be prepared before funding broadcast;
 - encrypted recovery material can be exported before funding;
 - a refund can execute after the wallet is unloaded.
 
-## 10. What this evidence does NOT prove
+## 11. What this evidence does NOT prove
 
 STOP-SHIP remains for Mainnet until at least:
 - production timeout derivation is reviewed;
-- multi-node isolated regtest and conflicting-tip tests pass;
-- deeper/multi-block reorg matrix passes;
+- deeper/multi-block reorg matrix beyond the tested two-vs-four-block fork passes;
 - package/cluster/pinning adversarial fee tests pass;
 - hardware-wallet / external signer compatibility matrix passes;
 - standalone recovery tooling is packaged/reproducibly released;
