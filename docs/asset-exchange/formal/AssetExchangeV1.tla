@@ -1,7 +1,7 @@
 ---- MODULE AssetExchangeV1 ----
 EXTENDS Naturals, FiniteSets, TLC
 
-CONSTANTS Maker, Taker1, Taker2
+CONSTANTS Maker, Taker1, Taker2, MaxEpoch
 
 Actors == {Maker, Taker1, Taker2}
 
@@ -240,6 +240,7 @@ BeginModeTransition(newMode) ==
   /\ newMode \in {"CONFORMITE", "SOUVERAIN"}
   /\ newMode # mode
   /\ mode # "TRANSITION"
+  /\ policyEpoch < MaxEpoch
   /\ targetMode' = newMode
   /\ mode' = "TRANSITION"
   /\ policyEpoch' = policyEpoch + 1
@@ -305,8 +306,9 @@ TypeOK ==
   /\ bundleGenerated \in BOOLEAN
   /\ bundleValidated \in BOOLEAN
   /\ bundleExported \in BOOLEAN
-  /\ policyEpoch \in Nat
-  /\ commandEpoch \in Nat
+  /\ MaxEpoch \in Nat
+  /\ policyEpoch \in 0..MaxEpoch
+  /\ commandEpoch \in 0..MaxEpoch
   /\ mode \in Modes
   /\ targetMode \in {"CONFORMITE", "SOUVERAIN"}
   /\ chainA \in ChainStates
@@ -317,7 +319,7 @@ TypeOK ==
   /\ newLocksEnabled \in BOOLEAN
   /\ coreAvailable \in BOOLEAN
   /\ replayConsumed \in BOOLEAN
-  /\ lockCreatedEpoch \in Nat
+  /\ lockCreatedEpoch \in 0..MaxEpoch
 
 NoDoubleFill == Cardinality(acceptedBy) <= 1
 

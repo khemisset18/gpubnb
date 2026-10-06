@@ -92,3 +92,17 @@ test("oversized request target is rejected", async () => {
     assert.equal(res.statusCode, 414);
   });
 });
+
+test("readiness probe is time-bounded", async () => {
+  const server = createApiServer({
+    readinessProbe: async () => new Promise(() => {}),
+    readinessTimeoutMs: 25
+  });
+  await withServer(server, async (port) => {
+    const started = Date.now();
+    const res = await request(port, { path: "/readyz" });
+    const elapsed = Date.now() - started;
+    assert.equal(res.statusCode, 503);
+    assert.ok(elapsed < 1000);
+  });
+});

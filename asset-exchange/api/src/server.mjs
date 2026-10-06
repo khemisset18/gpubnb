@@ -28,8 +28,24 @@ function validHost(host) {
   return typeof host === "string" && host.length >= 1 && host.length <= 255 && !/[\r\n]/.test(host);
 }
 
-export function createApiServer({ readinessProbe = async () => ({ ready: true }) } = {}) {
+async function runWithTimeout(operation, timeoutMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("operation_timeout")), timeoutMs);
+        timer.unref?.();
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export function createApiServer({ readinessProbe = async () => ({ ready: true }), readinessTimeoutMs = 1_000 } = {}) {
   invariant(typeof readinessProbe === "function", "API_READINESS_PROBE", "readinessProbe must be a function");
+  invariant(Number.isSafeInteger(readinessTimeoutMs) && readinessTimeoutMs >= 10 && readinessTimeoutMs <= 5_000, "API_READINESS_TIMEOUT", "invalid readiness timeout");
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -59,7 +75,7 @@ export function createApiServer({ readinessProbe = async () => ({ ready: true })
 
       if (req.url === "/readyz") {
         try {
-          const result = await readinessProbe();
+          const result = await runWithTimeout(readinessProbe, readinessTimeoutMs);
           if (result?.ready === true) {
             writeJson(res, 200, { status: "ready", service: "asset-exchange-api" });
           } else {
@@ -81,8 +97,8 @@ export function createApiServer({ readinessProbe = async () => ({ ready: true })
     }
   });
 
-  server.requestTimeout = 5_000;
-  server.headersTimeout = 6_000;
+  server.requestTimeout = 10_000;
+  server.headersTimeout = 5_000;
   server.keepAliveTimeout = 5_000;
   server.maxHeadersCount = 64;
 
