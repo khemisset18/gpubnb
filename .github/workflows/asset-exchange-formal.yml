@@ -57,7 +57,8 @@ jobs:
         run: |
           set -euo pipefail
           cd "${FORMAL_DIR}"
-          java -cp "${RUNNER_TEMP}/tlaplus/tla2tools.jar" tla2sany.SANY AssetExchangeV1.tla             2>&1 | tee sany.log
+          java -cp "${RUNNER_TEMP}/tlaplus/tla2tools.jar" tla2sany.SANY AssetExchangeV1.tla 2>&1 | tee sany.log
+          java -cp "${RUNNER_TEMP}/tlaplus/tla2tools.jar" tla2sany.SANY AssetExchangeFaultsV1.tla 2>&1 | tee sany-faults.log
 
       - name: Run TLC safety and liveness scenarios
         shell: bash
@@ -67,6 +68,8 @@ jobs:
           set -euo pipefail
           chmod +x "${FORMAL_DIR}/run-tlc.sh"
           "${FORMAL_DIR}/run-tlc.sh"
+          chmod +x "${FORMAL_DIR}/run-faults-tlc.sh"
+          "${FORMAL_DIR}/run-faults-tlc.sh"
 
       - name: Build evidence manifest
         if: always()
@@ -87,6 +90,10 @@ jobs:
             sha256sum "${FORMAL_DIR}/AssetExchangeV1.recovery.cfg"
             sha256sum "${FORMAL_DIR}/AssetExchangeV1.transition.cfg"
             sha256sum "${FORMAL_DIR}/run-tlc.sh"
+            sha256sum "${FORMAL_DIR}/AssetExchangeFaultsV1.tla"
+            sha256sum "${FORMAL_DIR}/AssetExchangeFaultsV1.cfg"
+            sha256sum "${FORMAL_DIR}/AssetExchangeFaultsV1.crash.cfg"
+            sha256sum "${FORMAL_DIR}/run-faults-tlc.sh"
           } > "${FORMAL_DIR}/evidence-manifest.txt"
 
       - name: Upload formal verification evidence
@@ -96,6 +103,7 @@ jobs:
           name: asset-exchange-formal-${{ github.sha }}
           path: |
             docs/asset-exchange/formal/sany.log
+            docs/asset-exchange/formal/sany-faults.log
             docs/asset-exchange/formal/evidence-manifest.txt
             docs/asset-exchange/formal/evidence/*.log
           if-no-files-found: warn
