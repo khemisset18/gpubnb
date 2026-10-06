@@ -4,6 +4,7 @@ import { invariant } from "../../core/src/errors.mjs";
 import { validateDeploymentId } from "../../core/src/deployment.mjs";
 import { BTC_HTLC_PROTOCOL_ID, buildBitcoinHtlcV1 } from "./bitcoin-htlc-v1.mjs";
 import { deriveBitcoinRefundTimeoutV1 } from "./bitcoin-timeout-policy.mjs";
+import { selectBitcoinConfirmationsV1 } from "./bitcoin-confirmation-policy.mjs";
 
 export const BTC_SETTLEMENT_TERMS_DOMAIN = "GPUBNB:ASSET-EXCHANGE:SETTLEMENT:BTC:v1";
 
@@ -25,7 +26,8 @@ export function createBitcoinSettlementTerms(input) {
     "fundingAmountSats","secretHashHex","redeemPubkeyHex","refundPubkeyHex",
     "refundLockHeight","witnessScriptHashHex","scriptPubKeyHex",
     "requiredConfirmations","sighashType","feePolicyId","feePolicyVersion",
-    "timeoutPolicy","timeoutAnchorHeight"
+    "timeoutPolicy","timeoutAnchorHeight",
+    "confirmationPolicy","confirmationRiskClass"
   ]);
   for (const key of Object.keys(input)) invariant(allowed.has(key), "BTC_TERMS_UNKNOWN_FIELD", `unknown bitcoin settlement term: ${key}`);
 
@@ -38,13 +40,24 @@ export function createBitcoinSettlementTerms(input) {
   const amount = BigInt(input.fundingAmountSats);
   invariant(amount > 0n && amount <= 2_100_000_000_000_000n, "BTC_TERMS_AMOUNT_RANGE", "bitcoin amount outside valid range");
 
+  const confirmation = selectBitcoinConfirmationsV1({
+    policy: input.confirmationPolicy,
+    amountSats: input.fundingAmountSats,
+    riskClass: input.confirmationRiskClass
+  });
+
   const timeout = deriveBitcoinRefundTimeoutV1({
     anchorHeight: input.timeoutAnchorHeight,
     policy: input.timeoutPolicy
   });
 
   invariant(
-    input.requiredConfirmations === timeout.policy.fundingConfirmations,
+    timeout.policy.fundingConfirmations === confirmation.requiredConfirmations,
+    "BTC_TERMS_CONFIRMATION_TIMEOUT_MISMATCH",
+    "timeout policy confirmations must match amount/risk confirmation policy"
+  );
+  invariant(
+    input.requiredConfirmations === confirmation.requiredConfirmations,
     "BTC_TERMS_CONFIRMATION_POLICY",
     "required confirmations must match signed timeout policy"
   );
@@ -84,6 +97,12 @@ export function createBitcoinSettlementTerms(input) {
     secretHashHex,
     redeemPubkeyHex,
     refundPubkeyHex,
+    confirmationPolicy: confirmation.policy,
+    confirmationPolicyHash: confirmation.policyHash,
+    confirmationRiskClass: confirmation.riskClass,
+    confirmationAmountBandIndex: confirmation.amountBandIndex,
+    confirmationAmountBandConfirmations: confirmation.amountBandConfirmations,
+    confirmationRiskFloor: confirmation.riskFloorConfirmations,
     timeoutPolicy: timeout.policy,
     timeoutPolicyHash: timeout.policyHash,
     timeoutAnchorHeight: timeout.anchorHeight,
@@ -114,6 +133,8 @@ export function bitcoinSettlementTermsDigestHex(termsInput) {
         refundPubkeyHex: termsInput.refundPubkeyHex,
         timeoutPolicy: termsInput.timeoutPolicy,
         timeoutAnchorHeight: termsInput.timeoutAnchorHeight,
+        confirmationPolicy: termsInput.confirmationPolicy,
+        confirmationRiskClass: termsInput.confirmationRiskClass,
         refundLockHeight: termsInput.refundLockHeight,
         witnessScriptHashHex: termsInput.witnessScriptHashHex,
         scriptPubKeyHex: termsInput.scriptPubKeyHex,

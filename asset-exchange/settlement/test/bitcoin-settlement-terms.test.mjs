@@ -8,6 +8,22 @@ const redeem = "03c150061989643d77162902b725409087959f15914649d4f06b6cc3f8c87bb2
 const refund = "020461e6025e68bdc5a1d6730b2fb13c4c62d295f226f0c3dbd0b713530897a6b4";
 const secretHash = "33".repeat(32);
 
+const confirmationPolicy = {
+  policyId: "btc-regtest-confirm-v1",
+  network: "regtest",
+  amountBands: [
+    { maxAmountSats: "50000", confirmations: 1 },
+    { maxAmountSats: "500000", confirmations: 2 },
+    { maxAmountSats: null, confirmations: 6 }
+  ],
+  riskFloors: {
+    LOW: 1,
+    STANDARD: 2,
+    HIGH: 3,
+    EXTREME: 6
+  }
+};
+
 const timeoutPolicy = {
   policyId: "btc-regtest-risk-v1",
   network: "regtest",
@@ -46,6 +62,8 @@ const base = {
   refundPubkeyHex: refund,
   timeoutPolicy,
   timeoutAnchorHeight: 400,
+  confirmationPolicy,
+  confirmationRiskClass: "STANDARD",
   refundLockHeight: timeout.refundLockHeight,
   witnessScriptHashHex: built.witnessScriptHashHex,
   scriptPubKeyHex: built.scriptPubKeyHex,
@@ -112,6 +130,15 @@ test("settlement digest binds every economic, script, and timeout-critical field
     {
       timeoutPolicy: shiftedRiskPolicy
     },
+    {
+      confirmationPolicy: {
+        ...confirmationPolicy,
+        riskFloors: {
+          ...confirmationPolicy.riskFloors,
+          EXTREME: 7
+        }
+      }
+    },
     { feePolicyVersion: 2 },
     { deploymentId: "ae-test-02" },
     { tradeId: "trade-00000002" }
@@ -138,10 +165,20 @@ test("terms reject timeout/script substitution even when other fields look valid
   }));
 });
 
-test("confirmation policy must match signed timeout policy", () => {
+test("confirmation policy must match both signed terms and timeout budget", () => {
   assert.throws(() => createBitcoinSettlementTerms({
     ...base,
     requiredConfirmations: 3
+  }));
+
+  assert.throws(() => createBitcoinSettlementTerms({
+    ...base,
+    confirmationRiskClass: "HIGH"
+  }));
+
+  assert.throws(() => createBitcoinSettlementTerms({
+    ...base,
+    timeoutPolicy: { ...timeoutPolicy, fundingConfirmations: 3 }
   }));
 });
 

@@ -88,7 +88,19 @@ If either condition fails:
 
 This prevents signed settlement terms from aging into an unsafe recovery window before funding.
 
-## 6. Signed-term binding
+## 6. Amount/risk-aware confirmation binding
+
+The funding confirmation count is not an independent free-form value.
+
+It must equal the output of the separately signed Bitcoin confirmation policy:
+- amount band selected from exact funding satoshis;
+- explicit risk class;
+- risk-class confirmation floor;
+- final count = max(amount-band count, risk floor).
+
+The timeout policy's `fundingConfirmations` must equal that final selected count.
+
+## 7. Signed-term binding
 
 The Bitcoin settlement digest now binds:
 - the complete timeout policy;
@@ -102,7 +114,7 @@ The Bitcoin settlement digest now binds:
 
 Changing the allocation of risk blocks changes the signed digest even when the final total window is unchanged.
 
-## 7. Wall-clock interpretation
+## 8. Wall-clock interpretation
 
 A target block spacing may be shown as an informational estimate only.
 
@@ -114,7 +126,7 @@ It MUST NOT:
 
 Consensus validity remains height-based.
 
-## 8. Cross-chain caution
+## 9. Cross-chain caution
 
 This policy is only the Bitcoin-side derivation primitive.
 
@@ -127,7 +139,7 @@ The longer-timeout side must leave enough room for:
 
 No universal cross-chain timeout constant is defined here.
 
-## 9. Production STOP-SHIP
+## 10. Production STOP-SHIP
 
 Mainnet remains blocked until:
 - a production Bitcoin risk profile is separately reviewed;
