@@ -136,6 +136,9 @@ BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
   asset-exchange/bitcoin-regtest/run-rbf-conflict-limit.sh
 
 BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
+  asset-exchange/bitcoin-regtest/run-rbf-feerate-diagram.sh
+
+BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
   asset-exchange/bitcoin-regtest/run-recovery-before-lock.sh
 
 asset-exchange/bitcoin-regtest/run-multinode-reorg.sh
