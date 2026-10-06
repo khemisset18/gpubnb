@@ -209,9 +209,9 @@ BEGIN
     RETURN;
   END IF;
 
-  SELECT * INTO v_offer
-  FROM asset_exchange.offers
-  WHERE offer_id = p_offer_id
+  SELECT o.* INTO v_offer
+  FROM asset_exchange.offers AS o
+  WHERE o.offer_id = p_offer_id
   FOR UPDATE;
 
   IF NOT FOUND THEN

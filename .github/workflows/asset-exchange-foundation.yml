@@ -75,7 +75,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RInEi '\b(real|float|double precision|money)\b' asset-exchange/db/migrations --include='*.sql'; then
-            echo 'Forbidden inexact financial SQL type detected'
+          findings="$(
+            find asset-exchange/db/migrations -type f -name '*.sql' -print0               | xargs -0 awk '
+                {
+                  line=$0
+                  sub(/--.*/, "", line)
+                  if (tolower(line) ~ /^[[:space:]]*[a-z_][a-z0-9_]*[[:space:]]+(real|float([[:space:](,]|$)|double[[:space:]]+precision|money)([[:space:],)]|$)/) {
+                    print FILENAME ":" FNR ":" $0
+                  }
+                }
+              '
+          )"
+          if [[ -n "${findings}" ]]; then
+            echo "${findings}"
+            echo 'Forbidden inexact financial SQL column type detected'
             exit 1
           fi
