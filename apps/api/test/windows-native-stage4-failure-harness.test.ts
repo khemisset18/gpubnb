@@ -25,6 +25,22 @@ test('Stage 4 Windows native physical fault harness is explicitly armed and narr
   assert.doesNotMatch(source, /shutdown\.exe/i);
 });
 
+test('Stage 4 harness relays through LocalSystem before touching the authority control pipe', async () => {
+  const source = await readFile(harness, 'utf8');
+
+  assert.match(source, /S-1-5-18/);
+  assert.match(source, /stage4_localsystem_required/);
+  assert.match(source, /New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest/);
+  assert.match(source, /Register-ScheduledTask/);
+  assert.match(source, /Start-ScheduledTask/);
+  assert.match(source, /Unregister-ScheduledTask/);
+  assert.match(source, /if \(-not \(Test-LocalSystem\)\) \{/);
+  assert.match(source, /Invoke-LocalSystemRelay/);
+
+  assert.doesNotMatch(source, /D:P\(A;;GA;;;BA\)/);
+  assert.doesNotMatch(source, /psexec/i);
+});
+
 test('Stage 4 helper and Agent faults accept only recovery or fail-closed local outcomes', async () => {
   const source = await readFile(harness, 'utf8');
 
