@@ -151,7 +151,7 @@ test("cancel rejects hash, epoch, deployment, timestamp and expiry mismatch befo
     { policyEpoch: offer.policyEpoch + 1 },
     { deploymentId: "ae-other-01" },
     { cancelledAtUnixMs: 1100 },
-    { expiryUnixMs: 1001 }
+    { cancelledAtUnixMs: 900, expiryUnixMs: 1000 }
   ]) {
     await assert.rejects(() => svc.cancelOffer({
       actor: actorMaker,
