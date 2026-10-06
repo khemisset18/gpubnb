@@ -382,9 +382,53 @@ The dedicated workflow uses current Node-24-native official actions:
 - `actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` (v7.0.1);
 - `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6` (v4.2.2).
 
+Independent consumer verification drill:
+- workflow run id: `37522464918`;
+- source commit: `aa5b07d5787c73d2706b16b36c003efae5c6a12b`;
+- producer job: SUCCESS;
+- separate consumer job: SUCCESS;
+- downloaded artifact checksum verification: PASS;
+- SLSA provenance verification bound to repository + exact source commit: PASS;
+- SPDX 2.3 SBOM attestation verification bound to repository + exact source commit: PASS;
+- GitHub CLI version used by the consumer job: `2.101.0`.
+
+The consumer job has read-only permissions for contents/actions/attestations and does not inherit the producer job's filesystem or attestation-write permissions.
+
 This is build-and-attestation evidence. It does NOT by itself constitute a public production release or Mainnet authorization.
 
-## 14. Security findings discovered during implementation
+
+## 14. RBF feerate-diagram enforcement
+
+The regtest harness now reproduces the Bitcoin Core 31.1 feerate-diagram replacement rule.
+
+Scenario:
+1. create a compact original transaction from one confirmed UTXO;
+2. broadcast the original;
+3. construct a much larger replacement that pays more absolute fee but has substantially lower feerate;
+4. require Bitcoin Core to reject the weak replacement because it does not improve the feerate diagram;
+5. construct a strongly funded replacement of the same large shape;
+6. require the strong replacement to be accepted and evict the original transaction.
+
+Observed run:
+- workflow: Asset Exchange Bitcoin Regtest;
+- run id: `37523435751`;
+- source commit: `c2b12526d33a5aecf04633937f711d28a2e27b01`;
+- conclusion: SUCCESS.
+
+Observed values:
+- original fee: `10000 sats`;
+- original vsize: `110 vB`;
+- weak replacement fee: `20000 sats`;
+- weak replacement vsize: `3510 vB`;
+- weak reject reason: `replacement-failed`;
+- weak reject details: `insufficient feerate: does not improve feerate diagram`;
+- strong replacement fee: `500000 sats`;
+- strong replacement vsize: `3510 vB`;
+- strong replacement txid: `a7b2593d0d69379e234befc4f2fc5baaac802ccf12290b47a60591536ad2b7ce`.
+
+This directly validates that increasing absolute fee alone is not sufficient under Bitcoin Core 31.1 replacement policy. The replacement must also improve the mempool feerate diagram.
+
+## 15. Security findings discovered during implementation
 
 ### G6-F001 — Preimage length initially enforced only by application
 Initial script checked SHA256 preimage equality but did not constrain the preimage byte length on-chain.
@@ -448,7 +492,7 @@ None were bypassed. Each was corrected and rerun.
 
 Disposition: FIXED.
 
-## 15. What this evidence DOES prove
+## 16. What this evidence DOES prove
 
 Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - reviewed P2WSH script and canonical Miniscript descriptor agree;
@@ -468,18 +512,20 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - a signed refund can be prepared before funding broadcast;
 - encrypted recovery material can be exported before funding;
 - a refund can execute after the wallet is unloaded;
-- the standalone recovery tool can be packaged reproducibly with deterministic SHA-256/SBOM output and signed provenance/SBOM attestations.
+- the standalone recovery tool can be packaged reproducibly with deterministic SHA-256/SBOM output and signed provenance/SBOM attestations;
+- a fresh read-only consumer job can independently verify the recovery artifact checksum, SLSA provenance, and SPDX SBOM attestation against the exact repository/source commit;
+- Bitcoin Core rejects a higher-absolute-fee replacement that worsens the feerate diagram and accepts a sufficiently funded replacement that improves it.
 
-## 16. What this evidence does NOT prove
+## 17. What this evidence does NOT prove
 
 STOP-SHIP remains for Mainnet until at least:
 - production timeout derivation is reviewed;
 - deeper/multi-block reorg matrix beyond the tested two-vs-four-block fork passes;
-- more complex package-RBF graph topologies and feerate-diagram edge cases pass;
+- more complex package-RBF graph topologies and additional feerate-diagram edge cases beyond the tested cases pass;
 - hardware-wallet / external signer compatibility matrix passes;
-- controlled release/distribution policy and an independent consumer verification drill are completed;
-- dependency/SBOM/provenance release evidence is complete;
-- liveness/fairness formal model is expanded;
+- controlled release/distribution policy is completed;
+- full product dependency/SBOM/provenance release evidence beyond the standalone recovery artifact is complete;
+- formal liveness/fairness coverage is expanded beyond the currently bounded cooperative/recovery/transition/fault scenarios;
 - independent external audit/red-team is completed;
 - signet/testnet qualification passes;
 - explicit owner authorization is given for any Mainnet canary.
