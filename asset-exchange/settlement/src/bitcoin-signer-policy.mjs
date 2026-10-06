@@ -114,7 +114,19 @@ export function bitcoinSignerIntentDigestHex(input) {
   return createHash("sha256").update(canonicalBytes(createBitcoinSignerIntent(input))).digest("hex");
 }
 
-export function assertDecodedPsbtMatchesSignerIntent(decoded, intentInput) {
+function psbtBytesFromBase64(psbtBase64) {
+  invariant(typeof psbtBase64 === "string" && /^[A-Za-z0-9+/]+={0,2}$/.test(psbtBase64), "BTC_SIGNER_PSBT_BASE64", "invalid PSBT base64");
+  const bytes = Buffer.from(psbtBase64, "base64");
+  invariant(bytes.length >= 5, "BTC_SIGNER_PSBT_LENGTH", "PSBT is too short");
+  invariant(bytes.subarray(0, 5).equals(Buffer.from([0x70, 0x73, 0x62, 0x74, 0xff])), "BTC_SIGNER_PSBT_MAGIC", "invalid PSBT magic");
+  return bytes;
+}
+
+export function bitcoinPsbtDigestHex(psbtBase64) {
+  return createHash("sha256").update(psbtBytesFromBase64(psbtBase64)).digest("hex");
+}
+
+export function assertDecodedPsbtMatchesSignerIntent(decoded, intentInput, psbtBase64) {
   const intent = createBitcoinSignerIntent(intentInput);
   invariant(decoded && typeof decoded === "object" && !Array.isArray(decoded), "BTC_SIGNER_DECODED_TYPE", "decoded PSBT required");
   invariant(decoded.tx && typeof decoded.tx === "object", "BTC_SIGNER_DECODED_TX", "decoded PSBT transaction required");
@@ -145,7 +157,6 @@ export function assertDecodedPsbtMatchesSignerIntent(decoded, intentInput) {
     invariant(observedSats.toString() === expected.amountSats, "BTC_SIGNER_OUTPUT_AMOUNT_MISMATCH", `output ${i} amount mismatch`);
   }
 
-  const psbtDigest = createHash("sha256").update(canonicalBytes(decoded)).digest("hex");
-  invariant(psbtDigest === intent.psbtDigestHex, "BTC_SIGNER_PSBT_DIGEST_MISMATCH", "decoded PSBT digest mismatch");
+  invariant(bitcoinPsbtDigestHex(psbtBase64) === intent.psbtDigestHex, "BTC_SIGNER_PSBT_DIGEST_MISMATCH", "PSBT binary digest mismatch");
   return true;
 }
