@@ -571,25 +571,40 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
 
     def _report_native_usage(self, runtime: NativeGatewayRuntime) -> None:
         if self._reconnect_is_paused(runtime.session_id):
-            now = time.monotonic()
-            with self._reconnect_lock:
-                previous = self._reconnect_last_liveness.get(runtime.session_id, now)
-                if now - previous < reconnect.RECONNECT_LIVENESS_INTERVAL_SECONDS:
+            # RESUME deliberately makes the helper physically Ready before the
+            # API clears reconnect state. Without sharing the native resume lock,
+            # the reconcile thread can observe "commercially paused" while the
+            # helper is already Ready and falsely hard-stop a healthy reconnect
+            # as windows_native_suspended_proof_lost. Serialize only this paused
+            # proof with the existing resume transition, then re-check server
+            # pause state after acquiring the lock.
+            with self._native_resume_lock(runtime.session_id):
+                if self._reconnect_is_paused(runtime.session_id):
+                    now = time.monotonic()
+                    with self._reconnect_lock:
+                        previous = self._reconnect_last_liveness.get(
+                            runtime.session_id,
+                            now,
+                        )
+                        if now - previous < reconnect.RECONNECT_LIVENESS_INTERVAL_SECONDS:
+                            return
+                        self._reconnect_last_liveness[runtime.session_id] = now
+
+                    if not windows_native_workspace_suspended(runtime.session_id):
+                        self._report_error(
+                            RuntimeError("windows_native_suspended_proof_lost")
+                        )
+                        self._native_stop_and_report(runtime.session_id)
+                        return
+
+                    try:
+                        self._reconnect_event(runtime.session_id, "LIVENESS")
+                    except Exception as exc:
+                        # Keep the native runtime physically suspended if
+                        # control-plane liveness reporting fails; never convert
+                        # grace into billable usage.
+                        self._report_error(exc)
                     return
-                self._reconnect_last_liveness[runtime.session_id] = now
-
-            if not windows_native_workspace_suspended(runtime.session_id):
-                self._report_error(RuntimeError("windows_native_suspended_proof_lost"))
-                self._native_stop_and_report(runtime.session_id)
-                return
-
-            try:
-                self._reconnect_event(runtime.session_id, "LIVENESS")
-            except Exception as exc:
-                # Keep the native runtime physically suspended if control-plane
-                # liveness reporting fails; never convert grace into billable usage.
-                self._report_error(exc)
-            return
 
         now = time.monotonic()
         previous = self.usage_last_report.setdefault(runtime.session_id, now)
