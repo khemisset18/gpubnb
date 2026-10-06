@@ -313,7 +313,36 @@ This directly validates both default cluster dimensions used by the pinned node:
 
 It does not prove every possible graph topology or replacement interaction near both limits simultaneously.
 
-## 12. Security findings discovered during implementation
+
+## 12. RBF conflicting-cluster cap
+
+The regtest harness now verifies the Bitcoin Core 31.1 anti-DoS limit on the number of distinct conflicting clusters a single replacement may evict.
+
+Scenario:
+1. create 101 independent confirmed wallet outputs;
+2. spend each output independently so the mempool contains 101 distinct singleton clusters;
+3. construct one replacement transaction that double-spends all 101 confirmed outputs;
+4. require Bitcoin Core to reject that replacement even though the fee budget is sufficient;
+5. remove one input so the replacement conflicts with exactly 100 clusters;
+6. require the 100-cluster replacement to be accepted and mined.
+
+Observed run:
+- workflow: Asset Exchange Bitcoin Regtest;
+- run id: `37518106733`;
+- source commit: `a59cb1d025eaefede33d67e7d39a13d8d3746fc3`;
+- conclusion: SUCCESS.
+
+Observed values:
+- conflicting clusters rejected: `101`;
+- rejection reason: `too many potential replacements`;
+- conflicting clusters accepted: `100`;
+- accepted replacement txid: `c8ee64a1333c2ce8714ee47139ce99d75d12b992cc0f6e8523571208f362e723`.
+
+This directly validates the v31 replacement-policy cap that a single replacement may not conflict with more than 100 distinct clusters.
+
+It does not prove every package-RBF graph topology or feerate-diagram interaction.
+
+## 13. Security findings discovered during implementation
 
 ### G6-F001 — Preimage length initially enforced only by application
 Initial script checked SHA256 preimage equality but did not constrain the preimage byte length on-chain.
@@ -377,7 +406,7 @@ None were bypassed. Each was corrected and rerun.
 
 Disposition: FIXED.
 
-## 13. What this evidence DOES prove
+## 14. What this evidence DOES prove
 
 Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - reviewed P2WSH script and canonical Miniscript descriptor agree;
@@ -388,6 +417,7 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - a costly descendant can pin a modest replacement, while a sufficiently funded parent replacement evicts the parent+child cluster;
 - the pinned Bitcoin Core 31.1 node accepts a 64-transaction cluster and rejects transaction #65 with `too-large-cluster`;
 - the pinned node enforces the separate 101000-vbyte cluster-size boundary and rejects a candidate that would exceed it;
+- a replacement conflicting with 101 distinct clusters is rejected, while 100 conflicts are accepted with sufficient fee;
 - redeem/refund confirmations respond safely to forced one-block reorgs;
 - two independent nodes can diverge, report UNCERTAIN tips, and converge to the heavier chain;
 - a transaction with two confirmations on the losing fork returns to zero confirmations after reorg;
@@ -397,12 +427,12 @@ Within the pinned isolated Bitcoin Core 31.1 regtest environment:
 - encrypted recovery material can be exported before funding;
 - a refund can execute after the wallet is unloaded.
 
-## 14. What this evidence does NOT prove
+## 15. What this evidence does NOT prove
 
 STOP-SHIP remains for Mainnet until at least:
 - production timeout derivation is reviewed;
 - deeper/multi-block reorg matrix beyond the tested two-vs-four-block fork passes;
-- more complex package/cluster graph topologies and near-limit RBF interactions pass;
+- more complex package-RBF graph topologies and feerate-diagram edge cases pass;
 - hardware-wallet / external signer compatibility matrix passes;
 - standalone recovery tooling is packaged/reproducibly released;
 - dependency/SBOM/provenance release evidence is complete;
