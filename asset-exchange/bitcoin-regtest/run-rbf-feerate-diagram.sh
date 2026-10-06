@@ -123,11 +123,13 @@ original_entry="$("${CLI[@]}" getmempoolentry "${original_txid}")"
 
 read -r weak_hex weak_vsize < <(build_signed "${weak_fee_sats}" yes weak)
 weak_test="$("${CLI[@]}" testmempoolaccept "[\"${weak_hex}\"]")"
-read -r weak_allowed weak_reason < <(
+read -r weak_allowed weak_reason weak_details < <(
   printf '%s' "${weak_test}" | python3 -c '
 import json,sys
 r=json.load(sys.stdin)[0]
-print("yes" if r["allowed"] else "no", r.get("reject-reason",""))
+reason=r.get("reject-reason","").replace(" ","_")
+details=r.get("reject-details","").replace(" ","_")
+print("yes" if r["allowed"] else "no", reason, details)
 '
 )
 
@@ -135,8 +137,8 @@ if [[ "${weak_allowed}" != "no" ]]; then
   echo "ERROR: low-feerate larger replacement unexpectedly accepted"
   exit 1
 fi
-if [[ "${weak_reason}" != *"does not improve feerate diagram"* ]]; then
-  echo "ERROR: weak replacement rejected for unexpected reason: ${weak_reason}"
+if [[ "${weak_details//_/ }" != *"does not improve feerate diagram"* ]]; then
+  echo "ERROR: weak replacement rejected for unexpected details: ${weak_details//_/ }"
   printf '%s\n' "${weak_test}"
   exit 1
 fi
@@ -175,5 +177,6 @@ PY
 
 echo "Bitcoin Core RBF feerate-diagram test passed."
 echo "original_txid=${original_txid}"
-echo "weak_reject_reason=${weak_reason}"
+echo "weak_reject_reason=${weak_reason//_/ }"
+echo "weak_reject_details=${weak_details//_/ }"
 echo "strong_replacement_txid=${strong_txid}"
