@@ -27,6 +27,7 @@ test("P2WSH HTLC builder produces exact reviewed opcode structure", () => {
   assert.match(out.witnessScriptHex, /^6382012088a820/);
   assert.ok(out.witnessScriptHex.includes("88" + "21" + redeem + "ac67"));
   assert.ok(out.witnessScriptHex.endsWith("21" + refund + "ac68"));
+  assert.ok(out.witnessScriptHex.includes("b16921" + refund));
   assert.match(out.scriptPubKeyHex, /^0020[0-9a-f]{64}$/);
   assert.equal(out.scriptPubKeyHex.slice(4), out.witnessScriptHashHex);
 });
@@ -43,6 +44,12 @@ test("builder rejects uncompressed keys, bad hashes and time-based locktimes", (
     redeemPubkeyHex: "04" + "11".repeat(32),
     refundPubkeyHex: refund,
     refundLockHeight: 500
+  }));
+  assert.throws(() => buildBitcoinHtlcV1({
+    secretHashHex: secretHash,
+    redeemPubkeyHex: redeem,
+    refundPubkeyHex: refund,
+    refundLockHeight: 0
   }));
   assert.throws(() => buildBitcoinHtlcV1({
     secretHashHex: secretHash,

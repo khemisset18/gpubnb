@@ -113,33 +113,23 @@ refund_raw="$(
     version=2
 )"
 
-prevouts_json="$(
-  python3 - "${funding_txid}" "${funding_vout}" "${script_pubkey}" "${witness_script}" "${funding_amount}" <<'PY'
-import json, sys
-print(json.dumps([{
-    "txid": sys.argv[1],
-    "vout": int(sys.argv[2]),
-    "scriptPubKey": sys.argv[3],
-    "witnessScript": sys.argv[4],
-    "amount": float(sys.argv[5]),
-}], separators=(",", ":")))
-PY
-)"
-keys_json="$(
-  python3 - "${REFUND_WIF}" <<'PY'
+private_descriptor="wsh(or_i(and_v(v:sha256(${secret_hash}),pk(${REDEEM_WIF})),and_v(v:after(${refund_lock_height}),pk(${REFUND_WIF}))))"
+descriptors_json="$(
+  python3 - "${private_descriptor}" <<'PY'
 import json, sys
 print(json.dumps([sys.argv[1]], separators=(",", ":")))
 PY
 )"
 
-signed="$("${CLI[@]}" signrawtransactionwithkey "${refund_raw}" "${keys_json}" "${prevouts_json}" ALL)"
-complete="$(printf '%s' "${signed}" | python3 -c 'import json,sys; print("yes" if json.load(sys.stdin).get("complete") else "no")')"
+refund_psbt="$("${CLI[@]}" converttopsbt "${refund_raw}")"
+processed="$("${CLI[@]}" descriptorprocesspsbt "${refund_psbt}" "${descriptors_json}" ALL true true)"
+complete="$(printf '%s' "${processed}" | python3 -c 'import json,sys; print("yes" if json.load(sys.stdin).get("complete") else "no")')"
 if [[ "${complete}" != "yes" ]]; then
-  echo "ERROR: Bitcoin Core could not fully sign/finalize refund path"
-  printf '%s\n' "${signed}"
+  echo "ERROR: Bitcoin Core Miniscript descriptor could not fully sign/finalize refund path"
+  printf '%s\n' "${processed}"
   exit 1
 fi
-refund_hex="$(printf '%s' "${signed}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["hex"])')"
+refund_hex="$(printf '%s' "${processed}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["hex"])')"
 
 decoded_refund="$("${CLI[@]}" decoderawtransaction "${refund_hex}")"
 python3 - "${decoded_refund}" "${refund_lock_height}" <<'PY'

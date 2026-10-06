@@ -51,7 +51,7 @@ OP_IF
 OP_ELSE
   <refund_lock_height>
   OP_CHECKLOCKTIMEVERIFY
-  OP_DROP
+  OP_VERIFY
   <33-byte refund_pubkey>
   OP_CHECKSIG
 OP_ENDIF
@@ -77,7 +77,7 @@ Fixed opcodes:
 - OP_CHECKSIG = `0xac`
 - OP_ELSE = `0x67`
 - OP_CHECKLOCKTIMEVERIFY = `0xb1`
-- OP_DROP = `0x75`
+- OP_VERIFY = `0x69`
 - OP_ENDIF = `0x68`
 
 Fixed pushes:
@@ -88,7 +88,13 @@ Fixed pushes:
 
 Refund height is serialized as a minimally-encoded positive Bitcoin Script number and then pushed using the minimal push opcode.
 
-No negative or time-based lock values are accepted in V1.
+No zero, negative, or time-based lock values are accepted in V1.
+
+The canonical Miniscript form is:
+
+`wsh(or_i(and_v(v:sha256(H),pk(redeem_key)),and_v(v:after(refund_height),pk(refund_key))))`
+
+The implementation MUST cross-check that this descriptor compiles to the same P2WSH output as the byte-level builder.
 
 ## 4. P2WSH output
 
@@ -143,6 +149,8 @@ Witness stack:
 <witness_script>
 ```
 
+The refund branch uses the Miniscript `v:after(refund_height)` form, which compiles the CLTV condition as a Verify condition and permits Bitcoin Core's Miniscript/descriptor satisfaction engine to construct the witness.
+
 The refund transaction MUST use:
 - `nVersion = 2`;
 - `nLockTime = refund_lock_height`;
@@ -159,7 +167,7 @@ The implementation MUST NOT use `0xffffffff` on the HTLC refund input because BI
 V1 uses block-height CLTV only.
 
 Therefore:
-- `refund_lock_height < 500000000`;
+- `1 <= refund_lock_height < 500000000`;
 - refund transaction nLockTime MUST also be height-based;
 - `nLockTime >= refund_lock_height`;
 - the V1 canonical builder sets `nLockTime == refund_lock_height`.

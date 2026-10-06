@@ -37,6 +37,7 @@ function minimalPush(data) {
 }
 
 export function buildBitcoinHtlcV1({ secretHashHex, redeemPubkeyHex, refundPubkeyHex, refundLockHeight }) {
+  invariant(Number.isSafeInteger(refundLockHeight) && refundLockHeight >= 1 && refundLockHeight < 500_000_000, "BTC_HTLC_LOCK_HEIGHT", "refund lock height must be a positive block height");
   const secretHash = hexBytes(secretHashHex, 32, "secret hash");
   const redeem = compressedPubkey(redeemPubkeyHex, "redeem pubkey");
   const refund = compressedPubkey(refundPubkeyHex, "refund pubkey");
@@ -51,7 +52,7 @@ export function buildBitcoinHtlcV1({ secretHashHex, redeemPubkeyHex, refundPubke
     minimalPush(redeem),
     Buffer.from([0xac, 0x67]),
     minimalPush(lock),
-    Buffer.from([0xb1, 0x75]),
+    Buffer.from([0xb1, 0x69]),
     minimalPush(refund),
     Buffer.from([0xac, 0x68])
   ]);
@@ -70,7 +71,7 @@ export function buildBitcoinHtlcV1({ secretHashHex, redeemPubkeyHex, refundPubke
 
 export function validateRefundTransactionPolicy({ version, lockTime, sequence, sighashType }) {
   invariant(version === 2, "BTC_REFUND_VERSION", "refund transaction version must be 2");
-  invariant(Number.isSafeInteger(lockTime) && lockTime >= 0 && lockTime < 500_000_000, "BTC_REFUND_LOCKTIME", "refund locktime must be block height");
+  invariant(Number.isSafeInteger(lockTime) && lockTime >= 1 && lockTime < 500_000_000, "BTC_REFUND_LOCKTIME", "refund locktime must be positive block height");
   invariant(sequence === 0xfffffffd, "BTC_REFUND_SEQUENCE", "refund input sequence must be 0xfffffffd");
   invariant(sighashType === 0x01, "BTC_REFUND_SIGHASH", "refund must use SIGHASH_ALL");
   return true;
