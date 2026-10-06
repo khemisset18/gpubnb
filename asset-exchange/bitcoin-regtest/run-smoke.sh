@@ -27,10 +27,12 @@ dnsseed=0
 discover=0
 upnp=0
 natpmp=0
+txindex=1
+
+[regtest]
 rpcbind=127.0.0.1
 rpcallowip=127.0.0.1
 fallbackfee=0.00010000
-txindex=1
 EOF
 
 "${BITCOIND}" -datadir="${DATA_DIR}" -daemonwait
