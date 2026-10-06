@@ -142,6 +142,7 @@ BITCOIN_REGTEST_DATADIR="${DATA_DIR}" \
   asset-exchange/bitcoin-regtest/run-recovery-before-lock.sh
 
 asset-exchange/bitcoin-regtest/run-multinode-reorg.sh
+asset-exchange/bitcoin-regtest/run-deep-reorg-matrix.sh
 
 echo "Bitcoin Core regtest isolation/reorg smoke test passed."
 echo "txid=${txid}"
