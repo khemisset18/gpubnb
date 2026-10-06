@@ -63,6 +63,7 @@ Init ==
   /\ newLocksEnabled = TRUE
   /\ coreAvailable = TRUE
   /\ replayConsumed = FALSE
+  /\ lockCreatedEpoch = 0
 
 CanAccept(t) ==
   /\ t \in {Taker1, Taker2}
@@ -136,10 +137,11 @@ BroadcastALock ==
   /\ lockBroadcast' = TRUE
   /\ tradeState' = "A_LOCKED"
   /\ chainA' = "MEMPOOL"
+  /\ lockCreatedEpoch' = policyEpoch
   /\ UNCHANGED <<offerState, acceptedBy, termsSigned, bundleGenerated,
                   bundleValidated, bundleExported, policyEpoch, commandEpoch,
                   mode, targetMode, chainB, feeState, kycStatus,
-                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch>>
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed>>
 
 ConfirmA ==
   /\ tradeState = "A_LOCKED"
@@ -290,6 +292,7 @@ TypeOK ==
   /\ newLocksEnabled \in BOOLEAN
   /\ coreAvailable \in BOOLEAN
   /\ replayConsumed \in BOOLEAN
+  /\ lockCreatedEpoch \in Nat
 
 NoDoubleFill == Cardinality(acceptedBy) <= 1
 
