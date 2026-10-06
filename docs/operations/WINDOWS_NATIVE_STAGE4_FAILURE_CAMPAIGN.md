@@ -43,6 +43,13 @@ Scenarios:
 
 Fault-capable scenarios require explicit `-ArmFaults`.
 
+The authority control pipe is intentionally private to the identity that launched
+the native authority. In production that identity is `LocalSystem` via
+`GPUbnbAgent`. Therefore an administrator-launched harness first relays itself
+through a temporary on-demand Task Scheduler task running as `SYSTEM`, waits for
+the result, and removes the temporary task/runner files. The pipe ACL is not
+weakened and no broad administrator ACE is added.
+
 The harness never:
 
 - kills a process by image name;
