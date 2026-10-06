@@ -56,7 +56,7 @@ test('installer never changes the owner Windows power plan', () => {
 test('hung-service fallback targets only the SCM-owned Agent PID after executable-path verification', () => {
   assert.doesNotMatch(source, /taskkill\.exe[^\r\n]*\/IM\s+gpubnb-agent\.exe/i);
   assert.match(source, /Get-CimInstance Win32_Service -Filter 'Name=''GPUbnbAgent'''/);
-  assert.match(source, /\$\$servicePid = \[uint32\]\$\$service\.ProcessId/);
+  assert.match(source, /FileWrite \$2 "\$\$servicePid = \[uint32\]\$\$service\.ProcessId/);
   assert.match(source, /Get-CimInstance Win32_Process -Filter \$\$processFilter/);
   assert.match(source, /\$\$process\.ExecutablePath/);
   assert.match(source, /service\/process executable mismatch/);
