@@ -13,6 +13,26 @@ function satsString(value, field, { allowZero = false } = {}) {
   return n;
 }
 
+
+export function bitcoinCoreAmountToSats(value, field = "bitcoin amount") {
+  let text;
+  if (typeof value === "number") {
+    invariant(Number.isFinite(value) && value >= 0 && value <= 21_000_000, "BTC_SIGNER_CORE_AMOUNT", `invalid ${field}`);
+    text = value.toFixed(8);
+  } else {
+    invariant(typeof value === "string", "BTC_SIGNER_CORE_AMOUNT", `invalid ${field}`);
+    text = value;
+  }
+
+  const match = /^(0|[1-9][0-9]{0,7})(?:\.([0-9]{1,8}))?$/.exec(text);
+  invariant(match, "BTC_SIGNER_CORE_AMOUNT_FORMAT", `invalid ${field} precision`);
+  const whole = BigInt(match[1]);
+  const fraction = BigInt((match[2] ?? "").padEnd(8, "0"));
+  const sats = whole * 100_000_000n + fraction;
+  invariant(sats <= 2_100_000_000_000_000n, "BTC_SIGNER_CORE_AMOUNT_RANGE", `${field} out of range`);
+  return sats;
+}
+
 function hex(value, bytes, field) {
   invariant(typeof value === "string" && new RegExp(`^[0-9a-f]{${bytes * 2}}$`).test(value), "BTC_SIGNER_HEX", `invalid ${field}`);
   return value;
@@ -144,7 +164,7 @@ export function assertDecodedPsbtMatchesSignerIntent(decoded, intentInput, psbtB
     invariant(vin.sequence === expected.sequence, "BTC_SIGNER_SEQUENCE_MISMATCH", `input ${i} sequence mismatch`);
     invariant(psbtInput?.witness_utxo, "BTC_SIGNER_WITNESS_UTXO", `input ${i} missing witness_utxo`);
     invariant(psbtInput.witness_utxo.scriptPubKey?.hex === expected.scriptPubKeyHex, "BTC_SIGNER_INPUT_SCRIPT_MISMATCH", `input ${i} script mismatch`);
-    const observedSats = BigInt(Math.round(Number(psbtInput.witness_utxo.amount) * 100_000_000));
+    const observedSats = bitcoinCoreAmountToSats(psbtInput.witness_utxo.amount, `input ${i} amount`);
     invariant(observedSats.toString() === expected.amountSats, "BTC_SIGNER_INPUT_AMOUNT_MISMATCH", `input ${i} amount mismatch`);
     if (psbtInput.sighash !== undefined) invariant(psbtInput.sighash === "ALL", "BTC_SIGNER_SIGHASH_MISMATCH", `input ${i} sighash mismatch`);
   }
@@ -153,7 +173,7 @@ export function assertDecodedPsbtMatchesSignerIntent(decoded, intentInput, psbtB
     const expected = intent.outputs[i];
     const observed = decoded.tx.vout[i];
     invariant(observed.scriptPubKey?.hex === expected.scriptPubKeyHex, "BTC_SIGNER_OUTPUT_SCRIPT_MISMATCH", `output ${i} script mismatch`);
-    const observedSats = BigInt(Math.round(Number(observed.value) * 100_000_000));
+    const observedSats = bitcoinCoreAmountToSats(observed.value, `output ${i} amount`);
     invariant(observedSats.toString() === expected.amountSats, "BTC_SIGNER_OUTPUT_AMOUNT_MISMATCH", `output ${i} amount mismatch`);
   }
 

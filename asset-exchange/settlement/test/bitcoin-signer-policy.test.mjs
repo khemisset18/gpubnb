@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertDecodedPsbtMatchesSignerIntent, bitcoinPsbtDigestHex, bitcoinSignerIntentDigestHex, createBitcoinSignerIntent } from "../src/bitcoin-signer-policy.mjs";
+import { assertDecodedPsbtMatchesSignerIntent, bitcoinCoreAmountToSats, bitcoinPsbtDigestHex, bitcoinSignerIntentDigestHex, createBitcoinSignerIntent } from "../src/bitcoin-signer-policy.mjs";
 
 const decoded = {
   tx: {
@@ -102,4 +102,14 @@ test("binary PSBT must match the pre-authorized digest exactly", () => {
 test("invalid PSBT base64 or magic is rejected before signer invocation", () => {
   assert.throws(() => bitcoinPsbtDigestHex("not_base64!"));
   assert.throws(() => bitcoinPsbtDigestHex(Buffer.from("not-a-psbt").toString("base64")));
+});
+
+test("Bitcoin Core decimal amounts convert to sats without floating multiplication", () => {
+  assert.equal(bitcoinCoreAmountToSats(0.0099), 990000n);
+  assert.equal(bitcoinCoreAmountToSats(0.00000001), 1n);
+  assert.equal(bitcoinCoreAmountToSats("21000000.00000000"), 2100000000000000n);
+  assert.equal(bitcoinCoreAmountToSats("1.23456789"), 123456789n);
+  assert.throws(() => bitcoinCoreAmountToSats("0.000000001"));
+  assert.throws(() => bitcoinCoreAmountToSats("21000000.00000001"));
+  assert.throws(() => bitcoinCoreAmountToSats(-1));
 });
