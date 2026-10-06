@@ -112,7 +112,7 @@ jobs:
           "@
           python -m pip install --upgrade pip
           python -m pip install ./agent pyinstaller==6.16.0
-          pyinstaller --clean --noconfirm --onefile --name gpubnb-agent --hidden-import=_cffi_backend --hidden-import=encodings.idna --hidden-import=servicemanager --hidden-import=win32event --hidden-import=win32service --hidden-import=win32serviceutil --hidden-import=win32timezone --hidden-import=urllib.request --collect-all cffi --collect-all nacl agent/gpubnb_agent/__main__.py
+          pyinstaller --clean --noconfirm --onefile --name gpubnb-agent --hidden-import=_cffi_backend --hidden-import=encodings.idna --hidden-import=servicemanager --hidden-import=win32event --hidden-import=win32service --hidden-import=win32serviceutil --hidden-import=win32timezone --hidden-import=win32crypt --hidden-import=urllib.request --collect-all cffi --collect-all nacl agent/gpubnb_agent/__main__.py
           if (-not (Test-Path dist/gpubnb-agent.exe)) { throw 'Standalone agent was not generated.' }
           $builtCommit = (& ./dist/gpubnb-agent.exe build-info | ConvertFrom-Json).buildCommit
           if ($builtCommit -ne $commit) { throw "Frozen exe reports buildCommit '$builtCommit', expected '$commit' - the commit stamp did not make it into the build." }

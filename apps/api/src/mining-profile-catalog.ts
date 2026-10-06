@@ -22,7 +22,7 @@ export const MINING_PROFILE_CATALOG: readonly MiningProfileDefinition[] = [
     algorithm: 'blake3',
     miner: 'lolminer',
     enabled: true,
-    gpuVendors: ['AMD', 'NVIDIA'],
+    gpuVendors: ['NVIDIA'],
   },
   {
     id: 'lolminer_etchash',
@@ -31,7 +31,7 @@ export const MINING_PROFILE_CATALOG: readonly MiningProfileDefinition[] = [
     algorithm: 'etchash',
     miner: 'lolminer',
     enabled: true,
-    gpuVendors: ['AMD', 'NVIDIA'],
+    gpuVendors: ['NVIDIA'],
   },
   {
     id: 'lolminer_octopus',
@@ -40,7 +40,7 @@ export const MINING_PROFILE_CATALOG: readonly MiningProfileDefinition[] = [
     algorithm: 'octopus',
     miner: 'lolminer',
     enabled: true,
-    gpuVendors: ['AMD', 'NVIDIA'],
+    gpuVendors: ['NVIDIA'],
   },
   {
     id: 'xmrig_randomx',
@@ -78,7 +78,7 @@ export const MINING_PROFILE_CATALOG: readonly MiningProfileDefinition[] = [
     algorithm: 'etchash',
     miner: 'lolminer',
     enabled: false,
-    gpuVendors: ['AMD', 'NVIDIA'],
+    gpuVendors: ['NVIDIA'],
   },
   {
     id: 'lolminer_erg_autolykos2',
@@ -87,7 +87,7 @@ export const MINING_PROFILE_CATALOG: readonly MiningProfileDefinition[] = [
     algorithm: 'autolykos2',
     miner: 'lolminer',
     enabled: false,
-    gpuVendors: ['AMD', 'NVIDIA'],
+    gpuVendors: ['NVIDIA'],
   },
   {
     id: 'lolminer_flux_zelhash',
@@ -96,7 +96,7 @@ export const MINING_PROFILE_CATALOG: readonly MiningProfileDefinition[] = [
     algorithm: 'zelhash',
     miner: 'lolminer',
     enabled: false,
-    gpuVendors: ['AMD', 'NVIDIA'],
+    gpuVendors: ['NVIDIA'],
   },
   {
     id: 'lolminer_beam_beamhashiii',
@@ -105,7 +105,7 @@ export const MINING_PROFILE_CATALOG: readonly MiningProfileDefinition[] = [
     algorithm: 'beamhashiii',
     miner: 'lolminer',
     enabled: false,
-    gpuVendors: ['AMD', 'NVIDIA'],
+    gpuVendors: ['NVIDIA'],
   },
   {
     id: 'lolminer_ctxc_cuckatoo32',
@@ -114,7 +114,7 @@ export const MINING_PROFILE_CATALOG: readonly MiningProfileDefinition[] = [
     algorithm: 'cuckatoo32',
     miner: 'lolminer',
     enabled: false,
-    gpuVendors: ['AMD', 'NVIDIA'],
+    gpuVendors: ['NVIDIA'],
   },
 ] as const;
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import codecs
+import getpass
 import json
 import os
 import signal
@@ -971,6 +972,61 @@ def command_benchmark(_: argparse.Namespace) -> int:
     return 0 if gpus else 1
 
 
+def command_mining_secret_set(args: argparse.Namespace) -> int:
+    from .mining_secret_broker import MiningSecretError, store_secret
+
+    secret = getpass.getpass("Secret du pool : ")
+    confirmation = getpass.getpass("Confirmez le secret : ")
+    if secret != confirmation:
+        raise RuntimeError("mining_secret_confirmation_mismatch")
+    try:
+        status = store_secret(args.reference, secret)
+    except MiningSecretError as exc:
+        raise RuntimeError(str(exc)) from exc
+    print_json({
+        "reference": status.reference,
+        "backend": status.backend,
+        "present": status.present,
+    })
+    return 0
+
+
+def command_mining_secret_status(args: argparse.Namespace) -> int:
+    from .mining_secret_broker import MiningSecretError, secret_status
+
+    try:
+        status = secret_status(args.reference)
+    except MiningSecretError as exc:
+        raise RuntimeError(str(exc)) from exc
+    print_json({
+        "reference": status.reference,
+        "backend": status.backend,
+        "present": status.present,
+    })
+    return 0
+
+
+def command_mining_secret_delete(args: argparse.Namespace) -> int:
+    from .mining_secret_broker import MiningSecretError, delete_secret
+
+    if not args.yes:
+        print(
+            "Cette action supprime le secret local du pool. Relancez avec --yes pour confirmer.",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        status = delete_secret(args.reference)
+    except MiningSecretError as exc:
+        raise RuntimeError(str(exc)) from exc
+    print_json({
+        "reference": status.reference,
+        "backend": status.backend,
+        "present": status.present,
+    })
+    return 0
+
+
 def command_logs(args: argparse.Namespace) -> int:
     try:
         lines = log_path().read_text(encoding="utf-8", errors="replace").splitlines()
@@ -1187,6 +1243,33 @@ def parser() -> argparse.ArgumentParser:
     logs = commands.add_parser("logs", help="afficher les derniers journaux")
     logs.add_argument("--lines", type=int, default=100)
     logs.set_defaults(handler=command_logs)
+    mining_secrets = commands.add_parser(
+        "mining-secrets",
+        help="gérer les secrets de pool dans le coffre local du système",
+    )
+    mining_secret_commands = mining_secrets.add_subparsers(
+        dest="mining_secret_command",
+        required=True,
+    )
+    mining_secret_set = mining_secret_commands.add_parser(
+        "set",
+        help="enregistrer un secret de pool sans le placer dans la ligne de commande",
+    )
+    mining_secret_set.add_argument("reference")
+    mining_secret_set.set_defaults(handler=command_mining_secret_set)
+    mining_secret_status = mining_secret_commands.add_parser(
+        "status",
+        help="vérifier si une référence locale existe sans afficher le secret",
+    )
+    mining_secret_status.add_argument("reference")
+    mining_secret_status.set_defaults(handler=command_mining_secret_status)
+    mining_secret_delete = mining_secret_commands.add_parser(
+        "delete",
+        help="supprimer une référence locale du coffre",
+    )
+    mining_secret_delete.add_argument("reference")
+    mining_secret_delete.add_argument("--yes", action="store_true")
+    mining_secret_delete.set_defaults(handler=command_mining_secret_delete)
     workspaces = commands.add_parser("workspaces", help="catalogue et capacités Workspace")
     workspace_commands = workspaces.add_subparsers(dest="workspace_command", required=True)
     workspace_commands.add_parser("list", help="afficher les 13 espaces du catalogue").set_defaults(handler=command_workspaces_list)
