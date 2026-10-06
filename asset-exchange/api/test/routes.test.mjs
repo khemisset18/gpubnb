@@ -18,11 +18,11 @@ async function listen(server) {
   return server.address().port;
 }
 
-function request(port, { path, body, cookie, csrf, origin = "https://exchange.example", fetchSite = "same-origin", idempotency = "idempotency-key-001" }) {
+function request(port, { path, body, cookie, csrf, origin = "https://exchange.example", fetchSite = "same-origin", idempotency = "idempotency-key-001", method = "POST" }) {
   const payload = body === undefined ? null : Buffer.from(body, "utf8");
   return new Promise((resolve, reject) => {
     const req = http.request({
-      host: "127.0.0.1", port, method: "POST", path,
+      host: "127.0.0.1", port, method, path,
       headers: {
         host: "asset-exchange.test",
         ...(payload ? { "content-type": "application/json", "content-length": String(payload.length) } : {}),
@@ -30,7 +30,7 @@ function request(port, { path, body, cookie, csrf, origin = "https://exchange.ex
         ...(csrf ? { "x-csrf-token": csrf } : {}),
         ...(origin ? { origin } : {}),
         ...(fetchSite ? { "sec-fetch-site": fetchSite } : {}),
-        "idempotency-key": idempotency
+        ...(method === "GET" ? {} : { "idempotency-key": idempotency })
       }
     }, (res) => {
       const chunks = [];
@@ -386,6 +386,48 @@ test("cancel route requires signed JSON intent and binds path offer id", async (
     });
     assert.equal(empty.status, 400);
     assert.equal(calls.length, 1);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+
+test("asset catalog GET routes are authenticated, rate-limited reads without CSRF mutation semantics", async () => {
+  const sessionManager = createSessionManager({ store: createMemorySessionStore() });
+  const issued = await sessionManager.issue({ subject: "user:test:catalog" });
+  const cookie = issued.cookie.split(";")[0];
+  const router = createBusinessRouter({
+    sessionManager,
+    rateLimiter: createMemoryFixedWindowRateLimiter(),
+    allowedOrigins: ["https://exchange.example"],
+    offerService: {
+      async publishOffer() { throw new Error("unexpected"); },
+      async cancelOffer() { throw new Error("unexpected"); },
+      async acceptOffer() { throw new Error("unexpected"); }
+    }
+  });
+  const server = createApiServer({ businessRouter: router, allowedHosts: ["asset-exchange.test"] });
+  const port = await listen(server);
+  try {
+    const unauth = await request(port, { method: "GET", path: "/v1/assets" });
+    assert.equal(unauth.status, 401);
+
+    const list = await request(port, { method: "GET", path: "/v1/assets", cookie });
+    assert.equal(list.status, 200);
+    const parsed = JSON.parse(list.body);
+    assert.ok(parsed.assets.length >= 20);
+    assert.equal(parsed.assets.filter((a) => a.capabilities.automaticSettlementSupported).length, 1);
+
+    const btc = await request(port, { method: "GET", path: "/v1/assets/btc-regtest-native", cookie });
+    assert.equal(btc.status, 200);
+    assert.equal(JSON.parse(btc.body).asset.routing.settlement, "BITCOIN_P2WSH_HTLC_V1_REGTEST");
+
+    const usdt = await request(port, { method: "GET", path: "/v1/assets/usdt-solana-mainnet", cookie });
+    assert.equal(usdt.status, 200);
+    assert.equal(JSON.parse(usdt.body).asset.identity.assetId, "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB");
+
+    const missing = await request(port, { method: "GET", path: "/v1/assets/not-a-real-asset", cookie });
+    assert.equal(missing.status, 404);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

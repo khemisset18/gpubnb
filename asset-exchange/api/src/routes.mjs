@@ -1,4 +1,5 @@
 import { DomainError, invariant } from "../../core/src/errors.mjs";
+import { listAssetCatalog, getAssetCatalogRecord } from "../../core/src/asset-registry.mjs";
 import { validateIdempotencyKey } from "./authz.mjs";
 import { readStrictJson } from "./strict-json.mjs";
 
@@ -44,11 +45,13 @@ export function createBusinessRouter({
     const logout = req.method === "POST" && pathname === "/v1/session/logout";
     const adminFeeChallenge = req.method === "POST" && pathname === "/v1/admin/fee-policy/challenge";
     const adminFeeActivate = req.method === "POST" && pathname === "/v1/admin/fee-policy/activate";
+    const assetList = req.method === "GET" && pathname === "/v1/assets";
+    const assetDetailMatch = req.method === "GET" && pathname.match(/^\/v1\/assets\/([a-z0-9][a-z0-9._:-]{2,127})$/);
     const publish = req.method === "POST" && pathname === "/v1/offers";
     const cancelMatch = req.method === "POST" && pathname.match(/^\/v1\/offers\/([^/]+)\/cancel$/);
     const acceptMatch = req.method === "POST" && pathname.match(/^\/v1\/offers\/([^/]+)\/accept$/);
 
-    if (!exchangeSession && !logout && !adminFeeChallenge && !adminFeeActivate && !publish && !cancelMatch && !acceptMatch) return false;
+    if (!exchangeSession && !logout && !adminFeeChallenge && !adminFeeActivate && !assetList && !assetDetailMatch && !publish && !cancelMatch && !acceptMatch) return false;
 
     try {
       const origin = req.headers.origin;
@@ -73,12 +76,27 @@ export function createBusinessRouter({
       }
 
       const actor = await sessionManager.authenticateRequest(req);
-      await sessionManager.assertCsrf(req, actor);
+      if (req.method !== "GET") await sessionManager.assertCsrf(req, actor);
 
-      const routeClass = logout ? "logout" : adminFeeChallenge ? "admin-fee-challenge" : adminFeeActivate ? "admin-fee-activate" : publish ? "publish" : cancelMatch ? "cancel" : "accept";
+      const routeClass = assetList ? "assets-list" : assetDetailMatch ? "assets-detail" : logout ? "logout" : adminFeeChallenge ? "admin-fee-challenge" : adminFeeActivate ? "admin-fee-activate" : publish ? "publish" : cancelMatch ? "cancel" : "accept";
       const rate = await rateLimiter.consume(`${actor.subject}:${routeClass}`);
       if (!rate.allowed) {
         sendJson(429, { error: "rate_limited" }, { "retry-after": "60" });
+        return true;
+      }
+
+      if (assetList) {
+        sendJson(200, { assets: listAssetCatalog() });
+        return true;
+      }
+
+      if (assetDetailMatch) {
+        const record = getAssetCatalogRecord(assetDetailMatch[1]);
+        if (record === null) {
+          sendJson(404, { error: "asset_not_found" });
+          return true;
+        }
+        sendJson(200, { asset: record });
         return true;
       }
 

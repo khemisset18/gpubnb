@@ -2,6 +2,7 @@ export * from "./errors.mjs";
 export * from "./deployment.mjs";
 export * from "./amount.mjs";
 export * from "./asset.mjs";
+export * from "./asset-registry.mjs";
 export * from "./canonical.mjs";
 export * from "./fee-policy.mjs";
 export * from "./offer.mjs";
