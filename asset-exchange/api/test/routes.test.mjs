@@ -56,7 +56,7 @@ test("business route requires session and csrf before service mutation", async (
       async acceptOffer() { throw new Error("unexpected"); }
     }
   });
-  const server = createApiServer({ businessRouter: router });
+  const server = createApiServer({ businessRouter: router, allowedHosts: ["asset-exchange.test"] });
   const port = await listen(server);
   try {
     const res = await request(port, { path: "/v1/offers", body: '{"offer":{},"signature":"sig"}' });
@@ -80,7 +80,7 @@ test("valid session+csrf routes publish request and duplicate JSON keys are reje
       async acceptOffer() { throw new Error("unexpected"); }
     }
   });
-  const server = createApiServer({ businessRouter: router });
+  const server = createApiServer({ businessRouter: router, allowedHosts: ["asset-exchange.test"] });
   const port = await listen(server);
   try {
     const good = await request(port, {
@@ -116,7 +116,7 @@ test("rate limit blocks repeated business flow", async () => {
       async acceptOffer() { throw new Error("unexpected"); }
     }
   });
-  const server = createApiServer({ businessRouter: router });
+  const server = createApiServer({ businessRouter: router, allowedHosts: ["asset-exchange.test"] });
   const port = await listen(server);
   try {
     const first = await request(port, { path: "/v1/offers", cookie, csrf: issued.csrfToken, body: '{"offer":{},"signature":"sig"}' });
@@ -141,7 +141,7 @@ test("mutating business routes reject untrusted or cross-site origins", async ()
       async acceptOffer() { throw new Error("unexpected"); }
     }
   });
-  const server = createApiServer({ businessRouter: router });
+  const server = createApiServer({ businessRouter: router, allowedHosts: ["asset-exchange.test"] });
   const port = await listen(server);
   try {
     const evil = await request(port, {
@@ -178,7 +178,7 @@ test("logout revokes current session and expires hardened cookie", async () => {
       async acceptOffer() { throw new Error("unexpected"); }
     }
   });
-  const server = createApiServer({ businessRouter: router });
+  const server = createApiServer({ businessRouter: router, allowedHosts: ["asset-exchange.test"] });
   const port = await listen(server);
   try {
     const out = await request(port, {
@@ -239,7 +239,7 @@ test("signed SSO HTTP exchange creates session and replay is rejected", async ()
     }
   });
 
-  const server = createApiServer({ businessRouter: router });
+  const server = createApiServer({ businessRouter: router, allowedHosts: ["asset-exchange.test"] });
   const port = await listen(server);
   const body = JSON.stringify({ ticket, signature });
   try {
@@ -284,7 +284,7 @@ test("admin fee routes bind WYSIWYS intent to authenticated session subject", as
       async acceptOffer() { throw new Error("unexpected"); }
     }
   });
-  const server = createApiServer({ businessRouter: router });
+  const server = createApiServer({ businessRouter: router, allowedHosts: ["asset-exchange.test"] });
   const port = await listen(server);
   const policy = {
     policyId: "owner-fee-v2",
@@ -345,7 +345,7 @@ test("cancel route requires signed JSON intent and binds path offer id", async (
       async cancelOffer(v) { calls.push(v); return { status: "CANCELLED", offerId: v.cancellation.offerId }; }
     }
   });
-  const server = createApiServer({ businessRouter: router });
+  const server = createApiServer({ businessRouter: router, allowedHosts: ["asset-exchange.test"] });
   const port = await listen(server);
   const cancellation = {
     offerId: "offer-00000001",

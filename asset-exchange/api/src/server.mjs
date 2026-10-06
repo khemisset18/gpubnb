@@ -25,8 +25,39 @@ function validRequestTarget(url) {
   return typeof url === "string" && url.startsWith("/") && url.length <= 2048;
 }
 
-function validHost(host) {
-  return typeof host === "string" && host.length >= 1 && host.length <= 255 && !/[\r\n]/.test(host);
+const CRITICAL_SINGLETON_HEADERS = new Set([
+  "host",
+  "origin",
+  "cookie",
+  "content-type",
+  "content-length",
+  "transfer-encoding",
+  "idempotency-key",
+  "x-csrf-token"
+]);
+
+function canonicalHost(host) {
+  if (typeof host !== "string" || host.length < 1 || host.length > 255 || /[\r\n\s]/.test(host)) return null;
+  const lower = host.toLowerCase();
+  const match = lower.match(/^([a-z0-9.-]+)(?::([0-9]{1,5}))?$/);
+  if (!match) return null;
+  if (match[2] !== undefined) {
+    const port = Number(match[2]);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+  }
+  return lower;
+}
+
+function hasDuplicateCriticalHeaders(rawHeaders) {
+  if (!Array.isArray(rawHeaders) || rawHeaders.length % 2 !== 0) return true;
+  const seen = new Set();
+  for (let i = 0; i < rawHeaders.length; i += 2) {
+    const name = String(rawHeaders[i]).toLowerCase();
+    if (!CRITICAL_SINGLETON_HEADERS.has(name)) continue;
+    if (seen.has(name)) return true;
+    seen.add(name);
+  }
+  return false;
 }
 
 async function runWithTimeout(operation, timeoutMs) {
@@ -47,15 +78,30 @@ async function runWithTimeout(operation, timeoutMs) {
 export function createApiServer({
   readinessProbe = async () => ({ ready: true }),
   readinessTimeoutMs = 1_000,
-  businessRouter = null
+  businessRouter = null,
+  allowedHosts
 } = {}) {
   invariant(typeof readinessProbe === "function", "API_READINESS_PROBE", "readinessProbe must be a function");
+  invariant(Array.isArray(allowedHosts) && allowedHosts.length > 0, "API_ALLOWED_HOSTS", "allowedHosts must be a non-empty array");
+  const hostSet = new Set();
+  for (const host of allowedHosts) {
+    const normalized = canonicalHost(host);
+    invariant(normalized !== null, "API_ALLOWED_HOST_FORMAT", "allowed host is invalid");
+    invariant(!hostSet.has(normalized), "API_ALLOWED_HOST_DUPLICATE", "duplicate allowed host");
+    hostSet.add(normalized);
+  }
   invariant(Number.isSafeInteger(readinessTimeoutMs) && readinessTimeoutMs >= 10 && readinessTimeoutMs <= 5_000, "API_READINESS_TIMEOUT", "invalid readiness timeout");
   invariant(businessRouter === null || typeof businessRouter === "function", "API_ROUTER", "businessRouter must be a function");
 
   const server = http.createServer(async (req, res) => {
     try {
-      if (!validHost(req.headers.host)) {
+      if (hasDuplicateCriticalHeaders(req.rawHeaders)) {
+        writeJson(res, 400, { error: "bad_request" });
+        return;
+      }
+
+      const requestHost = canonicalHost(req.headers.host);
+      if (requestHost === null || !hostSet.has(requestHost)) {
         writeJson(res, 400, { error: "bad_request" });
         return;
       }
