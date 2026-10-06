@@ -7,7 +7,8 @@ const SECURITY_HEADERS = Object.freeze({
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "referrer-policy": "no-referrer",
-  "cross-origin-resource-policy": "same-origin"
+  "cross-origin-resource-policy": "same-origin",
+  "content-security-policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 });
 
 function writeJson(res, statusCode, body, extraHeaders = {}) {
@@ -43,9 +44,14 @@ async function runWithTimeout(operation, timeoutMs) {
   }
 }
 
-export function createApiServer({ readinessProbe = async () => ({ ready: true }), readinessTimeoutMs = 1_000 } = {}) {
+export function createApiServer({
+  readinessProbe = async () => ({ ready: true }),
+  readinessTimeoutMs = 1_000,
+  businessRouter = null
+} = {}) {
   invariant(typeof readinessProbe === "function", "API_READINESS_PROBE", "readinessProbe must be a function");
   invariant(Number.isSafeInteger(readinessTimeoutMs) && readinessTimeoutMs >= 10 && readinessTimeoutMs <= 5_000, "API_READINESS_TIMEOUT", "invalid readiness timeout");
+  invariant(businessRouter === null || typeof businessRouter === "function", "API_ROUTER", "businessRouter must be a function");
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -53,47 +59,43 @@ export function createApiServer({ readinessProbe = async () => ({ ready: true })
         writeJson(res, 400, { error: "bad_request" });
         return;
       }
-
       if (!validRequestTarget(req.url)) {
         writeJson(res, 414, { error: "request_target_rejected" });
         return;
       }
 
-      if (req.method !== "GET") {
-        if (req.url === "/healthz" || req.url === "/readyz") {
+      if (req.url === "/healthz" || req.url === "/readyz") {
+        if (req.method !== "GET") {
           writeJson(res, 405, { error: "method_not_allowed" }, { allow: "GET" });
           return;
         }
-        writeJson(res, 404, { error: "not_found" });
-        return;
-      }
 
-      if (req.url === "/healthz") {
-        writeJson(res, 200, { status: "ok", service: "asset-exchange-api" });
-        return;
-      }
+        if (req.url === "/healthz") {
+          writeJson(res, 200, { status: "ok", service: "asset-exchange-api" });
+          return;
+        }
 
-      if (req.url === "/readyz") {
         try {
           const result = await runWithTimeout(readinessProbe, readinessTimeoutMs);
-          if (result?.ready === true) {
-            writeJson(res, 200, { status: "ready", service: "asset-exchange-api" });
-          } else {
-            writeJson(res, 503, { status: "not_ready", service: "asset-exchange-api" });
-          }
+          writeJson(res, result?.ready === true ? 200 : 503, {
+            status: result?.ready === true ? "ready" : "not_ready",
+            service: "asset-exchange-api"
+          });
         } catch {
           writeJson(res, 503, { status: "not_ready", service: "asset-exchange-api" });
         }
         return;
       }
 
+      if (businessRouter) {
+        const handled = await businessRouter(req, (statusCode, body, headers) => writeJson(res, statusCode, body, headers));
+        if (handled) return;
+      }
+
       writeJson(res, 404, { error: "not_found" });
     } catch {
-      if (!res.headersSent) {
-        writeJson(res, 500, { error: "internal_error" });
-      } else {
-        res.destroy();
-      }
+      if (!res.headersSent) writeJson(res, 500, { error: "internal_error" });
+      else res.destroy();
     }
   });
 
@@ -103,11 +105,8 @@ export function createApiServer({ readinessProbe = async () => ({ ready: true })
   server.maxHeadersCount = 64;
 
   server.on("clientError", (_err, socket) => {
-    if (socket.writable) {
-      socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
-    } else {
-      socket.destroy();
-    }
+    if (socket.writable) socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+    else socket.destroy();
   });
 
   return server;
@@ -116,20 +115,12 @@ export function createApiServer({ readinessProbe = async () => ({ ready: true })
 export async function listenApiServer(server, config) {
   invariant(server && typeof server.listen === "function", "API_SERVER", "valid server required");
   invariant(config && typeof config === "object", "API_CONFIG", "config required");
-
   await new Promise((resolve, reject) => {
-    const onError = (error) => {
-      server.off("listening", onListening);
-      reject(error);
-    };
-    const onListening = () => {
-      server.off("error", onError);
-      resolve();
-    };
+    const onError = (error) => { server.off("listening", onListening); reject(error); };
+    const onListening = () => { server.off("error", onError); resolve(); };
     server.once("error", onError);
     server.once("listening", onListening);
     server.listen(config.port, config.host);
   });
-
   return server.address();
 }
