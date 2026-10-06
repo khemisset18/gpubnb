@@ -129,6 +129,46 @@ export function createBitcoinSettlementTerms(input) {
   });
 }
 
+export function parseSignedBitcoinSettlementTerms(input) {
+  invariant(input && typeof input === "object" && !Array.isArray(input), "BTC_TERMS_TYPE", "signed bitcoin settlement terms required");
+  invariant(input.domain === BTC_SETTLEMENT_TERMS_DOMAIN, "BTC_TERMS_DOMAIN", "invalid settlement terms domain");
+  invariant(input.version === 1, "BTC_TERMS_VERSION", "unsupported settlement terms version");
+
+  const rebuilt = createBitcoinSettlementTerms({
+    deploymentId: input.deploymentId,
+    tradeId: input.tradeId,
+    offerHash: input.offerHash,
+    makerSubject: input.makerSubject,
+    takerSubject: input.takerSubject,
+    policyEpoch: input.policyEpoch,
+    network: input.network,
+    protocolId: input.protocolId,
+    protocolVersion: input.protocolVersion,
+    fundingAmountSats: input.fundingAmountSats,
+    secretHashHex: input.secretHashHex,
+    redeemPubkeyHex: input.redeemPubkeyHex,
+    refundPubkeyHex: input.refundPubkeyHex,
+    timeoutPolicy: input.timeoutPolicy,
+    timeoutAnchorHeight: input.timeoutAnchorHeight,
+    confirmationPolicy: input.confirmationPolicy,
+    confirmationRiskClass: input.confirmationRiskClass,
+    refundLockHeight: input.refundLockHeight,
+    witnessScriptHashHex: input.witnessScriptHashHex,
+    scriptPubKeyHex: input.scriptPubKeyHex,
+    requiredConfirmations: input.requiredConfirmations,
+    sighashType: input.sighashType,
+    feePolicyId: input.feePolicyId,
+    feePolicyVersion: input.feePolicyVersion
+  });
+
+  invariant(
+    canonicalBytes(input).equals(canonicalBytes(rebuilt)),
+    "BTC_TERMS_NOT_CANONICAL",
+    "signed settlement terms are not canonical normalized terms"
+  );
+  return rebuilt;
+}
+
 export function bitcoinSettlementTermsDigestHex(termsInput) {
   const terms = termsInput?.domain === BTC_SETTLEMENT_TERMS_DOMAIN
     ? createBitcoinSettlementTerms({

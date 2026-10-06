@@ -2,7 +2,7 @@ import { invariant } from "../../core/src/errors.mjs";
 import { validateDeploymentId } from "../../core/src/deployment.mjs";
 import { createActor, validateIdempotencyKey } from "./authz.mjs";
 import {
-  createBitcoinSettlementTerms,
+  parseSignedBitcoinSettlementTerms,
   bitcoinSettlementTermsDigestHex
 } from "../../settlement/src/bitcoin-settlement-terms.mjs";
 
@@ -33,7 +33,7 @@ export function createBitcoinTermsService({
       validateIdempotencyKey(idempotencyKey);
       opaqueSignature(signature);
 
-      const parsedTerms = createBitcoinSettlementTerms(terms);
+      const parsedTerms = parseSignedBitcoinSettlementTerms(terms);
       invariant(parsedTerms.deploymentId === scopedDeploymentId, "DEPLOYMENT_MISMATCH", "settlement terms deployment mismatch");
 
       const trade = await repository.getTradeById(parsedTerms.tradeId);

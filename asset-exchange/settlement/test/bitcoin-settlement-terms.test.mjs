@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildBitcoinHtlcV1 } from "../src/bitcoin-htlc-v1.mjs";
 import { deriveBitcoinRefundTimeoutV1 } from "../src/bitcoin-timeout-policy.mjs";
-import { createBitcoinSettlementTerms, bitcoinSettlementTermsDigestHex } from "../src/bitcoin-settlement-terms.mjs";
+import { createBitcoinSettlementTerms, parseSignedBitcoinSettlementTerms, bitcoinSettlementTermsDigestHex } from "../src/bitcoin-settlement-terms.mjs";
 
 const redeem = "03c150061989643d77162902b725409087959f15914649d4f06b6cc3f8c87bb238";
 const refund = "020461e6025e68bdc5a1d6730b2fb13c4c62d295f226f0c3dbd0b713530897a6b4";
@@ -221,4 +221,23 @@ test("settlement terms bind accepted-trade lineage and distinct parties", () => 
   assert.throws(() => createBitcoinSettlementTerms({ ...base, makerSubject: "" }));
   assert.throws(() => createBitcoinSettlementTerms({ ...base, takerSubject: base.makerSubject }));
   assert.throws(() => createBitcoinSettlementTerms({ ...base, policyEpoch: -1 }));
+});
+
+
+test("signed normalized settlement terms parse strictly and reject derived-field mutation", () => {
+  const normalized = createBitcoinSettlementTerms(base);
+  assert.deepEqual(parseSignedBitcoinSettlementTerms(normalized), normalized);
+
+  assert.throws(() => parseSignedBitcoinSettlementTerms({
+    ...normalized,
+    confirmationPolicyHash: "00".repeat(32)
+  }));
+  assert.throws(() => parseSignedBitcoinSettlementTerms({
+    ...normalized,
+    domain: "GPUBNB:ASSET-EXCHANGE:SETTLEMENT:BTC:v2"
+  }));
+  assert.throws(() => parseSignedBitcoinSettlementTerms({
+    ...normalized,
+    operationalSafetyBlocks: normalized.operationalSafetyBlocks + 1
+  }));
 });
