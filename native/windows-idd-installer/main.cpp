@@ -1,6 +1,3 @@
-#define UNICODE
-#define _UNICODE
-
 #include <windows.h>
 #include <newdev.h>
 #include <setupapi.h>
