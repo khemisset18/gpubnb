@@ -5,12 +5,14 @@ on:
   pull_request:
     paths:
       - "native/windows-idd/**"
+      - "native/windows-idd-installer/**"
       - ".github/workflows/windows-idd.yml"
   push:
     branches:
       - "feat/windows-native-desktop-workspaces"
     paths:
       - "native/windows-idd/**"
+      - "native/windows-idd-installer/**"
       - ".github/workflows/windows-idd.yml"
 
 permissions:
@@ -136,10 +138,41 @@ jobs:
             throw "WDK 28000 CI must use the x64 MSBuild host"
           }
 
+      - name: Verify root-device installer is narrowly scoped
+        shell: pwsh
+        run: |
+          $source = Get-Content native/windows-idd-installer/main.cpp -Raw
+          foreach ($required in @(
+            'Root\\GPUbnbVirtualDisplay',
+            'GPUbnbIdd.inf',
+            'DIF_REGISTERDEVICE',
+            'UpdateDriverForPlugAndPlayDevicesW',
+            'INSTALLFLAG_NONINTERACTIVE'
+          )) {
+            if ($source -notmatch [regex]::Escape($required)) {
+              throw "IDD installer is missing required bounded contract: $required"
+            }
+          }
+          if ($source -match 'INSTALLFLAG_FORCE') {
+            throw 'Production IDD installer must not force a driver downgrade.'
+          }
+          if ($source -match 'argv\[.+HardwareId') {
+            throw 'Production IDD installer must not accept an arbitrary hardware ID.'
+          }
+
       - name: Restore WDK NuGet packages
         shell: pwsh
         run: |
           msbuild native/windows-idd/GPUbnbIdd.vcxproj /t:Restore /p:Configuration=Release /p:Platform=x64 /warnAsError
+          msbuild native/windows-idd-installer/GPUbnbIddInstaller.vcxproj /t:Restore /p:Configuration=Release /p:Platform=x64 /warnAsError
+
+      - name: Build bounded IddCx root-device installer
+        shell: pwsh
+        run: |
+          msbuild native/windows-idd-installer/GPUbnbIddInstaller.vcxproj /m /p:Configuration=Release /p:Platform=x64 /warnAsError
+          $installer = Get-ChildItem native/windows-idd-installer -Recurse -Filter GPUbnbIddInstaller.exe -File | Select-Object -First 1
+          if (-not $installer) { throw 'GPUbnbIddInstaller.exe was not produced.' }
+          Write-Host "Built bounded IDD installer: $($installer.FullName)"
 
       - name: Verify restored x64 WDK toolchain
         shell: pwsh
