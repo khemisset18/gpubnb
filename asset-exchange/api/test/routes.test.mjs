@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { generateKeyPairSync, sign } from "node:crypto";
 import { createApiServer } from "../src/server.mjs";
 import { createBusinessRouter } from "../src/routes.mjs";
 import { createMemorySessionStore, createSessionManager } from "../src/session.mjs";
 import { createMemoryFixedWindowRateLimiter } from "../src/rate-limit.mjs";
+import { canonicalBytes } from "../../core/src/canonical.mjs";
+import { createMemorySsoReplayStore } from "../src/postgres-sso-replay-store.mjs";
+import { createSsoExchangeService, createSsoTicket } from "../src/sso-ticket.mjs";
 
 async function listen(server) {
   await new Promise((resolve, reject) => {
@@ -192,5 +196,61 @@ test("logout revokes current session and expires hardened cookie", async () => {
       body: '{"offer":{},"signature":"sig"}'
     });
     assert.equal(after.status, 401);
+  } finally { await new Promise((r) => server.close(r)); }
+});
+
+test("signed SSO HTTP exchange creates session and replay is rejected", async () => {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const publicKeyPem = publicKey.export({ type: "spki", format: "pem" });
+  const store = createMemorySessionStore();
+  const sessionManager = createSessionManager({ store, now: () => 2000 });
+  const replayStore = createMemorySsoReplayStore();
+  const ssoService = createSsoExchangeService({
+    publicKeyPem,
+    expectedIssuer: "gpubnb-core-auth",
+    expectedAudience: "gpu.k.p2p",
+    deploymentId: "ae-test-01",
+    replayStore,
+    sessionManager,
+    now: () => 2000
+  });
+  const ticket = createSsoTicket({
+    domain: "GPUBNB:ASSET-EXCHANGE:SSO:v1",
+    version: 1,
+    issuer: "gpubnb-core-auth",
+    audience: "gpu.k.p2p",
+    deploymentId: "ae-test-01",
+    subject: "user:test:001",
+    iatUnixMs: 1000,
+    expUnixMs: 61000,
+    jti: "route-ticket-00000001"
+  });
+  const signature = sign(null, canonicalBytes(ticket), privateKey).toString("base64url");
+
+  const router = createBusinessRouter({
+    sessionManager,
+    ssoService,
+    rateLimiter: createMemoryFixedWindowRateLimiter(),
+    allowedOrigins: ["https://exchange.example"],
+    offerService: {
+      async publishOffer() { throw new Error("unexpected"); },
+      async cancelOffer() { throw new Error("unexpected"); },
+      async acceptOffer() { throw new Error("unexpected"); }
+    }
+  });
+
+  const server = createApiServer({ businessRouter: router });
+  const port = await listen(server);
+  const body = JSON.stringify({ ticket, signature });
+  try {
+    const first = await request(port, { path: "/v1/session/exchange", body });
+    assert.equal(first.status, 200);
+    assert.match(first.headers["set-cookie"][0], /^__Host-gpubnb-ae-session=/);
+    const parsed = JSON.parse(first.body);
+    assert.equal(parsed.status, "session_created");
+    assert.equal(typeof parsed.csrfToken, "string");
+
+    const replay = await request(port, { path: "/v1/session/exchange", body });
+    assert.equal(replay.status, 401);
   } finally { await new Promise((r) => server.close(r)); }
 });
