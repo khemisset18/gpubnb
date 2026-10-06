@@ -247,6 +247,15 @@ ReorgA ==
                   commandEpoch, mode, targetMode, chainB, feeState, kycStatus,
                   recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment, refundMatured, exchangeAvailable>>
 
+ReorgB ==
+  /\ chainB \in {"CONFIRMED", "SPENT_REDEEM"}
+  /\ chainB' = "REORGED"
+  /\ tradeState' = "REORG_HOLD"
+  /\ UNCHANGED <<offerState, acceptedBy, termsSigned, lockBroadcast,
+                  bundleGenerated, bundleValidated, bundleExported, policyEpoch,
+                  commandEpoch, mode, targetMode, chainA, feeState, kycStatus,
+                  recoveryEnabled, newLocksEnabled, coreAvailable, replayConsumed, lockCreatedEpoch, offerDeployment, refundMatured, exchangeAvailable>>
+
 BeginModeTransition(newMode) ==
   /\ newMode \in {"CONFORMITE", "SOUVERAIN"}
   /\ newMode # mode
@@ -324,6 +333,7 @@ Next ==
   \/ BecomeRefundEligible
   \/ Refund
   \/ ReorgA
+  \/ ReorgB
   \/ \E m \in {"CONFORMITE", "SOUVERAIN"}: BeginModeTransition(m)
   \/ ActivateTargetMode
   \/ \E s \in KycStates: ChangeKycStatus(s)
@@ -390,6 +400,13 @@ CompletedRequiresRedeems ==
 CrossDeploymentReplayBlocked ==
   (offerState \in {"RESERVED", "CONSUMED"} \/ lockBroadcast)
     => offerDeployment = CurrentDeployment
+
+DependentIrreversibleStates ==
+  {"B_LOCKED", "SECRET_REVEALED", "COUNTER_REDEEM_CONFIRMED", "COMPLETED"}
+
+UncertainChainStopsAdvance ==
+  (chainA = "REORGED" \/ chainB = "REORGED")
+    => tradeState \notin DependentIrreversibleStates
 
 \* Scenario-specific liveness models with explicit fairness assumptions.
 
