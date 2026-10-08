@@ -74,6 +74,7 @@ gitian_image_id="$(docker image inspect base-focal-amd64 --format '{{.Id}}')"
 
 cp "$source_dir/contrib/gitian-descriptors/gitian-linux.yml" "$work/gitian-linux.yml"
 export USE_DOCKER=1
+set +e
 (
   cd "$builder_dir"
   ./bin/gbuild -j 2 -m 6000 \
@@ -81,6 +82,22 @@ export USE_DOCKER=1
     --url "dogecoin=$DOGECOIN_REPO" \
     "$work/gitian-linux.yml" 2>&1 | tee "$OUTPUT_DIR/gbuild.log"
 )
+gbuild_status=$?
+set -e
+if [[ "$gbuild_status" -ne 0 ]]; then
+  for diagnostic in \
+    "$builder_dir/var/install.log" \
+    "$builder_dir/var/build.log" \
+    "$builder_dir/var/base.log"; do
+    if [[ -f "$diagnostic" ]]; then
+      cp "$diagnostic" "$OUTPUT_DIR/$(basename "$diagnostic")"
+      echo "===== $(basename "$diagnostic") =====" >&2
+      tail -n 400 "$diagnostic" >&2 || true
+    fi
+  done
+  docker ps -a >&2 || true
+  exit "$gbuild_status"
+fi
 
 archive_path="$(find "$builder_dir/build/out" -maxdepth 1 -type f -name "$EXPECTED_ARCHIVE" -print -quit)"
 if [[ -z "$archive_path" || ! -f "$archive_path" ]]; then
