@@ -60,7 +60,8 @@ jobs:
             "${GITHUB_WORKSPACE}/dist/dogecoin-d0-${{ matrix.replica }}"
 
       - name: Upload independent build evidence
-            uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dogecoin-d0-replica-${{ matrix.replica }}-${{ github.sha }}
           path: dist/dogecoin-d0-${{ matrix.replica }}/
@@ -70,7 +71,6 @@ jobs:
   compare:
     name: Compare replicas and produce D0 evidence
     needs: build
-    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
