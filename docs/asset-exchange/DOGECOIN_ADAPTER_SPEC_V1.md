@@ -1,6 +1,6 @@
 # Dogecoin Adapter Specification V1
 
-Status: SPECIFIED / UNVERIFIED / NO-TEST WINDOW / NO AUTOMATIC SETTLEMENT ACTIVATION
+Status: SPECIFIED / UNVERIFIED / D0 BLOCKED / NO AUTOMATIC SETTLEMENT ACTIVATION
 
 ## 1. Scope
 
@@ -10,7 +10,7 @@ Candidate adapter/profile:
 
 `DOGE_SCRIPT_SETTLEMENT_V1`
 
-This specification is intentionally non-executable during the current no-test window.
+This specification remains non-executable for Dogecoin settlement while D0 release/toolchain integrity is blocked.
 
 It does NOT:
 - enable Dogecoin settlement;
@@ -33,6 +33,39 @@ Reviewed release baseline:
 - tagged commit: `e0a1c157791544e818c901bd9341896965afbf9d`.
 
 The v1.14.9 release notes describe important bugfixes and recommend upgrade.
+
+### Revalidation finding — 2026-10-08
+
+The Dogecoin release-integrity gate is **BLOCKED**:
+
+- The downloaded `dogecoin-1.14.9-x86_64-linux-gnu.tar.gz` SHA-256 was
+  `4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8`. It
+  matches the official `SHA256SUMS.asc` entry and both v1.14.9 Linux Gitian
+  manifests.
+- GPG reports that the `SHA256SUMS.asc` signature key
+  `DC6EF4A8BF9F1B1E4DE1EE522D3A345B98D0DC1F` expired on 2024-07-16, before the
+  signature date of 2024-12-01.
+- The `slightlyskepticalpotat` Gitian attestation uses key
+  `48C7B3FCBB060C957E5E468F38198FBB972B765A`, which is revoked with a
+  2020-03-15 revocation date. The `KunNw0n` attestation uses key
+  `7E453C9D37AC2EB246645C4B75055E4030051C37`; that key is not in the official
+  v1.14.9 release-key list and was unavailable from the OpenPGP key service,
+  so its signature could not be authenticated.
+- The official Dogecoin security policy currently lists v1.14.7 as supported,
+  while the v1.14.9 release page marks v1.14.9 as Latest. This support-status
+  difference also needs clarification.
+
+The v1.14.9 binary was not executed. Do not qualify it until Dogecoin publishes
+valid release provenance signed by an authenticated, non-revoked key and
+clarifies the supported-version status. The campaign stopped here; the BCH
+phase was not run. Dogecoin remains `MARKETPLACE_ONLY` with automatic settlement
+disabled.
+
+Evidence sources:
+- Release and checksum: https://github.com/dogecoin/dogecoin/releases/tag/v1.14.9
+- Release keys: https://github.com/dogecoin/dogecoin/tree/v1.14.9/contrib/gitian-keys
+- Gitian attestations: https://github.com/dogecoin/gitian.sigs/tree/master/1.14.9-linux
+- Security policy: https://github.com/dogecoin/dogecoin/security/policy
 
 The official Dogecoin BIP document records:
 - BIP65 / CHECKLOCKTIMEVERIFY;
@@ -108,7 +141,7 @@ Proposed identity:
 
 The exact domain string MUST be frozen before implementation.
 
-## 6. Capability declaration during no-test window
+## 6. Capability declaration until executable qualification
 
 All executable capabilities remain false:
 
@@ -132,7 +165,7 @@ No capability may become true based only on Bitcoin/Litecoin similarity.
 
 ## 7. Settlement construction decision
 
-No final Dogecoin script form is approved during the no-test window.
+No final Dogecoin script form is approved until executable qualification establishes the exact Dogecoin profile.
 
 Qualification MUST compare at least:
 - P2SH-based script construction;
