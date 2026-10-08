@@ -103,6 +103,10 @@ echo "ubuntu_focal_repo_digest=$UBUNTU_REPO_DIGEST" >> "$OUTPUT_DIR/environment.
   cd "$WORK_DIR/gitian-builder"
   export MIRROR_HOST=172.17.0.1
   ./bin/make-base-vm --suite focal --arch amd64 --docker --docker-image-digest "$UBUNTU_DIGEST"
+  PINNED_BASE_IMAGE="base-${UBUNTU_DIGEST}-amd64"
+  docker image inspect "$PINNED_BASE_IMAGE" >/dev/null
+  docker tag "$PINNED_BASE_IMAGE" base-focal-amd64
+  test "$(docker image inspect --format='{{.Id}}' "$PINNED_BASE_IMAGE")" = "$(docker image inspect --format='{{.Id}}' base-focal-amd64)"
 )
 
 (
