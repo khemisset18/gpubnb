@@ -18,6 +18,7 @@ The source-rebuild route binds to all of:
 - pinned Gitian builder commit: `41c325d2f14147e8028fce9a5edd26e7adad30a4`;
 - immutable Ubuntu Focal container digest resolved and recorded before build;
 - LIEF wheel SHA-256 `c848aadac0816268aeb9dde7cefdb54bf24f78e664a19e97e74c92d3be1bb147` from the upstream release build script;
+- LIEF transport may use the PyPI file CDN only when the downloaded bytes match that exact pinned SHA-256; transport location is not a trust substitute;
 - observed official x86_64 release archive SHA-256 `4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8`.
 
 The security assumption is explicit: gpu.k.p2p trusts the official GitHub repository/commit identity as the source root for this internal qualification route. It does not reinterpret an expired/revoked OpenPGP signature as valid.
