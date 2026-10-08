@@ -2,9 +2,11 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { canonicalBytes } from "../../core/src/canonical.mjs";
 import { invariant } from "../../core/src/errors.mjs";
 import { assertNoForbiddenSecrets, createRecoveryMetadata } from "./metadata.mjs";
+import { parseStrictJson } from "./strict-json.mjs";
 
 export const RECOVERY_DOMAIN = "GPUBNB:ASSET-EXCHANGE:RECOVERY:v1";
 export const RECOVERY_CIPHER = "AES-256-GCM";
+export const MAX_RECOVERY_PLAINTEXT_BYTES = 8 * 1024 * 1024;
 
 const ARTIFACT_TYPES = new Set([
   "SIGNED_REFUND_TX",
@@ -44,10 +46,20 @@ export function createRecoveryArtifact(input) {
   invariant(ARTIFACT_TYPES.has(input.artifactType), "RECOVERY_ARTIFACT_KIND", "unsupported recovery artifact type");
   invariant(typeof input.chainProfile === "string" && input.chainProfile.length >= 3 && input.chainProfile.length <= 128, "RECOVERY_ARTIFACT_CHAIN", "invalid recovery artifact chain");
   invariant(ENCODINGS.has(input.encoding), "RECOVERY_ARTIFACT_ENCODING", "unsupported recovery artifact encoding");
-  invariant(typeof input.data === "string" && input.data.length >= 1 && input.data.length <= 2_000_000, "RECOVERY_ARTIFACT_DATA", "invalid recovery artifact data");
+  invariant(typeof input.data === "string", "RECOVERY_ARTIFACT_DATA", "invalid recovery artifact data");
+  const dataBytes = Buffer.byteLength(input.data, "utf8");
+  invariant(dataBytes >= 1 && dataBytes <= 2_000_000, "RECOVERY_ARTIFACT_DATA", "invalid recovery artifact data");
 
   if (input.encoding === "HEX") invariant(/^(?:[0-9a-fA-F]{2})+$/.test(input.data), "RECOVERY_ARTIFACT_HEX", "invalid hex artifact");
-  if (input.encoding === "BASE64") invariant(/^[A-Za-z0-9+/]*={0,2}$/.test(input.data), "RECOVERY_ARTIFACT_BASE64", "invalid base64 artifact");
+  if (input.encoding === "BASE64") {
+    invariant(/^[A-Za-z0-9+/]+={0,2}$/.test(input.data), "RECOVERY_ARTIFACT_BASE64", "invalid base64 artifact");
+    const decoded = Buffer.from(input.data, "base64");
+    invariant(decoded.length > 0 && decoded.toString("base64") === input.data, "RECOVERY_ARTIFACT_BASE64", "non-canonical base64 artifact");
+  }
+  if (input.encoding === "JSON") {
+    const parsed = parseStrictJson(input.data);
+    assertNoForbiddenSecrets(parsed, "$.artifact.data");
+  }
 
   return Object.freeze({
     artifactType: input.artifactType,
@@ -91,6 +103,7 @@ export function encryptRecoveryPayload(payloadInput, keyInput) {
   const iv = randomBytes(12);
   const aad = recoveryAad();
   const plaintext = canonicalBytes(payload);
+  invariant(plaintext.length <= MAX_RECOVERY_PLAINTEXT_BYTES, "RECOVERY_PLAINTEXT_LIMIT", "recovery plaintext too large");
 
   try {
     const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
@@ -134,11 +147,11 @@ export function decryptRecoveryEnvelope(envelope, keyInput) {
     decipher.setAAD(aad, { plaintextLength: ciphertext.length });
     decipher.setAuthTag(tag);
     const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    invariant(plaintext.length <= 8 * 1024 * 1024, "RECOVERY_PLAINTEXT_LIMIT", "recovery plaintext too large");
+    invariant(plaintext.length <= MAX_RECOVERY_PLAINTEXT_BYTES, "RECOVERY_PLAINTEXT_LIMIT", "recovery plaintext too large");
 
     let parsed;
-    try { parsed = JSON.parse(plaintext.toString("utf8")); }
-    catch { invariant(false, "RECOVERY_JSON", "recovery plaintext is not valid JSON"); }
+    try { parsed = parseStrictJson(plaintext.toString("utf8")); }
+    catch { invariant(false, "RECOVERY_JSON", "recovery plaintext is not valid strict JSON"); }
 
     invariant(parsed.domain === RECOVERY_DOMAIN && parsed.payloadVersion === 1, "RECOVERY_PAYLOAD_HEADER", "invalid recovery payload header");
     return createRecoveryPayload({ metadata: parsed.metadata, artifacts: parsed.artifacts });
