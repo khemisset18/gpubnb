@@ -49,6 +49,7 @@ expected_files = {
     "asset-exchange/recovery/src/bundle.mjs",
     "asset-exchange/recovery/src/cli.mjs",
     "asset-exchange/recovery/src/metadata.mjs",
+    "asset-exchange/recovery/src/strict-json.mjs",
 }
 
 with open(sbom_path, "r", encoding="utf-8") as f:
