@@ -74,7 +74,7 @@ bytes_equal = archive_a.read_bytes() == archive_b.read_bytes()
 identity_fields = [
     "dogecoinRepository", "dogecoinCommit", "dogecoinTree", "gitianDescriptorSha256",
     "gitianBuildScriptSha256", "gitianBuilderRepository", "gitianBuilderCommit",
-    "ubuntuFocalImageDigest", "liefSha256", "archive"
+    "ubuntuFocalImageDigest", "liefSha256", "qrencodeSha256", "archive"
 ]
 identity_equal = all(info_a.get(k) == info_b.get(k) for k in identity_fields)
 source_ok = info_a.get("dogecoinCommit") == EXPECTED_SOURCE == info_b.get("dogecoinCommit")

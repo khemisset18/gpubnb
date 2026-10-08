@@ -16,6 +16,8 @@ readonly LIEF_URL="https://files.pythonhosted.org/packages/3a/cf/a6ddb755d7f38cd
 readonly LIEF_SHA256="c848aadac0816268aeb9dde7cefdb54bf24f78e664a19e97e74c92d3be1bb147"
 readonly OFFICIAL_X86_64_SHA256="4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8"
 readonly EXPECTED_ARCHIVE="dogecoin-1.14.9-x86_64-linux-gnu.tar.gz"
+readonly QRENCODE_URL="https://download.bitcoincashnode.org/depends-sources/qrencode-3.4.4.tar.bz2"
+readonly QRENCODE_SHA256="efe5188b1ddbcbf98763b819b146be6a90481aac30cfc8d858ab78a19cde1fa5"
 
 work="$(mktemp -d)"
 cleanup() { rm -rf "$work"; }
@@ -46,10 +48,17 @@ git -C "$builder_dir" fetch --depth 1 origin "$GITIAN_BUILDER_COMMIT"
 git -C "$builder_dir" checkout --detach -q FETCH_HEAD
 [[ "$(git -C "$builder_dir" rev-parse HEAD)" == "$GITIAN_BUILDER_COMMIT" ]]
 
-mkdir -p "$builder_dir/inputs"
+mkdir -p "$builder_dir/inputs" "$builder_dir/cache/common"
 curl --fail --location --retry 3 --proto '=https' --tlsv1.2 "$LIEF_URL" \
   --output "$builder_dir/inputs/$(basename "$LIEF_URL")"
 echo "$LIEF_SHA256  $builder_dir/inputs/$(basename "$LIEF_URL")" | sha256sum -c --strict
+
+# The original qrencode URL is gone and the Dogecoin fallback currently has
+# invalid TLS. Preseed only the exact source bytes authorized by the hash in
+# Dogecoin v1.14.9 depends/packages/qrencode.mk.
+curl --fail --location --retry 3 --proto '=https' --tlsv1.2 "$QRENCODE_URL" \
+  --output "$builder_dir/cache/common/qrencode-3.4.4.tar.bz2"
+echo "$QRENCODE_SHA256  $builder_dir/cache/common/qrencode-3.4.4.tar.bz2" | sha256sum -c --strict
 
 # Resolve the mutable Ubuntu tag to an immutable digest before creating the Gitian base image.
 docker pull ubuntu:focal
@@ -128,6 +137,8 @@ data = {
   "gitianBaseImageId": "$gitian_image_id",
   "liefUrl": "$LIEF_URL",
   "liefSha256": "$LIEF_SHA256",
+  "qrencodeMirrorUrl": "$QRENCODE_URL",
+  "qrencodeSha256": "$QRENCODE_SHA256",
   "archive": "$EXPECTED_ARCHIVE",
   "archiveSha256": "$archive_sha256",
   "archiveSize": int("$archive_size"),

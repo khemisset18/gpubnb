@@ -19,6 +19,7 @@ The source-rebuild route binds to all of:
 - immutable Ubuntu Focal container digest resolved and recorded before build;
 - LIEF wheel SHA-256 `c848aadac0816268aeb9dde7cefdb54bf24f78e664a19e97e74c92d3be1bb147` from the upstream release build script;
 - LIEF transport may use the PyPI file CDN only when the downloaded bytes match that exact pinned SHA-256; transport location is not a trust substitute;
+- qrencode 3.4.4 may be preseeded from an independent HTTPS source mirror only when it matches the exact Dogecoin depends SHA-256 `efe5188b1ddbcbf98763b819b146be6a90481aac30cfc8d858ab78a19cde1fa5`; mirror identity is transport evidence only;
 - observed official x86_64 release archive SHA-256 `4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8`.
 
 The security assumption is explicit: gpu.k.p2p trusts the official GitHub repository/commit identity as the source root for this internal qualification route. It does not reinterpret an expired/revoked OpenPGP signature as valid.
