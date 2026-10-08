@@ -21,6 +21,7 @@ The source-rebuild route binds to all of:
 - LIEF transport may use the PyPI file CDN only when the downloaded bytes match that exact pinned SHA-256; transport location is not a trust substitute;
 - qrencode 3.4.4 may be preseeded from an independent HTTPS source mirror only when it matches the exact Dogecoin depends SHA-256 `efe5188b1ddbcbf98763b819b146be6a90481aac30cfc8d858ab78a19cde1fa5`; mirror identity is transport evidence only;
 - zlib 1.3 may be preseeded from the official zlib HTTPS fossils directory only when it matches the exact Dogecoin depends SHA-256 `ff0ba4c292013dbc27530b3a81e1f9a813cd39de01ca5e0f8bf355702efa593e`;
+- all remaining Linux `depends` source archives may use an independent HTTPS fallback transport only through Dogecoin's unmodified `depends` fetch rules, which verify the SHA-256 values embedded in the pinned v1.14.9 source tree; the fallback host is not a content trust root;
 - observed official x86_64 release archive SHA-256 `4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8`.
 
 The security assumption is explicit: gpu.k.p2p trusts the official GitHub repository/commit identity as the source root for this internal qualification route. It does not reinterpret an expired/revoked OpenPGP signature as valid.

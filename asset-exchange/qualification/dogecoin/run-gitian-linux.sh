@@ -20,6 +20,7 @@ readonly QRENCODE_URL="https://download.bitcoincashnode.org/depends-sources/qren
 readonly QRENCODE_SHA256="efe5188b1ddbcbf98763b819b146be6a90481aac30cfc8d858ab78a19cde1fa5"
 readonly ZLIB_URL="https://www.zlib.net/fossils/zlib-1.3.tar.gz"
 readonly ZLIB_SHA256="ff0ba4c292013dbc27530b3a81e1f9a813cd39de01ca5e0f8bf355702efa593e"
+readonly DEPENDS_FALLBACK_URL="https://download.bitcoincashnode.org/depends-sources"
 
 work="$(mktemp -d)"
 cleanup() { rm -rf "$work"; }
@@ -67,6 +68,19 @@ echo "$QRENCODE_SHA256  $builder_dir/cache/common/qrencode-3.4.4.tar.bz2" | sha2
 curl --fail --location --retry 3 --proto '=https' --tlsv1.2 "$ZLIB_URL" \
   --output "$builder_dir/cache/common/zlib-1.3.tar.gz"
 echo "$ZLIB_SHA256  $builder_dir/cache/common/zlib-1.3.tar.gz" | sha256sum -c --strict
+
+# Prefetch the exact source set required by the unmodified v1.14.9 Linux
+# descriptor. Dogecoin's own depends machinery validates every downloaded file
+# against the SHA-256 embedded in the pinned source commit. Replacing only the
+# fallback transport prevents the expired depends.dogecoincore.org certificate
+# from weakening or blocking source acquisition.
+for host in aarch64-linux-gnu arm-linux-gnueabihf x86_64-pc-linux-gnu i686-pc-linux-gnu; do
+  make -C "$source_dir/depends" -s \
+    HOST="$host" \
+    SOURCES_PATH="$builder_dir/cache/common" \
+    FALLBACK_DOWNLOAD_PATH="$DEPENDS_FALLBACK_URL" \
+    download-one
+done
 
 # Resolve the mutable Ubuntu tag to an immutable digest before creating the Gitian base image.
 docker pull ubuntu:focal
@@ -149,6 +163,7 @@ data = {
   "qrencodeSha256": "$QRENCODE_SHA256",
   "zlibUrl": "$ZLIB_URL",
   "zlibSha256": "$ZLIB_SHA256",
+  "dependsFallbackUrl": "$DEPENDS_FALLBACK_URL",
   "archive": "$EXPECTED_ARCHIVE",
   "archiveSha256": "$archive_sha256",
   "archiveSize": int("$archive_size"),
