@@ -27,6 +27,12 @@ export function assertNoForbiddenSecrets(value, path = "$") {
   return true;
 }
 
+function validateOpaqueId(value, field, min = 3, max = 128) {
+  invariant(typeof value === "string" && value.length >= min && value.length <= max, "RECOVERY_IDENTIFIER", `invalid ${field}`);
+  invariant(/^[\x21-\x7e]+$/.test(value), "RECOVERY_IDENTIFIER", `${field} must be printable ASCII without whitespace`);
+  return value;
+}
+
 export function createRecoveryMetadata(input) {
   invariant(input && typeof input === "object" && !Array.isArray(input), "RECOVERY_TYPE", "recovery metadata must be an object");
   assertNoForbiddenSecrets(input);
@@ -39,12 +45,12 @@ export function createRecoveryMetadata(input) {
 
   invariant(input.bundleVersion === 1, "RECOVERY_VERSION", "unsupported recovery bundle version");
   const deploymentId = validateDeploymentId(input.deploymentId);
-  invariant(typeof input.tradeId === "string" && input.tradeId.length >= 8 && input.tradeId.length <= 128, "RECOVERY_TRADE", "invalid tradeId");
-  invariant(typeof input.protocolId === "string" && input.protocolId.length >= 8 && input.protocolId.length <= 128, "RECOVERY_PROTOCOL", "invalid protocolId");
+  const tradeId = validateOpaqueId(input.tradeId, "tradeId", 8, 128);
+  const protocolId = validateOpaqueId(input.protocolId, "protocolId", 8, 128);
   invariant(Number.isSafeInteger(input.protocolVersion) && input.protocolVersion >= 1, "RECOVERY_PROTOCOL_VERSION", "invalid protocol version");
   invariant(["MAKER","TAKER"].includes(input.partyRole), "RECOVERY_ROLE", "invalid recovery role");
   invariant(Array.isArray(input.chainProfiles) && input.chainProfiles.length >= 1 && input.chainProfiles.length <= 8, "RECOVERY_CHAINS", "invalid chain profile list");
-  invariant(input.chainProfiles.every((v) => typeof v === "string" && v.length >= 3 && v.length <= 128), "RECOVERY_CHAIN_PROFILE", "invalid chain profile");
+  invariant(input.chainProfiles.every((v) => { try { validateOpaqueId(v, "chainProfile", 3, 128); return true; } catch { return false; } }), "RECOVERY_CHAIN_PROFILE", "invalid chain profile");
   invariant(Array.isArray(input.recoveryActions) && input.recoveryActions.length >= 1 && input.recoveryActions.length <= 16, "RECOVERY_ACTIONS", "invalid recovery action list");
   invariant(input.recoveryActions.every((v) => ["REFUND","REDEEM","RECONCILE","REBROADCAST"].includes(v)), "RECOVERY_ACTION", "unsupported recovery action");
   invariant(Number.isSafeInteger(input.createdAtUnixMs) && input.createdAtUnixMs > 0, "RECOVERY_TIME", "invalid creation timestamp");
@@ -52,8 +58,8 @@ export function createRecoveryMetadata(input) {
   return Object.freeze({
     bundleVersion: 1,
     deploymentId,
-    tradeId: input.tradeId,
-    protocolId: input.protocolId,
+    tradeId,
+    protocolId,
     protocolVersion: input.protocolVersion,
     partyRole: input.partyRole,
     chainProfiles: Object.freeze([...input.chainProfiles]),
