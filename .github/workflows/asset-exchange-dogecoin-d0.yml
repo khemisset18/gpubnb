@@ -1,0 +1,143 @@
+name: Asset Exchange Dogecoin D0 Reproducible Build
+
+on:
+  push:
+    branches:
+      - asset-exchange/dogecoin-d0-build-2026-10-08
+      - asset-exchange/secure-foundation-v1
+    paths:
+      - 'asset-exchange/qualification/dogecoin/**'
+      - 'docs/asset-exchange/DOGECOIN_D0_TRUST_POLICY_V1.md'
+      - '.github/workflows/asset-exchange-dogecoin-d0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: asset-exchange-dogecoin-d0-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Independent Gitian build ${{ matrix.replica }}
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [a, b]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout gpu.k.p2p qualification source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build pinned Dogecoin Core with Gitian
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x asset-exchange/qualification/dogecoin/run-gitian-linux.sh
+          asset-exchange/qualification/dogecoin/run-gitian-linux.sh "dist/dogecoin-d0-${{ matrix.replica }}"
+
+      - name: Upload independent build evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dogecoin-d0-build-${{ matrix.replica }}-${{ github.sha }}
+          path: dist/dogecoin-d0-${{ matrix.replica }}/
+          if-no-files-found: error
+          retention-days: 30
+
+  compare-and-attest:
+    name: Compare two builds and attest D0 evidence
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Checkout verifier at exact qualification commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download build A
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dogecoin-d0-build-a-${{ github.sha }}
+          path: dist/build-a
+
+      - name: Download build B
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dogecoin-d0-build-b-${{ github.sha }}
+          path: dist/build-b
+
+      - name: Compare independent outputs and generate SBOM
+        id: verify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/evidence
+          export EVIDENCE_CREATED_ISO="$(date -u -d "@$(git show -s --format=%ct "${GITHUB_SHA}")" '+%Y-%m-%dT%H:%M:%SZ')"
+          python3 asset-exchange/qualification/dogecoin/verify-two-builds.py \
+            dist/build-a dist/build-b dist/evidence
+          cp dist/build-a/dogecoin-1.14.9-x86_64-linux-gnu.tar.gz dist/evidence/
+          cp dist/build-a/BUILD_INFO.json dist/evidence/BUILD_INFO_A.json
+          cp dist/build-b/BUILD_INFO.json dist/evidence/BUILD_INFO_B.json
+          cp dist/build-a/gitian-linux.yml dist/evidence/gitian-linux.yml
+          sha256sum \
+            dist/evidence/dogecoin-1.14.9-x86_64-linux-gnu.tar.gz \
+            dist/evidence/BUILD_INFO_A.json \
+            dist/evidence/BUILD_INFO_B.json \
+            dist/evidence/gitian-linux.yml \
+            >> dist/evidence/SHA256SUMS
+          sort -o dist/evidence/SHA256SUMS dist/evidence/SHA256SUMS
+
+      - name: Attest internally reproduced Dogecoin binary
+        if: steps.verify.outcome == 'success'
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/evidence/dogecoin-1.14.9-x86_64-linux-gnu.tar.gz
+          show-summary: true
+
+      - name: Attest generated SPDX SBOM
+        if: steps.verify.outcome == 'success'
+        id: sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/evidence/dogecoin-1.14.9-x86_64-linux-gnu.tar.gz
+          sbom-path: dist/evidence/dogecoin-1.14.9-x86_64-linux-gnu.spdx.json
+          show-summary: true
+
+      - name: Collect attestation bundles
+        if: steps.verify.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "${{ steps.provenance.outputs.bundle-path }}" dist/evidence/provenance.sigstore.json
+          cp "${{ steps.sbom.outputs.bundle-path }}" dist/evidence/sbom-attestation.sigstore.json
+
+      - name: Upload D0 evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dogecoin-d0-evidence-${{ github.sha }}
+          path: dist/evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Enforce fail-closed D0 result
+        if: steps.verify.outcome != 'success'
+        shell: bash
+        run: |
+          echo 'Dogecoin D0 source-rebuild verification is BLOCKED.' >&2
+          exit 1
