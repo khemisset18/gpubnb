@@ -47,6 +47,8 @@ for key in (
     "gitianBuilderCommit",
     "ubuntuFocalRepoDigest",
     "officialObservedSha256",
+    "dependsFallbackUrl",
+    "liefInputSha256",
 ):
     if a_ev.get(key) != b_ev.get(key):
         raise SystemExit(f"replica environment mismatch for {key}: {a_ev.get(key)!r} != {b_ev.get(key)!r}")
@@ -168,6 +170,8 @@ provenance = {
     "dogecoinSourceCommit": source_commit,
     "gitianBuilderCommit": gitian_commit,
     "ubuntuFocalRepoDigest": ubuntu_digest,
+    "dependsFallbackUrl": a_ev["dependsFallbackUrl"],
+    "liefInputSha256": a_ev["liefInputSha256"],
     "binaryExecuted": False,
     "mainnetUsed": False,
     "realFundsUsed": False,
