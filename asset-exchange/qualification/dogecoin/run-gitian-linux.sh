@@ -6,7 +6,8 @@ if [[ "$#" -ne 1 ]]; then
   exit 2
 fi
 
-readonly OUTPUT_DIR="$1"
+OUTPUT_DIR="$(realpath -m "$1")"
+readonly OUTPUT_DIR
 readonly DOGECOIN_REPO="https://github.com/dogecoin/dogecoin.git"
 readonly DOGECOIN_COMMIT="e0a1c157791544e818c901bd9341896965afbf9d"
 readonly GITIAN_BUILDER_REPO="https://github.com/devrandom/gitian-builder.git"
@@ -61,6 +62,16 @@ ubuntu_digest="${ubuntu_ref##*@sha256:}"
   ./bin/make-base-vm --suite focal --arch amd64 --docker --docker-image-digest "$ubuntu_digest"
 )
 
+# make-base-vm names digest-pinned images by digest, while gbuild expects
+# base-focal-amd64. Create only a local alias and prove it points to the same
+# immutable image before gbuild can use it.
+digest_image="base-${ubuntu_digest}-amd64"
+docker image inspect "$digest_image" >/dev/null
+docker tag "$digest_image" base-focal-amd64
+digest_image_id="$(docker image inspect "$digest_image" --format '{{.Id}}')"
+gitian_image_id="$(docker image inspect base-focal-amd64 --format '{{.Id}}')"
+[[ -n "$digest_image_id" && "$digest_image_id" == "$gitian_image_id" ]]
+
 cp "$source_dir/contrib/gitian-descriptors/gitian-linux.yml" "$work/gitian-linux.yml"
 export USE_DOCKER=1
 (
@@ -97,6 +108,7 @@ data = {
   "gitianBuilderRepository": "$GITIAN_BUILDER_REPO",
   "gitianBuilderCommit": "$GITIAN_BUILDER_COMMIT",
   "ubuntuFocalImageDigest": "sha256:$ubuntu_digest",
+  "gitianBaseImageId": "$gitian_image_id",
   "liefUrl": "$LIEF_URL",
   "liefSha256": "$LIEF_SHA256",
   "archive": "$EXPECTED_ARCHIVE",
