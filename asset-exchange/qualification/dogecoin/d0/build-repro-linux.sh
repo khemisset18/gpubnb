@@ -14,6 +14,8 @@ DOGE_REPOSITORY="https://github.com/dogecoin/dogecoin.git"
 GITIAN_BUILDER_COMMIT="41c325d2f14147e8028fce9a5edd26e7adad30a4"
 GITIAN_BUILDER_REPOSITORY="https://github.com/devrandom/gitian-builder.git"
 DEPENDS_FALLBACK_URL="https://download.bitcoincashnode.org/depends-sources"
+ZLIB_FOSSIL_URL="https://zlib.net/fossils/zlib-1.3.tar.gz"
+ZLIB_SHA256="ff0ba4c292013dbc27530b3a81e1f9a813cd39de01ca5e0f8bf355702efa593e"
 LIEF_URL="https://files.pythonhosted.org/packages/3a/cf/a6ddb755d7f38cd69ca1dd8d7720963cd2f9ff0b15ec9e5ae175910add51/lief-0.12.3-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
 LIEF_SHA256="c848aadac0816268aeb9dde7cefdb54bf24f78e664a19e97e74c92d3be1bb147"
 OFFICIAL_X86_64_SHA256="4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8"
@@ -27,6 +29,8 @@ mkdir -p "$WORK_DIR" "$OUTPUT_DIR"
   echo "gitian_builder_commit=$GITIAN_BUILDER_COMMIT"
   echo "official_x86_64_sha256=$OFFICIAL_X86_64_SHA256"
   echo "depends_fallback_url=$DEPENDS_FALLBACK_URL"
+  echo "zlib_fossil_url=$ZLIB_FOSSIL_URL"
+  echo "zlib_sha256=$ZLIB_SHA256"
   echo "runner_kernel=$(uname -srmo)"
   echo "runner_arch=$(uname -m)"
   echo "docker_version=$(docker --version)"
@@ -44,12 +48,34 @@ git clone --filter=blob:none --no-checkout "$GITIAN_BUILDER_REPOSITORY" "$WORK_D
 git -C "$WORK_DIR/gitian-builder" checkout --detach "$GITIAN_BUILDER_COMMIT"
 test "$(git -C "$WORK_DIR/gitian-builder" rev-parse HEAD)" = "$GITIAN_BUILDER_COMMIT"
 
+collect_diagnostics() {
+  local rc=$?
+  set +e
+  mkdir -p "$OUTPUT_DIR/diagnostics"
+  for candidate in     "$WORK_DIR/gitian-builder/var/install.log"     "$WORK_DIR/gitian-builder/var/build.log"     "$WORK_DIR/gitian-builder/var/target.log"     "$WORK_DIR/gitian-builder/var/build-script"; do
+    if [[ -f "$candidate" ]]; then
+      cp "$candidate" "$OUTPUT_DIR/diagnostics/$(basename "$candidate")"
+    fi
+  done
+  find "$WORK_DIR/gitian-builder/var" -maxdepth 1 -type f -name 'base-*.manifest' -exec cp '{}' "$OUTPUT_DIR/diagnostics/" \; 2>/dev/null || true
+  find "$WORK_DIR/gitian-builder/result" -maxdepth 1 -type f -name '*.yml' -exec cp '{}' "$OUTPUT_DIR/diagnostics/" \; 2>/dev/null || true
+  exit "$rc"
+}
+trap collect_diagnostics EXIT
+
 mkdir -p "$WORK_DIR/gitian-builder/inputs"
 curl --fail --location --proto '=https' --tlsv1.2 "$LIEF_URL" \
   --output "$WORK_DIR/gitian-builder/inputs/$(basename "$LIEF_URL")"
 (
   cd "$WORK_DIR/gitian-builder/inputs"
   echo "$LIEF_SHA256  $(basename "$LIEF_URL")" | sha256sum --check --strict
+)
+
+mkdir -p "$WORK_DIR/gitian-builder/cache/common"
+curl --fail --location --proto '=https' --tlsv1.2 "$ZLIB_FOSSIL_URL"   --output "$WORK_DIR/gitian-builder/cache/common/zlib-1.3.tar.gz"
+(
+  cd "$WORK_DIR/gitian-builder/cache/common"
+  echo "$ZLIB_SHA256  zlib-1.3.tar.gz" | sha256sum --check --strict
 )
 
 cp "$WORK_DIR/dogecoin/contrib/gitian-descriptors/gitian-linux.yml" "$WORK_DIR/gitian-linux-upstream.yml"
@@ -145,12 +171,12 @@ cp "$WORK_DIR/gitian-builder/result/"*.yml "$OUTPUT_DIR/" 2>/dev/null || true
 ACTUAL_SHA256="$(sha256sum "$OUTPUT_DIR/$OUTPUT_NAME" | awk '{print $1}')"
 printf '%s  %s\n' "$ACTUAL_SHA256" "$OUTPUT_NAME" > "$OUTPUT_DIR/SHA256SUMS"
 
-python3 - "$OUTPUT_DIR" "$DOGE_SOURCE_COMMIT" "$GITIAN_BUILDER_COMMIT" "$UBUNTU_REPO_DIGEST" "$ACTUAL_SHA256" "$OFFICIAL_X86_64_SHA256" "$DEPENDS_FALLBACK_URL" "$LIEF_SHA256" <<'PY'
+python3 - "$OUTPUT_DIR" "$DOGE_SOURCE_COMMIT" "$GITIAN_BUILDER_COMMIT" "$UBUNTU_REPO_DIGEST" "$ACTUAL_SHA256" "$OFFICIAL_X86_64_SHA256" "$DEPENDS_FALLBACK_URL" "$LIEF_SHA256" "$ZLIB_FOSSIL_URL" "$ZLIB_SHA256" <<'PY'
 import json
 from pathlib import Path
 import sys
 
-out, source, gitian, ubuntu_digest, actual, official, fallback_url, lief_sha256 = sys.argv[1:]
+out, source, gitian, ubuntu_digest, actual, official, fallback_url, lief_sha256, zlib_url, zlib_sha256 = sys.argv[1:]
 evidence = {
     "schema": "GPUBNB:DOGECOIN:D0-INTERNAL-BUILD-EVIDENCE:v1",
     "dogecoinSourceCommit": source,
@@ -162,6 +188,8 @@ evidence = {
     "officialHashMatch": actual == official,
     "dependsFallbackUrl": fallback_url,
     "liefInputSha256": lief_sha256,
+    "zlibFossilUrl": zlib_url,
+    "zlibInputSha256": zlib_sha256,
     "binaryExecuted": False,
     "mainnetUsed": False,
     "realFundsUsed": False,
