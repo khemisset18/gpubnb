@@ -23,6 +23,7 @@ mkdir -p "${stage}/asset-exchange/recovery/src" "${stage}/asset-exchange/core/sr
 install -m 0755 asset-exchange/recovery/src/cli.mjs "${stage}/asset-exchange/recovery/src/cli.mjs"
 install -m 0644 asset-exchange/recovery/src/bundle.mjs "${stage}/asset-exchange/recovery/src/bundle.mjs"
 install -m 0644 asset-exchange/recovery/src/metadata.mjs "${stage}/asset-exchange/recovery/src/metadata.mjs"
+install -m 0644 asset-exchange/recovery/src/strict-json.mjs "${stage}/asset-exchange/recovery/src/strict-json.mjs"
 install -m 0644 asset-exchange/core/src/canonical.mjs "${stage}/asset-exchange/core/src/canonical.mjs"
 install -m 0644 asset-exchange/core/src/errors.mjs "${stage}/asset-exchange/core/src/errors.mjs"
 install -m 0644 asset-exchange/core/src/deployment.mjs "${stage}/asset-exchange/core/src/deployment.mjs"
@@ -53,6 +54,7 @@ gpu.k.p2p-recovery-tool-v1/asset-exchange/core/src/errors.mjs
 gpu.k.p2p-recovery-tool-v1/asset-exchange/recovery/src/bundle.mjs
 gpu.k.p2p-recovery-tool-v1/asset-exchange/recovery/src/cli.mjs
 gpu.k.p2p-recovery-tool-v1/asset-exchange/recovery/src/metadata.mjs
+gpu.k.p2p-recovery-tool-v1/asset-exchange/recovery/src/strict-json.mjs
 EOF
 )"
 if [[ "${actual_files}" != "${expected_files}" ]]; then
