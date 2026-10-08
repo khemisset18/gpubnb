@@ -13,7 +13,10 @@ This module implements a portable encrypted recovery-bundle foundation that can 
 - versioned envelope and payload;
 - deployment ID bound inside authenticated ciphertext;
 - explicit artifact allow-list;
-- wallet seed/private key/spend key/mnemonic/password fields rejected;
+- recovery plaintext bounded to 8 MiB on both encryption and decryption;
+- strict JSON parsing rejects duplicate object keys and non-JSON whitespace;
+- HEX/BASE64 encodings are syntax-checked and BASE64 must be canonical;
+- structured metadata and JSON recovery recipes reject wallet seed/private key/spend key/mnemonic/password fields;
 - recovery key is supplied by the caller and never serialized;
 - no password-based KDF is invented here.
 
@@ -26,6 +29,8 @@ The Asset Exchange server MUST NOT:
 - receive the user's wallet private keys;
 - escrow the recovery encryption key as a substitute for the user;
 - log bundle plaintext or the encryption key.
+
+On POSIX systems the standalone CLI rejects recovery-key files that are group/world accessible and creates new key/output files with mode 0600.
 
 A production UX for backing up the recovery key requires a separate reviewed design.
 
@@ -41,6 +46,8 @@ Current bundle artifact types are limited to recovery/public transaction materia
 - CHAIN_RECOVERY_RECIPE
 
 These formats do not authorize settlement by themselves. Chain-specific validation remains mandatory.
+
+The generic container can inspect structured fields and JSON recipes, but it cannot prove that arbitrary opaque HEX/BASE64/UTF8 transaction material contains no concealed secret. Chain-specific builders and validators MUST therefore ensure opaque artifacts contain only the public/non-secret material authorized by their profile.
 
 ## Not yet authorized
 
