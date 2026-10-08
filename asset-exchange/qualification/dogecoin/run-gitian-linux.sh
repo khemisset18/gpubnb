@@ -18,6 +18,8 @@ readonly OFFICIAL_X86_64_SHA256="4f227117b411a7c98622c970986e27bcfc3f547a72bef65
 readonly EXPECTED_ARCHIVE="dogecoin-1.14.9-x86_64-linux-gnu.tar.gz"
 readonly QRENCODE_URL="https://download.bitcoincashnode.org/depends-sources/qrencode-3.4.4.tar.bz2"
 readonly QRENCODE_SHA256="efe5188b1ddbcbf98763b819b146be6a90481aac30cfc8d858ab78a19cde1fa5"
+readonly ZLIB_URL="https://www.zlib.net/fossils/zlib-1.3.tar.gz"
+readonly ZLIB_SHA256="ff0ba4c292013dbc27530b3a81e1f9a813cd39de01ca5e0f8bf355702efa593e"
 
 work="$(mktemp -d)"
 cleanup() { rm -rf "$work"; }
@@ -59,6 +61,12 @@ echo "$LIEF_SHA256  $builder_dir/inputs/$(basename "$LIEF_URL")" | sha256sum -c 
 curl --fail --location --retry 3 --proto '=https' --tlsv1.2 "$QRENCODE_URL" \
   --output "$builder_dir/cache/common/qrencode-3.4.4.tar.bz2"
 echo "$QRENCODE_SHA256  $builder_dir/cache/common/qrencode-3.4.4.tar.bz2" | sha256sum -c --strict
+
+# zlib 1.3 moved from the current-release URL to the upstream HTTPS fossils
+# directory. Keep Dogecoin's exact depends hash as the content authority.
+curl --fail --location --retry 3 --proto '=https' --tlsv1.2 "$ZLIB_URL" \
+  --output "$builder_dir/cache/common/zlib-1.3.tar.gz"
+echo "$ZLIB_SHA256  $builder_dir/cache/common/zlib-1.3.tar.gz" | sha256sum -c --strict
 
 # Resolve the mutable Ubuntu tag to an immutable digest before creating the Gitian base image.
 docker pull ubuntu:focal
@@ -139,6 +147,8 @@ data = {
   "liefSha256": "$LIEF_SHA256",
   "qrencodeMirrorUrl": "$QRENCODE_URL",
   "qrencodeSha256": "$QRENCODE_SHA256",
+  "zlibUrl": "$ZLIB_URL",
+  "zlibSha256": "$ZLIB_SHA256",
   "archive": "$EXPECTED_ARCHIVE",
   "archiveSha256": "$archive_sha256",
   "archiveSize": int("$archive_size"),
