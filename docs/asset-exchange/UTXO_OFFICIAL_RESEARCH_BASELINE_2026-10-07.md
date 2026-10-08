@@ -150,6 +150,13 @@ Reviewed stable release:
 - official release commit shown by the repository: e0a1c15
 - release is marked Latest in the official dogecoin/dogecoin releases page
 
+Revalidation on 2026-10-08 stopped at the Dogecoin release-integrity gate. The
+archive hash matched the release checksum and two Gitian build manifests, but
+their signatures could not be authenticated with valid, available signer keys.
+The official security policy also lists v1.14.7 as supported while the release
+page marks v1.14.9 latest. See `DOGECOIN_ADAPTER_SPEC_V1.md` for the evidence.
+Do not execute or qualify the v1.14.9 artifact until this is resolved.
+
 Primary official sources reviewed:
 
 - dogecoin/dogecoin releases
