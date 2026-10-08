@@ -43,3 +43,11 @@ test('workspace correlation never adds bearer secrets or payload data to the chi
     assert.doesNotMatch(child,new RegExp(`\\b${forbidden}\\b`,'i'),`${forbidden} must not be part of the correlation logger`);
   }
 });
+
+
+test('websocket close diagnostics include the code without exposing the remote reason',async()=>{
+  const gateway=await readFile(gatewayUrl,'utf8');
+  assert.match(gateway,/ws\.on\('close',\(closeCode:number,closeReason:Buffer\)=>\{/);
+  assert.match(gateway,/event:'workspace_gateway_browser_closed'[^\n]*closeCode,closeReasonBytes:closeReason\.length,bufferedAmount:ws\.bufferedAmount/);
+  assert.doesNotMatch(gateway,/closeReason\s*\.\s*toString\s*\(/);
+});
