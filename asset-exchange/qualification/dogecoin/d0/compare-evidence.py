@@ -49,6 +49,8 @@ for key in (
     "officialObservedSha256",
     "dependsFallbackUrl",
     "liefInputSha256",
+    "zlibFossilUrl",
+    "zlibInputSha256",
 ):
     if a_ev.get(key) != b_ev.get(key):
         raise SystemExit(f"replica environment mismatch for {key}: {a_ev.get(key)!r} != {b_ev.get(key)!r}")
@@ -172,6 +174,8 @@ provenance = {
     "ubuntuFocalRepoDigest": ubuntu_digest,
     "dependsFallbackUrl": a_ev["dependsFallbackUrl"],
     "liefInputSha256": a_ev["liefInputSha256"],
+    "zlibFossilUrl": a_ev["zlibFossilUrl"],
+    "zlibInputSha256": a_ev["zlibInputSha256"],
     "binaryExecuted": False,
     "mainnetUsed": False,
     "realFundsUsed": False,
