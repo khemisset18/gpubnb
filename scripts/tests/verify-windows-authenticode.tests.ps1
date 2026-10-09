@@ -61,9 +61,12 @@ try {
     try {
         $tamperedOutput = @(& $Verifier -Path $tampered -Required)
     } catch { $tamperedError = $_.Exception.Message }
-    if (-not $tamperedError.StartsWith('authenticode_present_but_invalid:', [StringComparison]::Ordinal) -or
-        $tamperedOutput.Count -ne 0) {
-        throw 'real_tampered_signature_was_not_rejected'
+    # Catalog-signed files lose their recognized signature after modification;
+    # embedded signatures instead report an invalid status. Both must fail Required.
+    $tamperedRejected = $tamperedError.StartsWith('authenticode_present_but_invalid:', [StringComparison]::Ordinal) -or
+        $tamperedError.StartsWith('authenticode_required_but_missing:', [StringComparison]::Ordinal)
+    if (-not $tamperedRejected -or $tamperedOutput.Count -ne 0) {
+        throw "real_tampered_signature_was_not_rejected:$tamperedError"
     }
     $passed++
     Write-Host 'PASS real tampered signature rejected'
