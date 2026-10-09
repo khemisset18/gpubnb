@@ -17,6 +17,7 @@ required-features = ["physical-qualification"]
 [features]
 default = []
 physical-qualification = ["gpubnb-windows-platform/physical-qualification"]
+release-candidate = ["gpubnb-windows-platform/release-candidate"]
 
 # Keep this crate independent from the repository root workspace until the WDK /
 # IddCx integration and its own locked Windows dependency graph are ready.

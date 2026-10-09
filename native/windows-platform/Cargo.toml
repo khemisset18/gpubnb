@@ -9,6 +9,9 @@ publish = false
 default = []
 # Explicit opt-in used only by controlled physical qualification builds.
 physical-qualification = []
+# Separate Stage 4 candidate gate. This is intentionally not a public-production
+# switch: backend bookability remains independently fail-closed until promotion.
+release-candidate = []
 
 [workspace]
 

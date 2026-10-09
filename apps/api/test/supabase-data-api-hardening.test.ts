@@ -32,3 +32,16 @@ test('database migration revokes current and future Data API privileges from bro
   assert.match(sql, /ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM authenticated/);
   assert.doesNotMatch(sql, /FROM service_role/, 'server/service integrations are outside this browser-role hardening migration');
 });
+
+
+test('Stage 4 enables RLS on internal diagnostic/quarantine tables and closes future postgres grants', async () => {
+  const sql = await read('apps/api/prisma/migrations/20261006020000_stage4_supabase_internal_rls/migration.sql');
+
+  assert.match(sql, /ALTER TABLE public\."DiagnosticRun" ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql, /ALTER TABLE public\."MachineQuarantineEvent" ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql, /ARRAY\['anon', 'authenticated'\]/);
+  assert.match(sql, /ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL PRIVILEGES ON TABLES FROM %I/);
+  assert.match(sql, /ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL PRIVILEGES ON SEQUENCES FROM %I/);
+  assert.match(sql, /ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL PRIVILEGES ON FUNCTIONS FROM %I/);
+  assert.doesNotMatch(sql, /CREATE POLICY/i, 'browser roles must not gain direct policies on internal operational tables');
+});

@@ -589,8 +589,13 @@ fn read_websocket_client_frame<R: Read>(
 fn peer_disconnect_error(kind: ErrorKind) -> bool {
     matches!(
         kind,
-        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::NotConnected
+        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::NotConnected | ErrorKind::BrokenPipe
     )
+}
+
+fn classify_websocket_write_error(error: std::io::Error) -> QualificationMediaServerError {
+    if peer_disconnect_error(error.kind()) { QualificationMediaServerError::StaleConnection }
+    else { QualificationMediaServerError::Response }
 }
 
 fn try_read_websocket_client_frame(
@@ -633,7 +638,7 @@ fn write_websocket_control(
     stream
         .write_all(&header)
         .and_then(|_| stream.write_all(payload))
-        .map_err(|_| QualificationMediaServerError::Response)
+        .map_err(classify_websocket_write_error)
 }
 fn read_upgrade_request(stream: &mut TcpStream) -> Result<Vec<u8>, QualificationMediaServerError> {
     let mut request = Vec::with_capacity(1024);
@@ -680,7 +685,7 @@ fn write_websocket_binary(
     stream
         .write_all(&header[..header_len])
         .and_then(|_| stream.write_all(payload))
-        .map_err(|_| QualificationMediaServerError::Response)
+        .map_err(classify_websocket_write_error)
 }
 
 pub fn websocket_accept_value(key: &str) -> String {
@@ -853,8 +858,17 @@ mod tests {
         assert!(peer_disconnect_error(ErrorKind::ConnectionReset));
         assert!(peer_disconnect_error(ErrorKind::ConnectionAborted));
         assert!(peer_disconnect_error(ErrorKind::NotConnected));
+        assert!(peer_disconnect_error(ErrorKind::BrokenPipe));
         assert!(!peer_disconnect_error(ErrorKind::WouldBlock));
         assert!(!peer_disconnect_error(ErrorKind::Other));
+    }
+
+    #[test]
+    fn websocket_write_peer_disconnect_does_not_kill_media_listener() {
+        for kind in [ErrorKind::BrokenPipe, ErrorKind::ConnectionReset, ErrorKind::ConnectionAborted, ErrorKind::NotConnected] {
+            assert_eq!(classify_websocket_write_error(std::io::Error::from(kind)), QualificationMediaServerError::StaleConnection);
+        }
+        assert_eq!(classify_websocket_write_error(std::io::Error::from(ErrorKind::PermissionDenied)), QualificationMediaServerError::Response);
     }
 
     #[test]

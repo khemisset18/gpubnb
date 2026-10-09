@@ -16,6 +16,18 @@ SERVICE_DESCRIPTION = "Supervises the GPUbnb host agent and secure workspace run
 RESTART_DELAY_SECONDS = 5
 MAX_RESTART_DELAY_SECONDS = 300
 
+# Least-privilege SCM policy for the dedicated LocalSystem service.
+#
+# WTSQueryUserToken requires SeTcbPrivilege. CreateProcessAsUser requires
+# SeIncreaseQuotaPrivilege and can require SeAssignPrimaryTokenPrivilege.
+# Native pipe clients deliberately request SecurityIdentification, so the
+# service does not need SeImpersonatePrivilege merely to inspect peer identity.
+SERVICE_REQUIRED_PRIVILEGES = (
+    "SeTcbPrivilege",
+    "SeAssignPrimaryTokenPrivilege",
+    "SeIncreaseQuotaPrivilege",
+)
+
 
 def _service_logger() -> Logger:
     from .storage import log_path
@@ -247,6 +259,7 @@ def manage_service(action: str) -> int:
         sys.argv = previous
     if action == "install":
         _configure_recovery()
+        _configure_security()
     return 0
 
 
@@ -274,6 +287,18 @@ def _configure_recovery() -> None:
         "restart/5000/restart/30000/restart/120000",
     )
     _sc("failureflag", SERVICE_NAME, "1")
+
+
+def _configure_security() -> None:
+    # sc.exe expects required privilege names separated by forward slashes.
+    # Once configured, SCM removes unlisted privileges from the service token
+    # on the next service start (apart from Windows' compatibility exception
+    # for SeChangeNotifyPrivilege).
+    _sc(
+        "privs",
+        SERVICE_NAME,
+        "/".join(SERVICE_REQUIRED_PRIVILEGES),
+    )
 
 
 def service_status() -> dict[str, bool]:

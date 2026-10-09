@@ -15,6 +15,11 @@ if ([string]::IsNullOrWhiteSpace($thumbprint)) {
 if ([string]::IsNullOrWhiteSpace($timestampUrl)) {
     throw 'codesign_timestamp_url_missing_on_signing_runner'
 }
+$timestampUri = $null
+if (-not [Uri]::TryCreate($timestampUrl, [UriKind]::Absolute, [ref]$timestampUri) -or
+    $timestampUri.Scheme -cne 'https') {
+    throw 'codesign_timestamp_url_must_be_https'
+}
 if (-not $Path -or $Path.Count -eq 0) {
     throw 'codesign_paths_missing'
 }
@@ -31,6 +36,9 @@ if (-not $certificate.HasPrivateKey) {
 if ($certificate.NotBefore -gt (Get-Date) -or $certificate.NotAfter -le (Get-Date)) {
     throw 'codesign_certificate_not_currently_valid'
 }
+$signerCertificateSha256 = $certificate.GetCertHashString(
+    [System.Security.Cryptography.HashAlgorithmName]::SHA256
+).ToLowerInvariant()
 
 $signTool = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Source
 if (-not $signTool) {
@@ -55,4 +63,8 @@ foreach ($item in $Path) {
     }
 }
 
-& "$PSScriptRoot/verify-windows-authenticode.ps1" -Path $Path -Required
+& "$PSScriptRoot/verify-windows-authenticode.ps1" `
+    -Path $Path `
+    -Required `
+    -RequireTimestamp `
+    -ExpectedSignerSha256 $signerCertificateSha256

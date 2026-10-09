@@ -518,8 +518,12 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
             if(!browserClosed){browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1013,'gateway relay backpressure');}
           });
         });
-        ws.on('close',()=>{
-          browserClosed=true;clearInterval(pump);gatewayLog.info({event:'workspace_gateway_browser_closed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser websocket closed');
+        ws.on('close',(closeCode:number,closeReason:Buffer)=>{
+          browserClosed=true;clearInterval(pump);
+          // Close reason may be supplied by a remote peer: never log its raw contents.
+          // The code, reason length and buffered bytes are sufficient to correlate
+          // a browser disconnect with gateway backpressure and Agent ws_close.
+          gatewayLog.info({event:'workspace_gateway_browser_closed',sessionId,machineId:row.machineId,channel:channelLogId,closeCode,closeReasonBytes:closeReason.length,bufferedAmount:ws.bufferedAmount},'workspace gateway browser websocket closed');
           void browserSendChain.then(async()=>{
             if(!await enqueueMachineRelay(redis,row.machineId,{id:crypto.randomUUID(),sessionId,kind:'ws_close',channelId} satisfies RelayRequest))throw new Error('workspace_machine_queue_backpressure');
             await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId),wsInputKey(channelId),wsInputBytesKey(channelId));
