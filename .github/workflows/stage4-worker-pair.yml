@@ -1,0 +1,92 @@
+name: stage4-worker-pair
+
+on:
+  push:
+    branches: [prep/stage4-worker-pair-20261010]
+    paths: [.github/workflows/stage4-worker-pair.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      GPUBNB_SOURCE_COMMIT: fe0b1cde539abb71e289e1875b0cc9dc32f1629d
+      GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256: 200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a
+      GPUBNB_WINDOWS_WORKER_SIGNER_SHA256: 200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: fe0b1cde539abb71e289e1875b0cc9dc32f1629d
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
+        with:
+          components: rustfmt, clippy
+      - name: Verify exact clean source
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD) -cne $env:GPUBNB_SOURCE_COMMIT) { throw 'worker_source_mismatch' }
+          git diff --exit-code
+          if ($LASTEXITCODE -ne 0) { throw 'worker_source_dirty' }
+          git diff --cached --exit-code
+          if ($LASTEXITCODE -ne 0) { throw 'worker_index_dirty' }
+      - name: Worker format
+        run: cargo fmt --manifest-path native/windows-worker/Cargo.toml -- --check
+      - name: Worker tests with exact compiled policy
+        run: cargo test --locked --manifest-path native/windows-worker/Cargo.toml --all-targets
+      - name: Worker clippy
+        run: cargo clippy --locked --manifest-path native/windows-worker/Cargo.toml --all-targets -- -D warnings
+      - name: Platform tests
+        run: cargo test --locked --manifest-path native/windows-platform/Cargo.toml --all-targets
+      - name: Helper transport and security tests
+        run: cargo test --locked --manifest-path native/windows-stream-helper/Cargo.toml --all-targets
+      - name: Build unsigned worker
+        run: cargo build --locked --release --manifest-path native/windows-worker/Cargo.toml
+      - name: Verify policy, AMD64 and unsigned provenance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $worker = 'native/windows-worker/target/release/gpubnb-windows-worker.exe'
+          $policyRaw = (& $worker --build-policy --json | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'worker_policy_failed' }
+          $policy = $policyRaw | ConvertFrom-Json
+          if ($policy.schemaVersion -ne 1 -or $policy.sourceCommit -cne $env:GPUBNB_SOURCE_COMMIT -or $policy.mediaSignerSha256 -cne $env:GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256) { throw 'worker_policy_mismatch' }
+          $bytes = [IO.File]::ReadAllBytes((Resolve-Path $worker))
+          $pe = [BitConverter]::ToInt32($bytes, 60)
+          if ([BitConverter]::ToUInt16($bytes, $pe + 4) -ne 0x8664) { throw 'worker_not_amd64' }
+          if ([BitConverter]::ToUInt16($bytes, $pe + 24) -ne 0x20b) { throw 'worker_not_pe32plus' }
+          if ([BitConverter]::ToUInt32($bytes, $pe + 24 + 144) -ne 0 -or [BitConverter]::ToUInt32($bytes, $pe + 24 + 148) -ne 0) { throw 'worker_unexpected_certificate_table' }
+          if ((Get-AuthenticodeSignature -LiteralPath $worker).Status -ne 'NotSigned') { throw 'worker_unexpected_signature_status' }
+          New-Item -ItemType Directory -Path stage4-worker-artifact | Out-Null
+          Copy-Item -LiteralPath $worker -Destination stage4-worker-artifact/gpubnb-windows-worker.exe
+          $manifest = [ordered]@{
+            schemaVersion = 1
+            sourceCommit = $policy.sourceCommit
+            workflowCommit = '${{ github.sha }}'
+            runId = '${{ github.run_id }}'
+            runAttempt = '${{ github.run_attempt }}'
+            generatedAtUtc = [DateTime]::UtcNow.ToString('o')
+            architecture = 'AMD64'
+            cargoVersion = '0.1.0'
+            workerSha256BeforeSigning = (Get-FileHash -LiteralPath $worker -Algorithm SHA256).Hash.ToLowerInvariant()
+            workerSizeBytes = $bytes.Length
+            workerBuildPolicy = $policy
+            helperSourceCommit = 'fe0b1cde539abb71e289e1875b0cc9dc32f1629d'
+            helperArtifactId = 11639950809
+            helperSha256BeforeSigning = '6957c09bfe2afea15718a8740b8ea738236a3274dfa9b9da1fcb0d573fbb905c'
+            expectedMediaDllSha256 = '510d559b056ba094f8dc06b73d4c6d7bce46ca97fa774524e605844ad16fc9de'
+            signature = 'unsigned'
+            productionBookabilityChanged = $false
+            installed = $false
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath stage4-worker-artifact/worker-manifest.json -Encoding utf8
+          $manifest | ConvertTo-Json -Depth 5
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: stage4-worker-pair-fe0b1cde-${{ github.run_id }}
+          path: stage4-worker-artifact/
+          if-no-files-found: error
+          retention-days: 14
