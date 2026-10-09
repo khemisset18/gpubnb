@@ -23,6 +23,7 @@ use crate::worker_protocol::{
     encode_worker_command, encode_worker_display_spec, encode_worker_input,
     validate_worker_media_diagnostic, validate_worker_media_poll, validate_worker_media_proof,
 };
+use gpubnb_windows_platform::PlatformError;
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
 use gpubnb_windows_platform::idd_control::{
     VirtualDisplayLease, VirtualDisplayOperation, VirtualDisplayRequest,
@@ -54,12 +55,28 @@ pub enum ServiceRuntimeError {
     InvalidConfiguration,
     WorkerSignerPolicy,
     RenterSession,
+    RenterSessionNotActive,
+    RenterSessionNotConsole,
+    RenterAnotherInteractiveSession,
+    RenterProviderProcess,
+    RenterTokenQuery,
+    RenterTokenNotPrimary,
+    RenterTokenSessionMismatch,
+    RenterTokenUserMismatch,
+    RenterIdentityPolicy,
+    ServiceIdentity,
     Pipe,
     WorkerTrust,
     WorkerLaunch,
     WorkerHandshake,
     ExactGpu,
     VirtualDisplay,
+    VirtualDisplayInterfaceQuery,
+    VirtualDisplayInterfaceMissing,
+    VirtualDisplayInterfaceAmbiguous,
+    VirtualDisplayControlOpen,
+    VirtualDisplayControl,
+    VirtualDisplayGate,
     WorkerProtocol,
     MediaProof,
     MediaDiagnostic {
@@ -87,12 +104,28 @@ impl ServiceRuntimeError {
             Self::InvalidConfiguration => "invalid_configuration",
             Self::WorkerSignerPolicy => "worker_signer_policy",
             Self::RenterSession => "renter_session",
+            Self::RenterSessionNotActive => "renter_session_not_active",
+            Self::RenterSessionNotConsole => "renter_session_not_console",
+            Self::RenterAnotherInteractiveSession => "renter_another_interactive_session",
+            Self::RenterProviderProcess => "renter_provider_process",
+            Self::RenterTokenQuery => "renter_token_query",
+            Self::RenterTokenNotPrimary => "renter_token_not_primary",
+            Self::RenterTokenSessionMismatch => "renter_token_session_mismatch",
+            Self::RenterTokenUserMismatch => "renter_token_user_mismatch",
+            Self::RenterIdentityPolicy => "renter_identity_policy",
+            Self::ServiceIdentity => "service_identity",
             Self::Pipe => "pipe",
             Self::WorkerTrust => "worker_trust",
             Self::WorkerLaunch => "worker_launch",
             Self::WorkerHandshake => "worker_handshake",
             Self::ExactGpu => "exact_gpu",
             Self::VirtualDisplay => "virtual_display",
+            Self::VirtualDisplayInterfaceQuery => "virtual_display_interface_query",
+            Self::VirtualDisplayInterfaceMissing => "virtual_display_interface_missing",
+            Self::VirtualDisplayInterfaceAmbiguous => "virtual_display_interface_ambiguous",
+            Self::VirtualDisplayControlOpen => "virtual_display_control_open",
+            Self::VirtualDisplayControl => "virtual_display_control",
+            Self::VirtualDisplayGate => "virtual_display_gate",
             Self::WorkerProtocol => "worker_protocol",
             Self::MediaProof => "media_proof",
             Self::MediaDiagnostic { .. } => "media_diagnostic",
@@ -102,6 +135,46 @@ impl ServiceRuntimeError {
             Self::StopUnconfirmed => "stop_unconfirmed",
             Self::DisplayCleanup => "display_cleanup",
         }
+    }
+}
+
+fn map_virtual_display_error(error: PlatformError) -> ServiceRuntimeError {
+    match error {
+        PlatformError::IddInterfaceQueryFailed => ServiceRuntimeError::VirtualDisplayInterfaceQuery,
+        PlatformError::IddInterfaceMissing => ServiceRuntimeError::VirtualDisplayInterfaceMissing,
+        PlatformError::IddInterfaceAmbiguous => {
+            ServiceRuntimeError::VirtualDisplayInterfaceAmbiguous
+        }
+        PlatformError::IddControlOpenFailed => ServiceRuntimeError::VirtualDisplayControlOpen,
+        PlatformError::IddControlFailed => ServiceRuntimeError::VirtualDisplayControl,
+        PlatformError::IddUnsafeOperation => ServiceRuntimeError::VirtualDisplayGate,
+        PlatformError::GpuGraphicsIdentityUnavailable
+        | PlatformError::GpuGraphicsIdentityMismatch => ServiceRuntimeError::ExactGpu,
+        _ => ServiceRuntimeError::VirtualDisplay,
+    }
+}
+
+fn map_renter_session_error(error: PlatformError) -> ServiceRuntimeError {
+    match error {
+        PlatformError::RenterSessionNotActive => ServiceRuntimeError::RenterSessionNotActive,
+        PlatformError::RenterSessionNotConsole => ServiceRuntimeError::RenterSessionNotConsole,
+        PlatformError::AnotherInteractiveSessionActive => {
+            ServiceRuntimeError::RenterAnotherInteractiveSession
+        }
+        PlatformError::ProviderProcessInRenterSession => ServiceRuntimeError::RenterProviderProcess,
+        PlatformError::RenterTokenQueryFailed => ServiceRuntimeError::RenterTokenQuery,
+        PlatformError::RenterTokenNotPrimary => ServiceRuntimeError::RenterTokenNotPrimary,
+        PlatformError::RenterTokenSessionMismatch => {
+            ServiceRuntimeError::RenterTokenSessionMismatch
+        }
+        PlatformError::RenterTokenUserMismatch => ServiceRuntimeError::RenterTokenUserMismatch,
+        PlatformError::InvalidWindowsSessionId
+        | PlatformError::InvalidRenterUserSid
+        | PlatformError::RenterSystemIdentityForbidden
+        | PlatformError::RenterProviderIdentityForbidden => {
+            ServiceRuntimeError::RenterIdentityPolicy
+        }
+        _ => ServiceRuntimeError::RenterSession,
     }
 }
 
@@ -214,13 +287,10 @@ impl QualifiedGraphicsRuntime {
     }
 
     fn ensure_provider_boundary(&mut self) -> Result<(), ServiceRuntimeError> {
-        if ensure_provider_process_absent(
-            self.windows_session_id,
-            &self.provider_user_sid,
-        )
-        .is_err()
+        if let Err(error) =
+            ensure_provider_process_absent(self.windows_session_id, &self.provider_user_sid)
         {
-            return Err(self.fail(ServiceRuntimeError::RenterSession));
+            return Err(self.fail(map_renter_session_error(error)));
         }
         Ok(())
     }
@@ -266,12 +336,14 @@ impl QualifiedGraphicsRuntime {
         let frame = match receive_polled_media_frame(
             &self.pipe,
             &self.media_pipe,
-            self.generation,
-            sequence,
-            self.windows_session_id,
-            &self.provider_user_sid,
-            self.display_spec,
-            &self.gpu_uuid,
+            MediaFrameBinding {
+                generation: self.generation,
+                command_sequence: sequence,
+                windows_session_id: self.windows_session_id,
+                provider_user_sid: &self.provider_user_sid,
+                display_spec: self.display_spec,
+                gpu_uuid: &self.gpu_uuid,
+            },
         ) {
             Ok(Some(frame)) => frame,
             Ok(None) => return Ok(None),
@@ -373,12 +445,14 @@ impl QualifiedGraphicsRuntime {
         let frame = match receive_bound_media_frame(
             &self.pipe,
             &self.media_pipe,
-            self.generation,
-            sequence,
-            self.windows_session_id,
-            &self.provider_user_sid,
-            self.display_spec,
-            &self.gpu_uuid,
+            MediaFrameBinding {
+                generation: self.generation,
+                command_sequence: sequence,
+                windows_session_id: self.windows_session_id,
+                provider_user_sid: &self.provider_user_sid,
+                display_spec: self.display_spec,
+                gpu_uuid: &self.gpu_uuid,
+            },
         ) {
             Ok(frame) => frame,
             Err(error) => return Err(self.fail(error)),
@@ -453,40 +527,31 @@ fn workspace_slug(workspace: WorkspaceKind) -> &'static str {
     }
 }
 
-fn receive_bound_media_frame(
-    pipe: &WorkerPipe,
-    media_pipe: &WorkerMediaPipe,
+#[derive(Clone, Copy)]
+struct MediaFrameBinding<'a> {
     generation: u64,
     command_sequence: u64,
     windows_session_id: u32,
-    provider_user_sid: &str,
+    provider_user_sid: &'a str,
     display_spec: WorkerDisplaySpec,
-    gpu_uuid: &str,
+    gpu_uuid: &'a str,
+}
+
+fn receive_bound_media_frame(
+    pipe: &WorkerPipe,
+    media_pipe: &WorkerMediaPipe,
+    binding: MediaFrameBinding<'_>,
 ) -> Result<BoundMediaFrame, ServiceRuntimeError> {
     let proof_frame = pipe
         .read_frame(MEDIA_PROOF_TIMEOUT_MS)
         .map_err(|_| ServiceRuntimeError::MediaProof)?;
-    receive_bound_media_frame_after_proof(
-        &proof_frame,
-        media_pipe,
-        generation,
-        command_sequence,
-        windows_session_id,
-        provider_user_sid,
-        display_spec,
-        gpu_uuid,
-    )
+    receive_bound_media_frame_after_proof(&proof_frame, media_pipe, binding)
 }
 
 fn receive_polled_media_frame(
     pipe: &WorkerPipe,
     media_pipe: &WorkerMediaPipe,
-    generation: u64,
-    command_sequence: u64,
-    windows_session_id: u32,
-    provider_user_sid: &str,
-    display_spec: WorkerDisplaySpec,
-    gpu_uuid: &str,
+    binding: MediaFrameBinding<'_>,
 ) -> Result<Option<BoundMediaFrame>, ServiceRuntimeError> {
     let control_frame = pipe
         .read_frame(PIPE_TIMEOUT_MS)
@@ -495,16 +560,20 @@ fn receive_polled_media_frame(
     if control_frame.len() == WORKER_MEDIA_POLL_FRAME_SIZE {
         let poll = decode_worker_media_poll(&control_frame)
             .map_err(|_| ServiceRuntimeError::MediaProof)?;
-        let status =
-            validate_worker_media_poll(generation, command_sequence, windows_session_id, poll)
-                .map_err(|_| ServiceRuntimeError::MediaProof)?;
+        let status = validate_worker_media_poll(
+            binding.generation,
+            binding.command_sequence,
+            binding.windows_session_id,
+            poll,
+        )
+        .map_err(|_| ServiceRuntimeError::MediaProof)?;
 
         // A no-frame timeout is benign only while the exact leased GPU still maps
         // to the render adapter. Structural capture/device failures never use this
         // status and remain terminal in the worker.
-        let identity =
-            resolve_nvidia_uuid_to_luid(gpu_uuid).map_err(|_| ServiceRuntimeError::ExactGpu)?;
-        if identity.luid != display_spec.adapter_luid {
+        let identity = resolve_nvidia_uuid_to_luid(binding.gpu_uuid)
+            .map_err(|_| ServiceRuntimeError::ExactGpu)?;
+        if identity.luid != binding.display_spec.adapter_luid {
             return Err(ServiceRuntimeError::ExactGpu);
         }
 
@@ -513,37 +582,22 @@ fn receive_polled_media_frame(
         };
     }
 
-    receive_bound_media_frame_after_proof(
-        &control_frame,
-        media_pipe,
-        generation,
-        command_sequence,
-        windows_session_id,
-        provider_user_sid,
-        display_spec,
-        gpu_uuid,
-    )
-    .map(Some)
+    receive_bound_media_frame_after_proof(&control_frame, media_pipe, binding).map(Some)
 }
 
 fn receive_bound_media_frame_after_proof(
     proof_frame: &[u8],
     media_pipe: &WorkerMediaPipe,
-    generation: u64,
-    command_sequence: u64,
-    windows_session_id: u32,
-    provider_user_sid: &str,
-    display_spec: WorkerDisplaySpec,
-    gpu_uuid: &str,
+    binding: MediaFrameBinding<'_>,
 ) -> Result<BoundMediaFrame, ServiceRuntimeError> {
     if proof_frame.len() == WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE {
         let diagnostic = decode_worker_media_diagnostic(proof_frame)
             .map_err(|_| ServiceRuntimeError::MediaProof)?;
         let diagnostic = validate_worker_media_diagnostic(
-            generation,
-            command_sequence,
-            windows_session_id,
-            display_spec.adapter_luid,
+            binding.generation,
+            binding.command_sequence,
+            binding.windows_session_id,
+            binding.display_spec.adapter_luid,
             diagnostic,
         )
         .map_err(|_| ServiceRuntimeError::MediaProof)?;
@@ -559,10 +613,10 @@ fn receive_bound_media_frame_after_proof(
     let proof: WorkerMediaProof =
         decode_worker_media_proof(proof_frame).map_err(|_| ServiceRuntimeError::MediaProof)?;
     validate_worker_media_proof(
-        generation,
-        command_sequence,
-        windows_session_id,
-        display_spec,
+        binding.generation,
+        binding.command_sequence,
+        binding.windows_session_id,
+        binding.display_spec,
         proof,
     )
     .map_err(|_| ServiceRuntimeError::MediaProof)?;
@@ -573,10 +627,10 @@ fn receive_bound_media_frame_after_proof(
     let header = decode_worker_media_frame_header(&header_bytes)
         .map_err(|_| ServiceRuntimeError::MediaTransport)?;
     validate_worker_media_frame_header(
-        generation,
-        command_sequence,
-        windows_session_id,
-        display_spec,
+        binding.generation,
+        binding.command_sequence,
+        binding.windows_session_id,
+        binding.display_spec,
         proof,
         header,
     )
@@ -593,46 +647,44 @@ fn receive_bound_media_frame_after_proof(
     // The media DLL revalidates UUID -> LUID for every capture; repeat the check
     // in the privileged service before accepting the bytes into the data plane.
     let identity =
-        resolve_nvidia_uuid_to_luid(gpu_uuid).map_err(|_| ServiceRuntimeError::ExactGpu)?;
-    if identity.luid != display_spec.adapter_luid {
+        resolve_nvidia_uuid_to_luid(binding.gpu_uuid).map_err(|_| ServiceRuntimeError::ExactGpu)?;
+    if identity.luid != binding.display_spec.adapter_luid {
         return Err(ServiceRuntimeError::ExactGpu);
     }
 
-    let provider_desktop_excluded = ensure_provider_process_absent(
-        windows_session_id,
-        provider_user_sid,
-    )
-    .map(|_| true)
-    .map_err(|_| ServiceRuntimeError::RenterSession)?;
+    let provider_desktop_excluded =
+        ensure_provider_process_absent(binding.windows_session_id, binding.provider_user_sid)
+            .map(|_| true)
+            .map_err(map_renter_session_error)?;
 
     validate_graphics_proof_chain(
-        generation,
-        windows_session_id,
-        gpu_uuid,
+        binding.generation,
+        binding.windows_session_id,
+        binding.gpu_uuid,
         VirtualDisplayProof {
-            generation,
-            windows_session_id,
-            display_nonce: display_spec.display_nonce,
-            adapter_luid: display_spec.adapter_luid,
-            width: display_spec.width,
-            height: display_spec.height,
-            refresh_hz: display_spec.refresh_hz,
+            generation: binding.generation,
+            windows_session_id: binding.windows_session_id,
+            display_nonce: binding.display_spec.display_nonce,
+            adapter_luid: binding.display_spec.adapter_luid,
+            width: binding.display_spec.width,
+            height: binding.display_spec.height,
+            refresh_hz: binding.display_spec.refresh_hz,
             provider_desktop_excluded,
         },
         CaptureFrameProof {
-            generation,
-            windows_session_id,
-            display_nonce: display_spec.display_nonce,
-            adapter_luid: display_spec.adapter_luid,
+            generation: binding.generation,
+            windows_session_id: binding.windows_session_id,
+            display_nonce: binding.display_spec.display_nonce,
+            adapter_luid: binding.display_spec.adapter_luid,
             frame_sequence: proof.frame_sequence,
             width: proof.width,
             height: proof.height,
             format: PixelFormat::Bgra8Unorm,
         },
         &NvencProof {
-            generation,
-            adapter_luid: display_spec.adapter_luid,
-            gpu_uuid: gpu_uuid.to_owned(),
+            generation: binding.generation,
+            adapter_luid: binding.display_spec.adapter_luid,
+            gpu_uuid: binding.gpu_uuid.to_owned(),
             input_frame_sequence: proof.frame_sequence,
             codec: EncodeCodec::H264,
             encoded_bytes: u64::from(proof.encoded_bytes),
@@ -703,10 +755,11 @@ pub fn start_qualified_graphics_runtime(
         config.renter_user_sid,
         config.provider_user_sid,
     )
-    .map_err(|_| ServiceRuntimeError::RenterSession)?;
+    .map_err(map_renter_session_error)?;
     let renter_isolation = renter.isolation_proof();
 
-    let service_sid = current_process_user_sid().map_err(|_| ServiceRuntimeError::RenterSession)?;
+    let service_sid =
+        current_process_user_sid().map_err(|_| ServiceRuntimeError::ServiceIdentity)?;
     let pipe = create_worker_pipe(
         config.session_id,
         config.generation,
@@ -788,7 +841,7 @@ pub fn start_qualified_graphics_runtime(
             refresh_hz: config.refresh_hz,
         },
     )
-    .map_err(|_| ServiceRuntimeError::VirtualDisplay)?;
+    .map_err(map_virtual_display_error)?;
 
     let startup = (|| -> Result<(BoundMediaFrame, MediaCapabilityToken), ServiceRuntimeError> {
         let prepare = encode_worker_command(WorkerCommandFrame {
@@ -817,12 +870,14 @@ pub fn start_qualified_graphics_runtime(
         let initial_media_frame = receive_bound_media_frame(
             &pipe,
             &media_pipe,
-            config.generation,
-            2,
-            config.windows_session_id,
-            config.provider_user_sid,
-            display_spec,
-            config.gpu_uuid,
+            MediaFrameBinding {
+                generation: config.generation,
+                command_sequence: 2,
+                windows_session_id: config.windows_session_id,
+                provider_user_sid: config.provider_user_sid,
+                display_spec,
+                gpu_uuid: config.gpu_uuid,
+            },
         )?;
         if !initial_media_frame.is_keyframe() {
             return Err(ServiceRuntimeError::MediaTransport);
@@ -894,6 +949,18 @@ mod tests {
             "renter_session"
         );
         assert_eq!(
+            ServiceRuntimeError::RenterTokenQuery.diagnostic_code(),
+            "renter_token_query"
+        );
+        assert_eq!(
+            ServiceRuntimeError::RenterTokenUserMismatch.diagnostic_code(),
+            "renter_token_user_mismatch"
+        );
+        assert_eq!(
+            ServiceRuntimeError::ServiceIdentity.diagnostic_code(),
+            "service_identity"
+        );
+        assert_eq!(
             ServiceRuntimeError::MediaTransport.diagnostic_code(),
             "media_transport"
         );
@@ -911,6 +978,86 @@ mod tests {
         assert_eq!(
             ServiceRuntimeError::DisplayCleanup.diagnostic_code(),
             "display_cleanup"
+        );
+    }
+
+    #[test]
+    fn virtual_display_platform_errors_map_to_bounded_classes() {
+        assert_eq!(
+            map_virtual_display_error(PlatformError::IddInterfaceQueryFailed),
+            ServiceRuntimeError::VirtualDisplayInterfaceQuery
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::IddInterfaceMissing),
+            ServiceRuntimeError::VirtualDisplayInterfaceMissing
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::IddInterfaceAmbiguous),
+            ServiceRuntimeError::VirtualDisplayInterfaceAmbiguous
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::IddControlOpenFailed),
+            ServiceRuntimeError::VirtualDisplayControlOpen
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::IddControlFailed),
+            ServiceRuntimeError::VirtualDisplayControl
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::IddUnsafeOperation),
+            ServiceRuntimeError::VirtualDisplayGate
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::GpuGraphicsIdentityMismatch),
+            ServiceRuntimeError::ExactGpu
+        );
+        assert_eq!(
+            map_virtual_display_error(PlatformError::PipeCreateFailed),
+            ServiceRuntimeError::VirtualDisplay
+        );
+    }
+
+    #[test]
+    fn renter_platform_errors_map_to_bounded_classes() {
+        assert_eq!(
+            map_renter_session_error(PlatformError::RenterSessionNotActive),
+            ServiceRuntimeError::RenterSessionNotActive
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::RenterSessionNotConsole),
+            ServiceRuntimeError::RenterSessionNotConsole
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::AnotherInteractiveSessionActive),
+            ServiceRuntimeError::RenterAnotherInteractiveSession
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::ProviderProcessInRenterSession),
+            ServiceRuntimeError::RenterProviderProcess
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::RenterTokenQueryFailed),
+            ServiceRuntimeError::RenterTokenQuery
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::RenterTokenNotPrimary),
+            ServiceRuntimeError::RenterTokenNotPrimary
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::RenterTokenSessionMismatch),
+            ServiceRuntimeError::RenterTokenSessionMismatch
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::RenterTokenUserMismatch),
+            ServiceRuntimeError::RenterTokenUserMismatch
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::InvalidRenterUserSid),
+            ServiceRuntimeError::RenterIdentityPolicy
+        );
+        assert_eq!(
+            map_renter_session_error(PlatformError::PipeCreateFailed),
+            ServiceRuntimeError::RenterSession
         );
     }
 

@@ -509,8 +509,8 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             return False
 
         released = self._release_native_claims(session_id)
-        if not released:
-            return False
+        if released is not True:
+            return released
         with self._native_lock:
             self.native_runtimes.pop(session_id, None)
             self._native_blocked.discard(session_id)

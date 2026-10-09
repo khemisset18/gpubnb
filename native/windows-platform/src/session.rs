@@ -139,6 +139,7 @@ fn validate_local_console_session(
     Ok(())
 }
 
+#[cfg(any(windows, test))]
 fn provider_process_contaminates_renter_session(
     renter_session_id: u32,
     provider_user_sid: &str,
@@ -714,13 +715,19 @@ mod tests {
             42, provider, 42, provider,
         ));
         assert!(provider_process_contaminates_renter_session(
-            42, provider, 42, "s-1-5-21-100-200-300-1000",
+            42,
+            provider,
+            42,
+            "s-1-5-21-100-200-300-1000",
         ));
         assert!(!provider_process_contaminates_renter_session(
             42, provider, 43, provider,
         ));
         assert!(!provider_process_contaminates_renter_session(
-            42, provider, 42, "S-1-5-21-100-200-300-1001",
+            42,
+            provider,
+            42,
+            "S-1-5-21-100-200-300-1001",
         ));
     }
 
