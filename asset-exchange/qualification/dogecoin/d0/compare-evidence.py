@@ -51,6 +51,8 @@ for key in (
     "liefInputSha256",
     "zlibFossilUrl",
     "zlibInputSha256",
+    "expatUrl",
+    "expatInputSha256",
 ):
     if a_ev.get(key) != b_ev.get(key):
         raise SystemExit(f"replica environment mismatch for {key}: {a_ev.get(key)!r} != {b_ev.get(key)!r}")
@@ -176,6 +178,8 @@ provenance = {
     "liefInputSha256": a_ev["liefInputSha256"],
     "zlibFossilUrl": a_ev["zlibFossilUrl"],
     "zlibInputSha256": a_ev["zlibInputSha256"],
+    "expatUrl": a_ev["expatUrl"],
+    "expatInputSha256": a_ev["expatInputSha256"],
     "binaryExecuted": False,
     "mainnetUsed": False,
     "realFundsUsed": False,
