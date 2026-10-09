@@ -14,7 +14,7 @@ Aucune signature, intervention PC1, modification Render, fusion ou session physi
 
 Les lancements f797af63 37992039659 et 37992039633 sont annulés, distincts des validations réussies. Le push fe0b1cde 37988563153 est également annulé; cela ne remplace pas les workflows PR réussis.
 
-Correction supplémentaire limitée à `.github/workflows/ci.yml`, au libellé du commit public dans l'ancien rapport et à ses sommes de contrôle. Les images officielles PostgreSQL/Redis utilisent le miroir public ECR déjà validé pour le candidat. Aucune exception Gitleaks, règle ignorée, réduction d'audit ou modification des permissions. Diff exact: `preparation-ci-fix.patch`.
+Correction supplémentaire limitée à `.github/workflows/ci.yml`, au libellé du commit public dans l'ancien rapport et à ses sommes de contrôle. Les images officielles PostgreSQL/Redis utilisent le miroir public ECR déjà validé pour le candidat. Aucune exception Gitleaks, règle ignorée, réduction d'audit ou modification des permissions. Diff exact: https://github.com/khemisset18/gpubnb/compare/41c4e019f1a35786d7ccdede58ccb68e5de26323...fd936033f1f65ab8f585ca059120541b0457afc8 . Le patch brut reproduisait le libellé ancien et déclenchait le même faux positif Gitleaks: il est remis séparément, sans aucune exception de sécurité dans le dépôt.
 
 ## Compatibilité et provenance
 
