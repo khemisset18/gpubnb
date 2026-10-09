@@ -10,19 +10,27 @@ on:
 permissions:
   contents: read
 jobs:
-  verify:
+  verify-pwsh:
     runs-on: windows-latest
     timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        shell: [pwsh, powershell]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
       - name: Syntax and fail-closed behavior
-        shell: ${{ matrix.shell }}
+        shell: pwsh
+        run: |
+          & ./scripts/tests/verify-windows-authenticode.tests.ps1
+          if (-not $?) { exit 1 }
+  verify-powershell:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Syntax and fail-closed behavior
+        shell: powershell
         run: |
           & ./scripts/tests/verify-windows-authenticode.tests.ps1
           if (-not $?) { exit 1 }
