@@ -136,27 +136,33 @@ sha256sum "$WORK_DIR/gitian-linux-reduced.yml" > "$OUTPUT_DIR/reduced-descriptor
 cp "$WORK_DIR/gitian-linux-upstream.yml" "$OUTPUT_DIR/"
 cp "$WORK_DIR/gitian-linux-reduced.yml" "$OUTPUT_DIR/"
 
-docker pull ubuntu:focal
-UBUNTU_REPO_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' ubuntu:focal)"
+CANONICAL_FOCAL_REF="public.ecr.aws/ubuntu/ubuntu:focal"
+docker pull "$CANONICAL_FOCAL_REF"
+UBUNTU_REPO_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "$CANONICAL_FOCAL_REF")"
 case "$UBUNTU_REPO_DIGEST" in
-  ubuntu@sha256:*) ;;
+  public.ecr.aws/ubuntu/ubuntu@sha256:*) ;;
   *)
-    echo "unexpected ubuntu:focal RepoDigest: $UBUNTU_REPO_DIGEST" >&2
+    echo "unexpected Canonical ECR RepoDigest: $UBUNTU_REPO_DIGEST" >&2
     exit 1
     ;;
 esac
-UBUNTU_DIGEST="${UBUNTU_REPO_DIGEST#ubuntu@sha256:}"
 echo "ubuntu_focal_repo_digest=$UBUNTU_REPO_DIGEST" >> "$OUTPUT_DIR/environment.txt"
 
-(
-  cd "$WORK_DIR/gitian-builder"
-  export MIRROR_HOST=172.17.0.1
-  ./bin/make-base-vm --suite focal --arch amd64 --docker --docker-image-digest "$UBUNTU_DIGEST"
-  PINNED_BASE_IMAGE="base-${UBUNTU_DIGEST}-amd64"
-  docker image inspect "$PINNED_BASE_IMAGE" >/dev/null
-  docker tag "$PINNED_BASE_IMAGE" base-focal-amd64
-  test "$(docker image inspect --format='{{.Id}}' "$PINNED_BASE_IMAGE")" = "$(docker image inspect --format='{{.Id}}' base-focal-amd64)"
-)
+mkdir -p "$WORK_DIR/gitian-builder/docker"
+cat > "$WORK_DIR/gitian-builder/docker/base-focal-amd64.Dockerfile" <<EOF
+FROM $UBUNTU_REPO_DIGEST
+ENV DEBIAN_FRONTEND=noninteractive
+RUN echo 'Acquire::http { Proxy "http://172.17.0.1:3142"; };' > /etc/apt/apt.conf.d/50cacher
+RUN apt-get update && apt-get --no-install-recommends -y install pciutils build-essential git subversion language-pack-en wget lsb-release sudo linux-image-generic grub-pc openssh-server
+RUN useradd -ms /bin/bash -U ubuntu
+USER ubuntu:ubuntu
+WORKDIR /home/ubuntu
+CMD ["sleep", "infinity"]
+EOF
+
+docker build   -f "$WORK_DIR/gitian-builder/docker/base-focal-amd64.Dockerfile"   -t base-focal-amd64   "$WORK_DIR/gitian-builder/docker"
+
+docker image inspect base-focal-amd64 >/dev/null
 
 (
   cd "$WORK_DIR/gitian-builder"
