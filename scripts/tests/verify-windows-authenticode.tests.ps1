@@ -34,8 +34,8 @@ Write-Host 'PASS existing Windows signed executable'
 
 $temporary = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
 [void][System.IO.Directory]::CreateDirectory($temporary)
-$first = Join-Path $temporary 'fixture[1].txt'
-$second = Join-Path $temporary 'fixture[2].txt'
+$first = Join-Path $temporary 'fixture[1].ps1'
+$second = Join-Path $temporary 'fixture[2].ps1'
 [System.IO.File]::WriteAllText($first, 'unsigned Authenticode test fixture')
 [System.IO.File]::WriteAllText($second, 'unsigned Authenticode test fixture')
 try {
@@ -45,6 +45,28 @@ try {
     }
     $passed++
     Write-Host 'PASS existing unsigned policy and literal bracket path'
+
+    # Alter a temporary copy of an existing signed executable; never execute it.
+    $tampered = Join-Path $temporary 'tampered.exe'
+    $bytes = [System.IO.File]::ReadAllBytes($liveSigned)
+    $pe = [BitConverter]::ToInt32($bytes, 0x3c)
+    $optionalSize = [BitConverter]::ToUInt16($bytes, $pe + 20)
+    $section = $pe + 24 + $optionalSize
+    $raw = [BitConverter]::ToInt32($bytes, $section + 20)
+    if ($raw -lt 0 -or $raw + 64 -ge $bytes.Length) { throw 'fixture_pe_section_invalid' }
+    $bytes[$raw + 64] = $bytes[$raw + 64] -bxor 1
+    [System.IO.File]::WriteAllBytes($tampered, $bytes)
+    $tamperedOutput = @()
+    $tamperedError = ''
+    try {
+        $tamperedOutput = @(& $Verifier -Path $tampered -Required)
+    } catch { $tamperedError = $_.Exception.Message }
+    if (-not $tamperedError.StartsWith('authenticode_present_but_invalid:', [StringComparison]::Ordinal) -or
+        $tamperedOutput.Count -ne 0) {
+        throw 'real_tampered_signature_was_not_rejected'
+    }
+    $passed++
+    Write-Host 'PASS real tampered signature rejected'
 
     $approved = 'a' * 64
     $other = 'b' * 64
@@ -164,7 +186,7 @@ try {
     Remove-Item -LiteralPath $temporary -Recurse -Force
 }
 # A real child process must fail with a nonzero exit when Required rejects unsigned data.
-$processFixture = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N')+'.txt')
+$processFixture = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N')+'.ps1')
 [System.IO.File]::WriteAllText($processFixture, 'unsigned process exit fixture')
 try {
     $engine = (Get-Process -Id $PID).Path
