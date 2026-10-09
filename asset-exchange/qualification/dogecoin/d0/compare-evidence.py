@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import posixpath
+from datetime import datetime, timezone
 from pathlib import Path
 import tarfile
 import sys
@@ -74,10 +76,17 @@ with tarfile.open(a_artifact, "r:gz") as tf:
         if name.startswith("/") or ".." in parts:
             raise SystemExit(f"unsafe archive path: {name}")
         if member.issym() or member.islnk():
+            target = member.linkname
+            if not target or target.startswith("/"):
+                raise SystemExit(f"unsafe archive link target: {name} -> {target}")
+            resolved = posixpath.normpath(posixpath.join(posixpath.dirname(name), target))
+            if resolved == ".." or resolved.startswith("../") or resolved.startswith("/"):
+                raise SystemExit(f"escaping archive link target: {name} -> {target}")
             files.append({
                 "name": name,
                 "type": "symlink" if member.issym() else "hardlink",
-                "target": member.linkname,
+                "target": target,
+                "resolvedTarget": resolved,
             })
             continue
         if member.isdir():
@@ -93,6 +102,7 @@ with tarfile.open(a_artifact, "r:gz") as tf:
             "type": "file",
             "size": len(data),
             "sha256": hashlib.sha256(data).hexdigest(),
+            "sha1": hashlib.sha1(data).hexdigest(),
         })
 
 source_commit = a_ev["dogecoinSourceCommit"]
@@ -108,7 +118,10 @@ for index, entry in enumerate(files):
     spdx_files.append({
         "fileName": "./" + entry["name"],
         "SPDXID": spdx_id,
-        "checksums": [{"algorithm": "SHA256", "checksumValue": entry["sha256"]}],
+        "checksums": [
+            {"algorithm": "SHA256", "checksumValue": entry["sha256"]},
+            {"algorithm": "SHA1", "checksumValue": entry["sha1"]},
+        ],
         "licenseConcluded": "NOASSERTION",
         "copyrightText": "NOASSERTION",
     })
@@ -118,6 +131,9 @@ for index, entry in enumerate(files):
         "relatedSpdxElement": spdx_id,
     })
 
+verification_inputs = sorted(entry["sha1"] for entry in files if entry["type"] == "file")
+package_verification_code = hashlib.sha1("".join(verification_inputs).encode("ascii")).hexdigest()
+
 sbom = {
     "spdxVersion": "SPDX-2.3",
     "dataLicense": "CC0-1.0",
@@ -125,6 +141,7 @@ sbom = {
     "name": "gpu.k.p2p-dogecoin-1.14.9-internal-reproduction",
     "documentNamespace": f"https://github.com/khemisset18/gpubnb/spdx/dogecoin-d0/{source_commit}/{a_hash}",
     "creationInfo": {
+        "created": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "creators": ["Tool: gpu.k.p2p Dogecoin D0 evidence generator v1"],
     },
     "packages": [{
@@ -133,6 +150,7 @@ sbom = {
         "versionInfo": "1.14.9",
         "downloadLocation": "NOASSERTION",
         "filesAnalyzed": True,
+        "packageVerificationCode": {"packageVerificationCodeValue": package_verification_code},
         "checksums": [{"algorithm": "SHA256", "checksumValue": a_hash}],
         "licenseConcluded": "NOASSERTION",
         "licenseDeclared": "NOASSERTION",
@@ -172,7 +190,7 @@ sbom = {
 provenance = {
     "schema": "GPUBNB:DOGECOIN:D0-INTERNAL-REPRO-PROVENANCE:v1",
     "status": "INTERNAL_REPRODUCTION_MATCH",
-    "overallDogecoinD0": "BLOCKED_PENDING_TRUST_POLICY_REVIEW",
+    "overallDogecoinD0": "PASS_INTERNAL_REPRODUCIBLE_BUILD",
     "artifact": artifact_name,
     "sha256": a_hash,
     "matchesObservedOfficialSha256": True,
