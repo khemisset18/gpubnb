@@ -13,20 +13,33 @@ permissions:
 
 jobs:
   focal-snapshot:
-    name: Verify historical Focal package state
+    name: Focal snapshot ${{ matrix.snapshot }}
+    strategy:
+      fail-fast: false
+      matrix:
+        snapshot:
+          - 20241115T000000Z
+          - 20241118T000000Z
+          - 20241120T000000Z
+          - 20241122T000000Z
+          - 20241124T000000Z
+          - 20241126T000000Z
+          - 20241128T000000Z
+          - 20241130T000000Z
+          - 20241201T000000Z
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
-      - name: Probe Ubuntu archive snapshot used by Dogecoin 1.14.9 release
+      - name: Probe historical Focal package state
         shell: bash
+        env:
+          SNAPSHOT_ID: ${{ matrix.snapshot }}
         run: |
           set -euo pipefail
 
-          SNAPSHOT_ID="20241201T000000Z"
           IMAGE="ubuntu:focal"
-
-          docker pull "${IMAGE}"
+          docker pull "${IMAGE}" >/dev/null
           IMAGE_ID="$(docker image inspect --format='{{.Id}}' "${IMAGE}")"
           IMAGE_DIGEST="$(docker image inspect --format='{{index .RepoDigests 0}}' "${IMAGE}")"
           echo "probe_image_id=${IMAGE_ID}"
@@ -51,12 +64,15 @@ jobs:
                 apt-cache policy "$1" | awk "/Candidate:/ {print \$2; exit}"
               }
 
+              mismatches=0
               check_version() {
                 package="$1"
                 expected="$2"
                 actual="$(candidate "${package}")"
-                printf "%s expected=%s actual=%s\n" "${package}" "${expected}" "${actual}"
-                test "${actual}" = "${expected}"
+                printf "CHECK package=%s expected=%s actual=%s\n" "${package}" "${expected}" "${actual}"
+                if [[ "${actual}" != "${expected}" ]]; then
+                  mismatches=$((mismatches + 1))
+                fi
               }
 
               check_version apt "2.0.10"
@@ -67,5 +83,6 @@ jobs:
               check_version ca-certificates "20240203~20.04.1"
               check_version intel-microcode "3.20241112.0ubuntu0.20.04.1"
 
-              apt-cache policy apt binutils curl git libc6 ca-certificates intel-microcode
+              echo "SNAPSHOT_RESULT id=${SNAPSHOT_ID} mismatches=${mismatches}"
+              test "${mismatches}" -eq 0
             '
