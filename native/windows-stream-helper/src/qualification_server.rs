@@ -159,6 +159,7 @@ impl QualificationMediaServer {
         let started = Instant::now();
         let mut sent = 0u32;
         let mut accepted_input = 0u32;
+        let mut input_pending_since = None;
 
         while sent < max_frames {
             if started.elapsed() > STREAM_TIMEOUT {
@@ -166,7 +167,7 @@ impl QualificationMediaServer {
             }
 
             loop {
-                match try_read_websocket_client_frame(&mut stream)? {
+                match try_read_websocket_client_frame(&mut stream, &mut input_pending_since)? {
                     None => break,
                     Some(ClientWebSocketFrame::Input(payload)) => {
                         let event = input_fence
@@ -222,10 +223,11 @@ impl QualificationMediaServer {
             .map_err(|_| QualificationMediaServerError::Input)?;
         let mut sent = 0u64;
         let mut accepted_input = 0u64;
+        let mut input_pending_since = None;
 
         loop {
             loop {
-                match try_read_websocket_client_frame(&mut stream)? {
+                match try_read_websocket_client_frame(&mut stream, &mut input_pending_since)? {
                     None => break,
                     Some(ClientWebSocketFrame::Input(payload)) => {
                         let event = input_fence
@@ -589,31 +591,58 @@ fn read_websocket_client_frame<R: Read>(
 fn peer_disconnect_error(kind: ErrorKind) -> bool {
     matches!(
         kind,
-        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::NotConnected | ErrorKind::BrokenPipe
+        ErrorKind::ConnectionReset
+            | ErrorKind::ConnectionAborted
+            | ErrorKind::NotConnected
+            | ErrorKind::BrokenPipe
     )
 }
 
 fn classify_websocket_write_error(error: std::io::Error) -> QualificationMediaServerError {
-    if peer_disconnect_error(error.kind()) { QualificationMediaServerError::StaleConnection }
-    else { QualificationMediaServerError::Response }
+    if peer_disconnect_error(error.kind()) {
+        QualificationMediaServerError::StaleConnection
+    } else {
+        QualificationMediaServerError::Response
+    }
 }
 
 fn try_read_websocket_client_frame(
     stream: &mut TcpStream,
+    pending_since: &mut Option<Instant>,
 ) -> Result<Option<ClientWebSocketFrame>, QualificationMediaServerError> {
     stream
         .set_nonblocking(true)
         .map_err(|_| QualificationMediaServerError::Socket)?;
-    let mut header = [0u8; 2];
-    let peeked = stream.peek(&mut header);
+    // Input/control frames are bounded to 125 bytes. A two-byte header does
+    // not mean the mask/payload has arrived: blocking read_exact here used to
+    // stop video and epoch checks for IO_TIMEOUT on a split TCP delivery.
+    let mut wire = [0u8; 4 + 4 + 125];
+    let peeked = stream.peek(&mut wire);
     stream
         .set_nonblocking(false)
         .map_err(|_| QualificationMediaServerError::Socket)?;
     match peeked {
         Ok(0) => Ok(Some(ClientWebSocketFrame::Close(Vec::new()))),
-        Ok(1) => Ok(None),
-        Ok(_) => read_websocket_client_frame(stream).map(Some),
-        Err(error) if error.kind() == ErrorKind::WouldBlock => Ok(None),
+        Ok(count) => {
+            let complete =
+                client_frame_wire_size(&wire[..count])?.is_some_and(|size| count >= size);
+            if complete {
+                *pending_since = None;
+                read_websocket_client_frame(stream).map(Some)
+            } else {
+                let started = pending_since.get_or_insert_with(Instant::now);
+                if started.elapsed() >= IO_TIMEOUT {
+                    return Err(QualificationMediaServerError::Input);
+                }
+                Ok(None)
+            }
+        }
+        Err(error) if error.kind() == ErrorKind::WouldBlock => {
+            if pending_since.is_some_and(|started| started.elapsed() >= IO_TIMEOUT) {
+                return Err(QualificationMediaServerError::Input);
+            }
+            Ok(None)
+        }
         // Winsock reports an abortive peer close as WSAECONNRESET instead of
         // the zero-byte graceful-close path. A browser reload can therefore
         // surface as ConnectionReset/ConnectionAborted even though only this
@@ -624,6 +653,29 @@ fn try_read_websocket_client_frame(
         }
         Err(_) => Err(QualificationMediaServerError::Socket),
     }
+}
+
+fn client_frame_wire_size(wire: &[u8]) -> Result<Option<usize>, QualificationMediaServerError> {
+    if wire.len() < 2 {
+        return Ok(None);
+    }
+    let opcode = wire[0] & 0x0f;
+    if wire[0] & 0xf0 != 0x80 || wire[1] & 0x80 == 0 {
+        return Err(QualificationMediaServerError::Input);
+    }
+    let marker = wire[1] & 0x7f;
+    let (header_size, payload_size) = match marker {
+        0..=125 => (2, usize::from(marker)),
+        126 if wire.len() < 4 => return Ok(None),
+        126 => (4, usize::from(u16::from_be_bytes([wire[2], wire[3]]))),
+        _ => return Err(QualificationMediaServerError::Input),
+    };
+    match opcode {
+        0x02 if payload_size == BROWSER_INPUT_FRAME_SIZE => {}
+        0x08 | 0x09 if payload_size <= 125 => {}
+        _ => return Err(QualificationMediaServerError::Input),
+    }
+    Ok(Some(header_size + 4 + payload_size))
 }
 
 fn write_websocket_control(
@@ -806,6 +858,96 @@ mod tests {
         wire
     }
 
+    fn loopback_pair() -> (TcpStream, TcpStream) {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+        let client = TcpStream::connect(listener.local_addr().expect("address")).expect("connect");
+        let (server, _) = listener.accept().expect("accept");
+        server
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .expect("read timeout");
+        (client, server)
+    }
+
+    #[test]
+    fn split_tcp_input_does_not_block_media_polling_or_discard_bytes() {
+        let (mut client, mut server) = loopback_pair();
+        let input = [0u8; BROWSER_INPUT_FRAME_SIZE];
+        let wire = masked_client_frame(0x02, &input);
+        let mut pending = None;
+        for byte in &wire[..wire.len() - 1] {
+            client.write_all(&[*byte]).expect("partial write");
+            assert_eq!(
+                try_read_websocket_client_frame(&mut server, &mut pending),
+                Ok(None)
+            );
+        }
+        client
+            .write_all(&wire[wire.len() - 1..])
+            .expect("complete write");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match try_read_websocket_client_frame(&mut server, &mut pending).expect("read") {
+                Some(frame) => {
+                    assert_eq!(frame, ClientWebSocketFrame::Input(input));
+                    assert!(pending.is_none());
+                    break;
+                }
+                None => assert!(Instant::now() < deadline),
+            }
+        }
+    }
+
+    #[test]
+    fn incomplete_input_deadline_remains_connection_scoped() {
+        let (mut client, mut server) = loopback_pair();
+        client.write_all(&[0x82, 0xa0]).expect("header");
+        let mut pending = Some(Instant::now() - IO_TIMEOUT);
+        assert_eq!(
+            try_read_websocket_client_frame(&mut server, &mut pending),
+            Err(QualificationMediaServerError::Input)
+        );
+    }
+
+    #[test]
+    fn eof_is_connection_close_and_listener_accepts_next_peer() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+        for _ in 0..3 {
+            let client =
+                TcpStream::connect(listener.local_addr().expect("address")).expect("connect");
+            let (mut server, _) = listener.accept().expect("accept");
+            client
+                .shutdown(std::net::Shutdown::Write)
+                .expect("shutdown");
+            let mut pending = None;
+            let deadline = Instant::now() + Duration::from_secs(2);
+            loop {
+                match try_read_websocket_client_frame(&mut server, &mut pending).expect("read") {
+                    Some(frame) => {
+                        assert_eq!(frame, ClientWebSocketFrame::Close(Vec::new()));
+                        break;
+                    }
+                    None => assert!(Instant::now() < deadline),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn peek_rejects_invalid_input_before_waiting_for_payload() {
+        for wire in [
+            vec![0x82, 32],
+            vec![0x81, 0xa0],
+            vec![0x82, 0x9f],
+            vec![0x09, 0x80],
+            vec![0x89, 0xff],
+        ] {
+            assert_eq!(
+                client_frame_wire_size(&wire),
+                Err(QualificationMediaServerError::Input)
+            );
+        }
+    }
+
     #[test]
     fn explicit_shutdown_while_idle_accept_is_clean() {
         let server = QualificationMediaServer::bind("shutdown-test", 1).expect("bind");
@@ -865,10 +1007,21 @@ mod tests {
 
     #[test]
     fn websocket_write_peer_disconnect_does_not_kill_media_listener() {
-        for kind in [ErrorKind::BrokenPipe, ErrorKind::ConnectionReset, ErrorKind::ConnectionAborted, ErrorKind::NotConnected] {
-            assert_eq!(classify_websocket_write_error(std::io::Error::from(kind)), QualificationMediaServerError::StaleConnection);
+        for kind in [
+            ErrorKind::BrokenPipe,
+            ErrorKind::ConnectionReset,
+            ErrorKind::ConnectionAborted,
+            ErrorKind::NotConnected,
+        ] {
+            assert_eq!(
+                classify_websocket_write_error(std::io::Error::from(kind)),
+                QualificationMediaServerError::StaleConnection
+            );
         }
-        assert_eq!(classify_websocket_write_error(std::io::Error::from(ErrorKind::PermissionDenied)), QualificationMediaServerError::Response);
+        assert_eq!(
+            classify_websocket_write_error(std::io::Error::from(ErrorKind::PermissionDenied)),
+            QualificationMediaServerError::Response
+        );
     }
 
     #[test]
