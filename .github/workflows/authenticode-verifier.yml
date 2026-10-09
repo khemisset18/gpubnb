@@ -1,0 +1,28 @@
+name: Authenticode verifier tests
+on:
+  push:
+    branches:
+      - fix/authenticode-verifier-fail-closed-20261009
+    paths:
+      - scripts/verify-windows-authenticode.ps1
+      - scripts/tests/verify-windows-authenticode.tests.ps1
+      - .github/workflows/authenticode-verifier.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [pwsh, powershell]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Syntax and fail-closed behavior
+        shell: ${{ matrix.shell }}
+        run: |
+          & ./scripts/tests/verify-windows-authenticode.tests.ps1
+          if (-not $?) { exit 1 }
