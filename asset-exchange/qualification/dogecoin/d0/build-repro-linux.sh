@@ -164,7 +164,7 @@ docker build   -f "$WORK_DIR/gitian-builder/docker/base-focal-amd64.Dockerfile" 
 
 docker image inspect base-focal-amd64 >/dev/null
 
-(
+if ! (
   cd "$WORK_DIR/gitian-builder"
   export USE_DOCKER=1
   ./bin/gbuild \
@@ -173,7 +173,20 @@ docker image inspect base-focal-amd64 >/dev/null
     --commit "dogecoin=$DOGE_SOURCE_COMMIT" \
     --url "dogecoin=$DOGE_REPOSITORY" \
     "$WORK_DIR/gitian-linux-reduced.yml"
-)
+); then
+  echo "Gitian build failed; emitting bounded diagnostics." >&2
+  for candidate in \
+    "$WORK_DIR/gitian-builder/var/install.log" \
+    "$WORK_DIR/gitian-builder/var/target.log" \
+    "$WORK_DIR/gitian-builder/var/build.log"; do
+    if [[ -f "$candidate" ]]; then
+      echo "::group::$(basename "$candidate")" >&2
+      tail -n 300 "$candidate" >&2 || true
+      echo "::endgroup::" >&2
+    fi
+  done
+  exit 1
+fi
 
 BUILT="$(find "$WORK_DIR/gitian-builder/build/out" -maxdepth 1 -type f -name "$OUTPUT_NAME" -print -quit)"
 if [[ -z "$BUILT" || ! -f "$BUILT" ]]; then
