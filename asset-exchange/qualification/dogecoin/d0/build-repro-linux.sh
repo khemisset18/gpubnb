@@ -89,52 +89,29 @@ curl --fail --location --proto '=https' --tlsv1.2 "$EXPAT_URL" \
   echo "$EXPAT_SHA256  expat-2.6.2.tar.bz2" | sha256sum --check --strict
 )
 
-cp "$WORK_DIR/dogecoin/contrib/gitian-descriptors/gitian-linux.yml" "$WORK_DIR/gitian-linux-upstream.yml"
-sha256sum "$WORK_DIR/gitian-linux-upstream.yml" > "$OUTPUT_DIR/upstream-descriptor.sha256"
+UPSTREAM_DESCRIPTOR="$WORK_DIR/dogecoin/contrib/gitian-descriptors/gitian-linux.yml"
+UPSTREAM_DESCRIPTOR_BLOB="$(git -C "$WORK_DIR/dogecoin" rev-parse "$DOGE_SOURCE_COMMIT:contrib/gitian-descriptors/gitian-linux.yml")"
+test "$(git hash-object "$UPSTREAM_DESCRIPTOR")" = "$UPSTREAM_DESCRIPTOR_BLOB"
+UPSTREAM_DESCRIPTOR_SHA256="$(sha256sum "$UPSTREAM_DESCRIPTOR" | awk '{print $1}')"
+printf '%s  %s\n' "$UPSTREAM_DESCRIPTOR_SHA256" "contrib/gitian-descriptors/gitian-linux.yml" > "$OUTPUT_DIR/upstream-descriptor.sha256"
+cp "$UPSTREAM_DESCRIPTOR" "$OUTPUT_DIR/gitian-linux-upstream.yml"
 
-python3 - "$WORK_DIR/gitian-linux-upstream.yml" "$WORK_DIR/gitian-linux-reduced.yml" "$DEPENDS_FALLBACK_URL" <<'PY'
-from pathlib import Path
-import sys
+for host in i686-pc-linux-gnu x86_64-linux-gnu arm-linux-gnueabihf aarch64-linux-gnu; do
+  make -C "$WORK_DIR/dogecoin/depends" -s download-one \
+    HOST="$host" \
+    SOURCES_PATH="$WORK_DIR/gitian-builder/cache/common" \
+    FALLBACK_DOWNLOAD_PATH="$DEPENDS_FALLBACK_URL"
+done
 
-source = Path(sys.argv[1]).read_text()
-reduced = source
-fallback_url = sys.argv[3]
-
-old_hosts = 'HOSTS="i686-pc-linux-gnu x86_64-linux-gnu arm-linux-gnueabihf aarch64-linux-gnu"'
-new_hosts = 'HOSTS="i686-pc-linux-gnu x86_64-linux-gnu"'
-if old_hosts not in reduced:
-    raise SystemExit("expected upstream HOSTS declaration missing")
-reduced = reduced.replace(old_hosts, new_hosts, 1)
-
-for line in [
-    '- "g++-aarch64-linux-gnu"\n',
-    '- "g++-9-aarch64-linux-gnu"\n',
-    '- "gcc-9-aarch64-linux-gnu"\n',
-    '- "binutils-aarch64-linux-gnu"\n',
-    '- "g++-arm-linux-gnueabihf"\n',
-    '- "g++-9-arm-linux-gnueabihf"\n',
-    '- "gcc-9-arm-linux-gnueabihf"\n',
-    '- "binutils-arm-linux-gnueabihf"\n',
-]:
-    if line not in reduced:
-        raise SystemExit(f"expected upstream package line missing: {line.strip()}")
-    reduced = reduced.replace(line, "", 1)
-
-tz_line = '  export TZ="UTC"\n'
-if tz_line not in reduced:
-    raise SystemExit("expected TZ export missing from upstream descriptor")
-reduced = reduced.replace(
-    tz_line,
-    tz_line + f'  export FALLBACK_DOWNLOAD_PATH="{fallback_url}"\n',
-    1,
-)
-
-Path(sys.argv[2]).write_text(reduced)
-PY
-
-sha256sum "$WORK_DIR/gitian-linux-reduced.yml" > "$OUTPUT_DIR/reduced-descriptor.sha256"
-cp "$WORK_DIR/gitian-linux-upstream.yml" "$OUTPUT_DIR/"
-cp "$WORK_DIR/gitian-linux-reduced.yml" "$OUTPUT_DIR/"
+(
+  cd "$WORK_DIR/gitian-builder/cache/common"
+  find . -maxdepth 1 -type f -printf '%P\0' \
+    | LC_ALL=C sort -z \
+    | xargs -0 sha256sum
+) > "$OUTPUT_DIR/depends-source-cache.SHA256SUMS"
+DEPENDS_CACHE_MANIFEST_SHA256="$(sha256sum "$OUTPUT_DIR/depends-source-cache.SHA256SUMS" | awk '{print $1}')"
+DEPENDS_CACHE_FILE_COUNT="$(wc -l < "$OUTPUT_DIR/depends-source-cache.SHA256SUMS" | tr -d ' ')"
+test "$DEPENDS_CACHE_FILE_COUNT" -gt 0
 
 CANONICAL_FOCAL_REF="public.ecr.aws/ubuntu/ubuntu:focal"
 docker pull "$CANONICAL_FOCAL_REF"
@@ -173,7 +150,7 @@ if ! (
     -m "${D0_BUILD_MEMORY_MIB:-5000}" \
     --commit "dogecoin=$DOGE_SOURCE_COMMIT" \
     --url "dogecoin=$DOGE_REPOSITORY" \
-    "$WORK_DIR/gitian-linux-reduced.yml"
+    "$UPSTREAM_DESCRIPTOR"
 ); then
   echo "Gitian build failed; emitting bounded diagnostics." >&2
   for candidate in \
@@ -202,12 +179,12 @@ cp "$WORK_DIR/gitian-builder/result/"*.yml "$OUTPUT_DIR/" 2>/dev/null || true
 ACTUAL_SHA256="$(sha256sum "$OUTPUT_DIR/$OUTPUT_NAME" | awk '{print $1}')"
 printf '%s  %s\n' "$ACTUAL_SHA256" "$OUTPUT_NAME" > "$OUTPUT_DIR/SHA256SUMS"
 
-python3 - "$OUTPUT_DIR" "$DOGE_SOURCE_COMMIT" "$GITIAN_BUILDER_COMMIT" "$UBUNTU_REPO_DIGEST" "$ACTUAL_SHA256" "$OFFICIAL_X86_64_SHA256" "$DEPENDS_FALLBACK_URL" "$LIEF_SHA256" "$ZLIB_FOSSIL_URL" "$ZLIB_SHA256" "$EXPAT_URL" "$EXPAT_SHA256" <<'PY'
+python3 - "$OUTPUT_DIR" "$DOGE_SOURCE_COMMIT" "$GITIAN_BUILDER_COMMIT" "$UBUNTU_REPO_DIGEST" "$ACTUAL_SHA256" "$OFFICIAL_X86_64_SHA256" "$DEPENDS_FALLBACK_URL" "$LIEF_SHA256" "$ZLIB_FOSSIL_URL" "$ZLIB_SHA256" "$EXPAT_URL" "$EXPAT_SHA256" "$UPSTREAM_DESCRIPTOR_SHA256" "$DEPENDS_CACHE_MANIFEST_SHA256" "$DEPENDS_CACHE_FILE_COUNT" <<'PY'
 import json
 from pathlib import Path
 import sys
 
-out, source, gitian, ubuntu_digest, actual, official, fallback_url, lief_sha256, zlib_url, zlib_sha256, expat_url, expat_sha256 = sys.argv[1:]
+out, source, gitian, ubuntu_digest, actual, official, fallback_url, lief_sha256, zlib_url, zlib_sha256, expat_url, expat_sha256, descriptor_sha256, cache_manifest_sha256, cache_file_count = sys.argv[1:]
 evidence = {
     "schema": "GPUBNB:DOGECOIN:D0-INTERNAL-BUILD-EVIDENCE:v1",
     "dogecoinSourceCommit": source,
@@ -223,6 +200,10 @@ evidence = {
     "zlibInputSha256": zlib_sha256,
     "expatUrl": expat_url,
     "expatInputSha256": expat_sha256,
+    "gitianDescriptorSha256": descriptor_sha256,
+    "dependsSourceCacheManifestSha256": cache_manifest_sha256,
+    "dependsSourceCacheFileCount": int(cache_file_count),
+    "gitianDescriptorModified": False,
     "binaryExecuted": False,
     "mainnetUsed": False,
     "realFundsUsed": False,
