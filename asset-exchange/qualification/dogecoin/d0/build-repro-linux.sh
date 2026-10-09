@@ -163,6 +163,7 @@ EOF
 docker build   -f "$WORK_DIR/gitian-builder/docker/base-focal-amd64.Dockerfile"   -t base-focal-amd64   "$WORK_DIR/gitian-builder/docker"
 
 docker image inspect base-focal-amd64 >/dev/null
+mkdir -p "$WORK_DIR/gitian-builder/var"
 
 if ! (
   cd "$WORK_DIR/gitian-builder"
