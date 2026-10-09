@@ -34,6 +34,10 @@ jobs:
           echo "snapshot_id=${SNAPSHOT_ID}"
 
           docker run --rm             -e SNAPSHOT_ID="${SNAPSHOT_ID}"             "${IMAGE}"             bash -euxo pipefail -c '
+              apt-get update
+              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates
+              update-ca-certificates
+
               cat >/etc/apt/sources.list <<EOF
           deb [snapshot=${SNAPSHOT_ID}] http://archive.ubuntu.com/ubuntu focal main restricted universe multiverse
           deb [snapshot=${SNAPSHOT_ID}] http://archive.ubuntu.com/ubuntu focal-updates main restricted universe multiverse
