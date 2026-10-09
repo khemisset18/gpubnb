@@ -1,0 +1,427 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 955fc2a2..6ef9adfd 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -19,7 +19,7 @@ jobs:
+         working-directory: apps/api
+     services:
+       postgres:
+-        image: postgres:16
++        image: public.ecr.aws/docker/library/postgres:16
+         env:
+           POSTGRES_PASSWORD: postgres
+           POSTGRES_DB: gpubnb
+@@ -28,7 +28,7 @@ jobs:
+           --health-cmd "pg_isready -U postgres" --health-interval 10s
+           --health-timeout 5s --health-retries 5
+       redis:
+-        image: redis:7-alpine
++        image: public.ecr.aws/docker/library/redis:7-alpine
+         ports: ["6379:6379"]
+     env:
+       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gpubnb
+diff --git a/agent/gpubnb_agent/workspace_gateway_v10.py b/agent/gpubnb_agent/workspace_gateway_v10.py
+index 195d22c1..f20a5085 100644
+--- a/agent/gpubnb_agent/workspace_gateway_v10.py
++++ b/agent/gpubnb_agent/workspace_gateway_v10.py
+@@ -509,8 +509,8 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
+             return False
+ 
+         released = self._release_native_claims(session_id)
+-        if not released:
+-            return False
++        if released is not True:
++            return released
+         with self._native_lock:
+             self.native_runtimes.pop(session_id, None)
+             self._native_blocked.discard(session_id)
+diff --git a/agent/tests/test_windows_inventory_heartbeat.py b/agent/tests/test_windows_inventory_heartbeat.py
+index cadb578f..058b7523 100644
+--- a/agent/tests/test_windows_inventory_heartbeat.py
++++ b/agent/tests/test_windows_inventory_heartbeat.py
+@@ -2,7 +2,7 @@ from __future__ import annotations
+ 
+ import subprocess
+ import unittest
+-from unittest.mock import patch
++from unittest.mock import MagicMock, patch
+ 
+ from gpubnb_agent import platform_info
+ 
+@@ -32,16 +32,17 @@ class WindowsInventoryHeartbeatHardeningTests(unittest.TestCase):
+         }
+ 
+     def test_run_command_hides_child_console_on_windows(self) -> None:
+-        completed = subprocess.CompletedProcess(["powershell.exe"], 0, "ok", "")
++        process = MagicMock()
++        process.wait.return_value = 0
+         with (
+             patch.object(platform_info.os, "name", "nt"),
+-            patch.object(platform_info.subprocess, "run", return_value=completed) as run,
++            patch.object(platform_info.subprocess, "Popen", return_value=process) as popen,
+         ):
+             result = platform_info.run_command(["powershell.exe"])
+ 
+         self.assertEqual(result.returncode, 0)
+         self.assertEqual(
+-            run.call_args.kwargs["creationflags"],
++            popen.call_args.kwargs["creationflags"],
+             platform_info.WINDOWS_CREATE_NO_WINDOW,
+         )
+ 
+diff --git a/apps/api/package-lock.json b/apps/api/package-lock.json
+index 900c0f8e..1542e1d9 100644
+--- a/apps/api/package-lock.json
++++ b/apps/api/package-lock.json
+@@ -16,7 +16,7 @@
+         "@prisma/client": "^6.10.0",
+         "@solana/web3.js": "^1.98.4",
+         "bs58": "^6.0.0",
+-        "fastify": "^5.8.1",
++        "fastify": "^5.12.5",
+         "ioredis": "^5.6.1",
+         "tweetnacl": "^1.0.3",
+         "ws": "7.5.13",
+@@ -1577,9 +1577,9 @@
+       "license": "MIT"
+     },
+     "node_modules/brace-expansion": {
+-      "version": "5.0.9",
+-      "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.9.tgz",
+-      "integrity": "sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==",
++      "version": "5.0.12",
++      "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.12.tgz",
++      "integrity": "sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ==",
+       "license": "MIT",
+       "dependencies": {
+         "balanced-match": "^4.0.2"
+@@ -2054,9 +2054,9 @@
+       "license": "BSD-3-Clause"
+     },
+     "node_modules/fastify": {
+-      "version": "5.12.1",
+-      "resolved": "https://registry.npmjs.org/fastify/-/fastify-5.12.1.tgz",
+-      "integrity": "sha512-FWi+tQvwxR/PeRX7Z2mhfEF5ozJ3jn9asiiclzKXNSzJRHAYcU924aIOKAdHFJ+YIKieh3cqr1IwCOvTr41B3Q==",
++      "version": "5.12.5",
++      "resolved": "https://registry.npmjs.org/fastify/-/fastify-5.12.5.tgz",
++      "integrity": "sha512-OB2k1dlxs5/NAABqeKV2FUHkSD2BbENsCak8yULVcymn3fHIPDVa9TI3SDnJSWYSllZmSYuZXy2gTnsT+Sut1A==",
+       "funding": [
+         {
+           "type": "github",
+diff --git a/apps/api/package.json b/apps/api/package.json
+index 5d7e74dc..1d829df0 100644
+--- a/apps/api/package.json
++++ b/apps/api/package.json
+@@ -25,7 +25,7 @@
+     "@prisma/client": "^6.10.0",
+     "@solana/web3.js": "^1.98.4",
+     "bs58": "^6.0.0",
+-    "fastify": "^5.8.1",
++    "fastify": "^5.12.5",
+     "ioredis": "^5.6.1",
+     "tweetnacl": "^1.0.3",
+     "ws": "7.5.13",
+@@ -39,7 +39,7 @@
+     "typescript": "^5.8.3"
+   },
+   "overrides": {
+-    "brace-expansion": "5.0.9",
++    "brace-expansion": "5.0.12",
+     "deepmerge-ts": "8.0.0",
+     "fast-uri": "3.1.7",
+     "fast-json-stringify": {
+diff --git a/apps/api/src/api-served-web-config.ts b/apps/api/src/api-served-web-config.ts
+new file mode 100644
+index 00000000..a0685c4c
+--- /dev/null
++++ b/apps/api/src/api-served-web-config.ts
+@@ -0,0 +1,16 @@
++import type { FastifyInstance } from 'fastify';
++import { readFileSync } from 'node:fs';
++
++// The API serves its bundled desktop UI at its own origin. Static-site builds
++// retain their /api proxy contract; no hosting-provider hostname is inferred.
++export function registerApiServedWebConfig(app: FastifyInstance, configPath: string): void {
++  const source = readFileSync(configPath, 'utf8');
++  const sameOriginDefaults = [
++    'window.GPUBNB_API_URL = window.GPUBNB_API_URL || window.location.origin;',
++    'window.GPUBNB_GATEWAY_URL = window.GPUBNB_GATEWAY_URL || window.location.origin;',
++  ].join('\n');
++  app.get('/config.js', async (_request, reply) => reply
++    .header('cache-control', 'no-store')
++    .type('application/javascript; charset=utf-8')
++    .send(`${sameOriginDefaults}\n${source}`));
++}
+diff --git a/apps/api/src/server.ts b/apps/api/src/server.ts
+index 74b0e49a..516f5a9b 100644
+--- a/apps/api/src/server.ts
++++ b/apps/api/src/server.ts
+@@ -1,3 +1,4 @@
++import { registerApiServedWebConfig } from './api-served-web-config.js';
+ import Fastify from 'fastify'; import helmet from '@fastify/helmet'; import rateLimit from '@fastify/rate-limit'; import cookie from '@fastify/cookie'; import fastifyStatic from '@fastify/static'; import path from 'node:path'; import { Transform } from 'node:stream';
+ import { Prisma, PrismaClient, MachineConnectivity, MachineOperational, ModerationStatus, ListingStatus, BookingStatus, PaymentStatus, JobStatus, JobType, MachineWorkspaceState, WorkspaceRelease, WorkspaceRuntimeBackend, WorkspaceSessionStatus, SessionTerminationReason } from '@prisma/client';
+ import { Redis } from 'ioredis'; import { z, ZodError } from 'zod'; import bs58 from 'bs58'; import nacl from 'tweetnacl'; import crypto from 'node:crypto';
+@@ -270,6 +271,7 @@ const filesystemArtifactStorage=new FilesystemArtifactStorage(config.FILE_STORAG
+ app.post('/jobs/:id/artifacts',{config:{rateLimit:{max:20,timeWindow:'1 minute'},bodyLimit:config.MAX_ARTIFACT_BYTES}},async(req,reply)=>{const {id}=z.object({id:z.string().cuid()}).parse(req.params);const body=z.object({machineId:z.string().cuid(),kind:z.string().regex(/^(?!\.{1,2}$)[A-Za-z0-9._-]{1,32}$/).default('result'),sha256:z.string().regex(/^[a-f0-9]{64}$/),sizeBytes:z.number().int().min(1).max(config.MAX_ARTIFACT_BYTES)}).parse(req.query);const routePath=`/jobs/${id}/artifacts`;if(!await authenticatedAgentWithBody(body.machineId,'POST',routePath,req.headers,req.rawBody))return reply.code(401).send({error:'invalid_agent_request'});const job=await db.job.findFirst({where:{id,machineId:body.machineId},select:{id:true,renterId:true}});if(!job)return reply.code(404).send({error:'job_not_found'});const data=await req.body;if(!Buffer.isBuffer(data)&&typeof data!=='string')return reply.code(400).send({error:'binary_body_required'});const buf=Buffer.from(data);if(buf.length>config.MAX_ARTIFACT_BYTES)return reply.code(413).send({error:'artifact_too_large'});const hash=crypto.createHash('sha256').update(buf).digest('hex');if(hash!==body.sha256)return reply.code(400).send({error:'integrity_check_failed'});const storageKey=await artifactStorage.write(id,body.kind,body.sha256,buf);const artifact=await db.jobArtifact.create({data:{jobId:id,kind:body.kind,sha256:body.sha256,sizeBytes:buf.length,storageKey}});return reply.code(201).send({id:artifact.id,sha256:body.sha256,sizeBytes:buf.length,storageKey});});
+ app.get('/jobs/:id/artifacts',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {id}=z.object({id:z.string().cuid()}).parse(req.params);const job=await db.job.findFirst({where:{id,renterId:session.userId},select:{id:true}});if(!job)return reply.code(404).send({error:'job_not_found'});const artifacts=await db.jobArtifact.findMany({where:{jobId:id},select:{id:true,kind:true,sha256:true,sizeBytes:true,storageKey:true,createdAt:true},orderBy:{createdAt:'desc'}});return {artifacts};});
+ app.get('/jobs/:id/artifacts/:artifactId',async(req,reply)=>{const session=await requireSession(req,reply,redis);if(!session)return;const {id,artifactId}=z.object({id:z.string().cuid(),artifactId:z.string().cuid()}).parse(req.params);const job=await db.job.findFirst({where:{id,renterId:session.userId},select:{id:true}});if(!job)return reply.code(404).send({error:'job_not_found'});const artifact=await db.jobArtifact.findFirst({where:{id:artifactId,jobId:id},select:{id:true,sha256:true,sizeBytes:true,storageKey:true,kind:true}});if(!artifact)return reply.code(404).send({error:'artifact_not_found'});try{const data=await artifactStorage.read(artifact.storageKey);verifyArtifactBytes(data,artifact.sha256,artifact.sizeBytes);reply.header('content-type','application/octet-stream');reply.header('x-artifact-sha256',artifact.sha256);return reply.send(data);}catch(err){if(typeof err==='object'&&err&&'code'in err){const code=(err as {code?:string}).code;if(code==='ENOENT')return reply.code(404).send({error:'artifact_not_found_in_storage'});if(code==='artifact_integrity_check_failed'){req.log.error({jobId:id,artifactId,storageKey:artifact.storageKey},'artifact_integrity_check_failed');return reply.code(502).send({error:'artifact_integrity_check_failed'});}}throw err;}});
++registerApiServedWebConfig(app, path.resolve(process.cwd(), '../web/config.js'));
+ await app.register(fastifyStatic,{root:path.resolve(process.cwd(),'../web'),prefix:'/'});
+ app.setNotFoundHandler((req,reply)=>{if(req.method==='GET'&&!req.url.startsWith('/api/')&&!req.url.startsWith('/internal/'))return reply.sendFile('index.html');return reply.code(404).send({error:'not_found'})});
+ // Reconciliation and sweep loops remain in-process for deployment compatibility.
+diff --git a/apps/api/src/workspace-gateway-transport.ts b/apps/api/src/workspace-gateway-transport.ts
+index 38c95621..7e0b6af1 100644
+--- a/apps/api/src/workspace-gateway-transport.ts
++++ b/apps/api/src/workspace-gateway-transport.ts
+@@ -32,12 +32,22 @@ export class BrowserPendingBudget {
+ }
+ 
+ export function websocketDataToBuffer(data: WebSocket.Data): Buffer {
++  if (typeof data === 'string') return Buffer.from(data, 'utf8');
+   if (Buffer.isBuffer(data)) return data;
+   if (Array.isArray(data)) return Buffer.concat(data);
+   if (data instanceof ArrayBuffer) return Buffer.from(data);
+   throw new TypeError('workspace_websocket_unsupported_data_type');
+ }
+ 
++// ws 7 emits message(data): text is a string, binary follows binaryType.
++// ws 8 emits message(data, isBinary), including Buffer-backed text. Prefer
++// explicit opcode metadata when present; never infer it from payload contents.
++export function websocketMessageIsBinary(data: WebSocket.Data, isBinary?: boolean): boolean {
++  if (typeof isBinary === 'boolean') return isBinary;
++  return Buffer.isBuffer(data) || data instanceof ArrayBuffer ||
++    (Array.isArray(data) && data.every(Buffer.isBuffer));
++}
++
+ export function isStrictBase64Payload(
+   value: unknown,
+   maxEncodedBytes: number,
+diff --git a/apps/api/src/workspace-gateway.ts b/apps/api/src/workspace-gateway.ts
+index 42f88853..4abb8de7 100644
+--- a/apps/api/src/workspace-gateway.ts
++++ b/apps/api/src/workspace-gateway.ts
+@@ -25,6 +25,7 @@ import {
+   WS_REDIS_INPUT_MAX_BYTES,
+   isStrictBase64Payload,
+   websocketDataToBuffer,
++  websocketMessageIsBinary,
+ } from './workspace-gateway-transport.js';
+ 
+ const WebSocketServer=WebSocket.Server;
+@@ -499,8 +500,9 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
+             .finally(()=>{pumpBusy=false;});
+         },20);
+         let browserSendChain:Promise<void>=setup.then(()=>undefined);
+-        ws.on('message',(data:WebSocket.Data,isBinary:boolean)=>{
++        ws.on('message',(data:WebSocket.Data,binaryMetadata?:boolean)=>{
+           if(browserClosed)return;
++          const isBinary=websocketMessageIsBinary(data,binaryMetadata);
+           let frame:Buffer;
+           try{frame=websocketDataToBuffer(data);}catch(error){gatewayLog.error({err:error,event:'workspace_gateway_browser_frame_invalid',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser frame invalid');browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1003,'unsupported websocket frame');return;}
+           if(!browserGatewayFrameAllowed(row.runtimeBackend,isBinary,frame.length)){
+diff --git a/apps/api/test/api-served-web-config.test.ts b/apps/api/test/api-served-web-config.test.ts
+new file mode 100644
+index 00000000..d89b78de
+--- /dev/null
++++ b/apps/api/test/api-served-web-config.test.ts
+@@ -0,0 +1,38 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import Fastify from 'fastify';
++import { fileURLToPath } from 'node:url';
++import { readFileSync } from 'node:fs';
++import { runInNewContext } from 'node:vm';
++import { registerApiServedWebConfig } from '../src/api-served-web-config.js';
++
++const configPath = fileURLToPath(new URL('../../web/config.js', import.meta.url));
++
++test('API-served UI config uses its same origin without accepting request-host configuration', async () => {
++  const app = Fastify();
++  registerApiServedWebConfig(app, configPath);
++  try {
++    const response = await app.inject({ url: '/config.js', headers: { host: 'untrusted.invalid' } });
++    assert.equal(response.statusCode, 200);
++    assert.match(response.headers['content-type']!, /application\/javascript/);
++    assert.equal(response.headers['cache-control'], 'no-store');
++    assert.doesNotMatch(response.body, /untrusted\.invalid/);
++    const window = { location: { origin: 'https://qualification.example' } } as Record<string, any>;
++    runInNewContext(response.body, { window });
++    assert.equal(window.GPUBNB_CONFIG.apiBase, window.location.origin);
++    assert.equal(window.GPUBNB_CONFIG.workspaceGatewayBase, window.location.origin);
++    const configured = { location: window.location, GPUBNB_API_URL: 'https://api.example', GPUBNB_GATEWAY_URL: 'https://gateway.example' } as Record<string, any>;
++    runInNewContext(response.body, { window: configured });
++    assert.equal(configured.GPUBNB_CONFIG.apiBase, 'https://api.example');
++    assert.equal(configured.GPUBNB_CONFIG.workspaceGatewayBase, 'https://gateway.example');
++  } finally {
++    await app.close();
++  }
++});
++
++test('static-site config retains the /api proxy and configured gateway defaults', () => {
++  const window = { location: { origin: 'https://static.example' } } as Record<string, any>;
++  runInNewContext(readFileSync(configPath, 'utf8'), { window });
++  assert.equal(window.GPUBNB_CONFIG.apiBase, '/api');
++  assert.equal(window.GPUBNB_CONFIG.workspaceGatewayBase, 'http://localhost:3000');
++});
+diff --git a/apps/api/test/workspace-gateway-contract.test.ts b/apps/api/test/workspace-gateway-contract.test.ts
+index 213fbf74..a4f7162e 100644
+--- a/apps/api/test/workspace-gateway-contract.test.ts
++++ b/apps/api/test/workspace-gateway-contract.test.ts
+@@ -190,15 +190,15 @@ test('cleanup is fail closed and expired sessions are stopped',()=>{
+ 
+ test('windows native grant redirect is an absolute HTTPS URL', () => {
+   assert.match(
+-    source,
++    api,
+     /const host=String\(request\.headers\.host\|\|''\)\.trim\(\);/,
+   );
+   assert.match(
+-    source,
++    api,
+     /new URL\([\s\S]*\/windows-native-desktop\.html\?session=\$\{encodeURIComponent\(sessionId\)\}[\s\S]*`https:\/\/\$\{host\}`[\s\S]*\)\.toString\(\)/,
+   );
+   assert.match(
+-    source,
++    api,
+     /\.code\(302\)\.header\('Location',target\)\.send\(\)/,
+   );
+ });
+diff --git a/apps/api/test/workspace-gateway-ws7-wire.test.ts b/apps/api/test/workspace-gateway-ws7-wire.test.ts
+new file mode 100644
+index 00000000..9cc8982c
+--- /dev/null
++++ b/apps/api/test/workspace-gateway-ws7-wire.test.ts
+@@ -0,0 +1,45 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { once } from 'node:events';
++import WebSocket from 'ws';
++import { WorkspaceRuntimeBackend } from '@prisma/client';
++import { browserGatewayFrameAllowed } from '../src/windows-native-gateway-policy.js';
++import { websocketDataToBuffer, websocketMessageIsBinary } from '../src/workspace-gateway-transport.js';
++
++test('locked ws wire transport preserves native binary input and rejects same-size text', {timeout: 5000}, async () => {
++  const server = new WebSocket.Server({host: '127.0.0.1', port: 0});
++  await once(server, 'listening');
++  const address = server.address();
++  assert.ok(address && typeof address !== 'string');
++  const connected = once(server, 'connection');
++  const client = new WebSocket(`ws://127.0.0.1:${address.port}`);
++  let peer: WebSocket | undefined;
++  try {
++    [peer] = await connected as [WebSocket];
++    await once(client, 'open');
++    for (const binary of [true, true, false, true]) {
++      const incoming = once(peer, 'message');
++      client.send(binary ? Buffer.alloc(32, 0x41) : 'A'.repeat(32), {binary});
++      const [data, metadata] = await incoming;
++      const bytes = websocketDataToBuffer(data);
++      assert.equal(bytes.length, 32);
++      // Regression: ws 7 does not supply metadata. The old gateway passed
++      // undefined to its binary-only policy and rejected genuine input.
++      assert.equal(websocketMessageIsBinary(data, metadata), binary);
++      assert.equal(browserGatewayFrameAllowed(WorkspaceRuntimeBackend.WINDOWS_NATIVE,
++        websocketMessageIsBinary(data, metadata), bytes.length), binary);
++    }
++    assert.equal(peer.readyState, WebSocket.OPEN);
++  } finally {
++    client.terminate();
++    peer?.terminate();
++    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
++  }
++});
++
++test('explicit opcode metadata takes precedence over Buffer representation', () => {
++  const data = Buffer.alloc(32);
++  assert.equal(websocketMessageIsBinary(data, false), false);
++  assert.equal(websocketMessageIsBinary(data, true), true);
++  assert.equal(websocketMessageIsBinary('A'.repeat(32)), false);
++});
+diff --git a/apps/web/config.js b/apps/web/config.js
+index be2f3e64..344232a8 100644
+--- a/apps/web/config.js
++++ b/apps/web/config.js
+@@ -1,16 +1,9 @@
+-// URL publique de l’API vue par le navigateur.
+-// Private Stage 3 Render deployments are intentionally same-origin so PC2 can
+-// authenticate and open the native desktop without changing the public Netlify site.
+-const GPUBNB_STAGE3_RENDER_SAME_ORIGIN =
+-  window.location?.protocol === "https:" &&
+-  window.location?.hostname?.endsWith(".onrender.com");
+-
+-window.GPUBNB_API_URL = window.GPUBNB_API_URL ||
+-  (GPUBNB_STAGE3_RENDER_SAME_ORIGIN ? window.location.origin : "/api");
+-
+-window.GPUBNB_GATEWAY_URL = window.GPUBNB_GATEWAY_URL ||
+-  (GPUBNB_STAGE3_RENDER_SAME_ORIGIN ? window.location.origin : "http://localhost:3000");
+-
++// URL publique de l’API vue par le navigateur. En production, le build garde
++// `/api` et génère un proxy Netlify vers GPUBNB_API_ORIGIN.
++window.GPUBNB_API_URL = window.GPUBNB_API_URL || "/api";
++// Le build remplace cette valeur de développement par GPUBNB_GATEWAY_ORIGIN
++// (ou GPUBNB_API_ORIGIN lorsque API et gateway partagent le même runtime).
++window.GPUBNB_GATEWAY_URL = window.GPUBNB_GATEWAY_URL || "http://localhost:3000";
+ window.GPUBNB_CONFIG = {
+   apiBase: window.GPUBNB_API_URL,
+   workspaceGatewayBase: window.GPUBNB_GATEWAY_URL,
+diff --git a/package-lock.json b/package-lock.json
+index b4e29f0f..35507a16 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -16,7 +16,7 @@
+         "@prisma/client": "^6.10.0",
+         "@solana/web3.js": "^1.98.4",
+         "bs58": "^6.0.0",
+-        "fastify": "^5.8.1",
++        "fastify": "^5.12.5",
+         "ioredis": "^5.6.1",
+         "tweetnacl": "^1.0.3",
+         "ws": "7.5.13",
+@@ -1577,9 +1577,9 @@
+       "license": "MIT"
+     },
+     "node_modules/brace-expansion": {
+-      "version": "5.0.9",
+-      "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.9.tgz",
+-      "integrity": "sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==",
++      "version": "5.0.12",
++      "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.12.tgz",
++      "integrity": "sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ==",
+       "license": "MIT",
+       "dependencies": {
+         "balanced-match": "^4.0.2"
+@@ -2054,9 +2054,9 @@
+       "license": "BSD-3-Clause"
+     },
+     "node_modules/fastify": {
+-      "version": "5.12.1",
+-      "resolved": "https://registry.npmjs.org/fastify/-/fastify-5.12.1.tgz",
+-      "integrity": "sha512-FWi+tQvwxR/PeRX7Z2mhfEF5ozJ3jn9asiiclzKXNSzJRHAYcU924aIOKAdHFJ+YIKieh3cqr1IwCOvTr41B3Q==",
++      "version": "5.12.5",
++      "resolved": "https://registry.npmjs.org/fastify/-/fastify-5.12.5.tgz",
++      "integrity": "sha512-OB2k1dlxs5/NAABqeKV2FUHkSD2BbENsCak8yULVcymn3fHIPDVa9TI3SDnJSWYSllZmSYuZXy2gTnsT+Sut1A==",
+       "funding": [
+         {
+           "type": "github",
+diff --git a/package.json b/package.json
+index 4c0609be..7fb28de9 100644
+--- a/package.json
++++ b/package.json
+@@ -25,7 +25,7 @@
+     "@prisma/client": "^6.10.0",
+     "@solana/web3.js": "^1.98.4",
+     "bs58": "^6.0.0",
+-    "fastify": "^5.8.1",
++    "fastify": "^5.12.5",
+     "ioredis": "^5.6.1",
+     "tweetnacl": "^1.0.3",
+     "ws": "7.5.13",
+@@ -39,7 +39,7 @@
+     "typescript": "^5.8.3"
+   },
+   "overrides": {
+-    "brace-expansion": "5.0.9",
++    "brace-expansion": "5.0.12",
+     "deepmerge-ts": "8.0.0",
+     "fast-uri": "3.1.7",
+     "fast-json-stringify": {

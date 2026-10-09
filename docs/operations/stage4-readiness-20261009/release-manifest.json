@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-10-09T21:12:21.089425+00:00",
+  "purpose": "private preparation only; not an installation approval",
+  "repository": "khemisset18/gpubnb",
+  "runtimeFixCommit": "fe0b1cde539abb71e289e1875b0cc9dc32f1629d",
+  "authenticodeVerifierCommit": "f797af6378928bdcc09e0f3494a57f16aa994d98",
+  "privateGatewayCandidate": {
+    "branch": "prep/stage4-private-gateway-audit-20261009",
+    "commit": "0c901bbf67bf36098e54ddd01fce318beed867ae",
+    "runtimeCommit": "0c901bbf67bf36098e54ddd01fce318beed867ae",
+    "baselineCommit": "6b655614d3b9c3fda7912742b539601ba22598f1",
+    "migrationChanges": false,
+    "webClientChanges": "config defaults only; WebCodecs unchanged",
+    "deployed": false,
+    "ci": {
+      "runId": 37991671609,
+      "conclusion": "success",
+      "prephysicalRunId": 37991671696,
+      "prephysicalConclusion": "success",
+      "apiTests": 797,
+      "apiPassed": 795,
+      "apiSkipped": 2,
+      "apiFailed": 0,
+      "agentTests": 617,
+      "agentSkipped": 3
+    },
+    "tree": "e41c6c7c2a5c3c54141382dfb9b5d51255f6493a"
+  },
+  "helperArtifact": {
+    "workflowRunId": 37978709636,
+    "artifactId": 11639950809,
+    "sourceCommit": "fe0b1cde539abb71e289e1875b0cc9dc32f1629d",
+    "expiresAtUtc": "2026-10-23T19:14:15Z",
+    "archiveSha256": "118ecfb2eb65d488fa867621f8672f0ef07e72b5f0d6cb363c7bb612a074cc00",
+    "file": "gpubnb-windows-stream.exe",
+    "sizeBytes": 465408,
+    "sha256": "6957c09bfe2afea15718a8740b8ea738236a3274dfa9b9da1fcb0d573fbb905c",
+    "peMachine": "0x8664",
+    "architecture": "AMD64",
+    "peMagic": "0x20b",
+    "certificateTableSize": 0,
+    "signature": "unsigned",
+    "declaredCargoVersion": "0.1.0",
+    "embeddedFileVersion": null,
+    "buildFeature": "physical-qualification",
+    "compiledWorkerSignerCertificateSha256": "200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a",
+    "compatibleWithPC1Worker": "unproven",
+    "signedFileSha256": null,
+    "timestamp": null
+  },
+  "trust": {
+    "observedSubject": "CN=GPUbnb LOCAL PHYSICAL TEST ONLY 2026-09-21",
+    "observedSha1Thumbprint": "6B8A9EA7C26791668CA31863DC68A7B5F88FC6EC",
+    "leafCertificateSha256": null,
+    "codeSigningEkuVerified": false,
+    "currentValidityVerified": false,
+    "workerBuildPolicyVerified": false,
+    "protectedSigningKeyLocationVerified": false,
+    "approvedHttpsRfc3161Url": null
+  },
+  "pc1HistoricalInventory": {
+    "collectedDateUtc": "2026-10-09",
+    "newCollectionPerformed": false,
+    "files": [
+      {
+        "file": "gpubnb-agent.exe",
+        "sizeBytes": 22259240,
+        "sha256": "073C98950248301BB152AA0EBD08C5E72D0A118F294388B584029CD145E981DA"
+      },
+      {
+        "file": "gpubnb-windows-stream.exe",
+        "sizeBytes": 466264,
+        "sha256": "D114BCA3293DA78481DEE1D53D06C7B91B4A94F08CCDE4A61D268EA73D039690"
+      },
+      {
+        "file": "gpubnb-windows-worker.exe",
+        "sizeBytes": 183632,
+        "sha256": "720325ACAC59D5E7E24F25F2EC72E13CEF1E1071249943F024FF135844091579"
+      },
+      {
+        "file": "GPUbnbWindowsMedia.dll",
+        "sizeBytes": 66904,
+        "sha256": "510D559B056BA094F8DC06B73D4C6D7BCE46CA97FA774524E605844AD16FC9DE"
+      }
+    ]
+  },
+  "renderObservedBaseline": {
+    "serviceId": "srv-dau86i2d0e5s73elmk10",
+    "name": "gpubnb-stage3-private",
+    "deployId": "dep-db4j8gom7kps73c1u4p0",
+    "commit": "6b655614d3b9c3fda7912742b539601ba22598f1",
+    "autoDeploy": false,
+    "previewDeploys": false,
+    "deploymentPerformed": false
+  },
+  "physicalValidation": {
+    "performed": false,
+    "requiredStableSeconds": 300,
+    "passed": false
+  },
+  "decision": {
+    "preparation": "GO with documented release blockers",
+    "signature": "NO-GO",
+    "deployment": "NO-GO",
+    "physicalQualification": "NOT DEMONSTRATED"
+  }
+}

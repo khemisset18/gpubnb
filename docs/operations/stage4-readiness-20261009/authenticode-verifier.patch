@@ -1,0 +1,336 @@
+diff --git a/.github/workflows/authenticode-verifier.yml b/.github/workflows/authenticode-verifier.yml
+new file mode 100644
+index 00000000..373ccb26
+--- /dev/null
++++ b/.github/workflows/authenticode-verifier.yml
+@@ -0,0 +1,36 @@
++name: Authenticode verifier tests
++on:
++  push:
++    branches:
++      - fix/authenticode-verifier-fail-closed-20261009
++    paths:
++      - scripts/verify-windows-authenticode.ps1
++      - scripts/tests/verify-windows-authenticode.tests.ps1
++      - .github/workflows/authenticode-verifier.yml
++permissions:
++  contents: read
++jobs:
++  verify-pwsh:
++    runs-on: windows-latest
++    timeout-minutes: 10
++    steps:
++      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
++        with:
++          persist-credentials: false
++      - name: Syntax and fail-closed behavior
++        shell: pwsh
++        run: |
++          & ./scripts/tests/verify-windows-authenticode.tests.ps1
++          if (-not $?) { exit 1 }
++  verify-powershell:
++    runs-on: windows-latest
++    timeout-minutes: 10
++    steps:
++      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
++        with:
++          persist-credentials: false
++      - name: Syntax and fail-closed behavior
++        shell: powershell
++        run: |
++          & ./scripts/tests/verify-windows-authenticode.tests.ps1
++          if (-not $?) { exit 1 }
+diff --git a/scripts/tests/verify-windows-authenticode.tests.ps1 b/scripts/tests/verify-windows-authenticode.tests.ps1
+new file mode 100644
+index 00000000..cb0722f4
+--- /dev/null
++++ b/scripts/tests/verify-windows-authenticode.tests.ps1
+@@ -0,0 +1,207 @@
++param(
++    [string]$Verifier = (Join-Path $PSScriptRoot '..\verify-windows-authenticode.ps1')
++)
++$ErrorActionPreference = 'Stop'
++Set-StrictMode -Version Latest
++$Verifier = (Resolve-Path -LiteralPath $Verifier).Path
++$tokens = $null
++$parseErrors = $null
++[void][System.Management.Automation.Language.Parser]::ParseFile(
++    $Verifier, [ref]$tokens, [ref]$parseErrors
++)
++if ($parseErrors.Count -ne 0) {
++    throw "verifier_syntax_errors:$($parseErrors.Count)"
++}
++$passed = 1
++Write-Host 'PASS verifier syntax'
++
++# Existing runner files only: no certificate generation, trust-store changes or signing.
++$liveSigned = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
++$liveSignature = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $liveSigned
++if ($liveSignature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
++    throw 'runner_existing_signature_not_valid'
++}
++$liveHash = $liveSignature.SignerCertificate.GetCertHashString(
++    [System.Security.Cryptography.HashAlgorithmName]::SHA256
++)
++$liveReport = & $Verifier -Path $liveSigned -Required -ExpectedSignerSha256 $liveHash |
++    ConvertFrom-Json
++if (-not $liveReport.valid -or -not $liveReport.signed) {
++    throw 'live_signed_verification_failed'
++}
++$passed++
++Write-Host 'PASS existing Windows signed executable'
++
++$temporary = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
++[void][System.IO.Directory]::CreateDirectory($temporary)
++$first = Join-Path $temporary 'fixture[1].ps1'
++$second = Join-Path $temporary 'fixture[2].ps1'
++[System.IO.File]::WriteAllText($first, 'unsigned Authenticode test fixture')
++[System.IO.File]::WriteAllText($second, 'unsigned Authenticode test fixture')
++try {
++    $realUnsigned = & $Verifier -Path $first | ConvertFrom-Json
++    if ($realUnsigned.signed -or $realUnsigned.status -cne 'NotSigned') {
++        throw 'live_unsigned_verification_failed'
++    }
++    $passed++
++    Write-Host 'PASS existing unsigned policy and literal bracket path'
++
++    # Alter a temporary copy of an existing signed executable; never execute it.
++    $tampered = Join-Path $temporary 'tampered.exe'
++    $bytes = [System.IO.File]::ReadAllBytes($liveSigned)
++    $pe = [BitConverter]::ToInt32($bytes, 0x3c)
++    $optionalSize = [BitConverter]::ToUInt16($bytes, $pe + 20)
++    $section = $pe + 24 + $optionalSize
++    $raw = [BitConverter]::ToInt32($bytes, $section + 20)
++    if ($raw -lt 0 -or $raw + 64 -ge $bytes.Length) { throw 'fixture_pe_section_invalid' }
++    $bytes[$raw + 64] = $bytes[$raw + 64] -bxor 1
++    [System.IO.File]::WriteAllBytes($tampered, $bytes)
++    $tamperedOutput = @()
++    $tamperedError = ''
++    try {
++        $tamperedOutput = @(& $Verifier -Path $tampered -Required)
++    } catch { $tamperedError = $_.Exception.Message }
++    # Catalog-signed files lose their recognized signature after modification;
++    # embedded signatures instead report an invalid status. Both must fail Required.
++    $tamperedRejected = $tamperedError.StartsWith('authenticode_present_but_invalid:', [StringComparison]::Ordinal) -or
++        $tamperedError.StartsWith('authenticode_required_but_missing:', [StringComparison]::Ordinal)
++    if (-not $tamperedRejected -or $tamperedOutput.Count -ne 0) {
++        throw "real_tampered_signature_was_not_rejected:$tamperedError"
++    }
++    $passed++
++    Write-Host 'PASS real tampered signature rejected'
++
++    $approved = 'a' * 64
++    $other = 'b' * 64
++    $certificate = [pscustomobject]@{
++        Subject = 'CN=PUBLIC TEST METADATA ONLY'
++        Thumbprint = 'C' * 40
++        NotAfter = [DateTime]::UtcNow.AddDays(1)
++        PublicHash = $approved
++    }
++    $certificate | Add-Member -MemberType ScriptMethod -Name GetCertHashString -Value {
++        param($algorithm)
++        if ($algorithm -ne [System.Security.Cryptography.HashAlgorithmName]::SHA256) {
++            throw 'certificate_hash_algorithm_changed'
++        }
++        $this.PublicHash
++    }
++    $timestamp = [pscustomobject]@{ Subject = 'CN=PUBLIC TIMESTAMP TEST METADATA ONLY' }
++    function New-TestSignature {
++        param([string]$Status, $Certificate, $Timestamp)
++        [pscustomobject]@{
++            Status = [System.Management.Automation.SignatureStatus]::$Status
++            SignerCertificate = $Certificate
++            TimeStamperCertificate = $Timestamp
++        }
++    }
++    $global:AuthTestSignature = New-TestSignature 'Valid' $certificate $timestamp
++    $global:AuthTestCalls = [System.Collections.Generic.List[string]]::new()
++    $global:AuthTestThrow = $false
++    $global:AuthTestSecond = $null
++    function global:Get-AuthenticodeSignature {
++        param([string]$LiteralPath)
++        $global:AuthTestCalls.Add($LiteralPath)
++        if ($global:AuthTestThrow) { throw 'provider_verification_failed' }
++        if ($null -ne $global:AuthTestSecond -and $global:AuthTestCalls.Count -eq 2) {
++            return $global:AuthTestSecond
++        }
++        $global:AuthTestSignature
++    }
++    function Test-Case {
++        param([string]$Name, [hashtable]$Arguments, [string]$ExpectedError = '')
++        $global:AuthTestCalls.Clear()
++        $output = [System.Collections.Generic.List[object]]::new()
++        $caught = ''
++        try {
++            & $Verifier @Arguments | ForEach-Object { $output.Add($_) }
++        } catch { $caught = $_.Exception.Message }
++        if ($ExpectedError) {
++            if (-not $caught.StartsWith($ExpectedError, [StringComparison]::Ordinal)) {
++                throw "case_failed:${Name}:expected=${ExpectedError}:actual=$caught"
++            }
++            if ($output.Count -ne 0) { throw "partial_success_output:${Name}" }
++        } else {
++            if ($caught) { throw "case_failed:${Name}:$caught" }
++            $report = ($output -join [Environment]::NewLine) | ConvertFrom-Json
++            if (@($report).Count -ne @($Arguments.Path).Count) {
++                throw "report_count_changed:${Name}"
++            }
++        }
++        Write-Host "PASS $Name"
++    }
++    Test-Case 'valid approved timestamped' @{Path=$first;Required=$true;RequireTimestamp=$true;ExpectedSignerSha256=$approved}
++    $passed++
++    Test-Case 'normalized uppercase signer with spaces' @{Path=$first;Required=$true;ExpectedSignerSha256=(' '+$approved.ToUpperInvariant()+' ')}
++    $passed++
++    Test-Case 'unapproved signer' @{Path=$first;Required=$true;ExpectedSignerSha256=$other} 'authenticode_unapproved_signer:'
++    $passed++
++    foreach ($badPin in @('', ' ', ('a'*63), ('a'*65), ('g'*64))) {
++        Test-Case 'malformed or empty explicit signer pin' @{Path=$first;ExpectedSignerSha256=$badPin} 'authenticode_expected_signer_sha256_invalid'
++        if ($global:AuthTestCalls.Count -ne 0) { throw 'pin_validation_was_not_first' }
++        $passed++
++    }
++    $global:AuthTestSignature = New-TestSignature 'Valid' $certificate $null
++    Test-Case 'missing required timestamp' @{Path=$first;Required=$true;RequireTimestamp=$true} 'authenticode_timestamp_required_but_missing:'
++    $passed++
++    Test-Case 'timestamp remains optional without switch' @{Path=$first;Required=$true}
++    $passed++
++    $global:AuthTestSignature = New-TestSignature 'NotSigned' $null $null
++    Test-Case 'unsigned rejected when required' @{Path=$first;Required=$true} 'authenticode_required_but_missing:'
++    $passed++
++    Test-Case 'unsigned rejected when pinned' @{Path=$first;ExpectedSignerSha256=$approved} 'authenticode_unapproved_signer:'
++    $passed++
++    Test-Case 'unsigned rejected when timestamp required' @{Path=$first;RequireTimestamp=$true} 'authenticode_timestamp_required_but_missing:'
++    $passed++
++    foreach ($status in @('HashMismatch','NotTrusted','UnknownError','NotSupportedFileFormat','Incompatible')) {
++        foreach ($cert in @($certificate, $null)) {
++            $global:AuthTestSignature = New-TestSignature $status $cert $null
++            Test-Case "invalid $status certificate=$($null -ne $cert)" @{Path=$first} 'authenticode_present_but_invalid:'
++            $passed++
++        }
++    }
++    $global:AuthTestSignature = New-TestSignature 'Valid' $null $timestamp
++    Test-Case 'inconsistent valid status without signer' @{Path=$first} 'authenticode_present_but_invalid:'
++    $passed++
++    $global:AuthTestSignature = New-TestSignature 'NotSigned' $certificate $null
++    Test-Case 'inconsistent unsigned status with signer' @{Path=$first} 'authenticode_present_but_invalid:'
++    $passed++
++    Test-Case 'missing literal file' @{Path=(Join-Path $temporary 'absent.exe');Required=$true} 'authenticode_path_missing:'
++    if ($global:AuthTestCalls.Count -ne 0) { throw 'missing_path_reached_provider' }
++    $passed++
++    $global:AuthTestThrow = $true
++    Test-Case 'provider error propagates' @{Path=$first;Required=$true} 'provider_verification_failed'
++    $passed++
++    $global:AuthTestThrow = $false
++    $global:AuthTestSignature = New-TestSignature 'Valid' $certificate $timestamp
++    $global:AuthTestSecond = New-TestSignature 'HashMismatch' $certificate $timestamp
++    Test-Case 'multi-file failure emits no partial report' @{Path=@($first,$second,$liveSigned);Required=$true} 'authenticode_present_but_invalid:'
++    if ($global:AuthTestCalls.Count -ne 2) { throw 'verification_continued_after_failure' }
++    $passed++
++    $global:AuthTestSecond = $null
++    Test-Case 'multi-file success' @{Path=@($first,$second);Required=$true}
++    $passed++
++} finally {
++    Remove-Item Function:\Get-AuthenticodeSignature -ErrorAction SilentlyContinue
++    foreach ($name in @('AuthTestSignature','AuthTestCalls','AuthTestThrow','AuthTestSecond')) {
++        Remove-Variable -Name $name -Scope Global -ErrorAction SilentlyContinue
++    }
++    Remove-Item -LiteralPath $temporary -Recurse -Force
++}
++# A real child process must fail with a nonzero exit when Required rejects unsigned data.
++$processFixture = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N')+'.ps1')
++[System.IO.File]::WriteAllText($processFixture, 'unsigned process exit fixture')
++try {
++    $engine = (Get-Process -Id $PID).Path
++    $ErrorActionPreference = 'Continue'
++    & $engine -NoLogo -NoProfile -NonInteractive -File $Verifier -Path $processFixture -Required *> $null
++    $childExit = $LASTEXITCODE
++    $ErrorActionPreference = 'Stop'
++    if ($childExit -eq 0) { throw 'required_failure_exit_code_zero' }
++    $passed++
++    Write-Host 'PASS real child process nonzero exit'
++} finally {
++    Remove-Item -LiteralPath $processFixture -Force
++}
++$global:LASTEXITCODE = 0
++Write-Host "AUTHENTICODE_TESTS_PASSED=$passed"
+diff --git a/scripts/verify-windows-authenticode.ps1 b/scripts/verify-windows-authenticode.ps1
+index b1589eb7..aaca2bfd 100644
+--- a/scripts/verify-windows-authenticode.ps1
++++ b/scripts/verify-windows-authenticode.ps1
+@@ -15,15 +15,20 @@ Set-StrictMode -Version Latest
+ if (-not $Path -or $Path.Count -eq 0) {
+     throw 'authenticode_paths_missing'
+ }
+-if ($ExpectedSignerSha256) {
++if ($PSBoundParameters.ContainsKey('ExpectedSignerSha256')) {
+     $ExpectedSignerSha256 = $ExpectedSignerSha256.Replace(' ', '').ToLowerInvariant()
+-    if ($ExpectedSignerSha256 -notmatch '^[0-9a-f]{64}
++    if ($ExpectedSignerSha256 -notmatch '^[0-9a-f]{64}$') {
++        throw 'authenticode_expected_signer_sha256_invalid'
++    }
++}
++
++$results = @()
+ foreach ($item in $Path) {
+-    if (-not (Test-Path $item -PathType Leaf)) {
++    if (-not (Test-Path -LiteralPath $item -PathType Leaf)) {
+         throw "authenticode_path_missing:$item"
+     }
+ 
+-    $signature = Get-AuthenticodeSignature -FilePath $item
++    $signature = Get-AuthenticodeSignature -LiteralPath $item
+     $signed = $null -ne $signature.SignerCertificate
+     $valid = $signature.Status -eq [System.Management.Automation.SignatureStatus]::Valid
+ 
+@@ -31,7 +36,8 @@ foreach ($item in $Path) {
+     # required. A file that *does* contain a signature must always validate:
+     # accepting a present-but-broken signature is worse than explicitly knowing
+     # that a pre-qualification candidate is unsigned.
+-    if ($signed -and -not $valid) {
++    if (($signed -and -not $valid) -or
++        (-not $signed -and $signature.Status -ne [System.Management.Automation.SignatureStatus]::NotSigned)) {
+         throw "authenticode_present_but_invalid:${item}:$($signature.Status)"
+     }
+     if ($Required -and -not $signed) {
+@@ -68,41 +74,3 @@ foreach ($item in $Path) {
+ }
+ 
+ $results | ConvertTo-Json -Depth 6
+-) {
+-        throw 'authenticode_expected_signer_sha256_invalid'
+-    }
+-}
+-
+-$results = @()
+-foreach ($item in $Path) {
+-    if (-not (Test-Path $item -PathType Leaf)) {
+-        throw "authenticode_path_missing:$item"
+-    }
+-
+-    $signature = Get-AuthenticodeSignature -FilePath $item
+-    $signed = $null -ne $signature.SignerCertificate
+-    $valid = $signature.Status -eq [System.Management.Automation.SignatureStatus]::Valid
+-
+-    # An unsigned development candidate is permitted only when signing is not
+-    # required. A file that *does* contain a signature must always validate:
+-    # accepting a present-but-broken signature is worse than explicitly knowing
+-    # that a pre-qualification candidate is unsigned.
+-    if ($signed -and -not $valid) {
+-        throw "authenticode_present_but_invalid:$item:$($signature.Status)"
+-    }
+-    if ($Required -and -not $signed) {
+-        throw "authenticode_required_but_missing:$item"
+-    }
+-
+-    $results += [ordered]@{
+-        path = $item
+-        signed = $signed
+-        valid = $valid
+-        status = [string]$signature.Status
+-        signerSubject = if ($signed) { $signature.SignerCertificate.Subject } else { $null }
+-        signerThumbprint = if ($signed) { $signature.SignerCertificate.Thumbprint } else { $null }
+-        certificateNotAfter = if ($signed) { $signature.SignerCertificate.NotAfter.ToUniversalTime().ToString('o') } else { $null }
+-    }
+-}
+-
+-$results | ConvertTo-Json -Depth 6

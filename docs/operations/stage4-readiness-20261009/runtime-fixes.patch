@@ -1,0 +1,532 @@
+diff --git a/apps/api/src/workspace-gateway-transport.ts b/apps/api/src/workspace-gateway-transport.ts
+index 38c95621..7e0b6af1 100644
+--- a/apps/api/src/workspace-gateway-transport.ts
++++ b/apps/api/src/workspace-gateway-transport.ts
+@@ -32,12 +32,22 @@ export class BrowserPendingBudget {
+ }
+ 
+ export function websocketDataToBuffer(data: WebSocket.Data): Buffer {
++  if (typeof data === 'string') return Buffer.from(data, 'utf8');
+   if (Buffer.isBuffer(data)) return data;
+   if (Array.isArray(data)) return Buffer.concat(data);
+   if (data instanceof ArrayBuffer) return Buffer.from(data);
+   throw new TypeError('workspace_websocket_unsupported_data_type');
+ }
+ 
++// ws 7 emits message(data): text is a string, binary follows binaryType.
++// ws 8 emits message(data, isBinary), including Buffer-backed text. Prefer
++// explicit opcode metadata when present; never infer it from payload contents.
++export function websocketMessageIsBinary(data: WebSocket.Data, isBinary?: boolean): boolean {
++  if (typeof isBinary === 'boolean') return isBinary;
++  return Buffer.isBuffer(data) || data instanceof ArrayBuffer ||
++    (Array.isArray(data) && data.every(Buffer.isBuffer));
++}
++
+ export function isStrictBase64Payload(
+   value: unknown,
+   maxEncodedBytes: number,
+diff --git a/apps/api/src/workspace-gateway.ts b/apps/api/src/workspace-gateway.ts
+index a7132f81..ba6da85b 100644
+--- a/apps/api/src/workspace-gateway.ts
++++ b/apps/api/src/workspace-gateway.ts
+@@ -25,6 +25,7 @@ import {
+   WS_REDIS_INPUT_MAX_BYTES,
+   isStrictBase64Payload,
+   websocketDataToBuffer,
++  websocketMessageIsBinary,
+ } from './workspace-gateway-transport.js';
+ 
+ const WebSocketServer=WebSocket.Server;
+@@ -499,8 +500,9 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
+             .finally(()=>{pumpBusy=false;});
+         },20);
+         let browserSendChain:Promise<void>=setup.then(()=>undefined);
+-        ws.on('message',(data:WebSocket.Data,isBinary:boolean)=>{
++        ws.on('message',(data:WebSocket.Data,binaryMetadata?:boolean)=>{
+           if(browserClosed)return;
++          const isBinary=websocketMessageIsBinary(data,binaryMetadata);
+           let frame:Buffer;
+           try{frame=websocketDataToBuffer(data);}catch(error){gatewayLog.error({err:error,event:'workspace_gateway_browser_frame_invalid',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser frame invalid');browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1003,'unsupported websocket frame');return;}
+           if(!browserGatewayFrameAllowed(row.runtimeBackend,isBinary,frame.length)){
+diff --git a/apps/api/test/workspace-gateway-ws7-wire.test.ts b/apps/api/test/workspace-gateway-ws7-wire.test.ts
+new file mode 100644
+index 00000000..9cc8982c
+--- /dev/null
++++ b/apps/api/test/workspace-gateway-ws7-wire.test.ts
+@@ -0,0 +1,45 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { once } from 'node:events';
++import WebSocket from 'ws';
++import { WorkspaceRuntimeBackend } from '@prisma/client';
++import { browserGatewayFrameAllowed } from '../src/windows-native-gateway-policy.js';
++import { websocketDataToBuffer, websocketMessageIsBinary } from '../src/workspace-gateway-transport.js';
++
++test('locked ws wire transport preserves native binary input and rejects same-size text', {timeout: 5000}, async () => {
++  const server = new WebSocket.Server({host: '127.0.0.1', port: 0});
++  await once(server, 'listening');
++  const address = server.address();
++  assert.ok(address && typeof address !== 'string');
++  const connected = once(server, 'connection');
++  const client = new WebSocket(`ws://127.0.0.1:${address.port}`);
++  let peer: WebSocket | undefined;
++  try {
++    [peer] = await connected as [WebSocket];
++    await once(client, 'open');
++    for (const binary of [true, true, false, true]) {
++      const incoming = once(peer, 'message');
++      client.send(binary ? Buffer.alloc(32, 0x41) : 'A'.repeat(32), {binary});
++      const [data, metadata] = await incoming;
++      const bytes = websocketDataToBuffer(data);
++      assert.equal(bytes.length, 32);
++      // Regression: ws 7 does not supply metadata. The old gateway passed
++      // undefined to its binary-only policy and rejected genuine input.
++      assert.equal(websocketMessageIsBinary(data, metadata), binary);
++      assert.equal(browserGatewayFrameAllowed(WorkspaceRuntimeBackend.WINDOWS_NATIVE,
++        websocketMessageIsBinary(data, metadata), bytes.length), binary);
++    }
++    assert.equal(peer.readyState, WebSocket.OPEN);
++  } finally {
++    client.terminate();
++    peer?.terminate();
++    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
++  }
++});
++
++test('explicit opcode metadata takes precedence over Buffer representation', () => {
++  const data = Buffer.alloc(32);
++  assert.equal(websocketMessageIsBinary(data, false), false);
++  assert.equal(websocketMessageIsBinary(data, true), true);
++  assert.equal(websocketMessageIsBinary('A'.repeat(32)), false);
++});
+diff --git a/docs/operations/WINDOWS_NATIVE_DISCONNECT_DIAGNOSIS_20261009.md b/docs/operations/WINDOWS_NATIVE_DISCONNECT_DIAGNOSIS_20261009.md
+new file mode 100644
+index 00000000..7612a36c
+--- /dev/null
++++ b/docs/operations/WINDOWS_NATIVE_DISCONNECT_DIAGNOSIS_20261009.md
+@@ -0,0 +1,172 @@
++# Stage 4 disconnect investigation — 9 October 2026
++
++Status: software defects identified; physical five-minute acceptance NOT demonstrated.
++Baseline: `cf7130c410d89b5e05a7549fd034126b8718994e`.
++No PC1 operation, deployment, merge, public bookability change, or DB mutation is authorized by this report.
++
++## Evidence and limits
++
++Read-only Render logs were retrieved from `srv-dau86i2d0e5s73elmk10`,
++the private qualification service. A complete query of connection/open/close,
++input rejection, pump/send failure and backpressure events returned 112 records
++for the two sessions below, without pagination remaining. These events do not
++contain browser decoder errors, Agent local exceptions or worker media diagnostics.
++The deployed close events lack closeCode; source HEAD diagnostics therefore cannot
++be assumed present in the tested installation. Exact deployed Agent/helper/DLL
++hashes and browser build remain unverified.
++
++The supplied `ConnectionAbortedError`, `WinError 10058` and `409 unknown_gateway_channel`
++are confirmed symptoms from the owner's tests, not independently timestamped
++local evidence available to this investigation. Do not invent their position in
++the physical chronology.
++
++## Measured chronology (UTC; Paris = UTC + 2)
++
++Session A: `cmv16b61700waju0ttaizkjn6`.
++
++| Time UTC | Channel | Observed event |
++| --- | --- | --- |
++| 16:22:23.424 | 25b701f1 | Browser connection |
++| 16:22:23.985 | 25b701f1 | Agent reports native media connect failure |
++| 16:22:33.987 | 25b701f1 | Browser connection closed |
++| 16:22:44.654 | 2a49eacc | Browser connection |
++| 16:22:45.190 | 2a49eacc | Upstream opened |
++| 16:22:49.132 | 2a49eacc | Closed, 3.942 s after upstream open |
++| 16:25:33.518 | 21d327a1 | Upstream opened |
++| 16:25:36.324 | 21d327a1 | Native input rejected: 32 bytes, frameKind=text |
++| 16:25:36.390 | 21d327a1 | Closed 66 ms after input rejection |
++| 16:28:18.818 | 708ed85c | Last observed upstream opening |
++| 16:29:39.006 | 708ed85c | Closed, 80.188 s after upstream open |
++
++Session B: `cmv1b7hhh000ob71bn8ziy9uy`.
++
++| Time UTC | Channel | Observed event |
++| --- | --- | --- |
++| 18:40:03.550 | f7e60604 | Native connect failure |
++| 18:40:24.947 | b15c3553 | Native connect failure |
++| 18:40:47.432 | bc693f2c | Upstream opened |
++| 18:41:02.639 | bc693f2c | Closed, 15.207 s after open |
++| 18:41:03.416 | a29475c5 | Upstream opened |
++| 18:41:06.518 | a29475c5 | Closed, 3.102 s after open |
++| 18:41:07.017 | 4c03a332 | Upstream opened |
++| 18:41:08.940 | 4c03a332 | Closed, 1.923 s after open |
++| 18:41:13.320 | e14cfcd3 | Native connect failure |
++| 18:41:53.742 | ff26fce4 | Upstream open timeout, 15.010 s after browser connection |
++| 18:42:34.329 | 02b163bc | Upstream open timeout, 15.021 s after browser connection |
++| 18:43:36.851 | 1ef2ac68 | Native connect failure |
++
++These measurements prove repeated short-lived upstreams and subsequent handshake
++failures. They do NOT prove which component initiated every closure in Session B.
++No gateway pump/send/backpressure event was returned by the complete query.
++Absence of an event is not proof of absence of network/decoder pressure.
++
++## Demonstrated defects and changes
++
++### Gateway binary opcode interpretation
++
++Both package locks pin `ws@7.5.13`. Its `receiverOnMessage(data)` emits one argument.
++Its receiver emits binary as Buffer/ArrayBuffer/Buffer[] (binaryType), and text as
++string. The gateway used the ws 8 callback `(data, isBinary)` and passed the absent
++second argument into a binary-only native input gate. A valid 32-byte binary input
++was thus rejected and the gateway initiated close code 1003. Session A's
++16:25:36 event directly matches this defect. The browser sends input as Blob.
++
++The fix interprets the installed library's message representation when explicit
++opcode metadata is absent. Explicit boolean metadata, when supplied, wins,
++including Buffer-backed text. Text bytes remain supported for container sessions
++and remain rejected for native sessions. No content-based binary inference occurs.
++
++The new test uses actual ws TCP peers and native input policy: repeated binary
++messages accepted, equal-length text rejected, then another binary message accepted.
++The old absent-metadata assumption makes this regression test fail.
++
++### Helper partial TCP delivery stalls the media loop
++
++The helper peeked only two header bytes and then called blocking read_exact for
++mask/payload. A split TCP frame could hold the single input/media thread for its
++15-second socket timeout, without producing video or checking the connection epoch.
++The fix peeks the complete bounded input/control frame (maximum 133 bytes), consumes
++only complete frames, and rejects an incomplete frame after the existing 15-second
++deadline. All masking, size, opcode, token and epoch checks remain enforced.
++
++New Windows helper tests cover byte-by-byte delivery without discarding bytes,
++incomplete-frame expiry, malformed headers, and EOF followed by new loopback peers.
++This defect is independently reproducible; attribution to a physical test still
++requires the local trace. The helper's server module is Windows-only: Linux unit
++test success alone does not execute these new tests.
++
++### Meaning of cf7130c
++
++Peer resets at peek can terminate the listener before the earlier `5cad78df` fix.
++`cf7130c` additionally classifies peer write errors as StaleConnection and adds
++BrokenPipe handling. However, both Response and StaleConnection already continue
++the outer accept loop. That write classification alone is not proof of a changed
++reconnect outcome or a fix for the initial closure.
++
++The baseline Windows/Ubuntu workflow `37976213660` built and tested successfully,
++then failed rustfmt on qualification_server.rs. The formatting is corrected here;
++the gate is retained. Baseline artifact `11639720902` is linked to cf7130c, but
++later Windows platform/worker/candidate checks were skipped after the style failure.
++
++## Capture, NVENC, queues and lifecycle review
++
++- Capture uses Windows Graphics Capture CreateFreeThreaded, not DXGI duplication.
++  The acquired frame object remains alive through texture copy. Empty polls are
++  bounded to 250 ms in the worker; no-frame is accepted only with exact GPU mapping.
++  Capture loss, adapter mismatch and NVENC failure remain terminal diagnostics.
++- NVENC uses synchronous encode/LockBitstream with low-latency configuration and
++  a forced first IDR plus SPS/PPS. It runs in the renter worker. No NVENC diagnostic
++  from the failed physical runs is available; neither GPU nor codec failure is
++  established as root cause. Do not change driver/API compatibility speculatively.
++- Browser reassembly requires contiguous frame/chunk sequence, 8 MiB frame limit,
++  1 MiB chunk limit and 2 s partial-frame timeout. decodeQueueSize >= 4 closes
++  the client. Burst decode pressure remains a hypothesis requiring the browser's
++  exact error, frame timing and queue observation.
++- Agent transport has 256-item/12 MiB outbound budget and a 2 s queue wait; signed
++  HTTPS micro-batches traverse Render/Redis. Native socket connect timeout is
++  10 s and removed after connection. Reader/sender teardown can generate late
++  frames after gateway channel deletion; 409 is then a downstream symptom.
++- Gateway upstream ACK timeout is 15 s. Browser pressure has an 8 MiB high-water
++  mark and a 30 s deadline. Runtime mutex spans capture/read and socket write to
++  serialize suspension with delivery; this invariant is preserved.
++- Fresh proof, capability rotation, GPU identity, renter session, lease and billing
++  activation remain unchanged. No reconnect delay, queue budget or security gate
++  is relaxed by the patch.
++
++## Applicable primary documentation
++
++- [Microsoft: Graphics Capture CreateFreeThreaded](https://learn.microsoft.com/en-us/uwp/api/windows.graphics.capture.direct3d11captureframepool.createfreethreaded)
++- [Microsoft: TryGetNextFrame](https://learn.microsoft.com/en-us/uwp/api/windows.graphics.capture.direct3d11captureframepool.trygetnextframe)
++- [Microsoft: Winsock error codes](https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2)
++  WSAESHUTDOWN 10058 means an operation after shutdown; it does not explain why
++  the shutdown occurred. WSAECONNABORTED 10053 can follow timeout or protocol error.
++- [NVIDIA NVENC 13.0 programming guide](https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-video-encoder-api-prog-guide/)
++  Blocking output retrieval belongs outside the main submission thread. The
++  current worker serializes one frame per command; latency needs physical measurement.
++- [ws 7.5.13 receiver source](https://github.com/websockets/ws/blob/7.5.13/lib/receiver.js)
++- [ws 7.5.13 message forwarding](https://github.com/websockets/ws/blob/7.5.13/lib/websocket.js)
++
++## Validation and remaining acceptance gate
++
++Local: API TypeScript build passed; 66 targeted API tests passed (1 skipped);
++25 browser tests passed; 626 Agent tests passed (3 skipped); 96 Linux helper
++tests passed. New Windows-only transport tests require the Windows CI runner.
++Clippy was run through clippy-driver because this environment lacks /proc/self/exe.
++Full local API execution requires PostgreSQL/Redis; its unavailable-DB failures
++are not claimed as passing CI. The additional local serializable-guard script
++reports six pre-existing call sites outside this patch.
++
++Before any approved PC1 intervention, record candidate commit, all required CI
++results, Windows artifact archive/file hashes, PE architecture, signer/provenance,
++and coherent Agent/helper/worker/media DLL versions. CI artifacts are not proof
++of production signing or real GPU execution.
++
++Require explicit owner approval for any private backend deployment or PC1 helper
++replacement. Then collect synchronized browser, gateway, Agent and helper/worker
++logs for one controlled rental. Require at least 300 seconds of visible video
++and repeated keyboard/mouse interaction, without repeated reconnects. Check
++suspension/revocation, accounting, cleanup and absence of quarantine through the
++normal authorized lifecycle. Stop and preserve first-failure evidence if it fails.
++
++Without that authorized physical run, status remains NOT QUALIFIED. Existing
++blocked PRs remain blocked and public Windows Native reservations remain closed.
+diff --git a/native/windows-stream-helper/src/qualification_server.rs b/native/windows-stream-helper/src/qualification_server.rs
+index 6fd1519f..b79b8dec 100644
+--- a/native/windows-stream-helper/src/qualification_server.rs
++++ b/native/windows-stream-helper/src/qualification_server.rs
+@@ -159,6 +159,7 @@ impl QualificationMediaServer {
+         let started = Instant::now();
+         let mut sent = 0u32;
+         let mut accepted_input = 0u32;
++        let mut input_pending_since = None;
+ 
+         while sent < max_frames {
+             if started.elapsed() > STREAM_TIMEOUT {
+@@ -166,7 +167,7 @@ impl QualificationMediaServer {
+             }
+ 
+             loop {
+-                match try_read_websocket_client_frame(&mut stream)? {
++                match try_read_websocket_client_frame(&mut stream, &mut input_pending_since)? {
+                     None => break,
+                     Some(ClientWebSocketFrame::Input(payload)) => {
+                         let event = input_fence
+@@ -222,10 +223,11 @@ impl QualificationMediaServer {
+             .map_err(|_| QualificationMediaServerError::Input)?;
+         let mut sent = 0u64;
+         let mut accepted_input = 0u64;
++        let mut input_pending_since = None;
+ 
+         loop {
+             loop {
+-                match try_read_websocket_client_frame(&mut stream)? {
++                match try_read_websocket_client_frame(&mut stream, &mut input_pending_since)? {
+                     None => break,
+                     Some(ClientWebSocketFrame::Input(payload)) => {
+                         let event = input_fence
+@@ -589,31 +591,58 @@ fn read_websocket_client_frame<R: Read>(
+ fn peer_disconnect_error(kind: ErrorKind) -> bool {
+     matches!(
+         kind,
+-        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::NotConnected | ErrorKind::BrokenPipe
++        ErrorKind::ConnectionReset
++            | ErrorKind::ConnectionAborted
++            | ErrorKind::NotConnected
++            | ErrorKind::BrokenPipe
+     )
+ }
+ 
+ fn classify_websocket_write_error(error: std::io::Error) -> QualificationMediaServerError {
+-    if peer_disconnect_error(error.kind()) { QualificationMediaServerError::StaleConnection }
+-    else { QualificationMediaServerError::Response }
++    if peer_disconnect_error(error.kind()) {
++        QualificationMediaServerError::StaleConnection
++    } else {
++        QualificationMediaServerError::Response
++    }
+ }
+ 
+ fn try_read_websocket_client_frame(
+     stream: &mut TcpStream,
++    pending_since: &mut Option<Instant>,
+ ) -> Result<Option<ClientWebSocketFrame>, QualificationMediaServerError> {
+     stream
+         .set_nonblocking(true)
+         .map_err(|_| QualificationMediaServerError::Socket)?;
+-    let mut header = [0u8; 2];
+-    let peeked = stream.peek(&mut header);
++    // Input/control frames are bounded to 125 bytes. A two-byte header does
++    // not mean the mask/payload has arrived: blocking read_exact here used to
++    // stop video and epoch checks for IO_TIMEOUT on a split TCP delivery.
++    let mut wire = [0u8; 4 + 4 + 125];
++    let peeked = stream.peek(&mut wire);
+     stream
+         .set_nonblocking(false)
+         .map_err(|_| QualificationMediaServerError::Socket)?;
+     match peeked {
+         Ok(0) => Ok(Some(ClientWebSocketFrame::Close(Vec::new()))),
+-        Ok(1) => Ok(None),
+-        Ok(_) => read_websocket_client_frame(stream).map(Some),
+-        Err(error) if error.kind() == ErrorKind::WouldBlock => Ok(None),
++        Ok(count) => {
++            let complete =
++                client_frame_wire_size(&wire[..count])?.is_some_and(|size| count >= size);
++            if complete {
++                *pending_since = None;
++                read_websocket_client_frame(stream).map(Some)
++            } else {
++                let started = pending_since.get_or_insert_with(Instant::now);
++                if started.elapsed() >= IO_TIMEOUT {
++                    return Err(QualificationMediaServerError::Input);
++                }
++                Ok(None)
++            }
++        }
++        Err(error) if error.kind() == ErrorKind::WouldBlock => {
++            if pending_since.is_some_and(|started| started.elapsed() >= IO_TIMEOUT) {
++                return Err(QualificationMediaServerError::Input);
++            }
++            Ok(None)
++        }
+         // Winsock reports an abortive peer close as WSAECONNRESET instead of
+         // the zero-byte graceful-close path. A browser reload can therefore
+         // surface as ConnectionReset/ConnectionAborted even though only this
+@@ -626,6 +655,29 @@ fn try_read_websocket_client_frame(
+     }
+ }
+ 
++fn client_frame_wire_size(wire: &[u8]) -> Result<Option<usize>, QualificationMediaServerError> {
++    if wire.len() < 2 {
++        return Ok(None);
++    }
++    let opcode = wire[0] & 0x0f;
++    if wire[0] & 0xf0 != 0x80 || wire[1] & 0x80 == 0 {
++        return Err(QualificationMediaServerError::Input);
++    }
++    let marker = wire[1] & 0x7f;
++    let (header_size, payload_size) = match marker {
++        0..=125 => (2, usize::from(marker)),
++        126 if wire.len() < 4 => return Ok(None),
++        126 => (4, usize::from(u16::from_be_bytes([wire[2], wire[3]]))),
++        _ => return Err(QualificationMediaServerError::Input),
++    };
++    match opcode {
++        0x02 if payload_size == BROWSER_INPUT_FRAME_SIZE => {}
++        0x08 | 0x09 if payload_size <= 125 => {}
++        _ => return Err(QualificationMediaServerError::Input),
++    }
++    Ok(Some(header_size + 4 + payload_size))
++}
++
+ fn write_websocket_control(
+     stream: &mut TcpStream,
+     opcode: u8,
+@@ -806,6 +858,96 @@ mod tests {
+         wire
+     }
+ 
++    fn loopback_pair() -> (TcpStream, TcpStream) {
++        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
++        let client = TcpStream::connect(listener.local_addr().expect("address")).expect("connect");
++        let (server, _) = listener.accept().expect("accept");
++        server
++            .set_read_timeout(Some(Duration::from_millis(100)))
++            .expect("read timeout");
++        (client, server)
++    }
++
++    #[test]
++    fn split_tcp_input_does_not_block_media_polling_or_discard_bytes() {
++        let (mut client, mut server) = loopback_pair();
++        let input = [0u8; BROWSER_INPUT_FRAME_SIZE];
++        let wire = masked_client_frame(0x02, &input);
++        let mut pending = None;
++        for byte in &wire[..wire.len() - 1] {
++            client.write_all(&[*byte]).expect("partial write");
++            assert_eq!(
++                try_read_websocket_client_frame(&mut server, &mut pending),
++                Ok(None)
++            );
++        }
++        client
++            .write_all(&wire[wire.len() - 1..])
++            .expect("complete write");
++        let deadline = Instant::now() + Duration::from_secs(2);
++        loop {
++            match try_read_websocket_client_frame(&mut server, &mut pending).expect("read") {
++                Some(frame) => {
++                    assert_eq!(frame, ClientWebSocketFrame::Input(input));
++                    assert!(pending.is_none());
++                    break;
++                }
++                None => assert!(Instant::now() < deadline),
++            }
++        }
++    }
++
++    #[test]
++    fn incomplete_input_deadline_remains_connection_scoped() {
++        let (mut client, mut server) = loopback_pair();
++        client.write_all(&[0x82, 0xa0]).expect("header");
++        let mut pending = Some(Instant::now() - IO_TIMEOUT);
++        assert_eq!(
++            try_read_websocket_client_frame(&mut server, &mut pending),
++            Err(QualificationMediaServerError::Input)
++        );
++    }
++
++    #[test]
++    fn eof_is_connection_close_and_listener_accepts_next_peer() {
++        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
++        for _ in 0..3 {
++            let client =
++                TcpStream::connect(listener.local_addr().expect("address")).expect("connect");
++            let (mut server, _) = listener.accept().expect("accept");
++            client
++                .shutdown(std::net::Shutdown::Write)
++                .expect("shutdown");
++            let mut pending = None;
++            let deadline = Instant::now() + Duration::from_secs(2);
++            loop {
++                match try_read_websocket_client_frame(&mut server, &mut pending).expect("read") {
++                    Some(frame) => {
++                        assert_eq!(frame, ClientWebSocketFrame::Close(Vec::new()));
++                        break;
++                    }
++                    None => assert!(Instant::now() < deadline),
++                }
++            }
++        }
++    }
++
++    #[test]
++    fn peek_rejects_invalid_input_before_waiting_for_payload() {
++        for wire in [
++            vec![0x82, 32],
++            vec![0x81, 0xa0],
++            vec![0x82, 0x9f],
++            vec![0x09, 0x80],
++            vec![0x89, 0xff],
++        ] {
++            assert_eq!(
++                client_frame_wire_size(&wire),
++                Err(QualificationMediaServerError::Input)
++            );
++        }
++    }
++
+     #[test]
+     fn explicit_shutdown_while_idle_accept_is_clean() {
+         let server = QualificationMediaServer::bind("shutdown-test", 1).expect("bind");
+@@ -865,10 +1007,21 @@ mod tests {
+ 
+     #[test]
+     fn websocket_write_peer_disconnect_does_not_kill_media_listener() {
+-        for kind in [ErrorKind::BrokenPipe, ErrorKind::ConnectionReset, ErrorKind::ConnectionAborted, ErrorKind::NotConnected] {
+-            assert_eq!(classify_websocket_write_error(std::io::Error::from(kind)), QualificationMediaServerError::StaleConnection);
++        for kind in [
++            ErrorKind::BrokenPipe,
++            ErrorKind::ConnectionReset,
++            ErrorKind::ConnectionAborted,
++            ErrorKind::NotConnected,
++        ] {
++            assert_eq!(
++                classify_websocket_write_error(std::io::Error::from(kind)),
++                QualificationMediaServerError::StaleConnection
++            );
+         }
+-        assert_eq!(classify_websocket_write_error(std::io::Error::from(ErrorKind::PermissionDenied)), QualificationMediaServerError::Response);
++        assert_eq!(
++            classify_websocket_write_error(std::io::Error::from(ErrorKind::PermissionDenied)),
++            QualificationMediaServerError::Response
++        );
+     }
+ 
+     #[test]
