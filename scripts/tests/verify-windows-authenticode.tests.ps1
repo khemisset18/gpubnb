@@ -203,4 +203,5 @@ try {
 } finally {
     Remove-Item -LiteralPath $processFixture -Force
 }
+$global:LASTEXITCODE = 0
 Write-Host "AUTHENTICODE_TESTS_PASSED=$passed"
