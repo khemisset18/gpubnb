@@ -4,7 +4,7 @@ Décision : **GO préparation**, **NO-GO signature**, **NO-GO déploiement**, **
 
 ## 1. Versions et preuves GitHub
 
-Dépôt : https://github.com/khemisset18/gpubnb. PR #285 ouverte, brouillon et non fusionnée ; HEAD `fe0b1cde539abb71e289e1875b0cc9dc32f1629d`. Correctif Authenticode : `f797af6378928bdcc09e0f3494a57f16aa994d98`, branche `fix/authenticode-verifier-fail-closed-20261009`.
+Dépôt : https://github.com/khemisset18/gpubnb. PR #285 ouverte, brouillon et non fusionnée ; HEAD `fe0b1cde539abb71e289e1875b0cc9dc32f1629d`. Le correctif du vérificateur correspond au commit `f797af6378928bdcc09e0f3494a57f16aa994d98`, branche `fix/authenticode-verifier-fail-closed-20261009`.
 
 ### Contrôles des commits demandés
 
