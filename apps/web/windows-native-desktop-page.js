@@ -9,6 +9,8 @@ import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=202610
 
 const NATIVE_RECONNECT_DELAYS_MS = Object.freeze([250, 500, 1000, 2000, 5000]);
 const NATIVE_RECONNECT_WINDOW_MS = 10 * 60 * 1000;
+// A single decoded frame does not prove the media path is stable.
+const NATIVE_STABLE_STREAM_MS = 10 * 1000;
 
 export function nativeDesktopStreamPath(sessionId) {
   if (
@@ -52,6 +54,7 @@ export function mountWindowsNativeDesktop({
   let reconnectTimer = null;
   let reconnectAttempt = 0;
   let reconnectStartedAt = null;
+  let stableStreamTimer = null;
   let pageHidden = false;
   let stopped = false;
 
@@ -62,6 +65,10 @@ export function mountWindowsNativeDesktop({
   };
 
   const releaseCurrent = () => {
+    if (stableStreamTimer !== null) {
+      clearTimeoutFn(stableStreamTimer);
+      stableStreamTimer = null;
+    }
     const client = currentClient;
     const unbind = unbindCurrent;
     currentClient = null;
@@ -110,6 +117,10 @@ export function mountWindowsNativeDesktop({
         if (client !== currentClient) return;
 
         if (state?.state === 'closed') {
+          if (stableStreamTimer !== null) {
+            clearTimeoutFn(stableStreamTimer);
+            stableStreamTimer = null;
+          }
           const unbind = unbindCurrent;
           currentClient = null;
           unbindCurrent = null;
@@ -124,7 +135,14 @@ export function mountWindowsNativeDesktop({
           return;
         }
 
-        if (state?.state === 'ready') markRecovered();
+        if (state?.state === 'ready' && stableStreamTimer === null) {
+          // Only reset exponential backoff after sustained decoded-video uptime.
+          // Short-lived readiness otherwise creates an unbounded rapid reconnect loop.
+          stableStreamTimer = setTimeoutFn(() => {
+            stableStreamTimer = null;
+            if (client === currentClient && !stopped && !pageHidden) markRecovered();
+          }, NATIVE_STABLE_STREAM_MS);
+        }
 
         const label = {
           connecting: reconnectAttempt > 0 ? 'Reconnexion sécurisée…' : 'Connexion sécurisée…',
