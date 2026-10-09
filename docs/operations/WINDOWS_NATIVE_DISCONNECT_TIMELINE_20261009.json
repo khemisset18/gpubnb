@@ -1,0 +1,811 @@
+{
+  "source": "Render read-only srv-dau86i2d0e5s73elmk10",
+  "queryStart": "2026-10-09T00:00:00Z",
+  "queryEnd": "2026-10-09T19:10:00Z",
+  "hasMore": false,
+  "scope": "Connection/open/close/input-rejection/pump/send/backpressure events only; no local PC1 or browser decoder logs",
+  "events": [
+    {
+      "timestamp": "2026-10-09T16:22:23.424487593Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "25b701f1-2dd9-45c6-8a72-bfcf415d7cf6",
+      "channel": "25b701f1"
+    },
+    {
+      "timestamp": "2026-10-09T16:22:23.985016633Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "25b701f1-2dd9-45c6-8a72-bfcf415d7cf6",
+      "channel": "25b701f1",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T16:22:33.987426537Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "25b701f1-2dd9-45c6-8a72-bfcf415d7cf6",
+      "channel": "25b701f1"
+    },
+    {
+      "timestamp": "2026-10-09T16:22:44.654703948Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "2a49eacc-5151-4e60-b895-795424dff42b",
+      "channel": "2a49eacc"
+    },
+    {
+      "timestamp": "2026-10-09T16:22:45.190917432Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "2a49eacc-5151-4e60-b895-795424dff42b",
+      "channel": "2a49eacc"
+    },
+    {
+      "timestamp": "2026-10-09T16:22:49.132678871Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "2a49eacc-5151-4e60-b895-795424dff42b",
+      "channel": "2a49eacc"
+    },
+    {
+      "timestamp": "2026-10-09T16:22:49.78317821Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "87082041-e5d4-4ba1-babe-5f908e69eedd",
+      "channel": "87082041"
+    },
+    {
+      "timestamp": "2026-10-09T16:22:50.395793189Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "87082041-e5d4-4ba1-babe-5f908e69eedd",
+      "channel": "87082041"
+    },
+    {
+      "timestamp": "2026-10-09T16:22:50.908752638Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "87082041-e5d4-4ba1-babe-5f908e69eedd",
+      "channel": "87082041"
+    },
+    {
+      "timestamp": "2026-10-09T16:22:51.158278768Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "06777e8c-3590-40fb-b02c-4071c8770493",
+      "channel": "06777e8c"
+    },
+    {
+      "timestamp": "2026-10-09T16:22:52.021508551Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "06777e8c-3590-40fb-b02c-4071c8770493",
+      "channel": "06777e8c",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:02.022779115Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "06777e8c-3590-40fb-b02c-4071c8770493",
+      "channel": "06777e8c"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:13.785389348Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "c1c5874f-d40c-41d9-95e0-2110b373dd94",
+      "channel": "c1c5874f"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:15.322668245Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "c1c5874f-d40c-41d9-95e0-2110b373dd94",
+      "channel": "c1c5874f"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:26.583017538Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "c0918dec-dd58-42b5-bee2-f8145ce5ecdc",
+      "channel": "c0918dec"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:26.709264709Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "c1c5874f-d40c-41d9-95e0-2110b373dd94",
+      "channel": "c1c5874f"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:27.390775661Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "c0918dec-dd58-42b5-bee2-f8145ce5ecdc",
+      "channel": "c0918dec"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:27.910169438Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "c0918dec-dd58-42b5-bee2-f8145ce5ecdc",
+      "channel": "c0918dec"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:28.303524909Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "a4e01420-93d4-40f7-a28f-68d5f137b2b2",
+      "channel": "a4e01420"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:29.08864386Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "a4e01420-93d4-40f7-a28f-68d5f137b2b2",
+      "channel": "a4e01420"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:30.186260342Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "a4e01420-93d4-40f7-a28f-68d5f137b2b2",
+      "channel": "a4e01420"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:30.940519841Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "4a8b667f-5bbd-46c5-ba09-164f128263f8",
+      "channel": "4a8b667f"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:31.685932206Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "4a8b667f-5bbd-46c5-ba09-164f128263f8",
+      "channel": "4a8b667f",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:41.687465072Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "4a8b667f-5bbd-46c5-ba09-164f128263f8",
+      "channel": "4a8b667f"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:53.949797398Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "cb3bc990-157a-41ec-9d91-12c18dd3cf71",
+      "channel": "cb3bc990"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:55.615993347Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "cb3bc990-157a-41ec-9d91-12c18dd3cf71",
+      "channel": "cb3bc990"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:56.781949185Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "cb3bc990-157a-41ec-9d91-12c18dd3cf71",
+      "channel": "cb3bc990"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:57.20708923Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "4189847b-fef6-4277-b91d-4752c7ed90b7",
+      "channel": "4189847b"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:57.988281533Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "4189847b-fef6-4277-b91d-4752c7ed90b7",
+      "channel": "4189847b"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:58.606234015Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "4189847b-fef6-4277-b91d-4752c7ed90b7",
+      "channel": "4189847b"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:58.854296506Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "8d183cad-fffa-46f2-b3b9-7423c76afa01",
+      "channel": "8d183cad"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:59.487248529Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "8d183cad-fffa-46f2-b3b9-7423c76afa01",
+      "channel": "8d183cad"
+    },
+    {
+      "timestamp": "2026-10-09T16:23:59.91364675Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "8d183cad-fffa-46f2-b3b9-7423c76afa01",
+      "channel": "8d183cad"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:01.087345576Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "7c786e43-fff5-4aeb-98ab-c080e99d554a",
+      "channel": "7c786e43"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:01.983416015Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "7c786e43-fff5-4aeb-98ab-c080e99d554a",
+      "channel": "7c786e43"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:03.087358858Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "7c786e43-fff5-4aeb-98ab-c080e99d554a",
+      "channel": "7c786e43"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:04.448645474Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "e53ff436-d3cf-49b7-86c2-6486ebe5dab5",
+      "channel": "e53ff436"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:05.384452051Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "e53ff436-d3cf-49b7-86c2-6486ebe5dab5",
+      "channel": "e53ff436",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:15.385875847Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "e53ff436-d3cf-49b7-86c2-6486ebe5dab5",
+      "channel": "e53ff436"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:30.872095574Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "18add237-5750-4139-b90b-26353d6dfab0",
+      "channel": "18add237"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:32.525572166Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "18add237-5750-4139-b90b-26353d6dfab0",
+      "channel": "18add237"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:34.585552633Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "18add237-5750-4139-b90b-26353d6dfab0",
+      "channel": "18add237"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:35.043337483Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "3522c5c5-08ab-48ee-9c80-de8023145ae6",
+      "channel": "3522c5c5"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:35.784418233Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "3522c5c5-08ab-48ee-9c80-de8023145ae6",
+      "channel": "3522c5c5",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:45.788589232Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "3522c5c5-08ab-48ee-9c80-de8023145ae6",
+      "channel": "3522c5c5"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:56.570041236Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "e287c75c-c9d8-4227-8057-fcab7bad75b0",
+      "channel": "e287c75c"
+    },
+    {
+      "timestamp": "2026-10-09T16:24:58.024105001Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "e287c75c-c9d8-4227-8057-fcab7bad75b0",
+      "channel": "e287c75c"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:10.606835065Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "e287c75c-c9d8-4227-8057-fcab7bad75b0",
+      "channel": "e287c75c"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:10.682325739Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "f2eca723-caee-49d2-9212-f4cd20bb3d35",
+      "channel": "f2eca723"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:11.315094199Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "f2eca723-caee-49d2-9212-f4cd20bb3d35",
+      "channel": "f2eca723",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:21.318074894Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "f2eca723-caee-49d2-9212-f4cd20bb3d35",
+      "channel": "f2eca723"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:32.125917942Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "21d327a1-7584-40c1-963d-30bbc329b6a5",
+      "channel": "21d327a1"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:33.518384781Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "21d327a1-7584-40c1-963d-30bbc329b6a5",
+      "channel": "21d327a1"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:36.324834184Z",
+      "event": "windows_native_browser_input_rejected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "21d327a1-7584-40c1-963d-30bbc329b6a5",
+      "channel": "21d327a1",
+      "frameBytes": 32,
+      "frameKind": "text"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:36.390790017Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "21d327a1-7584-40c1-963d-30bbc329b6a5",
+      "channel": "21d327a1"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:36.984175044Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "b875bc5b-ba9f-4549-88fc-19ccc6375e8a",
+      "channel": "b875bc5b"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:38.08436152Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "b875bc5b-ba9f-4549-88fc-19ccc6375e8a",
+      "channel": "b875bc5b"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:38.905402987Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "b875bc5b-ba9f-4549-88fc-19ccc6375e8a",
+      "channel": "b875bc5b"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:40.033778243Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "d9c12f43-470c-4936-90c1-539bead1e8b5",
+      "channel": "d9c12f43"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:40.52249897Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "d9c12f43-470c-4936-90c1-539bead1e8b5",
+      "channel": "d9c12f43",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T16:25:50.52429322Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "d9c12f43-470c-4936-90c1-539bead1e8b5",
+      "channel": "d9c12f43"
+    },
+    {
+      "timestamp": "2026-10-09T16:26:01.978872176Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "c0987faf-b86a-4a76-b1e2-af219fdc5740",
+      "channel": "c0987faf"
+    },
+    {
+      "timestamp": "2026-10-09T16:26:03.634347973Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "c0987faf-b86a-4a76-b1e2-af219fdc5740",
+      "channel": "c0987faf"
+    },
+    {
+      "timestamp": "2026-10-09T16:26:47.6840713Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "c0987faf-b86a-4a76-b1e2-af219fdc5740",
+      "channel": "c0987faf"
+    },
+    {
+      "timestamp": "2026-10-09T16:26:48.150986821Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "fce82462-2c76-42c6-862e-7b742eccb28f",
+      "channel": "fce82462"
+    },
+    {
+      "timestamp": "2026-10-09T16:26:48.722707672Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "fce82462-2c76-42c6-862e-7b742eccb28f",
+      "channel": "fce82462",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T16:26:58.723756124Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "fce82462-2c76-42c6-862e-7b742eccb28f",
+      "channel": "fce82462"
+    },
+    {
+      "timestamp": "2026-10-09T16:27:09.974891151Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "115a2d13-4e71-482a-8c75-988a13deb7e3",
+      "channel": "115a2d13"
+    },
+    {
+      "timestamp": "2026-10-09T16:27:11.405580253Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "115a2d13-4e71-482a-8c75-988a13deb7e3",
+      "channel": "115a2d13"
+    },
+    {
+      "timestamp": "2026-10-09T16:27:47.285878879Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "115a2d13-4e71-482a-8c75-988a13deb7e3",
+      "channel": "115a2d13"
+    },
+    {
+      "timestamp": "2026-10-09T16:27:48.094146285Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "1e70352b-da0c-4082-baba-d124f3914a0a",
+      "channel": "1e70352b"
+    },
+    {
+      "timestamp": "2026-10-09T16:27:48.691013528Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "1e70352b-da0c-4082-baba-d124f3914a0a",
+      "channel": "1e70352b"
+    },
+    {
+      "timestamp": "2026-10-09T16:27:49.752654667Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "1e70352b-da0c-4082-baba-d124f3914a0a",
+      "channel": "1e70352b"
+    },
+    {
+      "timestamp": "2026-10-09T16:27:49.953674072Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "6cdf3acd-1575-47c7-b7b4-c58194ec90fc",
+      "channel": "6cdf3acd"
+    },
+    {
+      "timestamp": "2026-10-09T16:27:50.822044492Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "6cdf3acd-1575-47c7-b7b4-c58194ec90fc",
+      "channel": "6cdf3acd"
+    },
+    {
+      "timestamp": "2026-10-09T16:27:51.316407983Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "6cdf3acd-1575-47c7-b7b4-c58194ec90fc",
+      "channel": "6cdf3acd"
+    },
+    {
+      "timestamp": "2026-10-09T16:27:52.973784477Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "b867fbb0-ec3f-4a71-9cd6-4fad0ba33790",
+      "channel": "b867fbb0"
+    },
+    {
+      "timestamp": "2026-10-09T16:27:54.583447761Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "b867fbb0-ec3f-4a71-9cd6-4fad0ba33790",
+      "channel": "b867fbb0",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T16:28:04.584911033Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "b867fbb0-ec3f-4a71-9cd6-4fad0ba33790",
+      "channel": "b867fbb0"
+    },
+    {
+      "timestamp": "2026-10-09T16:28:17.152272075Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "708ed85c-d7e6-49fb-b61a-694ae901b817",
+      "channel": "708ed85c"
+    },
+    {
+      "timestamp": "2026-10-09T16:28:18.818388095Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "708ed85c-d7e6-49fb-b61a-694ae901b817",
+      "channel": "708ed85c"
+    },
+    {
+      "timestamp": "2026-10-09T16:29:39.006288332Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv16b61700waju0ttaizkjn6",
+      "channelId": "708ed85c-d7e6-49fb-b61a-694ae901b817",
+      "channel": "708ed85c"
+    },
+    {
+      "timestamp": "2026-10-09T18:40:02.243008768Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "f7e60604-4415-4eed-ba12-3d7930f68be4",
+      "channel": "f7e60604"
+    },
+    {
+      "timestamp": "2026-10-09T18:40:03.550809315Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "f7e60604-4415-4eed-ba12-3d7930f68be4",
+      "channel": "f7e60604",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T18:40:13.556087273Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "f7e60604-4415-4eed-ba12-3d7930f68be4",
+      "channel": "f7e60604"
+    },
+    {
+      "timestamp": "2026-10-09T18:40:24.3479995Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "b15c3553-ea35-43cd-9d3a-9fa8bd9a071d",
+      "channel": "b15c3553"
+    },
+    {
+      "timestamp": "2026-10-09T18:40:24.947870221Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "b15c3553-ea35-43cd-9d3a-9fa8bd9a071d",
+      "channel": "b15c3553",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T18:40:34.948982169Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "b15c3553-ea35-43cd-9d3a-9fa8bd9a071d",
+      "channel": "b15c3553"
+    },
+    {
+      "timestamp": "2026-10-09T18:40:45.827638087Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "bc693f2c-8ad0-4c65-96e3-8f76f871d64d",
+      "channel": "bc693f2c"
+    },
+    {
+      "timestamp": "2026-10-09T18:40:47.432265251Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "bc693f2c-8ad0-4c65-96e3-8f76f871d64d",
+      "channel": "bc693f2c"
+    },
+    {
+      "timestamp": "2026-10-09T18:40:59.126318625Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "a29475c5-0d02-4bc6-94f7-4caa0cd7c83f",
+      "channel": "a29475c5"
+    },
+    {
+      "timestamp": "2026-10-09T18:41:02.639296464Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "bc693f2c-8ad0-4c65-96e3-8f76f871d64d",
+      "channel": "bc693f2c"
+    },
+    {
+      "timestamp": "2026-10-09T18:41:03.416233039Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "a29475c5-0d02-4bc6-94f7-4caa0cd7c83f",
+      "channel": "a29475c5"
+    },
+    {
+      "timestamp": "2026-10-09T18:41:05.799146177Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "4c03a332-e193-43ba-b41f-517781c63d8b",
+      "channel": "4c03a332"
+    },
+    {
+      "timestamp": "2026-10-09T18:41:06.518186192Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "a29475c5-0d02-4bc6-94f7-4caa0cd7c83f",
+      "channel": "a29475c5"
+    },
+    {
+      "timestamp": "2026-10-09T18:41:07.017430538Z",
+      "event": "workspace_gateway_upstream_opened",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "4c03a332-e193-43ba-b41f-517781c63d8b",
+      "channel": "4c03a332"
+    },
+    {
+      "timestamp": "2026-10-09T18:41:08.940487974Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "4c03a332-e193-43ba-b41f-517781c63d8b",
+      "channel": "4c03a332"
+    },
+    {
+      "timestamp": "2026-10-09T18:41:12.40195835Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "e14cfcd3-42c7-462e-9e06-dea2b48e8281",
+      "channel": "e14cfcd3"
+    },
+    {
+      "timestamp": "2026-10-09T18:41:13.320363398Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "e14cfcd3-42c7-462e-9e06-dea2b48e8281",
+      "channel": "e14cfcd3",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T18:41:23.323757136Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "e14cfcd3-42c7-462e-9e06-dea2b48e8281",
+      "channel": "e14cfcd3"
+    },
+    {
+      "timestamp": "2026-10-09T18:41:38.732461055Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "ff26fce4-6080-40f6-96bb-b18120d409b0",
+      "channel": "ff26fce4"
+    },
+    {
+      "timestamp": "2026-10-09T18:41:53.742656485Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "ff26fce4-6080-40f6-96bb-b18120d409b0",
+      "channel": "ff26fce4",
+      "error": "workspace_upstream_open_timeout"
+    },
+    {
+      "timestamp": "2026-10-09T18:42:03.750815066Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "ff26fce4-6080-40f6-96bb-b18120d409b0",
+      "channel": "ff26fce4"
+    },
+    {
+      "timestamp": "2026-10-09T18:42:19.309346074Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "02b163bc-76c1-49b2-b5c0-0d3df7a7e2df",
+      "channel": "02b163bc"
+    },
+    {
+      "timestamp": "2026-10-09T18:42:34.329988623Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "02b163bc-76c1-49b2-b5c0-0d3df7a7e2df",
+      "channel": "02b163bc",
+      "error": "workspace_upstream_open_timeout"
+    },
+    {
+      "timestamp": "2026-10-09T18:42:44.341928989Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "02b163bc-76c1-49b2-b5c0-0d3df7a7e2df",
+      "channel": "02b163bc"
+    },
+    {
+      "timestamp": "2026-10-09T18:42:59.699261404Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "eafde322-3936-49fd-8663-e5dcde307316",
+      "channel": "eafde322"
+    },
+    {
+      "timestamp": "2026-10-09T18:43:01.855473608Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "eafde322-3936-49fd-8663-e5dcde307316",
+      "channel": "eafde322",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T18:43:11.914314239Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "eafde322-3936-49fd-8663-e5dcde307316",
+      "channel": "eafde322"
+    },
+    {
+      "timestamp": "2026-10-09T18:43:27.180635042Z",
+      "event": "workspace_gateway_browser_connected",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "1ef2ac68-a5c8-4ee3-ab6f-3407e2b273a9",
+      "channel": "1ef2ac68"
+    },
+    {
+      "timestamp": "2026-10-09T18:43:36.851372805Z",
+      "event": "workspace_gateway_upstream_open_failed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "1ef2ac68-a5c8-4ee3-ab6f-3407e2b273a9",
+      "channel": "1ef2ac68",
+      "error": "workspace_upstream_open_failed:windows_native_media_connect_failed"
+    },
+    {
+      "timestamp": "2026-10-09T18:43:46.852639532Z",
+      "event": "workspace_gateway_browser_closed",
+      "sessionId": "cmv1b7hhh000ob71bn8ziy9uy",
+      "channelId": "1ef2ac68-a5c8-4ee3-ab6f-3407e2b273a9",
+      "channel": "1ef2ac68"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "sourceCommit": "fe0b1cde539abb71e289e1875b0cc9dc32f1629d",
+  "workflowRun": 37978709636,
+  "artifactId": 11639950809,
+  "archiveSha256": "118ecfb2eb65d488fa867621f8672f0ef07e72b5f0d6cb363c7bb612a074cc00",
+  "archiveDigestMatchesGitHub": true,
+  "file": "gpubnb-windows-stream.exe",
+  "fileSizeBytes": 465408,
+  "fileSha256": "6957c09bfe2afea15718a8740b8ea738236a3274dfa9b9da1fcb0d573fbb905c",
+  "peMachine": "AMD64 (0x8664)",
+  "peFormat": "PE32+",
+  "certificateTableOffset": 0,
+  "certificateTableSize": 0,
+  "authenticode": "absent",
+  "qualification": "CI build only; not physically validated; no installation authorization"
+}

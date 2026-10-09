@@ -2,6 +2,7 @@
 
 Status: software defects identified; physical five-minute acceptance NOT demonstrated.
 Baseline: `cf7130c410d89b5e05a7549fd034126b8718994e`.
+Corrected code: `fe0b1cde539abb71e289e1875b0cc9dc32f1629d`, draft PR #285.
 No PC1 operation, deployment, merge, public bookability change, or DB mutation is authorized by this report.
 
 ## Evidence and limits
@@ -14,6 +15,11 @@ contain browser decoder errors, Agent local exceptions or worker media diagnosti
 The deployed close events lack closeCode; source HEAD diagnostics therefore cannot
 be assumed present in the tested installation. Exact deployed Agent/helper/DLL
 hashes and browser build remain unverified.
+
+The complete bounded event sequence is retained in
+`WINDOWS_NATIVE_DISCONNECT_TIMELINE_20261009.json`; it contains only event,
+time, session/channel identifiers and bounded failure metadata, not payloads,
+cookies, media tokens or decoder data.
 
 The supplied `ConnectionAbortedError`, `WinError 10058` and `409 unknown_gateway_channel`
 are confirmed symptoms from the owner's tests, not independently timestamped
@@ -150,11 +156,48 @@ later Windows platform/worker/candidate checks were skipped after the style fail
 
 Local: API TypeScript build passed; 66 targeted API tests passed (1 skipped);
 25 browser tests passed; 626 Agent tests passed (3 skipped); 96 Linux helper
-tests passed. New Windows-only transport tests require the Windows CI runner.
+tests, 49 platform tests and 9 worker tests passed. A supplemental local harness
+compiled the actual qualification_server module with a stub graphics runtime:
+14 transport tests passed; restoring the baseline TCP reader makes the split-frame
+test fail after the 100 ms test socket deadline. This harness proves socket
+behavior, not graphics integration. The restored ws7 metadata assumption also
+makes the new real-peer regression fail (undefined instead of true).
 Clippy was run through clippy-driver because this environment lacks /proc/self/exe.
 Full local API execution requires PostgreSQL/Redis; its unavailable-DB failures
 are not claimed as passing CI. The additional local serializable-guard script
 reports six pre-existing call sites outside this patch.
+
+All seven workflows triggered for corrected code commit `fe0b1cde` completed
+SUCCESS. No failed check was disabled or skipped to obtain this result.
+
+| Workflow | Run |
+| --- | --- |
+| CI | 37978709771 |
+| windows-native-stream-helper | 37978709636 |
+| workspace-reliability | 37978709862 |
+| prephysical-qualification | 37978709857 |
+| deployment-readiness | 37978709924 |
+| code-security | 37978709847 |
+| api-mining-ci | 37978709821 |
+
+The Windows helper job directly ran all four new socket tests successfully:
+104 library + 10 CLI unit + 3 CLI integration tests; platform 58 tests;
+worker 11 tests; qualification harness 1 test. Both helper jobs passed the
+retained fmt/Clippy gates. The Windows candidate build and missing-lease
+fail-closed self-test also passed. CI runs exercise their configured scope;
+untriggered workflows are not falsely reported as rerun.
+
+Artifact verification is retained in `WINDOWS_NATIVE_CANDIDATE_FE0B1CDE.json`.
+Artifact `11639950809` is bound to code commit `fe0b1cde`; the downloaded archive
+SHA-256 matches GitHub's recorded digest. It contains exactly the AMD64 PE32+
+helper (465408 bytes), file SHA-256
+`6957c09bfe2afea15718a8740b8ea738236a3274dfa9b9da1fcb0d573fbb905c`.
+Its PE certificate table is empty: this CI binary is UNSIGNED and is not an
+installable/promoted candidate. No worker or media DLL was replaced. The later
+release-candidate compilation validates that feature's build, but the uploaded
+artifact was produced earlier under physical-qualification; do not confuse them.
+Any controlled signing requires the owner's authorized qualification identity
+and recording the resulting signed file hash and signer before installation.
 
 Before any approved PC1 intervention, record candidate commit, all required CI
 results, Windows artifact archive/file hashes, PE architecture, signer/provenance,
