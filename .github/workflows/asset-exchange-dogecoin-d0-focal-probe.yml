@@ -13,76 +13,68 @@ permissions:
 
 jobs:
   focal-snapshot:
-    name: Focal snapshot ${{ matrix.snapshot }}
+    name: Focal clean snapshot ${{ matrix.snapshot }}
     strategy:
       fail-fast: false
       matrix:
         snapshot:
-          - 20241115T000000Z
-          - 20241118T000000Z
-          - 20241120T000000Z
-          - 20241122T000000Z
-          - 20241124T000000Z
-          - 20241126T000000Z
-          - 20241128T000000Z
           - 20241130T000000Z
           - 20241201T000000Z
+          - 20241202T000000Z
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
-      - name: Probe historical Focal package state
+      - name: Reconstruct clean historical Focal rootfs
         shell: bash
         env:
           SNAPSHOT_ID: ${{ matrix.snapshot }}
         run: |
           set -euo pipefail
 
-          IMAGE="ubuntu:focal"
-          docker pull "${IMAGE}" >/dev/null
-          IMAGE_ID="$(docker image inspect --format='{{.Id}}' "${IMAGE}")"
-          IMAGE_DIGEST="$(docker image inspect --format='{{index .RepoDigests 0}}' "${IMAGE}")"
-          echo "probe_image_id=${IMAGE_ID}"
-          echo "probe_image_digest=${IMAGE_DIGEST}"
-          echo "snapshot_id=${SNAPSHOT_ID}"
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends             ca-certificates debootstrap
 
-          docker run --rm             -e SNAPSHOT_ID="${SNAPSHOT_ID}"             "${IMAGE}"             bash -euxo pipefail -c '
-              apt-get update
-              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates
-              update-ca-certificates
+          ROOT="${RUNNER_TEMP}/focal-${SNAPSHOT_ID}"
+          SNAP_URL="https://snapshot.ubuntu.com/ubuntu/${SNAPSHOT_ID}"
+          sudo rm -rf "${ROOT}"
 
-              cat >/etc/apt/sources.list <<EOF
-          deb [snapshot=${SNAPSHOT_ID}] http://archive.ubuntu.com/ubuntu focal main restricted universe multiverse
-          deb [snapshot=${SNAPSHOT_ID}] http://archive.ubuntu.com/ubuntu focal-updates main restricted universe multiverse
-          deb [snapshot=${SNAPSHOT_ID}] http://archive.ubuntu.com/ubuntu focal-backports main restricted universe multiverse
-          deb [snapshot=${SNAPSHOT_ID}] http://security.ubuntu.com/ubuntu focal-security main restricted universe multiverse
+          sudo debootstrap             --variant=minbase             --arch=amd64             --include=ca-certificates             focal             "${ROOT}"             "${SNAP_URL}"
+
+          sudo tee "${ROOT}/etc/apt/sources.list" >/dev/null <<EOF
+          deb ${SNAP_URL} focal main restricted universe multiverse
+          deb ${SNAP_URL} focal-updates main restricted universe multiverse
+          deb ${SNAP_URL} focal-backports main restricted universe multiverse
+          deb ${SNAP_URL} focal-security main restricted universe multiverse
           EOF
 
-              apt-get update
+          sudo chroot "${ROOT}" apt-get update
 
-              candidate() {
-                apt-cache policy "$1" | awk "/Candidate:/ {print \$2; exit}"
-              }
+          candidate() {
+            sudo chroot "${ROOT}" apt-cache policy "$1" | awk '/Candidate:/ {print $2; exit}'
+          }
 
-              mismatches=0
-              check_version() {
-                package="$1"
-                expected="$2"
-                actual="$(candidate "${package}")"
-                printf "CHECK package=%s expected=%s actual=%s\n" "${package}" "${expected}" "${actual}"
-                if [[ "${actual}" != "${expected}" ]]; then
-                  mismatches=$((mismatches + 1))
-                fi
-              }
+          mismatches=0
+          check_version() {
+            package="$1"
+            expected="$2"
+            actual="$(candidate "${package}")"
+            printf 'CHECK package=%s expected=%s actual=%s\n' "${package}" "${expected}" "${actual}"
+            if [[ "${actual}" != "${expected}" ]]; then
+              mismatches=$((mismatches + 1))
+            fi
+          }
 
-              check_version apt "2.0.10"
-              check_version binutils "2.34-6ubuntu1.9"
-              check_version curl "7.68.0-1ubuntu2.24"
-              check_version git "1:2.25.1-1ubuntu3.13"
-              check_version libc6 "2.31-0ubuntu9.16"
-              check_version ca-certificates "20240203~20.04.1"
-              check_version intel-microcode "3.20241112.0ubuntu0.20.04.1"
+          check_version apt "2.0.10"
+          check_version binutils "2.34-6ubuntu1.9"
+          check_version curl "7.68.0-1ubuntu2.24"
+          check_version git "1:2.25.1-1ubuntu3.13"
+          check_version libc6 "2.31-0ubuntu9.16"
+          check_version ca-certificates "20240203~20.04.1"
+          check_version libfreetype6 "2.10.1-2ubuntu0.3"
 
-              echo "SNAPSHOT_RESULT id=${SNAPSHOT_ID} mismatches=${mismatches}"
-              test "${mismatches}" -eq 0
-            '
+          printf 'INFO package=intel-microcode actual=%s\n' "$(candidate intel-microcode)"
+          printf 'INFO package=libexpat1 actual=%s\n' "$(candidate libexpat1)"
+          echo "SNAPSHOT_RESULT id=${SNAPSHOT_ID} mismatches=${mismatches}"
+
+          test "${mismatches}" -eq 0
