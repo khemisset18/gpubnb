@@ -17,6 +17,13 @@ GITIAN_COMMIT = "41c325d2f14147e8028fce9a5edd26e7adad30a4"
 SCHEMA = "GPUBNB:DOGECOIN:D0-INTERNAL-BUILD-EVIDENCE:v1"
 MAX_EVIDENCE_BYTES = 64 * 1024
 
+# Attested upstream package manifests checked in with this qualification harness.
+# These files, not the build artifact's self-reported variant, are the authority.
+TRUSTED_FOCAL_MANIFESTS = {
+    "KunNw0n": Path(__file__).resolve().parent / "official-focal-amd64-KunNw0n.manifest",
+    "slightlyskepticalpotat": Path(__file__).resolve().parent / "official-focal-amd64-slightlyskepticalpotat.manifest",
+}
+
 EXPECTED = {
     "schema": SCHEMA,
     "artifact": ARTIFACT,
@@ -106,7 +113,15 @@ def load_evidence(root: Path, actual_artifact_sha256: str) -> dict:
         raise ValueError("D0 evidence invalid Focal snapshot ID")
     if evidence.get("focalSnapshotUrl") != f"https://snapshot.ubuntu.com/ubuntu/{snapshot}":
         raise ValueError("D0 evidence snapshot URL and ID differ")
-    if evidence.get("officialFocalManifestVariant") not in ("KunNw0n", "slightlyskepticalpotat"):
+    variant = evidence.get("officialFocalManifestVariant")
+    if type(variant) is not str or variant not in TRUSTED_FOCAL_MANIFESTS:
         raise ValueError("D0 evidence unknown official Focal manifest variant")
+    trusted_manifest = TRUSTED_FOCAL_MANIFESTS[variant]
+    # A claimed official variant is never accepted without comparing actual bytes
+    # against that variant's checked-in attested manifest.
+    if _sha256(_regular_file(root, "gitian-base-focal-amd64.manifest")) != _sha256(
+        _regular_file(trusted_manifest.parent, trusted_manifest.name)
+    ):
+        raise ValueError("D0 Gitian base manifest does not match the attested official variant")
 
     return evidence
