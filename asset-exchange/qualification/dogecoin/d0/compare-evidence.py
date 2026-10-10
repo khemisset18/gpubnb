@@ -47,7 +47,9 @@ b_ev = load_evidence(b_dir)
 for key in (
     "dogecoinSourceCommit",
     "gitianBuilderCommit",
-    "ubuntuFocalRepoDigest",
+    "focalBootstrapMethod",
+    "focalBootstrapPackageManifestSha256",
+    "focalBootstrapPackageCount",
     "officialObservedSha256",
     "dependsFallbackUrl",
     "liefInputSha256",
@@ -109,7 +111,9 @@ with tarfile.open(a_artifact, "r:gz") as tf:
 
 source_commit = a_ev["dogecoinSourceCommit"]
 gitian_commit = a_ev["gitianBuilderCommit"]
-ubuntu_digest = a_ev["ubuntuFocalRepoDigest"]
+focal_bootstrap_method = a_ev["focalBootstrapMethod"]
+focal_bootstrap_manifest_sha256 = a_ev["focalBootstrapPackageManifestSha256"]
+focal_bootstrap_package_count = a_ev["focalBootstrapPackageCount"]
 
 spdx_files = []
 relationships = []
@@ -199,7 +203,9 @@ provenance = {
     "independentBuildsByteIdentical": True,
     "dogecoinSourceCommit": source_commit,
     "gitianBuilderCommit": gitian_commit,
-    "ubuntuFocalRepoDigest": ubuntu_digest,
+    "focalBootstrapMethod": focal_bootstrap_method,
+    "focalBootstrapPackageManifestSha256": focal_bootstrap_manifest_sha256,
+    "focalBootstrapPackageCount": focal_bootstrap_package_count,
     "dependsFallbackUrl": a_ev["dependsFallbackUrl"],
     "liefInputSha256": a_ev["liefInputSha256"],
     "zlibFossilUrl": a_ev["zlibFossilUrl"],
