@@ -19,6 +19,8 @@ ZLIB_FOSSIL_URL="https://zlib.net/fossils/zlib-1.3.tar.gz"
 ZLIB_SHA256="ff0ba4c292013dbc27530b3a81e1f9a813cd39de01ca5e0f8bf355702efa593e"
 EXPAT_URL="https://github.com/libexpat/libexpat/releases/download/R_2_6_2/expat-2.6.2.tar.bz2"
 EXPAT_SHA256="9c7c1b5dcbc3c237c500a8fb1493e14d9582146dd9b42aa8d3ffb856a3b927e0"
+FREETYPE_URL="https://download-mirror.savannah.gnu.org/releases/freetype/freetype-2.11.0.tar.xz"
+FREETYPE_SHA256="8bee39bd3968c4804b70614a0a3ad597299ad0e824bc8aad5ce8aaf48067bde7"
 LIEF_URL="https://files.pythonhosted.org/packages/3a/cf/a6ddb755d7f38cd69ca1dd8d7720963cd2f9ff0b15ec9e5ae175910add51/lief-0.12.3-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
 LIEF_SHA256="c848aadac0816268aeb9dde7cefdb54bf24f78e664a19e97e74c92d3be1bb147"
 OFFICIAL_X86_64_SHA256="4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8"
@@ -42,6 +44,8 @@ mkdir -p "$WORK_DIR" "$OUTPUT_DIR"
   echo "zlib_sha256=$ZLIB_SHA256"
   echo "expat_url=$EXPAT_URL"
   echo "expat_sha256=$EXPAT_SHA256"
+  echo "freetype_url=$FREETYPE_URL"
+  echo "freetype_sha256=$FREETYPE_SHA256"
   echo "focal_snapshot_id=$FOCAL_SNAPSHOT_ID"
   echo "focal_snapshot_url=$FOCAL_SNAPSHOT_URL"
   echo "runner_kernel=$(uname -srmo)"
@@ -96,6 +100,18 @@ curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-all-errors -
 (
   cd "$WORK_DIR/gitian-builder/cache/common"
   echo "$EXPAT_SHA256  expat-2.6.2.tar.bz2" | sha256sum --check --strict
+)
+
+# Upstream FreeType 2.11.0 URL is HTTP and the generic fallback returned 404
+# in D0 run #27. Preload directly from Savannah's official HTTPS mirror.
+# The immutable Dogecoin depends/packages/freetype.mk SHA-256 is the authority.
+curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+  --retry 4 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
+  "$FREETYPE_URL" \
+  --output "$WORK_DIR/gitian-builder/cache/common/freetype-2.11.0.tar.xz"
+(
+  cd "$WORK_DIR/gitian-builder/cache/common"
+  echo "$FREETYPE_SHA256  freetype-2.11.0.tar.xz" | sha256sum --check --strict
 )
 
 UPSTREAM_DESCRIPTOR="$WORK_DIR/dogecoin/contrib/gitian-descriptors/gitian-linux.yml"
