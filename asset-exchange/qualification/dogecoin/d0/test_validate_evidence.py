@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
+import validate_evidence
 from validate_evidence import EXPECTED, HASHED_EVIDENCE_FILES, OFFICIAL_SHA256, load_evidence
 
 
@@ -28,6 +30,16 @@ class D0EvidenceValidationTests(unittest.TestCase):
             content = (name + "\n").encode("utf-8")
             (self.root / name).write_bytes(content)
             self.evidence[key] = hashlib.sha256(content).hexdigest()
+        self.trusted_manifest = self.root / "trusted-focal.manifest"
+        self.trusted_manifest.write_bytes(
+            (self.root / "gitian-base-focal-amd64.manifest").read_bytes()
+        )
+        manifest_patch = patch.dict(
+            validate_evidence.TRUSTED_FOCAL_MANIFESTS,
+            {"KunNw0n": self.trusted_manifest},
+        )
+        manifest_patch.start()
+        self.addCleanup(manifest_patch.stop)
         self.write_evidence()
 
     def write_evidence(self):
@@ -77,6 +89,17 @@ class D0EvidenceValidationTests(unittest.TestCase):
         (self.root / filename).unlink()
         self.assert_rejected()
         (self.root / filename).symlink_to(self.root / "gitian-linux-upstream.yml")
+        self.assert_rejected()
+
+    def test_rejects_tampered_gitian_manifest_even_if_metadata_hash_updated(self):
+        filename = "gitian-base-focal-amd64.manifest"
+        altered = b"malicious rootfs package manifest\n"
+        (self.root / filename).write_bytes(altered)
+        self.evidence["gitianBaseManifestSha256"] = hashlib.sha256(altered).hexdigest()
+        self.assert_rejected()
+
+    def test_rejects_wrong_official_focal_manifest_variant(self):
+        self.evidence["officialFocalManifestVariant"] = "slightlyskepticalpotat"
         self.assert_rejected()
 
     def test_rejects_unpinned_snapshot_transport(self):
