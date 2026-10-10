@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            apt-cacher-ng ca-certificates curl git gnupg ruby wget
+            apt-cacher-ng ca-certificates curl debootstrap git gnupg ruby wget
           sudo systemctl enable --now apt-cacher-ng
           docker version
           systemctl --no-pager --full status apt-cacher-ng
