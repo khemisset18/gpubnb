@@ -1,0 +1,26 @@
+name: stage4-windows-tsa-probe
+on:
+  push:
+    branches: [prep/stage4-windows-tsa-probe-20261010]
+    paths:
+      - scripts/tests/windows-tsa-probe.ps1
+      - .github/workflows/stage4-windows-tsa-probe.yml
+permissions:
+  contents: read
+concurrency:
+  group: stage4-windows-tsa-probe-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  public-tsa-interoperability:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Public fixture probe without code signing or root imports
+        shell: pwsh
+        run: |
+          & ./scripts/tests/windows-tsa-probe.ps1
+          if (-not $?) { exit 1 }
