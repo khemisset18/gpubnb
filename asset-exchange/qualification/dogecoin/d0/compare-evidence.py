@@ -58,6 +58,8 @@ for key in (
     "gitianDescriptorSha256",
     "dependsSourceCacheManifestSha256",
     "dependsSourceCacheFileCount",
+    "focalSnapshotId",
+    "focalSnapshotUrl",
     "gitianDescriptorModified",
 ):
     if a_ev.get(key) != b_ev.get(key):
@@ -207,6 +209,8 @@ provenance = {
     "gitianDescriptorSha256": a_ev["gitianDescriptorSha256"],
     "dependsSourceCacheManifestSha256": a_ev["dependsSourceCacheManifestSha256"],
     "dependsSourceCacheFileCount": a_ev["dependsSourceCacheFileCount"],
+    "focalSnapshotId": a_ev["focalSnapshotId"],
+    "focalSnapshotUrl": a_ev["focalSnapshotUrl"],
     "gitianDescriptorModified": False,
     "binaryExecuted": False,
     "mainnetUsed": False,
