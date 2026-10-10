@@ -35,6 +35,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Test fail-closed D0 evidence validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover \
+            -s asset-exchange/qualification/dogecoin/d0 \
+            -p 'test_validate_evidence.py' -v
+
       - name: Prepare isolated Gitian prerequisites
         shell: bash
         run: |

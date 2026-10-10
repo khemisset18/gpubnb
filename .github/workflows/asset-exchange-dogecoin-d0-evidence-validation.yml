@@ -1,0 +1,128 @@
+name: Asset Exchange Dogecoin D0 Evidence Security
+
+on:
+  pull_request:
+    branches:
+      - asset-exchange/dogecoin-d0-repro-build-2026-10-08
+    paths:
+      - '.github/workflows/asset-exchange-dogecoin-d0-evidence-validation.yml'
+      - '.github/workflows/asset-exchange-dogecoin-d0-repro.yml'
+      - 'asset-exchange/qualification/dogecoin/d0/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-evidence:
+    name: D0 fail-closed evidence tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout D0 evidence qualification
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify shell and Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n asset-exchange/qualification/dogecoin/d0/build-repro-linux.sh
+          python3 -m compileall -q asset-exchange/qualification/dogecoin/d0/
+
+      - name: Run adversarial evidence verification tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover \
+            -s asset-exchange/qualification/dogecoin/d0 \
+            -p 'test_validate_evidence.py' -v
+
+  focal-rootfs-smoke:
+    name: Pinned Focal installed-package smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Validate historical Focal installed packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates debootstrap
+
+          ROOT="${RUNNER_TEMP}/dogecoin-d0-focal-installed-smoke"
+          SNAPSHOT="https://snapshot.ubuntu.com/ubuntu/20241212T000000Z"
+          sudo rm -rf "$ROOT"
+          sudo debootstrap --variant=minbase --arch=amd64 --include=ca-certificates \
+            focal "$ROOT" "$SNAPSHOT"
+          sudo tee "$ROOT/etc/apt/sources.list" >/dev/null <<EOF
+          deb $SNAPSHOT focal main restricted universe multiverse
+          deb $SNAPSHOT focal-updates main restricted universe multiverse
+          deb $SNAPSHOT focal-backports main restricted universe multiverse
+          deb $SNAPSHOT focal-security main restricted universe multiverse
+          EOF
+          sudo tee "$ROOT/etc/apt/apt.conf.d/99-gpubnb-focal-snapshot" >/dev/null <<'EOF'
+          Acquire::Check-Valid-Until "false";
+          Acquire::Retries "3";
+          EOF
+
+          check_candidate() {
+            local actual
+            actual="$(sudo chroot "$ROOT" apt-cache policy "$1" | awk '/Candidate:/ {print $2; exit}')"
+            echo "candidate $1=$actual"
+            test "$actual" = "$2"
+          }
+          check_installed() {
+            local actual
+            actual="$(sudo chroot "$ROOT" dpkg-query -W -f='${Version}' "$1")"
+            echo "installed $1=$actual"
+            test "$actual" = "$2"
+          }
+
+          sudo chroot "$ROOT" apt-get update
+          check_candidate apt "2.0.10"
+          check_candidate binutils "2.34-6ubuntu1.9"
+          check_candidate curl "7.68.0-1ubuntu2.24"
+          check_candidate git "1:2.25.1-1ubuntu3.13"
+          check_candidate libc6 "2.31-0ubuntu9.16"
+          check_candidate ca-certificates "20240203~20.04.1"
+          check_candidate libfreetype6 "2.10.1-2ubuntu0.3"
+          check_candidate intel-microcode "3.20241112.0ubuntu0.20.04.1"
+          check_candidate libexpat1 "2.2.9-1ubuntu0.8"
+
+          sudo chroot "$ROOT" env DEBIAN_FRONTEND=noninteractive \
+            apt-get --no-install-recommends -y dist-upgrade
+          sudo chroot "$ROOT" env DEBIAN_FRONTEND=noninteractive \
+            apt-get --no-install-recommends -y install \
+            pciutils build-essential git subversion language-pack-en wget lsb-release sudo \
+            linux-image-generic grub-pc openssh-server
+
+          check_installed apt "2.0.10"
+          check_installed binutils "2.34-6ubuntu1.9"
+          check_installed git "1:2.25.1-1ubuntu3.13"
+          check_installed libc6 "2.31-0ubuntu9.16"
+          check_installed ca-certificates "20240203~20.04.1"
+          check_installed libfreetype6 "2.10.1-2ubuntu0.3"
+          check_installed intel-microcode "3.20241112.0ubuntu0.20.04.1"
+          check_installed libexpat1 "2.2.9-1ubuntu0.8"
+          echo "FOCAL_INSTALLED_SMOKE_RESULT=PASS"
+
+  source-archive-smoke:
+    name: Pinned FreeType HTTPS source smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check official Savannah mirror with upstream Dogecoin SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://download-mirror.savannah.gnu.org/releases/freetype/freetype-2.11.0.tar.xz"
+          SHA="8bee39bd3968c4804b70614a0a3ad597299ad0e824bc8aad5ce8aaf48067bde7"
+          cd "$RUNNER_TEMP"
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --retry 4 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
+            "$URL" --output freetype-2.11.0.tar.xz
+          echo "$SHA  freetype-2.11.0.tar.xz" | sha256sum --check --strict
+          echo "FREETYPE_PINNED_HTTPS_RESULT=PASS"
