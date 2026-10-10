@@ -133,6 +133,9 @@ mkdir -p "$WORK_DIR/gitian-builder/docker"
 cat > "$WORK_DIR/gitian-builder/docker/base-focal-amd64.Dockerfile" <<EOF
 FROM $UBUNTU_REPO_DIGEST
 ENV DEBIAN_FRONTEND=noninteractive
+# Bootstrap TLS trust from Canonical's current signed Focal archive, then immediately
+# rewind the complete package state to the pinned historical snapshot below.
+RUN apt-get update && apt-get --no-install-recommends -y install ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN rm -f /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources && \
     printf '%s\n' \
       'deb $FOCAL_SNAPSHOT_URL focal main restricted universe multiverse' \
