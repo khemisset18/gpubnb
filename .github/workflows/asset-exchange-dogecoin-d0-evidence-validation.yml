@@ -108,3 +108,21 @@ jobs:
           check_installed intel-microcode "3.20241112.0ubuntu0.20.04.1"
           check_installed libexpat1 "2.2.9-1ubuntu0.8"
           echo "FOCAL_INSTALLED_SMOKE_RESULT=PASS"
+
+  source-archive-smoke:
+    name: Pinned FreeType HTTPS source smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check official Savannah mirror with upstream Dogecoin SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://download-mirror.savannah.gnu.org/releases/freetype/freetype-2.11.0.tar.xz"
+          SHA="8bee39bd3968c4804b70614a0a3ad597299ad0e824bc8aad5ce8aaf48067bde7"
+          cd "$RUNNER_TEMP"
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --retry 4 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
+            "$URL" --output freetype-2.11.0.tar.xz
+          echo "$SHA  freetype-2.11.0.tar.xz" | sha256sum --check --strict
+          echo "FREETYPE_PINNED_HTTPS_RESULT=PASS"
