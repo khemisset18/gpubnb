@@ -22,6 +22,8 @@ LIEF_URL="https://files.pythonhosted.org/packages/3a/cf/a6ddb755d7f38cd69ca1dd8d
 LIEF_SHA256="c848aadac0816268aeb9dde7cefdb54bf24f78e664a19e97e74c92d3be1bb147"
 OFFICIAL_X86_64_SHA256="4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8"
 OUTPUT_NAME="dogecoin-1.14.9-x86_64-linux-gnu.tar.gz"
+FOCAL_SNAPSHOT_ID="20241212T000000Z"
+FOCAL_SNAPSHOT_URL="https://snapshot.ubuntu.com/ubuntu/$FOCAL_SNAPSHOT_ID"
 
 rm -rf "$WORK_DIR" "$OUTPUT_DIR"
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR"
@@ -35,6 +37,8 @@ mkdir -p "$WORK_DIR" "$OUTPUT_DIR"
   echo "zlib_sha256=$ZLIB_SHA256"
   echo "expat_url=$EXPAT_URL"
   echo "expat_sha256=$EXPAT_SHA256"
+  echo "focal_snapshot_id=$FOCAL_SNAPSHOT_ID"
+  echo "focal_snapshot_url=$FOCAL_SNAPSHOT_URL"
   echo "runner_kernel=$(uname -srmo)"
   echo "runner_arch=$(uname -m)"
   echo "docker_version=$(docker --version)"
@@ -129,17 +133,55 @@ mkdir -p "$WORK_DIR/gitian-builder/docker"
 cat > "$WORK_DIR/gitian-builder/docker/base-focal-amd64.Dockerfile" <<EOF
 FROM $UBUNTU_REPO_DIGEST
 ENV DEBIAN_FRONTEND=noninteractive
-RUN echo 'Acquire::http { Proxy "http://172.17.0.1:3142"; };' > /etc/apt/apt.conf.d/50cacher
-RUN apt-get update && apt-get --no-install-recommends -y install pciutils build-essential git subversion language-pack-en wget lsb-release sudo linux-image-generic grub-pc openssh-server
+RUN rm -f /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources && \
+    printf '%s\n' \
+      'deb $FOCAL_SNAPSHOT_URL focal main restricted universe multiverse' \
+      'deb $FOCAL_SNAPSHOT_URL focal-updates main restricted universe multiverse' \
+      'deb $FOCAL_SNAPSHOT_URL focal-backports main restricted universe multiverse' \
+      'deb $FOCAL_SNAPSHOT_URL focal-security main restricted universe multiverse' \
+      > /etc/apt/sources.list && \
+    printf '%s\n' \
+      'Acquire::Check-Valid-Until "false";' \
+      'Acquire::Retries "3";' \
+      > /etc/apt/apt.conf.d/99-gpubnb-focal-snapshot
+RUN apt-get update && \
+    apt-get --no-install-recommends --allow-downgrades -y dist-upgrade && \
+    apt-get --no-install-recommends --allow-downgrades -y install \
+      pciutils build-essential git subversion language-pack-en wget lsb-release sudo \
+      linux-image-generic grub-pc openssh-server && \
+    rm -rf /var/lib/apt/lists/*
 RUN useradd -ms /bin/bash -U ubuntu
 USER ubuntu:ubuntu
 WORKDIR /home/ubuntu
 CMD ["sleep", "infinity"]
 EOF
 
-docker build   -f "$WORK_DIR/gitian-builder/docker/base-focal-amd64.Dockerfile"   -t base-focal-amd64   "$WORK_DIR/gitian-builder/docker"
+docker build \
+  -f "$WORK_DIR/gitian-builder/docker/base-focal-amd64.Dockerfile" \
+  -t base-focal-amd64 \
+  "$WORK_DIR/gitian-builder/docker"
 
 docker image inspect base-focal-amd64 >/dev/null
+
+docker run --rm --user root base-focal-amd64 sh -ec '
+  check() {
+    actual="$(dpkg-query -W -f="${Version}" "$1")"
+    test "$actual" = "$2" || {
+      echo "historical Focal mismatch: $1 expected=$2 actual=$actual" >&2
+      exit 1
+    }
+    printf "%s=%s\n" "$1" "$actual"
+  }
+  check apt "2.0.10"
+  check binutils "2.34-6ubuntu1.9"
+  check curl "7.68.0-1ubuntu2.24"
+  check git "1:2.25.1-1ubuntu3.13"
+  check libc6 "2.31-0ubuntu9.16"
+  check ca-certificates "20240203~20.04.1"
+  check libfreetype6 "2.10.1-2ubuntu0.3"
+  check intel-microcode "3.20241112.0ubuntu0.20.04.1"
+  check libexpat1 "2.2.9-1ubuntu0.8"
+' | tee "$OUTPUT_DIR/focal-snapshot-key-packages.txt"
 mkdir -p "$WORK_DIR/gitian-builder/var"
 
 if ! (
@@ -179,12 +221,12 @@ cp "$WORK_DIR/gitian-builder/result/"*.yml "$OUTPUT_DIR/" 2>/dev/null || true
 ACTUAL_SHA256="$(sha256sum "$OUTPUT_DIR/$OUTPUT_NAME" | awk '{print $1}')"
 printf '%s  %s\n' "$ACTUAL_SHA256" "$OUTPUT_NAME" > "$OUTPUT_DIR/SHA256SUMS"
 
-python3 - "$OUTPUT_DIR" "$DOGE_SOURCE_COMMIT" "$GITIAN_BUILDER_COMMIT" "$UBUNTU_REPO_DIGEST" "$ACTUAL_SHA256" "$OFFICIAL_X86_64_SHA256" "$DEPENDS_FALLBACK_URL" "$LIEF_SHA256" "$ZLIB_FOSSIL_URL" "$ZLIB_SHA256" "$EXPAT_URL" "$EXPAT_SHA256" "$UPSTREAM_DESCRIPTOR_SHA256" "$DEPENDS_CACHE_MANIFEST_SHA256" "$DEPENDS_CACHE_FILE_COUNT" <<'PY'
+python3 - "$OUTPUT_DIR" "$DOGE_SOURCE_COMMIT" "$GITIAN_BUILDER_COMMIT" "$UBUNTU_REPO_DIGEST" "$ACTUAL_SHA256" "$OFFICIAL_X86_64_SHA256" "$DEPENDS_FALLBACK_URL" "$LIEF_SHA256" "$ZLIB_FOSSIL_URL" "$ZLIB_SHA256" "$EXPAT_URL" "$EXPAT_SHA256" "$UPSTREAM_DESCRIPTOR_SHA256" "$DEPENDS_CACHE_MANIFEST_SHA256" "$DEPENDS_CACHE_FILE_COUNT" "$FOCAL_SNAPSHOT_ID" "$FOCAL_SNAPSHOT_URL" <<'PY'
 import json
 from pathlib import Path
 import sys
 
-out, source, gitian, ubuntu_digest, actual, official, fallback_url, lief_sha256, zlib_url, zlib_sha256, expat_url, expat_sha256, descriptor_sha256, cache_manifest_sha256, cache_file_count = sys.argv[1:]
+out, source, gitian, ubuntu_digest, actual, official, fallback_url, lief_sha256, zlib_url, zlib_sha256, expat_url, expat_sha256, descriptor_sha256, cache_manifest_sha256, cache_file_count, focal_snapshot_id, focal_snapshot_url = sys.argv[1:]
 evidence = {
     "schema": "GPUBNB:DOGECOIN:D0-INTERNAL-BUILD-EVIDENCE:v1",
     "dogecoinSourceCommit": source,
@@ -203,6 +245,8 @@ evidence = {
     "gitianDescriptorSha256": descriptor_sha256,
     "dependsSourceCacheManifestSha256": cache_manifest_sha256,
     "dependsSourceCacheFileCount": int(cache_file_count),
+    "focalSnapshotId": focal_snapshot_id,
+    "focalSnapshotUrl": focal_snapshot_url,
     "gitianDescriptorModified": False,
     "binaryExecuted": False,
     "mainnetUsed": False,
