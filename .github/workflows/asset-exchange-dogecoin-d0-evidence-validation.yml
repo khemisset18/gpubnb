@@ -1,0 +1,40 @@
+name: Asset Exchange Dogecoin D0 Evidence Security
+
+on:
+  pull_request:
+    branches:
+      - asset-exchange/dogecoin-d0-repro-build-2026-10-08
+    paths:
+      - '.github/workflows/asset-exchange-dogecoin-d0-evidence-validation.yml'
+      - '.github/workflows/asset-exchange-dogecoin-d0-repro.yml'
+      - 'asset-exchange/qualification/dogecoin/d0/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-evidence:
+    name: D0 fail-closed evidence tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout D0 evidence qualification
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify shell and Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n asset-exchange/qualification/dogecoin/d0/build-repro-linux.sh
+          python3 -m compileall -q asset-exchange/qualification/dogecoin/d0/
+
+      - name: Run adversarial evidence verification tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover \
+            -s asset-exchange/qualification/dogecoin/d0 \
+            -p 'test_validate_evidence.py' -v
