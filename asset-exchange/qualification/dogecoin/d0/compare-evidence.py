@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 import posixpath
-from datetime import datetime, timezone
 from pathlib import Path
 import tarfile
 import sys
@@ -62,6 +61,8 @@ for key in (
     "dependsSourceCacheFileCount",
     "focalSnapshotId",
     "focalSnapshotUrl",
+    "gitianBaseManifestSha256",
+    "officialFocalManifestVariant",
     "gitianDescriptorModified",
 ):
     if a_ev.get(key) != b_ev.get(key):
@@ -147,7 +148,7 @@ sbom = {
     "name": "gpu.k.p2p-dogecoin-1.14.9-internal-reproduction",
     "documentNamespace": f"https://github.com/khemisset18/gpubnb/spdx/dogecoin-d0/{source_commit}/{a_hash}",
     "creationInfo": {
-        "created": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "created": "2024-12-01T01:55:09Z",
         "creators": ["Tool: gpu.k.p2p Dogecoin D0 evidence generator v1"],
     },
     "packages": [{
@@ -174,8 +175,8 @@ sbom = {
             },
             {
                 "referenceCategory": "OTHER",
-                "referenceType": "build-base-image",
-                "referenceLocator": ubuntu_digest,
+                "referenceType": "build-environment-snapshot",
+                "referenceLocator": a_ev["focalSnapshotUrl"],
             },
         ],
     }],
@@ -217,6 +218,8 @@ provenance = {
     "dependsSourceCacheFileCount": a_ev["dependsSourceCacheFileCount"],
     "focalSnapshotId": a_ev["focalSnapshotId"],
     "focalSnapshotUrl": a_ev["focalSnapshotUrl"],
+    "gitianBaseManifestSha256": a_ev["gitianBaseManifestSha256"],
+    "officialFocalManifestVariant": a_ev["officialFocalManifestVariant"],
     "gitianDescriptorModified": False,
     "binaryExecuted": False,
     "mainnetUsed": False,
