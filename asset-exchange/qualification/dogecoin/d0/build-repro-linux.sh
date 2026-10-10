@@ -157,14 +157,10 @@ Acquire::Retries "3";
 EOF
 
 sudo chroot "$FOCAL_ROOTFS" apt-get update
-sudo chroot "$FOCAL_ROOTFS" env DEBIAN_FRONTEND=noninteractive apt-get --no-install-recommends -y install \
-  pciutils build-essential git subversion language-pack-en wget lsb-release sudo \
-  linux-image-generic grub-pc openssh-server
 
-if ! sudo chroot "$FOCAL_ROOTFS" id ubuntu >/dev/null 2>&1; then
-  sudo chroot "$FOCAL_ROOTFS" useradd -ms /bin/bash -U ubuntu
-fi
-
+# Validate historical apt candidates BEFORE installing/upgrading packages.
+# Gitian's grab-packages.sh records installed .deb versions, not candidates:
+# a clean minbase debootstrap starts with older apt and libc6 packages.
 check_snapshot_candidate() {
   local package="$1"
   local expected="$2"
@@ -174,7 +170,7 @@ check_snapshot_candidate() {
     echo "historical Focal candidate mismatch: $package expected=$expected actual=$actual" >&2
     exit 1
   fi
-  printf "%s=%s\n" "$package" "$actual"
+  printf '%s=%s\n' "$package" "$actual"
 }
 {
   check_snapshot_candidate apt "2.0.10"
@@ -187,6 +183,42 @@ check_snapshot_candidate() {
   check_snapshot_candidate intel-microcode "3.20241112.0ubuntu0.20.04.1"
   check_snapshot_candidate libexpat1 "2.2.9-1ubuntu0.8"
 } | tee "$OUTPUT_DIR/focal-snapshot-key-candidates.txt"
+
+# minbase does not upgrade existing packages automatically. Preserve the
+# immutable, signature-verified snapshot and upgrade BEFORE image import.
+sudo chroot "$FOCAL_ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+  apt-get --no-install-recommends -y dist-upgrade
+sudo chroot "$FOCAL_ROOTFS" env DEBIAN_FRONTEND=noninteractive apt-get --no-install-recommends -y install \
+  pciutils build-essential git subversion language-pack-en wget lsb-release sudo \
+  linux-image-generic grub-pc openssh-server
+
+if ! sudo chroot "$FOCAL_ROOTFS" id ubuntu >/dev/null 2>&1; then
+  sudo chroot "$FOCAL_ROOTFS" useradd -ms /bin/bash -U ubuntu
+fi
+
+# Ensure installed package versions match the trusted historical release
+# environment. Checking apt-cache candidates after an install is insufficient.
+check_installed_focal_package() {
+  local package="$1"
+  local expected="$2"
+  local actual
+  actual="$(sudo chroot "$FOCAL_ROOTFS" dpkg-query -W -f='${Version}' "$package" 2>/dev/null || true)"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "historical Focal INSTALLED package mismatch: $package expected=$expected actual=$actual" >&2
+    exit 1
+  fi
+  printf '%s=%s\n' "$package" "$actual"
+}
+{
+  check_installed_focal_package apt "2.0.10"
+  check_installed_focal_package binutils "2.34-6ubuntu1.9"
+  check_installed_focal_package git "1:2.25.1-1ubuntu3.13"
+  check_installed_focal_package libc6 "2.31-0ubuntu9.16"
+  check_installed_focal_package ca-certificates "20240203~20.04.1"
+  check_installed_focal_package libfreetype6 "2.10.1-2ubuntu0.3"
+  check_installed_focal_package intel-microcode "3.20241112.0ubuntu0.20.04.1"
+  check_installed_focal_package libexpat1 "2.2.9-1ubuntu0.8"
+} | tee "$OUTPUT_DIR/focal-snapshot-installed-versions.txt"
 
 sudo chroot "$FOCAL_ROOTFS" dpkg-query -W -f='${Package}\t${Version}\n' | LC_ALL=C sort > "$OUTPUT_DIR/focal-bootstrap-packages.txt"
 FOCAL_BOOTSTRAP_MANIFEST_SHA256="$(sha256sum "$OUTPUT_DIR/focal-bootstrap-packages.txt" | awk '{print $1}')"
