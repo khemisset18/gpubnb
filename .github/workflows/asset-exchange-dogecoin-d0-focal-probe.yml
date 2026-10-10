@@ -18,9 +18,14 @@ jobs:
       fail-fast: false
       matrix:
         snapshot:
-          - 20241130T000000Z
-          - 20241201T000000Z
-          - 20241202T000000Z
+          - 20241203T000000Z
+          - 20241205T000000Z
+          - 20241207T000000Z
+          - 20241210T000000Z
+          - 20241212T000000Z
+          - 20241215T000000Z
+          - 20241218T000000Z
+          - 20241220T000000Z
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -72,9 +77,8 @@ jobs:
           check_version libc6 "2.31-0ubuntu9.16"
           check_version ca-certificates "20240203~20.04.1"
           check_version libfreetype6 "2.10.1-2ubuntu0.3"
-
-          printf 'INFO package=intel-microcode actual=%s\n' "$(candidate intel-microcode)"
-          printf 'INFO package=libexpat1 actual=%s\n' "$(candidate libexpat1)"
+          check_version intel-microcode "3.20241112.0ubuntu0.20.04.1"
+          check_version libexpat1 "2.2.9-1ubuntu0.8"
           echo "SNAPSHOT_RESULT id=${SNAPSHOT_ID} mismatches=${mismatches}"
 
           test "${mismatches}" -eq 0
