@@ -79,6 +79,12 @@ function Invoke-SignTool([string[]]$Arguments, [string]$LogName) {
         throw 'signtool_probe_timeout'
     }
     $p.WaitForExit()
+    $script:signToolDiagnostics[$LogName] = [ordered]@{
+        exitCode = $p.ExitCode
+        # Controlled Microsoft tool, public disposable fixture and public URL only.
+        stdout = ((Get-Content -LiteralPath $out -ErrorAction Stop | Select-Object -First 30) -join "`n")
+        stderr = ((Get-Content -LiteralPath $err -ErrorAction Stop | Select-Object -First 30) -join "`n")
+    }
     return $p.ExitCode
 }
 function Get-EmbeddedCms([string]$Path) {
@@ -105,6 +111,7 @@ function Get-EmbeddedCms([string]$Path) {
 $scratch = Join-Path $env:RUNNER_TEMP ('gpubnb-tsa-probe-' + [Guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $scratch)
 $results = @()
+$signToolDiagnostics = @{}
 $report = [ordered]@{ schemaVersion = 1; probe = 'windows-isolated-public-fixture-only'; codeSigningPerformed = $false; rootsImported = $false; providers = @(); gpuBnbCandidateSigned = $false; pc1CompatibilityProven = $false }
 try {
     $signTool = Get-ChildItem -LiteralPath (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin') -Filter signtool.exe -File -Recurse |
@@ -165,6 +172,7 @@ try {
             $content.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::new('application/timestamp-query')
             $response = $client.PostAsync($provider.url, $content).GetAwaiter().GetResult()
             $row.httpStatus = [int]$response.StatusCode
+            $row.responseContentType = [string]$response.Content.Headers.ContentType
             if (-not $response.IsSuccessStatusCode) { throw 'rfc3161_https_post_not_successful_no_redirect_followed' }
             if ($response.Content.Headers.ContentType.MediaType -cne 'application/timestamp-reply') { throw 'rfc3161_response_content_type' }
             $raw = $response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
@@ -179,8 +187,10 @@ try {
             $file = Join-Path $scratch ($provider.name + '.exe')
             Copy-Item -LiteralPath $fixture -Destination $file
             $row.signtoolTimestampExitCode = Invoke-SignTool @('timestamp', '/tr', $provider.url, '/td', 'SHA256', '/tp', '0', '/v', $file) ($provider.name + '-timestamp')
+            $row.timestampDiagnostic = $signToolDiagnostics[$provider.name + '-timestamp']
             if ($row.signtoolTimestampExitCode -ne 0) { throw 'signtool_timestamp_failed' }
             $row.signtoolVerifyExitCode = Invoke-SignTool @('verify', '/pa', '/all', '/v', '/tw', $file) ($provider.name + '-verify')
+            $row.verifyDiagnostic = $signToolDiagnostics[$provider.name + '-verify']
             if ($row.signtoolVerifyExitCode -ne 0) { throw 'signtool_verification_failed_or_warning' }
             $sig = Get-AuthenticodeSignature -LiteralPath $file
             if ($sig.Status -ne 'Valid' -or $null -eq $sig.TimeStamperCertificate -or (Get-PublicCertHash $sig.SignerCertificate) -cne $report.fixture.signerCertificateSha256) { throw 'fixture_authenticode_or_signer_changed' }
@@ -200,6 +210,7 @@ try {
             $row.technicalPass = $true
         } catch {
             $row.errorType = $_.Exception.GetType().Name
+            $row.innerErrorType = if ($null -ne $_.Exception.InnerException) { $_.Exception.InnerException.GetType().Name } else { $null }
             # Only static errors or type names are emitted; no URL/headers/body/credentials.
             $msg = [string]$_.Exception.Message
             $row.errorCode = if ($msg -match '^[a-z0-9_]+$') { $msg } else { 'probe_exception_details_withheld' }
