@@ -18,7 +18,8 @@ The controlling acceptance policy is `DOGECOIN_D0_TRUST_POLICY_V1.md`.
 - Gitian builder commit: `41c325d2f14147e8028fce9a5edd26e7adad30a4`
 - LIEF wheel SHA-256: `c848aadac0816268aeb9dde7cefdb54bf24f78e664a19e97e74c92d3be1bb147`
 - observed official Linux x86_64 SHA-256: `4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8`
-- Ubuntu Focal root image: Canonical's verified Amazon ECR publication, resolved to an immutable RepoDigest before build and compared across replicas\n- Ubuntu package snapshot: `https://snapshot.ubuntu.com/ubuntu/20241212T000000Z`, selected because its key package versions match the official v1.14.9 Gitian base manifest
+- Ubuntu package snapshot: `https://snapshot.ubuntu.com/ubuntu/20241212T000000Z`, selected from explicit historical probes because its build-toolchain candidates match an official v1.14.9 Gitian environment
+- accepted Focal manifests: the two 323-package `focal-amd64` manifests published by the independent `KunNw0n` and `slightlyskepticalpotat` v1.14.9 Linux attestations at `dogecoin/gitian.sigs` commit `9d1be4fb0effc4c2e97750e0763b92f39d474a17`
 
 Historical dependency download locations are transport only. Dependency integrity is determined by the hashes pinned in Dogecoin's exact `depends` tree.
 
