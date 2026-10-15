@@ -1,0 +1,33 @@
+{
+  "positive": {
+    "verifiedFiles": 4,
+    "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+    "archiveSha256": "113ed2b8644dd7796692bf894b5b5de4c9fd8402b772837935f9db7abe9d94a4",
+    "binariesExecuted": false,
+    "installationAuthorized": false
+  },
+  "negativeCases": [
+    {
+      "case": "wrong_source",
+      "rejected": true
+    },
+    {
+      "case": "wrong_binary_hash",
+      "rejected": true
+    },
+    {
+      "case": "wrong_architecture",
+      "rejected": true
+    },
+    {
+      "case": "false_signed_claim",
+      "rejected": true
+    },
+    {
+      "case": "false_installation_go",
+      "rejected": true
+    }
+  ],
+  "passed": 6,
+  "failed": 0
+}

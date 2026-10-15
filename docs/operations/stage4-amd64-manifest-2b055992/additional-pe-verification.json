@@ -1,0 +1,12 @@
+{
+  "mediaExports": [
+    "GPUbnbMediaClose",
+    "GPUbnbMediaGetLastDiagnostic",
+    "GPUbnbMediaOpen",
+    "GPUbnbMediaReadFrame",
+    "GPUbnbProbeMediaFrame"
+  ],
+  "requiredMediaAbiExportsVerified": true,
+  "helperPinAsciiPresent": true,
+  "helperWasNotExecuted": true
+}

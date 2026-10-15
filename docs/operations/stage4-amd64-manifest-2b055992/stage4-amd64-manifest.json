@@ -1,0 +1,379 @@
+{
+  "schemaVersion": 1,
+  "kind": "gpubnb-stage4-unsigned-amd64-evidence",
+  "repository": "khemisset18/gpubnb",
+  "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+  "sourceTree": "8b8b765eacf88e4a1a91b6426a55988ed2b028ef",
+  "generatedAtUtc": "2026-10-15T14:14:53.872240+00:00",
+  "prChain": [
+    285,
+    290,
+    291
+  ],
+  "provenance": {
+    "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+    "workflowPath": ".github/workflows/stage4-amd64-manifest.yml",
+    "workflowCommit": "8270e0cf0576fe468c01fb89649602e260512609",
+    "runId": 38748425182,
+    "runAttempt": 1,
+    "jobId": 116468085920,
+    "jobKey": "build-amd64",
+    "jobUrl": "https://github.com/khemisset18/gpubnb/actions/runs/38748425182/job/116468085920",
+    "artifactId": 11980008547
+  },
+  "archive": {
+    "artifactId": 11980008547,
+    "name": "stage4-unsigned-amd64-2b055992-38748425182",
+    "sizeBytes": 22343892,
+    "sha256": "113ed2b8644dd7796692bf894b5b5de4c9fd8402b772837935f9db7abe9d94a4",
+    "digestMatchedGitHubArtifactMetadata": true,
+    "createdAtUtc": "2026-10-15T14:08:47Z",
+    "expiresAtUtc": "2026-10-29T14:08:44Z",
+    "downloadThroughGitHubActions": true
+  },
+  "files": [
+    {
+      "name": "gpubnb-windows-stream.exe",
+      "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "version": "0.1.0",
+      "sizeBytes": 465408,
+      "sha256": "258f61515a8ca919e945957699283550e9f5fc0bed421dbaa82214ecc26fdb30",
+      "architecture": "AMD64",
+      "peMachine": "0x8664",
+      "peMagic": "0x20b",
+      "certificateTableSize": 0,
+      "embeddedFileVersion": null,
+      "embeddedProductVersion": null,
+      "authenticodeStatus": "NotSigned",
+      "signed": false,
+      "installable": false,
+      "independentlyRehashed": true,
+      "peIndependentlyChecked": true,
+      "provenance": {
+        "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+        "workflowPath": ".github/workflows/stage4-amd64-manifest.yml",
+        "workflowCommit": "8270e0cf0576fe468c01fb89649602e260512609",
+        "runId": 38748425182,
+        "runAttempt": 1,
+        "jobId": 116468085920,
+        "jobKey": "build-amd64",
+        "jobUrl": "https://github.com/khemisset18/gpubnb/actions/runs/38748425182/job/116468085920",
+        "artifactId": 11980008547
+      },
+      "hashStage": "unsigned_before_any_signing",
+      "finalSignedSha256": null,
+      "timestamp": null,
+      "versionEvidence": "Cargo.toml source declaration",
+      "sha256IndependentlyRecomputed": true,
+      "architectureIndependentlyVerified": true,
+      "rebuildOnConsolidatedCommitRequired": false,
+      "cargoFeatures": [
+        "physical-qualification"
+      ],
+      "compiledWorkerSignerSha256": "200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a",
+      "compiledPinAsciiFoundInPe": true,
+      "executedForVerification": false
+    },
+    {
+      "name": "gpubnb-windows-worker.exe",
+      "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "version": "0.1.0",
+      "sizeBytes": 181760,
+      "sha256": "632bdfb73a0cd6c57e6655ca6c7813a55b4cf8560016860c4d38dead1694adc2",
+      "architecture": "AMD64",
+      "peMachine": "0x8664",
+      "peMagic": "0x20b",
+      "certificateTableSize": 0,
+      "embeddedFileVersion": null,
+      "embeddedProductVersion": null,
+      "authenticodeStatus": "NotSigned",
+      "signed": false,
+      "installable": false,
+      "independentlyRehashed": true,
+      "peIndependentlyChecked": true,
+      "provenance": {
+        "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+        "workflowPath": ".github/workflows/stage4-amd64-manifest.yml",
+        "workflowCommit": "8270e0cf0576fe468c01fb89649602e260512609",
+        "runId": 38748425182,
+        "runAttempt": 1,
+        "jobId": 116468085920,
+        "jobKey": "build-amd64",
+        "jobUrl": "https://github.com/khemisset18/gpubnb/actions/runs/38748425182/job/116468085920",
+        "artifactId": 11980008547
+      },
+      "hashStage": "unsigned_before_any_signing",
+      "finalSignedSha256": null,
+      "timestamp": null,
+      "versionEvidence": "Cargo.toml source declaration",
+      "sha256IndependentlyRecomputed": true,
+      "architectureIndependentlyVerified": true,
+      "rebuildOnConsolidatedCommitRequired": false,
+      "cargoFeatures": [],
+      "compiledMediaSignerSha256": "200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a",
+      "embeddedSourceCommitVerified": true,
+      "executedForVerification": "--build-policy --json only on isolated runner"
+    },
+    {
+      "name": "GPUbnbWindowsMedia.dll",
+      "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "version": "media-ABI-2",
+      "sizeBytes": 66560,
+      "sha256": "2817cc7f7852d3d5001b57f386dd51073a4772b7b3f19ed9d81b83ee52e1808a",
+      "architecture": "AMD64",
+      "peMachine": "0x8664",
+      "peMagic": "0x20b",
+      "certificateTableSize": 0,
+      "embeddedFileVersion": null,
+      "embeddedProductVersion": null,
+      "authenticodeStatus": "NotSigned",
+      "signed": false,
+      "installable": false,
+      "independentlyRehashed": true,
+      "peIndependentlyChecked": true,
+      "provenance": {
+        "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+        "workflowPath": ".github/workflows/stage4-amd64-manifest.yml",
+        "workflowCommit": "8270e0cf0576fe468c01fb89649602e260512609",
+        "runId": 38748425182,
+        "runAttempt": 1,
+        "jobId": 116468085920,
+        "jobKey": "build-amd64",
+        "jobUrl": "https://github.com/khemisset18/gpubnb/actions/runs/38748425182/job/116468085920",
+        "artifactId": 11980008547
+      },
+      "hashStage": "unsigned_before_any_signing",
+      "finalSignedSha256": null,
+      "timestamp": null,
+      "versionEvidence": "media header ABI declaration",
+      "sha256IndependentlyRecomputed": true,
+      "architectureIndependentlyVerified": true,
+      "rebuildOnConsolidatedCommitRequired": false,
+      "mediaAbiVersion": 2,
+      "exportsVerified": [
+        "GPUbnbMediaClose",
+        "GPUbnbMediaGetLastDiagnostic",
+        "GPUbnbMediaOpen",
+        "GPUbnbMediaReadFrame",
+        "GPUbnbProbeMediaFrame"
+      ],
+      "dllLoadedForVerification": false,
+      "semanticProductVersion": null
+    },
+    {
+      "name": "gpubnb-agent.exe",
+      "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "version": "0.6.6",
+      "sizeBytes": 22259360,
+      "sha256": "9de3ea6016048799675ac59709d4530eab669cf9ec257fb762eb26ce44dd6070",
+      "architecture": "AMD64",
+      "peMachine": "0x8664",
+      "peMagic": "0x20b",
+      "certificateTableSize": 0,
+      "embeddedFileVersion": null,
+      "embeddedProductVersion": null,
+      "authenticodeStatus": "NotSigned",
+      "signed": false,
+      "installable": false,
+      "independentlyRehashed": true,
+      "peIndependentlyChecked": true,
+      "provenance": {
+        "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+        "workflowPath": ".github/workflows/stage4-amd64-manifest.yml",
+        "workflowCommit": "8270e0cf0576fe468c01fb89649602e260512609",
+        "runId": 38748425182,
+        "runAttempt": 1,
+        "jobId": 116468085920,
+        "jobKey": "build-amd64",
+        "jobUrl": "https://github.com/khemisset18/gpubnb/actions/runs/38748425182/job/116468085920",
+        "artifactId": 11980008547
+      },
+      "hashStage": "unsigned_before_any_signing",
+      "finalSignedSha256": null,
+      "timestamp": null,
+      "versionEvidence": "frozen executable build-info",
+      "sha256IndependentlyRecomputed": true,
+      "architectureIndependentlyVerified": true,
+      "rebuildOnConsolidatedCommitRequired": false,
+      "generatedBuildOverlay": {
+        "path": "agent/gpubnb_agent/_build_info.py",
+        "afterSha256": "1a0b0cdb8dd815060544c7b70fc9c4730c42482816f594779b3674a01601287b",
+        "beforeSha256": "337ef25749030831e21379baed8c66a84a5ace037fa8ffbb100b1361a954204b",
+        "buildCommit": "2b055992f752"
+      },
+      "embeddedBuildCommit": "2b055992f752",
+      "executedForVerification": "build-info only on isolated runner"
+    }
+  ],
+  "compatibility": {
+    "workerProtocolVersion": 1,
+    "browserMediaProtocolVersion": 1,
+    "browserInputProtocolVersion": 1,
+    "mediaAbiVersion": 2,
+    "iddControlVersion": 1,
+    "nvencApi": "13.0",
+    "nvCodecHeadersCommit": "e844e5b26f46bb77479f063029595293aa8f812d",
+    "nvEncodeHeaderSha256": "6cca5db41ba7a3120de9987f9ce5c54ac9089da97a7faa6a3a81fae62b9c4269",
+    "helperToWorkerSignerPinMatchesObservedCertificate": true,
+    "workerToMediaSignerPinMatchesObservedCertificate": true,
+    "sameSourceCommitForNewWorkerAndHelper": true,
+    "installedWorkerSourceCommit": "3cb18fb71c494e3947768455d61bc8763cd1e5c2",
+    "installedWorkerSourceMatchesConsolidatedCommit": false,
+    "physicalCompatibilityValidated": false,
+    "toolchain": {
+      "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)\r\nbinary: rustc\r\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\r\ncommit-date: 2026-07-14\r\nhost: x86_64-pc-windows-msvc\r\nrelease: 1.97.1\r\nLLVM version: 22.1.6",
+      "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+      "python": "Python 3.12.10",
+      "msbuild": "18.10.1.42706"
+    }
+  },
+  "historicalArtifacts": [
+    {
+      "name": "gpubnb-windows-stream.exe",
+      "candidate": false,
+      "sourceCommit": "fe0b1cde539abb71e289e1875b0cc9dc32f1629d",
+      "runId": 37978709636,
+      "jobId": 113983452353,
+      "artifactId": 11639950809,
+      "architecture": "AMD64",
+      "version": "0.1.0",
+      "sizeBytes": 465408,
+      "sha256": "6957c09bfe2afea15718a8740b8ea738236a3274dfa9b9da1fcb0d573fbb905c",
+      "archiveSha256": "118ecfb2eb65d488fa867621f8672f0ef07e72b5f0d6cb363c7bb612a074cc00",
+      "independentlyDownloadedAndRehashedThisMission": true,
+      "supersededForThisManifest": true
+    }
+  ],
+  "installedPc1HistoricalBaseline": {
+    "collectedAtUtc": "2026-10-09T21:46:40.4911660Z",
+    "collectionSource": "operator supplied in this conversation",
+    "newCollectionPerformed": false,
+    "isCandidate": false,
+    "files": [
+      {
+        "name": "gpubnb-agent.exe",
+        "sha256": "073c98950248301bb152aa0ebd08c5e72d0a118f294388b584029cd145e981da",
+        "workflowRunId": null,
+        "jobId": null,
+        "ciProvenanceVerified": false
+      },
+      {
+        "name": "gpubnb-windows-stream.exe",
+        "sha256": "d114bca3293da78481dee1d53d06c7b91b4a94f08ccde4a61d268ea73d039690",
+        "workflowRunId": null,
+        "jobId": null,
+        "ciProvenanceVerified": false
+      },
+      {
+        "name": "gpubnb-windows-worker.exe",
+        "sha256": "720325acac59d5e7e24f25f2ec72e13cef1e1071249943f024ff135844091579",
+        "workflowRunId": null,
+        "jobId": null,
+        "ciProvenanceVerified": false
+      },
+      {
+        "name": "GPUbnbWindowsMedia.dll",
+        "sha256": "510d559b056ba094f8dc06b73d4c6d7bce46ca97fa774524e605844ad16fc9de",
+        "workflowRunId": null,
+        "jobId": null,
+        "ciProvenanceVerified": false
+      }
+    ]
+  },
+  "unbuiltOrUnverifiedDependencies": [
+    {
+      "component": "GPUbnb IddCx UMDF driver package",
+      "files": [
+        "GPUbnbIdd.dll",
+        "GPUbnbIdd.cat",
+        "published INF"
+      ],
+      "required": true,
+      "observedInstalledVersion": "9.3.32.4",
+      "observationDateUtc": "2026-10-09",
+      "sourceInfTemplateVersion": "0.1.0.0",
+      "sourceInfTemplateDate": "2026-09-18",
+      "sourceCommitOfInstalledPackage": null,
+      "sha256": null,
+      "architectureMeasured": false,
+      "workflowRunId": null,
+      "jobId": null,
+      "status": "installed package provenance, bytes and authority profile not verified",
+      "rebuildRequired": null,
+      "instruction": "retain installed driver; no rebuild or replacement approved"
+    },
+    {
+      "component": "NVIDIA display driver and NVENC runtime",
+      "required": true,
+      "observedWindowsDriverVersion": "32.0.15.9282",
+      "minimumWindowsMarketingDriverDeclaredByReleaseBuilder": "570.00",
+      "observationDateUtc": "2026-10-09",
+      "sha256": null,
+      "status": "not rebuilt; no current NVENC runtime or capture test; no driver change approved"
+    },
+    {
+      "component": "gpubnb-host-tunnel.exe",
+      "requiredWhen": "server dataPlane.hostTunnelEnabled is true",
+      "configurationVerifiedThisMission": false,
+      "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "sha256": null,
+      "workflowRunId": null,
+      "jobId": null,
+      "status": "conditional component not built or asserted necessary; must inventory if enabled"
+    },
+    {
+      "component": "Host Desktop UI / installer",
+      "requiredForBrowserRenter": false,
+      "status": "not part of this payload; existing Host installation retained"
+    }
+  ],
+  "signatureRequirements": {
+    "unsignedArtifactsInstallable": false,
+    "requiredBeforeAnyInstallation": [
+      "valid Authenticode signature",
+      "explicitly authorized signer identity matching compiled pins",
+      "timestamp when required by standard policy",
+      "new SHA-256 after signing",
+      "approved manifest and separate installation approval"
+    ],
+    "observedQualificationCertificateSha256": "200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a",
+    "observedCertificateNotAfterUtc": "2026-10-20T22:23:47Z",
+    "observedCertificateNotAfterParis": "2026-10-21T00:23:47+02:00",
+    "protectedPublisherSigningEnvironmentVerified": false,
+    "existingKeyInaccessibleToPc1Proven": false,
+    "approvedHttpsTimestampService": null,
+    "privateNoTimestampExceptionActivated": false,
+    "studyCutoffParis": "2026-10-20T18:00:00+02:00",
+    "standardReleaseBuilderAcceptsQualificationCertificate": false,
+    "productionReleaseManifestProduced": false
+  },
+  "security": {
+    "signingPerformed": false,
+    "privateSigningKeyUsedOrIntroduced": false,
+    "certificateOrTrustStoreChanged": false,
+    "pc1Accessed": false,
+    "pc2Accessed": false,
+    "pc2BrowserOnly": true,
+    "renderModified": false,
+    "mergedPrs": [],
+    "physicalQualificationPerformed": false,
+    "stableSessionSecondsRequired": 300,
+    "runtimeSourceModified": false,
+    "paidServiceAdded": false
+  },
+  "status": {
+    "coreArtifactsBuiltAndBytesVerified": true,
+    "coreArtifactsStillRequiringBuild": [],
+    "driverAndOptionalDependencyInventoryComplete": false,
+    "signature": "NO-GO",
+    "installation": "NO-GO",
+    "deployment": "NO-GO",
+    "physicalQualification": "NO-GO"
+  },
+  "verificationEvidence": {
+    "ciEvidenceFile": "ci-evidence.json",
+    "offlineVerifier": "verify-manifest.py",
+    "offlineVerifierTests": "verifier-test-results.json",
+    "ciTextCopiesEncoding": "UTF-8; repository copies use LF; original CI bytes remain in the ZIP"
+  }
+}

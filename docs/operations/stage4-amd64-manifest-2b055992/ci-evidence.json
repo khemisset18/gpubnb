@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "repository": "khemisset18/gpubnb",
+  "sourceCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+  "checkedAtUtc": "2026-10-15T14:20:51.055Z",
+  "sourceWorkflowRuns": [
+    {
+      "id": 38746371567,
+      "name": "workflow-security",
+      "headCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/38746371567"
+    },
+    {
+      "id": 38746371762,
+      "name": "prephysical-qualification",
+      "headCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/38746371762"
+    },
+    {
+      "id": 38746371836,
+      "name": "Authenticode verifier tests",
+      "headCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/38746371836"
+    },
+    {
+      "id": 38746371531,
+      "name": "code-security",
+      "headCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/38746371531"
+    },
+    {
+      "id": 38746371585,
+      "name": "CI",
+      "headCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/38746371585"
+    },
+    {
+      "id": 38746361072,
+      "name": "prephysical-qualification",
+      "headCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/38746361072"
+    },
+    {
+      "id": 38746360830,
+      "name": "Authenticode verifier tests",
+      "headCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/38746360830"
+    },
+    {
+      "id": 38746360767,
+      "name": "CI",
+      "headCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/38746360767"
+    }
+  ],
+  "unsignedBuild": {
+    "runId": 38748425182,
+    "headCommit": "8270e0cf0576fe468c01fb89649602e260512609",
+    "status": "completed",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 116468085920,
+        "name": "build-amd64",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "buildInstructionsCi": {
+    "runId": 38748425136,
+    "headCommit": "8270e0cf0576fe468c01fb89649602e260512609",
+    "status": "completed",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 116468087604,
+        "name": "api",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 116468087738,
+        "name": "security-static-analysis",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 116468087932,
+        "name": "production-gates",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 116468087941,
+        "name": "agent",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 116468088060,
+        "name": "dependency-audit",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 116468088109,
+        "name": "contract",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "existingPullRequests": [
+    {
+      "number": 285,
+      "headCommit": "fe0b1cde539abb71e289e1875b0cc9dc32f1629d",
+      "headBranch": "fix/stage4-native-stream-disconnect-diagnosis",
+      "baseCommit": "cf7130c410d89b5e05a7549fd034126b8718994e",
+      "baseBranch": "stage4/windows-native-production-hardening",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "url": "https://github.com/khemisset18/gpubnb/pull/285"
+    },
+    {
+      "number": 289,
+      "headCommit": "ef09cd20a39cb5bf6f295a8bbb947fc043d85922",
+      "headBranch": "fix/stage4-browser-only-login-20261015",
+      "baseCommit": "d21af2fbf1f110dff5c0cab7a460035fb2ddefa6",
+      "baseBranch": "prep/stage4-osslsigncode-hardened-20261015",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "url": "https://github.com/khemisset18/gpubnb/pull/289"
+    },
+    {
+      "number": 290,
+      "headCommit": "a7b4b9bec2bf01b6041555997638ea2c335b15f1",
+      "headBranch": "integration/stage4-browser-on-285-20261015",
+      "baseCommit": "fe0b1cde539abb71e289e1875b0cc9dc32f1629d",
+      "baseBranch": "fix/stage4-native-stream-disconnect-diagnosis",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "url": "https://github.com/khemisset18/gpubnb/pull/290"
+    },
+    {
+      "number": 291,
+      "headCommit": "2b055992f7521505d0387dd4c876e36794fffd63",
+      "headBranch": "fix/stage4-authenticode-on-290-20261015",
+      "baseCommit": "a7b4b9bec2bf01b6041555997638ea2c335b15f1",
+      "baseBranch": "integration/stage4-browser-on-285-20261015",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "url": "https://github.com/khemisset18/gpubnb/pull/291"
+    }
+  ],
+  "scope": "read-only GitHub evidence; no existing PR modified; no workflow rerun requested for evidence"
+}
