@@ -5,7 +5,18 @@ param(
     [ValidateScript({ Test-Path -LiteralPath $_ -PathType Container })]
     [string]$NvCodecHeadersDir,
 
-    [string]$OutputDirectory
+    [string]$OutputDirectory,
+
+    # CI-built unsigned Agent for THIS exact source commit; copy it, never sign the source file.
+    [Parameter(Mandatory = $true)]
+    [string]$UnsignedAgentPath,
+
+    [Parameter(Mandatory = $true)]
+    [string]$UnsignedAgentSha256,
+
+    # Approved PUBLIC certificate fingerprint; no key material in this parameter.
+    [Parameter(Mandatory = $true)]
+    [string]$ExpectedPublisherSha256
 )
 
 Set-StrictMode -Version Latest
@@ -63,6 +74,18 @@ $git = (Get-Command git.exe -ErrorAction Stop).Source
 $cargo = (Get-Command cargo.exe -ErrorAction Stop).Source
 $msbuild = (Get-Command msbuild.exe -ErrorAction Stop).Source
 
+$expectedPublisher = $ExpectedPublisherSha256.Replace(' ', '').ToLowerInvariant()
+if ($expectedPublisher -cnotmatch '^[a-f0-9]{64}$' -or $expectedPublisher -ceq ('0' * 64)) {
+    throw 'release_candidate_approved_publisher_sha256_invalid'
+}
+if ([string]::IsNullOrWhiteSpace($env:GPUBNB_APPROVED_PUBLISHER_CERTIFICATE_SHA256)) {
+    throw 'release_candidate_approved_publisher_not_configured'
+}
+$approval = $env:GPUBNB_APPROVED_PUBLISHER_CERTIFICATE_SHA256.Replace(' ', '').ToLowerInvariant()
+if ($approval -cne $expectedPublisher) {
+    throw 'release_candidate_publisher_approval_mismatch'
+}
+
 $sourceCommit = (& $git -C $repoRoot rev-parse HEAD | Out-String).Trim()
 Assert-ExitCode -Step 'git rev-parse'
 if ($sourceCommit -notmatch '^[0-9a-f]{40}$') {
@@ -73,6 +96,39 @@ if ($sourceCommit -notmatch '^[0-9a-f]{40}$') {
 if ($LASTEXITCODE -ne 0) { throw 'release_candidate_tracked_worktree_dirty' }
 & $git -C $repoRoot diff --cached --quiet --
 if ($LASTEXITCODE -ne 0) { throw 'release_candidate_index_dirty' }
+
+# Fail before invoking any signer or running unsigned Agent code.
+$expectedAgentHash = $UnsignedAgentSha256.Trim().ToLowerInvariant()
+if ($expectedAgentHash -cnotmatch '^[0-9a-f]{64}$' -or $expectedAgentHash -ceq ('0' * 64)) {
+    throw 'release_candidate_agent_expected_sha256_invalid'
+}
+if (-not (Test-Path -LiteralPath $UnsignedAgentPath -PathType Leaf)) {
+    throw 'release_candidate_unsigned_agent_missing'
+}
+$agentInput = (Resolve-Path -LiteralPath $UnsignedAgentPath -ErrorAction Stop).Path
+if ([IO.Path]::GetFileName($agentInput) -cne 'gpubnb-agent.exe') {
+    throw 'release_candidate_unsigned_agent_wrong_filename'
+}
+$observedAgentHash = (Get-FileHash -LiteralPath $agentInput -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($observedAgentHash -cne $expectedAgentHash) {
+    throw 'release_candidate_unsigned_agent_sha256_mismatch'
+}
+$agentInputSignature = Get-AuthenticodeSignature -LiteralPath $agentInput
+if ($agentInputSignature.Status -ne [System.Management.Automation.SignatureStatus]::NotSigned -or
+    $null -ne $agentInputSignature.SignerCertificate) {
+    throw 'release_candidate_agent_input_must_be_unsigned'
+}
+$agentBytes = [IO.File]::ReadAllBytes($agentInput)
+if ($agentBytes.Length -lt 512 -or [BitConverter]::ToUInt16($agentBytes, 0) -ne 0x5a4d) {
+    throw 'release_candidate_agent_invalid_pe'
+}
+$agentPe = [BitConverter]::ToInt32($agentBytes, 0x3c)
+if ($agentPe -lt 0 -or $agentPe + 264 -gt $agentBytes.Length -or
+    [BitConverter]::ToUInt32($agentBytes, $agentPe) -ne 0x4550 -or
+    [BitConverter]::ToUInt16($agentBytes, $agentPe + 4) -ne 0x8664 -or
+    [BitConverter]::ToUInt16($agentBytes, $agentPe + 24) -ne 0x20b) {
+    throw 'release_candidate_agent_not_amd64'
+}
 
 $thumbprint = "$env:GPUBNB_CODESIGN_THUMBPRINT".Replace(' ', '').ToUpperInvariant()
 $timestampUrl = "$env:GPUBNB_CODESIGN_TIMESTAMP_URL".Trim()
@@ -90,6 +146,9 @@ if (-not $signingCertificate) {
     throw "release_candidate_codesign_certificate_not_found:$thumbprint"
 }
 Assert-ProductionSigner -Certificate $signingCertificate
+if ((Get-CertificateSha256 -Certificate $signingCertificate) -cne $expectedPublisher) {
+    throw 'release_candidate_publisher_certificate_not_approved'
+}
 
 $resolvedHeaders = (Resolve-Path -LiteralPath $NvCodecHeadersDir).Path
 $header = Join-Path $resolvedHeaders 'nvEncodeAPI.h'
@@ -109,6 +168,11 @@ if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 }
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $output = (Resolve-Path -LiteralPath $OutputDirectory).Path
+
+if ([IO.Path]::GetFullPath($agentInput) -ieq
+    [IO.Path]::GetFullPath((Join-Path $output 'gpubnb-agent.exe'))) {
+    throw 'release_candidate_agent_input_must_be_separate_from_output'
+}
 
 # STEP 1: Build and sign the media DLL first. The worker embeds this publisher.
 $mediaProject = Join-Path $repoRoot 'native\windows-media\GPUbnbWindowsMedia.vcxproj'
@@ -208,13 +272,47 @@ if ($workerSignerSha256 -cne $mediaSignerSha256 -or
     throw 'release_candidate_user_mode_publisher_mismatch'
 }
 
+# STEP 4: Copy CI-built AMD64 Agent to release output before signing.
+# Never modify the downloaded unsigned source artifact.
+$agentCandidate = Join-Path $output 'gpubnb-agent.exe'
+if ($agentInput -ceq $agentCandidate) {
+    throw 'release_candidate_agent_input_must_be_separate_from_output'
+}
+Copy-Item -LiteralPath $agentInput -Destination $agentCandidate -Force
+if ((Get-FileHash -LiteralPath $agentCandidate -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expectedAgentHash) {
+    throw 'release_candidate_agent_staged_sha256_mismatch'
+}
+& (Join-Path $repoRoot 'scripts\sign-windows-authenticode.ps1') -Path @($agentCandidate)
+Assert-ExitCode -Step 'agent Authenticode signing'
+$agentCert = Get-ValidSigner -Path $agentCandidate
+Assert-ProductionSigner -Certificate $agentCert
+$agentSignerSha256 = Get-CertificateSha256 -Certificate $agentCert
+if ($agentSignerSha256 -cne $workerSignerSha256) {
+    throw 'release_candidate_agent_publisher_mismatch'
+}
+$agentInfoRaw = (& $agentCandidate build-info | Out-String).Trim()
+Assert-ExitCode -Step 'signed agent build-info'
+try {
+    $agentInfo = $agentInfoRaw | ConvertFrom-Json -ErrorAction Stop
+} catch {
+    throw 'release_candidate_agent_build_info_invalid'
+}
+if ($agentInfo.frozen -ne $true -or [string]$agentInfo.buildCommit -cne $sourceCommit.Substring(0, 12) -or
+    [string]$agentInfo.agentVersion -cne '0.6.6') {
+    throw 'release_candidate_agent_build_identity_mismatch'
+}
+
 $payload = [ordered]@{
     'GPUbnbWindowsMedia.dll' = $media
     'gpubnb-windows-worker.exe' = $worker
     'gpubnb-windows-stream.exe' = $helper
+    'gpubnb-agent.exe' = $agentCandidate
 }
 foreach ($entry in $payload.GetEnumerator()) {
-    Copy-Item -LiteralPath $entry.Value -Destination (Join-Path $output $entry.Key) -Force
+    $destination = Join-Path $output $entry.Key
+    if ([IO.Path]::GetFullPath($entry.Value) -ine [IO.Path]::GetFullPath($destination)) {
+        Copy-Item -LiteralPath $entry.Value -Destination $destination -Force
+    }
 }
 
 $files = @()
@@ -239,6 +337,9 @@ $manifest = [ordered]@{
     minimumNvidiaWindowsDriver = '570.00'
     nvencUpgradePolicy = 'SDK 13.1 requires NVIDIA Windows driver 610+ and a fresh physical qualification'
     userModePublisherCertificateSha256 = $workerSignerSha256
+    explicitlyApprovedPublisherSha256 = $expectedPublisher
+    agentUnsignedInputSha256 = $expectedAgentHash
+    agentBuildCommit = $sourceCommit.Substring(0, 12)
     files = $files
     iddDriverProductionSigningRequired = $true
     iddDriverIncluded = $false
