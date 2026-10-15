@@ -35,18 +35,35 @@ $childEnv=@{
     GIT_CONFIG_NOSYSTEM='1';GIT_CONFIG_GLOBAL=$emptyGitConfig;GIT_TERMINAL_PROMPT='0'
 }
 function Run([string]$Exe,[string[]]$Arguments,[string]$Directory=$work,[int]$TimeoutMs=1200000) {
+    # File redirection avoids waiting indefinitely for EOF held by an orphaned
+    # compiler/test descendant after its parent has exited. Only fixed build
+    # arguments are accepted; cmd metacharacters/expansion are rejected.
+    $id=[Guid]::NewGuid().ToString('N')
+    $outFile=Join-Path $work ($id+'.stdout.log')
+    $errFile=Join-Path $work ($id+'.stderr.log')
+    $batch=Join-Path $work ($id+'.cmd')
+    $words=@($Exe)+$Arguments
+    foreach($word in $words){if($word -match '[%\r\n"!^&<>|]'){throw 'build_argument_not_safe_for_fixed_batch'}}
+    $line=(@($words|ForEach-Object {'"'+$_+'"'}) -join ' ')
+    [IO.File]::WriteAllText($batch,('@echo off'+"`r`n"+$line+' 1>"'+$outFile+'" 2>"'+$errFile+'"'+"`r`n@exit /b %errorlevel%`r`n"),[Text.Encoding]::ASCII)
+    Write-Host ("Build process: "+[IO.Path]::GetFileName($Exe)+' '+($Arguments -join ' '))
     $si=[Diagnostics.ProcessStartInfo]::new()
-    $si.FileName=$Exe;$si.WorkingDirectory=$Directory;$si.UseShellExecute=$false
-    $si.RedirectStandardOutput=$true;$si.RedirectStandardError=$true
+    $si.FileName="$env:SystemRoot\System32\cmd.exe";$si.WorkingDirectory=$Directory;$si.UseShellExecute=$false
     $si.Environment.Clear()
     foreach($k in $childEnv.Keys){$si.Environment[$k]=$childEnv[$k]}
-    foreach($a in $Arguments){$si.ArgumentList.Add($a)}
+    foreach($a in @('/d','/v:off','/c',$batch)){$si.ArgumentList.Add($a)}
     $p=[Diagnostics.Process]::new();$p.StartInfo=$si
     try {
         if(-not $p.Start()){throw 'build_process_start_failed'}
-        $o=$p.StandardOutput.ReadToEndAsync();$e=$p.StandardError.ReadToEndAsync()
-        if(-not $p.WaitForExit($TimeoutMs)){$p.Kill($true);$p.WaitForExit();throw 'build_process_timeout'}
-        $stdout=$o.GetAwaiter().GetResult();$stderr=$e.GetAwaiter().GetResult()
+        $completed=$p.WaitForExit($TimeoutMs)
+        if(-not $completed){$p.Kill($true);[void]$p.WaitForExit(10000)}
+        $stdout=if(Test-Path -LiteralPath $outFile){[IO.File]::ReadAllText($outFile)}else{''}
+        $stderr=if(Test-Path -LiteralPath $errFile){[IO.File]::ReadAllText($errFile)}else{''}
+        if(-not $completed){
+            Write-Host $stdout.Substring([Math]::Max(0,$stdout.Length-18000))
+            Write-Host $stderr.Substring([Math]::Max(0,$stderr.Length-18000))
+            throw "build_process_timeout:$([IO.Path]::GetFileName($Exe))"
+        }
         if($p.ExitCode -ne 0){
             Write-Host $stdout.Substring([Math]::Max(0,$stdout.Length-18000))
             Write-Host $stderr.Substring([Math]::Max(0,$stderr.Length-18000))
