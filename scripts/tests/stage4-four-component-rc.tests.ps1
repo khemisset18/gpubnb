@@ -61,7 +61,7 @@ try {
     } 'release_candidate_unsigned_agent_sha256_mismatch'
     Test-Reject 'non-PE Agent rejected before signing' {
         & $Builder -NvCodecHeadersDir $folder -UnsignedAgentPath $missing -UnsignedAgentSha256 $actualHash
-    } 'release_candidate_agent_invalid_pe'
+    } 'release_candidate_agent_input_must_be_unsigned'
     Write-Host 'PASS negative preflight: no signing or trust-store mutations'
 } finally {
     Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
