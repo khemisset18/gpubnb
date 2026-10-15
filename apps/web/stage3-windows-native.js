@@ -113,6 +113,11 @@
       if(!access.openPath)throw new Error('URL d’accès sécurisée absente.');
       window.location.assign(access.openPath);
     }catch(error){
+      if(error.status===401){
+        setStatus('Session expirée. Reconnectez-vous avec Google ou par e-mail.');
+        window.location.assign(window.GPUBNB_BROWSER_NAVIGATION.loginHref('stage3-windows-native.html'));
+        return;
+      }
       setStatus(error.message||'Échec du test Stage 3.',true);
       button.disabled=false;
     }

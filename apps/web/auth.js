@@ -11,10 +11,7 @@ function configured(){return Boolean(cfg.supabaseUrl&&cfg.supabaseAnonKey&&!cfg.
 let sharedSupabaseClient;
 function supabaseClient(){if(!configured()){configHelp.hidden=false;throw new Error('Connexion Google/e-mail non configurée : complétez auth-config.js');}if(!window.supabase?.createClient)throw new Error('Le module Supabase n’a pas pu être chargé');sharedSupabaseClient ||= window.supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});return sharedSupabaseClient}
 function safeNext(){
- const next=new URLSearchParams(location.search).get('next')||'dashboard.html';
- const routes=new Set(['dashboard.html','host-install.html','machines.html','listings.html','publish.html','bookings.html','revenues.html','workspaces.html','index.html']);
- const normalized=next.endsWith('.html')?next:`${next}.html`;
- return routes.has(normalized)?normalized:'dashboard.html';
+ return window.GPUBNB_BROWSER_NAVIGATION.safeReturnPath(new URLSearchParams(location.search).get('next'));
 }
 function destination(needsOnboarding=false){
  const next=safeNext();
