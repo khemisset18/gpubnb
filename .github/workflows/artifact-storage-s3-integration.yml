@@ -29,7 +29,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  minio-roundtrip:
+  s3-real-roundtrip:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -44,36 +44,30 @@ jobs:
       - name: Install locked API dependencies
         working-directory: apps/api
         run: npm ci
-      - name: Start version-pinned S3-compatible MinIO from official Linux binary
+      - name: Start pinned SeaweedFS S3 server (real HTTP backend)
         shell: bash
-        env:
-          MINIO_VERSION: RELEASE.2025-09-07T16-13-09Z
-          MINIO_SHA256: 7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f
         run: |
           set -euo pipefail
-          binary="$RUNNER_TEMP/gpubnb-minio"
-          curl --fail --silent --show-error --location --retry 2 --connect-timeout 20 --max-time 180 \
-            "https://dl.min.io/server/minio/release/linux-amd64/minio.${MINIO_VERSION}" \
-            --output "$binary"
-          printf '%s  %s\n' "$MINIO_SHA256" "$binary" | sha256sum --check --status
-          chmod 0755 "$binary"
-          mkdir -p "$RUNNER_TEMP/gpubnb-minio-data"
-          MINIO_ROOT_USER=gpubnb-ci-access MINIO_ROOT_PASSWORD=gpubnb-ci-secret-key \
-            "$binary" server "$RUNNER_TEMP/gpubnb-minio-data" --address :9000 \
-            > "$RUNNER_TEMP/gpubnb-minio.log" 2>&1 &
-          echo "$!" > "$RUNNER_TEMP/gpubnb-minio.pid"
-          for _ in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
+          cat > "$RUNNER_TEMP/gpubnb-s3-credentials.json" <<'JSON'
+          {"identities":[{"name":"gpubnb-ci","credentials":[{"accessKey":"gpubnb-ci-access","secretKey":"gpubnb-ci-secret-key"}],"actions":["Admin","Read","Write"]}]}
+          JSON
+          docker run -d --rm --name gpubnb-s3 -p 127.0.0.1:9000:8333 \
+            -v "$RUNNER_TEMP/gpubnb-s3-credentials.json:/etc/gpubnb-s3.json:ro" \
+            chrislusf/seaweedfs@sha256:2c96cf02b8596dbf73c9fca5b90d9258f1953cdaaf4160009d3d02e796c9f0a6 \
+            server -s3 -dir=/data -s3.config=/etc/gpubnb-s3.json
+          for _ in $(seq 1 45); do
+            status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              http://127.0.0.1:9000/ || true)
+            if [ "$status" = "403" ] || [ "$status" = "200" ]; then
               exit 0
             fi
-            if ! kill -0 "$(cat "$RUNNER_TEMP/gpubnb-minio.pid")" 2>/dev/null; then
-              echo "MinIO exited before readiness"
-              cat "$RUNNER_TEMP/gpubnb-minio.log"
+            if ! docker ps --filter "name=^/gpubnb-s3$" --format '{{.ID}}' | grep -q .; then
+              docker logs gpubnb-s3
               exit 1
             fi
             sleep 1
           done
-          cat "$RUNNER_TEMP/gpubnb-minio.log"
+          docker logs gpubnb-s3
           exit 1
       - name: Real S3 put/get round trip
         working-directory: apps/api
@@ -93,17 +87,9 @@ jobs:
           ARTIFACT_S3_ACCESS_KEY_ID: gpubnb-ci-access
           ARTIFACT_S3_SECRET_ACCESS_KEY: gpubnb-ci-secret-key
         run: npx tsx --test test/artifact-storage-migration-s3.integration.test.ts
-      - name: MinIO diagnostics
+      - name: SeaweedFS S3 diagnostics
         if: failure()
-        shell: bash
-        run: |
-          if [ -f "$RUNNER_TEMP/gpubnb-minio.log" ]; then
-            tail -n 100 "$RUNNER_TEMP/gpubnb-minio.log"
-          fi
-      - name: Stop MinIO
+        run: docker logs gpubnb-s3 || true
+      - name: Stop SeaweedFS S3
         if: always()
-        shell: bash
-        run: |
-          if [ -f "$RUNNER_TEMP/gpubnb-minio.pid" ]; then
-            kill "$(cat "$RUNNER_TEMP/gpubnb-minio.pid")" || true
-          fi
+        run: docker stop gpubnb-s3 || true
