@@ -25,6 +25,7 @@ import {
   WS_REDIS_INPUT_MAX_BYTES,
   isStrictBase64Payload,
   websocketDataToBuffer,
+  websocketMessageIsBinary,
 } from './workspace-gateway-transport.js';
 
 const WebSocketServer=WebSocket.Server;
@@ -499,8 +500,9 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
             .finally(()=>{pumpBusy=false;});
         },20);
         let browserSendChain:Promise<void>=setup.then(()=>undefined);
-        ws.on('message',(data:WebSocket.Data,isBinary:boolean)=>{
+        ws.on('message',(data:WebSocket.Data,binaryMetadata?:boolean)=>{
           if(browserClosed)return;
+          const isBinary=websocketMessageIsBinary(data,binaryMetadata);
           let frame:Buffer;
           try{frame=websocketDataToBuffer(data);}catch(error){gatewayLog.error({err:error,event:'workspace_gateway_browser_frame_invalid',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser frame invalid');browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1003,'unsupported websocket frame');return;}
           if(!browserGatewayFrameAllowed(row.runtimeBackend,isBinary,frame.length)){

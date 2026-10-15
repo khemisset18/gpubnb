@@ -492,6 +492,19 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         self.usage_last_report.pop(session_id, None)
 
         if runtime is None:
+            # A lost/restarted Agent supervisor has no in-memory handle, but the
+            # helper/runtime may still exist. Use the helper's idempotent STOP as
+            # the physical absence/cleanup proof before releasing server claims.
+            # Never infer cleanup merely from missing in-memory state.
+            try:
+                stop_windows_native_workspace(session_id)
+            except Exception as exc:
+                self._trace(
+                    "native_stop_without_handle_failed",
+                    session_id=session_id,
+                    detail=f"code={_native_error_code(exc)}",
+                )
+                return False
             released = self._release_native_claims(session_id)
             if released:
                 with self._native_lock:
@@ -509,8 +522,8 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             return False
 
         released = self._release_native_claims(session_id)
-        if not released:
-            return False
+        if released is not True:
+            return released
         with self._native_lock:
             self.native_runtimes.pop(session_id, None)
             self._native_blocked.discard(session_id)

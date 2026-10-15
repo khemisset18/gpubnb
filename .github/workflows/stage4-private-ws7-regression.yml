@@ -1,0 +1,43 @@
+name: Stage 4 private ws7 binary frame regression
+on:
+  push:
+    branches:
+      - prep/stage4-private-gateway-ws7-20261015
+    paths:
+      - apps/api/src/workspace-gateway.ts
+      - apps/api/src/workspace-gateway-transport.ts
+      - apps/api/test/workspace-gateway-ws7-wire.test.ts
+      - .github/workflows/stage4-private-ws7-regression.yml
+  pull_request:
+    paths:
+      - apps/api/src/workspace-gateway.ts
+      - apps/api/src/workspace-gateway-transport.ts
+      - apps/api/test/workspace-gateway-ws7-wire.test.ts
+      - .github/workflows/stage4-private-ws7-regression.yml
+permissions:
+  contents: read
+concurrency:
+  group: stage4-ws7-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ws7-binary-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - name: Install exact locked dependencies, no audit bypass in ordinary CI
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client for WebSocket policy enums
+        run: npx prisma generate
+      - name: Exercise actual ws 7 network peers
+        run: npx tsx --test test/workspace-gateway-ws7-wire.test.ts

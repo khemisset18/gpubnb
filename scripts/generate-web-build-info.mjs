@@ -52,7 +52,7 @@ const value = {
 
 let source = await readFile(configPath, 'utf8');
 const apiUpdated = source.replace(
-  /window\.GPUBNB_API_URL = window\.GPUBNB_API_URL \|\| [^;]+;/,
+  /window\.GPUBNB_API_URL = window\.GPUBNB_API_URL \|\|\s+[^;]+;/,
   'window.GPUBNB_API_URL = window.GPUBNB_API_URL || "/api";',
 );
 if (apiUpdated === source && !source.includes('window.GPUBNB_API_URL = window.GPUBNB_API_URL || "/api";')) {
@@ -60,11 +60,22 @@ if (apiUpdated === source && !source.includes('window.GPUBNB_API_URL = window.GP
 }
 source = apiUpdated;
 const gatewayUpdated = source.replace(
-  /window\.GPUBNB_GATEWAY_URL = window\.GPUBNB_GATEWAY_URL \|\| [^;]+;/,
+  /window\.GPUBNB_GATEWAY_URL = window\.GPUBNB_GATEWAY_URL \|\|\s+[^;]+;/,
   `window.GPUBNB_GATEWAY_URL = window.GPUBNB_GATEWAY_URL || ${JSON.stringify(gatewayOrigin)};`,
 );
 if (gatewayUpdated === source) throw new Error('gateway_url_marker_not_found');
 source = gatewayUpdated;
+// The private same-origin override is intentionally present only in the
+// private Render source tree. Never ship provider-specific routing logic
+// inside generated public Netlify artifacts.
+if (isHostedBuild) {
+  const privateStage3Config =
+    /\/\/ Private Stage 3 Render deployments[^\n]*\n\/\/ authenticate[^\n]*\nconst GPUBNB_STAGE3_RENDER_SAME_ORIGIN =\n[\s\S]*?;\n\n/;
+  source = source.replace(privateStage3Config, '');
+  if (source.includes('GPUBNB_STAGE3_RENDER_SAME_ORIGIN')) {
+    throw new Error('private_stage3_routing_leaked_to_public_build');
+  }
+}
 const buildUpdated = source.replace(
   /window\.GPUBNB_BUILD = window\.GPUBNB_BUILD \|\| \{[\s\S]*?\n\};/,
   `window.GPUBNB_BUILD = window.GPUBNB_BUILD || ${JSON.stringify(value, null, 2)};`,
