@@ -190,15 +190,15 @@ test('cleanup is fail closed and expired sessions are stopped',()=>{
 
 test('windows native grant redirect is an absolute HTTPS URL', () => {
   assert.match(
-    source,
+    api,
     /const host=String\(request\.headers\.host\|\|''\)\.trim\(\);/,
   );
   assert.match(
-    source,
+    api,
     /new URL\([\s\S]*\/windows-native-desktop\.html\?session=\$\{encodeURIComponent\(sessionId\)\}[\s\S]*`https:\/\/\$\{host\}`[\s\S]*\)\.toString\(\)/,
   );
   assert.match(
-    source,
+    api,
     /\.code\(302\)\.header\('Location',target\)\.send\(\)/,
   );
 });
