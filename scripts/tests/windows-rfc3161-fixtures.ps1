@@ -44,7 +44,7 @@ function PublicHttp([string]$Url,[string]$Method='GET') {
             $r=$client.PostAsync($Url,$content).GetAwaiter().GetResult()
         }else{$r=$client.GetAsync($Url).GetAwaiter().GetResult()}
         $b=$r.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
-        [ordered]@{url=$Url;method=$Method;status=[int]$r.StatusCode;contentType=[string]$r.Content.Headers.ContentType;length=$b.Length;firstBytesHex=[Convert]::ToHexString($b[0..([Math]::Min(15,$b.Length-1))]);sha256=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($b)).ToLowerInvariant()}
+        [ordered]@{url=$Url;method=$Method;status=[int]$r.StatusCode;contentType=[string]$r.Content.Headers.ContentType;length=$b.Length;firstBytesHex=if($b.Length -gt 0){[Convert]::ToHexString($b[0..([Math]::Min(15,$b.Length-1))])}else{''};sha256=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($b)).ToLowerInvariant()}
     }catch{[ordered]@{url=$Url;method=$Method;errorType=$_.Exception.GetType().Name}}
     finally{if($r){$r.Dispose()};if($content){$content.Dispose()};$client.Dispose();$h.Dispose()}
 }

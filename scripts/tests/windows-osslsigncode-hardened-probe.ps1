@@ -161,8 +161,14 @@ function Invoke-ProbeTool([string]$FilePath, [string[]]$Arguments, [int]$Timeout
         }
     } finally { $p.Dispose() }
 }
-function Get-LeafCrl($Control,[string]$Name) {
-    if(-not $Control.HandshakeSucceeded -or -not $Control.LeafCertificateDerBase64){throw 'crl_requires_authenticated_public_tls_certificate'}
+function Get-LeafCrl($Control,[string]$Name,[switch]$KnownExpiredFixture) {
+    # Negative fixture metadata is public even when the handshake is rejected.
+    # This never changes the TLS callback or adds any certificate to trust.
+    $rejectedFixture=$KnownExpiredFixture -and $Control.Host -ceq 'expired.badssl.com' -and
+        $Control.CallbackReached -and $Control.PolicyErrors -match 'RemoteCertificateChainErrors' -and
+        $Control.ChainStatuses -contains 'NotTimeValid'
+    if((-not $Control.HandshakeSucceeded -and -not $rejectedFixture) -or -not $Control.LeafCertificateDerBase64){throw 'crl_requires_authenticated_peer_or_explicit_expired_negative_fixture'}
+
     $leaf=Join-Path $scratch ($Name+'-leaf.pem')
     $der=[Convert]::FromBase64String($Control.LeafCertificateDerBase64)
     $text="-----BEGIN CERTIFICATE-----`n"+[Convert]::ToBase64String($der,[Base64FormattingOptions]::InsertLineBreaks)+"`n-----END CERTIFICATE-----`n"
@@ -175,7 +181,7 @@ function Get-LeafCrl($Control,[string]$Name) {
     # Only known public CA distribution hosts are allowed; no local endpoints.
     $u=[Uri]$urls[0]
     if($u.UserInfo -ne '' -or $u.Fragment -ne '' -or -not $u.IsDefaultPort -or
-        $u.Host -notmatch '(?i)(^|\.)(lencr\.org|digicert\.com|sectigo\.com|pki\.goog|amazontrust\.com)$') {throw 'crl_distribution_host_not_allowlisted'}
+        $u.Host -notmatch '(?i)(^|\.)(lencr\.org|digicert\.com|sectigo\.com|comodoca\.com|pki\.goog|amazontrust\.com)$') {throw 'crl_distribution_host_not_allowlisted'}
     $h=[Net.Http.HttpClientHandler]::new();$h.UseProxy=$false;$h.UseDefaultCredentials=$false;$h.AllowAutoRedirect=$false
     $client=[Net.Http.HttpClient]::new($h);$client.Timeout=[TimeSpan]::FromSeconds(20)
     try {
@@ -196,8 +202,8 @@ function Get-LeafCrl($Control,[string]$Name) {
     }finally{$client.Dispose();$h.Dispose()}
 }
 function Test-InvalidRfc3161 {
-    $url='https://httpbingo.org/response-headers?Content-Type=application%2Ftimestamp-reply'
-    $control=[PublicTlsControl]::Check('httpbingo.org')
+    $url='https://httpbin.org/response-headers?Content-Type=application%2Ftimestamp-reply'
+    $control=[PublicTlsControl]::Check('httpbin.org')
     if(-not $control.HandshakeSucceeded){throw 'malformed_response_tls_control_failed'}
     $invalidCrl=Get-LeafCrl $control 'malformed-response'
     $control.LeafCertificateDerBase64=$null
@@ -209,6 +215,7 @@ function Test-InvalidRfc3161 {
         $r=$client.PostAsync($url,$content).GetAwaiter().GetResult()
         try {
             $body=$r.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
+            $report.invalidRfc3161Control=[ordered]@{url=$url;httpStatus=[int]$r.StatusCode;contentType=[string]$r.Content.Headers.ContentType;length=$body.Length;firstByte=if($body.Length -gt 0){[int]$body[0]}else{$null}}
             if([int]$r.StatusCode -ne 200 -or $r.Content.Headers.ContentType.MediaType -cne 'application/timestamp-reply' -or
                 $body.Length -eq 0 -or $body[0] -ne 0x7b){throw 'malformed_rfc3161_response_not_independently_observed'}
             $target=Join-Path $scratch 'invalid-rfc3161.exe'
@@ -390,8 +397,10 @@ try {
         @{name='expired-peer';host='expired.badssl.com';pattern='TLS_FAIL_CLOSED: certificate verification: certificate has expired'}
     )) {
         $control = [PublicTlsControl]::Check($test.host)
+        $testCrl=$crl
+        if($test.name -ceq 'expired-peer'){$testCrl=Get-LeafCrl $control 'expired-negative' -KnownExpiredFixture}
         $target = Join-Path $scratch ($test.name+'.exe')
-        $diagnostic = Invoke-ProbeTool $ossl.FullName @('add','-h','sha256','-ts',("https://"+$test.host+"/"),'-HTTPS-CAfile',$ca,'-HTTPS-CRLfile',$crl,'-verbose','-in',$fixture,'-out',$target)
+        $diagnostic = Invoke-ProbeTool $ossl.FullName @('add','-h','sha256','-ts',("https://"+$test.host+"/"),'-HTTPS-CAfile',$ca,'-HTTPS-CRLfile',$testCrl,'-verbose','-in',$fixture,'-out',$target)
         $combined = $diagnostic.stdout + [Environment]::NewLine + $diagnostic.stderr
         $expectedControl = if ($test.name -ceq 'untrusted-peer') {
             $control.CallbackReached -and $control.PolicyErrors -match 'RemoteCertificateChainErrors'
