@@ -1,0 +1,34 @@
+name: stage4-osslsigncode-isolated-proof
+on:
+  push:
+    branches: [prep/stage4-osslsigncode-probe-20261015]
+    paths:
+      - scripts/tests/windows-osslsigncode-probe.ps1
+      - .github/workflows/stage4-osslsigncode-probe.yml
+permissions:
+  contents: read
+concurrency:
+  group: stage4-osslsigncode-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  no-key-public-fixture:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Parse probe before any third-party execution
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/tests/windows-osslsigncode-probe.ps1'), [ref]$tokens, [ref]$errors)
+          if ($errors.Count -ne 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
+      - name: RFC 3161 fixture proof and strict TLS negative controls
+        shell: pwsh
+        run: |
+          & ./scripts/tests/windows-osslsigncode-probe.ps1
+          if (-not $?) { exit 1 }
+# Results are emitted to logs only: no artifacts, cache, secrets or paid storage.
