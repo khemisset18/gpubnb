@@ -33,6 +33,14 @@ $childEnv=@{
     SystemRoot=$env:SystemRoot;WINDIR=$env:WINDIR;TEMP=$work;TMP=$work
     PATH="$env:SystemRoot\System32;C:\Program Files\CMake\bin;C:\Program Files\Git\cmd;C:\Strawberry\perl\bin"
     GIT_CONFIG_NOSYSTEM='1';GIT_CONFIG_GLOBAL=$emptyGitConfig;GIT_TERMINAL_PROMPT='0'
+    VSCMD_SKIP_SENDTELEMETRY='1'
+}
+if($env:RUNNER_TRACKING_ID){$childEnv['RUNNER_TRACKING_ID']=$env:RUNNER_TRACKING_ID}
+function Read-BuildLog([string]$Path) {
+    if(-not (Test-Path -LiteralPath $Path)){return ''}
+    $stream=[IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+    $reader=[IO.StreamReader]::new($stream)
+    try{return $reader.ReadToEnd()}finally{$reader.Dispose();$stream.Dispose()}
 }
 function Run([string]$Exe,[string[]]$Arguments,[string]$Directory=$work,[int]$TimeoutMs=1200000) {
     # File redirection avoids waiting indefinitely for EOF held by an orphaned
@@ -57,8 +65,8 @@ function Run([string]$Exe,[string[]]$Arguments,[string]$Directory=$work,[int]$Ti
         if(-not $p.Start()){throw 'build_process_start_failed'}
         $completed=$p.WaitForExit($TimeoutMs)
         if(-not $completed){$p.Kill($true);[void]$p.WaitForExit(10000)}
-        $stdout=if(Test-Path -LiteralPath $outFile){[IO.File]::ReadAllText($outFile)}else{''}
-        $stderr=if(Test-Path -LiteralPath $errFile){[IO.File]::ReadAllText($errFile)}else{''}
+        $stdout=Read-BuildLog $outFile
+        $stderr=Read-BuildLog $errFile
         if(-not $completed){
             Write-Host $stdout.Substring([Math]::Max(0,$stdout.Length-18000))
             Write-Host $stderr.Substring([Math]::Max(0,$stderr.Length-18000))
