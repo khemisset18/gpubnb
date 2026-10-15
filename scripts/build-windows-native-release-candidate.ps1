@@ -12,7 +12,11 @@ param(
     [string]$UnsignedAgentPath,
 
     [Parameter(Mandatory = $true)]
-    [string]$UnsignedAgentSha256
+    [string]$UnsignedAgentSha256,
+
+    # Approved PUBLIC certificate fingerprint; no key material in this parameter.
+    [Parameter(Mandatory = $true)]
+    [string]$ExpectedPublisherSha256
 )
 
 Set-StrictMode -Version Latest
@@ -69,6 +73,18 @@ $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $git = (Get-Command git.exe -ErrorAction Stop).Source
 $cargo = (Get-Command cargo.exe -ErrorAction Stop).Source
 $msbuild = (Get-Command msbuild.exe -ErrorAction Stop).Source
+
+$expectedPublisher = $ExpectedPublisherSha256.Replace(' ', '').ToLowerInvariant()
+if ($expectedPublisher -cnotmatch '^[a-f0-9]{64}$' -or $expectedPublisher -ceq ('0' * 64)) {
+    throw 'release_candidate_approved_publisher_sha256_invalid'
+}
+if ([string]::IsNullOrWhiteSpace($env:GPUBNB_APPROVED_PUBLISHER_CERTIFICATE_SHA256)) {
+    throw 'release_candidate_approved_publisher_not_configured'
+}
+$approval = $env:GPUBNB_APPROVED_PUBLISHER_CERTIFICATE_SHA256.Replace(' ', '').ToLowerInvariant()
+if ($approval -cne $expectedPublisher) {
+    throw 'release_candidate_publisher_approval_mismatch'
+}
 
 $sourceCommit = (& $git -C $repoRoot rev-parse HEAD | Out-String).Trim()
 Assert-ExitCode -Step 'git rev-parse'
@@ -130,6 +146,9 @@ if (-not $signingCertificate) {
     throw "release_candidate_codesign_certificate_not_found:$thumbprint"
 }
 Assert-ProductionSigner -Certificate $signingCertificate
+if ((Get-CertificateSha256 -Certificate $signingCertificate) -cne $expectedPublisher) {
+    throw 'release_candidate_publisher_certificate_not_approved'
+}
 
 $resolvedHeaders = (Resolve-Path -LiteralPath $NvCodecHeadersDir).Path
 $header = Join-Path $resolvedHeaders 'nvEncodeAPI.h'
@@ -318,6 +337,7 @@ $manifest = [ordered]@{
     minimumNvidiaWindowsDriver = '570.00'
     nvencUpgradePolicy = 'SDK 13.1 requires NVIDIA Windows driver 610+ and a fresh physical qualification'
     userModePublisherCertificateSha256 = $workerSignerSha256
+    explicitlyApprovedPublisherSha256 = $expectedPublisher
     agentUnsignedInputSha256 = $expectedAgentHash
     agentBuildCommit = $sourceCommit.Substring(0, 12)
     files = $files
