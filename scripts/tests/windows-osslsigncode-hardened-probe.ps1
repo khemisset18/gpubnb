@@ -385,7 +385,7 @@ try {
     }
     $report.failClosedConfigurationProven=$true
     foreach ($test in @(
-        @{name='untrusted-peer';host='self-signed.badssl.com';pattern='certificate verify failed|self.signed|unable to get local issuer certificate'},
+        @{name='untrusted-peer';host='self-signed.badssl.com';pattern='TLS_FAIL_CLOSED: certificate verification: (self.signed certificate|unable to get local issuer certificate|unable to verify the first certificate)'},
         @{name='wrong-host';host='wrong.host.badssl.com';pattern='TLS_FAIL_CLOSED: certificate verification: hostname mismatch'},
         @{name='expired-peer';host='expired.badssl.com';pattern='TLS_FAIL_CLOSED: certificate verification: certificate has expired'}
     )) {

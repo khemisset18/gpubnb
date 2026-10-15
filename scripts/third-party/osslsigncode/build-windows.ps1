@@ -7,11 +7,21 @@ if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_OS -cne 'Windows' -or
     $env:GITHUB_REF_NAME -cne 'prep/stage4-osslsigncode-hardened-20261015') {
     throw 'hardened_build_requires_isolated_hosted_windows_branch'
 }
+function Get-RootStoreSnapshot {
+    $rows=foreach($scope in @('CurrentUser','LocalMachine')){
+        Get-ChildItem -LiteralPath "Cert:\$scope\Root" | ForEach-Object {
+            "$scope|$($_.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256))"
+        }
+    }
+    return @($rows|Sort-Object -Unique)
+}
+$rootsBeforeBuild=@(Get-RootStoreSnapshot)
 $base=[IO.Path]::GetFullPath($env:RUNNER_TEMP)+[IO.Path]::DirectorySeparatorChar
 $work=[IO.Path]::GetFullPath($OutputDirectory)
 if (-not $work.StartsWith($base,[StringComparison]::OrdinalIgnoreCase) -or
     (Test-Path -LiteralPath $work)) { throw 'build_destination_must_be_new_runner_temp_directory' }
 [void](New-Item -ItemType Directory -Path $work)
+"GPUBNB_HARDENED_BUILD_ROOT=$work" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 $lock=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'sources.lock.json') -Raw | ConvertFrom-Json
 $patch=Join-Path $PSScriptRoot 'tls-fail-closed.patch'
 if ((Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lock.patchSha256) { throw 'hardening_patch_hash_mismatch' }
@@ -138,7 +148,9 @@ Write-Host 'Building pinned OpenSSL 3.5.9 LTS (static AMD64, upstream tests enab
 $provenance.opensslConfigure=@('Configure','VC-WIN64A','no-shared','no-asm',"--prefix=$prefix","--openssldir=$prefix\ssl")
 [void](Run $perl $provenance.opensslConfigure $opensslSrc)
 [void](Run $nmake @('/nologo') $opensslSrc)
-$testLog=Run $nmake @('/nologo','test') $opensslSrc
+Write-Host 'OpenSSL compilation complete; starting all upstream tests with four TAP workers.'
+$provenance.opensslTestArguments=@('/nologo','test','HARNESS_JOBS=4','VERBOSE_FAILURE=yes')
+$testLog=Run $nmake $provenance.opensslTestArguments $opensslSrc
 Write-Host $testLog.Substring([Math]::Max(0,$testLog.Length-9000))
 $provenance.opensslUpstreamTestsPassed=$true
 [void](Run $nmake @('/nologo','install_sw') $opensslSrc)
@@ -151,6 +163,9 @@ $ztests=Run $ctest @('--test-dir',$zbuild,'--output-on-failure','--no-tests=erro
 Write-Host $ztests
 $provenance.zlibUpstreamTestsPassed=$true
 [void](Run $cmake @('--install',$zbuild))
+$provenance.installedDependencyBinaries=@(Get-ChildItem -LiteralPath $prefix -Recurse -File | Where-Object { $_.Extension -in @('.lib','.dll','.exe') } | Sort-Object FullName | ForEach-Object {
+    [ordered]@{relativePath=$_.FullName.Substring($prefix.Length+1);sizeBytes=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}
+})
 $obuild=Join-Path $work 'osslsigncode-build'
 Write-Host 'Building osslsigncode 2.14-gpubnb-tls1 with pinned static dependencies.'
 $provenance.osslsigncodeConfigure=@('-S',$src,'-B',$obuild,'-G','NMake Makefiles','-DCMAKE_BUILD_TYPE=Release',"-DOPENSSL_ROOT_DIR=$prefix",'-DOPENSSL_USE_STATIC_LIBS=TRUE',"-DZLIB_ROOT=$prefix",'-DCMAKE_DISABLE_FIND_PACKAGE_Python3=TRUE')
@@ -168,6 +183,8 @@ if($headers -notmatch '8664 machine \(x64\)' -or
 if($dependents -match '(?i)libssl|libcrypto|zlib.*\.dll'){throw 'unexpected_dynamic_dependency'}
 $provenance.peSecurity=[ordered]@{amd64=$true;aslr=$true;nx=$true;cfg=$true;highEntropyVA=$true;staticOpenSslAndZlib=$true;headers=$headers;dependents=$dependents}
 $provenance.tool=[ordered]@{path=$tool;sizeBytes=(Get-Item -LiteralPath $tool).Length;sha256=(Get-FileHash -LiteralPath $tool -Algorithm SHA256).Hash.ToLowerInvariant();authenticodeStatus=[string](Get-AuthenticodeSignature -LiteralPath $tool).Status}
+$provenance.rootStoresUnchanged=(@(Compare-Object $rootsBeforeBuild @(Get-RootStoreSnapshot)).Count -eq 0)
+if(-not $provenance.rootStoresUnchanged){throw 'root_store_changed_during_build'}
 $provenance.completedAtUtc=[DateTime]::UtcNow.ToString('o')
 $manifest=Join-Path $work 'build-manifest.json'
 $provenance|ConvertTo-Json -Depth 12|Set-Content -LiteralPath $manifest -Encoding utf8NoBOM
