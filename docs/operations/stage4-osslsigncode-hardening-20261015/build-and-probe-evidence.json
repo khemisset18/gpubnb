@@ -1,0 +1,677 @@
+{
+  "build": {
+    "schemaVersion": 1,
+    "workflowCommit": "d21af2fbf1f110dff5c0cab7a460035fb2ddefa6",
+    "workflowRunId": "38670517814",
+    "repository": "khemisset18/gpubnb",
+    "builtAtUtc": "2026-10-15T02:21:31.5112222Z",
+    "windowsVersion": "10.0.20348.0",
+    "architecture": "AMD64",
+    "sources": {
+      "schemaVersion": 1,
+      "osslsigncode": {
+        "repository": "mtrojnar/osslsigncode",
+        "tag": "2.14",
+        "sourceCommit": "beec94e308d1a1e03ca17b05fe089d93c6303e90",
+        "license": "GPL-3.0-or-later WITH OpenSSL-exception",
+        "auditedForkVersion": "2.14-gpubnb-tls1"
+      },
+      "openssl": {
+        "version": "3.5.9",
+        "supportUntil": "2030-04-08",
+        "sourceCommit": "45e844fa2a14ec92d146bd8f5778ac130b6625fb",
+        "archive": "openssl-3.5.9.tar.gz",
+        "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz",
+        "sha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a",
+        "sizeBytes": 53279637
+      },
+      "zlib": {
+        "version": "1.3.2",
+        "archive": "zlib-1.3.2.tar.gz",
+        "url": "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz",
+        "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
+        "sizeBytes": 1502830
+      },
+      "patchSha256": "1dc68b278a134d0b9ea3408d7886b5cba946157df7f9a9fb2da07bc2775237e5",
+      "tlsPolicy": {
+        "minimumProtocol": "TLS1.2",
+        "explicitTrustedRootsRequired": true,
+        "expectedDnsSanRequired": true,
+        "partialWildcardsAllowed": false,
+        "leafCrlRequired": true,
+        "certificateErrorWaivers": false,
+        "httpsTimestampOnly": true,
+        "timeoutSeconds": 30,
+        "disableVerificationOptionAllowed": false
+      },
+      "gpuBnbSigningOrOperationAuthorized": false,
+      "extraCostEuros": 0
+    },
+    "gpuBnbPrivateKeyUsed": false,
+    "gpuBnbBinarySigned": false,
+    "rootStoresModified": false,
+    "machineConfigurationModified": false,
+    "compilerTools": [
+      {
+        "name": "cl.exe",
+        "path": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+        "version": "14.44.35229.0",
+        "sha256": "fe251ef50a1545b1b0835ee17b1e785459712b38d79e45b5c1d3d28970a36619"
+      },
+      {
+        "name": "link.exe",
+        "path": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\link.exe",
+        "version": "14.44.35229.0",
+        "sha256": "a364af801a8539e4324d9489313dbf001d959128451fc99a27b24676bbac058f"
+      },
+      {
+        "name": "nmake.exe",
+        "path": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\nmake.exe",
+        "version": "14.44.35229.0",
+        "sha256": "ce6b50c2d8e6704b671ec116e52ce9d2fbc1d20dd28c5b895b5421adddf94ebb"
+      },
+      {
+        "name": "perl.exe",
+        "path": "C:\\Strawberry\\perl\\bin\\perl.exe",
+        "version": "5.32.1.1",
+        "sha256": "4d61ebe19311dbf7b9710ac2c6c402e3cba3e23b63e8b82be88e471343bed52d"
+      },
+      {
+        "name": "cmake.exe",
+        "path": "C:\\Program Files\\CMake\\bin\\cmake.exe",
+        "version": "3.31.6",
+        "sha256": "3fe22eb02e1c6184ec207366ed21a6f2f9c3828c1e9f3324546befadfb362be3"
+      },
+      {
+        "name": "git.exe",
+        "path": "C:\\Program Files\\Git\\cmd\\git.exe",
+        "version": "2.56.0.windows.2",
+        "sha256": "54bda91c773c6bba2b970424423cfcb80552d92dc6967d766f98931fe1251a54"
+      }
+    ],
+    "compilerVersion": "14.44.35207",
+    "windowsSdkVersion": "10.0.26100.0\\",
+    "upstreamPgpSignatureVerified": false,
+    "reproducibleBuildProven": false,
+    "isolatedToolOnly": true,
+    "extraCostEuros": 0,
+    "patchedSources": [
+      {
+        "path": "osslsigncode.c",
+        "sha256": "db2f93ebcd96084e6ea66d863a8a75228f3c06d301f7846369f9012467b5b01c"
+      },
+      {
+        "path": "CMakeLists.txt",
+        "sha256": "ed99b7fc17f4aa44fa197229a222fd7e7b6673fd398b7de0a4bde365f53b9950"
+      }
+    ],
+    "opensslConfigure": [
+      "Configure",
+      "VC-WIN64A",
+      "no-shared",
+      "no-asm",
+      "--prefix=D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix",
+      "--openssldir=D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix\\ssl"
+    ],
+    "opensslTestArguments": [
+      "/nologo",
+      "test",
+      "HARNESS_JOBS=4",
+      "VERBOSE_FAILURE=yes"
+    ],
+    "opensslUpstreamTestsPassed": true,
+    "opensslVersion": "OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)\r\nbuilt on: Thu Oct 15 02:24:03 2026 UTC\r\nplatform: VC-WIN64A\r\noptions:  bn(64,64)\r\ncompiler: cl  /Zi /Fdossl_static.pdb /MT /Zl /GF /Gy /W3 /wd4090 /nologo /O2 -DL_ENDIAN -DOPENSSL_PIC -D\"OPENSSL_BUILDING_OPENSSL\" -D\"OPENSSL_SYS_WIN32\" -D\"WIN32_LEAN_AND_MEAN\" -D\"UNICODE\" -D\"_UNICODE\" -D\"_CRT_SECURE_NO_DEPRECATE\" -D\"_WINSOCK_DEPRECATED_NO_WARNINGS\" -D\"NDEBUG\"\r\nOPENSSLDIR: \"D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix\\ssl\"\r\nENGINESDIR: \"D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix\\lib\\engines-3\"\r\nMODULESDIR: \"D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix\\lib\\ossl-modules\"\r\nSeeding source: os-specific\r\nCPUINFO: N/A",
+    "zlibUpstreamTestsPassed": true,
+    "installedDependencyBinaries": [
+      {
+        "relativePath": "bin\\openssl.exe",
+        "sizeBytes": 5073920,
+        "sha256": "d2091378823c1f589c950065688bd6009bfee2b73117a58fc6047678945c9492"
+      },
+      {
+        "relativePath": "lib\\libcrypto.lib",
+        "sizeBytes": 47797158,
+        "sha256": "86a406d0633ecde5ddac2ccfd0c74d8599b72b0e11969c1cea67dd4e66162b12"
+      },
+      {
+        "relativePath": "lib\\libssl.lib",
+        "sizeBytes": 9872482,
+        "sha256": "7362f4fe6820910bed677481af560ff53734a30f6daa51af922d8f32db8cd734"
+      },
+      {
+        "relativePath": "lib\\ossl-modules\\legacy.dll",
+        "sizeBytes": 5451776,
+        "sha256": "3b0e6042cf9c085b27a7c401c315c3c7b819b2c415562c44b9aa90502c7bbc5b"
+      },
+      {
+        "relativePath": "lib\\zs.lib",
+        "sizeBytes": 200288,
+        "sha256": "d15364c0cc99434affd702f6974d9fdb325ff2f25533fc6da74bcc7669e36fa9"
+      }
+    ],
+    "zlibVersionProof": "zlib_compile=1.3.2\r\nzlib_runtime=1.3.2",
+    "zlibStaticLibrarySha256": "d15364c0cc99434affd702f6974d9fdb325ff2f25533fc6da74bcc7669e36fa9",
+    "osslsigncodeConfigure": [
+      "-S",
+      "D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\osslsigncode-source",
+      "-B",
+      "D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\osslsigncode-build",
+      "-G",
+      "NMake Makefiles",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DOPENSSL_ROOT_DIR=D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix",
+      "-DOPENSSL_USE_STATIC_LIBS=TRUE",
+      "-DZLIB_ROOT=D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix",
+      "-DZLIB_LIBRARY:FILEPATH=D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix\\lib\\zs.lib",
+      "-DZLIB_INCLUDE_DIR:PATH=D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix\\include",
+      "-DCMAKE_DISABLE_FIND_PACKAGE_Python3=TRUE"
+    ],
+    "toolVersion": "osslsigncode 2.14-gpubnb-tls1, using:\r\n\tOpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)\r\nNo default -CAfile location detected\r\n\r\nPlease send bug-reports to Michal.Trojnara@stunnel.org",
+    "peSecurity": {
+      "amd64": true,
+      "aslr": true,
+      "nx": true,
+      "cfg": true,
+      "highEntropyVA": true,
+      "staticOpenSslAndZlib": true,
+      "headers": "Microsoft (R) COFF/PE Dumper Version 14.44.35229.0\r\nCopyright (C) Microsoft Corporation.  All rights reserved.\r\n\r\n\r\nDump of file D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\osslsigncode-build\\osslsigncode.exe\r\n\r\nPE signature found\r\n\r\nFile Type: EXECUTABLE IMAGE\r\n\r\nFILE HEADER VALUES\r\n            8664 machine (x64)\r\n               6 number of sections\r\n        6AD03D6C time date stamp Thu Oct 15 02:41:48 2026\r\n               0 file pointer to symbol table\r\n               0 number of symbols\r\n              F0 size of optional header\r\n              22 characteristics\r\n                   Executable\r\n                   Application can handle large (>2GB) addresses\r\n\r\nOPTIONAL HEADER VALUES\r\n             20B magic # (PE32+)\r\n           14.44 linker version\r\n          33BC00 size of code\r\n          193600 size of initialized data\r\n               0 size of uninitialized data\r\n          33B980 entry point (000000014033B980) mainCRTStartup\r\n            1000 base of code\r\n       140000000 image base (0000000140000000 to 00000001404D3FFF)\r\n            1000 section alignment\r\n             200 file alignment\r\n            6.00 operating system version\r\n            0.00 image version\r\n            6.00 subsystem version\r\n               0 Win32 version\r\n          4D4000 size of image\r\n             400 size of headers\r\n               0 checksum\r\n               3 subsystem (Windows CUI)\r\n            C160 DLL characteristics\r\n                   High Entropy Virtual Addresses\r\n                   Dynamic base\r\n                   NX compatible\r\n                   Control Flow Guard\r\n                   Terminal Server Aware\r\n          100000 size of stack reserve\r\n            1000 size of stack commit\r\n          100000 size of heap reserve\r\n            1000 size of heap commit\r\n               0 loader flags\r\n              10 number of directories\r\n          4859D0 [      54] RVA [size] of Export Directory\r\n          485A24 [     168] RVA [size] of Import Directory\r\n          4C5000 [     1E0] RVA [size] of Resource Directory\r\n          493000 [   31B24] RVA [size] of Exception Directory\r\n               0 [       0] RVA [size] of Certificates Directory\r\n          4C6000 [    D0BC] RVA [size] of Base Relocation Directory\r\n          43E710 [      70] RVA [size] of Debug Directory\r\n               0 [       0] RVA [size] of Architecture Directory\r\n               0 [       0] RVA [size] of Global Pointer Directory\r\n               0 [       0] RVA [size] of Thread Storage Directory\r\n          43E5D0 [     140] RVA [size] of Load Configuration Directory\r\n               0 [       0] RVA [size] of Bound Import Directory\r\n          33D000 [     848] RVA [size] of Import Address Table Directory\r\n               0 [       0] RVA [size] of Delay Import Directory\r\n               0 [       0] RVA [size] of COM Descriptor Directory\r\n               0 [       0] RVA [size] of Reserved Directory\r\n\r\n\r\nSECTION HEADER #1\r\n   .text name\r\n  33BAEC virtual size\r\n    1000 virtual address (0000000140001000 to 000000014033CAEB)\r\n  33BC00 size of raw data\r\n     400 file pointer to raw data (00000400 to 0033BFFF)\r\n       0 file pointer to relocation table\r\n       0 file pointer to line numbers\r\n       0 number of relocations\r\n       0 number of line numbers\r\n60000020 flags\r\n         Code\r\n         Execute Read\r\n\r\nSECTION HEADER #2\r\n  .rdata name\r\n  14A3F2 virtual size\r\n  33D000 virtual address (000000014033D000 to 00000001404873F1)\r\n  14A400 size of raw data\r\n  33C000 file pointer to raw data (0033C000 to 004863FF)\r\n       0 file pointer to relocation table\r\n       0 file pointer to line numbers\r\n       0 number of relocations\r\n       0 number of line numbers\r\n40000040 flags\r\n         Initialized Data\r\n         Read Only\r\n\r\n  Debug Directories\r\n\r\n        Time Type        Size      RVA  Pointer\r\n    -------- ------- -------- -------- --------\r\n    6AD03D6C cv            7E 0043FF54   43EF54    Format: RSDS, {FC437121-E233-4604-8452-1218CEFA5627}, 1, D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\osslsigncode-build\\osslsigncode.pdb\r\n    6AD03D6C feat          14 0043FFD4   43EFD4    Counts: Pre-VC++ 11.00=0, C/C++=986, /GS=986, /sdl=0, guardN=40\r\n    6AD03D6C coffgrp      2FC 0043FFE8   43EFE8\r\n    6AD03D6C dllchar        4 004402E4   43F2E4\r\n\r\n        00000001 extended DLL characteristics\r\n                   CET compatible\r\n\r\nSECTION HEADER #3\r\n   .data name\r\n    A0A8 virtual size\r\n  488000 virtual address (0000000140488000 to 00000001404920A7)\r\n    7200 size of raw data\r\n  486400 file pointer to raw data (00486400 to 0048D5FF)\r\n       0 file pointer to relocation table\r\n       0 file pointer to line numbers\r\n       0 number of relocations\r\n       0 number of line numbers\r\nC0000040 flags\r\n         Initialized Data\r\n         Read Write\r\n\r\nSECTION HEADER #4\r\n  .pdata name\r\n   31B24 virtual size\r\n  493000 virtual address (0000000140493000 to 00000001404C4B23)\r\n   31C00 size of raw data\r\n  48D600 file pointer to raw data (0048D600 to 004BF1FF)\r\n       0 file pointer to relocation table\r\n       0 file pointer to line numbers\r\n       0 number of relocations\r\n       0 number of line numbers\r\n40000040 flags\r\n         Initialized Data\r\n         Read Only\r\n\r\nSECTION HEADER #5\r\n   .rsrc name\r\n     1E0 virtual size\r\n  4C5000 virtual address (00000001404C5000 to 00000001404C51DF)\r\n     200 size of raw data\r\n  4BF200 file pointer to raw data (004BF200 to 004BF3FF)\r\n       0 file pointer to relocation table\r\n       0 file pointer to line numbers\r\n       0 number of relocations\r\n       0 number of line numbers\r\n40000040 flags\r\n         Initialized Data\r\n         Read Only\r\n\r\nSECTION HEADER #6\r\n  .reloc name\r\n    D0BC virtual size\r\n  4C6000 virtual address (00000001404C6000 to 00000001404D30BB)\r\n    D200 size of raw data\r\n  4BF400 file pointer to raw data (004BF400 to 004CC5FF)\r\n       0 file pointer to relocation table\r\n       0 file pointer to line numbers\r\n       0 number of relocations\r\n       0 number of line numbers\r\n42000040 flags\r\n         Initialized Data\r\n         Discardable\r\n         Read Only\r\n\r\n  Summary\r\n\r\n        B000 .data\r\n       32000 .pdata\r\n      14B000 .rdata\r\n        E000 .reloc\r\n        1000 .rsrc\r\n      33C000 .text",
+      "dependents": "Microsoft (R) COFF/PE Dumper Version 14.44.35229.0\r\nCopyright (C) Microsoft Corporation.  All rights reserved.\r\n\r\n\r\nDump of file D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\osslsigncode-build\\osslsigncode.exe\r\n\r\nFile Type: EXECUTABLE IMAGE\r\n\r\n  Image has the following dependencies:\r\n\r\n    WS2_32.dll\r\n    CRYPT32.dll\r\n    KERNEL32.dll\r\n    USER32.dll\r\n    ADVAPI32.dll\r\n    VCRUNTIME140.dll\r\n    api-ms-win-crt-string-l1-1-0.dll\r\n    api-ms-win-crt-runtime-l1-1-0.dll\r\n    api-ms-win-crt-stdio-l1-1-0.dll\r\n    api-ms-win-crt-filesystem-l1-1-0.dll\r\n    api-ms-win-crt-convert-l1-1-0.dll\r\n    api-ms-win-crt-environment-l1-1-0.dll\r\n    api-ms-win-crt-time-l1-1-0.dll\r\n    api-ms-win-crt-utility-l1-1-0.dll\r\n    api-ms-win-crt-heap-l1-1-0.dll\r\n    api-ms-win-crt-math-l1-1-0.dll\r\n    api-ms-win-crt-locale-l1-1-0.dll\r\n\r\n  Summary\r\n\r\n        B000 .data\r\n       32000 .pdata\r\n      14B000 .rdata\r\n        E000 .reloc\r\n        1000 .rsrc\r\n      33C000 .text"
+    },
+    "tool": {
+      "path": "D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\osslsigncode-build\\osslsigncode.exe",
+      "sizeBytes": 5031424,
+      "sha256": "4cdc043aa128d5f30523d38ebcb4d79238cdaeb55fdf5cf94ce4f8e2903a5874",
+      "authenticodeStatus": "NotSigned"
+    },
+    "rootStoresUnchanged": true,
+    "completedAtUtc": "2026-10-15T02:41:49.2342547Z"
+  },
+  "probe": {
+    "schemaVersion": 1,
+    "probe": "windows-isolated-hardened-osslsigncode-public-fixture",
+    "repository": "khemisset18/gpubnb",
+    "workflowCommit": "d21af2fbf1f110dff5c0cab7a460035fb2ddefa6",
+    "collectedAtUtc": "2026-10-15T02:42:07.7229958Z",
+    "windowsVersion": "10.0.20348.0",
+    "powerShellVersion": "7.6.6",
+    "sourceTag": "2.14",
+    "sourceCommit": "beec94e308d1a1e03ca17b05fe089d93c6303e90",
+    "auditedBuild": {
+      "schemaVersion": 1,
+      "workflowCommit": "d21af2fbf1f110dff5c0cab7a460035fb2ddefa6",
+      "workflowRunId": "38670517814",
+      "repository": "khemisset18/gpubnb",
+      "builtAtUtc": "2026-10-15T02:21:31.5112222Z",
+      "windowsVersion": "10.0.20348.0",
+      "architecture": "AMD64",
+      "sources": {
+        "schemaVersion": 1,
+        "osslsigncode": {
+          "repository": "mtrojnar/osslsigncode",
+          "tag": "2.14",
+          "sourceCommit": "beec94e308d1a1e03ca17b05fe089d93c6303e90",
+          "license": "GPL-3.0-or-later WITH OpenSSL-exception",
+          "auditedForkVersion": "2.14-gpubnb-tls1"
+        },
+        "openssl": {
+          "version": "3.5.9",
+          "supportUntil": "2030-04-08",
+          "sourceCommit": "45e844fa2a14ec92d146bd8f5778ac130b6625fb",
+          "archive": "openssl-3.5.9.tar.gz",
+          "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz",
+          "sha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a",
+          "sizeBytes": 53279637
+        },
+        "zlib": {
+          "version": "1.3.2",
+          "archive": "zlib-1.3.2.tar.gz",
+          "url": "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz",
+          "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
+          "sizeBytes": 1502830
+        },
+        "patchSha256": "1dc68b278a134d0b9ea3408d7886b5cba946157df7f9a9fb2da07bc2775237e5",
+        "tlsPolicy": {
+          "minimumProtocol": "TLS1.2",
+          "explicitTrustedRootsRequired": true,
+          "expectedDnsSanRequired": true,
+          "partialWildcardsAllowed": false,
+          "leafCrlRequired": true,
+          "certificateErrorWaivers": false,
+          "httpsTimestampOnly": true,
+          "timeoutSeconds": 30,
+          "disableVerificationOptionAllowed": false
+        },
+        "gpuBnbSigningOrOperationAuthorized": false,
+        "extraCostEuros": 0
+      },
+      "gpuBnbPrivateKeyUsed": false,
+      "gpuBnbBinarySigned": false,
+      "rootStoresModified": false,
+      "machineConfigurationModified": false,
+      "compilerTools": [
+        {
+          "name": "cl.exe",
+          "path": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+          "version": "14.44.35229.0",
+          "sha256": "fe251ef50a1545b1b0835ee17b1e785459712b38d79e45b5c1d3d28970a36619"
+        },
+        {
+          "name": "link.exe",
+          "path": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\link.exe",
+          "version": "14.44.35229.0",
+          "sha256": "a364af801a8539e4324d9489313dbf001d959128451fc99a27b24676bbac058f"
+        },
+        {
+          "name": "nmake.exe",
+          "path": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\nmake.exe",
+          "version": "14.44.35229.0",
+          "sha256": "ce6b50c2d8e6704b671ec116e52ce9d2fbc1d20dd28c5b895b5421adddf94ebb"
+        },
+        {
+          "name": "perl.exe",
+          "path": "C:\\Strawberry\\perl\\bin\\perl.exe",
+          "version": "5.32.1.1",
+          "sha256": "4d61ebe19311dbf7b9710ac2c6c402e3cba3e23b63e8b82be88e471343bed52d"
+        },
+        {
+          "name": "cmake.exe",
+          "path": "C:\\Program Files\\CMake\\bin\\cmake.exe",
+          "version": "3.31.6",
+          "sha256": "3fe22eb02e1c6184ec207366ed21a6f2f9c3828c1e9f3324546befadfb362be3"
+        },
+        {
+          "name": "git.exe",
+          "path": "C:\\Program Files\\Git\\cmd\\git.exe",
+          "version": "2.56.0.windows.2",
+          "sha256": "54bda91c773c6bba2b970424423cfcb80552d92dc6967d766f98931fe1251a54"
+        }
+      ],
+      "compilerVersion": "14.44.35207",
+      "windowsSdkVersion": "10.0.26100.0\\",
+      "upstreamPgpSignatureVerified": false,
+      "reproducibleBuildProven": false,
+      "isolatedToolOnly": true,
+      "extraCostEuros": 0,
+      "patchedSources": [
+        {
+          "path": "osslsigncode.c",
+          "sha256": "db2f93ebcd96084e6ea66d863a8a75228f3c06d301f7846369f9012467b5b01c"
+        },
+        {
+          "path": "CMakeLists.txt",
+          "sha256": "ed99b7fc17f4aa44fa197229a222fd7e7b6673fd398b7de0a4bde365f53b9950"
+        }
+      ],
+      "opensslConfigure": [
+        "Configure",
+        "VC-WIN64A",
+        "no-shared",
+        "no-asm",
+        "--prefix=D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix",
+        "--openssldir=D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix\\ssl"
+      ],
+      "opensslTestArguments": [
+        "/nologo",
+        "test",
+        "HARNESS_JOBS=4",
+        "VERBOSE_FAILURE=yes"
+      ],
+      "opensslUpstreamTestsPassed": true,
+      "opensslVersion": "OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)\r\nbuilt on: Thu Oct 15 02:24:03 2026 UTC\r\nplatform: VC-WIN64A\r\noptions:  bn(64,64)\r\ncompiler: cl  /Zi /Fdossl_static.pdb /MT /Zl /GF /Gy /W3 /wd4090 /nologo /O2 -DL_ENDIAN -DOPENSSL_PIC -D\"OPENSSL_BUILDING_OPENSSL\" -D\"OPENSSL_SYS_WIN32\" -D\"WIN32_LEAN_AND_MEAN\" -D\"UNICODE\" -D\"_UNICODE\" -D\"_CRT_SECURE_NO_DEPRECATE\" -D\"_WINSOCK_DEPRECATED_NO_WARNINGS\" -D\"NDEBUG\"\r\nOPENSSLDIR: \"D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix\\ssl\"\r\nENGINESDIR: \"D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix\\lib\\engines-3\"\r\nMODULESDIR: \"D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix\\lib\\ossl-modules\"\r\nSeeding source: os-specific\r\nCPUINFO: N/A",
+      "zlibUpstreamTestsPassed": true,
+      "installedDependencyBinaries": [
+        {
+          "relativePath": "bin\\openssl.exe",
+          "sizeBytes": 5073920,
+          "sha256": "d2091378823c1f589c950065688bd6009bfee2b73117a58fc6047678945c9492"
+        },
+        {
+          "relativePath": "lib\\libcrypto.lib",
+          "sizeBytes": 47797158,
+          "sha256": "86a406d0633ecde5ddac2ccfd0c74d8599b72b0e11969c1cea67dd4e66162b12"
+        },
+        {
+          "relativePath": "lib\\libssl.lib",
+          "sizeBytes": 9872482,
+          "sha256": "7362f4fe6820910bed677481af560ff53734a30f6daa51af922d8f32db8cd734"
+        },
+        {
+          "relativePath": "lib\\ossl-modules\\legacy.dll",
+          "sizeBytes": 5451776,
+          "sha256": "3b0e6042cf9c085b27a7c401c315c3c7b819b2c415562c44b9aa90502c7bbc5b"
+        },
+        {
+          "relativePath": "lib\\zs.lib",
+          "sizeBytes": 200288,
+          "sha256": "d15364c0cc99434affd702f6974d9fdb325ff2f25533fc6da74bcc7669e36fa9"
+        }
+      ],
+      "zlibVersionProof": "zlib_compile=1.3.2\r\nzlib_runtime=1.3.2",
+      "zlibStaticLibrarySha256": "d15364c0cc99434affd702f6974d9fdb325ff2f25533fc6da74bcc7669e36fa9",
+      "osslsigncodeConfigure": [
+        "-S",
+        "D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\osslsigncode-source",
+        "-B",
+        "D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\osslsigncode-build",
+        "-G",
+        "NMake Makefiles",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DOPENSSL_ROOT_DIR=D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix",
+        "-DOPENSSL_USE_STATIC_LIBS=TRUE",
+        "-DZLIB_ROOT=D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix",
+        "-DZLIB_LIBRARY:FILEPATH=D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix\\lib\\zs.lib",
+        "-DZLIB_INCLUDE_DIR:PATH=D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\prefix\\include",
+        "-DCMAKE_DISABLE_FIND_PACKAGE_Python3=TRUE"
+      ],
+      "toolVersion": "osslsigncode 2.14-gpubnb-tls1, using:\r\n\tOpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)\r\nNo default -CAfile location detected\r\n\r\nPlease send bug-reports to Michal.Trojnara@stunnel.org",
+      "peSecurity": {
+        "amd64": true,
+        "aslr": true,
+        "nx": true,
+        "cfg": true,
+        "highEntropyVA": true,
+        "staticOpenSslAndZlib": true,
+        "headers": "Microsoft (R) COFF/PE Dumper Version 14.44.35229.0\r\nCopyright (C) Microsoft Corporation.  All rights reserved.\r\n\r\n\r\nDump of file D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\osslsigncode-build\\osslsigncode.exe\r\n\r\nPE signature found\r\n\r\nFile Type: EXECUTABLE IMAGE\r\n\r\nFILE HEADER VALUES\r\n            8664 machine (x64)\r\n               6 number of sections\r\n        6AD03D6C time date stamp Thu Oct 15 02:41:48 2026\r\n               0 file pointer to symbol table\r\n               0 number of symbols\r\n              F0 size of optional header\r\n              22 characteristics\r\n                   Executable\r\n                   Application can handle large (>2GB) addresses\r\n\r\nOPTIONAL HEADER VALUES\r\n             20B magic # (PE32+)\r\n           14.44 linker version\r\n          33BC00 size of code\r\n          193600 size of initialized data\r\n               0 size of uninitialized data\r\n          33B980 entry point (000000014033B980) mainCRTStartup\r\n            1000 base of code\r\n       140000000 image base (0000000140000000 to 00000001404D3FFF)\r\n            1000 section alignment\r\n             200 file alignment\r\n            6.00 operating system version\r\n            0.00 image version\r\n            6.00 subsystem version\r\n               0 Win32 version\r\n          4D4000 size of image\r\n             400 size of headers\r\n               0 checksum\r\n               3 subsystem (Windows CUI)\r\n            C160 DLL characteristics\r\n                   High Entropy Virtual Addresses\r\n                   Dynamic base\r\n                   NX compatible\r\n                   Control Flow Guard\r\n                   Terminal Server Aware\r\n          100000 size of stack reserve\r\n            1000 size of stack commit\r\n          100000 size of heap reserve\r\n            1000 size of heap commit\r\n               0 loader flags\r\n              10 number of directories\r\n          4859D0 [      54] RVA [size] of Export Directory\r\n          485A24 [     168] RVA [size] of Import Directory\r\n          4C5000 [     1E0] RVA [size] of Resource Directory\r\n          493000 [   31B24] RVA [size] of Exception Directory\r\n               0 [       0] RVA [size] of Certificates Directory\r\n          4C6000 [    D0BC] RVA [size] of Base Relocation Directory\r\n          43E710 [      70] RVA [size] of Debug Directory\r\n               0 [       0] RVA [size] of Architecture Directory\r\n               0 [       0] RVA [size] of Global Pointer Directory\r\n               0 [       0] RVA [size] of Thread Storage Directory\r\n          43E5D0 [     140] RVA [size] of Load Configuration Directory\r\n               0 [       0] RVA [size] of Bound Import Directory\r\n          33D000 [     848] RVA [size] of Import Address Table Directory\r\n               0 [       0] RVA [size] of Delay Import Directory\r\n               0 [       0] RVA [size] of COM Descriptor Directory\r\n               0 [       0] RVA [size] of Reserved Directory\r\n\r\n\r\nSECTION HEADER #1\r\n   .text name\r\n  33BAEC virtual size\r\n    1000 virtual address (0000000140001000 to 000000014033CAEB)\r\n  33BC00 size of raw data\r\n     400 file pointer to raw data (00000400 to 0033BFFF)\r\n       0 file pointer to relocation table\r\n       0 file pointer to line numbers\r\n       0 number of relocations\r\n       0 number of line numbers\r\n60000020 flags\r\n         Code\r\n         Execute Read\r\n\r\nSECTION HEADER #2\r\n  .rdata name\r\n  14A3F2 virtual size\r\n  33D000 virtual address (000000014033D000 to 00000001404873F1)\r\n  14A400 size of raw data\r\n  33C000 file pointer to raw data (0033C000 to 004863FF)\r\n       0 file pointer to relocation table\r\n       0 file pointer to line numbers\r\n       0 number of relocations\r\n       0 number of line numbers\r\n40000040 flags\r\n         Initialized Data\r\n         Read Only\r\n\r\n  Debug Directories\r\n\r\n        Time Type        Size      RVA  Pointer\r\n    -------- ------- -------- -------- --------\r\n    6AD03D6C cv            7E 0043FF54   43EF54    Format: RSDS, {FC437121-E233-4604-8452-1218CEFA5627}, 1, D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\osslsigncode-build\\osslsigncode.pdb\r\n    6AD03D6C feat          14 0043FFD4   43EFD4    Counts: Pre-VC++ 11.00=0, C/C++=986, /GS=986, /sdl=0, guardN=40\r\n    6AD03D6C coffgrp      2FC 0043FFE8   43EFE8\r\n    6AD03D6C dllchar        4 004402E4   43F2E4\r\n\r\n        00000001 extended DLL characteristics\r\n                   CET compatible\r\n\r\nSECTION HEADER #3\r\n   .data name\r\n    A0A8 virtual size\r\n  488000 virtual address (0000000140488000 to 00000001404920A7)\r\n    7200 size of raw data\r\n  486400 file pointer to raw data (00486400 to 0048D5FF)\r\n       0 file pointer to relocation table\r\n       0 file pointer to line numbers\r\n       0 number of relocations\r\n       0 number of line numbers\r\nC0000040 flags\r\n         Initialized Data\r\n         Read Write\r\n\r\nSECTION HEADER #4\r\n  .pdata name\r\n   31B24 virtual size\r\n  493000 virtual address (0000000140493000 to 00000001404C4B23)\r\n   31C00 size of raw data\r\n  48D600 file pointer to raw data (0048D600 to 004BF1FF)\r\n       0 file pointer to relocation table\r\n       0 file pointer to line numbers\r\n       0 number of relocations\r\n       0 number of line numbers\r\n40000040 flags\r\n         Initialized Data\r\n         Read Only\r\n\r\nSECTION HEADER #5\r\n   .rsrc name\r\n     1E0 virtual size\r\n  4C5000 virtual address (00000001404C5000 to 00000001404C51DF)\r\n     200 size of raw data\r\n  4BF200 file pointer to raw data (004BF200 to 004BF3FF)\r\n       0 file pointer to relocation table\r\n       0 file pointer to line numbers\r\n       0 number of relocations\r\n       0 number of line numbers\r\n40000040 flags\r\n         Initialized Data\r\n         Read Only\r\n\r\nSECTION HEADER #6\r\n  .reloc name\r\n    D0BC virtual size\r\n  4C6000 virtual address (00000001404C6000 to 00000001404D30BB)\r\n    D200 size of raw data\r\n  4BF400 file pointer to raw data (004BF400 to 004CC5FF)\r\n       0 file pointer to relocation table\r\n       0 file pointer to line numbers\r\n       0 number of relocations\r\n       0 number of line numbers\r\n42000040 flags\r\n         Initialized Data\r\n         Discardable\r\n         Read Only\r\n\r\n  Summary\r\n\r\n        B000 .data\r\n       32000 .pdata\r\n      14B000 .rdata\r\n        E000 .reloc\r\n        1000 .rsrc\r\n      33C000 .text",
+        "dependents": "Microsoft (R) COFF/PE Dumper Version 14.44.35229.0\r\nCopyright (C) Microsoft Corporation.  All rights reserved.\r\n\r\n\r\nDump of file D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\osslsigncode-build\\osslsigncode.exe\r\n\r\nFile Type: EXECUTABLE IMAGE\r\n\r\n  Image has the following dependencies:\r\n\r\n    WS2_32.dll\r\n    CRYPT32.dll\r\n    KERNEL32.dll\r\n    USER32.dll\r\n    ADVAPI32.dll\r\n    VCRUNTIME140.dll\r\n    api-ms-win-crt-string-l1-1-0.dll\r\n    api-ms-win-crt-runtime-l1-1-0.dll\r\n    api-ms-win-crt-stdio-l1-1-0.dll\r\n    api-ms-win-crt-filesystem-l1-1-0.dll\r\n    api-ms-win-crt-convert-l1-1-0.dll\r\n    api-ms-win-crt-environment-l1-1-0.dll\r\n    api-ms-win-crt-time-l1-1-0.dll\r\n    api-ms-win-crt-utility-l1-1-0.dll\r\n    api-ms-win-crt-heap-l1-1-0.dll\r\n    api-ms-win-crt-math-l1-1-0.dll\r\n    api-ms-win-crt-locale-l1-1-0.dll\r\n\r\n  Summary\r\n\r\n        B000 .data\r\n       32000 .pdata\r\n      14B000 .rdata\r\n        E000 .reloc\r\n        1000 .rsrc\r\n      33C000 .text"
+      },
+      "tool": {
+        "path": "D:\\a\\_temp\\gpubnb-hardened-build-94d491a7e28244a689e0fdc7d14320ac\\osslsigncode-build\\osslsigncode.exe",
+        "sizeBytes": 5031424,
+        "sha256": "4cdc043aa128d5f30523d38ebcb4d79238cdaeb55fdf5cf94ce4f8e2903a5874",
+        "authenticodeStatus": "NotSigned"
+      },
+      "rootStoresUnchanged": true,
+      "completedAtUtc": "2026-10-15T02:41:49.2342547Z"
+    },
+    "tlsExpiryValidationProven": true,
+    "invalidRfc3161RejectionProven": true,
+    "failClosedConfigurationProven": true,
+    "tlsRevocationMode": "strict_leaf_CRL_no_error_waivers",
+    "crlEvidence": [
+      {
+        "name": "positive",
+        "url": "http://ye2.c.lencr.org/51.crl",
+        "derSha256": "15d85e981845b569ac387de2b2aee4d2bc69e29cd084be8c8d5d3badb260eae7",
+        "metadata": "issuer=C=US, O=Let's Encrypt, CN=YE2\r\nlastUpdate=Oct 15 02:06:40 2026 GMT\r\nnextUpdate=Oct 24 02:06:39 2026 GMT\r\n",
+        "usedByActualOpenSslPeerValidation": true
+      },
+      {
+        "name": "expired-negative",
+        "url": "http://crl.comodoca.com/COMODORSADomainValidationSecureServerCA.crl",
+        "derSha256": "d8da6f12b75adf1e8a2056d57bd0c5e48b5fa4d83973cc04a5936bc0c9c9beeb",
+        "metadata": "issuer=C=GB, ST=Greater Manchester, L=Salford, O=COMODO CA Limited, CN=COMODO RSA Domain Validation Secure Server CA\r\nlastUpdate=Oct 14 23:55:07 2026 GMT\r\nnextUpdate=Oct 21 23:55:07 2026 GMT\r\n",
+        "usedByActualOpenSslPeerValidation": true
+      },
+      {
+        "name": "malformed-response",
+        "url": "http://crl.r2m01.amazontrust.com/r2m01.crl",
+        "derSha256": "9dde6fd25ac90fd3a2da1e503eb719e95eb6bfc1b18757f4dd457d05ea6dfdc6",
+        "metadata": "issuer=C=US, O=Amazon, CN=Amazon RSA 2048 M01\r\nlastUpdate=Oct 14 17:19:12 2026 GMT\r\nnextUpdate=Oct 21 17:19:12 2026 GMT\r\n",
+        "usedByActualOpenSslPeerValidation": true
+      }
+    ],
+    "codeSigningPerformed": false,
+    "privateKeyAccessed": false,
+    "rootsImported": false,
+    "fixtureNeverExecuted": true,
+    "gpuBnbCandidateModified": false,
+    "pc1OrPc2Accessed": false,
+    "providerApproved": false,
+    "extraCostEuros": 0,
+    "tlsPeerValidationProven": true,
+    "tlsHostnameValidationProven": true,
+    "functionalTimestampPass": true,
+    "secureIntegrationPass": true,
+    "negativeTls": [
+      {
+        "name": "untrusted-peer",
+        "url": "https://self-signed.badssl.com/",
+        "strictWindowsControl": {
+          "Host": "self-signed.badssl.com",
+          "CallbackReached": true,
+          "HandshakeSucceeded": false,
+          "PolicyErrors": "RemoteCertificateChainErrors",
+          "ChainStatuses": [
+            "UntrustedRoot"
+          ],
+          "CertificateSha256": "68cd59ab2dec6f682e78854b3e6cd66280b6d91bae7fe6bb73eec35dd46c533d",
+          "ErrorType": "AuthenticationException",
+          "LeafCertificateDerBase64": ""
+        },
+        "expectedFaultIndependentlyObserved": true,
+        "osslsigncode": {
+          "exitCode": 1,
+          "stdout": "PE checksum   : 00052FB8\r\nConnecting to https://self-signed.badssl.com/\r\nFailed\r\n",
+          "stderr": "TLS_FAIL_CLOSED: certificate verification: self-signed certificate\r\n\r\nHTTP failure: Failed to get data from https://self-signed.badssl.com/\r\nRFC 3161 timestamping failed\r\nUse the \"-t\" option to add the Authenticode Time-Stamp Authority or choose another one RFC3161 Time-Stamp Authority\r\nUnable to set unauthenticated attributes\r\n28040000:error:0A000086:SSL routines:tls_post_process_server_certificate:certificate verify failed:ssl\\statem\\statem_clnt.c:2125:\n28040000:error:1E800066:HTTP routines:OSSL_HTTP_REQ_CTX_exchange:error sending:crypto\\http\\http_client.c:1073:server=https://self-signed.badssl.com:443\n"
+        },
+        "tlsSpecificRejectionProven": true,
+        "outputCreated": false
+      },
+      {
+        "name": "wrong-host",
+        "url": "https://wrong.host.badssl.com/",
+        "strictWindowsControl": {
+          "Host": "wrong.host.badssl.com",
+          "CallbackReached": true,
+          "HandshakeSucceeded": false,
+          "PolicyErrors": "RemoteCertificateNameMismatch",
+          "ChainStatuses": [],
+          "CertificateSha256": "101154813e8fdab6ba4fab575185c1a13944bcec1d849ae2cd94a073494997e3",
+          "ErrorType": "AuthenticationException",
+          "LeafCertificateDerBase64": ""
+        },
+        "expectedFaultIndependentlyObserved": true,
+        "osslsigncode": {
+          "exitCode": 1,
+          "stdout": "PE checksum   : 00052FB8\r\nConnecting to https://wrong.host.badssl.com/\r\nFailed\r\n",
+          "stderr": "TLS_FAIL_CLOSED: certificate verification: hostname mismatch\r\n\r\nHTTP failure: Failed to get data from https://wrong.host.badssl.com/\r\nRFC 3161 timestamping failed\r\nUse the \"-t\" option to add the Authenticode Time-Stamp Authority or choose another one RFC3161 Time-Stamp Authority\r\nUnable to set unauthenticated attributes\r\n541A0000:error:0A000086:SSL routines:tls_post_process_server_certificate:certificate verify failed:ssl\\statem\\statem_clnt.c:2125:\n541A0000:error:1E800066:HTTP routines:OSSL_HTTP_REQ_CTX_exchange:error sending:crypto\\http\\http_client.c:1073:server=https://wrong.host.badssl.com:443\n"
+        },
+        "tlsSpecificRejectionProven": true,
+        "outputCreated": false
+      },
+      {
+        "name": "expired-peer",
+        "url": "https://expired.badssl.com/",
+        "strictWindowsControl": {
+          "Host": "expired.badssl.com",
+          "CallbackReached": true,
+          "HandshakeSucceeded": false,
+          "PolicyErrors": "RemoteCertificateChainErrors",
+          "ChainStatuses": [
+            "NotTimeValid"
+          ],
+          "CertificateSha256": "ba105ce02bac76888ecee47cd4eb7941653e9ac993b61b2eb3dcc82014d21b4f",
+          "ErrorType": "AuthenticationException",
+          "LeafCertificateDerBase64": ""
+        },
+        "expectedFaultIndependentlyObserved": true,
+        "osslsigncode": {
+          "exitCode": 1,
+          "stdout": "PE checksum   : 00052FB8\r\nConnecting to https://expired.badssl.com/\r\nFailed\r\n",
+          "stderr": "TLS_FAIL_CLOSED: certificate verification: certificate has expired\r\n\r\nHTTP failure: Failed to get data from https://expired.badssl.com/\r\nRFC 3161 timestamping failed\r\nUse the \"-t\" option to add the Authenticode Time-Stamp Authority or choose another one RFC3161 Time-Stamp Authority\r\nUnable to set unauthenticated attributes\r\n78160000:error:0A000086:SSL routines:tls_post_process_server_certificate:certificate verify failed:ssl\\statem\\statem_clnt.c:2125:\n78160000:error:1E800066:HTTP routines:OSSL_HTTP_REQ_CTX_exchange:error sending:crypto\\http\\http_client.c:1073:server=https://expired.badssl.com:443\n"
+        },
+        "tlsSpecificRejectionProven": true,
+        "outputCreated": false
+      }
+    ],
+    "configurationNegatives": [
+      {
+        "name": "missing-ca",
+        "rejected": true,
+        "diagnostic": {
+          "exitCode": 1,
+          "stdout": "PE checksum   : 00052FB8\r\nConnecting to https://rfc3161.ai.moda/\r\nFailed\r\n",
+          "stderr": "\r\nError: no certificate found\r\nTLS_FAIL_CLOSED: CA or CRL loading failed\r\n\r\nHTTP failure: Failed to get data from https://rfc3161.ai.moda/\r\nRFC 3161 timestamping failed\r\nUse the \"-t\" option to add the Authenticode Time-Stamp Authority or choose another one RFC3161 Time-Stamp Authority\r\nUnable to set unauthenticated attributes\r\n2C1E0000:error:80000002:system library:BIO_new_file:No such file or directory:crypto\\bio\\bss_file.c:67:calling fopen(D:\\a\\_temp\\gpubnb-osslsigncode-probe-18cd0167e56d477e8399d81563b94f01\\absent.pem, rb)\n2C1E0000:error:10000080:BIO routines:BIO_new_file:no such file:crypto\\bio\\bss_file.c:75:\n2C1E0000:error:05880020:x509 certificate routines:X509_load_cert_crl_file_ex:BIO lib:crypto\\x509\\by_file.c:248:\n"
+        }
+      },
+      {
+        "name": "missing-crl",
+        "rejected": true,
+        "diagnostic": {
+          "exitCode": 1,
+          "stdout": "PE checksum   : 00052FB8\r\nConnecting to https://rfc3161.ai.moda/\r\nFailed\r\n",
+          "stderr": "TLS_FAIL_CLOSED: explicit CA and CRL files are required\r\n\r\nHTTP failure: Failed to get data from https://rfc3161.ai.moda/\r\nRFC 3161 timestamping failed\r\nUse the \"-t\" option to add the Authenticode Time-Stamp Authority or choose another one RFC3161 Time-Stamp Authority\r\nUnable to set unauthenticated attributes\r\n"
+        }
+      },
+      {
+        "name": "http-tsa",
+        "rejected": true,
+        "diagnostic": {
+          "exitCode": 1,
+          "stdout": "PE checksum   : 00052FB8\r\nConnecting to http://rfc3161.ai.moda/\r\nFailed\r\n",
+          "stderr": "TLS_FAIL_CLOSED: HTTPS is required for timestamp requests\r\n\r\nHTTP failure: Failed to get data from http://rfc3161.ai.moda/\r\nRFC 3161 timestamping failed\r\nUse the \"-t\" option to add the Authenticode Time-Stamp Authority or choose another one RFC3161 Time-Stamp Authority\r\nUnable to set unauthenticated attributes\r\n"
+        }
+      }
+    ],
+    "positive": {
+      "url": "https://rfc3161.ai.moda/",
+      "approved": false,
+      "signatureAdded": false,
+      "afterTimestampSha256": "b05b51b02a6b93342d7805613c61dbd0dac2b0b1ba38e4862927a0c15bec8146",
+      "technicalPass": true,
+      "errorCode": null,
+      "strictWindowsTlsControl": {
+        "Host": "rfc3161.ai.moda",
+        "CallbackReached": true,
+        "HandshakeSucceeded": true,
+        "PolicyErrors": "None",
+        "ChainStatuses": [],
+        "CertificateSha256": "dba2876e2aee005ce51100f1e5f133eb06c9b9d08625c2010595dda27eb40300",
+        "ErrorType": null,
+        "LeafCertificateDerBase64": ""
+      },
+      "addDiagnostic": {
+        "exitCode": 0,
+        "stdout": "PE checksum   : 00052FB8\r\nConnecting to https://rfc3161.ai.moda/\r\nSucceeded\r\n",
+        "stderr": ""
+      },
+      "primaryUnchanged": true,
+      "primary": {
+        "signerSha256": "d33927e4dda9b91def9f8ed282549a49217ed8cacf54577a690963cbc5eff3ed",
+        "digestOid": "2.16.840.1.101.3.4.2.1",
+        "signatureBytesSha256": "b95d05a78c3ad395c1e91aec4a401cfc763593ed2ddd8b0265570e7add2c7e64",
+        "signedContentSha256": "81426b3107241817a8c5c4b6c7a54fc0f9fda21b6a12237ed6c50d840ec219d8",
+        "signedAttributes": [
+          "1.2.840.113549.1.9.3|a12c9aaa889f24a9542a2d6a11b4abbe1be0db42e731e26ff8652eb2f5018302",
+          "1.2.840.113549.1.9.4|89da3ea98009b282d8ae43cefc95cf5720d3e73489dd818920731d3abb664593",
+          "1.3.6.1.4.1.311.2.1.12|367958bf08695ac5687803405d176d52da00d165905b089efe2ee6100bd6fd20"
+        ]
+      },
+      "windowsStatus": "Valid",
+      "signtoolVerify": {
+        "exitCode": 0,
+        "stdout": "\r\r\nVerifying: D:\\a\\_temp\\gpubnb-osslsigncode-probe-18cd0167e56d477e8399d81563b94f01\\fixture-rfc3161.exe\r\r\n\r\nSignature Index: 0 (Primary Signature)\r\nHash of file (sha256): 5271190DE2795B1D97E8E1F68B735B8CD70CDAE903CB267234DC0AC56CF0AA56\r\n\r\nSigning Certificate Chain:\r\n    Issued to: Microsoft Root Certificate Authority 2011\r\r\n    Issued by: Microsoft Root Certificate Authority 2011\r\r\n    Expires:   Sat Mar 22 22:13:04 2036\r\r\n    SHA1 hash: 8F43288AD272F3103B6FB1428485EA3014C0BCFE\r\r\n\r\n        Issued to: Microsoft Code Signing PCA 2024\r\r\n        Issued by: Microsoft Root Certificate Authority 2011\r\r\n        Expires:   Sat Mar 22 22:13:04 2036\r\r\n        SHA1 hash: 5039C8DC9ACE1CE039587E43486DE073FA459222\r\r\n\r\n            Issued to: Microsoft Corporation\r\r\n            Issued by: Microsoft Code Signing PCA 2024\r\r\n            Expires:   Thu Apr 15 18:59:43 2027\r\r\n            SHA1 hash: AB172913A2960A224809EE8A0C371CD47A079B72\r\r\n\r\nThe signature is timestamped: Thu Oct 15 02:42:12 2026\r\r\nTimestamp Verified by:\r\n    Issued to: DigiCert Assured ID Root CA\r\r\n    Issued by: DigiCert Assured ID Root CA\r\r\n    Expires:   Mon Nov 10 00:00:00 2031\r\r\n    SHA1 hash: 0563B8630D62D75ABBC8AB1E4BDFB5A899B24D43\r\r\n\r\n        Issued to: DigiCert Trusted Root G4\r\r\n        Issued by: DigiCert Assured ID Root CA\r\r\n        Expires:   Sun Nov 09 23:59:59 2031\r\r\n        SHA1 hash: A99D5B79E9F1CDA59CDAB6373169D5353F5874C6\r\r\n\r\n            Issued to: DigiCert Trusted G4 TimeStamping RSA4096 SHA256 2025 CA1\r\r\n            Issued by: DigiCert Trusted Root G4\r\r\n            Expires:   Thu Jan 14 23:59:59 2038\r\r\n            SHA1 hash: 07894D00FC194A17DB273AEB5CF8FACEF14423A4\r\r\n\r\n                Issued to: DigiCert SHA256 RSA4096 Timestamp Responder 2026 1\r\r\n                Issued by: DigiCert Trusted G4 TimeStamping RSA4096 SHA256 2025 CA1\r\r\n                Expires:   Wed Nov 04 23:59:59 2037\r\r\n                SHA1 hash: 51D9ABDA034973D84F4266ACA48248E6B369C439\r\r\n\r\n\r\nSuccessfully verified: D:\\a\\_temp\\gpubnb-osslsigncode-probe-18cd0167e56d477e8399d81563b94f01\\fixture-rfc3161.exe\r\r\n\r\nNumber of signatures successfully Verified: 1\r\r\nNumber of warnings: 0\r\r\nNumber of errors: 0\r\r\n",
+        "stderr": ""
+      },
+      "tsa": {
+        "valid": true,
+        "statuses": [],
+        "signerSubject": "CN=DigiCert SHA256 RSA4096 Timestamp Responder 2026 1, O=\"DigiCert, Inc.\", C=US",
+        "signerCertificateSha256": "2da09da7f4131f9fe72db6c5e6e9c9656755af043f1ea742cc0d2120e141ebfc",
+        "rootCertificateSha256": "3e9099b5015e8f486c00bcea9d111ee721faba355a89bcf1df69561e3dc6325c",
+        "rootPreviouslyTrusted": true,
+        "timestampUtc": "2026-10-15T02:42:12.0000000Z",
+        "hashAlgorithmOid": "2.16.840.1.101.3.4.2.1"
+      },
+      "tokenBoundToPrimary": true,
+      "rfc3161Sha256": true,
+      "timestampSignatureAdded": true,
+      "integrityNegative": {
+        "windowsStatus": "HashMismatch",
+        "signtoolExitCode": 1,
+        "rejected": true
+      },
+      "standardGpuBnbVerifier": {
+        "path": "D:\\a\\_temp\\gpubnb-osslsigncode-probe-18cd0167e56d477e8399d81563b94f01\\fixture-rfc3161.exe",
+        "signed": true,
+        "valid": true,
+        "status": "Valid",
+        "signerSubject": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "signerThumbprint": "AB172913A2960A224809EE8A0C371CD47A079B72",
+        "signerCertificateSha256": "d33927e4dda9b91def9f8ed282549a49217ed8cacf54577a690963cbc5eff3ed",
+        "timestamped": true,
+        "timestampSignerSubject": "CN=DigiCert SHA256 RSA4096 Timestamp Responder 2026 1, O=\"DigiCert, Inc.\", C=US",
+        "certificateNotAfter": "2027-04-15T18:59:43Z"
+      }
+    },
+    "signTool": {
+      "path": "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64\\signtool.exe",
+      "fileVersion": "4.00 (WinBuild.160101.0800)",
+      "productVersion": "10.0.26100.7705",
+      "sha256": "431ee314c83988cacda86606356fd321b75ae0093481b97e3b738e99c412f2a0",
+      "signerSha256": "d557f0a8b156bcfa8197ba58a72cce491cdb7584eeaaf7d513cdad2f337a6086"
+    },
+    "tool": {
+      "fileSha256": "4cdc043aa128d5f30523d38ebcb4d79238cdaeb55fdf5cf94ce4f8e2903a5874",
+      "version": {
+        "exitCode": 0,
+        "stdout": "osslsigncode 2.14-gpubnb-tls1, using:\r\n\tOpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)\r\nNo default -CAfile location detected\r\n\r\nPlease send bug-reports to Michal.Trojnara@stunnel.org\r\n\r\n",
+        "stderr": ""
+      },
+      "authenticodeStatus": "NotSigned"
+    },
+    "fixture": {
+      "sourcePath": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "sourceSha256": "bfb46af89433268872ddb43d1ca7a3f433452ee91ed356a9786940f90118e285",
+      "beforeTimestampSha256": "b6a6c492c9aedf6e7bae7451fe995823eb663720955981e600e18a33ee40ff74",
+      "primary": {
+        "signerSha256": "d33927e4dda9b91def9f8ed282549a49217ed8cacf54577a690963cbc5eff3ed",
+        "digestOid": "2.16.840.1.101.3.4.2.1",
+        "signatureBytesSha256": "b95d05a78c3ad395c1e91aec4a401cfc763593ed2ddd8b0265570e7add2c7e64",
+        "signedContentSha256": "81426b3107241817a8c5c4b6c7a54fc0f9fda21b6a12237ed6c50d840ec219d8",
+        "signedAttributes": [
+          "1.2.840.113549.1.9.3|a12c9aaa889f24a9542a2d6a11b4abbe1be0db42e731e26ff8652eb2f5018302",
+          "1.2.840.113549.1.9.4|89da3ea98009b282d8ae43cefc95cf5720d3e73489dd818920731d3abb664593",
+          "1.3.6.1.4.1.311.2.1.12|367958bf08695ac5687803405d176d52da00d165905b089efe2ee6100bd6fd20"
+        ]
+      },
+      "baselineWindowsStatus": "Valid",
+      "baselineSignTool": {
+        "exitCode": 0,
+        "stdout": "\r\r\nVerifying: D:\\a\\_temp\\gpubnb-osslsigncode-probe-18cd0167e56d477e8399d81563b94f01\\fixture-without-timestamp.exe\r\r\n\r\nSignature Index: 0 (Primary Signature)\r\nHash of file (sha256): 5271190DE2795B1D97E8E1F68B735B8CD70CDAE903CB267234DC0AC56CF0AA56\r\n\r\nSigning Certificate Chain:\r\n    Issued to: Microsoft Root Certificate Authority 2011\r\r\n    Issued by: Microsoft Root Certificate Authority 2011\r\r\n    Expires:   Sat Mar 22 22:13:04 2036\r\r\n    SHA1 hash: 8F43288AD272F3103B6FB1428485EA3014C0BCFE\r\r\n\r\n        Issued to: Microsoft Code Signing PCA 2024\r\r\n        Issued by: Microsoft Root Certificate Authority 2011\r\r\n        Expires:   Sat Mar 22 22:13:04 2036\r\r\n        SHA1 hash: 5039C8DC9ACE1CE039587E43486DE073FA459222\r\r\n\r\n            Issued to: Microsoft Corporation\r\r\n            Issued by: Microsoft Code Signing PCA 2024\r\r\n            Expires:   Thu Apr 15 18:59:43 2027\r\r\n            SHA1 hash: AB172913A2960A224809EE8A0C371CD47A079B72\r\r\n\r\nFile is not timestamped.\r\n\r\n\r\nSuccessfully verified: D:\\a\\_temp\\gpubnb-osslsigncode-probe-18cd0167e56d477e8399d81563b94f01\\fixture-without-timestamp.exe\r\r\n\r\nNumber of signatures successfully Verified: 1\r\r\nNumber of warnings: 0\r\r\nNumber of errors: 0\r\r\n",
+        "stderr": ""
+      },
+      "originalPrimaryPreservedDuringTimestampRemoval": true,
+      "signerNotAfterUtc": "2027-04-15T18:59:43.0000000Z"
+    },
+    "httpsTrust": {
+      "publicRootsOnly": true,
+      "rootCount": 1142,
+      "pemSha256": "46787fa2a0cd028c3dc532657fc3e84b8a7c6dbad6c094981ca1993b3694e2eb",
+      "noRootImported": true,
+      "explicitHttpsCAfile": true
+    },
+    "invalidRfc3161Control": {
+      "url": "https://httpbin.org/response-headers?Content-Type=application%2Ftimestamp-reply",
+      "httpStatus": 200,
+      "contentType": "application/timestamp-reply",
+      "length": 115,
+      "firstByte": 123
+    },
+    "invalidRfc3161": {
+      "url": "https://httpbin.org/response-headers?Content-Type=application%2Ftimestamp-reply",
+      "strictWindowsTlsControl": {
+        "Host": "httpbin.org",
+        "CallbackReached": true,
+        "HandshakeSucceeded": true,
+        "PolicyErrors": "None",
+        "ChainStatuses": [],
+        "CertificateSha256": "738e8af738b619ca9296866aa0f263122d4bbec797c092e861e14abfb0632ff8",
+        "ErrorType": null,
+        "LeafCertificateDerBase64": ""
+      },
+      "independentHttpStatus": 200,
+      "contentType": "application/timestamp-reply",
+      "invalidBodySha256": "c2b175d6b2b29959ed56e381d01f494bf12306ce65eae69bb4435668684b7b0d",
+      "osslsigncode": {
+        "exitCode": 1,
+        "stdout": "PE checksum   : 00052FB8\r\nConnecting to https://httpbin.org/response-headers?Content-Type=application%2Ftimestamp-reply\r\nFailed\r\n",
+        "stderr": "Failed to convert timestamp reply from https://httpbin.org/response-headers?Content-Type=application%2Ftimestamp-reply\r\nD8100000:error:0A000126:SSL routines::unexpected eof while reading:ssl\\record\\rec_layer_s3.c:703:\nD8100000:error:068000A8:asn1 encoding routines:asn1_check_tlen:wrong tag:crypto\\asn1\\tasn_dec.c:1231:\nD8100000:error:0688010A:asn1 encoding routines:asn1_item_embed_d2i:nested asn1 error:crypto\\asn1\\tasn_dec.c:375:Type=TS_RESP\nRFC 3161 timestamping failed\nUse the \"-t\" option to add the Authenticode Time-Stamp Authority or choose another one RFC3161 Time-Stamp Authority\nUnable to set unauthenticated attributes\n"
+      },
+      "rejectedAtRfc3161Parser": true
+    },
+    "rootStoresUnchanged": true,
+    "sourceFixtureUnchanged": true,
+    "decision": "TECHNICAL_PROOF_ONLY_NO_OPERATIONAL_APPROVAL"
+  }
+}

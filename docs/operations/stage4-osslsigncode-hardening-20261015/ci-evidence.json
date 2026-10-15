@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "verifiedAtUtc": "2026-10-15T12:12:00.507Z",
+  "repository": "khemisset18/gpubnb",
+  "testedCommit": "d21af2fbf1f110dff5c0cab7a460035fb2ddefa6",
+  "sourceBranch": "prep/stage4-osslsigncode-hardened-20261015",
+  "runs": [
+    {
+      "id": 38670517814,
+      "name": "stage4-osslsigncode-hardened",
+      "headSha": "d21af2fbf1f110dff5c0cab7a460035fb2ddefa6",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/38670517814",
+      "jobs": [
+        {
+          "id": 116212308897,
+          "name": "audited-amd64-build-and-proof",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 38670517761,
+      "name": "CI",
+      "headSha": "d21af2fbf1f110dff5c0cab7a460035fb2ddefa6",
+      "conclusion": "success",
+      "attempt": 3,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/38670517761",
+      "completedAtUtc": "2026-10-15T12:08:41Z",
+      "jobs": [
+        {
+          "id": 116412493950,
+          "name": "api",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 116412496298,
+          "name": "dependency-audit",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 116412496658,
+          "name": "security-static-analysis",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 116412533735,
+          "name": "production-gates",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 116412538817,
+          "name": "agent",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 116412562962,
+          "name": "contract",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 38670517781,
+      "name": "prephysical-qualification",
+      "headSha": "d21af2fbf1f110dff5c0cab7a460035fb2ddefa6",
+      "conclusion": "success",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/38670517781",
+      "jobs": [
+        {
+          "id": 116212308846,
+          "name": "Gate 1/2/3/5 — API authority, release trust and cross-component boundaries",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 116212309226,
+          "name": "Gate 2/4 — Agent power, recovery, rollback and quarantine logic",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "testCounts": {
+    "openssl": {
+      "files": 347,
+      "tests": 3820,
+      "passed": true,
+      "upstreamConfigurationSkipsPreserved": true
+    },
+    "zlib": {
+      "tests": 13,
+      "failed": 0
+    },
+    "authenticode": {
+      "powerShell7": 34,
+      "windowsPowerShell51": 34,
+      "failed": 0,
+      "standardVerifierChanged": false
+    },
+    "api": {
+      "tests": 807,
+      "passed": 805,
+      "skipped": 2,
+      "failed": 0
+    },
+    "agent": {
+      "tests": 626,
+      "passed": 623,
+      "skipped": 3,
+      "failed": 0
+    },
+    "browserNative": {
+      "tests": 25,
+      "passed": 25,
+      "failed": 0
+    }
+  },
+  "previousInfrastructureFailure": {
+    "attempts": [
+      1,
+      2
+    ],
+    "runId": 38670517761,
+    "image": "public.ecr.aws/docker/library/postgres:16",
+    "message": "toomanyrequests: Data limit exceeded",
+    "stage": "Initialize containers, before API tests",
+    "resolution": "Delayed rerun of the same commit and unchanged workflow; attempt 3 success"
+  },
+  "gpuBnbSigningPerformed": false,
+  "pc1OrPc2Accessed": false,
+  "renderOperationPerformed": false,
+  "mergePerformed": false,
+  "physicalQualificationPerformed": false,
+  "additionalCostEuros": 0
+}

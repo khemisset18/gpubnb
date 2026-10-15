@@ -1,0 +1,1155 @@
+diff --git a/.github/workflows/stage4-osslsigncode-hardened.yml b/.github/workflows/stage4-osslsigncode-hardened.yml
+new file mode 100644
+index 00000000..8308f2de
+--- /dev/null
++++ b/.github/workflows/stage4-osslsigncode-hardened.yml
+@@ -0,0 +1,61 @@
++name: stage4-osslsigncode-hardened
++on:
++  push:
++    branches: [prep/stage4-osslsigncode-hardened-20261015]
++    paths:
++      - scripts/third-party/osslsigncode/**
++      - scripts/tests/windows-osslsigncode-hardened-probe.ps1
++      - .github/workflows/stage4-osslsigncode-hardened.yml
++permissions:
++  contents: read
++concurrency:
++  group: stage4-osslsigncode-hardened-${{ github.ref }}
++  cancel-in-progress: true
++jobs:
++  audited-amd64-build-and-proof:
++    if: ${{ github.event.repository.private == false }}
++    runs-on: windows-2022
++    timeout-minutes: 55
++    steps:
++      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
++        with:
++          persist-credentials: false
++      - name: Parse all new PowerShell before execution
++        shell: pwsh
++        run: |
++          foreach ($path in @('scripts/third-party/osslsigncode/build-windows.ps1','scripts/tests/windows-osslsigncode-hardened-probe.ps1')) {
++            $tokens=$null; $errors=$null
++            [void][Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $path),[ref]$tokens,[ref]$errors)
++            if ($errors.Count -ne 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
++          }
++      - name: Build pinned static AMD64 tool and test OpenSSL and zlib
++        shell: pwsh
++        run: |
++          & ./scripts/third-party/osslsigncode/build-windows.ps1 -OutputDirectory (Join-Path $env:RUNNER_TEMP ('gpubnb-hardened-build-'+[Guid]::NewGuid().ToString('N')))
++          if (-not $?) { exit 1 }
++      - name: Unchanged Authenticode regression suite on PowerShell 7
++        shell: pwsh
++        run: |
++          & ./scripts/tests/verify-windows-authenticode.tests.ps1
++          if (-not $?) { exit 1 }
++      - name: Unchanged Authenticode regression suite on Windows PowerShell 5.1
++        shell: powershell
++        run: |
++          & ./scripts/tests/verify-windows-authenticode.tests.ps1
++          if (-not $?) { exit 1 }
++      - name: Four negative controls and Windows SignTool interoperability
++        shell: pwsh
++        run: |
++          & ./scripts/tests/windows-osslsigncode-hardened-probe.ps1
++          if (-not $?) { exit 1 }
++      - name: Delete temporary build and disposable fixtures
++        if: ${{ always() }}
++        shell: pwsh
++        run: |
++          if ($env:GPUBNB_HARDENED_BUILD_ROOT -and (Test-Path -LiteralPath $env:GPUBNB_HARDENED_BUILD_ROOT)) {
++            $root=[IO.Path]::GetFullPath($env:GPUBNB_HARDENED_BUILD_ROOT)
++            $temp=[IO.Path]::GetFullPath($env:RUNNER_TEMP)+[IO.Path]::DirectorySeparatorChar
++            if (-not $root.StartsWith($temp,[StringComparison]::OrdinalIgnoreCase)) { throw 'cleanup_path_outside_runner_temp' }
++            Remove-Item -LiteralPath $root -Recurse -Force
++          }
++# Public standard runner, logs only: no secrets, artifact storage or cache.
+diff --git a/.github/workflows/stage4-public-fixtures.yml b/.github/workflows/stage4-public-fixtures.yml
+new file mode 100644
+index 00000000..746eebc8
+--- /dev/null
++++ b/.github/workflows/stage4-public-fixtures.yml
+@@ -0,0 +1,23 @@
++name: stage4-public-fixture-diagnostics
++on:
++  push:
++    branches: [prep/stage4-osslsigncode-hardened-20261015]
++    paths:
++      - scripts/tests/windows-rfc3161-fixtures.ps1
++      - .github/workflows/stage4-public-fixtures.yml
++permissions:
++  contents: read
++jobs:
++  public-fixtures:
++    if: ${{ github.event.repository.private == false }}
++    runs-on: windows-2022
++    timeout-minutes: 6
++    steps:
++      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
++        with:
++          persist-credentials: false
++      - name: Inspect public expired certificate and malformed HTTP fixture
++        shell: pwsh
++        run: |
++          & ./scripts/tests/windows-rfc3161-fixtures.ps1
++          if (-not $?) { exit 1 }
+diff --git a/scripts/tests/windows-osslsigncode-hardened-probe.ps1 b/scripts/tests/windows-osslsigncode-hardened-probe.ps1
+new file mode 100644
+index 00000000..7d363307
+--- /dev/null
++++ b/scripts/tests/windows-osslsigncode-hardened-probe.ps1
+@@ -0,0 +1,520 @@
++# Isolated public TSA interoperability probe. Never creates a code signature.
++# Only public certificate stores are read; no key or trust-store import is used.
++Set-StrictMode -Version Latest
++$ErrorActionPreference = 'Stop'
++if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_OS -cne 'Windows' -or
++    $env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or
++    $env:GITHUB_REPOSITORY -cne 'khemisset18/gpubnb') {
++    throw 'tsa_probe_requires_isolated_github_hosted_windows'
++}
++Add-Type -AssemblyName System.Security.Cryptography.Pkcs
++
++function Get-RootSnapshot {
++    $rows = foreach ($scope in @('LocalMachine', 'CurrentUser')) {
++        Get-ChildItem -LiteralPath "Cert:\$scope\Root" | ForEach-Object {
++            "$scope|$($_.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256))"
++        }
++    }
++    return @($rows | Sort-Object -Unique)
++}
++$rootsBefore = @(Get-RootSnapshot)
++$trustedRoots = [System.Security.Cryptography.X509Certificates.X509Certificate2Collection]::new()
++foreach ($scope in @('LocalMachine', 'CurrentUser')) {
++    foreach ($cert in @(Get-ChildItem -LiteralPath "Cert:\$scope\Root")) {
++        [void]$trustedRoots.Add($cert)
++    }
++}
++function Get-PublicCertHash($Certificate) {
++    return $Certificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant()
++}
++function Test-TsaChain($Token) {
++    $cms = $Token.AsSignedCms()
++    $cms.CheckSignature($true)
++    if ($cms.SignerInfos.Count -ne 1) { throw 'tsa_signer_count' }
++    $tsa = $cms.SignerInfos[0].Certificate
++    if ($null -eq $tsa) { throw 'tsa_certificate_missing' }
++    $eku = @($tsa.Extensions | Where-Object { $_.Oid.Value -ceq '2.5.29.37' })
++    if ($eku.Count -ne 1 -or -not $eku[0].Critical -or
++        $eku[0].EnhancedKeyUsages.Count -ne 1 -or
++        $eku[0].EnhancedKeyUsages[0].Value -cne '1.3.6.1.5.5.7.3.8') {
++        throw 'tsa_eku_not_exclusive_critical_timestamping'
++    }
++    $chain = [System.Security.Cryptography.X509Certificates.X509Chain]::new()
++    try {
++        # Memory-only roots are exactly the original Windows trusted roots.
++        # Provider-supplied certificates go ONLY in ExtraStore, never trust roots.
++        $chain.ChainPolicy.TrustMode = [System.Security.Cryptography.X509Certificates.X509ChainTrustMode]::CustomRootTrust
++        $chain.ChainPolicy.CustomTrustStore.AddRange($trustedRoots)
++        $chain.ChainPolicy.ExtraStore.AddRange($cms.Certificates)
++        $chain.ChainPolicy.DisableCertificateDownloads = $true
++        $chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::Online
++        $chain.ChainPolicy.RevocationFlag = [System.Security.Cryptography.X509Certificates.X509RevocationFlag]::ExcludeRoot
++        $chain.ChainPolicy.VerificationFlags = [System.Security.Cryptography.X509Certificates.X509VerificationFlags]::NoFlag
++        $chain.ChainPolicy.UrlRetrievalTimeout = [TimeSpan]::FromSeconds(10)
++        $chain.ChainPolicy.VerificationTime = $Token.TokenInfo.Timestamp.UtcDateTime
++        [void]$chain.ChainPolicy.ApplicationPolicy.Add([System.Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.8'))
++        $valid = $chain.Build($tsa)
++        $root = $chain.ChainElements[$chain.ChainElements.Count - 1].Certificate
++        $rootHash = Get-PublicCertHash $root
++        $previouslyTrusted = @($trustedRoots | Where-Object { (Get-PublicCertHash $_) -ceq $rootHash }).Count -gt 0
++        return [ordered]@{
++            valid = ($valid -and $previouslyTrusted)
++            statuses = @($chain.ChainStatus | ForEach-Object { [string]$_.Status })
++            signerSubject = $tsa.Subject
++            signerCertificateSha256 = Get-PublicCertHash $tsa
++            rootCertificateSha256 = $rootHash
++            rootPreviouslyTrusted = $previouslyTrusted
++            timestampUtc = $Token.TokenInfo.Timestamp.UtcDateTime.ToString('o')
++            hashAlgorithmOid = $Token.TokenInfo.HashAlgorithmId.Value
++        }
++    } finally { $chain.Dispose() }
++}
++function Get-EmbeddedCms([string]$Path) {
++    $bytes = [IO.File]::ReadAllBytes($Path)
++    if ($bytes.Length -lt 256 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw 'fixture_not_pe' }
++    $pe = [BitConverter]::ToInt32($bytes, 60)
++    if ($pe -lt 64 -or $pe + 24 + 112 + 40 -gt $bytes.Length -or
++        [BitConverter]::ToUInt32($bytes, $pe) -ne 0x4550) { throw 'fixture_pe_header_invalid' }
++    $opt = $pe + 24
++    $magic = [BitConverter]::ToUInt16($bytes, $opt)
++    $directory = if ($magic -eq 0x20b) { $opt + 112 } elseif ($magic -eq 0x10b) { $opt + 96 } else { throw 'fixture_pe_magic' }
++    $offset = [BitConverter]::ToUInt32($bytes, $directory + 32)
++    $size = [BitConverter]::ToUInt32($bytes, $directory + 36)
++    if ($offset -eq 0 -or $size -lt 8 -or ([long]$offset + $size) -gt $bytes.Length) { throw 'fixture_embedded_signature_missing' }
++    $length = [BitConverter]::ToUInt32($bytes, $offset)
++    if ($length -lt 8 -or $length -gt $size -or [BitConverter]::ToUInt16($bytes, $offset + 6) -ne 2) { throw 'fixture_win_certificate_invalid' }
++    $raw = [byte[]]::new($length - 8)
++    [Array]::Copy($bytes, $offset + 8, $raw, 0, $raw.Length)
++    $cms = [System.Security.Cryptography.Pkcs.SignedCms]::new()
++    $cms.Decode($raw)
++    return $cms
++}
++
++# This probe has no signing command, private key, PFX, token or GPUbnb binary.
++if ($env:GITHUB_REF_NAME -cne 'prep/stage4-osslsigncode-hardened-20261015') {
++    throw 'osslsigncode_probe_wrong_branch'
++}
++function Get-ByteHash([byte[]]$Bytes) {
++    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($Bytes)).ToLowerInvariant()
++}
++function Get-PrimaryDescription($Cms) {
++    if ($Cms.SignerInfos.Count -ne 1) { throw 'primary_signer_ambiguous' }
++    $s = $Cms.SignerInfos[0]
++    if ($null -eq $s.Certificate) { throw 'primary_certificate_missing' }
++    $attrs = @($s.SignedAttributes | ForEach-Object {
++        $oid = $_.Oid.Value
++        foreach ($value in $_.Values) { "$oid|$(Get-ByteHash $value.RawData)" }
++    } | Sort-Object)
++    return [ordered]@{
++        signerSha256 = Get-PublicCertHash $s.Certificate
++        digestOid = $s.DigestAlgorithm.Value
++        signatureBytesSha256 = Get-ByteHash $s.GetSignature()
++        signedContentSha256 = Get-ByteHash $Cms.ContentInfo.Content
++        signedAttributes = $attrs
++    }
++}
++function Assert-SamePrimary($Before, $After) {
++    foreach ($name in @('signerSha256', 'digestOid', 'signatureBytesSha256', 'signedContentSha256')) {
++        if ($Before[$name] -cne $After[$name]) { throw 'primary_signature_changed' }
++    }
++    if (@(Compare-Object @($Before.signedAttributes) @($After.signedAttributes)).Count -ne 0) {
++        throw 'primary_signed_attributes_changed'
++    }
++}
++function Invoke-ProbeTool([string]$FilePath, [string[]]$Arguments, [int]$TimeoutMs = 45000) {
++    if ($Arguments -contains 'sign' -or $Arguments -contains '-key' -or
++        $Arguments -contains '-pkcs12' -or $Arguments -contains '-TSA-key' -or
++        $Arguments -contains '-noverifypeer' -or $Arguments -contains '-time' -or
++        $Arguments -contains '-TSA-time') { throw 'forbidden_probe_operation' }
++    $start = [Diagnostics.ProcessStartInfo]::new()
++    $start.FileName = $FilePath
++    $start.WorkingDirectory = $scratch
++    $start.UseShellExecute = $false
++    $start.CreateNoWindow = $true
++    $start.RedirectStandardOutput = $true
++    $start.RedirectStandardError = $true
++    # The third-party process receives no runner tokens, key settings or proxies.
++    $start.Environment.Clear()
++    $start.Environment['SystemRoot'] = $env:SystemRoot
++    $start.Environment['WINDIR'] = $env:WINDIR
++    $start.Environment['TEMP'] = $scratch
++    $start.Environment['TMP'] = $scratch
++    $start.Environment['PATH'] = "$([IO.Path]::GetDirectoryName($FilePath));$env:WINDIR\System32"
++    foreach ($arg in $Arguments) { $start.ArgumentList.Add($arg) }
++    $p = [Diagnostics.Process]::new()
++    $p.StartInfo = $start
++    try {
++        if (-not $p.Start()) { throw 'probe_process_start_failed' }
++        $stdout = $p.StandardOutput.ReadToEndAsync()
++        $stderr = $p.StandardError.ReadToEndAsync()
++        if (-not $p.WaitForExit($TimeoutMs)) {
++            $p.Kill($true)
++            $p.WaitForExit()
++            throw 'probe_process_timeout'
++        }
++        $out = $stdout.GetAwaiter().GetResult()
++        $err = $stderr.GetAwaiter().GetResult()
++        return [ordered]@{
++            exitCode = $p.ExitCode
++            stdout = $out.Substring(0, [Math]::Min(10000, $out.Length))
++            stderr = $err.Substring(0, [Math]::Min(10000, $err.Length))
++        }
++    } finally { $p.Dispose() }
++}
++function Get-LeafCrl($Control,[string]$Name,[switch]$KnownExpiredFixture) {
++    # Negative fixture metadata is public even when the handshake is rejected.
++    # This never changes the TLS callback or adds any certificate to trust.
++    $rejectedFixture=$KnownExpiredFixture -and $Control.Host -ceq 'expired.badssl.com' -and
++        $Control.CallbackReached -and $Control.PolicyErrors -match 'RemoteCertificateChainErrors' -and
++        $Control.ChainStatuses -contains 'NotTimeValid'
++    if((-not $Control.HandshakeSucceeded -and -not $rejectedFixture) -or -not $Control.LeafCertificateDerBase64){throw 'crl_requires_authenticated_peer_or_explicit_expired_negative_fixture'}
++
++    $leaf=Join-Path $scratch ($Name+'-leaf.pem')
++    $der=[Convert]::FromBase64String($Control.LeafCertificateDerBase64)
++    $text="-----BEGIN CERTIFICATE-----`n"+[Convert]::ToBase64String($der,[Base64FormattingOptions]::InsertLineBreaks)+"`n-----END CERTIFICATE-----`n"
++    [IO.File]::WriteAllText($leaf,$text,[Text.Encoding]::ASCII)
++    $ext=Invoke-ProbeTool $openssl @('x509','-in',$leaf,'-noout','-ext','crlDistributionPoints')
++    $urls=@([regex]::Matches($ext.stdout,'URI:(https?://[^\s]+)')|ForEach-Object {$_.Groups[1].Value}|Sort-Object -Unique)
++    if($ext.exitCode -ne 0 -or $urls.Count -eq 0){throw 'public_tls_leaf_crl_distribution_point_missing'}
++    # CDP responses are signed CRLs, not timestamp responses. OpenSSL validates
++    # their issuer signature, applicability and freshness on its real TLS socket.
++    # Only known public CA distribution hosts are allowed; no local endpoints.
++    $u=[Uri]$urls[0]
++    if($u.UserInfo -ne '' -or $u.Fragment -ne '' -or -not $u.IsDefaultPort -or
++        $u.Host -notmatch '(?i)(^|\.)(lencr\.org|digicert\.com|sectigo\.com|comodoca\.com|pki\.goog|amazontrust\.com)$') {throw 'crl_distribution_host_not_allowlisted'}
++    $h=[Net.Http.HttpClientHandler]::new();$h.UseProxy=$false;$h.UseDefaultCredentials=$false;$h.AllowAutoRedirect=$false
++    $client=[Net.Http.HttpClient]::new($h);$client.Timeout=[TimeSpan]::FromSeconds(20)
++    try {
++        $r=$client.GetAsync($u).GetAwaiter().GetResult()
++        try {
++            if([int]$r.StatusCode -ne 200){throw 'public_crl_download_http_error'}
++            $bytes=$r.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
++            if($bytes.Length -lt 64 -or $bytes.Length -gt 16777216){throw 'public_crl_size_invalid'}
++            $d=Join-Path $scratch ($Name+'.crl.der');$p=Join-Path $scratch ($Name+'.crl.pem')
++            [IO.File]::WriteAllBytes($d,$bytes)
++            $convert=Invoke-ProbeTool $openssl @('crl','-inform','DER','-in',$d,'-outform','PEM','-out',$p)
++            if($convert.exitCode -ne 0){throw 'public_crl_der_invalid'}
++            $info=Invoke-ProbeTool $openssl @('crl','-in',$p,'-noout','-issuer','-lastupdate','-nextupdate')
++            if($info.exitCode -ne 0){throw 'public_crl_metadata_invalid'}
++            $report.crlEvidence+=@([ordered]@{name=$Name;url=$u.AbsoluteUri;derSha256=Get-ByteHash $bytes;metadata=$info.stdout;usedByActualOpenSslPeerValidation=$true})
++            return $p
++        }finally{$r.Dispose()}
++    }finally{$client.Dispose();$h.Dispose()}
++}
++function Test-InvalidRfc3161 {
++    $url='https://httpbin.org/response-headers?Content-Type=application%2Ftimestamp-reply'
++    $control=[PublicTlsControl]::Check('httpbin.org')
++    if(-not $control.HandshakeSucceeded){throw 'malformed_response_tls_control_failed'}
++    $invalidCrl=Get-LeafCrl $control 'malformed-response'
++    $control.LeafCertificateDerBase64=$null
++    $h=[Net.Http.HttpClientHandler]::new();$h.UseProxy=$false;$h.UseDefaultCredentials=$false;$h.AllowAutoRedirect=$false
++    $client=[Net.Http.HttpClient]::new($h);$client.Timeout=[TimeSpan]::FromSeconds(20)
++    try {
++        $content=[Net.Http.ByteArrayContent]::new([byte[]]@(0x30,0x00))
++        $content.Headers.ContentType=[Net.Http.Headers.MediaTypeHeaderValue]::new('application/timestamp-query')
++        $r=$client.PostAsync($url,$content).GetAwaiter().GetResult()
++        try {
++            $body=$r.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
++            $report.invalidRfc3161Control=[ordered]@{url=$url;httpStatus=[int]$r.StatusCode;contentType=[string]$r.Content.Headers.ContentType;length=$body.Length;firstByte=if($body.Length -gt 0){[int]$body[0]}else{$null}}
++            if([int]$r.StatusCode -ne 200 -or $r.Content.Headers.ContentType.MediaType -cne 'application/timestamp-reply' -or
++                $body.Length -eq 0 -or $body[0] -ne 0x7b){throw 'malformed_rfc3161_response_not_independently_observed'}
++            $target=Join-Path $scratch 'invalid-rfc3161.exe'
++            $d=Invoke-ProbeTool $ossl.FullName @('add','-h','sha256','-ts',$url,'-HTTPS-CAfile',$ca,'-HTTPS-CRLfile',$invalidCrl,'-verbose','-in',$fixture,'-out',$target)
++            $combined=$d.stdout+$d.stderr
++            $pass=($d.exitCode -ne 0 -and $combined -match 'Failed to convert timestamp reply' -and
++                $combined -match 'asn1|ASN1|wrong tag' -and $combined -notmatch 'TLS_FAIL_CLOSED|HTTP failure|verification was skipped|Ignoring .*CRL' -and -not (Test-Path -LiteralPath $target))
++            $report.invalidRfc3161=[ordered]@{url=$url;strictWindowsTlsControl=$control;independentHttpStatus=[int]$r.StatusCode;contentType=$r.Content.Headers.ContentType.MediaType;invalidBodySha256=Get-ByteHash $body;osslsigncode=$d;rejectedAtRfc3161Parser=$pass}
++            $report.invalidRfc3161RejectionProven=$pass
++        }finally{$r.Dispose();$content.Dispose()}
++    }finally{$client.Dispose();$h.Dispose()}
++}
++Add-Type -TypeDefinition @'
++using System;
++using System.Linq;
++using System.Net.Security;
++using System.Net.Sockets;
++using System.Security.Cryptography;
++using System.Security.Cryptography.X509Certificates;
++public sealed class PublicTlsResult {
++    public string Host;
++    public bool CallbackReached;
++    public bool HandshakeSucceeded;
++    public string PolicyErrors;
++    public string[] ChainStatuses;
++    public string CertificateSha256;
++    public string ErrorType;
++    public string LeafCertificateDerBase64;
++}
++public static class PublicTlsControl {
++    public static PublicTlsResult Check(string host) {
++        var r=new PublicTlsResult {Host=host, ChainStatuses=Array.Empty<string>()};
++        using (var tcp=new TcpClient()) {
++            try {
++                if (!tcp.ConnectAsync(host,443).Wait(12000)) throw new TimeoutException();
++                using (var ssl=new SslStream(tcp.GetStream(),false,(sender,cert,chain,errors)=>{
++                    r.CallbackReached=true;
++                    r.LeafCertificateDerBase64=cert==null ? null : Convert.ToBase64String(cert.GetRawCertData());
++                    r.PolicyErrors=errors.ToString();
++                    r.ChainStatuses=chain==null ? Array.Empty<string>() : chain.ChainStatus.Select(s=>s.Status.ToString()).ToArray();
++                    r.CertificateSha256=cert==null ? null : Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())).ToLowerInvariant();
++                    return errors==SslPolicyErrors.None;
++                })) {
++                    if (!ssl.AuthenticateAsClientAsync(host).Wait(12000)) throw new TimeoutException();
++                    r.HandshakeSucceeded=ssl.IsAuthenticated && ssl.IsEncrypted;
++                }
++            } catch (Exception e) {r.ErrorType=(e.InnerException??e).GetType().Name;}
++        }
++        return r;
++    }
++}
++'@
++$scratch = Join-Path $env:RUNNER_TEMP ('gpubnb-osslsigncode-probe-' + [Guid]::NewGuid().ToString('N'))
++[void](New-Item -ItemType Directory -Path $scratch)
++$report = [ordered]@{
++    schemaVersion=1
++    probe='windows-isolated-hardened-osslsigncode-public-fixture'
++    repository=$env:GITHUB_REPOSITORY
++    workflowCommit=$env:GITHUB_SHA
++    collectedAtUtc=[DateTime]::UtcNow.ToString('o')
++    windowsVersion=[Environment]::OSVersion.Version.ToString()
++    powerShellVersion=$PSVersionTable.PSVersion.ToString()
++    sourceTag='2.14'
++    sourceCommit='beec94e308d1a1e03ca17b05fe089d93c6303e90'
++    auditedBuild=$null
++    tlsExpiryValidationProven=$false
++    invalidRfc3161RejectionProven=$false
++    failClosedConfigurationProven=$false
++    tlsRevocationMode='strict_leaf_CRL_no_error_waivers'
++    crlEvidence=@()
++    codeSigningPerformed=$false
++    privateKeyAccessed=$false
++    rootsImported=$false
++    fixtureNeverExecuted=$true
++    gpuBnbCandidateModified=$false
++    pc1OrPc2Accessed=$false
++    providerApproved=$false
++    extraCostEuros=0
++    tlsPeerValidationProven=$false
++    tlsHostnameValidationProven=$false
++    functionalTimestampPass=$false
++    secureIntegrationPass=$false
++    negativeTls=@()
++    configurationNegatives=@()
++    positive=$null
++}
++$fixtureSource=$null
++$sourceHash=$null
++try {
++    $signTool = Get-Item -LiteralPath 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe' -ErrorAction Stop
++    $st = Get-AuthenticodeSignature -LiteralPath $signTool.FullName
++    if ($st.Status -ne 'Valid' -or $st.SignerCertificate.Subject -notmatch 'CN=Microsoft Corporation(?:,|$)') {
++        throw 'signtool_not_valid_microsoft'
++    }
++    $report.signTool = [ordered]@{
++        path=$signTool.FullName
++        fileVersion=$signTool.VersionInfo.FileVersion
++        productVersion=$signTool.VersionInfo.ProductVersion
++        sha256=(Get-FileHash -LiteralPath $signTool.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
++        signerSha256=Get-PublicCertHash $st.SignerCertificate
++    }
++    $build=Get-Content -LiteralPath $env:GPUBNB_HARDENED_MANIFEST -Raw | ConvertFrom-Json
++    $ossl=Get-Item -LiteralPath $env:GPUBNB_HARDENED_TOOL -ErrorAction Stop
++    if ((Get-FileHash -LiteralPath $ossl.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -cne $build.tool.sha256 -or
++        $build.workflowCommit -cne $env:GITHUB_SHA -or -not $build.opensslUpstreamTestsPassed -or -not $build.zlibUpstreamTestsPassed) { throw 'audited_build_provenance_mismatch' }
++    $version=Invoke-ProbeTool $ossl.FullName @('-v')
++    if ($version.exitCode -ne 0 -or $version.stdout -notmatch 'osslsigncode 2\.14-gpubnb-tls1' -or $version.stdout -notmatch 'OpenSSL 3\.5\.9') { throw 'hardened_version_mismatch' }
++    $report.auditedBuild=$build
++    $report.tool=[ordered]@{fileSha256=$build.tool.sha256;version=$version;authenticodeStatus=$build.tool.authenticodeStatus}
++    $openssl=Join-Path $env:GPUBNB_HARDENED_BUILD_ROOT 'prefix\bin\openssl.exe'
++    $fixture = $null
++    $paths = @((Join-Path $PSHOME 'pwsh.exe'), $signTool.FullName)
++    foreach ($path in $paths) {
++        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
++        $sig = Get-AuthenticodeSignature -LiteralPath $path
++        $now = [DateTime]::UtcNow
++        if ($sig.Status -ne 'Valid' -or $null -eq $sig.SignerCertificate -or
++            $sig.SignerCertificate.Subject -notmatch 'CN=Microsoft Corporation(?:,|$)' -or
++            $sig.SignerCertificate.NotBefore.ToUniversalTime() -gt $now -or
++            $sig.SignerCertificate.NotAfter.ToUniversalTime() -le $now) { continue }
++        $cms = Get-EmbeddedCms $path
++        if ($cms.SignerInfos.Count -ne 1 -or $cms.SignerInfos[0].DigestAlgorithm.Value -cne '2.16.840.1.101.3.4.2.1') { continue }
++        $originalPrimary = Get-PrimaryDescription $cms
++        $copy = Join-Path $scratch 'fixture-without-timestamp.exe'
++        Copy-Item -LiteralPath $path -Destination $copy
++        $remove = Invoke-ProbeTool $signTool.FullName @('remove','/u',$copy)
++        if ($remove.exitCode -ne 0) { throw 'fixture_timestamp_removal_failed' }
++        $after = Get-AuthenticodeSignature -LiteralPath $copy
++        if ($after.Status -ne 'Valid' -or $null -ne $after.TimeStamperCertificate) { throw 'fixture_baseline_signature_invalid' }
++        $primary = Get-PrimaryDescription (Get-EmbeddedCms $copy)
++        Assert-SamePrimary $originalPrimary $primary
++        $verify = Invoke-ProbeTool $signTool.FullName @('verify','/pa','/all','/v',$copy)
++        if ($verify.exitCode -ne 0) { throw 'fixture_baseline_signtool_invalid' }
++        $fixture = $copy
++        $fixtureSource = $path
++        $sourceHash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
++        $report.fixture = [ordered]@{
++            sourcePath=$path;sourceSha256=$sourceHash
++            beforeTimestampSha256=(Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant()
++            primary=$primary;baselineWindowsStatus=[string]$after.Status
++            baselineSignTool=$verify;originalPrimaryPreservedDuringTimestampRemoval=$true
++            signerNotAfterUtc=$after.SignerCertificate.NotAfter.ToUniversalTime().ToString('o')
++        }
++        break
++    }
++    if ($null -eq $fixture) { throw 'no_current_valid_microsoft_sha256_embedded_fixture' }
++    # Public root DER bytes only, written as a temporary PEM. No key or import.
++    $ca = Join-Path $scratch 'original-windows-roots.pem'
++    $pem = @($trustedRoots | ForEach-Object {
++        '-----BEGIN CERTIFICATE-----'
++        [Convert]::ToBase64String($_.RawData,[Base64FormattingOptions]::InsertLineBreaks)
++        '-----END CERTIFICATE-----'
++    }) -join [Environment]::NewLine
++    [IO.File]::WriteAllText($ca,$pem,[Text.Encoding]::ASCII)
++    $report.httpsTrust = [ordered]@{
++        publicRootsOnly=$true;rootCount=$trustedRoots.Count
++        pemSha256=(Get-FileHash -LiteralPath $ca -Algorithm SHA256).Hash.ToLowerInvariant()
++        noRootImported=$true;explicitHttpsCAfile=$true
++    }
++    $positiveControl=[PublicTlsControl]::Check('rfc3161.ai.moda')
++    if (-not $positiveControl.HandshakeSucceeded) { throw 'positive_tls_control_failed' }
++    $crl=Get-LeafCrl $positiveControl 'positive'
++    foreach ($test in @(
++        @{name='missing-ca';args=@('-HTTPS-CAfile',(Join-Path $scratch 'absent.pem'),'-HTTPS-CRLfile',$crl);pattern='TLS_FAIL_CLOSED: CA or CRL loading failed'},
++        @{name='missing-crl';args=@('-HTTPS-CAfile',$ca);pattern='TLS_FAIL_CLOSED: explicit CA and CRL files are required'},
++        @{name='http-tsa';args=@('-HTTPS-CAfile',$ca,'-HTTPS-CRLfile',$crl);pattern='TLS_FAIL_CLOSED: HTTPS is required'}
++    )) {
++        $target=Join-Path $scratch ($test.name+'.exe')
++        $url=if($test.name -ceq 'http-tsa'){'http://rfc3161.ai.moda/'}else{'https://rfc3161.ai.moda/'}
++        $d=Invoke-ProbeTool $ossl.FullName (@('add','-h','sha256','-ts',$url)+$test.args+@('-verbose','-in',$fixture,'-out',$target))
++        $pass=($d.exitCode -ne 0 -and ($d.stdout+$d.stderr) -match $test.pattern -and -not (Test-Path -LiteralPath $target))
++        if(-not $pass){throw 'fail_closed_configuration_test_failed'}
++        $report.configurationNegatives+=@([ordered]@{name=$test.name;rejected=$pass;diagnostic=$d})
++    }
++    $report.failClosedConfigurationProven=$true
++    foreach ($test in @(
++        @{name='untrusted-peer';host='self-signed.badssl.com';pattern='TLS_FAIL_CLOSED: certificate verification: (self.signed certificate|unable to get local issuer certificate|unable to verify the first certificate)'},
++        @{name='wrong-host';host='wrong.host.badssl.com';pattern='TLS_FAIL_CLOSED: certificate verification: hostname mismatch'},
++        @{name='expired-peer';host='expired.badssl.com';pattern='TLS_FAIL_CLOSED: certificate verification: certificate has expired'}
++    )) {
++        $control = [PublicTlsControl]::Check($test.host)
++        $testCrl=$crl
++        if($test.name -ceq 'expired-peer'){$testCrl=Get-LeafCrl $control 'expired-negative' -KnownExpiredFixture}
++        $target = Join-Path $scratch ($test.name+'.exe')
++        $diagnostic = Invoke-ProbeTool $ossl.FullName @('add','-h','sha256','-ts',("https://"+$test.host+"/"),'-HTTPS-CAfile',$ca,'-HTTPS-CRLfile',$testCrl,'-verbose','-in',$fixture,'-out',$target)
++        $combined = $diagnostic.stdout + [Environment]::NewLine + $diagnostic.stderr
++        $expectedControl = if ($test.name -ceq 'untrusted-peer') {
++            $control.CallbackReached -and $control.PolicyErrors -match 'RemoteCertificateChainErrors'
++        } elseif ($test.name -ceq 'expired-peer') {
++            $control.CallbackReached -and $control.PolicyErrors -match 'RemoteCertificateChainErrors' -and $control.ChainStatuses -contains 'NotTimeValid'
++        } else {
++            $control.CallbackReached -and $control.PolicyErrors -ceq 'RemoteCertificateNameMismatch' -and $control.ChainStatuses.Count -eq 0
++        }
++        $rejected = $expectedControl -and $diagnostic.exitCode -ne 0 -and $combined -match $test.pattern
++        $rejected=$rejected -and -not (Test-Path -LiteralPath $target) -and $combined -notmatch 'received status 405|verification was skipped|Ignoring .*CRL'
++        $control.LeafCertificateDerBase64=$null
++        $report.negativeTls += [ordered]@{
++            name=$test.name;url=("https://"+$test.host+"/");strictWindowsControl=$control
++            expectedFaultIndependentlyObserved=$expectedControl
++            osslsigncode=$diagnostic;tlsSpecificRejectionProven=$rejected
++            outputCreated=(Test-Path -LiteralPath $target -PathType Leaf)
++        }
++        if ($test.name -ceq 'untrusted-peer') { $report.tlsPeerValidationProven=$rejected }
++        elseif ($test.name -ceq 'wrong-host') { $report.tlsHostnameValidationProven=$rejected }
++        else { $report.tlsExpiryValidationProven=$rejected }
++    }
++    # Measurement on PUBLIC fixture only. Any failed TLS gate keeps integration NO-GO.
++    $row = [ordered]@{
++        url='https://rfc3161.ai.moda/';approved=$false;signatureAdded=$false
++        afterTimestampSha256=$null;technicalPass=$false;errorCode=$null
++    }
++    try {
++        $row.strictWindowsTlsControl = $positiveControl
++        $row.strictWindowsTlsControl.LeafCertificateDerBase64=$null
++        if (-not $row.strictWindowsTlsControl.HandshakeSucceeded) { throw 'positive_tls_control_failed' }
++        $timestamped = Join-Path $scratch 'fixture-rfc3161.exe'
++        $beforeNetwork = [DateTime]::UtcNow
++        $row.addDiagnostic = Invoke-ProbeTool $ossl.FullName @('add','-h','sha256','-ts',$row.url,'-HTTPS-CAfile',$ca,'-HTTPS-CRLfile',$crl,'-verbose','-in',$fixture,'-out',$timestamped)
++        if ($row.addDiagnostic.exitCode -ne 0) { throw 'osslsigncode_add_failed' }
++        $afterNetwork = [DateTime]::UtcNow
++        if ($row.addDiagnostic.stdout -match 'verification was skipped|Ignoring .*CRL' -or $row.addDiagnostic.stderr -match 'verification was skipped') { throw 'tls_verification_skipped' }
++        $row.afterTimestampSha256 = (Get-FileHash -LiteralPath $timestamped -Algorithm SHA256).Hash.ToLowerInvariant()
++        if ($row.afterTimestampSha256 -ceq $report.fixture.beforeTimestampSha256) { throw 'file_hash_not_changed' }
++        $cms = Get-EmbeddedCms $timestamped
++        $newPrimary = Get-PrimaryDescription $cms
++        Assert-SamePrimary $report.fixture.primary $newPrimary
++        $row.primaryUnchanged=$true
++        $row.primary=$newPrimary
++        $sig = Get-AuthenticodeSignature -LiteralPath $timestamped
++        $row.windowsStatus=[string]$sig.Status
++        if ($sig.Status -ne 'Valid' -or $null -eq $sig.TimeStamperCertificate -or
++            (Get-PublicCertHash $sig.SignerCertificate) -cne $report.fixture.primary.signerSha256) {
++            throw 'windows_signature_timestamp_or_identity_invalid'
++        }
++        $row.signtoolVerify = Invoke-ProbeTool $signTool.FullName @('verify','/pa','/all','/v','/tw',$timestamped)
++        if ($row.signtoolVerify.exitCode -ne 0) { throw 'signtool_timestamp_verification_failed_or_warning' }
++        $attrs = @($cms.SignerInfos[0].UnsignedAttributes | Where-Object { $_.Oid.Value -ceq '1.3.6.1.4.1.311.3.3.1' })
++        if ($attrs.Count -ne 1 -or $attrs[0].Values.Count -ne 1) { throw 'rfc3161_attribute_missing_or_ambiguous' }
++        $token=$null; $consumed=0
++        $raw=$attrs[0].Values[0].RawData
++        if (-not [Security.Cryptography.Pkcs.Rfc3161TimestampToken]::TryDecode([ReadOnlyMemory[byte]]::new($raw),[ref]$token,[ref]$consumed) -or $consumed -ne $raw.Length) {
++            throw 'rfc3161_embedded_token_invalid'
++        }
++        $tsaCert=$null
++        if (-not $token.VerifySignatureForSignerInfo($cms.SignerInfos[0],[ref]$tsaCert,$token.AsSignedCms().Certificates)) { throw 'rfc3161_not_bound_to_primary' }
++        if ($token.TokenInfo.HashAlgorithmId.Value -cne '2.16.840.1.101.3.4.2.1') { throw 'rfc3161_digest_not_sha256' }
++        if ($token.TokenInfo.Timestamp.UtcDateTime -lt $beforeNetwork.AddSeconds(-5) -or
++            $token.TokenInfo.Timestamp.UtcDateTime -gt $afterNetwork.AddSeconds(5)) { throw 'rfc3161_time_outside_request_interval' }
++        $row.tsa = Test-TsaChain $token
++        if (-not $row.tsa.valid) { throw 'tsa_chain_or_revocation_not_valid_under_original_roots' }
++        $row.tokenBoundToPrimary=$true
++        $row.rfc3161Sha256=$true
++        $row.timestampSignatureAdded=$true
++        # Meaningful integrity negative: flip a byte in the first non-empty section.
++        $tampered=Join-Path $scratch 'fixture-tampered.exe'
++        $bytes=[IO.File]::ReadAllBytes($timestamped)
++        $pe=[BitConverter]::ToInt32($bytes,60)
++        $sectionTable=$pe+24+[BitConverter]::ToUInt16($bytes,$pe+20)
++        $sectionCount=[BitConverter]::ToUInt16($bytes,$pe+6)
++        $offset=0
++        for($i=0;$i -lt $sectionCount;$i++){
++            $s=$sectionTable+40*$i
++            $size=[BitConverter]::ToUInt32($bytes,$s+16)
++            $start=[BitConverter]::ToUInt32($bytes,$s+20)
++            if($size -ge 32 -and $start -ge $sectionTable+40*$sectionCount -and [long]$start+$size -le $bytes.Length){
++                $offset=[int]$start+16;break
++            }
++        }
++        if($offset -eq 0){throw 'tamper_test_section_missing'}
++        $bytes[$offset]=$bytes[$offset] -bxor 1
++        [IO.File]::WriteAllBytes($tampered,$bytes)
++        $badSig=Get-AuthenticodeSignature -LiteralPath $tampered
++        $badVerify=Invoke-ProbeTool $signTool.FullName @('verify','/pa','/all','/v','/tw',$tampered)
++        $row.integrityNegative=[ordered]@{windowsStatus=[string]$badSig.Status;signtoolExitCode=$badVerify.exitCode;rejected=($badSig.Status -ne 'Valid' -and $badVerify.exitCode -ne 0)}
++        if(-not $row.integrityNegative.rejected){throw 'modified_fixture_not_rejected'}
++        $standard=& (Join-Path $PSScriptRoot '../verify-windows-authenticode.ps1') -Path $timestamped -Required -RequireTimestamp -ExpectedSignerSha256 $report.fixture.primary.signerSha256
++        $row.standardGpuBnbVerifier=($standard -join "`n")|ConvertFrom-Json
++        if(-not $row.standardGpuBnbVerifier.valid -or -not $row.standardGpuBnbVerifier.timestamped){throw 'standard_verifier_rejected_fixture'}
++        $row.technicalPass=$true
++        $report.functionalTimestampPass=$true
++    } catch {
++        $msg=[string]$_.Exception.Message
++        $row.errorCode=if($msg -match '^[a-z0-9_]+$'){$msg}else{'positive_exception_details_withheld'}
++        $row.errorType=$_.Exception.GetType().Name
++    }
++    $report.positive=$row
++    Test-InvalidRfc3161
++} catch {
++    $msg=[string]$_.Exception.Message
++    $report.environmentErrorCode=if($msg -match '^[a-z0-9_]+$'){$msg}else{'environment_exception_details_withheld'}
++    $report.environmentErrorType=$_.Exception.GetType().Name
++} finally {
++    $report.rootStoresUnchanged=(@(Compare-Object $rootsBefore @(Get-RootSnapshot)).Count -eq 0)
++    $report.sourceFixtureUnchanged=($null -ne $fixtureSource -and (Get-FileHash -LiteralPath $fixtureSource -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $sourceHash)
++    $report.secureIntegrationPass=($report.functionalTimestampPass -and $report.tlsPeerValidationProven -and $report.tlsHostnameValidationProven -and $report.tlsExpiryValidationProven -and $report.invalidRfc3161RejectionProven -and $report.failClosedConfigurationProven -and $report.rootStoresUnchanged -and $report.sourceFixtureUnchanged)
++    $report.decision=if($report.secureIntegrationPass){'TECHNICAL_PROOF_ONLY_NO_OPERATIONAL_APPROVAL'}else{'NO_GO_SECURE_INTEGRATION'}
++    Write-Host 'GPUBNB_OSSLSIGNCODE_JSON_BEGIN'
++    $report | ConvertTo-Json -Depth 16 | Write-Host
++    Write-Host 'GPUBNB_OSSLSIGNCODE_JSON_END'
++    Remove-Item -LiteralPath $scratch -Recurse -Force
++}
++if (-not $report.secureIntegrationPass) { exit 1 }
+diff --git a/scripts/tests/windows-rfc3161-fixtures.ps1 b/scripts/tests/windows-rfc3161-fixtures.ps1
+new file mode 100644
+index 00000000..6372bad9
+--- /dev/null
++++ b/scripts/tests/windows-rfc3161-fixtures.ps1
+@@ -0,0 +1,76 @@
++# Public fixture diagnostics only, no code signing or private key operations.
++Set-StrictMode -Version Latest
++$ErrorActionPreference='Stop'
++if($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_OS -cne 'Windows' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or $env:GITHUB_REPOSITORY -cne 'khemisset18/gpubnb'){throw 'isolated_windows_required'}
++function Roots { @('CurrentUser','LocalMachine')|ForEach-Object {$s=$_;Get-ChildItem -LiteralPath "Cert:\$s\Root"|ForEach-Object {"$s|$($_.Thumbprint)"}}|Sort-Object -Unique }
++$before=@(Roots)
++Add-Type -TypeDefinition @'
++using System;
++using System.Linq;
++using System.Net.Security;
++using System.Net.Sockets;
++using System.Security.Cryptography;
++using System.Security.Cryptography.X509Certificates;
++public static class ExpiredPublicFixture {
++    public static string Certificate;
++    public static string Errors;
++    public static string[] Statuses;
++    public static string ErrorType;
++    public static void Read() {
++        using (var c=new TcpClient()) {
++            try {
++                if(!c.ConnectAsync("expired.badssl.com",443).Wait(12000)) throw new TimeoutException();
++                using(var s=new SslStream(c.GetStream(),false,(sender,cert,chain,errors)=>{
++                    Certificate=Convert.ToBase64String(cert.GetRawCertData());
++                    Errors=errors.ToString();
++                    Statuses=chain.ChainStatus.Select(x=>x.Status.ToString()).ToArray();
++                    return errors==SslPolicyErrors.None;
++                })) {
++                    if(!s.AuthenticateAsClientAsync("expired.badssl.com").Wait(12000)) throw new TimeoutException();
++                }
++            } catch(Exception e){ErrorType=(e.InnerException??e).GetType().Name;}
++        }
++    }
++}
++'@
++function PublicHttp([string]$Url,[string]$Method='GET') {
++    $h=[Net.Http.HttpClientHandler]::new();$h.UseDefaultCredentials=$false;$h.UseProxy=$false;$h.AllowAutoRedirect=$false
++    $client=[Net.Http.HttpClient]::new($h);$client.Timeout=[TimeSpan]::FromSeconds(15)
++    $r=$null;$content=$null
++    try{
++        if($Method -ceq 'POST'){
++            $content=[Net.Http.ByteArrayContent]::new([byte[]]@(0x30,0))
++            $content.Headers.ContentType=[Net.Http.Headers.MediaTypeHeaderValue]::new('application/timestamp-query')
++            $r=$client.PostAsync($Url,$content).GetAwaiter().GetResult()
++        }else{$r=$client.GetAsync($Url).GetAwaiter().GetResult()}
++        $b=$r.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
++        [ordered]@{url=$Url;method=$Method;status=[int]$r.StatusCode;contentType=[string]$r.Content.Headers.ContentType;length=$b.Length;firstBytesHex=if($b.Length -gt 0){[Convert]::ToHexString($b[0..([Math]::Min(15,$b.Length-1))])}else{''};sha256=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($b)).ToLowerInvariant()}
++    }catch{[ordered]@{url=$Url;method=$Method;errorType=$_.Exception.GetType().Name}}
++    finally{if($r){$r.Dispose()};if($content){$content.Dispose()};$client.Dispose();$h.Dispose()}
++}
++[ExpiredPublicFixture]::Read()
++if(-not [ExpiredPublicFixture]::Certificate){throw 'expired_fixture_public_certificate_missing'}
++$cert=[Security.Cryptography.X509Certificates.X509Certificate2]::new([Convert]::FromBase64String([ExpiredPublicFixture]::Certificate))
++$cdp=@($cert.Extensions|Where-Object {$_.Oid.Value -ceq '2.5.29.31'}|ForEach-Object {$_.Format($true)}) -join [Environment]::NewLine
++$urls=@([regex]::Matches($cdp,'https?://[^\s,]+')|ForEach-Object {$_.Value}|Sort-Object -Unique)
++$crls=@(foreach($url in $urls){
++    $u=[Uri]$url
++    if($u.UserInfo -eq '' -and $u.IsDefaultPort -and $u.Host -match '(?i)(^|\.)(digicert\.com|comodoca\.com|sectigo\.com)$'){PublicHttp $url}
++})
++$rows=@(
++    PublicHttp 'https://httpbingo.org/response-headers?Content-Type=application%2Ftimestamp-reply' 'POST'
++    PublicHttp 'https://httpbingo.org/response-headers?Content-Type=application%2Ftimestamp-reply'
++    PublicHttp 'https://httpbin.org/response-headers?Content-Type=application%2Ftimestamp-reply' 'POST'
++    PublicHttp 'https://httpbin.org/response-headers?Content-Type=application%2Ftimestamp-reply'
++)
++$report=[ordered]@{
++    schemaVersion=1;workflowCommit=$env:GITHUB_SHA;collectedAtUtc=[DateTime]::UtcNow.ToString('o')
++    expired=[ordered]@{issuer=$cert.Issuer;notAfterUtc=$cert.NotAfter.ToUniversalTime().ToString('o');certificateSha256=$cert.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256);errors=[ExpiredPublicFixture]::Errors;statuses=[ExpiredPublicFixture]::Statuses;cdpUrls=$urls;crls=$crls}
++    malformedResponses=$rows;rootStoresUnchanged=(@(Compare-Object $before @(Roots)).Count -eq 0)
++    gpuBnbKeyUsed=$false;gpuBnbBinarySigned=$false;pc1OrPc2Accessed=$false;extraCostEuros=0
++}
++$cert.Dispose()
++Write-Host 'GPUBNB_PUBLIC_FIXTURES_JSON_BEGIN'
++$report|ConvertTo-Json -Depth 12|Write-Host
++Write-Host 'GPUBNB_PUBLIC_FIXTURES_JSON_END'
++if(-not $report.rootStoresUnchanged){throw 'root_store_changed'}
+diff --git a/scripts/third-party/osslsigncode/build-windows.ps1 b/scripts/third-party/osslsigncode/build-windows.ps1
+new file mode 100644
+index 00000000..512c1703
+--- /dev/null
++++ b/scripts/third-party/osslsigncode/build-windows.ps1
+@@ -0,0 +1,239 @@
++param([Parameter(Mandatory=$true)][string]$OutputDirectory)
++Set-StrictMode -Version Latest
++$ErrorActionPreference='Stop'
++if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_OS -cne 'Windows' -or
++    $env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or
++    $env:GITHUB_REPOSITORY -cne 'khemisset18/gpubnb' -or
++    $env:GITHUB_REF_NAME -cne 'prep/stage4-osslsigncode-hardened-20261015') {
++    throw 'hardened_build_requires_isolated_hosted_windows_branch'
++}
++function Get-RootStoreSnapshot {
++    $rows=foreach($scope in @('CurrentUser','LocalMachine')){
++        Get-ChildItem -LiteralPath "Cert:\$scope\Root" | ForEach-Object {
++            "$scope|$($_.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256))"
++        }
++    }
++    return @($rows|Sort-Object -Unique)
++}
++$rootsBeforeBuild=@(Get-RootStoreSnapshot)
++$base=[IO.Path]::GetFullPath($env:RUNNER_TEMP)+[IO.Path]::DirectorySeparatorChar
++$work=[IO.Path]::GetFullPath($OutputDirectory)
++if (-not $work.StartsWith($base,[StringComparison]::OrdinalIgnoreCase) -or
++    (Test-Path -LiteralPath $work)) { throw 'build_destination_must_be_new_runner_temp_directory' }
++[void](New-Item -ItemType Directory -Path $work)
++"GPUBNB_HARDENED_BUILD_ROOT=$work" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
++$lock=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'sources.lock.json') -Raw | ConvertFrom-Json
++$patch=Join-Path $PSScriptRoot 'tls-fail-closed.patch'
++if ((Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lock.patchSha256) { throw 'hardening_patch_hash_mismatch' }
++$emptyGitConfig=Join-Path $work 'empty-git.config'
++[IO.File]::WriteAllText($emptyGitConfig,'',[Text.Encoding]::ASCII)
++$emptyHooks=Join-Path $work 'empty-hooks'
++[void](New-Item -ItemType Directory -Path $emptyHooks)
++$childEnv=@{
++    SystemRoot=$env:SystemRoot;WINDIR=$env:WINDIR;TEMP=$work;TMP=$work
++    PATH="$env:SystemRoot\System32;C:\Program Files\CMake\bin;C:\Program Files\Git\cmd;C:\Strawberry\perl\bin"
++    GIT_CONFIG_NOSYSTEM='1';GIT_CONFIG_GLOBAL=$emptyGitConfig;GIT_TERMINAL_PROMPT='0'
++    VSCMD_SKIP_SENDTELEMETRY='1'
++}
++if($env:RUNNER_TRACKING_ID){$childEnv['RUNNER_TRACKING_ID']=$env:RUNNER_TRACKING_ID}
++function Read-BuildLog([string]$Path) {
++    if(-not (Test-Path -LiteralPath $Path)){return ''}
++    $stream=[IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
++    $reader=[IO.StreamReader]::new($stream)
++    try{return $reader.ReadToEnd()}finally{$reader.Dispose();$stream.Dispose()}
++}
++function Run([string]$Exe,[string[]]$Arguments,[string]$Directory=$work,[int]$TimeoutMs=1200000) {
++    # File redirection avoids waiting indefinitely for EOF held by an orphaned
++    # compiler/test descendant after its parent has exited. Only fixed build
++    # arguments are accepted; cmd metacharacters/expansion are rejected.
++    $id=[Guid]::NewGuid().ToString('N')
++    $outFile=Join-Path $work ($id+'.stdout.log')
++    $errFile=Join-Path $work ($id+'.stderr.log')
++    $batch=Join-Path $work ($id+'.cmd')
++    $words=@($Exe)+$Arguments
++    foreach($word in $words){if($word -match '[%\r\n"!^&<>|]'){throw 'build_argument_not_safe_for_fixed_batch'}}
++    $line=(@($words|ForEach-Object {'"'+$_+'"'}) -join ' ')
++    [IO.File]::WriteAllText($batch,('@echo off'+"`r`n"+$line+' 1>"'+$outFile+'" 2>"'+$errFile+'"'+"`r`n@exit /b %errorlevel%`r`n"),[Text.Encoding]::ASCII)
++    Write-Host ("Build process: "+[IO.Path]::GetFileName($Exe)+' '+($Arguments -join ' '))
++    $si=[Diagnostics.ProcessStartInfo]::new()
++    $si.FileName="$env:SystemRoot\System32\cmd.exe";$si.WorkingDirectory=$Directory;$si.UseShellExecute=$false
++    $si.Environment.Clear()
++    foreach($k in $childEnv.Keys){$si.Environment[$k]=$childEnv[$k]}
++    foreach($a in @('/d','/v:off','/c',$batch)){$si.ArgumentList.Add($a)}
++    $p=[Diagnostics.Process]::new();$p.StartInfo=$si
++    try {
++        if(-not $p.Start()){throw 'build_process_start_failed'}
++        $completed=$p.WaitForExit($TimeoutMs)
++        if(-not $completed){$p.Kill($true);[void]$p.WaitForExit(10000)}
++        $stdout=Read-BuildLog $outFile
++        $stderr=Read-BuildLog $errFile
++        if(-not $completed){
++            Write-Host $stdout.Substring([Math]::Max(0,$stdout.Length-18000))
++            Write-Host $stderr.Substring([Math]::Max(0,$stderr.Length-18000))
++            throw "build_process_timeout:$([IO.Path]::GetFileName($Exe))"
++        }
++        if($p.ExitCode -ne 0){
++            Write-Host $stdout.Substring([Math]::Max(0,$stdout.Length-18000))
++            Write-Host $stderr.Substring([Math]::Max(0,$stderr.Length-18000))
++            throw "build_process_failed:$([IO.Path]::GetFileName($Exe)):$($p.ExitCode)"
++        }
++        return ($stdout+$stderr).Trim()
++    } finally {$p.Dispose()}
++}
++function Download([string]$Url,[string]$Destination,[string]$Sha256,[long]$Size) {
++    $u=[Uri]$Url;$h=[Net.Http.HttpClientHandler]::new()
++    $h.AllowAutoRedirect=$false;$h.UseDefaultCredentials=$false;$h.UseProxy=$false
++    $client=[Net.Http.HttpClient]::new($h);$client.Timeout=[TimeSpan]::FromSeconds(90)
++    try {
++        for($i=0;$i -lt 6;$i++){
++            if($u.Scheme -cne 'https' -or $u.UserInfo -ne '' -or
++                $u.Host -notin @('github.com','release-assets.githubusercontent.com','objects.githubusercontent.com')){throw 'source_redirect_not_allowlisted_https'}
++            $r=$client.GetAsync($u).GetAwaiter().GetResult()
++            try {
++                if([int]$r.StatusCode -in @(301,302,303,307,308)){
++                    if($null -eq $r.Headers.Location){throw 'source_redirect_missing'}
++                    $u=[Uri]::new($u,$r.Headers.Location);continue
++                }
++                if(-not $r.IsSuccessStatusCode){throw 'source_download_http_error'}
++                $bytes=$r.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
++                if($bytes.Length -ne $Size -or
++                    [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant() -cne $Sha256){throw 'source_archive_size_or_hash_mismatch'}
++                [IO.File]::WriteAllBytes($Destination,$bytes);return
++            }finally{$r.Dispose()}
++        }
++        throw 'source_redirect_limit'
++    }finally{$client.Dispose();$h.Dispose()}
++}
++function Extract([string]$Archive) {
++    $names=Run "$env:SystemRoot\System32\tar.exe" @('-tzf',$Archive)
++    foreach($n in ($names -split "`r?`n")){
++        if([IO.Path]::IsPathRooted($n) -or $n -match '(^|[/\\])\.\.([/\\]|$)' -or $n -match ':'){throw 'source_archive_path_invalid'}
++    }
++    [void](Run "$env:SystemRoot\System32\tar.exe" @('-xzf',$Archive,'-C',$work))
++}
++$vc='C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat'
++if(-not (Test-Path -LiteralPath $vc -PathType Leaf)){throw 'expected_visual_studio_toolchain_missing'}
++# Only this temporary process receives vcvars. No system/user environment is changed.
++$init=Join-Path $work 'init-msvc.cmd'
++[IO.File]::WriteAllText($init,('@call "'+$vc+'" >nul'+"`r`n@set`r`n"),[Text.Encoding]::ASCII)
++$vcOutput=Run "$env:SystemRoot\System32\cmd.exe" @('/d','/c','init-msvc.cmd')
++foreach($line in ($vcOutput -split "`r?`n")){
++    if($line -match '^([^=]+)=(.*)$' -and $Matches[1] -in @('PATH','INCLUDE','LIB','LIBPATH','VCToolsInstallDir','VCToolsVersion','WindowsSdkDir','WindowsSDKVersion','UniversalCRTSdkDir','UCRTVersion')){
++        $childEnv[$Matches[1]]=$Matches[2]
++    }
++}
++foreach($n in @('INCLUDE','LIB','VCToolsInstallDir')){if(-not $childEnv.ContainsKey($n)){throw 'msvc_environment_incomplete'}}
++$compiler=Join-Path $childEnv['VCToolsInstallDir'] 'bin\Hostx64\x64\cl.exe'
++$linker=Join-Path $childEnv['VCToolsInstallDir'] 'bin\Hostx64\x64\link.exe'
++$nmake=Join-Path $childEnv['VCToolsInstallDir'] 'bin\Hostx64\x64\nmake.exe'
++$perl='C:\Strawberry\perl\bin\perl.exe'
++$cmake='C:\Program Files\CMake\bin\cmake.exe'
++$ctest='C:\Program Files\CMake\bin\ctest.exe'
++$git='C:\Program Files\Git\cmd\git.exe'
++foreach($p in @($compiler,$linker,$nmake,$perl,$cmake,$ctest,$git)){
++    if(-not (Test-Path -LiteralPath $p -PathType Leaf)){throw "build_tool_missing:$([IO.Path]::GetFileName($p))"}
++}
++$provenance=[ordered]@{
++    schemaVersion=1;workflowCommit=$env:GITHUB_SHA;workflowRunId=$env:GITHUB_RUN_ID
++    repository=$env:GITHUB_REPOSITORY;builtAtUtc=[DateTime]::UtcNow.ToString('o')
++    windowsVersion=[Environment]::OSVersion.Version.ToString();architecture='AMD64'
++    sources=$lock;gpuBnbPrivateKeyUsed=$false;gpuBnbBinarySigned=$false
++    rootStoresModified=$false;machineConfigurationModified=$false
++    compilerTools=@(@($compiler,$linker,$nmake,$perl,$cmake,$git) | ForEach-Object {
++        $f=Get-Item -LiteralPath $_
++        [ordered]@{name=$f.Name;path=$f.FullName;version=$f.VersionInfo.ProductVersion;sha256=(Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant()}
++    })
++    compilerVersion=$childEnv['VCToolsVersion'];windowsSdkVersion=$childEnv['WindowsSDKVersion']
++    upstreamPgpSignatureVerified=$false;reproducibleBuildProven=$false
++    isolatedToolOnly=$true;extraCostEuros=0
++}
++foreach($package in @($lock.openssl,$lock.zlib)){
++    $archive=Join-Path $work $package.archive
++    Download $package.url $archive $package.sha256 $package.sizeBytes
++    Extract $archive
++}
++$src=Join-Path $work 'osslsigncode-source'
++[void](New-Item -ItemType Directory -Path $src)
++$gitArgs=@('-c','http.sslVerify=true','-c','credential.helper=','-c','core.autocrlf=false','-c',"core.hooksPath=$emptyHooks")
++[void](Run $git ($gitArgs+@('init')) $src)
++[void](Run $git ($gitArgs+@('remote','add','origin','https://github.com/mtrojnar/osslsigncode.git')) $src)
++[void](Run $git ($gitArgs+@('fetch','--no-tags','--depth=1','origin',$lock.osslsigncode.sourceCommit)) $src)
++[void](Run $git ($gitArgs+@('checkout','--detach','FETCH_HEAD')) $src)
++if((Run $git @('rev-parse','HEAD') $src) -cne $lock.osslsigncode.sourceCommit){throw 'upstream_checkout_commit_mismatch'}
++[void](Run $git @('apply','--check',$patch) $src)
++[void](Run $git @('apply',$patch) $src)
++$provenance.patchedSources=@(@('osslsigncode.c','CMakeLists.txt')|ForEach-Object {
++    [ordered]@{path=$_;sha256=(Get-FileHash -LiteralPath (Join-Path $src $_) -Algorithm SHA256).Hash.ToLowerInvariant()}
++})
++$prefix=Join-Path $work 'prefix'
++$opensslSrc=Join-Path $work 'openssl-3.5.9'
++Write-Host 'Building pinned OpenSSL 3.5.9 LTS (static AMD64, upstream tests enabled).'
++# Portable C implementation: no unpinned assembler download or installation.
++# This removes assembly optimization only; TLS/certificate/CRL checks stay enabled.
++$provenance.opensslConfigure=@('Configure','VC-WIN64A','no-shared','no-asm',"--prefix=$prefix","--openssldir=$prefix\ssl")
++[void](Run $perl $provenance.opensslConfigure $opensslSrc)
++[void](Run $nmake @('/nologo') $opensslSrc)
++Write-Host 'OpenSSL compilation complete; starting all upstream tests with four TAP workers.'
++$provenance.opensslTestArguments=@('/nologo','test','HARNESS_JOBS=4','VERBOSE_FAILURE=yes')
++$testLog=Run $nmake $provenance.opensslTestArguments $opensslSrc
++Write-Host $testLog.Substring([Math]::Max(0,$testLog.Length-9000))
++$provenance.opensslUpstreamTestsPassed=$true
++[void](Run $nmake @('/nologo','install_sw') $opensslSrc)
++$provenance.opensslVersion=Run (Join-Path $prefix 'bin\openssl.exe') @('version','-a')
++$zbuild=Join-Path $work 'zlib-build'
++Write-Host 'Building pinned zlib 1.3.2 (static AMD64) and running its tests.'
++[void](Run $cmake @('-S',(Join-Path $work 'zlib-1.3.2'),'-B',$zbuild,'-G','NMake Makefiles','-DCMAKE_BUILD_TYPE=Release',"-DCMAKE_INSTALL_PREFIX=$prefix",'-DZLIB_BUILD_SHARED=OFF','-DZLIB_BUILD_STATIC=ON','-DZLIB_BUILD_TESTING=ON'))
++[void](Run $cmake @('--build',$zbuild))
++$ztests=Run $ctest @('--test-dir',$zbuild,'--output-on-failure','--no-tests=error')
++Write-Host $ztests
++$provenance.zlibUpstreamTestsPassed=$true
++[void](Run $cmake @('--install',$zbuild))
++$provenance.installedDependencyBinaries=@(Get-ChildItem -LiteralPath $prefix -Recurse -File | Where-Object { $_.Extension -in @('.lib','.dll','.exe') } | Sort-Object FullName | ForEach-Object {
++    [ordered]@{relativePath=$_.FullName.Substring($prefix.Length+1);sizeBytes=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}
++})
++$zlibStatic=Join-Path $prefix 'lib\zs.lib'
++if(-not (Test-Path -LiteralPath $zlibStatic -PathType Leaf)){throw 'expected_zlib_132_static_library_missing'}
++# osslsigncode -v reports OpenSSL, not zlib. Verify the exact static library
++# with a keyless, disposable native version probe instead of guessing output.
++$zprobe=Join-Path $work 'zlib-version-probe.c'
++$zexe=Join-Path $work 'zlib-version-probe.exe'
++[IO.File]::WriteAllText($zprobe, @'
++#include <stdio.h>
++#include <string.h>
++#include <zlib.h>
++int main(void) {
++    printf("zlib_compile=%s\nzlib_runtime=%s\n", ZLIB_VERSION, zlibVersion());
++    return strcmp(ZLIB_VERSION, "1.3.2") || strcmp(zlibVersion(), "1.3.2");
++}
++'@, [Text.Encoding]::ASCII)
++[void](Run $compiler @('/nologo','/MD','/O2','/GS','/guard:cf',("/I"+$prefix+'\include'),("/Fe"+$zexe),$zprobe,$zlibStatic,'/link','/guard:cf'))
++$provenance.zlibVersionProof=Run $zexe @()
++if($provenance.zlibVersionProof -notmatch 'zlib_compile=1\.3\.2' -or $provenance.zlibVersionProof -notmatch 'zlib_runtime=1\.3\.2'){throw 'zlib_static_runtime_version_mismatch'}
++$provenance.zlibStaticLibrarySha256=(Get-FileHash -LiteralPath $zlibStatic -Algorithm SHA256).Hash.ToLowerInvariant()
++
++$obuild=Join-Path $work 'osslsigncode-build'
++Write-Host 'Building osslsigncode 2.14-gpubnb-tls1 with pinned static dependencies.'
++$provenance.osslsigncodeConfigure=@('-S',$src,'-B',$obuild,'-G','NMake Makefiles','-DCMAKE_BUILD_TYPE=Release',"-DOPENSSL_ROOT_DIR=$prefix",'-DOPENSSL_USE_STATIC_LIBS=TRUE',"-DZLIB_ROOT=$prefix","-DZLIB_LIBRARY:FILEPATH=$zlibStatic","-DZLIB_INCLUDE_DIR:PATH=$prefix\include",'-DCMAKE_DISABLE_FIND_PACKAGE_Python3=TRUE')
++[void](Run $cmake $provenance.osslsigncodeConfigure)
++[void](Run $cmake @('--build',$obuild))
++$tool=Join-Path $obuild 'osslsigncode.exe'
++$provenance.toolVersion=Run $tool @('-v')
++if($provenance.toolVersion -notmatch 'osslsigncode 2\.14-gpubnb-tls1' -or
++    $provenance.toolVersion -notmatch 'OpenSSL 3\.5\.9'){throw 'built_tool_version_mismatch'}
++$headers=Run $linker @('/dump','/headers',$tool)
++$dependents=Run $linker @('/dump','/dependents',$tool)
++if($headers -notmatch '8664 machine \(x64\)' -or
++    $headers -notmatch 'Dynamic base' -or $headers -notmatch 'NX compatible' -or
++    $headers -notmatch 'Control Flow Guard' -or $headers -notmatch 'High Entropy Virtual Addresses') {throw 'pe_architecture_or_security_flags_missing'}
++if($dependents -match '(?i)libssl|libcrypto|(?:zlib[^\s]*|zs|z)\.dll'){throw 'unexpected_dynamic_dependency'}
++$provenance.peSecurity=[ordered]@{amd64=$true;aslr=$true;nx=$true;cfg=$true;highEntropyVA=$true;staticOpenSslAndZlib=$true;headers=$headers;dependents=$dependents}
++$provenance.tool=[ordered]@{path=$tool;sizeBytes=(Get-Item -LiteralPath $tool).Length;sha256=(Get-FileHash -LiteralPath $tool -Algorithm SHA256).Hash.ToLowerInvariant();authenticodeStatus=[string](Get-AuthenticodeSignature -LiteralPath $tool).Status}
++$provenance.rootStoresUnchanged=(@(Compare-Object $rootsBeforeBuild @(Get-RootStoreSnapshot)).Count -eq 0)
++if(-not $provenance.rootStoresUnchanged){throw 'root_store_changed_during_build'}
++$provenance.completedAtUtc=[DateTime]::UtcNow.ToString('o')
++$manifest=Join-Path $work 'build-manifest.json'
++$provenance|ConvertTo-Json -Depth 12|Set-Content -LiteralPath $manifest -Encoding utf8NoBOM
++Write-Host 'GPUBNB_HARDENED_BUILD_JSON_BEGIN'
++$provenance|ConvertTo-Json -Depth 12|Write-Host
++Write-Host 'GPUBNB_HARDENED_BUILD_JSON_END'
++"GPUBNB_HARDENED_TOOL=$tool`nGPUBNB_HARDENED_MANIFEST=$manifest`nGPUBNB_HARDENED_BUILD_ROOT=$work" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+diff --git a/scripts/third-party/osslsigncode/sources.lock.json b/scripts/third-party/osslsigncode/sources.lock.json
+new file mode 100644
+index 00000000..142ca8ea
+--- /dev/null
++++ b/scripts/third-party/osslsigncode/sources.lock.json
+@@ -0,0 +1,40 @@
++{
++  "schemaVersion": 1,
++  "osslsigncode": {
++    "repository": "mtrojnar/osslsigncode",
++    "tag": "2.14",
++    "sourceCommit": "beec94e308d1a1e03ca17b05fe089d93c6303e90",
++    "license": "GPL-3.0-or-later WITH OpenSSL-exception",
++    "auditedForkVersion": "2.14-gpubnb-tls1"
++  },
++  "openssl": {
++    "version": "3.5.9",
++    "supportUntil": "2030-04-08",
++    "sourceCommit": "45e844fa2a14ec92d146bd8f5778ac130b6625fb",
++    "archive": "openssl-3.5.9.tar.gz",
++    "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz",
++    "sha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a",
++    "sizeBytes": 53279637
++  },
++  "zlib": {
++    "version": "1.3.2",
++    "archive": "zlib-1.3.2.tar.gz",
++    "url": "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz",
++    "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
++    "sizeBytes": 1502830
++  },
++  "patchSha256": "1dc68b278a134d0b9ea3408d7886b5cba946157df7f9a9fb2da07bc2775237e5",
++  "tlsPolicy": {
++    "minimumProtocol": "TLS1.2",
++    "explicitTrustedRootsRequired": true,
++    "expectedDnsSanRequired": true,
++    "partialWildcardsAllowed": false,
++    "leafCrlRequired": true,
++    "certificateErrorWaivers": false,
++    "httpsTimestampOnly": true,
++    "timeoutSeconds": 30,
++    "disableVerificationOptionAllowed": false
++  },
++  "gpuBnbSigningOrOperationAuthorized": false,
++  "extraCostEuros": 0
++}
+diff --git a/scripts/third-party/osslsigncode/tls-fail-closed.patch b/scripts/third-party/osslsigncode/tls-fail-closed.patch
+new file mode 100644
+index 00000000..9068b473
+--- /dev/null
++++ b/scripts/third-party/osslsigncode/tls-fail-closed.patch
+@@ -0,0 +1,154 @@
++--- a/osslsigncode.c
+++++ b/osslsigncode.c
++@@ -777,7 +777,17 @@
++             BIO_free(sbio);
++             return NULL;
++         }
++-        SSL_set_tlsext_host_name(ssl, info->server);
+++        /* SNI selects a server certificate; it does not authenticate its name. */
+++        SSL_set_hostflags(ssl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS |
+++            X509_CHECK_FLAG_NEVER_CHECK_SUBJECT);
+++        if (!info->server || !*info->server ||
+++            SSL_set1_host(ssl, info->server) != 1 ||
+++            SSL_set_tlsext_host_name(ssl, info->server) != 1) {
+++            fprintf(stderr, "TLS_FAIL_CLOSED: expected hostname configuration failed\n");
+++            SSL_free(ssl);
+++            BIO_free(sbio);
+++            return NULL;
+++        }
++         SSL_set_connect_state(ssl);
++         BIO_set_ssl(sbio, ssl, BIO_CLOSE);
++         bio = BIO_push(sbio, bio);
++@@ -787,24 +797,10 @@
++
++ static int verify_callback(int ok, X509_STORE_CTX *ctx)
++ {
++-    if (!ok) {
++-        int error = X509_STORE_CTX_get_error(ctx);
++-
++-        print_cert(X509_STORE_CTX_get_current_cert(ctx), 0);
++-        if (error == X509_V_ERR_UNABLE_TO_GET_CRL) {
++-            char *url = clrdp_url_get_x509(X509_STORE_CTX_get_current_cert(ctx));
++-
++-            printf("\tWarning: Ignoring \'%s\' error for CRL validation\n",
++-                X509_verify_cert_error_string(error));
++-            printf("\nUse the \"-HTTPS-CRLfile\" option to verify CRL\n");
++-            if (url) {
++-                printf("HTTPS's CRL distribution point: %s\n", url);
++-                OPENSSL_free(url);
++-            }
++-            return 1;
++-        } else {
++-            printf("\tError: %s\n\n", X509_verify_cert_error_string(error));
++-        }
+++    /* No certificate error, including missing/expired CRL, is waived. */
+++    if (!ok) {
+++        fprintf(stderr, "TLS_FAIL_CLOSED: certificate verification: %s\n",
+++            X509_verify_cert_error_string(X509_STORE_CTX_get_error(ctx)));
++     }
++     return ok;
++ }
++@@ -907,7 +903,7 @@
++     HTTP_TLS_Info info;
++     SSL_CTX *ssl_ctx = NULL;
++     char *server = NULL, *port = NULL, *path = NULL;
++-    int timeout = -1; /* blocking mode, exactly one try, see BIO_do_connect_retry() */
+++    int timeout = 30; /* Bound the complete HTTP/TLS exchange. */
++     int use_ssl = 0;
++
++     if (!url) {
++@@ -919,22 +915,29 @@
++     if (!OSSL_HTTP_parse_url(url, &use_ssl, NULL, &server, &port, NULL, &path, NULL, NULL)) {
++         return NULL; /* FAILED */
++     }
++-    if (use_ssl) {
++-        X509_STORE *store = NULL;
++-
++-        ssl_ctx = SSL_CTX_new(TLS_client_method());
++-        if (cafile) {
++-            printf("HTTPS-CAfile: %s\n", cafile);
++-            if (crlfile)
++-                printf("HTTPS-CRLfile: %s\n", crlfile);
++-            store = SSL_CTX_get_cert_store(ssl_ctx);
++-            if (x509_store_load_crlfile(store, cafile, crlfile))
++-                SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER, verify_callback);
++-            else
++-                printf("Warning: HTTPS verification was skipped\n");
++-        } else {
++-            printf("Warning: HTTPS verification was skipped\n");
++-        }
+++    /* Timestamp requests require HTTPS. HTTP CRL distribution remains signed data. */
+++    if (req && !use_ssl) {
+++        fprintf(stderr, "TLS_FAIL_CLOSED: HTTPS is required for timestamp requests\n");
+++        goto end;
+++    }
+++    if (use_ssl) {
+++        X509_STORE *store;
+++
+++        if (!cafile || !*cafile || !crlfile || !*crlfile) {
+++            fprintf(stderr, "TLS_FAIL_CLOSED: explicit CA and CRL files are required\n");
+++            goto end;
+++        }
+++        ssl_ctx = SSL_CTX_new(TLS_client_method());
+++        if (!ssl_ctx || SSL_CTX_set_min_proto_version(ssl_ctx, TLS1_2_VERSION) != 1) {
+++            fprintf(stderr, "TLS_FAIL_CLOSED: TLS context initialization failed\n");
+++            goto end;
+++        }
+++        store = SSL_CTX_get_cert_store(ssl_ctx);
+++        if (!store || !x509_store_load_crlfile(store, cafile, crlfile)) {
+++            fprintf(stderr, "TLS_FAIL_CLOSED: CA or CRL loading failed\n");
+++            goto end;
+++        }
+++        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER, verify_callback);
++     }
++     info.server = server;
++     info.port = port;
++@@ -972,6 +975,7 @@
++             expected_content_type, 0, 0, timeout, 0);
++         BIO_free(tmp_bio);
++     }
+++end:
++     OPENSSL_free(server);
++     OPENSSL_free(port);
++     OPENSSL_free(path);
++@@ -4919,7 +4923,8 @@
++             }
++             options->proxy = *(++argv);
++         } else if ((cmd == CMD_SIGN || cmd == CMD_ADD) && !strcmp(*argv, "-noverifypeer")) {
++-            options->noverifypeer = 1;
+++            fprintf(stderr, "TLS_FAIL_CLOSED: -noverifypeer is forbidden in this build\n");
+++            return 0; /* CLI parse failure; no request or output. */
++         } else if ((cmd == CMD_SIGN || cmd == CMD_ADD) && !strcmp(*argv, "-addUnauthenticatedBlob")) {
++             options->addBlob = 1;
++         } else if (options->addBlob && !strcmp(*argv, "-blobFile")) {
++--- a/CMakeLists.txt
+++++ b/CMakeLists.txt
++@@ -16,7 +16,7 @@
++     LANGUAGES C)
++
++ # force nonstandard version format for development packages
++-set(DEV "")
+++set(DEV "-gpubnb-tls1")
++ set(PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}${DEV}")
++
++ # version and contact information
++@@ -29,8 +29,8 @@
++
++ # load CMake library modules
++ include(FindOpenSSL)
++-if(OPENSSL_VERSION VERSION_LESS "1.1.1")
++-    message(FATAL_ERROR "OpenSSL version must be at least 1.1.1")
+++if(OPENSSL_VERSION VERSION_LESS "3.5.9")
+++    message(FATAL_ERROR "OpenSSL version must be at least 3.5.9")
++ endif()
++ if(OPENSSL_VERSION VERSION_LESS "3.0.0")
++     include(FindCURL)
++@@ -66,7 +66,7 @@
++     message(FATAL_ERROR "OpenSSL library not found")
++ endif(NOT OPENSSL_FOUND)
++ target_include_directories(osslsigncode PRIVATE ${OPENSSL_INCLUDE_DIR})
++-target_link_libraries(osslsigncode PRIVATE ${OPENSSL_LIBRARIES})
+++target_link_libraries(osslsigncode PRIVATE OpenSSL::SSL OpenSSL::Crypto)
++
++ # set cURL includes/libraries
++ if(OPENSSL_VERSION VERSION_LESS "3.0.0")
