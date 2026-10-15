@@ -52,7 +52,7 @@ const value = {
 
 let source = await readFile(configPath, 'utf8');
 const apiUpdated = source.replace(
-  /window\.GPUBNB_API_URL = window\.GPUBNB_API_URL \|\| [^;]+;/,
+  /window\.GPUBNB_API_URL = window\.GPUBNB_API_URL \|\|\s+[^;]+;/,
   'window.GPUBNB_API_URL = window.GPUBNB_API_URL || "/api";',
 );
 if (apiUpdated === source && !source.includes('window.GPUBNB_API_URL = window.GPUBNB_API_URL || "/api";')) {
@@ -60,7 +60,7 @@ if (apiUpdated === source && !source.includes('window.GPUBNB_API_URL = window.GP
 }
 source = apiUpdated;
 const gatewayUpdated = source.replace(
-  /window\.GPUBNB_GATEWAY_URL = window\.GPUBNB_GATEWAY_URL \|\| [^;]+;/,
+  /window\.GPUBNB_GATEWAY_URL = window\.GPUBNB_GATEWAY_URL \|\|\s+[^;]+;/,
   `window.GPUBNB_GATEWAY_URL = window.GPUBNB_GATEWAY_URL || ${JSON.stringify(gatewayOrigin)};`,
 );
 if (gatewayUpdated === source) throw new Error('gateway_url_marker_not_found');
