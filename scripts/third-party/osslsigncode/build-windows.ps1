@@ -193,6 +193,24 @@ $provenance.installedDependencyBinaries=@(Get-ChildItem -LiteralPath $prefix -Re
 })
 $zlibStatic=Join-Path $prefix 'lib\zs.lib'
 if(-not (Test-Path -LiteralPath $zlibStatic -PathType Leaf)){throw 'expected_zlib_132_static_library_missing'}
+# osslsigncode -v reports OpenSSL, not zlib. Verify the exact static library
+# with a keyless, disposable native version probe instead of guessing output.
+$zprobe=Join-Path $work 'zlib-version-probe.c'
+$zexe=Join-Path $work 'zlib-version-probe.exe'
+[IO.File]::WriteAllText($zprobe, @'
+#include <stdio.h>
+#include <string.h>
+#include <zlib.h>
+int main(void) {
+    printf("zlib_compile=%s\nzlib_runtime=%s\n", ZLIB_VERSION, zlibVersion());
+    return strcmp(ZLIB_VERSION, "1.3.2") || strcmp(zlibVersion(), "1.3.2");
+}
+'@, [Text.Encoding]::ASCII)
+[void](Run $compiler @('/nologo','/MD','/O2','/GS','/guard:cf',("/I"+$prefix+'\include'),("/Fe"+$zexe),$zprobe,$zlibStatic,'/link','/guard:cf'))
+$provenance.zlibVersionProof=Run $zexe @()
+if($provenance.zlibVersionProof -notmatch 'zlib_compile=1\.3\.2' -or $provenance.zlibVersionProof -notmatch 'zlib_runtime=1\.3\.2'){throw 'zlib_static_runtime_version_mismatch'}
+$provenance.zlibStaticLibrarySha256=(Get-FileHash -LiteralPath $zlibStatic -Algorithm SHA256).Hash.ToLowerInvariant()
+
 $obuild=Join-Path $work 'osslsigncode-build'
 Write-Host 'Building osslsigncode 2.14-gpubnb-tls1 with pinned static dependencies.'
 $provenance.osslsigncodeConfigure=@('-S',$src,'-B',$obuild,'-G','NMake Makefiles','-DCMAKE_BUILD_TYPE=Release',"-DOPENSSL_ROOT_DIR=$prefix",'-DOPENSSL_USE_STATIC_LIBS=TRUE',"-DZLIB_ROOT=$prefix","-DZLIB_LIBRARY:FILEPATH=$zlibStatic","-DZLIB_INCLUDE_DIR:PATH=$prefix\include",'-DCMAKE_DISABLE_FIND_PACKAGE_Python3=TRUE')
@@ -201,8 +219,7 @@ $provenance.osslsigncodeConfigure=@('-S',$src,'-B',$obuild,'-G','NMake Makefiles
 $tool=Join-Path $obuild 'osslsigncode.exe'
 $provenance.toolVersion=Run $tool @('-v')
 if($provenance.toolVersion -notmatch 'osslsigncode 2\.14-gpubnb-tls1' -or
-    $provenance.toolVersion -notmatch 'OpenSSL 3\.5\.9' -or
-    $provenance.toolVersion -notmatch '(?is)zlib.{0,30}1\.3\.2'){throw 'built_tool_version_mismatch'}
+    $provenance.toolVersion -notmatch 'OpenSSL 3\.5\.9'){throw 'built_tool_version_mismatch'}
 $headers=Run $linker @('/dump','/headers',$tool)
 $dependents=Run $linker @('/dump','/dependents',$tool)
 if($headers -notmatch '8664 machine \(x64\)' -or
