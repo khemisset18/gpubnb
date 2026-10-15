@@ -15,8 +15,18 @@ test('Netlify same-origin API routing is generated from provider-neutral build o
   assert.match(generator, /GPUBNB_API_ORIGIN/);
   assert.match(generator, /GPUBNB_GATEWAY_ORIGIN/);
   assert.match(generator, /\/api\/\* \$\{apiOrigin\}\/\:splat 200!/);
-  assert.match(read('apps/web/config.js'), /GPUBNB_API_URL = .+ "\/api"/);
-  assert.doesNotMatch(read('apps/web/config.js'), /onrender\.com/);
+  const config = read('apps/web/config.js');
+  if (config.includes('GPUBNB_STAGE3_RENDER_SAME_ORIGIN')) {
+    // Private Stage 4 qualification serves the browser + API from the same
+    // HTTPS Render origin. Production Netlify builds must strip this override.
+    assert.match(config, /window\.location\?\.protocol === "https:"/);
+    assert.match(config, /window\.location\?\.hostname\?\.endsWith\("\.onrender\.com"\)/);
+    assert.match(config, /GPUBNB_API_URL = window\.GPUBNB_API_URL \|\|\s+\(GPUBNB_STAGE3_RENDER_SAME_ORIGIN \? window\.location\.origin : "\/api"\)/);
+    assert.match(generator, /private_stage3_routing_leaked_to_public_build/);
+  } else {
+    assert.match(config, /GPUBNB_API_URL = .+ "\/api"/);
+    assert.doesNotMatch(config, /onrender\.com/);
+  }
 });
 
 test('private-beta bookings stay on the registered Compute API path, with Developer unlocked only after GPU_PROOF completes', () => {
