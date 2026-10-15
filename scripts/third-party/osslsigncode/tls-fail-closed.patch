@@ -1,0 +1,154 @@
+--- a/osslsigncode.c
++++ b/osslsigncode.c
+@@ -777,7 +777,17 @@
+             BIO_free(sbio);
+             return NULL;
+         }
+-        SSL_set_tlsext_host_name(ssl, info->server);
++        /* SNI selects a server certificate; it does not authenticate its name. */
++        SSL_set_hostflags(ssl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS |
++            X509_CHECK_FLAG_NEVER_CHECK_SUBJECT);
++        if (!info->server || !*info->server ||
++            SSL_set1_host(ssl, info->server) != 1 ||
++            SSL_set_tlsext_host_name(ssl, info->server) != 1) {
++            fprintf(stderr, "TLS_FAIL_CLOSED: expected hostname configuration failed\n");
++            SSL_free(ssl);
++            BIO_free(sbio);
++            return NULL;
++        }
+         SSL_set_connect_state(ssl);
+         BIO_set_ssl(sbio, ssl, BIO_CLOSE);
+         bio = BIO_push(sbio, bio);
+@@ -787,24 +797,10 @@
+ 
+ static int verify_callback(int ok, X509_STORE_CTX *ctx)
+ {
+-    if (!ok) {
+-        int error = X509_STORE_CTX_get_error(ctx);
+-
+-        print_cert(X509_STORE_CTX_get_current_cert(ctx), 0);
+-        if (error == X509_V_ERR_UNABLE_TO_GET_CRL) {
+-            char *url = clrdp_url_get_x509(X509_STORE_CTX_get_current_cert(ctx));
+-
+-            printf("\tWarning: Ignoring \'%s\' error for CRL validation\n",
+-                X509_verify_cert_error_string(error));
+-            printf("\nUse the \"-HTTPS-CRLfile\" option to verify CRL\n");
+-            if (url) {
+-                printf("HTTPS's CRL distribution point: %s\n", url);
+-                OPENSSL_free(url);
+-            }
+-            return 1;
+-        } else {
+-            printf("\tError: %s\n\n", X509_verify_cert_error_string(error));
+-        }
++    /* No certificate error, including missing/expired CRL, is waived. */
++    if (!ok) {
++        fprintf(stderr, "TLS_FAIL_CLOSED: certificate verification: %s\n",
++            X509_verify_cert_error_string(X509_STORE_CTX_get_error(ctx)));
+     }
+     return ok;
+ }
+@@ -907,7 +903,7 @@
+     HTTP_TLS_Info info;
+     SSL_CTX *ssl_ctx = NULL;
+     char *server = NULL, *port = NULL, *path = NULL;
+-    int timeout = -1; /* blocking mode, exactly one try, see BIO_do_connect_retry() */
++    int timeout = 30; /* Bound the complete HTTP/TLS exchange. */
+     int use_ssl = 0;
+ 
+     if (!url) {
+@@ -919,22 +915,29 @@
+     if (!OSSL_HTTP_parse_url(url, &use_ssl, NULL, &server, &port, NULL, &path, NULL, NULL)) {
+         return NULL; /* FAILED */
+     }
+-    if (use_ssl) {
+-        X509_STORE *store = NULL;
+-
+-        ssl_ctx = SSL_CTX_new(TLS_client_method());
+-        if (cafile) {
+-            printf("HTTPS-CAfile: %s\n", cafile);
+-            if (crlfile)
+-                printf("HTTPS-CRLfile: %s\n", crlfile);
+-            store = SSL_CTX_get_cert_store(ssl_ctx);
+-            if (x509_store_load_crlfile(store, cafile, crlfile))
+-                SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER, verify_callback);
+-            else
+-                printf("Warning: HTTPS verification was skipped\n");
+-        } else {
+-            printf("Warning: HTTPS verification was skipped\n");
+-        }
++    /* Timestamp requests require HTTPS. HTTP CRL distribution remains signed data. */
++    if (req && !use_ssl) {
++        fprintf(stderr, "TLS_FAIL_CLOSED: HTTPS is required for timestamp requests\n");
++        goto end;
++    }
++    if (use_ssl) {
++        X509_STORE *store;
++
++        if (!cafile || !*cafile || !crlfile || !*crlfile) {
++            fprintf(stderr, "TLS_FAIL_CLOSED: explicit CA and CRL files are required\n");
++            goto end;
++        }
++        ssl_ctx = SSL_CTX_new(TLS_client_method());
++        if (!ssl_ctx || SSL_CTX_set_min_proto_version(ssl_ctx, TLS1_2_VERSION) != 1) {
++            fprintf(stderr, "TLS_FAIL_CLOSED: TLS context initialization failed\n");
++            goto end;
++        }
++        store = SSL_CTX_get_cert_store(ssl_ctx);
++        if (!store || !x509_store_load_crlfile(store, cafile, crlfile)) {
++            fprintf(stderr, "TLS_FAIL_CLOSED: CA or CRL loading failed\n");
++            goto end;
++        }
++        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER, verify_callback);
+     }
+     info.server = server;
+     info.port = port;
+@@ -972,6 +975,7 @@
+             expected_content_type, 0, 0, timeout, 0);
+         BIO_free(tmp_bio);
+     }
++end:
+     OPENSSL_free(server);
+     OPENSSL_free(port);
+     OPENSSL_free(path);
+@@ -4919,7 +4923,8 @@
+             }
+             options->proxy = *(++argv);
+         } else if ((cmd == CMD_SIGN || cmd == CMD_ADD) && !strcmp(*argv, "-noverifypeer")) {
+-            options->noverifypeer = 1;
++            fprintf(stderr, "TLS_FAIL_CLOSED: -noverifypeer is forbidden in this build\n");
++            return 0; /* CLI parse failure; no request or output. */
+         } else if ((cmd == CMD_SIGN || cmd == CMD_ADD) && !strcmp(*argv, "-addUnauthenticatedBlob")) {
+             options->addBlob = 1;
+         } else if (options->addBlob && !strcmp(*argv, "-blobFile")) {
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -16,7 +16,7 @@
+     LANGUAGES C)
+ 
+ # force nonstandard version format for development packages
+-set(DEV "")
++set(DEV "-gpubnb-tls1")
+ set(PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}${DEV}")
+ 
+ # version and contact information
+@@ -29,8 +29,8 @@
+ 
+ # load CMake library modules
+ include(FindOpenSSL)
+-if(OPENSSL_VERSION VERSION_LESS "1.1.1")
+-    message(FATAL_ERROR "OpenSSL version must be at least 1.1.1")
++if(OPENSSL_VERSION VERSION_LESS "3.5.9")
++    message(FATAL_ERROR "OpenSSL version must be at least 3.5.9")
+ endif()
+ if(OPENSSL_VERSION VERSION_LESS "3.0.0")
+     include(FindCURL)
+@@ -66,7 +66,7 @@
+     message(FATAL_ERROR "OpenSSL library not found")
+ endif(NOT OPENSSL_FOUND)
+ target_include_directories(osslsigncode PRIVATE ${OPENSSL_INCLUDE_DIR})
+-target_link_libraries(osslsigncode PRIVATE ${OPENSSL_LIBRARIES})
++target_link_libraries(osslsigncode PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+ 
+ # set cURL includes/libraries
+ if(OPENSSL_VERSION VERSION_LESS "3.0.0")
