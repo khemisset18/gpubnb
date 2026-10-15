@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from gpubnb_agent import platform_info
 
