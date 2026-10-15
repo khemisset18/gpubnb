@@ -150,8 +150,8 @@ if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $output = (Resolve-Path -LiteralPath $OutputDirectory).Path
 
-if ([IO.Path]::GetFullPath($agentInput).TrimEnd('\') -ieq
-    [IO.Path]::GetFullPath((Join-Path $output 'gpubnb-agent.exe')).TrimEnd('\')) {
+if ([IO.Path]::GetFullPath($agentInput) -ieq
+    [IO.Path]::GetFullPath((Join-Path $output 'gpubnb-agent.exe'))) {
     throw 'release_candidate_agent_input_must_be_separate_from_output'
 }
 
@@ -290,7 +290,10 @@ $payload = [ordered]@{
     'gpubnb-agent.exe' = $agentCandidate
 }
 foreach ($entry in $payload.GetEnumerator()) {
-    Copy-Item -LiteralPath $entry.Value -Destination (Join-Path $output $entry.Key) -Force
+    $destination = Join-Path $output $entry.Key
+    if ([IO.Path]::GetFullPath($entry.Value) -ine [IO.Path]::GetFullPath($destination)) {
+        Copy-Item -LiteralPath $entry.Value -Destination $destination -Force
+    }
 }
 
 $files = @()
