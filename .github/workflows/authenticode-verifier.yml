@@ -14,6 +14,11 @@ on:
       - .github/workflows/authenticode-verifier.yml
 permissions:
   contents: read
+
+concurrency:
+  group: authenticode-verifier-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify-pwsh:
     runs-on: windows-latest
