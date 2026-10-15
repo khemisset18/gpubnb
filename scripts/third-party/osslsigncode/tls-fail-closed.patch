@@ -20,7 +20,7 @@
          BIO_set_ssl(sbio, ssl, BIO_CLOSE);
          bio = BIO_push(sbio, bio);
 @@ -787,24 +797,10 @@
- 
+
  static int verify_callback(int ok, X509_STORE_CTX *ctx)
  {
 -    if (!ok) {
@@ -55,7 +55,7 @@
 -    int timeout = -1; /* blocking mode, exactly one try, see BIO_do_connect_retry() */
 +    int timeout = 30; /* Bound the complete HTTP/TLS exchange. */
      int use_ssl = 0;
- 
+
      if (!url) {
 @@ -919,22 +915,29 @@
      if (!OSSL_HTTP_parse_url(url, &use_ssl, NULL, &server, &port, NULL, &path, NULL, NULL)) {
@@ -125,15 +125,15 @@
 +++ b/CMakeLists.txt
 @@ -16,7 +16,7 @@
      LANGUAGES C)
- 
+
  # force nonstandard version format for development packages
 -set(DEV "")
 +set(DEV "-gpubnb-tls1")
  set(PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}${DEV}")
- 
+
  # version and contact information
 @@ -29,8 +29,8 @@
- 
+
  # load CMake library modules
  include(FindOpenSSL)
 -if(OPENSSL_VERSION VERSION_LESS "1.1.1")
@@ -149,6 +149,6 @@
  target_include_directories(osslsigncode PRIVATE ${OPENSSL_INCLUDE_DIR})
 -target_link_libraries(osslsigncode PRIVATE ${OPENSSL_LIBRARIES})
 +target_link_libraries(osslsigncode PRIVATE OpenSSL::SSL OpenSSL::Crypto)
- 
+
  # set cURL includes/libraries
  if(OPENSSL_VERSION VERSION_LESS "3.0.0")

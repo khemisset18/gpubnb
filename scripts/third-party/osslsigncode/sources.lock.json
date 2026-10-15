@@ -23,7 +23,7 @@
     "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
     "sizeBytes": 1502830
   },
-  "patchSha256": "767dd46a50fa6aa5742fbb28cb5abbf2291a333103fddf7e183ff07df6b9b6ba",
+  "patchSha256": "1dc68b278a134d0b9ea3408d7886b5cba946157df7f9a9fb2da07bc2775237e5",
   "tlsPolicy": {
     "minimumProtocol": "TLS1.2",
     "explicitTrustedRootsRequired": true,

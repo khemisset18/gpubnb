@@ -17,7 +17,7 @@ $patch=Join-Path $PSScriptRoot 'tls-fail-closed.patch'
 if ((Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lock.patchSha256) { throw 'hardening_patch_hash_mismatch' }
 $childEnv=@{
     SystemRoot=$env:SystemRoot;WINDIR=$env:WINDIR;TEMP=$work;TMP=$work
-    PATH="$env:SystemRoot\System32;C:\Program Files\CMake\bin;C:\Program Files\Git\cmd;C:\Strawberry\perl\bin;C:\Program Files\NASM"
+    PATH="$env:SystemRoot\System32;C:\Program Files\CMake\bin;C:\Program Files\Git\cmd;C:\Strawberry\perl\bin"
     GIT_CONFIG_NOSYSTEM='1';GIT_CONFIG_GLOBAL='NUL';GIT_TERMINAL_PROMPT='0'
 }
 function Run([string]$Exe,[string[]]$Arguments,[string]$Directory=$work,[int]$TimeoutMs=1200000) {
@@ -91,8 +91,7 @@ $perl='C:\Strawberry\perl\bin\perl.exe'
 $cmake='C:\Program Files\CMake\bin\cmake.exe'
 $ctest='C:\Program Files\CMake\bin\ctest.exe'
 $git='C:\Program Files\Git\cmd\git.exe'
-$nasm='C:\Program Files\NASM\nasm.exe'
-foreach($p in @($compiler,$linker,$nmake,$perl,$cmake,$ctest,$git,$nasm)){
+foreach($p in @($compiler,$linker,$nmake,$perl,$cmake,$ctest,$git)){
     if(-not (Test-Path -LiteralPath $p -PathType Leaf)){throw "build_tool_missing:$([IO.Path]::GetFileName($p))"}
 }
 $provenance=[ordered]@{
@@ -101,7 +100,7 @@ $provenance=[ordered]@{
     windowsVersion=[Environment]::OSVersion.Version.ToString();architecture='AMD64'
     sources=$lock;gpuBnbPrivateKeyUsed=$false;gpuBnbBinarySigned=$false
     rootStoresModified=$false;machineConfigurationModified=$false
-    compilerTools=@(@($compiler,$linker,$nmake,$perl,$cmake,$git,$nasm) | ForEach-Object {
+    compilerTools=@(@($compiler,$linker,$nmake,$perl,$cmake,$git) | ForEach-Object {
         $f=Get-Item -LiteralPath $_
         [ordered]@{name=$f.Name;path=$f.FullName;version=$f.VersionInfo.ProductVersion;sha256=(Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant()}
     })
@@ -130,7 +129,9 @@ $provenance.patchedSources=@(@('osslsigncode.c','CMakeLists.txt')|ForEach-Object
 $prefix=Join-Path $work 'prefix'
 $opensslSrc=Join-Path $work 'openssl-3.5.9'
 Write-Host 'Building pinned OpenSSL 3.5.9 LTS (static AMD64, upstream tests enabled).'
-$provenance.opensslConfigure=@('Configure','VC-WIN64A','no-shared',"--prefix=$prefix","--openssldir=$prefix\ssl")
+# Portable C implementation: no unpinned assembler download or installation.
+# This removes assembly optimization only; TLS/certificate/CRL checks stay enabled.
+$provenance.opensslConfigure=@('Configure','VC-WIN64A','no-shared','no-asm',"--prefix=$prefix","--openssldir=$prefix\ssl")
 [void](Run $perl $provenance.opensslConfigure $opensslSrc)
 [void](Run $nmake @('/nologo') $opensslSrc)
 $testLog=Run $nmake @('/nologo','test') $opensslSrc
