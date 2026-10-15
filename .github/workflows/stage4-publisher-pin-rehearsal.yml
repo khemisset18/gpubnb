@@ -1,0 +1,70 @@
+name: Stage 4 unsigned publisher pin rehearsal
+on:
+  push:
+    branches:
+      - prep/stage4-public-pin-rebuild-20261015
+    paths:
+      - scripts/tests/build-stage4-amd64-unsigned-publisher-repin.ps1
+      - .github/workflows/stage4-publisher-pin-rehearsal.yml
+permissions:
+  contents: read
+concurrency:
+  group: stage4-unsigned-repin-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  unsigned-amd64-repin:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      SOURCE_COMMIT: 2b055992f7521505d0387dd4c876e36794fffd63
+      WORKFLOW_COMMIT: ${{ github.sha }}
+      # SHA-256 of a fixed test label, NOT a real certificate or an approval.
+      REHEARSAL_PIN: 45aa2316f140ca0dc8599a4bceea15a6f91641229b042b8c53aaab0f9b843095
+    steps:
+      - name: Checkout isolated build instructions
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          path: ci-tools
+          persist-credentials: false
+      - name: Checkout exact consolidated Stage 4 source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: 2b055992f7521505d0387dd4c876e36794fffd63
+          path: source
+          persist-credentials: false
+      - name: Checkout pinned NVENC 13.0 headers
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: FFmpeg/nv-codec-headers
+          ref: e844e5b26f46bb77479f063029595293aa8f812d
+          path: nv-codec-headers
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
+      - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
+      - name: Audit workflow policy
+        working-directory: ci-tools
+        run: python scripts/audit-github-actions.py
+      - name: Compile four unsigned AMD64 binaries with synthetic public pin
+        shell: pwsh
+        run: |
+          & ./ci-tools/scripts/tests/build-stage4-amd64-unsigned-publisher-repin.ps1 -SourceRoot ./source -NvCodecHeadersDir ./nv-codec-headers/include/ffnvcodec -OutputDirectory ./unsigned-amd64 -SourceCommit $env:SOURCE_COMMIT -WorkflowCommit $env:WORKFLOW_COMMIT -PublisherCertificateSha256 $env:REHEARSAL_PIN
+          if (-not $?) { throw 'stage4_unsigned_repin_build_failed' }
+          $m=Get-Content ./unsigned-amd64/ci-build-manifest.json -Raw | ConvertFrom-Json
+          if ($m.workerSignerSha256 -cne $env:REHEARSAL_PIN -or
+              $m.mediaSignerSha256 -cne $env:REHEARSAL_PIN -or
+              $m.publisherIdentityApproval -cne 'not_granted_by_this_build' -or
+              $m.signingPerformed -ne $false -or $m.files.Count -ne 4) {
+            throw 'stage4_repin_manifest_policy_failed'
+          }
+          foreach ($f in $m.files) {
+            if ($f.signed -ne $false -or $f.installable -ne $false -or
+                $f.authenticodeStatus -cne 'NotSigned') {
+              throw 'stage4_unsigned_repin_contamination'
+            }
+          }
+          Write-Host 'Stage4 synthetic repin PASS: binaries unsigned, helper/worker public pins match, no publish.'
+      # Deliberately no artifact upload, release, signing step, secret, deployment or installer.
