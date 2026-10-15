@@ -1,0 +1,47 @@
+{
+  "base": "https://gpubnb.netlify.app",
+  "requests": "GET only, no cookies, no login or booking",
+  "observations": [
+    {
+      "path": "/",
+      "status": 200,
+      "sha256": "0cc2738e3e3f39b64d964732817ed987c367f93cd4a0896bdcfa40a7e6ca7520",
+      "size": 7447
+    },
+    {
+      "path": "/auth.html",
+      "status": 200,
+      "sha256": "b4f7b21b6695f007f7100bb24c8bf1936887ed4318bed2614ebd2987999c1821",
+      "size": 1693
+    },
+    {
+      "path": "/auth-config.js",
+      "status": 200,
+      "sha256": "7c172866657ca9779192b329f3b06f3bfb773f0be98d3d795d95c54dbce51c18",
+      "size": 394,
+      "publicConfigurationPresenceOnly": {
+        "supabaseUrl": {
+          "present": true,
+          "placeholder": false
+        },
+        "supabaseAnonKey": {
+          "present": true,
+          "placeholder": false
+        }
+      }
+    },
+    {
+      "path": "/config.js",
+      "status": 200,
+      "sha256": "c9ec1589a0047f355fbacfbc10ddf1236b9115022dfaf362d8188db0d18e00fc",
+      "size": 1072
+    },
+    {
+      "path": "/choose-workspace.js",
+      "status": 200,
+      "sha256": "df80f6210ae0a56cdda61786686746edc98b5f9ae6d9481f20a6436beb58b138",
+      "size": 6950,
+      "offersPhantomInstall": true
+    }
+  ]
+}

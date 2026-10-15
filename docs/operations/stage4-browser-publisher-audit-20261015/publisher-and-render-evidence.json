@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "verifiedAtUtc": "2026-10-15T12:41:36.508Z",
+  "service": {
+    "id": "srv-dau86i2d0e5s73elmk10",
+    "name": "gpubnb-stage3-private",
+    "branch": "qualification/stage3-windows-native-private-3c3e21e6",
+    "autoDeploy": "no",
+    "previewGeneration": "off",
+    "url": "https://gpubnb-stage3-private.onrender.com"
+  },
+  "liveDeployment": {
+    "id": "dep-db4j8gom7kps73c1u4p0",
+    "commit": "6b655614d3b9c3fda7912742b539601ba22598f1",
+    "status": "live",
+    "source": "Render read-only list_deploys"
+  },
+  "candidateGatewayCommit": "0c901bbf67bf36098e54ddd01fce318beed867ae",
+  "candidateDeployed": false,
+  "sourceAuditCommit": "d21af2fbf1f110dff5c0cab7a460035fb2ddefa6",
+  "priorCiReused": {
+    "hardenedRun": 38670517814,
+    "ciRun": 38670517761,
+    "ciAttempt": 3,
+    "conclusion": "success",
+    "reexecuted": false
+  },
+  "signing": {
+    "approvedIndependentSignerEnvironmentIdentified": false,
+    "publisherKeyIndependentOfPc1Proven": false,
+    "pc2Role": "BROWSER_ONLY_NO_INSTALL_NO_MANDATORY_EXTENSION_NO_SIGNING_KEY",
+    "existingCertificateSha256": "200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a",
+    "existingCertificateNotAfterUtc": "2026-10-20T22:23:47Z",
+    "existingCertificateNotAfterParis": "2026-10-21T00:23:47+02:00",
+    "tsaApproved": false,
+    "selfHostedRunnerInventory": "not available through the connector's allowed public endpoints",
+    "signingEnvironmentProtectionInventory": "not available through the connector's allowed public endpoints",
+    "privateKeysOrSecretsRequestedOrCollected": false
+  },
+  "authorization": {
+    "auditAndPreparationOnly": true,
+    "signing": false,
+    "certificateCreation": false,
+    "trustStoreChange": false,
+    "installation": false,
+    "deployment": false,
+    "merge": false,
+    "physicalQualification": false
+  }
+}

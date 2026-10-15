@@ -1,0 +1,77 @@
+{
+  "base": "https://gpubnb-stage3-private.onrender.com",
+  "requests": "GET only, no cookies, no login, no booking or session creation",
+  "observations": [
+    {
+      "path": "/health",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "sha256": "753ae5c68c9148218116bb5a48fee6860e8c8bf5e4a1332d4acfb6e2b7fd93d2",
+      "size": 78,
+      "publicHealth": {
+        "ok": true,
+        "cluster": "devnet",
+        "mainnetEnabled": false
+      }
+    },
+    {
+      "path": "/auth.html",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "sha256": "b4f7b21b6695f007f7100bb24c8bf1936887ed4318bed2614ebd2987999c1821",
+      "size": 1693
+    },
+    {
+      "path": "/stage3-windows-native.html",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "sha256": "c9be2316d96596a42fb4d0568fd07745ef3da3cdfaf6740cbd2d9f4e8e887563",
+      "size": 1226
+    },
+    {
+      "path": "/windows-native-desktop.html",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "sha256": "e1c0b5d4b224187ac4484fb092521100166fddb1ccdaf690a1d9d70739a3fb5e",
+      "size": 1258
+    },
+    {
+      "path": "/auth-config.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "sha256": "7c172866657ca9779192b329f3b06f3bfb773f0be98d3d795d95c54dbce51c18",
+      "size": 394,
+      "publicConfigurationPresenceOnly": {
+        "supabaseUrl": {
+          "present": true,
+          "placeholder": false
+        },
+        "supabaseAnonKey": {
+          "present": true,
+          "placeholder": false
+        },
+        "redirectUrl": {
+          "present": false,
+          "placeholder": false
+        }
+      }
+    },
+    {
+      "path": "/config.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "sha256": "13e8fec149031f7ef5ce5e3b17984614af1c0060383df15b186a5405386e02de",
+      "size": 1231,
+      "usesWindowOrigin": true,
+      "renderOriginLiteralPresent": false
+    },
+    {
+      "path": "/choose-workspace.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "sha256": "a9e1fb1136792745555fab7b3359f190bf0fc286df8e0dde6f6cb6f07c2d1d68",
+      "size": 7520,
+      "offersPhantomInstall": true
+    }
+  ]
+}

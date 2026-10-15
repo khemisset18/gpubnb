@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "collectedAtUtc": "2026-10-15T12:40:50.335Z",
+  "mode": "NODE_VM_SOURCE_AUDIT_SIMULATED_HTTP_ONLY",
+  "sourceCommit": "d21af2fbf1f110dff5c0cab7a460035fb2ddefa6",
+  "sourceRootKind": "repository_checkout",
+  "sourceFilesSha256": {
+    "apps/web/choose-workspace.js": "a9e1fb1136792745555fab7b3359f190bf0fc286df8e0dde6f6cb6f07c2d1d68",
+    "apps/web/portal.js": "6076c7c81ee3528e691d688d3c50a3b521254fa92327e9b98aa456447dfee0fa",
+    "apps/web/auth.js": "d188936fde8e51677b8b34fd93e575664ca5691d95b13cb259ad699f9de2bd58",
+    "apps/web/stage3-windows-native.js": "ae399eb0bef8c8796949a546c6061f8101fe32aa645c7642d8080fa1b4a6afff"
+  },
+  "observations": [
+    {
+      "case": "existing_web_session_without_wallet",
+      "observed": "frontend_booking_and_preparation_succeed",
+      "browserOnlyCompatible": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "POST",
+          "path": "/bookings"
+        },
+        {
+          "method": "POST",
+          "path": "/bookings/audit-booking/workspace/developer"
+        }
+      ]
+    },
+    {
+      "case": "missing_or_failed_web_session_401",
+      "observed": "phantom_installation_offer_instead_of_web_login_or_service_error",
+      "browserOnlyCompatible": false,
+      "liveMutationPerformed": false
+    },
+    {
+      "case": "missing_or_failed_web_session_500",
+      "observed": "phantom_installation_offer_instead_of_web_login_or_service_error",
+      "browserOnlyCompatible": false,
+      "liveMutationPerformed": false
+    },
+    {
+      "case": "renter_only_dashboard",
+      "observed": "Activer l’espace propriétaire",
+      "destination": "onboarding.html",
+      "browserOnlyCompatible": false,
+      "severity": "misleading_navigation_not_backend_installation_requirement"
+    },
+    {
+      "case": "dual_role_account_without_host",
+      "observed": "Installer GPUbnb Host",
+      "destination": "host-install.html",
+      "severity": "host_priority_in_dashboard_not_a_client_dependency"
+    },
+    {
+      "case": "return_to_selected_workspace_after_login",
+      "observed": "dashboard.html",
+      "browserOnlyCompatible": true,
+      "preservesBookingIntent": false
+    },
+    {
+      "case": "private_qualification_page_without_wallet",
+      "observed": "access_path_opened_after_all_simulated_guards",
+      "browserOnlyCompatible": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "POST",
+          "path": "/qualification/windows-native/booking"
+        },
+        {
+          "method": "GET",
+          "path": "/dashboard"
+        },
+        {
+          "method": "POST",
+          "path": "/bookings/audit-booking/workspace/cloud-desktop?qualification=windows-native"
+        },
+        {
+          "method": "GET",
+          "path": "/bookings/audit-booking/workspace/cloud-desktop/status"
+        },
+        {
+          "method": "POST",
+          "path": "/bookings/audit-booking/workspace/cloud-desktop/access"
+        }
+      ]
+    }
+  ],
+  "actualBrowserLoginPerformed": false,
+  "actualBookingOrSessionCreated": false,
+  "pc1OrPc2Accessed": false,
+  "privateKeyAccessed": false,
+  "signingPerformed": false,
+  "standardCiReexecuted": false,
+  "tlsProviderTestsReexecuted": false,
+  "conclusion": "AUDIT_REPRODUCED_GAPS_NOT_A_PHYSICAL_OR_AUTHENTICATION_ACCEPTANCE"
+}

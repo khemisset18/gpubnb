@@ -1,0 +1,29 @@
+{
+  "base": "https://gpubnb-stage3-private.onrender.com",
+  "observations": [
+    {
+      "path": "apps/web/choose-workspace.js",
+      "url": "https://gpubnb-stage3-private.onrender.com/choose-workspace.js",
+      "status": 200,
+      "sha256": "a9e1fb1136792745555fab7b3359f190bf0fc286df8e0dde6f6cb6f07c2d1d68"
+    },
+    {
+      "path": "apps/web/portal.js",
+      "url": "https://gpubnb-stage3-private.onrender.com/portal.js",
+      "status": 200,
+      "sha256": "6076c7c81ee3528e691d688d3c50a3b521254fa92327e9b98aa456447dfee0fa"
+    },
+    {
+      "path": "apps/web/auth.js",
+      "url": "https://gpubnb-stage3-private.onrender.com/auth.js",
+      "status": 200,
+      "sha256": "d188936fde8e51677b8b34fd93e575664ca5691d95b13cb259ad699f9de2bd58"
+    },
+    {
+      "path": "apps/web/stage3-windows-native.js",
+      "url": "https://gpubnb-stage3-private.onrender.com/stage3-windows-native.js",
+      "status": 200,
+      "sha256": "ae399eb0bef8c8796949a546c6061f8101fe32aa645c7642d8080fa1b4a6afff"
+    }
+  ]
+}
