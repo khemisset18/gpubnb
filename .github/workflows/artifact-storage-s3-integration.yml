@@ -44,20 +44,36 @@ jobs:
       - name: Install locked API dependencies
         working-directory: apps/api
         run: npm ci
-      - name: Start S3-compatible MinIO
+      - name: Start version-pinned S3-compatible MinIO from official Linux binary
+        shell: bash
+        env:
+          MINIO_VERSION: RELEASE.2025-09-07T16-13-09Z
+          MINIO_SHA256: 7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f
         run: |
-          docker run -d --rm --name gpubnb-minio \
-            -p 9000:9000 \
-            -e MINIO_ROOT_USER=gpubnb-ci-access \
-            -e MINIO_ROOT_PASSWORD=gpubnb-ci-secret-key \
-            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data --address :9000
+          set -euo pipefail
+          binary="$RUNNER_TEMP/gpubnb-minio"
+          curl --fail --silent --show-error --location --retry 2 --connect-timeout 20 --max-time 180 \
+            "https://dl.min.io/server/minio/release/linux-amd64/minio.${MINIO_VERSION}" \
+            --output "$binary"
+          printf '%s  %s\n' "$MINIO_SHA256" "$binary" | sha256sum --check --status
+          chmod 0755 "$binary"
+          mkdir -p "$RUNNER_TEMP/gpubnb-minio-data"
+          MINIO_ROOT_USER=gpubnb-ci-access MINIO_ROOT_PASSWORD=gpubnb-ci-secret-key \
+            "$binary" server "$RUNNER_TEMP/gpubnb-minio-data" --address :9000 \
+            > "$RUNNER_TEMP/gpubnb-minio.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/gpubnb-minio.pid"
           for _ in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
               exit 0
             fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/gpubnb-minio.pid")" 2>/dev/null; then
+              echo "MinIO exited before readiness"
+              cat "$RUNNER_TEMP/gpubnb-minio.log"
+              exit 1
+            fi
             sleep 1
           done
-          docker logs gpubnb-minio
+          cat "$RUNNER_TEMP/gpubnb-minio.log"
           exit 1
       - name: Real S3 put/get round trip
         working-directory: apps/api
@@ -79,7 +95,15 @@ jobs:
         run: npx tsx --test test/artifact-storage-migration-s3.integration.test.ts
       - name: MinIO diagnostics
         if: failure()
-        run: docker logs gpubnb-minio || true
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/gpubnb-minio.log" ]; then
+            tail -n 100 "$RUNNER_TEMP/gpubnb-minio.log"
+          fi
       - name: Stop MinIO
         if: always()
-        run: docker stop gpubnb-minio || true
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/gpubnb-minio.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/gpubnb-minio.pid")" || true
+          fi
