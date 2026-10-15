@@ -25,6 +25,11 @@ foreach ($marker in @(
     'release_candidate_agent_not_amd64',
     'release_candidate_agent_build_identity_mismatch',
     'release_candidate_agent_publisher_mismatch',
+    'release_candidate_approved_publisher_sha256_invalid',
+    'release_candidate_approved_publisher_not_configured',
+    'release_candidate_publisher_approval_mismatch',
+    'release_candidate_publisher_certificate_not_approved',
+    'explicitlyApprovedPublisherSha256 = $expectedPublisher',
     "'gpubnb-agent.exe' = "+'$agentCandidate',
     'agentUnsignedInputSha256 = $expectedAgentHash',
     'agentBuildCommit = $sourceCommit.Substring(0, 12)'
@@ -44,25 +49,39 @@ function Test-Reject {
     }
     Write-Host "PASS $Name"
 }
+$priorApproval = [Environment]::GetEnvironmentVariable('GPUBNB_APPROVED_PUBLISHER_CERTIFICATE_SHA256')
 try {
     $missing = Join-Path $folder 'gpubnb-agent.exe'
     $fake = Join-Path $folder 'fake'
     $badHash = '0' * 64
+    $testApprovedPublisher = 'a' * 64
+    [Environment]::SetEnvironmentVariable('GPUBNB_APPROVED_PUBLISHER_CERTIFICATE_SHA256', $null)
+    Test-Reject 'approval must be separately configured' {
+        & $Builder -NvCodecHeadersDir $folder -UnsignedAgentPath $missing -UnsignedAgentSha256 ('a' * 64) -ExpectedPublisherSha256 $testApprovedPublisher
+    } 'release_candidate_approved_publisher_not_configured'
+    [Environment]::SetEnvironmentVariable('GPUBNB_APPROVED_PUBLISHER_CERTIFICATE_SHA256', $testApprovedPublisher)
+    Test-Reject 'malformed approved signer pin rejected' {
+        & $Builder -NvCodecHeadersDir $folder -UnsignedAgentPath $missing -UnsignedAgentSha256 ('a' * 64) -ExpectedPublisherSha256 ('z' * 64)
+    } 'release_candidate_approved_publisher_sha256_invalid'
+    Test-Reject 'publisher approval mismatch rejected' {
+        & $Builder -NvCodecHeadersDir $folder -UnsignedAgentPath $missing -UnsignedAgentSha256 ('a' * 64) -ExpectedPublisherSha256 ('b' * 64)
+    } 'release_candidate_publisher_approval_mismatch'
     Test-Reject 'invalid agent input hash rejected before signing' {
-        & $Builder -NvCodecHeadersDir $folder -UnsignedAgentPath $missing -UnsignedAgentSha256 $badHash
+        & $Builder -NvCodecHeadersDir $folder -UnsignedAgentPath $missing -UnsignedAgentSha256 $badHash -ExpectedPublisherSha256 $testApprovedPublisher
     } 'release_candidate_agent_expected_sha256_invalid'
     Test-Reject 'missing agent binary rejected before signing' {
-        & $Builder -NvCodecHeadersDir $folder -UnsignedAgentPath $missing -UnsignedAgentSha256 ('a' * 64)
+        & $Builder -NvCodecHeadersDir $folder -UnsignedAgentPath $missing -UnsignedAgentSha256 ('a' * 64) -ExpectedPublisherSha256 $testApprovedPublisher
     } 'release_candidate_unsigned_agent_missing'
     [IO.File]::WriteAllText($missing,'not an executable')
     $actualHash = (Get-FileHash -LiteralPath $missing -Algorithm SHA256).Hash
     Test-Reject 'mismatched Agent SHA256 rejected before signing' {
-        & $Builder -NvCodecHeadersDir $folder -UnsignedAgentPath $missing -UnsignedAgentSha256 ('a' * 64)
+        & $Builder -NvCodecHeadersDir $folder -UnsignedAgentPath $missing -UnsignedAgentSha256 ('a' * 64) -ExpectedPublisherSha256 $testApprovedPublisher
     } 'release_candidate_unsigned_agent_sha256_mismatch'
     Test-Reject 'non-PE Agent rejected before signing' {
-        & $Builder -NvCodecHeadersDir $folder -UnsignedAgentPath $missing -UnsignedAgentSha256 $actualHash
+        & $Builder -NvCodecHeadersDir $folder -UnsignedAgentPath $missing -UnsignedAgentSha256 $actualHash -ExpectedPublisherSha256 $testApprovedPublisher
     } 'release_candidate_agent_input_must_be_unsigned'
     Write-Host 'PASS negative preflight: no signing or trust-store mutations'
 } finally {
+    [Environment]::SetEnvironmentVariable('GPUBNB_APPROVED_PUBLISHER_CERTIFICATE_SHA256', $priorApproval)
     Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
 }
