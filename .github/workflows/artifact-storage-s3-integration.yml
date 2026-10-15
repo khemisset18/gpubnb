@@ -29,7 +29,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  minio-roundtrip:
+  s3-real-roundtrip:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -44,20 +44,30 @@ jobs:
       - name: Install locked API dependencies
         working-directory: apps/api
         run: npm ci
-      - name: Start S3-compatible MinIO
+      - name: Start pinned SeaweedFS S3 server (real HTTP backend)
+        shell: bash
         run: |
-          docker run -d --rm --name gpubnb-minio \
-            -p 9000:9000 \
-            -e MINIO_ROOT_USER=gpubnb-ci-access \
-            -e MINIO_ROOT_PASSWORD=gpubnb-ci-secret-key \
-            minio/minio:RELEASE.2025-09-07T16-13-09Z server /data --address :9000
-          for _ in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/gpubnb-s3-credentials.json" <<'JSON'
+          {"identities":[{"name":"gpubnb-ci","credentials":[{"accessKey":"gpubnb-ci-access","secretKey":"gpubnb-ci-secret-key"}],"actions":["Admin","Read","Write"]}]}
+          JSON
+          docker run -d --rm --name gpubnb-s3 -p 127.0.0.1:9000:8333 \
+            -v "$RUNNER_TEMP/gpubnb-s3-credentials.json:/etc/gpubnb-s3.json:ro" \
+            chrislusf/seaweedfs@sha256:2c96cf02b8596dbf73c9fca5b90d9258f1953cdaaf4160009d3d02e796c9f0a6 \
+            server -s3 -dir=/data -s3.config=/etc/gpubnb-s3.json
+          for _ in $(seq 1 45); do
+            status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              http://127.0.0.1:9000/ || true)
+            if [ "$status" = "403" ] || [ "$status" = "200" ]; then
               exit 0
+            fi
+            if ! docker ps --filter "name=^/gpubnb-s3$" --format '{{.ID}}' | grep -q .; then
+              docker logs gpubnb-s3
+              exit 1
             fi
             sleep 1
           done
-          docker logs gpubnb-minio
+          docker logs gpubnb-s3
           exit 1
       - name: Real S3 put/get round trip
         working-directory: apps/api
@@ -77,9 +87,9 @@ jobs:
           ARTIFACT_S3_ACCESS_KEY_ID: gpubnb-ci-access
           ARTIFACT_S3_SECRET_ACCESS_KEY: gpubnb-ci-secret-key
         run: npx tsx --test test/artifact-storage-migration-s3.integration.test.ts
-      - name: MinIO diagnostics
+      - name: SeaweedFS S3 diagnostics
         if: failure()
-        run: docker logs gpubnb-minio || true
-      - name: Stop MinIO
+        run: docker logs gpubnb-s3 || true
+      - name: Stop SeaweedFS S3
         if: always()
-        run: docker stop gpubnb-minio || true
+        run: docker stop gpubnb-s3 || true
