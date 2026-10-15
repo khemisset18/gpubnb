@@ -65,16 +65,16 @@ const gatewayUpdated = source.replace(
 );
 if (gatewayUpdated === source) throw new Error('gateway_url_marker_not_found');
 source = gatewayUpdated;
-// The private same-origin override is intentionally present only in the
-// private Render source tree. Never ship provider-specific routing logic
-// inside generated public Netlify artifacts.
+// Hosted Netlify builds use their configured provider-neutral origins.
+// Remove the private same-origin override entirely from public artifacts.
 if (isHostedBuild) {
-  const privateStage3Config =
-    /\/\/ Private Stage 3 Render deployments[^\n]*\n\/\/ authenticate[^\n]*\nconst GPUBNB_STAGE3_RENDER_SAME_ORIGIN =\n[\s\S]*?;\n\n/;
-  source = source.replace(privateStage3Config, '');
-  if (source.includes('GPUBNB_STAGE3_RENDER_SAME_ORIGIN')) {
-    throw new Error('private_stage3_routing_leaked_to_public_build');
+  const privateOriginBlock = /\/\/ BEGIN_PRIVATE_HTTPS_SAME_ORIGIN\n[\s\S]*?\/\/ END_PRIVATE_HTTPS_SAME_ORIGIN\n\n/;
+  const publicConfig = source.replace(privateOriginBlock, '');
+  if (publicConfig === source || publicConfig.includes('BEGIN_PRIVATE_HTTPS_SAME_ORIGIN') ||
+      publicConfig.includes('END_PRIVATE_HTTPS_SAME_ORIGIN')) {
+    throw new Error('private_https_routing_leaked_to_public_build');
   }
+  source = publicConfig;
 }
 const buildUpdated = source.replace(
   /window\.GPUBNB_BUILD = window\.GPUBNB_BUILD \|\| \{[\s\S]*?\n\};/,
