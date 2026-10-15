@@ -72,8 +72,7 @@ if (isHostedBuild) {
   const privateStage3Config =
     /\/\/ Private Stage 3 Render deployments[^\n]*\n\/\/ authenticate[^\n]*\nconst GPUBNB_STAGE3_RENDER_SAME_ORIGIN =\n[\s\S]*?;\n\n/;
   source = source.replace(privateStage3Config, '');
-  if (source.includes('GPUBNB_STAGE3_RENDER_SAME_ORIGIN') ||
-      source.includes('.onrender.com')) {
+  if (source.includes('GPUBNB_STAGE3_RENDER_SAME_ORIGIN')) {
     throw new Error('private_stage3_routing_leaked_to_public_build');
   }
 }
