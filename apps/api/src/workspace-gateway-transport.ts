@@ -32,10 +32,20 @@ export class BrowserPendingBudget {
 }
 
 export function websocketDataToBuffer(data: WebSocket.Data): Buffer {
+  if (typeof data === 'string') return Buffer.from(data, 'utf8');
   if (Buffer.isBuffer(data)) return data;
   if (Array.isArray(data)) return Buffer.concat(data);
   if (data instanceof ArrayBuffer) return Buffer.from(data);
   throw new TypeError('workspace_websocket_unsupported_data_type');
+}
+
+// ws 7 emits message(data): text is a string, binary follows binaryType.
+// ws 8 emits message(data, isBinary), including Buffer-backed text. Prefer
+// explicit opcode metadata when present; never infer it from payload contents.
+export function websocketMessageIsBinary(data: WebSocket.Data, isBinary?: boolean): boolean {
+  if (typeof isBinary === 'boolean') return isBinary;
+  return Buffer.isBuffer(data) || data instanceof ArrayBuffer ||
+    (Array.isArray(data) && data.every(Buffer.isBuffer));
 }
 
 export function isStrictBase64Payload(
