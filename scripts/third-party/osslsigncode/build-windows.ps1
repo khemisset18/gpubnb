@@ -191,21 +191,24 @@ $provenance.zlibUpstreamTestsPassed=$true
 $provenance.installedDependencyBinaries=@(Get-ChildItem -LiteralPath $prefix -Recurse -File | Where-Object { $_.Extension -in @('.lib','.dll','.exe') } | Sort-Object FullName | ForEach-Object {
     [ordered]@{relativePath=$_.FullName.Substring($prefix.Length+1);sizeBytes=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}
 })
+$zlibStatic=Join-Path $prefix 'lib\zs.lib'
+if(-not (Test-Path -LiteralPath $zlibStatic -PathType Leaf)){throw 'expected_zlib_132_static_library_missing'}
 $obuild=Join-Path $work 'osslsigncode-build'
 Write-Host 'Building osslsigncode 2.14-gpubnb-tls1 with pinned static dependencies.'
-$provenance.osslsigncodeConfigure=@('-S',$src,'-B',$obuild,'-G','NMake Makefiles','-DCMAKE_BUILD_TYPE=Release',"-DOPENSSL_ROOT_DIR=$prefix",'-DOPENSSL_USE_STATIC_LIBS=TRUE',"-DZLIB_ROOT=$prefix",'-DCMAKE_DISABLE_FIND_PACKAGE_Python3=TRUE')
+$provenance.osslsigncodeConfigure=@('-S',$src,'-B',$obuild,'-G','NMake Makefiles','-DCMAKE_BUILD_TYPE=Release',"-DOPENSSL_ROOT_DIR=$prefix",'-DOPENSSL_USE_STATIC_LIBS=TRUE',"-DZLIB_ROOT=$prefix","-DZLIB_LIBRARY:FILEPATH=$zlibStatic","-DZLIB_INCLUDE_DIR:PATH=$prefix\include",'-DCMAKE_DISABLE_FIND_PACKAGE_Python3=TRUE')
 [void](Run $cmake $provenance.osslsigncodeConfigure)
 [void](Run $cmake @('--build',$obuild))
 $tool=Join-Path $obuild 'osslsigncode.exe'
 $provenance.toolVersion=Run $tool @('-v')
 if($provenance.toolVersion -notmatch 'osslsigncode 2\.14-gpubnb-tls1' -or
-    $provenance.toolVersion -notmatch 'OpenSSL 3\.5\.9'){throw 'built_tool_version_mismatch'}
+    $provenance.toolVersion -notmatch 'OpenSSL 3\.5\.9' -or
+    $provenance.toolVersion -notmatch '(?is)zlib.{0,30}1\.3\.2'){throw 'built_tool_version_mismatch'}
 $headers=Run $linker @('/dump','/headers',$tool)
 $dependents=Run $linker @('/dump','/dependents',$tool)
 if($headers -notmatch '8664 machine \(x64\)' -or
     $headers -notmatch 'Dynamic base' -or $headers -notmatch 'NX compatible' -or
     $headers -notmatch 'Control Flow Guard' -or $headers -notmatch 'High Entropy Virtual Addresses') {throw 'pe_architecture_or_security_flags_missing'}
-if($dependents -match '(?i)libssl|libcrypto|zlib.*\.dll'){throw 'unexpected_dynamic_dependency'}
+if($dependents -match '(?i)libssl|libcrypto|(?:zlib[^\s]*|zs|z)\.dll'){throw 'unexpected_dynamic_dependency'}
 $provenance.peSecurity=[ordered]@{amd64=$true;aslr=$true;nx=$true;cfg=$true;highEntropyVA=$true;staticOpenSslAndZlib=$true;headers=$headers;dependents=$dependents}
 $provenance.tool=[ordered]@{path=$tool;sizeBytes=(Get-Item -LiteralPath $tool).Length;sha256=(Get-FileHash -LiteralPath $tool -Algorithm SHA256).Hash.ToLowerInvariant();authenticodeStatus=[string](Get-AuthenticodeSignature -LiteralPath $tool).Status}
 $provenance.rootStoresUnchanged=(@(Compare-Object $rootsBeforeBuild @(Get-RootStoreSnapshot)).Count -eq 0)
