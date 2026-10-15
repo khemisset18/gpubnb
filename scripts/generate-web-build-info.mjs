@@ -65,15 +65,16 @@ const gatewayUpdated = source.replace(
 );
 if (gatewayUpdated === source) throw new Error('gateway_url_marker_not_found');
 source = gatewayUpdated;
-// Public hosted builds receive explicit origins from deployment configuration.
-// Strip the private same-origin default; do not leak private routing into Netlify.
+// Hosted Netlify builds use their configured provider-neutral origins.
+// Remove the private same-origin override entirely from public artifacts.
 if (isHostedBuild) {
-  const privateOriginBlock =
-    /\/\/ The private app and API are served by the same HTTPS origin\.\n\/\/ The public hosted build replaces these defaults from its configured origins\.\nconst GPUBNB_PRIVATE_HTTPS_ORIGIN = [^\n]+;\n\n/;
-  source = source.replace(privateOriginBlock, '');
-  if (source.includes('GPUBNB_PRIVATE_HTTPS_ORIGIN')) {
+  const privateOriginBlock = /\/\/ BEGIN_PRIVATE_HTTPS_SAME_ORIGIN\n[\s\S]*?\/\/ END_PRIVATE_HTTPS_SAME_ORIGIN\n\n/;
+  const publicConfig = source.replace(privateOriginBlock, '');
+  if (publicConfig === source || publicConfig.includes('BEGIN_PRIVATE_HTTPS_SAME_ORIGIN') ||
+      publicConfig.includes('END_PRIVATE_HTTPS_SAME_ORIGIN')) {
     throw new Error('private_https_routing_leaked_to_public_build');
   }
+  source = publicConfig;
 }
 const buildUpdated = source.replace(
   /window\.GPUBNB_BUILD = window\.GPUBNB_BUILD \|\| \{[\s\S]*?\n\};/,
