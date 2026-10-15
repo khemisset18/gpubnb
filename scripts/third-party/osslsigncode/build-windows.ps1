@@ -15,10 +15,14 @@ if (-not $work.StartsWith($base,[StringComparison]::OrdinalIgnoreCase) -or
 $lock=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'sources.lock.json') -Raw | ConvertFrom-Json
 $patch=Join-Path $PSScriptRoot 'tls-fail-closed.patch'
 if ((Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lock.patchSha256) { throw 'hardening_patch_hash_mismatch' }
+$emptyGitConfig=Join-Path $work 'empty-git.config'
+[IO.File]::WriteAllText($emptyGitConfig,'',[Text.Encoding]::ASCII)
+$emptyHooks=Join-Path $work 'empty-hooks'
+[void](New-Item -ItemType Directory -Path $emptyHooks)
 $childEnv=@{
     SystemRoot=$env:SystemRoot;WINDIR=$env:WINDIR;TEMP=$work;TMP=$work
     PATH="$env:SystemRoot\System32;C:\Program Files\CMake\bin;C:\Program Files\Git\cmd;C:\Strawberry\perl\bin"
-    GIT_CONFIG_NOSYSTEM='1';GIT_CONFIG_GLOBAL='NUL';GIT_TERMINAL_PROMPT='0'
+    GIT_CONFIG_NOSYSTEM='1';GIT_CONFIG_GLOBAL=$emptyGitConfig;GIT_TERMINAL_PROMPT='0'
 }
 function Run([string]$Exe,[string[]]$Arguments,[string]$Directory=$work,[int]$TimeoutMs=1200000) {
     $si=[Diagnostics.ProcessStartInfo]::new()
@@ -115,7 +119,7 @@ foreach($package in @($lock.openssl,$lock.zlib)){
 }
 $src=Join-Path $work 'osslsigncode-source'
 [void](New-Item -ItemType Directory -Path $src)
-$gitArgs=@('-c','http.sslVerify=true','-c','credential.helper=','-c','core.autocrlf=false','-c','core.hooksPath=NUL')
+$gitArgs=@('-c','http.sslVerify=true','-c','credential.helper=','-c','core.autocrlf=false','-c',"core.hooksPath=$emptyHooks")
 [void](Run $git ($gitArgs+@('init')) $src)
 [void](Run $git ($gitArgs+@('remote','add','origin','https://github.com/mtrojnar/osslsigncode.git')) $src)
 [void](Run $git ($gitArgs+@('fetch','--no-tags','--depth=1','origin',$lock.osslsigncode.sourceCommit)) $src)
