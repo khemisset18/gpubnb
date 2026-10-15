@@ -1,0 +1,59 @@
+name: Stage 4 unsigned AMD64 manifest
+on:
+  push:
+    branches: [prep/stage4-amd64-manifest-2b055992-20261015]
+    paths:
+      - .github/workflows/stage4-amd64-manifest.yml
+      - scripts/tests/build-stage4-amd64-unsigned.ps1
+permissions:
+  contents: read
+concurrency:
+  group: stage4-amd64-manifest-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-amd64:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      SOURCE_COMMIT: 2b055992f7521505d0387dd4c876e36794fffd63
+      WORKFLOW_COMMIT: ${{ github.sha }}
+    steps:
+      - name: Checkout build instructions
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          path: ci-tools
+          persist-credentials: false
+      - name: Checkout exact consolidated source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: 2b055992f7521505d0387dd4c876e36794fffd63
+          path: source
+          persist-credentials: false
+      - name: Checkout existing pinned NVENC 13.0 headers
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: FFmpeg/nv-codec-headers
+          ref: e844e5b26f46bb77479f063029595293aa8f812d
+          path: nv-codec-headers
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
+      - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
+      - name: Audit workflow policy
+        working-directory: ci-tools
+        run: python scripts/audit-github-actions.py
+      - name: Build unsigned components, inspect bytes and record provenance
+        shell: pwsh
+        run: |
+          & ./ci-tools/scripts/tests/build-stage4-amd64-unsigned.ps1 -SourceRoot ./source -NvCodecHeadersDir ./nv-codec-headers/include/ffnvcodec -OutputDirectory ./unsigned-amd64 -SourceCommit $env:SOURCE_COMMIT -WorkflowCommit $env:WORKFLOW_COMMIT
+          if (-not $?) { exit 1 }
+      - name: Upload unsigned evidence only
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: stage4-unsigned-amd64-2b055992-${{ github.run_id }}
+          path: unsigned-amd64/
+          if-no-files-found: error
+          retention-days: 14
