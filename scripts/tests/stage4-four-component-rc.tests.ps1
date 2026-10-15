@@ -40,7 +40,7 @@ function Test-Reject {
     $message = ''
     try { & $Action | Out-Null } catch { $message = $_.Exception.Message }
     if (-not $message.StartsWith($Expected,[StringComparison]::Ordinal)) {
-        throw "unexpected_preflight_result:$Name:$message"
+        throw "unexpected_preflight_result:${Name}:$message"
     }
     Write-Host "PASS $Name"
 }
