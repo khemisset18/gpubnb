@@ -1,13 +1,15 @@
 // URL publique de l’API vue par le navigateur.
-// The private app and API are served by the same HTTPS origin.
-// The public hosted build replaces these defaults from its configured origins.
-const GPUBNB_PRIVATE_HTTPS_ORIGIN = window.location?.protocol === "https:";
+window.GPUBNB_API_URL = window.GPUBNB_API_URL || "/api";
+window.GPUBNB_GATEWAY_URL = window.GPUBNB_GATEWAY_URL || "http://localhost:3000";
 
-window.GPUBNB_API_URL = window.GPUBNB_API_URL ||
-  (GPUBNB_PRIVATE_HTTPS_ORIGIN ? window.location.origin : "/api");
-
-window.GPUBNB_GATEWAY_URL = window.GPUBNB_GATEWAY_URL ||
-  (GPUBNB_PRIVATE_HTTPS_ORIGIN ? window.location.origin : "http://localhost:3000");
+// BEGIN_PRIVATE_HTTPS_SAME_ORIGIN
+// The private site shares one HTTPS origin between HTML pages and its API.
+// Public hosted builds strip this block and use configured API/gateway origins.
+if (window.location?.protocol === "https:") {
+  if (window.GPUBNB_API_URL === "/api") window.GPUBNB_API_URL = window.location.origin;
+  if (window.GPUBNB_GATEWAY_URL === "http://localhost:3000") window.GPUBNB_GATEWAY_URL = window.location.origin;
+}
+// END_PRIVATE_HTTPS_SAME_ORIGIN
 
 window.GPUBNB_CONFIG = {
   apiBase: window.GPUBNB_API_URL,
