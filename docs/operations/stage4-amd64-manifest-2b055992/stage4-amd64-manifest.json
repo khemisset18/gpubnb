@@ -72,7 +72,26 @@
       ],
       "compiledWorkerSignerSha256": "200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a",
       "compiledPinAsciiFoundInPe": true,
-      "executedForVerification": false
+      "executedForVerification": false,
+      "staticPeImports": [
+        "ADVAPI32.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "bcrypt.dll",
+        "CFGMGR32.dll",
+        "CRYPT32.dll",
+        "KERNEL32.dll",
+        "ntdll.dll",
+        "USERENV.dll",
+        "VCRUNTIME140.dll",
+        "WINTRUST.dll",
+        "WS2_32.dll",
+        "WTSAPI32.dll"
+      ]
     },
     {
       "name": "gpubnb-windows-worker.exe",
@@ -112,7 +131,21 @@
       "cargoFeatures": [],
       "compiledMediaSignerSha256": "200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a",
       "embeddedSourceCommitVerified": true,
-      "executedForVerification": "--build-policy --json only on isolated runner"
+      "executedForVerification": "--build-policy --json only on isolated runner",
+      "staticPeImports": [
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "CRYPT32.dll",
+        "KERNEL32.dll",
+        "ntdll.dll",
+        "USER32.dll",
+        "VCRUNTIME140.dll",
+        "WINTRUST.dll"
+      ]
     },
     {
       "name": "GPUbnbWindowsMedia.dll",
@@ -158,7 +191,34 @@
         "GPUbnbProbeMediaFrame"
       ],
       "dllLoadedForVerification": false,
-      "semanticProductVersion": null
+      "semanticProductVersion": null,
+      "staticPeImports": [
+        "api-ms-win-core-com-l1-1-0.dll",
+        "api-ms-win-core-debug-l1-1-0.dll",
+        "api-ms-win-core-errorhandling-l1-1-0.dll",
+        "api-ms-win-core-heap-l1-1-0.dll",
+        "api-ms-win-core-interlocked-l1-1-0.dll",
+        "api-ms-win-core-libraryloader-l1-2-0.dll",
+        "api-ms-win-core-processthreads-l1-1-0.dll",
+        "api-ms-win-core-processthreads-l1-1-1.dll",
+        "api-ms-win-core-profile-l1-1-0.dll",
+        "api-ms-win-core-rtlsupport-l1-1-0.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-core-sysinfo-l1-1-0.dll",
+        "api-ms-win-core-winrt-error-l1-1-1.dll",
+        "api-ms-win-core-winrt-l1-1-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll",
+        "d3d11.dll",
+        "dxgi.dll",
+        "MSVCP140.dll",
+        "OLEAUT32.dll",
+        "SETUPAPI.dll",
+        "USER32.dll",
+        "VCRUNTIME140.dll",
+        "VCRUNTIME140_1.dll"
+      ]
     },
     {
       "name": "gpubnb-agent.exe",
@@ -202,7 +262,12 @@
         "buildCommit": "2b055992f752"
       },
       "embeddedBuildCommit": "2b055992f752",
-      "executedForVerification": "build-info only on isolated runner"
+      "executedForVerification": "build-info only on isolated runner",
+      "staticPeImports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "USER32.dll"
+      ]
     }
   ],
   "compatibility": {
@@ -310,6 +375,20 @@
       "observationDateUtc": "2026-10-09",
       "sha256": null,
       "status": "not rebuilt; no current NVENC runtime or capture test; no driver change approved"
+    },
+    {
+      "component": "Microsoft Visual C++ runtime / Windows UCRT",
+      "required": true,
+      "architectureRequired": "AMD64",
+      "observedStaticPeImports": [
+        "VCRUNTIME140.dll",
+        "VCRUNTIME140_1.dll",
+        "MSVCP140.dll",
+        "api-ms-win-crt-*"
+      ],
+      "presenceOrVersionOnPc1VerifiedThisMission": false,
+      "sha256": null,
+      "status": "required imports measured from new PE bytes; installed runtime inventory not collected; no installation or replacement approved"
     },
     {
       "component": "gpubnb-host-tunnel.exe",
