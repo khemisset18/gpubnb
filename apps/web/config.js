@@ -1,15 +1,13 @@
 // URL publique de l’API vue par le navigateur.
-// Private Stage 3 Render deployments are intentionally same-origin so PC2 can
-// authenticate and open the native desktop without changing the public Netlify site.
-const GPUBNB_STAGE3_RENDER_SAME_ORIGIN =
-  window.location?.protocol === "https:" &&
-  window.location?.hostname?.endsWith(".onrender.com");
+// The private app and API are served by the same HTTPS origin.
+// The public hosted build replaces these defaults from its configured origins.
+const GPUBNB_PRIVATE_HTTPS_ORIGIN = window.location?.protocol === "https:";
 
 window.GPUBNB_API_URL = window.GPUBNB_API_URL ||
-  (GPUBNB_STAGE3_RENDER_SAME_ORIGIN ? window.location.origin : "/api");
+  (GPUBNB_PRIVATE_HTTPS_ORIGIN ? window.location.origin : "/api");
 
 window.GPUBNB_GATEWAY_URL = window.GPUBNB_GATEWAY_URL ||
-  (GPUBNB_STAGE3_RENDER_SAME_ORIGIN ? window.location.origin : "http://localhost:3000");
+  (GPUBNB_PRIVATE_HTTPS_ORIGIN ? window.location.origin : "http://localhost:3000");
 
 window.GPUBNB_CONFIG = {
   apiBase: window.GPUBNB_API_URL,
