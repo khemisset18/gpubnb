@@ -214,11 +214,7 @@ impl QualifiedGraphicsRuntime {
     }
 
     fn ensure_provider_boundary(&mut self) -> Result<(), ServiceRuntimeError> {
-        if ensure_provider_process_absent(
-            self.windows_session_id,
-            &self.provider_user_sid,
-        )
-        .is_err()
+        if ensure_provider_process_absent(self.windows_session_id, &self.provider_user_sid).is_err()
         {
             return Err(self.fail(ServiceRuntimeError::RenterSession));
         }
@@ -598,12 +594,10 @@ fn receive_bound_media_frame_after_proof(
         return Err(ServiceRuntimeError::ExactGpu);
     }
 
-    let provider_desktop_excluded = ensure_provider_process_absent(
-        windows_session_id,
-        provider_user_sid,
-    )
-    .map(|_| true)
-    .map_err(|_| ServiceRuntimeError::RenterSession)?;
+    let provider_desktop_excluded =
+        ensure_provider_process_absent(windows_session_id, provider_user_sid)
+            .map(|_| true)
+            .map_err(|_| ServiceRuntimeError::RenterSession)?;
 
     validate_graphics_proof_chain(
         generation,
