@@ -67,7 +67,8 @@ if ($target.TrimEnd('\') -ieq $sourcePath -or
 if ($target -match '(?i)\\Program Files\\|\\Windows\\|\\ProgramData\\GPUbnb\\') {
     throw 'stage4_private_installed_path_forbidden'
 }
-$signTool=(Get-Command signtool.exe -ErrorAction SilentlyContinue).Source
+$foundSignTool=Get-Command signtool.exe -ErrorAction SilentlyContinue
+$signTool=if ($null -ne $foundSignTool) { $foundSignTool.Source } else { $null }
 if (-not $signTool) {
     $kits=Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Windows Kits\10\bin'
     $signTool=Get-ChildItem -LiteralPath $kits -Filter signtool.exe -File -Recurse -ErrorAction SilentlyContinue |
