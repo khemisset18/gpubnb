@@ -1098,6 +1098,117 @@ async function createDesktopWorkspaceSession(
 }
 
 export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaClient, redis: Redis): void {
+  // Read-only readiness check. This route MUST NOT create a Booking, mutate a
+  // listing or access billing. The POST path rechecks every prerequisite.
+  app.get('/qualification/windows-native/preflight', {
+    config: { rateLimit: { max: 15, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const session = await requireSession(request, reply, redis);
+    if (!session) return;
+    reply.header('Cache-Control', 'no-store');
+
+    if (!windowsNativePrivateQualificationEnabled()) {
+      return {
+        privateNoPaymentMode: false,
+        allowed: false,
+        code: 'PRIVATE_BETA_NO_PAYMENT_DISABLED',
+      };
+    }
+
+    const now = new Date();
+    const candidates = await db.gpuListing.findMany({
+      where: {
+        status: { in: windowsNativePrivateQualificationListingStatuses },
+        resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
+        machine: {
+          connectivity: MachineConnectivity.ONLINE,
+          moderationStatus: ModerationStatus.CLEAR,
+          nativeDesktopStreamingAvailable: true,
+        },
+      },
+      take: 3,
+      select: {
+        id: true,
+        hourlyLamports: true,
+        machine: {
+          select: {
+            operatingSystem: true,
+            operational: true,
+            lastHeartbeatAt: true,
+            nativeDesktopStreamingGpuUuid: true,
+          },
+        },
+        accelerators: {
+          select: {
+            accelerator: {
+              select: {
+                hardwareUuid: true,
+                vendor: true,
+                moderationStatus: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const eligible = candidates.filter((listing) => {
+      const host = listing.machine;
+      const uuid = host.nativeDesktopStreamingGpuUuid?.trim() ?? '';
+      const accelerator = listing.accelerators[0]?.accelerator;
+      const heartbeat = host.lastHeartbeatAt;
+      return host.operatingSystem?.trim().toLowerCase().startsWith('windows') === true
+        && (host.operational === MachineOperational.AVAILABLE
+          || host.operational === MachineOperational.RESERVED
+          || host.operational === MachineOperational.RUNNING)
+        && heartbeat !== null
+        && heartbeat.getTime() <= now.getTime()
+        && now.getTime() - heartbeat.getTime()
+          <= config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS * 1000
+        && listing.accelerators.length === 1
+        && accelerator !== undefined
+        && WINDOWS_NATIVE_GPU_UUID_RE.test(uuid)
+        && accelerator.vendor?.trim().toUpperCase() === 'NVIDIA'
+        && accelerator.moderationStatus === ModerationStatus.CLEAR
+        && rentableAccelerators.includes(accelerator.status)
+        && accelerator.hardwareUuid.toLowerCase() === uuid.toLowerCase()
+        && listing.hourlyLamports * BigInt(WINDOWS_NATIVE_QUALIFICATION_SECONDS) / 3600n > 0n;
+    });
+
+    if (eligible.length !== 1 || !eligible[0]) {
+      return {
+        privateNoPaymentMode: true,
+        allowed: false,
+        code: 'PRIVATE_WINDOWS_HOST_NOT_READY',
+      };
+    }
+
+    // A private qualification may reuse the same renter's own booking, but
+    // cannot attach to another person's overlapping allocation.
+    const otherUserBookings = await db.booking.count({
+      where: {
+        listingId: eligible[0].id,
+        buyerId: { not: session.userId },
+        status: { in: qualificationBookingStatuses },
+        endsAt: { gt: now },
+      },
+    });
+    if (otherUserBookings !== 0) {
+      return {
+        privateNoPaymentMode: true,
+        allowed: false,
+        code: 'PRIVATE_WINDOWS_HOST_RESERVED',
+      };
+    }
+
+    return {
+      privateNoPaymentMode: true,
+      allowed: true,
+      code: 'PRIVATE_WINDOWS_TEST_ATTEMPT_ALLOWED',
+    };
+  });
+
   app.post('/qualification/windows-native/booking', {
     config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
   }, async (request, reply) => {
