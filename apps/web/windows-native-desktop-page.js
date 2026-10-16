@@ -6,6 +6,7 @@ function safeNativeDesktopErrorCode(error) {
 }
 
 import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261003-input-blob-1';
+import { Stage4VideoContinuity } from './windows-native-continuity.js?v=20261016-1';
 
 const NATIVE_RECONNECT_DELAYS_MS = Object.freeze([250, 500, 1000, 2000, 5000]);
 const NATIVE_RECONNECT_WINDOW_MS = 10 * 60 * 1000;
@@ -31,7 +32,10 @@ export function mountWindowsNativeDesktop({
   clientFactory = (options) => new WindowsNativeDesktopClient(options),
   setTimeoutFn = (callback, delay) => globalThis.setTimeout(callback, delay),
   clearTimeoutFn = (timer) => globalThis.clearTimeout(timer),
+  setIntervalFn = (callback, delay) => globalThis.setInterval(callback, delay),
+  clearIntervalFn = (timer) => globalThis.clearInterval(timer),
   now = () => Date.now(),
+  proofNow = () => globalThis.performance?.now?.() ?? Date.now(),
 } = {}) {
   if (!documentObject || !locationObject) {
     throw new Error('windows_native_page_environment');
@@ -39,6 +43,7 @@ export function mountWindowsNativeDesktop({
   const canvas = documentObject.querySelector('#nativeDesktopCanvas');
   const status = documentObject.querySelector('#nativeDesktopStatus');
   const closeButton = documentObject.querySelector('#nativeDesktopClose');
+  const proofIndicator = documentObject.querySelector('#nativeDesktopContinuity');
   if (!canvas || !status || !closeButton) {
     throw new Error('windows_native_page_contract');
   }
@@ -47,6 +52,18 @@ export function mountWindowsNativeDesktop({
   const streamPath = nativeDesktopStreamPath(sessionId);
   const setStatus = (value) => {
     status.textContent = value;
+  };
+  const proof = proofIndicator ? new Stage4VideoContinuity() : null;
+  const showProof = () => {
+    if (!proof || !proofIndicator) return;
+    const result = proof.snapshot(proofNow());
+    proofIndicator.textContent = result.video300sObserved
+      ? 'Vidéo 300 s observée · effet des commandes à confirmer'
+      : `Vidéo continue : ${result.continuousSeconds}/300 s`;
+  };
+  const resetProof = () => {
+    proof?.reset();
+    showProof();
   };
 
   let currentClient = null;
@@ -57,6 +74,8 @@ export function mountWindowsNativeDesktop({
   let stableStreamTimer = null;
   let pageHidden = false;
   let stopped = false;
+  const proofTimer = proof ? setIntervalFn(showProof, 1_000) : null;
+  showProof();
 
   const cancelReconnect = () => {
     if (reconnectTimer === null) return;
@@ -117,6 +136,7 @@ export function mountWindowsNativeDesktop({
         if (client !== currentClient) return;
 
         if (state?.state === 'closed') {
+          resetProof();
           if (stableStreamTimer !== null) {
             clearTimeoutFn(stableStreamTimer);
             stableStreamTimer = null;
@@ -143,6 +163,10 @@ export function mountWindowsNativeDesktop({
             if (client === currentClient && !stopped && !pageHidden) markRecovered();
           }, NATIVE_STABLE_STREAM_MS);
         }
+
+        if (state?.state === 'ready') proof?.observe(state, proofNow());
+        else resetProof();
+        showProof();
 
         const label = {
           connecting: reconnectAttempt > 0 ? 'Reconnexion sécurisée…' : 'Connexion sécurisée…',
@@ -172,6 +196,7 @@ export function mountWindowsNativeDesktop({
 
   const onPageHide = () => {
     pageHidden = true;
+    resetProof();
     cancelReconnect();
     releaseCurrent();
   };
@@ -185,6 +210,8 @@ export function mountWindowsNativeDesktop({
   const stop = () => {
     if (stopped) return;
     stopped = true;
+    if (proofTimer !== null) clearIntervalFn(proofTimer);
+    resetProof();
     cancelReconnect();
     releaseCurrent();
     windowObject.removeEventListener?.('pagehide', onPageHide);
