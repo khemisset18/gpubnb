@@ -13,8 +13,8 @@ foreach ($guard in @(
     'SignCopiesForPrivateTest', 'stage4_private_unsigned_file_hash_mismatch',
     'stage4_private_source_must_be_unsigned', 'stage4_private_test_certificate_unavailable',
     'stage4_private_output_must_be_new', 'stage4_private_installed_path_forbidden',
-    'stage4_private_signature_not_valid', "installationPerformed=$false",
-    "publicBookabilityEnabled=$false", "LOCAL_TEST_ONLY_NOT_RELEASE"
+    'stage4_private_signature_not_valid', 'installationPerformed=$false',
+    'publicBookabilityEnabled=$false', "LOCAL_TEST_ONLY_NOT_RELEASE"
 )) {
     if (-not $source.Contains($guard)) { throw "stage4_private_staging_guard_missing:$guard" }
 }
