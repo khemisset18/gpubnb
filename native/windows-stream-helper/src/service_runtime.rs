@@ -514,8 +514,7 @@ fn receive_polled_media_frame(
         };
     }
 
-    receive_bound_media_frame_after_proof(&control_frame, media_pipe, fence)
-    .map(Some)
+    receive_bound_media_frame_after_proof(&control_frame, media_pipe, fence).map(Some)
 }
 
 fn receive_bound_media_frame_after_proof(
