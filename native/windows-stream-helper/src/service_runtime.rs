@@ -214,11 +214,7 @@ impl QualifiedGraphicsRuntime {
     }
 
     fn ensure_provider_boundary(&mut self) -> Result<(), ServiceRuntimeError> {
-        if ensure_provider_process_absent(
-            self.windows_session_id,
-            &self.provider_user_sid,
-        )
-        .is_err()
+        if ensure_provider_process_absent(self.windows_session_id, &self.provider_user_sid).is_err()
         {
             return Err(self.fail(ServiceRuntimeError::RenterSession));
         }
@@ -266,12 +262,14 @@ impl QualifiedGraphicsRuntime {
         let frame = match receive_polled_media_frame(
             &self.pipe,
             &self.media_pipe,
-            self.generation,
-            sequence,
-            self.windows_session_id,
-            &self.provider_user_sid,
-            self.display_spec,
-            &self.gpu_uuid,
+            MediaFrameFence {
+                generation: self.generation,
+                command_sequence: sequence,
+                windows_session_id: self.windows_session_id,
+                provider_user_sid: &self.provider_user_sid,
+                display_spec: self.display_spec,
+                gpu_uuid: &self.gpu_uuid,
+            },
         ) {
             Ok(Some(frame)) => frame,
             Ok(None) => return Ok(None),
@@ -373,12 +371,14 @@ impl QualifiedGraphicsRuntime {
         let frame = match receive_bound_media_frame(
             &self.pipe,
             &self.media_pipe,
-            self.generation,
-            sequence,
-            self.windows_session_id,
-            &self.provider_user_sid,
-            self.display_spec,
-            &self.gpu_uuid,
+            MediaFrameFence {
+                generation: self.generation,
+                command_sequence: sequence,
+                windows_session_id: self.windows_session_id,
+                provider_user_sid: &self.provider_user_sid,
+                display_spec: self.display_spec,
+                gpu_uuid: &self.gpu_uuid,
+            },
         ) {
             Ok(frame) => frame,
             Err(error) => return Err(self.fail(error)),
@@ -453,41 +453,42 @@ fn workspace_slug(workspace: WorkspaceKind) -> &'static str {
     }
 }
 
-fn receive_bound_media_frame(
-    pipe: &WorkerPipe,
-    media_pipe: &WorkerMediaPipe,
+// Carry the immutable session and GPU fence as one typed argument through
+// each media read. This keeps every check identical without positional sprawl.
+#[derive(Clone, Copy)]
+struct MediaFrameFence<'a> {
     generation: u64,
     command_sequence: u64,
     windows_session_id: u32,
-    provider_user_sid: &str,
+    provider_user_sid: &'a str,
     display_spec: WorkerDisplaySpec,
-    gpu_uuid: &str,
+    gpu_uuid: &'a str,
+}
+
+fn receive_bound_media_frame(
+    pipe: &WorkerPipe,
+    media_pipe: &WorkerMediaPipe,
+    fence: MediaFrameFence<'_>,
 ) -> Result<BoundMediaFrame, ServiceRuntimeError> {
     let proof_frame = pipe
         .read_frame(MEDIA_PROOF_TIMEOUT_MS)
         .map_err(|_| ServiceRuntimeError::MediaProof)?;
-    receive_bound_media_frame_after_proof(
-        &proof_frame,
-        media_pipe,
-        generation,
-        command_sequence,
-        windows_session_id,
-        provider_user_sid,
-        display_spec,
-        gpu_uuid,
-    )
+    receive_bound_media_frame_after_proof(&proof_frame, media_pipe, fence)
 }
 
 fn receive_polled_media_frame(
     pipe: &WorkerPipe,
     media_pipe: &WorkerMediaPipe,
-    generation: u64,
-    command_sequence: u64,
-    windows_session_id: u32,
-    provider_user_sid: &str,
-    display_spec: WorkerDisplaySpec,
-    gpu_uuid: &str,
+    fence: MediaFrameFence<'_>,
 ) -> Result<Option<BoundMediaFrame>, ServiceRuntimeError> {
+    let MediaFrameFence {
+        generation,
+        command_sequence,
+        windows_session_id,
+        display_spec,
+        gpu_uuid,
+        ..
+    } = fence;
     let control_frame = pipe
         .read_frame(PIPE_TIMEOUT_MS)
         .map_err(|_| ServiceRuntimeError::MediaProof)?;
@@ -513,29 +514,22 @@ fn receive_polled_media_frame(
         };
     }
 
-    receive_bound_media_frame_after_proof(
-        &control_frame,
-        media_pipe,
+    receive_bound_media_frame_after_proof(&control_frame, media_pipe, fence).map(Some)
+}
+
+fn receive_bound_media_frame_after_proof(
+    proof_frame: &[u8],
+    media_pipe: &WorkerMediaPipe,
+    fence: MediaFrameFence<'_>,
+) -> Result<BoundMediaFrame, ServiceRuntimeError> {
+    let MediaFrameFence {
         generation,
         command_sequence,
         windows_session_id,
         provider_user_sid,
         display_spec,
         gpu_uuid,
-    )
-    .map(Some)
-}
-
-fn receive_bound_media_frame_after_proof(
-    proof_frame: &[u8],
-    media_pipe: &WorkerMediaPipe,
-    generation: u64,
-    command_sequence: u64,
-    windows_session_id: u32,
-    provider_user_sid: &str,
-    display_spec: WorkerDisplaySpec,
-    gpu_uuid: &str,
-) -> Result<BoundMediaFrame, ServiceRuntimeError> {
+    } = fence;
     if proof_frame.len() == WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE {
         let diagnostic = decode_worker_media_diagnostic(proof_frame)
             .map_err(|_| ServiceRuntimeError::MediaProof)?;
@@ -598,12 +592,10 @@ fn receive_bound_media_frame_after_proof(
         return Err(ServiceRuntimeError::ExactGpu);
     }
 
-    let provider_desktop_excluded = ensure_provider_process_absent(
-        windows_session_id,
-        provider_user_sid,
-    )
-    .map(|_| true)
-    .map_err(|_| ServiceRuntimeError::RenterSession)?;
+    let provider_desktop_excluded =
+        ensure_provider_process_absent(windows_session_id, provider_user_sid)
+            .map(|_| true)
+            .map_err(|_| ServiceRuntimeError::RenterSession)?;
 
     validate_graphics_proof_chain(
         generation,
@@ -817,12 +809,14 @@ pub fn start_qualified_graphics_runtime(
         let initial_media_frame = receive_bound_media_frame(
             &pipe,
             &media_pipe,
-            config.generation,
-            2,
-            config.windows_session_id,
-            config.provider_user_sid,
-            display_spec,
-            config.gpu_uuid,
+            MediaFrameFence {
+                generation: config.generation,
+                command_sequence: 2,
+                windows_session_id: config.windows_session_id,
+                provider_user_sid: config.provider_user_sid,
+                display_spec,
+                gpu_uuid: config.gpu_uuid,
+            },
         )?;
         if !initial_media_frame.is_keyframe() {
             return Err(ServiceRuntimeError::MediaTransport);
