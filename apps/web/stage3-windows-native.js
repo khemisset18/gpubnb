@@ -98,6 +98,19 @@
       setStatus('Vérification du compte PC2…');
       await request('/auth/me');
 
+      setStatus('Contrôle en lecture seule : mode privé sans paiement et PC1…');
+      const preflight=await request('/qualification/windows-native/preflight');
+      if(preflight.privateNoPaymentMode!==true){
+        throw new Error('Test bloqué : serveur privé sans paiement non activé. Aucune réservation créée.');
+      }
+      if(preflight.allowed!==true){
+        const reason={
+          PRIVATE_WINDOWS_HOST_NOT_READY:'PC1 ne confirme pas encore la session Windows native.',
+          PRIVATE_WINDOWS_HOST_RESERVED:'PC1 est déjà réservé par une autre session.'
+        }[preflight.code]||'Préconditions de qualification manquantes.';
+        throw new Error(`Test bloqué : ${reason} Aucune réservation créée.`);
+      }
+
       setStatus('Création de la réservation privée…');
       const booking=await request('/qualification/windows-native/booking',{method:'POST'});
 
