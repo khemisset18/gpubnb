@@ -54,7 +54,7 @@ test('browser page shows a video-only monitor, while manual input proof remains 
   const html = readFileSync(new URL('../../web/windows-native-desktop.html', import.meta.url), 'utf8');
   const page = readFileSync(new URL('../../web/windows-native-desktop-page.js', import.meta.url), 'utf8');
   assert.match(html, /id="nativeDesktopContinuity"/);
-  assert.match(page, /proof\.observe\(state, proofNow\(\)\)/);
+  assert.ok(page.includes('proof?.observe(state, proofNow())'));
   assert.match(page, /resetProof\(\)/);
   assert.match(page, /effet des commandes à confirmer/);
   assert.doesNotMatch(page, /inputEffectVerified\s*=\s*true/);
