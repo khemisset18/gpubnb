@@ -174,6 +174,7 @@ def classify_supervisor_exception(
             "connection refused",
             "connection reset",
             "connection aborted",
+            "winerror 10053",  # Windows WSAECONNABORTED: transient local TCP abort.
             "remote end closed connection",
         )
     ):

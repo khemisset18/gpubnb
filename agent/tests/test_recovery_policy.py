@@ -90,6 +90,7 @@ class RecoveryPolicyTests(unittest.TestCase):
     def test_runtime_classifier_only_retries_unambiguous_transient_failures(self) -> None:
         cases = [
             (TimeoutError("API timed out"), "heartbeat", "api_timeout"),
+            (RuntimeError("API inaccessible: [WinError 10053] Une connexion établie a été abandonnée par un logiciel de votre ordinateur hôte"), "heartbeat", "network_unreachable"),
             (RuntimeError("API HTTP 503: unavailable"), "gateway", "api_unavailable"),
             (
                 RuntimeError("workspace_docker_failed:info:1:Docker Desktop is starting"),

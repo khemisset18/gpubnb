@@ -1,6 +1,6 @@
 # Windows Native Desktop — Security Threat Model
 
-Status: pre-qualification, fail-closed. This document is normative for PR #220 and later promotion work.
+Status: Stage 3 physical Cloud Desktop qualification PASS; Stage 4 production hardening remains fail-closed. This document is normative for PR #220 and later promotion work.
 
 ## Security objective
 
@@ -94,6 +94,8 @@ No native Windows workspace is bookable or billable until the complete runtime p
 - Stale READY after DXGI/device/session degradation.
 
 ## Required before production promotion
+
+The Stage 3 physical qualification in PR #281 closed the real Cloud Desktop capture/NVENC/browser/input/reconnect/normal-cleanup proof on one qualified Windows/NVIDIA Host. The remaining items below are Stage 4 release blockers where still applicable; qualification success does not automatically promote them.
 
 The following remain release blockers until implemented and physically verified:
 

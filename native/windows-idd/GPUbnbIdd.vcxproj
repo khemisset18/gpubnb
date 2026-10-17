@@ -52,10 +52,13 @@
     <PhysicalQualificationBuild Condition="'$(PhysicalQualificationBuild)'==''">false</PhysicalQualificationBuild>
     <PhysicalQualificationDefine Condition="'$(PhysicalQualificationBuild)'=='true'">GPUBNB_PHYSICAL_QUALIFICATION_BUILD=1;</PhysicalQualificationDefine>
     <PhysicalQualificationDefine Condition="'$(PhysicalQualificationBuild)'!='true'">GPUBNB_PHYSICAL_QUALIFICATION_BUILD=0;</PhysicalQualificationDefine>
+    <ReleaseCandidateBuild Condition="'$(ReleaseCandidateBuild)'==''">false</ReleaseCandidateBuild>
+    <ReleaseCandidateDefine Condition="'$(ReleaseCandidateBuild)'=='true'">GPUBNB_RELEASE_CANDIDATE_BUILD=1;</ReleaseCandidateDefine>
+    <ReleaseCandidateDefine Condition="'$(ReleaseCandidateBuild)'!='true'">GPUBNB_RELEASE_CANDIDATE_BUILD=0;</ReleaseCandidateDefine>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><ExceptionHandling>false</ExceptionHandling><EnablePREfast>true</EnablePREfast>
-      <PreprocessorDefinitions>$(PhysicalQualificationDefine)_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>$(PhysicalQualificationDefine)$(ReleaseCandidateDefine)_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/D_ATL_NO_WIN_SUPPORT /DUMDF_DRIVER /DIDDCX_VERSION_MAJOR=1 /DIDDCX_VERSION_MINOR=6 /DIDDCX_MINIMUM_VERSION_REQUIRED=4 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link><AdditionalDependencies>%(AdditionalDependencies);OneCoreUAP.lib;d3d11.lib;dxgi.lib</AdditionalDependencies></Link>
@@ -63,7 +66,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><ExceptionHandling>false</ExceptionHandling><EnablePREfast>true</EnablePREfast>
-      <PreprocessorDefinitions>$(PhysicalQualificationDefine)NDEBUG;_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>$(PhysicalQualificationDefine)$(ReleaseCandidateDefine)NDEBUG;_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/D_ATL_NO_WIN_SUPPORT /DUMDF_DRIVER /DIDDCX_VERSION_MAJOR=1 /DIDDCX_VERSION_MINOR=6 /DIDDCX_MINIMUM_VERSION_REQUIRED=4 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link><AdditionalDependencies>%(AdditionalDependencies);OneCoreUAP.lib;d3d11.lib;dxgi.lib</AdditionalDependencies><GenerateDebugInformation>true</GenerateDebugInformation></Link>

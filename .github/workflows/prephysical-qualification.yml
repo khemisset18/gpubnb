@@ -82,6 +82,7 @@ jobs:
           test/release-compatibility-agent-contract.test.ts
           test/release-compatibility-runtime.test.ts
           test/windows-release-signing-wiring.test.ts
+          test/windows-native-release-candidate-wiring.test.ts
           test/prephysical-boundaries.test.ts
       - name: Strict TypeScript verification
         run: npx tsc -p tsconfig.json --noEmit

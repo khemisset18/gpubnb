@@ -75,7 +75,9 @@ jobs:
         run: cargo test --locked --manifest-path native/windows-stream-helper/Cargo.toml --all-targets
 
       - name: Build release helper
-        run: cargo build --locked --release --manifest-path native/windows-stream-helper/Cargo.toml
+        env:
+          GPUBNB_WINDOWS_WORKER_SIGNER_SHA256: 200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a
+        run: cargo build --locked --release --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification --bin gpubnb-windows-stream
 
       - name: Upload Windows stream helper artifact
         if: runner.os == 'Windows'
@@ -120,6 +122,12 @@ jobs:
       - name: Clippy physical qualification harness
         if: runner.os == 'Windows'
         run: cargo clippy --locked --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification --bin gpubnb-windows-physical-qualify -- -D warnings
+
+      - name: Compile Stage 4 release-candidate helper without publishing it
+        if: runner.os == 'Windows'
+        env:
+          GPUBNB_WINDOWS_WORKER_SIGNER_SHA256: 1111111111111111111111111111111111111111111111111111111111111111
+        run: cargo build --locked --release --manifest-path native/windows-stream-helper/Cargo.toml --features release-candidate --bin gpubnb-windows-stream
 
       - name: Parse physical qualification PowerShell entrypoints
         if: runner.os == 'Windows'

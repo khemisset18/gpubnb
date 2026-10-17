@@ -1,0 +1,38 @@
+name: Stage 4 ephemeral Authenticode signature rehearsal
+on:
+  push:
+    branches:
+      - prep/stage4-ephemeral-signature-rehearsal-20261015
+    paths:
+      - scripts/tests/stage4-ephemeral-signature-rehearsal.ps1
+      - .github/workflows/stage4-ephemeral-signature-rehearsal.yml
+  pull_request:
+    paths:
+      - scripts/tests/stage4-ephemeral-signature-rehearsal.ps1
+      - .github/workflows/stage4-ephemeral-signature-rehearsal.yml
+permissions:
+  contents: read
+concurrency:
+  group: stage4-ephemeral-authenticode-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  temporary-signature-only:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact policy under test
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Verify Authenticode fail-closed behavior with existing tests
+        shell: powershell
+        run: |
+          & ./scripts/tests/verify-windows-authenticode.tests.ps1
+          if (-not $?) { throw 'authenticode_verifier_tests_failed' }
+      - name: Sign only a disposable test script with temporary nonexportable key
+        shell: powershell
+        run: |
+          & ./scripts/tests/stage4-ephemeral-signature-rehearsal.ps1
+          if (-not $?) { throw 'ephemeral_signature_rehearsal_failed' }
+      # Intentionally no secrets, deploy, release, key export or artifact upload.
+      # This test does NOT validate an approved production cert/TSA nor sign a PE.

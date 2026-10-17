@@ -9,9 +9,13 @@ use crate::gpu_identity::resolve_nvidia_uuid_to_luid;
 pub const IDD_CONTROL_VERSION: u32 = 1;
 pub const IDD_CONTROL_REQUEST_SIZE: usize = 64;
 
-// Physical qualification gate mirrored from the UMDF driver. Both sides must
-// remain false until an explicitly promoted, physically qualified build.
-pub const IDD_MONITOR_MUTATION_ENABLED: bool = cfg!(feature = "physical-qualification");
+// Explicit mutation gate mirrored from the UMDF driver. Physical qualification
+// and Stage 4 release-candidate builds are distinct authorities; both default
+// off and neither changes public bookability on its own.
+pub const IDD_MONITOR_MUTATION_ENABLED: bool = cfg!(any(
+    feature = "physical-qualification",
+    feature = "release-candidate"
+));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
@@ -544,9 +548,9 @@ mod tests {
         }
     }
 
-    #[cfg(not(feature = "physical-qualification"))]
+    #[cfg(not(any(feature = "physical-qualification", feature = "release-candidate")))]
     #[test]
-    fn activation_is_hard_disabled_before_physical_qualification() {
+    fn activation_is_hard_disabled_without_explicit_mutation_authority() {
         const { assert!(!IDD_MONITOR_MUTATION_ENABLED) };
         assert_eq!(
             activate_virtual_display_lease("GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a", valid())

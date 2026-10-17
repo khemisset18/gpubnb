@@ -90,12 +90,28 @@ fn bounded_runtime_failure_code(value: &str) -> Option<&'static str> {
         "invalid_configuration" => Some("invalid_configuration"),
         "worker_signer_policy" => Some("worker_signer_policy"),
         "renter_session" => Some("renter_session"),
+        "renter_session_not_active" => Some("renter_session_not_active"),
+        "renter_session_not_console" => Some("renter_session_not_console"),
+        "renter_another_interactive_session" => Some("renter_another_interactive_session"),
+        "renter_provider_process" => Some("renter_provider_process"),
+        "renter_token_query" => Some("renter_token_query"),
+        "renter_token_not_primary" => Some("renter_token_not_primary"),
+        "renter_token_session_mismatch" => Some("renter_token_session_mismatch"),
+        "renter_token_user_mismatch" => Some("renter_token_user_mismatch"),
+        "renter_identity_policy" => Some("renter_identity_policy"),
+        "service_identity" => Some("service_identity"),
         "pipe" => Some("pipe"),
         "worker_trust" => Some("worker_trust"),
         "worker_launch" => Some("worker_launch"),
         "worker_handshake" => Some("worker_handshake"),
         "exact_gpu" => Some("exact_gpu"),
         "virtual_display" => Some("virtual_display"),
+        "virtual_display_interface_query" => Some("virtual_display_interface_query"),
+        "virtual_display_interface_missing" => Some("virtual_display_interface_missing"),
+        "virtual_display_interface_ambiguous" => Some("virtual_display_interface_ambiguous"),
+        "virtual_display_control_open" => Some("virtual_display_control_open"),
+        "virtual_display_control" => Some("virtual_display_control"),
+        "virtual_display_gate" => Some("virtual_display_gate"),
         "worker_protocol" => Some("worker_protocol"),
         "media_proof" => Some("media_proof"),
         "media_diagnostic" => Some("media_diagnostic"),
@@ -780,6 +796,26 @@ mod tests {
         assert_eq!(
             bounded_runtime_failure_code("renter_session"),
             Some("renter_session")
+        );
+        assert_eq!(
+            bounded_runtime_failure_code("renter_token_query"),
+            Some("renter_token_query")
+        );
+        assert_eq!(
+            bounded_runtime_failure_code("renter_token_user_mismatch"),
+            Some("renter_token_user_mismatch")
+        );
+        assert_eq!(
+            bounded_runtime_failure_code("service_identity"),
+            Some("service_identity")
+        );
+        assert_eq!(
+            bounded_runtime_failure_code("virtual_display_control_open"),
+            Some("virtual_display_control_open")
+        );
+        assert_eq!(
+            bounded_runtime_failure_code("virtual_display_interface_missing"),
+            Some("virtual_display_interface_missing")
         );
         assert_eq!(bounded_runtime_failure_code("media_transport:token"), None);
         assert_eq!(bounded_runtime_failure_code(""), None);

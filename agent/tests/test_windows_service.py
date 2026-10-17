@@ -118,6 +118,30 @@ class WindowsServiceTests(unittest.TestCase):
         self.assertIn('"jobId":"job-1"', payload)
         self.assertIn("échec", payload)
 
+    def test_service_required_privileges_are_minimal_and_native_specific(self) -> None:
+        self.assertEqual(
+            windows_service.SERVICE_REQUIRED_PRIVILEGES,
+            (
+                "SeTcbPrivilege",
+                "SeAssignPrimaryTokenPrivilege",
+                "SeIncreaseQuotaPrivilege",
+            ),
+        )
+        self.assertNotIn("SeDebugPrivilege", windows_service.SERVICE_REQUIRED_PRIVILEGES)
+        self.assertNotIn("SeBackupPrivilege", windows_service.SERVICE_REQUIRED_PRIVILEGES)
+        self.assertNotIn("SeRestorePrivilege", windows_service.SERVICE_REQUIRED_PRIVILEGES)
+        self.assertNotIn("SeImpersonatePrivilege", windows_service.SERVICE_REQUIRED_PRIVILEGES)
+
+    def test_configure_security_sets_exact_required_privileges(self) -> None:
+        with patch.object(windows_service, "_sc") as sc:
+            windows_service._configure_security()
+
+        sc.assert_called_once_with(
+            "privs",
+            "GPUbnbAgent",
+            "SeTcbPrivilege/SeAssignPrimaryTokenPrivilege/SeIncreaseQuotaPrivilege",
+        )
+
     def test_service_status_reports_running_only_from_scm_evidence(self) -> None:
         win32service = MagicMock(SERVICE_RUNNING=4)
         win32service.error = OSError

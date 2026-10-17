@@ -15,16 +15,45 @@
 !macroend
 
 !macro GPUbnbForceKillAgent
-  ; A graceful "sc stop" relies on the running agent noticing its stop event
-  ; between blocking calls. A heartbeat loop stuck inside a network call that
-  ; never returns (observed in practice) never checks it, so the process
-  ; outlives the stop request indefinitely and keeps gpubnb-agent.exe locked -
-  ; every subsequent File instruction then silently no-ops, leaving the old
-  ; build installed with no visible error (worse under /S, which has no
-  ; sharing-violation dialog to surface it at all). Force-kill by image name
-  ; as a fallback so an upgrade can never be blocked by a hung previous agent.
-  nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /IM gpubnb-agent.exe /T'
-  Pop $0
+  ; A hung service may outlive sc.exe stop. Never fall back to taskkill /IM:
+  ; another process with the same filename is not part of the GPUbnb service
+  ; authority. Resolve the exact SCM-owned PID, prove its executable path is
+  ; the executable registered in the service command line, and only then stop
+  ; that one process. Any ambiguity aborts the install/update fail-closed.
+  FileOpen $2 "$TEMP\gpubnb-stop-agent-service-pid.ps1" w
+  FileWrite $2 "$$ErrorActionPreference = 'Stop'$\r$\n"
+  FileWrite $2 "$$service = Get-CimInstance Win32_Service -Filter 'Name=''GPUbnbAgent''' -ErrorAction SilentlyContinue$\r$\n"
+  FileWrite $2 "if ($$null -eq $$service -or [uint32]$$service.ProcessId -eq 0) { exit 0 }$\r$\n"
+  FileWrite $2 "$$servicePid = [uint32]$$service.ProcessId$\r$\n"
+  FileWrite $2 "$$pathName = ([string]$$service.PathName).Trim()$\r$\n"
+  FileWrite $2 "if ([string]::IsNullOrWhiteSpace($$pathName)) { throw 'GPUbnbAgent service path is unavailable.' }$\r$\n"
+  FileWrite $2 "if ($$pathName.StartsWith([string][char]34)) {$\r$\n"
+  FileWrite $2 "  $$endQuote = $$pathName.IndexOf([char]34, 1)$\r$\n"
+  FileWrite $2 "  if ($$endQuote -lt 2) { throw 'GPUbnbAgent service path is malformed.' }$\r$\n"
+  FileWrite $2 "  $$expectedExe = $$pathName.Substring(1, $$endQuote - 1)$\r$\n"
+  FileWrite $2 "} else {$\r$\n"
+  FileWrite $2 "  $$exeEnd = $$pathName.IndexOf('.exe', [System.StringComparison]::OrdinalIgnoreCase)$\r$\n"
+  FileWrite $2 "  if ($$exeEnd -lt 0) { throw 'GPUbnbAgent service path has no executable.' }$\r$\n"
+  FileWrite $2 "  $$expectedExe = $$pathName.Substring(0, $$exeEnd + 4).Trim()$\r$\n"
+  FileWrite $2 "}$\r$\n"
+  FileWrite $2 "if ([IO.Path]::GetFileName($$expectedExe) -ine 'gpubnb-agent.exe') { throw 'GPUbnbAgent service executable name mismatch.' }$\r$\n"
+  FileWrite $2 "$$processFilter = 'ProcessId=' + $$servicePid$\r$\n"
+  FileWrite $2 "$$process = Get-CimInstance Win32_Process -Filter $$processFilter -ErrorAction Stop$\r$\n"
+  FileWrite $2 "if ($$null -eq $$process) { exit 0 }$\r$\n"
+  FileWrite $2 "$$actualExe = [string]$$process.ExecutablePath$\r$\n"
+  FileWrite $2 "if ([string]::IsNullOrWhiteSpace($$actualExe)) { throw 'GPUbnbAgent process path is unavailable.' }$\r$\n"
+  FileWrite $2 "$$expectedFull = [IO.Path]::GetFullPath($$expectedExe)$\r$\n"
+  FileWrite $2 "$$actualFull = [IO.Path]::GetFullPath($$actualExe)$\r$\n"
+  FileWrite $2 "if (-not [string]::Equals($$expectedFull, $$actualFull, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'GPUbnbAgent service/process executable mismatch.' }$\r$\n"
+  FileWrite $2 "Stop-Process -Id $$servicePid -Force -ErrorAction Stop$\r$\n"
+  FileWrite $2 "$$deadline = (Get-Date).AddSeconds(15)$\r$\n"
+  FileWrite $2 "while (Get-Process -Id $$servicePid -ErrorAction SilentlyContinue) {$\r$\n"
+  FileWrite $2 "  if ((Get-Date) -ge $$deadline) { throw 'GPUbnbAgent process did not exit after targeted stop.' }$\r$\n"
+  FileWrite $2 "  Start-Sleep -Milliseconds 200$\r$\n"
+  FileWrite $2 "}$\r$\n"
+  FileClose $2
+  !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$TEMP\gpubnb-stop-agent-service-pid.ps1"' "Unable to stop the verified GPUbnb service process"
+  Delete "$TEMP\gpubnb-stop-agent-service-pid.ps1"
 !macroend
 
 !macro NSIS_HOOK_PREINSTALL

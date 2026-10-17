@@ -5,6 +5,8 @@ on:
     paths:
       - agent/**
       - services/edge/**
+      - scripts/build-windows-native-release-candidate.ps1
+      - scripts/windows-native-stage4-failure-qualification.ps1
       - apps/host-desktop/**
       - Cargo.toml
       - Cargo.lock
@@ -27,6 +29,51 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+
+      - name: Parse Stage 4 native release-candidate builder
+        shell: pwsh
+        run: |
+          $source = Get-Content 'scripts/build-windows-native-release-candidate.ps1' -Raw
+          [void][scriptblock]::Create($source)
+          if ($source -notmatch "'--features', 'release-candidate'") {
+            throw 'Stage 4 native candidate builder must use the release-candidate gate.'
+          }
+          if ($source -match 'physical-qualification') {
+            throw 'Stage 4 native candidate builder must never use the physical-qualification gate.'
+          }
+
+      - name: Parse Stage 4 physical failure harness
+        shell: pwsh
+        run: |
+          $path = 'scripts/windows-native-stage4-failure-qualification.ps1'
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            $path,
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'Stage 4 physical failure harness contains PowerShell parse errors.'
+          }
+          $source = Get-Content $path -Raw
+          foreach ($required in @(
+            "'HelperCrash'",
+            "'AgentRestart'",
+            "'NetworkInterruption'",
+            "'RebootPrepare'",
+            "'RebootVerify'",
+            'stage4_faults_not_armed',
+            'overallAcceptancePendingServerEvidence'
+          )) {
+            if ($source -notmatch [regex]::Escape($required)) {
+              throw "Stage 4 physical failure harness is missing required contract: $required"
+            }
+          }
+          if ($source -match 'Disable-NetAdapter|Restart-Computer|shutdown\.exe') {
+            throw 'Stage 4 physical failure harness contains a forbidden broad host mutation.'
+          }
 
       - name: Validate language-independent installer ACLs
         shell: pwsh
@@ -270,6 +317,51 @@ jobs:
           ) {
             throw 'Windows Service recovery is not configured.'
           }
+
+          $requiredPrivileges = @(
+            'SeTcbPrivilege',
+            'SeAssignPrimaryTokenPrivilege',
+            'SeIncreaseQuotaPrivilege'
+          )
+          $privileges = (& sc.exe qprivs GPUbnbAgent 8192) -join "`n"
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Unable to query GPUbnbAgent required privileges.'
+          }
+          foreach ($privilege in $requiredPrivileges) {
+            if ($privileges -notmatch [regex]::Escape($privilege)) {
+              throw "GPUbnbAgent is missing required privilege $privilege."
+            }
+          }
+          foreach ($forbiddenPrivilege in @(
+            'SeDebugPrivilege',
+            'SeBackupPrivilege',
+            'SeRestorePrivilege',
+            'SeImpersonatePrivilege',
+            'SeTakeOwnershipPrivilege'
+          )) {
+            if ($privileges -match [regex]::Escape($forbiddenPrivilege)) {
+              throw "GPUbnbAgent retains unnecessary privilege $forbiddenPrivilege."
+            }
+          }
+
+          $serviceSddl = (& sc.exe sdshow GPUbnbAgent | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($serviceSddl)) {
+            throw 'Unable to read GPUbnbAgent service security descriptor.'
+          }
+          $descriptor = [System.Security.AccessControl.RawSecurityDescriptor]::new($serviceSddl)
+          $broadServicePrincipals = @('S-1-1-0', 'S-1-5-11', 'S-1-5-32-545')
+          $dangerousServiceRights = 0x00000002 -bor 0x00000010 -bor 0x00000020 -bor 0x00010000 -bor 0x00040000 -bor 0x00080000
+          foreach ($ace in $descriptor.DiscretionaryAcl) {
+            if (
+              $ace -is [System.Security.AccessControl.CommonAce] -and
+              $ace.AceQualifier -eq [System.Security.AccessControl.AceQualifier]::AccessAllowed -and
+              $broadServicePrincipals -contains $ace.SecurityIdentifier.Value -and
+              (($ace.AccessMask -band $dangerousServiceRights) -ne 0)
+            ) {
+              throw "Broad principal $($ace.SecurityIdentifier.Value) has dangerous GPUbnbAgent service rights."
+            }
+          }
+
           & $installedSidecar service restart
           if ($LASTEXITCODE -ne 0) { throw 'The installed service could not be restarted.' }
           $service = Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"

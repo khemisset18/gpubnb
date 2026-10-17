@@ -5,12 +5,14 @@ on:
   pull_request:
     paths:
       - "native/windows-idd/**"
+      - "native/windows-idd-installer/**"
       - ".github/workflows/windows-idd.yml"
   push:
     branches:
       - "feat/windows-native-desktop-workspaces"
     paths:
       - "native/windows-idd/**"
+      - "native/windows-idd-installer/**"
       - ".github/workflows/windows-idd.yml"
 
 permissions:
@@ -49,19 +51,29 @@ jobs:
             }
           }
 
-      - name: Verify monitor mutation remains explicitly qualification-gated
+      - name: Verify monitor mutation remains explicitly gated
         shell: pwsh
         run: |
           $driver = Get-Content native/windows-idd/Driver.cpp -Raw
           $project = Get-Content native/windows-idd/GPUbnbIdd.vcxproj -Raw
           if ($driver -notmatch 'GPUBNB_PHYSICAL_QUALIFICATION_BUILD == 1') {
-            throw "IddCx monitor mutation must remain behind the explicit physical qualification macro"
+            throw "IddCx monitor mutation must retain the physical qualification authority"
+          }
+          if ($driver -notmatch 'GPUBNB_RELEASE_CANDIDATE_BUILD == 1') {
+            throw "IddCx monitor mutation must retain the distinct release-candidate authority"
+          }
+          if ($driver -notmatch 'mutually exclusive') {
+            throw "IddCx mutation authorities must remain mutually exclusive"
           }
           if ($project -notmatch '<PhysicalQualificationBuild Condition=.*>false</PhysicalQualificationBuild>') {
             throw "The IddCx project must default physical qualification builds to false"
           }
-          if ($project -notmatch 'GPUBNB_PHYSICAL_QUALIFICATION_BUILD=0') {
-            throw "Default IddCx builds must compile monitor mutation disabled"
+          if ($project -notmatch '<ReleaseCandidateBuild Condition=.*>false</ReleaseCandidateBuild>') {
+            throw "The IddCx project must default release-candidate builds to false"
+          }
+          if ($project -notmatch 'GPUBNB_PHYSICAL_QUALIFICATION_BUILD=0' -or
+              $project -notmatch 'GPUBNB_RELEASE_CANDIDATE_BUILD=0') {
+            throw "Default IddCx builds must compile every mutation authority disabled"
           }
 
       - name: Verify exact leased GPU is the preferred IddCx render adapter
@@ -126,10 +138,41 @@ jobs:
             throw "WDK 28000 CI must use the x64 MSBuild host"
           }
 
+      - name: Verify root-device installer is narrowly scoped
+        shell: pwsh
+        run: |
+          $source = Get-Content native/windows-idd-installer/main.cpp -Raw
+          foreach ($required in @(
+            'Root\\GPUbnbVirtualDisplay',
+            'GPUbnbIdd.inf',
+            'DIF_REGISTERDEVICE',
+            'UpdateDriverForPlugAndPlayDevicesW',
+            'INSTALLFLAG_NONINTERACTIVE'
+          )) {
+            if ($source -notmatch [regex]::Escape($required)) {
+              throw "IDD installer is missing required bounded contract: $required"
+            }
+          }
+          if ($source -match 'INSTALLFLAG_FORCE') {
+            throw 'Production IDD installer must not force a driver downgrade.'
+          }
+          if ($source -match 'argv\[.+HardwareId') {
+            throw 'Production IDD installer must not accept an arbitrary hardware ID.'
+          }
+
       - name: Restore WDK NuGet packages
         shell: pwsh
         run: |
           msbuild native/windows-idd/GPUbnbIdd.vcxproj /t:Restore /p:Configuration=Release /p:Platform=x64 /warnAsError
+          msbuild native/windows-idd-installer/GPUbnbIddInstaller.vcxproj /t:Restore /p:Configuration=Release /p:Platform=x64 /warnAsError
+
+      - name: Build bounded IddCx root-device installer
+        shell: pwsh
+        run: |
+          msbuild native/windows-idd-installer/GPUbnbIddInstaller.vcxproj /m /p:Configuration=Release /p:Platform=x64 /warnAsError
+          $installer = Get-ChildItem native/windows-idd-installer -Recurse -Filter GPUbnbIddInstaller.exe -File | Select-Object -First 1
+          if (-not $installer) { throw 'GPUbnbIddInstaller.exe was not produced.' }
+          Write-Host "Built bounded IDD installer: $($installer.FullName)"
 
       - name: Verify restored x64 WDK toolchain
         shell: pwsh
@@ -159,6 +202,22 @@ jobs:
         run: |
           msbuild native/windows-idd/GPUbnbIdd.vcxproj /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /p:PhysicalQualificationBuild=true /warnAsError
           Write-Host "Qualification variant compiled only. CI does not install, sign, upload, or promote it."
+
+      - name: Compile Stage 4 release-candidate IddCx variant
+        shell: pwsh
+        run: |
+          msbuild native/windows-idd/GPUbnbIdd.vcxproj /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /p:ReleaseCandidateBuild=true /warnAsError
+          Write-Host "Stage 4 release-candidate variant compiled only. CI does not install, sign, upload, or promote it."
+
+      - name: Reject ambiguous dual-authority IddCx build
+        shell: pwsh
+        run: |
+          msbuild native/windows-idd/GPUbnbIdd.vcxproj /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /p:PhysicalQualificationBuild=true /p:ReleaseCandidateBuild=true /warnAsError
+          if ($LASTEXITCODE -eq 0) {
+            throw "IddCx must reject a build with both mutation authorities enabled"
+          }
+          Write-Host "Dual-authority build correctly failed closed."
+          exit 0
 
       - name: Verify build produced driver package inputs
         shell: pwsh

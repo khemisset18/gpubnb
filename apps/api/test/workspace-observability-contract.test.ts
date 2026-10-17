@@ -43,3 +43,22 @@ test('workspace correlation never adds bearer secrets or payload data to the chi
     assert.doesNotMatch(child,new RegExp(`\\b${forbidden}\\b`,'i'),`${forbidden} must not be part of the correlation logger`);
   }
 });
+
+
+test('websocket close diagnostics include the code without exposing the remote reason',async()=>{
+  const gateway=await readFile(gatewayUrl,'utf8');
+  assert.match(gateway,/ws\.on\('close',\(closeCode:number,closeReason:Buffer\)=>\{/);
+  assert.match(gateway,/event:'workspace_gateway_browser_closed'[^\n]*closeCode,closeReasonBytes:closeReason\.length,bufferedAmount:ws\.bufferedAmount/);
+  assert.doesNotMatch(gateway,/closeReason\s*\.\s*toString\s*\(/);
+});
+
+
+test('native desktop reconnect backoff requires sustained decoded video before resetting',async()=>{
+  const page=await readFile(new URL('../../web/windows-native-desktop-page.js',import.meta.url),'utf8');
+  assert.match(page,/NATIVE_STABLE_STREAM_MS = 10 \* 1000/);
+  assert.match(page,/state\?\.state === 'ready' && stableStreamTimer === null/);
+  assert.match(page,/stableStreamTimer = setTimeoutFn\(\(\) => \{/);
+  assert.match(page,/if \(client === currentClient && !stopped && !pageHidden\) markRecovered\(\)/);
+  assert.match(page,/if \(stableStreamTimer !== null\) \{\s*clearTimeoutFn\(stableStreamTimer\)/);
+  assert.doesNotMatch(page,/if \(state\?\.state === 'ready'\) markRecovered\(\)/);
+});

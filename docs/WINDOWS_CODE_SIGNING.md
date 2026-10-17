@@ -12,13 +12,16 @@ The intended release order is:
 
 1. build the exact Agent and Host tunnel from the release commit;
 2. build the Tauri Host executable without bundling;
-3. sign the Host executable and Windows sidecars;
-4. verify every pre-bundle executable;
-5. bundle the already-signed payload into the NSIS installer;
-6. sign the final installer;
-7. verify the final installer again;
-8. only then calculate SHA-256 values and publish the immutable candidate;
-9. independently verify the published candidate before moving the promoted release alias.
+3. sign the media DLL first;
+4. build the renter worker against the approved media signer policy, then sign it;
+5. build the native stream helper against the approved worker/media signer policy,
+   then sign it together with the Host executable and remaining Windows sidecars;
+6. verify every pre-bundle executable and its approved publisher policy;
+7. bundle the already-signed payload into the NSIS installer;
+8. sign the final installer;
+9. verify the final installer again;
+10. only then calculate SHA-256 values and publish the immutable candidate;
+11. independently verify the published candidate before moving the promoted release alias.
 
 This ordering ensures hashes describe the final signed bytes rather than a pre-signing intermediate.
 
@@ -44,7 +47,15 @@ At minimum:
 - `gpubnb-agent.exe`;
 - `gpubnb-host-tunnel.exe`;
 - the compiled `gpubnb-host-desktop.exe`;
+- `gpubnb-windows-stream.exe`;
+- `gpubnb-windows-worker.exe`;
+- `GPUbnbWindowsMedia.dll`;
 - the final `gpubnb-host-windows-x64.exe` installer.
+
+The Windows native display driver package is a separate trust boundary. Its
+INF/CAT/driver payload must use the applicable Microsoft production driver-signing
+path; a local physical-qualification certificate is never a production driver
+trust root.
 
 The portable Windows archive must be created only after executable payloads are signed so its contents remain individually verifiable.
 

@@ -36,13 +36,21 @@ test('Authenticode verifier fails closed when required and rejects invalid prese
   assert.match(source, /\$signed -and -not \$valid/);
   assert.match(source, /authenticode_present_but_invalid/);
   assert.match(source, /SignatureStatus\]::Valid/);
+  assert.match(source, /\$RequireTimestamp -and -not \$timestamped/);
+  assert.match(source, /authenticode_timestamp_required_but_missing/);
+  assert.match(source, /\$ExpectedSignerSha256/);
+  assert.match(source, /authenticode_unapproved_signer/);
 });
 
 test('Windows signer requires a current private-key certificate and RFC3161 timestamp endpoint', async () => {
   const source = await readFile(signerUrl, 'utf8');
   assert.match(source, /codesign_thumbprint_missing_on_signing_runner/);
   assert.match(source, /codesign_timestamp_url_missing_on_signing_runner/);
+  assert.match(source, /codesign_timestamp_url_must_be_https/);
   assert.match(source, /HasPrivateKey/);
   assert.match(source, /\/fd SHA256 \/tr \$timestampUrl \/td SHA256/);
-  assert.match(source, /verify-windows-authenticode\.ps1" -Path \$Path -Required/);
+  assert.match(source, /verify-windows-authenticode\.ps1/);
+  assert.match(source, /-Required/);
+  assert.match(source, /-RequireTimestamp/);
+  assert.match(source, /-ExpectedSignerSha256 \$signerCertificateSha256/);
 });
