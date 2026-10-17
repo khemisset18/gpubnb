@@ -72,7 +72,6 @@ if ($env:OS -ne 'Windows_NT') {
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $git = (Get-Command git.exe -ErrorAction Stop).Source
 $cargo = (Get-Command cargo.exe -ErrorAction Stop).Source
-$msbuild = (Get-Command msbuild.exe -ErrorAction Stop).Source
 
 $expectedPublisher = $ExpectedPublisherSha256.Replace(' ', '').ToLowerInvariant()
 if ($expectedPublisher -cnotmatch '^[a-f0-9]{64}$' -or $expectedPublisher -ceq ('0' * 64)) {
@@ -185,6 +184,7 @@ $mediaArgs = @(
     '/p:RunCodeAnalysis=true'
 )
 & $msbuild @mediaArgs
+$msbuild = (Get-Command msbuild.exe -ErrorAction Stop).Source
 Assert-ExitCode -Step 'media build'
 
 $media = Join-Path $repoRoot 'native\windows-media\bin\Release\GPUbnbWindowsMedia.dll'
