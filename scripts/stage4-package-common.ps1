@@ -20,7 +20,7 @@ function Assert-Stage4Certificate {
     try {
         $chain.ChainPolicy.RevocationMode=[Security.Cryptography.X509Certificates.X509RevocationMode]::Offline
         $chain.ChainPolicy.VerificationFlags=[Security.Cryptography.X509Certificates.X509VerificationFlags]::NoFlag
-        $chain.ChainPolicy.ApplicationPolicy.Add([Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.3'))
+        [void]$chain.ChainPolicy.ApplicationPolicy.Add([Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.3'))
         if (-not $chain.Build($Certificate)) { throw 'stage4_private_certificate_chain_not_trusted' }
     } finally { $chain.Dispose() }
 }
@@ -53,7 +53,7 @@ function Get-Stage4PrivateCertificateStatus {
     $result.status='blocked'
     try {
         Assert-Stage4Certificate -Certificate $Certificate -ExpectedPublisherSha256 $ExpectedPublisherSha256 `
-            -MinimumValidityHours $MinimumValidityHours -RequirePrivateKey $RequirePrivateKey
+            -MinimumValidityHours $MinimumValidityHours -RequirePrivateKey $RequirePrivateKey | Out-Null
         $result.signingReady=$true
         $result.blockers=@()
         $result.status=if($result.renewalRecommended){'renewal_recommended'}else{'ready'}
