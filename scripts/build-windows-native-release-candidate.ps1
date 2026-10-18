@@ -183,8 +183,8 @@ $mediaArgs = @(
     "/p:NvCodecHeadersDir=$resolvedHeaders",
     '/p:RunCodeAnalysis=true'
 )
-& $msbuild @mediaArgs
 $msbuild = (Get-Command msbuild.exe -ErrorAction Stop).Source
+& $msbuild @mediaArgs
 Assert-ExitCode -Step 'media build'
 
 $media = Join-Path $repoRoot 'native\windows-media\bin\Release\GPUbnbWindowsMedia.dll'
