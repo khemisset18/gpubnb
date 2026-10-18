@@ -8,7 +8,7 @@ on:
       publisher_sha256:
         description: Real SHA-256 of the authorized LOCAL PHYSICAL TEST ONLY certificate (public fingerprint only)
         required: true
-        default: '200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a'
+        default: '88662fb76d4237aa3842ad1ad8d0378a17ffb82d022f860b297ed85e2c08c99a'
 permissions:
   contents: read
 concurrency:
@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 35
     env:
       SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
-      PUBLISHER_SHA256: ${{ inputs.publisher_sha256 || '200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a' }}
+      PUBLISHER_SHA256: ${{ inputs.publisher_sha256 || '88662fb76d4237aa3842ad1ad8d0378a17ffb82d022f860b297ed85e2c08c99a' }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
