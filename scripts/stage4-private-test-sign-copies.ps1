@@ -3,116 +3,89 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$UnsignedDirectory,
+    [Parameter(Mandatory=$true)][string]$ExpectedManifestSha256,
+    [Parameter(Mandatory=$true)][string]$ExpectedCommit,
+    [Parameter(Mandatory=$true)][string]$ExpectedPublisherSha256,
     [switch]$SignCopiesForPrivateTest,
     [string]$OutputDirectory
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-if ($env:OS -cne 'Windows_NT' -or -not [Environment]::Is64BitProcess) {
-    throw 'stage4_private_windows_x64_required'
-}
+if ($env:OS -cne 'Windows_NT' -or -not [Environment]::Is64BitProcess) { throw 'stage4_private_windows_x64_required' }
+. (Join-Path $PSScriptRoot 'stage4-package-common.ps1')
 $root=(Resolve-Path -LiteralPath $UnsignedDirectory -ErrorAction Stop).Path
-$sourceCommit='2b055992f7521505d0387dd4c876e36794fffd63'
-$testPin='200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a'
-$files=[ordered]@{
-    'GPUbnbWindowsMedia.dll'='2817cc7f7852d3d5001b57f386dd51073a4772b7b3f19ed9d81b83ee52e1808a'
-    'gpubnb-windows-worker.exe'='632bdfb73a0cd6c57e6655ca6c7813a55b4cf8560016860c4d38dead1694adc2'
-    'gpubnb-windows-stream.exe'='258f61515a8ca919e945957699283550e9f5fc0bed421dbaa82214ecc26fdb30'
-    'gpubnb-agent.exe'='9de3ea6016048799675ac59709d4530eab669cf9ec257fb762eb26ce44dd6070'
-}
-$sourcePaths=[ordered]@{}
-foreach ($name in $files.Keys) {
-    $path=Join-Path $root $name
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        throw "stage4_private_unsigned_file_missing:$name"
-    }
-    if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $files[$name]) {
-        throw "stage4_private_unsigned_file_hash_mismatch:$name"
-    }
-    $sig=Get-AuthenticodeSignature -LiteralPath $path
-    if ($sig.Status -ne [Management.Automation.SignatureStatus]::NotSigned -or $null -ne $sig.SignerCertificate) {
-        throw "stage4_private_source_must_be_unsigned:$name"
-    }
-    $sourcePaths[$name]=$path
-}
-# Test-only private key stays in PC1 CurrentUser store; never exported or copied.
+# External CI manifest hash, full commit and REAL public certificate pin are
+# mandatory. Never derive expected values from an untrusted downloaded manifest.
+$manifest=Read-Stage4Package $root $ExpectedManifestSha256 $ExpectedCommit $ExpectedPublisherSha256 'unsigned'
+& (Join-Path $PSScriptRoot 'verify-stage4-package.ps1') -PackageDirectory $root `
+    -ExpectedManifestSha256 $ExpectedManifestSha256 -ExpectedCommit $ExpectedCommit `
+    -ExpectedPublisherSha256 $ExpectedPublisherSha256 | Out-Null
+if(-not $?){throw 'stage4_private_unsigned_package_verification_failed'}
 $matches=@(Get-ChildItem Cert:\CurrentUser\My | Where-Object {
-    $_.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -ceq $testPin
+    $_.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -ceq $ExpectedPublisherSha256
 })
-if ($matches.Count -ne 1 -or -not $matches[0].HasPrivateKey) {
-    throw 'stage4_private_test_certificate_unavailable'
-}
+if($matches.Count -ne 1){throw 'stage4_private_test_certificate_unavailable'}
 $cert=$matches[0]
-if ($cert.Subject -notmatch 'LOCAL PHYSICAL TEST ONLY' -or
-    $cert.NotBefore -gt (Get-Date) -or $cert.NotAfter -le (Get-Date).AddHours(24)) {
-    throw 'stage4_private_test_certificate_invalid_or_expiring'
-}
-if (-not $SignCopiesForPrivateTest) {
-    [ordered]@{
-        mode='read_only';ok=$true;sourceCommit=$sourceCommit;
-        filesVerified=$files.Count;signingPerformed=$false;installationPerformed=$false;
-        privateTestPinSha256=$testPin;expiresUtc=$cert.NotAfter.ToUniversalTime().ToString('o');
-        publicBookabilityEnabled=$false
-    } | ConvertTo-Json
+Assert-Stage4Certificate $cert $ExpectedPublisherSha256
+if(-not $SignCopiesForPrivateTest){
+    [ordered]@{mode='read_only';ok=$true;sourceCommit=$ExpectedCommit;unsignedManifestSha256=$ExpectedManifestSha256;
+        filesVerified=4;signingPerformed=$false;installationPerformed=$false;privateTestPinSha256=$ExpectedPublisherSha256;
+        expiresUtc=$cert.NotAfter.ToUniversalTime().ToString('o');publicBookabilityEnabled=$false} | ConvertTo-Json
     return
 }
-if ([string]::IsNullOrWhiteSpace($OutputDirectory)) { throw 'stage4_private_output_required' }
-$target=[IO.Path]::GetFullPath($OutputDirectory)
-if (Test-Path -LiteralPath $target) { throw 'stage4_private_output_must_be_new' }
-$sourcePath=[IO.Path]::GetFullPath($root).TrimEnd('\')
-if ($target.TrimEnd('\') -ieq $sourcePath -or
-    $target.StartsWith($sourcePath+'\',[StringComparison]::OrdinalIgnoreCase)) {
-    throw 'stage4_private_output_must_be_separate'
-}
-if ($target -match '(?i)\\Program Files\\|\\Windows\\|\\ProgramData\\GPUbnb\\') {
-    throw 'stage4_private_installed_path_forbidden'
-}
-$foundSignTool=Get-Command signtool.exe -ErrorAction SilentlyContinue
-$signTool=if ($null -ne $foundSignTool) { $foundSignTool.Source } else { $null }
-if (-not $signTool) {
+$target=Assert-Stage4NewOutput $OutputDirectory $root
+$found=Get-Command signtool.exe -ErrorAction SilentlyContinue
+$signTool=if($null -ne $found){$found.Source}else{$null}
+if(-not $signTool){
     $kits=Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Windows Kits\10\bin'
     $signTool=Get-ChildItem -LiteralPath $kits -Filter signtool.exe -File -Recurse -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
-        Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+        Where-Object {$_.FullName -match '\\x64\\signtool\.exe$'} | Sort-Object FullName -Descending |
+        Select-Object -First 1 -ExpandProperty FullName
 }
-if (-not $signTool) { throw 'stage4_private_signtool_required' }
-# No timestamp service is trusted for this local test: unsigned source and
-# signed copies are NOT installable releases, and expire with test certificate.
+if(-not $signTool){throw 'stage4_private_signtool_required'}
+# No timestamp: these copies expire with the local certificate. Never a public release.
 [void][IO.Directory]::CreateDirectory($target)
+$complete=$false
 try {
-    $records=@()
-    foreach ($name in $files.Keys) {
-        $copy=Join-Path $target $name
-        Copy-Item -LiteralPath $sourcePaths[$name] -Destination $copy -ErrorAction Stop
-        if ((Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant() -cne $files[$name]) {
-            throw "stage4_private_copy_hash_mismatch:$name"
-        }
+    Copy-Item -LiteralPath (Join-Path $root 'build-identities.json') -Destination $target
+    Copy-Item -LiteralPath (Join-Path $root 'stage4.manifest.json') -Destination (Join-Path $target 'unsigned-stage4.manifest.json')
+    foreach($record in $manifest.files){
+        # Rehash each source at the moment of copying, then verify the copy.
+        $source=Join-Path $root $record.name;$copy=Join-Path $target $record.name
+        if((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant() -cne $record.sha256){throw "stage4_private_unsigned_file_hash_mismatch:$($record.name)"}
+        Copy-Item -LiteralPath $source -Destination $copy
+        if((Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant() -cne $record.sha256){throw "stage4_private_copy_hash_mismatch:$($record.name)"}
+        Assert-Stage4Certificate $cert $ExpectedPublisherSha256
         & $signTool sign /sha1 $cert.Thumbprint /fd SHA256 /v $copy | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "stage4_private_sign_failed:$name" }
+        if($LASTEXITCODE -ne 0){throw "stage4_private_sign_failed:$($record.name)"}
         $sig=Get-AuthenticodeSignature -LiteralPath $copy
-        if ($sig.Status -ne [Management.Automation.SignatureStatus]::Valid -or
-            $null -eq $sig.SignerCertificate -or
-            $sig.SignerCertificate.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -cne $testPin) {
-            throw "stage4_private_signature_not_valid:$name"
+        if($sig.Status -ne 'Valid' -or $null -eq $sig.SignerCertificate -or
+            $sig.SignerCertificate.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -cne $ExpectedPublisherSha256){
+            throw "stage4_private_signature_not_valid:$($record.name)"
         }
-        $records+= [ordered]@{
-            name=$name;unsignedSha256=$files[$name];
-            signedSha256=(Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant()
-        }
+        $record | Add-Member -NotePropertyName unsignedSha256 -NotePropertyValue $record.sha256
+        $record.sha256=(Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant()
     }
-    $report=[ordered]@{
-        schemaVersion=1;kind='LOCAL_TEST_ONLY_NOT_RELEASE';sourceCommit=$sourceCommit;
-        signedAtUtc=[DateTime]::UtcNow.ToString('o');
-        testPublisherSha256=$testPin;expiresUtc=$cert.NotAfter.ToUniversalTime().ToString('o');
-        timestamped=$false;publicPublisherApproved=$false;
-        driverModified=$false;installationPerformed=$false;publicBookabilityEnabled=$false;
-        files=$records
-    }
-    [IO.File]::WriteAllText((Join-Path $target 'PRIVATE-TEST-ONLY.json'),
-        ($report|ConvertTo-Json -Depth 8)+[Environment]::NewLine,
-        [Text.UTF8Encoding]::new($false))
-    $report|ConvertTo-Json -Depth 8
-} catch {
-    Remove-Item -LiteralPath $target -Force -Recurse -ErrorAction SilentlyContinue
-    throw
+    $manifest.kind='LOCAL_TEST_ONLY_NOT_RELEASE';$manifest.signatureStatus='private-signed'
+    $manifest | Add-Member -NotePropertyName unsignedManifestSha256 -NotePropertyValue $ExpectedManifestSha256
+    $manifest | Add-Member -NotePropertyName expiresUtc -NotePropertyValue $cert.NotAfter.ToUniversalTime().ToString('o')
+    $manifest | Add-Member -NotePropertyName signedAtUtc -NotePropertyValue ([DateTime]::UtcNow.ToString('o'))
+    $manifest | Add-Member -NotePropertyName timestamped -NotePropertyValue $false
+    $manifest | Add-Member -NotePropertyName installationPerformed -NotePropertyValue $false
+    [IO.File]::WriteAllText((Join-Path $target 'stage4.manifest.json'),($manifest|ConvertTo-Json -Depth 12)+"`n",[Text.UTF8Encoding]::new($false))
+    $signedManifestHash=(Get-FileHash (Join-Path $target 'stage4.manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+    & (Join-Path $PSScriptRoot 'verify-stage4-package.ps1') -PackageDirectory $target `
+        -ExpectedManifestSha256 $signedManifestHash -ExpectedCommit $ExpectedCommit `
+        -ExpectedPublisherSha256 $ExpectedPublisherSha256 -SignatureStatus private-signed | Out-Null
+    if(-not $?){throw 'stage4_private_signed_package_verification_failed'}
+    $sums=@($manifest.files|ForEach-Object {$_.sha256+'  '+$_.name})+@($signedManifestHash+'  stage4.manifest.json')
+    [IO.File]::WriteAllText((Join-Path $target 'SHA256SUMS'),($sums -join "`n")+"`n",[Text.UTF8Encoding]::new($false))
+    $complete=$true
+    [ordered]@{ok=$true;kind='LOCAL_TEST_ONLY_NOT_RELEASE';sourceCommit=$ExpectedCommit;filesVerified=4;
+        unsignedManifestSha256=$ExpectedManifestSha256;signedManifestSha256=$signedManifestHash;
+        outputDirectory=$target;publisherSha256=$ExpectedPublisherSha256;installationPerformed=$false;
+        publicBookabilityEnabled=$false} | ConvertTo-Json -Depth 6
+} finally {
+    # Deliberately keep failed staging for diagnosis. No broad recursive deletion.
+    if(-not $complete){[IO.File]::WriteAllText((Join-Path $target 'INCOMPLETE-DO-NOT-INSTALL.txt'),'Signing failed. Never install this directory.')}
 }

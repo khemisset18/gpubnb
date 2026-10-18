@@ -20,8 +20,8 @@ export class Stage4VideoContinuity {
   }
 
   reset() {
-    if (this.passed) return;
     if (this.startedAt !== null) this.interruptions += 1;
+    this.passed = false;
     this.startedAt = null;
     this.lastAt = null;
     this.epoch = null;
@@ -30,7 +30,6 @@ export class Stage4VideoContinuity {
   }
 
   observe(state, nowMs) {
-    if (this.passed) return this.snapshot(nowMs);
     if (!Number.isFinite(nowMs) || nowMs < 0 ||
         state?.state !== 'ready' ||
         typeof state.streamEpoch !== 'bigint' || state.streamEpoch <= 0n ||
@@ -56,14 +55,14 @@ export class Stage4VideoContinuity {
   }
 
   snapshot(nowMs) {
-    if (!this.passed && this.startedAt !== null &&
+    if (this.startedAt !== null &&
         (!Number.isFinite(nowMs) || nowMs < this.lastAt ||
          nowMs - this.lastAt > this.maxFrameGapMs)) this.reset();
+    // Only the last actual decoded/rendered frame advances the evidence clock.
+    // A UI timer must never turn a stalled stream at 299 s into a 300 s pass.
     const elapsedMs = this.startedAt === null ? 0
-      : Math.max(0, Math.min(nowMs - this.startedAt, this.minimumMs));
-    if (!this.passed && this.frames >= 2 && elapsedMs >= this.minimumMs) {
-      this.passed = true;
-    }
+      : Math.max(0, Math.min(this.lastAt - this.startedAt, this.minimumMs));
+    this.passed = this.frames >= 2 && elapsedMs >= this.minimumMs;
     return Object.freeze({
       video300sObserved: this.passed,
       continuousSeconds: Math.floor(elapsedMs / 1000),

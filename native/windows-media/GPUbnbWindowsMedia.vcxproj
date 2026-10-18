@@ -83,6 +83,12 @@
     </Link>
   </ItemDefinitionGroup>
 
+  <ItemDefinitionGroup Condition="'$(SourceCommit)'!=''">
+    <ClCompile>
+      <PreprocessorDefinitions>GPUBNB_SOURCE_COMMIT=&quot;$(SourceCommit)&quot;;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+
   <Target Name="ValidateNvCodecHeaders" BeforeTargets="ClCompile">
     <Error Condition="'$(NvCodecHeadersDir)'==''" Text="NvCodecHeadersDir is required." />
     <Error Condition="!Exists('$(NvCodecHeadersDir)\nvEncodeAPI.h')" Text="nvEncodeAPI.h not found under NvCodecHeadersDir." />
@@ -90,6 +96,7 @@
 
   <ItemGroup>
     <ClCompile Include="Media.cpp" />
+    <ClCompile Include="BuildIdentity.cpp" />
     <ClInclude Include="Media.h" />
     <None Include="GPUbnbWindowsMedia.def" />
   </ItemGroup>

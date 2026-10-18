@@ -1,0 +1,100 @@
+name: Stage 4 complete Windows package
+on:
+  pull_request:
+  push:
+    branches: [audit/ssj12007-consolidation]
+  workflow_dispatch:
+    inputs:
+      publisher_sha256:
+        description: Real SHA-256 of the authorized LOCAL PHYSICAL TEST ONLY certificate (public fingerprint only)
+        required: true
+        default: '200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a'
+permissions:
+  contents: read
+concurrency:
+  group: stage4-package-${{ github.event.pull_request.head.ref || github.ref }}
+  cancel-in-progress: true
+jobs:
+  four-components:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    env:
+      SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      PUBLISHER_SHA256: ${{ inputs.publisher_sha256 || '200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: FFmpeg/nv-codec-headers
+          ref: e844e5b26f46bb77479f063029595293aa8f812d
+          path: .deps/nv-codec-headers
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13.7'
+          architecture: x64
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5
+        with:
+          components: rustfmt, clippy
+      - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce
+      - name: Install hash-locked Windows build dependencies
+        run: python -m pip install --require-hashes -r scripts/stage4-windows-python.lock
+      - name: Install tracked Agent without resolving dependencies again
+        run: python -m pip install --no-deps --no-build-isolation ./agent
+      - name: Offline package adversarial tests
+        run: python -m unittest discover -s scripts/tests -p test_stage4_package.py -v
+      - name: PowerShell package and signing preflight tests (5.1)
+        shell: powershell
+        run: |
+          & ./scripts/tests/stage4-private-test-sign-copies.tests.ps1
+          if (-not $?) { throw 'stage4_private_tests_failed' }
+      - name: PowerShell package and signing preflight tests (7)
+        shell: pwsh
+        run: |
+          & ./scripts/tests/stage4-private-test-sign-copies.tests.ps1
+          if (-not $?) { throw 'stage4_private_tests_failed' }
+      - name: Browser regression tests
+        run: node --test apps/web/windows-native*.test.js
+      - name: Native Windows unit tests
+        shell: pwsh
+        run: |
+          foreach ($crate in @('windows-platform','windows-worker','windows-stream-helper')) {
+            cargo test --locked --manifest-path "native/$crate/Cargo.toml" --all-targets
+            if ($LASTEXITCODE -ne 0) { throw "native_tests_failed:$crate" }
+          }
+      - name: Build all four components from exact checkout and verify actual identities
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'stage4-package'
+          & ./scripts/build-stage4-unsigned-package.ps1 -ExpectedCommit $env:SOURCE_COMMIT -PublisherSha256 $env:PUBLISHER_SHA256 -NvCodecHeadersDir "$env:GITHUB_WORKSPACE/.deps/nv-codec-headers/include/ffnvcodec" -OutputDirectory $out
+          if (-not $?) { throw 'stage4_package_build_failed' }
+      - name: Verify completed package, archive and provenance
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'stage4-package'
+          $manifest = (Get-FileHash "$out/stage4.manifest.json" -Algorithm SHA256).Hash.ToLowerInvariant()
+          & ./scripts/verify-stage4-package.ps1 -PackageDirectory $out -ExpectedManifestSha256 $manifest -ExpectedCommit $env:SOURCE_COMMIT -ExpectedPublisherSha256 $env:PUBLISHER_SHA256 -ExecuteBuildIdentity
+          if (-not $?) { throw 'stage4_complete_package_verify_failed' }
+          python scripts/verify_stage4_package.py verify --directory $out --manifest-sha256 $manifest --commit $env:SOURCE_COMMIT --publisher $env:PUBLISHER_SHA256
+          if ($LASTEXITCODE -ne 0) { throw 'stage4_independent_verify_failed' }
+          $zip = Join-Path $env:RUNNER_TEMP "stage4-unsigned-$env:SOURCE_COMMIT.zip"
+          Compress-Archive -Path "$out/*" -DestinationPath $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          @("sourceCommit=$env:SOURCE_COMMIT","manifestSha256=$manifest","archiveSha256=$hash","publisherSha256=$env:PUBLISHER_SHA256",'components=4/4','status=UNSIGNED_PRIVATE_CANDIDATE_NOT_INSTALLABLE') | Set-Content "$env:RUNNER_TEMP/stage4-provenance.txt"
+          Get-Content "$env:RUNNER_TEMP/stage4-provenance.txt" | Add-Content $env:GITHUB_STEP_SUMMARY
+      - name: Upload verified four-component unsigned archive
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: stage4-unsigned-four-components-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/stage4-unsigned-*.zip
+            ${{ runner.temp }}/stage4-provenance.txt
+          if-no-files-found: error
+          retention-days: 14
+      # No secret, certificate/key, installer, driver, booking, deploy or physical test.

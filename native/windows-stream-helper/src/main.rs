@@ -448,8 +448,46 @@ fn error_json(error: CliError) -> String {
     format!(r#"{{"ok":false,"error":"{}"}}"#, error.code)
 }
 
+// Pure build identity: never probes a GPU, starts an authority or opens a session.
+fn build_policy_json() -> Result<String, CliError> {
+    let source = option_env!("GPUBNB_SOURCE_COMMIT")
+        .filter(|v| v.len() == 40 && v.bytes().all(|b| b.is_ascii_hexdigit()))
+        .ok_or(CliError::new("build_source_commit_unconfigured", 21))?;
+    let signer = option_env!("GPUBNB_WINDOWS_WORKER_SIGNER_SHA256")
+        .filter(|v| {
+            v.len() == 64 && v.bytes().all(|b| b.is_ascii_hexdigit()) && *v != "0".repeat(64)
+        })
+        .ok_or(CliError::new("build_worker_signer_unconfigured", 21))?;
+    let authority = if cfg!(feature = "release-candidate") {
+        "release-candidate"
+    } else if cfg!(feature = "physical-qualification") {
+        "physical-qualification"
+    } else {
+        "disabled"
+    };
+    Ok(format!(
+        r#"{{"schemaVersion":1,"sourceCommit":"{source}","workerSignerSha256":"{signer}","mutationAuthority":"{authority}","workerProtocol":{},"mediaTransportProtocol":{},"browserMediaProtocol":{},"browserInputProtocol":{}}}"#,
+        gpubnb_windows_stream_helper::worker_protocol::WORKER_PROTOCOL_VERSION,
+        gpubnb_windows_stream_helper::media_protocol::MEDIA_TRANSPORT_PROTOCOL_VERSION,
+        gpubnb_windows_stream_helper::browser_media_protocol::BROWSER_MEDIA_PROTOCOL_VERSION,
+        gpubnb_windows_stream_helper::browser_input_protocol::BROWSER_INPUT_PROTOCOL_VERSION,
+    ))
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
+    if args == ["--build-policy", "--json"] {
+        return match build_policy_json() {
+            Ok(value) => {
+                println!("{value}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                println!("{}", error_json(error));
+                ExitCode::from(error.exit_code)
+            }
+        };
+    }
     match parse_args(&args).and_then(|command| execute(&command)) {
         Ok(value) => {
             println!("{value}");
@@ -468,6 +506,18 @@ mod tests {
     use super::*;
 
     const GPU_UUID: &str = "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a";
+
+    #[test]
+    fn build_identity_never_invents_missing_provenance_or_signer() {
+        let configured = option_env!("GPUBNB_SOURCE_COMMIT").is_some()
+            && option_env!("GPUBNB_WINDOWS_WORKER_SIGNER_SHA256").is_some();
+        if !configured {
+            assert!(build_policy_json().is_err());
+        } else if let Ok(value) = build_policy_json() {
+            assert!(value.contains("\"workerProtocol\":1"));
+            assert!(value.contains("\"mediaTransportProtocol\":2"));
+        }
+    }
 
     fn strings(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_owned()).collect()
