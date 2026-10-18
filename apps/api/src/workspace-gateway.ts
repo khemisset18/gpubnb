@@ -1,3 +1,4 @@
+import { createGatewayChannelLeaseGuard } from './workspace-gateway-channel-lease.js';
 import crypto from 'node:crypto';
 import type { Socket } from 'node:net';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -441,6 +442,9 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         const channelId=crypto.randomUUID();const channelLogId=channelId.slice(0,8);const targetPath='/'+targetSuffix+url.search;const browserSessionKey=gatewaySessionKey(token);
         const channelTtl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((row.expiresAt.getTime()-Date.now())/1000)));
         const openRequestId=crypto.randomUUID();let browserClosed=false;let browserBackpressureSince=0;
+        const channelAuthorized=isWindowsNativeRuntime(row.runtimeBackend)
+          ?createGatewayChannelLeaseGuard({sessionId,userId:browser.userId,readBrowser:()=>redis.get(browserSessionKey),readWorkspace:()=>activeGatewaySession(db,sessionId)})
+          :async()=>true;
         const browserPending=new BrowserPendingBudget();
         const gatewayLog=app.log.child({accessRequestId:browser.accessRequestId,bookingId:row.bookingId,jobId:row.jobId,workspaceSessionId:sessionId,machineId:row.machineId,channelId,channel:channelLogId,openRequestId});
         gatewayLog.info({event:'workspace_gateway_browser_connected'},'workspace gateway browser websocket connected');
@@ -486,6 +490,11 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
           browserBackpressureSince=0;
           pumpBusy=true;
           void (async()=>{
+            if(!await channelAuthorized()){
+              browserClosed=true;clearInterval(pump);
+              if(ws.readyState===WebSocket.OPEN)ws.close(1008,'workspace session expired');
+              return;
+            }
             for(let i=0;i<50;i++){
               if(ws.bufferedAmount>WS_BROWSER_BUFFERED_HIGH_WATER_BYTES)break;
               const frame=await redis.rpop(wsInputKey(channelId));if(!frame)break;

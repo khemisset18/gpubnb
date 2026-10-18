@@ -123,7 +123,7 @@ jobs:
         shell: pwsh
         env:
           EXPECTED_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_sha || github.event.workflow_run.head_sha }}
-        run: ./scripts/verify-windows-release.ps1 -InstallerPath 'published-release/gpubnb-host-windows-x64.exe' -ExpectedCommit "$env:EXPECTED_SHA"
+        run: ./scripts/verify-windows-release.ps1 -InstallerPath 'published-release/gpubnb-host-windows-x64.exe' -ExpectedCommit "$env:EXPECTED_SHA" -AllowEphemeralRunnerInstallSmoke
 
       - name: Promote verified candidate to host-test-latest
         shell: pwsh

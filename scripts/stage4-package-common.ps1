@@ -1,8 +1,8 @@
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 function Assert-Stage4Certificate {
-    param($Certificate, [string]$ExpectedPublisherSha256, [int]$MinimumValidityHours = 24)
-    if ($null -eq $Certificate -or -not $Certificate.HasPrivateKey) {
+    param($Certificate, [string]$ExpectedPublisherSha256, [int]$MinimumValidityHours = 24, [bool]$RequirePrivateKey=$true)
+    if ($null -eq $Certificate -or ($RequirePrivateKey -and -not $Certificate.HasPrivateKey)) {
         throw 'stage4_private_test_certificate_unavailable'
     }
     $pin=$Certificate.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant()
@@ -71,7 +71,9 @@ function Get-Stage4PeInfo {
     }
     $certOffset=[BitConverter]::ToUInt32($b,$o+112+4*8);$certSize=[BitConverter]::ToUInt32($b,$o+116+4*8)
     if(-not (($certOffset -eq 0 -and $certSize -eq 0) -or ($certOffset -gt 0 -and $certSize -ge 8 -and [long]$certOffset+$certSize -le $b.Length))){throw 'stage4_invalid_certificate_table'}
-    return @{architecture='AMD64';imports=@($imports | Sort-Object -Unique);certificateTablePresent=($certSize -gt 0)}
+    [string[]]$sortedImports=@($imports|Select-Object -Unique)
+    [Array]::Sort($sortedImports,[StringComparer]::Ordinal)
+    return @{architecture='AMD64';imports=$sortedImports;certificateTablePresent=($certSize -gt 0)}
 }
 
 function Read-Stage4Package {
@@ -104,7 +106,7 @@ function Read-Stage4Package {
         if(-not (Test-Path -LiteralPath $path -PathType Leaf)){throw "stage4_component_missing:$($f.name)"}
         if((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $f.sha256){throw "stage4_component_hash_mismatch:$($f.name)"}
         $pe=Get-Stage4PeInfo $path
-        if($f.architecture -cne 'AMD64' -or (@($f.imports)-join ',') -cne (@($pe.imports)-join ',')){throw 'stage4_pe_metadata_mismatch'}
+        if($f.architecture -cne 'AMD64' -or (@($f.imports)-join ',') -cne (@($pe.imports)-join ',')){throw "stage4_pe_metadata_mismatch:$($f.name):expected=$(@($f.imports)-join ','):observed=$(@($pe.imports)-join ',')"}
         if($Status -ceq 'unsigned' -and $pe.certificateTablePresent){throw 'stage4_source_must_be_unsigned'}
         if($Status -ceq 'private-signed' -and -not $pe.certificateTablePresent){throw 'stage4_signature_table_missing'}
     }
@@ -120,6 +122,16 @@ function Read-Stage4Package {
     }
     if($id.media.mediaAbi -ne 2 -or $id.media.nvencApi -cne '13.0'){throw 'stage4_media_abi_mismatch'}
     if($Status -ceq 'private-signed' -and $m.unsignedManifestSha256 -cnotmatch '^[0-9a-f]{64}$'){throw 'stage4_unsigned_provenance_missing'}
+    if($Status -ceq 'private-signed'){
+        $up=Join-Path $root 'unsigned-stage4.manifest.json'
+        if((Get-FileHash $up -Algorithm SHA256).Hash.ToLowerInvariant() -cne $m.unsignedManifestSha256){throw 'stage4_unsigned_manifest_hash_mismatch'}
+        $u=Get-Content $up -Raw|ConvertFrom-Json
+        if($u.kind -cne 'STAGE4_UNSIGNED_PRIVATE_CANDIDATE' -or $u.sourceCommit -cne $Commit -or $u.publisherSha256 -cne $Publisher -or @($u.files).Count -ne 4){throw 'stage4_unsigned_provenance_mismatch'}
+        foreach($f in $m.files){
+            $old=@($u.files|Where-Object {$_.name -ceq $f.name})
+            if($old.Count -ne 1 -or $f.unsignedSha256 -cne $old[0].sha256){throw 'stage4_unsigned_file_provenance_mismatch'}
+        }
+    }
     return $m
 }
 

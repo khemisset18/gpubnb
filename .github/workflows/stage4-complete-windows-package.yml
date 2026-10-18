@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: stage4-package-${{ github.event.pull_request.head.ref || github.ref }}
+  group: stage4-package-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
   four-components:
@@ -97,4 +97,14 @@ jobs:
             ${{ runner.temp }}/stage4-provenance.txt
           if-no-files-found: error
           retention-days: 14
+      - name: Preserve non-secret identity and manifest diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: stage4-rejected-package-diagnostics-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/stage4-package/stage4.manifest.json
+            ${{ runner.temp }}/stage4-package/build-identities.json
+          if-no-files-found: ignore
+          retention-days: 7
       # No secret, certificate/key, installer, driver, booking, deploy or physical test.

@@ -150,6 +150,16 @@ def verify(directory, manifest_hash, commit, publisher, status="unsigned"):
     if status == "private-signed":
         require(HEX.fullmatch(m.get("unsignedManifestSha256", "")) is not None,
                 "stage4_unsigned_provenance_missing")
+        original = root / "unsigned-stage4.manifest.json"
+        require(sha(original) == m["unsignedManifestSha256"], "stage4_unsigned_manifest_hash_mismatch")
+        u = json.loads(original.read_text(encoding="utf-8-sig"))
+        require(u.get("kind") == "STAGE4_UNSIGNED_PRIVATE_CANDIDATE" and u.get("sourceCommit") == commit and
+                u.get("publisherSha256") == publisher and len(u.get("files", [])) == 4,
+                "stage4_unsigned_provenance_mismatch")
+        for f in records:
+            old = [x for x in u["files"] if x.get("name") == f["name"]]
+            require(len(old) == 1 and f.get("unsignedSha256") == old[0].get("sha256"),
+                    "stage4_unsigned_file_provenance_mismatch")
     return m
 
 

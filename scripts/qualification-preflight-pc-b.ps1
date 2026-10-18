@@ -5,8 +5,10 @@ param(
     [string]$ApiOrigin,
     [Parameter(Mandatory = $true)]
     [string]$GatewayOrigin,
-    [string]$ExpectedReleaseCommit = "",
-    [string]$OutputPath = ""
+    [Parameter(Mandatory = $true)]
+    [string]$ExpectedReleaseCommit,
+    [string]$OutputPath = "",
+    [switch]$PrivateSameOrigin
 )
 
 $ErrorActionPreference = 'Stop'
@@ -105,9 +107,36 @@ try {
 }
 
 $expectedFull = $ExpectedReleaseCommit.Trim().ToLowerInvariant()
-if ($expectedFull -and $expectedFull -notmatch '^[0-9a-f]{40}$') {
+if ($expectedFull -notmatch '^[0-9a-f]{40}$') {
     Write-Error 'ExpectedReleaseCommit must be the exact 40-character Git SHA for physical qualification'
     exit 1
+}
+
+if ($PrivateSameOrigin) {
+    Add-Check 'private frontend API gateway share exactly one HTTPS origin' ($frontend -ceq $api -and $api -ceq $gateway) "$frontend / $api / $gateway"
+    $privateReady=Get-Public "$api/ready"
+    $readyJson=$null;try{$readyJson=$privateReady.body|ConvertFrom-Json}catch{}
+    Add-Check 'private API ready JSON' ($privateReady.status -eq 200 -and $null -ne $readyJson -and $readyJson.ok -eq $true) "HTTP $($privateReady.status)"
+    $release=Get-ReleaseCommit (Get-Public "$api/release")
+    Add-Check 'private exact API deployment identity' ($release -ceq $expectedFull) "expected=$expectedFull observed=$release"
+    $config=Get-Public "$frontend/config.js"
+    $runtimeCommit=[regex]::Match($config.body,'"releaseCommit"\s*:\s*"([0-9a-f]{40})"')
+    $sameOrigin=$config.body.Contains('BEGIN_PRIVATE_HTTPS_SAME_ORIGIN') -and $config.body.Contains('window.location.origin')
+    Add-Check 'private browser runtime exact release identity and same-origin routing' ($config.status -eq 200 -and $runtimeCommit.Success -and $runtimeCommit.Groups[1].Value -ceq $expectedFull -and $sameOrigin) 'runtime config.js must identify the full deployed SHA'
+    $page=Get-Public "$frontend/stage3-windows-native.html"
+    Add-Check 'private qualification entry page' ($page.status -eq 200 -and $page.body.Contains('id="stage3-start"')) "HTTP $($page.status)"
+    $desktop=Get-Public "$frontend/windows-native-desktop.html"
+    Add-Check 'decoded-frame continuity indicator is actually deployed' ($desktop.status -eq 200 -and $desktop.body.Contains('id="nativeDesktopContinuity"')) "HTTP $($desktop.status)"
+    $anonymous=Get-Public "$api/qualification/windows-native/preflight"
+    Add-Check 'unauthenticated preflight is refused' ($anonymous.status -eq 401 -or $anonymous.status -eq 403) "HTTP $($anonymous.status); HTML 200 is never accepted"
+    $health=Test-GatewayWebSocket $gateway
+    Add-Check 'private WSS health exact frame' $health.ok $health.url
+    $passed=@($checks|Where-Object {-not $_.passed}).Count -eq 0
+    $report=[ordered]@{kind='STAGE4_PRIVATE_PC2_READ_ONLY_PREFLIGHT';passed=$passed;checks=$checks;
+        sourceCommit=$release;authenticatedBrowserPreflightStillRequired=$true;sessionStarted=$false;physicalTestPerformed=$false}
+    $report|ConvertTo-Json -Depth 8
+    if($OutputPath){$report|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $OutputPath -Encoding UTF8}
+    if(-not $passed){exit 1};exit 0
 }
 
 Add-Check 'public origins are HTTPS and origin-only' $true "frontend=$frontend api=$api gateway=$gateway"

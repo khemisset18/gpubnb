@@ -7,10 +7,14 @@ param(
     # docs/QUARANTINE_DIAGNOSTICS_SYSTEM.md #14/#15 for the real incident
     # (a two-day-old frozen binary silently missing the diagnostic loop) this
     # check makes structurally impossible to ship again unnoticed.
-    [string]$ExpectedCommit
+    [string]$ExpectedCommit,
+    [switch]$AllowEphemeralRunnerInstallSmoke
 )
 
 $ErrorActionPreference = 'Stop'
+if (-not $AllowEphemeralRunnerInstallSmoke -or $env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') {
+    throw 'windows_release_install_smoke_requires_explicit_disposable_github_runner'
+}
 
 $installer = Get-Item -LiteralPath $InstallerPath -ErrorAction Stop
 if ($installer.Length -lt 262144) {

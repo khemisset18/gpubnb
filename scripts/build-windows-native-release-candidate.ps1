@@ -180,6 +180,7 @@ $mediaArgs = @(
     '/m',
     '/p:Configuration=Release',
     '/p:Platform=x64',
+    "/p:SourceCommit=$sourceCommit",
     "/p:NvCodecHeadersDir=$resolvedHeaders",
     '/p:RunCodeAnalysis=true'
 )
@@ -240,8 +241,10 @@ $workerSignerSha256 = Get-CertificateSha256 -Certificate $workerCert
 
 # STEP 3: Build the distinct Stage 4 helper with exact worker publisher policy.
 $oldWorkerSigner = $env:GPUBNB_WINDOWS_WORKER_SIGNER_SHA256
+$oldHelperSourceCommit = $env:GPUBNB_SOURCE_COMMIT
 try {
     $env:GPUBNB_WINDOWS_WORKER_SIGNER_SHA256 = $workerSignerSha256
+    $env:GPUBNB_SOURCE_COMMIT = $sourceCommit
     $helperArgs = @(
         'build',
         '--locked',
@@ -255,6 +258,7 @@ try {
 }
 finally {
     $env:GPUBNB_WINDOWS_WORKER_SIGNER_SHA256 = $oldWorkerSigner
+    $env:GPUBNB_SOURCE_COMMIT = $oldHelperSourceCommit
 }
 
 $helper = Join-Path $repoRoot 'native\windows-stream-helper\target\release\gpubnb-windows-stream.exe'

@@ -65,6 +65,7 @@ try {
         }
         $record | Add-Member -NotePropertyName unsignedSha256 -NotePropertyValue $record.sha256
         $record.sha256=(Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant()
+        $record.certificateTablePresent=$true
     }
     $manifest.kind='LOCAL_TEST_ONLY_NOT_RELEASE';$manifest.signatureStatus='private-signed'
     $manifest | Add-Member -NotePropertyName unsignedManifestSha256 -NotePropertyValue $ExpectedManifestSha256

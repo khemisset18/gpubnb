@@ -2,10 +2,21 @@ param(
     [string]$ExpectedReleaseCommit = "",
     [string]$ExpectedAgentCommit = "",
     [string]$ExpectedGpuUuid = "",
-    [string]$OutputPath = ""
+    [string]$OutputPath = "",
+    [switch]$Stage4Native,
+    [string]$PackageDirectory,
+    [string]$ExpectedManifestSha256,
+    [string]$ExpectedPublisherSha256
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Stage4Native) {
+    & (Join-Path $PSScriptRoot 'stage4-test-ready-audit.ps1') -PackageDirectory $PackageDirectory `
+        -ExpectedCommit $ExpectedReleaseCommit -ExpectedManifestSha256 $ExpectedManifestSha256 `
+        -ExpectedPublisherSha256 $ExpectedPublisherSha256 -SignatureStatus private-signed
+    if (-not $?) { exit 1 }
+    exit 0
+}
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $startedAt = [DateTime]::UtcNow
 $checks = New-Object System.Collections.Generic.List[object]
@@ -33,7 +44,8 @@ function Commit-Matches {
     if ([string]::IsNullOrWhiteSpace($Expected)) { return $true }
     $a = $Actual.Trim().ToLowerInvariant()
     $e = $Expected.Trim().ToLowerInvariant()
-    return $a.StartsWith($e) -or $e.StartsWith($a)
+    if ($e -notmatch '^[0-9a-f]{40}$') { return $false }
+    return ($a -ceq $e) -or ($a -cmatch '^[0-9a-f]{12}$' -and $a -ceq $e.Substring(0,12))
 }
 
 function Safe-Origin {

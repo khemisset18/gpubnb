@@ -27,6 +27,7 @@ foreach ($record in $manifest.files) {
             $sig.SignerCertificate.Subject -notmatch 'LOCAL PHYSICAL TEST ONLY') {
             throw "stage4_private_signature_not_valid:$($record.name)"
         }
+        Assert-Stage4Certificate -Certificate $sig.SignerCertificate -ExpectedPublisherSha256 $ExpectedPublisherSha256 -MinimumValidityHours 0 -RequirePrivateKey $false
     }
     foreach ($dll in $record.imports) {
         if ($dll -match '^(api-ms-win-|ext-ms-win-)') { continue } # Windows API sets resolved by the loader.

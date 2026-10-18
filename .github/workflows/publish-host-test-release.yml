@@ -189,7 +189,7 @@ jobs:
       - name: Smoke test exact Windows release installer
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/verify-windows-release.ps1 -InstallerPath 'release-assets/gpubnb-host-windows-x64.exe' -ExpectedCommit "$env:GITHUB_SHA"
+        run: ./scripts/verify-windows-release.ps1 -InstallerPath 'release-assets/gpubnb-host-windows-x64.exe' -ExpectedCommit "$env:GITHUB_SHA" -AllowEphemeralRunnerInstallSmoke
 
       - name: Create verified Windows portable archive
         if: runner.os == 'Windows'
