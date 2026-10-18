@@ -86,6 +86,19 @@ jobs:
           $zip = Join-Path $env:RUNNER_TEMP "stage4-unsigned-$env:SOURCE_COMMIT.zip"
           Compress-Archive -Path "$out/*" -DestinationPath $zip
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          # Verify the archive bytes after extraction, not only the source directory.
+          $expanded = Join-Path $env:RUNNER_TEMP 'stage4-archive-roundtrip'
+          if (Test-Path -LiteralPath $expanded) { throw 'stage4_roundtrip_directory_must_be_new' }
+          Expand-Archive -LiteralPath $zip -DestinationPath $expanded
+          & ./scripts/verify-stage4-package.ps1 -PackageDirectory $expanded -ExpectedManifestSha256 $manifest -ExpectedCommit $env:SOURCE_COMMIT -ExpectedPublisherSha256 $env:PUBLISHER_SHA256
+          if (-not $?) { throw 'stage4_archive_roundtrip_powershell_failed' }
+          python scripts/verify_stage4_package.py verify --directory $expanded --manifest-sha256 $manifest --commit $env:SOURCE_COMMIT --publisher $env:PUBLISHER_SHA256
+          if ($LASTEXITCODE -ne 0) { throw 'stage4_archive_roundtrip_python_failed' }
+          Write-Host 'STAGE4_VERIFIED_ARCHIVE_MANIFEST_BEGIN'
+          Get-Content -LiteralPath "$expanded/stage4.manifest.json" -Raw | Write-Host
+          Write-Host 'STAGE4_VERIFIED_ARCHIVE_MANIFEST_END'
+          Write-Host "STAGE4_VERIFIED_ARCHIVE_SHA256=$hash"
+          Write-Host "STAGE4_VERIFIED_MANIFEST_SHA256=$manifest"
           @("sourceCommit=$env:SOURCE_COMMIT","manifestSha256=$manifest","archiveSha256=$hash","publisherSha256=$env:PUBLISHER_SHA256",'components=4/4','status=UNSIGNED_PRIVATE_CANDIDATE_NOT_INSTALLABLE') | Set-Content "$env:RUNNER_TEMP/stage4-provenance.txt"
           Get-Content "$env:RUNNER_TEMP/stage4-provenance.txt" | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Upload verified four-component unsigned archive
