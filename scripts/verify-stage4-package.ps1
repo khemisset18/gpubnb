@@ -41,6 +41,8 @@ if ($ExecuteBuildIdentity) {
     $identity=Get-Content -LiteralPath (Join-Path $root 'build-identities.json') -Raw | ConvertFrom-Json
     $agent=(& (Join-Path $root 'gpubnb-agent.exe') build-info | Out-String) | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0 -or $agent.frozen -ne $true -or $agent.buildCommit -cne $ExpectedCommit.Substring(0,12) -or $agent.agentVersion -cne $manifest.agentVersion) { throw 'stage4_agent_build_identity_mismatch' }
+    $runtime=(& (Join-Path $root 'gpubnb-agent.exe') runtime-check | Out-String) | ConvertFrom-Json
+    if($LASTEXITCODE -ne 0 -or $runtime.idnaCodec -ne $true -or $runtime.dnsResolution -ne $true -or $runtime.tlsContext -ne $true){throw 'stage4_frozen_agent_runtime_mismatch'}
     foreach ($pair in @(@('helper','gpubnb-windows-stream.exe'),@('worker','gpubnb-windows-worker.exe'))) {
         $actual=(& (Join-Path $root $pair[1]) --build-policy --json | Out-String) | ConvertFrom-Json
         if ($LASTEXITCODE -ne 0) { throw 'stage4_build_policy_failed' }

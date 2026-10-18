@@ -70,12 +70,13 @@ try {
     Copy-Item -LiteralPath (Join-Path $repo 'native\windows-stream-helper\target\release\gpubnb-windows-stream.exe') -Destination $output
 
     $agent=(& (Join-Path $output 'gpubnb-agent.exe') build-info | Out-String) | ConvertFrom-Json;Check-Exit 'agent-build-info'
+    $agentRuntime=(& (Join-Path $output 'gpubnb-agent.exe') runtime-check | Out-String) | ConvertFrom-Json;Check-Exit 'frozen-agent-runtime-check'
     $helper=(& (Join-Path $output 'gpubnb-windows-stream.exe') --build-policy --json | Out-String) | ConvertFrom-Json;Check-Exit 'helper-build-policy'
     $worker=(& (Join-Path $output 'gpubnb-windows-worker.exe') --build-policy --json | Out-String) | ConvertFrom-Json;Check-Exit 'worker-build-policy'
     # ctypes calls ONLY the pure DLL build identity export, never a media probe.
     $mediaCode='import ctypes,json,sys; d=ctypes.CDLL(sys.argv[1]); f=d.GPUbnbMediaBuildIdentity; f.restype=ctypes.c_char_p; print(f().decode("ascii"))'
     $media=(& python -c $mediaCode (Join-Path $output 'GPUbnbWindowsMedia.dll') | Out-String) | ConvertFrom-Json;Check-Exit 'media-build-identity'
-    $identities=[ordered]@{agent=$agent;helper=$helper;worker=$worker;media=$media}
+    $identities=[ordered]@{agent=$agent;agentRuntime=$agentRuntime;helper=$helper;worker=$worker;media=$media}
     [IO.File]::WriteAllText((Join-Path $output 'build-identities.json'),($identities|ConvertTo-Json -Depth 10)+"`n",[Text.UTF8Encoding]::new($false))
     $proof=(& python (Join-Path $PSScriptRoot 'verify_stage4_package.py') create --directory $output --commit $head --publisher $PublisherSha256 | Out-String) | ConvertFrom-Json
     Check-Exit 'manifest-create-and-independent-pe-verification'

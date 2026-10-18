@@ -26,6 +26,14 @@ function Save-Manifest {
 }
 function Read-Fixture { Read-Stage4Package $dir $script:digest $commit $pin 'unsigned' }
 try {
+    $leaseText="schema=1`nwindows_session_id=42`nrenter_user_sid=S-1-5-21-1-2-3-1002`nprovider_user_sid=S-1-5-21-1-2-3-1001`ngpu_uuid=GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a`n"
+    $leaseArgs=@{Text=$leaseText;SessionId=42;RenterSid='S-1-5-21-1-2-3-1002';ProviderSid='S-1-5-21-1-2-3-1001';GpuUuid='GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a'}
+    if(-not (Assert-Stage4RenterLease @leaseArgs)){throw 'stage4_positive_lease_failed'}
+    Write-Host 'PASS exact existing renter WTS lease'
+    $leaseArgs.SessionId=43
+    Expect-Failure 'stage4_renter_lease_stale_or_mismatched' {Assert-Stage4RenterLease @leaseArgs}
+    $leaseArgs.SessionId=42;$leaseArgs.Text=$leaseText+"schema=1`n"
+    Expect-Failure 'stage4_renter_lease_format_invalid' {Assert-Stage4RenterLease @leaseArgs}
     $b=New-Object byte[] 1024
     [Array]::Copy([Text.Encoding]::ASCII.GetBytes('MZ'),0,$b,0,2)
     [Array]::Copy([BitConverter]::GetBytes([int]128),0,$b,60,4)
@@ -50,6 +58,7 @@ try {
         $records+=@{name=$name;sha256=(Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant();architecture='AMD64';imports=@('kernel32.dll')}
     }
     $identity=@{agent=@{frozen=$true;agentVersion='0.6.6';buildCommit=$commit.Substring(0,12)};
+        agentRuntime=@{idnaCodec=$true;dnsResolution=$true;tlsContext=$true};
         helper=@{sourceCommit=$commit;workerSignerSha256=$pin;mutationAuthority='release-candidate';workerProtocol=1;mediaTransportProtocol=2;browserMediaProtocol=1;browserInputProtocol=1};
         worker=@{sourceCommit=$commit;mediaSignerSha256=$pin};media=@{sourceCommit=$commit;mediaAbi=2;nvencApi='13.0'}}
     $ip=Join-Path $dir 'build-identities.json';[IO.File]::WriteAllText($ip,($identity|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
@@ -86,7 +95,7 @@ try {
     $script:m.buildIdentitiesSha256=(Get-FileHash $ip -Algorithm SHA256).Hash.ToLowerInvariant();Save-Manifest
     Expect-Failure 'stage4_embedded_pin_mismatch' {Read-Fixture}
     Expect-Failure 'stage4_private_test_certificate_unavailable' {Assert-Stage4Certificate $null $pin}
-    $rsa=[Security.Cryptography.RSA]::Create();$rsa.KeySize=2048
+    $rsa=[Security.Cryptography.RSA]::Create(2048)
     try {
         $request=[Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=GPUbnb LOCAL PHYSICAL TEST ONLY ephemeral policy test',$rsa,[Security.Cryptography.HashAlgorithmName]::SHA256,[Security.Cryptography.RSASignaturePadding]::Pkcs1)
         $oids=[Security.Cryptography.OidCollection]::new();[void]$oids.Add([Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.3'))

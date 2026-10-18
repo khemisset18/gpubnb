@@ -115,6 +115,7 @@ function Read-Stage4Package {
     if((Get-FileHash -LiteralPath $ip -Algorithm SHA256).Hash.ToLowerInvariant() -cne $m.buildIdentitiesSha256){throw 'stage4_identity_hash_mismatch'}
     $id=Get-Content -LiteralPath $ip -Raw | ConvertFrom-Json
     if($id.agent.frozen -ne $true -or $id.agent.agentVersion -cne '0.6.6' -or $id.agent.buildCommit -cne $Commit.Substring(0,12)){throw 'stage4_agent_identity_mismatch'}
+    if($id.agentRuntime.idnaCodec -ne $true -or $id.agentRuntime.dnsResolution -ne $true -or $id.agentRuntime.tlsContext -ne $true){throw 'stage4_frozen_agent_runtime_mismatch'}
     if($id.helper.sourceCommit -cne $Commit -or $id.worker.sourceCommit -cne $Commit -or $id.media.sourceCommit -cne $Commit){throw 'stage4_component_commit_mismatch'}
     if($id.helper.workerSignerSha256 -cne $Publisher -or $id.worker.mediaSignerSha256 -cne $Publisher){throw 'stage4_embedded_pin_mismatch'}
     if($id.helper.mutationAuthority -cne 'release-candidate'){throw 'stage4_wrong_helper_authority'}
@@ -157,4 +158,21 @@ function Assert-Stage4NewOutput {
         $cursor=$cursor.Parent
     }
     return $target
+}
+
+function Assert-Stage4RenterLease {
+    param([string]$Text,[uint32]$SessionId,[string]$RenterSid,[string]$ProviderSid,[string]$GpuUuid)
+    if($SessionId -eq 0 -or $RenterSid -ceq $ProviderSid -or [Text.Encoding]::UTF8.GetByteCount($Text) -gt 4096){throw 'stage4_renter_lease_identity_invalid'}
+    $values=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
+    foreach($ch in $Text.ToCharArray()){if([char]::IsControl($ch) -and $ch -ne "`r" -and $ch -ne "`n"){throw 'stage4_renter_lease_format_invalid'}}
+    foreach($line in ($Text -split "`r?`n")){
+        if($line.Length -eq 0){continue}
+        $parts=$line -split '=',2
+        if($parts.Count -ne 2 -or @('schema','windows_session_id','renter_user_sid','provider_user_sid','gpu_uuid') -cnotcontains $parts[0] -or $values.ContainsKey($parts[0])){throw 'stage4_renter_lease_format_invalid'}
+        $values.Add($parts[0],$parts[1])
+    }
+    if($values.Count -ne 5 -or $values['schema'] -cne '1' -or $values['windows_session_id'] -cne $SessionId.ToString() -or
+        $values['renter_user_sid'] -cne $RenterSid -or $values['provider_user_sid'] -cne $ProviderSid -or
+        $values['gpu_uuid'] -ine $GpuUuid){throw 'stage4_renter_lease_stale_or_mismatched'}
+    return $true
 }

@@ -321,6 +321,9 @@ if ($agentInfo.frozen -ne $true -or [string]$agentInfo.buildCommit -cne $sourceC
     throw 'release_candidate_agent_build_identity_mismatch'
 }
 
+& $agentCandidate runtime-check
+Assert-ExitCode -Step 'signed agent runtime-check'
+
 $payload = [ordered]@{
     'GPUbnbWindowsMedia.dll' = $media
     'gpubnb-windows-worker.exe' = $worker

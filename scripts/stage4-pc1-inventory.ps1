@@ -56,7 +56,7 @@ public static class Stage4ReadOnlyWts {
   [DllImport("wtsapi32.dll", CharSet=CharSet.Unicode)] static extern bool WTSQuerySessionInformationW(IntPtr server,int id,int info,out IntPtr value,out int bytes);
   [DllImport("wtsapi32.dll")] static extern void WTSFreeMemory(IntPtr value);
   [DllImport("kernel32.dll")] static extern uint WTSGetActiveConsoleSessionId();
-  static string Query(int id,int info) { IntPtr p; int n; if(!WTSQuerySessionInformationW(IntPtr.Zero,id,info,out p,out n))throw new InvalidOperationException("WTS query failed"); try{return Marshal.PtrToStringUni(p)??"";}finally{WTSFreeMemory(p);} }
+  static string Query(int id,int info) { IntPtr p; int n; if(id==0||!WTSQuerySessionInformationW(IntPtr.Zero,id,info,out p,out n))return ""; try{return Marshal.PtrToStringUni(p)??"";}finally{WTSFreeMemory(p);} }
   public static Row[] Read() { IntPtr p; int n; if(!WTSEnumerateSessionsW(IntPtr.Zero,0,1,out p,out n))throw new InvalidOperationException("WTS enumeration failed");
     try {var rows=new List<Row>();int size=Marshal.SizeOf(typeof(Session));for(int i=0;i<n;i++){var s=(Session)Marshal.PtrToStructure(IntPtr.Add(p,i*size),typeof(Session));rows.Add(new Row{sessionId=s.Id,state=s.State,user=Query(s.Id,5),domain=Query(s.Id,7),activeConsole=((uint)s.Id==WTSGetActiveConsoleSessionId())});}return rows.ToArray();}finally{WTSFreeMemory(p);} }
 }
@@ -65,9 +65,32 @@ public static class Stage4ReadOnlyWts {
     $sessions=@([Stage4ReadOnlyWts]::Read())
     $observations.wts=$sessions
     $active=@($sessions|Where-Object {$_.sessionId -ne 0 -and $_.state -eq 0})
-    $isolated=$active.Count -eq 1 -and $active[0].user -ceq $RenterAccount -and $active[0].activeConsole
+    $isolated=$active.Count -eq 1 -and $active[0].user -ieq $RenterAccount -and $active[0].activeConsole
+    if($isolated){
+        $wtsSid=([Security.Principal.NTAccount]::new($active[0].domain,$active[0].user)).Translate([Security.Principal.SecurityIdentifier]).Value
+        $isolated=$wtsSid -ceq $user.SID.Value
+    }
     Record 'exclusive-active-renter-console-session' $isolated ($sessions|ConvertTo-Json -Compress)
 }catch{Record 'exclusive-active-renter-console-session' $false $_.Exception.Message}
+try {
+    if(-not $isolated){throw 'stage4_renter_console_session_not_proven'}
+    $lease='C:\ProgramData\GPUbnb\windows-renter-lease.txt'
+    $leaseItem=Get-Item -LiteralPath $lease -Force
+    if($leaseItem.Length -gt 4096 -or ($leaseItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'stage4_renter_lease_invalid_file'}
+    $text=[Text.UTF8Encoding]::new($false,$true).GetString([IO.File]::ReadAllBytes($lease))
+    [void](Assert-Stage4RenterLease $text ([uint32]$active[0].sessionId) $user.SID.Value $provider $ExpectedGpuUuid)
+    foreach($path in @($lease,(Split-Path -Parent $lease))){
+        $item=Get-Item -LiteralPath $path -Force
+        if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'stage4_renter_lease_reparse_point_forbidden'}
+        $acl=Get-Acl -LiteralPath $path
+        $broad=@('S-1-1-0','S-1-5-11','S-1-5-32-545',$user.SID.Value)
+        if($broad -contains $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value){throw 'stage4_renter_lease_owner_forbidden'}
+        foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
+            if($ace.AccessControlType -eq 'Allow' -and $broad -contains $ace.IdentityReference.Value -and (([long]$ace.FileSystemRights -band 0x500D0156) -ne 0)){throw 'stage4_renter_lease_broad_write_forbidden'}
+        }
+    }
+    Record 'renter-lease-exact-session-SIDs-GPU-and-protected-ACL' $true 'existing UTF-8 lease matches live WTS identity; no file was written'
+}catch{Record 'renter-lease-exact-session-SIDs-GPU-and-protected-ACL' $false $_.Exception.Message}
 try {
     $processes=@(Get-CimInstance Win32_Process|Where-Object {$_.Name -match '^gpubnb-(agent|windows-stream|windows-worker)\.exe$'}|Select-Object ProcessId,ParentProcessId,SessionId,Name,ExecutablePath)
     $services=@(Get-CimInstance Win32_Service|Where-Object {$_.Name -like '*GPUbnb*'}|Select-Object Name,State,StartMode,ProcessId,PathName,StartName)

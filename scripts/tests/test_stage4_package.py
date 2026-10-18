@@ -37,6 +37,7 @@ class PackageTests(unittest.TestCase):
             (self.root/n).write_bytes(fixture_pe())
         self.identity = {
             'agent': {'frozen': True, 'agentVersion': '0.6.6', 'buildCommit': COMMIT[:12]},
+            'agentRuntime': {'idnaCodec': True, 'dnsResolution': True, 'tlsContext': True},
             'helper': {'sourceCommit': COMMIT, 'workerSignerSha256': PIN, 'mutationAuthority': 'release-candidate',
                        'workerProtocol': 1, 'mediaTransportProtocol': 2, 'browserMediaProtocol': 1, 'browserInputProtocol': 1},
             'worker': {'sourceCommit': COMMIT, 'mediaSignerSha256': PIN},
@@ -96,7 +97,8 @@ class PackageTests(unittest.TestCase):
         for component,field,value in [('agent','frozen',False),('agent','agentVersion','0.0.0'),
                                      ('helper','workerSignerSha256','ab'*32),('worker','sourceCommit','a'*40),
                                      ('helper','mutationAuthority','physical-qualification'),
-                                     ('helper','mediaTransportProtocol',1),('media','mediaAbi',1)]:
+                                     ('helper','mediaTransportProtocol',1),('media','mediaAbi',1),
+                                     ('agentRuntime','tlsContext',False)]:
             identity=copy.deepcopy(self.identity);identity[component][field]=value
             with self.subTest(component=component,field=field),self.assertRaises(ValueError):
                 s.check_identity(identity,COMMIT,PIN)
