@@ -90,7 +90,7 @@ try {
     $inventory+=(& python -m pip freeze | Out-String).Trim()
     [IO.File]::WriteAllText((Join-Path $output 'build-environment.txt'),($inventory -join "`n")+"`n",[Text.UTF8Encoding]::new($false))
     $support=Join-Path $output 'support';[void][IO.Directory]::CreateDirectory($support)
-    foreach($name in @('stage4-package-common.ps1','verify-stage4-package.ps1','verify_stage4_package.py','stage4-private-test-sign-copies.ps1','stage4-test-ready-audit.ps1','stage4-pc1-inventory.ps1','qualification-preflight-pc-a.ps1','qualification-preflight-pc-b.ps1','stage4-windows-python.lock')){
+    foreach($name in @('stage4-package-common.ps1','verify-stage4-package.ps1','verify_stage4_package.py','stage4-private-certificate.ps1','stage4-private-test-sign-copies.ps1','stage4-test-ready-audit.ps1','stage4-pc1-inventory.ps1','qualification-preflight-pc-a.ps1','qualification-preflight-pc-b.ps1','stage4-windows-python.lock')){
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $support
     }
     Copy-Item -LiteralPath (Join-Path $repo 'docs\operations\stage4-test-ready') -Destination (Join-Path $output 'instructions') -Recurse

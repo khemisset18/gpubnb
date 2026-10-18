@@ -28,6 +28,10 @@ foreach ($record in $manifest.files) {
             throw "stage4_private_signature_not_valid:$($record.name)"
         }
         Assert-Stage4Certificate -Certificate $sig.SignerCertificate -ExpectedPublisherSha256 $ExpectedPublisherSha256 -MinimumValidityHours 0 -RequirePrivateKey $false
+        if($manifest.timestamped -ne $false -or $null -ne $sig.TimeStamperCertificate -or
+            [DateTimeOffset]::Parse($manifest.expiresUtc).UtcDateTime -ne $sig.SignerCertificate.NotAfter.ToUniversalTime()){
+            throw "stage4_private_certificate_metadata_mismatch:$($record.name)"
+        }
     }
     foreach ($dll in $record.imports) {
         if ($dll -match '^(api-ms-win-|ext-ms-win-)') { continue } # Windows API sets resolved by the loader.

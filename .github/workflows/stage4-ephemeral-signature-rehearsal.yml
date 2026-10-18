@@ -5,10 +5,16 @@ on:
       - prep/stage4-ephemeral-signature-rehearsal-20261015
     paths:
       - scripts/tests/stage4-ephemeral-signature-rehearsal.ps1
+      - scripts/tests/stage4-private-certificate-rehearsal.ps1
+      - scripts/stage4-private-certificate.ps1
+      - scripts/stage4-package-common.ps1
       - .github/workflows/stage4-ephemeral-signature-rehearsal.yml
   pull_request:
     paths:
       - scripts/tests/stage4-ephemeral-signature-rehearsal.ps1
+      - scripts/tests/stage4-private-certificate-rehearsal.ps1
+      - scripts/stage4-private-certificate.ps1
+      - scripts/stage4-package-common.ps1
       - .github/workflows/stage4-ephemeral-signature-rehearsal.yml
 permissions:
   contents: read
@@ -34,5 +40,15 @@ jobs:
         run: |
           & ./scripts/tests/stage4-ephemeral-signature-rehearsal.ps1
           if (-not $?) { throw 'ephemeral_signature_rehearsal_failed' }
+      - name: Exercise opt-in certificate replacement without trust changes (5.1)
+        shell: powershell
+        run: |
+          & ./scripts/tests/stage4-private-certificate-rehearsal.ps1
+          if (-not $?) { throw 'ephemeral_certificate_replacement_failed' }
+      - name: Exercise opt-in certificate replacement without trust changes (7)
+        shell: pwsh
+        run: |
+          & ./scripts/tests/stage4-private-certificate-rehearsal.ps1
+          if (-not $?) { throw 'ephemeral_certificate_replacement_pwsh_failed' }
       # Intentionally no secrets, deploy, release, key export or artifact upload.
       # This test does NOT validate an approved production cert/TSA nor sign a PE.

@@ -29,6 +29,8 @@ Elle n'exécute pas les PE, n'installe rien, ne crée aucune session et contrôl
 
 ## Certificat : deux cas
 
+La procédure directement exécutable, l'audit d'expiration et le remplacement à clé non exportable sont dans [SIGNATURE-PRIVEE.md](SIGNATURE-PRIVEE.md). La demande utilisateur du 18 octobre autorise la finalisation de la signature privée ou la préparation du remplacement ; elle n'autorise ni une installation ni une modification de confiance Windows.
+
 Le pin historique réel est `200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a`, sujet `GPUbnb LOCAL PHYSICAL TEST ONLY 2026-09-21`, NotAfter observé `2026-10-20T22:23:47Z`. Ce certificat n'est pas un éditeur public.
 
 **A — certificat encore valide.** Le préflight vérifie dans CurrentUser/My exactement le pin du build, la clé privée locale, l'EKU `1.3.6.1.5.5.7.3.3`, les dates avec au moins 24 heures restantes et une chaîne Windows déjà approuvée. Sans switch, cette commande reste en lecture seule :
@@ -39,7 +41,7 @@ Le pin historique réel est `200208e0ef9dc3de4911df5541e6b11506c07de282084900631
 
 Après autorisation explicite de signature seulement, reprendre la même commande avec `-SignCopiesForPrivateTest -OutputDirectory $SignedNewDirectory`. Le dossier de sortie doit être neuf et séparé. La source unsigned est conservée. Les quatre copies sont signées SHA-256 sans timestamp, contrôlées Authenticode Valid avec le pin exact, puis munies d'un nouveau manifeste et des hashes signés. Un échec conserve un marqueur `INCOMPLETE-DO-NOT-INSTALL.txt`. Ne jamais installer un tel dossier.
 
-**B — certificat absent, expiré ou incompatible.** Ne pas tenter de signer avec un autre certificat simplement disponible. Après autorisation locale explicite, créer un certificat de code signing auto-signé de test, sujet contenant `LOCAL PHYSICAL TEST ONLY`, clé RSA au moins 3072 bits, SHA-256, EKU code signing, clé **NonExportable**, magasin CurrentUser/My, validité courte choisie pour la qualification. Aucun script de ce dossier ne crée de certificat ou de nouvelle confiance.
+**B — certificat absent, expiré ou incompatible.** Ne pas tenter de signer avec un autre certificat simplement disponible. Le script `stage4-private-certificate.ps1` est en lecture seule par défaut ; `-CreateReplacement` prépare explicitement un nouveau certificat de code signing de test, sujet contenant `LOCAL PHYSICAL TEST ONLY`, clé RSA 3072 bits, SHA-256, EKU code signing, clé **NonExportable**, magasin CurrentUser/My, validité de 14 jours par défaut. `-WhatIf` prévisualise sans écriture. Aucun script de ce dossier ne crée de nouvelle confiance. La création locale reste à exécuter sur PC1 selon la procédure dédiée ; aucune clé PC1 n'est accessible ici.
 
 Relever ensuite le SHA-256 réel du certificat public, ses dates et l'EKU. Une approbation de confiance distincte doit viser cette empreinte exacte ; documenter les contextes qui vérifient les signatures (opérateur, service SYSTEM et worker locataire). Une confiance CurrentUser chez le fournisseur ne prouve pas la confiance dans les deux autres contextes. L'approbation machine éventuelle reste manuelle et expressément autorisée. Ne jamais exporter de PFX/clé privée, installer silencieusement une autorité ou modifier les protections Windows.
 

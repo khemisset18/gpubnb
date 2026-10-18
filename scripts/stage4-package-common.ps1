@@ -25,6 +25,45 @@ function Assert-Stage4Certificate {
     } finally { $chain.Dispose() }
 }
 
+function Get-Stage4PrivateCertificateStatus {
+    param($Certificate, [string]$ExpectedPublisherSha256,
+        [ValidateRange(24,720)][int]$MinimumValidityHours=24,
+        [ValidateRange(24,720)][int]$RenewalWindowHours=72,
+        [bool]$RequirePrivateKey=$true)
+    if($ExpectedPublisherSha256 -cnotmatch '^[0-9a-f]{64}$' -or $ExpectedPublisherSha256 -match '^(.)\1{63}$'){
+        throw 'stage4_real_publisher_pin_required'
+    }
+    $result=[ordered]@{status='absent';signingReady=$false;renewalRecommended=$true;
+        expectedPublisherSha256=$ExpectedPublisherSha256;publisherSha256=$null;thumbprint=$null;
+        subject=$null;notBeforeUtc=$null;expiresUtc=$null;remainingHours=$null;
+        minimumValidityHours=$MinimumValidityHours;renewalWindowHours=$RenewalWindowHours;
+        hasPrivateKey=$false;codeSigningEku=$false;blockers=@('stage4_private_test_certificate_unavailable')}
+    if($null -eq $Certificate){return [pscustomobject]$result}
+    $now=[DateTime]::UtcNow
+    $result.publisherSha256=$Certificate.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant()
+    $result.thumbprint=$Certificate.Thumbprint
+    $result.subject=$Certificate.Subject
+    $result.notBeforeUtc=$Certificate.NotBefore.ToUniversalTime().ToString('o')
+    $result.expiresUtc=$Certificate.NotAfter.ToUniversalTime().ToString('o')
+    $result.remainingHours=[Math]::Round(($Certificate.NotAfter.ToUniversalTime()-$now).TotalHours,2)
+    $result.hasPrivateKey=$Certificate.HasPrivateKey
+    $eku=@($Certificate.Extensions|Where-Object {$_.Oid.Value -ceq '2.5.29.37'})
+    $result.codeSigningEku=($eku.Count -eq 1 -and (@($eku[0].EnhancedKeyUsages|ForEach-Object {$_.Value}) -contains '1.3.6.1.5.5.7.3.3'))
+    $result.renewalRecommended=($Certificate.NotAfter.ToUniversalTime() -le $now.AddHours([Math]::Max($MinimumValidityHours,$RenewalWindowHours)))
+    $result.status='blocked'
+    try {
+        Assert-Stage4Certificate -Certificate $Certificate -ExpectedPublisherSha256 $ExpectedPublisherSha256 `
+            -MinimumValidityHours $MinimumValidityHours -RequirePrivateKey $RequirePrivateKey
+        $result.signingReady=$true
+        $result.blockers=@()
+        $result.status=if($result.renewalRecommended){'renewal_recommended'}else{'ready'}
+    } catch {
+        if(-not $_.Exception.Message.StartsWith('stage4_private_',[StringComparison]::Ordinal)){throw}
+        $result.blockers=@($_.Exception.Message)
+    }
+    return [pscustomobject]$result
+}
+
 function Get-Stage4PeInfo {
     param([string]$Path)
     $b=[IO.File]::ReadAllBytes($Path)

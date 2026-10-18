@@ -27,10 +27,12 @@ $matches=@(Get-ChildItem Cert:\CurrentUser\My | Where-Object {
 if($matches.Count -ne 1){throw 'stage4_private_test_certificate_unavailable'}
 $cert=$matches[0]
 Assert-Stage4Certificate $cert $ExpectedPublisherSha256
+$certificateStatus=Get-Stage4PrivateCertificateStatus -Certificate $cert -ExpectedPublisherSha256 $ExpectedPublisherSha256
 if(-not $SignCopiesForPrivateTest){
     [ordered]@{mode='read_only';ok=$true;sourceCommit=$ExpectedCommit;unsignedManifestSha256=$ExpectedManifestSha256;
         filesVerified=4;signingPerformed=$false;installationPerformed=$false;privateTestPinSha256=$ExpectedPublisherSha256;
-        expiresUtc=$cert.NotAfter.ToUniversalTime().ToString('o');publicBookabilityEnabled=$false} | ConvertTo-Json
+        expiresUtc=$cert.NotAfter.ToUniversalTime().ToString('o');renewalRecommended=$certificateStatus.renewalRecommended;
+        remainingHours=$certificateStatus.remainingHours;publicBookabilityEnabled=$false} | ConvertTo-Json
     return
 }
 $target=Assert-Stage4NewOutput $OutputDirectory $root
@@ -56,11 +58,14 @@ try {
         Copy-Item -LiteralPath $source -Destination $copy
         if((Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant() -cne $record.sha256){throw "stage4_private_copy_hash_mismatch:$($record.name)"}
         Assert-Stage4Certificate $cert $ExpectedPublisherSha256
-        & $signTool sign /sha1 $cert.Thumbprint /fd SHA256 /v $copy | Out-Null
+        & $signTool sign /s My /sha1 $cert.Thumbprint /fd SHA256 /v $copy | Out-Null
         if($LASTEXITCODE -ne 0){throw "stage4_private_sign_failed:$($record.name)"}
+        & $signTool verify /pa /all /v $copy | Out-Null
+        if($LASTEXITCODE -ne 0){throw "stage4_private_signtool_verify_failed:$($record.name)"}
         $sig=Get-AuthenticodeSignature -LiteralPath $copy
         if($sig.Status -ne 'Valid' -or $null -eq $sig.SignerCertificate -or
-            $sig.SignerCertificate.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -cne $ExpectedPublisherSha256){
+            $sig.SignerCertificate.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -cne $ExpectedPublisherSha256 -or
+            $null -ne $sig.TimeStamperCertificate){
             throw "stage4_private_signature_not_valid:$($record.name)"
         }
         $record | Add-Member -NotePropertyName unsignedSha256 -NotePropertyValue $record.sha256
@@ -85,6 +90,8 @@ try {
     [ordered]@{ok=$true;kind='LOCAL_TEST_ONLY_NOT_RELEASE';sourceCommit=$ExpectedCommit;filesVerified=4;
         unsignedManifestSha256=$ExpectedManifestSha256;signedManifestSha256=$signedManifestHash;
         outputDirectory=$target;publisherSha256=$ExpectedPublisherSha256;installationPerformed=$false;
+        expiresUtc=$cert.NotAfter.ToUniversalTime().ToString('o');timestamped=$false;
+        signedFiles=@($manifest.files|ForEach-Object {[ordered]@{name=$_.name;sha256=$_.sha256;unsignedSha256=$_.unsignedSha256}});
         publicBookabilityEnabled=$false} | ConvertTo-Json -Depth 6
 } finally {
     # Deliberately keep failed staging for diagnosis. No broad recursive deletion.

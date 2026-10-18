@@ -4,7 +4,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $scripts=Split-Path -Parent $PSScriptRoot
 . (Join-Path $scripts 'stage4-package-common.ps1')
-foreach($name in @('stage4-private-test-sign-copies.ps1','verify-stage4-package.ps1','stage4-package-common.ps1','build-stage4-unsigned-package.ps1','stage4-pc1-inventory.ps1','stage4-test-ready-audit.ps1','stage4-backup-installed.ps1','qualification-preflight-pc-a.ps1','qualification-preflight-pc-b.ps1','verify-windows-release.ps1')){
+foreach($name in @('stage4-private-certificate.ps1','stage4-private-test-sign-copies.ps1','verify-stage4-package.ps1','stage4-package-common.ps1','build-stage4-unsigned-package.ps1','stage4-pc1-inventory.ps1','stage4-test-ready-audit.ps1','stage4-backup-installed.ps1','qualification-preflight-pc-a.ps1','qualification-preflight-pc-b.ps1','verify-windows-release.ps1')){
     $tokens=$null;$errors=$null
     [void][Management.Automation.Language.Parser]::ParseFile((Join-Path $scripts $name),[ref]$tokens,[ref]$errors)
     if($errors.Count -ne 0){throw "stage4_parser_failed:$name`:$($errors[0].Message)"}
