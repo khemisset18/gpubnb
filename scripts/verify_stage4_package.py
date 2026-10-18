@@ -108,6 +108,7 @@ def check_identity(identity, commit, publisher):
 
 def verify(directory, manifest_hash, commit, publisher, status="unsigned"):
     root = Path(directory).resolve(strict=True)
+    require(not (root/"INCOMPLETE-DO-NOT-INSTALL.txt").exists(), "stage4_incomplete_package_forbidden")
     require(re.fullmatch(r"[0-9a-f]{40}", commit) is not None, "stage4_exact_commit_required")
     require(HEX.fullmatch(publisher) is not None and len(set(publisher)) > 1,
             "stage4_real_publisher_pin_required")

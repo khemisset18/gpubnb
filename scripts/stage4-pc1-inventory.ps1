@@ -4,6 +4,7 @@
 param(
     [string]$ExpectedGpuUuid='GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a',
     [string]$RenterAccount='gpubnb-renter-qual',
+    [string]$ProviderAccount='HICHAM\hicha',
     [string]$PublisherSha256='200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a'
 )
 Set-StrictMode -Version Latest
@@ -15,8 +16,8 @@ function Record([string]$Name,[bool]$Pass,[string]$Detail){$script:checks+=@{nam
 try {
     $gpu=@(& nvidia-smi --query-gpu=name,uuid,driver_version --format=csv,noheader 2>&1)
     if($LASTEXITCODE -ne 0){throw 'stage4_nvidia_inventory_failed'}
-    $matches=@($gpu|Where-Object {$_ -match [regex]::Escape($ExpectedGpuUuid)})
-    $fields=if($matches.Count -eq 1){@($matches[0] -split ',\s*')}else{@()}
+    $gpuMatches=@($gpu|Where-Object {$_ -match [regex]::Escape($ExpectedGpuUuid)})
+    $fields=if($gpuMatches.Count -eq 1){@($gpuMatches[0] -split ',\s*')}else{@()}
     $pass=$fields.Count -eq 3 -and $fields[0] -match 'GTX 1650' -and [version]$fields[2] -ge [version]'570.00'
     Record 'GTX1650-exact-UUID-driver-570-or-newer' $pass ($gpu -join '; ')
     $observations.gpus=$gpu
@@ -31,17 +32,17 @@ try {
     Record 'IddCx-existing-device-OK' ($idd.Count -eq 1 -and $idd[0].Status -eq 'OK') ($observations.idd|ConvertTo-Json -Compress)
 }catch{Record 'IddCx-existing-device-OK' $false $_.Exception.Message}
 try {
-    $certs=@(Get-ChildItem Cert:\CurrentUser\My|Where-Object {$_.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -ceq $PublisherSha256})
-    if($certs.Count -ne 1){throw 'stage4_private_test_certificate_unavailable'}
-    Assert-Stage4Certificate $certs[0] $PublisherSha256
-    Record 'exact-test-certificate-key-EKU-chain-dates' $true ('NotAfterUTC='+$certs[0].NotAfter.ToUniversalTime().ToString('o'))
-}catch{Record 'exact-test-certificate-key-EKU-chain-dates' $false $_.Exception.Message}
+    $certs=@(Get-ChildItem Cert:\CurrentUser\My,Cert:\CurrentUser\Root,Cert:\LocalMachine\Root|Where-Object {$_.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -ceq $PublisherSha256})
+    if($certs.Count -lt 1){throw 'stage4_private_test_certificate_unavailable'}
+    Assert-Stage4Certificate -Certificate $certs[0] -ExpectedPublisherSha256 $PublisherSha256 -RequirePrivateKey $false
+    Record 'exact-test-certificate-EKU-chain-dates' $true ('NotAfterUTC='+$certs[0].NotAfter.ToUniversalTime().ToString('o')+'; signing key checked only by authorized signer preflight')
+}catch{Record 'exact-test-certificate-EKU-chain-dates' $false $_.Exception.Message}
 try {
     $user=Get-LocalUser -Name $RenterAccount
-    $provider=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    $observations.renter=@{name=$user.Name;sid=$user.SID.Value;enabled=$user.Enabled;auditorSid=$provider}
-    Record 'enabled-renter-account-distinct-from-auditor' ($user.Enabled -and $user.SID.Value -cne $provider) ($observations.renter|ConvertTo-Json -Compress)
-}catch{Record 'enabled-renter-account-distinct-from-auditor' $false $_.Exception.Message}
+    $provider=([Security.Principal.NTAccount]::new($ProviderAccount)).Translate([Security.Principal.SecurityIdentifier]).Value
+    $observations.renter=@{name=$user.Name;sid=$user.SID.Value;enabled=$user.Enabled;providerSid=$provider;auditorSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}
+    Record 'enabled-renter-account-distinct-from-provider' ($user.Enabled -and $user.SID.Value -cne $provider) ($observations.renter|ConvertTo-Json -Compress)
+}catch{Record 'enabled-renter-account-distinct-from-provider' $false $_.Exception.Message}
 try {
     if(-not ('Stage4ReadOnlyWts' -as [type])){
         Add-Type -TypeDefinition @'

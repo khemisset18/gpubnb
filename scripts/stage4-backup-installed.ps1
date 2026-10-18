@@ -20,6 +20,8 @@ foreach($n in $names){
     $records+=@{name=$n;sha256=(Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant();
         architecture=$pe.architecture;sddl=(Get-Acl -LiteralPath $path).Sddl;
         signatureStatus=[string]$sig.Status;signerSha256=if($sig.SignerCertificate){$sig.SignerCertificate.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant()}else{''}}
+    $records[-1].signerExpiresUtc=if($sig.SignerCertificate){$sig.SignerCertificate.NotAfter.ToUniversalTime().ToString('o')}else{$null}
+    $records[-1].timestamped=($null -ne $sig.TimeStamperCertificate)
 }
 [void][IO.Directory]::CreateDirectory($output)
 $complete=$false

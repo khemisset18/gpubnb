@@ -165,7 +165,22 @@ if ($headerSource -notmatch '#define\s+NVENCAPI_MINOR_VERSION\s+0') {
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $repoRoot "dist\windows-native-release-candidate\$sourceCommit"
 }
-New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+$OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
+if ($OutputDirectory -match '(?i)\\Program Files(?: \(x86\))?(?:\\|$)|\\Windows(?:\\|$)|\\ProgramData(?:\\|$)') {
+    throw 'release_candidate_installed_output_forbidden'
+}
+if (Test-Path -LiteralPath $OutputDirectory) { throw 'release_candidate_output_must_be_new' }
+$ancestor = Split-Path -Parent $OutputDirectory
+while (-not (Test-Path -LiteralPath $ancestor -PathType Container)) {
+    $ancestor = Split-Path -Parent $ancestor
+    if ([string]::IsNullOrWhiteSpace($ancestor)) { throw 'release_candidate_output_parent_invalid' }
+}
+$ancestorItem = Get-Item -LiteralPath $ancestor -Force
+while ($null -ne $ancestorItem) {
+    if (($ancestorItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'release_candidate_output_reparse_point_forbidden' }
+    $ancestorItem = $ancestorItem.Parent
+}
+New-Item -ItemType Directory -Path $OutputDirectory | Out-Null
 $output = (Resolve-Path -LiteralPath $OutputDirectory).Path
 
 if ([IO.Path]::GetFullPath($agentInput) -ieq

@@ -38,3 +38,8 @@ test('clock reversal cannot reuse a cached grant',async()=>{
   const {state,authorized}=fixture();assert.equal(await authorized(),true);state.time--;state.browser=null;
   assert.equal(await authorized(),false);
 });
+test('unresponsive authorization dependencies fail closed with a bounded deadline',async()=>{
+  const authorized=createGatewayChannelLeaseGuard({sessionId:'s1',userId:'u1',timeoutMs:15,
+    readBrowser:()=>new Promise(()=>{}),readWorkspace:()=>new Promise(()=>{})});
+  assert.equal(await authorized(),false);
+});

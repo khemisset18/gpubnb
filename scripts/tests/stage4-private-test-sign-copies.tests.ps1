@@ -60,6 +60,9 @@ try {
     $positive=Read-Fixture
     if($positive.files.Count -ne 4){throw 'positive_fixture_failed'}
     Write-Host 'PASS exact four-component unsigned package, actual PE/imports and identities'
+    $incomplete=Join-Path $dir 'INCOMPLETE-DO-NOT-INSTALL.txt';[IO.File]::WriteAllText($incomplete,'incomplete')
+    Expect-Failure 'stage4_incomplete_package_forbidden' {Read-Fixture}
+    Remove-Item $incomplete
     Expect-Failure 'stage4_manifest_hash_mismatch' {Read-Stage4Package $dir ('a'*64) $commit $pin}
     Expect-Failure 'stage4_manifest_commit_mismatch' {Read-Stage4Package $dir $script:digest ('a'*40) $pin}
     Expect-Failure 'stage4_real_publisher_pin_required' {Read-Stage4Package $dir $script:digest $commit ('1'*64)}
@@ -83,7 +86,7 @@ try {
     $script:m.buildIdentitiesSha256=(Get-FileHash $ip -Algorithm SHA256).Hash.ToLowerInvariant();Save-Manifest
     Expect-Failure 'stage4_embedded_pin_mismatch' {Read-Fixture}
     Expect-Failure 'stage4_private_test_certificate_unavailable' {Assert-Stage4Certificate $null $pin}
-    $rsa=[Security.Cryptography.RSA]::Create(2048)
+    $rsa=[Security.Cryptography.RSA]::Create();$rsa.KeySize=2048
     try {
         $request=[Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=GPUbnb LOCAL PHYSICAL TEST ONLY ephemeral policy test',$rsa,[Security.Cryptography.HashAlgorithmName]::SHA256,[Security.Cryptography.RSASignaturePadding]::Pkcs1)
         $oids=[Security.Cryptography.OidCollection]::new();[void]$oids.Add([Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.3'))

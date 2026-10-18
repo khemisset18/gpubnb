@@ -1,17 +1,36 @@
-# Stage 4 — état vérifié 18 octobre 2026
+# GPUbnb Stage 4 — état de préparation
 
-PR #303 ouverte, draft; HEAD initial `781137ecd34e5dac07e060a82a1695700b22f218`. 20 workflows GitHub Actions réussis à ce HEAD, mais aucun paquet complet Agent + stream + worker + media DLL attesté.
+La préparation logicielle est consolidée exclusivement dans [la PR #303](https://github.com/khemisset18/gpubnb/pull/303), branche `audit/ssj12007-consolidation`. Aucune fusion, installation PC1, signature PC1, réservation, qualification physique ou modification Render n'a été effectuée.
 
-Artefacts recensés: helper `gpubnb-windows-stream-helper-781137ecd34e5dac07e060a82a1695700b22f218` et host preflight `gpubnb-host-windows-preflight-781137ecd34e5dac07e060a82a1695700b22f218`; archives non inspectées octet à octet. Empreintes SHA256 PE, architecture exacte, dépendances, Authenticode et contrats des quatre composants: NON CONFIRMÉS. Anciennes empreintes du commit `2b055992...` non réutilisables.
+## Paquet et preuve attendue
 
-Certificat privé PC1 expirant le 21 octobre 2026 selon état ancien: magasin local inaccessible, identité et validité réelles non vérifiées. PC1 IddCx/WTS/NVENC non audité sur machine. PC2 navigateur et vidéo 300 secondes non testés.
+Le workflow [Stage 4 complete Windows package](https://github.com/khemisset18/gpubnb/actions/workflows/stage4-complete-windows-package.yml) construit depuis **le SHA exact de la branche**, et non le commit de fusion implicite de GitHub :
 
-Render `srv-dau86i2d0e5s73elmk10` au commit Stage 3 `6b655614d3b9c3fda7912742b539601ba22598f1`, auto-deploy désactivé. Aucune installation, déploiement, réservation ou qualification exécutée. État: BLOQUÉ avant autorisation du test physique.
+1. Agent `0.6.6` frozen, commit embarqué contrôlé ;
+2. DLL média AMD64, identité source exportée, ABI 2, NVENC 13.0 ;
+3. worker AMD64, commit source et pin média réels embarqués ;
+4. helper AMD64 `release-candidate`, commit, pin worker et protocoles contrôlés.
 
-## Inspection octet-à-octet des archives CI (18/10/2026)
-Archives téléchargées directement depuis GitHub Actions; fichiers lus à l'intérieur des ZIP, SHA256 calculés localement, en-tête PE vérifié sans exécution des fichiers.
-- Artefact 12132764129: `gpubnb-windows-stream.exe`, 464384 octets, SHA256 `e041ee80a0ad31b0b27edc7a0e7bcff50d8cfe2afefadc24f4db64887388620d`, Machine 0x8664 (AMD64), Optional Header 0x20b (PE32+).
-- Artefact 12132808032: `gpubnb-agent.exe`, 22258206 octets, SHA256 `3a6ca3a88c5b46e19294ac4fc1f68666461532b99854f60aa3bce6f33f413b13`, Machine 0x8664 (AMD64); `gpubnb-host-tunnel.exe` SHA256 `de966e31a3eb816e4abb504cc965b2a4483c17f420cc38f95929670fd44e1f03`, AMD64; installateur `GPUbnb Host_0.1.0_x64-setup.exe` SHA256 `4c1e51094108fbf8ef0821dc6a5c49b6da43a7b274299e3185540bd5238d4697` (en-tête PE machine 0x14c du stub: ne démontre pas l'architecture du payload).
-- Artefact 12132164519: installateur `dist-installers/nsis/GPUbnb Host_0.1.0_x64-setup.exe`, SHA256 `78e5bc2de9ac252950bb52dfca586b9f9b2d841498d158166e50f76de208`, accompagné de fichiers dist-evidence; **ce n'est pas un paquet natif quatre composants**.
-- Dans ces trois archives, **ni `gpubnb-windows-worker.exe` ni `GPUbnbWindowsMedia.dll` n'apparaissent**. Agent et helper sont deux archives séparées. Leur commit de build réel, signature et compatibilité protocolaire ne sont pas attestés par la présence de fichiers/PE seuls.
-- Aucune archive n'a été lancée, extraite sur PC1, signée ou installée. Le paquet complet Stage 4 demeure **BLOQUÉ**.
+Un upload réussi exige quatre fichiers, leurs SHA-256, deux lecteurs PE indépendants (Python et PowerShell), les imports Windows, les identités exécutées uniquement sur le runner et l'absence de signatures sur la source unsigned. Le manifeste et `build-identities.json` sont vérifiés avant archivage. Aucun certificat ou secret de signature n'est utilisé par ce build.
+
+L'archive s'appelle `stage4-unsigned-<SHA>.zip`. Le fichier `stage4-provenance.txt` joint donne **le SHA complet, le hash du manifeste, le hash du ZIP et le pin public**. Ces valeurs doivent être prises depuis le run du commit remis, jamais depuis une archive plus ancienne ou un manifeste non authentifié. Les artefacts expirent après 14 jours.
+
+**Le paquet CI est NON SIGNÉ et NON INSTALLABLE.** Une signature de copies privées reste une opération locale soumise à autorisation. La chaîne publique `build-windows-native-release-candidate.ps1` continue à refuser les certificats `LOCAL PHYSICAL TEST ONLY`.
+
+## Contrats et vérifications
+
+Protocoles : worker 1, transport média interne 2, média navigateur 1, entrées navigateur 1, ABI DLL 2. En-têtes NVCodec : `e844e5b26f46bb77479f063029595293aa8f812d`, API NVENC 13.0. Minimum contractuel NVIDIA Windows : 570.00. Le pilote réel, le GPU, la capture WGC et l'encodeur NVENC restent à qualifier physiquement.
+
+Les régressions couvrent notamment le hash/commit/pin erroné, le PE x86, les fichiers manquants, les imports falsifiés, l'identité Agent, la chaîne/EKU/expiration du certificat, l'authentification et le préflight, la révocation d'un flux déjà ouvert et le compteur de vidéo décodée. Le minuteur seul ne peut plus produire les 300 secondes ; coupure, changement d'époque, rejeu ou arrêt du décodage invalident la mesure.
+
+Les résultats complets et artefacts à retenir sont ceux du **HEAD final**. Une CI verte d'un ancien SHA ou un workflow qui ne construit qu'un helper ne vaut pas preuve 4/4.
+
+## État externe vérifié le 18 octobre 2026
+
+Render : service `srv-dau86i2d0e5s73elmk10`, branche `qualification/stage3-windows-native-private-3c3e21e6`, autoDeploy `no`, Dockerfile `apps/api/Dockerfile`, santé `/health`. Déploiement actif `dep-db4j8gom7kps73c1u4p0`, SHA `6b655614d3b9c3fda7912742b539601ba22598f1`. `/health`, `/ready` et `/release` répondent ; WSS `/ws-health` renvoie exactement `gpubnb-ws-ok`.
+
+Le frontend privé est servi à la même origine que l'API. Le frontend public Netlify annonce `16c13e0` et une autre gateway ; il n'est pas le parcours privé Stage 4. Le Stage 3 live renvoie encore du HTML au préflight Stage 4 absent : un HTTP 200 seul n'est donc jamais accepté.
+
+PC1 : observations historiques fournies par l'utilisateur conservées dans `PC1-PREPARATION.md`. Aucun accès à son matériel, à ses sessions ou à ses magasins de certificats n'a été établi. Le certificat observé expire le **20 octobre 2026 à 22:23:47 UTC**, soit le 21 octobre à 00:23:47 Paris.
+
+**Préparation logicielle, signature privée et qualification matérielle sont trois états distincts. Ne pas annoncer « PRÉPARATION TERMINÉE » tant que les critères restants de BLOCAGES.md ne sont pas satisfaits.**

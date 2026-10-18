@@ -1,11 +1,11 @@
 /** Revalidate an already-open native channel; an upgrade is not a permanent grant. */
 export function createGatewayChannelLeaseGuard({
-  sessionId, userId, readBrowser, readWorkspace, now = Date.now, cacheMs = 1000,
+  sessionId, userId, readBrowser, readWorkspace, now = Date.now, cacheMs = 1000, timeoutMs = 5000,
 }: {
   sessionId: string; userId: string;
   readBrowser: () => Promise<string | null>;
   readWorkspace: () => Promise<{ renterId: string; expiresAt: Date } | null>;
-  now?: () => number; cacheMs?: number;
+  now?: () => number; cacheMs?: number; timeoutMs?: number;
 }) {
   let checkedAt: number | null = null;
   let allowed = false;
@@ -18,8 +18,12 @@ export function createGatewayChannelLeaseGuard({
     if (pending) return pending;
     pending = (async () => {
       allowed = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        const [raw, row] = await Promise.all([readBrowser(), readWorkspace()]);
+        const [raw, row] = await Promise.race([
+          Promise.all([readBrowser(), readWorkspace()]),
+          new Promise<never>((_resolve,reject)=>{timer=setTimeout(()=>reject(new Error('channel_authorization_timeout')),timeoutMs);}),
+        ]);
         const browser: unknown = raw ? JSON.parse(raw) : null;
         const current = now();
         const expiresAt = row?.expiresAt.getTime() ?? NaN;
@@ -31,6 +35,7 @@ export function createGatewayChannelLeaseGuard({
         checkedAt = current;
         validUntil = allowed ? Math.min(current + cacheMs, expiresAt) : current;
       } catch { allowed = false; checkedAt = null; }
+      finally { if(timer!==undefined)clearTimeout(timer); }
       return allowed;
     })();
     try { return await pending; } finally { pending = null; }

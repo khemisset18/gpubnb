@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { readFile } from 'node:fs/promises';
 import { resolveReleaseIdentity } from './release-identity.js';
 
-export function privateWebSocketCspSource(request: {headers:{host?:string}}): string {
+export function privateWebSocketCspSource(request: {headers:{host?:string|undefined}}): string {
   const host=request.headers.host;
   return host && /^[a-z0-9.-]+(?::[0-9]{1,5})?$/i.test(host) ? `wss://${host}` : "'none'";
 }

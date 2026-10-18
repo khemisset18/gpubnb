@@ -523,7 +523,13 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
             browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1013,'gateway backpressure');return;
           }
           const relay:RelayRequest={id:crypto.randomUUID(),sessionId,kind:'ws_send',channelId,dataBase64:frame.toString('base64'),binary:isBinary};
-          const task=browserSendChain.then(async()=>{if(!await enqueueMachineRelay(redis,row.machineId,relay))throw new Error('workspace_machine_queue_backpressure');});
+          const task=browserSendChain.then(async()=>{
+            if(browserClosed||!await channelAuthorized()){
+              browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1008,'workspace session expired');
+              return;
+            }
+            if(!await enqueueMachineRelay(redis,row.machineId,relay))throw new Error('workspace_machine_queue_backpressure');
+          });
           browserSendChain=task.finally(()=>browserPending.release(frame.length)).catch(error=>{
             gatewayLog.error({err:error,event:'workspace_gateway_send_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser frame relay failed');
             if(!browserClosed){browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1013,'gateway relay backpressure');}

@@ -81,6 +81,7 @@ function Read-Stage4Package {
     if($Commit -cnotmatch '^[0-9a-f]{40}$'){throw 'stage4_exact_commit_required'}
     if($Publisher -cnotmatch '^[0-9a-f]{64}$' -or $Publisher -match '^(.)\1{63}$'){throw 'stage4_real_publisher_pin_required'}
     $root=(Resolve-Path -LiteralPath $Directory).Path
+    if(Test-Path -LiteralPath (Join-Path $root 'INCOMPLETE-DO-NOT-INSTALL.txt')){throw 'stage4_incomplete_package_forbidden'}
     $mp=Join-Path $root 'stage4.manifest.json'
     if($ManifestSha256 -cnotmatch '^[0-9a-f]{64}$' -or (Get-FileHash -LiteralPath $mp -Algorithm SHA256).Hash.ToLowerInvariant() -cne $ManifestSha256){throw 'stage4_manifest_hash_mismatch'}
     $m=Get-Content -LiteralPath $mp -Raw | ConvertFrom-Json

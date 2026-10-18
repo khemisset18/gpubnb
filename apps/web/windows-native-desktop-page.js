@@ -50,6 +50,8 @@ export function mountWindowsNativeDesktop({
 
   const sessionId = new URLSearchParams(locationObject.search).get('session');
   const streamPath = nativeDesktopStreamPath(sessionId);
+  const manageLink = documentObject.querySelector('#nativeDesktopManage');
+  if (manageLink) manageLink.href = `session.html?id=${encodeURIComponent(sessionId)}`;
   const setStatus = (value) => {
     status.textContent = value;
   };

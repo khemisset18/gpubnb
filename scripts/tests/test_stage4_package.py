@@ -115,6 +115,10 @@ class PackageTests(unittest.TestCase):
         self.mutate_manifest(lambda m:m.update(installable=True))
         with self.assertRaisesRegex(ValueError, 'policy_mismatch'):self.verify()
 
+    def test_partial_signing_marker_prevents_reuse_even_with_valid_hashes(self):
+        (self.root/'INCOMPLETE-DO-NOT-INSTALL.txt').write_text('previous signing failed')
+        with self.assertRaisesRegex(ValueError, 'incomplete_package_forbidden'):self.verify()
+
     def test_malformed_pe_bounds_are_rejected(self):
         p=self.root/'bad.exe'
         for offset in [0,0x7fffffff,900]:

@@ -1,17 +1,19 @@
-# Blocages encore ouverts (18 octobre 2026)
-1. Archives CI non inspectées au niveau binaire; quatre composants AMD64 au même HEAD, hashes, versions, dépendances et signatures non attestés.
-2. Script de signature privée épinglé au commit `2b055992...`; reconstruire et repinner les quatre composants avec une identité réelle, sans supprimer de contrôle.
-3. Certificat local PC1 (expiration annoncée 21/10/2026): statut réel inaccessible, vérifier EKU, clé, dates et confiance en lecture seule.
-4. GTX1650/NVENC, IddCx, SID/session isolée, Agent, backup/rollback PC1 non vérifiés physiquement.
-5. Frontend PC2 et gateway WSS URLs publiques exactes inconnues, login/préflight authentifié non vérifiés.
-6. Render Stage 3 non déployé Stage 4; test de 300 secondes non exécuté.
+# Blocages et autorisations restantes
 
+## À ne pas confondre avec un défaut du build
 
-## Preuves PC1 reçues le 18 octobre 2026 (observations utilisateur, aucun changement machine)
-- NVIDIA GTX 1650, pilote 592.82; périphérique `GPUbnb Isolated Virtual Display` `ROOT\\DISPLAY\\0000` état OK.
-- Compte `gpubnb-renter-qual` activé, SID distinct de celui de l'utilisateur fournisseur, **pas de session locataire interactive confirmée**.
-- Service `GPUbnbAgent` déclaré Stopped; deux processus distincts `gpubnb-agent.exe` dans `Program Files\\GPUbnb` (session 0) et `Program Files\\GPUbnb Host` (session 1). Ne pas conclure que le service arrêté contrôle le processus session 0.
-- Quatre fichiers `C:\\Program Files\\GPUbnb` présents, Authenticode Valid, tous signés par le même certificat test SHA256 `200208e0ef9dc3de4911df5541e6b11506c07de2820849006311cb68b342965a`. Date NotAfter UTC `2026-10-20T22:23:47Z`. Certificat NON public.
-- SHA256 installés: Agent `073c98950248301bb152aa0ebd08c5e72d0a118f294388b584029cd145e981da`; stream `d114bca3293da78481dee1d53d06c7b91b4a94f08ccde4a61d268ea73d039690`; worker `720325acac59d5e7e24f25f2ec72e13cef1e1071249943f024ff135844091579`; media `510d559b056ba094f8dc06b73d4c6d7bce46ca97fa774524e605844ad16fc9de`.
-- Agent installé `build-info`: `0.6.6` frozen, `buildCommit=9be531450463`. Worker installé `sourceCommit=3cb18fb71c494e3947768455d61bc8763cd1e5c2` et pin média identique au certificat installé. Ces binaires NE correspondent PAS au HEAD Stage 4.
-- Il reste à vérifier: commit du helper, dépendances PE, NVENC matériel, protocole 4/4, compatibilité IddCx et WTS. **Ne pas solliciter d'autres actions utilisateur sur PC1 tant que le paquet neuf n'est pas attesté.**
+- **Signature privée non effectuée.** Le certificat et la confiance Windows actuels ne sont pas accessibles depuis cet environnement. Le pin réel historique est connu ; son expiration observée est le 20/10/2026 à 22:23:47 UTC. Les contrôles locaux imposent clé, EKU, chaîne, dates et pins. Un certificat nouveau exige un nouveau pin réel et une reconstruction cohérente avant signature.
+- **Matériel PC1 non qualifié.** Aucune preuve nouvelle de session console locataire exclusive, isolation du bureau, compatibilité ABI IddCx, capture ou encodage NVENC GTX1650 n'a été produite. Les observations utilisateur précédentes restent des observations historiques.
+- **Installation et sauvegarde PC1 non exécutées.** Les quatre fichiers installés appartiennent aux anciens commits mentionnés dans PC1-PREPARATION.md. La procédure de sauvegarde/retour est fournie ; vérifier aussi la validité temporelle du certificat des anciens binaires avant de compter sur leur restauration.
+- **Render Stage 4 non déployé.** L'auto-deploy OFF et le Stage 3 live ont été relus. La valeur actuelle de BETA_TEST_DEV_BYPASS n'est pas exposée par la lecture disponible ; l'opérateur doit vérifier la paire de paramètres privés avant l'autorisation de déploiement. Aucun secret ne doit être partagé. Le statut de la migration RLS supplémentaire et les permissions du rôle Prisma doivent également être contrôlés avant une migration expressément autorisée ; le Dockerfile configuré ne l'applique pas au démarrage.
+- **Test physique réservé à l'utilisateur.** Aucun POST de réservation réel, paiement, lancement de session native ou test de cinq minutes n'a été exécuté. Le parcours navigateur privé et sa gateway santé sont identifiés ; le site public Netlify est un autre déploiement.
+
+## Preuve logicielle à retenir
+
+L'archive acceptée est exclusivement l'artefact `stage4-unsigned-four-components-<SHA>` du workflow complet au HEAD final, avec quatre PE AMD64 et le manifeste externe vérifié. Un artefact `stage4-rejected-package-diagnostics-*` est une preuve d'échec, jamais un paquet installable. Les artefacts Host/helper isolés ou leurs hashes historiques ne satisfont pas ce contrat.
+
+Le premier build complet a bloqué sur la dépendance pefile exclue par PyInstaller ; le verrou a été corrigé. Le suivant a produit les quatre PE mais les deux lecteurs d'imports comparaient un tri régional à un tri ordinal ; la comparaison a été rendue déterministe et testée. Ne retenir que les résultats de la reconstruction finale, pas ces tentatives échouées.
+
+## Limites de vérification locale
+
+Les tests Python Agent, navigateur, lecteurs PE, Rust portables et tests API ciblés peuvent être exécutés ici. PowerShell local ne peut pas initialiser CoreCLR dans ce sandbox ; les vérifications 5.1/7 et le build PE sont exécutés sur les runners Windows GitHub. La suite API complète requiert PostgreSQL/Redis ; ses erreurs locales de connexion ne sont pas des PASS. La CI doit fournir les résultats de cette suite avec ses services réels. Aucun contrôle n'est désactivé pour transformer ces limites en succès.
