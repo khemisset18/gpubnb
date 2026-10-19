@@ -5,6 +5,8 @@ on:
       - prep/stage4-private-pc1-staging-20261016
     paths:
       - scripts/stage4-private-test-sign-copies.ps1
+      - scripts/stage4-prepare-timestamped-rollback.ps1
+      - scripts/tests/stage4-rollback.tests.ps1
       - scripts/stage4-private-certificate.ps1
       - scripts/stage4-package-common.ps1
       - scripts/tests/stage4-private-certificate.tests.ps1
@@ -13,6 +15,8 @@ on:
   pull_request:
     paths:
       - scripts/stage4-private-test-sign-copies.ps1
+      - scripts/stage4-prepare-timestamped-rollback.ps1
+      - scripts/tests/stage4-rollback.tests.ps1
       - scripts/stage4-private-certificate.ps1
       - scripts/stage4-package-common.ps1
       - scripts/tests/stage4-private-certificate.tests.ps1
@@ -38,6 +42,8 @@ jobs:
           if (-not $?) { throw 'private_pc1_preflight_powershell_failed' }
           & ./scripts/tests/stage4-private-certificate.tests.ps1
           if (-not $?) { throw 'private_certificate_powershell_failed' }
+          & ./scripts/tests/stage4-rollback.tests.ps1
+          if (-not $?) { throw 'stage4_rollback_powershell_failed' }
       - name: PowerShell 7 package and certificate policy checks
         shell: pwsh
         run: |
@@ -45,4 +51,6 @@ jobs:
           if (-not $?) { throw 'private_pc1_preflight_pwsh_failed' }
           & ./scripts/tests/stage4-private-certificate.tests.ps1
           if (-not $?) { throw 'private_certificate_pwsh_failed' }
+          & ./scripts/tests/stage4-rollback.tests.ps1
+          if (-not $?) { throw 'stage4_rollback_pwsh_failed' }
       # Intentionally no certificate, signing secret, artifact, install or deploy.
