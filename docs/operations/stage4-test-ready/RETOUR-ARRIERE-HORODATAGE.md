@@ -11,11 +11,11 @@
 
 Microsoft documente la commande SignTool timestamp, qui peut ajouter un horodatage RFC3161 SHA-256 à un exécutable **déjà signé**, sans remplacer l'identité du signataire. Le pin historique intégré dans le worker/helper reste celui de l'ancien signataire. Une signature horodatée et reconnue peut conserver sa validité après expiration de son certificat, mais uniquement si les chaînes de confiance, la politique Windows et l'horodatage sont valides.
 
-Références : https://learn.microsoft.com/en-us/windows/win32/seccrypto/signtool et https://learn.microsoft.com/en-us/windows/win32/seccrypto/time-stamping-authenticode-signatures
+Références : https://learn.microsoft.com/en-us/windows/win32/seccrypto/signtool et https://learn.microsoft.com/en-us/windows/win32/seccrypto/time-stamping-authenticode-signatures ; URL RFC3161 publiée par DigiCert : https://knowledge.digicert.com/solution/troubleshooting-timestamping-problems
 
 Aucune garantie n'est donnée : un serveur TSA peut refuser les certificats autosignés, être indisponible ou renvoyer un jeton invalide ; la confiance en contexte utilisateur ne prouve pas la confiance LocalSystem ou locataire. Un serveur de temps non approuvé est un **blocage**. Ne jamais désactiver Defender, WDAC, Secure Boot ou Authenticode pour contourner le refus.
 
-Le script scripts/stage4-prepare-timestamped-rollback.ps1 est en lecture seule par défaut. Il ne contacte **aucun** serveur TSA ni ne modifie le système sans le switch explicite -CreateTimestampedCopies. Une éventuelle requête TSA utilise HTTPS avec URL approuvée par l'opérateur ; cela constitue un échange réseau externe distinct à autoriser. Seule l'empreinte de signature est envoyée pour horodatage, jamais une clé privée ou un PFX.
+Le script scripts/stage4-prepare-timestamped-rollback.ps1 est en lecture seule par défaut. Il ne contacte **aucun** serveur TSA ni ne modifie le système sans le switch explicite -CreateTimestampedCopies. Une éventuelle requête TSA utilise une URL approuvée explicitement par l'opérateur : HTTPS par défaut ; seule exception HTTP admise par le script, l'URL exacte http://timestamp.digicert.com publiée par DigiCert. RFC3161 retourne un jeton signé et SignTool doit en vérifier la chaîne ; HTTP ne fournit aucune confidentialité ni protection contre le déni de service. Ne pas contourner les contrôles cryptographiques. Ceci constitue un échange réseau externe distinct à autoriser. Seule l'empreinte de signature est envoyée pour horodatage, jamais une clé privée ou un PFX.
 
 ### Préflight (lecture seule sur PC1)
 
@@ -33,16 +33,16 @@ Le retour lecture seule vérifie les quatre fichiers, leur signature, architectu
 
 ### Horodatage sur COPIES — non effectué et soumis à autorisation distincte
 
-Après sélection d'une TSA HTTPS RFC3161 SHA-256 reconnue et autorisation explicite de l'opérateur :
+Après sélection d'une TSA RFC3161 SHA-256 reconnue et autorisation explicite de l'opérateur :
 
 ~~~powershell
-$ReviewedTsa = Read-Host 'URL HTTPS de la TSA apres revue'
+$ReviewedTsa = Read-Host 'URL de la TSA apres revue (DigiCert officiel ou HTTPS approuve)'
 $Timestamped = Join-Path $env:USERPROFILE ('gpubnb-stage4-rollback-timestamped-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 
 .\scripts\stage4-prepare-timestamped-rollback.ps1 -BackupDirectory $B -ExpectedBackupManifestSha256 $BH -ExpectedSignerSha256 $OldPin -CreateTimestampedCopies -TimestampUrl $ReviewedTsa -OutputDirectory $Timestamped
 ~~~
 
-Le script refuse un dossier existant, un lien de redirection, des fichiers non conformes et une signature expirant dans 15 minutes ou moins. Il ne touche qu'aux quatre **nouvelles copies** ; vérifie les nouveaux fichiers par SignTool verify /pa /all /v et Authenticode, conserve le signer SHA256 historique, relève le certificat TSA, vérifie que les anciennes sources sont inchangées. Il écrit rollback-timestamp-evidence.json et laisse readyToRestore=false. Un échec laisse INCOMPLETE-DO-NOT-RESTORE.txt ; un tel dossier ne doit jamais être restauré.
+Le script refuse les URL HTTP autres que l'endpoint officiel DigiCert, un dossier existant, un lien de redirection, des fichiers non conformes et une signature expirant dans 15 minutes ou moins. Il ne touche qu'aux quatre **nouvelles copies** ; vérifie les nouveaux fichiers par SignTool verify /pa /all /v et Authenticode, conserve le signer SHA256 historique, relève le certificat TSA, vérifie que les anciennes sources sont inchangées. Il écrit rollback-timestamp-evidence.json et laisse readyToRestore=false. Un échec laisse INCOMPLETE-DO-NOT-RESTORE.txt ; un tel dossier ne doit jamais être restauré.
 
 ### Conditions encore requises avant de dire « retour arrière sûr »
 
