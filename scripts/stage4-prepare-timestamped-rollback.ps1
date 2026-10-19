@@ -28,11 +28,11 @@ if ($CreateTimestampedCopies) {
     if ([string]::IsNullOrWhiteSpace($OutputDirectory)) { throw 'stage4_rollback_output_required' }
     $uri = $null
     if (-not [Uri]::TryCreate($TimestampUrl,[UriKind]::Absolute,[ref]$uri) -or
-        $uri.Scheme -cne 'https' -or
+        ($uri.Scheme -cne 'https' -and $uri.AbsoluteUri -cne 'http://timestamp.digicert.com/') -or
         -not [string]::IsNullOrEmpty($uri.UserInfo) -or
         -not [string]::IsNullOrEmpty($uri.Fragment) -or
         $uri.Host -notmatch '^[a-zA-Z0-9.-]+$') {
-        throw 'stage4_rollback_https_tsa_required'
+        throw 'stage4_rollback_approved_tsa_url_required'
     }
 } elseif ($TimestampUrl -or $OutputDirectory) {
     throw 'stage4_rollback_create_switch_required'
