@@ -11,7 +11,7 @@ foreach($guard in @(
     'stage4_rollback_manifest_hash_mismatch',
     'stage4_rollback_component_hash_mismatch',
     'stage4_rollback_signature_invalid',
-    'stage4_rollback_https_tsa_required',
+    'stage4_rollback_approved_tsa_url_required',
     'stage4_rollback_timestamp_deadline_too_close',
     'INCOMPLETE-DO-NOT-RESTORE.txt',
     'stage4_rollback_timestamp_verify_failed',
@@ -37,10 +37,15 @@ try{
             throw ('stage4_rollback_test_expected:'+$Expected+':actual:'+$actual)
         }
     }
-    Expect-Error 'stage4_rollback_https_tsa_required' {
+    Expect-Error 'stage4_rollback_approved_tsa_url_required' {
         & $script -BackupDirectory $folder -ExpectedBackupManifestSha256 $hash -ExpectedSignerSha256 $pin -CreateTimestampedCopies -TimestampUrl 'http://untrusted.example' -OutputDirectory $output
     }
     Write-Host 'PASS non-HTTPS timestamp server rejected before any request'
+    Expect-Error 'stage4_rollback_manifest_missing' {
+        & $script -BackupDirectory $folder -ExpectedBackupManifestSha256 $hash -ExpectedSignerSha256 $pin -CreateTimestampedCopies -TimestampUrl 'http://timestamp.digicert.com' -OutputDirectory $output
+    }
+    Write-Host 'PASS exact DigiCert documented RFC3161 endpoint passes URL policy but no network request is made'
+
     Expect-Error 'stage4_rollback_create_switch_required' {
         & $script -BackupDirectory $folder -ExpectedBackupManifestSha256 $hash -ExpectedSignerSha256 $pin -TimestampUrl 'https://timestamp.example.invalid'
     }
