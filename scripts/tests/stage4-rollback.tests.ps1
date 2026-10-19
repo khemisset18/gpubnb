@@ -48,7 +48,7 @@ try{
     Expect-Error 'stage4_rollback_manifest_missing' {
         & $script -BackupDirectory $folder -ExpectedBackupManifestSha256 $hash -ExpectedSignerSha256 $pin
     }
-    [IO.File]::WriteAllText((Join-Path $folder 'backup.manifest.json'),'not json')
+    [IO.File]::WriteAllText((Join-Path $folder 'backup.manifest.json'),'{"schemaVersion":0,"kind":"INVALID","installationPerformed":false,"privateKeyExported":false,"serviceModified":false}')
     Expect-Error 'stage4_rollback_manifest_hash_mismatch' {
         & $script -BackupDirectory $folder -ExpectedBackupManifestSha256 $hash -ExpectedSignerSha256 $pin
     }
