@@ -36,6 +36,10 @@ from . import workspace_gateway as legacy
 from . import workspace_gateway_v8 as reconnect
 from .execution_control import ExecutionControlError
 from .gpu_rental_preemption import TRANSIENT_QUIESCENCE_REASONS, _resource_transition_lock
+from .windows_native_capability import (
+    fence_native_rental_launch,
+    native_rental_physical_cleanup_confirmed,
+)
 from .windows_native_runtime import (
     NativeRuntimeHandle,
     launch_windows_native_workspace,
@@ -211,6 +215,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
     def _release_native_claims(self, session_id: str) -> bool | None:
         claims = self.rental_preemption.claims_for_session(session_id)
         if not claims:
+            native_rental_physical_cleanup_confirmed(session_id)
             return True
         try:
             released = self.rental_preemption.release_after_cleanup(session_id)
@@ -235,6 +240,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             )
             return False
         self._release_server_leases(session_id, released)
+        native_rental_physical_cleanup_confirmed(session_id)
         return True
 
     @staticmethod
@@ -372,6 +378,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             self._recover_stale_native_claim(spec)
             return self.rental_preemption.preempt_for_rental(spec)
 
+    @fence_native_rental_launch
     def _start_native_runtime(
         self,
         session_id: str,
