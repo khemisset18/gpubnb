@@ -41,6 +41,7 @@ use gpubnb_windows_platform::session::{
     RenterSessionIsolationProof, ensure_provider_process_absent, query_renter_session_token,
 };
 use std::path::Path;
+use gpubnb_windows_platform::PlatformError;
 
 const WORKER_PATH: &str = r"C:\Program Files\GPUbnb\gpubnb-windows-worker.exe";
 const PIPE_TIMEOUT_MS: u32 = 10_000;
@@ -60,6 +61,15 @@ pub enum ServiceRuntimeError {
     WorkerHandshake,
     ExactGpu,
     VirtualDisplay,
+    VirtualDisplayInterfaceQuery,
+    VirtualDisplayInterfaceMissing,
+    VirtualDisplayInterfaceAmbiguous,
+    VirtualDisplayControlOpen,
+    VirtualDisplayControl,
+    VirtualDisplayGate,
+    VirtualDisplayBusy,
+    VirtualDisplayAccessDenied,
+    VirtualDisplayInvalidRequest,
     WorkerProtocol,
     MediaProof,
     MediaDiagnostic {
@@ -93,6 +103,15 @@ impl ServiceRuntimeError {
             Self::WorkerHandshake => "worker_handshake",
             Self::ExactGpu => "exact_gpu",
             Self::VirtualDisplay => "virtual_display",
+            Self::VirtualDisplayInterfaceQuery => "virtual_display_interface_query",
+            Self::VirtualDisplayInterfaceMissing => "virtual_display_interface_missing",
+            Self::VirtualDisplayInterfaceAmbiguous => "virtual_display_interface_ambiguous",
+            Self::VirtualDisplayControlOpen => "virtual_display_control_open",
+            Self::VirtualDisplayControl => "virtual_display_control",
+            Self::VirtualDisplayGate => "virtual_display_gate",
+            Self::VirtualDisplayBusy => "virtual_display_busy",
+            Self::VirtualDisplayAccessDenied => "virtual_display_access_denied",
+            Self::VirtualDisplayInvalidRequest => "virtual_display_invalid_request",
             Self::WorkerProtocol => "worker_protocol",
             Self::MediaProof => "media_proof",
             Self::MediaDiagnostic { .. } => "media_diagnostic",
@@ -684,6 +703,26 @@ fn validate_config(config: ServiceRuntimeConfig<'_>) -> Result<(), ServiceRuntim
     Ok(())
 }
 
+// Preserve the exact physical IddCx failure class through the self-test boundary.
+// In particular, device Status=OK does not imply the qualification-only
+// PlugMonitor gate is enabled in the installed UMDF binary.
+fn classify_virtual_display_failure(error: PlatformError) -> ServiceRuntimeError {
+    match error {
+        PlatformError::IddInterfaceQueryFailed => ServiceRuntimeError::VirtualDisplayInterfaceQuery,
+        PlatformError::IddInterfaceMissing => ServiceRuntimeError::VirtualDisplayInterfaceMissing,
+        PlatformError::IddInterfaceAmbiguous => ServiceRuntimeError::VirtualDisplayInterfaceAmbiguous,
+        PlatformError::IddControlOpenFailed => ServiceRuntimeError::VirtualDisplayControlOpen,
+        PlatformError::IddControlFailed => ServiceRuntimeError::VirtualDisplayControl,
+        PlatformError::IddUnsafeOperation => ServiceRuntimeError::VirtualDisplayGate,
+        PlatformError::IddControlBusy => ServiceRuntimeError::VirtualDisplayBusy,
+        PlatformError::IddControlAccessDenied => ServiceRuntimeError::VirtualDisplayAccessDenied,
+        PlatformError::IddControlInvalidRequest => ServiceRuntimeError::VirtualDisplayInvalidRequest,
+        PlatformError::GpuGraphicsIdentityUnavailable
+        | PlatformError::GpuGraphicsIdentityMismatch => ServiceRuntimeError::ExactGpu,
+        _ => ServiceRuntimeError::VirtualDisplay,
+    }
+}
+
 pub fn start_qualified_graphics_runtime(
     config: ServiceRuntimeConfig<'_>,
 ) -> Result<QualifiedGraphicsRuntime, ServiceRuntimeError> {
@@ -780,7 +819,7 @@ pub fn start_qualified_graphics_runtime(
             refresh_hz: config.refresh_hz,
         },
     )
-    .map_err(|_| ServiceRuntimeError::VirtualDisplay)?;
+    .map_err(classify_virtual_display_failure)?;
 
     let startup = (|| -> Result<(BoundMediaFrame, MediaCapabilityToken), ServiceRuntimeError> {
         let prepare = encode_worker_command(WorkerCommandFrame {
@@ -879,6 +918,28 @@ mod tests {
         assert!(matches!(RuntimeMediaState::Ready, RuntimeMediaState::Ready));
         assert_ne!(RuntimeMediaState::Ready, RuntimeMediaState::Suspended);
         assert_ne!(RuntimeMediaState::Suspended, RuntimeMediaState::Failed);
+    }
+
+    #[test]
+    fn virtual_display_failure_diagnostics_distinguish_gate_busy_and_driver_interface() {
+        let cases = [
+            (PlatformError::IddUnsafeOperation, "virtual_display_gate"),
+            (PlatformError::IddControlBusy, "virtual_display_busy"),
+            (PlatformError::IddControlAccessDenied, "virtual_display_access_denied"),
+            (PlatformError::IddControlInvalidRequest, "virtual_display_invalid_request"),
+            (PlatformError::IddInterfaceMissing, "virtual_display_interface_missing"),
+            (PlatformError::IddInterfaceQueryFailed, "virtual_display_interface_query"),
+            (PlatformError::IddInterfaceAmbiguous, "virtual_display_interface_ambiguous"),
+            (PlatformError::IddControlOpenFailed, "virtual_display_control_open"),
+            (PlatformError::IddControlFailed, "virtual_display_control"),
+            (PlatformError::GpuGraphicsIdentityMismatch, "exact_gpu"),
+        ];
+        for (platform_error, expected) in cases {
+            assert_eq!(
+                classify_virtual_display_failure(platform_error).diagnostic_code(),
+                expected
+            );
+        }
     }
 
     #[test]
