@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import platform
 import threading
+from functools import wraps
 import time
 from typing import Callable
 
@@ -33,6 +34,42 @@ class NativeDesktopCapabilitySnapshot:
     helper_version: str | None
     audio_available: bool
     measured_at: float
+
+
+# The helper self-test creates a real IddCx monitor and NVENC capture. It must
+# never run concurrently with preemption, native START or an active rental.
+# This lock is deliberately process-local to the single Agent supervisor.
+_PHYSICAL_PROBE_LOCK = threading.RLock()
+_FENCED_NATIVE_RENTALS: set[str] = set()
+
+def native_rental_physical_cleanup_confirmed(session_id: str) -> None:
+    """Unfence only after the helper STOP and GPU claim release were proven."""
+    with _PHYSICAL_PROBE_LOCK:
+        _FENCED_NATIVE_RENTALS.discard(session_id)
+        invalidate_native_desktop_capability_cache()
+
+
+def fence_native_rental_launch(fn):
+    """Serialize the complete GPU preemption + helper start against heartbeats.
+
+    Retain the fence after launch, or after uncertain cleanup, until the physical
+    owner proves release. A failed launch without any claim may be safely unfenced.
+    """
+    @wraps(fn)
+    def guarded(self, session_id: str, *args, **kwargs):
+        with _PHYSICAL_PROBE_LOCK:
+            _FENCED_NATIVE_RENTALS.add(session_id)
+            try:
+                return fn(self, session_id, *args, **kwargs)
+            finally:
+                try:
+                    claims = self.rental_preemption.claims_for_session(session_id)
+                except Exception:
+                    claims = [True]  # Indeterminate authority: fail closed.
+                if not claims:
+                    _FENCED_NATIVE_RENTALS.discard(session_id)
+                    invalidate_native_desktop_capability_cache()
+    return guarded
 
 
 _CACHE_LOCK = threading.Lock()
@@ -73,7 +110,7 @@ def cached_native_desktop_capability_snapshot() -> NativeDesktopCapabilitySnapsh
         return _CACHE[3] if _CACHE is not None else None
 
 
-def probe_native_desktop_capability(
+def _probe_native_desktop_capability_unfenced(
     *,
     force: bool = False,
     clock: Callable[[], float] = time.monotonic,
@@ -115,6 +152,30 @@ def probe_native_desktop_capability(
         snapshot = _snapshot(preflight, now)
         _CACHE = (*identity, snapshot)
         return snapshot
+
+
+def probe_native_desktop_capability(
+    *,
+    force: bool = False,
+    clock: Callable[[], float] = time.monotonic,
+) -> NativeDesktopCapabilitySnapshot:
+    """Do not create a qualification display while any rental owns the GPU."""
+    with _PHYSICAL_PROBE_LOCK:
+        if _FENCED_NATIVE_RENTALS:
+            # Do not reuse a READY cache as permission for a new physical probe.
+            # Emit an explicit bounded unavailable snapshot while GPU fencing
+            # or physical cleanup is in progress.
+            snapshot = _snapshot(
+                NativeDesktopPreflight(False, "native_rental_fenced"),
+                clock(),
+            )
+            helper = find_stream_helper()
+            identity = _helper_identity(helper)
+            global _CACHE
+            with _CACHE_LOCK:
+                _CACHE = (*identity, snapshot)
+            return snapshot
+        return _probe_native_desktop_capability_unfenced(force=force, clock=clock)
 
 
 def native_desktop_streaming_available_cached(*, force: bool = False) -> bool:
