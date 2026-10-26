@@ -14,6 +14,68 @@ class WindowsNativeCapabilityTests(unittest.TestCase):
     def tearDown(self) -> None:
         capability.invalidate_native_desktop_capability_cache()
 
+    def test_live_rental_fence_prevents_heartbeat_self_test_even_with_expired_cache(self):
+        class Owner:
+            class Claims:
+                @staticmethod
+                def claims_for_session(_session_id):
+                    return [object()]
+            rental_preemption = Claims()
+
+            @capability.fence_native_rental_launch
+            def launch(self, session_id):
+                return capability.probe_native_desktop_capability(clock=lambda: 101.0)
+
+        try:
+            with (
+                patch.object(capability.platform, "system", return_value="Windows"),
+                patch.object(capability, "find_stream_helper", return_value="helper.exe"),
+                patch.object(capability, "_helper_identity", return_value=("helper.exe", 1, 100)),
+                patch.object(capability, "windows_native_desktop_preflight") as preflight,
+            ):
+                during_launch = Owner().launch("test-session")
+                after_launch = capability.probe_native_desktop_capability(
+                    force=True, clock=lambda: 200.0
+                )
+            self.assertFalse(during_launch.available)
+            self.assertEqual(during_launch.reason, "native_rental_fenced")
+            self.assertFalse(after_launch.available)
+            self.assertEqual(after_launch.reason, "native_rental_fenced")
+            preflight.assert_not_called()
+        finally:
+            capability.native_rental_physical_cleanup_confirmed("test-session")
+
+    def test_only_confirmed_release_reenables_physical_qualification_probe(self):
+        class Owner:
+            class Claims:
+                @staticmethod
+                def claims_for_session(_session_id):
+                    return [object()]
+            rental_preemption = Claims()
+
+            @capability.fence_native_rental_launch
+            def launch(self, session_id):
+                return None
+
+        ready = NativeDesktopPreflight(
+            True, "ready", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+            "nvenc", "0.2", False,
+        )
+        Owner().launch("test-session")
+        try:
+            with (
+                patch.object(capability.platform, "system", return_value="Windows"),
+                patch.object(capability, "find_stream_helper", return_value="helper.exe"),
+                patch.object(capability, "_helper_identity", return_value=("helper.exe", 1, 100)),
+                patch.object(capability, "windows_native_desktop_preflight", return_value=ready) as preflight,
+            ):
+                capability.native_rental_physical_cleanup_confirmed("test-session")
+                result = capability.probe_native_desktop_capability(clock=lambda: 201.0)
+                self.assertTrue(result.available)
+                preflight.assert_called_once_with("helper.exe")
+        finally:
+            capability.native_rental_physical_cleanup_confirmed("test-session")
+
     def test_non_windows_is_immediately_unavailable_without_helper_probe(self):
         with (
             patch.object(capability.platform, "system", return_value="Linux"),
