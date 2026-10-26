@@ -13,7 +13,7 @@ pub const IDD_CONTROL_REQUEST_SIZE: usize = 64;
 // handles or physical device paths in helper/browser-visible diagnostics.
 fn classify_control_failure(win32_error: i32) -> PlatformError {
     match win32_error {
-        50 => PlatformError::IddUnsafeOperation,    // ERROR_NOT_SUPPORTED (mutation gate)
+        50 => PlatformError::IddUnsafeOperation, // ERROR_NOT_SUPPORTED (mutation gate)
         170 | 2404 => PlatformError::IddControlBusy, // ERROR_BUSY / ERROR_DEVICE_IN_USE
         5 => PlatformError::IddControlAccessDenied, // ERROR_ACCESS_DENIED
         1 | 87 => PlatformError::IddControlInvalidRequest, // INVALID_FUNCTION/PARAMETER
@@ -548,13 +548,31 @@ mod tests {
 
     #[test]
     fn driver_control_failures_have_bounded_fail_closed_classes() {
-        assert_eq!(classify_control_failure(50), PlatformError::IddUnsafeOperation);
+        assert_eq!(
+            classify_control_failure(50),
+            PlatformError::IddUnsafeOperation
+        );
         assert_eq!(classify_control_failure(170), PlatformError::IddControlBusy);
-        assert_eq!(classify_control_failure(2404), PlatformError::IddControlBusy);
-        assert_eq!(classify_control_failure(5), PlatformError::IddControlAccessDenied);
-        assert_eq!(classify_control_failure(87), PlatformError::IddControlInvalidRequest);
-        assert_eq!(classify_control_failure(1), PlatformError::IddControlInvalidRequest);
-        assert_eq!(classify_control_failure(123456), PlatformError::IddControlFailed);
+        assert_eq!(
+            classify_control_failure(2404),
+            PlatformError::IddControlBusy
+        );
+        assert_eq!(
+            classify_control_failure(5),
+            PlatformError::IddControlAccessDenied
+        );
+        assert_eq!(
+            classify_control_failure(87),
+            PlatformError::IddControlInvalidRequest
+        );
+        assert_eq!(
+            classify_control_failure(1),
+            PlatformError::IddControlInvalidRequest
+        );
+        assert_eq!(
+            classify_control_failure(123456),
+            PlatformError::IddControlFailed
+        );
     }
 
     #[test]
