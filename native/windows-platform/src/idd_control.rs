@@ -11,6 +11,7 @@ pub const IDD_CONTROL_REQUEST_SIZE: usize = 64;
 
 // Translate only stable Windows error classes; never expose raw kernel errors,
 // handles or physical device paths in helper/browser-visible diagnostics.
+#[cfg(any(target_os = "windows", test))]
 fn classify_control_failure(win32_error: i32) -> PlatformError {
     match win32_error {
         50 => PlatformError::IddUnsafeOperation, // ERROR_NOT_SUPPORTED (mutation gate)
