@@ -23,6 +23,7 @@ use crate::worker_protocol::{
     encode_worker_command, encode_worker_display_spec, encode_worker_input,
     validate_worker_media_diagnostic, validate_worker_media_poll, validate_worker_media_proof,
 };
+use gpubnb_windows_platform::PlatformError;
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
 use gpubnb_windows_platform::idd_control::{
     VirtualDisplayLease, VirtualDisplayOperation, VirtualDisplayRequest,
@@ -41,7 +42,6 @@ use gpubnb_windows_platform::session::{
     RenterSessionIsolationProof, ensure_provider_process_absent, query_renter_session_token,
 };
 use std::path::Path;
-use gpubnb_windows_platform::PlatformError;
 
 const WORKER_PATH: &str = r"C:\Program Files\GPUbnb\gpubnb-windows-worker.exe";
 const PIPE_TIMEOUT_MS: u32 = 10_000;
@@ -710,13 +710,17 @@ fn classify_virtual_display_failure(error: PlatformError) -> ServiceRuntimeError
     match error {
         PlatformError::IddInterfaceQueryFailed => ServiceRuntimeError::VirtualDisplayInterfaceQuery,
         PlatformError::IddInterfaceMissing => ServiceRuntimeError::VirtualDisplayInterfaceMissing,
-        PlatformError::IddInterfaceAmbiguous => ServiceRuntimeError::VirtualDisplayInterfaceAmbiguous,
+        PlatformError::IddInterfaceAmbiguous => {
+            ServiceRuntimeError::VirtualDisplayInterfaceAmbiguous
+        }
         PlatformError::IddControlOpenFailed => ServiceRuntimeError::VirtualDisplayControlOpen,
         PlatformError::IddControlFailed => ServiceRuntimeError::VirtualDisplayControl,
         PlatformError::IddUnsafeOperation => ServiceRuntimeError::VirtualDisplayGate,
         PlatformError::IddControlBusy => ServiceRuntimeError::VirtualDisplayBusy,
         PlatformError::IddControlAccessDenied => ServiceRuntimeError::VirtualDisplayAccessDenied,
-        PlatformError::IddControlInvalidRequest => ServiceRuntimeError::VirtualDisplayInvalidRequest,
+        PlatformError::IddControlInvalidRequest => {
+            ServiceRuntimeError::VirtualDisplayInvalidRequest
+        }
         PlatformError::GpuGraphicsIdentityUnavailable
         | PlatformError::GpuGraphicsIdentityMismatch => ServiceRuntimeError::ExactGpu,
         _ => ServiceRuntimeError::VirtualDisplay,
@@ -925,12 +929,30 @@ mod tests {
         let cases = [
             (PlatformError::IddUnsafeOperation, "virtual_display_gate"),
             (PlatformError::IddControlBusy, "virtual_display_busy"),
-            (PlatformError::IddControlAccessDenied, "virtual_display_access_denied"),
-            (PlatformError::IddControlInvalidRequest, "virtual_display_invalid_request"),
-            (PlatformError::IddInterfaceMissing, "virtual_display_interface_missing"),
-            (PlatformError::IddInterfaceQueryFailed, "virtual_display_interface_query"),
-            (PlatformError::IddInterfaceAmbiguous, "virtual_display_interface_ambiguous"),
-            (PlatformError::IddControlOpenFailed, "virtual_display_control_open"),
+            (
+                PlatformError::IddControlAccessDenied,
+                "virtual_display_access_denied",
+            ),
+            (
+                PlatformError::IddControlInvalidRequest,
+                "virtual_display_invalid_request",
+            ),
+            (
+                PlatformError::IddInterfaceMissing,
+                "virtual_display_interface_missing",
+            ),
+            (
+                PlatformError::IddInterfaceQueryFailed,
+                "virtual_display_interface_query",
+            ),
+            (
+                PlatformError::IddInterfaceAmbiguous,
+                "virtual_display_interface_ambiguous",
+            ),
+            (
+                PlatformError::IddControlOpenFailed,
+                "virtual_display_control_open",
+            ),
             (PlatformError::IddControlFailed, "virtual_display_control"),
             (PlatformError::GpuGraphicsIdentityMismatch, "exact_gpu"),
         ];
