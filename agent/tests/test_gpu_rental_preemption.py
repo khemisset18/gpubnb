@@ -346,6 +346,44 @@ class RentalPreemptionTests(unittest.TestCase):
         self.assertEqual(self.claim_store.load(), {})
         self.assertEqual(self.runtime_store.load()["resource_00000002"].state, "MINING")
 
+    def test_transient_cleanup_quiescence_defers_release_without_quarantine(self) -> None:
+        self._seed_two_miners()
+        rental = spec("resource_00000001", "GPU-aaaaaaaa", 9)
+        self.supervisor.preempt_for_rental(rental)
+        self.probe.fail_for.add("GPU-aaaaaaaa")
+
+        with self.assertRaisesRegex(ExecutionControlError, "rental_gpu_compute_processes_present"):
+            self.supervisor.release_after_cleanup(rental.session_id)
+
+        # No GPU lease is released while telemetry reports a foreign client.
+        # Equally important, a transient observation must not permanently
+        # quarantine either the rental fence or the mining runtime.
+        self.assertEqual(self.claim_store.load()[rental.resource_id].state, "QUIESCENT")
+        self.assertEqual(self.runtime_store.load()[rental.resource_id].state, "STOPPED")
+
+        self.probe.fail_for.discard("GPU-aaaaaaaa")
+        released = self.supervisor.release_after_cleanup(rental.session_id)
+
+        self.assertEqual([claim.resource_id for claim in released], [rental.resource_id])
+        self.assertEqual(self.claim_store.load(), {})
+        self.assertEqual(self.runtime_store.load()[rental.resource_id].state, "STOPPED")
+
+    def test_nontransient_cleanup_probe_error_still_quarantines(self) -> None:
+        self._seed_two_miners()
+        rental = spec("resource_00000001", "GPU-aaaaaaaa", 9)
+        self.supervisor.preempt_for_rental(rental)
+
+        with patch.object(
+            self.probe,
+            "prove",
+            side_effect=ExecutionControlError("rental_gpu_probe_failed"),
+        ):
+            with self.assertRaisesRegex(ExecutionControlError, "rental_gpu_probe_failed"):
+                self.supervisor.release_after_cleanup(rental.session_id)
+
+        self.assertEqual(self.claim_store.load()[rental.resource_id].state, "QUARANTINED")
+        self.assertEqual(self.runtime_store.load()[rental.resource_id].state, "QUARANTINED")
+
     def test_stale_rental_fence_cannot_preempt_newer_mining_generation(self) -> None:
         self._seed_two_miners()
         records = self.runtime_store.load()
