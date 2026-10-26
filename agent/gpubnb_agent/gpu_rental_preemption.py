@@ -636,6 +636,11 @@ class RentalPreemptionSupervisor:
                     try:
                         self.probe.prove(claim.hardware_uuid)
                     except ExecutionControlError as exc:
+                        if str(exc) in TRANSIENT_QUIESCENCE_REASONS:
+                            # A temporary GPU client/noise is not a cleanup
+                            # failure. Preserve the exact rental fence until
+                            # a subsequent attempt freshly proves quiescence.
+                            raise
                         spec = RentalResourceSpec(
                             claim.session_id,
                             claim.resource_id,
