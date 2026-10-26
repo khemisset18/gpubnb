@@ -820,7 +820,12 @@ mod tests {
             bounded_runtime_failure_code("virtual_display_interface_missing"),
             Some("virtual_display_interface_missing")
         );
-        for code in ["virtual_display_gate", "virtual_display_busy", "virtual_display_access_denied", "virtual_display_invalid_request"] {
+        for code in [
+            "virtual_display_gate",
+            "virtual_display_busy",
+            "virtual_display_access_denied",
+            "virtual_display_invalid_request",
+        ] {
             assert_eq!(bounded_runtime_failure_code(code), Some(code));
         }
         assert_eq!(bounded_runtime_failure_code("media_transport:token"), None);
