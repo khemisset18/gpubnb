@@ -9,6 +9,19 @@ use crate::gpu_identity::resolve_nvidia_uuid_to_luid;
 pub const IDD_CONTROL_VERSION: u32 = 1;
 pub const IDD_CONTROL_REQUEST_SIZE: usize = 64;
 
+// Translate only stable Windows error classes; never expose raw kernel errors,
+// handles or physical device paths in helper/browser-visible diagnostics.
+#[cfg(any(target_os = "windows", test))]
+fn classify_control_failure(win32_error: i32) -> PlatformError {
+    match win32_error {
+        50 => PlatformError::IddUnsafeOperation, // ERROR_NOT_SUPPORTED (mutation gate)
+        170 | 2404 => PlatformError::IddControlBusy, // ERROR_BUSY / ERROR_DEVICE_IN_USE
+        5 => PlatformError::IddControlAccessDenied, // ERROR_ACCESS_DENIED
+        1 | 87 => PlatformError::IddControlInvalidRequest, // INVALID_FUNCTION/PARAMETER
+        _ => PlatformError::IddControlFailed,
+    }
+}
+
 // Explicit mutation gate mirrored from the UMDF driver. Physical qualification
 // and Stage 4 release-candidate builds are distinct authorities; both default
 // off and neither changes public bookability on its own.
@@ -254,7 +267,7 @@ pub fn probe_idd_control_contract(request: VirtualDisplayRequest) -> Result<(), 
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
-    use super::IDD_CONTROL_REQUEST_SIZE;
+    use super::{IDD_CONTROL_REQUEST_SIZE, classify_control_failure};
     use crate::PlatformError;
     use std::ffi::{OsStr, c_void};
     use std::os::windows::ffi::OsStrExt;
@@ -461,7 +474,14 @@ mod windows_impl {
                 ptr::null_mut(),
             )
         };
-        if ok == 0 || bytes_returned != 0 {
+        if ok == 0 {
+            // Capture GetLastError immediately after the failed IOCTL. The
+            // driver returns STATUS_NOT_SUPPORTED when its physical monitor
+            // mutation gate is closed, even if PnP reports device Status=OK.
+            let win32_error = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+            return Err(classify_control_failure(win32_error));
+        }
+        if bytes_returned != 0 {
             return Err(PlatformError::IddControlFailed);
         }
         Ok(())
@@ -525,6 +545,35 @@ mod tests {
             height: 1080,
             refresh_hz: 60,
         }
+    }
+
+    #[test]
+    fn driver_control_failures_have_bounded_fail_closed_classes() {
+        assert_eq!(
+            classify_control_failure(50),
+            PlatformError::IddUnsafeOperation
+        );
+        assert_eq!(classify_control_failure(170), PlatformError::IddControlBusy);
+        assert_eq!(
+            classify_control_failure(2404),
+            PlatformError::IddControlBusy
+        );
+        assert_eq!(
+            classify_control_failure(5),
+            PlatformError::IddControlAccessDenied
+        );
+        assert_eq!(
+            classify_control_failure(87),
+            PlatformError::IddControlInvalidRequest
+        );
+        assert_eq!(
+            classify_control_failure(1),
+            PlatformError::IddControlInvalidRequest
+        );
+        assert_eq!(
+            classify_control_failure(123456),
+            PlatformError::IddControlFailed
+        );
     }
 
     #[test]

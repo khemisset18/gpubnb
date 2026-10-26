@@ -172,6 +172,29 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
         self.assertFalse(result.available)
         self.assertEqual(result.reason, "virtual_display_control_open")
 
+    def test_bounded_virtual_display_driver_subcauses_do_not_echo_stderr(self):
+        for reason in (
+            "virtual_display_gate",
+            "virtual_display_busy",
+            "virtual_display_access_denied",
+            "virtual_display_invalid_request",
+        ):
+            with (
+                self.subTest(reason=reason),
+                patch.object(native.platform, "system", return_value="Windows"),
+                patch.object(
+                    native, "run_command",
+                    return_value=SimpleNamespace(
+                        returncode=21,
+                        stdout=json.dumps({"ok": False, "error": reason}),
+                        stderr="device-path-and-provider-files-must-remain-private",
+                    ),
+                ),
+            ):
+                result = native.windows_native_desktop_preflight("helper.exe")
+            self.assertFalse(result.available)
+            self.assertEqual(result.reason, reason)
+
     def test_unknown_helper_self_test_error_stays_generic(self):
         with (
             patch.object(native.platform, "system", return_value="Windows"),
