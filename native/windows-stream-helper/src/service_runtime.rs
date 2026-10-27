@@ -932,7 +932,10 @@ mod tests {
         let cases = [
             (PlatformError::IddUnsafeOperation, "virtual_display_gate"),
             (PlatformError::IddControlBusy, "virtual_display_busy"),
-            (PlatformError::IddControlNotReady, "virtual_display_not_ready"),
+            (
+                PlatformError::IddControlNotReady,
+                "virtual_display_not_ready",
+            ),
             (
                 PlatformError::IddControlAccessDenied,
                 "virtual_display_access_denied",

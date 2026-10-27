@@ -34,6 +34,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  incident-evidence:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Read-only collector fixtures on Windows PowerShell 5.1
+        shell: powershell
+        run: ./scripts/tests/stage4-pc1-incident-evidence.tests.ps1
+      - name: Read-only collector fixtures on PowerShell 7
+        shell: pwsh
+        run: ./scripts/tests/stage4-pc1-incident-evidence.tests.ps1
+
   contract:
     strategy:
       fail-fast: false
@@ -171,11 +185,6 @@ jobs:
             exit 1
           fi
           python -c 'import json,sys; r=json.loads(sys.argv[1]); assert r == {"ok": False, "error": "windows_required"}' "$reply"
-
-      - name: Incident collector fixtures on Windows PowerShell 5.1
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: ./scripts/tests/stage4-pc1-incident-evidence.tests.ps1
 
       - name: Helper must fail closed without a physical renter lease
         if: runner.os == 'Windows'

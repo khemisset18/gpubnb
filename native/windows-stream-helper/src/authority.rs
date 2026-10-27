@@ -846,7 +846,10 @@ mod tests {
     #[test]
     fn self_test_cleanup_failure_takes_precedence_over_media_failure() {
         assert_eq!(
-            checked_self_test_cleanup(Err(AuthorityError::MediaProof), Err(AuthorityError::Cleanup)),
+            checked_self_test_cleanup(
+                Err(AuthorityError::MediaProof),
+                Err(AuthorityError::Cleanup)
+            ),
             Err(AuthorityError::Cleanup)
         );
         assert_eq!(
