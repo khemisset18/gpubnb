@@ -15,7 +15,7 @@ from typing import Any, Callable
 
 from .execution_control import ExecutionControlError
 from .gpu_rental_preemption import RentalClaimRecord, RentalPreemptionSupervisor
-from .gpu_resource_supervisor import MAX_GENERATION, SAFE_ID, RuntimeRecord
+from .gpu_resource_supervisor import MAX_GENERATION, SAFE_ID, GpuResourceSupervisor, RuntimeRecord
 from .physical_gpu_authority import PHYSICAL_GPU_LOCK
 from .windows_native_capability import native_rental_physical_cleanup_confirmed
 from .windows_native_runtime import stop_windows_native_workspace
@@ -53,7 +53,9 @@ class NativeQuarantineRecovery:
             raise ExecutionControlError("native_cleanup_scope_unverified")
         self.diagnostic_run_id = diagnostic_run_id
         self.target = dict(target)
-        self.supervisor = supervisor or RentalPreemptionSupervisor()
+        self.supervisor = supervisor or RentalPreemptionSupervisor(
+            mining=GpuResourceSupervisor(reconcile_on_start=False),
+        )
         self.authorize = authorize
         self.stop = stop or stop_windows_native_workspace
         self._prepared: tuple[_Snapshot, int] | None = None

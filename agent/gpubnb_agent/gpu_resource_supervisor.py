@@ -438,13 +438,17 @@ class GpuResourceSupervisor:
         inspector: ProcessInspector | None = None,
         launcher: ProcessLauncher | None = None,
         binding_resolver: Any = None,
+        reconcile_on_start: bool = True,
     ) -> None:
         self.store = store or RuntimeStore()
         self.inspector = inspector or SystemProcessInspector()
         self.launcher = launcher or SystemLauncher()
         self.binding_resolver = binding_resolver or resolve_nvidia_binding
         self._lock = threading.RLock()
-        self.reconcile()
+        # Read-only quarantine preparation must inspect the original records
+        # before any reconciliation can rewrite mining state or process identity.
+        if reconcile_on_start:
+            self.reconcile()
 
     def reconcile(self) -> dict[str, str]:
         with self._lock:

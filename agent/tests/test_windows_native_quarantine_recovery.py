@@ -64,6 +64,23 @@ class NativeQuarantineRecoveryTests(unittest.TestCase):
         self.assertEqual([c.args[0]["runtimeGeneration"] for c in self.authorize.call_args_list], ["90", "92"])
         self.unfence.assert_not_called()
 
+    def test_default_constructor_preserves_unsafe_records_before_diagnostic_authorization(self) -> None:
+        # The production constructor used to reconcile MINING -> QUARANTINED
+        # before _snapshot(), making an unsafe original state look recoverable.
+        self.runtime.save({self.record.resource_id: replace(self.record, state="MINING")})
+        before = self.bytes()
+        with (patch("gpubnb_agent.gpu_resource_supervisor.RuntimeStore", return_value=self.runtime),
+              patch("gpubnb_agent.gpu_rental_preemption.RentalClaimStore", return_value=self.claims),
+              patch("gpubnb_agent.gpu_resource_supervisor.SystemProcessInspector") as inspector):
+            recovery = NativeQuarantineRecovery(RUN, TARGET, self.authorize, stop=self.stop)
+            self.assertEqual(self.bytes(), before)
+            with self.assertRaisesRegex(ExecutionControlError, "runtime_process_unverified"):
+                recovery.prepare()
+        self.assertEqual(self.bytes(), before)
+        self.authorize.assert_not_called()
+        self.stop.assert_not_called()
+        inspector.return_value.inspect.assert_not_called()
+
     def test_finish_reproves_and_releases_preserving_server_floor_and_files(self) -> None:
         recovery = self.recovery()
         recovery.prepare()
