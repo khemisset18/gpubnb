@@ -12,12 +12,13 @@ import csv
 import json
 import ntpath
 import os
+from contextlib import contextmanager, nullcontext
 import tempfile
 import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .execution_control import ExecutionControlError, ExecutionResult
 from .gpu_resource_supervisor import (
@@ -29,6 +30,7 @@ from .gpu_resource_supervisor import (
     RuntimeRecord,
 )
 from .platform_info import find_nvidia_smi, run_command
+from .physical_gpu_authority import PHYSICAL_GPU_LOCK
 from .storage import config_dir
 
 RENTAL_SCHEMA_VERSION = 1
@@ -56,20 +58,23 @@ _RESOURCE_LOCKS_GUARD = threading.Lock()
 _RESOURCE_LOCKS: dict[str, threading.RLock] = {}
 
 
-def _resource_transition_lock(resource_id: str) -> threading.RLock:
+@contextmanager
+def _resource_transition_lock(resource_id: str) -> Iterator[None]:
     """Return the process-local transition lock for one MiningResource.
 
     Mining mutations already accepted by the control channel can race with the
     first rental reconciliation.  Sharing this lock between START/STOP_MINING and
     rental preemption closes that local delivery window without serializing other
-    GPUs on the same host.
+    GPUs on Linux. Windows physical qualification can touch a display adapter,
+    so Windows also serializes these transitions against the physical probe.
     """
     with _RESOURCE_LOCKS_GUARD:
         lock = _RESOURCE_LOCKS.get(resource_id)
         if lock is None:
             lock = threading.RLock()
             _RESOURCE_LOCKS[resource_id] = lock
-        return lock
+    with (PHYSICAL_GPU_LOCK if os.name == "nt" else nullcontext()), lock:
+        yield
 
 
 @dataclass(frozen=True)
@@ -621,7 +626,7 @@ class RentalPreemptionSupervisor:
         return True
 
     def release_after_cleanup(self, session_id: str) -> list[RentalClaimRecord]:
-        with self._lock:
+        with (PHYSICAL_GPU_LOCK if os.name == "nt" else nullcontext()), self._lock:
             claims = self.claims.load()
             selected = sorted(
                 (claim for claim in claims.values() if claim.session_id == session_id),

@@ -69,6 +69,7 @@ pub enum ServiceRuntimeError {
     VirtualDisplayGate,
     VirtualDisplayBusy,
     VirtualDisplayAccessDenied,
+    VirtualDisplayNotReady,
     VirtualDisplayInvalidRequest,
     WorkerProtocol,
     MediaProof,
@@ -111,6 +112,7 @@ impl ServiceRuntimeError {
             Self::VirtualDisplayGate => "virtual_display_gate",
             Self::VirtualDisplayBusy => "virtual_display_busy",
             Self::VirtualDisplayAccessDenied => "virtual_display_access_denied",
+            Self::VirtualDisplayNotReady => "virtual_display_not_ready",
             Self::VirtualDisplayInvalidRequest => "virtual_display_invalid_request",
             Self::WorkerProtocol => "worker_protocol",
             Self::MediaProof => "media_proof",
@@ -718,6 +720,7 @@ fn classify_virtual_display_failure(error: PlatformError) -> ServiceRuntimeError
         PlatformError::IddUnsafeOperation => ServiceRuntimeError::VirtualDisplayGate,
         PlatformError::IddControlBusy => ServiceRuntimeError::VirtualDisplayBusy,
         PlatformError::IddControlAccessDenied => ServiceRuntimeError::VirtualDisplayAccessDenied,
+        PlatformError::IddControlNotReady => ServiceRuntimeError::VirtualDisplayNotReady,
         PlatformError::IddControlInvalidRequest => {
             ServiceRuntimeError::VirtualDisplayInvalidRequest
         }
@@ -929,6 +932,7 @@ mod tests {
         let cases = [
             (PlatformError::IddUnsafeOperation, "virtual_display_gate"),
             (PlatformError::IddControlBusy, "virtual_display_busy"),
+            (PlatformError::IddControlNotReady, "virtual_display_not_ready"),
             (
                 PlatformError::IddControlAccessDenied,
                 "virtual_display_access_denied",

@@ -120,6 +120,59 @@ class WindowsNativeStaleClaimRecoveryTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
+    def seed_quarantine(self) -> None:
+        self.claims.save({RESOURCE: claim_for(self.old, "QUARANTINED")})
+        records = self.runtime.load()
+        records[RESOURCE].state = "QUARANTINED"
+        self.runtime.save(records)
+
+    def test_quarantine_requires_server_authority_stop_and_fresh_quiescence(self) -> None:
+        self.seed_quarantine()
+        with patch("gpubnb_agent.workspace_gateway_v10.stop_windows_native_workspace") as stop:
+            proof = self.supervisor._preempt_native_spec(self.new)
+        stop.assert_called_once_with(OLD_SESSION)
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(self.probe.calls, [GPU, GPU])
+        self.assertEqual(proof.hardware_uuid, GPU)
+        self.assertEqual(self.claims.load()[RESOURCE].state, "QUIESCENT")
+        self.assertEqual(self.claims.load()[RESOURCE].runtime_generation, 71)
+        self.assertEqual(self.runtime.load()[RESOURCE].state, "STOPPED")
+
+    def test_denied_quarantine_recovery_preserves_both_stores(self) -> None:
+        self.seed_quarantine()
+        before = (self.claims.path.read_bytes(), self.runtime.path.read_bytes())
+        self.supervisor._request = lambda *_args, **_kwargs: {"allowed": False}
+        with patch("gpubnb_agent.workspace_gateway_v10.stop_windows_native_workspace") as stop:
+            with self.assertRaisesRegex(ExecutionControlError, "not_authorized"):
+                self.supervisor._preempt_native_spec(self.new)
+        stop.assert_not_called()
+        self.assertEqual((self.claims.path.read_bytes(), self.runtime.path.read_bytes()), before)
+
+    def test_quarantine_recovery_resumes_after_runtime_advance_crash(self) -> None:
+        self.seed_quarantine()
+        records = self.runtime.load()
+        records[RESOURCE].state = "STOPPED"
+        records[RESOURCE].runtime_generation = self.new.runtime_generation
+        self.runtime.save(records)
+        with patch("gpubnb_agent.workspace_gateway_v10.stop_windows_native_workspace") as stop:
+            self.supervisor._preempt_native_spec(self.new)
+        stop.assert_called_once_with(OLD_SESSION)
+        self.assertEqual(self.claims.load()[RESOURCE].state, "QUIESCENT")
+        self.assertEqual(self.claims.load()[RESOURCE].runtime_generation, self.new.runtime_generation)
+
+    def test_failed_quarantine_stop_or_quiescence_never_advances_fence(self) -> None:
+        for failure in ("stop", "quiescence"):
+            with self.subTest(failure=failure):
+                self.seed_quarantine()
+                before = (self.claims.path.read_bytes(), self.runtime.path.read_bytes())
+                with (
+                    patch("gpubnb_agent.workspace_gateway_v10.stop_windows_native_workspace", side_effect=RuntimeError("unverified") if failure == "stop" else None),
+                    patch.object(self.probe, "prove", side_effect=ExecutionControlError("rental_gpu_compute_processes_present")),
+                ):
+                    with self.assertRaisesRegex(ExecutionControlError, "cleanup_unverified"):
+                        self.supervisor._preempt_native_spec(self.new)
+                self.assertEqual((self.claims.path.read_bytes(), self.runtime.path.read_bytes()), before)
+
     def test_newer_signed_native_authority_recovers_stale_active_claim_after_physical_cleanup(self) -> None:
         with patch(
             "gpubnb_agent.workspace_gateway_v10.stop_windows_native_workspace",

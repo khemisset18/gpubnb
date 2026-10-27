@@ -189,7 +189,12 @@ def launch_windows_native_workspace(
     # effects for no security benefit.
     preflight = windows_native_desktop_preflight(executable)
     if not preflight.available:
-        raise RuntimeError(preflight.reason)
+        # --self-test itself creates graphics resources. A timeout, malformed
+        # report or failed media proof cannot establish that they were cleaned.
+        # STOP also asserts global monitor absence when no authority exists.
+        _raise_after_started_session_validation_failure(
+            executable, session_id, preflight.reason
+        )
     if not preflight.gpu_uuid or preflight.gpu_uuid.casefold() != gpu_uuid.casefold():
         raise RuntimeError("native_stream_leased_gpu_mismatch")
     if profile.requires_audio and not preflight.audio_available:

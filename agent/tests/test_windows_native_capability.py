@@ -1,18 +1,122 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
+import threading
+from pathlib import Path
 from unittest.mock import patch
 
 from gpubnb_agent import windows_native_capability as capability
 from gpubnb_agent.windows_native_workspace import NativeDesktopPreflight
+from gpubnb_agent.gpu_rental_preemption import RentalClaimRecord, RentalClaimStore, _resource_transition_lock
+from gpubnb_agent.gpu_resource_supervisor import RuntimeRecord, RuntimeStore
 
 
 class WindowsNativeCapabilityTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.root = tempfile.TemporaryDirectory()
+        self.addCleanup(self.root.cleanup)
+        self.config = patch.dict("os.environ", {"GPUBNB_CONFIG_DIR": self.root.name})
+        self.config.start()
+        self.addCleanup(self.config.stop)
         capability.invalidate_native_desktop_capability_cache()
 
     def tearDown(self) -> None:
         capability.invalidate_native_desktop_capability_cache()
+
+    def test_persisted_rental_states_fence_probe_after_agent_restart(self):
+        store = RentalClaimStore()
+        for state in ("PREEMPTING", "QUIESCENT", "RENTAL_ACTIVE", "QUARANTINED"):
+            with self.subTest(state=state):
+                record = RentalClaimRecord(
+                    "old_session", "resource_one", "GPU-aaaaaaaa", 90,
+                    "rental:old_session", "old_lease", "90", state, 1,
+                )
+                store.save({record.resource_id: record})
+                before = store.path.read_bytes()
+                self.assertFalse(capability._FENCED_NATIVE_RENTALS)
+                with (
+                    patch.object(capability.platform, "system", return_value="Windows"),
+                    patch.object(capability, "find_stream_helper", return_value=None),
+                    patch.object(capability, "windows_native_desktop_preflight") as preflight,
+                ):
+                    result = capability.probe_native_desktop_capability(force=True)
+                self.assertEqual(result.reason, "native_rental_fenced")
+                preflight.assert_not_called()
+                self.assertEqual(store.path.read_bytes(), before)
+
+    def test_durable_claim_overrides_fresh_ready_cache(self):
+        with (
+            patch.object(capability.platform, "system", return_value="Windows"),
+            patch.object(capability, "find_stream_helper", return_value=None),
+            patch.object(capability, "windows_native_desktop_preflight", return_value=NativeDesktopPreflight(True, "ready")) as preflight,
+        ):
+            self.assertTrue(capability.probe_native_desktop_capability().available)
+            RentalClaimStore().save({"resource_one": RentalClaimRecord(
+                "old_session", "resource_one", "GPU-aaaaaaaa", 90,
+                "rental:old_session", "old_lease", "90", "QUARANTINED", 1,
+            )})
+            result = capability.probe_native_desktop_capability()
+        self.assertEqual(result.reason, "native_rental_fenced")
+        self.assertEqual(preflight.call_count, 1)
+
+    def test_runtime_quarantine_or_process_identity_blocks_probe_without_claim(self):
+        store = RuntimeStore()
+        for state, pid, token in (("QUARANTINED", None, None), ("MINING", 123, "creation"), ("STOPPED", 123, None), ("STOPPED", None, "creation")):
+            with self.subTest(state=state, pid=pid, token=token):
+                store.save({"resource_one": RuntimeRecord(
+                    "resource_one", "GPU-aaaaaaaa", 90, state,
+                    pid=pid, process_creation_token=token,
+                )})
+                with (
+                    patch.object(capability.platform, "system", return_value="Windows"),
+                    patch.object(capability, "find_stream_helper", return_value=None),
+                    patch.object(capability, "windows_native_desktop_preflight") as preflight,
+                ):
+                    result = capability.probe_native_desktop_capability(force=True)
+                self.assertEqual(result.reason, "native_gpu_runtime_fenced")
+                preflight.assert_not_called()
+
+    def test_corrupt_claim_or_runtime_blocks_probe_without_rewriting_evidence(self):
+        for filename in ("gpu-resource-rental-v1.json", "gpu-resource-runtime-v1.json"):
+            with self.subTest(filename=filename):
+                path = Path(self.root.name) / filename
+                path.write_bytes(b"\xffinvalid")
+                with (
+                    patch.object(capability.platform, "system", return_value="Windows"),
+                    patch.object(capability, "find_stream_helper", return_value=None),
+                    patch.object(capability, "windows_native_desktop_preflight") as preflight,
+                ):
+                    result = capability.probe_native_desktop_capability()
+                self.assertEqual(result.reason, "native_resource_state_unverified")
+                preflight.assert_not_called()
+                self.assertEqual(path.read_bytes(), b"\xffinvalid")
+                path.unlink()  # Test fixture only.
+
+    def test_heartbeat_returns_while_windows_gpu_transition_holds_physical_authority(self):
+        held = threading.Event()
+        release = threading.Event()
+
+        def launch():
+            with patch("gpubnb_agent.gpu_rental_preemption.os.name", "nt"), _resource_transition_lock("resource_one"):
+                held.set()
+                release.wait(5)
+
+        owner = threading.Thread(target=launch)
+        owner.start()
+        try:
+            self.assertTrue(held.wait(2))
+            with (
+                patch.object(capability.platform, "system", return_value="Windows"),
+                patch.object(capability, "windows_native_desktop_preflight") as preflight,
+            ):
+                result = capability.probe_native_desktop_capability()
+            self.assertEqual(result.reason, "native_rental_fenced")
+            self.assertFalse(release.is_set())
+            preflight.assert_not_called()
+        finally:
+            release.set()
+            owner.join(2)
 
     def test_live_rental_fence_prevents_heartbeat_self_test_even_with_expired_cache(self):
         class Owner:

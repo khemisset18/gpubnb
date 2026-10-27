@@ -95,6 +95,20 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             "RuntimeError",
         )
 
+    def test_failed_physical_preflight_requires_stop_proof_before_claim_release(self):
+        for reason in ("virtual_display_busy", "native_stream_self_test_failed", "native_session_cleanup_failed"):
+            for stopped in (True, False):
+                with (
+                    self.subTest(reason=reason, stopped=stopped),
+                    patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                    patch.object(runtime, "windows_native_desktop_preflight", return_value=NativeDesktopPreflight(False, reason)),
+                    patch.object(runtime, "run_command", return_value=self._stop_report(stopped=stopped)) as run,
+                ):
+                    expected = reason if stopped else f"{reason}_cleanup_unverified"
+                    with self.assertRaisesRegex(RuntimeError, f"^{expected}$"):
+                        runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
+                self.assertEqual(run.call_args.args[0], ["helper.exe", "--stop", "--json", "--session-id", "sess-1"])
+
     def test_launch_rejects_different_preflight_gpu_before_start(self):
         with (
             patch.object(runtime, "find_stream_helper", return_value="helper.exe"),

@@ -9,6 +9,7 @@ authority proves a strictly newer fence and the physical GPU is freshly quiescen
 from __future__ import annotations
 
 import logging
+import platform
 import time
 from typing import Callable
 
@@ -83,6 +84,8 @@ def _runtime_is_recoverable(
 def _recover_stale_quarantined_claim(
     supervisor: RentalPreemptionSupervisor,
     spec: RentalResourceSpec,
+    *,
+    physical_cleanup: Callable[[], None] | None = None,
 ) -> bool:
     """Promote one stale QUARANTINED record to the new PREEMPTING authority.
 
@@ -99,6 +102,15 @@ def _recover_stale_quarantined_claim(
     current = records.get(spec.resource_id)
     if not _runtime_is_recoverable(current, previous, spec):
         return False
+
+    # Windows GPU quiescence does not prove the privileged display/input helper
+    # has stopped. Only the native gateway can supply this callback, after the
+    # signed server decision proves the previous native session is terminal.
+    # Generic mining/rental reconciliation must never silently retire that fence.
+    if platform.system() == "Windows" and physical_cleanup is None:
+        return False
+    if physical_cleanup is not None:
+        physical_cleanup()
 
     # The new authority alone is not enough. Re-resolve the physical UUID and
     # prove the target GPU has no foreign compute clients / unsafe utilization.

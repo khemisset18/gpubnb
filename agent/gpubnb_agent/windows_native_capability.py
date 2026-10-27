@@ -15,6 +15,7 @@ from functools import wraps
 import time
 from typing import Callable
 
+from .physical_gpu_authority import PHYSICAL_GPU_LOCK
 from .windows_native_workspace import (
     NativeDesktopPreflight,
     find_stream_helper,
@@ -39,8 +40,32 @@ class NativeDesktopCapabilitySnapshot:
 # The helper self-test creates a real IddCx monitor and NVENC capture. It must
 # never run concurrently with preemption, native START or an active rental.
 # This lock is deliberately process-local to the single Agent supervisor.
-_PHYSICAL_PROBE_LOCK = threading.RLock()
+_PHYSICAL_PROBE_LOCK = PHYSICAL_GPU_LOCK
 _FENCED_NATIVE_RENTALS: set[str] = set()
+
+
+def _persisted_physical_probe_block_reason() -> str | None:
+    # Lazy imports avoid the inventory -> preemption -> inventory module cycle.
+    # Read every time, before using even a fresh READY cache. In-memory fences
+    # disappear at restart, while active/quarantined claims must remain fences.
+    from .gpu_rental_preemption import RentalClaimStore
+    from .gpu_resource_supervisor import RuntimeStore
+
+    try:
+        if RentalClaimStore().load():
+            return "native_rental_fenced"
+        for record in RuntimeStore().load().values():
+            if (
+                record.state != "STOPPED"
+                or record.pid is not None
+                or record.process_creation_token is not None
+            ):
+                return "native_gpu_runtime_fenced"
+    except Exception:
+        # Corruption, invalid UTF-8, ACL errors and unknown authority all block
+        # monitor creation. Never echo file contents, paths or exception text.
+        return "native_resource_state_unverified"
+    return None
 
 def native_rental_physical_cleanup_confirmed(session_id: str) -> None:
     """Unfence only after the helper STOP and GPU claim release were proven."""
@@ -160,13 +185,23 @@ def probe_native_desktop_capability(
     clock: Callable[[], float] = time.monotonic,
 ) -> NativeDesktopCapabilitySnapshot:
     """Do not create a qualification display while any rental owns the GPU."""
-    with _PHYSICAL_PROBE_LOCK:
-        if _FENCED_NATIVE_RENTALS:
+    if platform.system() != "Windows":
+        return _snapshot(NativeDesktopPreflight(False, "windows_required"), clock())
+    # A START/STOP may hold the lock for a complete helper deadline. Heartbeat
+    # must still return promptly so the control plane can renew rental leases.
+    if not _PHYSICAL_PROBE_LOCK.acquire(blocking=False):
+        return _snapshot(NativeDesktopPreflight(False, "native_rental_fenced"), clock())
+    try:
+        reason = (
+            "native_rental_fenced" if _FENCED_NATIVE_RENTALS
+            else _persisted_physical_probe_block_reason()
+        )
+        if reason is not None:
             # Do not reuse a READY cache as permission for a new physical probe.
             # Emit an explicit bounded unavailable snapshot while GPU fencing
             # or physical cleanup is in progress.
             snapshot = _snapshot(
-                NativeDesktopPreflight(False, "native_rental_fenced"),
+                NativeDesktopPreflight(False, reason),
                 clock(),
             )
             helper = find_stream_helper()
@@ -176,6 +211,8 @@ def probe_native_desktop_capability(
                 _CACHE = (*identity, snapshot)
             return snapshot
         return _probe_native_desktop_capability_unfenced(force=force, clock=clock)
+    finally:
+        _PHYSICAL_PROBE_LOCK.release()
 
 
 def native_desktop_streaming_available_cached(*, force: bool = False) -> bool:

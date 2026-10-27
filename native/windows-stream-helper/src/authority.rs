@@ -114,6 +114,7 @@ fn bounded_runtime_failure_code(value: &str) -> Option<&'static str> {
         "virtual_display_gate" => Some("virtual_display_gate"),
         "virtual_display_busy" => Some("virtual_display_busy"),
         "virtual_display_access_denied" => Some("virtual_display_access_denied"),
+        "virtual_display_not_ready" => Some("virtual_display_not_ready"),
         "virtual_display_invalid_request" => Some("virtual_display_invalid_request"),
         "worker_protocol" => Some("worker_protocol"),
         "media_proof" => Some("media_proof"),
@@ -299,6 +300,16 @@ fn run_probe_client(
     Ok(())
 }
 
+#[cfg(any(target_os = "windows", test))]
+fn checked_self_test_cleanup(
+    proof_result: Result<(), AuthorityError>,
+    stop_result: Result<(), AuthorityError>,
+) -> Result<(), AuthorityError> {
+    // Failed capture/input must never hide a simultaneous failed cleanup.
+    stop_result?;
+    proof_result
+}
+
 pub fn run_self_test() -> Result<SelfTestReport, AuthorityError> {
     #[cfg(not(target_os = "windows"))]
     {
@@ -364,8 +375,7 @@ pub fn run_self_test() -> Result<SelfTestReport, AuthorityError> {
         })();
 
         let stop_result = runtime.stop().map_err(|_| AuthorityError::Cleanup);
-        proof_result?;
-        stop_result?;
+        checked_self_test_cleanup(proof_result, stop_result)?;
         Ok(SelfTestReport {
             gpu_uuid: lease.gpu_uuid,
         })
@@ -823,6 +833,7 @@ mod tests {
         for code in [
             "virtual_display_gate",
             "virtual_display_busy",
+            "virtual_display_not_ready",
             "virtual_display_access_denied",
             "virtual_display_invalid_request",
         ] {
@@ -830,6 +841,19 @@ mod tests {
         }
         assert_eq!(bounded_runtime_failure_code("media_transport:token"), None);
         assert_eq!(bounded_runtime_failure_code(""), None);
+    }
+
+    #[test]
+    fn self_test_cleanup_failure_takes_precedence_over_media_failure() {
+        assert_eq!(
+            checked_self_test_cleanup(Err(AuthorityError::MediaProof), Err(AuthorityError::Cleanup)),
+            Err(AuthorityError::Cleanup)
+        );
+        assert_eq!(
+            checked_self_test_cleanup(Err(AuthorityError::MediaProof), Ok(())),
+            Err(AuthorityError::MediaProof)
+        );
+        assert_eq!(checked_self_test_cleanup(Ok(()), Ok(())), Ok(()));
     }
 
     #[test]

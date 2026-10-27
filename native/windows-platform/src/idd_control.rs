@@ -15,10 +15,21 @@ pub const IDD_CONTROL_REQUEST_SIZE: usize = 64;
 fn classify_control_failure(win32_error: i32) -> PlatformError {
     match win32_error {
         50 => PlatformError::IddUnsafeOperation, // ERROR_NOT_SUPPORTED (mutation gate)
-        170 | 2404 => PlatformError::IddControlBusy, // ERROR_BUSY / ERROR_DEVICE_IN_USE
+        32 | 170 | 2404 => PlatformError::IddControlBusy, // SHARING_VIOLATION/BUSY/DEVICE_IN_USE
         5 => PlatformError::IddControlAccessDenied, // ERROR_ACCESS_DENIED
+        21 | 1167 => PlatformError::IddControlNotReady, // NOT_READY/DEVICE_NOT_CONNECTED
         1 | 87 => PlatformError::IddControlInvalidRequest, // INVALID_FUNCTION/PARAMETER
         _ => PlatformError::IddControlFailed,
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn classify_control_open_failure(win32_error: i32) -> PlatformError {
+    match win32_error {
+        5 => PlatformError::IddControlAccessDenied,
+        32 | 170 | 2404 => PlatformError::IddControlBusy,
+        21 | 1167 => PlatformError::IddControlNotReady,
+        _ => PlatformError::IddControlOpenFailed,
     }
 }
 
@@ -267,7 +278,7 @@ pub fn probe_idd_control_contract(request: VirtualDisplayRequest) -> Result<(), 
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
-    use super::{IDD_CONTROL_REQUEST_SIZE, classify_control_failure};
+    use super::{IDD_CONTROL_REQUEST_SIZE, classify_control_failure, classify_control_open_failure};
     use crate::PlatformError;
     use std::ffi::{OsStr, c_void};
     use std::os::windows::ffi::OsStrExt;
@@ -450,7 +461,8 @@ mod windows_impl {
             )
         };
         if raw == INVALID_HANDLE_VALUE {
-            return Err(PlatformError::IddControlOpenFailed);
+            let win32_error = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+            return Err(classify_control_open_failure(win32_error));
         }
         Ok(OwnedControlHandle(raw))
     }
@@ -573,6 +585,41 @@ mod tests {
         assert_eq!(
             classify_control_failure(123456),
             PlatformError::IddControlFailed
+        );
+        assert_eq!(classify_control_failure(32), PlatformError::IddControlBusy);
+        for code in [21, 1167] {
+            assert_eq!(
+                classify_control_failure(code),
+                PlatformError::IddControlNotReady
+            );
+        }
+    }
+
+    #[test]
+    fn control_open_distinguishes_acl_contention_and_unavailable_device() {
+        assert_eq!(
+            classify_control_open_failure(5),
+            PlatformError::IddControlAccessDenied
+        );
+        for code in [32, 170, 2404] {
+            assert_eq!(
+                classify_control_open_failure(code),
+                PlatformError::IddControlBusy
+            );
+        }
+        for code in [21, 1167] {
+            assert_eq!(
+                classify_control_open_failure(code),
+                PlatformError::IddControlNotReady
+            );
+        }
+        assert_eq!(
+            classify_control_open_failure(50),
+            PlatformError::IddControlOpenFailed
+        );
+        assert_eq!(
+            classify_control_open_failure(123456),
+            PlatformError::IddControlOpenFailed
         );
     }
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from gpubnb_agent.execution_control import ExecutionControlError
 from gpubnb_agent.gpu_rental_preemption import (
@@ -92,6 +93,11 @@ def claim(spec: RentalResourceSpec, state: str = "QUARANTINED") -> RentalClaimRe
 
 class StaleQuarantinedRentalClaimRecoveryTests(unittest.TestCase):
     def setUp(self) -> None:
+        # Generic quiescence-only recovery is a Linux path. Windows additionally
+        # needs the native gateway's authorized STOP/monitor absence proof.
+        self.platform = patch("gpubnb_agent.rental_claim_recovery.platform.system", return_value="Linux")
+        self.platform.start()
+        self.addCleanup(self.platform.stop)
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
         self.runtime_store = RuntimeStore(root / "runtime.json")
@@ -269,6 +275,16 @@ class StaleQuarantinedRentalClaimRecoveryTests(unittest.TestCase):
         self.assertEqual(updated_claim.state, "QUIESCENT")
         self.assertEqual(updated_claim.runtime_generation, 8)
         self.assertEqual(self.runtime_store.load()[old.resource_id].state, "STOPPED")
+
+    def test_windows_generic_recovery_requires_native_physical_cleanup(self) -> None:
+        old = self._seed_quarantine(generation=7)
+        before = self.claim_store.path.read_bytes()
+        with patch("gpubnb_agent.rental_claim_recovery.platform.system", return_value="Windows"):
+            with self.assertRaisesRegex(ExecutionControlError, "rental_resource_claim_conflict"):
+                self._preempt(rental_spec(8, session="session_new0001"))
+        self.assertEqual(self.claim_store.path.read_bytes(), before)
+        self.assertEqual(self.claim_store.load()[old.resource_id], claim(old))
+        self.assertEqual(self.probe.calls, [])
 
     def test_intermediate_unknown_runtime_generation_remains_quarantined(self) -> None:
         old = self._seed_quarantine(

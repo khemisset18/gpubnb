@@ -177,6 +177,7 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
             "virtual_display_gate",
             "virtual_display_busy",
             "virtual_display_access_denied",
+            "virtual_display_not_ready",
             "virtual_display_invalid_request",
         ):
             with (

@@ -93,6 +93,7 @@ pub enum PlatformError {
     IddControlFailed,
     IddControlBusy,
     IddControlAccessDenied,
+    IddControlNotReady,
     IddControlInvalidRequest,
     IddUnsafeOperation,
     GpuGraphicsIdentityUnavailable,

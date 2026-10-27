@@ -36,6 +36,7 @@ from . import workspace_gateway as legacy
 from . import workspace_gateway_v8 as reconnect
 from .execution_control import ExecutionControlError
 from .gpu_rental_preemption import TRANSIENT_QUIESCENCE_REASONS, _resource_transition_lock
+from .rental_claim_recovery import _recover_stale_quarantined_claim
 from .windows_native_capability import (
     fence_native_rental_launch,
     native_rental_physical_cleanup_confirmed,
@@ -246,7 +247,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
     @staticmethod
     def _strict_stale_native_successor(previous: Any, spec: Any) -> bool:
         return (
-            previous.state in {"RENTAL_ACTIVE", "QUIESCENT"}
+            previous.state in {"RENTAL_ACTIVE", "QUIESCENT", "QUARANTINED"}
             and previous.session_id != spec.session_id
             and _NATIVE_SESSION_ID.fullmatch(previous.session_id) is not None
             and previous.resource_id == spec.resource_id
@@ -265,8 +266,18 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         return bool(
             record is not None
             and record.hardware_uuid.casefold() == spec.hardware_uuid.casefold()
-            and record.runtime_generation == previous.runtime_generation
-            and record.state == "STOPPED"
+            and (
+                record.runtime_generation == previous.runtime_generation
+                or (
+                    previous.state == "QUARANTINED"
+                    and record.runtime_generation == spec.runtime_generation
+                    and record.state == "STOPPED"
+                )
+            )
+            and (
+                record.state == "STOPPED"
+                or (previous.state == "QUARANTINED" and record.state == "QUARANTINED")
+            )
             and record.pid is None
             and record.process_creation_token is None
             and record.command_id is None
@@ -340,6 +351,21 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             # proof. If the old authority child is already absent it acquires
             # the first-pipe-instance fence and verifies the virtual display is
             # absent before reporting success.
+            if previous.state == "QUARANTINED":
+                recovered = _recover_stale_quarantined_claim(
+                    self.rental_preemption,
+                    spec,
+                    physical_cleanup=lambda: stop_windows_native_workspace(previous.session_id),
+                )
+                if not recovered:
+                    raise ExecutionControlError("rental_resource_stale_claim_runtime_unsafe")
+                native_rental_physical_cleanup_confirmed(previous.session_id)
+                self._trace(
+                    "native_stale_quarantine_recovered",
+                    session_id=spec.session_id,
+                    detail=f"old_generation={previous.runtime_generation}:new_generation={spec.runtime_generation}",
+                )
+                return True
             stop_windows_native_workspace(previous.session_id)
         except Exception as exc:
             self._trace(
@@ -362,6 +388,8 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             raise
         if len(released) != 1 or released[0].resource_id != spec.resource_id:
             raise ExecutionControlError("rental_resource_stale_claim_release_invalid")
+
+        native_rental_physical_cleanup_confirmed(previous.session_id)
 
         self._trace(
             "native_stale_claim_recovered",

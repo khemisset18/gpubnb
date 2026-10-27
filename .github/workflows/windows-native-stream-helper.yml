@@ -19,6 +19,8 @@ on:
       - agent/tests/test_windows_native_*.py
       - agent/tools/windows_native_qualify.py
       - agent/tools/windows_native_*.ps1
+      - scripts/stage4-pc1-incident-evidence.ps1
+      - scripts/tests/stage4-pc1-incident-evidence.tests.ps1
       - docs/operations/WINDOWS_NATIVE_DESKTOP_QUALIFICATION.md
       - docs/architecture/WINDOWS_NATIVE_*.md
       - .github/workflows/windows-native-stream-helper.yml
@@ -62,6 +64,11 @@ jobs:
         env:
           PYTHONPATH: agent
         run: python -m unittest discover -s agent/tests -p "test_windows_native_*.py" -v
+
+      - name: Agent durable claim recovery contracts
+        env:
+          PYTHONPATH: agent
+        run: python -m unittest discover -s agent/tests -p "test_*claim*.py" -v
 
       - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
         with:
@@ -164,6 +171,11 @@ jobs:
             exit 1
           fi
           python -c 'import json,sys; r=json.loads(sys.argv[1]); assert r == {"ok": False, "error": "windows_required"}' "$reply"
+
+      - name: Incident collector fixtures on Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/tests/stage4-pc1-incident-evidence.tests.ps1
 
       - name: Helper must fail closed without a physical renter lease
         if: runner.os == 'Windows'
