@@ -129,4 +129,4 @@ of reconnect and failure behavior. No readiness claim is valid before this pass.
 - [IddCx versions shipped by Windows](https://learn.microsoft.com/en-us/windows-hardware/drivers/display/iddcx-versions)
 - [Microsoft IDD sample INF](https://github.com/microsoft/Windows-driver-samples/blob/main/video/IndirectDisplay/IddSampleDriver/IddSampleDriver.inf)
 - [PnPUtil ranking behavior](https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/pnputil-command-syntax)
-- [Driver ranking, date and version](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/how-windows-ranks-drivers--windows-vista-and-later-)
+- [Driver ranking, date and version](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/overview-of-the-driver-selection-process)

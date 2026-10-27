@@ -278,7 +278,9 @@ pub fn probe_idd_control_contract(request: VirtualDisplayRequest) -> Result<(), 
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
-    use super::{IDD_CONTROL_REQUEST_SIZE, classify_control_failure, classify_control_open_failure};
+    use super::{
+        IDD_CONTROL_REQUEST_SIZE, classify_control_failure, classify_control_open_failure,
+    };
     use crate::PlatformError;
     use std::ffi::{OsStr, c_void};
     use std::os::windows::ffi::OsStrExt;
