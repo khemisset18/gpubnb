@@ -22,6 +22,10 @@ import { reasonDefinition } from './quarantine-reason-registry.js';
 import { computeMachineState } from './machine-state-service.js';
 import { computeLifecycleStatus } from './rental-listing-service.js';
 import { allWorkspaceCompatibility } from './machine-workspace-catalog.js';
+import {
+  authorizeNativeQuarantineCleanup, nativeCleanupAuthorityRequestSchema,
+  nativeCleanupContext, nativeRuntimeCleanupSchema, verifyNativeCleanupReport,
+} from './windows-native-quarantine-recovery.js';
 
 /**
  * Authenticates an agent-signed request WITHOUT requiring
@@ -69,6 +73,7 @@ const diagnosticResultSchema = z.object({
   driverVersion: z.string().max(80).nullable().optional(),
   summary: z.string().max(2000),
   metrics: z.record(z.string(), z.unknown()).optional(),
+  nativeRuntimeCleanup: nativeRuntimeCleanupSchema.optional(),
   runtimeCleanliness: z.object({
     unexpectedContainers: z.array(z.string().min(1).max(200)).max(64),
     unexpectedVolumes: z.array(z.string().min(1).max(200)).max(64),
@@ -99,9 +104,12 @@ async function currentRuntimeSessionIds(db: PrismaClient, machineId: string): Pr
 
 async function buildChecksFromDiagnosticResult(
   db: PrismaClient,
+  redis: Redis,
+  diagnosticRunId: string,
   machineId: string,
   result: z.infer<typeof diagnosticResultSchema>,
   now: Date,
+  signedV2: boolean,
 ): Promise<DiagnosticCheck[]> {
   const machine = await db.machine.findUnique({
     where: { id: machineId },
@@ -221,6 +229,26 @@ async function buildChecksFromDiagnosticResult(
     source: 'agent-diagnostic',
   });
 
+  const nativeContext = await nativeCleanupContext(db, machineId);
+  if (nativeContext.required) {
+    const status = await verifyNativeCleanupReport(
+      db, redis, diagnosticRunId, machineId, result.nativeRuntimeCleanup, signedV2, now,
+    );
+    const details = status === 'PASS'
+      ? 'STOP natif, absence du moniteur, quiescence GPU et libération locale vérifiés sous autorité serveur fraîche.'
+      : 'La preuve de nettoyage Windows natif est absente, refusée ou incomplète. Un inventaire Docker seul ne peut pas lever cette quarantaine.';
+    checks.push({ name: 'nativeRuntimeCleanup', status, value: status === 'PASS' ? 'vérifié' : null,
+      details, measuredAt, source: 'agent-diagnostic' });
+    // Keep the existing mandatory runtimeCleanup gate. This adds evidence; it
+    // never substitutes native proof for Docker inventory or allocation checks.
+    const mandatory = checks.find(check => check.name === 'runtimeCleanup')!;
+    if (mandatory.status === 'PASS' && status !== 'PASS') {
+      mandatory.status = status;
+      mandatory.value = null;
+      mandatory.details = details;
+    }
+  }
+
   const orphanedAllocation = await detectAvailableRepair(db, machineId);
   checks.push({
     name: 'allocation',
@@ -268,12 +296,31 @@ export function registerMachineDiagnosticsRoutes(app: FastifyInstance, db: Prism
       return { diagnosticRunId: null };
     }
     const expectedRuntimeSessionIds = await currentRuntimeSessionIds(db, machineId);
+    const nativeContext = await nativeCleanupContext(db, machineId);
     return {
       diagnosticRunId: pending.id,
       diagnosticImage: config.DEV_DIAGNOSTIC_IMAGE ?? null,
       timeoutSeconds: Math.floor(DIAGNOSTIC_TIMEOUT_MS / 1000),
       expectedRuntimeSessionIds,
+      ...(nativeContext.required ? {
+        nativeCleanupProtocolVersion: 1,
+        nativeCleanupRequired: true,
+        nativeCleanupTarget: nativeContext.target,
+      } : {}),
     };
+  });
+
+  app.post('/agent/diagnostics/:diagnosticRunId/native-cleanup-authority', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
+    const { diagnosticRunId } = z.object({ diagnosticRunId: z.string().cuid() }).parse(request.params);
+    const body = nativeCleanupAuthorityRequestSchema.parse(request.body);
+    const route = `/agent/diagnostics/${diagnosticRunId}/native-cleanup-authority`;
+    // A cleanup scope must be bound to the exact POST body, including the GPU,
+    // session and persisted generation. Legacy v1 signatures do not bind it.
+    if (request.headers['x-agent-signature-version'] !== '2'
+      || !await authenticateQuarantinableAgent(db, redis, body.machineId, request, route)) {
+      return reply.code(401).send({ error: 'invalid_agent_request' });
+    }
+    return authorizeNativeQuarantineCleanup(db, redis, diagnosticRunId, body);
   });
 
   app.post('/agent/diagnostics/:diagnosticRunId/result', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
@@ -299,7 +346,10 @@ export function registerMachineDiagnosticsRoutes(app: FastifyInstance, db: Prism
         });
         return { ok: true, status: outcome.status, cleared: outcome.cleared };
       }
-      const checks = await buildChecksFromDiagnosticResult(db, body.machineId, body, now);
+      const checks = await buildChecksFromDiagnosticResult(
+        db, redis, diagnosticRunId, body.machineId, body, now,
+        request.headers['x-agent-signature-version'] === '2',
+      );
       const outcome = await completeDiagnosticRun(db, {
         diagnosticRunId, machineId: body.machineId, checks, source: 'agent-diagnostic-result', now,
       });

@@ -14,6 +14,7 @@ import threading
 import time
 import traceback
 import webbrowser
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -43,6 +44,8 @@ from .storage import (
 )
 from .runtime_images import DEFAULT_DEVELOPER_IMAGE, workspace_image
 from .runtime_cleanliness import inspect_runtime_cleanliness
+from .physical_gpu_authority import PHYSICAL_GPU_LOCK
+from .windows_native_quarantine_recovery import NativeQuarantineRecovery
 
 DEFAULT_API = "https://gpubnb.netlify.app/api"
 
@@ -595,33 +598,69 @@ def poll_and_run_diagnostic_once(
     try:
         if not image:
             raise RuntimeError("diagnostic_image_not_configured")
-        emit({"event": "diagnostic_run_started", "machineId": machine_id, "diagnosticRunId": diagnostic_run_id, "timestamp": now_iso()})
-        runtime_cleanliness = (
-            inspect_runtime_cleanliness([
-                value for value in expected_runtime_session_ids
-                if isinstance(value, str) and value
-            ])
-            if runtime_expectation_supplied
-            else None
-        )
-        report = run_gpu_diagnostic(image, timeout_seconds)
-        metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
-        agent_request(api, key, machine_id, result_path, "POST", {
-            "machineId": machine_id,
-            "gpuDetected": bool(report.get("gpuDetected")),
-            "gpuUuid": metrics.get("firstGpuUuid"),
-            "summary": str(report.get("summary") or "")[:2000],
-            "metrics": metrics,
-            **({
-                "runtimeCleanliness": {
-                    **runtime_cleanliness.to_api_payload(),
-                    "expectedSessionIds": [
-                        value for value in expected_runtime_session_ids
-                        if isinstance(value, str) and value
-                    ],
-                },
-            } if runtime_cleanliness is not None else {}),
-        })
+        native_required = "nativeCleanupRequired" in pending
+        if native_required and (
+            pending["nativeCleanupRequired"] is not True
+            or type(pending.get("nativeCleanupProtocolVersion")) is not int
+            or pending["nativeCleanupProtocolVersion"] != 1
+            or not runtime_expectation_supplied or expected_runtime_session_ids
+        ):
+            raise RuntimeError("native_cleanup_assignment_unverified")
+        with PHYSICAL_GPU_LOCK if native_required else nullcontext():
+            recovery = None
+            if native_required:
+                def authorize_native_cleanup(scope: dict[str, Any]) -> dict[str, Any]:
+                    return agent_request(
+                        api, key, machine_id,
+                        f"/agent/diagnostics/{diagnostic_run_id}/native-cleanup-authority",
+                        "POST", {"machineId": machine_id, **scope},
+                    )
+                recovery = NativeQuarantineRecovery(
+                    diagnostic_run_id, pending.get("nativeCleanupTarget"), authorize_native_cleanup,
+                )
+                recovery.prepare()
+                emit({"event": "native_cleanup_prepared", "machineId": machine_id,
+                      "diagnosticRunId": diagnostic_run_id, "timestamp": now_iso()})
+            emit({"event": "diagnostic_run_started", "machineId": machine_id, "diagnosticRunId": diagnostic_run_id, "timestamp": now_iso()})
+            runtime_cleanliness = (
+                inspect_runtime_cleanliness([
+                    value for value in expected_runtime_session_ids
+                    if isinstance(value, str) and value
+                ])
+                if runtime_expectation_supplied
+                else None
+            )
+            report = run_gpu_diagnostic(image, timeout_seconds)
+            metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
+            native_cleanup = None
+            if recovery is not None:
+                if runtime_cleanliness is None or not runtime_cleanliness.clean:
+                    raise RuntimeError("native_cleanup_docker_resources_present")
+                if (report.get("gpuDetected") is not True
+                    or not isinstance(metrics.get("firstGpuUuid"), str)
+                    or metrics["firstGpuUuid"].casefold() != recovery.target["hardwareUuid"].casefold()):
+                    raise RuntimeError("native_cleanup_diagnostic_gpu_mismatch")
+                native_cleanup = recovery.finish()
+                emit({"event": "native_cleanup_completed", "machineId": machine_id,
+                      "diagnosticRunId": diagnostic_run_id, "fenceFloor": native_cleanup["fenceFloor"],
+                      "timestamp": now_iso()})
+            agent_request(api, key, machine_id, result_path, "POST", {
+                "machineId": machine_id,
+                "gpuDetected": bool(report.get("gpuDetected")),
+                "gpuUuid": metrics.get("firstGpuUuid"),
+                "summary": str(report.get("summary") or "")[:2000],
+                "metrics": metrics,
+                **({"nativeRuntimeCleanup": native_cleanup} if native_cleanup is not None else {}),
+                **({
+                    "runtimeCleanliness": {
+                        **runtime_cleanliness.to_api_payload(),
+                        "expectedSessionIds": [
+                            value for value in expected_runtime_session_ids
+                            if isinstance(value, str) and value
+                        ],
+                    },
+                } if runtime_cleanliness is not None else {}),
+            })
         emit({
             "event": "diagnostic_run_completed",
             "machineId": machine_id,

@@ -14,6 +14,8 @@ try {
     if ((Get-FileHash -LiteralPath $file).Hash -cne $before) { throw 'incident_evidence_was_modified' }
     $rows = @(Select-IncidentLifecycleCodes @('2026-10-26 12:00:01 workspace_trace:native_helper_start_failed:session=SECRET:code=virtual_display_control_open path=C:\Users\SECRET token=SECRET', 'not_virtual_display_busy_secret', '2026-10-26 12:00:02 rental_gpu_compute_processes_present'))
     if ($rows.Count -ne 3 -or ($rows | ConvertTo-Json) -match 'SECRET|Users|session=') { throw 'incident_log_scrubbing_failed' }
+    $recoveryRows = @(Select-IncidentLifecycleCodes @('{"event":"native_cleanup_completed","sessionId":"SECRET","hardwareUuid":"SECRET"}', 'native_cleanup_authority_refused capability=SECRET', 'native_cleanup_unknown_secret'))
+    if ($recoveryRows.Count -ne 2 -or ($recoveryRows | ConvertTo-Json) -match 'SECRET|sessionId|hardwareUuid|capability|unknown') { throw 'incident_recovery_log_scrubbing_failed' }
     [IO.File]::WriteAllBytes($file, [byte[]]@(255, 254, 255))
     if ((Read-IncidentResourceState $file $true).status -cne 'unreadable_or_invalid') { throw 'incident_invalid_utf8_not_blocked' }
     [IO.File]::WriteAllText($file, '{"schemaVersion":2,"resources":{}}')

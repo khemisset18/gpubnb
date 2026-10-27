@@ -40,6 +40,25 @@ replaced by a guessed new inventory.
   proof and fresh quiescence before advancing persistent state. Runtime process
   identity, an equal/older fence, server denial or failed physical proof keeps
   quarantine intact. The existing crash-safe runtime-then-claim ordering remains.
+- A fresh owner/admin `DiagnosticRun` can now retire a terminal native quarantine
+  without creating a successor booking. Its v2 body-signed authority checks the
+  unresolved native cleanup scope, terminal session, absence of live allocations,
+  workspaces, mining and Redis lease, and the existing persistent resource fence.
+  The Agent proves helper STOP/monitor absence and canonical NVIDIA quiescence
+  before the normal Docker/GPU diagnostic, then repeats those physical and server
+  proofs afterwards. Only then does it retain/advance the local STOPPED tombstone
+  to the **existing** authoritative fence floor and release the exact old claim
+  through `release_after_cleanup`. It never invents, increments or resets a fence.
+  Equal-generation rental replay is rejected after retirement; exact persisted
+  PREEMPTING crash recovery still works. A crash or failed proof retains a fence
+  and requires fresh proofs on retry. Missing process identities are necessary
+  for this bounded path, not evidence of physical cleanup by themselves.
+- Native cleanup evidence is mandatory in addition to the existing Docker and
+  allocation gates. An old Agent's Docker-only result cannot clear an unresolved
+  native cleanup, even if another failed diagnostic changes the primary reason
+  or a later Docker stop is recorded. Multiple/unknown native obligations remain
+  blocked. The physical mutex covers preparation, the diagnostic, retirement and
+  signed submission, excluding a competing heartbeat self-test throughout.
 - Control-handle opening now distinguishes access denial, exclusive-handle
   contention and a device/adapter that is not ready. The same bounded classes
   survive IOCTL, helper and Agent boundaries without raw paths or kernel text.
@@ -101,11 +120,16 @@ executes a GPUbnb binary, installs a driver, stops a process, edits a lock/claim
 changes a service or clears quarantine. Its output is evidence for private review,
 not a declaration of cleanliness. Missing/unreadable data remains unverified.
 
-After reviewing those results, use the project's owner repair/DiagnosticRun
-workflow to resolve server quarantine. A successor lease is admitted only after
-the existing server guards allow it; the new native recovery code is not a
-force-clear endpoint for generation 90. Keep the private listing paused until
-the end-to-end evidence is complete.
+After reviewing those results and installing the coherently signed updated
+Agent/Helper set with the matching API revision, use the existing owner
+`DiagnosticRun` workflow. It performs the bounded recovery above while quarantine
+remains in force. No successor rental is required to break the previous circular
+dependency (quarantine blocked the very successor needed to recover). Docker,
+GPU, allocation and signature checks remain mandatory. An unsupported/busy
+driver, failed STOP, occupied GPU, missing persistent Redis fence or unknown
+resource scope blocks recovery; do not edit local records or bypass that refusal.
+The API itself does not STOP host processes or clear local evidence. Keep the
+private listing paused until the end-to-end physical evidence is complete.
 
 ## Physical acceptance, still outstanding
 

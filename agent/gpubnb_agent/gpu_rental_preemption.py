@@ -520,6 +520,10 @@ class RentalPreemptionSupervisor:
                     raise ExecutionControlError("rental_resource_hardware_identity_conflict")
                 if current.runtime_generation > spec.runtime_generation:
                     raise ExecutionControlError("rental_resource_fence_stale")
+                if previous_claim is None and current.runtime_generation == spec.runtime_generation:
+                    # A retired generation is a durable tombstone. Only an
+                    # already-persisted exact PREEMPTING claim may resume it.
+                    raise ExecutionControlError("rental_resource_generation_replay")
                 if current.state == "QUARANTINED":
                     raise ExecutionControlError("rental_resource_mining_quarantined")
 
