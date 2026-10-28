@@ -304,6 +304,60 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                         runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
                 self.assertEqual(run.call_count, 2)
 
+    def test_start_preserves_bounded_display_codes_and_cleanup_fence(self):
+        codes = sorted(code for code in runtime.SELF_TEST_SAFE_FAILURE_REASONS
+                       if code.startswith("virtual_display"))
+        for code in codes:
+            for stopped in (True, False):
+                with (
+                    self.subTest(code=code, stopped=stopped),
+                    patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                    patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+                    patch.object(runtime, "discover_native_application", return_value=None),
+                    patch.object(runtime, "run_command", side_effect=[
+                        SimpleNamespace(returncode=1, stdout=json.dumps({"ok": False, "error": code})),
+                        self._stop_report(stopped=stopped),
+                    ]) as run,
+                ):
+                    expected = f"native_workspace_start_failed:{code}"
+                    if not stopped:
+                        expected += "_cleanup_unverified"
+                    with self.assertRaises(RuntimeError) as caught:
+                        runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
+                    self.assertEqual(str(caught.exception), expected)
+                    self.assertEqual(gateway_v10._native_error_code(caught.exception), expected)
+                    self.assertEqual(run.call_args.args[0], ["helper.exe", "--stop", "--json", "--session-id", "sess-1"])
+
+    def test_display_codes_survive_lifecycle_but_untrusted_start_text_does_not(self):
+        for code in sorted(runtime.SELF_TEST_SAFE_FAILURE_REASONS):
+            report = json.dumps({"ok": False, "error": code})
+            self.assertEqual(runtime._bounded_helper_failure_class(report), code)
+            if code.startswith("virtual_display"):
+                with patch.object(runtime, "run_command", return_value=SimpleNamespace(returncode=1, stdout=report)):
+                    with self.assertRaises(RuntimeError) as caught:
+                        runtime._native_session_command("helper.exe", "--resume", "sess-1")
+                    self.assertEqual(str(caught.exception), f"native_workspace_resume_failed:{code}")
+                    with self.assertRaises(RuntimeError) as caught:
+                        runtime.stop_windows_native_workspace("sess-1", helper_path="helper.exe")
+                    self.assertEqual(str(caught.exception), f"native_workspace_stop_failed:{code}")
+        for report in (
+            {"ok": False, "error": "virtual_display_secret_token"},
+            {"ok": False, "error": "virtual_display_gate C:\\private"},
+            {"ok": True, "error": "virtual_display_gate"},
+            {"ok": False, "error": ["virtual_display_gate"]},
+        ):
+            with (
+                self.subTest(report=report),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+                patch.object(runtime, "discover_native_application", return_value=None),
+                patch.object(runtime, "run_command", side_effect=[
+                    SimpleNamespace(returncode=1, stdout=json.dumps(report)), self._stop_report(),
+                ]),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "^native_workspace_start_failed$"):
+                    runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
+
     def test_ambiguous_json_and_schema_proofs_require_cleanup(self):
         valid = self._start_report().stdout
         reports = (
