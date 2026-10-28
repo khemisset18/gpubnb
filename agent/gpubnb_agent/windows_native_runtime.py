@@ -18,12 +18,12 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .windows_native_protocol import json_object as _json_object, schema_v1, valid_gpu_uuid
+from .windows_native_protocol import VIRTUAL_DISPLAY_FAILURE_REASONS, json_object as _json_object, schema_v1, valid_gpu_uuid
 
 from .platform_info import run_command
 WINDOWS_NATIVE_START_COMMAND_TIMEOUT_SECONDS = 135
 
-_SAFE_HELPER_FAILURE_CLASSES = frozenset({
+_SAFE_HELPER_FAILURE_CLASSES = VIRTUAL_DISPLAY_FAILURE_REASONS | frozenset({
     "invalid_configuration",
     "worker_signer_policy",
     "renter_session",
@@ -32,7 +32,6 @@ _SAFE_HELPER_FAILURE_CLASSES = frozenset({
     "worker_launch",
     "worker_handshake",
     "exact_gpu",
-    "virtual_display",
     "worker_protocol",
     "media_proof",
     "media_diagnostic",
@@ -232,9 +231,11 @@ def launch_windows_native_workspace(
             executable, session_id, "native_workspace_start_failed"
         )
     if result.returncode != 0:
-        _raise_after_started_session_validation_failure(
-            executable, session_id, "native_workspace_start_failed"
-        )
+        failure_class = _bounded_helper_failure_class(result.stdout)
+        code = "native_workspace_start_failed"
+        if failure_class is not None:
+            code = f"{code}:{failure_class}"
+        _raise_after_started_session_validation_failure(executable, session_id, code)
 
     report = _json_object(result.stdout)
     if report is None:

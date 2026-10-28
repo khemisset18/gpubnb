@@ -109,6 +109,56 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                         runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
                 self.assertEqual(run.call_args.args[0], ["helper.exe", "--stop", "--json", "--session-id", "sess-1"])
 
+    def test_start_preserves_iddcx_cause_without_weakening_cleanup(self):
+        for code in runtime.VIRTUAL_DISPLAY_FAILURE_REASONS:
+            for stopped in (True, False):
+                failure = SimpleNamespace(returncode=21,
+                    stdout=json.dumps({"ok": False, "error": code}), stderr="private-secret")
+                with (
+                    self.subTest(code=code, stopped=stopped),
+                    patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                    patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+                    patch.object(runtime, "discover_native_application", return_value=None),
+                    patch.object(runtime, "run_command", side_effect=[failure, self._stop_report(stopped=stopped)]) as run,
+                ):
+                    expected = f"native_workspace_start_failed:{code}"
+                    if not stopped:
+                        expected += "_cleanup_unverified"
+                    with self.assertRaises(RuntimeError) as caught:
+                        runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
+                    self.assertEqual(str(caught.exception), expected)
+                    self.assertEqual(gateway_v10._native_error_code(caught.exception), expected)
+                    self.assertEqual(run.call_count, 2)
+                    self.assertEqual(run.call_args.args[0], ["helper.exe", "--stop", "--json", "--session-id", "sess-1"])
+
+    def test_lifecycle_preserves_all_iddcx_causes(self):
+        for verb in ("--stop", "--suspend", "--resume", "--status"):
+            for code in runtime.VIRTUAL_DISPLAY_FAILURE_REASONS:
+                with self.subTest(verb=verb, code=code), patch.object(runtime, "run_command", return_value=SimpleNamespace(
+                    returncode=21, stdout=json.dumps({"ok": False, "error": code}), stderr="private-secret")):
+                    with self.assertRaises(RuntimeError) as caught:
+                        runtime._native_session_command("helper.exe", verb, "sess-1")
+                    self.assertEqual(str(caught.exception), f"native_workspace_{verb[2:]}_failed:{code}")
+
+    def test_start_rejects_untrusted_failure_reports_and_still_stops(self):
+        for stdout in (
+            '{"ok":false,"error":"virtual_display_busy:secret"}',
+            '{"ok":false,"error":"virtual_display_busy","error":"virtual_display_gate"}',
+            '{"ok":true,"error":"virtual_display_busy"}',
+            '{"ok":false,"error":123}', 'not-json',
+        ):
+            with (
+                self.subTest(stdout=stdout),
+                patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+                patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+                patch.object(runtime, "discover_native_application", return_value=None),
+                patch.object(runtime, "run_command", side_effect=[
+                    SimpleNamespace(returncode=21, stdout=stdout, stderr="private-secret"), self._stop_report()]) as run,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "^native_workspace_start_failed$"):
+                    runtime.launch_windows_native_workspace("sess-1", "cloud-desktop", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
+                self.assertEqual(run.call_count, 2)
+
     def test_launch_rejects_different_preflight_gpu_before_start(self):
         with (
             patch.object(runtime, "find_stream_helper", return_value="helper.exe"),

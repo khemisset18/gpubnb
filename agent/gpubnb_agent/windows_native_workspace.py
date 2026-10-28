@@ -18,7 +18,7 @@ import platform
 import subprocess
 from pathlib import Path, PureWindowsPath
 
-from .windows_native_protocol import json_object as _parse_self_test, schema_v1, valid_gpu_uuid
+from .windows_native_protocol import VIRTUAL_DISPLAY_FAILURE_REASONS, json_object as _parse_self_test, schema_v1, valid_gpu_uuid
 
 from .platform_info import gpu_inventory, run_command
 
@@ -33,7 +33,7 @@ WINDOWS_STREAM_HELPER_DEV_ALLOW_ENV = "GPUBNB_WINDOWS_STREAM_HELPER_DEV_ALLOW"
 # Only compile-time helper error classes that can be emitted by --self-test are
 # accepted here. Unknown or caller-controlled text remains collapsed to the
 # generic fail-closed reason and is never surfaced to Agent logs.
-SELF_TEST_SAFE_FAILURE_REASONS = frozenset(
+SELF_TEST_SAFE_FAILURE_REASONS = VIRTUAL_DISPLAY_FAILURE_REASONS | frozenset(
     {
         "windows_required",
         "renter_session_lease_unavailable",
@@ -62,17 +62,6 @@ SELF_TEST_SAFE_FAILURE_REASONS = frozenset(
         "worker_launch",
         "worker_handshake",
         "exact_gpu",
-        "virtual_display",
-        "virtual_display_interface_query",
-        "virtual_display_interface_missing",
-        "virtual_display_interface_ambiguous",
-        "virtual_display_control_open",
-        "virtual_display_control",
-        "virtual_display_gate",
-        "virtual_display_busy",
-        "virtual_display_access_denied",
-        "virtual_display_not_ready",
-        "virtual_display_invalid_request",
         "worker_protocol",
         "media_proof",
         "media_diagnostic",
