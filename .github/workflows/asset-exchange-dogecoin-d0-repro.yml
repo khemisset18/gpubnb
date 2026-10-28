@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - asset-exchange/dogecoin-d0-repro-build-2026-10-08
+      # Isolated verification of PR #287; never touches the secure foundation or main.
+      - asset-exchange/dogecoin-d0-evidence-hardening-2026-10-10
     paths:
       - 'asset-exchange/qualification/dogecoin/d0/**'
       - 'docs/asset-exchange/DOGECOIN_D0_INTERNAL_BUILD_PLAN.md'
