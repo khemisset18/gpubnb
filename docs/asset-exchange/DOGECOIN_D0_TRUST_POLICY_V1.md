@@ -16,7 +16,8 @@ The source-rebuild route binds to all of:
 - source commit: `e0a1c157791544e818c901bd9341896965afbf9d`;
 - Gitian descriptor contained in that exact source commit;
 - pinned Gitian builder commit: `41c325d2f14147e8028fce9a5edd26e7adad30a4`;
-- Ubuntu archive snapshot `20241212T000000Z`, selected by historical package probes;\n- one of the two accepted 323-package `focal-amd64` manifests independently published for v1.14.9 by `KunNw0n` and `slightlyskepticalpotat` in `dogecoin/gitian.sigs` commit `9d1be4fb0effc4c2e97750e0763b92f39d474a17`;
+- Ubuntu archive snapshot `20241212T000000Z`, selected by historical package probes;
+- one of the two accepted 323-package `focal-amd64` manifests independently published for v1.14.9 by `KunNw0n` and `slightlyskepticalpotat` in `dogecoin/gitian.sigs` commit `9d1be4fb0effc4c2e97750e0763b92f39d474a17`;
 - LIEF wheel SHA-256 `c848aadac0816268aeb9dde7cefdb54bf24f78e664a19e97e74c92d3be1bb147` from the upstream release build script;
 - observed official x86_64 release archive SHA-256 `4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8`.
 
@@ -28,16 +29,20 @@ D0-SOURCE-REBUILD may be PASS only when two clean GitHub-hosted build jobs indep
 
 1. fetch the exact Dogecoin source commit;
 2. fetch the exact pinned Gitian builder commit;
-3. resolve Ubuntu Focal to an immutable image digest before building;
-4. verify the pinned LIEF wheel hash;
-5. use the upstream Gitian Linux descriptor from the pinned Dogecoin commit without modification;
-6. build using Gitian Docker isolation;
-7. do not execute the resulting release binary;
-8. produce byte-for-byte identical x86_64 release archives;
-9. produce the observed official x86_64 SHA-256 exactly;
-10. pass archive path/link safety inspection;
-11. produce an SPDX SBOM and source/build identity evidence;
-12. receive gpu.k.p2p GitHub attestation for the internally reproduced artifact and SBOM.
+3. reconstruct a signed-package Ubuntu Focal rootfs with `debootstrap` from the pinned `20241212T000000Z` archive snapshot;
+4. check the pinned package candidates before installation and the required installed package versions after upgrading and installing the rootfs;
+5. run `apt-get clean` in the rootfs and fail if any `.deb` remains in `/var/cache/apt/archives/`;
+6. import that rootfs as Gitian's Docker base `base-focal-amd64`;
+7. verify the pinned LIEF wheel hash;
+8. use the upstream Gitian Linux descriptor from the pinned Dogecoin source commit without modification;
+9. build using Gitian Docker isolation;
+10. require Gitian's generated `base-focal-amd64.manifest` to match byte-for-byte one of the two accepted official 323-package manifests;
+11. do not execute the resulting release binary;
+12. produce byte-for-byte identical x86_64 release archives;
+13. produce the observed official x86_64 SHA-256 exactly;
+14. pass archive path/link safety inspection;
+15. produce an SPDX SBOM and source/build identity evidence;
+16. receive gpu.k.p2p GitHub attestation for the internally reproduced artifact and SBOM.
 
 Any mismatch is BLOCKED, not a warning.
 
@@ -68,6 +73,8 @@ Fail closed if any of the following occurs:
 - Gitian descriptor differs from the pinned source tree;
 - Gitian builder commit differs;
 - required dependency hash differs;
+- a pinned Focal package candidate or installed version differs, or the rootfs retains any cached `.deb` archive;
+- Gitian's generated Focal base manifest does not byte-match either accepted official manifest;
 - two build outputs differ;
 - output differs from the observed official hash;
 - final binary is executed during D0;

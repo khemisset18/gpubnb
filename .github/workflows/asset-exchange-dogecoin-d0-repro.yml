@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - asset-exchange/dogecoin-d0-repro-build-2026-10-08
+      # Isolated verification of PR #287; never touches the secure foundation or main.
+      - asset-exchange/dogecoin-d0-evidence-hardening-2026-10-10
     paths:
       - 'asset-exchange/qualification/dogecoin/d0/**'
       - 'docs/asset-exchange/DOGECOIN_D0_INTERNAL_BUILD_PLAN.md'
@@ -34,6 +36,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Test fail-closed D0 evidence validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover \
+            -s asset-exchange/qualification/dogecoin/d0 \
+            -p 'test_validate_evidence.py' -v
 
       - name: Prepare isolated Gitian prerequisites
         shell: bash

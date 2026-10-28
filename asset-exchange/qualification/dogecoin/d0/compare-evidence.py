@@ -8,6 +8,8 @@ from pathlib import Path
 import tarfile
 import sys
 
+from validate_evidence import load_evidence
+
 if len(sys.argv) != 4:
     raise SystemExit("usage: compare-evidence.py <replica-a-dir> <replica-b-dir> <output-dir>")
 
@@ -26,12 +28,9 @@ def sha256(path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 
-def load_evidence(root: Path) -> dict:
-    return json.loads((root / "evidence.json").read_text())
-
 a_artifact = a_dir / artifact_name
 b_artifact = b_dir / artifact_name
-if not a_artifact.is_file() or not b_artifact.is_file():
+if a_artifact.is_symlink() or b_artifact.is_symlink() or not a_artifact.is_file() or not b_artifact.is_file():
     raise SystemExit("one or both independent build artifacts are missing")
 
 a_hash = sha256(a_artifact)
@@ -41,8 +40,8 @@ if a_hash != b_hash:
 if a_hash != official_sha256:
     raise SystemExit(f"reproducible build does not match observed official hash: {a_hash}")
 
-a_ev = load_evidence(a_dir)
-b_ev = load_evidence(b_dir)
+a_ev = load_evidence(a_dir, a_hash)
+b_ev = load_evidence(b_dir, b_hash)
 for key in (
     "dogecoinSourceCommit",
     "gitianBuilderCommit",
