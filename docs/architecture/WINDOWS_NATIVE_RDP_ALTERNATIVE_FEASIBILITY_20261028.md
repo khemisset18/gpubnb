@@ -63,3 +63,46 @@ Stop the RDP path without changing PC1 if the Windows edition cannot host it, a 
 - [GPU paravirtualization and the built-in indirect display adapter for remoting](https://learn.microsoft.com/en-us/windows-hardware/drivers/display/gpu-paravirtualization)
 - [Windows 11 RDP H.264/AVC hardware-encoding policy](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-admx-terminalserver)
 - [GPU acceleration for Azure Virtual Desktop](https://learn.microsoft.com/en-us/azure/virtual-desktop/enable-gpu-acceleration) (the encoder policy and fallback behavior; AVD's full deployment guidance is not assumed to apply to this host)
+
+
+## Evidence review: browser, gateway, Render, and acceptance fit
+
+### Browser client candidates
+
+- The Apache Guacamole JavaScript client is Apache-2.0, but it does not speak RDP directly. Its documented architecture requires `guacd` plus an RDP/FreeRDP plugin to translate RDP into the Guacamole protocol. Guacamole 1.6 documents RDP Graphics Pipeline Extension support and a separate video stream mechanism. That makes it a possible browser display client, but the repository has no Guacamole endpoint and no evidence yet that the complete chain preserves the exact Windows NVIDIA hardware AVC encoder required by Stage 4. Treat NVIDIA/H.264 as unproven until the host and browser recorder identify the real encoder and bitstream.
+- The small `grdpwasm` project demonstrates browser-to-RDP over a WebSocket-to-TCP proxy. Its README labels the client GPLv3 and says the sample proxy accepts any origin and sends RDP credentials from the browser to the proxy. It is not safe to adopt as-is; adapting it would require authentication, origin checks, session scoping, credential handling, dependency review, and maintenance/security review.
+
+### Existing gateway boundary
+
+At Stage 4 commit `40e9ef5`, the current Windows-native gateway is deliberately narrow:
+
+- The renter first consumes a one-use workspace grant; the gateway then sets a Secure, HttpOnly, per-session cookie.
+- Windows-native WebSocket upgrades are limited to `native-stream` with no query string.
+- Browser-to-Agent messages are binary only and exactly 32 bytes (the GBNI input envelope); upstream native frames must be binary. The current route has per-channel lease authorization, expiry checks, bounded queues, backpressure handling, and close cleanup.
+- Media uses the separate GBNM H.264 frame envelope.
+
+Therefore RDP cannot reuse `native-stream` unchanged. It needs its own session-bound protocol and bounded byte tunnel, with the current one-use grant, cookie, lease guard, expiry/generation checks, queue budgets, audit redaction, and close/STOP cleanup carried over. Any browser-supplied RDP password, if unavoidable, must be memory-only and excluded from URLs, Redis keys, logs, and persisted rental/session records.
+
+### Render and zero-euro constraint
+
+The Stage 4 `render.yaml` at `40e9ef5` defines the existing API web service and delivery worker on `free`. Current Render documentation says Free instances are supported for web services, Postgres, and Key Value; other service types do not support Free instances. Free web services cannot receive private-network traffic, can spin down after 15 minutes without inbound activity, share a 750-hour monthly allowance, and may be restarted. A new private `guacd` service therefore cannot currently be assumed to fit 0 €. A public Free web service would also fail the private-only boundary unless placed behind the existing authenticated gateway and independently security-reviewed. Do not create or deploy a service until the route, quotas, and zero-cost condition are proven from the account's actual plan.
+
+### Feasibility decision
+
+RDP is a credible way to avoid GPUbnb's custom IddCx kernel-signing dependency, but it is **not yet a validated replacement** for the Stage 4 browser stream. The unavoidable gates are:
+
+1. Read-only confirm PC1's Windows edition/build. Home cannot host inbound Remote Desktop.
+2. Confirm the existing plan can provide an authenticated, isolated renter session without a new paid/private service or an exposed public RDP listener.
+3. Prove the RDP host's actual display path uses NVIDIA hardware H.264; policy configuration alone is insufficient because the platform may fall back to software.
+4. Prove remote session isolation from the provider console, then test keyboard/mouse mapping and teardown.
+5. Resolve the existing generation-90 quarantine only through the repository's authorized signed recovery path. A quiet NVIDIA sample does not clear it.
+6. Decide whether the test is qualifying the current GPUbnb Windows Native implementation or a separately named RDP backend. An RDP success cannot be reported as qualification of the custom IddCx/GBNM/GBNI path.
+
+Until these gates pass, implementation should stay on this branch as a feasibility proposal. Do not change the main or qualification branch, add an unreviewed client dependency, alter PC1, or claim the RDP route meets the Stage 4 acceptance contract.
+
+### Sources
+
+- Microsoft, [Enable Remote Desktop on your PC](https://learn.microsoft.com/en-us/windows-server/remote/remote-desktop-services/remotepc/remote-desktop-allow-access): Windows Pro/Enterprise/Education host requirement; Home cannot host incoming RDP.
+- Apache Guacamole, [Implementation and architecture](https://guacamole.apache.org/doc/gug/guacamole-architecture.html), [Configuring Guacamole](https://guacamole.apache.org/doc/gug/configuring-guacamole.html), and [Protocol reference](https://guacamole.apache.org/doc/gug/protocol-reference): guacd/RDP translation, RDP GFX, and browser video streams.
+- grdpwasm, [project README](https://github.com/nakagami/grdpwasm): GPLv3, sample browser/proxy architecture, and its stated origin/credential limitations.
+- Render, [Deploy for Free](https://render.com/docs/free) and [Private Services](https://render.com/docs/private-services): Free service types and private-network restrictions.
