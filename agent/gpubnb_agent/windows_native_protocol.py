@@ -5,6 +5,22 @@ import json
 import re
 from typing import Any
 
+# Exact public IddCx failure classes emitted by the Helper. Shared by preflight
+# and lifecycle parsing so START/STOP cannot silently discard a refined cause.
+VIRTUAL_DISPLAY_FAILURE_REASONS = frozenset({
+    "virtual_display",
+    "virtual_display_interface_query",
+    "virtual_display_interface_missing",
+    "virtual_display_interface_ambiguous",
+    "virtual_display_control_open",
+    "virtual_display_control",
+    "virtual_display_gate",
+    "virtual_display_busy",
+    "virtual_display_access_denied",
+    "virtual_display_not_ready",
+    "virtual_display_invalid_request",
+})
+
 _GPU_UUID = re.compile(r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 
 
