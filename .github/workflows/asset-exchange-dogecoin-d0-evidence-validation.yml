@@ -107,6 +107,15 @@ jobs:
           check_installed libfreetype6 "2.10.1-2ubuntu0.3"
           check_installed intel-microcode "3.20241112.0ubuntu0.20.04.1"
           check_installed libexpat1 "2.2.9-1ubuntu0.8"
+
+          # Gitian's upstream grab-packages.sh sums all cached .deb files,
+          # not solely the currently installed versions: empty stale archives.
+          sudo chroot "$ROOT" apt-get clean
+          if sudo find "$ROOT/var/cache/apt/archives" -maxdepth 1 -type f -name '*.deb' | grep -q .; then
+            echo "FAIL: stale .deb files remain in the Focal rootfs" >&2
+            exit 1
+          fi
+          echo "FOCAL_APT_CACHE_CLEAN_RESULT=PASS"
           echo "FOCAL_INSTALLED_SMOKE_RESULT=PASS"
 
   source-archive-smoke:
