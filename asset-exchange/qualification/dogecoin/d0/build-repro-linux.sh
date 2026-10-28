@@ -236,6 +236,20 @@ check_installed_focal_package() {
   check_installed_focal_package libexpat1 "2.2.9-1ubuntu0.8"
 } | tee "$OUTPUT_DIR/focal-snapshot-installed-versions.txt"
 
+# The pinned Gitian grab-packages.sh hashes EVERY .deb in the apt archives
+# (including obsolete packages left by debootstrap or dist-upgrade).
+# Removing historical cached versions from the base rootfs is essential:
+# otherwise the generated manifest includes both apt_2.0.2 and apt_2.0.10,
+# which violates the exact official Dogecoin 1.14.9 Focal attestation.
+# Keep /var/lib/apt/lists intact: Gitian still needs authenticated apt indexes.
+sudo chroot "$FOCAL_ROOTFS" apt-get clean
+STALE_FOCAL_DEB="$(sudo find "$FOCAL_ROOTFS/var/cache/apt/archives" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+if [[ -n "$STALE_FOCAL_DEB" ]]; then
+  echo "Focal rootfs contains a stale pre-import apt archive: $STALE_FOCAL_DEB" >&2
+  exit 1
+fi
+echo "focal_rootfs_apt_archive_clean=true" >> "$OUTPUT_DIR/environment.txt"
+
 sudo chroot "$FOCAL_ROOTFS" dpkg-query -W -f='${Package}\t${Version}\n' | LC_ALL=C sort > "$OUTPUT_DIR/focal-bootstrap-packages.txt"
 FOCAL_BOOTSTRAP_MANIFEST_SHA256="$(sha256sum "$OUTPUT_DIR/focal-bootstrap-packages.txt" | awk '{print $1}')"
 FOCAL_BOOTSTRAP_PACKAGE_COUNT="$(wc -l < "$OUTPUT_DIR/focal-bootstrap-packages.txt" | tr -d ' ')"
