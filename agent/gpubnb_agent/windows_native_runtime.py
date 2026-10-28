@@ -23,33 +23,20 @@ from .windows_native_protocol import json_object as _json_object, schema_v1, val
 from .platform_info import run_command
 WINDOWS_NATIVE_START_COMMAND_TIMEOUT_SECONDS = 135
 
-_SAFE_HELPER_FAILURE_CLASSES = frozenset({
-    "invalid_configuration",
-    "worker_signer_policy",
-    "renter_session",
-    "pipe",
-    "worker_trust",
-    "worker_launch",
-    "worker_handshake",
-    "exact_gpu",
-    "virtual_display",
-    "worker_protocol",
-    "media_proof",
-    "media_diagnostic",
-    "media_transport",
-    "media_capability",
-    "graphics_proof",
-    "stop_unconfirmed",
-    "display_cleanup",
-})
-
 
 from .windows_native_workspace import (
+    SELF_TEST_SAFE_FAILURE_REASONS,
     discover_native_application,
     find_stream_helper,
     profile_for_slug,
     windows_native_desktop_preflight,
 )
+
+
+# The helper emits the same bounded runtime codes for preflight and lifecycle
+# commands. Keep one allowlist so new IddCx classes cannot disappear at START,
+# STOP or resume while still refusing arbitrary helper text.
+_SAFE_HELPER_FAILURE_CLASSES = SELF_TEST_SAFE_FAILURE_REASONS
 
 
 @dataclass(frozen=True)
@@ -232,9 +219,11 @@ def launch_windows_native_workspace(
             executable, session_id, "native_workspace_start_failed"
         )
     if result.returncode != 0:
-        _raise_after_started_session_validation_failure(
-            executable, session_id, "native_workspace_start_failed"
-        )
+        failure_class = _bounded_helper_failure_class(result.stdout)
+        code = "native_workspace_start_failed"
+        if failure_class is not None:
+            code = f"{code}:{failure_class}"
+        _raise_after_started_session_validation_failure(executable, session_id, code)
 
     report = _json_object(result.stdout)
     if report is None:
