@@ -34,8 +34,7 @@ use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
 #[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::media_protocol::{
     MEDIA_CODEC_H264, MEDIA_CONSOLE_TRANSPORT_PROTOCOL_VERSION, MEDIA_FRAME_FLAG_KEYFRAME,
-    MEDIA_TRANSPORT_PROTOCOL_VERSION,
-    WorkerMediaFrameHeader, encode_worker_media_frame_header,
+    MEDIA_TRANSPORT_PROTOCOL_VERSION, WorkerMediaFrameHeader, encode_worker_media_frame_header,
 };
 #[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::worker_protocol::{
@@ -574,21 +573,20 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         return Err(WorkerError::new("capture_gpu_luid_mismatch", 21));
                     }
 
-                    let mut session = match open_worker_media(
-                        args, windows_session_id, spec, console,
-                    ) {
-                        Ok(session) => session,
-                        Err(error) => {
-                            send_media_diagnostic(
-                                &client,
-                                args.generation,
-                                command_sequence,
-                                windows_session_id,
-                                error,
-                            );
-                            return Err(media_probe_error(error, false));
-                        }
-                    };
+                    let mut session =
+                        match open_worker_media(args, windows_session_id, spec, console) {
+                            Ok(session) => session,
+                            Err(error) => {
+                                send_media_diagnostic(
+                                    &client,
+                                    args.generation,
+                                    command_sequence,
+                                    windows_session_id,
+                                    error,
+                                );
+                                return Err(media_probe_error(error, false));
+                            }
+                        };
                     let media = read_required_media_frame(
                         &mut session,
                         &client,
@@ -699,21 +697,20 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         return Err(WorkerError::new("resume_gpu_luid_mismatch", 21));
                     }
 
-                    let mut session = match open_worker_media(
-                        args, windows_session_id, spec, console,
-                    ) {
-                        Ok(session) => session,
-                        Err(error) => {
-                            send_media_diagnostic(
-                                &client,
-                                args.generation,
-                                command_sequence,
-                                windows_session_id,
-                                error,
-                            );
-                            return Err(media_probe_error(error, true));
-                        }
-                    };
+                    let mut session =
+                        match open_worker_media(args, windows_session_id, spec, console) {
+                            Ok(session) => session,
+                            Err(error) => {
+                                send_media_diagnostic(
+                                    &client,
+                                    args.generation,
+                                    command_sequence,
+                                    windows_session_id,
+                                    error,
+                                );
+                                return Err(media_probe_error(error, true));
+                            }
+                        };
                     let media = read_required_media_frame(
                         &mut session,
                         &client,
