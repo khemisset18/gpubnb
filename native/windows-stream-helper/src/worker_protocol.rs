@@ -18,13 +18,18 @@ pub const WORKER_MEDIA_POLL_FRAME_SIZE: usize = 23;
 pub const WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE: usize = 46;
 pub const WORKER_INPUT_FRAME_SIZE: usize = 31;
 pub const WORKER_MEDIA_REQUIRED_PROOF_FLAGS: u32 = 0x0f;
+/// Console/IddCx H.264 proof domains must never be substituted.
+pub const WORKER_CONSOLE_PROOF_PROTOCOL_VERSION: u16 = 2;
+pub const WORKER_CONSOLE_REQUIRED_PROOF_FLAGS: u32 = 0x1f;
 const MAX_SESSION_ID: usize = 128;
 const MAX_GPU_UUID: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkerCommand {
     PrepareDisplay,
+    PrepareConsoleDisplay,
     StartCapture,
+    StartConsoleCapture,
     SuspendMedia,
     ResumeAfterFreshProof,
     ReadMediaFrame,
@@ -392,6 +397,8 @@ fn command_tag(command: WorkerCommand) -> u8 {
         WorkerCommand::Stop => 5,
         WorkerCommand::InjectInput => 6,
         WorkerCommand::ReadMediaFrame => 7,
+        WorkerCommand::PrepareConsoleDisplay => 8,
+        WorkerCommand::StartConsoleCapture => 9,
     }
 }
 
@@ -404,6 +411,8 @@ fn command_from_tag(tag: u8) -> Result<WorkerCommand, WorkerCommandError> {
         5 => Ok(WorkerCommand::Stop),
         6 => Ok(WorkerCommand::InjectInput),
         7 => Ok(WorkerCommand::ReadMediaFrame),
+        8 => Ok(WorkerCommand::PrepareConsoleDisplay),
+        9 => Ok(WorkerCommand::StartConsoleCapture),
         _ => Err(WorkerCommandError::InvalidCommand),
     }
 }
@@ -924,12 +933,21 @@ pub fn validate_worker_display_spec(
     Ok(())
 }
 
+fn validate_proof_domain(version: u16, flags: u32) -> Result<(), WorkerGraphicsFrameError> {
+    match (version, flags) {
+        (WORKER_PROTOCOL_VERSION, WORKER_MEDIA_REQUIRED_PROOF_FLAGS)
+        | (WORKER_CONSOLE_PROOF_PROTOCOL_VERSION, WORKER_CONSOLE_REQUIRED_PROOF_FLAGS) => Ok(()),
+        (WORKER_PROTOCOL_VERSION | WORKER_CONSOLE_PROOF_PROTOCOL_VERSION, _) => {
+            Err(WorkerGraphicsFrameError::ProofFlags)
+        }
+        _ => Err(WorkerGraphicsFrameError::ProtocolVersion),
+    }
+}
+
 pub fn encode_worker_media_proof(
     proof: WorkerMediaProof,
 ) -> Result<[u8; WORKER_MEDIA_PROOF_FRAME_SIZE], WorkerGraphicsFrameError> {
-    if proof.protocol_version != WORKER_PROTOCOL_VERSION {
-        return Err(WorkerGraphicsFrameError::ProtocolVersion);
-    }
+    validate_proof_domain(proof.protocol_version, proof.proof_flags)?;
     validate_display_fields(
         proof.generation,
         proof.command_sequence,
@@ -973,7 +991,7 @@ pub fn decode_worker_media_proof(
         return Err(WorkerGraphicsFrameError::InvalidLength);
     }
     let protocol_version = u16::from_le_bytes([frame[0], frame[1]]);
-    if protocol_version != WORKER_PROTOCOL_VERSION {
+    if !matches!(protocol_version, WORKER_PROTOCOL_VERSION | WORKER_CONSOLE_PROOF_PROTOCOL_VERSION) {
         return Err(WorkerGraphicsFrameError::ProtocolVersion);
     }
     let generation = read_fixed_u64(frame, 2)?;
@@ -1006,9 +1024,7 @@ pub fn decode_worker_media_proof(
     if encoded_bytes == 0 {
         return Err(WorkerGraphicsFrameError::EncodedOutput);
     }
-    if proof_flags != WORKER_MEDIA_REQUIRED_PROOF_FLAGS {
-        return Err(WorkerGraphicsFrameError::ProofFlags);
-    }
+    validate_proof_domain(protocol_version, proof_flags)?;
 
     Ok(WorkerMediaProof {
         protocol_version,
@@ -1033,6 +1049,10 @@ pub fn validate_worker_media_proof(
     expected_display: WorkerDisplaySpec,
     proof: WorkerMediaProof,
 ) -> Result<(), WorkerGraphicsFrameError> {
+    validate_proof_domain(WORKER_PROTOCOL_VERSION, proof.proof_flags)?;
+    if proof.protocol_version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerGraphicsFrameError::ProtocolVersion);
+    }
     if proof.generation != expected_generation {
         return Err(WorkerGraphicsFrameError::Generation);
     }
@@ -1058,6 +1078,31 @@ pub fn validate_worker_media_proof(
         return Err(WorkerGraphicsFrameError::ProofFlags);
     }
     Ok(())
+}
+
+/// Console validation retains the exact same WTS/nonce/frame fences but
+/// explicitly rejects legacy IddCx version 1 and flags 0x0f.
+pub fn validate_worker_console_media_proof(
+    expected_generation: u64,
+    expected_command_sequence: u64,
+    expected_windows_session_id: u32,
+    expected_display: WorkerDisplaySpec,
+    proof: WorkerMediaProof,
+) -> Result<(), WorkerGraphicsFrameError> {
+    validate_proof_domain(proof.protocol_version, proof.proof_flags)?;
+    if proof.protocol_version != WORKER_CONSOLE_PROOF_PROTOCOL_VERSION {
+        return Err(WorkerGraphicsFrameError::ProtocolVersion);
+    }
+    let mut normalized = proof;
+    normalized.protocol_version = WORKER_PROTOCOL_VERSION;
+    normalized.proof_flags = WORKER_MEDIA_REQUIRED_PROOF_FLAGS;
+    validate_worker_media_proof(
+        expected_generation,
+        expected_command_sequence,
+        expected_windows_session_id,
+        expected_display,
+        normalized,
+    )
 }
 
 fn workspace_tag(workspace: WorkspaceKind) -> u8 {
