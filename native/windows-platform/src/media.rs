@@ -384,8 +384,8 @@ fn encode_console_request(
     {
         return Err(MediaProbeError::InvalidRequest);
     }
-    let uuid = parse_nvidia_gpu_uuid(request.gpu_uuid)
-        .map_err(|_| MediaProbeError::InvalidRequest)?;
+    let uuid =
+        parse_nvidia_gpu_uuid(request.gpu_uuid).map_err(|_| MediaProbeError::InvalidRequest)?;
     let mut wire = [0u8; CONSOLE_MEDIA_REQUEST_SIZE];
     wire[0..4].copy_from_slice(&(CONSOLE_MEDIA_REQUEST_SIZE as u32).to_le_bytes());
     wire[4..8].copy_from_slice(&CONSOLE_MEDIA_ABI_VERSION.to_le_bytes());
@@ -661,8 +661,7 @@ mod windows_impl {
     ) -> Result<PersistentSession, MediaProbeError> {
         let module = load_verified_module()?;
         let open: OpenFn = unsafe { symbol(module.0, b"GPUbnbConsoleMediaOpen\0")? };
-        let read: ReadFrameFn =
-            unsafe { symbol(module.0, b"GPUbnbConsoleMediaReadFrame\0")? };
+        let read: ReadFrameFn = unsafe { symbol(module.0, b"GPUbnbConsoleMediaReadFrame\0")? };
         let diagnostic: DiagnosticFn =
             unsafe { symbol(module.0, b"GPUbnbMediaGetLastDiagnostic\0")? };
         let close: CloseFn = unsafe { symbol(module.0, b"GPUbnbMediaClose\0")? };
@@ -922,19 +921,22 @@ mod tests {
         assert_eq!(&wire[68..80], &[0u8; 12]);
         assert_eq!(
             encode_console_request(ConsoleMediaProbeRequest {
-                windows_session_id: 0, ..base
+                windows_session_id: 0,
+                ..base
             }),
             Err(MediaProbeError::InvalidRequest)
         );
         assert_eq!(
             encode_console_request(ConsoleMediaProbeRequest {
-                session_nonce: [0u8; 16], ..base
+                session_nonce: [0u8; 16],
+                ..base
             }),
             Err(MediaProbeError::InvalidRequest)
         );
         assert_eq!(
             encode_console_request(ConsoleMediaProbeRequest {
-                adapter_luid: 0, ..base
+                adapter_luid: 0,
+                ..base
             }),
             Err(MediaProbeError::InvalidRequest)
         );
