@@ -1,6 +1,8 @@
 """Offline harness tests: no Dogecoin node, CLI or native library is executed."""
 from copy import deepcopy
 import json
+import hashlib
+import zipfile
 from pathlib import Path
 import subprocess
 import tempfile
@@ -146,6 +148,30 @@ class ScriptDiagnosticsTests(unittest.TestCase):
                     d.synthetic_tx(**{field: value})
         with self.assertRaises(ValueError): d.push(b'x' * 76)
         with self.assertRaises(ValueError): d.synthetic_tx(b'x' * 253)
+
+    def test_preserved_execution_proof_cannot_promote_diagnostic_success(self):
+        root = d.D2_DIR.parents[3] / 'docs/asset-exchange/audits/evidence/doge-d2-20261029'
+        archive = (root / 'original-ci-evidence.zip').read_bytes()
+        self.assertEqual(hashlib.sha256(archive).hexdigest(), '8f700c1eaccabf13df6873a4ec1a65931779b0bc231007e3b489615e3d18ebef')
+        with zipfile.ZipFile(root / 'original-ci-evidence.zip') as original:
+            report = json.loads(original.read('regtest-run/evidence/d2-report.json'))
+            effective = json.loads(original.read('regtest-run/evidence/effective-manifest.json'))
+        self.assertEqual(effective, d.manifest())
+        self.assertEqual(report['diagnosticStatus'], 'PASS')
+        self.assertEqual(report['qualificationStatus'], 'BLOCKED')
+        self.assertEqual(report['generatedSyntheticBlocks'], 1352)
+        self.assertEqual(report['shutdownExitCode'], 0)
+        self.assertEqual(len(report['consensusVectors']), 23)
+        for vector in report['consensusVectors']:
+            self.assertEqual(vector['result'], vector['expectedResult'])
+            self.assertEqual(vector['error'], vector['expectedError'])
+        self.assertEqual(report['finalPeers'], [])
+        self.assertEqual(report['finalNetwork']['connections'], 0)
+        self.assertFalse(report['signingPerformed'])
+        self.assertFalse(report['broadcastPerformed'])
+        for field in ['namespaceInterfacesBefore', 'namespaceInterfacesAfter']:
+            self.assertEqual([link['ifname'] for link in report[field]], ['lo'])
+        self.assertEqual(report, json.loads((root / 'd2-report.json').read_text()))
 
     def test_shell_requires_exact_scope_and_clears_inherited_environment(self):
         path = d.D2_DIR / 'run-isolated.sh'

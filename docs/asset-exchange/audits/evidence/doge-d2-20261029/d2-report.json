@@ -1,0 +1,789 @@
+{
+  "activationAuthorized": false,
+  "blockingCriteria": [
+    "full transaction standardness not measured",
+    "positive signature-bound HTLC claim/refund construction not demonstrated"
+  ],
+  "broadcastPerformed": false,
+  "consensusVectors": [
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 1,
+      "name": "true_control",
+      "result": 1
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 0,
+      "name": "false_control",
+      "result": 0
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 1,
+      "name": "p2sh_true_redeem",
+      "result": 1
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 1,
+      "name": "p2sh_false_without_flag_control",
+      "result": 1
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 0,
+      "name": "p2sh_false_with_flag_rejected",
+      "result": 0
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 0,
+      "name": "p2sh_hash_mismatch",
+      "result": 0
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 1,
+      "name": "cltv_inactive_control",
+      "result": 1
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 0,
+      "name": "cltv_before_lock_rejected",
+      "result": 0
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 1,
+      "name": "cltv_equal_lock_accepts_script",
+      "result": 1
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 1,
+      "name": "cltv_after_lock_accepts_script",
+      "result": 1
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 0,
+      "name": "cltv_final_sequence_rejected",
+      "result": 0
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 0,
+      "name": "cltv_height_time_type_rejected",
+      "result": 0
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 0,
+      "name": "cltv_negative_operand_rejected",
+      "result": 0
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 1,
+      "name": "p2sh_cltv_equal",
+      "result": 1
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 0,
+      "name": "p2sh_cltv_early_rejected",
+      "result": 0
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 1,
+      "name": "hashlock_public_preimage",
+      "result": 1
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 0,
+      "name": "hashlock_wrong_preimage_rejected",
+      "result": 0
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 0,
+      "name": "htlc_no_signature_claim_rejected",
+      "result": 0
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 0,
+      "name": "htlc_no_signature_refund_rejected",
+      "result": 0
+    },
+    {
+      "error": 3,
+      "expectedError": 3,
+      "expectedResult": 0,
+      "name": "malformed_transaction_rejected",
+      "result": 0
+    },
+    {
+      "error": 1,
+      "expectedError": 1,
+      "expectedResult": 0,
+      "name": "wrong_input_index_rejected",
+      "result": 0
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 1,
+      "name": "upstream_public_signature_verify_only",
+      "result": 1
+    },
+    {
+      "error": 0,
+      "expectedError": 0,
+      "expectedResult": 0,
+      "name": "upstream_signature_mutation_rejected",
+      "result": 0
+    }
+  ],
+  "d0ArchiveSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+  "diagnosticStatus": "PASS",
+  "finalNetwork": {
+    "connections": 0,
+    "harddustlimit": 0.001,
+    "incrementalfee": 0.0001,
+    "localaddresses": [],
+    "localrelay": true,
+    "localservices": "000000000000000d",
+    "networkactive": true,
+    "networks": [
+      {
+        "limited": false,
+        "name": "ipv4",
+        "proxy": "",
+        "proxy_randomize_credentials": false,
+        "reachable": true
+      },
+      {
+        "limited": false,
+        "name": "ipv6",
+        "proxy": "",
+        "proxy_randomize_credentials": false,
+        "reachable": true
+      },
+      {
+        "limited": true,
+        "name": "onion",
+        "proxy": "",
+        "proxy_randomize_credentials": false,
+        "reachable": false
+      }
+    ],
+    "protocolversion": 70015,
+    "relayfee": 0.001,
+    "softdustlimit": 0.01,
+    "subversion": "/Shibetoshi:1.14.9/",
+    "timeoffset": 0,
+    "version": 1140900,
+    "warnings": ""
+  },
+  "finalPeers": [],
+  "generatedSyntheticBlocks": 1352,
+  "heightObservations": [
+    {
+      "bestblockhash": "88e0dd3e2e58faf6cf9164e65dfeac0678bf19ae22b11554950b55f6d9dcaba9",
+      "bip9_softforks": {
+        "csv": {
+          "bit": 0,
+          "since": 720,
+          "startTime": 0,
+          "status": "started",
+          "timeout": 999999999999
+        },
+        "segwit": {
+          "bit": 1,
+          "since": 720,
+          "startTime": 0,
+          "status": "started",
+          "timeout": 999999999999
+        }
+      },
+      "blocks": 1350,
+      "chain": "regtest",
+      "chainwork": "0000000000000000000000000000000000000000000000000000000000000a8e",
+      "difficulty": 4.656542373906925e-10,
+      "headers": 1350,
+      "initialblockdownload": false,
+      "mediantime": 1793310983,
+      "pruned": false,
+      "size_on_disk": 357839,
+      "softforks": [
+        {
+          "id": "bip34",
+          "reject": {
+            "status": false
+          },
+          "version": 2
+        },
+        {
+          "id": "bip66",
+          "reject": {
+            "status": true
+          },
+          "version": 3
+        },
+        {
+          "id": "bip65",
+          "reject": {
+            "status": false
+          },
+          "version": 4
+        }
+      ],
+      "verificationprogress": 1,
+      "warnings": ""
+    },
+    {
+      "bestblockhash": "4c34fce21140faa9e7930d64e8a877ea229dd3a40b96c8601c3b6026045de2f5",
+      "bip9_softforks": {
+        "csv": {
+          "bit": 0,
+          "since": 720,
+          "startTime": 0,
+          "status": "started",
+          "timeout": 999999999999
+        },
+        "segwit": {
+          "bit": 1,
+          "since": 720,
+          "startTime": 0,
+          "status": "started",
+          "timeout": 999999999999
+        }
+      },
+      "blocks": 1351,
+      "chain": "regtest",
+      "chainwork": "0000000000000000000000000000000000000000000000000000000000000a90",
+      "difficulty": 4.656542373906925e-10,
+      "headers": 1351,
+      "initialblockdownload": false,
+      "mediantime": 1793310984,
+      "pruned": false,
+      "size_on_disk": 358104,
+      "softforks": [
+        {
+          "id": "bip34",
+          "reject": {
+            "status": false
+          },
+          "version": 2
+        },
+        {
+          "id": "bip66",
+          "reject": {
+            "status": true
+          },
+          "version": 3
+        },
+        {
+          "id": "bip65",
+          "reject": {
+            "status": true
+          },
+          "version": 4
+        }
+      ],
+      "verificationprogress": 1,
+      "warnings": ""
+    },
+    {
+      "bestblockhash": "220e000ffab039be7f6d66103b84fd9b7d02670c984cb4dcc1d0346c11a767fc",
+      "bip9_softforks": {
+        "csv": {
+          "bit": 0,
+          "since": 720,
+          "startTime": 0,
+          "status": "started",
+          "timeout": 999999999999
+        },
+        "segwit": {
+          "bit": 1,
+          "since": 720,
+          "startTime": 0,
+          "status": "started",
+          "timeout": 999999999999
+        }
+      },
+      "blocks": 1352,
+      "chain": "regtest",
+      "chainwork": "0000000000000000000000000000000000000000000000000000000000000a92",
+      "difficulty": 4.656542373906925e-10,
+      "headers": 1352,
+      "initialblockdownload": false,
+      "mediantime": 1793310984,
+      "pruned": false,
+      "size_on_disk": 358369,
+      "softforks": [
+        {
+          "id": "bip34",
+          "reject": {
+            "status": false
+          },
+          "version": 2
+        },
+        {
+          "id": "bip66",
+          "reject": {
+            "status": true
+          },
+          "version": 3
+        },
+        {
+          "id": "bip65",
+          "reject": {
+            "status": true
+          },
+          "version": 4
+        }
+      ],
+      "verificationprogress": 1,
+      "warnings": ""
+    }
+  ],
+  "initialIdentity": {
+    "blockchain": {
+      "bestblockhash": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+      "bip9_softforks": {
+        "csv": {
+          "since": 0,
+          "startTime": 0,
+          "status": "defined",
+          "timeout": 999999999999
+        },
+        "segwit": {
+          "since": 0,
+          "startTime": 0,
+          "status": "defined",
+          "timeout": 999999999999
+        }
+      },
+      "blocks": 0,
+      "chain": "regtest",
+      "chainwork": "0000000000000000000000000000000000000000000000000000000000000002",
+      "difficulty": 4.656542373906925e-10,
+      "headers": 0,
+      "initialblockdownload": true,
+      "mediantime": 1296688602,
+      "pruned": false,
+      "size_on_disk": 232,
+      "softforks": [
+        {
+          "id": "bip34",
+          "reject": {
+            "status": false
+          },
+          "version": 2
+        },
+        {
+          "id": "bip66",
+          "reject": {
+            "status": false
+          },
+          "version": 3
+        },
+        {
+          "id": "bip65",
+          "reject": {
+            "status": false
+          },
+          "version": 4
+        }
+      ],
+      "verificationprogress": 1,
+      "warnings": ""
+    },
+    "genesis": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+    "network": {
+      "connections": 0,
+      "harddustlimit": 0.001,
+      "incrementalfee": 0.0001,
+      "localaddresses": [],
+      "localrelay": true,
+      "localservices": "000000000000000d",
+      "networkactive": true,
+      "networks": [
+        {
+          "limited": false,
+          "name": "ipv4",
+          "proxy": "",
+          "proxy_randomize_credentials": false,
+          "reachable": true
+        },
+        {
+          "limited": false,
+          "name": "ipv6",
+          "proxy": "",
+          "proxy_randomize_credentials": false,
+          "reachable": true
+        },
+        {
+          "limited": true,
+          "name": "onion",
+          "proxy": "",
+          "proxy_randomize_credentials": false,
+          "reachable": false
+        }
+      ],
+      "protocolversion": 70015,
+      "relayfee": 0.001,
+      "softdustlimit": 0.01,
+      "subversion": "/Shibetoshi:1.14.9/",
+      "timeoffset": 0,
+      "version": 1140900,
+      "warnings": ""
+    },
+    "peers": []
+  },
+  "mainnetUsed": false,
+  "members": {
+    "dogecoin-cli": {
+      "member": "dogecoin-1.14.9/bin/dogecoin-cli",
+      "sha256": "2d3c69c56db3c3c51f0f7540ce05e723f0df59b308a3d78e424b5dfff0a1b3b3"
+    },
+    "dogecoind": {
+      "member": "dogecoin-1.14.9/bin/dogecoind",
+      "sha256": "897494db97d4a0be43a712151dafd4b06d0a66339d55350457505506fd5a6aca"
+    },
+    "libdogecoinconsensus.so.0.0.0": {
+      "member": "dogecoin-1.14.9/lib/libdogecoinconsensus.so.0.0.0",
+      "sha256": "3c27dd2f3018a3bd659648129a94ba5f211e84b8ec6d308f7f0db001b5e7902b"
+    }
+  },
+  "namespaceInterfacesAfter": [
+    {
+      "address": "00:00:00:00:00:00",
+      "broadcast": "00:00:00:00:00:00",
+      "flags": [
+        "LOOPBACK",
+        "UP",
+        "LOWER_UP"
+      ],
+      "group": "default",
+      "ifindex": 1,
+      "ifname": "lo",
+      "link_type": "loopback",
+      "linkmode": "DEFAULT",
+      "mtu": 65536,
+      "operstate": "UNKNOWN",
+      "qdisc": "noqueue",
+      "txqlen": 1000
+    }
+  ],
+  "namespaceInterfacesBefore": [
+    {
+      "address": "00:00:00:00:00:00",
+      "broadcast": "00:00:00:00:00:00",
+      "flags": [
+        "LOOPBACK",
+        "UP",
+        "LOWER_UP"
+      ],
+      "group": "default",
+      "ifindex": 1,
+      "ifname": "lo",
+      "link_type": "loopback",
+      "linkmode": "DEFAULT",
+      "mtu": 65536,
+      "operstate": "UNKNOWN",
+      "qdisc": "noqueue",
+      "txqlen": 1000
+    }
+  ],
+  "phase": "D2",
+  "qualificationStatus": "BLOCKED",
+  "realFundsUsed": false,
+  "rpcRequests": [
+    {
+      "exitCode": 1,
+      "method": "getblockchaininfo",
+      "params": [],
+      "stderr": "error: Could not locate RPC credentials. No authentication cookie could be found, and no rpcpassword is set in the configuration file (/home/runner/work/_temp/doge-d2/regtest-run/data/dogecoin.conf)\n",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "exitCode": 0,
+      "method": "getblockchaininfo",
+      "params": [],
+      "stderr": "",
+      "stdoutSha256": "53a910f201dc666334e277a84c6a03c610a4a34933d642a6b2ca3bd44817083f"
+    },
+    {
+      "exitCode": 0,
+      "method": "getblockhash",
+      "params": [
+        "0"
+      ],
+      "stderr": "",
+      "stdoutSha256": "bc8ee8e6f3a7f92d6d98f185bbed55e050994672286cddeef46c642b64eaa787"
+    },
+    {
+      "exitCode": 0,
+      "method": "getnetworkinfo",
+      "params": [],
+      "stderr": "",
+      "stdoutSha256": "c61bebe7f3d848f411e739d4755d10341b6fabcfa110f00d80a146776f0484c4"
+    },
+    {
+      "exitCode": 0,
+      "method": "getpeerinfo",
+      "params": [],
+      "stderr": "",
+      "stdoutSha256": "3fbbd4c6d76130399b0c79cdf41758669224a91e05b7b216953f0c9728750865"
+    },
+    {
+      "exitCode": 0,
+      "method": "decodescript",
+      "params": [
+        "21038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac"
+      ],
+      "stderr": "",
+      "stdoutSha256": "c5eb14ed4baa6e99b01681f71f3c9469fb440633885456bbade485b1a83b32e3"
+    },
+    {
+      "exitCode": 0,
+      "method": "decodescript",
+      "params": [
+        "76a914ee5a6aa40facefb2655ac23c0c28c57c65c41f9b88ac"
+      ],
+      "stderr": "",
+      "stdoutSha256": "9bdde9c86e0d7ce51fe7f8116c4f16cd3cf9cafd91b351533e201f71539d9e4e"
+    },
+    {
+      "exitCode": 0,
+      "method": "decodescript",
+      "params": [
+        "a9147768a9bfa3007b566f1cf51547efc78193fd12f887"
+      ],
+      "stderr": "",
+      "stdoutSha256": "622ed5c54e002577eb69a3c24ba3dfc71b720af3b1b4e6d92ae28b1f5f758c4b"
+    },
+    {
+      "exitCode": 0,
+      "method": "decodescript",
+      "params": [
+        "6382012088a8203e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb8821038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac67024705b17521038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac68"
+      ],
+      "stderr": "",
+      "stdoutSha256": "2a3827d594d5c1f0c81a2ce7c4b12ef9ed25e3c42ec305d827b40f12c437ee08"
+    },
+    {
+      "exitCode": 0,
+      "method": "decodescript",
+      "params": [
+        "024705b17551"
+      ],
+      "stderr": "",
+      "stdoutSha256": "44b9a71f9e78656080f1769185154cbe18e68898ad22d069e6d61ae76e3f4a02"
+    },
+    {
+      "exitCode": 0,
+      "method": "generatetoaddress",
+      "params": [
+        "1350",
+        "2MyF5LxGTsXxf7xSpLr6RqXD4N7f1uEBfS7",
+        "1000000",
+        "0"
+      ],
+      "stderr": "",
+      "stdoutSha256": "7ab39e86b22cdae8de0d62d4689d4731961f180b051a818cac30f9e62b8e2056"
+    },
+    {
+      "exitCode": 0,
+      "method": "getblockchaininfo",
+      "params": [],
+      "stderr": "",
+      "stdoutSha256": "6e1b2f1f29e84b8e9325d7f5708fad24f478a980650bebd82d2fb73bd7cc2f69"
+    },
+    {
+      "exitCode": 0,
+      "method": "generatetoaddress",
+      "params": [
+        "1",
+        "2MyF5LxGTsXxf7xSpLr6RqXD4N7f1uEBfS7",
+        "1000000",
+        "0"
+      ],
+      "stderr": "",
+      "stdoutSha256": "aba1251acfe1e918b0f18deb2c895e3e9b77fe4194be782e869d81d3d047b587"
+    },
+    {
+      "exitCode": 0,
+      "method": "getblockchaininfo",
+      "params": [],
+      "stderr": "",
+      "stdoutSha256": "4343c4ddc0651284522f9da2b9901ff659b673071444faf44530de55a8c1f947"
+    },
+    {
+      "exitCode": 0,
+      "method": "generatetoaddress",
+      "params": [
+        "1",
+        "2MyF5LxGTsXxf7xSpLr6RqXD4N7f1uEBfS7",
+        "1000000",
+        "0"
+      ],
+      "stderr": "",
+      "stdoutSha256": "236c0b01cf3c8cb27605cf18790be103be21173d4f8c594da6a916a3e56920f1"
+    },
+    {
+      "exitCode": 0,
+      "method": "getblockchaininfo",
+      "params": [],
+      "stderr": "",
+      "stdoutSha256": "81db42e7017604027ad4c0c895695c8d45fe8c0c45b32cd29f7be40b9849371c"
+    },
+    {
+      "exitCode": 0,
+      "method": "getnetworkinfo",
+      "params": [],
+      "stderr": "",
+      "stdoutSha256": "c61bebe7f3d848f411e739d4755d10341b6fabcfa110f00d80a146776f0484c4"
+    },
+    {
+      "exitCode": 0,
+      "method": "getpeerinfo",
+      "params": [],
+      "stderr": "",
+      "stdoutSha256": "3fbbd4c6d76130399b0c79cdf41758669224a91e05b7b216953f0c9728750865"
+    },
+    {
+      "exitCode": 0,
+      "method": "stop",
+      "params": [],
+      "stderr": "",
+      "stdoutSha256": "19e03ec64fefe3d207d67083381e5f883af9b76888154a881b0f9cd5cb8a4ff2"
+    }
+  ],
+  "rpcRestriction": "private cookie plus fixed harness allowlist in loopback-only namespace; release has no native per-method RPC ACL",
+  "scriptClassifications": [
+    {
+      "fixture": {
+        "expectedType": "pubkey",
+        "hex": "21038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac",
+        "name": "legacy_p2pk"
+      },
+      "observed": {
+        "addresses": [
+          "n3FFRxo6BAab5utimiY9WpJiWivtaHLATg"
+        ],
+        "asm": "038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041 OP_CHECKSIG",
+        "p2sh": "2NG3mbv2KhkRHj3mL17cBUGKFzTHbr1iw4q",
+        "reqSigs": 1,
+        "type": "pubkey"
+      }
+    },
+    {
+      "fixture": {
+        "expectedType": "pubkeyhash",
+        "hex": "76a914ee5a6aa40facefb2655ac23c0c28c57c65c41f9b88ac",
+        "name": "legacy_p2pkh"
+      },
+      "observed": {
+        "addresses": [
+          "n3FFRxo6BAab5utimiY9WpJiWivtaHLATg"
+        ],
+        "asm": "OP_DUP OP_HASH160 ee5a6aa40facefb2655ac23c0c28c57c65c41f9b OP_EQUALVERIFY OP_CHECKSIG",
+        "p2sh": "2My6fG1iFT48KZzaex7qXZJ3HdARFKkcccr",
+        "reqSigs": 1,
+        "type": "pubkeyhash"
+      }
+    },
+    {
+      "fixture": {
+        "expectedType": "scripthash",
+        "hex": "a9147768a9bfa3007b566f1cf51547efc78193fd12f887",
+        "name": "candidate_p2sh_output"
+      },
+      "observed": {
+        "addresses": [
+          "2N48bnEJGN44tqJqoZe4K6v7GmNup8dEY2Q"
+        ],
+        "asm": "OP_HASH160 7768a9bfa3007b566f1cf51547efc78193fd12f8 OP_EQUAL",
+        "reqSigs": 1,
+        "type": "scripthash"
+      }
+    },
+    {
+      "fixture": {
+        "expectedType": "nonstandard",
+        "hex": "6382012088a8203e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb8821038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac67024705b17521038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac68",
+        "name": "candidate_htlc_redeem"
+      },
+      "observed": {
+        "asm": "OP_IF OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 3e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb OP_EQUALVERIFY 038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041 OP_CHECKSIG OP_ELSE 1351 OP_CHECKLOCKTIMEVERIFY OP_DROP 038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041 OP_CHECKSIG OP_ENDIF",
+        "p2sh": "2N48bnEJGN44tqJqoZe4K6v7GmNup8dEY2Q",
+        "type": "nonstandard"
+      }
+    },
+    {
+      "fixture": {
+        "expectedType": "nonstandard",
+        "hex": "024705b17551",
+        "name": "bare_cltv_control"
+      },
+      "observed": {
+        "asm": "1351 OP_CHECKLOCKTIMEVERIFY OP_DROP 1",
+        "p2sh": "2MvwFSTmpLXPF3P39QRLBVPRvrzBxT4thC1",
+        "type": "nonstandard"
+      }
+    }
+  ],
+  "scriptLimit": "explicit C-ABI CLTV flag cases are not signed HTLC claim/refund or transaction finality tests",
+  "serverRpcMethods": [
+    "getblockchaininfo",
+    "getblockhash",
+    "getnetworkinfo",
+    "getpeerinfo",
+    "decodescript",
+    "decodescript",
+    "decodescript",
+    "decodescript",
+    "decodescript",
+    "generatetoaddress",
+    "getblockchaininfo",
+    "generatetoaddress",
+    "getblockchaininfo",
+    "generatetoaddress",
+    "getblockchaininfo",
+    "getnetworkinfo",
+    "getpeerinfo",
+    "stop"
+  ],
+  "shutdownExitCode": 0,
+  "signingPerformed": false,
+  "standardnessLimit": "decodescript invokes Solver only; neither full transaction standardness nor mempool admission was tested",
+  "walletDisabled": true,
+  "walletFilesAbsent": true
+}
