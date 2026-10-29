@@ -1,6 +1,6 @@
 # Dogecoin Adapter Specification V1
 
-Status: SPECIFIED / UNVERIFIED / D0 BLOCKED / NO AUTOMATIC SETTLEMENT ACTIVATION
+Status: SPECIFIED / D0 SOURCE-REBUILD PASS / D1-D9 UNVERIFIED / NO AUTOMATIC SETTLEMENT ACTIVATION
 
 ## 1. Scope
 
@@ -10,7 +10,10 @@ Candidate adapter/profile:
 
 `DOGE_SCRIPT_SETTLEMENT_V1`
 
-This specification remains non-executable for Dogecoin settlement while D0 release/toolchain integrity is blocked.
+D0 passed through the approved independent source-rebuild route on 2026-10-29.
+See [the completed reproduction audit](audits/DOGECOIN_D0_REPRODUCTION_PASS_2026-10-29.md).
+D1-D9 execution still requires the user's distinct isolated-test authorization.
+This specification does not activate Dogecoin settlement.
 
 It does NOT:
 - enable Dogecoin settlement;
@@ -34,9 +37,11 @@ Reviewed release baseline:
 
 The v1.14.9 release notes describe important bugfixes and recommend upgrade.
 
-### Revalidation finding — 2026-10-08
+### Historical upstream-prebuilt revalidation finding — 2026-10-08
 
-The Dogecoin release-integrity gate is **BLOCKED**:
+The upstream-prebuilt signer-provenance route remains **BLOCKED**. The approved
+independent source-rebuild route now has D0 PASS; it does not rehabilitate the
+signatures described below:
 
 - The downloaded `dogecoin-1.14.9-x86_64-linux-gnu.tar.gz` SHA-256 was
   `4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8`. It
@@ -55,11 +60,12 @@ The Dogecoin release-integrity gate is **BLOCKED**:
   while the v1.14.9 release page marks v1.14.9 as Latest. This support-status
   difference also needs clarification.
 
-The v1.14.9 binary was not executed. Do not qualify it until Dogecoin publishes
-valid release provenance signed by an authenticated, non-revoked key and
-clarifies the supported-version status. The campaign stopped here; the BCH
-phase was not run. Dogecoin remains `MARKETPLACE_ONLY` with automatic settlement
-disabled.
+The upstream-prebuilt binary was not executed or accepted on those signatures.
+The later D0 source-rebuild acceptance is governed only by
+[DOGECOIN_D0_TRUST_POLICY_V1.md](DOGECOIN_D0_TRUST_POLICY_V1.md).
+The support-policy discrepancy remains a recorded maintenance risk.
+D1-D9 and the BCH phase have not been executed. Dogecoin remains
+`MARKETPLACE_ONLY` with automatic settlement disabled.
 
 Evidence sources:
 - Release and checksum: https://github.com/dogecoin/dogecoin/releases/tag/v1.14.9

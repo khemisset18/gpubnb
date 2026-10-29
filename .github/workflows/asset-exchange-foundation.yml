@@ -53,6 +53,25 @@ jobs:
         working-directory: asset-exchange
         run: npm test
 
+      - name: Offline Dogecoin D1 preparation tests (no binary execution)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n asset-exchange/qualification/dogecoin/d1/run-isolated.sh
+          python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d0 -p 'test_*.py' -v
+          python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d1 -p 'test_*.py' -v
+
+      - name: Linux network isolation preflight (no Dogecoin execution)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PARENT_NET_NS="$(readlink /proc/self/ns/net)"
+          sudo unshare --net -- /bin/bash -c '
+            set -euo pipefail
+            ip link set lo up
+            exec python3 "$@"
+          ' d1 "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d1/namespace_preflight.py" "$PARENT_NET_NS"
+
       - name: Assert Core import isolation
         shell: bash
         run: |
