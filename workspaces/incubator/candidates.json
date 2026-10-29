@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "status": "DESIGN_ONLY",
+  "neverBookable": true,
+  "baselineExistingRealWorking": 9,
+  "baselineExistingBlocked": 4,
+  "proposedCount": 6,
+  "requiresExplicitPromotion": true,
+  "candidates": [
+    {
+      "slug": "ai-image-studio",
+      "name": "AI Image Studio",
+      "status": "DESIGN_ONLY",
+      "release": "UPCOMING",
+      "bookable": false,
+      "gpuRequired": true,
+      "minimum": {
+        "ramMiB": 16384,
+        "diskMiB": 102400,
+        "vramMiB": 8192,
+        "cuda": true,
+        "docker": true,
+        "nvidiaRuntime": true
+      },
+      "surface": "API",
+      "network": "GATEWAY_ONLY",
+      "entrypointPlaceholder": "comfyui-http",
+      "softwarePlanned": [
+        "ComfyUI (prévu)",
+        "Stable Diffusion (prévu)",
+        "CUDA"
+      ],
+      "proofRequired": "Génération d'une image réelle par modèle sous licence validée, lecture via Gateway puis suppression des fichiers éphémères",
+      "blockingReason": "Image applicative et modèle non épinglés, licences modèles non contrôlées, pas de preuve CUDA/HTTP sur GPU loué"
+    },
+    {
+      "slug": "llm-studio",
+      "name": "LLM Studio",
+      "status": "DESIGN_ONLY",
+      "release": "UPCOMING",
+      "bookable": false,
+      "gpuRequired": true,
+      "minimum": {
+        "ramMiB": 16384,
+        "diskMiB": 81920,
+        "vramMiB": 8192,
+        "cuda": true,
+        "docker": true,
+        "nvidiaRuntime": true
+      },
+      "surface": "API",
+      "network": "GATEWAY_ONLY",
+      "entrypointPlaceholder": "llm-http",
+      "softwarePlanned": [
+        "Ollama (prévu)",
+        "vLLM (prévu)",
+        "CUDA"
+      ],
+      "proofRequired": "Inférence réelle avec modèle autorisé, latence bornée, VRAM limitée et endpoint protégé par Gateway",
+      "blockingReason": "Serveur et modèle non épinglés; téléchargement de modèles, sorties, VRAM et licences à encadrer"
+    },
+    {
+      "slug": "voice-ai-studio",
+      "name": "Voice AI Studio",
+      "status": "DESIGN_ONLY",
+      "release": "UPCOMING",
+      "bookable": false,
+      "gpuRequired": true,
+      "minimum": {
+        "ramMiB": 8192,
+        "diskMiB": 51200,
+        "vramMiB": 4096,
+        "cuda": true,
+        "docker": true,
+        "nvidiaRuntime": true
+      },
+      "surface": "API",
+      "network": "GATEWAY_ONLY",
+      "entrypointPlaceholder": "voice-http",
+      "softwarePlanned": [
+        "Whisper (prévu)",
+        "TTS (prévu)",
+        "CUDA"
+      ],
+      "proofRequired": "Transcription d'un audio de test libre et sortie audio vérifiable; aucun enregistrement conservé après session",
+      "blockingReason": "API audio et images non construites; vie privée, anti-usurpation vocale, modèles et quotas à définir"
+    },
+    {
+      "slug": "ai-training-studio",
+      "name": "AI Training Studio",
+      "status": "DESIGN_ONLY",
+      "release": "UPCOMING",
+      "bookable": false,
+      "gpuRequired": true,
+      "minimum": {
+        "ramMiB": 32768,
+        "diskMiB": 122880,
+        "vramMiB": 12288,
+        "cuda": true,
+        "docker": true,
+        "nvidiaRuntime": true
+      },
+      "surface": "CODE",
+      "network": "EGRESS_POLICY",
+      "entrypointPlaceholder": "code-server",
+      "softwarePlanned": [
+        "PyTorch (prévu)",
+        "PEFT (prévu)",
+        "LoRA (prévu)"
+      ],
+      "proofRequired": "Entraînement LoRA réellement exécuté avec GPU UUID loué, checkpoint écrit et repris après arrêt volontaire",
+      "blockingReason": "Image/outillage et gestion des datasets non construits; VRAM, stockage et intégrité des checkpoints non qualifiés"
+    },
+    {
+      "slug": "render-3d-studio",
+      "name": "3D Rendering Studio",
+      "status": "DESIGN_ONLY",
+      "release": "UPCOMING",
+      "bookable": false,
+      "gpuRequired": true,
+      "minimum": {
+        "ramMiB": 16384,
+        "diskMiB": 81920,
+        "vramMiB": 6144,
+        "cuda": true,
+        "docker": true,
+        "nvidiaRuntime": true
+      },
+      "surface": "BATCH",
+      "network": "NONE",
+      "entrypointPlaceholder": "blender-headless",
+      "softwarePlanned": [
+        "Blender (prévu)",
+        "Cycles CUDA (prévu)"
+      ],
+      "proofRequired": "Rendu Cycles sur GPU matériel exact, fichier image produit, pas de fallback CPU et cleanup intégral",
+      "blockingReason": "Validation headless CUDA non réalisée; image épinglée et preuve de rendu sur RTX physique requises"
+    },
+    {
+      "slug": "game-server-studio",
+      "name": "Game Server Studio",
+      "status": "DESIGN_ONLY",
+      "release": "UPCOMING",
+      "bookable": false,
+      "gpuRequired": false,
+      "minimum": {
+        "ramMiB": 16384,
+        "diskMiB": 81920,
+        "docker": true
+      },
+      "surface": "API",
+      "network": "NONE",
+      "entrypointPlaceholder": "game-control-plane",
+      "softwarePlanned": [
+        "Serveur Minecraft (prévu)",
+        "Serveur Palworld (prévu)"
+      ],
+      "proofRequired": "Serveur de jeu connecté à des clients réels via réseau autorisé, isolation inter-hôtes, quota et arrêt sûr",
+      "blockingReason": "Le Gateway actuel est HTTP/TCP et n'expose pas les ports UDP de jeu; droits d'exploitation, filtrage anti-abus et protocole réseau manquants"
+    }
+  ]
+}

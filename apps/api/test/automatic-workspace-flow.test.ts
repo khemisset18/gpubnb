@@ -111,10 +111,10 @@ test('Developer renter routes are registered (via device-authorization-routes) a
   assert.deepEqual(compatibleWorkspaceChoices(compatiblePrivateBetaMachine).map(item=>item.slug),['compute']);
 });
 
-test('the full workspace catalogue always covers all thirteen manifests, once each',()=>{
+test('the full catalogue covers thirteen historical workspaces plus six unqualified candidates, once each',()=>{
   const catalogue=allWorkspaceCompatibility(compatiblePrivateBetaMachine);
-  assert.equal(catalogue.length,13);
-  assert.equal(new Set(catalogue.map(item=>item.slug)).size,13);
+  assert.equal(catalogue.length,19);
+  assert.equal(new Set(catalogue.map(item=>item.slug)).size,19);
 });
 
 test('the catalogue only marks a workspace bookable when it is both compatible and executable, never from compatibility alone',()=>{
@@ -145,7 +145,7 @@ test('an incompatible workspace in the full catalogue is explained, not silently
   assert.ok(ai.compatibility.missing.length>0);
 });
 
-test('the workspace-catalogue route is wired to the full thirteen-workspace engine, separately from the booking route',async()=>{
+test('the workspace-catalogue route is wired to the full nineteen-workspace engine, separately from the booking route',async()=>{
   const routes=await readFile(path.join(sourceRoot,'rental-marketplace-routes.ts'),'utf8');
   assert.match(routes,/\/rental\/listings\/:listingId\/workspace-catalogue/);
   assert.match(routes,/workspaces: ?allWorkspaceCompatibility\(listing\.machine\)/);

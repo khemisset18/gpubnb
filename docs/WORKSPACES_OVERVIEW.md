@@ -1,7 +1,8 @@
 # GPUbnb Workspaces — état réel, référence pour les développeurs
 
 Ce document est la référence officielle sur l'état réel des 13 Workspaces
-GPUbnb. Il répond à une seule question à chaque fois : **est-ce réellement
+historiques GPUbnb. Six nouveaux studios restent de simples candidats de catalogue,
+non construits et non réservables (voir en fin de document). Il répond à une seule question à chaque fois : **est-ce réellement
 testé et fonctionnel, ou pas ?** Un Workspace n'est jamais présenté comme
 fonctionnel s'il ne l'est pas réellement.
 
@@ -193,3 +194,25 @@ section 9 (preflight → build → test manuel `--gpus` → confirmation
 rendu/clavier/souris/gamepad/audio réels → seulement alors, ajout aux
 listes réservables → cycle complet réservation→lancement→accès→arrêt→cleanup
 via la vraie plateforme → mise à jour des manifestes).
+
+
+## Incubateur : six studios supplémentaires (DESIGN_ONLY / UPCOMING)
+
+Ces six entrées sont des **candidats** : elles sont visibles dans le manifeste
+`workspaceManifests`, mais **aucune image applicative vérifiée n'est livrée** et
+aucun studio n'est ajouté à `executableWorkspaceSlugs` ou à
+`GATEWAY_WORKSPACE_SLUGS`. Leur présence au catalogue n'est jamais une preuve
+fonctionnelle. Les 13 Workspaces historiques conservent les statuts ci-dessus.
+
+| Candidat | Famille de travail | Blocage avant activation |
+|---|---|---|
+| AI Image Studio | ComfyUI (prévu), Stable Diffusion (prévu), CUDA | Image applicative et modèle non épinglés, licences modèles non contrôlées, pas de preuve CUDA/HTTP sur GPU loué |
+| LLM Studio | Ollama (prévu), vLLM (prévu), CUDA | Serveur et modèle non épinglés; téléchargement de modèles, sorties, VRAM et licences à encadrer |
+| Voice AI Studio | Whisper (prévu), TTS (prévu), CUDA | API audio et images non construites; vie privée, anti-usurpation vocale, modèles et quotas à définir |
+| AI Training Studio | PyTorch (prévu), PEFT (prévu), LoRA (prévu) | Image/outillage et gestion des datasets non construits; VRAM, stockage et intégrité des checkpoints non qualifiés |
+| 3D Rendering Studio | Blender (prévu), Cycles CUDA (prévu) | Validation headless CUDA non réalisée; image épinglée et preuve de rendu sur RTX physique requises |
+| Game Server Studio | Serveur Minecraft (prévu), Serveur Palworld (prévu) | Le Gateway actuel est HTTP/TCP et n'expose pas les ports UDP de jeu; droits d'exploitation, filtrage anti-abus et protocole réseau manquants |
+
+Contrats de promotion, preuves à réunir et priorités :
+`workspaces/incubator/README.md`. Aucune modification au minage, à
+l'exchange, au paiement ou aux réservations n'est autorisée par ce lot.
