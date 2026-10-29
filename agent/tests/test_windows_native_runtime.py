@@ -998,5 +998,63 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                     runtime.stop_windows_native_workspace("sess-1")
 
 
+    def test_private_console_launch_is_explicit_and_never_claims_virtual_display(self):
+        report = self._start_report(
+            captureBackend="console-dedicated",
+            consoleDisplay=True,
+            virtualDisplay=False,
+        )
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()) as preflight,
+            patch.object(runtime, "discover_native_application", return_value=None),
+            patch.object(runtime, "run_command", return_value=report) as run,
+        ):
+            handle = runtime.launch_windows_native_workspace(
+                "sess-1", "cloud-desktop",
+                "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+                private_console_qualification=True,
+            )
+        self.assertEqual(handle.capture_backend, "console-dedicated")
+        self.assertIn("--start-console", run.call_args.args[0])
+        self.assertEqual(
+            preflight.call_args.kwargs["capture_backend"], "console-dedicated"
+        )
+
+    def test_console_masquerade_as_iddcx_triggers_stop(self):
+        report = self._start_report(
+            captureBackend="console-dedicated",
+            consoleDisplay=True,
+            virtualDisplay=False,
+        )
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
+            patch.object(runtime, "discover_native_application", return_value=None),
+            patch.object(runtime, "run_command", side_effect=[report, self._stop_report()]) as run,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "native_workspace_start_display_source_mismatch"):
+                runtime.launch_windows_native_workspace(
+                    "sess-1", "cloud-desktop",
+                    "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+                )
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("--stop", run.call_args.args[0])
+
+    def test_console_source_proof_is_required_for_liveness(self):
+        console = {
+            "captureBackend": "console-dedicated",
+            "virtualDisplay": False,
+            "consoleDisplay": True,
+        }
+        self.assertTrue(runtime._source_proof_matches(console, "console-dedicated"))
+        self.assertFalse(runtime._source_proof_matches(console, "iddcx"))
+        self.assertFalse(runtime._source_proof_matches(
+            {**console, "virtualDisplay": True}, "console-dedicated",
+        ))
+        self.assertFalse(runtime._source_proof_matches(
+            {**console, "captureBackend": "unknown"}, "console-dedicated",
+        ))
+
 if __name__ == "__main__":
     unittest.main()
