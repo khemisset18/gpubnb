@@ -17,6 +17,7 @@ const WORKSPACES: [&str; 4] = ["cloud-desktop", "creator", "cad", "gaming"];
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Command {
     SelfTest,
+    SelfTestConsole,
     Start {
         session_id: String,
         workspace: String,
@@ -306,6 +307,7 @@ fn parse_args(args: &[String]) -> Result<Command, CliError> {
             _ => Err(CliError::new("invalid_authority_arguments", 2)),
         },
         Some("--self-test") if args.len() == 2 && args[1] == "--json" => Ok(Command::SelfTest),
+        Some("--self-test-console") if args.len() == 2 && args[1] == "--json" => Ok(Command::SelfTestConsole),
         Some("--self-test") => Err(CliError::new("invalid_self_test_arguments", 2)),
         Some("--start") => parse_start(args),
         Some("--start-console") => match parse_start(args)? {
@@ -346,6 +348,22 @@ fn execute(command: &Command) -> Result<String, CliError> {
                     .map_err(authority_error)?;
                 Ok(format!(
                     r#"{{"schemaVersion":1,"platform":"windows","helperVersion":"{}","gpuUuid":"{}","isolatedSession":true,"separateRenterIdentity":true,"renterSessionActive":true,"providerSessionInactive":true,"virtualDisplay":true,"providerDesktopExcluded":true,"captureFrame":true,"exactGpuBound":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaLoopback":true,"inputIsolation":true,"audioAvailable":false}}"#,
+                    env!("CARGO_PKG_VERSION"),
+                    report.gpu_uuid
+                ))
+            }
+        }
+        Command::SelfTestConsole => {
+            #[cfg(not(target_os = "windows"))]
+            {
+                Err(CliError::new("windows_required", 20))
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let report = gpubnb_windows_stream_helper::authority::run_console_self_test()
+                    .map_err(authority_error)?;
+                Ok(format!(
+                    r#"{{"schemaVersion":1,"platform":"windows","captureBackend":"console-dedicated","helperVersion":"{}","gpuUuid":"{}","isolatedSession":true,"separateRenterIdentity":true,"renterSessionActive":true,"providerSessionInactive":true,"consoleDisplay":true,"virtualDisplay":false,"providerDesktopExcluded":true,"captureFrame":true,"exactGpuBound":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaLoopback":true,"inputIsolation":true,"audioAvailable":false}}"#,
                     env!("CARGO_PKG_VERSION"),
                     report.gpu_uuid
                 ))
