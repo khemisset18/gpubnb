@@ -799,6 +799,16 @@ mod windows_impl {
         validate_input_desktop_name(&value)
     }
 
+    #[cfg(all(test, target_arch = "x86_64"))]
+    #[test]
+    fn windows_wts_info_ex_level1_abi_size() {
+        // WTSINFOEXW = 8-byte level/union header + 224-byte level-1 payload.
+        // Catch accidental field/alignment drift before trusting SessionFlags.
+        assert_eq!(std::mem::size_of::<WtsInfoExLevel1>(), 224);
+        assert_eq!(std::mem::size_of::<WtsInfoEx>(), 232);
+        assert_eq!(std::mem::align_of::<WtsInfoEx>(), 8);
+    }
+
     pub(super) fn query_renter_session_token(
         session_id: u32,
         expected_renter_user_sid: &str,
