@@ -1,0 +1,25 @@
+{
+  "status": "SOURCE_INSPECTION_ONLY_NOT_RUNTIME",
+  "expanded": {
+    "baseline": {
+      "sha256": "f9f19ab16df60c6f5254e694141b7c573c19c16a2c59a9edbd86282ccb088823",
+      "bytes": 291250,
+      "legacyIdlTagSites": 2,
+      "legacyIdlModuleMentions": 19,
+      "duplicateMutableKeyHooks": 0,
+      "duplicateMutableConstraintSites": 0,
+      "closeConstraintSites": 4
+    },
+    "candidate": {
+      "sha256": "b71935f0af75606ad066c41d14740ab801d96de8406c2d181c730b3e30ed235f",
+      "bytes": 295748,
+      "legacyIdlTagSites": 0,
+      "legacyIdlModuleMentions": 0,
+      "duplicateMutableKeyHooks": 9,
+      "duplicateMutableConstraintSites": 7,
+      "closeConstraintSites": 3
+    }
+  },
+  "compiler": "Rust1.97.1 with RUSTC_BOOTSTRAP=1 only to request -Zunpretty=expanded; dedicated fresh target caches",
+  "businessSourceUnchanged": true
+}
