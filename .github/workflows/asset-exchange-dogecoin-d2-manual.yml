@@ -3,6 +3,11 @@ name: Asset Exchange DOGE D2 Authorized Script Diagnostics
 # Diagnostics are not full D2 qualification. The final qualification gate remains
 # blocking until the frozen D2 criteria are actually demonstrated.
 on:
+  push:
+    branches:
+      - asset-exchange/doge-d2-isolated-20261029
+    paths:
+      - .github/workflows/asset-exchange-dogecoin-d2-manual.yml
   workflow_dispatch:
     inputs:
       authorization:
@@ -16,12 +21,19 @@ permissions:
 
 jobs:
   script-diagnostics:
+    if: >-
+      github.repository == 'khemisset18/gpubnb' &&
+      github.event.repository.id == 1305325878 &&
+      github.event.repository.owner.id == 103233875 &&
+      ((github.event_name == 'workflow_dispatch' && inputs.authorization == 'AUTHORIZE_D2_SCRIPT_DIAGNOSTICS') ||
+       (github.event_name == 'push' && github.ref == 'refs/heads/asset-exchange/doge-d2-isolated-20261029' &&
+        github.event.head_commit.message == 'qualify(doge-d2): execute owner-authorized isolated script diagnostics 20261029'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Require owner-authorized D2 scope
         env:
-          D2_AUTHORIZATION: ${{ inputs.authorization }}
+          D2_AUTHORIZATION: ${{ github.event_name == 'push' && 'AUTHORIZE_D2_SCRIPT_DIAGNOSTICS' || inputs.authorization }}
         run: test "$D2_AUTHORIZATION" = AUTHORIZE_D2_SCRIPT_DIAGNOSTICS
       - name: Checkout reviewed D2 harness
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,7 +53,7 @@ jobs:
       - name: Revalidate provenance then execute only isolated D2 diagnostics
         env:
           GH_TOKEN: ${{ github.token }}
-          D2_AUTHORIZATION: ${{ inputs.authorization }}
+          D2_AUTHORIZATION: ${{ github.event_name == 'push' && 'AUTHORIZE_D2_SCRIPT_DIAGNOSTICS' || inputs.authorization }}
         run: |
           bash asset-exchange/qualification/dogecoin/d2/run-isolated.sh \
             "$GITHUB_WORKSPACE/dist/doge-d0-verified" "$RUNNER_TEMP/doge-d2" "$D2_AUTHORIZATION"
