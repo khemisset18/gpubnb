@@ -54,9 +54,8 @@ not a driver or service installation.
 ```powershell
 # On PC1 only, from the reviewed checked-out source. Powershell x64.
 # Supply approved hashes from a separately verified complete release manifest.
-powershell.exe -NoProfile -ExecutionPolicy Restricted -Command "$PSVersionTable.PSVersion"
-# Then execute the inspected local script via an already-authorized script
-# execution policy; do not change machine/user policy to make this work.
+# Execute the inspected local script only if the current script execution
+# policy already permits it; do not change a machine/user policy.
 .\scripts\stage4-console-readonly-preflight.ps1 `
   -ExpectedGpuUuid 'GPU-REPLACE-WITH-ACTUAL-CANONICAL-UUID' `
   -RenterAccount 'gpubnb-renter-qual' `
