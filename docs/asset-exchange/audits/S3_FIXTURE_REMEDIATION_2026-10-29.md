@@ -38,3 +38,16 @@ Local signature/SBOM verification is proven; container execution and S3
 compatibility are **IMPLEMENTED BUT NOT YET VALIDATED** until CI completes.
 An unavailable old digest or future vulnerability must block, not fall back to
 latest or another provider. A digest pin proves identity, not perpetual support.
+
+## First real CI attempt and network diagnosis
+
+Run 40913907434 verified the fixture signature and signed SBOM and its full
+image Trivy gate passed. It then downloaded and started the pinned MinIO
+successfully but the loopback-published readiness probe failed. Server logs
+show a normal initialized MinIO listener on the private internal-bridge IP.
+The internal Docker bridge deliberately has no external NAT path. The corrected
+harness explicitly targets its inspected private IPv4 from the runner's directly
+connected bridge route, passes that same endpoint to both real S3 tests and
+retains the internal network/loopback-only port restrictions. No public network
+or test threshold is opened. This hypothesis still requires a successful real
+round trip, not just a startup log; the failed run stays FAILED.

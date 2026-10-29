@@ -83,8 +83,18 @@ jobs:
             -e MINIO_ROOT_USER=gpubnb-ci-access \
             -e MINIO_ROOT_PASSWORD=gpubnb-ci-secret-key \
             "$MINIO_IMAGE" --certs-dir /tmp/certs server /data --address :9000
+          # An internal bridge has no external NAT route. Reach its connected
+          # private address from the runner rather than relying on port NAT.
+          fixture_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' gpubnb-minio)"
+          python3 - "$fixture_ip" <<'PY'
+          import ipaddress, sys
+          address = ipaddress.ip_address(sys.argv[1])
+          assert address.version == 4 and address.is_private and not address.is_loopback
+          PY
+          fixture_endpoint="http://$fixture_ip:9000"
+          echo "ARTIFACT_S3_ENDPOINT=$fixture_endpoint" >> "$GITHUB_ENV"
           for attempt in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
+            if curl --fail --silent --show-error --noproxy '*' --connect-timeout 1 --max-time 2 "$fixture_endpoint/minio/health/live" >/dev/null; then
               exit 0
             fi
             sleep 1
@@ -95,7 +105,6 @@ jobs:
         working-directory: apps/api
         env:
           ARTIFACT_S3_INTEGRATION: '1'
-          ARTIFACT_S3_ENDPOINT: http://127.0.0.1:9000
           ARTIFACT_S3_REGION: us-east-1
           ARTIFACT_S3_ACCESS_KEY_ID: gpubnb-ci-access
           ARTIFACT_S3_SECRET_ACCESS_KEY: gpubnb-ci-secret-key
@@ -106,7 +115,6 @@ jobs:
         working-directory: apps/api
         env:
           ARTIFACT_S3_INTEGRATION: '1'
-          ARTIFACT_S3_ENDPOINT: http://127.0.0.1:9000
           ARTIFACT_S3_REGION: us-east-1
           ARTIFACT_S3_ACCESS_KEY_ID: gpubnb-ci-access
           ARTIFACT_S3_SECRET_ACCESS_KEY: gpubnb-ci-secret-key
