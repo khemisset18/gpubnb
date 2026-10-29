@@ -79,6 +79,13 @@ export const workspaceRuntimeProfiles:Readonly<Record<string,WorkspaceRuntimePro
   // An interactive Ardour/Audacity GUI would need the same broken-on-this-
   // host desktop-streaming path as Creator's Blender - see docs/SESSION_RESUME.md.
   audio:{slug:'audio',runtime:'CONTAINER',surface:'NOTEBOOK',category:'AUDIO',entrypoint:'jupyterlab',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  // Incubator only. No pinned image or agent launcher, and no executableWorkspaceSlug.
+  'ai-image-studio':{slug:'ai-image-studio',runtime:'CONTAINER',surface:'API',category:'AI',entrypoint:'comfyui-http',network:'GATEWAY_ONLY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  'llm-studio':{slug:'llm-studio',runtime:'CONTAINER',surface:'API',category:'AI',entrypoint:'llm-http',network:'GATEWAY_ONLY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  'voice-ai-studio':{slug:'voice-ai-studio',runtime:'CONTAINER',surface:'API',category:'AUDIO',entrypoint:'voice-http',network:'GATEWAY_ONLY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  'ai-training-studio':{slug:'ai-training-studio',runtime:'CONTAINER',surface:'CODE',category:'AI',entrypoint:'code-server',network:'EGRESS_POLICY',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
+  'render-3d-studio':{slug:'render-3d-studio',runtime:'CONTAINER',surface:'BATCH',category:'CREATION',entrypoint:'blender-headless',network:'NONE',persistentWorkspace:false,hostAccess:false,dockerSocket:false,privileged:false},
+  'game-server-studio':{slug:'game-server-studio',runtime:'CONTAINER',surface:'API',category:'GAMING',entrypoint:'game-control-plane',network:'NONE',persistentWorkspace:true,hostAccess:false,dockerSocket:false,privileged:false},
 });
 
 export function workspaceRuntimeProfile(slug:string){return workspaceRuntimeProfiles[slug];}
