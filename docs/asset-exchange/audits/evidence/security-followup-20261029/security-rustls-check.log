@@ -176,7 +176,7 @@ error: linking with `cc` failed: exit status: 1
   = note: some arguments are omitted. use `--verbose` to show all linker arguments
   = note: lld-wrapper: could not get the path of the current executable: no /proc/self/exe available. Is /proc mounted?
           collect2: error: ld returned 1 exit status
-          
+
 
 error: could not compile `quote` (build script) due to 1 previous error
 warning: build failed, waiting for other jobs to finish...
@@ -186,7 +186,7 @@ error: linking with `cc` failed: exit status: 1
   = note: some arguments are omitted. use `--verbose` to show all linker arguments
   = note: lld-wrapper: could not get the path of the current executable: no /proc/self/exe available. Is /proc mounted?
           collect2: error: ld returned 1 exit status
-          
+
 
 error: could not compile `proc-macro2` (build script) due to 1 previous error
 error: linking with `cc` failed: exit status: 1
@@ -195,6 +195,6 @@ error: linking with `cc` failed: exit status: 1
   = note: some arguments are omitted. use `--verbose` to show all linker arguments
   = note: lld-wrapper: could not get the path of the current executable: no /proc/self/exe available. Is /proc mounted?
           collect2: error: ld returned 1 exit status
-          
+
 
 error: could not compile `libc` (build script) due to 1 previous error

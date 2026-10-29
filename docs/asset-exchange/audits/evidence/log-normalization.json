@@ -1,0 +1,29 @@
+{
+  "schema": "GPUBNB:EVIDENCE:LOG-VIEW:v1",
+  "rule": "Remove only ASCII space/tab immediately before existing line endings or EOF; preserve UTF-8 bytes otherwise. Raw gzip is authoritative original data.",
+  "records": [
+    {
+      "view": "doge-d1-20261029/daemon-console.log",
+      "rawGzip": "doge-d1-20261029/daemon-console.log.original.gz",
+      "originalSha256": "3eec7252eba7f3a7db57c144c113889c8bdfa90e3c4efbd156857efd435cb7b9",
+      "normalizedSha256": "fa73f3611bd79b2efc72329391cc2dd566bc398f4f7f27f9cb04c1238fd31989",
+      "lineCount": 94,
+      "changedLines": [
+        1,
+        32
+      ]
+    },
+    {
+      "view": "security-followup-20261029/security-rustls-check.log",
+      "rawGzip": "security-followup-20261029/security-rustls-check.log.original.gz",
+      "originalSha256": "3d7939122416accaff249ef6fec1a4b3e5cbb766bf6435cf3cc21eb0f751b223",
+      "normalizedSha256": "8bcb1dd9a31dbe2e0f10c0975b1a21e631feb736c73b2bb58531a8875e4f6033",
+      "lineCount": 200,
+      "changedLines": [
+        179,
+        189,
+        198
+      ]
+    }
+  ]
+}

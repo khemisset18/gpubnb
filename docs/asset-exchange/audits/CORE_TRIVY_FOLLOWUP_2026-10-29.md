@@ -1,7 +1,8 @@
 # Additional compatible Trivy fixes
 
-Status: actual modified files scanned; three unresolved occurrences continue to
-block full repository qualification. This supersedes the initial nine-finding
+Status: local scan had three occurrences; newer authoritative CI scan has NINE
+occurrences including six desktop findings (see appended update). Full repository
+qualification is BLOCKED. This supersedes the initial nine-finding
 count in CORE_SECURITY_VALIDATION_2026-10-29.md, which preserves the prior scan.
 
 | Component | Actual change | Validation |
@@ -63,3 +64,19 @@ This is an actual infrastructure blocker, not evidence of a Zod/Jayson failure.
 The S3 tests were not executed. No unreviewed image/provider substitution or
 success-by-skip change was applied. A reviewed, available fixture image with
 pinned provenance is needed before that integration can be qualified.
+
+## Authoritative CI update — commit 61016d66b6616f339e06340054f534b6f9aabc1e
+
+Run 40894500362 includes development dependencies and reports NINE occurrences:
+previous borsh/glib/rand plus source-map-js 1.2.1 (CVE-2026-93749, HIGH) and
+Vite 7.3.6 (CVE-2026-112942 HIGH; 112943/112944/112946 MEDIUM; 112945 LOW).
+Desktop fixes reported: source-map-js 1.2.2 and Vite 7.3.7. These newer findings
+supersede the earlier local cached database count; the gate correctly failed.
+No clean security claim is made. Desktop changes need a separately reviewable
+proposal within the owner's scope restrictions.
+
+Gateway run 40894500274 completed successfully: real Redis contract tests,
+cross-language ticket compatibility, Clippy, release and container build.
+The P2P diff gate separately rejected trailing whitespace in two evidence logs;
+raw bytes are now preserved losslessly as gzip with explicit normalized views
+and tests of the original digests. No whitespace gate was weakened.

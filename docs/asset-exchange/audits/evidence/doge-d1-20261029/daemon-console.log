@@ -1,4 +1,4 @@
-2026-10-29 14:34:58 
+2026-10-29 14:34:58
 
 
 
@@ -29,7 +29,7 @@
 2026-10-29 14:34:58 Using at most 125 automatic connections (1024 file descriptors available)
 2026-10-29 14:34:58 Using 32 MiB out of 32 requested for signature cache, able to store 1048576 elements
 2026-10-29 14:34:58 Using 2 threads for script verification
-2026-10-29 14:34:58 Allowing HTTP connections from: 127.0.0.0/8 ::1/128 127.0.0.1/32 
+2026-10-29 14:34:58 Allowing HTTP connections from: 127.0.0.0/8 ::1/128 127.0.0.1/32
 2026-10-29 14:34:58 scheduler thread start
 2026-10-29 14:34:58 Binding RPC on address 127.0.0.1 port 18332
 2026-10-29 14:34:58 HTTP: creating work queue of depth 16
