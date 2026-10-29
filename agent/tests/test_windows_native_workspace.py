@@ -344,5 +344,56 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
             native.profile_for_slug("developer")
 
 
+    def test_console_self_test_requires_distinct_non_virtual_display_source(self):
+        base = self._passing_report(
+            captureBackend="console-dedicated",
+            virtualDisplay=False,
+            consoleDisplay=True,
+        )
+        inventory = [{"gpuVendor": "NVIDIA", "gpuUuid": "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"}]
+        with (
+            patch.object(native.platform, "system", return_value="Windows"),
+            patch.object(native, "run_command", return_value=base) as run,
+            patch.object(native, "gpu_inventory", return_value=inventory),
+        ):
+            preflight = native.windows_native_desktop_preflight(
+                "helper.exe", capture_backend="console-dedicated"
+            )
+        self.assertTrue(preflight.available)
+        self.assertEqual(run.call_args.args[0], ["helper.exe", "--self-test-console", "--json"])
+
+        for fields in (
+            {"captureBackend": "iddcx"},
+            {"virtualDisplay": True},
+            {"consoleDisplay": False},
+            {"consoleDisplay": None},
+        ):
+            with (
+                self.subTest(fields=fields),
+                patch.object(native.platform, "system", return_value="Windows"),
+                patch.object(native, "run_command", return_value=self._passing_report(
+                    captureBackend="console-dedicated",
+                    virtualDisplay=False,
+                    consoleDisplay=True,
+                    **fields,
+                )),
+            ):
+                self.assertFalse(
+                    native.windows_native_desktop_preflight(
+                        "helper.exe", capture_backend="console-dedicated"
+                    ).available
+                )
+
+    def test_console_preflight_cannot_be_silently_used_as_iddcx(self):
+        with (
+            patch.object(native.platform, "system", return_value="Windows"),
+            patch.object(native, "run_command", return_value=self._passing_report(
+                captureBackend="console-dedicated",
+                virtualDisplay=False,
+                consoleDisplay=True,
+            )),
+        ):
+            self.assertFalse(native.windows_native_desktop_preflight("helper.exe").available)
+
 if __name__ == "__main__":
     unittest.main()
