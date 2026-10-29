@@ -1,0 +1,7 @@
+{
+  "status": "DOCUMENTED_API_LIMITATION",
+  "input": "literal unencoded double quotes and HTML in the URL passed directly to transformIndexHtml",
+  "observation": "The raw API is not an HTML sanitizer. The initial broad expectation failed. Browser request URLs percent-encode these characters. Regression cases now use those actual browser encodings plus the exact upstream protocol-relative/query traversal shape, with a real existing fixture package.json.",
+  "mitigationScope": "The desktop uses the built-in SPA handler, not custom transformIndexHtml middleware. No application handler or expectation was weakened. Raw arbitrary HTML-as-URL sanitation is not claimed.",
+  "primaryReference": "https://github.com/vitejs/vite/security/advisories/GHSA-9jrq-w75r-8gcw"
+}

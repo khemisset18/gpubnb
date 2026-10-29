@@ -1,0 +1,6 @@
+(node:34) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> @gpubnb/host-desktop@0.1.0 check
+> tsc --noEmit
+

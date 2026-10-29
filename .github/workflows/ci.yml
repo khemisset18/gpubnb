@@ -97,6 +97,66 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  desktop-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/host-desktop/package-lock.json
+      - name: Install actual locked desktop tree with compatibility checks
+        working-directory: apps/host-desktop
+        run: npm ci --no-audit --no-fund
+      - name: Require zero desktop vulnerabilities at every severity
+        working-directory: apps/host-desktop
+        shell: bash
+        run: |
+          npm audit --json > desktop-npm-audit.json
+          node --input-type=module - <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const report = JSON.parse(readFileSync('desktop-npm-audit.json', 'utf8'));
+          console.log(JSON.stringify(report.metadata?.vulnerabilities));
+          if (report.error || report.metadata?.vulnerabilities?.total !== 0 || Object.keys(report.vulnerabilities ?? {}).length) process.exit(1);
+          NODE
+      - name: Source-map and Vite security regressions
+        working-directory: apps/host-desktop
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:security 2>&1 | tee desktop-security-tests.log
+      - name: Strict TypeScript and actual frontend build
+        working-directory: apps/host-desktop
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee desktop-typescript.log
+          npm run build 2>&1 | tee desktop-frontend-build.log
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Linux native host contracts and integration tests
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked -p gpubnb-host-desktop --all-targets 2>&1 | tee desktop-native-tests.log
+      - name: Retain desktop diagnostics including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-security-validation
+          path: |
+            apps/host-desktop/desktop-npm-audit.json
+            apps/host-desktop/desktop-security-tests.log
+            apps/host-desktop/desktop-typescript.log
+            apps/host-desktop/desktop-frontend-build.log
+            desktop-native-tests.log
+          if-no-files-found: error
+          retention-days: 30
+
   dependency-audit:
     runs-on: ubuntu-latest
     steps:

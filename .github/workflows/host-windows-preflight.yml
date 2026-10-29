@@ -82,6 +82,18 @@ jobs:
         working-directory: apps/host-desktop
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      - name: Apply reviewed deterministic source-map compatibility patch
+        working-directory: apps/host-desktop
+        run: npm run prepare:source-maps
+
+      - name: Desktop security regressions
+        working-directory: apps/host-desktop
+        run: npm run test:security
+
+      - name: Audit actual Windows desktop dependencies at all severities
+        working-directory: apps/host-desktop
+        run: npm audit
+
       - name: Install agent and PyInstaller
         run: |
           python -m pip install --upgrade pip
