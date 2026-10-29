@@ -1,12 +1,18 @@
 # Render — plan manuel prêt pour autorisation, non exécuté
 
-## État relu le 18 octobre 2026
+## État historique relu le 18 octobre 2026
 
 Service [gpubnb-stage3-private](https://dashboard.render.com/web/srv-dau86i2d0e5s73elmk10), ID `srv-dau86i2d0e5s73elmk10`. Dépôt `khemisset18/gpubnb`, branche `qualification/stage3-windows-native-private-3c3e21e6`, autoDeploy `no`, région Frankfurt, une instance, Docker, contexte `.`, Dockerfile `./apps/api/Dockerfile`, healthCheckPath `/health`.
 
 Déploiement actif relu : `dep-db4j8gom7kps73c1u4p0`, statut `live`, commit `6b655614d3b9c3fda7912742b539601ba22598f1`. Le contrôle public `/release` confirme ce même SHA. `/health` répond `mainnetEnabled=false`, `escrowConfigured=false` ; `/ready` répond JSON `ok=true`. Le WSS santé répond exactement `gpubnb-ws-ok`.
 
 Le connecteur ne fournit pas ici de lecture des variables d'environnement : **la valeur actuelle de `BETA_TEST_DEV_BYPASS` n'est pas attestée**. Aucun secret n'a été lu ou modifié. Vérifier dans le Dashboard habilité `BETA_TEST_DEV_BYPASS=true` ET `ESCROW_PROGRAM_ID=NOT_DEPLOYED_YET` ; toute autre combinaison bloque la qualification privée. Ne pas afficher les autres valeurs.
+
+## Contrôle en lecture seule du 29 octobre 2026
+
+Le relevé fourni dans cette session indique que le service `srv-dau86i2d0e5s73elmk10` a un déploiement actif au SHA `40e9ef5991ab13753130121fd321c60c84b4a297`, avec `autoDeploy=no`. Les métadonnées indiquent toujours la branche configurée `qualification/stage3-windows-native-private-3c3e21e6`. Aucun déploiement ou rollback n'a été demandé ou déclenché.
+
+Les endpoints runtime vérifiés donnent `/release` = `ok=true`, commit `40e9ef5991ab13753130121fd321c60c84b4a297`; `/config.js` = `releaseCommit=40e9ef5991ab13753130121fd321c60c84b4a297` (sortie PowerShell fournie par l'utilisateur) ; `/ready` = `ok=true`. Le déploiement `dep-dbggcm0u01pc73fbjg0g` est `live`; le déploiement précédent `dep-dbb2vsmq1p3s73dl7r20` au SHA `447b8f3f931bd61d3131cff6f7204d7625b108b2` est `deactivated`. L'API et la configuration frontend sont alignées sur `40e9ef5991ab13753130121fd321c60c84b4a297`, mais le paquet PC1 signé/vérifié, non installé, reste au SHA `447b8f3f931bd61d3131cff6f7204d7625b108b2`. Le déploiement n'est donc pas prêt pour le test PC1 → PC2. Les pages Stage 4, le préflight authentifié et la gateway restent à vérifier. `BETA_TEST_DEV_BYPASS` et l'état d'application de la migration RLS demeurent inconnus ; aucun secret n'a été lu ou modifié.
 
 ## Cible et préparation
 

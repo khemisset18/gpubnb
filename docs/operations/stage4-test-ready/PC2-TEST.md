@@ -1,6 +1,6 @@
 # PC2 — navigateur uniquement, test réservé à l'utilisateur
 
-## URL vérifiées le 18 octobre 2026
+## Vérifications historiques du 18 octobre 2026
 
 - Connexion : https://gpubnb-stage3-private.onrender.com/auth.html
 - Entrée privée : https://gpubnb-stage3-private.onrender.com/stage3-windows-native.html
@@ -9,7 +9,13 @@
 - Santé WebSocket : wss://gpubnb-stage3-private.onrender.com/ws-health — upgrade et message `gpubnb-ws-ok` vérifiés.
 - Flux privé défini dans le code : `/workspace-gateway/<sessionId>/native-stream` à la même origine WSS, authentifié et binaire. Aucune session réelle n'a été ouverte pour le vérifier.
 
-Le service live annonce encore le SHA Stage 3 `6b655614d3b9c3fda7912742b539601ba22598f1`. Sa page bureau n'a pas le compteur Stage 4 et le préflight Stage 4 absent renvoie du HTML : **ne pas démarrer le test sur ce déploiement**. `https://gpubnb.netlify.app/config.js` annonce `16c13e0` et `https://gpubnb.onrender.com` ; ne pas utiliser ce parcours public pour le test privé.
+Le déploiement vérifié ce jour-là annonçait le SHA Stage 3 `6b655614d3b9c3fda7912742b539601ba22598f1`. Sa page bureau n'avait pas le compteur Stage 4 et le préflight Stage 4 absent renvoyait du HTML. Ces observations sont historiques, pas l'état runtime du 29 octobre. `https://gpubnb.netlify.app/config.js` annonçait `16c13e0` et `https://gpubnb.onrender.com` ; ne pas utiliser ce parcours public pour le test privé.
+
+## Contrôle Render en lecture seule du 29 octobre 2026
+
+Le relevé de contrôle fourni dans cette session indique un déploiement actif au SHA `40e9ef5991ab13753130121fd321c60c84b4a297`, `autoDeploy=no`, sur le service privé `gpubnb-stage3-private`. Les métadonnées indiquent la branche configurée `qualification/stage3-windows-native-private-3c3e21e6`. Les endpoints runtime vérifiés donnent `/release` = commit `40e9ef5991ab13753130121fd321c60c84b4a297`, `/config.js` = `releaseCommit=40e9ef5991ab13753130121fd321c60c84b4a297` (sortie PowerShell fournie par l'utilisateur), et `/ready` = `ok=true`. Les pages Stage 4, le préflight authentifié et une session navigateur restent non vérifiés.
+
+Le paquet privé signé/vérifié disponible sur PC1 est au SHA `447b8f3f931bd61d3131cff6f7204d7625b108b2` et n'est pas installé. Le déploiement Render rapporté et le paquet ne sont donc pas alignés. **Ne pas lancer de réservation ni de test PC1 → PC2** sur cette seule base. Aucun accès navigateur, flux média ou session physique n'a été testé par ce relevé.
 
 ## Prérequis préparés
 
