@@ -300,6 +300,10 @@ def launch_windows_native_workspace(
         _raise_after_started_session_validation_failure(
             executable, session_id, f"native_workspace_start_missing_{missing}"
         )
+    if capture_backend == "iddcx" and report.get("virtualDisplay") is not True:
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_missing_virtualDisplay"
+        )
     if not _source_proof_matches(report, capture_backend):
         _raise_after_started_session_validation_failure(
             executable, session_id, "native_workspace_start_display_source_mismatch"
@@ -513,6 +517,8 @@ def resume_windows_native_workspace(
     missing = next((field for field in required_true if report.get(field) is not True), None)
     if missing:
         raise RuntimeError(f"native_workspace_resume_missing_{missing}")
+    if capture_backend == "iddcx" and report.get("virtualDisplay") is not True:
+        raise RuntimeError("native_workspace_resume_missing_virtualDisplay")
     if not _source_proof_matches(report, capture_backend):
         raise RuntimeError("native_workspace_resume_display_source_mismatch")
     if str(report.get("hardwareEncoder") or "").casefold() != "nvenc":
