@@ -1,0 +1,36 @@
+{
+  "run": 40959885917,
+  "commit": "c8bdef493c140097c1cc198aa6ec67bdb58ca4d5",
+  "artifactId": 12935187185,
+  "artifactSha256": "9b5e60f3c25ad77beb82ef387c71078d0c3b26b84a23e5b653fe4179452522ef",
+  "blockingCount": 3,
+  "findings": [
+    {
+      "target": "Cargo.lock",
+      "VulnerabilityID": "GHSA-fjx5-qpf4-xjf2",
+      "PkgName": "borsh",
+      "InstalledVersion": "0.10.4",
+      "FixedVersion": "1.0.0-alpha.1",
+      "Severity": "MEDIUM"
+    },
+    {
+      "target": "Cargo.lock",
+      "VulnerabilityID": "GHSA-wrw7-89jp-8q8g",
+      "PkgName": "glib",
+      "InstalledVersion": "0.18.5",
+      "FixedVersion": "0.20.0",
+      "Severity": "MEDIUM"
+    },
+    {
+      "target": "Cargo.lock",
+      "VulnerabilityID": "GHSA-cq8v-f236-94qc",
+      "PkgName": "rand",
+      "InstalledVersion": "0.7.3",
+      "FixedVersion": "0.9.3, 0.10.1, 0.8.6",
+      "Severity": "LOW"
+    }
+  ],
+  "scanIncludesDevDependencies": true,
+  "allSeverities": true,
+  "ignoreUnfixed": false
+}

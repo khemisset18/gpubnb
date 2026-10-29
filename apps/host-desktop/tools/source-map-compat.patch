@@ -1,60 +1,30 @@
 --- source-map-js@1.2.2/lib/source-map-consumer.js
 +++ source-map-js@1.2.2+gpubnb-compat/lib/source-map-consumer.js
-@@ -938,6 +938,9 @@
- 
-   this._sources = new ArraySet();
-   this._names = new ArraySet();
+@@ -940,0 +941,3 @@
 +  this.sourceRoot = null;
 +  this.file = util.getArg(sourceMap, 'file', null);
 +  this._sourceMapURL = aSourceMapURL;
- 
-   var lastOffset = {
-     line: -1,
-@@ -1070,7 +1073,7 @@
-         }
- 
-         return (needle.generatedColumn -
+@@ -1073 +1076 @@
 -                section.generatedOffset.generatedColumn);
 +                (section.generatedOffset.generatedColumn - 1));
-       });
-     var section = this._sections[sectionIndex];
- 
-@@ -1120,7 +1123,8 @@
-         return content;
-       }
-     }
+@@ -1123 +1126,2 @@
 -    if (nullOnMissing) {
 +    // A known source may legitimately omit sourcesContent.
 +    if (this.sources.indexOf(aSource) !== -1 || nullOnMissing) {
-       return null;
-     }
-     else {
-@@ -1151,18 +1155,14 @@
-     for (var i = 0; i < this._sections.length; i++) {
-       var section = this._sections[i];
- 
+@@ -1154,5 +1158 @@
 -      // Only consider this section if the requested source is in the list of
 -      // sources of the consumer.
 -      if (section.consumer._findSourceIndex(util.getArg(aArgs, 'source')) === -1) {
 -        continue;
 -      }
 +      // Use the public API: a section may itself be an indexed consumer.
-       var generatedPosition = section.consumer.generatedPositionFor(aArgs);
+@@ -1160 +1160 @@
 -      if (generatedPosition) {
 +      if (generatedPosition.line !== null && generatedPosition.column !== null) {
-         var ret = {
-           line: generatedPosition.line +
-             (section.generatedOffset.generatedLine - 1),
-           column: generatedPosition.column +
+@@ -1165 +1165 @@
 -            (section.generatedOffset.generatedLine === generatedPosition.line
 +            (generatedPosition.line === 1
-              ? section.generatedOffset.generatedColumn - 1
-              : 0)
-         };
-@@ -1191,15 +1191,16 @@
-       for (var j = 0; j < sectionMappings.length; j++) {
-         var mapping = sectionMappings[j];
- 
+@@ -1194,6 +1194,7 @@
 -        var source = section.consumer._sources.at(mapping.source);
 -        if(source !== null) {
 -          source = util.computeSourceURL(section.consumer.sourceRoot, source, this._sourceMapURL);
@@ -68,26 +38,13 @@
 +          this._sources.add(source);
 +          source = this._sources.indexOf(source);
 +        }
- 
-         var name = null;
+@@ -1202 +1203 @@
 -        if (mapping.name) {
 +        if (mapping.name !== null) {
-           name = section.consumer._names.at(mapping.name);
-           this._names.add(name);
-           name = this._names.indexOf(name);
-@@ -1214,7 +1215,7 @@
-           generatedLine: mapping.generatedLine +
-             (section.generatedOffset.generatedLine - 1),
-           generatedColumn: mapping.generatedColumn +
+@@ -1217 +1218 @@
 -            (section.generatedOffset.generatedLine === mapping.generatedLine
 +            (mapping.generatedLine === 1
-             ? section.generatedOffset.generatedColumn - 1
-             : 0),
-           originalLine: mapping.originalLine,
-@@ -1233,4 +1234,11 @@
-     quickSort(this.__originalMappings, util.compareByOriginalPositions);
-   };
- 
+@@ -1235,0 +1237,7 @@
 +// Indexed mappings are flattened lazily before inherited multi-position lookup.
 +IndexedSourceMapConsumer.prototype._findSourceIndex = function(aSource) {
 +  this._generatedMappings;
@@ -95,4 +52,3 @@
 +};
 +IndexedSourceMapConsumer.prototype._findMapping = BasicSourceMapConsumer.prototype._findMapping;
 +
- exports.IndexedSourceMapConsumer = IndexedSourceMapConsumer;

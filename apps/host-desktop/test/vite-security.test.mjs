@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtemp, mkdir, writeFile, rm, readFile} from 'node:fs/promises';
+import {mkdtemp, mkdir, writeFile, rm, readFile, realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {get} from 'node:http';
@@ -19,7 +19,8 @@ const request = (base, pathname) => new Promise((resolve, reject) => {
 });
 
 async function fixture(run) {
-  const directory = await mkdtemp(path.join(tmpdir(), 'gpubnb-vite-security-'));
+  // Canonicalize Windows 8.3 temp-directory aliases before constructing fs.allow.
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'gpubnb-vite-security-')));
   const root = path.join(directory, 'project');
   await mkdir(root);
   const sentinel = 'DISPOSABLE_FIXTURE_CONTENT_NEVER_SERVE';
@@ -39,9 +40,9 @@ async function fixture(run) {
 }
 
 test('real loopback HTTP server serves permitted files and denies outside/env/key/wasm requests', {timeout: 15000}, async () => {
-  await fixture(async ({base, outside, sentinel}) => {
+  await fixture(async ({base, outside, sentinel, root}) => {
     const allowed = await request(base, '/safe.txt');
-    assert.equal(allowed.status, 200);
+    assert.equal(allowed.status, 200, JSON.stringify({root, response: allowed.body}));
     assert.equal(allowed.body, 'ALLOWED_FIXTURE');
     for (const pathname of [`/@fs/${normalizePath(outside)}`, `/.env`, '/.env?raw', '/fixture.pem', '/fixture.pem?import', `/@fs/${normalizePath(outside)}?vite-wasm-instance`, `/@fs/${normalizePath(outside)}?raw`]) {
       const denied = await request(base, pathname);

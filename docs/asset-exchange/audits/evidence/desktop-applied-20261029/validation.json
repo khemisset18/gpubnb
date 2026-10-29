@@ -36,5 +36,25 @@
   "windows": "NOT_TESTED_ON_THIS_CHANGE_YET",
   "globalTrivy": "NOT_TESTED_ON_THIS_CHANGE_YET",
   "financialBehaviorModified": false,
-  "D0TrustModified": false
+  "D0TrustModified": false,
+  "firstGlobalTrivy": {
+    "run": 40959885917,
+    "blockingCount": 3,
+    "severityCounts": {
+      "HIGH": 0,
+      "MEDIUM": 2,
+      "LOW": 1
+    },
+    "desktopFindings": 0
+  },
+  "firstLinuxDesktopCi": {
+    "run": 40959885917,
+    "job": 123749575607,
+    "status": "PASS"
+  },
+  "firstWindowsCi": {
+    "run": 40959885741,
+    "status": "FAIL",
+    "cause": "permitted temporary fixture path returned403; canonical path repair awaits Windows validation"
+  }
 }

@@ -1,0 +1,90 @@
+(node:5) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> @gpubnb/host-desktop@0.1.0 test:security
+> node --test test/*.test.mjs
+
+(node:18) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+TAP version 13
+# (node:25) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: patch is deterministic, idempotent and refuses unknown dependency bytes
+ok 1 - patch is deterministic, idempotent and refuses unknown dependency bytes
+  ---
+  duration_ms: 4.506803
+  type: 'test'
+  ...
+# Subtest: exact original indexed-column-zero and flattening diagnostic now succeeds
+ok 2 - exact original indexed-column-zero and flattening diagnostic now succeeds
+  ---
+  duration_ms: 5.072793
+  type: 'test'
+  ...
+# Subtest: section offset affects only its first local line and preserves name index zero
+ok 3 - section offset affects only its first local line and preserves name index zero
+  ---
+  duration_ms: 1.56792
+  type: 'test'
+  ...
+# Subtest: nested sections preserve reverse positions, contents and multi-position lookup
+ok 4 - nested sections preserve reverse positions, contents and multi-position lookup
+  ---
+  duration_ms: 0.963178
+  type: 'test'
+  ...
+# Subtest: unmapped segments stay unmapped after flattening; flat consumers remain compatible
+ok 5 - unmapped segments stay unmapped after flattening; flat consumers remain compatible
+  ---
+  duration_ms: 0.968658
+  type: 'test'
+  ...
+# Subtest: PostCSS consumes actual indexed previous maps without losing the source
+ok 6 - PostCSS consumes actual indexed previous maps without losing the source
+  ---
+  duration_ms: 2.409684
+  type: 'test'
+  ...
+# (node:25) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: malformed/extreme/nested offsets still fail within a bounded worker
+ok 7 - malformed/extreme/nested offsets still fail within a bounded worker
+  ---
+  duration_ms: 129.838238
+  type: 'test'
+  ...
+# (node:26) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: real loopback HTTP server serves permitted files and denies outside/env/key/wasm requests
+ok 8 - real loopback HTTP server serves permitted files and denies outside/env/key/wasm requests
+  ---
+  duration_ms: 97.833535
+  type: 'test'
+  ...
+# Subtest: an imported project shadow file cannot allow the corresponding outside absolute file
+ok 9 - an imported project shadow file cannot allow the corresponding outside absolute file
+  ---
+  duration_ms: 47.294937
+  type: 'test'
+  ...
+# Subtest: custom middleware inline-module URLs remain on the local origin for hostile request URLs
+ok 10 - custom middleware inline-module URLs remain on the local origin for hostile request URLs
+  ---
+  duration_ms: 52.101716
+  type: 'test'
+  ...
+# Subtest: actual bundled Windows editor helpers reject percent/newline arguments and normalize paths before editor flags
+ok 11 - actual bundled Windows editor helpers reject percent/newline arguments and normalize paths before editor flags
+  ---
+  duration_ms: 14.60364
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1393.931312

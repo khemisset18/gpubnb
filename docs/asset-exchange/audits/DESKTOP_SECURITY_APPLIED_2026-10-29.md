@@ -56,3 +56,27 @@ required on this exact change. The global all-severity, development-inclusive,
 unfixed-inclusive Trivy gate remains strict. Three existing Rust graph issues
 remain expected; only a real report may establish the current count. No global
 security or production qualification PASS is inferred from the local audit.
+
+## First actual CI observations and follow-up
+
+Run 40959885917, commit c8bdef493c140097c1cc198aa6ec67bdb58ca4d5:
+Linux desktop dependency install/audit, eleven regressions, frontend/TypeScript
+and native host contracts all PASS. The independently downloaded Trivy artifact
+12935187185 has verified ZIP SHA-256
+9b5e60f3c25ad77beb82ef387c71078d0c3b26b84a23e5b653fe4179452522ef.
+Exactly three findings remain: borsh/glib MEDIUM and rand LOW. All six former
+desktop findings are absent. The full original ZIP is preserved with this report.
+The global gate remains correctly FAILED.
+
+Windows run 40959885741 correctly FAILED: the permitted temporary fixture file
+returned403 before any installer/native build. Its original full log is preserved
+losslessly in gzip with a raw digest. The repair canonicalizes the Windows temp
+path before constructing the narrow filesystem allowlist, addressing 8.3 vs long
+path identities. The HTTP200 positive control and all HTTP403/security assertions
+remain unchanged. A fresh Windows run must confirm this hypothesis.
+
+Every frontend build now explicitly prepares the checked source-map patch,
+including workflows which intentionally install with ignore-scripts. The readable
+patch is rendered with zero context so its required unified-diff context prefixes
+do not introduce whitespace-only lines into the unchanged strict P2P gate.
+No installed patch bytes or assertions change in that formatting adjustment.
