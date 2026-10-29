@@ -469,7 +469,10 @@ fn decode_console_frame_header(
         return Err(MediaProbeError::InvalidResult);
     }
     Ok(ConsoleFrameMetadata {
-        proof_flags, encoded_bytes, frame_sequence, frame_flags,
+        proof_flags,
+        encoded_bytes,
+        frame_sequence,
+        frame_flags,
     })
 }
 
