@@ -10,6 +10,8 @@ WORK_DIR="$(realpath -m "$1")"
 OUTPUT_DIR="$(realpath -m "$2")"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+source "$SCRIPT_DIR/focal-kernel-cohort.sh"
+
 DOGE_SOURCE_COMMIT="e0a1c157791544e818c901bd9341896965afbf9d"
 DOGE_REPOSITORY="https://github.com/dogecoin/dogecoin.git"
 GITIAN_BUILDER_COMMIT="41c325d2f14147e8028fce9a5edd26e7adad30a4"
@@ -25,7 +27,7 @@ LIEF_URL="https://files.pythonhosted.org/packages/3a/cf/a6ddb755d7f38cd69ca1dd8d
 LIEF_SHA256="c848aadac0816268aeb9dde7cefdb54bf24f78e664a19e97e74c92d3be1bb147"
 OFFICIAL_X86_64_SHA256="4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8"
 OUTPUT_NAME="dogecoin-1.14.9-x86_64-linux-gnu.tar.gz"
-FOCAL_SNAPSHOT_ID="20241212T000000Z"
+FOCAL_SNAPSHOT_ID="20241215T000000Z"
 FOCAL_SNAPSHOT_URL="https://snapshot.ubuntu.com/ubuntu/$FOCAL_SNAPSHOT_ID"
 OFFICIAL_FOCAL_MANIFEST_A="$SCRIPT_DIR/official-focal-amd64-KunNw0n.manifest"
 OFFICIAL_FOCAL_MANIFEST_B="$SCRIPT_DIR/official-focal-amd64-slightlyskepticalpotat.manifest"
@@ -76,9 +78,28 @@ collect_diagnostics() {
   done
   find "$WORK_DIR/gitian-builder/var" -maxdepth 1 -type f -name 'base-*.manifest' -exec cp '{}' "$OUTPUT_DIR/diagnostics/" \; 2>/dev/null || true
   find "$WORK_DIR/gitian-builder/result" -maxdepth 1 -type f -name '*.yml' -exec cp '{}' "$OUTPUT_DIR/diagnostics/" \; 2>/dev/null || true
+  # Diagnostic copy only: never creates successful qualification evidence.
+  if [[ "$rc" -ne 0 ]]; then
+    archive="$WORK_DIR/gitian-builder/build/out/$OUTPUT_NAME"
+    if [[ -f "$archive" && ! -L "$archive" ]]; then
+      cp "$archive" "$OUTPUT_DIR/diagnostics/$OUTPUT_NAME"
+      (cd "$OUTPUT_DIR/diagnostics" && sha256sum "$OUTPUT_NAME" > failed-archive.SHA256SUMS)
+    fi
+  fi
   exit "$rc"
 }
 trap collect_diagnostics EXIT
+
+# The release tag is version metadata, not a replacement source authority.
+# The helper requires it to point to DOGE_SOURCE_COMMIT before any compilation.
+# Keep gbuild's --commit SHA below: its subsequent --no-tags fetch retains this
+# one validated annotated tag in the already prepared input repository.
+bash "$SCRIPT_DIR/prepare-release-source.sh" "$DOGE_REPOSITORY" \
+  "$DOGE_SOURCE_COMMIT" "$WORK_DIR/gitian-builder/inputs/dogecoin" \
+  > "$OUTPUT_DIR/source-release-metadata.txt"
+sh "$WORK_DIR/gitian-builder/inputs/dogecoin/share/genbuild.sh" \
+  "$OUTPUT_DIR/source-build-info.h" "$WORK_DIR/gitian-builder/inputs/dogecoin"
+test "$(cat "$OUTPUT_DIR/source-build-info.h")" = '#define BUILD_DESC "v1.14.9"'
 
 mkdir -p "$WORK_DIR/gitian-builder/inputs"
 curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-all-errors --retry-delay 2 "$LIEF_URL" \
@@ -89,11 +110,29 @@ curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-all-errors -
 )
 
 mkdir -p "$WORK_DIR/gitian-builder/cache/common"
-curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-all-errors --retry-delay 2 "$ZLIB_FOSSIL_URL"   --output "$WORK_DIR/gitian-builder/cache/common/zlib-1.3.tar.gz"
-(
-  cd "$WORK_DIR/gitian-builder/cache/common"
-  echo "$ZLIB_SHA256  zlib-1.3.tar.gz" | sha256sum --check --strict
-)
+# Transport-only fallback: accept neither source unless the unchanged pinned
+# upstream zlib SHA-256 matches. Do not reuse an invalid partial download.
+ZLIB_FALLBACK_URL="https://github.com/madler/zlib/releases/download/v1.3/zlib-1.3.tar.gz"
+ZLIB_ARCHIVE="$WORK_DIR/gitian-builder/cache/common/zlib-1.3.tar.gz"
+zlib_verified=false
+for url in "$ZLIB_FOSSIL_URL" "$ZLIB_FALLBACK_URL"; do
+  rm -f "$ZLIB_ARCHIVE"
+  if curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+      --retry 4 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
+      "$url" --output "$ZLIB_ARCHIVE" &&
+      (cd "$(dirname "$ZLIB_ARCHIVE")" &&
+       echo "$ZLIB_SHA256  zlib-1.3.tar.gz" | sha256sum --check --strict); then
+    zlib_verified=true
+    echo "Verified pinned zlib source via $url"
+    break
+  fi
+  echo "zlib download failed integrity or transport check: $url" >&2
+done
+if [[ "$zlib_verified" != true ]]; then
+  rm -f "$ZLIB_ARCHIVE"
+  echo "No SHA-256-valid pinned zlib 1.3 source was retrieved" >&2
+  exit 1
+fi
 
 curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-all-errors --retry-delay 2 "$EXPAT_URL" \
   --output "$WORK_DIR/gitian-builder/cache/common/expat-2.6.2.tar.bz2"
@@ -198,13 +237,7 @@ check_snapshot_candidate() {
   check_snapshot_candidate libfreetype6 "2.10.1-2ubuntu0.3"
   check_snapshot_candidate intel-microcode "3.20241112.0ubuntu0.20.04.1"
   check_snapshot_candidate libexpat1 "2.2.9-1ubuntu0.8"
-  # Fail before the multi-hour Gitian build if this snapshot cannot produce
-  # the exact official Focal kernel cohort (observed mismatch in run #33).
-  check_snapshot_candidate linux-image-generic "5.4.0.202.198"
-  check_snapshot_candidate linux-image-5.4.0-202-generic "5.4.0-202.222"
-  check_snapshot_candidate linux-modules-5.4.0-202-generic "5.4.0-202.222"
-  check_snapshot_candidate linux-modules-extra-5.4.0-202-generic "5.4.0-202.222"
-  check_snapshot_candidate linux-libc-dev "5.4.0-202.222"
+  check_focal_kernel_cohort check_snapshot_candidate
 } | tee "$OUTPUT_DIR/focal-snapshot-key-candidates.txt"
 
 # minbase does not upgrade existing packages automatically. Preserve the
@@ -241,11 +274,7 @@ check_installed_focal_package() {
   check_installed_focal_package libfreetype6 "2.10.1-2ubuntu0.3"
   check_installed_focal_package intel-microcode "3.20241112.0ubuntu0.20.04.1"
   check_installed_focal_package libexpat1 "2.2.9-1ubuntu0.8"
-  check_installed_focal_package linux-image-generic "5.4.0.202.198"
-  check_installed_focal_package linux-image-5.4.0-202-generic "5.4.0-202.222"
-  check_installed_focal_package linux-modules-5.4.0-202-generic "5.4.0-202.222"
-  check_installed_focal_package linux-modules-extra-5.4.0-202-generic "5.4.0-202.222"
-  check_installed_focal_package linux-libc-dev "5.4.0-202.222"
+  check_focal_kernel_cohort check_installed_focal_package
 } | tee "$OUTPUT_DIR/focal-snapshot-installed-versions.txt"
 
 # The pinned Gitian grab-packages.sh hashes EVERY .deb in the apt archives

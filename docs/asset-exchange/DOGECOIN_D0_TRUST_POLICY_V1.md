@@ -16,7 +16,7 @@ The source-rebuild route binds to all of:
 - source commit: `e0a1c157791544e818c901bd9341896965afbf9d`;
 - Gitian descriptor contained in that exact source commit;
 - pinned Gitian builder commit: `41c325d2f14147e8028fce9a5edd26e7adad30a4`;
-- Ubuntu archive snapshot `20241212T000000Z`, selected by historical package probes;
+- Ubuntu archive snapshot `20241215T000000Z`, selected by historical package probes;
 - one of the two accepted 323-package `focal-amd64` manifests independently published for v1.14.9 by `KunNw0n` and `slightlyskepticalpotat` in `dogecoin/gitian.sigs` commit `9d1be4fb0effc4c2e97750e0763b92f39d474a17`;
 - LIEF wheel SHA-256 `c848aadac0816268aeb9dde7cefdb54bf24f78e664a19e97e74c92d3be1bb147` from the upstream release build script;
 - observed official x86_64 release archive SHA-256 `4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8`.
@@ -29,7 +29,7 @@ D0-SOURCE-REBUILD may be PASS only when two clean GitHub-hosted build jobs indep
 
 1. fetch the exact Dogecoin source commit;
 2. fetch the exact pinned Gitian builder commit;
-3. reconstruct a signed-package Ubuntu Focal rootfs with `debootstrap` from the pinned `20241212T000000Z` archive snapshot;
+3. reconstruct a signed-package Ubuntu Focal rootfs with `debootstrap` from the pinned `20241215T000000Z` archive snapshot;
 4. check the pinned package candidates before installation and the required installed package versions after upgrading and installing the rootfs;
 5. run `apt-get clean` in the rootfs and fail if any `.deb` remains in `/var/cache/apt/archives/`;
 6. import that rootfs as Gitian's Docker base `base-focal-amd64`;

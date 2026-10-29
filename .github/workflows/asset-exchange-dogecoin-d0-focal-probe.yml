@@ -6,6 +6,12 @@ on:
       - asset-exchange/dogecoin-d0-repro-build-2026-10-08
     paths:
       - '.github/workflows/asset-exchange-dogecoin-d0-focal-probe.yml'
+  pull_request:
+    branches:
+      - asset-exchange/doge-d0-kernel-failfast-20261029
+    paths:
+      - ".github/workflows/asset-exchange-dogecoin-d0-focal-probe.yml"
+      - "asset-exchange/qualification/dogecoin/d0/focal-kernel-cohort.sh"
   workflow_dispatch:
 
 permissions:
@@ -30,6 +36,10 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      - name: Checkout qualification requirements
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Reconstruct clean historical Focal rootfs
         shell: bash
         env:
@@ -53,6 +63,28 @@ jobs:
           deb ${SNAP_URL} focal-security main restricted universe multiverse
           EOF
 
+          sudo tee "${ROOT}/etc/apt/apt.conf.d/99-d0-probe" >/dev/null <<'EOF'
+          Acquire::Check-Valid-Until "false";
+          Acquire::Retries "3";
+          EOF
+          EVIDENCE="${RUNNER_TEMP}/focal-evidence-${SNAPSHOT_ID}"
+          mkdir -p "$EVIDENCE"
+          # Preserve signed InRelease files AND the authenticated package indexes.
+          # No snapshot discovered here is automatically promoted into the build.
+          collect_probe() {
+            rc=$?
+            trap - EXIT
+            set +e
+            sudo tar --exclude=lock --exclude=partial -czf "$EVIDENCE/apt-lists.tar.gz" -C "$ROOT/var/lib/apt" lists || rc=1
+            sudo cp "$ROOT/etc/apt/sources.list" "$EVIDENCE/sources.list" || rc=1
+            sudo cp "$ROOT/usr/share/keyrings/ubuntu-archive-keyring.gpg" "$EVIDENCE/ubuntu-archive-keyring.gpg" || rc=1
+            sudo chown -R "$(id -u):$(id -g)" "$EVIDENCE"
+            (cd "$EVIDENCE" && sha256sum apt-lists.tar.gz sources.list ubuntu-archive-keyring.gpg > SHA256SUMS) || rc=1
+            exit "$rc"
+          }
+          trap collect_probe EXIT
+          exec > >(tee "$EVIDENCE/probe.log") 2>&1
+          source asset-exchange/qualification/dogecoin/d0/focal-kernel-cohort.sh
           sudo chroot "${ROOT}" apt-get update
 
           candidate() {
@@ -63,7 +95,10 @@ jobs:
           check_version() {
             package="$1"
             expected="$2"
-            actual="$(candidate "${package}")"
+            actual="$(candidate "${package}")" || { mismatches=$((mismatches + 1)); return 0; }
+            sudo chroot "$ROOT" apt-cache policy "$package" || { mismatches=$((mismatches + 1)); return 0; }
+            # Package records include archive filename, version and SHA-256.
+            sudo chroot "$ROOT" apt-cache show "$package=$expected" || mismatches=$((mismatches + 1))
             printf 'CHECK package=%s expected=%s actual=%s\n' "${package}" "${expected}" "${actual}"
             if [[ "${actual}" != "${expected}" ]]; then
               mismatches=$((mismatches + 1))
@@ -79,6 +114,16 @@ jobs:
           check_version libfreetype6 "2.10.1-2ubuntu0.3"
           check_version intel-microcode "3.20241112.0ubuntu0.20.04.1"
           check_version libexpat1 "2.2.9-1ubuntu0.8"
+          check_focal_kernel_cohort check_version
           echo "SNAPSHOT_RESULT id=${SNAPSHOT_ID} mismatches=${mismatches}"
 
           test "${mismatches}" -eq 0
+
+      - name: Preserve authenticated snapshot discovery evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dogecoin-d0-focal-probe-${{ matrix.snapshot }}-${{ github.sha }}
+          path: ${{ runner.temp }}/focal-evidence-${{ matrix.snapshot }}/
+          if-no-files-found: error
+          retention-days: 30

@@ -3,6 +3,7 @@ name: Asset Exchange Dogecoin D0 Reproducible Build
 on:
   push:
     branches:
+      - asset-exchange/doge-d0-cohort-validation-20261029
       - asset-exchange/dogecoin-d0-repro-build-2026-10-08
       # Isolated verification of PR #287; never touches the secure foundation or main.
       - asset-exchange/dogecoin-d0-evidence-hardening-2026-10-10
@@ -43,7 +44,7 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover \
             -s asset-exchange/qualification/dogecoin/d0 \
-            -p 'test_validate_evidence.py' -v
+            -p 'test_*.py' -v
 
       - name: Prepare isolated Gitian prerequisites
         shell: bash

@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - asset-exchange/dogecoin-d0-repro-build-2026-10-08
+      - asset-exchange/dogecoin-d0-evidence-hardening-2026-10-10
+      - asset-exchange/doge-d0-kernel-failfast-20261029
     paths:
       - '.github/workflows/asset-exchange-dogecoin-d0-evidence-validation.yml'
       - '.github/workflows/asset-exchange-dogecoin-d0-repro.yml'
@@ -28,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash -n asset-exchange/qualification/dogecoin/d0/build-repro-linux.sh
+          for script in asset-exchange/qualification/dogecoin/d0/*.sh; do bash -n "$script"; done
           python3 -m compileall -q asset-exchange/qualification/dogecoin/d0/
 
       - name: Run adversarial evidence verification tests
@@ -37,13 +39,17 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover \
             -s asset-exchange/qualification/dogecoin/d0 \
-            -p 'test_validate_evidence.py' -v
+            -p 'test_*.py' -v
 
   focal-rootfs-smoke:
     name: Pinned Focal installed-package smoke
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Checkout D0 qualification
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Validate historical Focal installed packages
         shell: bash
         run: |
@@ -53,7 +59,7 @@ jobs:
             ca-certificates debootstrap
 
           ROOT="${RUNNER_TEMP}/dogecoin-d0-focal-installed-smoke"
-          SNAPSHOT="https://snapshot.ubuntu.com/ubuntu/20241212T000000Z"
+          SNAPSHOT="https://snapshot.ubuntu.com/ubuntu/20241215T000000Z"
           sudo rm -rf "$ROOT"
           sudo debootstrap --variant=minbase --arch=amd64 --include=ca-certificates \
             focal "$ROOT" "$SNAPSHOT"
@@ -81,6 +87,7 @@ jobs:
             test "$actual" = "$2"
           }
 
+          source asset-exchange/qualification/dogecoin/d0/focal-kernel-cohort.sh
           sudo chroot "$ROOT" apt-get update
           check_candidate apt "2.0.10"
           check_candidate binutils "2.34-6ubuntu1.9"
@@ -91,6 +98,7 @@ jobs:
           check_candidate libfreetype6 "2.10.1-2ubuntu0.3"
           check_candidate intel-microcode "3.20241112.0ubuntu0.20.04.1"
           check_candidate libexpat1 "2.2.9-1ubuntu0.8"
+          check_focal_kernel_cohort check_candidate
 
           sudo chroot "$ROOT" env DEBIAN_FRONTEND=noninteractive \
             apt-get --no-install-recommends -y dist-upgrade
@@ -107,6 +115,7 @@ jobs:
           check_installed libfreetype6 "2.10.1-2ubuntu0.3"
           check_installed intel-microcode "3.20241112.0ubuntu0.20.04.1"
           check_installed libexpat1 "2.2.9-1ubuntu0.8"
+          check_focal_kernel_cohort check_installed
 
           # Gitian's upstream grab-packages.sh sums all cached .deb files,
           # not solely the currently installed versions: empty stale archives.
