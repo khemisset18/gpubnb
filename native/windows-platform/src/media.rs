@@ -977,14 +977,14 @@ mod tests {
 
         for (offset, replacement) in [
             (4usize, 2u32), // IddCx version is not console v3.
-            (8, 0x07), // NVENC absent.
-            (8, 0x1f), // Unknown extra flag.
-            (12, 9), // Failed stage must be zero.
-            (24, 1280), // Dimensions cannot drift.
-            (36, 0), // Empty bitstream.
-            (48, 8192), // Capacity mismatch.
-            (52, 0x80), // Unknown frame flag.
-            (56, 1), // Reserved fields must be zero.
+            (8, 0x07),      // NVENC absent.
+            (8, 0x1f),      // Unknown extra flag.
+            (12, 9),        // Failed stage must be zero.
+            (24, 1280),     // Dimensions cannot drift.
+            (36, 0),        // Empty bitstream.
+            (48, 8192),     // Capacity mismatch.
+            (52, 0x80),     // Unknown frame flag.
+            (56, 1),        // Reserved fields must be zero.
         ] {
             let mut bad = wire;
             bad[offset..offset + 4].copy_from_slice(&replacement.to_le_bytes());
