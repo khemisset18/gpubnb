@@ -57,7 +57,30 @@ jobs:
         run: cargo fmt --manifest-path services/control-gateway/Cargo.toml -- --check
 
       - name: Unit and real-Redis contract tests
-        run: cargo test --locked --manifest-path services/control-gateway/Cargo.toml --all-targets
+        run: |
+          set -o pipefail
+          cargo test --locked --manifest-path services/control-gateway/Cargo.toml --all-targets 2>&1 | tee gateway-tests.log
+
+      - name: Cross-language ticket compatibility with the security-fixed Agent
+        env:
+          GPUBNB_P2P_QUALIFY_TICKET_BIN: ${{ github.workspace }}/services/control-gateway/target/debug/p2p-qualify-ticket
+          GPUBNB_P2P_QUALIFY_KEYGEN_BIN: ${{ github.workspace }}/services/control-gateway/target/debug/p2p-qualify-keygen
+        run: |
+          set -o pipefail
+          cargo build --locked --manifest-path services/control-gateway/Cargo.toml --bin p2p-qualify-ticket --bin p2p-qualify-keygen
+          python3 -m venv "$RUNNER_TEMP/agent-crypto-compat"
+          "$RUNNER_TEMP/agent-crypto-compat/bin/python" -m pip install --disable-pip-version-check -e agent
+          "$RUNNER_TEMP/agent-crypto-compat/bin/python" -m unittest discover -s agent/tests -p 'test_p2p_qualification_ticket.py' -v 2>&1 | tee gateway-agent-compat.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gateway-security-test-diagnostics
+          path: |
+            gateway-tests.log
+            gateway-agent-compat.log
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Clippy
         run: cargo clippy --locked --manifest-path services/control-gateway/Cargo.toml --all-targets -- -D warnings

@@ -1,0 +1,243 @@
+{
+  "date": "2026-10-29",
+  "source": "Official Cargo sparse registry https://index.crates.io",
+  "graph": "Exact reverse edges remain in audits/evidence/security-followup-20261029/remaining-dependency-origins.json",
+  "packages": {
+    "borsh": {
+      "compatibleSeriesPublished": [
+        "0.10.0",
+        "0.10.1",
+        "0.10.2",
+        "0.10.3",
+        "0.10.4"
+      ],
+      "latest": "1.8.1"
+    },
+    "glib": {
+      "compatibleSeriesPublished": [
+        "0.18.0",
+        "0.18.1",
+        "0.18.2",
+        "0.18.3",
+        "0.18.4",
+        "0.18.5"
+      ],
+      "latest": "0.22.10"
+    },
+    "rand": {
+      "compatibleSeriesPublished": [
+        "0.7.0-pre.0",
+        "0.7.0-pre.1",
+        "0.7.0-pre.2",
+        "0.7.0",
+        "0.7.1",
+        "0.7.2",
+        "0.7.3"
+      ],
+      "latest": "0.10.3"
+    },
+    "anchor-lang": {
+      "pinned": "0.31.1",
+      "pinnedRelevantConstraints": [
+        {
+          "name": "borsh",
+          "req": "^0.10.3",
+          "features": [],
+          "optional": false,
+          "default_features": true,
+          "target": null,
+          "kind": "normal"
+        }
+      ],
+      "latest": "1.2.2",
+      "latestRelevantConstraints": [
+        {
+          "name": "borsh",
+          "req": "^1.5.7",
+          "features": [],
+          "optional": false,
+          "default_features": true,
+          "target": null,
+          "kind": "normal"
+        }
+      ]
+    },
+    "libsecp256k1": {
+      "pinned": "0.6.0",
+      "pinnedRelevantConstraints": [
+        {
+          "name": "rand",
+          "req": "^0.7",
+          "features": [],
+          "optional": false,
+          "default_features": false,
+          "target": null,
+          "kind": "normal"
+        }
+      ],
+      "latest": "0.7.2",
+      "latestRelevantConstraints": [
+        {
+          "name": "rand",
+          "req": "^0.8",
+          "features": [],
+          "optional": false,
+          "default_features": false,
+          "target": null,
+          "kind": "normal"
+        }
+      ]
+    },
+    "gtk": {
+      "pinned": "0.18.2",
+      "pinnedRelevantConstraints": [
+        {
+          "name": "glib",
+          "req": "^0.18",
+          "features": [],
+          "optional": false,
+          "default_features": true,
+          "target": null,
+          "kind": "normal"
+        }
+      ],
+      "latest": "0.19.0",
+      "latestRelevantConstraints": [
+        {
+          "name": "glib",
+          "req": "^0.22",
+          "features": [],
+          "optional": false,
+          "default_features": true,
+          "target": null,
+          "kind": "normal"
+        }
+      ]
+    }
+  },
+  "desktopParentLatest": {
+    "tauri": {
+      "latestStable": "2.12.5",
+      "relevantDependencies": [
+        {
+          "name": "gtk",
+          "req": "^0.18",
+          "features": [
+            "v3_24"
+          ],
+          "optional": false,
+          "default_features": true,
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "kind": "normal"
+        },
+        {
+          "name": "tauri-runtime-wry",
+          "req": "~2.12.3",
+          "features": [],
+          "optional": true,
+          "default_features": false,
+          "target": null,
+          "kind": "normal"
+        },
+        {
+          "name": "webkit2gtk",
+          "req": "^2",
+          "features": [
+            "v2_40"
+          ],
+          "optional": true,
+          "default_features": true,
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "kind": "normal"
+        }
+      ]
+    },
+    "tauri-runtime-wry": {
+      "latestStable": "2.12.3",
+      "relevantDependencies": [
+        {
+          "name": "gtk",
+          "req": "^0.18",
+          "features": [
+            "v3_24"
+          ],
+          "optional": false,
+          "default_features": true,
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "kind": "normal"
+        },
+        {
+          "name": "webkit2gtk",
+          "req": "=2.0",
+          "features": [
+            "v2_40"
+          ],
+          "optional": false,
+          "default_features": true,
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "kind": "normal"
+        },
+        {
+          "name": "wry",
+          "req": "^0.57.0",
+          "features": [
+            "os-webview",
+            "linux-body"
+          ],
+          "optional": false,
+          "default_features": false,
+          "target": null,
+          "kind": "normal"
+        }
+      ]
+    },
+    "wry": {
+      "latestStable": "0.57.1",
+      "relevantDependencies": [
+        {
+          "name": "gtk",
+          "req": "^0.18",
+          "features": [],
+          "optional": true,
+          "default_features": true,
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "kind": "normal"
+        },
+        {
+          "name": "webkit2gtk",
+          "req": "=2.0.2",
+          "features": [
+            "v2_38"
+          ],
+          "optional": true,
+          "default_features": true,
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "kind": "normal"
+        }
+      ]
+    },
+    "webkit2gtk": {
+      "latestStable": "2.0.2",
+      "relevantDependencies": [
+        {
+          "name": "glib",
+          "req": "^0.18.0",
+          "features": [],
+          "optional": false,
+          "default_features": true,
+          "target": null,
+          "kind": "normal"
+        },
+        {
+          "name": "gtk",
+          "req": "^0.18.0",
+          "features": [],
+          "optional": false,
+          "default_features": true,
+          "target": null,
+          "kind": "normal"
+        }
+      ]
+    }
+  }
+}

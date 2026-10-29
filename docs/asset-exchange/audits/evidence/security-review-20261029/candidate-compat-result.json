@@ -1,0 +1,7 @@
+{
+  "status": "SYNTHETIC_DEPENDENCY_CHECKS_PASS",
+  "networkRequests": 0,
+  "actualCoreIntegrationTested": false,
+  "zodOversizedCollectionIssueCount": 1,
+  "scope": "Candidate packages only; no Core business logic, chain, key, fund or production access"
+}

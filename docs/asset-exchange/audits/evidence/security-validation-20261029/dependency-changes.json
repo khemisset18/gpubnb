@@ -1,0 +1,122 @@
+[
+  {
+    "lockfile": "package-lock.json",
+    "path": "node_modules/@fastify/ajv-compiler/node_modules/fast-uri",
+    "before": "3.1.7",
+    "after": "3.1.9"
+  },
+  {
+    "lockfile": "package-lock.json",
+    "path": "node_modules/brace-expansion",
+    "before": "5.0.9",
+    "after": "5.0.12"
+  },
+  {
+    "lockfile": "package-lock.json",
+    "path": "node_modules/fast-uri",
+    "before": "4.1.4",
+    "after": "4.2.3"
+  },
+  {
+    "lockfile": "package-lock.json",
+    "path": "node_modules/fastify",
+    "before": "5.12.1",
+    "after": "5.12.7"
+  },
+  {
+    "lockfile": "package-lock.json",
+    "path": "node_modules/jayson",
+    "before": "4.3.0",
+    "after": "5.0.0"
+  },
+  {
+    "lockfile": "package-lock.json",
+    "path": "node_modules/zod",
+    "before": "3.25.76",
+    "after": "4.6.7"
+  },
+  {
+    "lockfile": "package-lock.json",
+    "path": "node_modules/eyes",
+    "before": "0.1.8",
+    "after": null
+  },
+  {
+    "lockfile": "package-lock.json",
+    "path": "node_modules/stream-chain",
+    "before": "2.2.5",
+    "after": null
+  },
+  {
+    "lockfile": "package-lock.json",
+    "path": "node_modules/stream-json",
+    "before": "1.9.1",
+    "after": null
+  },
+  {
+    "lockfile": "package-lock.json",
+    "path": "node_modules/uuid",
+    "before": "11.1.1",
+    "after": null
+  },
+  {
+    "lockfile": "apps/api/package-lock.json",
+    "path": "node_modules/@fastify/ajv-compiler/node_modules/fast-uri",
+    "before": "3.1.7",
+    "after": "3.1.9"
+  },
+  {
+    "lockfile": "apps/api/package-lock.json",
+    "path": "node_modules/brace-expansion",
+    "before": "5.0.9",
+    "after": "5.0.12"
+  },
+  {
+    "lockfile": "apps/api/package-lock.json",
+    "path": "node_modules/fast-uri",
+    "before": "4.1.4",
+    "after": "4.2.3"
+  },
+  {
+    "lockfile": "apps/api/package-lock.json",
+    "path": "node_modules/fastify",
+    "before": "5.12.1",
+    "after": "5.12.7"
+  },
+  {
+    "lockfile": "apps/api/package-lock.json",
+    "path": "node_modules/jayson",
+    "before": "4.3.0",
+    "after": "5.0.0"
+  },
+  {
+    "lockfile": "apps/api/package-lock.json",
+    "path": "node_modules/zod",
+    "before": "3.25.76",
+    "after": "4.6.7"
+  },
+  {
+    "lockfile": "apps/api/package-lock.json",
+    "path": "node_modules/eyes",
+    "before": "0.1.8",
+    "after": null
+  },
+  {
+    "lockfile": "apps/api/package-lock.json",
+    "path": "node_modules/stream-chain",
+    "before": "2.2.5",
+    "after": null
+  },
+  {
+    "lockfile": "apps/api/package-lock.json",
+    "path": "node_modules/stream-json",
+    "before": "1.9.1",
+    "after": null
+  },
+  {
+    "lockfile": "apps/api/package-lock.json",
+    "path": "node_modules/uuid",
+    "before": "11.1.1",
+    "after": null
+  }
+]

@@ -1,0 +1,27 @@
+{
+  "status": "D1_NETWORK_IDENTITY_PASS",
+  "run": 40892872892,
+  "executionCommit": "1636df354d4fafd2cc2d9ab8595f4dca52582ad7",
+  "artifactId": 12906020927,
+  "artifactZipSha256": "18fecb1f6dd6dac59a44d44a351ddd7f70e378dd5f189a055d9af19c1002f13b",
+  "archiveSubjectSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+  "independentPostDownloadChecks": [
+    "artifact ZIP digest and exact six public members",
+    "validate_network actual results",
+    "validate_handoff both cryptographically verified D0 outputs and original signed SPDX",
+    "exact server RPC method allowlist and final stop",
+    "zero shutdown exit code"
+  ],
+  "firstRun": {
+    "id": 40892627943,
+    "status": "FAILED",
+    "reason": "Public evidence upload EACCES; caller could not stat a root-private directory. No qualification accepted from this run."
+  },
+  "limits": [
+    "Network identity only",
+    "No server-side RPC-method ACL exists in this release; access restricted by private namespace, cookie and fixed harness",
+    "networkactive and per-family reachable are protocol flags, not evidence of external reachability; only lo exists before and after execution",
+    "No D2-D9 authority or qualification",
+    "Upstream GPG provenance remains distinct and blocked"
+  ]
+}

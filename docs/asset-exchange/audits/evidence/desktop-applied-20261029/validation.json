@@ -1,0 +1,60 @@
+{
+  "status": "PASS_LOCAL_NOT_FULL_DESKTOP_QUALIFICATION",
+  "baselineCommit": "470926f416cf84caa4a407f219c72d6984f3a45b",
+  "node": "22.23.4",
+  "npm": "10.9.9",
+  "versions": {
+    "vite": {
+      "before": "7.3.6",
+      "after": "7.3.7"
+    },
+    "source-map-js": {
+      "before": "1.2.1",
+      "after": "1.2.2"
+    }
+  },
+  "sourceMapCompatibilityPatch": "344a10bed975b5e18de1967b7b3e6455ec28fb19631f73504bc1c8f902c9fbaa",
+  "actualInstalledTree": true,
+  "auditAllSeverities": 0,
+  "securityTests": {
+    "pass": 11,
+    "fail": 0,
+    "skip": 0
+  },
+  "upstreamSuite": {
+    "repository": "https://github.com/7rulnik/source-map-js",
+    "commit": "b158388e8721f622ef3fc82b0b545c7146bfc203",
+    "pass": 145,
+    "fail": 0,
+    "command": "node test/run-tests.js",
+    "sourceOverride": "only reviewed lib/source-map-consumer.js installed by the deterministic compatibility patch"
+  },
+  "originalDiagnostic": "PASS_AFTER_REPAIR",
+  "strictTypeScript": "PASS",
+  "frontendBuild": "PASS",
+  "debugSourceMapBuild": "PASS",
+  "windows": "NOT_TESTED_ON_THIS_CHANGE_YET",
+  "globalTrivy": "NOT_TESTED_ON_THIS_CHANGE_YET",
+  "financialBehaviorModified": false,
+  "D0TrustModified": false,
+  "firstGlobalTrivy": {
+    "run": 40959885917,
+    "blockingCount": 3,
+    "severityCounts": {
+      "HIGH": 0,
+      "MEDIUM": 2,
+      "LOW": 1
+    },
+    "desktopFindings": 0
+  },
+  "firstLinuxDesktopCi": {
+    "run": 40959885917,
+    "job": 123749575607,
+    "status": "PASS"
+  },
+  "firstWindowsCi": {
+    "run": 40959885741,
+    "status": "FAIL",
+    "cause": "permitted temporary fixture path returned403; canonical path repair awaits Windows validation"
+  }
+}

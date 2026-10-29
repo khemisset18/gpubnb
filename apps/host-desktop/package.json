@@ -9,11 +9,14 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run prepare:source-maps && tsc --noEmit && vite build",
     "tauri": "tauri",
     "check": "tsc --noEmit",
     "tauri:dev": "tauri dev --features desktop-runtime",
-    "tauri:build": "tauri build --features desktop-runtime"
+    "tauri:build": "tauri build --features desktop-runtime",
+    "prepare:source-maps": "node tools/prepare-source-maps.mjs",
+    "postinstall": "npm run prepare:source-maps",
+    "test:security": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.0.0",
@@ -22,6 +25,9 @@
   "devDependencies": {
     "@tauri-apps/cli": "2.0.0",
     "typescript": "5.8.3",
-    "vite": "7.3.6"
+    "vite": "7.3.7"
+  },
+  "overrides": {
+    "source-map-js": "1.2.2"
   }
 }

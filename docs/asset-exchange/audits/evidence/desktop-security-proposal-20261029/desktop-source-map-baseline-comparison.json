@@ -1,0 +1,55 @@
+{
+  "status": "EXISTING_INDEXED_LOOKUP_AND_FLATTENING_DEFECTS_ON_BOTH_VERSIONS",
+  "note": "Strict candidate functional expectations fail; the pinned 1.2.1 baseline exhibits the same defects. No upgrade regression established by this comparison. Flat source map lookup remains correct.",
+  "baselineOfficialNpmIntegrity": "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==",
+  "results": [
+    {
+      "version": "1.2.1",
+      "indexedColumn0": {
+        "source": null,
+        "line": null,
+        "column": null,
+        "name": null
+      },
+      "indexedColumn1": {
+        "source": "fixture.ts",
+        "line": 1,
+        "column": 0,
+        "name": null
+      },
+      "flat": {
+        "source": "fixture.ts",
+        "line": 1,
+        "column": 0,
+        "name": null
+      },
+      "flattened": {
+        "error": "Cannot read properties of undefined (reading 'replace')"
+      }
+    },
+    {
+      "version": "1.2.2",
+      "indexedColumn0": {
+        "source": null,
+        "line": null,
+        "column": null,
+        "name": null
+      },
+      "indexedColumn1": {
+        "source": "fixture.ts",
+        "line": 1,
+        "column": 0,
+        "name": null
+      },
+      "flat": {
+        "source": "fixture.ts",
+        "line": 1,
+        "column": 0,
+        "name": null
+      },
+      "flattened": {
+        "error": "Cannot read properties of undefined (reading 'replace')"
+      }
+    }
+  ]
+}

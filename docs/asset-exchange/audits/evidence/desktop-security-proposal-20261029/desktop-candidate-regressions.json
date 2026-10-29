@@ -1,0 +1,1 @@
+{"status":"FAILED_FUNCTIONAL_EXPECTATION","stages":[{"stage":"malformed-offset-rejection","status":"PASS","cases":6}],"error":"Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'fixture.ts'\n"}

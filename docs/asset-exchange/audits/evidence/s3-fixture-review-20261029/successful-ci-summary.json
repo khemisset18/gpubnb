@@ -1,0 +1,22 @@
+{
+  "status": "REAL_S3_TESTS_PASS",
+  "run": 40914795552,
+  "commit": "3f178f65dc97e0a8e4882c116a14e39c9a4973fc",
+  "artifactId": 12916145188,
+  "artifactZipSha256": "1539e295c7fe1b7ced3d4b51d2b771842899f7e606ec2ff2a047f1039869b17c",
+  "actualTests": {
+    "putGetRoundTrip": {
+      "pass": 1,
+      "fail": 0,
+      "skip": 0
+    },
+    "historicalMigration": {
+      "pass": 1,
+      "fail": 0,
+      "skip": 0
+    }
+  },
+  "imageTrivyAllSeveritiesFindings": 0,
+  "signatureAndSpdxVerification": "PASS",
+  "limits": "Only this pinned isolated S3 fixture and these tests; no production storage, node, chain or financial qualification."
+}

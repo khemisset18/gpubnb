@@ -1,0 +1,15 @@
+test_accepts_expected_offline_fixture (test_network_identity.NetworkIdentityTests.test_accepts_expected_offline_fixture) ... ok
+test_authorization_is_distinct_and_missing_token_fails_before_work (test_network_identity.NetworkIdentityTests.test_authorization_is_distinct_and_missing_token_fails_before_work) ... ok
+test_exact_signed_sbom_and_d0_identity_are_required (test_network_identity.NetworkIdentityTests.test_exact_signed_sbom_and_d0_identity_are_required) ... ok
+test_missing_wrong_or_multi_attestations_are_rejected (test_network_identity.NetworkIdentityTests.test_missing_wrong_or_multi_attestations_are_rejected) ... ok
+test_network_namespace_requires_new_loopback_only (test_network_identity.NetworkIdentityTests.test_network_namespace_requires_new_loopback_only) ... ok
+test_pinned_cli_string_results_are_unquoted (test_network_identity.NetworkIdentityTests.test_pinned_cli_string_results_are_unquoted) ... ok
+test_rejects_mainnet_testnet_and_wrong_genesis (test_network_identity.NetworkIdentityTests.test_rejects_mainnet_testnet_and_wrong_genesis) ... ok
+test_rejects_nonfresh_chain_and_boolean_counts (test_network_identity.NetworkIdentityTests.test_rejects_nonfresh_chain_and_boolean_counts) ... ok
+test_rejects_peers_version_suffix_and_connections (test_network_identity.NetworkIdentityTests.test_rejects_peers_version_suffix_and_connections) ... ok
+test_wallet_mining_and_broadcast_rpc_are_forbidden (test_network_identity.NetworkIdentityTests.test_wallet_mining_and_broadcast_rpc_are_forbidden) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.004s
+
+OK

@@ -1,0 +1,9 @@
+{
+  "run": 40961130964,
+  "job": 123753868107,
+  "commit": "b168d142cfe1a20d91c70e380e149f2dfda48a82",
+  "status": "FAIL",
+  "originalLogSha256": "1f38244d0c26112f65c2391e45762e2000cf9f0de07964c832b74ac9811d2660",
+  "observation": "Canonical temp path fixed the HTTP200 positive control. Outside-file fixture on C: was requested through raw-fs middleware rooted on checkout drive D:, so the actual nonexistent D: path yielded404 instead of exercising the required403 boundary.",
+  "fix": "Place disposable fixtures on the serving process drive; retain exactHTTP403 expectations and absence-of-sentinel checks."
+}

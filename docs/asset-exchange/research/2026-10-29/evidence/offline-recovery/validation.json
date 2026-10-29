@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "status": "PASS_OFFLINE_SOFTWARE_ONLY",
+  "baseCommit": "470926f416cf84caa4a407f219c72d6984f3a45b",
+  "runtime": "Node.js 22.23.4",
+  "command": "npm test --prefix asset-exchange",
+  "tests": 191,
+  "pass": 191,
+  "fail": 0,
+  "skip": 0,
+  "newTests": 20,
+  "simulationOnly": true,
+  "qualified": false,
+  "executableOperations": [],
+  "productionImports": false,
+  "chainExecutions": 0,
+  "sources": {
+    "asset-exchange/research/src/offline-data.mjs": "8aecf65c8ce37101ea86fc286e47328f01e883b02367ffcc0074b3cf7d2a106c",
+    "asset-exchange/research/src/offline-evidence.mjs": "61069823b7d08ea17fa2b78da689ae17a7b90debb952fa40ddce98bc64600611",
+    "asset-exchange/research/src/offline-journal.mjs": "678a645af9a65fe7c179498a40fc3b3bd5f6f984eab6e744c65dd5f4df75321e",
+    "asset-exchange/research/src/offline-terms.mjs": "581fe696e2b9974cbaceab5df9d8ef74f26bd89f8a8a31c34a3906094d36c052",
+    "asset-exchange/research/test/offline-data-terms.test.mjs": "16a9cc0f0e61154800cf32ac2cc17583b99bd79f2ccd79830f1a20417ce11a23",
+    "asset-exchange/research/test/offline-evidence.test.mjs": "7596e1c172765cf2a857d0911afebf856f63c07c52299990c95a64557dd89378",
+    "asset-exchange/research/test/offline-journal.test.mjs": "8aff7f3d7fab0d9faac1acb1a0dd27e32d3aadf4d249a2642fc8b6691e972172",
+    "docs/asset-exchange/research/2026-10-29/evidence/offline-recovery/foundation.tap": "b0ee0e248c2bedec8cac942343463a866ca937944bee67813a7934730ee1e5e5"
+  },
+  "limitations": [
+    "No chain/signature/consensus authentication",
+    "Synthetic offline profiles only",
+    "Separate independently trusted checkpoint required",
+    "POSIX journal only; Windows refused",
+    "No power-loss durability test",
+    "No financial executor or refund capability"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "node": "22.23.4",
+  "tests": 193,
+  "pass": 193,
+  "fail": 0,
+  "skip": 0,
+  "syntaxFiles": 47,
+  "binaryExecution": false,
+  "files": {
+    "foundation.tap": "4fc92658aca04bee9c22483b833e7a8ed97ae16688168b270de29c02aeb0bedb",
+    "syntax.log": "23279f56958bac3cd76d0816819c4e7b00cfc1d3f33ba154757270d534cb63f2"
+  }
+}

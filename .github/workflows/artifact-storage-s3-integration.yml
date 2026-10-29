@@ -28,6 +28,9 @@ jobs:
   minio-roundtrip:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      MINIO_IMAGE: cgr.dev/chainguard/minio@sha256:e234321fd3abff7fb968b0674056e883b702aa1ad93a0d4d795cb6c21fa46407
+      MINIO_AMD64_IMAGE: cgr.dev/chainguard/minio@sha256:abdbe7d805b4dc931053275bc65d6c96ea88e66fd121aa3bb87d7354ecd875c5
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -38,15 +41,60 @@ jobs:
       - name: Install locked API dependencies
         working-directory: apps/api
         run: npm ci
+      - name: Verify pinned fixture signature and signed SBOM before execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir s3-evidence
+          curl --fail --silent --show-error --location --max-time 120 \
+            https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-amd64 \
+            -o "$RUNNER_TEMP/s3-cosign"
+          echo '424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa  '"$RUNNER_TEMP/s3-cosign" | sha256sum --check --strict
+          chmod 700 "$RUNNER_TEMP/s3-cosign"
+          "$RUNNER_TEMP/s3-cosign" verify \
+            --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+            --certificate-identity=https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main \
+            "$MINIO_IMAGE" > s3-evidence/image-signature.json
+          "$RUNNER_TEMP/s3-cosign" verify-attestation --type https://spdx.dev/Document \
+            --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+            --certificate-identity=https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main \
+            "$MINIO_AMD64_IMAGE" > s3-evidence/signed-sbom.jsonl
+      - name: Scan actual pinned fixture without severity exclusions
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.MINIO_AMD64_IMAGE }}
+          scanners: vuln
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: false
+          format: json
+          output: s3-evidence/image-trivy.json
+          exit-code: '1'
       - name: Start S3-compatible MinIO
         run: |
+          docker network create --internal gpubnb-s3-ci
           docker run -d --rm --name gpubnb-minio \
-            -p 9000:9000 \
+            --platform linux/amd64 --network gpubnb-s3-ci \
+            -p 127.0.0.1:9000:9000 \
+            --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --memory 512m --cpus 2 \
+            --tmpfs /data:uid=65532,gid=65532,mode=0700,size=256m \
+            --tmpfs /tmp:uid=65532,gid=65532,mode=0700,size=32m \
             -e MINIO_ROOT_USER=gpubnb-ci-access \
             -e MINIO_ROOT_PASSWORD=gpubnb-ci-secret-key \
-            minio/minio:latest server /data --address :9000
+            "$MINIO_IMAGE" --certs-dir /tmp/certs server /data --address :9000
+          # An internal bridge has no external NAT route. Reach its connected
+          # private address from the runner rather than relying on port NAT.
+          fixture_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' gpubnb-minio)"
+          python3 - "$fixture_ip" <<'PY'
+          import ipaddress, sys
+          address = ipaddress.ip_address(sys.argv[1])
+          assert address.version == 4 and address.is_private and not address.is_loopback
+          PY
+          fixture_endpoint="http://$fixture_ip:9000"
+          echo "ARTIFACT_S3_ENDPOINT=$fixture_endpoint" >> "$GITHUB_ENV"
           for attempt in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
+            if curl --fail --silent --show-error --noproxy '*' --connect-timeout 1 --max-time 2 "$fixture_endpoint/minio/health/live" >/dev/null; then
               exit 0
             fi
             sleep 1
@@ -57,23 +105,37 @@ jobs:
         working-directory: apps/api
         env:
           ARTIFACT_S3_INTEGRATION: '1'
-          ARTIFACT_S3_ENDPOINT: http://127.0.0.1:9000
           ARTIFACT_S3_REGION: us-east-1
           ARTIFACT_S3_ACCESS_KEY_ID: gpubnb-ci-access
           ARTIFACT_S3_SECRET_ACCESS_KEY: gpubnb-ci-secret-key
-        run: npx tsx --test test/artifact-storage-s3.integration.test.ts
+        run: |
+          set -o pipefail
+          npx tsx --test test/artifact-storage-s3.integration.test.ts 2>&1 | tee "$GITHUB_WORKSPACE/s3-evidence/roundtrip.log"
       - name: Real historical migration round trip
         working-directory: apps/api
         env:
           ARTIFACT_S3_INTEGRATION: '1'
-          ARTIFACT_S3_ENDPOINT: http://127.0.0.1:9000
           ARTIFACT_S3_REGION: us-east-1
           ARTIFACT_S3_ACCESS_KEY_ID: gpubnb-ci-access
           ARTIFACT_S3_SECRET_ACCESS_KEY: gpubnb-ci-secret-key
-        run: npx tsx --test test/artifact-storage-migration-s3.integration.test.ts
-      - name: MinIO diagnostics
-        if: failure()
-        run: docker logs gpubnb-minio || true
-      - name: Stop MinIO
+        run: |
+          set -o pipefail
+          npx tsx --test test/artifact-storage-migration-s3.integration.test.ts 2>&1 | tee "$GITHUB_WORKSPACE/s3-evidence/migration.log"
+      - name: Retain MinIO diagnostics and remove disposable fixture
         if: always()
-        run: docker stop gpubnb-minio || true
+        run: |
+          if docker container inspect gpubnb-minio >/dev/null 2>&1; then
+            docker logs gpubnb-minio > s3-evidence/minio-container.log 2>&1
+            docker stop gpubnb-minio
+          fi
+          if docker network inspect gpubnb-s3-ci >/dev/null 2>&1; then
+            docker network rm gpubnb-s3-ci
+          fi
+      - name: Preserve real S3 test and fixture supply-chain evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s3-integration-evidence
+          path: s3-evidence/
+          if-no-files-found: error
+          retention-days: 30

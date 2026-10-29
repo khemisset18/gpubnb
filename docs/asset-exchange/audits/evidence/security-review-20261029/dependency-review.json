@@ -1,0 +1,167 @@
+{
+  "approvalRequired": "Original no-GPUbnb-Core-modification constraint; separate approval required to apply this proposed patch",
+  "baselineCommit": "1e3006286a904c249e8914a28699e59cf3247a8c",
+  "before": {
+    "metadata": {
+      "dependencies": {
+        "dev": 29,
+        "optional": 30,
+        "peer": 0,
+        "peerOptional": 0,
+        "prod": 205,
+        "total": 236
+      },
+      "vulnerabilities": {
+        "critical": 0,
+        "high": 3,
+        "info": 0,
+        "low": 0,
+        "moderate": 3,
+        "total": 6
+      }
+    },
+    "vulnerabilities": {
+      "brace-expansion": {
+        "advisories": [
+          "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
+          "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+          "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p"
+        ],
+        "fixAvailable": true,
+        "range": "4.0.0 - 5.0.11",
+        "severity": "high"
+      },
+      "fast-uri": {
+        "advisories": [
+          "https://github.com/advisories/GHSA-hrr3-gc8f-f4qj",
+          "https://github.com/advisories/GHSA-hrr3-gc8f-f4qj",
+          "https://github.com/advisories/GHSA-jvvf-x445-j334",
+          "https://github.com/advisories/GHSA-w74x-v6f9-j3xg",
+          "https://github.com/advisories/GHSA-w74x-v6f9-j3xg",
+          "https://github.com/advisories/GHSA-xhq7-xmqj-769h",
+          "https://github.com/advisories/GHSA-xhq7-xmqj-769h",
+          "https://github.com/advisories/GHSA-wjr9-j795-jxcr",
+          "https://github.com/advisories/GHSA-wjr9-j795-jxcr",
+          "https://github.com/advisories/GHSA-333x-w4r6-6crp",
+          "https://github.com/advisories/GHSA-333x-w4r6-6crp"
+        ],
+        "fixAvailable": true,
+        "range": "3.0.0 - 3.1.8 || 4.0.0 - 4.2.2",
+        "severity": "moderate"
+      },
+      "fastify": {
+        "advisories": [
+          "https://github.com/advisories/GHSA-4mh8-r7rc-xpvc",
+          "https://github.com/advisories/GHSA-667r-xxjv-c9mm",
+          "https://github.com/advisories/GHSA-p68q-wchp-6fh7",
+          "https://github.com/advisories/GHSA-hwr6-493r-vm6h",
+          "https://github.com/advisories/GHSA-9q9j-q6p8-xq58"
+        ],
+        "fixAvailable": true,
+        "range": "<=5.12.4",
+        "severity": "high"
+      },
+      "jayson": {
+        "advisories": [],
+        "fixAvailable": true,
+        "range": "4.2.0 - 4.3.0",
+        "severity": "moderate"
+      },
+      "stream-json": {
+        "advisories": [
+          "https://github.com/advisories/GHSA-528h-pc64-c93x",
+          "https://github.com/advisories/GHSA-hqr4-qq8f-hg3x",
+          "https://github.com/advisories/GHSA-mjw6-4jj6-33hc"
+        ],
+        "fixAvailable": true,
+        "range": "<=3.5.0",
+        "severity": "moderate"
+      },
+      "zod": {
+        "advisories": [
+          "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5"
+        ],
+        "fixAvailable": {
+          "isSemVerMajor": true,
+          "name": "zod",
+          "version": "4.6.7"
+        },
+        "range": "<4.6.6",
+        "severity": "high"
+      }
+    }
+  },
+  "candidateNodeVersion": "24.22.1",
+  "candidateNpmVersion": "11.9.0",
+  "candidates": {
+    "api": {
+      "audit": {
+        "auditReportVersion": 2,
+        "metadata": {
+          "dependencies": {
+            "dev": 29,
+            "optional": 30,
+            "peer": 0,
+            "peerOptional": 0,
+            "prod": 201,
+            "total": 232
+          },
+          "vulnerabilities": {
+            "critical": 0,
+            "high": 0,
+            "info": 0,
+            "low": 0,
+            "moderate": 0,
+            "total": 0
+          }
+        },
+        "vulnerabilities": {}
+      },
+      "packageLockSha256": "b17c9c78e50979005ab0f4f9e7440aea81702ef44bb0a079ac46c4ffa6a26937",
+      "versions": {
+        "node_modules/@fastify/ajv-compiler/node_modules/fast-uri": "3.1.9",
+        "node_modules/brace-expansion": "5.0.12",
+        "node_modules/fast-uri": "4.2.3",
+        "node_modules/fastify": "5.12.7",
+        "node_modules/jayson": "5.0.0",
+        "node_modules/zod": "4.6.7"
+      }
+    },
+    "root": {
+      "audit": {
+        "auditReportVersion": 2,
+        "metadata": {
+          "dependencies": {
+            "dev": 29,
+            "optional": 30,
+            "peer": 0,
+            "peerOptional": 0,
+            "prod": 201,
+            "total": 232
+          },
+          "vulnerabilities": {
+            "critical": 0,
+            "high": 0,
+            "info": 0,
+            "low": 0,
+            "moderate": 0,
+            "total": 0
+          }
+        },
+        "vulnerabilities": {}
+      },
+      "packageLockSha256": "ee097d300519ce8839715ba747c7d476057614513eb471455f47e5a512ab4c46",
+      "versions": {
+        "node_modules/@fastify/ajv-compiler/node_modules/fast-uri": "3.1.9",
+        "node_modules/brace-expansion": "5.0.12",
+        "node_modules/fast-uri": "4.2.3",
+        "node_modules/fastify": "5.12.7",
+        "node_modules/jayson": "5.0.0",
+        "node_modules/zod": "4.6.7"
+      }
+    }
+  },
+  "coreBusinessSourceChanged": false,
+  "coreIntegrationTestsRun": false,
+  "status": "PROPOSAL_ONLY_NOT_APPLIED_TO_CORE"
+}

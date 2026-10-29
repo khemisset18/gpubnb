@@ -1,0 +1,18 @@
+{
+  "baseCommit": "31c4833deaef7b51206f920a9d4833b82c55e807",
+  "trivy": "0.76.1",
+  "includeDevelopmentDependencies": true,
+  "allSeverities": true,
+  "ignoreUnfixed": false,
+  "trivyUncompressedSha256": "9ffa3f4e91364140f5690fe3a6f9d8d3b249169537803896324c3f08ec125f90",
+  "sha256": {
+    "requirements.txt": "dd5d460ac1bd03c13c177e007e72221b21e032e640fe79e42fd2d28a98c6a4c9",
+    "agent/requirements.txt": "b47e00f223bc55a935971618164c6ac2fc6a7739d1dd72c87bc9dd99ace3d63c",
+    "agent/pyproject.toml": "ef240e5ea55db195f1befb6691f259e57eeb7e1a68c6bb875ce8bcffe43ff981",
+    "services/control-gateway/Cargo.toml": "b087b686da4dbb8c34e98ac4042278a3a3195271ea4ef9e885d8550bc3dca6ef",
+    "services/control-gateway/Cargo.lock": "17e408ee5c41f4fcee1092cf6466de6122406a282fa9fbd0f45211b22e9950bb",
+    "Cargo.lock": "7eab89d15e587b2858b77b52d3ddf5316606bb68d1c1db7ce12567168e662301",
+    "package-lock.json": "ee097d300519ce8839715ba747c7d476057614513eb471455f47e5a512ab4c46",
+    "apps/api/package-lock.json": "b17c9c78e50979005ab0f4f9e7440aea81702ef44bb0a079ac46c4ffa6a26937"
+  }
+}

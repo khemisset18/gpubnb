@@ -1,0 +1,182 @@
+{
+  "testedCommit": "3f178f65dc97e0a8e4882c116a14e39c9a4973fc",
+  "coreRun": 40914795398,
+  "gatewayRun": 40914795515,
+  "note": "Original ZIP digests cross-checked with GitHub artifact metadata. Test count summaries read from actual logs, not step labels.",
+  "artifacts": {
+    "12914763406": {
+      "artifactId": 12914763406,
+      "zipSha256": "b4842cbed4d52541310c9a841d6cef3f5972f226f59241f08adbaafeba694d65",
+      "members": [
+        "gateway-tests.log",
+        "gateway-agent-compat.log"
+      ],
+      "gateway-tests.log": {
+        "counts": [
+          "test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s"
+        ]
+      },
+      "gateway-agent-compat.log": {
+        "counts": [
+          "Ran 1 test in 0.007s",
+          "OK"
+        ],
+        "skipped": 0
+      }
+    },
+    "12915317125": {
+      "artifactId": 12915317125,
+      "zipSha256": "0b70e4c76f09b49478ea208e80eb2a4a963851290aea41afef2518489cb4ce78",
+      "members": [
+        "npm-audit-root.json",
+        "npm-audit-api.json"
+      ],
+      "npm-audit-root.json": {
+        "vulnerabilities": {
+          "info": 0,
+          "low": 0,
+          "moderate": 0,
+          "high": 0,
+          "critical": 0,
+          "total": 0
+        }
+      },
+      "npm-audit-api.json": {
+        "vulnerabilities": {
+          "info": 0,
+          "low": 0,
+          "moderate": 0,
+          "high": 0,
+          "critical": 0,
+          "total": 0
+        }
+      }
+    },
+    "12915377617": {
+      "artifactId": 12915377617,
+      "zipSha256": "659106b71b2593a22a2fe37f3ae5c3d30200128153c89bc2bc9c2b9df3317d7f",
+      "members": [
+        "trivy-results.json"
+      ],
+      "trivy-results.json": {
+        "findings": [
+          {
+            "target": "Cargo.lock",
+            "VulnerabilityID": "GHSA-fjx5-qpf4-xjf2",
+            "PkgName": "borsh",
+            "InstalledVersion": "0.10.4",
+            "FixedVersion": "1.0.0-alpha.1",
+            "Severity": "MEDIUM"
+          },
+          {
+            "target": "Cargo.lock",
+            "VulnerabilityID": "GHSA-wrw7-89jp-8q8g",
+            "PkgName": "glib",
+            "InstalledVersion": "0.18.5",
+            "FixedVersion": "0.20.0",
+            "Severity": "MEDIUM"
+          },
+          {
+            "target": "Cargo.lock",
+            "VulnerabilityID": "GHSA-cq8v-f236-94qc",
+            "PkgName": "rand",
+            "InstalledVersion": "0.7.3",
+            "FixedVersion": "0.9.3, 0.10.1, 0.8.6",
+            "Severity": "LOW"
+          },
+          {
+            "target": "apps/host-desktop/package-lock.json",
+            "VulnerabilityID": "CVE-2026-93749",
+            "PkgName": "source-map-js",
+            "InstalledVersion": "1.2.1",
+            "FixedVersion": "1.2.2",
+            "Severity": "HIGH"
+          },
+          {
+            "target": "apps/host-desktop/package-lock.json",
+            "VulnerabilityID": "CVE-2026-112942",
+            "PkgName": "vite",
+            "InstalledVersion": "7.3.6",
+            "FixedVersion": "8.3.3, 8.2.4, 8.1.6, 7.3.7, 6.4.4",
+            "Severity": "HIGH"
+          },
+          {
+            "target": "apps/host-desktop/package-lock.json",
+            "VulnerabilityID": "CVE-2026-112943",
+            "PkgName": "vite",
+            "InstalledVersion": "7.3.6",
+            "FixedVersion": "8.3.3, 8.2.4, 8.1.6, 7.3.7, 6.4.4",
+            "Severity": "MEDIUM"
+          },
+          {
+            "target": "apps/host-desktop/package-lock.json",
+            "VulnerabilityID": "CVE-2026-112944",
+            "PkgName": "vite",
+            "InstalledVersion": "7.3.6",
+            "FixedVersion": "8.3.3, 8.2.4, 8.1.6, 7.3.7, 6.4.4",
+            "Severity": "MEDIUM"
+          },
+          {
+            "target": "apps/host-desktop/package-lock.json",
+            "VulnerabilityID": "CVE-2026-112946",
+            "PkgName": "vite",
+            "InstalledVersion": "7.3.6",
+            "FixedVersion": "8.3.3, 8.2.4, 8.1.6, 7.3.7, 6.4.4",
+            "Severity": "MEDIUM"
+          },
+          {
+            "target": "apps/host-desktop/package-lock.json",
+            "VulnerabilityID": "CVE-2026-112945",
+            "PkgName": "vite",
+            "InstalledVersion": "7.3.6",
+            "FixedVersion": "8.3.3, 8.2.4, 8.1.6, 7.3.7, 6.4.4",
+            "Severity": "LOW"
+          }
+        ]
+      }
+    },
+    "12915327988": {
+      "artifactId": 12915327988,
+      "zipSha256": "c2072dd5e0a1b8fae067975a5dc79a265d36b3f984764f5bd4054c6d2e6b420c",
+      "members": [
+        "api-test.log",
+        "integration-preflight.log"
+      ],
+      "api-test.log": {
+        "counts": [
+          "# tests 701",
+          "# pass 699",
+          "# fail 0",
+          "# skipped 2"
+        ]
+      },
+      "integration-preflight.log": {
+        "counts": [
+          "POSTGRESQL_AND_REDIS_READY: isolated CI services"
+        ]
+      }
+    },
+    "12914678378": {
+      "artifactId": 12914678378,
+      "zipSha256": "5bdfc45cc4bf835de0127449a55bd3c27b784496dc9571788a51e78a32b8c55d",
+      "members": [
+        "agent-test.log"
+      ],
+      "agent-test.log": {
+        "counts": [
+          "Ran 447 tests in 11.248s",
+          "OK (skipped=1)"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "borsh": [
+    {
+      "parent": "anchor-lang",
+      "version": "0.31.1",
+      "dependency": "borsh 0.10.4"
+    },
+    {
+      "parent": "solana-borsh",
+      "version": "2.2.1",
+      "dependency": "borsh 0.10.4"
+    },
+    {
+      "parent": "solana-borsh",
+      "version": "2.2.1",
+      "dependency": "borsh 1.8.0"
+    },
+    {
+      "parent": "solana-hash",
+      "version": "2.3.0",
+      "dependency": "borsh 1.8.0"
+    },
+    {
+      "parent": "solana-instruction",
+      "version": "2.3.3",
+      "dependency": "borsh 1.8.0"
+    },
+    {
+      "parent": "solana-program",
+      "version": "2.3.0",
+      "dependency": "borsh 0.10.4"
+    },
+    {
+      "parent": "solana-program",
+      "version": "2.3.0",
+      "dependency": "borsh 1.8.0"
+    },
+    {
+      "parent": "solana-program-error",
+      "version": "2.2.2",
+      "dependency": "borsh 1.8.0"
+    },
+    {
+      "parent": "solana-pubkey",
+      "version": "2.4.0",
+      "dependency": "borsh 0.10.4"
+    },
+    {
+      "parent": "solana-pubkey",
+      "version": "2.4.0",
+      "dependency": "borsh 1.8.0"
+    },
+    {
+      "parent": "solana-stake-interface",
+      "version": "1.2.1",
+      "dependency": "borsh 0.10.4"
+    },
+    {
+      "parent": "solana-stake-interface",
+      "version": "1.2.1",
+      "dependency": "borsh 1.8.0"
+    }
+  ],
+  "glib": [
+    {
+      "parent": "atk",
+      "version": "0.18.2",
+      "dependency": "glib"
+    },
+    {
+      "parent": "cairo-rs",
+      "version": "0.18.5",
+      "dependency": "glib"
+    },
+    {
+      "parent": "gdk",
+      "version": "0.18.2",
+      "dependency": "glib"
+    },
+    {
+      "parent": "gdk-pixbuf",
+      "version": "0.18.5",
+      "dependency": "glib"
+    },
+    {
+      "parent": "gdkx11",
+      "version": "0.18.2",
+      "dependency": "glib"
+    },
+    {
+      "parent": "gio",
+      "version": "0.18.4",
+      "dependency": "glib"
+    },
+    {
+      "parent": "gtk",
+      "version": "0.18.2",
+      "dependency": "glib"
+    },
+    {
+      "parent": "javascriptcore-rs",
+      "version": "1.1.2",
+      "dependency": "glib"
+    },
+    {
+      "parent": "libappindicator",
+      "version": "0.9.0",
+      "dependency": "glib"
+    },
+    {
+      "parent": "pango",
+      "version": "0.18.3",
+      "dependency": "glib"
+    },
+    {
+      "parent": "soup3",
+      "version": "0.5.0",
+      "dependency": "glib"
+    },
+    {
+      "parent": "webkit2gtk",
+      "version": "2.0.2",
+      "dependency": "glib"
+    }
+  ],
+  "rand": [
+    {
+      "parent": "libsecp256k1",
+      "version": "0.6.0",
+      "dependency": "rand 0.7.3"
+    },
+    {
+      "parent": "solana-program",
+      "version": "2.3.0",
+      "dependency": "rand 0.8.7"
+    }
+  ]
+}

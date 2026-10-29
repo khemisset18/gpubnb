@@ -1,0 +1,413 @@
+{
+  "reviewDate": "2026-10-29",
+  "sources": [
+    {
+      "id": "dogecoin",
+      "repository": "https://github.com/dogecoin/dogecoin",
+      "version": "v1.14.9",
+      "commit": "e0a1c157791544e818c901bd9341896965afbf9d",
+      "licenseAssessment": "MIT",
+      "inspection": "Source and selected tests read; no upstream binary, wallet or blockchain test executed. Not an exhaustive audit.",
+      "files": [
+        {
+          "path": "COPYING",
+          "sha256": "ff692211a86e69de91712125c9d6015fa5b1d15125329f80c09a9b61ec464bf6",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/COPYING"
+        },
+        {
+          "path": "src/chainparams.cpp",
+          "sha256": "150d3733903d05f22e2ce3bc195a65f99ced183e16f2e75f52a72d0df8ec5d9c",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparams.cpp"
+        },
+        {
+          "path": "src/validation.cpp",
+          "sha256": "e9f13df6a83e057fba52f3525fec894ba13a1dcec52be3cf71b13fd181c79e00",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp"
+        },
+        {
+          "path": "src/versionbits.cpp",
+          "sha256": "908cfc0dde9a0fdf5eecfced9c55adba0aa63621cf23022bffe0e8aa8d7a2c15",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/versionbits.cpp"
+        },
+        {
+          "path": "src/script/interpreter.cpp",
+          "sha256": "55a40e7cf109f1c9895675db4b20e8f2e7024cfc1d0c564d3583e8c940b3ac94",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/interpreter.cpp"
+        },
+        {
+          "path": "src/policy/policy.h",
+          "sha256": "1929f7a8c27228fabed8eb44223dda53dd86ea448f009fdd77e0024f9826ab51",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/policy/policy.h"
+        },
+        {
+          "path": "src/policy/policy.cpp",
+          "sha256": "da7d8cca27e0e44181805237cd7f3b66be380998f4d2474c7872a25c388250b5",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/policy/policy.cpp"
+        },
+        {
+          "path": "src/amount.h",
+          "sha256": "75285638d2675df7f3f569e26296435399f51fc74104cf816e73eef5d3debc41",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/amount.h"
+        },
+        {
+          "path": "src/consensus/consensus.h",
+          "sha256": "7bf00b00f3d6531e97f942c58b8395fe07139976cfb23b520c5a6c7817a6e605",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/consensus/consensus.h"
+        },
+        {
+          "path": "src/rpc/server.cpp",
+          "sha256": "ed005c2a18dc3d75d34e25c4004776f1b75efbf7576d73cbddfa4a5bc9f6a86c",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/server.cpp"
+        },
+        {
+          "path": "doc/bips.md",
+          "sha256": "fc989223db01ea48dbaa23fb5e422811f5ac775644dd35ffdfea30669705db38",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/doc/bips.md"
+        },
+        {
+          "path": "src/validation.h",
+          "sha256": "8549c1b0d4f17b10f947865745b41cfc13f00cc89b6aeae1ed4f8a460063dc93",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.h"
+        },
+        {
+          "path": "src/rpc/rawtransaction.cpp",
+          "sha256": "ecf3cb464e7b955bda3d51e99cded73b354583fab1a1b2b678a36d656b303ff4",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/rawtransaction.cpp"
+        },
+        {
+          "path": "src/rpc/blockchain.cpp",
+          "sha256": "219a002f86ba8f9e9d1a862cb9d76a255c5c6ae56f5ff94d592a31c4e5698455",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/blockchain.cpp"
+        },
+        {
+          "path": "src/rpc/net.cpp",
+          "sha256": "4151e723189a7456f1140c48b87c227d44828b0bcd7ce4b4082736b1e73afe62",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/net.cpp"
+        },
+        {
+          "path": "src/rpc/misc.cpp",
+          "sha256": "8056912e862f9b8c05b6940ebf39f2b59951a8fd7a3ed42fe216029d764c5343",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/misc.cpp"
+        },
+        {
+          "path": "src/rpc/mining.cpp",
+          "sha256": "90e11cddd7fa3918978b2fb362d3b111bf102c9f307395205baa8b15a930954d",
+          "url": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/mining.cpp"
+        }
+      ]
+    },
+    {
+      "id": "dcrdex",
+      "repository": "https://github.com/decred/dcrdex",
+      "version": "v1.0.5",
+      "commit": "37585833528544f80dddd92dcdff10a78ad01e1f",
+      "licenseAssessment": "BlueOak-1.0.0",
+      "inspection": "Source and selected tests read; no upstream binary, wallet or blockchain test executed. Not an exhaustive audit.",
+      "files": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004",
+          "url": "https://github.com/decred/dcrdex/blob/37585833528544f80dddd92dcdff10a78ad01e1f/LICENSE.md"
+        },
+        {
+          "path": "client/asset/doge/doge.go",
+          "sha256": "ee33db60bf384c1a81eb783c43ca4190e9d17e079c247e466ec9982bbf32d5b7",
+          "url": "https://github.com/decred/dcrdex/blob/37585833528544f80dddd92dcdff10a78ad01e1f/client/asset/doge/doge.go"
+        },
+        {
+          "path": "server/asset/doge/doge.go",
+          "sha256": "a4d3dbb0b128b05db1d1ed581ad26d1761b18100b5d582d2e93df5ebb96984e3",
+          "url": "https://github.com/decred/dcrdex/blob/37585833528544f80dddd92dcdff10a78ad01e1f/server/asset/doge/doge.go"
+        },
+        {
+          "path": "client/asset/bch/bch.go",
+          "sha256": "f7fb3ada6aa1b12e8c80163d463a26dd4df36985dbcd15b73e5ef6f0f934f719",
+          "url": "https://github.com/decred/dcrdex/blob/37585833528544f80dddd92dcdff10a78ad01e1f/client/asset/bch/bch.go"
+        },
+        {
+          "path": "client/asset/btc/btc.go",
+          "sha256": "df247a81b62abc636fb9b9c999da0f5147548422dd46f025db37abc0a2b345fe",
+          "url": "https://github.com/decred/dcrdex/blob/37585833528544f80dddd92dcdff10a78ad01e1f/client/asset/btc/btc.go"
+        },
+        {
+          "path": "dex/networks/btc/script.go",
+          "sha256": "0b7593c27223962ceaf4c6fd904d5575cda930265e71a10213f292eac46aec8b",
+          "url": "https://github.com/decred/dcrdex/blob/37585833528544f80dddd92dcdff10a78ad01e1f/dex/networks/btc/script.go"
+        },
+        {
+          "path": "dex/networks/btc/script_test.go",
+          "sha256": "d797ed181e4d3bbf0146286ed1255218291f00248c5694612de97884ad990f64",
+          "url": "https://github.com/decred/dcrdex/blob/37585833528544f80dddd92dcdff10a78ad01e1f/dex/networks/btc/script_test.go"
+        },
+        {
+          "path": "client/core/trade.go",
+          "sha256": "2dedcb30a73ee85f60fb9dfb443d08781d53582a162da542746c08bf00fa528b",
+          "url": "https://github.com/decred/dcrdex/blob/37585833528544f80dddd92dcdff10a78ad01e1f/client/core/trade.go"
+        },
+        {
+          "path": "client/asset/doge/regnet_test.go",
+          "sha256": "9ddf44adef2add5ad372537312cf362298b3475d632b01eb992c56082743484c",
+          "url": "https://github.com/decred/dcrdex/blob/37585833528544f80dddd92dcdff10a78ad01e1f/client/asset/doge/regnet_test.go"
+        },
+        {
+          "path": "client/asset/ltc/regnet_test.go",
+          "sha256": "01615ecc23044aeef693663833a417e48988abaf4ae3cdf0e2f3594d650cb16e",
+          "url": "https://github.com/decred/dcrdex/blob/37585833528544f80dddd92dcdff10a78ad01e1f/client/asset/ltc/regnet_test.go"
+        },
+        {
+          "path": "client/asset/bch/regnet_test.go",
+          "sha256": "9126067eca7d37bca21ff201f47328741607286c9f3e2cdc738b126e3a0a8e52",
+          "url": "https://github.com/decred/dcrdex/blob/37585833528544f80dddd92dcdff10a78ad01e1f/client/asset/bch/regnet_test.go"
+        }
+      ]
+    },
+    {
+      "id": "dcrdex-master",
+      "repository": "https://github.com/decred/dcrdex",
+      "version": "master snapshot",
+      "commit": "fc63460615e8dca83fc19520f32a1cb00be4acfa",
+      "licenseAssessment": "BlueOak-1.0.0",
+      "inspection": "Source and selected tests read; no upstream binary, wallet or blockchain test executed. Not an exhaustive audit.",
+      "files": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004",
+          "url": "https://github.com/decred/dcrdex/blob/fc63460615e8dca83fc19520f32a1cb00be4acfa/LICENSE.md"
+        },
+        {
+          "path": "client/asset/xmr/xmr.go",
+          "sha256": "7fda2f53d491d94d8bdcaad0841738a2341623ee8f3b786c8d7b4165fd816347",
+          "url": "https://github.com/decred/dcrdex/blob/fc63460615e8dca83fc19520f32a1cb00be4acfa/client/asset/xmr/xmr.go"
+        },
+        {
+          "path": "client/asset/xmr/stub.go",
+          "sha256": "7c27bb332b2ea5e16e2f288b8a4f2ff4c38e34a8ecf718e5b761ce3ec1af2500",
+          "url": "https://github.com/decred/dcrdex/blob/fc63460615e8dca83fc19520f32a1cb00be4acfa/client/asset/xmr/stub.go"
+        },
+        {
+          "path": "client/asset/xmr/README.md",
+          "sha256": "6f80cf22f3eebac266dd28b7373aa7a75603e6deef41ba5ff85d62e2edce8ff2",
+          "url": "https://github.com/decred/dcrdex/blob/fc63460615e8dca83fc19520f32a1cb00be4acfa/client/asset/xmr/README.md"
+        }
+      ]
+    },
+    {
+      "id": "basicswap",
+      "repository": "https://github.com/basicswap/basicswap",
+      "version": "v0.19.1 (same commit as inspected master)",
+      "commit": "de61f913cbe7c9289dcc735df505daa6f8b19385",
+      "licenseAssessment": "MIT",
+      "inspection": "Source and selected tests read; no upstream binary, wallet or blockchain test executed. Not an exhaustive audit.",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "3f78b4fb878a8ef07f74cbe942d58cc8b592608cdad0b58e610ddcfae83a8a90",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/LICENSE"
+        },
+        {
+          "path": "basicswap/chainparams.py",
+          "sha256": "7fabba3323cad2b94a52d4179147a2451be082c74fe32fdb1bcac92b2a58bccc",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/chainparams.py"
+        },
+        {
+          "path": "basicswap/basicswap.py",
+          "sha256": "c313fa7f055e8306208b7b83b8cd2ed2b874f261a0124b0e0cdd542503e9fd91",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/basicswap.py"
+        },
+        {
+          "path": "basicswap/interface/doge/doge.py",
+          "sha256": "4d7468bc1966121e797265d91fc722f408f3f2291d78c47bd21f340c225e9a83",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/interface/doge/doge.py"
+        },
+        {
+          "path": "basicswap/interface/bch/bch.py",
+          "sha256": "af99d8b07491ae5905611684f599319e32bd01276827b7bffe454ccfc74a96a9",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/interface/bch/bch.py"
+        },
+        {
+          "path": "basicswap/interface/xmr/xmr.py",
+          "sha256": "149cbacce3ade8e709b9cd36f9dd828f9b3dbe9e8c9dfd5ee80db2e57065a86c",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/interface/xmr/xmr.py"
+        },
+        {
+          "path": "basicswap/protocols/xmr_swap_1.py",
+          "sha256": "7ae4a0cbbda44d7d081f23ccec0ed41894ed7f8748b700a0a8e6304e566e1f86",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/protocols/xmr_swap_1.py"
+        },
+        {
+          "path": "doc/protocols/adaptor_sig.md",
+          "sha256": "acaa4497bad44072f36dfd1a36aceeb964f9074c8b8d9e8db3652c7f67d4948d",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/doc/protocols/adaptor_sig.md"
+        },
+        {
+          "path": "doc/protocols/adaptor_sig_reversed.md",
+          "sha256": "7371fd9c6feb04109d89999eec02ae9dad42f53737c381f60a8f313a758909fa",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/doc/protocols/adaptor_sig_reversed.md"
+        },
+        {
+          "path": "tests/basicswap/test_btc_xmr.py",
+          "sha256": "b9a1c9d6254a9dd13974478602a1adbe03da751fe6dc0cfe9ebede9a32f2375f",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/tests/basicswap/test_btc_xmr.py"
+        },
+        {
+          "path": "tests/basicswap/test_ltc_xmr.py",
+          "sha256": "ca9ff43411d5d48bf4b236f5694649184665744b7e41630599089c0d3d69c564",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/tests/basicswap/test_ltc_xmr.py"
+        },
+        {
+          "path": "tests/basicswap/test_bch_xmr.py",
+          "sha256": "4b354fe6cba8ae6ff75ae556c0c0de7046c13caf2f166f7c6d73ec9115bf7cc0",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/tests/basicswap/test_bch_xmr.py"
+        },
+        {
+          "path": "tests/basicswap/extended/test_doge.py",
+          "sha256": "fa0480d792e94a6bfeae33115e2d17d39f39a77100fda9bafe6f054dc733ec6c",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/tests/basicswap/extended/test_doge.py"
+        },
+        {
+          "path": "requirements.txt",
+          "sha256": "ab402aac9af9f6fff1e16a294069d58c586c3db934dd6d1b9919909ba1deecae",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/requirements.txt"
+        },
+        {
+          "path": "basicswap/basicswap_util.py",
+          "sha256": "b3bd60826b67967e1d307224fcc0becc68bf0751b82731475bbd53ed18cc8192",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/basicswap_util.py"
+        },
+        {
+          "path": "basicswap/interface/doge/chainparams.py",
+          "sha256": "9bdaf33f5dbea5fd36ed55bc65db52ef557b30fd95f4b7fa6f25eb4a59d94344",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/interface/doge/chainparams.py"
+        },
+        {
+          "path": "basicswap/interface/btc/chainparams.py",
+          "sha256": "6ac4c7aa2a3da185e160ee477e8a5a5d9068fd7901f2258eb2b53e816f14f8fa",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/interface/btc/chainparams.py"
+        },
+        {
+          "path": "basicswap/interface/ltc/chainparams.py",
+          "sha256": "84a38bcd82e6dc21dc37c156ceeeecc1495c8d8d8395abd17a7e2b36d59202f9",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/interface/ltc/chainparams.py"
+        },
+        {
+          "path": "basicswap/interface/bch/chainparams.py",
+          "sha256": "1fa0f2a200529e7d561f4b06f296451ab5beaafbff3c46d789090d242ed2bbcc",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/interface/bch/chainparams.py"
+        },
+        {
+          "path": "basicswap/interface/xmr/chainparams.py",
+          "sha256": "bd75147cb881440e386aea0f8576b6faa01db894350d9a87f6f16a835213e00e",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/interface/xmr/chainparams.py"
+        },
+        {
+          "path": "basicswap/interface/doge/core.py",
+          "sha256": "a8dad6023c1fcfb78cca3d6480c0a09b5adc851b5944c804e9fd271c54762115",
+          "url": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/basicswap/interface/doge/core.py"
+        }
+      ]
+    },
+    {
+      "id": "comit",
+      "repository": "https://github.com/comit-network/xmr-btc-swap",
+      "version": "1.0.0-rc.1",
+      "commit": "a2cc3591b158e6695f318f4b816068cd5a9ad7be",
+      "licenseAssessment": "GPL-3.0 (exact later-version grant requires legal review)",
+      "inspection": "Source and selected tests read; no upstream binary, wallet or blockchain test executed. Not an exhaustive audit.",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+          "url": "https://github.com/comit-network/xmr-btc-swap/blob/a2cc3591b158e6695f318f4b816068cd5a9ad7be/LICENSE"
+        },
+        {
+          "path": "README.md",
+          "sha256": "e1baa1d6db487237285d5595557dc603620b5228bdf83b12c52277eae22adc43",
+          "url": "https://github.com/comit-network/xmr-btc-swap/blob/a2cc3591b158e6695f318f4b816068cd5a9ad7be/README.md"
+        },
+        {
+          "path": "swap/src/protocol/alice.rs",
+          "sha256": "a7c6f1b93252e8b88d5ba74e536384f4a5829779bec6938d3409e9cff54f6728",
+          "url": "https://github.com/comit-network/xmr-btc-swap/blob/a2cc3591b158e6695f318f4b816068cd5a9ad7be/swap/src/protocol/alice.rs"
+        },
+        {
+          "path": "swap/src/protocol/bob.rs",
+          "sha256": "71770ce0b922118ed08681458c81dcd43940729dbf5beeb2a7754cf907850ce0",
+          "url": "https://github.com/comit-network/xmr-btc-swap/blob/a2cc3591b158e6695f318f4b816068cd5a9ad7be/swap/src/protocol/bob.rs"
+        },
+        {
+          "path": "swap/src/database/sqlite.rs",
+          "sha256": "9d7f9c18644075433f659cb3bb3f0e6c54525cef3386f484721c626352b0af41",
+          "url": "https://github.com/comit-network/xmr-btc-swap/blob/a2cc3591b158e6695f318f4b816068cd5a9ad7be/swap/src/database/sqlite.rs"
+        },
+        {
+          "path": "swap/src/asb/recovery/refund.rs",
+          "sha256": "ae7fead9c4c51fe56b10860fa5d1ab383bd8bca086f57a572d58dc4a2559c5cc",
+          "url": "https://github.com/comit-network/xmr-btc-swap/blob/a2cc3591b158e6695f318f4b816068cd5a9ad7be/swap/src/asb/recovery/refund.rs"
+        },
+        {
+          "path": "swap/src/asb/recovery/punish.rs",
+          "sha256": "ec9845ebc48ed8f6341ec73bfcaf627e3e122c60c3e30e312f9dc7b9d58e145e",
+          "url": "https://github.com/comit-network/xmr-btc-swap/blob/a2cc3591b158e6695f318f4b816068cd5a9ad7be/swap/src/asb/recovery/punish.rs"
+        }
+      ]
+    },
+    {
+      "id": "kdf",
+      "repository": "https://github.com/GLEECBTC/komodo-defi-framework",
+      "version": "main archived snapshot; original KomodoPlatform URL redirects here",
+      "commit": "9b3fd7026e9e5ad4c8bd2cba5a5499cecba8d957",
+      "licenseAssessment": "Custom notice + GPL-3.0 and third-party notices; legal review required",
+      "inspection": "Source and selected tests read; no upstream binary, wallet or blockchain test executed. Not an exhaustive audit.",
+      "files": [
+        {
+          "path": "LEGAL/LICENSE-COPYRIGHT-NOTICE",
+          "sha256": "70cd3a575d4890582e94b5c29c117edb16b3c5ac10444be995ed3d18ce89518b",
+          "url": "https://github.com/GLEECBTC/komodo-defi-framework/blob/9b3fd7026e9e5ad4c8bd2cba5a5499cecba8d957/LEGAL/LICENSE-COPYRIGHT-NOTICE"
+        },
+        {
+          "path": "README.md",
+          "sha256": "8877f652c44a82b7627477d1cd7e571a6766e99ceb227816c96070d38e143961",
+          "url": "https://github.com/GLEECBTC/komodo-defi-framework/blob/9b3fd7026e9e5ad4c8bd2cba5a5499cecba8d957/README.md"
+        },
+        {
+          "path": "LEGAL/COPYING",
+          "sha256": "31cb0ba148ea079e0bf9b2a9ca6da9b77c57e66abe24bd840c7ddc6a4c4c68c2",
+          "url": "https://github.com/GLEECBTC/komodo-defi-framework/blob/9b3fd7026e9e5ad4c8bd2cba5a5499cecba8d957/LEGAL/COPYING"
+        },
+        {
+          "path": "LEGAL/THIRDPARTY-LICENSES",
+          "sha256": "47aeab67759d212e3c7bc3574001952e4cf433b1bc7671cfdd959e35f9d74e22",
+          "url": "https://github.com/GLEECBTC/komodo-defi-framework/blob/9b3fd7026e9e5ad4c8bd2cba5a5499cecba8d957/LEGAL/THIRDPARTY-LICENSES"
+        }
+      ]
+    },
+    {
+      "id": "bips",
+      "repository": "https://github.com/bitcoin/bips",
+      "commit": "5aadddb511a5dcfe4599531bd8ae5e5b96d0f793",
+      "licenseAssessment": "65/112/125 PD; 199 BSD-3-Clause OR CC0-1.0; BIP199 status Closed",
+      "files": [
+        {
+          "path": "bip-0065.mediawiki",
+          "sha256": "717400aef7789a795bbc86a67e0f40ea94966aea13975052e1fc31a047207399",
+          "url": "https://github.com/bitcoin/bips/blob/5aadddb511a5dcfe4599531bd8ae5e5b96d0f793/bip-0065.mediawiki"
+        },
+        {
+          "path": "bip-0112.mediawiki",
+          "sha256": "61022872545daeb779ef5d38f769d7a155c0f85333653b20c83b0a2329b523c4",
+          "url": "https://github.com/bitcoin/bips/blob/5aadddb511a5dcfe4599531bd8ae5e5b96d0f793/bip-0112.mediawiki"
+        },
+        {
+          "path": "bip-0125.mediawiki",
+          "sha256": "da53c6f77100581b715befcfcb2e84adc672d205628a4219c77106f66978aad2",
+          "url": "https://github.com/bitcoin/bips/blob/5aadddb511a5dcfe4599531bd8ae5e5b96d0f793/bip-0125.mediawiki"
+        },
+        {
+          "path": "bip-0199.mediawiki",
+          "sha256": "1e28bc46b408c1616d0d8054d2a91e2eaf9759f0f1c788a3df24de79134b1d04",
+          "url": "https://github.com/bitcoin/bips/blob/5aadddb511a5dcfe4599531bd8ae5e5b96d0f793/bip-0199.mediawiki"
+        }
+      ]
+    }
+  ]
+}

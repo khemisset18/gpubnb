@@ -1,0 +1,45 @@
+{
+  "package": "source-map-js",
+  "version": "1.2.2",
+  "file": "lib/source-map-consumer.js",
+  "originalSha256": "9ad10db386da13c1f95e6a680d6298dbb306c77f57a9a3539e4595b723a7654b",
+  "patchedSha256": "344a10bed975b5e18de1967b7b3e6455ec28fb19631f73504bc1c8f902c9fbaa",
+  "replacements": [
+    {
+      "before": "  this._names = new ArraySet();",
+      "after": "  this._names = new ArraySet();\n  this.sourceRoot = null;\n  this.file = util.getArg(sourceMap, 'file', null);\n  this._sourceMapURL = aSourceMapURL;"
+    },
+    {
+      "before": "                section.generatedOffset.generatedColumn);",
+      "after": "                (section.generatedOffset.generatedColumn - 1));"
+    },
+    {
+      "before": "      // Only consider this section if the requested source is in the list of\n      // sources of the consumer.\n      if (section.consumer._findSourceIndex(util.getArg(aArgs, 'source')) === -1) {\n        continue;\n      }\n      var generatedPosition = section.consumer.generatedPositionFor(aArgs);\n      if (generatedPosition) {",
+      "after": "      // Use the public API: a section may itself be an indexed consumer.\n      var generatedPosition = section.consumer.generatedPositionFor(aArgs);\n      if (generatedPosition.line !== null && generatedPosition.column !== null) {"
+    },
+    {
+      "before": "(section.generatedOffset.generatedLine === generatedPosition.line",
+      "after": "(generatedPosition.line === 1"
+    },
+    {
+      "before": "        var source = section.consumer._sources.at(mapping.source);\n        if(source !== null) {\n          source = util.computeSourceURL(section.consumer.sourceRoot, source, this._sourceMapURL);\n        }\n        this._sources.add(source);\n        source = this._sources.indexOf(source);",
+      "after": "        var source = null;\n        if (mapping.source !== null) {\n          source = section.consumer._sources.at(mapping.source);\n          source = util.computeSourceURL(section.consumer.sourceRoot, source, section.consumer._sourceMapURL);\n          this._sources.add(source);\n          source = this._sources.indexOf(source);\n        }"
+    },
+    {
+      "before": "        if (mapping.name) {",
+      "after": "        if (mapping.name !== null) {"
+    },
+    {
+      "before": "(section.generatedOffset.generatedLine === mapping.generatedLine",
+      "after": "(mapping.generatedLine === 1"
+    },
+    {
+      "before": "exports.IndexedSourceMapConsumer = IndexedSourceMapConsumer;",
+      "after": "// Indexed mappings are flattened lazily before inherited multi-position lookup.\nIndexedSourceMapConsumer.prototype._findSourceIndex = function(aSource) {\n  this._generatedMappings;\n  return this._sources.has(aSource) ? this._sources.indexOf(aSource) : -1;\n};\nIndexedSourceMapConsumer.prototype._findMapping = BasicSourceMapConsumer.prototype._findMapping;\n\nexports.IndexedSourceMapConsumer = IndexedSourceMapConsumer;"
+    },
+    {
+      "before": "    if (nullOnMissing) {\n      return null;\n    }\n    else {\n      throw new Error('\"' + aSource + '\" is not in the SourceMap.');\n    }",
+      "after": "    // A known source may legitimately omit sourcesContent.\n    if (this.sources.indexOf(aSource) !== -1 || nullOnMissing) {\n      return null;\n    }\n    else {\n      throw new Error('\"' + aSource + '\" is not in the SourceMap.');\n    }"
+    }
+  ]
+}

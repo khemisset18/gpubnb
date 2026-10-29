@@ -1,0 +1,17 @@
+(node:55) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> @gpubnb/host-desktop@0.1.0 build
+> tsc --noEmit && vite build
+
+(node:76) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 11 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                  0.47 kB │ gzip:  0.30 kB
+dist/assets/index-ySy2nNWe.css  21.99 kB │ gzip:  5.33 kB
+dist/assets/index-C4c-Gx9n.js   36.50 kB │ gzip: 12.28 kB
+✓ built in 293ms

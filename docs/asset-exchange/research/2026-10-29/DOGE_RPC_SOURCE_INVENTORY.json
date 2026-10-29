@@ -1,0 +1,361 @@
+{
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "scope": "static RPC registration table inspection only; not an execution permission",
+  "methods": {
+    "getrawtransaction": {
+      "category": "rawtransactions",
+      "function": "getrawtransaction",
+      "path": "src/rpc/rawtransaction.cpp"
+    },
+    "createrawtransaction": {
+      "category": "rawtransactions",
+      "function": "createrawtransaction",
+      "path": "src/rpc/rawtransaction.cpp"
+    },
+    "decoderawtransaction": {
+      "category": "rawtransactions",
+      "function": "decoderawtransaction",
+      "path": "src/rpc/rawtransaction.cpp"
+    },
+    "decodescript": {
+      "category": "rawtransactions",
+      "function": "decodescript",
+      "path": "src/rpc/rawtransaction.cpp"
+    },
+    "sendrawtransaction": {
+      "category": "rawtransactions",
+      "function": "sendrawtransaction",
+      "path": "src/rpc/rawtransaction.cpp"
+    },
+    "signrawtransaction": {
+      "category": "rawtransactions",
+      "function": "signrawtransaction",
+      "path": "src/rpc/rawtransaction.cpp"
+    },
+    "gettxoutproof": {
+      "category": "blockchain",
+      "function": "gettxoutproof",
+      "path": "src/rpc/rawtransaction.cpp"
+    },
+    "verifytxoutproof": {
+      "category": "blockchain",
+      "function": "verifytxoutproof",
+      "path": "src/rpc/rawtransaction.cpp"
+    },
+    "help": {
+      "category": "control",
+      "function": "help",
+      "path": "src/rpc/server.cpp"
+    },
+    "stop": {
+      "category": "control",
+      "function": "stop",
+      "path": "src/rpc/server.cpp"
+    },
+    "getnetworkhashps": {
+      "category": "mining",
+      "function": "getnetworkhashps",
+      "path": "src/rpc/mining.cpp"
+    },
+    "getmininginfo": {
+      "category": "mining",
+      "function": "getmininginfo",
+      "path": "src/rpc/mining.cpp"
+    },
+    "prioritisetransaction": {
+      "category": "mining",
+      "function": "prioritisetransaction",
+      "path": "src/rpc/mining.cpp"
+    },
+    "getblocktemplate": {
+      "category": "mining",
+      "function": "getblocktemplate",
+      "path": "src/rpc/mining.cpp"
+    },
+    "submitblock": {
+      "category": "mining",
+      "function": "submitblock",
+      "path": "src/rpc/mining.cpp"
+    },
+    "getauxblock": {
+      "category": "mining",
+      "function": "getauxblock",
+      "path": "src/rpc/mining.cpp"
+    },
+    "createauxblock": {
+      "category": "mining",
+      "function": "createauxblock",
+      "path": "src/rpc/mining.cpp"
+    },
+    "submitauxblock": {
+      "category": "mining",
+      "function": "submitauxblock",
+      "path": "src/rpc/mining.cpp"
+    },
+    "generate": {
+      "category": "generating",
+      "function": "generate",
+      "path": "src/rpc/mining.cpp"
+    },
+    "generatetoaddress": {
+      "category": "generating",
+      "function": "generatetoaddress",
+      "path": "src/rpc/mining.cpp"
+    },
+    "estimatefee": {
+      "category": "util",
+      "function": "estimatefee",
+      "path": "src/rpc/mining.cpp"
+    },
+    "estimatepriority": {
+      "category": "util",
+      "function": "estimatepriority",
+      "path": "src/rpc/mining.cpp"
+    },
+    "estimatesmartfee": {
+      "category": "util",
+      "function": "estimatesmartfee",
+      "path": "src/rpc/mining.cpp"
+    },
+    "estimatesmartpriority": {
+      "category": "util",
+      "function": "estimatesmartpriority",
+      "path": "src/rpc/mining.cpp"
+    },
+    "getinfo": {
+      "category": "control",
+      "function": "getinfo",
+      "path": "src/rpc/misc.cpp"
+    },
+    "getmemoryinfo": {
+      "category": "control",
+      "function": "getmemoryinfo",
+      "path": "src/rpc/misc.cpp"
+    },
+    "validateaddress": {
+      "category": "util",
+      "function": "validateaddress",
+      "path": "src/rpc/misc.cpp"
+    },
+    "createmultisig": {
+      "category": "util",
+      "function": "createmultisig",
+      "path": "src/rpc/misc.cpp"
+    },
+    "verifymessage": {
+      "category": "util",
+      "function": "verifymessage",
+      "path": "src/rpc/misc.cpp"
+    },
+    "signmessagewithprivkey": {
+      "category": "util",
+      "function": "signmessagewithprivkey",
+      "path": "src/rpc/misc.cpp"
+    },
+    "setmocktime": {
+      "category": "hidden",
+      "function": "setmocktime",
+      "path": "src/rpc/misc.cpp"
+    },
+    "getmocktime": {
+      "category": "hidden",
+      "function": "getmocktime",
+      "path": "src/rpc/misc.cpp"
+    },
+    "echo": {
+      "category": "hidden",
+      "function": "echo",
+      "path": "src/rpc/misc.cpp"
+    },
+    "echojson": {
+      "category": "hidden",
+      "function": "echo",
+      "path": "src/rpc/misc.cpp"
+    },
+    "getconnectioncount": {
+      "category": "network",
+      "function": "getconnectioncount",
+      "path": "src/rpc/net.cpp"
+    },
+    "setmaxconnections": {
+      "category": "network",
+      "function": "setmaxconnections",
+      "path": "src/rpc/net.cpp"
+    },
+    "ping": {
+      "category": "network",
+      "function": "ping",
+      "path": "src/rpc/net.cpp"
+    },
+    "getpeerinfo": {
+      "category": "network",
+      "function": "getpeerinfo",
+      "path": "src/rpc/net.cpp"
+    },
+    "addnode": {
+      "category": "network",
+      "function": "addnode",
+      "path": "src/rpc/net.cpp"
+    },
+    "disconnectnode": {
+      "category": "network",
+      "function": "disconnectnode",
+      "path": "src/rpc/net.cpp"
+    },
+    "getaddednodeinfo": {
+      "category": "network",
+      "function": "getaddednodeinfo",
+      "path": "src/rpc/net.cpp"
+    },
+    "getnettotals": {
+      "category": "network",
+      "function": "getnettotals",
+      "path": "src/rpc/net.cpp"
+    },
+    "getnetworkinfo": {
+      "category": "network",
+      "function": "getnetworkinfo",
+      "path": "src/rpc/net.cpp"
+    },
+    "setban": {
+      "category": "network",
+      "function": "setban",
+      "path": "src/rpc/net.cpp"
+    },
+    "listbanned": {
+      "category": "network",
+      "function": "listbanned",
+      "path": "src/rpc/net.cpp"
+    },
+    "clearbanned": {
+      "category": "network",
+      "function": "clearbanned",
+      "path": "src/rpc/net.cpp"
+    },
+    "setnetworkactive": {
+      "category": "network",
+      "function": "setnetworkactive",
+      "path": "src/rpc/net.cpp"
+    },
+    "getblockchaininfo": {
+      "category": "blockchain",
+      "function": "getblockchaininfo",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getblockstats": {
+      "category": "blockchain",
+      "function": "getblockstats",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getbestblockhash": {
+      "category": "blockchain",
+      "function": "getbestblockhash",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getblockcount": {
+      "category": "blockchain",
+      "function": "getblockcount",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getblock": {
+      "category": "blockchain",
+      "function": "getblock",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getblockhash": {
+      "category": "blockchain",
+      "function": "getblockhash",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getblockheader": {
+      "category": "blockchain",
+      "function": "getblockheader",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getchaintips": {
+      "category": "blockchain",
+      "function": "getchaintips",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getdifficulty": {
+      "category": "blockchain",
+      "function": "getdifficulty",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getmempoolancestors": {
+      "category": "blockchain",
+      "function": "getmempoolancestors",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getmempooldescendants": {
+      "category": "blockchain",
+      "function": "getmempooldescendants",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getmempoolentry": {
+      "category": "blockchain",
+      "function": "getmempoolentry",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getmempoolinfo": {
+      "category": "blockchain",
+      "function": "getmempoolinfo",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "getrawmempool": {
+      "category": "blockchain",
+      "function": "getrawmempool",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "gettxout": {
+      "category": "blockchain",
+      "function": "gettxout",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "gettxoutsetinfo": {
+      "category": "blockchain",
+      "function": "gettxoutsetinfo",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "pruneblockchain": {
+      "category": "blockchain",
+      "function": "pruneblockchain",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "verifychain": {
+      "category": "blockchain",
+      "function": "verifychain",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "preciousblock": {
+      "category": "blockchain",
+      "function": "preciousblock",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "invalidateblock": {
+      "category": "hidden",
+      "function": "invalidateblock",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "reconsiderblock": {
+      "category": "hidden",
+      "function": "reconsiderblock",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "waitfornewblock": {
+      "category": "hidden",
+      "function": "waitfornewblock",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "waitforblock": {
+      "category": "hidden",
+      "function": "waitforblock",
+      "path": "src/rpc/blockchain.cpp"
+    },
+    "waitforblockheight": {
+      "category": "hidden",
+      "function": "waitforblockheight",
+      "path": "src/rpc/blockchain.cpp"
+    }
+  }
+}

@@ -1,0 +1,34 @@
+Obtaining file:///workspace/scratch/1e74791da067/gpubnb/agent
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Checking if build backend supports build_editable: started
+  Checking if build backend supports build_editable: finished with status 'done'
+  Getting requirements to build editable: started
+  Getting requirements to build editable: finished with status 'done'
+  Preparing editable metadata (pyproject.toml): started
+  Preparing editable metadata (pyproject.toml): finished with status 'done'
+Requirement already satisfied: PyNaCl==1.6.2 in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from gpubnb-agent==0.6.6) (1.6.2)
+Requirement already satisfied: base58==2.1.1 in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from gpubnb-agent==0.6.6) (2.1.1)
+Requirement already satisfied: aioquic==1.3.0 in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from gpubnb-agent==0.6.6) (1.3.0)
+Requirement already satisfied: websocket-client==1.9.0 in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from gpubnb-agent==0.6.6) (1.9.0)
+Requirement already satisfied: certifi in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from aioquic==1.3.0->gpubnb-agent==0.6.6) (2026.10.23)
+Requirement already satisfied: cryptography>=42.0.0 in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from aioquic==1.3.0->gpubnb-agent==0.6.6) (50.0.2)
+Requirement already satisfied: pylsqpack<0.4.0,>=0.3.3 in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from aioquic==1.3.0->gpubnb-agent==0.6.6) (0.3.24)
+Requirement already satisfied: pyopenssl>=24 in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from aioquic==1.3.0->gpubnb-agent==0.6.6) (26.4.0)
+Requirement already satisfied: service-identity>=24.1.0 in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from aioquic==1.3.0->gpubnb-agent==0.6.6) (26.1.0)
+Requirement already satisfied: cffi>=2.0.0 in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from PyNaCl==1.6.2->gpubnb-agent==0.6.6) (2.1.1)
+Requirement already satisfied: pycparser in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from cffi>=2.0.0->PyNaCl==1.6.2->gpubnb-agent==0.6.6) (3.12)
+Requirement already satisfied: typing-extensions>=4.9 in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from pyopenssl>=24->aioquic==1.3.0->gpubnb-agent==0.6.6) (4.16.0)
+Requirement already satisfied: attrs>=19.1.0 in /workspace/scratch/1e74791da067/validation-tools/agent-venv/lib/python3.12/site-packages (from service-identity>=24.1.0->aioquic==1.3.0->gpubnb-agent==0.6.6) (26.1.0)
+Building wheels for collected packages: gpubnb-agent
+  Building editable for gpubnb-agent (pyproject.toml): started
+  Building editable for gpubnb-agent (pyproject.toml): finished with status 'done'
+  Created wheel for gpubnb-agent: filename=gpubnb_agent-0.6.6-0.editable-py3-none-any.whl size=3124 sha256=9fa3f591b56714edc735698f4b638ec6f611e762487c86725d3796fb61abb8f2
+  Stored in directory: /workspace/scratch/1e74791da067/gpubnb/pip-ephem-wheel-cache-7q40cfwv/wheels/34/d8/bb/ca0b987532267fa047dffc33fc63675eece38bf60db82deae9
+Successfully built gpubnb-agent
+Installing collected packages: gpubnb-agent
+  Attempting uninstall: gpubnb-agent
+    Found existing installation: gpubnb-agent 0.6.6
+    Uninstalling gpubnb-agent-0.6.6:
+      Successfully uninstalled gpubnb-agent-0.6.6
+Successfully installed gpubnb-agent-0.6.6

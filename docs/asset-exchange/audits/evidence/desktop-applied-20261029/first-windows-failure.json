@@ -1,0 +1,8 @@
+{
+  "run": 40959885741,
+  "job": 123749575126,
+  "commit": "c8bdef493c140097c1cc198aa6ec67bdb58ca4d5",
+  "status": "FAIL",
+  "originalLogSha256": "13220737a034e03d1d74162aca633afe7c0877145a3a0fd0f4a17007e4b0a5d6",
+  "cause": "Fixture expected allowed HTTP200 but received403 on Windows. Investigating canonical short/long temp path mismatch; no filesystem-security expectation is relaxed."
+}

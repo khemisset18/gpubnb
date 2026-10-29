@@ -1,0 +1,1163 @@
+{
+  "schema": "GPUBNB:RESEARCH:PAIR-MATRIX:v1",
+  "sourceCommits": {
+    "dogecoin": "e0a1c157791544e818c901bd9341896965afbf9d",
+    "dcrdex": "37585833528544f80dddd92dcdff10a78ad01e1f",
+    "dcrdex-master": "fc63460615e8dca83fc19520f32a1cb00be4acfa",
+    "basicswap": "de61f913cbe7c9289dcc735df505daa6f8b19385",
+    "comit": "a2cc3591b158e6695f318f4b816068cd5a9ad7be",
+    "kdf": "9b3fd7026e9e5ad4c8bd2cba5a5499cecba8d957",
+    "bips": "5aadddb511a5dcfe4599531bd8ae5e5b96d0f793"
+  },
+  "notAnActivationManifest": true,
+  "directions": [
+    {
+      "pair": "BTC-DOGE",
+      "direction": "BTC → DOGE",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "Both client/server drivers and common HTLC engine exist; market enablement/liquidity and pair integration still required",
+        "protocol": "DCR-HTLC"
+      },
+      "basicswap": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "code path and upstream test present; tests were read, NOT executed here",
+        "testReference": "tests/basicswap/extended/test_doge.py",
+        "protocol": "BS-OTVES",
+        "roleMapping": "normal bid; script-capable ITX/A locks first; role depends on offer direction"
+      },
+      "claim": "DCR-HTLC preimage+signature; BS-OTVES signature completion extracts second-leg key share; for rejected pair no route",
+      "refund": "DCR-HTLC CLTV refund on each eligible leg; BS-OTVES presigned script-side refund/key-share recovery, separate late swipe/mercy cases; no unconditional XMR timelock",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "BTC",
+        "DOGE"
+      ],
+      "walletProfiles": [
+        "BTC",
+        "DOGE"
+      ],
+      "rpcProfiles": [
+        "BTC",
+        "DOGE"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "BTC remains existing regtest scope only",
+        "AuxPoW parsing; CLTV regtest activation height 1351; CSV not qualified",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result.",
+        "BasicSwap reviewed default DOGE node is tecnovert/dogecoin 23.2.1, not official Dogecoin v1.14.9; RPC/signer compatibility with GPUbnb D0 is unproven. No fork trust input is adopted."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "tests/basicswap/extended/test_doge.py"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "BTC-DOGE",
+      "direction": "DOGE → BTC",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "Both client/server drivers and common HTLC engine exist; market enablement/liquidity and pair integration still required",
+        "protocol": "DCR-HTLC"
+      },
+      "basicswap": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "code path and upstream test present; tests were read, NOT executed here",
+        "testReference": "tests/basicswap/extended/test_doge.py",
+        "protocol": "BS-OTVES",
+        "roleMapping": "reversed bid; offerer scriptless leg is PTX/B, script-capable counterleg locks first"
+      },
+      "claim": "DCR-HTLC preimage+signature; BS-OTVES signature completion extracts second-leg key share; for rejected pair no route",
+      "refund": "DCR-HTLC CLTV refund on each eligible leg; BS-OTVES presigned script-side refund/key-share recovery, separate late swipe/mercy cases; no unconditional XMR timelock",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "DOGE",
+        "BTC"
+      ],
+      "walletProfiles": [
+        "DOGE",
+        "BTC"
+      ],
+      "rpcProfiles": [
+        "DOGE",
+        "BTC"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "AuxPoW parsing; CLTV regtest activation height 1351; CSV not qualified",
+        "BTC remains existing regtest scope only",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result.",
+        "BasicSwap reviewed default DOGE node is tecnovert/dogecoin 23.2.1, not official Dogecoin v1.14.9; RPC/signer compatibility with GPUbnb D0 is unproven. No fork trust input is adopted."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "tests/basicswap/extended/test_doge.py"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "BTC-LTC",
+      "direction": "BTC → LTC",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "Both client/server drivers and common HTLC engine exist; market enablement/liquidity and pair integration still required",
+        "protocol": "DCR-HTLC"
+      },
+      "basicswap": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "code path and upstream test present; tests were read, NOT executed here",
+        "testReference": "tests/basicswap/test_ltc_xmr.py:test_20_btc_coin (SELLER_FIRST regtest only)",
+        "protocol": "BS-OTVES",
+        "roleMapping": "normal bid; script-capable ITX/A locks first; role depends on offer direction"
+      },
+      "claim": "DCR-HTLC preimage+signature; BS-OTVES signature completion extracts second-leg key share; for rejected pair no route",
+      "refund": "DCR-HTLC CLTV refund on each eligible leg; BS-OTVES presigned script-side refund/key-share recovery, separate late swipe/mercy cases; no unconditional XMR timelock",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "BTC",
+        "LTC"
+      ],
+      "walletProfiles": [
+        "BTC",
+        "LTC"
+      ],
+      "rpcProfiles": [
+        "BTC",
+        "LTC"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "BTC remains existing regtest scope only",
+        "No MWEB inherited from upstream support",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "tests/basicswap/test_ltc_xmr.py:test_20_btc_coin (SELLER_FIRST regtest only)"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "BTC-LTC",
+      "direction": "LTC → BTC",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "Both client/server drivers and common HTLC engine exist; market enablement/liquidity and pair integration still required",
+        "protocol": "DCR-HTLC"
+      },
+      "basicswap": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "code path and upstream test present; tests were read, NOT executed here",
+        "testReference": "tests/basicswap/test_ltc_xmr.py:test_20_btc_coin (SELLER_FIRST regtest only)",
+        "protocol": "BS-OTVES",
+        "roleMapping": "normal bid; script-capable ITX/A locks first; role depends on offer direction"
+      },
+      "claim": "DCR-HTLC preimage+signature; BS-OTVES signature completion extracts second-leg key share; for rejected pair no route",
+      "refund": "DCR-HTLC CLTV refund on each eligible leg; BS-OTVES presigned script-side refund/key-share recovery, separate late swipe/mercy cases; no unconditional XMR timelock",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "LTC",
+        "BTC"
+      ],
+      "walletProfiles": [
+        "LTC",
+        "BTC"
+      ],
+      "rpcProfiles": [
+        "LTC",
+        "BTC"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "No MWEB inherited from upstream support",
+        "BTC remains existing regtest scope only",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "tests/basicswap/test_ltc_xmr.py:test_20_btc_coin (SELLER_FIRST regtest only)"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "BTC-BCH",
+      "direction": "BTC → BCH",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "Both client/server drivers and common HTLC engine exist; market enablement/liquidity and pair integration still required",
+        "protocol": "DCR-HTLC"
+      },
+      "basicswap": {
+        "status": "Support documenté, mais non encore vérifié par les tests",
+        "basis": "validator/adapter paths present; no exact pair end-to-end test established by this review",
+        "testReference": null,
+        "protocol": "BS-OTVES",
+        "roleMapping": "normal bid; script-capable ITX/A locks first; role depends on offer direction"
+      },
+      "claim": "DCR-HTLC preimage+signature; BS-OTVES signature completion extracts second-leg key share; for rejected pair no route",
+      "refund": "DCR-HTLC CLTV refund on each eligible leg; BS-OTVES presigned script-side refund/key-share recovery, separate late swipe/mercy cases; no unconditional XMR timelock",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "BTC",
+        "BCH"
+      ],
+      "walletProfiles": [
+        "BTC",
+        "BCH"
+      ],
+      "rpcProfiles": [
+        "BTC",
+        "BCH"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "BTC remains existing regtest scope only",
+        "No SegWit. BasicSwap has_segwit() true is internal routing compatibility, not a consensus statement",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "No exact pair-specific BasicSwap end-to-end test established"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "BTC-BCH",
+      "direction": "BCH → BTC",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "Both client/server drivers and common HTLC engine exist; market enablement/liquidity and pair integration still required",
+        "protocol": "DCR-HTLC"
+      },
+      "basicswap": {
+        "status": "Support documenté, mais non encore vérifié par les tests",
+        "basis": "validator/adapter paths present; no exact pair end-to-end test established by this review",
+        "testReference": null,
+        "protocol": "BS-OTVES",
+        "roleMapping": "normal bid; script-capable ITX/A locks first; role depends on offer direction"
+      },
+      "claim": "DCR-HTLC preimage+signature; BS-OTVES signature completion extracts second-leg key share; for rejected pair no route",
+      "refund": "DCR-HTLC CLTV refund on each eligible leg; BS-OTVES presigned script-side refund/key-share recovery, separate late swipe/mercy cases; no unconditional XMR timelock",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "BCH",
+        "BTC"
+      ],
+      "walletProfiles": [
+        "BCH",
+        "BTC"
+      ],
+      "rpcProfiles": [
+        "BCH",
+        "BTC"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "No SegWit. BasicSwap has_segwit() true is internal routing compatibility, not a consensus statement",
+        "BTC remains existing regtest scope only",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "No exact pair-specific BasicSwap end-to-end test established"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "BTC-XMR",
+      "direction": "BTC → XMR",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Implémentation partielle",
+        "basis": "v1.0.5 has no XMR driver; master XMR Swap/Redeem/Refund return ErrUnsupported",
+        "protocol": "none implemented for XMR"
+      },
+      "basicswap": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "code path and upstream test present; tests were read, NOT executed here",
+        "testReference": "tests/basicswap/test_btc_xmr.py",
+        "protocol": "BS-OTVES",
+        "roleMapping": "normal bid; script-capable ITX/A locks first; role depends on offer direction"
+      },
+      "claim": "BasicSwap OtVES completion/key-share extraction on the script-capable leg; DCRDEX XMR trading is not implemented.",
+      "refund": "BasicSwap script-side presigned refund and key-share recovery; late swipe/mercy branches require separate audit. XMR has no on-chain HTLC timeout.",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "BTC",
+        "XMR"
+      ],
+      "walletProfiles": [
+        "BTC",
+        "XMR"
+      ],
+      "rpcProfiles": [
+        "BTC",
+        "XMR"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "BTC remains existing regtest scope only",
+        "No script timelock refund; script-side cancellation/refund reveals key share; availability/swipe risk must be audited",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "tests/basicswap/test_btc_xmr.py"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "BTC-XMR",
+      "direction": "XMR → BTC",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Implémentation partielle",
+        "basis": "v1.0.5 has no XMR driver; master XMR Swap/Redeem/Refund return ErrUnsupported",
+        "protocol": "none implemented for XMR"
+      },
+      "basicswap": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "code path and upstream test present; tests were read, NOT executed here",
+        "testReference": "tests/basicswap/test_btc_xmr.py",
+        "protocol": "BS-OTVES",
+        "roleMapping": "reversed bid; offerer scriptless leg is PTX/B, script-capable counterleg locks first"
+      },
+      "claim": "BasicSwap OtVES completion/key-share extraction on the script-capable leg; DCRDEX XMR trading is not implemented.",
+      "refund": "BasicSwap script-side presigned refund and key-share recovery; late swipe/mercy branches require separate audit. XMR has no on-chain HTLC timeout.",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "XMR",
+        "BTC"
+      ],
+      "walletProfiles": [
+        "XMR",
+        "BTC"
+      ],
+      "rpcProfiles": [
+        "XMR",
+        "BTC"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "No script timelock refund; script-side cancellation/refund reveals key share; availability/swipe risk must be audited",
+        "BTC remains existing regtest scope only",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "tests/basicswap/test_btc_xmr.py"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "DOGE-LTC",
+      "direction": "DOGE → LTC",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "Both client/server drivers and common HTLC engine exist; market enablement/liquidity and pair integration still required",
+        "protocol": "DCR-HTLC"
+      },
+      "basicswap": {
+        "status": "Support documenté, mais non encore vérifié par les tests",
+        "basis": "validator/adapter paths present; no exact pair end-to-end test established by this review",
+        "testReference": null,
+        "protocol": "BS-OTVES",
+        "roleMapping": "reversed bid; offerer scriptless leg is PTX/B, script-capable counterleg locks first"
+      },
+      "claim": "DCR-HTLC preimage+signature; BS-OTVES signature completion extracts second-leg key share; for rejected pair no route",
+      "refund": "DCR-HTLC CLTV refund on each eligible leg; BS-OTVES presigned script-side refund/key-share recovery, separate late swipe/mercy cases; no unconditional XMR timelock",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "DOGE",
+        "LTC"
+      ],
+      "walletProfiles": [
+        "DOGE",
+        "LTC"
+      ],
+      "rpcProfiles": [
+        "DOGE",
+        "LTC"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "AuxPoW parsing; CLTV regtest activation height 1351; CSV not qualified",
+        "No MWEB inherited from upstream support",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result.",
+        "BasicSwap reviewed default DOGE node is tecnovert/dogecoin 23.2.1, not official Dogecoin v1.14.9; RPC/signer compatibility with GPUbnb D0 is unproven. No fork trust input is adopted."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "No exact pair-specific BasicSwap end-to-end test established"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "DOGE-LTC",
+      "direction": "LTC → DOGE",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "Both client/server drivers and common HTLC engine exist; market enablement/liquidity and pair integration still required",
+        "protocol": "DCR-HTLC"
+      },
+      "basicswap": {
+        "status": "Support documenté, mais non encore vérifié par les tests",
+        "basis": "validator/adapter paths present; no exact pair end-to-end test established by this review",
+        "testReference": null,
+        "protocol": "BS-OTVES",
+        "roleMapping": "normal bid; script-capable ITX/A locks first; role depends on offer direction"
+      },
+      "claim": "DCR-HTLC preimage+signature; BS-OTVES signature completion extracts second-leg key share; for rejected pair no route",
+      "refund": "DCR-HTLC CLTV refund on each eligible leg; BS-OTVES presigned script-side refund/key-share recovery, separate late swipe/mercy cases; no unconditional XMR timelock",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "LTC",
+        "DOGE"
+      ],
+      "walletProfiles": [
+        "LTC",
+        "DOGE"
+      ],
+      "rpcProfiles": [
+        "LTC",
+        "DOGE"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "No MWEB inherited from upstream support",
+        "AuxPoW parsing; CLTV regtest activation height 1351; CSV not qualified",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result.",
+        "BasicSwap reviewed default DOGE node is tecnovert/dogecoin 23.2.1, not official Dogecoin v1.14.9; RPC/signer compatibility with GPUbnb D0 is unproven. No fork trust input is adopted."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "No exact pair-specific BasicSwap end-to-end test established"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "DOGE-BCH",
+      "direction": "DOGE → BCH",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "Both client/server drivers and common HTLC engine exist; market enablement/liquidity and pair integration still required",
+        "protocol": "DCR-HTLC"
+      },
+      "basicswap": {
+        "status": "Support documenté, mais non encore vérifié par les tests",
+        "basis": "validator/adapter paths present; no exact pair end-to-end test established by this review",
+        "testReference": null,
+        "protocol": "BS-OTVES",
+        "roleMapping": "reversed bid; offerer scriptless leg is PTX/B, script-capable counterleg locks first"
+      },
+      "claim": "DCR-HTLC preimage+signature; BS-OTVES signature completion extracts second-leg key share; for rejected pair no route",
+      "refund": "DCR-HTLC CLTV refund on each eligible leg; BS-OTVES presigned script-side refund/key-share recovery, separate late swipe/mercy cases; no unconditional XMR timelock",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "DOGE",
+        "BCH"
+      ],
+      "walletProfiles": [
+        "DOGE",
+        "BCH"
+      ],
+      "rpcProfiles": [
+        "DOGE",
+        "BCH"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "AuxPoW parsing; CLTV regtest activation height 1351; CSV not qualified",
+        "No SegWit. BasicSwap has_segwit() true is internal routing compatibility, not a consensus statement",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result.",
+        "BasicSwap reviewed default DOGE node is tecnovert/dogecoin 23.2.1, not official Dogecoin v1.14.9; RPC/signer compatibility with GPUbnb D0 is unproven. No fork trust input is adopted."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "No exact pair-specific BasicSwap end-to-end test established"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "DOGE-BCH",
+      "direction": "BCH → DOGE",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "Both client/server drivers and common HTLC engine exist; market enablement/liquidity and pair integration still required",
+        "protocol": "DCR-HTLC"
+      },
+      "basicswap": {
+        "status": "Support documenté, mais non encore vérifié par les tests",
+        "basis": "validator/adapter paths present; no exact pair end-to-end test established by this review",
+        "testReference": null,
+        "protocol": "BS-OTVES",
+        "roleMapping": "normal bid; script-capable ITX/A locks first; role depends on offer direction"
+      },
+      "claim": "DCR-HTLC preimage+signature; BS-OTVES signature completion extracts second-leg key share; for rejected pair no route",
+      "refund": "DCR-HTLC CLTV refund on each eligible leg; BS-OTVES presigned script-side refund/key-share recovery, separate late swipe/mercy cases; no unconditional XMR timelock",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "BCH",
+        "DOGE"
+      ],
+      "walletProfiles": [
+        "BCH",
+        "DOGE"
+      ],
+      "rpcProfiles": [
+        "BCH",
+        "DOGE"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "No SegWit. BasicSwap has_segwit() true is internal routing compatibility, not a consensus statement",
+        "AuxPoW parsing; CLTV regtest activation height 1351; CSV not qualified",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result.",
+        "BasicSwap reviewed default DOGE node is tecnovert/dogecoin 23.2.1, not official Dogecoin v1.14.9; RPC/signer compatibility with GPUbnb D0 is unproven. No fork trust input is adopted."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "No exact pair-specific BasicSwap end-to-end test established"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "DOGE-XMR",
+      "direction": "DOGE → XMR",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Implémentation partielle",
+        "basis": "v1.0.5 has no XMR driver; master XMR Swap/Redeem/Refund return ErrUnsupported",
+        "protocol": "none implemented for XMR"
+      },
+      "basicswap": {
+        "status": "Support incompatible ou non démontré",
+        "basis": "validateSwapType rejects two scriptless legs in BOTH offer directions",
+        "testReference": null,
+        "protocol": "REJECTED",
+        "roleMapping": "unsupported both directions"
+      },
+      "claim": "No accepted direct route in reviewed DCRDEX/BasicSwap code.",
+      "refund": "No qualified direct protocol; no refund guarantee can be inferred.",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "DOGE",
+        "XMR"
+      ],
+      "walletProfiles": [
+        "DOGE",
+        "XMR"
+      ],
+      "rpcProfiles": [
+        "DOGE",
+        "XMR"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "AuxPoW parsing; CLTV regtest activation height 1351; CSV not qualified",
+        "No script timelock refund; script-side cancellation/refund reveals key share; availability/swipe risk must be audited",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result.",
+        "BasicSwap reviewed default DOGE node is tecnovert/dogecoin 23.2.1, not official Dogecoin v1.14.9; RPC/signer compatibility with GPUbnb D0 is unproven. No fork trust input is adopted."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "No exact pair-specific BasicSwap end-to-end test established"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "DOGE-XMR",
+      "direction": "XMR → DOGE",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Implémentation partielle",
+        "basis": "v1.0.5 has no XMR driver; master XMR Swap/Redeem/Refund return ErrUnsupported",
+        "protocol": "none implemented for XMR"
+      },
+      "basicswap": {
+        "status": "Support incompatible ou non démontré",
+        "basis": "validateSwapType rejects two scriptless legs in BOTH offer directions",
+        "testReference": null,
+        "protocol": "REJECTED",
+        "roleMapping": "unsupported both directions"
+      },
+      "claim": "No accepted direct route in reviewed DCRDEX/BasicSwap code.",
+      "refund": "No qualified direct protocol; no refund guarantee can be inferred.",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "XMR",
+        "DOGE"
+      ],
+      "walletProfiles": [
+        "XMR",
+        "DOGE"
+      ],
+      "rpcProfiles": [
+        "XMR",
+        "DOGE"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "No script timelock refund; script-side cancellation/refund reveals key share; availability/swipe risk must be audited",
+        "AuxPoW parsing; CLTV regtest activation height 1351; CSV not qualified",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result.",
+        "BasicSwap reviewed default DOGE node is tecnovert/dogecoin 23.2.1, not official Dogecoin v1.14.9; RPC/signer compatibility with GPUbnb D0 is unproven. No fork trust input is adopted."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "No exact pair-specific BasicSwap end-to-end test established"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "LTC-BCH",
+      "direction": "LTC → BCH",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "Both client/server drivers and common HTLC engine exist; market enablement/liquidity and pair integration still required",
+        "protocol": "DCR-HTLC"
+      },
+      "basicswap": {
+        "status": "Support documenté, mais non encore vérifié par les tests",
+        "basis": "validator/adapter paths present; no exact pair end-to-end test established by this review",
+        "testReference": null,
+        "protocol": "BS-OTVES",
+        "roleMapping": "normal bid; script-capable ITX/A locks first; role depends on offer direction"
+      },
+      "claim": "DCR-HTLC preimage+signature; BS-OTVES signature completion extracts second-leg key share; for rejected pair no route",
+      "refund": "DCR-HTLC CLTV refund on each eligible leg; BS-OTVES presigned script-side refund/key-share recovery, separate late swipe/mercy cases; no unconditional XMR timelock",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "LTC",
+        "BCH"
+      ],
+      "walletProfiles": [
+        "LTC",
+        "BCH"
+      ],
+      "rpcProfiles": [
+        "LTC",
+        "BCH"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "No MWEB inherited from upstream support",
+        "No SegWit. BasicSwap has_segwit() true is internal routing compatibility, not a consensus statement",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "No exact pair-specific BasicSwap end-to-end test established"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "LTC-BCH",
+      "direction": "BCH → LTC",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "Both client/server drivers and common HTLC engine exist; market enablement/liquidity and pair integration still required",
+        "protocol": "DCR-HTLC"
+      },
+      "basicswap": {
+        "status": "Support documenté, mais non encore vérifié par les tests",
+        "basis": "validator/adapter paths present; no exact pair end-to-end test established by this review",
+        "testReference": null,
+        "protocol": "BS-OTVES",
+        "roleMapping": "normal bid; script-capable ITX/A locks first; role depends on offer direction"
+      },
+      "claim": "DCR-HTLC preimage+signature; BS-OTVES signature completion extracts second-leg key share; for rejected pair no route",
+      "refund": "DCR-HTLC CLTV refund on each eligible leg; BS-OTVES presigned script-side refund/key-share recovery, separate late swipe/mercy cases; no unconditional XMR timelock",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "BCH",
+        "LTC"
+      ],
+      "walletProfiles": [
+        "BCH",
+        "LTC"
+      ],
+      "rpcProfiles": [
+        "BCH",
+        "LTC"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "No SegWit. BasicSwap has_segwit() true is internal routing compatibility, not a consensus statement",
+        "No MWEB inherited from upstream support",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "No exact pair-specific BasicSwap end-to-end test established"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "LTC-XMR",
+      "direction": "LTC → XMR",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Implémentation partielle",
+        "basis": "v1.0.5 has no XMR driver; master XMR Swap/Redeem/Refund return ErrUnsupported",
+        "protocol": "none implemented for XMR"
+      },
+      "basicswap": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "code path and upstream test present; tests were read, NOT executed here",
+        "testReference": "tests/basicswap/test_ltc_xmr.py",
+        "protocol": "BS-OTVES",
+        "roleMapping": "normal bid; script-capable ITX/A locks first; role depends on offer direction"
+      },
+      "claim": "BasicSwap OtVES completion/key-share extraction on the script-capable leg; DCRDEX XMR trading is not implemented.",
+      "refund": "BasicSwap script-side presigned refund and key-share recovery; late swipe/mercy branches require separate audit. XMR has no on-chain HTLC timeout.",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "LTC",
+        "XMR"
+      ],
+      "walletProfiles": [
+        "LTC",
+        "XMR"
+      ],
+      "rpcProfiles": [
+        "LTC",
+        "XMR"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "No MWEB inherited from upstream support",
+        "No script timelock refund; script-side cancellation/refund reveals key share; availability/swipe risk must be audited",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "tests/basicswap/test_ltc_xmr.py"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "LTC-XMR",
+      "direction": "XMR → LTC",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Implémentation partielle",
+        "basis": "v1.0.5 has no XMR driver; master XMR Swap/Redeem/Refund return ErrUnsupported",
+        "protocol": "none implemented for XMR"
+      },
+      "basicswap": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "code path and upstream test present; tests were read, NOT executed here",
+        "testReference": "tests/basicswap/test_ltc_xmr.py",
+        "protocol": "BS-OTVES",
+        "roleMapping": "reversed bid; offerer scriptless leg is PTX/B, script-capable counterleg locks first"
+      },
+      "claim": "BasicSwap OtVES completion/key-share extraction on the script-capable leg; DCRDEX XMR trading is not implemented.",
+      "refund": "BasicSwap script-side presigned refund and key-share recovery; late swipe/mercy branches require separate audit. XMR has no on-chain HTLC timeout.",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "XMR",
+        "LTC"
+      ],
+      "walletProfiles": [
+        "XMR",
+        "LTC"
+      ],
+      "rpcProfiles": [
+        "XMR",
+        "LTC"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "No script timelock refund; script-side cancellation/refund reveals key share; availability/swipe risk must be audited",
+        "No MWEB inherited from upstream support",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "tests/basicswap/test_ltc_xmr.py"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "BCH-XMR",
+      "direction": "BCH → XMR",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Implémentation partielle",
+        "basis": "v1.0.5 has no XMR driver; master XMR Swap/Redeem/Refund return ErrUnsupported",
+        "protocol": "none implemented for XMR"
+      },
+      "basicswap": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "code path and upstream test present; tests were read, NOT executed here",
+        "testReference": "tests/basicswap/test_bch_xmr.py",
+        "protocol": "BS-OTVES",
+        "roleMapping": "normal bid; script-capable ITX/A locks first; role depends on offer direction"
+      },
+      "claim": "BasicSwap OtVES completion/key-share extraction on the script-capable leg; DCRDEX XMR trading is not implemented.",
+      "refund": "BasicSwap script-side presigned refund and key-share recovery; late swipe/mercy branches require separate audit. XMR has no on-chain HTLC timeout.",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "BCH",
+        "XMR"
+      ],
+      "walletProfiles": [
+        "BCH",
+        "XMR"
+      ],
+      "rpcProfiles": [
+        "BCH",
+        "XMR"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "No SegWit. BasicSwap has_segwit() true is internal routing compatibility, not a consensus statement",
+        "No script timelock refund; script-side cancellation/refund reveals key share; availability/swipe risk must be audited",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "tests/basicswap/test_bch_xmr.py"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    },
+    {
+      "pair": "BCH-XMR",
+      "direction": "XMR → BCH",
+      "directionMeaning": "offer coin_from → coin_to, not necessarily chain lock ordering",
+      "dcrdex": {
+        "status": "Implémentation partielle",
+        "basis": "v1.0.5 has no XMR driver; master XMR Swap/Redeem/Refund return ErrUnsupported",
+        "protocol": "none implemented for XMR"
+      },
+      "basicswap": {
+        "status": "Support observé dans du code maintenu",
+        "basis": "code path and upstream test present; tests were read, NOT executed here",
+        "testReference": "tests/basicswap/test_bch_xmr.py",
+        "protocol": "BS-OTVES",
+        "roleMapping": "reversed bid; offerer scriptless leg is PTX/B, script-capable counterleg locks first"
+      },
+      "claim": "BasicSwap OtVES completion/key-share extraction on the script-capable leg; DCRDEX XMR trading is not implemented.",
+      "refund": "BasicSwap script-side presigned refund and key-share recovery; late swipe/mercy branches require separate audit. XMR has no on-chain HTLC timeout.",
+      "expiration": "Chain-specific eligibility plus measured asymmetric deadlines; CSV only on proven active script leg; no arbitrary 24h/48h guarantee",
+      "signatureProfiles": [
+        "XMR",
+        "BCH"
+      ],
+      "walletProfiles": [
+        "XMR",
+        "BCH"
+      ],
+      "rpcProfiles": [
+        "XMR",
+        "BCH"
+      ],
+      "feeLimits": "Not frozen for GPUbnb; per-chain exact tagged rate, size/weight cap, reserved refund budget and explicit user ceiling; no float conversions",
+      "confirmations": "Not frozen. Per-leg reviewed risk/confirmation policy required; upstream settings are not GPUbnb proof",
+      "reorgRisk": "Stale/conflicting observation stops new irreversible intentions; secret leakage and replaced funding invalidate simple pre-signed-refund assumptions",
+      "availability": "User signer/watch service must meet measured deadlines; offline past protocol cancellation/swipe boundary can lose recovery rights. Backend independence does not imply user can remain offline indefinitely",
+      "limitations": [
+        "No script timelock refund; script-side cancellation/refund reveals key share; availability/swipe risk must be audited",
+        "No SegWit. BasicSwap has_segwit() true is internal routing compatibility, not a consensus statement",
+        "No Mainnet/funds/production qualification",
+        "No upstream swap tests executed in this investigation",
+        "Per-chain node/release policy and exact pair tests remain unqualified; upstream test presence is not an execution result."
+      ],
+      "upstreamTests": [
+        "DCR client asset regnet/live tests and common script tests (UTXO legs only)",
+        "tests/basicswap/test_bch_xmr.py"
+      ],
+      "missingGpuBnbTests": [
+        "independent node/release qualification per chain",
+        "both role directions claim/refund and wrong secret",
+        "funding malleability/replacement plus stale refund",
+        "crash after every outbox/persistence boundary",
+        "fee/dust and reorg/partition adversaries",
+        "user-owned signer and clean-room recovery",
+        "license and independent cryptographic review"
+      ],
+      "gpuBnbStatus": "PRÉPARÉ SANS EXÉCUTION; no capability activation"
+    }
+  ]
+}
