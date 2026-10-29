@@ -480,6 +480,7 @@ HRESULT FindExclusiveConsoleDisplayTarget(
     if (pathCount != 1) return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
     const auto& path = paths[0];
     if (!(path.flags & DISPLAYCONFIG_PATH_ACTIVE) ||
+        !path.targetInfo.targetAvailable ||
         path.targetInfo.rotation != DISPLAYCONFIG_ROTATION_IDENTITY ||
         !IsAllowedConsoleConnector(path.targetInfo.outputTechnology) ||
         (path.targetInfo.statusFlags & DISPLAYCONFIG_TARGET_FORCED_AVAILABILITY_BOOT) ||
