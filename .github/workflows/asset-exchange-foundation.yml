@@ -61,6 +61,13 @@ jobs:
           python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d0 -p 'test_*.py' -v
           python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d1 -p 'test_*.py' -v
 
+      - name: Offline D2 harness and retained evidence checks (no native execution)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n asset-exchange/qualification/dogecoin/d2/run-isolated.sh
+          python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d2 -p 'test_*.py' -v
+
       - name: Linux network isolation preflight (no Dogecoin execution)
         shell: bash
         run: |
