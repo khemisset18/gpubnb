@@ -1,0 +1,6 @@
+{
+  "returncode": 0,
+  "stdout": "GLIB_VARIANT_STR_ITER_PASS comparisons=3072 wrong_type_rejected=true runtime=2.80.0\n",
+  "stderr": "",
+  "binarySha256": "2c3e58a9dc4a669498364c51d5708886c4684e97bdae8d37dc2dc6a670c9b1fc"
+}

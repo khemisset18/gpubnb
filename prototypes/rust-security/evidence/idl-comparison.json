@@ -1,0 +1,9 @@
+{
+  "status": "PASS_SEMANTIC_ONLY",
+  "rawIdentical": false,
+  "normalization": "Baseline Anchor0.31.1 double-JSON-encoded its address print section; decode exactly once after asserting exact pinned ID. Candidate1.2.2 prints the address directly. Raw diff preserved. All other program/instruction/account/type/event/error metadata compares without normalization.",
+  "eventSections": 10,
+  "programSections": 1,
+  "address": "Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m",
+  "actualSbfAndCliIntegration": "NOT TESTED"
+}

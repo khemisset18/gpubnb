@@ -1,0 +1,67 @@
+{
+  "libgobject-2.0.so.0": {
+    "path": "/lib/x86_64-linux-gnu/libgobject-2.0.so.0",
+    "resolved": "/lib/x86_64-linux-gnu/libgobject-2.0.so.0.8000.0",
+    "sha256": "99bf0727e0ca4faf12ab09b753b3d03294562c29c559b970c4dad435f9ec2bc6"
+  },
+  "libgio-2.0.so.0": {
+    "path": "/lib/x86_64-linux-gnu/libgio-2.0.so.0",
+    "resolved": "/lib/x86_64-linux-gnu/libgio-2.0.so.0.8000.0",
+    "sha256": "d8c4cf698e9b8790584cc5ede813a86ec4f041c0d58daa452b72431572685a87"
+  },
+  "libglib-2.0.so.0": {
+    "path": "/lib/x86_64-linux-gnu/libglib-2.0.so.0",
+    "resolved": "/lib/x86_64-linux-gnu/libglib-2.0.so.0.8000.0",
+    "sha256": "42467d0dbcc0a6c9e0a31f05a5944095504ce98f093c3fe0825f0a1533fa8207"
+  },
+  "libgcc_s.so.1": {
+    "path": "/lib/x86_64-linux-gnu/libgcc_s.so.1",
+    "resolved": "/lib/x86_64-linux-gnu/libgcc_s.so.1",
+    "sha256": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb"
+  },
+  "libc.so.6": {
+    "path": "/lib/x86_64-linux-gnu/libc.so.6",
+    "resolved": "/lib/x86_64-linux-gnu/libc.so.6",
+    "sha256": "511f825ee075610ac9c0f7f91e2c13de2000d0f7b859f6461137e809a0a009d0"
+  },
+  "libffi.so.8": {
+    "path": "/lib/x86_64-linux-gnu/libffi.so.8",
+    "resolved": "/lib/x86_64-linux-gnu/libffi.so.8.1.4",
+    "sha256": "00f593fe192f2851b8ce23b25cec2488d769beb5a8f63e8c9e563071e1075153"
+  },
+  "libgmodule-2.0.so.0": {
+    "path": "/lib/x86_64-linux-gnu/libgmodule-2.0.so.0",
+    "resolved": "/lib/x86_64-linux-gnu/libgmodule-2.0.so.0.8000.0",
+    "sha256": "f8445c01952fd3ff0bb4f17f73be821af3e4b9b61546ff517392e9baeb8f2126"
+  },
+  "libz.so.1": {
+    "path": "/lib/x86_64-linux-gnu/libz.so.1",
+    "resolved": "/lib/x86_64-linux-gnu/libz.so.1.3",
+    "sha256": "9b64150b28505a33d6bc3ecf709c279f6de97a1c184dbda65d06ee4537f6d286"
+  },
+  "libmount.so.1": {
+    "path": "/lib/x86_64-linux-gnu/libmount.so.1",
+    "resolved": "/lib/x86_64-linux-gnu/libmount.so.1.1.0",
+    "sha256": "43831ab1f85948e5599c5c0295d87ad6d03e3d58b801534abdf4cd5d266388de"
+  },
+  "libselinux.so.1": {
+    "path": "/lib/x86_64-linux-gnu/libselinux.so.1",
+    "resolved": "/lib/x86_64-linux-gnu/libselinux.so.1",
+    "sha256": "0ec0843463f90e227b0e138e1f379774f50b5514bd7f5dbd4c8a87aca0aa6670"
+  },
+  "libm.so.6": {
+    "path": "/lib/x86_64-linux-gnu/libm.so.6",
+    "resolved": "/lib/x86_64-linux-gnu/libm.so.6",
+    "sha256": "f06f2ce1f1833df5f41cf13b6447ff07bea993ad9b27297d3428c2f70ab3f0e7"
+  },
+  "libpcre2-8.so.0": {
+    "path": "/lib/x86_64-linux-gnu/libpcre2-8.so.0",
+    "resolved": "/lib/x86_64-linux-gnu/libpcre2-8.so.0.11.2",
+    "sha256": "e00576d71d81d3ba0cfa4903c835a44a8723aac96f72f79ff75200b4cff9071b"
+  },
+  "libblkid.so.1": {
+    "path": "/lib/x86_64-linux-gnu/libblkid.so.1",
+    "resolved": "/lib/x86_64-linux-gnu/libblkid.so.1.1.0",
+    "sha256": "f3d6283f6b58de134f0f13094deac9c3af6764923c62e85f08a5780ad4ebe039"
+  }
+}

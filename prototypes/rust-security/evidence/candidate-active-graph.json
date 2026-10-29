@@ -1,0 +1,20 @@
+{
+  "status": "HOST_PROTOTYPE_ONLY",
+  "lockSha256": "b780a9625c5c72519b5c8a50ed573fa643d47306bddd309304199e7e48aefdbf",
+  "packages": {
+    "anchor-lang": [
+      "1.2.2"
+    ],
+    "borsh": [
+      "1.8.0"
+    ],
+    "rand": [],
+    "libsecp256k1": [],
+    "glib": [
+      "0.18.5"
+    ]
+  },
+  "financialSourceUnchanged": true,
+  "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+  "remainingScannerBlocker": "glib0.18.5; no source patch wired to active dependency graph"
+}

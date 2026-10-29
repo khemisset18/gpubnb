@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "publicVectors": 476,
+  "versions": [
+    "libsecp256k1=0.6.0",
+    "libsecp256k1=0.7.2"
+  ],
+  "resultsIdentical": true,
+  "signingPerformed": false,
+  "rngUsedByProbe": false,
+  "note": "This standalone verification probe is not an Anchor on-chain syscall/instruction runtime test."
+}
