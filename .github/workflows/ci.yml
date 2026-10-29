@@ -42,19 +42,40 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npx prisma migrate deploy
+      - name: Require isolated PostgreSQL and Redis before integration tests
+        shell: bash
+        run: |
+          set -o pipefail
+          node --input-type=module - <<'NODE' 2>&1 | tee integration-preflight.log
+          import {PrismaClient} from '@prisma/client';
+          import Redis from 'ioredis';
+          const prisma = new PrismaClient();
+          const redis = new Redis(process.env.REDIS_URL, {lazyConnect: true, enableOfflineQueue: false, retryStrategy: () => null});
+          try {
+            await prisma.$queryRaw`SELECT 1`;
+            await redis.connect();
+            if (await redis.ping() !== 'PONG') throw new Error('Redis preflight failed');
+            console.log('POSTGRESQL_AND_REDIS_READY: isolated CI services');
+          } finally {
+            redis.disconnect();
+            await prisma.$disconnect();
+          }
+          NODE
       - name: API tests
         shell: bash
         run: |
           set -o pipefail
           npm test 2>&1 | tee api-test.log
       - name: Upload API test diagnostics
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: api-test-diagnostics
-          path: apps/api/api-test.log
+          path: |
+            apps/api/api-test.log
+            apps/api/integration-preflight.log
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 30
       - name: Build API
         shell: bash
         run: |
@@ -66,7 +87,7 @@ jobs:
           set -o pipefail
           npx tsc -p tsconfig.json --noEmit 2>&1 | tee api-tsc.log
       - name: Upload API build diagnostics
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: api-build-diagnostics
@@ -74,51 +95,52 @@ jobs:
             apps/api/api-build.log
             apps/api/api-tsc.log
           if-no-files-found: warn
-          retention-days: 3
+          retention-days: 30
 
   dependency-audit:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/api
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: apps/api/package-lock.json
-      - run: npm ci --ignore-scripts
-      - name: npm audit (HIGH and CRITICAL)
-        id: npm-audit
+          cache-dependency-path: |
+            package-lock.json
+            apps/api/package-lock.json
+      - name: Install both actual dependency trees with Node 22
+        run: |
+          npm ci
+          npm ci --prefix apps/api
+      - name: npm audit both trees, all severities
         shell: bash
         run: |
           set +e
-          npm audit --audit-level=high --json > npm-audit.json
-          audit_status=$?
+          npm audit --json > npm-audit-root.json
+          root_status=$?
+          npm audit --prefix apps/api --json > npm-audit-api.json
+          api_status=$?
           set -e
           node - <<'NODE'
           const fs = require('node:fs');
-          const report = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));
-          const vulnerabilities = report.vulnerabilities || {};
-          const blocking = Object.entries(vulnerabilities)
-            .filter(([, value]) => value.severity === 'high' || value.severity === 'critical')
-            .map(([name, value]) => ({
-              name,
-              severity: value.severity,
-              direct: Boolean(value.isDirect),
-              via: (value.via || []).map(item => typeof item === 'string' ? item : item.url || item.title).slice(0, 4),
-              fixAvailable: value.fixAvailable,
-            }));
-          console.log(JSON.stringify({blockingCount: blocking.length, blocking}, null, 2));
+          for (const path of ['npm-audit-root.json', 'npm-audit-api.json']) {
+            const report = JSON.parse(fs.readFileSync(path, 'utf8'));
+            console.log(JSON.stringify({path, counts: report.metadata?.vulnerabilities, error: report.error}));
+            if (report.error || report.metadata?.vulnerabilities?.total !== 0 || Object.keys(report.vulnerabilities ?? {}).length) {
+              process.exitCode = 1;
+            }
+          }
           NODE
-          exit "$audit_status"
+          test "$root_status" -eq 0
+          test "$api_status" -eq 0
       - name: Upload npm audit report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: npm-audit-report
-          path: apps/api/npm-audit.json
+          path: |
+            npm-audit-root.json
+            npm-audit-api.json
           if-no-files-found: error
           retention-days: 14
 
@@ -130,7 +152,17 @@ jobs:
         with: { python-version: '3.12' }
       - run: python -m pip install --disable-pip-version-check -e agent
       - run: python -m py_compile agent/agent.py agent/gpubnb_agent/*.py
-      - run: python -m unittest discover -s agent/tests -v
+      - name: Agent tests
+        run: |
+          set -o pipefail
+          python -m unittest discover -s agent/tests -v 2>&1 | tee agent-test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-test-diagnostics
+          path: agent-test.log
+          if-no-files-found: error
+          retention-days: 30
 
   contract:
     runs-on: ubuntu-latest
@@ -143,7 +175,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: programs/gpu_escrow
-      - run: cargo test
+      - name: Contract tests
+        run: |
+          set -o pipefail
+          cargo test 2>&1 | tee contract-test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contract-test-diagnostics
+          path: programs/gpu_escrow/contract-test.log
+          if-no-files-found: error
+          retention-days: 30
 
   production-gates:
     runs-on: ubuntu-latest
@@ -216,12 +258,13 @@ jobs:
           # (confirmed live: the actual invoked command was plain `trivy fs .`, nothing
           # else) - trivy.yaml at the repo root is Trivy's own native config file, picked
           # up automatically regardless of the action's input handling.
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: false
+          scanners: vuln
           format: json
           output: trivy-results.json
           exit-code: '0'
-      - name: Enforce Trivy HIGH/CRITICAL gate
+      - name: Enforce Trivy gate on every reported vulnerability
         shell: bash
         run: |
           python3 - <<'PY'
@@ -233,7 +276,7 @@ jobs:
           for result in report.get('Results') or []:
               target = result.get('Target')
               for item in result.get('Vulnerabilities') or []:
-                  if item.get('Severity') in {'HIGH', 'CRITICAL'}:
+                  if item:
                       findings.append({
                           'target': target,
                           'id': item.get('VulnerabilityID'),

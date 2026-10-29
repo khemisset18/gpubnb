@@ -1,0 +1,13 @@
+{
+  "baseCommit": "03da7ff90beb284e613944755b5b13aae86a1534",
+  "note": "Trivy Metadata.Commit names the checkout parent; actual scanned lockfile bytes are identified below. No severity/exploitability exclusion.",
+  "runtime": "Node v22.23.4 / npm 10.9.9",
+  "trivy": "0.76.1",
+  "sha256": {
+    "package.json": "d30b8836179880898885761ac6b01afce2742365dc21ed10b712155c5c4dc881",
+    "package-lock.json": "ee097d300519ce8839715ba747c7d476057614513eb471455f47e5a512ab4c46",
+    "apps/api/package.json": "9a43c62da2f22b7674b31fa663234efb1fe7190dd1d39bafc478c415377f4248",
+    "apps/api/package-lock.json": "b17c9c78e50979005ab0f4f9e7440aea81702ef44bb0a079ac46c4ffa6a26937",
+    "apps/api/src/machine-diagnostics-routes.ts": "1271c6c09bb20407dd284d0bb1ad41dbd74e05fa43115ff6f461d87be66cad98"
+  }
+}

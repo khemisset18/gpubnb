@@ -1,0 +1,265 @@
+(node:4) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+TAP version 13
+# (node:11) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: accepts unknown future accelerator kinds
+ok 1 - accepts unknown future accelerator kinds
+  ---
+  duration_ms: 9.47676
+  type: 'test'
+  ...
+# Subtest: rejects duplicate identities
+ok 2 - rejects duplicate identities
+  ---
+  duration_ms: 5.88365
+  type: 'test'
+  ...
+# Subtest: rejects unsafe and unbounded metadata
+ok 3 - rejects unsafe and unbounded metadata
+  ---
+  duration_ms: 3.748773
+  type: 'test'
+  ...
+# Subtest: rejects impossible memory and metric values
+ok 4 - rejects impossible memory and metric values
+  ---
+  duration_ms: 2.963033
+  type: 'test'
+  ...
+# Subtest: selects a compatible primary GPU without excluding other devices
+ok 5 - selects a compatible primary GPU without excluding other devices
+  ---
+  duration_ms: 0.733432
+  type: 'test'
+  ...
+# Subtest: rejects unknown top-level fields and excessive devices
+ok 6 - rejects unknown top-level fields and excessive devices
+  ---
+  duration_ms: 0.85845
+  type: 'test'
+  ...
+# (node:11) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# (node:12) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Zod rejects oversized constrained collections without accumulating per-element issues
+ok 7 - Zod rejects oversized constrained collections without accumulating per-element issues
+  ---
+  duration_ms: 2.135028
+  type: 'test'
+  ...
+# Subtest: actual telemetry schema preserves defaults, absent optionals, nulls and error paths
+ok 8 - actual telemetry schema preserves defaults, absent optionals, nulls and error paths
+  ---
+  duration_ms: 4.725009
+  type: 'test'
+  ...
+# Subtest: actual config defaults preserve production and financial guards after Zod migration
+ok 9 - actual config defaults preserve production and financial guards after Zod migration
+  ---
+  duration_ms: 3533.872155
+  type: 'test'
+  ...
+# (node:12) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Fastify asynchronous validation cannot replace the validated request body
+ok 10 - Fastify asynchronous validation cannot replace the validated request body
+  ---
+  duration_ms: 179.580752
+  type: 'test'
+  ...
+# Subtest: Solana/Jayson preserves concurrent asynchronous JSON-RPC results and errors without network access
+ok 11 - Solana/Jayson preserves concurrent asynchronous JSON-RPC results and errors without network access
+  ---
+  duration_ms: 17.027675
+  type: 'test'
+  ...
+# (node:18) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: mining configuration policy
+    # Subtest: charges one percent only for the managed pool
+    ok 1 - charges one percent only for the managed pool
+      ---
+      duration_ms: 1.190148
+      type: 'test'
+      ...
+    # Subtest: accepts independently configured GPU and CPU resources
+    ok 2 - accepts independently configured GPU and CPU resources
+      ---
+      duration_ms: 5.936961
+      type: 'test'
+      ...
+    # Subtest: accepts supported secret-manager references for owner pools
+    ok 3 - accepts supported secret-manager references for owner pools
+      ---
+      duration_ms: 0.589316
+      type: 'test'
+      ...
+    # Subtest: rejects raw owner-pool passwords and unsupported secret references
+    ok 4 - rejects raw owner-pool passwords and unsupported secret references
+      ---
+      duration_ms: 1.556079
+      type: 'test'
+      ...
+    # Subtest: stops only the resource selected by a partial rental
+    ok 5 - stops only the resource selected by a partial rental
+      ---
+      duration_ms: 0.242895
+      type: 'test'
+      ...
+    # Subtest: stops every miner for an exclusive-machine rental
+    ok 6 - stops every miner for an exclusive-machine rental
+      ---
+      duration_ms: 0.123796
+      type: 'test'
+      ...
+    # Subtest: locks configuration changes for the rented resource
+    ok 7 - locks configuration changes for the rented resource
+      ---
+      duration_ms: 0.618659
+      type: 'test'
+      ...
+    # Subtest: allows CPU configuration while only a GPU is rented
+    ok 8 - allows CPU configuration while only a GPU is rented
+      ---
+      duration_ms: 0.398499
+      type: 'test'
+      ...
+    # Subtest: requires the machine owner
+    ok 9 - requires the machine owner
+      ---
+      duration_ms: 0.400902
+      type: 'test'
+      ...
+    # Subtest: uses optimistic concurrency
+    ok 10 - uses optimistic concurrency
+      ---
+      duration_ms: 0.56569
+      type: 'test'
+      ...
+    # Subtest: rejects enabling mining on a quarantined resource
+    ok 11 - rejects enabling mining on a quarantined resource
+      ---
+      duration_ms: 0.210857
+      type: 'test'
+      ...
+    # Subtest: rejects an NVIDIA-only profile on AMD
+    ok 12 - rejects an NVIDIA-only profile on AMD
+      ---
+      duration_ms: 0.331639
+      type: 'test'
+      ...
+    # Subtest: rejects GPU mining when the hardware vendor is unknown
+    ok 13 - rejects GPU mining when the hardware vendor is unknown
+      ---
+      duration_ms: 0.27271
+      type: 'test'
+      ...
+    # Subtest: accepts a pinned dual-vendor profile on AMD
+    ok 14 - accepts a pinned dual-vendor profile on AMD
+      ---
+      duration_ms: 0.16668
+      type: 'test'
+      ...
+    # Subtest: requires CPU-specific limits
+    ok 15 - requires CPU-specific limits
+      ---
+      duration_ms: 0.396395
+      type: 'test'
+      ...
+    # Subtest: requires GPU intensity and rejects CPU controls on a GPU
+    ok 16 - requires GPU intensity and rejects CPU controls on a GPU
+      ---
+      duration_ms: 0.345509
+      type: 'test'
+      ...
+    1..16
+ok 12 - mining configuration policy
+  ---
+  duration_ms: 15.044135
+  type: 'suite'
+  ...
+# (node:18) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# (node:19) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: accepts a valid v2 signature exactly once
+ok 13 - accepts a valid v2 signature exactly once
+  ---
+  duration_ms: 151.900417
+  type: 'test'
+  ...
+# Subtest: rejects any body alteration
+ok 14 - rejects any body alteration
+  ---
+  duration_ms: 9.182848
+  type: 'test'
+  ...
+# Subtest: rejects an invalid signature and an expired timestamp
+ok 15 - rejects an invalid signature and an expired timestamp
+  ---
+  duration_ms: 9.185753
+  type: 'test'
+  ...
+# Subtest: rejects a signature presented for another machine
+ok 16 - rejects a signature presented for another machine
+  ---
+  duration_ms: 20.816564
+  type: 'test'
+  ...
+# Subtest: rejects malformed nonces and unsupported versions
+ok 17 - rejects malformed nonces and unsupported versions
+  ---
+  duration_ms: 9.334827
+  type: 'test'
+  ...
+# (node:19) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# (node:20) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: constant-time token comparison accepts exact value
+ok 18 - constant-time token comparison accepts exact value
+  ---
+  duration_ms: 0.873833
+  type: 'test'
+  ...
+# Subtest: constant-time token comparison rejects missing, short and different values
+ok 19 - constant-time token comparison rejects missing, short and different values
+  ---
+  duration_ms: 0.148951
+  type: 'test'
+  ...
+# Subtest: trusts production and numbered GPUbnb Netlify previews only
+ok 20 - trusts production and numbered GPUbnb Netlify previews only
+  ---
+  duration_ms: 0.372061
+  type: 'test'
+  ...
+# (node:20) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# (node:21) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: booking digest is deterministic and domain separated
+ok 21 - booking digest is deterministic and domain separated
+  ---
+  duration_ms: 1.29775
+  type: 'test'
+  ...
+# Subtest: escrow PDA is deterministic
+ok 22 - escrow PDA is deterministic
+  ---
+  duration_ms: 4.020421
+  type: 'test'
+  ...
+# (node:21) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+1..22
+# tests 37
+# suites 1
+# pass 37
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4775.491578

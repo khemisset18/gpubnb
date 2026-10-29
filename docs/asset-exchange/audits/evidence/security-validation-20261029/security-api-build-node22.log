@@ -1,0 +1,19 @@
+(node:4) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> gpubnb-enterprise-api@1.0.0-devnet.1 build
+> prisma generate && tsc -p tsconfig.json
+
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v6.19.3) to ./node_modules/@prisma/client in 316ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+
+npm notice
+npm notice New major version of npm available! 10.9.9 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

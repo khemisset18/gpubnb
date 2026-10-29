@@ -1,0 +1,36 @@
+test_each_failed_check_stops_even_inside_conditional (test_focal_kernel_cohort.FocalKernelCohortTests.test_each_failed_check_stops_even_inside_conditional) ... ok
+test_missing_checker_is_rejected (test_focal_kernel_cohort.FocalKernelCohortTests.test_missing_checker_is_rejected) ... ok
+test_official_variants_must_not_be_mixed (test_focal_kernel_cohort.FocalKernelCohortTests.test_official_variants_must_not_be_mixed) ... ok
+test_old_kernel_is_rejected (test_focal_kernel_cohort.FocalKernelCohortTests.test_old_kernel_is_rejected) ... ok
+test_requirements_match_target_kunnwon_manifest (test_focal_kernel_cohort.FocalKernelCohortTests.test_requirements_match_target_kunnwon_manifest) ... ok
+test_source_has_no_side_effects (test_focal_kernel_cohort.FocalKernelCohortTests.test_source_has_no_side_effects) ... ok
+test_does_not_import_other_tags (test_release_source.ReleaseSourceTests.test_does_not_import_other_tags) ... ok
+test_preserves_release_tag_across_gbuild_sha_only_fetch (test_release_source.ReleaseSourceTests.test_preserves_release_tag_across_gbuild_sha_only_fetch) ... ok
+test_refuses_to_overwrite_existing_input (test_release_source.ReleaseSourceTests.test_refuses_to_overwrite_existing_input) ... ok
+test_rejects_lightweight_substitution (test_release_source.ReleaseSourceTests.test_rejects_lightweight_substitution) ... ok
+test_rejects_missing_tag (test_release_source.ReleaseSourceTests.test_rejects_missing_tag) ... ok
+test_rejects_tag_on_different_commit (test_release_source.ReleaseSourceTests.test_rejects_tag_on_different_commit) ... ok
+test_sha_only_fetch_loses_release_metadata_without_preparation (test_release_source.ReleaseSourceTests.test_sha_only_fetch_loses_release_metadata_without_preparation) ... ok
+test_epoch_identity_is_not_archive_filename (test_snapshot_packages.SnapshotPackageTests.test_epoch_identity_is_not_archive_filename) ... ok
+test_rejects_duplicate_and_missing_fields (test_snapshot_packages.SnapshotPackageTests.test_rejects_duplicate_and_missing_fields) ... ok
+test_rejects_empty_duplicate_or_bad_manifest (test_snapshot_packages.SnapshotPackageTests.test_rejects_empty_duplicate_or_bad_manifest) ... ok
+test_rejects_wrong_hash_version_architecture_or_missing_package (test_snapshot_packages.SnapshotPackageTests.test_rejects_wrong_hash_version_architecture_or_missing_package) ... ok
+test_signed_index_hash_and_size (test_snapshot_packages.SnapshotPackageTests.test_signed_index_hash_and_size) ... ok
+test_accepts_complete_matching_evidence (test_validate_evidence.D0EvidenceValidationTests.test_accepts_complete_matching_evidence) ... ok
+test_rejects_bad_declared_archive_digest (test_validate_evidence.D0EvidenceValidationTests.test_rejects_bad_declared_archive_digest) ... ok
+test_rejects_boolean_counts (test_validate_evidence.D0EvidenceValidationTests.test_rejects_boolean_counts) ... ok
+test_rejects_declared_hash_that_differs_from_file (test_validate_evidence.D0EvidenceValidationTests.test_rejects_declared_hash_that_differs_from_file) ... ok
+test_rejects_duplicate_json_keys (test_validate_evidence.D0EvidenceValidationTests.test_rejects_duplicate_json_keys) ... ok
+test_rejects_false_safety_assertions_and_non_boolean_types (test_validate_evidence.D0EvidenceValidationTests.test_rejects_false_safety_assertions_and_non_boolean_types) ... ok
+test_rejects_mismatched_source_commit (test_validate_evidence.D0EvidenceValidationTests.test_rejects_mismatched_source_commit) ... ok
+test_rejects_missing_or_symlinked_evidence (test_validate_evidence.D0EvidenceValidationTests.test_rejects_missing_or_symlinked_evidence) ... ok
+test_rejects_missing_safety_assertions (test_validate_evidence.D0EvidenceValidationTests.test_rejects_missing_safety_assertions) ... ok
+test_rejects_oversized_evidence (test_validate_evidence.D0EvidenceValidationTests.test_rejects_oversized_evidence) ... ok
+test_rejects_tampered_gitian_manifest_even_if_metadata_hash_updated (test_validate_evidence.D0EvidenceValidationTests.test_rejects_tampered_gitian_manifest_even_if_metadata_hash_updated) ... ok
+test_rejects_unpinned_snapshot_transport (test_validate_evidence.D0EvidenceValidationTests.test_rejects_unpinned_snapshot_transport) ... ok
+test_rejects_wrong_official_focal_manifest_variant (test_validate_evidence.D0EvidenceValidationTests.test_rejects_wrong_official_focal_manifest_variant) ... ok
+
+----------------------------------------------------------------------
+Ran 31 tests in 0.598s
+
+OK

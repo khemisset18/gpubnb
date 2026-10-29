@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { ZodError } from 'zod';
 import { acceleratorFingerprint, primaryGpu, sanitizeAccelerators } from '../src/accelerator-telemetry.js';
 
 const valid = {
@@ -31,8 +32,15 @@ test('rejects unsafe and unbounded metadata', () => {
 
 test('rejects impossible memory and metric values', () => {
   assert.throws(() => sanitizeAccelerators([{ ...valid, memoryTotalMiB: 10, memoryUsedMiB: 11 }]), /memory_used_exceeds_total/);
-  assert.throws(() => sanitizeAccelerators([{ ...valid, utilizationPercent: 101 }]), /less than or equal to 100/);
-  assert.throws(() => sanitizeAccelerators([{ ...valid, temperatureC: -274 }]), /greater than or equal to -273.15/);
+  assert.throws(() => sanitizeAccelerators([{ ...valid, utilizationPercent: 101 }]),
+    (error: unknown) => error instanceof ZodError && error.issues.some(issue =>
+      issue.code === 'too_big' && issue.path.join('.') === '0.utilizationPercent'
+      && issue.maximum === 100 && issue.inclusive === true));
+  assert.throws(() => sanitizeAccelerators([{ ...valid, temperatureC: -274 }]),
+    (error: unknown) => error instanceof ZodError && error.issues.some(issue =>
+      issue.code === 'too_small' && issue.path.join('.') === '0.temperatureC'
+      && issue.minimum === -273.15 && issue.inclusive === true));
+  assert.doesNotThrow(() => sanitizeAccelerators([{ ...valid, utilizationPercent: 100, temperatureC: -273.15 }]));
 });
 
 test('selects a compatible primary GPU without excluding other devices', () => {

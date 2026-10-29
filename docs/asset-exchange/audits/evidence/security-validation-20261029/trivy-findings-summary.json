@@ -1,0 +1,83 @@
+[
+  {
+    "VulnerabilityID": "GHSA-fjx5-qpf4-xjf2",
+    "PkgName": "borsh",
+    "InstalledVersion": "0.10.4",
+    "FixedVersion": "1.0.0-alpha.1",
+    "Severity": "MEDIUM",
+    "PrimaryURL": "https://github.com/advisories/GHSA-fjx5-qpf4-xjf2",
+    "target": "Cargo.lock"
+  },
+  {
+    "VulnerabilityID": "GHSA-wrw7-89jp-8q8g",
+    "PkgName": "glib",
+    "InstalledVersion": "0.18.5",
+    "FixedVersion": "0.20.0",
+    "Severity": "MEDIUM",
+    "PrimaryURL": "https://github.com/advisories/GHSA-wrw7-89jp-8q8g",
+    "target": "Cargo.lock"
+  },
+  {
+    "VulnerabilityID": "GHSA-cq8v-f236-94qc",
+    "PkgName": "rand",
+    "InstalledVersion": "0.7.3",
+    "FixedVersion": "0.9.3, 0.10.1, 0.8.6",
+    "Severity": "LOW",
+    "PrimaryURL": "https://github.com/advisories/GHSA-cq8v-f236-94qc",
+    "target": "Cargo.lock"
+  },
+  {
+    "VulnerabilityID": "CVE-2025-69277",
+    "PkgName": "pynacl",
+    "InstalledVersion": "1.5.0",
+    "FixedVersion": "1.6.2",
+    "Severity": "MEDIUM",
+    "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-69277",
+    "target": "agent/requirements.txt"
+  },
+  {
+    "VulnerabilityID": "CVE-2025-69277",
+    "PkgName": "pynacl",
+    "InstalledVersion": "1.5.0",
+    "FixedVersion": "1.6.2",
+    "Severity": "MEDIUM",
+    "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-69277",
+    "target": "requirements.txt"
+  },
+  {
+    "VulnerabilityID": "GHSA-2mjx-qc3c-rqvc",
+    "PkgName": "rustls",
+    "InstalledVersion": "0.23.43",
+    "FixedVersion": "0.23.45",
+    "Severity": "MEDIUM",
+    "PrimaryURL": "https://github.com/advisories/GHSA-2mjx-qc3c-rqvc",
+    "target": "services/control-gateway/Cargo.lock"
+  },
+  {
+    "VulnerabilityID": "GHSA-c8m5-c952-6cm4",
+    "PkgName": "rustls",
+    "InstalledVersion": "0.23.43",
+    "FixedVersion": "0.23.46, 0.24.0-dev.2",
+    "Severity": "MEDIUM",
+    "PrimaryURL": "https://github.com/advisories/GHSA-c8m5-c952-6cm4",
+    "target": "services/control-gateway/Cargo.lock"
+  },
+  {
+    "VulnerabilityID": "GHSA-h2v8-394m-p7vv",
+    "PkgName": "rustls",
+    "InstalledVersion": "0.23.43",
+    "FixedVersion": "0.23.46, 0.24.0-dev.2",
+    "Severity": "LOW",
+    "PrimaryURL": "https://github.com/advisories/GHSA-h2v8-394m-p7vv",
+    "target": "services/control-gateway/Cargo.lock"
+  },
+  {
+    "VulnerabilityID": "GHSA-w44r-93j7-qv28",
+    "PkgName": "rustls",
+    "InstalledVersion": "0.23.43",
+    "FixedVersion": "0.23.46, 0.24.0-dev.2",
+    "Severity": "LOW",
+    "PrimaryURL": "https://github.com/advisories/GHSA-w44r-93j7-qv28",
+    "target": "services/control-gateway/Cargo.lock"
+  }
+]
