@@ -198,6 +198,13 @@ check_snapshot_candidate() {
   check_snapshot_candidate libfreetype6 "2.10.1-2ubuntu0.3"
   check_snapshot_candidate intel-microcode "3.20241112.0ubuntu0.20.04.1"
   check_snapshot_candidate libexpat1 "2.2.9-1ubuntu0.8"
+  # Fail before the multi-hour Gitian build if this snapshot cannot produce
+  # the exact official Focal kernel cohort (observed mismatch in run #33).
+  check_snapshot_candidate linux-image-generic "5.4.0.202.198"
+  check_snapshot_candidate linux-image-5.4.0-202-generic "5.4.0-202.222"
+  check_snapshot_candidate linux-modules-5.4.0-202-generic "5.4.0-202.222"
+  check_snapshot_candidate linux-modules-extra-5.4.0-202-generic "5.4.0-202.222"
+  check_snapshot_candidate linux-libc-dev "5.4.0-202.222"
 } | tee "$OUTPUT_DIR/focal-snapshot-key-candidates.txt"
 
 # minbase does not upgrade existing packages automatically. Preserve the
@@ -234,6 +241,11 @@ check_installed_focal_package() {
   check_installed_focal_package libfreetype6 "2.10.1-2ubuntu0.3"
   check_installed_focal_package intel-microcode "3.20241112.0ubuntu0.20.04.1"
   check_installed_focal_package libexpat1 "2.2.9-1ubuntu0.8"
+  check_installed_focal_package linux-image-generic "5.4.0.202.198"
+  check_installed_focal_package linux-image-5.4.0-202-generic "5.4.0-202.222"
+  check_installed_focal_package linux-modules-5.4.0-202-generic "5.4.0-202.222"
+  check_installed_focal_package linux-modules-extra-5.4.0-202-generic "5.4.0-202.222"
+  check_installed_focal_package linux-libc-dev "5.4.0-202.222"
 } | tee "$OUTPUT_DIR/focal-snapshot-installed-versions.txt"
 
 # The pinned Gitian grab-packages.sh hashes EVERY .deb in the apt archives
