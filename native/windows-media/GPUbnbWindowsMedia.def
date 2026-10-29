@@ -5,3 +5,5 @@ EXPORTS
     GPUbnbMediaReadFrame
     GPUbnbMediaGetLastDiagnostic
     GPUbnbMediaClose
+    GPUbnbConsoleMediaOpen
+    GPUbnbConsoleMediaReadFrame
