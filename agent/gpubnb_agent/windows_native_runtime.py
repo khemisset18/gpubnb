@@ -69,7 +69,11 @@ class NativeRuntimeHandle:
 def _source_proof_matches(report: dict, capture_backend: str) -> bool:
     """Never present a console capture as a GPUbnb IddCx virtual display."""
     if capture_backend == "iddcx":
-        return report.get("virtualDisplay") is True and report.get("consoleDisplay") is not True
+        return (
+            report.get("virtualDisplay") is True
+            and report.get("consoleDisplay") is not True
+            and report.get("captureBackend") in (None, "iddcx")
+        )
     if capture_backend == "console-dedicated":
         return (
             report.get("captureBackend") == "console-dedicated"
