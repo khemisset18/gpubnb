@@ -426,6 +426,51 @@ pub fn open_console_media_session(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ConsoleFrameMetadata {
+    proof_flags: u32,
+    encoded_bytes: usize,
+    frame_sequence: u64,
+    frame_flags: u32,
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn decode_console_frame_header(
+    result: &[u8; CONSOLE_MEDIA_FRAME_RESULT_SIZE],
+    expected: ConsoleMediaProbeRequestOwned,
+    buffer_capacity: usize,
+) -> Result<ConsoleFrameMetadata, MediaProbeError> {
+    if read_u32(result, 0)? != CONSOLE_MEDIA_FRAME_RESULT_SIZE as u32
+        || read_u32(result, 4)? != CONSOLE_MEDIA_ABI_VERSION
+        || read_u32(result, 12)? != 0
+        || read_u64(result, 16)? != expected.adapter_luid
+        || read_u32(result, 24)? != expected.width
+        || read_u32(result, 28)? != expected.height
+        || read_u32(result, 32)? != expected.refresh_hz
+        || read_u32(result, 56)? != 0
+        || read_u32(result, 60)? != 0
+    {
+        return Err(MediaProbeError::InvalidResult);
+    }
+    let proof_flags = read_u32(result, 8)?;
+    let encoded_bytes = read_u32(result, 36)? as usize;
+    let frame_sequence = read_u64(result, 40)?;
+    let required_capacity = read_u32(result, 48)? as usize;
+    let frame_flags = read_u32(result, 52)?;
+    if proof_flags != CONSOLE_MEDIA_REQUIRED_PROOFS
+        || frame_sequence == 0
+        || encoded_bytes == 0
+        || encoded_bytes != required_capacity
+        || encoded_bytes > buffer_capacity
+        || frame_flags & !MEDIA_FRAME_FLAG_KEYFRAME != 0
+    {
+        return Err(MediaProbeError::InvalidResult);
+    }
+    Ok(ConsoleFrameMetadata {
+        proof_flags, encoded_bytes, frame_sequence, frame_flags,
+    })
+}
+
 pub fn open_media_session(request: MediaProbeRequest<'_>) -> Result<MediaSession, MediaProbeError> {
     let wire = encode_request(request)?;
     let expected = MediaProbeRequestOwned {
@@ -656,38 +701,13 @@ mod windows_impl {
             // Do not misparse a console ABI as an IddCx diagnostic proof.
             return Err(classify_probe_hresult(hr));
         }
-        if read_u32(&result, 0)? != CONSOLE_MEDIA_FRAME_RESULT_SIZE as u32
-            || read_u32(&result, 4)? != CONSOLE_MEDIA_ABI_VERSION
-            || read_u32(&result, 12)? != 0
-            || read_u64(&result, 16)? != expected.adapter_luid
-            || read_u32(&result, 24)? != expected.width
-            || read_u32(&result, 28)? != expected.height
-            || read_u32(&result, 32)? != expected.refresh_hz
-            || read_u32(&result, 56)? != 0
-            || read_u32(&result, 60)? != 0
-        {
-            return Err(MediaProbeError::InvalidResult);
-        }
-        let proof_flags = read_u32(&result, 8)?;
-        let encoded_bytes = read_u32(&result, 36)? as usize;
-        let sequence = read_u64(&result, 40)?;
-        let capacity = read_u32(&result, 48)? as usize;
-        let frame_flags = read_u32(&result, 52)?;
-        if proof_flags != CONSOLE_MEDIA_REQUIRED_PROOFS
-            || sequence == 0
-            || encoded_bytes == 0
-            || encoded_bytes != capacity
-            || encoded_bytes > bytes.len()
-            || frame_flags & !MEDIA_FRAME_FLAG_KEYFRAME != 0
-        {
-            return Err(MediaProbeError::InvalidResult);
-        }
-        bytes.truncate(encoded_bytes);
+        let verified = decode_console_frame_header(&result, expected, bytes.len())?;
+        bytes.truncate(verified.encoded_bytes);
         Ok(ConsoleEncodedMediaFrame {
             bytes,
-            frame_sequence: sequence,
-            proof_flags,
-            frame_flags,
+            frame_sequence: verified.frame_sequence,
+            proof_flags: verified.proof_flags,
+            frame_flags: verified.frame_flags,
             adapter_luid: expected.adapter_luid,
             width: expected.width,
             height: expected.height,
@@ -915,6 +935,60 @@ mod tests {
                 adapter_luid: 0, ..base
             }),
             Err(MediaProbeError::InvalidRequest)
+        );
+    }
+
+    #[test]
+    fn console_result_refuses_any_missing_proof_or_wrong_frame_fence() {
+        let expected = ConsoleMediaProbeRequestOwned {
+            adapter_luid: 0x1122_3344_5566_7788,
+            windows_session_id: 42,
+            width: 1920,
+            height: 1080,
+            refresh_hz: 60,
+        };
+        let mut wire = [0u8; CONSOLE_MEDIA_FRAME_RESULT_SIZE];
+        wire[0..4].copy_from_slice(&(wire.len() as u32).to_le_bytes());
+        wire[4..8].copy_from_slice(&CONSOLE_MEDIA_ABI_VERSION.to_le_bytes());
+        wire[8..12].copy_from_slice(&CONSOLE_MEDIA_REQUIRED_PROOFS.to_le_bytes());
+        wire[16..24].copy_from_slice(&expected.adapter_luid.to_le_bytes());
+        wire[24..28].copy_from_slice(&expected.width.to_le_bytes());
+        wire[28..32].copy_from_slice(&expected.height.to_le_bytes());
+        wire[32..36].copy_from_slice(&expected.refresh_hz.to_le_bytes());
+        wire[36..40].copy_from_slice(&4096u32.to_le_bytes());
+        wire[40..48].copy_from_slice(&1u64.to_le_bytes());
+        wire[48..52].copy_from_slice(&4096u32.to_le_bytes());
+        assert_eq!(
+            decode_console_frame_header(&wire, expected, MAX_ENCODED_FRAME_BYTES),
+            Ok(ConsoleFrameMetadata {
+                proof_flags: CONSOLE_MEDIA_REQUIRED_PROOFS,
+                encoded_bytes: 4096,
+                frame_sequence: 1,
+                frame_flags: 0,
+            })
+        );
+
+        for (offset, replacement) in [
+            (4usize, 2u32), // IddCx version is not console v3.
+            (8, 0x07), // NVENC absent.
+            (8, 0x1f), // Unknown extra flag.
+            (12, 9), // Failed stage must be zero.
+            (24, 1280), // Dimensions cannot drift.
+            (36, 0), // Empty bitstream.
+            (48, 8192), // Capacity mismatch.
+            (52, 0x80), // Unknown frame flag.
+            (56, 1), // Reserved fields must be zero.
+        ] {
+            let mut bad = wire;
+            bad[offset..offset + 4].copy_from_slice(&replacement.to_le_bytes());
+            assert_eq!(
+                decode_console_frame_header(&bad, expected, MAX_ENCODED_FRAME_BYTES),
+                Err(MediaProbeError::InvalidResult)
+            );
+        }
+        assert_eq!(
+            decode_console_frame_header(&wire, expected, 1024),
+            Err(MediaProbeError::InvalidResult)
         );
     }
 
