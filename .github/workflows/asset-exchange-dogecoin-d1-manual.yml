@@ -1,8 +1,13 @@
 name: Asset Exchange Dogecoin D1 Explicitly Authorized Isolated Regtest
 
-# Deliberately no push, PR, schedule, or workflow_run execution trigger.
-# The user must separately authorize binary execution for this exact phase.
+# One-time branch/path-scoped execution under the owner's explicit D1 approval.
+# workflow_dispatch requires the workflow on the default branch, which may not
+# be changed. The exact commit-message guard below admits only this authorized
+# execution commit. Restore dispatch-only after preserving the result.
 on:
+  push:
+    branches: [asset-exchange/security-gates-d1-prep-20261029]
+    paths: ['.github/workflows/asset-exchange-dogecoin-d1-manual.yml']
   workflow_dispatch:
     inputs:
       authorization:
@@ -16,12 +21,17 @@ permissions:
 
 jobs:
   network-identity:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.authorization == 'AUTHORIZE_D1_ISOLATED_REGTEST') ||
+      (github.event_name == 'push' && github.repository == 'khemisset18/gpubnb' &&
+       github.ref == 'refs/heads/asset-exchange/security-gates-d1-prep-20261029' &&
+       github.event.head_commit.message == 'test(doge): execute owner-authorized isolated D1 identity 20261029')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Require distinct D1 approval
         env:
-          D1_AUTHORIZATION: ${{ inputs.authorization }}
+          D1_AUTHORIZATION: ${{ github.event_name == 'push' && 'AUTHORIZE_D1_ISOLATED_REGTEST' || inputs.authorization }}
         run: test "$D1_AUTHORIZATION" = AUTHORIZE_D1_ISOLATED_REGTEST
       - name: Checkout prepared D1 harness
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,7 +48,8 @@ jobs:
           path: dist/doge-d0-verified
       - name: Verify signatures, isolate networking, and qualify D1 identity only
         env:
-          D1_AUTHORIZATION: ${{ inputs.authorization }}
+          D1_AUTHORIZATION: ${{ github.event_name == 'push' && 'AUTHORIZE_D1_ISOLATED_REGTEST' || inputs.authorization }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PREPARED ONLY: distinct user authorization is required before invoking this.
+# Distinct user authorization is required before invoking this.
 set -euo pipefail
 umask 077
 if [[ "$#" -ne 3 || "$3" != AUTHORIZE_D1_ISOLATED_REGTEST ]]; then
@@ -28,6 +28,15 @@ retain_public_evidence() {
   exit "$status"
 }
 trap retain_public_evidence EXIT
+gh api repos/khemisset18/gpubnb/actions/runs/40866305437 > "$D1_WORK_DIR/verification/d0-run.json"
+"$PYTHON_BIN" - "$D1_WORK_DIR/verification/d0-run.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+assert r['id'] == 40866305437 and r['run_attempt'] == 1
+assert r['status'] == 'completed' and r['conclusion'] == 'success'
+assert r['head_sha'] == '99724d5b66b9475dcb96f6c471c75ce01ed60f9a'
+assert r['repository']['id'] == 1305325878 and r['repository']['owner']['id'] == 103233875
+PY
 VERIFY_FLAGS=(
   --repo khemisset18/gpubnb
   --signer-workflow khemisset18/gpubnb/.github/workflows/asset-exchange-dogecoin-d0-repro.yml

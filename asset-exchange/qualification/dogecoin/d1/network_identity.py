@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tarfile
@@ -110,6 +111,14 @@ def rpc_arguments(binary, common, method, *params):
     return [str(binary), *common, "-rpcconnect=127.0.0.1", method, *params]
 
 
+def validate_server_rpc_methods(console):
+    methods = re.findall(r"ThreadRPCServer method=([a-zA-Z0-9_]+)", console)
+    require(bool(methods) and set(methods) == {"getblockchaininfo", "getblockhash", "getnetworkinfo", "getpeerinfo", "stop"},
+            "unexpected or missing server RPC method")
+    require(methods[-1] == "stop", "stop must be the final server RPC method")
+    return methods
+
+
 def run(args):
     authorize(args.authorization)
     parent, current = args.parent_net_ns, os.readlink("/proc/self/ns/net")
@@ -141,16 +150,22 @@ def run(args):
     common = [f"-datadir={data}", f"-conf={config}", "-regtest=1", "-testnet=0", "-rpcport=18332"]
     env = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8"}
 
+    rpc_trace = []
+
     def rpc(method, *params):
-        result = subprocess.run(rpc_arguments(bins / "dogecoin-cli", common, method, *params),
+        command = rpc_arguments(bins / "dogecoin-cli", common, method, *params)
+        rpc_trace.append({"method": method, "params": list(params)})
+        (out / "rpc-requests.json").write_text(json.dumps(rpc_trace, indent=2) + "\n")
+        result = subprocess.run(command,
                                 env=env, capture_output=True, text=True,
                                 check=True, timeout=10)
         return result.stdout
 
     with (out / "daemon-console.log").open("w") as log:
         process = subprocess.Popen([str(bins / "dogecoind"), *common, "-server=1", "-daemon=0",
-                                    "-listen=0", "-connect=0", "-dnsseed=0", "-discover=0",
-                                    "-upnp=0", "-listenonion=0", "-disablewallet=1",
+                                    "-listen=0", "-connect=0", "-dnsseed=0", "-dns=0", "-discover=0",
+                                    "-upnp=0", "-listenonion=0", "-onion=0", "-disablewallet=1",
+                                    "-debug=rpc",
                                     "-rpcbind=127.0.0.1", "-rpcallowip=127.0.0.1", "-printtoconsole=1"],
                                    env=env, stdout=log, stderr=subprocess.STDOUT)
         try:
@@ -175,10 +190,20 @@ def run(args):
                     process.wait(timeout=10)
                     raise RuntimeError("isolated node did not stop cleanly")
     require(process.returncode == 0, "isolated node shutdown failed")
+    # The pinned release has no server-side RPC-method whitelist. Private cookie
+    # authentication and an otherwise empty network namespace admit only this
+    # fixed-command harness. Independently check the server's recorded methods.
+    methods = validate_server_rpc_methods((out / "daemon-console.log").read_text())
+    require(not list(data.rglob("wallet*")), "unexpected wallet data")
+    final_links = json.loads(subprocess.check_output(["ip", "-json", "link", "show"], text=True))
+    validate_namespace(parent, os.readlink("/proc/self/ns/net"), final_links)
     report = {"status": "D1_NETWORK_IDENTITY_PASS", "d0ArchiveSha256": SHA256,
               "d0HarnessCommit": D0_COMMIT, "d0Run": D0_RUN, "observations": observed,
               "networkNamespace": current, "namespaceInterfaces": links,
-              "walletDisabled": True, "p2pDisabled": True, "automaticSettlementSupported": False,
+              "namespaceInterfacesAfterStop": final_links, "rpcRequests": rpc_trace,
+              "serverRpcMethods": methods, "shutdownExitCode": process.returncode,
+              "rpcRestriction": "private cookie, loopback-only namespace, fixed harness allowlist; no server-side method ACL in v1.14.9",
+              "walletDisabled": True, "walletFilesAbsent": True, "p2pDisabled": True, "automaticSettlementSupported": False,
               "mainnetUsed": False, "realFundsUsed": False, "broadcastPerformed": False,
               "scope": "network identity only; D2-D9 remain unqualified"}
     (out / "network-identity.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

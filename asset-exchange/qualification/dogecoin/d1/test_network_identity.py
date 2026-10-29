@@ -7,7 +7,7 @@ import unittest
 
 from network_identity import (AUTHORIZATION, D0_COMMIT, D0_RUN, GENESIS, SHA256,
                               authorize, decode_cli_observations, validate_handoff,
-                              rpc_arguments, validate_namespace, validate_network)
+                              rpc_arguments, validate_namespace, validate_network, validate_server_rpc_methods)
 
 
 class NetworkIdentityTests(unittest.TestCase):
@@ -35,6 +35,13 @@ class NetworkIdentityTests(unittest.TestCase):
             with self.subTest(method=method), self.assertRaises(ValueError):
                 rpc_arguments("cli", [], method)
         with self.assertRaises(ValueError): rpc_arguments("cli", [], "getblockhash", "1")
+
+    def test_server_rpc_log_must_contain_only_identity_methods_and_final_stop(self):
+        methods = ['getblockchaininfo', 'getblockhash', 'getnetworkinfo', 'getpeerinfo', 'stop']
+        def log(items): return '\n'.join('ThreadRPCServer method=' + item for item in items)
+        self.assertEqual(validate_server_rpc_methods(log(methods)), methods)
+        for bad in [[], methods[:-1], methods + ['sendrawtransaction'], methods + ['getnetworkinfo']]:
+            with self.subTest(methods=bad), self.assertRaises(ValueError): validate_server_rpc_methods(log(bad))
 
     def test_rejects_mainnet_testnet_and_wrong_genesis(self):
         for chain in ("main", "test", "bitcoin", "REGTEST"):

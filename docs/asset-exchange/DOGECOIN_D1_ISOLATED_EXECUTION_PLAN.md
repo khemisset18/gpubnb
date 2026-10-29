@@ -1,17 +1,22 @@
-# DOGE D1 isolated network identity — prepared, not executed
+# DOGE D1 isolated network identity — authorized execution plan
 
-Status: **PREPARED / NO DOGECOIN BINARY EXECUTED / D1 UNQUALIFIED**.
-D0 source-rebuild passed in run 40866305437. D1 requires separate explicit user
-authorization under the original instruction prohibiting binary execution.
+Status: **AUTHORIZED FOR D1 ONLY / EXECUTION PENDING / D1 UNQUALIFIED UNTIL EVIDENCED**.
+D0 source-rebuild passed in run 40866305437. The owner has now given separate explicit authorization for this exact D1
+phase. That permission does not extend to any D2-D9 execution.
 No Mainnet, wallet, mining, transaction broadcast, real funds or activation is
 part of this phase. D2-D9 remain outside this execution request.
 
 ## Reviewable execution boundary
 
 The prepared manual workflow is
-`.github/workflows/asset-exchange-dogecoin-d1-manual.yml`. It has only a
-`workflow_dispatch` trigger and requires the exact approval input
-`AUTHORIZE_D1_ISOLATED_REGTEST`. It has not been dispatched.
+`.github/workflows/asset-exchange-dogecoin-d1-manual.yml`. Manual execution
+requires the exact input `AUTHORIZE_D1_ISOLATED_REGTEST`. For this approved
+execution only, a temporary push trigger is bound to this work branch, this
+workflow path and the exact execution commit message. GitHub requires a dispatch
+workflow to exist on the default branch; changing main is forbidden. This
+branch-only trigger executes the already authorized phase without changing main
+and must be removed after collecting the result. See the authorization record
+below. A rejected identity or isolation check still blocks execution.
 
 1. Download the already verified D0 evidence from run 40866305437, code commit
    `99724d5b66b9475dcb96f6c471c75ce01ed60f9a`.
@@ -28,8 +33,11 @@ The prepared manual workflow is
    discovery, DNS seeds, UPnP and onion listening disabled. Clear inherited
    environment before the node is started. No Core credentials or defaults.
 6. Invoke only `getblockchaininfo`, `getblockhash 0`, `getnetworkinfo`,
-   `getpeerinfo`, then local node `stop`. The RPC allowlist rejects wallet,
-   mining and broadcasting methods.
+   `getpeerinfo`, then local node `stop`. The harness allowlist rejects wallet,
+   mining and broadcasting methods before invocation. This old node has no
+   server-side method ACL: private cookie authentication and the otherwise
+   empty namespace restrict access to the fixed-command harness. RPC debug
+   logging must confirm the exact allowed server methods after clean shutdown.
 7. Require a genesis-only fresh chain, correct release/version, zero
    connections and no peers; stop the node cleanly before recording D1 PASS.
 8. Upload only verification outputs and public evidence. Do not upload the
@@ -39,7 +47,7 @@ The input artifact expires on 2026-11-28. After expiry the workflow must fail;
 do not silently substitute another artifact, source or trusted run. The saved
 D0 proof bundle can support a separately reviewed equivalent handoff.
 
-## Source-derived candidate identity to approve
+## Approved source-derived identity expectations
 
 These values are taken from the **existing** trusted source commit
 `e0a1c157791544e818c901bd9341896965afbf9d`, not borrowed from Bitcoin:
@@ -73,6 +81,16 @@ capability, D0 trust input or acceptance threshold has been changed.
 - Foundation CI now includes an empty-network-namespace preflight without any
   Dogecoin process. Its result is an isolation check, not a D1 qualification.
 
-No real D1 observation or success is claimed until the separately authorized
-manual execution completes. Any signature, namespace, genesis, version or
+No real D1 observation or success is claimed until the authorized
+isolated execution completes. Any signature, namespace, genesis, version or
 shutdown mismatch is a failure, with no fallback to another network or policy.
+
+## Owner authorization record — 2026-10-29
+
+The current mission expressly states: “Je t’autorise séparément à exécuter
+uniquement le binaire Dogecoin Core v1.14.9 déjà reproduit et vérifié, dans
+l’environnement regtest entièrement isolé prévu par le plan D1.”
+
+Scope: existing verified D0 artifact; network identity RPCs and clean stop only;
+no public network, wallet, mining, transaction, real funds or settlement. D2-D9
+need separate specific approval. This records permission, not a D1 PASS.
