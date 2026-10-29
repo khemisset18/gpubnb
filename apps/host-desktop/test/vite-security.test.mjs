@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {mkdtemp, mkdir, writeFile, rm, readFile, realpath} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {get} from 'node:http';
 import {createRequire} from 'node:module';
@@ -19,8 +18,10 @@ const request = (base, pathname) => new Promise((resolve, reject) => {
 });
 
 async function fixture(run) {
-  // Canonicalize Windows 8.3 temp-directory aliases before constructing fs.allow.
-  const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'gpubnb-vite-security-')));
+  // Vite's Windows raw-fs middleware strips the drive letter. Keep fixtures on
+  // the serving process drive, so a denied existing file exercises HTTP403
+  // instead of an unrelated missing path on the checkout drive (HTTP404).
+  const directory = await realpath(await mkdtemp(path.join(process.cwd(), 'gpubnb-vite-security-')));
   const root = path.join(directory, 'project');
   await mkdir(root);
   const sentinel = 'DISPOSABLE_FIXTURE_CONTENT_NEVER_SERVE';

@@ -1,0 +1,19 @@
+{
+  "rule": "remove only redundant LF bytes at EOF, preserve one LF",
+  "files": {
+    "typescript.log": {
+      "sourceCommit": "c8bdef493c140097c1cc198aa6ec67bdb58ca4d5",
+      "originalSha256": "26c3b034487ac272dc3c109eda55c7616519050f74eb9aa2b0de760144dc2ff7",
+      "gzipSha256": "259d9b5c847b892586edccd7ed2bdbb1c2997d6a4978e1ba46e01ca4ab651777",
+      "viewSha256": "cf97918f5ccf9fa9cd3b3df5dbfb20e30e2284761699077466c0f128f71519de",
+      "removedBytes": 1
+    },
+    "upstream-tests.log": {
+      "sourceCommit": "c8bdef493c140097c1cc198aa6ec67bdb58ca4d5",
+      "originalSha256": "3ee8ab685c3ee332701e40471a7b1f5168d03dddf12f6eed338ac43c54f67727",
+      "gzipSha256": "196404d7a53763f475aead37b4043c41de2417571e7e3e21a468b14a6a82e9c1",
+      "viewSha256": "3d905025fc7b579ee7a48949fff244c98338e7adbab8b0bea1c45527cbe71b3e",
+      "removedBytes": 1
+    }
+  }
+}

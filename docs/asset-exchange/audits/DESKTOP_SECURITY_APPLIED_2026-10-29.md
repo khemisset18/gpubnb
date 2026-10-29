@@ -80,3 +80,18 @@ including workflows which intentionally install with ignore-scripts. The readabl
 patch is rendered with zero context so its required unified-diff context prefixes
 do not introduce whitespace-only lines into the unchanged strict P2P gate.
 No installed patch bytes or assertions change in that formatting adjustment.
+
+The next Windows run established that the canonical-path repair restored the
+positive HTTP200 control. The outside-file request then returned404 because
+Vite's Windows raw-fs middleware strips the requested drive letter and serves
+from the checkout drive, while the OS temp directory was on another drive.
+The second failed log is retained. Fixtures are now created privately on the
+serving process drive, so the existing denied file actually exists at the
+requested path. RequiredHTTP403 and sentinel-absence assertions remain strict.
+The Windows result for that final fixture repair is still pending at this point.
+
+P2P also correctly rejected redundant final blank lines in two new tool logs.
+Their original bytes are now retained in deterministic gzip, with source-commit
+and digest mapping; readable views remove exactly one final LF each. A new
+regression independently pins both original hashes and checks exact recovery.
+The historical assertions and results are unchanged.
