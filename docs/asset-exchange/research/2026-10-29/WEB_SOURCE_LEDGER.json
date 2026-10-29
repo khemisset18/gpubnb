@@ -1,0 +1,96 @@
+{
+  "reviewDate": "2026-10-29",
+  "sources": [
+    {
+      "name": "BasicSwap official",
+      "url": "https://basicswapdex.com",
+      "version": "website snapshot 2026-10-29",
+      "licenseScope": "Not established for website text; reference only",
+      "decisionEvidence": "Asset listing and claims treated as documentation, not pair proof"
+    },
+    {
+      "name": "Particl Academy",
+      "url": "https://academy.particl.io/en/latest/",
+      "version": "site states Desktop 3.3.3 / beta",
+      "licenseScope": "Not established; reference only",
+      "decisionEvidence": "Background documentation, potentially older than code"
+    },
+    {
+      "name": "Herlihy",
+      "url": "https://arxiv.org/abs/1801.09515v4",
+      "version": "2018 v4",
+      "licenseScope": "Publication license to review before reproduction; no code copied",
+      "decisionEvidence": "Abstract/metadata and model scope; not independent proof of implementation"
+    },
+    {
+      "name": "Gugger",
+      "url": "https://eprint.iacr.org/2020/1126",
+      "version": "revised 2020-11-18",
+      "licenseScope": "CC BY stated on ePrint; no full text/code copied",
+      "decisionEvidence": "Cross-curve proof/OtVES and protocol assumptions"
+    },
+    {
+      "name": "Hoenisch/Soriano del Pino",
+      "url": "https://arxiv.org/abs/2101.12332v2",
+      "version": "2021 v2",
+      "licenseScope": "Publication license to review before reproduction; no code copied",
+      "decisionEvidence": "Abstract/metadata on BTC-XMR scope and limitations"
+    },
+    {
+      "name": "COMIT protocol discussion",
+      "url": "https://comit.network/blog/2020/10/06/monero-bitcoin/",
+      "version": "2020-10-06",
+      "licenseScope": "Reference only, no source imported from page",
+      "decisionEvidence": "Redeem/refund race and cancel/refund/punish distinction"
+    },
+    {
+      "name": "AMF MiCA",
+      "url": "https://www.amf-france.org/fr/actualites-publications/dossiers-thematiques/mica",
+      "version": "checked 2026-10-29",
+      "licenseScope": "Official information, linked/paraphrased only",
+      "decisionEvidence": "Service categories and French authorization context"
+    },
+    {
+      "name": "AMF transition",
+      "url": "https://www.amf-france.org/fr/actualites-publications/actualites/fin-de-la-periode-transitoire-mica-lesma-precise-ses-attentes-envers-les-professionnels-et-alerte",
+      "version": "2026-04-24",
+      "licenseScope": "Official information, linked/paraphrased only",
+      "decisionEvidence": "July 2026 transition boundary; no launch permission"
+    },
+    {
+      "name": "EU MiCA",
+      "url": "https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:32023R1114",
+      "version": "2023/1114, consolidated references through 2024-01-09 as indexed",
+      "licenseScope": "Official legal text; no code license inference",
+      "decisionEvidence": "Articles 3/59/76 and recital 22; direct render JS blocked, official indexed renditions read"
+    },
+    {
+      "name": "ESMA Q&A2671",
+      "url": "https://www.esma.europa.eu/publications-data/questions-answers/2671",
+      "version": "checked 2026-10-29",
+      "licenseScope": "Official information, reference only",
+      "decisionEvidence": "Decentralisation is fact-specific"
+    },
+    {
+      "name": "ESMA Q&A2552",
+      "url": "https://www.esma.europa.eu/publications-data/questions-answers/2552",
+      "version": "answer 2026-02-18",
+      "licenseScope": "Official information, reference only",
+      "decisionEvidence": "No issuer/whitepaper issue does not remove CASP duties"
+    },
+    {
+      "name": "EU TFR",
+      "url": "https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:32023R1113",
+      "version": "2023/1113",
+      "licenseScope": "Official legal text; no code license inference",
+      "decisionEvidence": "Transfer/self-hosted address analysis remains distinct"
+    },
+    {
+      "name": "Chainguard MinIO",
+      "url": "https://images.chainguard.dev/directory/image/minio/provenance",
+      "version": "signed OCI digests fixed in S3 audit",
+      "licenseScope": "Image MinIO AGPLv3, exact transitive licenses in signed SBOM; CI fixture only",
+      "decisionEvidence": "Published exact Sigstore signing identity, actually verified"
+    }
+  ]
+}

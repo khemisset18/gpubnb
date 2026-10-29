@@ -1,0 +1,47 @@
+{
+  "BTC": {
+    "atomicUnit": "satoshi",
+    "decimals": 8,
+    "feeUnit": "satoshi per virtual byte for witness paths; exact serializer size otherwise",
+    "wallet": "external Bitcoin Core or separately qualified local/SPV signer",
+    "rpc": "getblockchaininfo, getblockhash, getrawtransaction/gettxout, listunspent, lockunspent, fundrawtransaction, signrawtransactionwithwallet/qualified external signer, sendrawtransaction (future authorized phases only)",
+    "signature": "secp256k1 ECDSA for reviewed legacy/SegWit v0 profile; no automatic Taproot substitution",
+    "special": "BTC remains existing regtest scope only"
+  },
+  "DOGE": {
+    "atomicUnit": "koinu (10^-8 DOGE)",
+    "decimals": 8,
+    "feeUnit": "integer koinu per 1000 serialized bytes; RPC DOGE/kB must be converted exactly",
+    "wallet": "external Dogecoin 1.14.9 wallet only after separate wallet permission; D1 had no wallet",
+    "rpc": "legacy signrawtransaction, getrawtransaction/gettxout, listunspent, lockunspent, sendrawtransaction plus identity RPC (not authorized now)",
+    "signature": "legacy secp256k1 ECDSA; P2SH; no witness stability assumption",
+    "special": "AuxPoW parsing; CLTV regtest activation height 1351; CSV not qualified"
+  },
+  "LTC": {
+    "atomicUnit": "litoshi",
+    "decimals": 8,
+    "feeUnit": "litoshi per virtual byte / 1000 bytes as explicitly tagged by interface",
+    "wallet": "transparent Litecoin Core/SPV profile; MWEB excluded",
+    "rpc": "chain/UTXO/funding/signing/broadcast RPCs bound to exact qualified Litecoin version (future approval)",
+    "signature": "secp256k1 ECDSA reviewed transparent legacy/SegWit v0 paths only",
+    "special": "No MWEB inherited from upstream support"
+  },
+  "BCH": {
+    "atomicUnit": "satoshi (BCH)",
+    "decimals": 8,
+    "feeUnit": "DCRDEX rate in atomic/byte; BasicSwap covenant branch uses absolute atomic fee, not generic atomic/kB",
+    "wallet": "BCHN/Electron Cash profile; exact version/signature policy separately frozen",
+    "rpc": "BCHN UTXO/funding/legacy-signing/broadcast and covenant-specific chain validation (future approval)",
+    "signature": "ForkID-aware BCH signature hashing; DCRDEX custom signer; BasicSwap BCH covenant/OtVES code is distinct",
+    "special": "No SegWit. BasicSwap has_segwit() true is internal routing compatibility, not a consensus statement"
+  },
+  "XMR": {
+    "atomicUnit": "piconero",
+    "decimals": 12,
+    "feeUnit": "atomic per transaction weight/priority and quantization mask from exact daemon version",
+    "wallet": "monerod plus local user-controlled monero-wallet-rpc; shared key material never backend-owned",
+    "rpc": "get_height/get_info/get_fee_estimate, refresh, get_transfers, generate_from_keys/import outputs/key images, transfer/sweep (future permissions only)",
+    "signature": "Monero ring-signature spend plus cross-curve DLEAG/OtVES protocol; not a Bitcoin HTLC",
+    "special": "No script timelock refund; script-side cancellation/refund reveals key share; availability/swipe risk must be audited"
+  }
+}
