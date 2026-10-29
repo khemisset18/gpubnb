@@ -142,6 +142,24 @@ fn validate_local_console_session(
 // A console desktop may be Winlogon (lock/UAC) or ScreenSaver even while
 // WTSEnumerateSessions still labels the renter WTS session as Active.
 #[cfg(any(target_os = "windows", test))]
+fn validate_unlocked_renter_session(
+    expected_session_id: u32,
+    observed_session_id: u32,
+    observed_state: u32,
+    session_flags: u32,
+) -> Result<(), PlatformError> {
+    if expected_session_id == 0 || observed_session_id != expected_session_id || observed_state != 0 {
+        return Err(PlatformError::RenterSessionNotActive);
+    }
+    // WTS_SESSIONSTATE_UNLOCK == 1 on Windows 11. Unknown or locked must
+    // never count as READY even if WTSEnumerateSessions says WTSActive.
+    if session_flags != 1 {
+        return Err(PlatformError::RenterDesktopUnavailable);
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "windows", test))]
 fn validate_input_desktop_name(name: &str) -> Result<(), PlatformError> {
     if name.eq_ignore_ascii_case("Default") {
         Ok(())
@@ -273,6 +291,7 @@ mod windows_impl {
     use super::{
         RenterSessionIsolationProof, RenterSessionToken, validate_exclusive_active_session,
         validate_input_desktop_name, validate_local_console_session,
+        validate_unlocked_renter_session,
     };
     use crate::PlatformError;
     use std::ffi::c_void;
@@ -291,6 +310,7 @@ mod windows_impl {
     const WTS_ACTIVE: u32 = 0;
     const DESKTOP_READOBJECTS: u32 = 0x0001;
     const UOI_NAME: i32 = 2;
+    const WTS_SESSION_INFO_EX: u32 = 25;
 
     #[repr(C)]
     struct SidAndAttributes {
@@ -307,6 +327,35 @@ mod windows_impl {
         session_id: u32,
         win_station_name: *mut u16,
         state: u32,
+    }
+
+    // Exact native WTSINFOEXW level-1 layout. Including the trailing fields
+    // preserves the 8-byte alignment of the WTSINFOEX_LEVEL union on AMD64.
+    #[repr(C)]
+    struct WtsInfoExLevel1 {
+        session_id: u32,
+        session_state: i32,
+        session_flags: i32,
+        win_station_name: [u16; 33],
+        user_name: [u16; 21],
+        domain_name: [u16; 18],
+        logon_time: i64,
+        connect_time: i64,
+        disconnect_time: i64,
+        last_input_time: i64,
+        current_time: i64,
+        incoming_bytes: u32,
+        outgoing_bytes: u32,
+        incoming_frames: u32,
+        outgoing_frames: u32,
+        incoming_compressed_bytes: u32,
+        outgoing_compressed_bytes: u32,
+    }
+
+    #[repr(C)]
+    struct WtsInfoEx {
+        level: u32,
+        data: WtsInfoExLevel1,
     }
 
     #[repr(C)]
@@ -366,6 +415,13 @@ mod windows_impl {
             version: u32,
             sessions: *mut *mut WtsSessionInfoW,
             count: *mut u32,
+        ) -> i32;
+        fn WTSQuerySessionInformationW(
+            server: Handle,
+            session_id: u32,
+            info_class: u32,
+            buffer: *mut *mut u16,
+            bytes_returned: *mut u32,
         ) -> i32;
         fn WTSEnumerateProcessesW(
             server: Handle,
@@ -663,7 +719,47 @@ mod windows_impl {
         validate_exclusive_active_session(session_id, &active_session_ids()?)?;
         // A disconnected/RDP session must never be substituted for the console.
         let active_console_id = unsafe { WTSGetActiveConsoleSessionId() };
-        validate_local_console_session(session_id, active_console_id)
+        validate_local_console_session(session_id, active_console_id)?;
+
+        // WTSActive alone includes locked consoles. Query the kernel session
+        // state instead of trusting a timer, process name or GUI indicator.
+        let mut buffer: *mut u16 = ptr::null_mut();
+        let mut bytes = 0u32;
+        let ok = unsafe {
+            WTSQuerySessionInformationW(
+                0,
+                session_id,
+                WTS_SESSION_INFO_EX,
+                &mut buffer,
+                &mut bytes,
+            )
+        };
+        if ok == 0 || buffer.is_null() {
+            return Err(PlatformError::RenterDesktopUnavailable);
+        }
+        struct OwnedInfo(*mut c_void);
+        impl Drop for OwnedInfo {
+            fn drop(&mut self) {
+                // SAFETY: WTSQuerySessionInformationW allocated the buffer.
+                unsafe { WTSFreeMemory(self.0); }
+            }
+        }
+        let owned = OwnedInfo(buffer.cast::<c_void>());
+        if (bytes as usize) < std::mem::size_of::<WtsInfoEx>() {
+            return Err(PlatformError::RenterDesktopUnavailable);
+        }
+        // SAFETY: size/nonnull checked; WTSInfoEx is a Win32 ABI-defined
+        // naturally aligned structure. Level must be exactly 1.
+        let info = unsafe { &*(owned.0.cast::<WtsInfoEx>()) };
+        if info.level != 1 {
+            return Err(PlatformError::RenterDesktopUnavailable);
+        }
+        validate_unlocked_renter_session(
+            session_id,
+            info.data.session_id,
+            info.data.session_state as u32,
+            info.data.session_flags as u32,
+        )
     }
 
     pub(super) fn ensure_default_input_desktop() -> Result<(), PlatformError> {
@@ -808,6 +904,25 @@ mod tests {
             ),
             Err(PlatformError::InvalidRenterUserSid)
         );
+    }
+
+    #[test]
+    fn wts_session_info_ex_refuses_locked_unknown_or_other_user() {
+        assert_eq!(validate_unlocked_renter_session(42, 42, 0, 1), Ok(()));
+        assert_eq!(
+            validate_unlocked_renter_session(42, 43, 0, 1),
+            Err(PlatformError::RenterSessionNotActive)
+        );
+        assert_eq!(
+            validate_unlocked_renter_session(42, 42, 4, 1),
+            Err(PlatformError::RenterSessionNotActive)
+        );
+        for flags in [0, 2, u32::MAX] {
+            assert_eq!(
+                validate_unlocked_renter_session(42, 42, 0, flags),
+                Err(PlatformError::RenterDesktopUnavailable)
+            );
+        }
     }
 
     #[test]
