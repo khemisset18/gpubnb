@@ -1033,7 +1033,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             patch.object(runtime, "discover_native_application", return_value=None),
             patch.object(runtime, "run_command", side_effect=[report, self._stop_report()]) as run,
         ):
-            with self.assertRaisesRegex(RuntimeError, "native_workspace_start_display_source_mismatch"):
+            with self.assertRaisesRegex(RuntimeError, "native_workspace_start_missing_virtualDisplay"):
                 runtime.launch_windows_native_workspace(
                     "sess-1", "cloud-desktop",
                     "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
