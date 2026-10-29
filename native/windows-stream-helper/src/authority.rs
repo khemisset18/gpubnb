@@ -314,8 +314,17 @@ fn checked_self_test_cleanup(
 }
 
 pub fn run_self_test() -> Result<SelfTestReport, AuthorityError> {
+    run_self_test_backend(RuntimeDisplayBackend::IddCx)
+}
+
+pub fn run_console_self_test() -> Result<SelfTestReport, AuthorityError> {
+    run_self_test_backend(RuntimeDisplayBackend::DedicatedConsole)
+}
+
+fn run_self_test_backend(backend: RuntimeDisplayBackend) -> Result<SelfTestReport, AuthorityError> {
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = backend;
         return Err(AuthorityError::WindowsRequired);
     }
     #[cfg(target_os = "windows")]
@@ -325,13 +334,15 @@ pub fn run_self_test() -> Result<SelfTestReport, AuthorityError> {
             .map_err(|_| AuthorityError::LeaseGpuMismatch)?;
         let session_id = format!("selftest-{}", std::process::id());
         let (generation, display_nonce) = random_runtime_identity()?;
-        let mut runtime = start_qualified_graphics_runtime(runtime_config(
-            &session_id,
-            &lease.gpu_uuid,
-            &lease,
-            generation,
-            display_nonce,
-        ))
+        let config = runtime_config(
+            &session_id, &lease.gpu_uuid, &lease, generation, display_nonce,
+        );
+        let mut runtime = match backend {
+            RuntimeDisplayBackend::IddCx => start_qualified_graphics_runtime(config),
+            RuntimeDisplayBackend::DedicatedConsole => {
+                start_dedicated_console_graphics_runtime(config)
+            }
+        }
         .map_err(|error| {
             bounded_runtime_failure_code(error.diagnostic_code())
                 .map(AuthorityError::RuntimeFailure)
