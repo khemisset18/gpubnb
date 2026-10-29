@@ -71,13 +71,47 @@ new backend enum, new deployable package, or any positive Stage 4 qualification.
 It does not remove the original `virtualDisplay` requirement or authorize
 software encoding or an unsafe provider-desktop fallback.
 
+## Driverless media engine groundwork (added after the isolation guards)
+
+The Windows Media DLL now exposes a **separate, non-default console capture ABI v3**:
+
+- `GPUbnbConsoleMediaOpen` accepts an 80-byte explicitly versioned request:
+  exact NVIDIA UUID/LUID, nonzero session nonce, expected WTS session ID,
+  dimensions and frame timeout. Strictly rejects nonzero reserved words.
+- `GPUbnbConsoleMediaReadFrame` returns a separate 64-byte ABI-v3 result and
+  `GPUBNB_CONSOLE_PROOF_CONSOLE_DISPLAY` rather than the IddCx
+  `GPUBNB_MEDIA_PROOF_DISPLAY_FOUND`. The older ABI-v2
+  `GPUbnbMediaOpen`/`GPUbnbMediaReadFrame` remain unchanged and **reject
+  console session handles**.
+- Windows.Graphics.Capture `CreateForMonitor` selects one **and only one**
+  active display path with a permitted physical connector (HDMI, DP, DVI,
+  internal), targetAvailable, no forced target, fixed rotation, exact dimensions
+  and refresh rate. No arbitrary primary monitor fallback. After choosing the
+  monitor, the source GDI name and monitor path are retained and revalidated.
+- The media call checks the worker's own Windows session, active console,
+  WTSINFOEX unlocked state and input desktop `Default`. These are repeated
+  after capture and after encoding, before encoded bytes are copied.
+- The NVENC implementation is shared with the existing exact-GPU D3D11 engine,
+  and its successful encoder output must still be established physically.
+- `native/windows-platform/src/media.rs` now contains an independent typed
+  Rust ABI-v3 loader and decoder that retains the existing DLL Authenticode
+  signer verification. A console proof cannot be cast to the v2 IddCx type.
+
+**Important:** this is an **unwired library capability**, not a running
+GPUbnb rental backend. Worker command framing, helper lifetime, nonce binding,
+signed release provenance, WTS notifications, per-frame browser revocation and
+bookability are intentionally unchanged. The required product integration below
+remains incomplete. An HDMI/DP connector alone is not evidence of a genuine
+trusted physical screen; device identity needs further qualification.
+
 ## Required work before a driverless mode can exist
 
-1. Design a *separate*, compile-gated media ABI and proof class for a preexisting
-   console monitor. Currently `Media.cpp` resolves an exact nonce-bound IddCx
-   monitor; replacing it with the first active display silently is forbidden.
-   The display source must be proven to belong to the dedicated renter console,
-   with stable monitor identity and the exact leased NVIDIA UUID -> LUID.
+1. The separate console ABI exists but remains **unwired**. Build an explicit
+   dedicated-console worker command and service runtime whose session nonce
+   and source identity are bound to the authenticated rental generation. Do not
+   use the IddCx `PrepareDisplay` command or re-label its proof fields. The
+   display source must be proven to belong to the renter console and exact
+   leased NVIDIA UUID -> LUID.
 2. Ensure any app/monitor capture always runs as the renter, never as the
    privileged service or provider; validate the user/window-station/desktop
    source and abort on any ambiguous topology transition.
