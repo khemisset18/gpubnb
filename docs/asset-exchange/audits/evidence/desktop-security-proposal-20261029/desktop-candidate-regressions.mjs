@@ -36,4 +36,3 @@ console.log(JSON.stringify({...result, stages}));
   console.log(JSON.stringify({status: 'FAILED_FUNCTIONAL_EXPECTATION', stages, error: error.message}));
   process.exitCode = 1;
 }
-
