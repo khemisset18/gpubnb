@@ -55,6 +55,7 @@ pub enum PlatformError {
     RenterTokenUserMismatch,
     RenterSessionNotActive,
     RenterSessionNotConsole,
+    RenterDesktopUnavailable,
     AnotherInteractiveSessionActive,
     ProviderProcessInRenterSession,
     EnvironmentCreateFailed,
