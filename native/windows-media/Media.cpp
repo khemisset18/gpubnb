@@ -2051,6 +2051,101 @@ HRESULT __stdcall GPUbnbMediaGetLastDiagnostic(GPUbnbMediaDiagnostic* diagnostic
     return S_OK;
 }
 
+
+extern "C" __declspec(dllexport)
+HRESULT __stdcall GPUbnbConsoleMediaOpen(
+    const GPUbnbConsoleProbeRequest* request,
+    GPUbnbMediaSession** session)
+{
+    if (session == nullptr || request == nullptr) return E_POINTER;
+    *session = nullptr;
+    HRESULT hr = ValidateConsoleRequest(*request);
+    if (FAILED(hr)) return hr;
+
+    // Use the existing bounded diagnostic record without mislabeling the
+    // result as an IddCx/virtual-display proof.
+    GPUbnbMediaProbeRequest diagnosticRequest = {};
+    diagnosticRequest.RenderAdapterLuid = request->RenderAdapterLuid;
+    diagnosticRequest.Width = request->Width;
+    diagnosticRequest.Height = request->Height;
+    diagnosticRequest.RefreshHz = request->RefreshHz;
+    ResetMediaDiagnostic(diagnosticRequest);
+
+    auto value = std::make_unique<GPUbnbMediaSession>();
+    hr = BuildDedicatedConsoleSession(*request, value.get());
+    if (FAILED(hr)) return hr;
+    *session = value.release();
+    RecordMediaSuccess();
+    return S_OK;
+}
+
+extern "C" __declspec(dllexport)
+HRESULT __stdcall GPUbnbConsoleMediaReadFrame(
+    GPUbnbMediaSession* session,
+    uint8_t* bitstream,
+    uint32_t bitstreamCapacity,
+    GPUbnbConsoleMediaFrameResult* result)
+{
+    if (session == nullptr || result == nullptr) return E_POINTER;
+    if (!session->consoleMode) return E_INVALIDARG;
+    *result = {};
+    result->Size = sizeof(*result);
+    result->Version = GPUBNB_CONSOLE_MEDIA_ABI_VERSION;
+    result->RenderAdapterLuid = session->request.RenderAdapterLuid;
+    result->Width = session->request.Width;
+    result->Height = session->request.Height;
+    result->RefreshHz = session->request.RefreshHz;
+    ResetMediaDiagnostic(session->request);
+
+    std::vector<uint8_t> encoded;
+    uint32_t encodedBytes = 0;
+    uint32_t frameFlags = 0;
+    uint32_t proofFlags = 0;
+    uint64_t frameSequence = 0;
+    HRESULT hr = CaptureAndEncode(
+        session, &encoded, &encodedBytes,
+        &frameFlags, &proofFlags, &frameSequence);
+    if (FAILED(hr))
+    {
+        result->FailedStage = g_lastMediaDiagnostic.FailedStage;
+        result->ProofFlags = g_lastMediaDiagnostic.ProofFlags;
+        return hr;
+    }
+
+    // Even though the numerical bit positions match the existing encoder,
+    // these are a *different*, version-3 console proof schema.
+    result->ProofFlags = GPUBNB_CONSOLE_PROOF_EXACT_GPU |
+        GPUBNB_CONSOLE_PROOF_CONSOLE_DISPLAY |
+        GPUBNB_CONSOLE_PROOF_CAPTURED_FRAME |
+        GPUBNB_CONSOLE_PROOF_NVENC_BITSTREAM;
+    result->FailedStage = GPUBNB_MEDIA_STAGE_NONE;
+    result->EncodedBytes = encodedBytes;
+    result->RequiredCapacity = encodedBytes;
+    result->FrameFlags = frameFlags;
+    result->FrameSequence = frameSequence;
+    if (encodedBytes == 0 || encoded.size() != encodedBytes)
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_NVENC_ENCODE, E_FAIL);
+    if (bitstream == nullptr || bitstreamCapacity < encodedBytes)
+        return RecordMediaFailure(
+            GPUBNB_MEDIA_STAGE_NVENC_ENCODE,
+            HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER));
+
+    // Last chance to stop on WTS lock/disconnect, switching or monitor change.
+    // Calling service must *also* recheck the real renter SID and session
+    // epoch before admitting this frame to any browser transport.
+    hr = ValidateLiveConsoleTarget(session);
+    if (FAILED(hr))
+    {
+        result->ProofFlags = 0;
+        result->EncodedBytes = 0;
+        result->FrameSequence = 0;
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
+    }
+    std::memcpy(bitstream, encoded.data(), encodedBytes);
+    RecordMediaSuccess();
+    return S_OK;
+}
+
 extern "C" __declspec(dllexport)
 void __stdcall GPUbnbMediaClose(GPUbnbMediaSession* session)
 {
