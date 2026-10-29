@@ -19,7 +19,7 @@ Status: **BLOCKED**. Evidence-only update. No Mainnet, no funds, no binary execu
 
 Both replica logs include the same manifest diff in the Linux package group:
 
-| Component | Official attested manifest | Built Gitian manifest |
+| Component | KunNw0n official manifest | Built Gitian manifest |
 | --- | --- | --- |
 | `linux-image` | `5.4.0-202-generic / 5.4.0-202.222` | `5.4.0-200-generic / 5.4.0-200.220` |
 | `linux-image-generic` | `5.4.0.202.198` | `5.4.0.200.196` |
@@ -38,3 +38,23 @@ The current harness uses immutable snapshot `20241212T000000Z`, runs `dist-upgra
 4. Repeat independent A/B Gitian builds and require full manifest equality, binary output equality, official archive hash equality, verified provenance and SBOM before considering a D0 pass.
 
 No assertion here authorizes D1-D9, registry promotion, BCH progression, Mainnet or real funds.
+
+
+## Correction after direct artifact/upstream comparison (2026-10-29)
+
+The kernel table above describes **KunNw0n only**, not both accepted variants.
+The checked-in manifests match upstream byte-for-byte at
+`dogecoin/gitian.sigs@9d1be4fb0effc4c2e97750e0763b92f39d474a17` (323 lines each).
+The slightlyskepticalpotat variant uses kernel 5.4.0-200, but requires
+`intel-microcode=3.20240910.0ubuntu0.20.04.1` and `libexpat1=2.2.9-1ubuntu0.7`.
+The run #33 manifests differ from that variant in those **two** packages.
+They differ from KunNw0n in the **five** kernel packages listed above.
+Thus the build environment mixes cohorts; neither entire manifest matches.
+The existing newer microcode/expat pins and PR #311 kernel guards target KunNw0n.
+
+Both diagnostic ZIPs were downloaded and matched their GitHub artifact digests.
+Their result YAML files declare the same non-official output hash, but neither
+ZIP contains the release archive. This review therefore does **not** prove
+byte-for-byte equality of the two binaries. Full Actions console log retrieval
+failed with `Transport closed`; complete Gitian build/install logs were available
+inside the diagnostic ZIPs. See the 2026-10-29 follow-up for exact evidence.

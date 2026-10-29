@@ -43,7 +43,7 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover \
             -s asset-exchange/qualification/dogecoin/d0 \
-            -p 'test_validate_evidence.py' -v
+            -p 'test_*.py' -v
 
       - name: Prepare isolated Gitian prerequisites
         shell: bash
