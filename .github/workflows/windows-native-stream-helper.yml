@@ -20,6 +20,7 @@ on:
       - agent/tools/windows_native_qualify.py
       - agent/tools/windows_native_*.ps1
       - scripts/stage4-pc1-incident-evidence.ps1
+      - scripts/stage4-console-readonly-preflight.ps1
       - scripts/tests/stage4-pc1-incident-evidence.tests.ps1
       - docs/operations/WINDOWS_NATIVE_DESKTOP_QUALIFICATION.md
       - docs/architecture/WINDOWS_NATIVE_*.md
@@ -157,7 +158,8 @@ jobs:
           foreach ($path in @(
             'agent/tools/windows_native_build_worker_qualification.ps1',
             'agent/tools/windows_native_build_qualification.ps1',
-            'agent/tools/windows_native_physical_smoke.ps1'
+            'agent/tools/windows_native_physical_smoke.ps1',
+            'scripts/stage4-console-readonly-preflight.ps1'
           )) {
             $source = Get-Content $path -Raw
             [void][scriptblock]::Create($source)
@@ -200,5 +202,17 @@ jobs:
           if ($report.ok -cne $false -or $report.error -cne 'renter_session_lease_unavailable') {
             throw 'Helper did not fail closed on the missing physical renter lease.'
           }
-          Write-Host "Expected fail-closed exit code: $helperExit"
+          # Console mode must fail closed too: CI has no signed local renter
+          # lease, authorized physical monitor or installable signed package.
+          $consoleReply = & $exe --self-test-console --json
+          $consoleExit = $LASTEXITCODE
+          if ($consoleExit -ne 21) {
+            throw "Console self-test unexpectedly succeeded without a renter lease: exit $consoleExit"
+          }
+          $consoleReport = $consoleReply | ConvertFrom-Json
+          if ($consoleReport.ok -cne $false -or
+              $consoleReport.error -cne 'renter_session_lease_unavailable') {
+            throw 'Console self-test did not fail closed on missing lease.'
+          }
+          Write-Host "Expected legacy and console fail-closed exits: $helperExit / $consoleExit"
           exit 0
