@@ -411,7 +411,10 @@ fn send_encoded_media_frame(
     fence: MediaSendFence,
     media: &EncodedMediaFrame,
 ) -> Result<(), WorkerError> {
-    let MediaSendFence { command_sequence, console_mode } = fence;
+    let MediaSendFence {
+        command_sequence,
+        console_mode,
+    } = fence;
     let encoded_bytes = u32::try_from(media.bytes.len())
         .map_err(|_| WorkerError::new("media_frame_too_large", 21))?;
     let proof_value = WorkerMediaProof {
