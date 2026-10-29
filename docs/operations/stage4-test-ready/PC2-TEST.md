@@ -13,7 +13,7 @@ Le déploiement vérifié ce jour-là annonçait le SHA Stage 3 `6b655614d3b9c3f
 
 ## Contrôle Render en lecture seule du 29 octobre 2026
 
-Le relevé de contrôle fourni dans cette session indique un déploiement actif au SHA `40e9ef5991ab13753130121fd321c60c84b4a297`, `autoDeploy=no`, sur le service privé `gpubnb-stage3-private`. Les métadonnées indiquent la branche configurée `qualification/stage3-windows-native-private-3c3e21e6`. Les routes runtime `/release`, `/config.js`, le préflight, les pages et la gateway n'ont pas été revalidés dans ce relevé.
+Le relevé de contrôle fourni dans cette session indique un déploiement actif au SHA `40e9ef5991ab13753130121fd321c60c84b4a297`, `autoDeploy=no`, sur le service privé `gpubnb-stage3-private`. Les métadonnées indiquent la branche configurée `qualification/stage3-windows-native-private-3c3e21e6`. Les endpoints runtime vérifiés donnent `/release` = commit `40e9ef5991ab13753130121fd321c60c84b4a297`, `/config.js` = `releaseCommit=40e9ef5991ab13753130121fd321c60c84b4a297` (sortie PowerShell fournie par l'utilisateur), et `/ready` = `ok=true`. Les pages Stage 4, le préflight authentifié et une session navigateur restent non vérifiés.
 
 Le paquet privé signé/vérifié disponible sur PC1 est au SHA `447b8f3f931bd61d3131cff6f7204d7625b108b2` et n'est pas installé. Le déploiement Render rapporté et le paquet ne sont donc pas alignés. **Ne pas lancer de réservation ni de test PC1 → PC2** sur cette seule base. Aucun accès navigateur, flux média ou session physique n'a été testé par ce relevé.
 
