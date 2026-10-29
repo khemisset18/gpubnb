@@ -5,7 +5,7 @@
 //! session. The surface deliberately exposes a finite set of keyboard/mouse events
 //! rather than arbitrary window messages or shell commands.
 
-use crate::session::current_process_session_id;
+use crate::session::ensure_current_renter_input_desktop;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseButton {
@@ -79,10 +79,10 @@ pub fn inject_input(expected_windows_session_id: u32, event: InputEvent) -> Resu
     if expected_windows_session_id == 0 {
         return Err(InputError::WrongSession);
     }
-    let current = current_process_session_id().map_err(|_| InputError::WrongSession)?;
-    if current != expected_windows_session_id {
-        return Err(InputError::WrongSession);
-    }
+    // Recheck the actual input desktop for every event. Session-ID equality
+    // alone would also accept a disconnected or locked renter session.
+    ensure_current_renter_input_desktop(expected_windows_session_id)
+        .map_err(|_| InputError::WrongSession)?;
 
     #[cfg(target_os = "windows")]
     {
