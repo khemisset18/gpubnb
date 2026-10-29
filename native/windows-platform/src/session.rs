@@ -148,7 +148,8 @@ fn validate_unlocked_renter_session(
     observed_state: u32,
     session_flags: u32,
 ) -> Result<(), PlatformError> {
-    if expected_session_id == 0 || observed_session_id != expected_session_id || observed_state != 0 {
+    if expected_session_id == 0 || observed_session_id != expected_session_id || observed_state != 0
+    {
         return Err(PlatformError::RenterSessionNotActive);
     }
     // WTS_SESSIONSTATE_UNLOCK == 1 on Windows 11. Unknown or locked must
@@ -726,13 +727,7 @@ mod windows_impl {
         let mut buffer: *mut u16 = ptr::null_mut();
         let mut bytes = 0u32;
         let ok = unsafe {
-            WTSQuerySessionInformationW(
-                0,
-                session_id,
-                WTS_SESSION_INFO_EX,
-                &mut buffer,
-                &mut bytes,
-            )
+            WTSQuerySessionInformationW(0, session_id, WTS_SESSION_INFO_EX, &mut buffer, &mut bytes)
         };
         if ok == 0 || buffer.is_null() {
             return Err(PlatformError::RenterDesktopUnavailable);
@@ -741,7 +736,9 @@ mod windows_impl {
         impl Drop for OwnedInfo {
             fn drop(&mut self) {
                 // SAFETY: WTSQuerySessionInformationW allocated the buffer.
-                unsafe { WTSFreeMemory(self.0); }
+                unsafe {
+                    WTSFreeMemory(self.0);
+                }
             }
         }
         let owned = OwnedInfo(buffer.cast::<c_void>());
@@ -767,7 +764,9 @@ mod windows_impl {
         impl Drop for OwnedDesktop {
             fn drop(&mut self) {
                 // SAFETY: OpenInputDesktop yielded the uniquely owned handle.
-                unsafe { let _ = CloseDesktop(self.0); }
+                unsafe {
+                    let _ = CloseDesktop(self.0);
+                }
             }
         }
         // This runs inside the renter worker, never in the LocalSystem service.
@@ -791,7 +790,9 @@ mod windows_impl {
         if ok == 0 || needed < 2 || needed as usize > name.len() * 2 {
             return Err(PlatformError::RenterDesktopUnavailable);
         }
-        let end = name.iter().position(|unit| *unit == 0)
+        let end = name
+            .iter()
+            .position(|unit| *unit == 0)
             .ok_or(PlatformError::RenterDesktopUnavailable)?;
         let value = String::from_utf16(&name[..end])
             .map_err(|_| PlatformError::RenterDesktopUnavailable)?;
