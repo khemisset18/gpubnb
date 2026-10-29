@@ -99,11 +99,29 @@ curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-all-errors -
 )
 
 mkdir -p "$WORK_DIR/gitian-builder/cache/common"
-curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-all-errors --retry-delay 2 "$ZLIB_FOSSIL_URL"   --output "$WORK_DIR/gitian-builder/cache/common/zlib-1.3.tar.gz"
-(
-  cd "$WORK_DIR/gitian-builder/cache/common"
-  echo "$ZLIB_SHA256  zlib-1.3.tar.gz" | sha256sum --check --strict
-)
+# Transport-only fallback: accept neither source unless the unchanged pinned
+# upstream zlib SHA-256 matches. Do not reuse an invalid partial download.
+ZLIB_FALLBACK_URL="https://github.com/madler/zlib/releases/download/v1.3/zlib-1.3.tar.gz"
+ZLIB_ARCHIVE="$WORK_DIR/gitian-builder/cache/common/zlib-1.3.tar.gz"
+zlib_verified=false
+for url in "$ZLIB_FOSSIL_URL" "$ZLIB_FALLBACK_URL"; do
+  rm -f "$ZLIB_ARCHIVE"
+  if curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+      --retry 4 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
+      "$url" --output "$ZLIB_ARCHIVE" &&
+      (cd "$(dirname "$ZLIB_ARCHIVE")" &&
+       echo "$ZLIB_SHA256  zlib-1.3.tar.gz" | sha256sum --check --strict); then
+    zlib_verified=true
+    echo "Verified pinned zlib source via $url"
+    break
+  fi
+  echo "zlib download failed integrity or transport check: $url" >&2
+done
+if [[ "$zlib_verified" != true ]]; then
+  rm -f "$ZLIB_ARCHIVE"
+  echo "No SHA-256-valid pinned zlib 1.3 source was retrieved" >&2
+  exit 1
+fi
 
 curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-all-errors --retry-delay 2 "$EXPAT_URL" \
   --output "$WORK_DIR/gitian-builder/cache/common/expat-2.6.2.tar.bz2"
