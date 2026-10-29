@@ -127,6 +127,7 @@ impl EncodedMediaFrame {
 /// Driverless console WGC+NVENC proof. Distinct type prevents accidental
 /// promotion to an IddCx virtual-display / browser READY proof.
 pub struct ConsoleMediaSession {
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     expected: ConsoleMediaProbeRequestOwned,
     #[cfg(target_os = "windows")]
     inner: windows_impl::PersistentSession,
@@ -426,6 +427,7 @@ pub fn open_console_media_session(
     }
 }
 
+#[cfg(any(target_os = "windows", test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ConsoleFrameMetadata {
     proof_flags: u32,
@@ -948,7 +950,7 @@ mod tests {
             refresh_hz: 60,
         };
         let mut wire = [0u8; CONSOLE_MEDIA_FRAME_RESULT_SIZE];
-        wire[0..4].copy_from_slice(&(wire.len() as u32).to_le_bytes());
+        wire[0..4].copy_from_slice(&(CONSOLE_MEDIA_FRAME_RESULT_SIZE as u32).to_le_bytes());
         wire[4..8].copy_from_slice(&CONSOLE_MEDIA_ABI_VERSION.to_le_bytes());
         wire[8..12].copy_from_slice(&CONSOLE_MEDIA_REQUIRED_PROOFS.to_le_bytes());
         wire[16..24].copy_from_slice(&expected.adapter_luid.to_le_bytes());
