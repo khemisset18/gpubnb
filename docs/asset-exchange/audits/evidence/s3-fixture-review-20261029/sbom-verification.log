@@ -1,0 +1,13 @@
+
+Verification for cgr.dev/chainguard/minio@sha256:abdbe7d805b4dc931053275bc65d6c96ea88e66fd121aa3bb87d7354ecd875c5 --
+The following checks were performed on each of these signatures:
+  - The cosign claims were validated
+  - Existence of the claims in the transparency log was verified offline
+  - The code-signing certificate was verified using trusted certificate authority certificates
+Certificate subject: https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main
+Certificate issuer URL: https://token.actions.githubusercontent.com
+GitHub Workflow Trigger: push
+GitHub Workflow SHA: 2587ec8e74e2c0cdf2a45182dc2d526105849f5b
+GitHub Workflow Name: .github/workflows/release.yaml
+GitHub Workflow Repository: chainguard-images/images
+GitHub Workflow Ref: refs/heads/main
