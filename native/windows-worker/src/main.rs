@@ -16,7 +16,8 @@ use gpubnb_windows_platform::input::{
 };
 #[cfg(target_os = "windows")]
 use gpubnb_windows_platform::media::{
-    EncodedMediaFrame, MediaProbeRequest, MediaSession, open_media_session,
+    ConsoleMediaProbeRequest, ConsoleMediaSession, EncodedMediaFrame, MediaProbeRequest,
+    MediaSession, open_console_media_session, open_media_session,
 };
 #[cfg(any(target_os = "windows", test))]
 use gpubnb_windows_platform::media::{MediaFailureDiagnostic, MediaProbeError};
@@ -32,11 +33,13 @@ use gpubnb_windows_platform::session::{
 use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
 #[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::media_protocol::{
-    MEDIA_CODEC_H264, MEDIA_FRAME_FLAG_KEYFRAME, MEDIA_TRANSPORT_PROTOCOL_VERSION,
+    MEDIA_CODEC_H264, MEDIA_CONSOLE_TRANSPORT_PROTOCOL_VERSION, MEDIA_FRAME_FLAG_KEYFRAME,
+    MEDIA_TRANSPORT_PROTOCOL_VERSION,
     WorkerMediaFrameHeader, encode_worker_media_frame_header,
 };
 #[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::worker_protocol::{
+    WORKER_CONSOLE_PROOF_PROTOCOL_VERSION, WORKER_CONSOLE_REQUIRED_PROOF_FLAGS,
     WORKER_PROTOCOL_VERSION, WorkerCommand, WorkerDisplaySpec, WorkerHello,
     WorkerMediaDiagnosticFrame, WorkerMediaPollFrame, WorkerMediaPollStatus, WorkerMediaProof,
     decode_worker_command, decode_worker_display_spec, decode_worker_input, encode_worker_hello,
@@ -238,8 +241,74 @@ fn media_error_is_capture_timeout(error: MediaProbeError) -> bool {
 }
 
 #[cfg(target_os = "windows")]
+enum ActiveMediaSession {
+    IddCx(MediaSession),
+    Console(ConsoleMediaSession),
+}
+
+#[cfg(target_os = "windows")]
+impl ActiveMediaSession {
+    fn read_frame(&mut self) -> Result<EncodedMediaFrame, MediaProbeError> {
+        match self {
+            Self::IddCx(session) => session.read_frame(),
+            Self::Console(session) => {
+                let frame = session.read_frame()?;
+                // Console's proof 0x0f is *not* an IddCx proof. Add a distinct
+                // domain bit and require pipe media protocol v3 downstream.
+                if frame.proof_flags != 0x0f {
+                    return Err(MediaProbeError::InvalidResult);
+                }
+                Ok(EncodedMediaFrame {
+                    bytes: frame.bytes,
+                    frame_sequence: frame.frame_sequence,
+                    proof_flags: WORKER_CONSOLE_REQUIRED_PROOF_FLAGS,
+                    frame_flags: frame.frame_flags,
+                    adapter_luid: frame.adapter_luid,
+                    width: frame.width,
+                    height: frame.height,
+                    refresh_hz: frame.refresh_hz,
+                })
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn open_worker_media(
+    args: &WorkerArgs,
+    windows_session_id: u32,
+    spec: WorkerDisplaySpec,
+    console_mode: bool,
+) -> Result<ActiveMediaSession, MediaProbeError> {
+    if console_mode {
+        open_console_media_session(ConsoleMediaProbeRequest {
+            gpu_uuid: &args.gpu_uuid,
+            adapter_luid: spec.adapter_luid,
+            windows_session_id,
+            session_nonce: spec.display_nonce,
+            width: spec.width,
+            height: spec.height,
+            refresh_hz: spec.refresh_hz,
+            capture_timeout_ms: MEDIA_POLL_TIMEOUT_MS,
+        })
+        .map(ActiveMediaSession::Console)
+    } else {
+        open_media_session(MediaProbeRequest {
+            gpu_uuid: &args.gpu_uuid,
+            adapter_luid: spec.adapter_luid,
+            display_nonce: spec.display_nonce,
+            width: spec.width,
+            height: spec.height,
+            refresh_hz: spec.refresh_hz,
+            capture_timeout_ms: MEDIA_POLL_TIMEOUT_MS,
+        })
+        .map(ActiveMediaSession::IddCx)
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn read_required_media_frame(
-    session: &mut MediaSession,
+    session: &mut ActiveMediaSession,
     control: &WorkerPipeClient,
     generation: u64,
     command_sequence: u64,
@@ -334,12 +403,17 @@ fn send_encoded_media_frame(
     windows_session_id: u32,
     spec: WorkerDisplaySpec,
     command_sequence: u64,
+    console_mode: bool,
     media: &EncodedMediaFrame,
 ) -> Result<(), WorkerError> {
     let encoded_bytes = u32::try_from(media.bytes.len())
         .map_err(|_| WorkerError::new("media_frame_too_large", 21))?;
     let proof_value = WorkerMediaProof {
-        protocol_version: WORKER_PROTOCOL_VERSION,
+        protocol_version: if console_mode {
+            WORKER_CONSOLE_PROOF_PROTOCOL_VERSION
+        } else {
+            WORKER_PROTOCOL_VERSION
+        },
         generation: args.generation,
         command_sequence,
         windows_session_id,
@@ -355,7 +429,11 @@ fn send_encoded_media_frame(
     let proof = encode_worker_media_proof(proof_value)
         .map_err(|_| WorkerError::new("media_proof_encode_failed", 21))?;
     let header = encode_worker_media_frame_header(WorkerMediaFrameHeader {
-        protocol_version: MEDIA_TRANSPORT_PROTOCOL_VERSION,
+        protocol_version: if console_mode {
+            MEDIA_CONSOLE_TRANSPORT_PROTOCOL_VERSION
+        } else {
+            MEDIA_TRANSPORT_PROTOCOL_VERSION
+        },
         codec: MEDIA_CODEC_H264,
         frame_flags: if media.is_keyframe() {
             MEDIA_FRAME_FLAG_KEYFRAME
@@ -425,8 +503,9 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
 
         let mut expected_sequence = 1u64;
         let mut display_spec = None;
+        let mut console_mode = None;
         let mut media_state = MediaState::Empty;
-        let mut media_session: Option<MediaSession> = None;
+        let mut media_session: Option<ActiveMediaSession> = None;
         loop {
             // This worker is persistent for the lifetime of the native desktop
             // session. Idleness is not a protocol failure: wait indefinitely for
@@ -455,7 +534,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
 
             match command {
                 WorkerCommand::Stop => return Ok(()),
-                WorkerCommand::PrepareDisplay => {
+                WorkerCommand::PrepareDisplay | WorkerCommand::PrepareConsoleDisplay => {
                     let next_state = media_state.prepare()?;
                     let frame = client
                         .read_frame(PIPE_TIMEOUT_MS)
@@ -475,13 +554,19 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                     if identity.luid != spec.adapter_luid {
                         return Err(WorkerError::new("display_gpu_luid_mismatch", 21));
                     }
+                    console_mode = Some(matches!(command, WorkerCommand::PrepareConsoleDisplay));
                     display_spec = Some(spec);
                     media_state = next_state;
                 }
-                WorkerCommand::StartCapture => {
+                WorkerCommand::StartCapture | WorkerCommand::StartConsoleCapture => {
                     let next_state = media_state.capture()?;
                     let spec =
                         display_spec.ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
+                    let console = console_mode
+                        .ok_or_else(|| WorkerError::new("capture_backend_unprepared", 21))?;
+                    if matches!(command, WorkerCommand::StartConsoleCapture) != console {
+                        return Err(WorkerError::new("capture_backend_mismatch", 21));
+                    }
 
                     let identity = resolve_nvidia_uuid_to_luid(&args.gpu_uuid)
                         .map_err(|_| WorkerError::new("exact_gpu_mapping_failed", 21))?;
@@ -489,15 +574,9 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         return Err(WorkerError::new("capture_gpu_luid_mismatch", 21));
                     }
 
-                    let mut session = match open_media_session(MediaProbeRequest {
-                        gpu_uuid: &args.gpu_uuid,
-                        adapter_luid: spec.adapter_luid,
-                        display_nonce: spec.display_nonce,
-                        width: spec.width,
-                        height: spec.height,
-                        refresh_hz: spec.refresh_hz,
-                        capture_timeout_ms: MEDIA_POLL_TIMEOUT_MS,
-                    }) {
+                    let mut session = match open_worker_media(
+                        args, windows_session_id, spec, console,
+                    ) {
                         Ok(session) => session,
                         Err(error) => {
                             send_media_diagnostic(
@@ -530,6 +609,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         windows_session_id,
                         spec,
                         command_sequence,
+                        console,
                         &media,
                     )?;
                     media_session = Some(session);
@@ -555,6 +635,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                                 windows_session_id,
                                 spec,
                                 command_sequence,
+                                console_mode.unwrap_or(false),
                                 &media,
                             )?;
                         }
@@ -605,6 +686,8 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                     let next_state = media_state.resume()?;
                     let spec =
                         display_spec.ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
+                    let console = console_mode
+                        .ok_or_else(|| WorkerError::new("capture_backend_unprepared", 21))?;
 
                     // A resume is never an administrative toggle. Re-prove that the
                     // rented NVIDIA UUID still resolves to the exact display LUID,
@@ -616,15 +699,9 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         return Err(WorkerError::new("resume_gpu_luid_mismatch", 21));
                     }
 
-                    let mut session = match open_media_session(MediaProbeRequest {
-                        gpu_uuid: &args.gpu_uuid,
-                        adapter_luid: spec.adapter_luid,
-                        display_nonce: spec.display_nonce,
-                        width: spec.width,
-                        height: spec.height,
-                        refresh_hz: spec.refresh_hz,
-                        capture_timeout_ms: MEDIA_POLL_TIMEOUT_MS,
-                    }) {
+                    let mut session = match open_worker_media(
+                        args, windows_session_id, spec, console,
+                    ) {
                         Ok(session) => session,
                         Err(error) => {
                             send_media_diagnostic(
@@ -655,6 +732,7 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         windows_session_id,
                         spec,
                         command_sequence,
+                        console,
                         &media,
                     )
                     .map_err(|_| WorkerError::new("resume_media_transport_failed", 21))?;
