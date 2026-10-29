@@ -1,0 +1,127 @@
+{
+  "commit": "de61f913cbe7c9289dcc735df505daa6f8b19385",
+  "scope": "Digest-pinned pure type/routing methods only; no application import, node, wallet, signing, transaction or network. Admission is not a successful swap.",
+  "sourceSha256": "c313fa7f055e8306208b7b83b8cd2ed2b874f261a0124b0e0cdd542503e9fd91",
+  "results": [
+    {
+      "from": "BTC",
+      "to": "DOGE",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": false
+    },
+    {
+      "from": "BTC",
+      "to": "LTC",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": false
+    },
+    {
+      "from": "BTC",
+      "to": "BCH",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": false
+    },
+    {
+      "from": "BTC",
+      "to": "XMR",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": false
+    },
+    {
+      "from": "DOGE",
+      "to": "BTC",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": true
+    },
+    {
+      "from": "DOGE",
+      "to": "LTC",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": true
+    },
+    {
+      "from": "DOGE",
+      "to": "BCH",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": true
+    },
+    {
+      "from": "DOGE",
+      "to": "XMR",
+      "result": "DOGE -> XMR is not currently supported",
+      "reverseBid": true
+    },
+    {
+      "from": "LTC",
+      "to": "BTC",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": false
+    },
+    {
+      "from": "LTC",
+      "to": "DOGE",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": false
+    },
+    {
+      "from": "LTC",
+      "to": "BCH",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": false
+    },
+    {
+      "from": "LTC",
+      "to": "XMR",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": false
+    },
+    {
+      "from": "BCH",
+      "to": "BTC",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": false
+    },
+    {
+      "from": "BCH",
+      "to": "DOGE",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": false
+    },
+    {
+      "from": "BCH",
+      "to": "LTC",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": false
+    },
+    {
+      "from": "BCH",
+      "to": "XMR",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": false
+    },
+    {
+      "from": "XMR",
+      "to": "BTC",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": true
+    },
+    {
+      "from": "XMR",
+      "to": "DOGE",
+      "result": "XMR -> DOGE is not currently supported",
+      "reverseBid": true
+    },
+    {
+      "from": "XMR",
+      "to": "LTC",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": true
+    },
+    {
+      "from": "XMR",
+      "to": "BCH",
+      "result": "ADMITTED_BY_TYPE_VALIDATOR_ONLY",
+      "reverseBid": true
+    }
+  ]
+}

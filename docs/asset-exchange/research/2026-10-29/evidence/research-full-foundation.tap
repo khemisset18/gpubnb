@@ -1,0 +1,1116 @@
+(node:19) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> @gpubnb/asset-exchange@0.0.0-g5 test
+> node --test core/test/*.test.mjs api/test/*.test.mjs worker/test/*.test.mjs chain-watchers/test/*.test.mjs recovery/test/*.test.mjs settlement/test/*.test.mjs release/test/*.test.mjs research/test/*.test.mjs
+
+(node:32) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+TAP version 13
+# (node:39) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: owner can choose fee percentage within deployment safety maximum
+ok 1 - owner can choose fee percentage within deployment safety maximum
+  ---
+  duration_ms: 3.704638
+  type: 'test'
+  ...
+# Subtest: fee above configured owner safety cap is rejected before challenge
+ok 2 - fee above configured owner safety cap is rejected before challenge
+  ---
+  duration_ms: 0.551339
+  type: 'test'
+  ...
+# Subtest: challenge is one-time and strong user verification is mandatory
+ok 3 - challenge is one-time and strong user verification is mandatory
+  ---
+  duration_ms: 3.218921
+  type: 'test'
+  ...
+# Subtest: strong authentication cannot replace admin authorization
+ok 4 - strong authentication cannot replace admin authorization
+  ---
+  duration_ms: 0.303021
+  type: 'test'
+  ...
+# (node:40) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: maker and taker must sign the same final terms before TERMS_SIGNED
+ok 5 - maker and taker must sign the same final terms before TERMS_SIGNED
+  ---
+  duration_ms: 5.586185
+  type: 'test'
+  ...
+# Subtest: wrong party, invalid signature, or lineage mismatch cannot persist terms
+ok 6 - wrong party, invalid signature, or lineage mismatch cannot persist terms
+  ---
+  duration_ms: 2.732327
+  type: 'test'
+  ...
+# (node:46) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: API refuses silent Core database fallback
+ok 7 - API refuses silent Core database fallback
+  ---
+  duration_ms: 0.896936
+  type: 'test'
+  ...
+# Subtest: API requires explicit Asset Exchange datastore names when enabled
+ok 8 - API requires explicit Asset Exchange datastore names when enabled
+  ---
+  duration_ms: 0.24982
+  type: 'test'
+  ...
+# Subtest: wildcard CORS and accidental public bind fail closed
+ok 9 - wildcard CORS and accidental public bind fail closed
+  ---
+  duration_ms: 0.822537
+  type: 'test'
+  ...
+# (node:47) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: publishing requires maker object authorization and verified signature
+ok 10 - publishing requires maker object authorization and verified signature
+  ---
+  duration_ms: 7.297171
+  type: 'test'
+  ...
+# Subtest: cancel requires stored maker identity and verified signed cancellation intent
+ok 11 - cancel requires stored maker identity and verified signed cancellation intent
+  ---
+  duration_ms: 2.641422
+  type: 'test'
+  ...
+# Subtest: cancel rejects hash, epoch, deployment, timestamp and expiry mismatch before mutation
+ok 12 - cancel rejects hash, epoch, deployment, timestamp and expiry mismatch before mutation
+  ---
+  duration_ms: 1.856291
+  type: 'test'
+  ...
+# Subtest: acceptance binds taker, offer hash and policy epoch for atomic repository verification
+ok 13 - acceptance binds taker, offer hash and policy epoch for atomic repository verification
+  ---
+  duration_ms: 0.957416
+  type: 'test'
+  ...
+# Subtest: acceptance rejects wrong actor and invalid signature before repository mutation
+ok 14 - acceptance rejects wrong actor and invalid signature before repository mutation
+  ---
+  duration_ms: 4.536331
+  type: 'test'
+  ...
+# Subtest: cross-deployment replay is rejected before persistence
+ok 15 - cross-deployment replay is rejected before persistence
+  ---
+  duration_ms: 0.437728
+  type: 'test'
+  ...
+# Subtest: acceptance timestamp cannot be far in the future
+ok 16 - acceptance timestamp cannot be far in the future
+  ---
+  duration_ms: 0.399411
+  type: 'test'
+  ...
+# (node:58) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: admin repository parameterizes fee activation and transaction
+ok 17 - admin repository parameterizes fee activation and transaction
+  ---
+  duration_ms: 1.709769
+  type: 'test'
+  ...
+# (node:59) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: withTransaction uses one client and commits before release
+ok 18 - withTransaction uses one client and commits before release
+  ---
+  duration_ms: 1.917522
+  type: 'test'
+  ...
+# Subtest: withTransaction rolls back on failure
+ok 19 - withTransaction rolls back on failure
+  ---
+  duration_ms: 0.524777
+  type: 'test'
+  ...
+# Subtest: repository calls parameterized publish function and never interpolates offer data
+ok 20 - repository calls parameterized publish function and never interpolates offer data
+  ---
+  duration_ms: 1.735245
+  type: 'test'
+  ...
+# Subtest: repository accept call binds deployment, offer hash and acceptance hash as parameters
+ok 21 - repository accept call binds deployment, offer hash and acceptance hash as parameters
+  ---
+  duration_ms: 1.132612
+  type: 'test'
+  ...
+# Subtest: repository cancel call persists signed cancellation evidence as parameters
+ok 22 - repository cancel call persists signed cancellation evidence as parameters
+  ---
+  duration_ms: 0.719396
+  type: 'test'
+  ...
+# (node:65) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: postgres session store persists only hashes and parameterizes values
+ok 23 - postgres session store persists only hashes and parameterizes values
+  ---
+  duration_ms: 1.113259
+  type: 'test'
+  ...
+# Subtest: postgres session store reads active session scoped to deployment
+ok 24 - postgres session store reads active session scoped to deployment
+  ---
+  duration_ms: 0.89207
+  type: 'test'
+  ...
+# Subtest: delete revokes instead of physically deleting audit row
+ok 25 - delete revokes instead of physically deleting audit row
+  ---
+  duration_ms: 0.301341
+  type: 'test'
+  ...
+# (node:72) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: postgres SSO replay store uses atomic INSERT ON CONFLICT and deployment scope
+ok 26 - postgres SSO replay store uses atomic INSERT ON CONFLICT and deployment scope
+  ---
+  duration_ms: 2.006494
+  type: 'test'
+  ...
+# (node:103) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: terms repository parameterizes atomic signature submission
+ok 27 - terms repository parameterizes atomic signature submission
+  ---
+  duration_ms: 1.309194
+  type: 'test'
+  ...
+# (node:109) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: business route requires session and csrf before service mutation
+ok 28 - business route requires session and csrf before service mutation
+  ---
+  duration_ms: 33.851704
+  type: 'test'
+  ...
+# Subtest: valid session+csrf routes publish request and duplicate JSON keys are rejected
+ok 29 - valid session+csrf routes publish request and duplicate JSON keys are rejected
+  ---
+  duration_ms: 13.958635
+  type: 'test'
+  ...
+# Subtest: rate limit blocks repeated business flow
+ok 30 - rate limit blocks repeated business flow
+  ---
+  duration_ms: 6.469631
+  type: 'test'
+  ...
+# Subtest: mutating business routes reject untrusted or cross-site origins
+ok 31 - mutating business routes reject untrusted or cross-site origins
+  ---
+  duration_ms: 4.626584
+  type: 'test'
+  ...
+# Subtest: logout revokes current session and expires hardened cookie
+ok 32 - logout revokes current session and expires hardened cookie
+  ---
+  duration_ms: 5.266423
+  type: 'test'
+  ...
+# Subtest: signed SSO HTTP exchange creates session and replay is rejected
+ok 33 - signed SSO HTTP exchange creates session and replay is rejected
+  ---
+  duration_ms: 9.86551
+  type: 'test'
+  ...
+# Subtest: admin fee routes bind WYSIWYS intent to authenticated session subject
+ok 34 - admin fee routes bind WYSIWYS intent to authenticated session subject
+  ---
+  duration_ms: 9.678742
+  type: 'test'
+  ...
+# Subtest: cancel route requires signed JSON intent and binds path offer id
+ok 35 - cancel route requires signed JSON intent and binds path offer id
+  ---
+  duration_ms: 15.352062
+  type: 'test'
+  ...
+# Subtest: asset catalog GET routes are authenticated, rate-limited reads without CSRF mutation semantics
+ok 36 - asset catalog GET routes are authenticated, rate-limited reads without CSRF mutation semantics
+  ---
+  duration_ms: 7.826374
+  type: 'test'
+  ...
+# (node:117) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: health endpoint exposes only minimal non-sensitive status
+ok 37 - health endpoint exposes only minimal non-sensitive status
+  ---
+  duration_ms: 24.762605
+  type: 'test'
+  ...
+# Subtest: readiness failures are generic and do not leak exception details
+ok 38 - readiness failures are generic and do not leak exception details
+  ---
+  duration_ms: 4.120382
+  type: 'test'
+  ...
+# Subtest: business routes fail closed because none are enabled yet
+ok 39 - business routes fail closed because none are enabled yet
+  ---
+  duration_ms: 8.947695
+  type: 'test'
+  ...
+# Subtest: health endpoints reject non-GET methods
+ok 40 - health endpoints reject non-GET methods
+  ---
+  duration_ms: 5.045461
+  type: 'test'
+  ...
+# Subtest: oversized request target is rejected
+ok 41 - oversized request target is rejected
+  ---
+  duration_ms: 3.155621
+  type: 'test'
+  ...
+# Subtest: readiness probe is time-bounded
+ok 42 - readiness probe is time-bounded
+  ---
+  duration_ms: 28.762694
+  type: 'test'
+  ...
+# Subtest: server requires explicit allowed host configuration
+ok 43 - server requires explicit allowed host configuration
+  ---
+  duration_ms: 0.474038
+  type: 'test'
+  ...
+# Subtest: server rejects unlisted Host before routing
+ok 44 - server rejects unlisted Host before routing
+  ---
+  duration_ms: 6.382095
+  type: 'test'
+  ...
+# Subtest: server rejects duplicate security-critical headers from raw wire input
+ok 45 - server rejects duplicate security-critical headers from raw wire input
+  ---
+  duration_ms: 3.269519
+  type: 'test'
+  ...
+# (node:123) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: session cookie is hardened and store never receives raw session id
+ok 46 - session cookie is hardened and store never receives raw session id
+  ---
+  duration_ms: 3.5897
+  type: 'test'
+  ...
+# Subtest: csrf is bound to session and wrong token is rejected
+ok 47 - csrf is bound to session and wrong token is rejected
+  ---
+  duration_ms: 1.364795
+  type: 'test'
+  ...
+# Subtest: expired session is rejected and removed
+ok 48 - expired session is rejected and removed
+  ---
+  duration_ms: 2.423823
+  type: 'test'
+  ...
+# Subtest: duplicate cookie names fail closed
+ok 49 - duplicate cookie names fail closed
+  ---
+  duration_ms: 0.973079
+  type: 'test'
+  ...
+# (node:125) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: valid signed SSO ticket creates independent Exchange session
+ok 50 - valid signed SSO ticket creates independent Exchange session
+  ---
+  duration_ms: 3.434941
+  type: 'test'
+  ...
+# Subtest: replay of same jti is rejected
+ok 51 - replay of same jti is rejected
+  ---
+  duration_ms: 1.366188
+  type: 'test'
+  ...
+# Subtest: wrong audience, deployment, expiry and signature fail closed
+ok 52 - wrong audience, deployment, expiry and signature fail closed
+  ---
+  duration_ms: 1.705333
+  type: 'test'
+  ...
+# Subtest: unexpected claims are rejected instead of silently propagated
+ok 53 - unexpected claims are rejected instead of silently propagated
+  ---
+  duration_ms: 0.322261
+  type: 'test'
+  ...
+# (node:129) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: strict JSON rejects duplicate keys at any object depth
+ok 54 - strict JSON rejects duplicate keys at any object depth
+  ---
+  duration_ms: 3.286131
+  type: 'test'
+  ...
+# Subtest: strict JSON accepts escaped strings and arrays
+ok 55 - strict JSON accepts escaped strings and arrays
+  ---
+  duration_ms: 1.431321
+  type: 'test'
+  ...
+# Subtest: strict JSON rejects trailing data
+ok 56 - strict JSON rejects trailing data
+  ---
+  duration_ms: 0.216612
+  type: 'test'
+  ...
+# (node:144) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: watcher evidence rejects unknown fields
+ok 57 - watcher evidence rejects unknown fields
+  ---
+  duration_ms: 1.5882
+  type: 'test'
+  ...
+# Subtest: disagreement never collapses to trusted evidence
+ok 58 - disagreement never collapses to trusted evidence
+  ---
+  duration_ms: 0.77649
+  type: 'test'
+  ...
+# Subtest: network mismatch is a conflict
+ok 59 - network mismatch is a conflict
+  ---
+  duration_ms: 0.273617
+  type: 'test'
+  ...
+# Subtest: tip quorum requires two distinct sources
+ok 60 - tip quorum requires two distinct sources
+  ---
+  duration_ms: 0.804828
+  type: 'test'
+  ...
+# Subtest: different honest tips are uncertain, never consistent
+ok 61 - different honest tips are uncertain, never consistent
+  ---
+  duration_ms: 0.289393
+  type: 'test'
+  ...
+# Subtest: same hash with impossible different heights is conflict
+ok 62 - same hash with impossible different heights is conflict
+  ---
+  duration_ms: 0.191245
+  type: 'test'
+  ...
+# Subtest: matching independent tips are consistent
+ok 63 - matching independent tips are consistent
+  ---
+  duration_ms: 0.491026
+  type: 'test'
+  ...
+# (node:146) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: acceptance digest binds offer hash, taker and trade id
+ok 64 - acceptance digest binds offer hash, taker and trade id
+  ---
+  duration_ms: 2.646341
+  type: 'test'
+  ...
+# Subtest: acceptance rejects unknown fields and invalid expiry
+ok 65 - acceptance rejects unknown fields and invalid expiry
+  ---
+  duration_ms: 0.498382
+  type: 'test'
+  ...
+# (node:159) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: atomic amounts reject floats, signs and leading zeros
+ok 66 - atomic amounts reject floats, signs and leading zeros
+  ---
+  duration_ms: 1.344811
+  type: 'test'
+  ...
+# Subtest: checkedAdd rejects u128 overflow
+ok 67 - checkedAdd rejects u128 overflow
+  ---
+  duration_ms: 0.236615
+  type: 'test'
+  ...
+# Subtest: fee math is exact integer floor
+ok 68 - fee math is exact integer floor
+  ---
+  duration_ms: 0.488184
+  type: 'test'
+  ...
+# Subtest: operator rate is configurable but safety bounded
+ok 69 - operator rate is configurable but safety bounded
+  ---
+  duration_ms: 0.215852
+  type: 'test'
+  ...
+# (node:175) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: asset registry has unique ids and canonical keys
+ok 70 - asset registry has unique ids and canonical keys
+  ---
+  duration_ms: 1.076332
+  type: 'test'
+  ...
+# Subtest: only reviewed regtest Bitcoin route can auto-settle in V1
+ok 71 - only reviewed regtest Bitcoin route can auto-settle in V1
+  ---
+  duration_ms: 0.771119
+  type: 'test'
+  ...
+# Subtest: stablecoins are distinct by exact chain and token identifier
+ok 72 - stablecoins are distinct by exact chain and token identifier
+  ---
+  duration_ms: 0.142057
+  type: 'test'
+  ...
+# Subtest: marketplace-only and experimental assets cannot accidentally auto-settle
+ok 73 - marketplace-only and experimental assets cannot accidentally auto-settle
+  ---
+  duration_ms: 0.201932
+  type: 'test'
+  ...
+# Subtest: resolver is exact and settlement guard fails closed
+ok 74 - resolver is exact and settlement guard fails closed
+  ---
+  duration_ms: 0.395711
+  type: 'test'
+  ...
+# (node:176) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: cancellation digest binds offer, maker, deployment, epoch, time and nonce
+ok 75 - cancellation digest binds offer, maker, deployment, epoch, time and nonce
+  ---
+  duration_ms: 2.800088
+  type: 'test'
+  ...
+# Subtest: cancellation rejects unknown fields and malformed replay controls
+ok 76 - cancellation rejects unknown fields and malformed replay controls
+  ---
+  duration_ms: 0.507674
+  type: 'test'
+  ...
+# (node:177) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: canonical object sorting follows RFC 8785 UTF-16 ordering
+ok 77 - canonical object sorting follows RFC 8785 UTF-16 ordering
+  ---
+  duration_ms: 0.841077
+  type: 'test'
+  ...
+# Subtest: canonical serialization is recursive and preserves array order
+ok 78 - canonical serialization is recursive and preserves array order
+  ---
+  duration_ms: 0.186556
+  type: 'test'
+  ...
+# Subtest: canonical profile rejects lone Unicode surrogates in values and keys
+ok 79 - canonical profile rejects lone Unicode surrogates in values and keys
+  ---
+  duration_ms: 0.388399
+  type: 'test'
+  ...
+# Subtest: canonical profile allows only safe integer JSON numbers
+ok 80 - canonical profile allows only safe integer JSON numbers
+  ---
+  duration_ms: 0.134408
+  type: 'test'
+  ...
+# Subtest: canonical bytes are UTF-8 and deterministic
+ok 81 - canonical bytes are UTF-8 and deterministic
+  ---
+  duration_ms: 0.6243
+  type: 'test'
+  ...
+# (node:193) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: offer digest is deterministic
+ok 82 - offer digest is deterministic
+  ---
+  duration_ms: 3.074502
+  type: 'test'
+  ...
+# Subtest: unknown offer fields fail closed
+ok 83 - unknown offer fields fail closed
+  ---
+  duration_ms: 0.790667
+  type: 'test'
+  ...
+# Subtest: asset/network ambiguity changes digest
+ok 84 - asset/network ambiguity changes digest
+  ---
+  duration_ms: 1.051441
+  type: 'test'
+  ...
+# Subtest: deployment id is part of signed offer digest
+ok 85 - deployment id is part of signed offer digest
+  ---
+  duration_ms: 1.445688
+  type: 'test'
+  ...
+# Subtest: client builder may generate id before signing but server parser requires explicit canonical signed offer
+ok 86 - client builder may generate id before signing but server parser requires explicit canonical signed offer
+  ---
+  duration_ms: 2.095725
+  type: 'test'
+  ...
+# Subtest: signed offer parser rejects derived-field substitution and non-canonical amounts
+ok 87 - signed offer parser rejects derived-field substitution and non-canonical amounts
+  ---
+  duration_ms: 0.74985
+  type: 'test'
+  ...
+# (node:194) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: lock cannot happen before recovery bundle readiness
+ok 88 - lock cannot happen before recovery bundle readiness
+  ---
+  duration_ms: 1.328828
+  type: 'test'
+  ...
+# Subtest: stale epoch cannot create a new lock
+ok 89 - stale epoch cannot create a new lock
+  ---
+  duration_ms: 0.285592
+  type: 'test'
+  ...
+# Subtest: refund requires chain timeout evidence
+ok 90 - refund requires chain timeout evidence
+  ---
+  duration_ms: 0.265616
+  type: 'test'
+  ...
+# Subtest: trade cannot complete from lock confirmations alone
+ok 91 - trade cannot complete from lock confirmations alone
+  ---
+  duration_ms: 0.2959
+  type: 'test'
+  ...
+# Subtest: FAIL_SAFE cannot strand already locked funds
+ok 92 - FAIL_SAFE cannot strand already locked funds
+  ---
+  duration_ms: 0.20102
+  type: 'test'
+  ...
+# Subtest: accept/cancel race has a single winner in the pure model
+ok 93 - accept/cancel race has a single winner in the pure model
+  ---
+  duration_ms: 0.322505
+  type: 'test'
+  ...
+# Subtest: trade state cannot enter TERMS_SIGNED without finalized two-party terms
+ok 94 - trade state cannot enter TERMS_SIGNED without finalized two-party terms
+  ---
+  duration_ms: 0.317944
+  type: 'test'
+  ...
+# (node:212) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: AES-256-GCM recovery envelope round-trips without exposing plaintext
+ok 95 - AES-256-GCM recovery envelope round-trips without exposing plaintext
+  ---
+  duration_ms: 4.808802
+  type: 'test'
+  ...
+# Subtest: tampered ciphertext, tag, AAD or wrong key fails authentication
+ok 96 - tampered ciphertext, tag, AAD or wrong key fails authentication
+  ---
+  duration_ms: 1.428567
+  type: 'test'
+  ...
+# Subtest: recovery encryption refuses wallet custody fields before encryption
+ok 97 - recovery encryption refuses wallet custody fields before encryption
+  ---
+  duration_ms: 0.316713
+  type: 'test'
+  ...
+# Subtest: recovery key must be exactly 32 bytes and is never serialized
+ok 98 - recovery key must be exactly 32 bytes and is never serialized
+  ---
+  duration_ms: 0.854903
+  type: 'test'
+  ...
+# (node:213) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: standalone recovery CLI keygen/encrypt/decrypt round-trips without plaintext bundle leakage
+ok 99 - standalone recovery CLI keygen/encrypt/decrypt round-trips without plaintext bundle leakage
+  ---
+  duration_ms: 199.469015
+  type: 'test'
+  ...
+# Subtest: standalone recovery CLI refuses overwrite of existing key or output
+ok 100 - standalone recovery CLI refuses overwrite of existing key or output
+  ---
+  duration_ms: 60.084935
+  type: 'test'
+  ...
+# (node:228) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: recovery artifact rejects private-key-like fields recursively
+ok 101 - recovery artifact rejects private-key-like fields recursively
+  ---
+  duration_ms: 2.08752
+  type: 'test'
+  ...
+# Subtest: minimal recovery metadata contains no custody material
+ok 102 - minimal recovery metadata contains no custody material
+  ---
+  duration_ms: 0.717705
+  type: 'test'
+  ...
+# (node:236) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: producer refuses payloads larger than the decrypt-side plaintext limit
+ok 103 - producer refuses payloads larger than the decrypt-side plaintext limit
+  ---
+  duration_ms: 201.990804
+  type: 'test'
+  ...
+# Subtest: JSON artifact content cannot hide forbidden custody fields
+ok 104 - JSON artifact content cannot hide forbidden custody fields
+  ---
+  duration_ms: 0.702772
+  type: 'test'
+  ...
+# Subtest: artifact BASE64 must be syntactically valid and canonical
+ok 105 - artifact BASE64 must be syntactically valid and canonical
+  ---
+  duration_ms: 0.345006
+  type: 'test'
+  ...
+# Subtest: recovery identifiers reject control and bidi characters
+ok 106 - recovery identifiers reject control and bidi characters
+  ---
+  duration_ms: 0.210745
+  type: 'test'
+  ...
+# Subtest: CLI rejects duplicate JSON object keys instead of last-key-wins parsing
+ok 107 - CLI rejects duplicate JSON object keys instead of last-key-wins parsing
+  ---
+  duration_ms: 121.567276
+  type: 'test'
+  ...
+# Subtest: CLI refuses recovery key files readable by group or world
+ok 108 - CLI refuses recovery key files readable by group or world
+  ---
+  duration_ms: 53.21793
+  type: 'test'
+  ...
+# Subtest: strict JSON accepts only RFC JSON whitespace
+ok 109 - strict JSON accepts only RFC JSON whitespace
+  ---
+  duration_ms: 1.101184
+  type: 'test'
+  ...
+# (node:239) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: normalized log views retain the exact original bytes and documented line-only changes
+ok 110 - normalized log views retain the exact original bytes and documented line-only changes
+  ---
+  duration_ms: 2.488869
+  type: 'test'
+  ...
+# Subtest: every original D1 manifest digest still matches original artifact bytes
+ok 111 - every original D1 manifest digest still matches original artifact bytes
+  ---
+  duration_ms: 1.234505
+  type: 'test'
+  ...
+# (node:251) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: release evidence normalizes unordered lists and has a stable digest
+ok 112 - release evidence normalizes unordered lists and has a stable digest
+  ---
+  duration_ms: 14.088673
+  type: 'test'
+  ...
+# Subtest: every gate must be green on the exact source SHA
+ok 113 - every gate must be green on the exact source SHA
+  ---
+  duration_ms: 0.778796
+  type: 'test'
+  ...
+# Subtest: V1 evidence cannot authorize Mainnet or real funds
+ok 114 - V1 evidence cannot authorize Mainnet or real funds
+  ---
+  duration_ms: 0.162569
+  type: 'test'
+  ...
+# Subtest: required gate policy is explicit and fail-closed
+ok 115 - required gate policy is explicit and fail-closed
+  ---
+  duration_ms: 0.347378
+  type: 'test'
+  ...
+# Subtest: artifact and limitation changes alter evidence digest
+ok 116 - artifact and limitation changes alter evidence digest
+  ---
+  duration_ms: 3.847537
+  type: 'test'
+  ...
+# Subtest: duplicates and generic workflows are rejected
+ok 117 - duplicates and generic workflows are rejected
+  ---
+  duration_ms: 0.455036
+  type: 'test'
+  ...
+# (node:258) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: the inventory covers all ten pairs and twenty directions with required evidence
+ok 118 - the inventory covers all ten pairs and twenty directions with required evidence
+  ---
+  duration_ms: 1.298222
+  type: 'test'
+  ...
+# Subtest: a wallet-list promotion of explicitly rejected DOGE-XMR routes is rejected
+ok 119 - a wallet-list promotion of explicitly rejected DOGE-XMR routes is rejected
+  ---
+  duration_ms: 0.606016
+  type: 'test'
+  ...
+# Subtest: partial XMR wallet, stale source commits, omitted evidence and duplicate directions cannot become qualification
+ok 120 - partial XMR wallet, stale source commits, omitted evidence and duplicate directions cannot become qualification
+  ---
+  duration_ms: 1.305638
+  type: 'test'
+  ...
+# Subtest: all future RPC requests are source-derived drafts and cannot authorize execution
+ok 121 - all future RPC requests are source-derived drafts and cannot authorize execution
+  ---
+  duration_ms: 0.911539
+  type: 'test'
+  ...
+# (node:259) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: decimal quotes preserve atomic units beyond floating point precision
+ok 122 - decimal quotes preserve atomic units beyond floating point precision
+  ---
+  duration_ms: 2.397193
+  type: 'test'
+  ...
+# Subtest: DOGE serialized-byte reserve rounds upward and separates commission
+ok 123 - DOGE serialized-byte reserve rounds upward and separates commission
+  ---
+  duration_ms: 1.400298
+  type: 'test'
+  ...
+# Subtest: BCH absolute covenant fee is never multiplied by transaction size
+ok 124 - BCH absolute covenant fee is never multiplied by transaction size
+  ---
+  duration_ms: 0.202311
+  type: 'test'
+  ...
+# Subtest: XMR weight quantization and insufficient budgets fail closed
+ok 125 - XMR weight quantization and insufficient budgets fail closed
+  ---
+  duration_ms: 0.425789
+  type: 'test'
+  ...
+# Subtest: timeout model rejects insufficient margin, stale data and unconverted cross-chain heights
+ok 126 - timeout model rejects insufficient margin, stale data and unconverted cross-chain heights
+  ---
+  duration_ms: 0.703036
+  type: 'test'
+  ...
+# Subtest: a fixed pre-signed refund is rejected for malleable or replaceable funding
+ok 127 - a fixed pre-signed refund is rejected for malleable or replaceable funding
+  ---
+  duration_ms: 0.334901
+  type: 'test'
+  ...
+# Subtest: locks cannot bypass recovery, ordering or chain-specific evidence
+ok 128 - locks cannot bypass recovery, ordering or chain-specific evidence
+  ---
+  duration_ms: 3.829702
+  type: 'test'
+  ...
+# Subtest: duplicate delivery is idempotent; conflicting reuse of an ID is rejected after restart
+ok 129 - duplicate delivery is idempotent; conflicting reuse of an ID is rejected after restart
+  ---
+  duration_ms: 0.59296
+  type: 'test'
+  ...
+# Subtest: reorg or uncertainty after both locks prevents further claim actions
+ok 130 - reorg or uncertainty after both locks prevents further claim actions
+  ---
+  duration_ms: 1.543139
+  type: 'test'
+  ...
+# Subtest: timeout alone never reports a refund, and locked funds cannot be abandoned/cancelled
+ok 131 - timeout alone never reports a refund, and locked funds cannot be abandoned/cancelled
+  ---
+  duration_ms: 1.666657
+  type: 'test'
+  ...
+# Subtest: one spend cannot complete a swap; mixed principal outcomes require a recovery incident
+ok 132 - one spend cannot complete a swap; mixed principal outcomes require a recovery incident
+  ---
+  duration_ms: 1.026163
+  type: 'test'
+  ...
+# Subtest: two observed claims plus reconciliation complete only the non-executable model
+ok 133 - two observed claims plus reconciliation complete only the non-executable model
+  ---
+  duration_ms: 0.726575
+  type: 'test'
+  ...
+# Subtest: deep reorg after apparent completion invalidates spend evidence instead of preserving a terminal success
+ok 134 - deep reorg after apparent completion invalidates spend evidence instead of preserving a terminal success
+  ---
+  duration_ms: 1.155104
+  type: 'test'
+  ...
+# Subtest: unsafe time and prototype-shaped event identifiers are rejected
+ok 135 - unsafe time and prototype-shaped event identifiers are rejected
+  ---
+  duration_ms: 0.357307
+  type: 'test'
+  ...
+# Subtest: pre-lock uncertainty cannot be used to skip contract review and independent recovery
+ok 136 - pre-lock uncertainty cannot be used to skip contract review and independent recovery
+  ---
+  duration_ms: 0.395093
+  type: 'test'
+  ...
+# (node:276) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: confirmation selection uses the stricter of amount band and risk floor
+ok 137 - confirmation selection uses the stricter of amount band and risk floor
+  ---
+  duration_ms: 2.812241
+  type: 'test'
+  ...
+# Subtest: policy requires increasing amount bands and non-decreasing confirmation counts
+ok 138 - policy requires increasing amount bands and non-decreasing confirmation counts
+  ---
+  duration_ms: 0.399086
+  type: 'test'
+  ...
+# Subtest: policy requires explicit final catch-all and monotonic risk floors
+ok 139 - policy requires explicit final catch-all and monotonic risk floors
+  ---
+  duration_ms: 0.253287
+  type: 'test'
+  ...
+# Subtest: policy hash changes when risk allocation changes
+ok 140 - policy hash changes when risk allocation changes
+  ---
+  duration_ms: 0.319584
+  type: 'test'
+  ...
+# Subtest: V1 refuses non-regtest and unknown risk classes
+ok 141 - V1 refuses non-regtest and unknown risk classes
+  ---
+  duration_ms: 0.285024
+  type: 'test'
+  ...
+# (node:289) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: minimal script number encoding is deterministic at sign-bit boundaries
+ok 142 - minimal script number encoding is deterministic at sign-bit boundaries
+  ---
+  duration_ms: 1.070999
+  type: 'test'
+  ...
+# Subtest: P2WSH HTLC builder produces exact reviewed opcode structure
+ok 143 - P2WSH HTLC builder produces exact reviewed opcode structure
+  ---
+  duration_ms: 1.658844
+  type: 'test'
+  ...
+# Subtest: builder rejects uncompressed keys, bad hashes and time-based locktimes
+ok 144 - builder rejects uncompressed keys, bad hashes and time-based locktimes
+  ---
+  duration_ms: 0.703104
+  type: 'test'
+  ...
+# Subtest: refund transaction policy requires CLTV-active RBF sequence and SIGHASH_ALL
+ok 145 - refund transaction policy requires CLTV-active RBF sequence and SIGHASH_ALL
+  ---
+  duration_ms: 0.27672
+  type: 'test'
+  ...
+# Subtest: redeem branch enforces 32-byte preimage on-chain before hashing
+ok 146 - redeem branch enforces 32-byte preimage on-chain before hashing
+  ---
+  duration_ms: 0.615529
+  type: 'test'
+  ...
+# Subtest: builder rejects prefix-looking bytes that are not a secp256k1 point
+ok 147 - builder rejects prefix-looking bytes that are not a secp256k1 point
+  ---
+  duration_ms: 1.178082
+  type: 'test'
+  ...
+# (node:300) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: settlement digest binds every economic, script, and timeout-critical field
+ok 148 - settlement digest binds every economic, script, and timeout-critical field
+  ---
+  duration_ms: 17.562651
+  type: 'test'
+  ...
+# Subtest: terms reject timeout/script substitution even when other fields look valid
+ok 149 - terms reject timeout/script substitution even when other fields look valid
+  ---
+  duration_ms: 1.284964
+  type: 'test'
+  ...
+# Subtest: confirmation policy must match both signed terms and timeout budget
+ok 150 - confirmation policy must match both signed terms and timeout budget
+  ---
+  duration_ms: 0.56375
+  type: 'test'
+  ...
+# Subtest: V1 terms refuse non-regtest, alternate sighash and invalid amounts
+ok 151 - V1 terms refuse non-regtest, alternate sighash and invalid amounts
+  ---
+  duration_ms: 0.587702
+  type: 'test'
+  ...
+# Subtest: normalized terms round-trip to same digest
+ok 152 - normalized terms round-trip to same digest
+  ---
+  duration_ms: 1.313565
+  type: 'test'
+  ...
+# Subtest: settlement terms bind accepted-trade lineage and distinct parties
+ok 153 - settlement terms bind accepted-trade lineage and distinct parties
+  ---
+  duration_ms: 0.3438
+  type: 'test'
+  ...
+# Subtest: signed normalized settlement terms parse strictly and reject derived-field mutation
+ok 154 - signed normalized settlement terms parse strictly and reject derived-field mutation
+  ---
+  duration_ms: 3.364697
+  type: 'test'
+  ...
+# (node:308) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: signer intent binds fingerprint, exact values, fee, locktime and SIGHASH_ALL
+ok 155 - signer intent binds fingerprint, exact values, fee, locktime and SIGHASH_ALL
+  ---
+  duration_ms: 2.550181
+  type: 'test'
+  ...
+# Subtest: PSBT output substitution is rejected before external signer call
+ok 156 - PSBT output substitution is rejected before external signer call
+  ---
+  duration_ms: 0.399873
+  type: 'test'
+  ...
+# Subtest: input amount, sequence and sighash substitution are rejected
+ok 157 - input amount, sequence and sighash substitution are rejected
+  ---
+  duration_ms: 0.65453
+  type: 'test'
+  ...
+# Subtest: fee cannot exceed signed maximum or disagree with value conservation
+ok 158 - fee cannot exceed signed maximum or disagree with value conservation
+  ---
+  duration_ms: 0.218575
+  type: 'test'
+  ...
+# Subtest: wrong network and malformed signer fingerprint fail closed
+ok 159 - wrong network and malformed signer fingerprint fail closed
+  ---
+  duration_ms: 0.213422
+  type: 'test'
+  ...
+# Subtest: binary PSBT must match the pre-authorized digest exactly
+ok 160 - binary PSBT must match the pre-authorized digest exactly
+  ---
+  duration_ms: 0.207902
+  type: 'test'
+  ...
+# Subtest: invalid PSBT base64 or magic is rejected before signer invocation
+ok 161 - invalid PSBT base64 or magic is rejected before signer invocation
+  ---
+  duration_ms: 0.17406
+  type: 'test'
+  ...
+# Subtest: Bitcoin Core decimal amounts convert to sats without floating multiplication
+ok 162 - Bitcoin Core decimal amounts convert to sats without floating multiplication
+  ---
+  duration_ms: 0.206119
+  type: 'test'
+  ...
+# (node:323) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: timeout derivation preserves full operational safety budget at latest allowed broadcast
+ok 163 - timeout derivation preserves full operational safety budget at latest allowed broadcast
+  ---
+  duration_ms: 2.251239
+  type: 'test'
+  ...
+# Subtest: funding broadcast fails closed once signed timeout terms become stale
+ok 164 - funding broadcast fails closed once signed timeout terms become stale
+  ---
+  duration_ms: 0.609327
+  type: 'test'
+  ...
+# Subtest: timeout policy has no hidden defaults
+ok 165 - timeout policy has no hidden defaults
+  ---
+  duration_ms: 0.258403
+  type: 'test'
+  ...
+# Subtest: policy hash binds risk allocation even when total block count stays equal
+ok 166 - policy hash binds risk allocation even when total block count stays equal
+  ---
+  duration_ms: 0.288846
+  type: 'test'
+  ...
+# Subtest: mutated timeout derivation is rejected before funding broadcast
+ok 167 - mutated timeout derivation is rejected before funding broadcast
+  ---
+  duration_ms: 0.571831
+  type: 'test'
+  ...
+# Subtest: derivation refuses lock heights outside block-height CLTV range
+ok 168 - derivation refuses lock heights outside block-height CLTV range
+  ---
+  duration_ms: 0.320295
+  type: 'test'
+  ...
+# (node:332) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: stale epochs are blocked for new commitments
+ok 169 - stale epochs are blocked for new commitments
+  ---
+  duration_ms: 0.915423
+  type: 'test'
+  ...
+# Subtest: recovery remains valid across later policy epochs
+ok 170 - recovery remains valid across later policy epochs
+  ---
+  duration_ms: 0.136094
+  type: 'test'
+  ...
+# Subtest: recovery command cannot claim a future epoch
+ok 171 - recovery command cannot claim a future epoch
+  ---
+  duration_ms: 0.169216
+  type: 'test'
+  ...
+1..171
+# tests 171
+# suites 0
+# pass 171
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 826.627042

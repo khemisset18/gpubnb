@@ -50,3 +50,29 @@ Current execution state for every row: **NON COMMENCÉ**. The roadmap itself is
 prepared; it is not executable qualification evidence. BTC stays within its
 already established regtest scope. LTC, XMR and BCH receive no qualification
 through DOGE results. DOGE stays MARKETPLACE_ONLY and automatic settlement false.
+
+## Source-based refinement — 29 October 2026
+
+The new review is under `research/2026-10-29/`. It adds exact source snapshots,
+all twenty pair directions, a pure BasicSwap routing probe and a non-executable
+safety model. These do not qualify any D2–D9 phase.
+
+Important findings: Dogecoin regtest BIP65Height is 1351; D1 at height zero does
+not prove CLTV. SegWit is explicitly disabled. CSV activation cannot be inferred
+from the presence of its code. A legacy funding txid can change and invalidate
+a fixed pre-signed refund. BasicSwap explicitly rejects direct DOGE–XMR in both
+directions; its BCH routing boolean is not a witness capability.
+
+`research/2026-10-29/D2_D9_AUTHORIZATION_DRAFTS.json` enumerates candidate RPCs,
+networks, resource/key/mining/transaction boundaries and PASS/FAIL evidence per
+phase. Names were checked statically against the pinned v1.14.9 RPC tables;
+notably, testmempoolaccept is absent, so Bitcoin-style dry-run assumptions are
+not used. Any future mempool admission test would require explicit permission
+for synthetic local-regtest sendrawtransaction and its exact fixture bytes.
+
+The execution-harness commit is deliberately null: no reviewed D2–D9 node
+executor has been implemented. Filling a guessed commit would create a false
+reviewable authorization. A phase remains BLOCKED FOR EXECUTION until its
+concrete harness, vectors, exact operations and independent review are frozen.
+No authorization is requested by merely committing these drafts. D2 approval
+will not authorize D3 or another chain's funds/mining/signatures.
