@@ -273,17 +273,29 @@ mod tests {
         );
         assert_eq!(
             validate_dedicated_console_chain(
-                7, 42, GPU,
-                DedicatedConsoleDisplayProof { renter_console_exclusive: false, ..source },
-                capture(), &encode(),
+                7,
+                42,
+                GPU,
+                DedicatedConsoleDisplayProof {
+                    renter_console_exclusive: false,
+                    ..source
+                },
+                capture(),
+                &encode(),
             ),
             Err(GraphicsProofError::ProviderDesktop)
         );
         assert_eq!(
             validate_dedicated_console_chain(
-                7, 42, GPU,
-                DedicatedConsoleDisplayProof { console_nonce: [0xB5; 16], ..source },
-                capture(), &encode(),
+                7,
+                42,
+                GPU,
+                DedicatedConsoleDisplayProof {
+                    console_nonce: [0xB5; 16],
+                    ..source
+                },
+                capture(),
+                &encode(),
             ),
             Err(GraphicsProofError::DisplayIdentity)
         );

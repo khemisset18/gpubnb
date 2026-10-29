@@ -991,7 +991,10 @@ pub fn decode_worker_media_proof(
         return Err(WorkerGraphicsFrameError::InvalidLength);
     }
     let protocol_version = u16::from_le_bytes([frame[0], frame[1]]);
-    if !matches!(protocol_version, WORKER_PROTOCOL_VERSION | WORKER_CONSOLE_PROOF_PROTOCOL_VERSION) {
+    if !matches!(
+        protocol_version,
+        WORKER_PROTOCOL_VERSION | WORKER_CONSOLE_PROOF_PROTOCOL_VERSION
+    ) {
         return Err(WorkerGraphicsFrameError::ProtocolVersion);
     }
     let generation = read_fixed_u64(frame, 2)?;

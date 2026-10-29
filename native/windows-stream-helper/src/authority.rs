@@ -335,7 +335,11 @@ fn run_self_test_backend(backend: RuntimeDisplayBackend) -> Result<SelfTestRepor
         let session_id = format!("selftest-{}", std::process::id());
         let (generation, display_nonce) = random_runtime_identity()?;
         let config = runtime_config(
-            &session_id, &lease.gpu_uuid, &lease, generation, display_nonce,
+            &session_id,
+            &lease.gpu_uuid,
+            &lease,
+            generation,
+            display_nonce,
         );
         let mut runtime = match backend {
             RuntimeDisplayBackend::IddCx => start_qualified_graphics_runtime(config),
@@ -468,7 +472,12 @@ pub fn start_session(
     workspace: &str,
     gpu_uuid: &str,
 ) -> Result<StartSessionReport, AuthorityError> {
-    start_session_backend(session_id, workspace, gpu_uuid, RuntimeDisplayBackend::IddCx)
+    start_session_backend(
+        session_id,
+        workspace,
+        gpu_uuid,
+        RuntimeDisplayBackend::IddCx,
+    )
 }
 
 pub fn start_console_session(
@@ -477,7 +486,10 @@ pub fn start_console_session(
     gpu_uuid: &str,
 ) -> Result<StartSessionReport, AuthorityError> {
     start_session_backend(
-        session_id, workspace, gpu_uuid, RuntimeDisplayBackend::DedicatedConsole,
+        session_id,
+        workspace,
+        gpu_uuid,
+        RuntimeDisplayBackend::DedicatedConsole,
     )
 }
 
@@ -660,27 +672,51 @@ fn runtime_status(
     };
     let console = matches!(active.backend(), RuntimeDisplayBackend::DedicatedConsole);
     if active.failed() {
-        return if console { AuthorityStatus::ConsoleDegraded } else { AuthorityStatus::Degraded };
+        return if console {
+            AuthorityStatus::ConsoleDegraded
+        } else {
+            AuthorityStatus::Degraded
+        };
     }
     if active.suspended() {
-        return if console { AuthorityStatus::ConsoleSuspended } else { AuthorityStatus::Suspended };
+        return if console {
+            AuthorityStatus::ConsoleSuspended
+        } else {
+            AuthorityStatus::Suspended
+        };
     }
     // STATUS drives Agent READY/usage accounting, even when no new frames
     // arrive. Never report billable readiness after a fast-user switch.
     if !active.live_renter_boundary() {
-        return if console { AuthorityStatus::ConsoleDegraded } else { AuthorityStatus::Degraded };
+        return if console {
+            AuthorityStatus::ConsoleDegraded
+        } else {
+            AuthorityStatus::Degraded
+        };
     }
     let identity = match resolve_nvidia_uuid_to_luid(gpu_uuid) {
         Ok(identity) => identity,
         Err(_) => {
-            return if console { AuthorityStatus::ConsoleDegraded } else { AuthorityStatus::Degraded };
+            return if console {
+                AuthorityStatus::ConsoleDegraded
+            } else {
+                AuthorityStatus::Degraded
+            };
         }
     };
     if identity.luid != active.display_spec().adapter_luid {
-        return if console { AuthorityStatus::ConsoleDegraded } else { AuthorityStatus::Degraded };
+        return if console {
+            AuthorityStatus::ConsoleDegraded
+        } else {
+            AuthorityStatus::Degraded
+        };
     }
     if active.media_ready() && endpoint_alive {
-        if console { AuthorityStatus::ConsoleReady } else { AuthorityStatus::Ready }
+        if console {
+            AuthorityStatus::ConsoleReady
+        } else {
+            AuthorityStatus::Ready
+        }
     } else if console {
         AuthorityStatus::ConsoleDegraded
     } else {
@@ -709,7 +745,10 @@ pub fn run_authority_child(
     gpu_uuid: &str,
 ) -> Result<(), AuthorityError> {
     run_authority_child_backend(
-        session_id, workspace, gpu_uuid, RuntimeDisplayBackend::IddCx,
+        session_id,
+        workspace,
+        gpu_uuid,
+        RuntimeDisplayBackend::IddCx,
     )
 }
 
@@ -719,7 +758,10 @@ pub fn run_console_authority_child(
     gpu_uuid: &str,
 ) -> Result<(), AuthorityError> {
     run_authority_child_backend(
-        session_id, workspace, gpu_uuid, RuntimeDisplayBackend::DedicatedConsole,
+        session_id,
+        workspace,
+        gpu_uuid,
+        RuntimeDisplayBackend::DedicatedConsole,
     )
 }
 
@@ -750,9 +792,7 @@ fn run_authority_child_backend(
 
         let lease = verified_lease(gpu_uuid)?;
         let (generation, display_nonce) = random_runtime_identity()?;
-        let config = runtime_config(
-            session_id, gpu_uuid, &lease, generation, display_nonce,
-        );
+        let config = runtime_config(session_id, gpu_uuid, &lease, generation, display_nonce);
         let runtime = match backend {
             RuntimeDisplayBackend::IddCx => start_qualified_graphics_runtime(config),
             RuntimeDisplayBackend::DedicatedConsole => {

@@ -9,7 +9,8 @@
 
 use crate::worker_protocol::{
     WORKER_CONSOLE_PROOF_PROTOCOL_VERSION, WORKER_CONSOLE_REQUIRED_PROOF_FLAGS,
-    WORKER_MEDIA_REQUIRED_PROOF_FLAGS, WORKER_PROTOCOL_VERSION, WorkerDisplaySpec, WorkerMediaProof,
+    WORKER_MEDIA_REQUIRED_PROOF_FLAGS, WORKER_PROTOCOL_VERSION, WorkerDisplaySpec,
+    WorkerMediaProof,
 };
 
 pub const MEDIA_TRANSPORT_PROTOCOL_VERSION: u16 = 2;
@@ -131,7 +132,7 @@ fn validate_header_fields(header: WorkerMediaFrameHeader) -> Result<(), MediaFra
     if header.payload_bytes == 0 || header.payload_bytes as usize > MEDIA_H264_FRAME_MAX_BYTES {
         return Err(MediaFrameError::PayloadLength);
     }
-     Ok(())
+    Ok(())
 }
 
 pub fn encode_worker_media_frame_header(

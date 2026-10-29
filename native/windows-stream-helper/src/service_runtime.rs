@@ -630,10 +630,18 @@ fn receive_bound_media_frame_after_proof(
         decode_worker_media_proof(proof_frame).map_err(|_| ServiceRuntimeError::MediaProof)?;
     match backend {
         RuntimeDisplayBackend::IddCx => validate_worker_media_proof(
-            generation, command_sequence, windows_session_id, display_spec, proof,
+            generation,
+            command_sequence,
+            windows_session_id,
+            display_spec,
+            proof,
         ),
         RuntimeDisplayBackend::DedicatedConsole => validate_worker_console_media_proof(
-            generation, command_sequence, windows_session_id, display_spec, proof,
+            generation,
+            command_sequence,
+            windows_session_id,
+            display_spec,
+            proof,
         ),
     }
     .map_err(|_| ServiceRuntimeError::MediaProof)?;
@@ -645,10 +653,20 @@ fn receive_bound_media_frame_after_proof(
         .map_err(|_| ServiceRuntimeError::MediaTransport)?;
     match backend {
         RuntimeDisplayBackend::IddCx => validate_worker_media_frame_header(
-            generation, command_sequence, windows_session_id, display_spec, proof, header,
+            generation,
+            command_sequence,
+            windows_session_id,
+            display_spec,
+            proof,
+            header,
         ),
         RuntimeDisplayBackend::DedicatedConsole => validate_worker_console_media_frame_header(
-            generation, command_sequence, windows_session_id, display_spec, proof, header,
+            generation,
+            command_sequence,
+            windows_session_id,
+            display_spec,
+            proof,
+            header,
         ),
     }
     .map_err(|_| ServiceRuntimeError::MediaTransport)?;
@@ -677,10 +695,8 @@ fn receive_bound_media_frame_after_proof(
     if matches!(backend, RuntimeDisplayBackend::DedicatedConsole) {
         // A WTS number can be recycled. Recheck the exact renter SID on every
         // frame, *before* returning any H.264 bytes to the browser server.
-        query_renter_session_token(
-            windows_session_id, renter_user_sid, provider_user_sid,
-        )
-        .map_err(|_| ServiceRuntimeError::RenterSession)?;
+        query_renter_session_token(windows_session_id, renter_user_sid, provider_user_sid)
+            .map_err(|_| ServiceRuntimeError::RenterSession)?;
         return validate_dedicated_console_chain(
             generation,
             windows_session_id,
@@ -929,20 +945,22 @@ fn start_graphics_runtime(
     // control device. This remains fail-closed while the physical qualification
     // gate in windows-platform/windows-idd is false.
     let display = if matches!(backend, RuntimeDisplayBackend::IddCx) {
-        Some(activate_virtual_display_lease(
-        config.gpu_uuid,
-        VirtualDisplayRequest {
-            operation: VirtualDisplayOperation::PlugMonitor,
-            generation: config.generation,
-            windows_session_id: config.windows_session_id,
-            render_adapter_luid: identity.luid,
-            display_nonce: config.display_nonce,
-            width: config.width,
-            height: config.height,
-            refresh_hz: config.refresh_hz,
-        },
-    )
-    .map_err(classify_virtual_display_failure)?)
+        Some(
+            activate_virtual_display_lease(
+                config.gpu_uuid,
+                VirtualDisplayRequest {
+                    operation: VirtualDisplayOperation::PlugMonitor,
+                    generation: config.generation,
+                    windows_session_id: config.windows_session_id,
+                    render_adapter_luid: identity.luid,
+                    display_nonce: config.display_nonce,
+                    width: config.width,
+                    height: config.height,
+                    refresh_hz: config.refresh_hz,
+                },
+            )
+            .map_err(classify_virtual_display_failure)?,
+        )
     } else {
         None
     };
@@ -1045,10 +1063,22 @@ mod tests {
 
     #[test]
     fn backend_commands_cannot_select_the_other_capture_engine() {
-        assert_eq!(RuntimeDisplayBackend::IddCx.prepare_command(), WorkerCommand::PrepareDisplay);
-        assert_eq!(RuntimeDisplayBackend::IddCx.capture_command(), WorkerCommand::StartCapture);
-        assert_eq!(RuntimeDisplayBackend::DedicatedConsole.prepare_command(), WorkerCommand::PrepareConsoleDisplay);
-        assert_eq!(RuntimeDisplayBackend::DedicatedConsole.capture_command(), WorkerCommand::StartConsoleCapture);
+        assert_eq!(
+            RuntimeDisplayBackend::IddCx.prepare_command(),
+            WorkerCommand::PrepareDisplay
+        );
+        assert_eq!(
+            RuntimeDisplayBackend::IddCx.capture_command(),
+            WorkerCommand::StartCapture
+        );
+        assert_eq!(
+            RuntimeDisplayBackend::DedicatedConsole.prepare_command(),
+            WorkerCommand::PrepareConsoleDisplay
+        );
+        assert_eq!(
+            RuntimeDisplayBackend::DedicatedConsole.capture_command(),
+            WorkerCommand::StartConsoleCapture
+        );
     }
 
     #[test]
