@@ -1,6 +1,7 @@
 #include "Media.h"
 
 #include <Windows.h>
+#include <WtsApi32.h>
 #include <SetupAPI.h>
 #include <initguid.h>
 #include <devpkey.h>
@@ -104,6 +105,30 @@ GUID ContainerIdFromNonce(const uint8_t nonce[16])
     value.Data3 = static_cast<USHORT>((value.Data3 & 0x0FFFu) | 0x4000u);
     value.Data4[0] = static_cast<uint8_t>((value.Data4[0] & 0x3Fu) | 0x80u);
     return value;
+}
+
+// Separate console ABI: no reserved bits, no implicit source fallback, and
+// no use of the IddCx monitor's container-ID nonce.
+HRESULT ValidateConsoleRequest(const GPUbnbConsoleProbeRequest& request)
+{
+    if (request.Size != sizeof(request) ||
+        request.Version != GPUBNB_CONSOLE_MEDIA_ABI_VERSION ||
+        (request.RenderAdapterLuid.LowPart == 0 && request.RenderAdapterLuid.HighPart == 0) ||
+        IsZero(request.ExpectedGpuUuid, sizeof(request.ExpectedGpuUuid)) ||
+        IsZero(request.SessionNonce, sizeof(request.SessionNonce)) ||
+        request.WindowsSessionId == 0 || request.WindowsSessionId == UINT32_MAX ||
+        request.Width < kMinWidth || request.Width > kMaxWidth ||
+        request.Height < kMinHeight || request.Height > kMaxHeight ||
+        request.RefreshHz < kMinRefresh || request.RefreshHz > kMaxRefresh ||
+        request.CaptureTimeoutMs == 0 || request.CaptureTimeoutMs > kMaxCaptureTimeoutMs)
+    {
+        return E_INVALIDARG;
+    }
+    for (uint32_t value : request.Reserved)
+    {
+        if (value != 0) return E_INVALIDARG;
+    }
+    return S_OK;
 }
 
 HRESULT ValidateRequest(const GPUbnbMediaProbeRequest& request)
@@ -224,6 +249,7 @@ HRESULT ContainerIdForMonitorPath(const wchar_t* path, GUID* containerId)
 struct DisplayTarget
 {
     std::wstring gdiDeviceName;
+    std::wstring monitorDevicePath;
     UINT32 refreshNumerator = 0;
     UINT32 refreshDenominator = 0;
 };
@@ -351,6 +377,160 @@ HRESULT FindDisplayTarget(
     }
 
     return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+}
+
+
+// Only an interactive, unlocked renter console is eligible. This is checked
+// in the worker, not from LocalSystem; no desktop-switching API is called.
+// The service separately verifies the exact renter SID against WTSQueryUserToken.
+HRESULT VerifyDedicatedConsoleContext(uint32_t expectedSessionId)
+{
+    DWORD actualSessionId = UINT32_MAX;
+    if (!ProcessIdToSessionId(GetCurrentProcessId(), &actualSessionId) ||
+        actualSessionId != expectedSessionId ||
+        WTSGetActiveConsoleSessionId() != expectedSessionId)
+    {
+        return HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
+    }
+
+    LPWSTR buffer = nullptr;
+    DWORD length = 0;
+    if (!WTSQuerySessionInformationW(
+            WTS_CURRENT_SERVER_HANDLE,
+            expectedSessionId,
+            WTSSessionInfoEx,
+            &buffer,
+            &length) ||
+        buffer == nullptr)
+    {
+        if (buffer != nullptr) WTSFreeMemory(buffer);
+        return HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
+    }
+    // Keep this buffer owned even when its version/size is invalid.
+    const auto* info = reinterpret_cast<const WTSINFOEXW*>(buffer);
+    const bool unlocked =
+        length >= sizeof(WTSINFOEXW) &&
+        info->Level == 1 &&
+        info->Data.WTSInfoExLevel1.SessionId == expectedSessionId &&
+        info->Data.WTSInfoExLevel1.SessionState == WTSActive &&
+        info->Data.WTSInfoExLevel1.SessionFlags == WTS_SESSIONSTATE_UNLOCK;
+    WTSFreeMemory(buffer);
+    if (!unlocked) return HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
+
+    HDESK inputDesktop = OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS);
+    if (inputDesktop == nullptr)
+    {
+        return HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
+    }
+    wchar_t desktopName[64] = {};
+    DWORD needed = 0;
+    const BOOL found = GetUserObjectInformationW(
+        inputDesktop, UOI_NAME, desktopName, sizeof(desktopName), &needed);
+    CloseDesktop(inputDesktop);
+    if (!found || needed < sizeof(wchar_t) ||
+        needed > sizeof(desktopName) ||
+        _wcsicmp(desktopName, L"Default") != 0)
+    {
+        return HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
+    }
+    return S_OK;
+}
+
+bool IsAllowedConsoleConnector(DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY technology)
+{
+    // No forced or indirect/remote display. Host must expose one physical
+    // connector; an unsigned virtual-display package cannot qualify here.
+    switch (technology)
+    {
+        case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_HD15:
+        case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DVI:
+        case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_HDMI:
+        case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DISPLAYPORT_EXTERNAL:
+        case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DISPLAYPORT_EMBEDDED:
+        case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_INTERNAL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Resolve exactly one active, connected physical monitor of the currently
+// authorized renter's desktop. Multiple/zero paths or any ambiguity fail
+// CLOSED; never capture the primary/first display as a fallback.
+HRESULT FindExclusiveConsoleDisplayTarget(
+    uint32_t width, uint32_t height, uint32_t refreshHz,
+    DisplayTarget* selected)
+{
+    if (selected == nullptr) return E_POINTER;
+    UINT32 pathCount = 0;
+    UINT32 modeCount = 0;
+    constexpr UINT32 flags = QDC_ONLY_ACTIVE_PATHS | QDC_VIRTUAL_MODE_AWARE;
+    LONG status = GetDisplayConfigBufferSizes(flags, &pathCount, &modeCount);
+    if (status != ERROR_SUCCESS) return HRESULT_FROM_WIN32(status);
+    if (pathCount != 1 || modeCount == 0 || pathCount > 16 ||
+        modeCount > 64)
+    {
+        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+    }
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+    status = QueryDisplayConfig(
+        flags, &pathCount, paths.data(), &modeCount, modes.data(), nullptr);
+    if (status != ERROR_SUCCESS) return HRESULT_FROM_WIN32(status);
+    if (pathCount != 1) return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+    const auto& path = paths[0];
+    if (!(path.flags & DISPLAYCONFIG_PATH_ACTIVE) ||
+        path.targetInfo.rotation != DISPLAYCONFIG_ROTATION_IDENTITY ||
+        !IsAllowedConsoleConnector(path.targetInfo.outputTechnology) ||
+        (path.targetInfo.statusFlags & DISPLAYCONFIG_TARGET_FORCED_AVAILABILITY_BOOT) ||
+        (path.targetInfo.statusFlags & DISPLAYCONFIG_TARGET_FORCED_AVAILABILITY_PATH) ||
+        (path.targetInfo.statusFlags & DISPLAYCONFIG_TARGET_FORCED_AVAILABILITY_SYSTEM))
+    {
+        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+    }
+
+    DISPLAYCONFIG_TARGET_DEVICE_NAME targetName = {};
+    targetName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+    targetName.header.size = sizeof(targetName);
+    targetName.header.adapterId = path.targetInfo.adapterId;
+    targetName.header.id = path.targetInfo.id;
+    status = DisplayConfigGetDeviceInfo(&targetName.header);
+    if (status != ERROR_SUCCESS || targetName.monitorDevicePath[0] == L'\0')
+        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+
+    DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName = {};
+    sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+    sourceName.header.size = sizeof(sourceName);
+    sourceName.header.adapterId = path.sourceInfo.adapterId;
+    sourceName.header.id = path.sourceInfo.id;
+    status = DisplayConfigGetDeviceInfo(&sourceName.header);
+    if (status != ERROR_SUCCESS || sourceName.viewGdiDeviceName[0] == L'\0')
+        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+
+    DisplayTarget candidate;
+    candidate.gdiDeviceName = sourceName.viewGdiDeviceName;
+    candidate.monitorDevicePath = targetName.monitorDevicePath;
+    candidate.refreshNumerator = path.targetInfo.refreshRate.Numerator;
+    candidate.refreshDenominator = path.targetInfo.refreshRate.Denominator;
+    if (!RefreshMatches(candidate, refreshHz))
+        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+
+    DEVMODEW currentMode = {};
+    currentMode.dmSize = sizeof(currentMode);
+    if (!EnumDisplaySettingsW(
+            candidate.gdiDeviceName.c_str(), ENUM_CURRENT_SETTINGS, &currentMode) ||
+        currentMode.dmPelsWidth != width || currentMode.dmPelsHeight != height)
+        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+    *selected = std::move(candidate);
+    return S_OK;
+}
+
+bool SameConsoleTarget(const DisplayTarget& left, const DisplayTarget& right)
+{
+    return _wcsicmp(left.gdiDeviceName.c_str(), right.gdiDeviceName.c_str()) == 0 &&
+           _wcsicmp(left.monitorDevicePath.c_str(), right.monitorDevicePath.c_str()) == 0 &&
+           left.refreshNumerator == right.refreshNumerator &&
+           left.refreshDenominator == right.refreshDenominator;
 }
 
 class Module
@@ -1428,6 +1608,9 @@ void InitializeResult(
 struct GPUbnbMediaSession
 {
     GPUbnbMediaProbeRequest request = {};
+    bool consoleMode = false;
+    uint32_t consoleWindowsSessionId = 0;
+    DisplayTarget consoleTarget;
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
     HMONITOR monitor = nullptr;
@@ -1526,6 +1709,77 @@ HRESULT BuildPersistentSession(
     return S_OK;
 }
 
+// A console session never uses the IddCx media open path. It keeps the same
+// trusted exact-GPU D3D11 NVENC engine but requires a fresh unique topology
+// and input-desktop proof for each read.
+HRESULT BuildDedicatedConsoleSession(
+    const GPUbnbConsoleProbeRequest& requested,
+    GPUbnbMediaSession* session)
+{
+    HRESULT hr = VerifyDedicatedConsoleContext(requested.WindowsSessionId);
+    if (FAILED(hr)) return RecordMediaFailure(GPUBNB_MEDIA_STAGE_VALIDATE, hr);
+    hr = VerifyExactGpu(requested.ExpectedGpuUuid, requested.RenderAdapterLuid);
+    if (FAILED(hr)) return RecordMediaFailure(GPUBNB_MEDIA_STAGE_EXACT_GPU, hr);
+    SetMediaProofFlags(GPUBNB_MEDIA_PROOF_EXACT_GPU);
+
+    DisplayTarget display;
+    hr = FindExclusiveConsoleDisplayTarget(
+        requested.Width, requested.Height, requested.RefreshHz, &display);
+    if (FAILED(hr)) return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
+    hr = FindDxgiMonitor(display, &session->monitor);
+    if (FAILED(hr)) return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, hr);
+
+    hr = CreateRenderDeviceForLuid(
+        requested.RenderAdapterLuid, &session->device, &session->context);
+    if (FAILED(hr)) return RecordMediaFailure(GPUBNB_MEDIA_STAGE_D3D11, hr);
+    LUID actualLuid = {};
+    hr = DeviceLuid(session->device.Get(), &actualLuid);
+    if (FAILED(hr) || !LuidEqual(actualLuid, requested.RenderAdapterLuid))
+        return RecordMediaFailure(GPUBNB_MEDIA_STAGE_D3D11,
+            FAILED(hr) ? hr : HRESULT_FROM_WIN32(ERROR_DEVICE_NOT_CONNECTED));
+
+    hr = session->capture.Initialize(
+        session->monitor, session->device.Get(),
+        requested.Width, requested.Height);
+    if (FAILED(hr)) return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE_SESSION, hr);
+    hr = session->encoder.Initialize(
+        session->device.Get(),
+        requested.Width, requested.Height, requested.RefreshHz);
+    if (FAILED(hr)) return hr;
+
+    session->request = {};
+    session->request.Size = sizeof(GPUbnbMediaProbeRequest);
+    session->request.Version = GPUBNB_WINDOWS_MEDIA_ABI_VERSION;
+    session->request.RenderAdapterLuid = requested.RenderAdapterLuid;
+    std::memcpy(session->request.ExpectedGpuUuid, requested.ExpectedGpuUuid, 16);
+    std::memcpy(session->request.DisplayNonce, requested.SessionNonce, 16);
+    session->request.Width = requested.Width;
+    session->request.Height = requested.Height;
+    session->request.RefreshHz = requested.RefreshHz;
+    session->request.CaptureTimeoutMs = requested.CaptureTimeoutMs;
+    session->consoleWindowsSessionId = requested.WindowsSessionId;
+    session->consoleTarget = std::move(display);
+    session->consoleMode = true;
+    RecordMediaSuccess();
+    return S_OK;
+}
+
+HRESULT ValidateLiveConsoleTarget(const GPUbnbMediaSession* session)
+{
+    if (session == nullptr || !session->consoleMode)
+        return E_INVALIDARG;
+    HRESULT hr = VerifyDedicatedConsoleContext(session->consoleWindowsSessionId);
+    if (FAILED(hr)) return hr;
+    DisplayTarget current;
+    hr = FindExclusiveConsoleDisplayTarget(
+        session->request.Width,
+        session->request.Height,
+        session->request.RefreshHz, &current);
+    if (FAILED(hr)) return hr;
+    return SameConsoleTarget(current, session->consoleTarget)
+        ? S_OK : HRESULT_FROM_WIN32(ERROR_DEVICE_NOT_CONNECTED);
+}
+
 HRESULT CaptureAndEncode(
     GPUbnbMediaSession* session,
     std::vector<uint8_t>* output,
@@ -1541,6 +1795,13 @@ HRESULT CaptureAndEncode(
         frameSequence == nullptr)
     {
         return E_POINTER;
+    }
+
+    if (session->consoleMode)
+    {
+        const HRESULT boundary = ValidateLiveConsoleTarget(session);
+        if (FAILED(boundary))
+            return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, boundary);
     }
 
     *encodedBytes = 0;
@@ -1577,6 +1838,13 @@ HRESULT CaptureAndEncode(
         return RecordMediaFailure(GPUBNB_MEDIA_STAGE_CAPTURE, hr);
     }
 
+    if (session->consoleMode)
+    {
+        // Verify again after the potentially blocking WGC capture.
+        const HRESULT boundary = ValidateLiveConsoleTarget(session);
+        if (FAILED(boundary))
+            return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, boundary);
+    }
     *proofFlags |= GPUBNB_MEDIA_PROOF_CAPTURED_FRAME;
     SetMediaProofFlags(*proofFlags);
 
@@ -1608,6 +1876,14 @@ HRESULT CaptureAndEncode(
             : RecordMediaFailure(GPUBNB_MEDIA_STAGE_NVENC_ENCODE, E_FAIL);
     }
 
+    if (session->consoleMode)
+    {
+        // Encoder work is asynchronous; do not release its bytes after a WTS
+        // or topology transition. The caller must check again before sending.
+        const HRESULT boundary = ValidateLiveConsoleTarget(session);
+        if (FAILED(boundary))
+            return RecordMediaFailure(GPUBNB_MEDIA_STAGE_DISPLAY, boundary);
+    }
     *proofFlags |= GPUBNB_MEDIA_PROOF_NVENC_BITSTREAM;
     SetMediaProofFlags(*proofFlags);
     *frameSequence = ++session->frameSequence;
@@ -1712,6 +1988,7 @@ HRESULT __stdcall GPUbnbMediaReadFrame(
         return E_POINTER;
     }
 
+    if (session->consoleMode) return E_INVALIDARG;
     ResetMediaDiagnostic(session->request);
     InitializeFrameResult(session->request, result);
 
