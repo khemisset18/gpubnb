@@ -1,0 +1,25 @@
+{
+  "candidateStatus": "PASS",
+  "baselineStatus": "FAIL",
+  "negativeControlReproduced": true,
+  "scannerStatus": "BLOCKED: package remains version0.18.5; no scanner exception/version spoof",
+  "fullGtkWebkitTauri": "NOT TESTED",
+  "results": [
+    {
+      "label": "baseline",
+      "returncode": -11,
+      "stdout": "",
+      "stderr": "",
+      "binarySha256": "73be0820132ead063ff5dda1d990502bf9b2628b63b41cc8b7d9a6e327d5e178",
+      "result": "FAIL"
+    },
+    {
+      "label": "candidate",
+      "returncode": 0,
+      "stdout": "GLIB_VARIANT_STR_ITER_PASS comparisons=3072 wrong_type_rejected=true runtime=2.80.0\n",
+      "stderr": "",
+      "binarySha256": "3cb62356774a01b0634b55b675d374a5d2425bb3430f7a85ddae4a43bfa28787",
+      "result": "PASS"
+    }
+  ]
+}

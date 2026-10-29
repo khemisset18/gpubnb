@@ -1,0 +1,24 @@
+{
+  "status": "PASS",
+  "independentFixtures": 30,
+  "results": [
+    {
+      "path": "prototypes/rust-security/evidence/abi-baseline.tsv",
+      "sha256": "7b14231b0c7e0aed94310bd10b7f9ae9634f9b84157de43017f5c2e7640e0ec0",
+      "fixtures": 30,
+      "status": "PASS"
+    },
+    {
+      "path": "prototypes/rust-security/evidence/abi-candidate.tsv",
+      "sha256": "7b14231b0c7e0aed94310bd10b7f9ae9634f9b84157de43017f5c2e7640e0ec0",
+      "fixtures": 30,
+      "status": "PASS"
+    }
+  ],
+  "notTested": [
+    "SBF execution",
+    "on-chain account constraints",
+    "client migration",
+    "deployment"
+  ]
+}

@@ -1,0 +1,78 @@
+name: Asset Exchange isolated Rust security prototypes
+
+on:
+  pull_request:
+    paths:
+      - prototypes/rust-security/**
+      - programs/gpu_escrow/**
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/asset-exchange-rust-security-prototypes.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  anchor-host-compatibility:
+    name: Anchor host ABI and public verification vectors (not SBF qualification)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Host-only migration regression and independent fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 prototypes/rust-security/run_anchor_probe.py "$RUNNER_TEMP/anchor-host-prototype"
+      - name: Preserve host prototype evidence on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: anchor-host-prototype-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/anchor-host-prototype/*.json
+            ${{ runner.temp }}/anchor-host-prototype/*.log
+            ${{ runner.temp }}/anchor-host-prototype/*.tsv
+          if-no-files-found: error
+          retention-days: 30
+
+  glib-native-backport:
+    name: GLib native official-backport diagnostic (scanner remains blocking)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Extract verified Ubuntu development metadata without system installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 prototypes/rust-security/glib/bootstrap_native_dev.py "$RUNNER_TEMP/glib-native-dev"
+      - name: Compare optimized native baseline and official backport
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/glib-native-dev/environment.sh"
+          python3 prototypes/rust-security/glib/run_probe.py "$RUNNER_TEMP/glib-native-prototype"
+      - name: Test the actual GTK3 and GObject native component interfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 prototypes/rust-security/glib/gtk_native_probe.py > "$RUNNER_TEMP/glib-native-prototype/gtk-native-component.json"
+      - name: Preserve native prototype evidence including baseline failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: glib-native-prototype-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/glib-native-prototype/*.json
+            ${{ runner.temp }}/glib-native-prototype/*.log
+          if-no-files-found: error
+          retention-days: 30
