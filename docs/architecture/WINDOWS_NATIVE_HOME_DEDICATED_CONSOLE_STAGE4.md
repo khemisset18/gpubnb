@@ -56,9 +56,10 @@ PC1/PC2 test is authorized. Do not treat this branch as a release artifact.
 2. Renter worker checks both its process session and the actual input desktop
    name `WinSta0\\Default` using `OpenInputDesktop`/UOI_NAME.
    Winlogon/UAC, ScreenSaver, disconnected, other session and failures reject.
-3. Service checks console authority before releasing cached frames/input and
-   again after asynchronous frame reads. Worker rechecks after capture and before
-   sending encoded frames and immediately before `SendInput`.
+3. Privileged service re-proves the **exact renter user SID** from a fresh
+   WTS token, not just a session number that could be recycled, before releasing
+   cached frames/input and after asynchronous frame reads. Worker rechecks after
+   capture and before sending encoded frames and immediately before `SendInput`.
 4. STATUS rechecks live console before emitting READY, avoiding usage reports
    solely because a previous media frame succeeded.
 5. STOP and SUSPEND deliberately remain callable when the console is locked or
