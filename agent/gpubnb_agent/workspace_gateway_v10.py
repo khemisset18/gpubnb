@@ -608,7 +608,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         live_proof_lost = False
         # Default remains IddCx: an experimental console handle can never be
         # credited using the historical virtualDisplay-only status schema.
-        backend = getattr(runtime.handle, "capture_backend", "iddcx")
+        backend = getattr(getattr(runtime, "handle", None), "capture_backend", "iddcx")
         proof_args = {"capture_backend": backend} if backend != "iddcx" else {}
         # SUSPEND revokes helper READY before the reconnect API/local pause bit
         # is committed, while RESUME makes helper READY before that bit clears.
