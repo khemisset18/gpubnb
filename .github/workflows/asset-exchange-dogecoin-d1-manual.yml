@@ -25,7 +25,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && inputs.authorization == 'AUTHORIZE_D1_ISOLATED_REGTEST') ||
       (github.event_name == 'push' && github.repository == 'khemisset18/gpubnb' &&
        github.ref == 'refs/heads/asset-exchange/security-gates-d1-prep-20261029' &&
-       github.event.head_commit.message == 'test(doge): execute owner-authorized isolated D1 identity 20261029')
+       github.event.head_commit.message == 'test(doge): retain authorized D1 evidence without exposing private state 20261029')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

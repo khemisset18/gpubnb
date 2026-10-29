@@ -19,7 +19,9 @@ mkdir -m 700 "$D1_WORK_DIR/verification"
 retain_public_evidence() {
   local status=$?
   trap - EXIT
-  if [[ -d "$D1_WORK_DIR/regtest-run/evidence" ]]; then
+  # The caller cannot traverse the root-owned 0700 regtest directory yet.
+  # Test as root before returning ownership of public evidence only.
+  if sudo test -d "$D1_WORK_DIR/regtest-run/evidence"; then
     # The node namespace runs as root. Return only public evidence ownership to
     # the caller; data, cookies and executable copies remain private to root.
     sudo chown "$(id -u):$(id -g)" "$D1_WORK_DIR/regtest-run"
