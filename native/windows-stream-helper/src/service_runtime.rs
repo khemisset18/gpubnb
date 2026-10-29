@@ -39,7 +39,8 @@ use gpubnb_windows_platform::process::{
 };
 use gpubnb_windows_platform::secret::MediaCapabilityToken;
 use gpubnb_windows_platform::session::{
-    RenterSessionIsolationProof, ensure_provider_process_absent, query_renter_session_token,
+    RenterSessionIsolationProof, ensure_active_console_renter, ensure_provider_process_absent,
+    query_renter_session_token,
 };
 use std::path::Path;
 
@@ -235,7 +236,11 @@ impl QualifiedGraphicsRuntime {
     }
 
     fn ensure_provider_boundary(&mut self) -> Result<(), ServiceRuntimeError> {
-        if ensure_provider_process_absent(self.windows_session_id, &self.provider_user_sid).is_err()
+        // A session checked only at START can be displaced by fast-user
+        // switching. Revoke the capability before returning any buffered frame.
+        if ensure_active_console_renter(self.windows_session_id).is_err()
+            || ensure_provider_process_absent(self.windows_session_id, &self.provider_user_sid)
+                .is_err()
         {
             return Err(self.fail(ServiceRuntimeError::RenterSession));
         }
@@ -299,6 +304,9 @@ impl QualifiedGraphicsRuntime {
         if frame.header.frame_sequence <= self.last_frame_sequence {
             return Err(self.fail(ServiceRuntimeError::MediaTransport));
         }
+        // The worker could have spent time capturing/encoding a frame while
+        // the console changed owners; never accept it without a second check.
+        self.ensure_provider_boundary()?;
         self.last_frame_sequence = frame.header.frame_sequence;
         Ok(Some(frame))
     }
@@ -418,6 +426,8 @@ impl QualifiedGraphicsRuntime {
             Ok(value) => value,
             Err(error) => return Err(self.fail(error)),
         };
+        // RESUME is another asynchronous capture boundary.
+        self.ensure_provider_boundary()?;
         self.last_frame_sequence = frame.header.frame_sequence;
         self.pending_media_frame = Some(frame);
         self.media_capability = Some(media_capability);
