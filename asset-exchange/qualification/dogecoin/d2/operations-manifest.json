@@ -1,0 +1,295 @@
+{
+  "authorization": "AUTHORIZE_D2_SCRIPT_DIAGNOSTICS",
+  "blockingCriteria": [
+    "full transaction standardness not measured",
+    "positive signature-bound HTLC claim/refund construction not demonstrated"
+  ],
+  "cAbi": {
+    "allowedFlags": [
+      0,
+      1,
+      512,
+      513,
+      517
+    ],
+    "functions": [
+      "bitcoinconsensus_version",
+      "bitcoinconsensus_verify_script"
+    ],
+    "version": 1
+  },
+  "coinbaseRedeemHex": "6a",
+  "consensusVectors": [
+    {
+      "expectedError": 0,
+      "expectedResult": 1,
+      "flags": 0,
+      "inputIndex": 0,
+      "name": "true_control",
+      "scriptPubKeyHex": "51",
+      "transactionHex": "010000000101010101010101010101010101010101010101010101010101010101010101010000000000feffffff010000000000000000016a00000000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 0,
+      "flags": 0,
+      "inputIndex": 0,
+      "name": "false_control",
+      "scriptPubKeyHex": "00",
+      "transactionHex": "010000000101010101010101010101010101010101010101010101010101010101010101010000000000feffffff010000000000000000016a00000000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 1,
+      "flags": 1,
+      "inputIndex": 0,
+      "name": "p2sh_true_redeem",
+      "scriptPubKeyHex": "a914da1745e9b549bd0bfa1a569971c77eba30cd5a4b87",
+      "transactionHex": "0100000001010101010101010101010101010101010101010101010101010101010101010100000000020151feffffff010000000000000000016a00000000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 1,
+      "flags": 0,
+      "inputIndex": 0,
+      "name": "p2sh_false_without_flag_control",
+      "scriptPubKeyHex": "a9149f7fd096d37ed2c0e3f7f0cfc924beef4ffceb6887",
+      "transactionHex": "0100000001010101010101010101010101010101010101010101010101010101010101010100000000020100feffffff010000000000000000016a00000000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 0,
+      "flags": 1,
+      "inputIndex": 0,
+      "name": "p2sh_false_with_flag_rejected",
+      "scriptPubKeyHex": "a9149f7fd096d37ed2c0e3f7f0cfc924beef4ffceb6887",
+      "transactionHex": "0100000001010101010101010101010101010101010101010101010101010101010101010100000000020100feffffff010000000000000000016a00000000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 0,
+      "flags": 1,
+      "inputIndex": 0,
+      "name": "p2sh_hash_mismatch",
+      "scriptPubKeyHex": "a914da1745e9b549bd0bfa1a569971c77eba30cd5a4b87",
+      "transactionHex": "0100000001010101010101010101010101010101010101010101010101010101010101010100000000020100feffffff010000000000000000016a00000000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 1,
+      "flags": 0,
+      "inputIndex": 0,
+      "name": "cltv_inactive_control",
+      "scriptPubKeyHex": "024705b17551",
+      "transactionHex": "010000000101010101010101010101010101010101010101010101010101010101010101010000000000feffffff010000000000000000016a46050000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 0,
+      "flags": 512,
+      "inputIndex": 0,
+      "name": "cltv_before_lock_rejected",
+      "scriptPubKeyHex": "024705b17551",
+      "transactionHex": "010000000101010101010101010101010101010101010101010101010101010101010101010000000000feffffff010000000000000000016a46050000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 1,
+      "flags": 512,
+      "inputIndex": 0,
+      "name": "cltv_equal_lock_accepts_script",
+      "scriptPubKeyHex": "024705b17551",
+      "transactionHex": "010000000101010101010101010101010101010101010101010101010101010101010101010000000000feffffff010000000000000000016a47050000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 1,
+      "flags": 512,
+      "inputIndex": 0,
+      "name": "cltv_after_lock_accepts_script",
+      "scriptPubKeyHex": "024705b17551",
+      "transactionHex": "010000000101010101010101010101010101010101010101010101010101010101010101010000000000feffffff010000000000000000016a48050000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 0,
+      "flags": 512,
+      "inputIndex": 0,
+      "name": "cltv_final_sequence_rejected",
+      "scriptPubKeyHex": "024705b17551",
+      "transactionHex": "010000000101010101010101010101010101010101010101010101010101010101010101010000000000ffffffff010000000000000000016a47050000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 0,
+      "flags": 512,
+      "inputIndex": 0,
+      "name": "cltv_height_time_type_rejected",
+      "scriptPubKeyHex": "024705b17551",
+      "transactionHex": "010000000101010101010101010101010101010101010101010101010101010101010101010000000000feffffff010000000000000000016a0065cd1d"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 0,
+      "flags": 512,
+      "inputIndex": 0,
+      "name": "cltv_negative_operand_rejected",
+      "scriptPubKeyHex": "4fb17551",
+      "transactionHex": "010000000101010101010101010101010101010101010101010101010101010101010101010000000000feffffff010000000000000000016a47050000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 1,
+      "flags": 513,
+      "inputIndex": 0,
+      "name": "p2sh_cltv_equal",
+      "scriptPubKeyHex": "a914287a3a33b05d3b8312374fa7c3def48be651448e87",
+      "transactionHex": "01000000010101010101010101010101010101010101010101010101010101010101010101000000000706024705b17551feffffff010000000000000000016a47050000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 0,
+      "flags": 513,
+      "inputIndex": 0,
+      "name": "p2sh_cltv_early_rejected",
+      "scriptPubKeyHex": "a914287a3a33b05d3b8312374fa7c3def48be651448e87",
+      "transactionHex": "01000000010101010101010101010101010101010101010101010101010101010101010101000000000706024705b17551feffffff010000000000000000016a46050000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 1,
+      "flags": 0,
+      "inputIndex": 0,
+      "name": "hashlock_public_preimage",
+      "scriptPubKeyHex": "a8203e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb87",
+      "transactionHex": "01000000010101010101010101010101010101010101010101010101010101010101010101000000002120475055626e62204432207075626c69632073796e74686574696320696e707574feffffff010000000000000000016a00000000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 0,
+      "flags": 0,
+      "inputIndex": 0,
+      "name": "hashlock_wrong_preimage_rejected",
+      "scriptPubKeyHex": "a8203e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb87",
+      "transactionHex": "010000000101010101010101010101010101010101010101010101010101010101010101010000000021207878787878787878787878787878787878787878787878787878787878787878feffffff010000000000000000016a00000000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 0,
+      "flags": 517,
+      "inputIndex": 0,
+      "name": "htlc_no_signature_claim_rejected",
+      "scriptPubKeyHex": "6382012088a8203e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb8821038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac67024705b17521038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac68",
+      "transactionHex": "01000000010101010101010101010101010101010101010101010101010101010101010101000000002220475055626e62204432207075626c69632073796e74686574696320696e70757451feffffff010000000000000000016a00000000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 0,
+      "flags": 517,
+      "inputIndex": 0,
+      "name": "htlc_no_signature_refund_rejected",
+      "scriptPubKeyHex": "6382012088a8203e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb8821038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac67024705b17521038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac68",
+      "transactionHex": "01000000010101010101010101010101010101010101010101010101010101010101010101000000000100feffffff010000000000000000016a47050000"
+    },
+    {
+      "expectedError": 3,
+      "expectedResult": 0,
+      "flags": 0,
+      "inputIndex": 0,
+      "name": "malformed_transaction_rejected",
+      "scriptPubKeyHex": "51",
+      "transactionHex": "00"
+    },
+    {
+      "expectedError": 1,
+      "expectedResult": 0,
+      "flags": 0,
+      "inputIndex": 1,
+      "name": "wrong_input_index_rejected",
+      "scriptPubKeyHex": "51",
+      "transactionHex": "010000000101010101010101010101010101010101010101010101010101010101010101010000000000feffffff010000000000000000016a00000000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 1,
+      "flags": 1,
+      "inputIndex": 0,
+      "name": "upstream_public_signature_verify_only",
+      "scriptPubKeyHex": "ab21038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac",
+      "transactionHex": "01000000012432b60dc72cebc1a27ce0969c0989c895bdd9e62e8234839117f8fc32d17fbc000000004a493046022100a576b52051962c25e642c0fd3d77ee6c92487048e5d90818bcf5b51abaccd7900221008204f8fb121be4ec3b24483b1f92d89b1b0548513a134e345c5442e86e8617a501ffffffff010000000000000000016a00000000"
+    },
+    {
+      "expectedError": 0,
+      "expectedResult": 0,
+      "flags": 1,
+      "inputIndex": 0,
+      "name": "upstream_signature_mutation_rejected",
+      "scriptPubKeyHex": "ab21038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac",
+      "transactionHex": "01000000012432b60dc72cebc1a27ce0969c0989c895bdd9e62e8234839117f8fc32d17fbc000000004a493046022100a576b42051962c25e642c0fd3d77ee6c92487048e5d90818bcf5b51abaccd7900221008204f8fb121be4ec3b24483b1f92d89b1b0548513a134e345c5442e86e8617a501ffffffff010000000000000000016a00000000"
+    }
+  ],
+  "d0ArchiveSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+  "decodeFixtures": [
+    {
+      "expectedType": "pubkey",
+      "hex": "21038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac",
+      "name": "legacy_p2pk"
+    },
+    {
+      "expectedType": "pubkeyhash",
+      "hex": "76a914ee5a6aa40facefb2655ac23c0c28c57c65c41f9b88ac",
+      "name": "legacy_p2pkh"
+    },
+    {
+      "expectedType": "scripthash",
+      "hex": "a9147768a9bfa3007b566f1cf51547efc78193fd12f887",
+      "name": "candidate_p2sh_output"
+    },
+    {
+      "expectedType": "nonstandard",
+      "hex": "6382012088a8203e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb8821038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac67024705b17521038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac68",
+      "name": "candidate_htlc_redeem"
+    },
+    {
+      "expectedType": "nonstandard",
+      "hex": "024705b17551",
+      "name": "bare_cltv_control"
+    }
+  ],
+  "externalNetwork": false,
+  "libraryMember": "dogecoin-1.14.9/lib/libdogecoinconsensus.so.0.0.0",
+  "librarySha256": "3c27dd2f3018a3bd659648129a94ba5f211e84b8ec6d308f7f0db001b5e7902b",
+  "maxSyntheticBlocks": 1352,
+  "maxTriesPerCall": 1000000,
+  "miningSchedule": [
+    1350,
+    1,
+    1
+  ],
+  "note": "Script C-ABI flags are explicit test inputs, not proof of network consensus activation; node observes activation separately.",
+  "phase": "D2_SCRIPT_DIAGNOSTICS",
+  "qualificationStatus": "BLOCKED",
+  "resources": {
+    "maxAddressSpaceMiB": 2048,
+    "maxCpuSeconds": 420,
+    "maxDataMiB": 512,
+    "maxSingleFileMiB": 512,
+    "maxWallSeconds": 600,
+    "nodes": 1
+  },
+  "rpcAllowlist": [
+    "decodescript",
+    "generatetoaddress",
+    "getblockchaininfo",
+    "getblockhash",
+    "getnetworkinfo",
+    "getpeerinfo",
+    "stop"
+  ],
+  "schemaVersion": 1,
+  "signing": false,
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "syntheticCoinbaseDestination": "2MyF5LxGTsXxf7xSpLr6RqXD4N7f1uEBfS7",
+  "transactionBroadcast": false,
+  "wallet": false
+}
