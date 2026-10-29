@@ -139,6 +139,17 @@ fn validate_local_console_session(
     Ok(())
 }
 
+// A console desktop may be Winlogon (lock/UAC) or ScreenSaver even while
+// WTSEnumerateSessions still labels the renter WTS session as Active.
+#[cfg(any(target_os = "windows", test))]
+fn validate_input_desktop_name(name: &str) -> Result<(), PlatformError> {
+    if name.eq_ignore_ascii_case("Default") {
+        Ok(())
+    } else {
+        Err(PlatformError::RenterDesktopUnavailable)
+    }
+}
+
 #[cfg(any(target_os = "windows", test))]
 fn provider_process_contaminates_renter_session(
     renter_session_id: u32,
@@ -202,6 +213,40 @@ pub fn current_process_session_id() -> Result<u32, PlatformError> {
     }
 }
 
+/// Revalidate live console exclusivity at every media/input boundary, not just
+/// at START. The LocalSystem authority may call this without switching sessions.
+/// This is NOT a virtual-display proof and does not make Home bookable.
+pub fn ensure_active_console_renter(session_id: u32) -> Result<(), PlatformError> {
+    if session_id == 0 {
+        return Err(PlatformError::InvalidWindowsSessionId);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::ensure_active_console_renter(session_id)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(PlatformError::WindowsRequired)
+    }
+}
+
+/// Worker-only proof: verify its own WTS identity, active console and current
+/// input desktop. Never attempt to open or switch a provider desktop.
+pub fn ensure_current_renter_input_desktop(session_id: u32) -> Result<(), PlatformError> {
+    ensure_active_console_renter(session_id)?;
+    if current_process_session_id()? != session_id {
+        return Err(PlatformError::RenterTokenSessionMismatch);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::ensure_default_input_desktop()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(PlatformError::WindowsRequired)
+    }
+}
+
 pub fn query_renter_session_token(
     session_id: u32,
     expected_renter_user_sid: &str,
@@ -225,7 +270,10 @@ pub fn query_renter_session_token(
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
-    use super::{RenterSessionIsolationProof, RenterSessionToken, validate_local_console_session};
+    use super::{
+        RenterSessionIsolationProof, RenterSessionToken, validate_exclusive_active_session,
+        validate_input_desktop_name, validate_local_console_session,
+    };
     use crate::PlatformError;
     use std::ffi::c_void;
     use std::mem::{align_of, size_of};
@@ -241,6 +289,8 @@ mod windows_impl {
     const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
     const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
     const WTS_ACTIVE: u32 = 0;
+    const DESKTOP_READOBJECTS: u32 = 0x0001;
+    const UOI_NAME: i32 = 2;
 
     #[repr(C)]
     struct SidAndAttributes {
@@ -325,6 +375,19 @@ mod windows_impl {
             count: *mut u32,
         ) -> i32;
         fn WTSFreeMemory(memory: *mut c_void);
+    }
+
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn OpenInputDesktop(flags: u32, inherit: i32, access: u32) -> Handle;
+        fn GetUserObjectInformationW(
+            object: Handle,
+            index: i32,
+            info: *mut c_void,
+            length: u32,
+            needed: *mut u32,
+        ) -> i32;
+        fn CloseDesktop(desktop: Handle) -> i32;
     }
 
     #[link(name = "userenv")]
@@ -596,15 +659,54 @@ mod windows_impl {
         })
     }
 
+    pub(super) fn ensure_active_console_renter(session_id: u32) -> Result<(), PlatformError> {
+        validate_exclusive_active_session(session_id, &active_session_ids()?)?;
+        // A disconnected/RDP session must never be substituted for the console.
+        let active_console_id = unsafe { WTSGetActiveConsoleSessionId() };
+        validate_local_console_session(session_id, active_console_id)
+    }
+
+    pub(super) fn ensure_default_input_desktop() -> Result<(), PlatformError> {
+        struct OwnedDesktop(Handle);
+        impl Drop for OwnedDesktop {
+            fn drop(&mut self) {
+                // SAFETY: OpenInputDesktop yielded the uniquely owned handle.
+                unsafe { let _ = CloseDesktop(self.0); }
+            }
+        }
+        // This runs inside the renter worker, never in the LocalSystem service.
+        // The API fails closed on a secure Winlogon/UAC desktop or access denial.
+        let handle = unsafe { OpenInputDesktop(0, 0, DESKTOP_READOBJECTS) };
+        if handle == 0 {
+            return Err(PlatformError::RenterDesktopUnavailable);
+        }
+        let desktop = OwnedDesktop(handle);
+        let mut name = [0u16; 64];
+        let mut needed = 0u32;
+        let ok = unsafe {
+            GetUserObjectInformationW(
+                desktop.0,
+                UOI_NAME,
+                name.as_mut_ptr().cast::<c_void>(),
+                (name.len() * std::mem::size_of::<u16>()) as u32,
+                &mut needed,
+            )
+        };
+        if ok == 0 || needed < 2 || needed as usize > name.len() * 2 {
+            return Err(PlatformError::RenterDesktopUnavailable);
+        }
+        let end = name.iter().position(|unit| *unit == 0)
+            .ok_or(PlatformError::RenterDesktopUnavailable)?;
+        let value = String::from_utf16(&name[..end])
+            .map_err(|_| PlatformError::RenterDesktopUnavailable)?;
+        validate_input_desktop_name(&value)
+    }
+
     pub(super) fn query_renter_session_token(
         session_id: u32,
         expected_renter_user_sid: &str,
     ) -> Result<RenterSessionToken, PlatformError> {
-        super::validate_exclusive_active_session(session_id, &active_session_ids()?)?;
-        // SAFETY: this query has no preconditions and returns u32::MAX when no
-        // physical console session is attached. Stage 2 must never accept RDP.
-        let active_console_session_id = unsafe { WTSGetActiveConsoleSessionId() };
-        validate_local_console_session(session_id, active_console_session_id)?;
+        ensure_active_console_renter(session_id)?;
 
         let mut raw = 0isize;
         // SAFETY: raw is a valid out pointer. WTSQueryUserToken requires the
@@ -705,6 +807,30 @@ mod tests {
                 "S-1-5-21-100-200-300-1000",
             ),
             Err(PlatformError::InvalidRenterUserSid)
+        );
+    }
+
+    #[test]
+    fn input_desktop_policy_refuses_lock_uac_and_unknown() {
+        assert_eq!(validate_input_desktop_name("Default"), Ok(()));
+        assert_eq!(validate_input_desktop_name("default"), Ok(()));
+        for value in ["", "Winlogon", "ScreenSaver", "Provider", "Default\\0"] {
+            assert_eq!(
+                validate_input_desktop_name(value),
+                Err(PlatformError::RenterDesktopUnavailable)
+            );
+        }
+    }
+
+    #[test]
+    fn console_revalidation_rejects_zero_even_before_platform_access() {
+        assert_eq!(
+            ensure_active_console_renter(0),
+            Err(PlatformError::InvalidWindowsSessionId)
+        );
+        assert_eq!(
+            ensure_current_renter_input_desktop(0),
+            Err(PlatformError::InvalidWindowsSessionId)
         );
     }
 
