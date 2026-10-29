@@ -400,6 +400,13 @@ fn run_self_test_backend(backend: RuntimeDisplayBackend) -> Result<SelfTestRepor
     }
 }
 
+// Preserve legacy READY parsing fixtures without retaining an unused
+// production wrapper. The real runtime calls parse_backend_ready directly.
+#[cfg(test)]
+fn parse_ready(value: &str) -> Result<StartSessionReport, AuthorityError> {
+    parse_backend_ready(value, RuntimeDisplayBackend::IddCx)
+}
+
 fn parse_backend_ready(
     value: &str,
     backend: RuntimeDisplayBackend,
