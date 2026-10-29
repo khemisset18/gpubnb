@@ -26,7 +26,9 @@ use gpubnb_windows_platform::pipe::{
     connect_worker_pipe_client,
 };
 #[cfg(target_os = "windows")]
-use gpubnb_windows_platform::session::current_process_session_id;
+use gpubnb_windows_platform::session::{
+    current_process_session_id, ensure_current_renter_input_desktop,
+};
 use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
 #[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::media_protocol::{
@@ -443,6 +445,14 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                 .checked_add(1)
                 .ok_or_else(|| WorkerError::new("worker_command_sequence_exhausted", 21))?;
 
+            // STOP and SUSPEND must remain possible when the console is
+            // locked or handed back to the provider. Every other command
+            // requires a live renter WinSta0\\Default input desktop.
+            if !matches!(command, WorkerCommand::Stop | WorkerCommand::SuspendMedia) {
+                ensure_current_renter_input_desktop(windows_session_id)
+                    .map_err(|_| WorkerError::new("renter_desktop_not_active", 21))?;
+            }
+
             match command {
                 WorkerCommand::Stop => return Ok(()),
                 WorkerCommand::PrepareDisplay => {
@@ -509,6 +519,10 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         false,
                     )?;
 
+                    // Capture may block; revalidate *after* encoding before any
+                    // bytes become reachable by the privileged service.
+                    ensure_current_renter_input_desktop(windows_session_id)
+                        .map_err(|_| WorkerError::new("renter_desktop_not_active", 21))?;
                     send_encoded_media_frame(
                         &client,
                         &media_client,
@@ -532,6 +546,8 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         .ok_or_else(|| WorkerError::new("media_session_missing", 21))?;
                     match session.read_frame() {
                         Ok(media) => {
+                            ensure_current_renter_input_desktop(windows_session_id)
+                                .map_err(|_| WorkerError::new("renter_desktop_not_active", 21))?;
                             send_encoded_media_frame(
                                 &client,
                                 &media_client,
@@ -630,6 +646,8 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         true,
                     )?;
 
+                    ensure_current_renter_input_desktop(windows_session_id)
+                        .map_err(|_| WorkerError::new("renter_desktop_not_active", 21))?;
                     send_encoded_media_frame(
                         &client,
                         &media_client,
