@@ -90,6 +90,17 @@ collect_diagnostics() {
 }
 trap collect_diagnostics EXIT
 
+# The release tag is version metadata, not a replacement source authority.
+# The helper requires it to point to DOGE_SOURCE_COMMIT before any compilation.
+# Keep gbuild's --commit SHA below: its subsequent --no-tags fetch retains this
+# one validated annotated tag in the already prepared input repository.
+bash "$SCRIPT_DIR/prepare-release-source.sh" "$DOGE_REPOSITORY" \
+  "$DOGE_SOURCE_COMMIT" "$WORK_DIR/gitian-builder/inputs/dogecoin" \
+  > "$OUTPUT_DIR/source-release-metadata.txt"
+sh "$WORK_DIR/gitian-builder/inputs/dogecoin/share/genbuild.sh" \
+  "$OUTPUT_DIR/source-build-info.h" "$WORK_DIR/gitian-builder/inputs/dogecoin"
+test "$(cat "$OUTPUT_DIR/source-build-info.h")" = '#define BUILD_DESC "v1.14.9"'
+
 mkdir -p "$WORK_DIR/gitian-builder/inputs"
 curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-all-errors --retry-delay 2 "$LIEF_URL" \
   --output "$WORK_DIR/gitian-builder/inputs/$(basename "$LIEF_URL")"
