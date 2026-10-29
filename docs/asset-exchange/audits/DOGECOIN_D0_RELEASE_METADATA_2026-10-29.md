@@ -1,6 +1,8 @@
 # DOGE D0: missing release tag in Gitian input
 
-Status: **BLOCKED pending corrected independent builds and attestations**.
+Historical diagnostic status: **BLOCKED pending corrected independent builds and attestations**.
+The completed result is recorded in
+[DOGECOIN_D0_REPRODUCTION_PASS_2026-10-29.md](DOGECOIN_D0_REPRODUCTION_PASS_2026-10-29.md).
 This investigation executes no downloaded or rebuilt Dogecoin executable.
 All changes remain on PR #312; no merge or financial activation is authorized.
 

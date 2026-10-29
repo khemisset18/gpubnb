@@ -1,0 +1,291 @@
+{
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "creationInfo": {
+    "created": "2024-12-01T01:55:09Z",
+    "creators": [
+      "Tool: gpu.k.p2p Dogecoin D0 evidence generator v1"
+    ]
+  },
+  "dataLicense": "CC0-1.0",
+  "documentNamespace": "https://github.com/khemisset18/gpubnb/spdx/dogecoin-d0/e0a1c157791544e818c901bd9341896965afbf9d/4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+  "files": [
+    {
+      "SPDXID": "SPDXRef-File-00000",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "2d3c69c56db3c3c51f0f7540ce05e723f0df59b308a3d78e424b5dfff0a1b3b3"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "3a0c17d57a3b4ef8561962f41faa54baa96dcbae"
+        }
+      ],
+      "copyrightText": "NOASSERTION",
+      "fileName": "./dogecoin-1.14.9/bin/dogecoin-cli",
+      "licenseConcluded": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-00001",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "897494db97d4a0be43a712151dafd4b06d0a66339d55350457505506fd5a6aca"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "065baad063cfc370c321480053e034f9a6b6f5df"
+        }
+      ],
+      "copyrightText": "NOASSERTION",
+      "fileName": "./dogecoin-1.14.9/bin/dogecoind",
+      "licenseConcluded": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-00002",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "c70020da15da3c6242498f02452a2c4d79757b8587c0e251889c3f49400e71c8"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "ebecc20b85f38e3cf4e4206b7fc69d122c95ca6c"
+        }
+      ],
+      "copyrightText": "NOASSERTION",
+      "fileName": "./dogecoin-1.14.9/bin/dogecoin-qt",
+      "licenseConcluded": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-00003",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "e13b761cfbe36041afc683cca2351e46e27747bbfd40f8c21a5e7aad2554be9f"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "35db7f8c2fe7d258b58140831534cd1ffd057e16"
+        }
+      ],
+      "copyrightText": "NOASSERTION",
+      "fileName": "./dogecoin-1.14.9/bin/dogecoin-tx",
+      "licenseConcluded": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-00004",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "c99bdf05832c7cdb453884da34335d54ca8131214d2d1ad867b36058fae24334"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "27640b341c6ee67b38894498dc8b3657ec41962d"
+        }
+      ],
+      "copyrightText": "NOASSERTION",
+      "fileName": "./dogecoin-1.14.9/bin/test_dogecoin",
+      "licenseConcluded": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-00005",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "9fcf59c6b31f724c27d686652b9c66b5f93ff6e934c8152edc82fa1490ec1507"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "b9345533f1ab10679ea0ea75f45635f88cf32f7b"
+        }
+      ],
+      "copyrightText": "NOASSERTION",
+      "fileName": "./dogecoin-1.14.9/include/bitcoinconsensus.h",
+      "licenseConcluded": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-00008",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "3c27dd2f3018a3bd659648129a94ba5f211e84b8ec6d308f7f0db001b5e7902b"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "903038cd428eba59cf01d63532c98db9da73805d"
+        }
+      ],
+      "copyrightText": "NOASSERTION",
+      "fileName": "./dogecoin-1.14.9/lib/libdogecoinconsensus.so.0.0.0",
+      "licenseConcluded": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-00009",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "61988c7c4fbaf166542d6345dd9a18fd02df564b8e73b9a0027989aff38ad912"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "6f84bc7c7b9e1412729d2ca8753c37dfe1e3a135"
+        }
+      ],
+      "copyrightText": "NOASSERTION",
+      "fileName": "./dogecoin-1.14.9/share/man/man1/dogecoin-cli.1",
+      "licenseConcluded": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-00010",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "67f79735477774c40947aab344ce58b6b42e40343d81746e2a4c022e5331de9f"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "8316edd85e0511e84a7069ccf3c11332b87b53ee"
+        }
+      ],
+      "copyrightText": "NOASSERTION",
+      "fileName": "./dogecoin-1.14.9/share/man/man1/dogecoind.1",
+      "licenseConcluded": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-00011",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "01055974ce6e254d8eaf8bc6ec319467759ca267fb6aa21ab3fb177aadb774e3"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "5f98f2c39cfb014fc686b48218c5dc60c3563b9e"
+        }
+      ],
+      "copyrightText": "NOASSERTION",
+      "fileName": "./dogecoin-1.14.9/share/man/man1/dogecoin-qt.1",
+      "licenseConcluded": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-00012",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "94c9d38287210df1a9447e120e1c52eebb7cda78bc634b928eb011955a97f522"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "6bd5037a3abbb2c6a66b85983a27c1b54aae6570"
+        }
+      ],
+      "copyrightText": "NOASSERTION",
+      "fileName": "./dogecoin-1.14.9/share/man/man1/dogecoin-tx.1",
+      "licenseConcluded": "NOASSERTION"
+    }
+  ],
+  "name": "gpu.k.p2p-dogecoin-1.14.9-internal-reproduction",
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Package-Dogecoin-Core-1.14.9",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8"
+        }
+      ],
+      "copyrightText": "NOASSERTION",
+      "downloadLocation": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "OTHER",
+          "referenceLocator": "https://github.com/dogecoin/dogecoin/commit/e0a1c157791544e818c901bd9341896965afbf9d",
+          "referenceType": "source-commit"
+        },
+        {
+          "referenceCategory": "OTHER",
+          "referenceLocator": "https://github.com/devrandom/gitian-builder/commit/41c325d2f14147e8028fce9a5edd26e7adad30a4",
+          "referenceType": "build-tool-commit"
+        },
+        {
+          "referenceCategory": "OTHER",
+          "referenceLocator": "https://snapshot.ubuntu.com/ubuntu/20241215T000000Z",
+          "referenceType": "build-environment-snapshot"
+        }
+      ],
+      "filesAnalyzed": true,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "name": "Dogecoin Core",
+      "packageVerificationCode": {
+        "packageVerificationCodeValue": "d14b9797888fb5b93fd5b32164dc6818a8c71861"
+      },
+      "versionInfo": "1.14.9"
+    }
+  ],
+  "relationships": [
+    {
+      "relatedSpdxElement": "SPDXRef-Package-Dogecoin-Core-1.14.9",
+      "relationshipType": "DESCRIBES",
+      "spdxElementId": "SPDXRef-DOCUMENT"
+    },
+    {
+      "relatedSpdxElement": "SPDXRef-File-00000",
+      "relationshipType": "CONTAINS",
+      "spdxElementId": "SPDXRef-Package-Dogecoin-Core-1.14.9"
+    },
+    {
+      "relatedSpdxElement": "SPDXRef-File-00001",
+      "relationshipType": "CONTAINS",
+      "spdxElementId": "SPDXRef-Package-Dogecoin-Core-1.14.9"
+    },
+    {
+      "relatedSpdxElement": "SPDXRef-File-00002",
+      "relationshipType": "CONTAINS",
+      "spdxElementId": "SPDXRef-Package-Dogecoin-Core-1.14.9"
+    },
+    {
+      "relatedSpdxElement": "SPDXRef-File-00003",
+      "relationshipType": "CONTAINS",
+      "spdxElementId": "SPDXRef-Package-Dogecoin-Core-1.14.9"
+    },
+    {
+      "relatedSpdxElement": "SPDXRef-File-00004",
+      "relationshipType": "CONTAINS",
+      "spdxElementId": "SPDXRef-Package-Dogecoin-Core-1.14.9"
+    },
+    {
+      "relatedSpdxElement": "SPDXRef-File-00005",
+      "relationshipType": "CONTAINS",
+      "spdxElementId": "SPDXRef-Package-Dogecoin-Core-1.14.9"
+    },
+    {
+      "relatedSpdxElement": "SPDXRef-File-00008",
+      "relationshipType": "CONTAINS",
+      "spdxElementId": "SPDXRef-Package-Dogecoin-Core-1.14.9"
+    },
+    {
+      "relatedSpdxElement": "SPDXRef-File-00009",
+      "relationshipType": "CONTAINS",
+      "spdxElementId": "SPDXRef-Package-Dogecoin-Core-1.14.9"
+    },
+    {
+      "relatedSpdxElement": "SPDXRef-File-00010",
+      "relationshipType": "CONTAINS",
+      "spdxElementId": "SPDXRef-Package-Dogecoin-Core-1.14.9"
+    },
+    {
+      "relatedSpdxElement": "SPDXRef-File-00011",
+      "relationshipType": "CONTAINS",
+      "spdxElementId": "SPDXRef-Package-Dogecoin-Core-1.14.9"
+    },
+    {
+      "relatedSpdxElement": "SPDXRef-File-00012",
+      "relationshipType": "CONTAINS",
+      "spdxElementId": "SPDXRef-Package-Dogecoin-Core-1.14.9"
+    }
+  ],
+  "spdxVersion": "SPDX-2.3"
+}

@@ -1,0 +1,155 @@
+{
+  "actualArchivesByteIdenticalToOfficial": true,
+  "artifacts": [
+    {
+      "archive_download_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/artifacts/12900786335/zip",
+      "created_at": "2026-10-29T13:24:55Z",
+      "digest": "sha256:210b98900825e71067da6d6c6dfb160b3f881a6b9db3ab0c14e1e173b26f1b2e",
+      "expired": false,
+      "expires_at": "2026-11-28T13:24:52Z",
+      "id": 12900786335,
+      "name": "dogecoin-d0-verified-evidence-99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+      "size_in_bytes": 35487341,
+      "updated_at": "2026-10-29T13:24:55Z",
+      "url": "https://api.github.com/repos/khemisset18/gpubnb/actions/artifacts/12900786335",
+      "workflow_run": {
+        "head_branch": "asset-exchange/doge-d0-cohort-validation-20261029",
+        "head_repository_id": 1305325878,
+        "head_sha": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+        "id": 40866305437,
+        "repository_id": 1305325878
+      }
+    },
+    {
+      "archive_download_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/artifacts/12900323164/zip",
+      "created_at": "2026-10-29T13:24:24Z",
+      "digest": "sha256:0527c0ea0acd61a861ea6cb8a14900da16b3659cdf1cc733930f499ff0bb74e1",
+      "expired": false,
+      "expires_at": "2026-11-28T13:24:22Z",
+      "id": 12900323164,
+      "name": "dogecoin-d0-replica-a-99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+      "size_in_bytes": 36605723,
+      "updated_at": "2026-10-29T13:24:24Z",
+      "url": "https://api.github.com/repos/khemisset18/gpubnb/actions/artifacts/12900323164",
+      "workflow_run": {
+        "head_branch": "asset-exchange/doge-d0-cohort-validation-20261029",
+        "head_repository_id": 1305325878,
+        "head_sha": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+        "id": 40866305437,
+        "repository_id": 1305325878
+      }
+    },
+    {
+      "archive_download_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/artifacts/12898412755/zip",
+      "created_at": "2026-10-29T12:58:57Z",
+      "digest": "sha256:83115f36b44bf0156511758e7b7df1e475e8cdeb5f0fbdb60b395ab223413d6d",
+      "expired": false,
+      "expires_at": "2026-11-28T12:58:55Z",
+      "id": 12898412755,
+      "name": "dogecoin-d0-replica-b-99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+      "size_in_bytes": 36601463,
+      "updated_at": "2026-10-29T12:58:57Z",
+      "url": "https://api.github.com/repos/khemisset18/gpubnb/actions/artifacts/12898412755",
+      "workflow_run": {
+        "head_branch": "asset-exchange/doge-d0-cohort-validation-20261029",
+        "head_repository_id": 1305325878,
+        "head_sha": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+        "id": 40866305437,
+        "repository_id": 1305325878
+      }
+    }
+  ],
+  "attestations": {
+    "provenance": {
+      "certificate": {
+        "buildConfigDigest": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+        "buildConfigURI": "https://github.com/khemisset18/gpubnb/.github/workflows/asset-exchange-dogecoin-d0-repro.yml@refs/heads/asset-exchange/doge-d0-cohort-validation-20261029",
+        "buildSignerDigest": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+        "buildSignerURI": "https://github.com/khemisset18/gpubnb/.github/workflows/asset-exchange-dogecoin-d0-repro.yml@refs/heads/asset-exchange/doge-d0-cohort-validation-20261029",
+        "buildTrigger": "push",
+        "certificateIssuer": "CN=sigstore-intermediate,O=sigstore.dev",
+        "githubWorkflowName": "Asset Exchange Dogecoin D0 Reproducible Build",
+        "githubWorkflowRef": "refs/heads/asset-exchange/doge-d0-cohort-validation-20261029",
+        "githubWorkflowRepository": "khemisset18/gpubnb",
+        "githubWorkflowSHA": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+        "githubWorkflowTrigger": "push",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "runInvocationURI": "https://github.com/khemisset18/gpubnb/actions/runs/40866305437/attempts/1",
+        "runnerEnvironment": "github-hosted",
+        "sourceRepositoryDigest": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+        "sourceRepositoryIdentifier": "1305325878",
+        "sourceRepositoryOwnerIdentifier": "103233875",
+        "sourceRepositoryOwnerURI": "https://github.com/khemisset18",
+        "sourceRepositoryRef": "refs/heads/asset-exchange/doge-d0-cohort-validation-20261029",
+        "sourceRepositoryURI": "https://github.com/khemisset18/gpubnb",
+        "sourceRepositoryVisibilityAtSigning": "public",
+        "subjectAlternativeName": "https://github.com/khemisset18/gpubnb/.github/workflows/asset-exchange-dogecoin-d0-repro.yml@refs/heads/asset-exchange/doge-d0-cohort-validation-20261029"
+      },
+      "cryptographicVerification": "PASS",
+      "fullVerificationOutputSha256": "961bc1346bee00a4a156a33f38e8691e362e0b53371b68af3f8cbd518d1afd9d",
+      "predicateType": "https://slsa.dev/provenance/v1",
+      "verifiedTimestamps": [
+        {
+          "timestamp": "2026-10-29T14:24:42+01:00",
+          "type": "Tlog",
+          "uri": "https://rekor.sigstore.dev"
+        }
+      ]
+    },
+    "sbom": {
+      "certificate": {
+        "buildConfigDigest": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+        "buildConfigURI": "https://github.com/khemisset18/gpubnb/.github/workflows/asset-exchange-dogecoin-d0-repro.yml@refs/heads/asset-exchange/doge-d0-cohort-validation-20261029",
+        "buildSignerDigest": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+        "buildSignerURI": "https://github.com/khemisset18/gpubnb/.github/workflows/asset-exchange-dogecoin-d0-repro.yml@refs/heads/asset-exchange/doge-d0-cohort-validation-20261029",
+        "buildTrigger": "push",
+        "certificateIssuer": "CN=sigstore-intermediate,O=sigstore.dev",
+        "githubWorkflowName": "Asset Exchange Dogecoin D0 Reproducible Build",
+        "githubWorkflowRef": "refs/heads/asset-exchange/doge-d0-cohort-validation-20261029",
+        "githubWorkflowRepository": "khemisset18/gpubnb",
+        "githubWorkflowSHA": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+        "githubWorkflowTrigger": "push",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "runInvocationURI": "https://github.com/khemisset18/gpubnb/actions/runs/40866305437/attempts/1",
+        "runnerEnvironment": "github-hosted",
+        "sourceRepositoryDigest": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+        "sourceRepositoryIdentifier": "1305325878",
+        "sourceRepositoryOwnerIdentifier": "103233875",
+        "sourceRepositoryOwnerURI": "https://github.com/khemisset18",
+        "sourceRepositoryRef": "refs/heads/asset-exchange/doge-d0-cohort-validation-20261029",
+        "sourceRepositoryURI": "https://github.com/khemisset18/gpubnb",
+        "sourceRepositoryVisibilityAtSigning": "public",
+        "subjectAlternativeName": "https://github.com/khemisset18/gpubnb/.github/workflows/asset-exchange-dogecoin-d0-repro.yml@refs/heads/asset-exchange/doge-d0-cohort-validation-20261029"
+      },
+      "cryptographicVerification": "PASS",
+      "fullVerificationOutputSha256": "49f7447ba15b03f0bfe3725e526cfb729a6262514ebfb2e832271644aa31159a",
+      "predicateType": "https://spdx.dev/Document/v2.3",
+      "verifiedTimestamps": [
+        {
+          "timestamp": "2026-10-29T14:24:47+01:00",
+          "type": "Tlog",
+          "uri": "https://rekor.sigstore.dev"
+        }
+      ]
+    }
+  },
+  "binaryExecuted": false,
+  "defaultTufRootsAreObservationNotNewPolicyPin": true,
+  "defaultTufRootsCapturedSha256": "65ca537f6ed8a47fd0e560c421baa1f6c1efb8b25fc200d8c5c02c0e92eb2b9c",
+  "githubCliTarballSha256": "4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d",
+  "githubCliVersion": "2.103.3",
+  "globalCiStatus": "FAILURE_UNWAIVED",
+  "harnessCommit": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+  "independentRunnerIds": [
+    1000070443,
+    1000070442
+  ],
+  "mainnetUsed": false,
+  "mergePerformed": false,
+  "officialSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+  "realFundsUsed": false,
+  "runId": 40866305437,
+  "scope": "Dogecoin Core v1.14.9 Linux x86_64 source-rebuild D0 only",
+  "status": "PASS_INTERNAL_REPRODUCIBLE_BUILD",
+  "upstreamPrebuiltSignerProvenance": "BLOCKED"
+}
