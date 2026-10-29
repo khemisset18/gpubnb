@@ -1,7 +1,7 @@
-# Stage 4: Windows 11 Home dedicated-console route (design and guarded groundwork)
+# Stage 4: Windows 11 Home dedicated-console backend (private integration, unqualified)
 
 Baseline: `40e9ef5991ab13753130121fd321c60c84b4a297`.
-Status: **NOT IMPLEMENTED as a driverless streaming backend; NOT physically qualified; NOT BOOKABLE**.
+Status: **SOFTWARE-WIRED FOR PRIVATE QUALIFICATION ONLY; NOT physically qualified; NOT BOOKABLE**.
 This is a scoped Windows Native engineering branch. No installation, driver action,
 signing, certificate/trust/pin change, deployment, forced quarantine recovery or
 PC1/PC2 test is authorized. Do not treat this branch as a release artifact.
@@ -48,7 +48,7 @@ PC1/PC2 test is authorized. Do not treat this branch as a release artifact.
   decoded/rendered frames, max 3,000 ms between observations. Input effects
   require an independent physical witness.
 
-## Code added in this branch: live-session safety hardening only
+## Live-session safety hardening
 
 1. `ensure_active_console_renter` checks exactly one WTSActive interactive session,
    physical active console ID, and `WTSSessionInfoEx` **unlocked** flag (1).
@@ -66,10 +66,10 @@ PC1/PC2 test is authorized. Do not treat this branch as a release artifact.
    transferred. Failure revokes the in-memory media capability and follows the
    existing fail-closed STOP/quarantine rules.
 
-This hardening **does not** create a driverless monitor, a dedicated account, a
-new backend enum, new deployable package, or any positive Stage 4 qualification.
-It does not remove the original `virtualDisplay` requirement or authorize
-software encoding or an unsafe provider-desktop fallback.
+This hardening does not create a new dedicated account, a signed
+deployable package or a positive Stage 4 qualification. The legacy
+IddCx `virtualDisplay` requirement remains unchanged for its own backend;
+software encoding or a provider-desktop fallback is not authorized.
 
 ## Driverless media engine groundwork (added after the isolation guards)
 
@@ -97,21 +97,42 @@ The Windows Media DLL now exposes a **separate, non-default console capture ABI 
   Rust ABI-v3 loader and decoder that retains the existing DLL Authenticode
   signer verification. A console proof cannot be cast to the v2 IddCx type.
 
-**Important:** this is an **unwired library capability**, not a running
-GPUbnb rental backend. Worker command framing, helper lifetime, nonce binding,
-signed release provenance, WTS notifications, per-frame browser revocation and
-bookability are intentionally unchanged. The required product integration below
-remains incomplete. An HDMI/DP connector alone is not evidence of a genuine
-trusted physical screen; device identity needs further qualification.
+### Software integration now present
 
-## Required work before a driverless mode can exist
+- Worker commands `PrepareConsoleDisplay` and `StartConsoleCapture` use
+  `ConsoleMediaSession` (not `MediaSession`) and reject cross-backend command
+  sequences. The service never calls `activate_virtual_display_lease` in the
+  console branch.
+- The worker proof domain is version 2 / flags `0x1f` for console versus
+  version 1 / flags `0x0f` for IddCx. The worker/media pipe uses distinct
+  protocol versions 3 (console) and 2 (IddCx). The service validates
+  exact WTS session, renter SID, generation, nonce, GPU UUID/LUID, frame
+  sequence, dimensions and encoder proof before accepting media.
+- The Helper has `--self-test-console` and `--start-console` separate from
+  production `--self-test` and `--start`. STATUS/RESUME report
+  `captureBackend: console-dedicated`, `consoleDisplay: true` and
+  `virtualDisplay: false` instead of fabricating the legacy proof.
+- Agent `windows_native_desktop_preflight(..., capture_backend="console-dedicated")`
+  and `launch_windows_native_workspace(..., private_console_qualification=True)`
+  are explicitly opt-in for a controlled, **non-bookable** private campaign.
+  Default Agent/Gateway launches still use IddCx. Gateway readiness, usage and
+  reconnect recheck the exact backend on each active runtime.
+- The existing same-origin browser GBNM/H.264 + GBNI input transport is reused.
+  PC2 needs no installed client or extension.
 
-1. The separate console ABI exists but remains **unwired**. Build an explicit
-   dedicated-console worker command and service runtime whose session nonce
-   and source identity are bound to the authenticated rental generation. Do not
-   use the IddCx `PrepareDisplay` command or re-label its proof fields. The
-   display source must be proven to belong to the renter console and exact
-   leased NVIDIA UUID -> LUID.
+The integration is **not a tested PC1 rental**. No authorized Windows Home host
+execution has occurred; no signed installable package, backend eligibility or
+physical 300-second proof exists. No new production listing or browser route
+automatically selects console mode. An HDMI/DP connector alone is not evidence
+of a genuine trusted physical screen; device identity needs further qualification.
+
+## Remaining gates before driverless rental can be qualified
+
+1. The console ABI, worker and Helper are wired for **private qualification**.
+   Make a separately authenticated, server-scoped and non-bookable test
+   orchestration path only after full code/signing provenance and explicit
+   authorization. Never silently select this backend for an ordinary listing
+   or merge its evidence into the IddCx `virtualDisplay` schema.
 2. Ensure any app/monitor capture always runs as the renter, never as the
    privileged service or provider; validate the user/window-station/desktop
    source and abort on any ambiguous topology transition.
@@ -128,10 +149,11 @@ trusted physical screen; device identity needs further qualification.
    but do not provide VM-level containment.
 6. Physical monitor/headless eligibility must be measured. Neither an unsigned
    virtual monitor, an unverified HDMI dummy nor an RDP host on Home is assumed.
-7. Route the new backend through *separate* preflight/start/status/stop and
-   schema-versioned evidence. Do not fabricate `virtualDisplay: true` or
-   reuse IddCx-only `nvencReady` flags for a different capture engine. Preserve
-   server booking, GPU fencing, cleanup/tombstones and quarantine.
+7. Preflight/start/status/resume use explicit source checks, but public
+   capability/booking policy, signed six-component provenance and authoritative
+   cleanup/tombstone handling for a console session still require independent
+   qualification. No fabricated `virtualDisplay: true`, no software NVENC
+   fallback, no quarantine recovery by changing backend.
 
 ## Test and release gate
 
