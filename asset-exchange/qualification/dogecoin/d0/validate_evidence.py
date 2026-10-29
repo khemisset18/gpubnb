@@ -26,6 +26,8 @@ TRUSTED_FOCAL_MANIFESTS = {
 
 EXPECTED = {
     "schema": SCHEMA,
+    "focalSnapshotId": "20241215T000000Z",
+    "focalSnapshotUrl": "https://snapshot.ubuntu.com/ubuntu/20241215T000000Z",
     "artifact": ARTIFACT,
     "dogecoinSourceCommit": SOURCE_COMMIT,
     "gitianBuilderCommit": GITIAN_COMMIT,

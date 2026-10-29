@@ -20,8 +20,8 @@ class D0EvidenceValidationTests(unittest.TestCase):
         self.evidence = dict(EXPECTED)
         self.evidence.update({
             "artifactSha256": OFFICIAL_SHA256,
-            "focalSnapshotId": "20241212T000000Z",
-            "focalSnapshotUrl": "https://snapshot.ubuntu.com/ubuntu/20241212T000000Z",
+            "focalSnapshotId": "20241215T000000Z",
+            "focalSnapshotUrl": "https://snapshot.ubuntu.com/ubuntu/20241215T000000Z",
             "officialFocalManifestVariant": "KunNw0n",
             "dependsSourceCacheFileCount": 2,
             "focalBootstrapPackageCount": 2,
@@ -103,7 +103,7 @@ class D0EvidenceValidationTests(unittest.TestCase):
         self.assert_rejected()
 
     def test_rejects_unpinned_snapshot_transport(self):
-        self.evidence["focalSnapshotUrl"] = "http://snapshot.ubuntu.com/ubuntu/20241212T000000Z"
+        self.evidence["focalSnapshotUrl"] = "http://snapshot.ubuntu.com/ubuntu/20241215T000000Z"
         self.assert_rejected()
 
     def test_rejects_bad_declared_archive_digest(self):

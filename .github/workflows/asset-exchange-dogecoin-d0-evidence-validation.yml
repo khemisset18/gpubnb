@@ -59,7 +59,7 @@ jobs:
             ca-certificates debootstrap
 
           ROOT="${RUNNER_TEMP}/dogecoin-d0-focal-installed-smoke"
-          SNAPSHOT="https://snapshot.ubuntu.com/ubuntu/20241212T000000Z"
+          SNAPSHOT="https://snapshot.ubuntu.com/ubuntu/20241215T000000Z"
           sudo rm -rf "$ROOT"
           sudo debootstrap --variant=minbase --arch=amd64 --include=ca-certificates \
             focal "$ROOT" "$SNAPSHOT"

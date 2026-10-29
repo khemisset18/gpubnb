@@ -27,7 +27,7 @@ LIEF_URL="https://files.pythonhosted.org/packages/3a/cf/a6ddb755d7f38cd69ca1dd8d
 LIEF_SHA256="c848aadac0816268aeb9dde7cefdb54bf24f78e664a19e97e74c92d3be1bb147"
 OFFICIAL_X86_64_SHA256="4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8"
 OUTPUT_NAME="dogecoin-1.14.9-x86_64-linux-gnu.tar.gz"
-FOCAL_SNAPSHOT_ID="20241212T000000Z"
+FOCAL_SNAPSHOT_ID="20241215T000000Z"
 FOCAL_SNAPSHOT_URL="https://snapshot.ubuntu.com/ubuntu/$FOCAL_SNAPSHOT_ID"
 OFFICIAL_FOCAL_MANIFEST_A="$SCRIPT_DIR/official-focal-amd64-KunNw0n.manifest"
 OFFICIAL_FOCAL_MANIFEST_B="$SCRIPT_DIR/official-focal-amd64-slightlyskepticalpotat.manifest"
@@ -78,6 +78,14 @@ collect_diagnostics() {
   done
   find "$WORK_DIR/gitian-builder/var" -maxdepth 1 -type f -name 'base-*.manifest' -exec cp '{}' "$OUTPUT_DIR/diagnostics/" \; 2>/dev/null || true
   find "$WORK_DIR/gitian-builder/result" -maxdepth 1 -type f -name '*.yml' -exec cp '{}' "$OUTPUT_DIR/diagnostics/" \; 2>/dev/null || true
+  # Diagnostic copy only: never creates successful qualification evidence.
+  if [[ "$rc" -ne 0 ]]; then
+    archive="$WORK_DIR/gitian-builder/build/out/$OUTPUT_NAME"
+    if [[ -f "$archive" && ! -L "$archive" ]]; then
+      cp "$archive" "$OUTPUT_DIR/diagnostics/$OUTPUT_NAME"
+      (cd "$OUTPUT_DIR/diagnostics" && sha256sum "$OUTPUT_NAME" > failed-archive.SHA256SUMS)
+    fi
+  fi
   exit "$rc"
 }
 trap collect_diagnostics EXIT
