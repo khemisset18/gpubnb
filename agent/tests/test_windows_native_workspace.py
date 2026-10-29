@@ -368,15 +368,12 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
             {"consoleDisplay": False},
             {"consoleDisplay": None},
         ):
+            invalid = dict(captureBackend="console-dedicated", virtualDisplay=False, consoleDisplay=True)
+            invalid.update(fields)
             with (
                 self.subTest(fields=fields),
                 patch.object(native.platform, "system", return_value="Windows"),
-                patch.object(native, "run_command", return_value=self._passing_report(
-                    captureBackend="console-dedicated",
-                    virtualDisplay=False,
-                    consoleDisplay=True,
-                    **fields,
-                )),
+                patch.object(native, "run_command", return_value=self._passing_report(**invalid)),
             ):
                 self.assertFalse(
                     native.windows_native_desktop_preflight(
