@@ -138,6 +138,78 @@ pub fn validate_graphics_proof_chain(
     Ok(())
 }
 
+/// Independent console-only proof. Never promotes to IddCx VirtualDisplayProof.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DedicatedConsoleDisplayProof {
+    pub generation: u64,
+    pub windows_session_id: u32,
+    pub console_nonce: [u8; 16],
+    pub adapter_luid: u64,
+    pub width: u32,
+    pub height: u32,
+    pub refresh_hz: u32,
+    pub renter_console_exclusive: bool,
+    pub one_monitor_validated: bool,
+}
+
+pub fn validate_dedicated_console_chain(
+    expected_generation: u64,
+    expected_windows_session_id: u32,
+    expected_gpu_uuid: &str,
+    console: DedicatedConsoleDisplayProof,
+    capture: CaptureFrameProof,
+    encode: &NvencProof,
+) -> Result<(), GraphicsProofError> {
+    if expected_generation == 0
+        || console.generation != expected_generation
+        || capture.generation != expected_generation
+        || encode.generation != expected_generation
+    {
+        return Err(GraphicsProofError::Generation);
+    }
+    if expected_windows_session_id == 0
+        || console.windows_session_id != expected_windows_session_id
+        || capture.windows_session_id != expected_windows_session_id
+    {
+        return Err(GraphicsProofError::WindowsSession);
+    }
+    if console.console_nonce == [0; 16] || capture.display_nonce != console.console_nonce {
+        return Err(GraphicsProofError::DisplayIdentity);
+    }
+    if !console.renter_console_exclusive || !console.one_monitor_validated {
+        return Err(GraphicsProofError::ProviderDesktop);
+    }
+    if console.adapter_luid == 0
+        || capture.adapter_luid != console.adapter_luid
+        || encode.adapter_luid != console.adapter_luid
+    {
+        return Err(GraphicsProofError::Adapter);
+    }
+    if console.width == 0
+        || console.height == 0
+        || !(30..=240).contains(&console.refresh_hz)
+        || capture.width != console.width
+        || capture.height != console.height
+    {
+        return Err(GraphicsProofError::DisplayMode);
+    }
+    if capture.frame_sequence == 0 || encode.input_frame_sequence != capture.frame_sequence {
+        return Err(GraphicsProofError::Frame);
+    }
+    if capture.format != PixelFormat::Bgra8Unorm {
+        return Err(GraphicsProofError::PixelFormat);
+    }
+    if !canonical_gpu_uuid(expected_gpu_uuid)
+        || !encode.gpu_uuid.eq_ignore_ascii_case(expected_gpu_uuid)
+    {
+        return Err(GraphicsProofError::Gpu);
+    }
+    if encode.codec != EncodeCodec::H264 || encode.encoded_bytes == 0 {
+        return Err(GraphicsProofError::EncodedOutput);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,6 +252,41 @@ mod tests {
             codec: EncodeCodec::H264,
             encoded_bytes: 4096,
         }
+    }
+
+    #[test]
+    fn console_proofs_cannot_claim_provider_screen_or_wrong_nonce() {
+        let source = DedicatedConsoleDisplayProof {
+            generation: 7,
+            windows_session_id: 42,
+            console_nonce: NONCE,
+            adapter_luid: 0x1122_3344_5566_7788,
+            width: 1920,
+            height: 1080,
+            refresh_hz: 60,
+            renter_console_exclusive: true,
+            one_monitor_validated: true,
+        };
+        assert_eq!(
+            validate_dedicated_console_chain(7, 42, GPU, source, capture(), &encode()),
+            Ok(())
+        );
+        assert_eq!(
+            validate_dedicated_console_chain(
+                7, 42, GPU,
+                DedicatedConsoleDisplayProof { renter_console_exclusive: false, ..source },
+                capture(), &encode(),
+            ),
+            Err(GraphicsProofError::ProviderDesktop)
+        );
+        assert_eq!(
+            validate_dedicated_console_chain(
+                7, 42, GPU,
+                DedicatedConsoleDisplayProof { console_nonce: [0xB5; 16], ..source },
+                capture(), &encode(),
+            ),
+            Err(GraphicsProofError::DisplayIdentity)
+        );
     }
 
     #[test]
