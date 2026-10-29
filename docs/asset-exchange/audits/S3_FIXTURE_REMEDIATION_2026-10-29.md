@@ -1,4 +1,4 @@
-# S3 fixture replacement — verified provenance, real CI test pending
+# S3 fixture replacement — real tests and provenance PASS
 
 Authorization scope: the current mission section 13 permits preparing/applying
 a reviewed S3 CI correction and requires a maintained available digest-pinned
@@ -51,3 +51,17 @@ connected bridge route, passes that same endpoint to both real S3 tests and
 retains the internal network/loopback-only port restrictions. No public network
 or test threshold is opened. This hypothesis still requires a successful real
 round trip, not just a startup log; the failed run stays FAILED.
+
+## Completed real validation
+
+**TERMINÉ ET PROUVÉ** for this CI fixture and the two specified tests.
+Run https://github.com/khemisset18/gpubnb/actions/runs/40914795552 at commit
+3f178f65dc97e0a8e4882c116a14e39c9a4973fc succeeded. Signature, signed SPDX,
+all-severity image scan (zero findings), private readiness, actual put/get and
+historical filesystem→S3 migration passed, each test with zero failures/skips.
+Cleanup and evidence upload succeeded. Artifact 12916145188 ZIP SHA-256:
+1539e295c7fe1b7ced3d4b51d2b771842899f7e606ec2ff2a047f1039869b17c.
+The downloaded ZIP digest, exact six public members, test counts and actual
+image report were checked independently. Original ZIP and summary are retained.
+The failed NAT-readiness run remains FAILED. This establishes fixture endpoint
+compatibility without relaxing its internal network or security gates.
