@@ -17,7 +17,6 @@ use gpubnb_windows_platform::pipe::{
     connect_authority_pipe_client, create_authority_pipe, current_process_user_sid,
 };
 use gpubnb_windows_platform::secret::MediaCapabilityToken;
-use gpubnb_windows_platform::session::ensure_active_console_renter;
 use std::env;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -614,7 +613,7 @@ fn runtime_status(
     }
     // STATUS drives Agent READY/usage accounting, even when no new frames
     // arrive. Never report billable readiness after a fast-user switch.
-    if ensure_active_console_renter(active.windows_session_id()).is_err() {
+    if !active.live_renter_boundary() {
         return AuthorityStatus::Degraded;
     }
     let identity = match resolve_nvidia_uuid_to_luid(gpu_uuid) {
