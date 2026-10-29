@@ -395,16 +395,23 @@ fn send_no_frame_poll(
 }
 
 #[cfg(target_os = "windows")]
+#[derive(Clone, Copy)]
+struct MediaSendFence {
+    command_sequence: u64,
+    console_mode: bool,
+}
+
+#[cfg(target_os = "windows")]
 fn send_encoded_media_frame(
     control: &WorkerPipeClient,
     media_pipe: &WorkerMediaPipeClient,
     args: &WorkerArgs,
     windows_session_id: u32,
     spec: WorkerDisplaySpec,
-    command_sequence: u64,
-    console_mode: bool,
+    fence: MediaSendFence,
     media: &EncodedMediaFrame,
 ) -> Result<(), WorkerError> {
+    let MediaSendFence { command_sequence, console_mode } = fence;
     let encoded_bytes = u32::try_from(media.bytes.len())
         .map_err(|_| WorkerError::new("media_frame_too_large", 21))?;
     let proof_value = WorkerMediaProof {
@@ -606,8 +613,10 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         args,
                         windows_session_id,
                         spec,
-                        command_sequence,
-                        console,
+                        MediaSendFence {
+                            command_sequence,
+                            console_mode: console,
+                        },
                         &media,
                     )?;
                     media_session = Some(session);
@@ -632,8 +641,10 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                                 args,
                                 windows_session_id,
                                 spec,
-                                command_sequence,
-                                console_mode.unwrap_or(false),
+                                MediaSendFence {
+                                    command_sequence,
+                                    console_mode: console_mode.unwrap_or(false),
+                                },
                                 &media,
                             )?;
                         }
@@ -728,8 +739,10 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         args,
                         windows_session_id,
                         spec,
-                        command_sequence,
-                        console,
+                        MediaSendFence {
+                            command_sequence,
+                            console_mode: console,
+                        },
                         &media,
                     )
                     .map_err(|_| WorkerError::new("resume_media_transport_failed", 21))?;
