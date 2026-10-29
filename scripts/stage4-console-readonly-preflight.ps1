@@ -83,8 +83,8 @@ if ($ExpectedGpuUuid -notmatch '^GPU-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4
         # Read-only NVIDIA inventory. Never chooses a different GPU implicitly.
         $nvidiaSmi = Get-Command 'nvidia-smi.exe' -ErrorAction Stop
         $uuids = @(& $nvidiaSmi.Source '--query-gpu=uuid' '--format=csv,noheader' 2>$null)
-        $matches = @($uuids | Where-Object { ([string]$_).Trim() -ieq $ExpectedGpuUuid })
-        $ok = $LASTEXITCODE -eq 0 -and $matches.Count -eq 1
+        $gpuMatches = @($uuids | Where-Object { ([string]$_).Trim() -ieq $ExpectedGpuUuid })
+        $ok = $LASTEXITCODE -eq 0 -and $gpuMatches.Count -eq 1
         Add-Check 'exact-nvidia-gpu' $ok $(if ($ok) { 'Exactly one matching NVIDIA UUID' } else { 'GPU unavailable, missing or ambiguous' })
     } catch {
         Add-Check 'exact-nvidia-gpu' $false 'NVIDIA inventory unavailable'
