@@ -571,7 +571,10 @@ pub fn resume_session(session_id: &str) -> Result<String, AuthorityError> {
         CONTROL_CONNECT_TIMEOUT_MS,
         CONTROL_READ_TIMEOUT_MS,
     )?;
-    if let Some(token) = response.strip_prefix("OK|resumed|") {
+    if let Some(token) = response
+        .strip_prefix("OK|resumed|")
+        .or_else(|| response.strip_prefix("OK|console_resumed|"))
+    {
         if token.len() == 64
             && token
                 .bytes()
@@ -654,14 +657,16 @@ fn runtime_status(
     // STATUS drives Agent READY/usage accounting, even when no new frames
     // arrive. Never report billable readiness after a fast-user switch.
     if !active.live_renter_boundary() {
-        return AuthorityStatus::Degraded;
+        return if console { AuthorityStatus::ConsoleDegraded } else { AuthorityStatus::Degraded };
     }
     let identity = match resolve_nvidia_uuid_to_luid(gpu_uuid) {
         Ok(identity) => identity,
-        Err(_) => return AuthorityStatus::Degraded,
+        Err(_) => {
+            return if console { AuthorityStatus::ConsoleDegraded } else { AuthorityStatus::Degraded };
+        }
     };
     if identity.luid != active.display_spec().adapter_luid {
-        return AuthorityStatus::Degraded;
+        return if console { AuthorityStatus::ConsoleDegraded } else { AuthorityStatus::Degraded };
     }
     if active.media_ready() && endpoint_alive {
         if console { AuthorityStatus::ConsoleReady } else { AuthorityStatus::Ready }
