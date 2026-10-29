@@ -1,0 +1,20 @@
+test_all_public_vector_names_unique_and_expected_values_frozen (test_script_diagnostics.ScriptDiagnosticsTests.test_all_public_vector_names_unique_and_expected_values_frozen) ... ok
+test_cltv_activation_boundaries_not_assumed_at_genesis (test_script_diagnostics.ScriptDiagnosticsTests.test_cltv_activation_boundaries_not_assumed_at_genesis) ... ok
+test_fixed_rpc_success_parameters (test_script_diagnostics.ScriptDiagnosticsTests.test_fixed_rpc_success_parameters) ... ok
+test_fixed_synthetic_preimage_is_32_bytes_and_not_a_key (test_script_diagnostics.ScriptDiagnosticsTests.test_fixed_synthetic_preimage_is_32_bytes_and_not_a_key) ... ok
+test_invalid_authorization_rejected_before_environment_inspection (test_script_diagnostics.ScriptDiagnosticsTests.test_invalid_authorization_rejected_before_environment_inspection) ... ok
+test_manifest_exactly_matches_committed_reviewed_operations (test_script_diagnostics.ScriptDiagnosticsTests.test_manifest_exactly_matches_committed_reviewed_operations) ... ok
+test_offline_manifest_does_not_load_native_library_or_spawn_node (test_script_diagnostics.ScriptDiagnosticsTests.test_offline_manifest_does_not_load_native_library_or_spawn_node) ... ok
+test_rpc_parameter_mutations_rejected (test_script_diagnostics.ScriptDiagnosticsTests.test_rpc_parameter_mutations_rejected) ... ok
+test_serializer_rejects_boolean_or_out_of_range_fields (test_script_diagnostics.ScriptDiagnosticsTests.test_serializer_rejects_boolean_or_out_of_range_fields) ... ok
+test_server_rpc_transcript_must_match_exact_method_set_and_counts (test_script_diagnostics.ScriptDiagnosticsTests.test_server_rpc_transcript_must_match_exact_method_set_and_counts) ... ok
+test_shell_requires_exact_scope_and_clears_inherited_environment (test_script_diagnostics.ScriptDiagnosticsTests.test_shell_requires_exact_scope_and_clears_inherited_environment) ... ok
+test_spdx_member_is_exact_unique_and_signed_digest_bound (test_script_diagnostics.ScriptDiagnosticsTests.test_spdx_member_is_exact_unique_and_signed_digest_bound) ... ok
+test_wallet_signature_transaction_and_external_rpc_forbidden (test_script_diagnostics.ScriptDiagnosticsTests.test_wallet_signature_transaction_and_external_rpc_forbidden) ... ok
+test_wrong_archive_and_symlink_rejected_before_native_execution (test_script_diagnostics.ScriptDiagnosticsTests.test_wrong_archive_and_symlink_rejected_before_native_execution) ... ok
+test_wrong_heights_network_and_ambiguous_activation_fail_closed (test_script_diagnostics.ScriptDiagnosticsTests.test_wrong_heights_network_and_ambiguous_activation_fail_closed) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.076s
+
+OK
