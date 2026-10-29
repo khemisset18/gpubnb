@@ -1,0 +1,28 @@
+[
+  {
+    "method": "getblockchaininfo",
+    "params": []
+  },
+  {
+    "method": "getblockchaininfo",
+    "params": []
+  },
+  {
+    "method": "getblockhash",
+    "params": [
+      "0"
+    ]
+  },
+  {
+    "method": "getnetworkinfo",
+    "params": []
+  },
+  {
+    "method": "getpeerinfo",
+    "params": []
+  },
+  {
+    "method": "stop",
+    "params": []
+  }
+]

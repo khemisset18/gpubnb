@@ -1,0 +1,186 @@
+{
+  "automaticSettlementSupported": false,
+  "broadcastPerformed": false,
+  "d0ArchiveSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+  "d0HarnessCommit": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+  "d0Run": "https://github.com/khemisset18/gpubnb/actions/runs/40866305437/attempts/1",
+  "mainnetUsed": false,
+  "namespaceInterfaces": [
+    {
+      "address": "00:00:00:00:00:00",
+      "broadcast": "00:00:00:00:00:00",
+      "flags": [
+        "LOOPBACK",
+        "UP",
+        "LOWER_UP"
+      ],
+      "group": "default",
+      "ifindex": 1,
+      "ifname": "lo",
+      "link_type": "loopback",
+      "linkmode": "DEFAULT",
+      "mtu": 65536,
+      "operstate": "UNKNOWN",
+      "qdisc": "noqueue",
+      "txqlen": 1000
+    }
+  ],
+  "namespaceInterfacesAfterStop": [
+    {
+      "address": "00:00:00:00:00:00",
+      "broadcast": "00:00:00:00:00:00",
+      "flags": [
+        "LOOPBACK",
+        "UP",
+        "LOWER_UP"
+      ],
+      "group": "default",
+      "ifindex": 1,
+      "ifname": "lo",
+      "link_type": "loopback",
+      "linkmode": "DEFAULT",
+      "mtu": 65536,
+      "operstate": "UNKNOWN",
+      "qdisc": "noqueue",
+      "txqlen": 1000
+    }
+  ],
+  "networkNamespace": "net:[4026532221]",
+  "observations": {
+    "blockchain": {
+      "bestblockhash": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+      "bip9_softforks": {
+        "csv": {
+          "since": 0,
+          "startTime": 0,
+          "status": "defined",
+          "timeout": 999999999999
+        },
+        "segwit": {
+          "since": 0,
+          "startTime": 0,
+          "status": "defined",
+          "timeout": 999999999999
+        }
+      },
+      "blocks": 0,
+      "chain": "regtest",
+      "chainwork": "0000000000000000000000000000000000000000000000000000000000000002",
+      "difficulty": 4.656542373906925e-10,
+      "headers": 0,
+      "initialblockdownload": true,
+      "mediantime": 1296688602,
+      "pruned": false,
+      "size_on_disk": 232,
+      "softforks": [
+        {
+          "id": "bip34",
+          "reject": {
+            "status": false
+          },
+          "version": 2
+        },
+        {
+          "id": "bip66",
+          "reject": {
+            "status": false
+          },
+          "version": 3
+        },
+        {
+          "id": "bip65",
+          "reject": {
+            "status": false
+          },
+          "version": 4
+        }
+      ],
+      "verificationprogress": 1,
+      "warnings": ""
+    },
+    "genesis": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+    "network": {
+      "connections": 0,
+      "harddustlimit": 0.001,
+      "incrementalfee": 0.0001,
+      "localaddresses": [],
+      "localrelay": true,
+      "localservices": "000000000000000d",
+      "networkactive": true,
+      "networks": [
+        {
+          "limited": false,
+          "name": "ipv4",
+          "proxy": "",
+          "proxy_randomize_credentials": false,
+          "reachable": true
+        },
+        {
+          "limited": false,
+          "name": "ipv6",
+          "proxy": "",
+          "proxy_randomize_credentials": false,
+          "reachable": true
+        },
+        {
+          "limited": true,
+          "name": "onion",
+          "proxy": "",
+          "proxy_randomize_credentials": false,
+          "reachable": false
+        }
+      ],
+      "protocolversion": 70015,
+      "relayfee": 0.001,
+      "softdustlimit": 0.01,
+      "subversion": "/Shibetoshi:1.14.9/",
+      "timeoffset": 0,
+      "version": 1140900,
+      "warnings": ""
+    },
+    "peers": []
+  },
+  "p2pDisabled": true,
+  "realFundsUsed": false,
+  "rpcRequests": [
+    {
+      "method": "getblockchaininfo",
+      "params": []
+    },
+    {
+      "method": "getblockchaininfo",
+      "params": []
+    },
+    {
+      "method": "getblockhash",
+      "params": [
+        "0"
+      ]
+    },
+    {
+      "method": "getnetworkinfo",
+      "params": []
+    },
+    {
+      "method": "getpeerinfo",
+      "params": []
+    },
+    {
+      "method": "stop",
+      "params": []
+    }
+  ],
+  "rpcRestriction": "private cookie, loopback-only namespace, fixed harness allowlist; no server-side method ACL in v1.14.9",
+  "scope": "network identity only; D2-D9 remain unqualified",
+  "serverRpcMethods": [
+    "getblockchaininfo",
+    "getblockhash",
+    "getnetworkinfo",
+    "getpeerinfo",
+    "stop"
+  ],
+  "shutdownExitCode": 0,
+  "status": "D1_NETWORK_IDENTITY_PASS",
+  "walletDisabled": true,
+  "walletFilesAbsent": true
+}

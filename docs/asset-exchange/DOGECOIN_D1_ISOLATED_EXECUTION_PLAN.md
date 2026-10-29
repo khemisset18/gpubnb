@@ -1,6 +1,6 @@
 # DOGE D1 isolated network identity — authorized execution plan
 
-Status: **AUTHORIZED FOR D1 ONLY / EXECUTION PENDING / D1 UNQUALIFIED UNTIL EVIDENCED**.
+Status: **D1 NETWORK IDENTITY PASS — isolated execution evidenced in run 40892872892**.
 D0 source-rebuild passed in run 40866305437. The owner has now given separate explicit authorization for this exact D1
 phase. That permission does not extend to any D2-D9 execution.
 No Mainnet, wallet, mining, transaction broadcast, real funds or activation is
@@ -10,12 +10,12 @@ part of this phase. D2-D9 remain outside this execution request.
 
 The prepared manual workflow is
 `.github/workflows/asset-exchange-dogecoin-d1-manual.yml`. Manual execution
-requires the exact input `AUTHORIZE_D1_ISOLATED_REGTEST`. For this approved
-execution only, a temporary push trigger is bound to this work branch, this
+requires the exact input `AUTHORIZE_D1_ISOLATED_REGTEST`. For the approved
+execution only, a temporary push trigger was bound to this work branch, this
 workflow path and the exact execution commit message. GitHub requires a dispatch
 workflow to exist on the default branch; changing main is forbidden. This
 branch-only trigger executes the already authorized phase without changing main
-and must be removed after collecting the result. See the authorization record
+and has been removed after collecting the result. See the authorization record
 below. A rejected identity or isolation check still blocks execution.
 
 1. Download the already verified D0 evidence from run 40866305437, code commit
@@ -72,7 +72,7 @@ capability, D0 trust input or acceptance threshold has been changed.
 
 ## Verification completed before requesting execution approval
 
-- Ten offline adversarial D1 tests pass: reject wrong network/genesis/version,
+- Eleven offline adversarial D1 tests pass: reject wrong network/genesis/version,
   stale/nonfresh chain, boolean counters, connections/peers, missing or altered
   D0 identity, mismatched signed SPDX, missing authorization and prohibited RPCs.
 - The handoff validator accepts the actual independently verified D0 bundles.
@@ -81,8 +81,8 @@ capability, D0 trust input or acceptance threshold has been changed.
 - Foundation CI now includes an empty-network-namespace preflight without any
   Dogecoin process. Its result is an isolation check, not a D1 qualification.
 
-No real D1 observation or success is claimed until the authorized
-isolated execution completes. Any signature, namespace, genesis, version or
+The successful D1 observation is preserved in the completed audit report
+`audits/DOGECOIN_D1_NETWORK_IDENTITY_PASS_2026-10-29.md`. Any signature, namespace, genesis, version or
 shutdown mismatch is a failure, with no fallback to another network or policy.
 
 ## Owner authorization record — 2026-10-29
