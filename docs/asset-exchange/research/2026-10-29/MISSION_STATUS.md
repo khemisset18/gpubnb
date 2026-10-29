@@ -1,5 +1,12 @@
 # Rapport factuel — sécurité Core et base technique Asset Exchange
 
+**Mise à jour d'autorisation** : la mission élargie jointe par le propriétaire
+après ce premier bilan autorise désormais le patch desktop, les prototypes Rust
+isolés et le diagnostic DOGE D2 avec minage regtest strictement borné. Les limites
+D3–D9, production et D0 restent en vigueur. Ce texte conserve le bilan historique ;
+les nouvelles preuves sont dans `../../audits/DESKTOP_SECURITY_APPLIED_2026-10-29.md`
+et `OFFLINE_RECOVERY_IMPLEMENTATION.md`, puis dans les PR distinctes de prototypes.
+
 Date : 29 octobre 2026. PR de travail : https://github.com/khemisset18/gpubnb/pull/313
 (brouillon, non fusionnée), basée sur #312. Aucun merge, changement direct de main,
 déploiement, activation financière, Mainnet ni fonds réels. La nouvelle mission
