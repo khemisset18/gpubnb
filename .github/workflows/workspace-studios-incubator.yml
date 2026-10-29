@@ -5,6 +5,9 @@ on:
       - 'apps/api/src/workspace-manifests.ts'
       - 'apps/api/src/workspace-runtime-profiles.ts'
       - 'apps/api/test/workspace-incubator.test.ts'
+      - 'apps/web/choose-workspace.html'
+      - 'apps/web/choose-workspace.js'
+      - 'apps/web/choose-workspace-catalogue.test.js'
       - 'workspaces/**'
       - '.github/workflows/workspace-studios-incubator.yml'
   workflow_dispatch:
@@ -20,3 +23,5 @@ jobs:
         run: python3 workspaces/incubator/test_sources.py
       - name: Ensure candidate build launcher syntax is valid
         run: sh -n workspaces/incubator/build-candidates.sh
+      - name: Verify public catalogue labels and count
+        run: node --test apps/web/choose-workspace-catalogue.test.js
