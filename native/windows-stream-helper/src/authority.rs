@@ -400,10 +400,6 @@ fn run_self_test_backend(backend: RuntimeDisplayBackend) -> Result<SelfTestRepor
     }
 }
 
-fn parse_ready(value: &str) -> Result<StartSessionReport, AuthorityError> {
-    parse_backend_ready(value, RuntimeDisplayBackend::IddCx)
-}
-
 fn parse_backend_ready(
     value: &str,
     backend: RuntimeDisplayBackend,
