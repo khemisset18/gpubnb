@@ -107,7 +107,7 @@ struct GPUbnbConsoleProbeRequest
     uint32_t Height;
     uint32_t RefreshHz;
     uint32_t CaptureTimeoutMs;
-    uint32_t Reserved[4];
+    uint32_t Reserved[3];
 };
 
 struct GPUbnbConsoleMediaFrameResult
