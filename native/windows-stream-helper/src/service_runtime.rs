@@ -39,8 +39,7 @@ use gpubnb_windows_platform::process::{
 };
 use gpubnb_windows_platform::secret::MediaCapabilityToken;
 use gpubnb_windows_platform::session::{
-    RenterSessionIsolationProof, ensure_active_console_renter, ensure_provider_process_absent,
-    query_renter_session_token,
+    RenterSessionIsolationProof, ensure_provider_process_absent, query_renter_session_token,
 };
 use std::path::Path;
 
@@ -161,6 +160,7 @@ pub struct QualifiedGraphicsRuntime {
     generation: u64,
     stream_epoch: u64,
     windows_session_id: u32,
+    renter_user_sid: String,
     provider_user_sid: String,
     renter_isolation: RenterSessionIsolationProof,
     display_spec: WorkerDisplaySpec,
@@ -235,13 +235,21 @@ impl QualifiedGraphicsRuntime {
         error
     }
 
+    /// Fresh WTS token proof: a recycled console session number or fast-user
+    /// switch must never be treated as the original renter identity.
+    pub fn live_renter_boundary(&self) -> bool {
+        query_renter_session_token(
+            self.windows_session_id,
+            &self.renter_user_sid,
+            &self.provider_user_sid,
+        )
+        .is_ok()
+    }
+
     fn ensure_provider_boundary(&mut self) -> Result<(), ServiceRuntimeError> {
         // A session checked only at START can be displaced by fast-user
         // switching. Revoke the capability before returning any buffered frame.
-        if ensure_active_console_renter(self.windows_session_id).is_err()
-            || ensure_provider_process_absent(self.windows_session_id, &self.provider_user_sid)
-                .is_err()
-        {
+        if !self.live_renter_boundary() {
             return Err(self.fail(ServiceRuntimeError::RenterSession));
         }
         Ok(())
@@ -905,6 +913,7 @@ pub fn start_qualified_graphics_runtime(
         generation: config.generation,
         stream_epoch: config.generation,
         windows_session_id: config.windows_session_id,
+        renter_user_sid: config.renter_user_sid.to_owned(),
         provider_user_sid: config.provider_user_sid.to_owned(),
         renter_isolation,
         display_spec,
