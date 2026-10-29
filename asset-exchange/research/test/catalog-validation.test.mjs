@@ -22,13 +22,31 @@ test('partial XMR wallet, stale source commits, omitted evidence and duplicate d
     c => {c.notAnActivationManifest = false;},
   ]) {const bad = structuredClone(catalog); mutate(bad); assert.throws(() => validateResearchCatalog(bad, probe));}
 });
-test('all future RPC requests are source-derived drafts and cannot authorize execution', () => {
+test('D3-D9 requests remain source-derived drafts and cannot authorize execution', () => {
   const requests = load('D2_D9_AUTHORIZATION_DRAFTS.json'), rpc = load('DOGE_RPC_SOURCE_INVENTORY.json');
-  assert.equal(requests.status, 'PREPARED_NOT_EXECUTABLE');
+  assert.equal(requests.status, 'D2_DIAGNOSTICS_EXECUTED_FULL_QUALIFICATION_BLOCKED_D3_D9_PREPARED');
   assert.deepEqual(requests.phases.map(r => r.phase), ['D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9']);
-  for (const request of requests.phases) {
+  for (const request of requests.phases.slice(1)) {
     assert.equal(request.authorization, 'NOT_GRANTED'); assert.equal(request.executionHarnessCommit, null); assert.equal(request.activationAuthorized, false);
     for (const method of request.candidateRpcAllowlist) assert.ok(Object.hasOwn(rpc.methods, method), method);
   }
   assert.equal(Object.hasOwn(rpc.methods, 'testmempoolaccept'), false);
+});
+
+test('the explicit D2 grant is bound to its executed diagnostics and cannot authorize signing, admission or activation', () => {
+  const d2 = load('D2_D9_AUTHORIZATION_DRAFTS.json').phases[0];
+  assert.equal(d2.authorization, 'GRANTED_D2_SCRIPT_DIAGNOSTICS_ONLY');
+  assert.equal(d2.executionHarnessCommit, 'acfe2123a8825c7d3595ef70944dccf7ca3cf074');
+  assert.equal(d2.executedCommit, '78fa2d1aa889853c8de428004d337bad0b21ddc8');
+  assert.equal(d2.evidenceCommit, 'e25b8b0cbb7967b379f4f74b6125614986024448');
+  assert.equal(d2.executionRun, 40961370001);
+  assert.equal(d2.diagnosticStatus, 'PASS');
+  assert.equal(d2.qualificationStatus, 'BLOCKED');
+  assert.equal(d2.activationAuthorized, false);
+  assert.equal(d2.artifactSha256, '4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8');
+  assert.equal(d2.resources.syntheticBlockCap, 1352);
+  assert.deepEqual(d2.candidateRpcAllowlist, ['decodescript', 'generatetoaddress', 'getblockchaininfo', 'getblockhash', 'getnetworkinfo', 'getpeerinfo', 'stop']);
+  assert.ok(d2.notAuthorizedFutureRpcRequests.includes('sendrawtransaction'));
+  assert.ok(d2.notAuthorizedFutureRpcRequests.includes('signrawtransaction'));
+  assert.ok(d2.notAuthorizedFutureRpcRequests.every(method => !d2.candidateRpcAllowlist.includes(method)));
 });

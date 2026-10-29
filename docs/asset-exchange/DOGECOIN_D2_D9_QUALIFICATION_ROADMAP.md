@@ -1,6 +1,12 @@
 # DOGE D2–D9 qualification roadmap
 
-Status: **DESIGN ONLY — NO D2–D9 EXECUTION AUTHORIZED OR PERFORMED**.
+Status: **D2 DIAGNOSTICS EXECUTED PASS / FULL D2 BLOCKED / D3–D9 PREPARED, NOT EXECUTED**.
+The expanded owner authorization permitted only the D2 diagnostic scope documented
+in [PR #314](https://github.com/khemisset18/gpubnb/pull/314). Actual run40961370001
+used the exact D0 archive,23 public/synthetic verification vectors, five Solver
+classifications and1350+1+1 private regtest blocks; the strict qualification gate
+correctly FAILED. Complete standardness and positive signature-bound HTLC paths
+remain missing. No D2 acceptance criterion below has been relaxed.
 This expands the existing D2–D9 level definitions in DOGECOIN_ADAPTER_SPEC_V1.md;
 it does not select a script, alter a capability or activate settlement.
 D0 source-rebuild and D1 network identity are separate evidence gates.
@@ -46,8 +52,10 @@ later phase never silently includes wallet use, signing, mining or broadcasting.
 | D8 | Candidate device/firmware identity, signed-vector hashes, exact display review record and rejection matrix; never private keys/seeds | D8 specific external/hardware signer and test-key use; separate explicit physical-device permission |
 | D9 | Indexed immutable evidence bundle, review sign-offs, residual-risk register, formal results, explicit decision and rollback conditions | Audit work may be prepared offline; any activation/production/Mainnet/funds operation requires a new distinct authorization and reviewed change. None is granted here |
 
-Current execution state for every row: **NON COMMENCÉ**. The roadmap itself is
-prepared; it is not executable qualification evidence. BTC stays within its
+Current execution state: D2 diagnostics **PASS**, full D2 qualification **BLOCKED**;
+D3–D9 node executions **NON COMMENCÉ**. The original diagnostic ZIP and report are
+retained in PR #314 at evidence commit e25b8b0cbb7967b379f4f74b6125614986024448.
+The remaining roadmap is prepared; it is not executable qualification evidence. BTC stays within its
 already established regtest scope. LTC, XMR and BCH receive no qualification
 through DOGE results. DOGE stays MARKETPLACE_ONLY and automatic settlement false.
 
@@ -70,9 +78,19 @@ notably, testmempoolaccept is absent, so Bitcoin-style dry-run assumptions are
 not used. Any future mempool admission test would require explicit permission
 for synthetic local-regtest sendrawtransaction and its exact fixture bytes.
 
-The execution-harness commit is deliberately null: no reviewed D2–D9 node
-executor has been implemented. Filling a guessed commit would create a false
-reviewable authorization. A phase remains BLOCKED FOR EXECUTION until its
-concrete harness, vectors, exact operations and independent review are frozen.
-No authorization is requested by merely committing these drafts. D2 approval
-will not authorize D3 or another chain's funds/mining/signatures.
+A reviewed D2 diagnostic harness is frozen at
+acfe2123a8825c7d3595ef70944dccf7ca3cf074; execution commit
+78fa2d1aa889853c8de428004d337bad0b21ddc8 changed only the temporary trigger.
+Its actual effective allowlist is narrower than the earlier candidate request:
+no sendrawtransaction, signrawtransaction, wallet or arbitrary RPC. The trigger
+was removed in e25b8b0cbb7967b379f4f74b6125614986024448. The diagnostic result is
+not a qualified script/profile, transaction-finality test or full standardness
+proof. BIP65 activation was observed independently at the exact expected heights.
+
+D3–D9 executor commits remain deliberately null: concrete reviewed node executors
+have not been implemented. Offline terms, evidence, journal/recovery and reorg
+models now have adversarial software tests, but no signing/broadcast effect.
+No guessed commit is presented as executable permission. A future D2 completion
+or D3–D9 node session must freeze exact fixture bytes and separately authorize
+its signing, synthetic transaction/mining or signer operations. The D2 approval
+does not extend to another phase or another chain.

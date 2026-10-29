@@ -1,49 +1,42 @@
 {
-  "status": "PREPARED_NOT_EXECUTABLE",
-  "note": "No D2-D9 node, transaction, mining or signing was executed. Candidate RPC names were checked against v1.14.9 registration tables. These are requests to concretize later, not permissions.",
+  "status": "D2_DIAGNOSTICS_EXECUTED_FULL_QUALIFICATION_BLOCKED_D3_D9_PREPARED",
+  "note": "Expanded owner authorization permits only D2 script diagnostics and strictly bounded synthetic block generation. Run40961370001 actually executed1352 blocks and public-vector verification; no wallet/signature creation/transaction broadcast. Full D2 remains BLOCKED; no D3-D9 node execution is authorized or performed.",
   "phases": [
     {
       "phase": "D2",
-      "authorization": "NOT_GRANTED",
-      "executionHarnessCommit": null,
-      "blockingReason": "A concrete reviewed execution harness commit, scenario vectors and expected results must be frozen before permission can be requested. This document alone cannot authorize execution.",
-      "reviewSpec": "DOGECOIN_D2_D9_QUALIFICATION_ROADMAP.md plus this source-derived RPC plan",
+      "authorization": "GRANTED_D2_SCRIPT_DIAGNOSTICS_ONLY",
+      "executionHarnessCommit": "acfe2123a8825c7d3595ef70944dccf7ca3cf074",
+      "blockingReason": "Full transaction standardness/mempool and positive signature-bound HTLC claim/refund proof remain absent; the strict final gate failed as required.",
+      "reviewSpec": "https://github.com/khemisset18/gpubnb/blob/acfe2123a8825c7d3595ef70944dccf7ca3cf074/docs/asset-exchange/DOGECOIN_D2_SCRIPT_DIAGNOSTICS_PLAN.md",
       "artifactSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
       "environment": "disposable Linux namespaces, private data, cleared environment; no Core/public connectivity",
       "network": "regtest namespace with loopback only",
       "candidateRpcAllowlist": [
-        "createrawtransaction",
-        "decoderawtransaction",
         "decodescript",
         "generatetoaddress",
         "getblockchaininfo",
         "getblockhash",
         "getnetworkinfo",
         "getpeerinfo",
-        "getrawmempool",
-        "getrawtransaction",
-        "gettxout",
-        "sendrawtransaction",
-        "signrawtransaction",
         "stop"
       ],
       "paramsRestrictions": [
-        "getblockhash readiness parameter 0; later heights bounded by fixture plan",
-        "sendrawtransaction only pre-reviewed synthetic fixture bytes, allowhighfees=false",
-        "generatetoaddress \u22642000 total blocks, test-only destination, capped attempts",
-        "no arbitrary wallet-RPC forwarding; wallet disabled unless separately listed"
+        "getblockhash only0",
+        "decodescript onlyfive frozenhexfixtures",
+        "generatetoaddress exactly1350+1+1 blocks to2MyF5LxGTsXxf7xSpLr6RqXD4N7f1uEBfS7, maxtries1000000, auxpow0",
+        "all other methods have no parameters; stop final; no wallet/signing/admission"
       ],
       "resources": {
-        "cpuLimit": 2,
-        "memoryMiB": 2048,
+        "maxCpuSecondsPerProcess": 420,
+        "memoryMiBPerProcess": 2048,
         "dataMiB": 512,
-        "maxMinutes": 20,
+        "maxWallSeconds": 600,
         "maxNodes": 1,
-        "syntheticBlockCap": 2000
+        "syntheticBlockCap": 1352
       },
-      "testKeys": "explicit separate approval for local disposable fixture keys/signatures; no production or user keys",
-      "transactionsOrMining": "Explicit synthetic creation, mining and local-regtest admission approval required; never public broadcast",
-      "externalSigner": "none unless separately specified",
+      "testKeys": "none; verification of an existing public upstream signature only",
+      "transactionsOrMining": "Only exact1350+1+1 synthetic generation executed; no signature creation, wallet or transaction submission",
+      "externalSigner": "none",
       "secondChain": "none; any BTC pairing test needs its own explicit regtest transaction/mining/signature scope",
       "risks": [
         "profile/consensus mismatch",
@@ -53,7 +46,21 @@
       ],
       "passFail": "All predeclared positive/negative vectors, identity/isolation, clean cleanup and evidence checks must pass; any mismatch or missing proof blocks. No policy adaptation to observed output.",
       "evidence": "exact harness/source/config hashes, provenance revalidation, nonsecret RPC transcripts, expected/actual matrix, fault timeline and artifact digests",
-      "activationAuthorized": false
+      "activationAuthorized": false,
+      "executedCommit": "78fa2d1aa889853c8de428004d337bad0b21ddc8",
+      "evidenceCommit": "e25b8b0cbb7967b379f4f74b6125614986024448",
+      "executionRun": 40961370001,
+      "diagnosticStatus": "PASS",
+      "qualificationStatus": "BLOCKED",
+      "notAuthorizedFutureRpcRequests": [
+        "createrawtransaction",
+        "decoderawtransaction",
+        "getrawmempool",
+        "getrawtransaction",
+        "gettxout",
+        "sendrawtransaction",
+        "signrawtransaction"
+      ]
     },
     {
       "phase": "D3",
@@ -84,7 +91,7 @@
       "paramsRestrictions": [
         "getblockhash readiness parameter 0; later heights bounded by fixture plan",
         "sendrawtransaction only pre-reviewed synthetic fixture bytes, allowhighfees=false",
-        "generatetoaddress \u22642000 total blocks, test-only destination, capped attempts",
+        "generatetoaddress ≤2000 total blocks, test-only destination, capped attempts",
         "no arbitrary wallet-RPC forwarding; wallet disabled unless separately listed"
       ],
       "resources": {
@@ -137,7 +144,7 @@
       "paramsRestrictions": [
         "getblockhash readiness parameter 0; later heights bounded by fixture plan",
         "sendrawtransaction only pre-reviewed synthetic fixture bytes, allowhighfees=false",
-        "generatetoaddress \u22642000 total blocks, test-only destination, capped attempts",
+        "generatetoaddress ≤2000 total blocks, test-only destination, capped attempts",
         "no arbitrary wallet-RPC forwarding; wallet disabled unless separately listed"
       ],
       "resources": {
@@ -190,7 +197,7 @@
       "paramsRestrictions": [
         "getblockhash readiness parameter 0; later heights bounded by fixture plan",
         "sendrawtransaction only pre-reviewed synthetic fixture bytes, allowhighfees=false",
-        "generatetoaddress \u22642000 total blocks, test-only destination, capped attempts",
+        "generatetoaddress ≤2000 total blocks, test-only destination, capped attempts",
         "no arbitrary wallet-RPC forwarding; wallet disabled unless separately listed"
       ],
       "resources": {
@@ -249,7 +256,7 @@
       "paramsRestrictions": [
         "getblockhash readiness parameter 0; later heights bounded by fixture plan",
         "sendrawtransaction only pre-reviewed synthetic fixture bytes, allowhighfees=false",
-        "generatetoaddress \u22642000 total blocks, test-only destination, capped attempts",
+        "generatetoaddress ≤2000 total blocks, test-only destination, capped attempts",
         "no arbitrary wallet-RPC forwarding; wallet disabled unless separately listed"
       ],
       "resources": {
@@ -303,7 +310,7 @@
       "paramsRestrictions": [
         "getblockhash readiness parameter 0; later heights bounded by fixture plan",
         "sendrawtransaction only pre-reviewed synthetic fixture bytes, allowhighfees=false",
-        "generatetoaddress \u22642000 total blocks, test-only destination, capped attempts",
+        "generatetoaddress ≤2000 total blocks, test-only destination, capped attempts",
         "no arbitrary wallet-RPC forwarding; wallet disabled unless separately listed"
       ],
       "resources": {
@@ -356,7 +363,7 @@
       "paramsRestrictions": [
         "getblockhash readiness parameter 0; later heights bounded by fixture plan",
         "sendrawtransaction only pre-reviewed synthetic fixture bytes, allowhighfees=false",
-        "generatetoaddress \u22642000 total blocks, test-only destination, capped attempts",
+        "generatetoaddress ≤2000 total blocks, test-only destination, capped attempts",
         "no arbitrary wallet-RPC forwarding; wallet disabled unless separately listed"
       ],
       "resources": {

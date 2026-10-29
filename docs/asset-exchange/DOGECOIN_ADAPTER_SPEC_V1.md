@@ -1,6 +1,6 @@
 # Dogecoin Adapter Specification V1
 
-Status: SPECIFIED / D0 SOURCE-REBUILD PASS / D1 NETWORK IDENTITY PASS / D2-D9 UNVERIFIED / NO AUTOMATIC SETTLEMENT ACTIVATION
+Status: SPECIFIED / D0 SOURCE-REBUILD PASS / D1 NETWORK IDENTITY PASS / D2 DIAGNOSTICS PASS / FULL D2 BLOCKED / D3-D9 UNVERIFIED / NO AUTOMATIC SETTLEMENT ACTIVATION
 
 ## 1. Scope
 
@@ -13,7 +13,8 @@ Candidate adapter/profile:
 D0 passed through the approved independent source-rebuild route on 2026-10-29.
 See [the completed reproduction audit](audits/DOGECOIN_D0_REPRODUCTION_PASS_2026-10-29.md).
 D1 network identity passed in isolated run 40892872892; see the completed D1 audit.
-D2-D9 execution still requires the user's distinct phase-specific authorization.
+D2 diagnostics ran within the expanded owner's exact authorization (PR #314);
+full D2 remains BLOCKED. D3-D9 execution still requires distinct phase approval.
 This specification does not activate Dogecoin settlement.
 
 It does NOT:
@@ -65,8 +66,9 @@ The upstream-prebuilt binary was not executed or accepted on those signatures.
 The later D0 source-rebuild acceptance is governed only by
 [DOGECOIN_D0_TRUST_POLICY_V1.md](DOGECOIN_D0_TRUST_POLICY_V1.md).
 The support-policy discrepancy remains a recorded maintenance risk.
-D1 network identity passed under separate authorization; D2-D9 and the BCH
-phase have not been executed. Dogecoin remains
+D1 network identity passed under separate authorization. D2 script diagnostics
+passed in isolated run40961370001, but full D2 remains BLOCKED by missing policy
+and positive signed-path proof. D3-D9 and the BCH phase have not been executed. Dogecoin remains
 `MARKETPLACE_ONLY` with automatic settlement disabled.
 
 Evidence sources:

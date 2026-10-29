@@ -4,7 +4,8 @@ Cette livraison est une base de recherche, de conception et de tests hors ligne.
 Elle n'est pas un exchange opérationnel ou qualifié. Les capacités et règles
 financières de production restent inchangées.
 
-- [Rapport factuel et décisions](MISSION_STATUS.md).
+- [Bilan actualisé sous autorisation élargie](EXPANDED_MISSION_STATUS.md).
+- [Rapport historique et décisions](MISSION_STATUS.md).
 - [Implémentations examinées et dix paires](RESEARCH_AND_PAIR_REVIEW.md).
 - [Vingt directions détaillées](PAIR_MATRIX_20_DIRECTIONS.json) et [profils](CHAIN_RESEARCH_PROFILES.json).
 - [Sources de code, commits, licences et hashes](SOURCE_INVENTORY.json) ; [sources web officielles](WEB_SOURCE_LEDGER.json).
@@ -18,5 +19,8 @@ financières de production restent inchangées.
 
 Les résultats du probe de routage BasicSwap ne sont pas des swaps réussis.
 Les modèles utilisent des hypothèses explicites de validation de preuves.
-Aucun D2–D9, wallet, minage, transaction ou signature blockchain n'a été exécuté.
+D2 : diagnostics autorisés exécutés dans la [PR #314](https://github.com/khemisset18/gpubnb/pull/314), avec1 352 blocs fictifs ; qualification complète BLOCKED. Aucun D3–D9, wallet, signature créée ou transaction diffusée.
+La [PR #315](https://github.com/khemisset18/gpubnb/pull/315) conserve les migrations Rust isolées ; leur compatibilité financière n'est pas acquise.
 D0 et D1 existants sont préservés ; leur succès ne se propage à aucun autre actif.
+
+- [Modules hors ligne de termes/preuves/journal de récupération](OFFLINE_RECOVERY_IMPLEMENTATION.md).
