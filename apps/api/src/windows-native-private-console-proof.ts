@@ -67,12 +67,13 @@ export async function replaceConsoleProof(
   redis: Redis,
   machineId: string,
   proof: { gpuUuid: string; agentCommit: string } | null,
+  acceptedCounter: string,
 ): Promise<void> {
   if (proof === null) {
     await redis.del(proofKey(machineId));
     return;
   }
-  await redis.set(proofKey(machineId), JSON.stringify(proof), 'EX', CONSOLE_PROOF_TTL_SECONDS);
+  await redis.set(proofKey(machineId), JSON.stringify({ ...proof, acceptedCounter }), 'EX', CONSOLE_PROOF_TTL_SECONDS);
 }
 
 /** An old claim from a different release or GPU is never usable. */
@@ -80,6 +81,7 @@ export async function readConsoleProof(
   redis: Redis,
   machineId: string,
   approvedCommit: string | null,
+  latestAcceptedCounter: string,
 ): Promise<{ gpuUuid: string; agentCommit: string } | null> {
   if (approvedCommit === null) return null;
   const raw = await redis.get(proofKey(machineId));
@@ -90,6 +92,7 @@ export async function readConsoleProof(
     const x = parsed as Record<string, unknown>;
     if (
       x.agentCommit !== approvedCommit
+      || x.acceptedCounter !== latestAcceptedCounter
       || typeof x.gpuUuid !== 'string'
       || !WINDOWS_NATIVE_GPU_UUID_RE.test(x.gpuUuid)
     ) return null;
@@ -106,8 +109,9 @@ export async function qualificationNativeSource(
   approvedCommit: string | null,
   legacyAvailable: boolean,
   legacyGpuUuid: string | null,
+  latestAcceptedCounter: bigint | undefined,
 ): Promise<{ gpuUuid: string; captureBackend: 'console-dedicated' | 'iddcx' } | null> {
-  const console = await readConsoleProof(redis, machineId, approvedCommit);
+  const console = await readConsoleProof(redis, machineId, approvedCommit, String(latestAcceptedCounter));
   if (console) return { gpuUuid: console.gpuUuid, captureBackend: 'console-dedicated' };
   if (legacyAvailable && legacyGpuUuid && WINDOWS_NATIVE_GPU_UUID_RE.test(legacyGpuUuid)) {
     return { gpuUuid: legacyGpuUuid, captureBackend: 'iddcx' };
