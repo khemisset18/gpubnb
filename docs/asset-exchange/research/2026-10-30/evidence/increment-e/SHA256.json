@@ -1,0 +1,10 @@
+{
+  "asset-exchange/research/src/chain-boundaries.mjs": "97e304e32a67e24d14dfe492d88b11a8a88ef885acda81c57db8ff41801116b1",
+  "asset-exchange/research/test/chain-boundaries.test.mjs": "dadbded32f2c889b2f69cb60a91cc61179a20df7a7ff2b61cec5bc26dce66141",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-e/ci-c-log-provenance.json": "1c54c6545ed5d1a2445cd01e571ca6f6f25b610d5cefafd4e08a804ee90b5197",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-e/ci-c-trivy-excerpt.log": "6d2126330b500f1177571d0b87595cfd4bbe970b6cf11e410f900abc144feafc",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-e/foundation-tests.log": "30ce7e3758bdd4152a3a374dd1b26739421e92f394aa5b5055384d4057da23ce",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-e/source-ledger.json": "edf77ee2d835cca6993387cda1b8685574ad897dea921182d8310e4086c42950",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-e/syntax.log": "c8b95294032457b8e6cacaed4707a47349a04ce2a377d796f5b95412d264e8a2",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-e/targeted-tests.log": "59fc47fa23912c35c22720f8170c07a87f938c2eddac61ed981787afb822db05"
+}

@@ -27,3 +27,12 @@ independently retained checkpoint. Every result remains unqualified with no
 executable operations. Neither module is imported into financial runtime paths.
 See `docs/asset-exchange/research/2026-10-30/DOGE_OFFLINE_INCREMENT_C.md` for the
 actual filesystem/process tests and the distinction from native recovery proofs.
+
+## Six-chain interface boundaries
+
+`src/chain-boundaries.mjs` validates separate synthetic descriptors and public plan
+envelopes for BTC, DOGE, LTC, BCH, XMR and SOL. It hashes public UTXO contracts and
+checks output binding, exact schemas, amount units and ordered pair review
+bindings. It never interprets scripts, verifies signatures, qualifies a route or
+connects a chain. The Solana rental escrow and a Monero script HTLC are rejected
+as substitutes. See `DOGE_OFFLINE_INCREMENT_E.md` in the same research docs folder.
