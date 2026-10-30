@@ -1,0 +1,18 @@
+name: Rust advisory paths (diagnostic only)
+on:
+  pull_request:
+    paths:
+      - 'Cargo.lock'
+      - 'scripts/security/rust-advisory-graph.mjs'
+      - 'scripts/security/rust-advisory-graph.test.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: node --test scripts/security/rust-advisory-graph.test.mjs
+      - run: node scripts/security/rust-advisory-graph.mjs --report Cargo.lock
