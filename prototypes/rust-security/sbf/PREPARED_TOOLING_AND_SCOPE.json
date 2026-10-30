@@ -1,0 +1,43 @@
+{
+  "status": "NOT_TESTED_SBF_CONTRACT",
+  "operationsPerformed": "static metadata, archive digest and already-generated host macro inspection only in this checkpoint",
+  "sdk": {
+    "release": "https://github.com/anza-xyz/platform-tools/releases/tag/v1.57",
+    "tag": "v1.57",
+    "url": "https://github.com/anza-xyz/platform-tools/releases/download/v1.57/platform-tools-linux-x86_64.tar.bz2",
+    "sha256": "b0f7af104adf726fff2a6a09ea2eb2f2d2965c92295f4d7388c08d140e0c2b00",
+    "bytes": 531380716,
+    "releaseDigestVerified": true
+  },
+  "hostExpansions": {
+    "baseline": {
+      "originalSha256": "f9f19ab16df60c6f5254e694141b7c573c19c16a2c59a9edbd86282ccb088823",
+      "compressedSha256": "f714c2da967015c091cf973a1f30ac75a2a7bc11bcbe5d9f9cfb2860b9a33041",
+      "bytes": 291250,
+      "counts": {
+        "IDL_IX_TAG": 2,
+        "duplicate_mutable_account_keys": 0,
+        "ConstraintDuplicateMutableAccount": 0
+      }
+    },
+    "candidate": {
+      "originalSha256": "b71935f0af75606ad066c41d14740ab801d96de8406c2d181c730b3e30ed235f",
+      "compressedSha256": "779044e8edb524df9082d0d9849b60c6b0caadddafb72b4de14bd8a6a5a29cb5",
+      "bytes": 295748,
+      "counts": {
+        "IDL_IX_TAG": 0,
+        "duplicate_mutable_account_keys": 9,
+        "ConstraintDuplicateMutableAccount": 7
+      }
+    }
+  },
+  "keyGenerationPerformed": false,
+  "nodeOrSignerExecuted": false,
+  "sbfContractBuildResult": "NOT_TESTED",
+  "environmentBlock": "The supplemental SBF worker was interrupted by an automated possible-cybersecurity-risk content block. This is not a contract vulnerability finding or a successful SBF build. No bypass attempted.",
+  "limitations": [
+    "source inspection is not execution of the generated dispatcher",
+    "host macro output is not SBF output",
+    "financial integration not approved by these diagnostics"
+  ]
+}

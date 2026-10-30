@@ -1,0 +1,124 @@
+{
+  "encoding": "gzip,mtime=0; no log normalization; decompress and hash to recover exact original bytes",
+  "files": [
+    {
+      "original": "abi-baseline-build.log",
+      "bytes": 24667,
+      "sha256": "3ae367343e4e2fd31198077d5dd3dda0b4c5228611e8cf7d966109f8407cbb97",
+      "gzip": "abi-baseline-build.log.gz",
+      "gzipSha256": "cc0d5f0e876162dbc338e6427e74d9cfe00abfc9a6cd8f56243457dc596444c8"
+    },
+    {
+      "original": "abi-candidate-build.log",
+      "bytes": 12712,
+      "sha256": "e3c81599173f66626390ce33cc42bcddfbc81f04254d2426f543eeaad7a6bc3e",
+      "gzip": "abi-candidate-build.log.gz",
+      "gzipSha256": "305dc8145b2b9010e3d9d18abf002cab86caffe85233b2ed07d135acfd2c8adf"
+    },
+    {
+      "original": "anchor-baseline-regressions.log",
+      "bytes": 15557,
+      "sha256": "99c29be511b9f9e174a1747d8ddc8680d3daf856d585352ebaebef3062f8003f",
+      "gzip": "anchor-baseline-regressions.log.gz",
+      "gzipSha256": "a6e4dd242d032ead40a7b5aa13b0962e40f9e8cb5cf503277ae5312c878ace3d"
+    },
+    {
+      "original": "anchor-candidate-regressions.log",
+      "bytes": 13640,
+      "sha256": "6020b6b114374691614fd742b2aedbe1b00a7e1b92f2ccfdc333be1ecc46d01d",
+      "gzip": "anchor-candidate-regressions.log.gz",
+      "gzipSha256": "d60919b6a8f766ee1d2cd64c380a3aa9bb9b65722307a3ff837901c60c0f4f16"
+    },
+    {
+      "original": "anchor-candidate-test.log",
+      "bytes": 25867,
+      "sha256": "572ad34f8d290b3c91676650d95378531ea9ceb55ea350d5c31be8b5dbc2276b",
+      "gzip": "anchor-candidate-test.log.gz",
+      "gzipSha256": "349de3f8e392ff156aef127da7b27cf07df16e591abc60038f1d4876286c7659"
+    },
+    {
+      "original": "anchor-reproduction.log",
+      "bytes": 487,
+      "sha256": "222ea056a0a52b9e0530298a8699e040091c5be190a0c7010d5a7f066aa79e76",
+      "gzip": "anchor-reproduction.log.gz",
+      "gzipSha256": "e31f88321183f9fd600149298d2b49f0aa6812990251517090755196580d16ed"
+    },
+    {
+      "original": "crypto-baseline-build.log",
+      "bytes": 968,
+      "sha256": "7a06e4e8690719778b6cce0bea549a5839abe6e5ee56d08782bfb8d5cb6e73cd",
+      "gzip": "crypto-baseline-build.log.gz",
+      "gzipSha256": "2a7533d35ba244ee4025fa0496df56e76258c3f2323dc7c6dd222e6f7154685f"
+    },
+    {
+      "original": "crypto-candidate-build.log",
+      "bytes": 2398,
+      "sha256": "010baec111dbe2790042d1f424d30bc9d3675e7f9b2e73459f3f950ac1b6ed3e",
+      "gzip": "crypto-candidate-build.log.gz",
+      "gzipSha256": "9d2acb1f4c455a55d3b4697cd1633a36566662ae170fa9af4d124cc8205524d2"
+    },
+    {
+      "original": "glib-baseline-build.log",
+      "bytes": 23746,
+      "sha256": "453b3bd35485ae0ef3db19300adebf074030a81001690588fa527794be39d015",
+      "gzip": "glib-baseline-build.log.gz",
+      "gzipSha256": "6f34388c1d12eb4c574b89bb353baae92cee01ce6225a98460739a8b51f385ae"
+    },
+    {
+      "original": "glib-baseline-run.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzip": "glib-baseline-run.log.gz",
+      "gzipSha256": "f61f27bd17de546264aa58f40f3aafaac7021e0ef69c17f6b1b4cd7664a037ec"
+    },
+    {
+      "original": "glib-candidate-build.log",
+      "bytes": 23698,
+      "sha256": "e76306bc8174c98b33c7f4d6d9a34e45acbf8827103cc9580f5347dc58debbfa",
+      "gzip": "glib-candidate-build.log.gz",
+      "gzipSha256": "f49e911f100bb06ce6c5df6ed14399b66cff69224eb34f0dfaed6eda360103fc"
+    },
+    {
+      "original": "glib-candidate-run.log",
+      "bytes": 84,
+      "sha256": "fd5025f3612ffca8072f1a0d10f4fd334a7924bf2b06c817789a5dd67d3e7210",
+      "gzip": "glib-candidate-run.log.gz",
+      "gzipSha256": "8f67bdb7d73f79ff63d6d479f417862e202d92a4df4271421b24eb90409544b9"
+    },
+    {
+      "original": "glib-native-linkage.log",
+      "bytes": 1077,
+      "sha256": "bf6edc02d1c78b6d4b9644702ff63b7fbc13f18696f9ee87e95a0292d9d9cc4b",
+      "gzip": "glib-native-linkage.log.gz",
+      "gzipSha256": "c7dd156586e2c72d57b2be73bf02ee4264e90532d9e7ee5aba9f1656510c56fb"
+    },
+    {
+      "original": "glib-reproduction.log",
+      "bytes": 771,
+      "sha256": "34ddd1d1948001761bb7ebe75681a314e443dc52108ba72ef6cf110001a74509",
+      "gzip": "glib-reproduction.log.gz",
+      "gzipSha256": "b9236cb39a844ec764f10860578cf18f1fb41bd70d02a774957c83a421740b46"
+    },
+    {
+      "original": "idl-baseline.log",
+      "bytes": 34314,
+      "sha256": "dd43291307771965684147083c046c3b20f11d9ddc54378065a5a0ee4f455cbf",
+      "gzip": "idl-baseline.log.gz",
+      "gzipSha256": "647ddbf06d659c963e5207dc95eab73f0085b84a132bb7695f723bc8a717cdd6"
+    },
+    {
+      "original": "idl-candidate.log",
+      "bytes": 32591,
+      "sha256": "f315964265488e5c699459c19c8e501783d87a8c18fb824ea1df2d32eaeb89dd",
+      "gzip": "idl-candidate.log.gz",
+      "gzipSha256": "380ef8442f3b9f8d0106104fdd9aa31da74b0901bc644ba91596d80f4d12c1b0"
+    },
+    {
+      "original": "native-bootstrap-proof.log",
+      "bytes": 247,
+      "sha256": "a4f7aab18a06f8059109c00aec126a8463eed85c71f204aaf6c8b4adac21c49a",
+      "gzip": "native-bootstrap-proof.log.gz",
+      "gzipSha256": "f0cbfd14821b3088f932eec1c03a0c9333fb727a58ac0b74d9705176caad5f8c"
+    }
+  ]
+}

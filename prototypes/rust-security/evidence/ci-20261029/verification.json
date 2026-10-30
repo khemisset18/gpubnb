@@ -1,0 +1,32 @@
+{
+  "prHead": "c527474b39ea58a9259d4328515c969a8af08814",
+  "testedMergeRevision": "f131424f23672f4da2d08035b05d651edc2b7daa",
+  "prototypeRun": 40961561128,
+  "prototypeConclusion": "success",
+  "coreRun": 40961561080,
+  "coreConclusion": "failure",
+  "artifacts": [
+    {
+      "id": 12936680813,
+      "sha256": "c8fb2ceefbd97338457c19ca0ea1b95c861af2b2ab0184378fde749ee0431b0c"
+    },
+    {
+      "id": 12935638207,
+      "sha256": "6c660e885a2160daa703f4f84397be6a4b541a304eee3b8db98cd9d6e709dc08"
+    },
+    {
+      "id": 12936765463,
+      "sha256": "2254960499e436dec052b4c366c1cc09218b49c6f7b8404452b0f8dc9fe3ce85"
+    }
+  ],
+  "candidateTrivyFindings": [
+    {
+      "target": "Cargo.lock",
+      "VulnerabilityID": "GHSA-wrw7-89jp-8q8g",
+      "PkgName": "glib",
+      "InstalledVersion": "0.18.5",
+      "FixedVersion": "0.20.0",
+      "Severity": "MEDIUM"
+    }
+  ]
+}

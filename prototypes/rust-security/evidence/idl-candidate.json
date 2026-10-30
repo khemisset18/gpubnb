@@ -1,0 +1,934 @@
+{
+  "address": [
+    "Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m"
+  ],
+  "errors": [
+    [
+      {
+        "code": 6000,
+        "msg": "program paused",
+        "name": "Paused"
+      },
+      {
+        "code": 6001,
+        "msg": "invalid input",
+        "name": "InvalidInput"
+      },
+      {
+        "code": 6002,
+        "msg": "invalid expiry",
+        "name": "InvalidExpiry"
+      },
+      {
+        "code": 6003,
+        "msg": "invalid state",
+        "name": "InvalidState"
+      },
+      {
+        "code": 6004,
+        "msg": "too early",
+        "name": "TooEarly"
+      },
+      {
+        "code": 6005,
+        "msg": "math error",
+        "name": "Math"
+      },
+      {
+        "code": 6006,
+        "msg": "invalid address",
+        "name": "InvalidAddress"
+      },
+      {
+        "code": 6007,
+        "msg": "buyer and provider must differ",
+        "name": "SelfBooking"
+      },
+      {
+        "code": 6008,
+        "msg": "dispute window is closed",
+        "name": "DisputeWindowClosed"
+      },
+      {
+        "code": 6009,
+        "msg": "unauthorized",
+        "name": "Unauthorized"
+      }
+    ]
+  ],
+  "event": [
+    {
+      "event": {
+        "discriminator": [
+          132,
+          209,
+          49,
+          109,
+          135,
+          138,
+          28,
+          81
+        ],
+        "name": "gpu_escrow::EscrowRefunded"
+      },
+      "types": [
+        {
+          "name": "gpu_escrow::EscrowRefunded",
+          "type": {
+            "fields": [
+              {
+                "name": "escrow",
+                "type": "pubkey"
+              },
+              {
+                "name": "buyer",
+                "type": "pubkey"
+              },
+              {
+                "name": "amount",
+                "type": "u64"
+              }
+            ],
+            "kind": "struct"
+          }
+        }
+      ]
+    },
+    {
+      "event": {
+        "discriminator": [
+          132,
+          73,
+          81,
+          200,
+          177,
+          51,
+          128,
+          18
+        ],
+        "name": "gpu_escrow::EscrowDisputed"
+      },
+      "types": [
+        {
+          "name": "gpu_escrow::EscrowDisputed",
+          "type": {
+            "fields": [
+              {
+                "name": "escrow",
+                "type": "pubkey"
+              },
+              {
+                "name": "buyer",
+                "type": "pubkey"
+              }
+            ],
+            "kind": "struct"
+          }
+        }
+      ]
+    },
+    {
+      "event": {
+        "discriminator": [
+          139,
+          32,
+          64,
+          205,
+          27,
+          154,
+          100,
+          147
+        ],
+        "name": "gpu_escrow::SettlementProposed"
+      },
+      "types": [
+        {
+          "name": "gpu_escrow::SettlementProposed",
+          "type": {
+            "fields": [
+              {
+                "name": "escrow",
+                "type": "pubkey"
+              },
+              {
+                "name": "valid_seconds",
+                "type": "u32"
+              },
+              {
+                "name": "settle_after",
+                "type": "i64"
+              }
+            ],
+            "kind": "struct"
+          }
+        }
+      ]
+    },
+    {
+      "event": {
+        "discriminator": [
+          181,
+          49,
+          200,
+          156,
+          19,
+          167,
+          178,
+          91
+        ],
+        "name": "gpu_escrow::ConfigInitialized"
+      },
+      "types": [
+        {
+          "name": "gpu_escrow::ConfigInitialized",
+          "type": {
+            "fields": [
+              {
+                "name": "admin",
+                "type": "pubkey"
+              },
+              {
+                "name": "platform",
+                "type": "pubkey"
+              },
+              {
+                "name": "oracle",
+                "type": "pubkey"
+              }
+            ],
+            "kind": "struct"
+          }
+        }
+      ]
+    },
+    {
+      "event": {
+        "discriminator": [
+          201,
+          42,
+          96,
+          8,
+          123,
+          9,
+          212,
+          164
+        ],
+        "name": "gpu_escrow::EscrowOpened"
+      },
+      "types": [
+        {
+          "name": "gpu_escrow::EscrowOpened",
+          "type": {
+            "fields": [
+              {
+                "name": "escrow",
+                "type": "pubkey"
+              },
+              {
+                "name": "booking",
+                "type": {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                }
+              },
+              {
+                "name": "buyer",
+                "type": "pubkey"
+              },
+              {
+                "name": "provider",
+                "type": "pubkey"
+              },
+              {
+                "name": "amount",
+                "type": "u64"
+              },
+              {
+                "name": "expected_seconds",
+                "type": "u32"
+              },
+              {
+                "name": "expires_at",
+                "type": "i64"
+              }
+            ],
+            "kind": "struct"
+          }
+        }
+      ]
+    },
+    {
+      "event": {
+        "discriminator": [
+          203,
+          168,
+          175,
+          51,
+          239,
+          104,
+          20,
+          85
+        ],
+        "name": "gpu_escrow::AdminTransferProposed"
+      },
+      "types": [
+        {
+          "name": "gpu_escrow::AdminTransferProposed",
+          "type": {
+            "fields": [
+              {
+                "name": "current_admin",
+                "type": "pubkey"
+              },
+              {
+                "name": "pending_admin",
+                "type": "pubkey"
+              }
+            ],
+            "kind": "struct"
+          }
+        }
+      ]
+    },
+    {
+      "event": {
+        "discriminator": [
+          238,
+          188,
+          213,
+          78,
+          134,
+          209,
+          178,
+          218
+        ],
+        "name": "gpu_escrow::PauseChanged"
+      },
+      "types": [
+        {
+          "name": "gpu_escrow::PauseChanged",
+          "type": {
+            "fields": [
+              {
+                "name": "paused",
+                "type": "bool"
+              }
+            ],
+            "kind": "struct"
+          }
+        }
+      ]
+    },
+    {
+      "event": {
+        "discriminator": [
+          255,
+          147,
+          182,
+          5,
+          199,
+          217,
+          38,
+          179
+        ],
+        "name": "gpu_escrow::AdminTransferred"
+      },
+      "types": [
+        {
+          "name": "gpu_escrow::AdminTransferred",
+          "type": {
+            "fields": [
+              {
+                "name": "previous_admin",
+                "type": "pubkey"
+              },
+              {
+                "name": "new_admin",
+                "type": "pubkey"
+              }
+            ],
+            "kind": "struct"
+          }
+        }
+      ]
+    },
+    {
+      "event": {
+        "discriminator": [
+          40,
+          241,
+          230,
+          122,
+          11,
+          19,
+          198,
+          194
+        ],
+        "name": "gpu_escrow::ConfigUpdated"
+      },
+      "types": [
+        {
+          "name": "gpu_escrow::ConfigUpdated",
+          "type": {
+            "fields": [
+              {
+                "name": "platform",
+                "type": "pubkey"
+              },
+              {
+                "name": "oracle",
+                "type": "pubkey"
+              }
+            ],
+            "kind": "struct"
+          }
+        }
+      ]
+    },
+    {
+      "event": {
+        "discriminator": [
+          97,
+          27,
+          150,
+          55,
+          203,
+          179,
+          173,
+          23
+        ],
+        "name": "gpu_escrow::EscrowSettled"
+      },
+      "types": [
+        {
+          "name": "gpu_escrow::EscrowSettled",
+          "type": {
+            "fields": [
+              {
+                "name": "escrow",
+                "type": "pubkey"
+              },
+              {
+                "name": "payable",
+                "type": "u64"
+              },
+              {
+                "name": "platform_amount",
+                "type": "u64"
+              },
+              {
+                "name": "provider_amount",
+                "type": "u64"
+              },
+              {
+                "name": "refund",
+                "type": "u64"
+              },
+              {
+                "name": "valid_seconds",
+                "type": "u32"
+              }
+            ],
+            "kind": "struct"
+          }
+        }
+      ]
+    }
+  ],
+  "program": [
+    {
+      "accounts": [
+        {
+          "discriminator": [
+            155,
+            12,
+            170,
+            224,
+            30,
+            250,
+            204,
+            130
+          ],
+          "name": "gpu_escrow::Config"
+        },
+        {
+          "discriminator": [
+            31,
+            213,
+            123,
+            187,
+            186,
+            22,
+            218,
+            155
+          ],
+          "name": "gpu_escrow::Escrow"
+        }
+      ],
+      "address": "",
+      "instructions": [
+        {
+          "accounts": [
+            {
+              "name": "admin",
+              "signer": true,
+              "writable": true
+            },
+            {
+              "name": "config",
+              "writable": true
+            },
+            {
+              "name": "system_program"
+            }
+          ],
+          "args": [
+            {
+              "name": "platform",
+              "type": "pubkey"
+            },
+            {
+              "name": "oracle",
+              "type": "pubkey"
+            }
+          ],
+          "discriminator": [
+            208,
+            127,
+            21,
+            1,
+            194,
+            190,
+            196,
+            70
+          ],
+          "name": "initialize_config"
+        },
+        {
+          "accounts": [
+            {
+              "name": "admin",
+              "signer": true
+            },
+            {
+              "name": "config",
+              "writable": true
+            }
+          ],
+          "args": [
+            {
+              "name": "platform",
+              "type": "pubkey"
+            },
+            {
+              "name": "oracle",
+              "type": "pubkey"
+            }
+          ],
+          "discriminator": [
+            29,
+            158,
+            252,
+            191,
+            10,
+            83,
+            219,
+            99
+          ],
+          "name": "update_config"
+        },
+        {
+          "accounts": [
+            {
+              "name": "admin",
+              "signer": true
+            },
+            {
+              "name": "config",
+              "writable": true
+            }
+          ],
+          "args": [
+            {
+              "name": "paused",
+              "type": "bool"
+            }
+          ],
+          "discriminator": [
+            91,
+            60,
+            125,
+            192,
+            176,
+            225,
+            166,
+            218
+          ],
+          "name": "set_paused"
+        },
+        {
+          "accounts": [
+            {
+              "name": "admin",
+              "signer": true
+            },
+            {
+              "name": "config",
+              "writable": true
+            }
+          ],
+          "args": [
+            {
+              "name": "pending_admin",
+              "type": "pubkey"
+            }
+          ],
+          "discriminator": [
+            121,
+            214,
+            199,
+            212,
+            87,
+            39,
+            117,
+            234
+          ],
+          "name": "propose_admin"
+        },
+        {
+          "accounts": [
+            {
+              "name": "pending_admin",
+              "signer": true
+            },
+            {
+              "name": "config",
+              "writable": true
+            }
+          ],
+          "args": [],
+          "discriminator": [
+            112,
+            42,
+            45,
+            90,
+            116,
+            181,
+            13,
+            170
+          ],
+          "name": "accept_admin"
+        },
+        {
+          "accounts": [
+            {
+              "name": "config"
+            },
+            {
+              "name": "buyer",
+              "signer": true,
+              "writable": true
+            },
+            {
+              "name": "provider"
+            },
+            {
+              "name": "escrow",
+              "writable": true
+            },
+            {
+              "name": "system_program"
+            }
+          ],
+          "args": [
+            {
+              "name": "booking",
+              "type": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            },
+            {
+              "name": "amount",
+              "type": "u64"
+            },
+            {
+              "name": "expected_seconds",
+              "type": "u32"
+            },
+            {
+              "name": "expires_at",
+              "type": "i64"
+            }
+          ],
+          "discriminator": [
+            228,
+            220,
+            155,
+            71,
+            199,
+            189,
+            60,
+            45
+          ],
+          "name": "open"
+        },
+        {
+          "accounts": [
+            {
+              "name": "config"
+            },
+            {
+              "name": "oracle",
+              "signer": true
+            },
+            {
+              "name": "escrow",
+              "writable": true
+            }
+          ],
+          "args": [
+            {
+              "name": "valid_seconds",
+              "type": "u32"
+            }
+          ],
+          "discriminator": [
+            228,
+            149,
+            56,
+            61,
+            137,
+            43,
+            106,
+            25
+          ],
+          "name": "propose_settlement"
+        },
+        {
+          "accounts": [
+            {
+              "name": "buyer",
+              "signer": true
+            },
+            {
+              "name": "escrow",
+              "writable": true
+            }
+          ],
+          "args": [],
+          "discriminator": [
+            216,
+            92,
+            128,
+            146,
+            202,
+            85,
+            135,
+            73
+          ],
+          "name": "dispute"
+        },
+        {
+          "accounts": [
+            {
+              "name": "config"
+            },
+            {
+              "name": "escrow",
+              "writable": true
+            },
+            {
+              "name": "buyer",
+              "writable": true
+            },
+            {
+              "name": "provider",
+              "writable": true
+            },
+            {
+              "name": "platform",
+              "writable": true
+            }
+          ],
+          "args": [],
+          "discriminator": [
+            171,
+            61,
+            218,
+            56,
+            127,
+            115,
+            12,
+            217
+          ],
+          "name": "finalize"
+        },
+        {
+          "accounts": [
+            {
+              "name": "config"
+            },
+            {
+              "name": "admin",
+              "signer": true
+            },
+            {
+              "name": "escrow",
+              "writable": true
+            },
+            {
+              "name": "buyer",
+              "writable": true
+            },
+            {
+              "name": "provider",
+              "writable": true
+            },
+            {
+              "name": "platform",
+              "writable": true
+            }
+          ],
+          "args": [
+            {
+              "name": "valid_seconds",
+              "type": "u32"
+            }
+          ],
+          "discriminator": [
+            231,
+            6,
+            202,
+            6,
+            96,
+            103,
+            12,
+            230
+          ],
+          "name": "resolve_dispute"
+        },
+        {
+          "accounts": [
+            {
+              "name": "escrow",
+              "writable": true
+            },
+            {
+              "name": "buyer",
+              "writable": true
+            }
+          ],
+          "args": [],
+          "discriminator": [
+            118,
+            153,
+            164,
+            244,
+            40,
+            128,
+            242,
+            250
+          ],
+          "name": "refund_expired"
+        }
+      ],
+      "metadata": {
+        "name": "gpu_escrow",
+        "spec": "0.1.0",
+        "version": "0.2.0"
+      },
+      "types": [
+        {
+          "name": "gpu_escrow::Config",
+          "type": {
+            "fields": [
+              {
+                "name": "admin",
+                "type": "pubkey"
+              },
+              {
+                "name": "pending_admin",
+                "type": "pubkey"
+              },
+              {
+                "name": "platform",
+                "type": "pubkey"
+              },
+              {
+                "name": "oracle",
+                "type": "pubkey"
+              },
+              {
+                "name": "paused",
+                "type": "bool"
+              },
+              {
+                "name": "bump",
+                "type": "u8"
+              }
+            ],
+            "kind": "struct"
+          }
+        },
+        {
+          "name": "gpu_escrow::Escrow",
+          "type": {
+            "fields": [
+              {
+                "name": "booking",
+                "type": {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                }
+              },
+              {
+                "name": "buyer",
+                "type": "pubkey"
+              },
+              {
+                "name": "provider",
+                "type": "pubkey"
+              },
+              {
+                "name": "amount",
+                "type": "u64"
+              },
+              {
+                "name": "expected_seconds",
+                "type": "u32"
+              },
+              {
+                "name": "valid_seconds",
+                "type": "u32"
+              },
+              {
+                "name": "expires_at",
+                "type": "i64"
+              },
+              {
+                "name": "settle_after",
+                "type": "i64"
+              },
+              {
+                "name": "state",
+                "type": "u8"
+              },
+              {
+                "name": "bump",
+                "type": "u8"
+              }
+            ],
+            "kind": "struct"
+          }
+        }
+      ]
+    }
+  ]
+}
