@@ -217,3 +217,43 @@ def probe_native_desktop_capability(
 
 def native_desktop_streaming_available_cached(*, force: bool = False) -> bool:
     return probe_native_desktop_capability(force=force).available
+
+
+def probe_private_console_capability(*, enabled: bool | None = None) -> NativeDesktopCapabilitySnapshot:
+    """Separately prove console graphics for private qualification only.
+
+    This never updates the legacy IddCx heartbeat capability. A future signed,
+    typed server proof must be added before the private server may use it to
+    allocate a session. Hold the same physical GPU authority lock as IddCx
+    and native rental START/STOP; fail closed on persistent claims/quarantine.
+    """
+    import os
+
+    now = time.monotonic()
+    if enabled is None:
+        enabled = os.environ.get("GPUBNB_PRIVATE_CONSOLE_QUALIFICATION") == "true"
+    if enabled is not True:
+        return _snapshot(NativeDesktopPreflight(False, "private_console_disabled"), now)
+    if platform.system() != "Windows":
+        return _snapshot(NativeDesktopPreflight(False, "windows_required"), now)
+    if not _PHYSICAL_PROBE_LOCK.acquire(blocking=False):
+        return _snapshot(NativeDesktopPreflight(False, "native_rental_fenced"), now)
+    try:
+        reason = (
+            "native_rental_fenced" if _FENCED_NATIVE_RENTALS
+            else _persisted_physical_probe_block_reason()
+        )
+        if reason is not None:
+            return _snapshot(NativeDesktopPreflight(False, reason), now)
+        helper = find_stream_helper()
+        if not helper:
+            return _snapshot(NativeDesktopPreflight(False, "native_stream_helper_missing"), now)
+        try:
+            result = windows_native_desktop_preflight(
+                helper, capture_backend="console-dedicated"
+            )
+        except Exception:
+            result = NativeDesktopPreflight(False, "native_console_probe_failed")
+        return _snapshot(result, now)
+    finally:
+        _PHYSICAL_PROBE_LOCK.release()
