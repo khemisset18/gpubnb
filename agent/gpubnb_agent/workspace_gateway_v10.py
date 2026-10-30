@@ -940,7 +940,11 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 session_id = self._native_channel_sessions.get(channel_id)
             # Never trust the browser-supplied sessionId for a media/input
             # decision: the mapping comes from the original authorized OPEN.
-            if session_id is not None and self._console_channel_fenced(session_id):
+            # A dead channel's mapping is deliberately retained as a
+            # fail-closed tombstone, even after the reader has exited.
+            if session_id is not None and (
+                channel_id not in self.channels or self._console_channel_fenced(session_id)
+            ):
                 self._close_session_channels(session_id)
                 return
         return super()._handle(item)
@@ -954,16 +958,25 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         if authorized is not None:
             if authorized != session_id or self._console_channel_fenced(authorized):
                 return False
+        # An unrecognized channel from a known native runtime never inherits
+        # v2's permissive legacy frame forwarding. This covers stale threads,
+        # late receives and early-closed loopback connections.
+        with self._native_lock:
+            if session_id in self.native_runtimes or session_id in self._native_blocked:
+                return False
         return super()._ws_forward_allowed(session_id, channel_id)
 
     def _ws_reader(self, session_id: str, channel_id: str, ws: websocket.WebSocket) -> None:
-        try:
-            return super()._ws_reader(session_id, channel_id, ws)
-        finally:
-            # Keep the mapping valid until v2's outbound sender has joined:
-            # otherwise queued frames could bypass the console WTS guard.
-            with self._native_lock:
-                self._native_channel_sessions.pop(channel_id, None)
+        # Keep the native channel's authorization identity after the reader
+        # returns. v2 joins its outbound sender for at most 15 seconds; an
+        # in-flight HTTP request can outlive that join. Dropping this mapping
+        # while a sender remains alive would silently revert
+        # _ws_forward_allowed to the legacy allow-by-default policy.
+        #
+        # Channel IDs are random/never reused, and this private-console
+        # authority is process-fenced on WTS transition. Retain the binding
+        # until service restart (rather than risk a fail-open GC).
+        return super()._ws_reader(session_id, channel_id, ws)
 
     def _ws_open(self, item: dict[str, Any]) -> None:
         session_id = str(item.get("sessionId") or "")
