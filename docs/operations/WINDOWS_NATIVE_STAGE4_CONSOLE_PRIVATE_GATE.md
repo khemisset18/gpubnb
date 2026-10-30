@@ -24,21 +24,24 @@ This is a *stacked* change on PR #316, not a physical qualification.
 
 **Do not enable the flags on Render or PC1 yet.** Additional work is mandatory:
 
-1. The Agent heartbeat still reports the **IddCx** native capability by
-   default. A separate, explicitly opt-in `probe_private_console_capability()`
-   exists for a physically guarded local console proof, but this measurement is
-   **not sent as a signed, typed capability to the server**. Never set
-   `nativeDesktopStreamingAvailable=true` manually to bypass
-   the strict `/qualification/windows-native/preflight` gate.
+1. The legacy IddCx heartbeat remains unchanged. The Agent now measures a
+   **separate opt-in physical console proof**, transmits it inside the v2
+   anti-replay signed heartbeat, and the private API checks GPU/NVENC/source
+   release, measurement freshness and monotonic heartbeat counter before a
+   short-lived Redis claim can authorize a private-only session. An invalid,
+   absent, expired, unsigned or mismatched proof fails closed. **Do not set**
+   `nativeDesktopStreamingAvailable=true` manually: the console source uses its
+   own admission path.
 2. This commit must be built as one exact-source signed four-component package
    with accepted publisher pin and rollback before installation. The older PC1
    package `f664a07...` and current Render `40e9ef5...` must not be mixed.
-3. Event-driven WTS session lock/connect/disconnect/logon and display topology
-   changes must atomically revoke buffered console media/input and server claims
-   before any risk of provider pixels. The existing polling guards do not
-   prove a zero-leak security property. Microsoft documents
-   `SERVICE_CONTROL_SESSIONCHANGE`/`HandlerEx` for services and
-   `WM_WTSSESSION_CHANGE` for registered windows.
+3. The Windows service now registers `SERVICE_ACCEPT_SESSIONCHANGE` and
+   sets a process-wide console fence for every WTS transition. The gateway
+   refuses new console media and stops usage/sessions on reconciliation. This
+   is **defense in depth, not yet proof of immediate zero-leak revocation**:
+   display topology change and authoritative worker-level media/input buffer
+   revocation must still be physically measured and audited before enablement.
+   Restarting the service is required to clear the WTS transition fence.
 4. Confirm genuine monitor topology and exact NVIDIA UUID/LUID/NVENC H.264
    SPS/PPS+IDR on physical PC1, and stable browser WebCodecs rendering on PC2.
 5. Perform the isolated 300-second continuously decoded **and rendered** frame
