@@ -444,6 +444,7 @@ async function createWindowsNativeQualificationBooking(
       machine: {
         select: {
           id: true,
+          ownerId: true,
           operatingSystem: true,
           operational: true,
           lastCounter: true,
@@ -491,6 +492,7 @@ async function createWindowsNativeQualificationBooking(
 
     return (
       source !== null
+      && (source.captureBackend !== 'console-dedicated' || machine.ownerId === renterId)
       && listing.accelerators.length === 1
       && Boolean(accelerator)
       && os.startsWith('windows')
@@ -584,6 +586,7 @@ async function createWindowsNativeQualificationBooking(
           machineId: true,
           machine: {
             select: {
+              ownerId: true,
               operatingSystem: true,
               connectivity: true,
               operational: true,
@@ -634,6 +637,7 @@ async function createWindowsNativeQualificationBooking(
         || fresh.machine.connectivity !== MachineConnectivity.ONLINE
         || fresh.machine.moderationStatus !== ModerationStatus.CLEAR
         || freshSource === null
+        || (freshSource.captureBackend === 'console-dedicated' && fresh.machine.ownerId !== renterId)
         || !WINDOWS_NATIVE_GPU_UUID_RE.test(nativeGpuUuid)
         || !freshHeartbeat
         || !(
@@ -740,6 +744,7 @@ async function createWindowsNativeQualificationSession(
               resourceMode: true,
               machine: {
                 select: {
+                  ownerId: true,
                   operatingSystem: true,
                   connectivity: true,
                   operational: true,
@@ -774,6 +779,7 @@ async function createWindowsNativeQualificationSession(
       const machineReady =
         os.startsWith('windows')
         && qualifiedSource !== null
+        && (qualifiedSource.captureBackend !== 'console-dedicated' || machine.ownerId === renterId)
         && WINDOWS_NATIVE_GPU_UUID_RE.test(nativeGpuUuid)
         && machine.connectivity === MachineConnectivity.ONLINE
         && machine.moderationStatus === ModerationStatus.CLEAR
@@ -1160,6 +1166,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
         machine: {
           select: {
             id: true,
+            ownerId: true,
             operatingSystem: true,
             operational: true,
             nativeDesktopStreamingAvailable: true,
@@ -1197,6 +1204,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       const accelerator = listing.accelerators[0]?.accelerator;
       const heartbeat = host.lastHeartbeatAt;
       return source !== null
+        && (source.captureBackend !== 'console-dedicated' || host.ownerId === session.userId)
         && host.operatingSystem?.trim().toLowerCase().startsWith('windows') === true
         && (host.operational === MachineOperational.AVAILABLE
           || host.operational === MachineOperational.RESERVED
