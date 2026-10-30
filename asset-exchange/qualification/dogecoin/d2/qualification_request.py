@@ -21,7 +21,7 @@ CASES = (
 def compile_qualification_request(terms):
     pair = prepare_spend_pair(terms)
     here = Path(__file__).resolve().parent
-    paths = ["htlc_codec.py", "spend_preparation.py", "qualification_request.py",
+    paths = ["offline_candidate.py", "htlc_codec.py", "spend_preparation.py", "qualification_request.py",
              "fixtures/htlc_codec_v1.json", "fixtures/spend_terms_v1.json", "fixtures/source_policy_map_v1.json"]
     inputs = [{"path":str(p),"sha256":hashlib.sha256((here/p).read_bytes()).hexdigest()} for p in paths]
     return {

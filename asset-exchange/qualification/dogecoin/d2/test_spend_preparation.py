@@ -2,10 +2,11 @@ import copy
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from htlc_codec import decode_htlc
 from spend_preparation import (GENESIS, MAX_MONEY, prepare_spend_pair, check_intent,
-    validate_terms, require_standard_model, fee_rate_model, assess_prepared_intent)
+    validate_terms, require_standard_model, fee_rate_model, assess_prepared_intent, stable_hash)
 
 
 def fixture():
@@ -13,6 +14,32 @@ def fixture():
 
 
 class SpendPreparationTests(unittest.TestCase):
+    def test_hash_bounds_dictionary_keys_before_serialization(self):
+        with patch('spend_preparation.json.dumps', side_effect=AssertionError('encoder reached')), self.assertRaises(ValueError):
+            stable_hash({'x'*129: 0})
+
+    def test_hash_bounds_aggregate_expansion_before_serialization(self):
+        shared = 0
+        for _ in range(8):
+            shared = [shared]*4
+        with patch('spend_preparation.json.dumps', side_effect=AssertionError('encoder reached')), self.assertRaises(ValueError):
+            stable_hash(shared)
+
+    def test_hash_bounds_total_text_before_serialization(self):
+        with patch('spend_preparation.json.dumps', side_effect=AssertionError('encoder reached')), self.assertRaises(ValueError):
+            stable_hash(['a'*4096]*9)
+
+    def test_hash_bounds_json_unicode_escape_expansion(self):
+        with self.assertRaisesRegex(ValueError, 'encoded intent byte'):
+            stable_hash(['\uffff'*4096]*4)
+
+    def test_normal_intent_and_terms_digests_preserve_published_vectors(self):
+        root=Path(__file__).resolve().parents[4]
+        old=json.loads((root/'docs/asset-exchange/research/2026-10-30/evidence/increment-b/request-only.json').read_text())
+        self.assertEqual(stable_hash(self.terms),old['termsDigest'])
+        for branch,value in self.pair.items():
+            self.assertEqual(stable_hash(value),old['intentDigests'][branch])
+
     def setUp(self):
         self.terms=fixture()
         self.pair=prepare_spend_pair(self.terms)

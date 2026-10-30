@@ -7,6 +7,13 @@ from qualification_request import compile_qualification_request, CASES
 
 
 class QualificationRequestTests(unittest.TestCase):
+    def test_request_hashes_all_local_runtime_imports(self):
+        terms=json.loads((Path(__file__).parent/'fixtures/spend_terms_v1.json').read_text())["terms"]
+        files={r['path']:r['sha256'] for r in compile_qualification_request(terms)['inputFiles']}
+        self.assertIn('offline_candidate.py',files)
+        import hashlib
+        self.assertEqual(files['offline_candidate.py'],hashlib.sha256((Path(__file__).parent/'offline_candidate.py').read_bytes()).hexdigest())
+
     def test_request_is_bounded_and_cannot_execute_or_become_approval(self):
         terms=json.loads((Path(__file__).parent/'fixtures/spend_terms_v1.json').read_text())["terms"]
         with patch('subprocess.run',side_effect=AssertionError('no process allowed')), \

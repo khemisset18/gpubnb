@@ -36,20 +36,44 @@ def amount(value):
 
 
 def stable_hash(value):
+    nodes = 0
+    characters = 0
+
+    def account_text(item, maximum):
+        nonlocal characters
+        if type(item) is not str or len(item) > maximum:
+            raise ValueError("bounded plain intent text required")
+        characters += len(item)
+        if characters > 32768:
+            raise ValueError("aggregate intent text bound exceeded")
+
     def plain(item, depth=0):
-        if depth>8:raise ValueError("bounded plain intent data required")
-        if item is None or type(item) is bool:return
-        if type(item) is str and len(item)<=4096:return
-        if type(item) is int and 0<=item<=MAX_MONEY:return
-        if type(item) is list and len(item)<=32:
-            for child in item:plain(child,depth+1)
+        nonlocal nodes
+        nodes += 1
+        if depth > 8 or nodes > 2048:
+            raise ValueError("aggregate bounded plain intent data required")
+        if item is None or type(item) is bool:
             return
-        if type(item) is dict and len(item)<=32 and all(type(k) is str for k in item):
-            for child in item.values():plain(child,depth+1)
+        if type(item) is str:
+            account_text(item, 4096)
+            return
+        if type(item) is int and 0 <= item <= MAX_MONEY:
+            return
+        if type(item) is list and len(item) <= 32:
+            for child in item:
+                plain(child, depth + 1)
+            return
+        if type(item) is dict and len(item) <= 32:
+            for key, child in item.items():
+                account_text(key, 128)
+                plain(child, depth + 1)
             return
         raise ValueError("bounded plain intent data required")
+
     plain(value)
     raw = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    if len(raw) > 65536:
+        raise ValueError("encoded intent byte bound exceeded")
     return hashlib.sha256(b"GPUbnb:DOGE:OFFLINE_SPEND_TERMS:1\x00" + raw).hexdigest()
 
 
