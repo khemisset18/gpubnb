@@ -1,5 +1,27 @@
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
+# Preserve ISO-8601 expiry instants across Windows PowerShell 5.1 ConvertFrom-Json
+# (which may return DateTime), regardless of the host's date culture.
+function Convert-Stage4ExpiryToUtc {
+    param($Value)
+    if($Value -is [DateTimeOffset]) { return $Value.UtcDateTime }
+    if($Value -is [DateTime]) {
+        if($Value.Kind -eq [DateTimeKind]::Unspecified){throw 'stage4_private_expiry_timezone_required'}
+        return $Value.ToUniversalTime()
+    }
+    if($Value -is [string]) {
+        $parsed=[DateTimeOffset]::MinValue
+        if(-not [DateTimeOffset]::TryParseExact($Value,'o',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind,[ref]$parsed)){
+            throw 'stage4_private_expiry_format_invalid'
+        }
+        if($parsed.Offset -ne [TimeSpan]::Zero){throw 'stage4_private_expiry_must_be_utc'}
+        return $parsed.UtcDateTime
+    }
+    throw 'stage4_private_expiry_type_invalid'
+}
+
 function Assert-Stage4Certificate {
     param($Certificate, [string]$ExpectedPublisherSha256, [int]$MinimumValidityHours = 24, [bool]$RequirePrivateKey=$true)
     if ($null -eq $Certificate -or ($RequirePrivateKey -and -not $Certificate.HasPrivateKey)) {
