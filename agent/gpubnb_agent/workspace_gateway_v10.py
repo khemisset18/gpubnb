@@ -703,7 +703,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 continue
             if status not in {"READY", "RUNNING"}:
                 continue
-            # The server-signed desired session, exact Agent build, and a
+            # The server-issued HTTPS desired session, exact Agent build, and a
             # separate local opt-in must agree before console media is touched.
             # Never treat missing or malformed authority as console permission.
             try:
