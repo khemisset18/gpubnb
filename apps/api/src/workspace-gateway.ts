@@ -10,6 +10,7 @@ import { dataPlaneHostBootstrapEnabled, issueHostTunnelBootstrap, loadDataPlaneH
 import { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';
 import { consumeWorkspaceAccessGrant } from './workspace-access.js';
 import { enterQuarantine } from './quarantine-service.js';
+import { privateConsoleAgentCommit, privateConsoleDesiredFields } from './windows-native-private-console.js';
 import { waitForGatewayQueueItem } from './gateway-queue.js';
 import {
   browserGatewayFrameAllowed,
@@ -234,11 +235,18 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   });
   app.get('/agent/workspace-gateway/:machineId/desired',async(request,reply)=>{
     const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/desired`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});
-    const rows=await db.workspaceSession.findMany({where:{machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,expiresAt:true,runtimeBackend:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});
+    const rows=await db.workspaceSession.findMany({where:{machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,expiresAt:true,runtimeBackend:true,connectionMetadata:true,resourceLimits:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});
     // The agent needs to know which container/image to run per session - a
     // flat workspaceSlug is what workspace_gateway.py's _reconcile_sessions
     // reads (defaulting to 'developer' for any older/unrecognized value).
-    const sessions=rows.map(({machineWorkspace,...row})=>({...row,workspaceSlug:machineWorkspace.workspace.slug}));
+    const approvedConsoleCommit=privateConsoleAgentCommit();
+    const sessions=rows.map(({machineWorkspace,resourceLimits,...row})=>({
+      ...row,
+      workspaceSlug:machineWorkspace.workspace.slug,
+      ...(row.runtimeBackend === WorkspaceRuntimeBackend.WINDOWS_NATIVE
+        ? privateConsoleDesiredFields(resourceLimits,approvedConsoleCommit)
+        : {}),
+    }));
     return {sessions,dataPlane:{hostTunnelEnabled:dataPlaneHostBootstrapEnabled()}};
   });
   app.get('/agent/workspace-gateway/:machineId/sessions/:sessionId/data-plane-host',{config:{rateLimit:{max:120,timeWindow:'1 minute'}}},async(request,reply)=>{
