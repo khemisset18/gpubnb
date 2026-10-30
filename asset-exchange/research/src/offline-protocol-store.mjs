@@ -1,6 +1,6 @@
 // POSIX durable replay adapter for PUBLIC OFFLINE events. No network, wallet, signer or financial effects.
 // Hashes detect rollback only relative to a checkpoint retained independently of this directory.
-import {constants, lstatSync, fstatSync, mkdirSync, openSync, readSync, writeSync, closeSync, fsyncSync} from 'node:fs';
+import {constants, lstatSync, fstatSync, mkdirSync, openSync, readSync, writeSync, closeSync, fsyncSync, unlinkSync} from 'node:fs';
 import {join} from 'node:path';
 import {canonical, dataHash, requireThat, offline} from './offline-data.mjs';
 import {createOfflineJournal, appendOfflineJournal, readOfflineJournal} from './offline-journal.mjs';
@@ -86,9 +86,15 @@ export function readOfflineProtocolStore({directory, tradeId, minimumCheckpoint}
   });
   return result(snapshot, config, events);
 }
-export function appendOfflineProtocolEvent({directory, tradeId, expectedCheckpoint, event}) {
+function appendLocked({directory, tradeId, expectedCheckpoint, event}) {
   const before = readOfflineProtocolStore({directory, tradeId, minimumCheckpoint: expectedCheckpoint});
   requireThat(event.id !== CONFIG_ID, 'reserved configuration event id');
+  const previous = before.events.find(e => e.id === event.id);
+  if (previous) {
+    requireThat(dataHash(previous) === dataHash(event), 'conflicting protocol event replay');
+    return offline({...before, appended: false, duplicate: true});
+  }
+  requireThat(dataHash(before.checkpoint) === dataHash(expectedCheckpoint), 'compare-and-swap checkpoint mismatch');
   // Validates/replays first. Persisting the event blob before the CAS leaves only harmless orphans if CAS loses.
   // A partial blob or a stale writer lock is deliberately not repaired/removed automatically.
   replayOfflineProtocol(before.config, [...before.events, event]);
@@ -97,4 +103,16 @@ export function appendOfflineProtocolEvent({directory, tradeId, expectedCheckpoi
     event: {schemaVersion: 1, id: event.id, tradeId, type: 'OFFLINE_PROTOCOL_EVENT', payload: {protocolEventDigest}}});
   const after = readOfflineProtocolStore({directory, tradeId, minimumCheckpoint: written.checkpoint});
   return offline({...after, appended: written.appended, duplicate: written.duplicate});
+}
+export function appendOfflineProtocolEvent(args) {
+  const {directory} = args; privateDirectory(directory);
+  // Serialize validation + archive + journal commit, not only the final journal append.
+  // Stale requests therefore cannot fill disk with unique orphan archives.
+  const path = join(directory, 'protocol-writer.lock'); let fd;
+  try { fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600); }
+  catch (error) { if (error.code === 'EEXIST') throw new Error('protocol writer lock exists; explicit recovery required'); throw error; }
+  try {
+    privateFile(fd); writeSync(fd, JSON.stringify({schemaVersion: 1, pid: process.pid}) + '\n'); fsyncSync(fd); syncDirectory(directory);
+    return appendLocked(args);
+  } finally { closeSync(fd); unlinkSync(path); syncDirectory(directory); }
 }

@@ -131,8 +131,9 @@ test('reorg reopens a model closure, invalidates both-leg decisions, preserves e
   const state = replayOfflineProtocol(c, events); assert.equal(state.mode, 'HOLD'); assert.equal(state.phase, 'RECONCILIATION_REQUIRED');
   assert.equal(state.legs.A.everExposed, true); assert.equal(state.legs.B.everExposed, true); assert.equal(state.legs.B.confirmed, false);
   assert.equal(state.legs.A.resolution, null); assert.equal(state.secretReceipt, null);
-  const stale = replayOfflineProtocol(c, [...events, reconcileFixture(c, 'LOCKED', 'LOCKED', 122)]); assert.equal(stale.mode, 'HOLD');
-  const fresh = replayOfflineProtocol(c, [...events, reconcileFixture(c, 'LOCKED', 'LOCKED', 122, 1)]); assert.equal(fresh.mode, 'RECOVERY_ONLY');
+  const stale = replayOfflineProtocol(c, [...events, reconcileFixture(c, 'LOCKED', 'LOCKED', 122)]); assert.equal(stale.mode, 'INCIDENT');
+  const impossible = replayOfflineProtocol(c, [...events, reconcileFixture(c, 'LOCKED', 'LOCKED', 122, 1)]); assert.equal(impossible.mode, 'INCIDENT');
+  const fresh = replayOfflineProtocol(c, [...events, reconcileFixture(c, 'LOCKED', 'CLAIMED', 122, 1)]); assert.equal(fresh.mode, 'RECOVERY_ONLY');
   assert.throws(() => replayOfflineProtocol(c, [...events, eventFixture(c, 'REORG', {leg: 'A', newEpoch: 3}, 122)]), /exactly one/);
   assert.throws(() => replayOfflineProtocol(c, [...events, reconcileFixture(c, 'LOCKED', 'LOCKED', 122, 1), eventFixture(c, 'CANCEL', {}, 123)]), /cannot abandon/);
 });

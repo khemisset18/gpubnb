@@ -1,0 +1,11 @@
+{
+  "docs/asset-exchange/research/2026-10-30/evidence/review-g/foundation.log": "7e7ed91ce2a29d4300fe333649e387139ea7952b2a74a992517a8c9186b24f47",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-g/intermediate-failure-2.log": "8fa8f1fd5c4d8e0ffa24433ffc05b6e2fd778af4d8833f9405fd263288a2c3f5",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-g/after-fix.log": "417078bb096315ae8b9fac70ea2e670ade10c41cc8464954550a96f9e3a09386",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-g/before-fix.log": "7bdde1c3e964a3d7b9759ef63eee84ef6b7f42b065119ab3793c16eddf112064",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-g/intermediate-failure.log": "75b62f99d07dc8739ca94f0580c562bbaf2ad32266883234e70cf63b438ba3cc",
+  "asset-exchange/research/src/offline-protocol.mjs": "cd4b91b789999575280d51c76160cf7b1205bc6483a876081ebccf7a9052a2fe",
+  "asset-exchange/research/src/offline-protocol-store.mjs": "070f2a952e5b24147a03b796c6b4a4838809a52576b023812210cf68e2b7ccb9",
+  "asset-exchange/research/test/offline-protocol.test.mjs": "370f81f04e81e784437801f54d9cae2f7085c5b53f0bfe52d288e8ba7dff0444",
+  "asset-exchange/research/test/offline-review-regressions.test.mjs": "8827a1734b9d1a05e22c19646ccd6fe3e4276c64e4a5a869560f774e35677ac3"
+}

@@ -87,11 +87,24 @@ function inspectReports(config, state, legName, reports, now, minimumConfirmatio
   const reasons = [...assessment.reasons];
   if (reports.some(r => r.planDigest !== leg[PLAN_FIELDS[r.outcome]])) reasons.push('PLAN_MISMATCH');
   if (expectedOutcome && reports.some(r => r.outcome !== expectedOutcome)) reasons.push('UNEXPECTED_OUTCOME');
-  return {ok: reasons.length === 0, reasons, digest: dataHash(reports), outcome: reports[0].outcome,
+  for (const r of reports) {
+    const previous = state.legs[legName].sourceObservations['source:' + r.source];
+    if (!previous || r.epoch !== previous.epoch) continue;
+    if (r.observedAt < previous.observedAt) reasons.push('REGRESSING_SOURCE_OBSERVATION');
+    if (r.tipHeight < previous.tipHeight) reasons.push('REGRESSING_CHAIN_TIP_REQUIRES_EPOCH');
+    if (['CLAIMED', 'REFUNDED'].includes(previous.outcome) && r.outcome !== previous.outcome) reasons.push('RESOLUTION_CHANGED_WITHOUT_EPOCH');
+    if (previous.outcome === 'LOCKED' && r.outcome === 'UNFUNDED') reasons.push('LOCK_DISAPPEARED_REQUIRES_RECONCILIATION');
+    if (previous.outcome === r.outcome && r.outcome !== 'UNFUNDED' && (previous.blockHash !== r.blockHash || previous.height !== r.height)) reasons.push('INCLUSION_CHANGED_WITHOUT_EPOCH');
+  }
+  return {ok: reasons.length === 0, reasons: [...new Set(reasons)], reports, digest: dataHash(reports), outcome: reports[0].outcome,
     observedAt: Math.min(...reports.map(r => r.observedAt)), exposurePossible: reports.some(r => r.outcome !== 'UNFUNDED')};
 }
 
-function emptyLeg() { return {epoch: 0, everExposed: false, observed: false, confirmed: false, lockObservedAt: null, lockReceipt: null, resolution: null, spendReceipt: null}; }
+function emptyLeg() { return {epoch: 0, everExposed: false, observed: false, confirmed: false, lockObservedAt: null, lockReceipt: null, resolution: null, spendReceipt: null, sourceObservations: {}}; }
+function rememberEvidence(leg, evidence) {
+  for (const r of evidence.reports) leg.sourceObservations['source:' + r.source] = {epoch: r.epoch, observedAt: r.observedAt,
+    tipHeight: r.tipHeight, blockHash: r.blockHash, height: r.height, outcome: r.outcome};
+}
 function remainingSafe(config, now) {
   const t = config.timing, remaining = BUDGETS.reduce((sum, key) => sum + t[key], 0);
   return now < t.validUntil && t.shortDeadline - now > remaining;
@@ -100,7 +113,11 @@ function freshLocks(config, state, now) {
   return LEGS.every(name => state.legs[name].confirmed && now - state.legs[name].lockObservedAt <= config.legs[name].policy.maximumAge);
 }
 function hasExposure(state) { return LEGS.some(name => state.legs[name].everExposed); }
-function hold(state, reasons, mode = 'HOLD') { state.mode = mode; state.reasons = reasons; }
+function hold(state, reasons, mode = 'HOLD') {
+  // A contradictory resolution is an incident; later operational uncertainty cannot downgrade it.
+  state.mode = state.mode === 'INCIDENT' || reasons.includes('RESOLUTION_CHANGED_WITHOUT_EPOCH') ? 'INCIDENT' : mode;
+  state.reasons = reasons;
+}
 function requireActive(state, phase) { requireThat(state.mode === 'ACTIVE' && state.phase === phase, 'out-of-order or suspended protocol transition'); }
 function receipt(value, name) { digest(value, name); requireThat(value !== '0'.repeat(64), 'empty receipt digest'); }
 
@@ -119,6 +136,12 @@ export function replayOfflineProtocol(config, events) {
     requireThat(event.at >= state.lastEventAt, 'event time moved backwards');
     requireThat(Object.keys(state.eventDigests).length < 48, 'unique protocol event bound exceeded');
     const p = event.payload, now = event.at;
+    if (state.mode === 'CLOSED') {
+      const riskObservation = ['LOCK_OBSERVED', 'LOCK_CONFIRMED', 'SPEND_OBSERVED', 'RECONCILE'].includes(event.type);
+      const exposureAlert = event.type === 'REORG' && hasExposure(state);
+      const uncertainEffect = event.type === 'RPC_ERROR' && p.operationClass === 'MAY_HAVE_MUTATED';
+      requireThat(riskObservation || exposureAlert || uncertainEffect, 'closed protocol state cannot be rewritten by operational events');
+    }
     switch (event.type) {
       case 'VALIDATE_TERMS':
         requireActive(state, 'OFFER_CREATED'); receipt(p.validationReceiptDigest, 'terms validation'); state.phase = 'TERMS_VALIDATED'; break;
@@ -132,6 +155,7 @@ export function replayOfflineProtocol(config, events) {
         const e = inspectReports(config, state, p.leg, p.reports, now, confirmation ? config.legs[p.leg].policy.minimumConfirmations : 1, 'LOCKED');
         leg.everExposed ||= e.exposurePossible;
         if (!e.ok) { hold(state, e.reasons); break; }
+        rememberEvidence(leg, e);
         const predecessor = confirmation ? p.leg + '_LOCK_OBSERVED' : p.leg === 'A' ? 'RECOVERY_PREPARED' : 'A_CONFIRMED';
         if (state.mode !== 'ACTIVE' || state.phase !== predecessor || !state.recoveryPrepared) { hold(state, ['UNEXPECTED_LOCK_OBSERVATION'], 'INCIDENT'); break; }
         if (!remainingSafe(config, now) || (p.leg === 'B' && (!state.legs.A.confirmed || now - state.legs.A.lockObservedAt > config.legs.A.policy.maximumAge))) {
@@ -151,6 +175,7 @@ export function replayOfflineProtocol(config, events) {
         const leg = state.legs[p.leg], e = inspectReports(config, state, p.leg, p.reports, now, config.legs[p.leg].policy.minimumConfirmations, p.outcome);
         leg.everExposed ||= e.exposurePossible;
         if (!e.ok) { hold(state, e.reasons); break; }
+        rememberEvidence(leg, e);
         const expectedPhase = p.leg === 'B' ? 'CLAIM_ELIGIBLE_IN_MODEL' : 'SECRET_OBSERVED_IN_MODEL';
         const expectedClaim = p.outcome === 'CLAIMED' && state.mode === 'ACTIVE' && state.phase === expectedPhase && freshLocks(config, state, now) && remainingSafe(config, now);
         if (leg.resolution && leg.resolution !== p.outcome) hold(state, ['CONFLICTING_SPEND'], 'INCIDENT');
@@ -170,6 +195,7 @@ export function replayOfflineProtocol(config, events) {
       case 'REORG':
         requireThat(Number.isSafeInteger(p.newEpoch) && p.newEpoch === state.legs[p.leg].epoch + 1, 'reorg must advance exactly one epoch');
         state.legs[p.leg].epoch = p.newEpoch;
+        state.legs[p.leg].sourceObservations = {};
         // Preserve exposure and epochs, invalidate both legs' combined safety decision.
         for (const name of LEGS) Object.assign(state.legs[name], {confirmed: false, resolution: null, spendReceipt: null, lockReceipt: null});
         state.secretReceipt = null; state.phase = 'RECONCILIATION_REQUIRED'; hold(state, ['REORG_REQUIRES_BOTH_LEGS'], 'HOLD'); break;
@@ -196,10 +222,15 @@ export function replayOfflineProtocol(config, events) {
           observations[name] = e; state.legs[name].everExposed ||= e.exposurePossible;
         }
         const failed = LEGS.flatMap(name => observations[name].reasons);
-        if (failed.length) { hold(state, failed); break; }
         const outcomes = LEGS.map(name => observations[name].outcome);
+        const mixedSpend = outcomes.includes('CLAIMED') && outcomes.includes('REFUNDED');
+        if (failed.length) {
+          if (mixedSpend) failed.push('MIXED_CLAIM_REFUND_INCIDENT');
+          hold(state, failed, mixedSpend ? 'INCIDENT' : 'HOLD'); break;
+        }
         for (const name of LEGS) {
           const leg = state.legs[name], e = observations[name];
+          rememberEvidence(leg, e);
           leg.confirmed = e.outcome === 'LOCKED'; leg.observed = leg.confirmed;
           leg.lockObservedAt = leg.confirmed ? e.observedAt : null; leg.lockReceipt = leg.confirmed ? e.digest : null;
           leg.resolution = ['CLAIMED', 'REFUNDED'].includes(e.outcome) ? e.outcome : null;
