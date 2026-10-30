@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "scope": "Exact-commit historical source references, retrieved text hash; no claim of native/runtime/maintenance qualification",
+  "sources": [
+    {
+      "id": "bch",
+      "sourceUrl": "https://github.com/bitcoin-cash-node/bitcoin-cash-node/blob/89a591f7c5b1fd110c0819377ad8f2647d656800/src/script/sighashtype.h",
+      "retrievedTextSHA256": "8bf738fff1c87883527602c3360f45241118f164a442cd1d309b2854cd4b21d4",
+      "retrievedBytes": 3687
+    },
+    {
+      "id": "sol",
+      "sourceUrl": "https://github.com/solana-labs/solana/blob/d9f20e951a06b61e4505da0955228020b96a8915/sdk/program/src/account_info.rs",
+      "retrievedTextSHA256": "dc0096411ce48bed4ec21e0b0ba45f39de5e3c72d69db2594ac12a65acb62413",
+      "retrievedBytes": 16801
+    },
+    {
+      "id": "adaptor",
+      "sourceUrl": "https://github.com/basicswap/basicswap/blob/de61f913cbe7c9289dcc735df505daa6f8b19385/doc/protocols/adaptor_sig.md",
+      "retrievedTextSHA256": "acaa4497bad44072f36dfd1a36aceeb964f9074c8b8d9e8db3652c7f67d4948d",
+      "retrievedBytes": 8010
+    }
+  ]
+}

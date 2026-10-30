@@ -1,0 +1,80 @@
+(node:5) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+TAP version 13
+# (node:12) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: all six explicit interfaces remain unqualified even when their structure and digest bind
+ok 1 - all six explicit interfaces remain unqualified even when their structure and digest bind
+  ---
+  duration_ms: 13.692281
+  type: 'test'
+  ...
+# Subtest: family, network, source, fee unit and signing domain substitutions reject
+ok 2 - family, network, source, fee unit and signing domain substitutions reject
+  ---
+  duration_ms: 7.54145
+  type: 'test'
+  ...
+# Subtest: expected digest separately binds amount, destination, recovery and terms even when still well-typed
+ok 3 - expected digest separately binds amount, destination, recovery and terms even when still well-typed
+  ---
+  duration_ms: 4.508801
+  type: 'test'
+  ...
+# Subtest: integer strings, bounded amounts and fee/rent reserves reject float, negative, overflow and excess
+ok 4 - integer strings, bounded amounts and fee/rent reserves reject float, negative, overflow and excess
+  ---
+  duration_ms: 22.629873
+  type: 'test'
+  ...
+# Subtest: actual contract hashes bind P2WSH separately from legacy P2SH without interpreting script semantics
+ok 5 - actual contract hashes bind P2WSH separately from legacy P2SH without interpreting script semantics
+  ---
+  duration_ms: 6.827746
+  type: 'test'
+  ...
+# Subtest: BCH ForkID bit and legacy/SegWit descriptors cannot be silently interchanged
+ok 6 - BCH ForkID bit and legacy/SegWit descriptors cannot be silently interchanged
+  ---
+  duration_ms: 4.703021
+  type: 'test'
+  ...
+# Subtest: UTXO identity, distinct roles, lock domain and nonfinal sequence are independently required
+ok 7 - UTXO identity, distinct roles, lock domain and nonfinal sequence are independently required
+  ---
+  duration_ms: 2.692011
+  type: 'test'
+  ...
+# Subtest: Monero requires a separate adaptor/proof/recovery envelope and excludes a fake script HTLC
+ok 8 - Monero requires a separate adaptor/proof/recovery envelope and excludes a fake script HTLC
+  ---
+  duration_ms: 1.123815
+  type: 'test'
+  ...
+# Subtest: Solana rental purpose, wrong owner, implicit expiry and weaker commitment cannot enter swap envelope
+ok 9 - Solana rental purpose, wrong owner, implicit expiry and weaker commitment cannot enter swap envelope
+  ---
+  duration_ms: 2.372217
+  type: 'test'
+  ...
+# Subtest: no key, preimage, signature, transaction bytes or caller qualification flag is an accepted field
+ok 10 - no key, preimage, signature, transaction bytes or caller qualification flag is an accepted field
+  ---
+  duration_ms: 96.199661
+  type: 'test'
+  ...
+# Subtest: every ordered direction requires its own review; zero of thirty directions becomes qualified
+ok 11 - every ordered direction requires its own review; zero of thirty directions becomes qualified
+  ---
+  duration_ms: 8.106622
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 460.801411

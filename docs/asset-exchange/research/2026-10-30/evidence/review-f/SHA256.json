@@ -1,0 +1,8 @@
+{
+  "docs/asset-exchange/research/2026-10-30/evidence/review-f/after-fix.log": "2d715649f21cbeecbdef5133176f1de5d18e0e1b9b5aa4768e5fa1f42c4fcd3b",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-f/before-fix.log": "444ba4de535f5b5c0c05b1f0980882cea6626419547d5a3bc6d0b5abd0075da6",
+  "asset-exchange/qualification/dogecoin/d2/spend_preparation.py": "d2d27ddea6b5a1a122b41f66f3d8acc1e44f5d2df5bafb65e67153f64205be35",
+  "asset-exchange/qualification/dogecoin/d2/qualification_request.py": "2387bd1f24ef3d5ced79553558a368adf40f929ee355970934333ac3444795e9",
+  "asset-exchange/qualification/dogecoin/d2/test_spend_preparation.py": "fc2d2c30b07d657427d9f0dbe82424639780a3b99681dec66c057566f24adc48",
+  "asset-exchange/qualification/dogecoin/d2/test_qualification_request.py": "ea16db81fa375c09a8cd11d704eb0aa504fc8aeabd62b7a99a6aa3051e17935b"
+}

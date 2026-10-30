@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "kind": "OFFLINE_EXPERIMENT_REQUEST_ONLY",
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "network": "regtest",
+  "genesis": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+  "termsDigest": "1f1a0411faf45f630aa70a43f92df5cd9cc393432b554816b7b1eb49bf2e06d1",
+  "nativeScenarioMatrixSha256": "b342a03deb7f4149221964bb984453eed7530365e3f7cf486fd261004af618b5",
+  "nativeResultVerifier": "OFFLINE_UNAUTHENTICATED_COMPARISON_ONLY",
+  "requiredOriginalArchiveSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+  "requiredArchiveMembers": [
+    "dogecoin-1.14.9/bin/dogecoind",
+    "dogecoin-1.14.9/bin/dogecoin-cli",
+    "dogecoin-1.14.9/lib/libdogecoinconsensus.so.0.0.0"
+  ],
+  "requiredConsensusLibrarySha256": "3c27dd2f3018a3bd659648129a94ba5f211e84b8ec6d308f7f0db001b5e7902b",
+  "inputFiles": [
+    {
+      "path": "offline_candidate.py",
+      "sha256": "b4a814f8e15b30bc41ae3175d1d3ff16ab982a90e1678a182b23498aba1277d2"
+    },
+    {
+      "path": "htlc_codec.py",
+      "sha256": "e418e1ee51cffc37090f99dd4e35b13f9578feaa7831a6a1356aaa098db0db5e"
+    },
+    {
+      "path": "spend_preparation.py",
+      "sha256": "d2d27ddea6b5a1a122b41f66f3d8acc1e44f5d2df5bafb65e67153f64205be35"
+    },
+    {
+      "path": "qualification_request.py",
+      "sha256": "0dc796649cd3bd0941d30f9aa239bd69f086f1f4cbc2092fa22048d4f5c05f7e"
+    },
+    {
+      "path": "native_result_contract.py",
+      "sha256": "836af9e95fa117a6fbefbed84a347f285ca1f7df03ef1a914036371c03dd42c0"
+    },
+    {
+      "path": "fixtures/native_scenarios_v1.json",
+      "sha256": "b342a03deb7f4149221964bb984453eed7530365e3f7cf486fd261004af618b5"
+    },
+    {
+      "path": "fixtures/htlc_codec_v1.json",
+      "sha256": "fb07d34447b89b7123654c52225763a42b2f347a8dad6393bb5111025dede9a4"
+    },
+    {
+      "path": "fixtures/spend_terms_v1.json",
+      "sha256": "2365356dc8288540756bfb387653704230f403a1ccf207763a3bd547866b2341"
+    },
+    {
+      "path": "fixtures/source_policy_map_v1.json",
+      "sha256": "bba7acfe4a9634a7f82ccbaadca65856026b536e27a6c821c2614ebdf2c11ea2"
+    }
+  ],
+  "intentDigests": {
+    "CLAIM": "2d2655ba7b800a08a5dc47b5c276c09dbb0ada13d63f5379dc399faf8de40b69",
+    "REFUND": "f265ade7fa7a510001185278d11025221362705c2dcefd802f186246eaf07f74"
+  },
+  "scenarios": [
+    "valid_claim",
+    "valid_refund_after_lock",
+    "early_refund",
+    "equal_candidate_height_nonfinal",
+    "wrong_signature",
+    "wrong_claim_key",
+    "wrong_refund_key",
+    "wrong_secret",
+    "short_secret",
+    "wrong_outpoint",
+    "wrong_input_value",
+    "wrong_redeem",
+    "wrong_destination",
+    "final_sequence",
+    "lock_domain_mismatch",
+    "changed_signed_lock",
+    "double_spend",
+    "absent_utxo",
+    "immature_coinbase",
+    "hard_dust",
+    "soft_dust_reserve",
+    "dynamic_mempool_fee_floor",
+    "excessive_fee",
+    "script_flag_override"
+  ],
+  "nativeExecutorImplemented": false,
+  "publicSignedFixtureSetDigest": null,
+  "readyForAuthorization": false,
+  "approved": false,
+  "blockingInputs": [
+    "native executor and exact executable commit not yet implemented/frozen",
+    "separately reviewed test-only public keys and signed fixture recipes required",
+    "funding prevouts, signed transaction bytes and exact effect transcript must be frozen",
+    "native policy and RPC-vs-P2P method of measurement must be independently reviewed"
+  ],
+  "proposedResourceBounds": {
+    "nodes": 1,
+    "maxSyntheticBlocks": 1500,
+    "maxGenerateCalls": 4,
+    "maxHtlcUtxos": 4,
+    "maxHtlcUtxoKoinu": "500000000",
+    "maxSubmissions": 24,
+    "maxReadRpcCalls": 96,
+    "maxCpuSeconds": 600,
+    "maxWallSeconds": 900,
+    "maxAddressSpaceMiB": 2048,
+    "maxDataMiB": 512
+  },
+  "proposedConfiguration": {
+    "acceptNonstandard": false,
+    "promiscuousMempoolFlags": null,
+    "privateFreshDatadir": true,
+    "interfaces": [
+      "lo"
+    ],
+    "p2pPeers": 0,
+    "walletDisabled": true,
+    "publicNetwork": false,
+    "gpuBnbCoreAccess": false,
+    "testSignerOutsideCore": true
+  },
+  "unapprovedFutureRpcMethods": [
+    "getblockchaininfo",
+    "getblockhash",
+    "getnetworkinfo",
+    "getpeerinfo",
+    "getrawmempool",
+    "getmempoolinfo",
+    "gettxout",
+    "getrawtransaction",
+    "decodescript",
+    "generatetoaddress",
+    "sendrawtransaction",
+    "stop"
+  ],
+  "nativeProofRequirements": [
+    "unchanged signed D0 archive/SPDX/identity revalidation",
+    "positive signature-bound claim and refund under exact library flags",
+    "complete IsStandardTx/AreInputsStandard and effective standard script flags",
+    "mempool membership and UTXO reconciliation even after an RPC error",
+    "RPC acceptance distinguished from P2P free-limiter/relay policy",
+    "all predeclared negative cases reject at the independently expected layer"
+  ],
+  "cleanupRequirements": [
+    "clean node stop and zero external peers/connections",
+    "private test-key material never uploaded; destroy only named disposable resources after proof capture",
+    "preserve public transcript, input/output hashes, namespace inventory and failure logs"
+  ],
+  "excluded": [
+    "user wallets",
+    "real funds",
+    "public-network submission",
+    "Core connectivity",
+    "Mainnet",
+    "D0/D1 trust changes",
+    "D3-D9 execution",
+    "deployment",
+    "exchange activation"
+  ],
+  "qualificationStatus": "BLOCKED",
+  "executableOperations": [],
+  "transactionBytes": null
+}

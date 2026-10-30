@@ -1,0 +1,15 @@
+{
+  "asset-exchange/research/src/offline-journal.mjs": "5cd2addfbc5d9bc42f3c42b77a788ca9b75ef5af0b7d619b4921917a7c3472ca",
+  "asset-exchange/research/src/offline-protocol-store.mjs": "6c3763d8a5a40185d4623cab394099d15909c34ba0df0d905a7856617fe4f9dc",
+  "asset-exchange/research/src/offline-protocol.mjs": "9c0e22f73fa3452a618ca5599da0cdb23044dcee74ceeb41c87ef2d017a8f0ee",
+  "asset-exchange/research/test/offline-protocol-store.test.mjs": "9a839e3a849601d42bd4149598d36354efc46edb27431b3a352a26a86412e829",
+  "asset-exchange/research/test/offline-protocol.test.mjs": "48d01c417ee84a652251b5a93482cdd2cc4c46b295a45a5142dedc5011d2b69a",
+  "asset-exchange/research/test/protocol-fixtures.mjs": "90101f59620fe24a5c9c8a079cfbdebff2b7dcd8b3f620e24af27173cb2bc11c",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-c/foundation-attempt-1.log": "25645d57f95ce08ca85a09be371533f5b9581952975d4b4406df5fe804f73230",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-c/foundation-tests.log": "f4c67878d424a41c2f1125adca3d92639b74aa4f68de26d1ecee72263fc77f4d",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-c/node-version.log": "2266957ed9a639bd7264d714bfa798a961510bf2e50695c668ab8fc0c3f4e906",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-c/syntax.log": "46851ceb81d69085f660ac9a83a939747c52c0996f01bf27b7e117ac49f5d81c",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-c/targeted-attempt-2.log": "3f758207879b8f5882a65da637c62a05cc0b6a8e41d26ab68ef20a32f12bc06f",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-c/targeted-attempt-3.log": "2003537f8a08fe38fa9770f09bc286aefc5d0b40edcdf7a604ff1f60118e6394",
+  "docs/asset-exchange/research/2026-10-30/evidence/increment-c/targeted-tests.log": "20190ab5232d600d26ee8f379a48b8ef6a5555f56e2f2eaaed5db480bd5a384a"
+}

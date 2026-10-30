@@ -1,6 +1,7 @@
 # Offline swap design research
 
-Only pure data models, structural validators and digest-pinned source inspection.
+Offline data models, structural validators, local POSIX persistence and
+digest-pinned source inspection.
 No node/signer/wallet/transaction executor, production import or capability
 activation. The model accepts assumed validator outputs; it does not implement
 cryptographic verification or establish D2–D9 qualification.
@@ -15,3 +16,23 @@ The reviewed source ledger, twenty-direction pair matrix, architecture,
 recovery/threat/fee/state/authorization and license/legal notes are under
 `docs/asset-exchange/research/2026-10-29/`. All production-facing capabilities
 remain unchanged. No external implementation was vendored into the runtime.
+
+## Durable offline protocol specification
+
+`src/offline-protocol.mjs` replays strict public events with separate observed and
+confirmed locks, sticky exposure, stale/conflicting evidence holds and reorg
+reconciliation. `src/offline-protocol-store.mjs` persists and replays that model
+through the private POSIX journal with compare-and-swap, idempotency and an
+independently retained checkpoint. Every result remains unqualified with no
+executable operations. Neither module is imported into financial runtime paths.
+See `docs/asset-exchange/research/2026-10-30/DOGE_OFFLINE_INCREMENT_C.md` for the
+actual filesystem/process tests and the distinction from native recovery proofs.
+
+## Six-chain interface boundaries
+
+`src/chain-boundaries.mjs` validates separate synthetic descriptors and public plan
+envelopes for BTC, DOGE, LTC, BCH, XMR and SOL. It hashes public UTXO contracts and
+checks output binding, exact schemas, amount units and ordered pair review
+bindings. It never interprets scripts, verifies signatures, qualifies a route or
+connects a chain. The Solana rental escrow and a Monero script HTLC are rejected
+as substitutes. See `DOGE_OFFLINE_INCREMENT_E.md` in the same research docs folder.

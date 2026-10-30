@@ -1,0 +1,62 @@
+(node:4) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+TAP version 13
+# (node:11) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: a terminal newline cannot bypass the exact digest boundary
+ok 1 - a terminal newline cannot bypass the exact digest boundary
+  ---
+  duration_ms: 2.008878
+  type: 'test'
+  ...
+# Subtest: canonical integer strings cannot use terminal whitespace accepted by BigInt
+ok 2 - canonical integer strings cannot use terminal whitespace accepted by BigInt
+  ---
+  duration_ms: 0.303783
+  type: 'test'
+  ...
+# Subtest: full text match rejects JavaScript dollar-anchor terminal-newline behavior
+ok 3 - full text match rejects JavaScript dollar-anchor terminal-newline behavior
+  ---
+  duration_ms: 0.300457
+  type: 'test'
+  ...
+# Subtest: small shared data graphs cannot cause unbounded canonical expansion
+ok 4 - small shared data graphs cannot cause unbounded canonical expansion
+  ---
+  duration_ms: 26.72509
+  type: 'test'
+  ...
+# Subtest: canonical object keys are bounded independently from values
+ok 5 - canonical object keys are bounded independently from values
+  ---
+  duration_ms: 0.419159
+  type: 'test'
+  ...
+# Subtest: aggregate strings cannot bypass individual field bounds
+ok 6 - aggregate strings cannot bypass individual field bounds
+  ---
+  duration_ms: 0.499644
+  type: 'test'
+  ...
+# Subtest: all six descriptor boundaries reject newline-suffixed identity digests
+ok 7 - all six descriptor boundaries reject newline-suffixed identity digests
+  ---
+  duration_ms: 1.468603
+  type: 'test'
+  ...
+# Subtest: normal canonical bytes and hashes retain the independently specified vector
+ok 8 - normal canonical bytes and hashes retain the independently specified vector
+  ---
+  duration_ms: 0.768642
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 215.116861

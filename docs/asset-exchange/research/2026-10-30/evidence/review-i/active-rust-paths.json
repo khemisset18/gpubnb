@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "scope": "read-only active Cargo.lock graph, not an exploitability waiver or migration test",
+  "cargoLockSha256": "7eab89d15e587b2858b77b52d3ddf5316606bb68d1c1db7ce12567168e662301",
+  "reviewedRustPrCommit": "35fb07cbc1487d05f5f38d0450e9dbdb0a63301e",
+  "findings": [
+    {
+      "package": "borsh",
+      "version": "0.10.4",
+      "directParents": [
+        "anchor-lang 0.31.1",
+        "solana-borsh 2.2.1",
+        "solana-program 2.3.0",
+        "solana-pubkey 2.4.0",
+        "solana-stake-interface 1.2.1"
+      ],
+      "oneRootPath": [
+        "gpu_escrow 0.2.0",
+        "anchor-lang 0.31.1",
+        "borsh 0.10.4"
+      ]
+    },
+    {
+      "package": "glib",
+      "version": "0.18.5",
+      "directParents": [
+        "atk 0.18.2",
+        "cairo-rs 0.18.5",
+        "gdk 0.18.2",
+        "gdk-pixbuf 0.18.5",
+        "gdkx11 0.18.2",
+        "gio 0.18.4",
+        "gtk 0.18.2",
+        "javascriptcore-rs 1.1.2",
+        "libappindicator 0.9.0",
+        "pango 0.18.3",
+        "soup3 0.5.0",
+        "webkit2gtk 2.0.2"
+      ],
+      "oneRootPath": [
+        "gpubnb-host-desktop 0.1.0",
+        "tauri 2.11.5",
+        "gtk 0.18.2",
+        "glib 0.18.5"
+      ]
+    },
+    {
+      "package": "rand",
+      "version": "0.7.3",
+      "directParents": [
+        "libsecp256k1 0.6.0"
+      ],
+      "oneRootPath": [
+        "gpu_escrow 0.2.0",
+        "anchor-lang 0.31.1",
+        "solana-program 2.3.0",
+        "solana-secp256k1-recover 2.2.1",
+        "libsecp256k1 0.6.0",
+        "rand 0.7.3"
+      ]
+    }
+  ],
+  "activeGraphChanged": false,
+  "scannerGateRetained": true
+}

@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "scope": "public deterministic scenario expectations, not signed transaction fixtures or observed native results",
+  "cases": [
+    {
+      "id": "valid_claim",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "PASS",
+        "FINALITY": "PASS",
+        "STANDARDNESS": "PASS",
+        "UTXO": "PASS",
+        "MEMPOOL": "PASS"
+      },
+      "predicate": "positive signature-bound spend; full script, context, inputs, policy and admission"
+    },
+    {
+      "id": "valid_refund_after_lock",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "PASS",
+        "FINALITY": "PASS",
+        "STANDARDNESS": "PASS",
+        "UTXO": "PASS",
+        "MEMPOOL": "PASS"
+      },
+      "predicate": "positive signature-bound spend; full script, context, inputs, policy and admission"
+    },
+    {
+      "id": "early_refund",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "PASS",
+        "FINALITY": "REJECT",
+        "MEMPOOL": "REJECT"
+      },
+      "predicate": "CLTV operand may compare successfully while strict next-block transaction finality rejects"
+    },
+    {
+      "id": "equal_candidate_height_nonfinal",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "PASS",
+        "FINALITY": "REJECT",
+        "MEMPOOL": "REJECT"
+      },
+      "predicate": "CLTV operand may compare successfully while strict next-block transaction finality rejects"
+    },
+    {
+      "id": "wrong_signature",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "REJECT"
+      },
+      "predicate": "frozen after-signing mutation must fail the expected legacy signature/branch condition"
+    },
+    {
+      "id": "wrong_claim_key",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "REJECT"
+      },
+      "predicate": "frozen after-signing mutation must fail the expected legacy signature/branch condition"
+    },
+    {
+      "id": "wrong_refund_key",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "REJECT"
+      },
+      "predicate": "frozen after-signing mutation must fail the expected legacy signature/branch condition"
+    },
+    {
+      "id": "wrong_secret",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "REJECT"
+      },
+      "predicate": "frozen after-signing mutation must fail the expected legacy signature/branch condition"
+    },
+    {
+      "id": "short_secret",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "REJECT"
+      },
+      "predicate": "frozen after-signing mutation must fail the expected legacy signature/branch condition"
+    },
+    {
+      "id": "wrong_redeem",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "REJECT"
+      },
+      "predicate": "frozen after-signing mutation must fail the expected legacy signature/branch condition"
+    },
+    {
+      "id": "lock_domain_mismatch",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "REJECT"
+      },
+      "predicate": "frozen after-signing mutation must fail the expected legacy signature/branch condition"
+    },
+    {
+      "id": "changed_signed_lock",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "REJECT"
+      },
+      "predicate": "frozen after-signing mutation must fail the expected legacy signature/branch condition"
+    },
+    {
+      "id": "wrong_outpoint",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "REJECT"
+      },
+      "predicate": "frozen after-signing mutation must fail the expected legacy signature/branch condition"
+    },
+    {
+      "id": "wrong_destination",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "REJECT"
+      },
+      "predicate": "frozen after-signing mutation must fail the expected legacy signature/branch condition"
+    },
+    {
+      "id": "final_sequence",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "REJECT",
+        "FINALITY": "PASS"
+      },
+      "predicate": "all-final sequence makes IsFinalTx true but fails CheckLockTime for the refund input"
+    },
+    {
+      "id": "wrong_input_value",
+      "measurementKind": "OFFLINE_PREFLIGHT",
+      "expected": {
+        "EXPECTED_INPUT_VALUE_BINDING": "REJECT"
+      },
+      "predicate": "legacy signature hashing does not commit to the spent input amount; check independently expected UTXO terms"
+    },
+    {
+      "id": "double_spend",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "UTXO": "REJECT",
+        "MEMPOOL": "REJECT"
+      },
+      "predicate": "spent or conflicting outpoint cannot be admitted twice"
+    },
+    {
+      "id": "absent_utxo",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "UTXO": "MISSING",
+        "MEMPOOL": "REJECT"
+      },
+      "predicate": "missing funding prevout is not evidence of script rejection"
+    },
+    {
+      "id": "immature_coinbase",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "UTXO": "REJECT",
+        "MEMPOOL": "REJECT"
+      },
+      "predicate": "coinbase maturity checks use the actual funding height"
+    },
+    {
+      "id": "hard_dust",
+      "measurementKind": "NATIVE_CORE",
+      "expected": {
+        "SCRIPT": "PASS",
+        "STANDARDNESS": "REJECT",
+        "MEMPOOL": "REJECT"
+      },
+      "predicate": "valid signature/script alone cannot satisfy hard-dust output policy"
+    },
+    {
+      "id": "soft_dust_reserve",
+      "measurementKind": "NATIVE_POLICY_PROBE",
+      "expected": {
+        "SOFT_DUST_SURCHARGE": "PASS"
+      },
+      "predicate": "GetDogecoinDustFee charges the exact soft-dust threshold for a spendable output below it; sendrawtransaction is not a free-limiter probe"
+    },
+    {
+      "id": "dynamic_mempool_fee_floor",
+      "measurementKind": "NATIVE_POLICY_PROBE",
+      "expected": {
+        "DYNAMIC_MEMPOOL_FEE_FLOOR": "REJECT"
+      },
+      "predicate": "independently frozen mempool pressure/context and fee floor required; currently not measured"
+    },
+    {
+      "id": "excessive_fee",
+      "measurementKind": "OFFLINE_PREFLIGHT",
+      "expected": {
+        "USER_FEE_CAP": "REJECT"
+      },
+      "predicate": "user intent cap is separate from native node maximum-fee policy"
+    },
+    {
+      "id": "script_flag_override",
+      "measurementKind": "OFFLINE_PREFLIGHT",
+      "expected": {
+        "EFFECTIVE_SCRIPT_FLAGS": "REJECT"
+      },
+      "predicate": "reject promiscuousmempoolflags before an authorized native run"
+    }
+  ]
+}

@@ -1,0 +1,424 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "license": "MIT; retained DOGECOIN_COPYING",
+  "classification": "source inspection, not native execution",
+  "conditions": [
+    {
+      "id": "HTLC_ENCODING",
+      "layer": "PROFILE_AND_POLICY",
+      "path": "src/script/interpreter.cpp",
+      "symbolOrAnchor": "bool static CheckMinimalPush",
+      "anchorLines": [
+        225
+      ],
+      "reviewedLines": [
+        225,
+        250
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/interpreter.cpp#L225",
+      "rule": "Canonical template and script pushes; full native minimal-data checks still required",
+      "offlineTestModule": "test_htlc_codec",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "SECRET_HASH_AND_LENGTH",
+      "layer": "CONSENSUS_SCRIPT",
+      "path": "src/script/interpreter.cpp",
+      "symbolOrAnchor": "case OP_SHA256:",
+      "anchorLines": [
+        849
+      ],
+      "reviewedLines": [
+        709,
+        849
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/interpreter.cpp#L849",
+      "rule": "OP_SIZE/EQUALVERIFY/SHA256/CHECKSIG must execute under actual signature checker",
+      "offlineTestModule": "test_htlc_codec",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "CLTV_OPERAND",
+      "layer": "CONSENSUS_SCRIPT",
+      "path": "src/script/interpreter.cpp",
+      "symbolOrAnchor": "case OP_CHECKLOCKTIMEVERIFY:",
+      "anchorLines": [
+        350
+      ],
+      "reviewedLines": [
+        350,
+        390
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/interpreter.cpp#L350",
+      "rule": "Negative and >5byte operands; five-byte values above uint32 cannot match tx lock",
+      "offlineTestModule": "test_htlc_codec",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "CLTV_DOMAIN_SEQUENCE",
+      "layer": "CONSENSUS_SCRIPT",
+      "path": "src/script/interpreter.cpp",
+      "symbolOrAnchor": "bool TransactionSignatureChecker::CheckLockTime",
+      "anchorLines": [
+        1274
+      ],
+      "reviewedLines": [
+        1274,
+        1310
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/interpreter.cpp#L1274",
+      "rule": "Same domain, operand<=txLock, this input nonfinal",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "LEGACY_IF_SELECTOR",
+      "layer": "PROFILE_NOT_UNIVERSAL_CONSENSUS",
+      "path": "src/script/interpreter.cpp",
+      "symbolOrAnchor": "sigversion == SIGVERSION_WITNESS_V0",
+      "anchorLines": [
+        219,
+        447,
+        1180
+      ],
+      "reviewedLines": [
+        436,
+        466
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/interpreter.cpp#L219",
+      "rule": "MINIMALIF check is witness-only; canonical OP_1/OP_0 is our narrower legacy preparation profile",
+      "offlineTestModule": "test_htlc_codec",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "P2SH_REDEEM",
+      "layer": "CONSENSUS_SCRIPT",
+      "path": "src/script/interpreter.cpp",
+      "symbolOrAnchor": "bool VerifyScript(",
+      "anchorLines": [
+        1409
+      ],
+      "reviewedLines": [
+        1409,
+        1512
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/interpreter.cpp#L1409",
+      "rule": "Hash160 match, push-only scriptSig, execute redeem; no native signature proof here",
+      "offlineTestModule": "test_htlc_codec",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "FINALITY_MEMPOOL",
+      "layer": "MEMPOOL_FINALITY",
+      "path": "src/validation.cpp",
+      "symbolOrAnchor": "bool CheckFinalTx(",
+      "anchorLines": [
+        271
+      ],
+      "reviewedLines": [
+        258,
+        301
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L271",
+      "rule": "Strict lock<tip+1/MTP, not CLTV equality",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "FINALITY_BLOCK",
+      "layer": "CONSENSUS_CONTEXT",
+      "path": "src/validation.cpp",
+      "symbolOrAnchor": "bool ContextualCheckBlock(",
+      "anchorLines": [
+        3121
+      ],
+      "reviewedLines": [
+        3122,
+        3145
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3121",
+      "rule": "MTP only when CSV active; otherwise candidate block time",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "BIP65_ACTIVATION",
+      "layer": "CONSENSUS_CONTEXT",
+      "path": "src/chainparams.cpp",
+      "symbolOrAnchor": "consensus.BIP65Height = 1351;",
+      "anchorLines": [
+        390
+      ],
+      "reviewedLines": [
+        376,
+        425
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparams.cpp#L390",
+      "rule": "Regtest activation1351 and coinbase maturity60; not inherited from BTC",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "STANDARDNESS_CONFIGURATION",
+      "layer": "NODE_POLICY_CONFIGURATION",
+      "path": "src/init.cpp",
+      "symbolOrAnchor": "fRequireStandard = !GetBoolArg",
+      "anchorLines": [
+        1057
+      ],
+      "reviewedLines": [
+        1057,
+        1059
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/init.cpp#L1057",
+      "rule": "Default regtest nonstandard allowed; acceptnonstdtxn=0 required in proposed standardness experiment",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "SCRIPT_FLAG_OVERRIDE",
+      "layer": "NODE_POLICY_CONFIGURATION",
+      "path": "src/validation.cpp",
+      "symbolOrAnchor": "-promiscuousmempoolflags",
+      "anchorLines": [
+        981
+      ],
+      "reviewedLines": [
+        979,
+        985
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L981",
+      "rule": "Regtest flags override is gated by Params().RequireStandard(), not fRequireStandard",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "STANDARD_TRANSACTION",
+      "layer": "RELAY_POLICY",
+      "path": "src/policy/policy.cpp",
+      "symbolOrAnchor": "bool IsStandardTx(",
+      "anchorLines": [
+        60
+      ],
+      "reviewedLines": [
+        60,
+        122
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/policy/policy.cpp#L60",
+      "rule": "Version,weight400000,scriptSig1650,push-only,output templates,dust and OP_RETURN budget",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "STANDARD_INPUTS",
+      "layer": "RELAY_POLICY",
+      "path": "src/policy/policy.cpp",
+      "symbolOrAnchor": "bool AreInputsStandard(",
+      "anchorLines": [
+        124
+      ],
+      "reviewedLines": [
+        124,
+        156
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/policy/policy.cpp#L124",
+      "rule": "P2SH redeem sigops<=15; not established by Solver alone",
+      "offlineTestModule": "test_htlc_codec",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "INPUT_EXISTENCE_AND_CONFLICT",
+      "layer": "UTXO_AND_MEMPOOL",
+      "path": "src/validation.cpp",
+      "symbolOrAnchor": "bool AcceptToMemoryPoolWorker(",
+      "anchorLines": [
+        608
+      ],
+      "reviewedLines": [
+        608,
+        752
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L608",
+      "rule": "Missing/spent/conflicting UTXOs are distinct; replacement is not simulated as consensus",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "INPUT_VALUE_MATURITY_FEE",
+      "layer": "CONSENSUS_INPUT_CONTEXT",
+      "path": "src/validation.cpp",
+      "symbolOrAnchor": "nCoinbaseMaturity",
+      "anchorLines": [
+        1433,
+        1434
+      ],
+      "reviewedLines": [
+        1419,
+        1459
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L1433",
+      "rule": "Amounts/maturity/source UTXO must be validated, not trusted from caller model facts",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "HARD_DUST",
+      "layer": "RELAY_POLICY",
+      "path": "src/primitives/transaction.h",
+      "symbolOrAnchor": "bool IsDust(",
+      "anchorLines": [
+        169
+      ],
+      "reviewedLines": [
+        168,
+        177
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/primitives/transaction.h#L169",
+      "rule": "Spendable output value<hardDust; OP_RETURN exemption is not a safe refund destination",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "FEE_ARITHMETIC",
+      "layer": "ARITHMETIC_MODEL",
+      "path": "src/amount.cpp",
+      "symbolOrAnchor": "CAmount CFeeRate::GetFee(",
+      "anchorLines": [
+        24
+      ],
+      "reviewedLines": [
+        28,
+        44
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/amount.cpp#L24",
+      "rule": "Integer truncation and positive one-koinu floor; do not silently use ceiling",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "SOFT_DUST_AND_RELAY_FEE",
+      "layer": "CONDITIONAL_RELAY_POLICY",
+      "path": "src/dogecoin-fees.cpp",
+      "symbolOrAnchor": "CAmount GetDogecoinMinRelayFee(",
+      "anchorLines": [
+        67
+      ],
+      "reviewedLines": [
+        67,
+        107
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/dogecoin-fees.cpp#L67",
+      "rule": "Priority deltas/free area/soft dust affect fee recommendation; no generic fee=>consensus claim",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "RPC_FREE_LIMITER",
+      "layer": "RPC_VS_P2P_POLICY",
+      "path": "src/rpc/rawtransaction.cpp",
+      "symbolOrAnchor": "bool fLimitFree = false;",
+      "anchorLines": [
+        896
+      ],
+      "reviewedLines": [
+        887,
+        913
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/rawtransaction.cpp#L896",
+      "rule": "RPC sendrawtransaction passes fLimitFree=false; it does not test the P2P free limiter path",
+      "offlineTestModule": "test_spend_preparation",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "RPC_ERROR_AFTER_ADMISSION",
+      "layer": "EFFECT_RECONCILIATION",
+      "path": "src/rpc/rawtransaction.cpp",
+      "symbolOrAnchor": "if(!g_connman)",
+      "anchorLines": [
+        922
+      ],
+      "reviewedLines": [
+        899,
+        927
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/rawtransaction.cpp#L922",
+      "rule": "Admission occurs before P2P-disabled error. Error reply is not proof of absent effect",
+      "offlineTestModule": "planned_offline_protocol_recovery",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    },
+    {
+      "id": "DECODESCRIPT_LIMIT",
+      "layer": "RPC_CLASSIFICATION_ONLY",
+      "path": "src/rpc/rawtransaction.cpp",
+      "symbolOrAnchor": "UniValue decodescript(",
+      "anchorLines": [
+        536
+      ],
+      "reviewedLines": [
+        536,
+        584
+      ],
+      "sourceUrl": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/rawtransaction.cpp#L536",
+      "rule": "ScriptPubKeyToJSON/Solver is not full validity/standardness/admission",
+      "offlineTestModule": "test_script_diagnostics",
+      "nativeEvidenceForNewHtlc": "NOT TESTED"
+    }
+  ],
+  "files": {
+    "src/script/interpreter.cpp": {
+      "sha256": "55a40e7cf109f1c9895675db4b20e8f2e7024cfc1d0c564d3583e8c940b3ac94",
+      "gitBlob": "f9b7835882833569e158c2e358c4e2ba779ba97e"
+    },
+    "src/validation.cpp": {
+      "sha256": "e9f13df6a83e057fba52f3525fec894ba13a1dcec52be3cf71b13fd181c79e00",
+      "gitBlob": "a0541361b43db4e3033ad139136fa5fae7b7222e"
+    },
+    "src/chainparams.cpp": {
+      "sha256": "150d3733903d05f22e2ce3bc195a65f99ced183e16f2e75f52a72d0df8ec5d9c",
+      "gitBlob": "5f8ebaa7af1e9a821cc700f8f23827e78554b7fa"
+    },
+    "src/init.cpp": {
+      "sha256": "fffc4fe0fbf7031043b3bc75fb615b5e4a298d2cdcf81dd28dc44a06af206a4e",
+      "gitBlob": "dcb3415306f0ab7518c2268fff07b87bb461de9f"
+    },
+    "src/policy/policy.cpp": {
+      "sha256": "da7d8cca27e0e44181805237cd7f3b66be380998f4d2474c7872a25c388250b5",
+      "gitBlob": "0bc05ad01d332ffba4a638a22209821501ae3cbd"
+    },
+    "src/primitives/transaction.h": {
+      "sha256": "e69a087c0bf79299462016f06025e2d3d75f1583fa0469491d86c9b46f4f2205",
+      "gitBlob": "b5ba4ede9c9aa62ac5a7191d408750345a147e27"
+    },
+    "src/amount.cpp": {
+      "sha256": "7fd0b6c551e54368d05ae0f7889dba7cfe57fff0eeafdcbf53866da9a40e9241",
+      "gitBlob": "ae9ce2fec272f831733b258d69eba696f18eed70"
+    },
+    "src/dogecoin-fees.cpp": {
+      "sha256": "e35b1290f63dd19732a1971a383f309b687e10680409dc8e7a89a2bb056ff219",
+      "gitBlob": "82802afa13b2f9c6d0aafdb5d3aa1ca123b4cf67"
+    },
+    "src/rpc/rawtransaction.cpp": {
+      "sha256": "ecf3cb464e7b955bda3d51e99cded73b354583fab1a1b2b678a36d656b303ff4",
+      "gitBlob": "5155e0780e9043e0975796263701826b735bb41f"
+    },
+    "src/script/standard.cpp": {
+      "sha256": "bca64f186b1639b83c06913b12dd65e64742b550f8b3f272de504dbada20183b",
+      "gitBlob": "4b9bec9aa18a45738c8275ba112d2bd68bd6d769"
+    },
+    "src/script/script.h": {
+      "sha256": "ad612f17b44361d08992558108a7a4f43d177c7b171137dbc37cdaeb31739591",
+      "gitBlob": "654dff4625ddc9dd57b8e97413dd6b2878656201"
+    },
+    "src/policy/policy.h": {
+      "sha256": "1929f7a8c27228fabed8eb44223dda53dd86ea448f009fdd77e0024f9826ab51",
+      "gitBlob": "d4d71f0aaef668d6a8dcbc59253c3b3527a7bc1a"
+    },
+    "src/amount.h": {
+      "sha256": "75285638d2675df7f3f569e26296435399f51fc74104cf816e73eef5d3debc41",
+      "gitBlob": "286197a4ac074b2864ba76646017aed50cc47a27"
+    }
+  },
+  "rpcTestMempoolAcceptPresent": false,
+  "qualificationStatus": "BLOCKED"
+}

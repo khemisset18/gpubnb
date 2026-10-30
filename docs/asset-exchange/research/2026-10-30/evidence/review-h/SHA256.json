@@ -1,0 +1,13 @@
+{
+  "docs/asset-exchange/research/2026-10-30/evidence/review-h/tests-final.log": "c65901f39cca04a15a9a92cb82ee269c5c7298208266db946ae66466b6aea637",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-h/tests-attempt-2.log": "167418814243ecddb448aacef492b77cbc202730bfe5e3e38c13a012de06af69",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-h/tests-attempt-1.log": "1144aa113bfbc76b1cb6ff5c77b7c3763c001ecaa6ee430ca5780185d3027c10",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-h/model-comparison.json": "7622fa23366b83f592d4c07061d64fed993d59b7f05b409c006c1e6685a52b42",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-h/request-only.json": "240df6efba4a12f00b341e16ca2e393cf2fb1e33ca9a7d6373399464251c0f1c",
+  "asset-exchange/qualification/dogecoin/d2/native_result_contract.py": "836af9e95fa117a6fbefbed84a347f285ca1f7df03ef1a914036371c03dd42c0",
+  "asset-exchange/qualification/dogecoin/d2/qualification_request.py": "0dc796649cd3bd0941d30f9aa239bd69f086f1f4cbc2092fa22048d4f5c05f7e",
+  "asset-exchange/qualification/dogecoin/d2/test_native_result_contract.py": "01996a98e469f73ab65c9e9c7185e18d484cfd6c88a00db25a4891013562cef2",
+  "asset-exchange/qualification/dogecoin/d2/fixtures/native_scenarios_v1.json": "b342a03deb7f4149221964bb984453eed7530365e3f7cf486fd261004af618b5",
+  "asset-exchange/qualification/dogecoin/d2/fixtures/native_report_model_v1.json": "63871d07e97f696f093722f66f5c9879cc5b55557f1ca63a28979ef204453be1",
+  "asset-exchange/qualification/dogecoin/d2/fixtures/public-model.log": "d4fe23a07ee8563d11be75ddf801488fcbe2635894802af2666bc15df56d1143"
+}

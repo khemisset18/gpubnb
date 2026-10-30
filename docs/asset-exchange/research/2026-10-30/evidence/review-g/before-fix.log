@@ -1,0 +1,248 @@
+(node:5) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+TAP version 13
+# (node:12) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: closed cancellation is not rewritten into expiry or an operational hold
+not ok 1 - closed cancellation is not rewritten into expiry or an operational hold
+  ---
+  duration_ms: 8.6717
+  type: 'test'
+  location: '/workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:11:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'throws'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:15:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+  ...
+# Subtest: a closed claimed trade does not reopen merely because the clock advances
+not ok 2 - a closed claimed trade does not reopen merely because the clock advances
+  ---
+  duration_ms: 10.391891
+  type: 'test'
+  location: '/workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:18:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'throws'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:20:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: fresh arrival time cannot disguise older per-source observation time
+not ok 3 - fresh arrival time cannot disguise older per-source observation time
+  ---
+  duration_ms: 3.038659
+  type: 'test'
+  location: '/workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:22:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    'ACTIVE' !== 'HOLD'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'HOLD'
+  actual: 'ACTIVE'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:26:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: tip regression requires a new epoch even when fabricated depth still reaches the minimum
+not ok 4 - tip regression requires a new epoch even when fabricated depth still reaches the minimum
+  ---
+  duration_ms: 3.596611
+  type: 'test'
+  location: '/workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:28:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    'ACTIVE' !== 'HOLD'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'HOLD'
+  actual: 'ACTIVE'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:32:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: disappeared locks preserve the previous evidence and require explicit epoch reconciliation
+not ok 5 - disappeared locks preserve the previous evidence and require explicit epoch reconciliation
+  ---
+  duration_ms: 6.18222
+  type: 'test'
+  location: '/workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:34:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'RECOVERY_ONLY'
+    - 'HOLD'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'HOLD'
+  actual: 'RECOVERY_ONLY'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:37:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: a fresh contradictory reconciliation cannot rewrite closed claims into refunds without reorg epochs
+not ok 6 - a fresh contradictory reconciliation cannot rewrite closed claims into refunds without reorg epochs
+  ---
+  duration_ms: 4.257137
+  type: 'test'
+  location: '/workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:39:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    'CLOSED' !== 'HOLD'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'HOLD'
+  actual: 'CLOSED'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:42:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: stale writers fail before archiving uncommitted events
+not ok 7 - stale writers fail before archiving uncommitted events
+  ---
+  duration_ms: 52.972875
+  type: 'test'
+  location: '/workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:50:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    true !== false
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:54:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: an interrupted protocol writer lock is never stolen or ignored
+not ok 8 - an interrupted protocol writer lock is never stolen or ignored
+  ---
+  duration_ms: 30.756731
+  type: 'test'
+  location: '/workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:56:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'throws'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:58:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: actual SIGKILL in a partial journal write preserves torn bytes and both recovery locks
+not ok 9 - actual SIGKILL in a partial journal write preserves torn bytes and both recovery locks
+  ---
+  duration_ms: 143.233988
+  type: 'test'
+  location: '/workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:61:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    false !== true
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/1e74791da067/doge-offline-protocol-20261030/asset-exchange/research/test/offline-review-regressions.test.mjs:70:76)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: actual SIGKILL after journal fsync recovers committed state but forbids lock stealing
+ok 10 - actual SIGKILL after journal fsync recovers committed state but forbids lock stealing
+  ---
+  duration_ms: 180.897605
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 1
+# fail 9
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 614.013134

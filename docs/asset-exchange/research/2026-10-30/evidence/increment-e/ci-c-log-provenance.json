@@ -1,0 +1,8 @@
+{
+  "runId": 41113793744,
+  "jobId": 124262652520,
+  "head": "248acd44765785694e4117ca727fc3d4dfe373b8",
+  "fullFetchedLogSHA256": "4e95a63b5586c3b3ac9d94cc38ad90be542da487fdafcc90131b8f1327d2e053",
+  "publishedLogScope": "exact public findings excerpt only; no environment or credentials",
+  "blockingCount": 3
+}

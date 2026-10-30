@@ -1,0 +1,8 @@
+{
+  "scope": "known public fixture residue from local tests; preserved by rename, never deleted",
+  "preservedPath": "/workspace/scratch/1e74791da067/preserved-doge-test-residue-PLTvSL",
+  "files": {
+    "private/config.json": "b4efdb08f920c5292bee9f1e84104eb4c8da954339ea5120ca4da4e52ca2ebd6",
+    "private/journal.ndjson": "15f74ca5fdba0e9bd24a50ab91038d8a3584a87418fcd0a64b837b81215e0eb7"
+  }
+}
