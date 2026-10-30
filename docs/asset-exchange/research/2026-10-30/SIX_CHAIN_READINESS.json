@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-30",
+  "scope": "read-only six-chain implementation inventory; no production capability changes",
+  "chains": [
+    {
+      "symbol": "SOL",
+      "mechanism": "Separately audited Solana hash/preimage + Clock-bound escrow program proposed; existing gpu_escrow is rental usage escrow, not an atomic-swap implementation",
+      "primitives": [
+        "Ed25519 transaction authorization",
+        "SHA256 commitment",
+        "PDA/account ownership and signer constraints"
+      ],
+      "lock": "New reviewed program/account state required; no Bitcoin Script inheritance",
+      "refund": "Independent permissionless expiry/refund entrypoint and close/rent policy must be designed and audited",
+      "compatibility": "Existing manual Open client/account layouts exist for rental escrow only; no reviewed cross-chain swap route",
+      "reorgRisk": "processed/confirmed observation is not finalized; fork rollback, RPC trust, duplicate effects and account state history require separate watcher proofs",
+      "timeAndConfirmations": "Freeze cluster/genesis, slot or Unix-time domain, Clock semantics, finalized commitment and timeout budget; no numeric budget qualified",
+      "implemented": [
+        "programs/gpu_escrow/src/lib.rs",
+        "apps/api/src/solana.ts",
+        "asset-exchange/core/src/asset-registry.mjs"
+      ],
+      "missing": [
+        "swap-specific program",
+        "preimage claim/refund semantics",
+        "SBF/CPI/runtime qualification",
+        "independent finalized-state watcher",
+        "recovery/signers"
+      ],
+      "status": "NOT STARTED",
+      "swapQualified": false,
+      "executableOperations": [],
+      "productionSettlement": "BLOCKED"
+    },
+    {
+      "symbol": "BTC",
+      "mechanism": "Existing Bitcoin P2WSH HTLC V1, regtest-only",
+      "primitives": [
+        "secp256k1 ECDSA",
+        "SHA256",
+        "SegWit v0/P2WSH",
+        "CLTV"
+      ],
+      "lock": "Exact approved witness script and UTXO/amount binding",
+      "refund": "CLTV-bound external-signer refund plus pre-lock recovery bundle",
+      "compatibility": "Existing regtest adapter/policies only; no production or other-chain qualification",
+      "reorgRisk": "Double spends, stale/conflicting watcher tips, reorg rollback, fee pinning and malleability outside reviewed witness profile",
+      "timeAndConfirmations": "Independent source-confirmation and timeout policy; no mainnet budget approved",
+      "implemented": [
+        "asset-exchange/settlement/src/bitcoin-htlc-v1.mjs",
+        "asset-exchange/settlement/src/bitcoin-timeout-policy.mjs",
+        "asset-exchange/settlement/src/bitcoin-signer-policy.mjs"
+      ],
+      "missing": [
+        "mainnet authorization",
+        "cross-chain two-leg execution proof",
+        "production recovery and independent audit"
+      ],
+      "status": "IMPLEMENTED — NOT QUALIFIED",
+      "swapQualified": false,
+      "executableOperations": [],
+      "productionSettlement": "BLOCKED"
+    },
+    {
+      "symbol": "DOGE",
+      "mechanism": "Legacy P2SH SHA256/CLTV candidate, official1.14.9 only",
+      "primitives": [
+        "legacy secp256k1 ECDSA/SIGHASH",
+        "SHA256/HASH160",
+        "BIP65 CLTV"
+      ],
+      "lock": "Distinct reviewed claim/refund keys and exact redeem bytes; no SegWit/CSV assumption",
+      "refund": "Nonfinal sequence, same-domain nLockTime/CLTV and independently usable signed refund; not proved",
+      "compatibility": "D0/D1 PASS; D2 diagnostics PASS; full D2 BLOCKED",
+      "reorgRisk": "Legacy funding-txid malleability, AuxPoW, unqualified confirmation budget, stale/false watcher evidence",
+      "timeAndConfirmations": "Regtest BIP65 activation1351 observed; CLTV script equality is not transaction finality; no relay/finality budget qualified",
+      "implemented": [
+        "asset-exchange/qualification/dogecoin/d2/script_diagnostics.py",
+        "asset-exchange/qualification/dogecoin/d2/offline_candidate.py"
+      ],
+      "missing": [
+        "signature-bound positive claim/refund",
+        "full standardness",
+        "standardness-enforced admission",
+        "recovery/reorg/signer phases"
+      ],
+      "status": "BLOCKED",
+      "swapQualified": false,
+      "executableOperations": [],
+      "productionSettlement": "BLOCKED"
+    },
+    {
+      "symbol": "LTC",
+      "mechanism": "Transparent UTXO HTLC proposed; MWEB excluded",
+      "primitives": [
+        "secp256k1 ECDSA",
+        "SHA256",
+        "profile-specific P2SH/P2WSH/CLTV"
+      ],
+      "lock": "Frozen Litecoin version/network/script and serializer required",
+      "refund": "Chain-specific locktime, fee reserve and external-signer refund not qualified",
+      "compatibility": "Source research and synthetic five-asset model only; BTC/DOGE results do not transfer",
+      "reorgRisk": "LTC-specific consensus, reorg depth, double spend and fee/replacement policy unmeasured",
+      "timeAndConfirmations": "No reviewed chain-specific depth or timeout budget",
+      "implemented": [
+        "docs/asset-exchange/research/2026-10-29/CHAIN_RESEARCH_PROFILES.json",
+        "asset-exchange/research/src/offline-terms.mjs"
+      ],
+      "missing": [
+        "pinned binary/provenance",
+        "real adapter",
+        "chain-specific functional and recovery tests"
+      ],
+      "status": "NOT STARTED",
+      "swapQualified": false,
+      "executableOperations": [],
+      "productionSettlement": "BLOCKED"
+    },
+    {
+      "symbol": "BCH",
+      "mechanism": "ForkID-aware HTLC or separately audited covenant protocol proposed",
+      "primitives": [
+        "BCH-specific signature hashing",
+        "SHA256",
+        "CLTV or reviewed covenant operations"
+      ],
+      "lock": "Freeze BCHN/version/upgrades, script and SIGHASH_FORKID domain; no SegWit inference",
+      "refund": "Independent BCH refund/covenant escape path and fee model not qualified",
+      "compatibility": "Existing research only; BasicSwap internal routing flag is not witness support",
+      "reorgRisk": "BCH consensus/upgrades, malleability and UTXO conflicts need explicit evidence",
+      "timeAndConfirmations": "Chain-specific dust/fees/confirmations/timeouts unfrozen",
+      "implemented": [
+        "docs/asset-exchange/research/2026-10-29/CHAIN_RESEARCH_PROFILES.json",
+        "asset-exchange/research/src/offline-terms.mjs"
+      ],
+      "missing": [
+        "frozen HTLC vs covenant decision",
+        "ForkID vectors",
+        "binary/admission/claim/refund/recovery proofs"
+      ],
+      "status": "NOT STARTED",
+      "swapQualified": false,
+      "executableOperations": [],
+      "productionSettlement": "BLOCKED"
+    },
+    {
+      "symbol": "XMR",
+      "mechanism": "Separately audited adaptor-signature/cross-curve protocol; no classical Bitcoin HTLC",
+      "primitives": [
+        "Monero ring-signature/key-image rules",
+        "cross-curve proof/key-share protocol",
+        "script-side adaptor signatures as separately reviewed"
+      ],
+      "lock": "Monero output ownership plus counterchain protocol; no script-side CLTV refund on Monero",
+      "refund": "Protocol-specific cancellation/refund recovery and availability conditions; never guaranteed by generic timeout model",
+      "compatibility": "No qualified route. BasicSwap source rejects direct DOGE–XMR both ways; examined DCRDEX wallet swap paths unsupported",
+      "reorgRisk": "Key images, output scanning/reorg/rescan, delayed evidence and offline-participant recovery risks",
+      "timeAndConfirmations": "Separate Monero unlock/confirmation/weight-fee and counterchain timeout analysis required",
+      "implemented": [
+        "docs/asset-exchange/research/2026-10-29/BASICSWAP_OFFLINE_TYPE_PROBE.json",
+        "docs/asset-exchange/research/2026-10-29/RESEARCH_AND_PAIR_REVIEW.md"
+      ],
+      "missing": [
+        "reviewed protocol and cryptographic audit",
+        "private user-held signer architecture",
+        "chain-specific recovery proofs",
+        "pair-specific compatibility"
+      ],
+      "status": "BLOCKED",
+      "swapQualified": false,
+      "executableOperations": [],
+      "productionSettlement": "BLOCKED"
+    }
+  ],
+  "sourceFiles": [
+    {
+      "path": "apps/api/src/solana.ts",
+      "sha256": "12ad2355c913734de44d13fcdb6a520557d95f535099e6fc0d6206398194e831"
+    },
+    {
+      "path": "asset-exchange/core/src/asset-registry.mjs",
+      "sha256": "1ba0f601292189be7d831fbd3130e8cf2173379e843227053cd2524f46ec4aef"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d2/offline_candidate.py",
+      "sha256": "b4a814f8e15b30bc41ae3175d1d3ff16ab982a90e1678a182b23498aba1277d2"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d2/script_diagnostics.py",
+      "sha256": "dd0384821922e5ad5694d23098b718417299f1f3a86df8bd9c487c1c5753a075"
+    },
+    {
+      "path": "asset-exchange/research/src/offline-terms.mjs",
+      "sha256": "581fe696e2b9974cbaceab5df9d8ef74f26bd89f8a8a31c34a3906094d36c052"
+    },
+    {
+      "path": "asset-exchange/settlement/src/bitcoin-htlc-v1.mjs",
+      "sha256": "2ee712b20e2d26cf7360b23f73c93d5f9e7211a475f6f27099860db1da4e496f"
+    },
+    {
+      "path": "asset-exchange/settlement/src/bitcoin-signer-policy.mjs",
+      "sha256": "badc597029effcf67bd7809a91e6d6cdb95896185fa7df340d28bd1980fa6092"
+    },
+    {
+      "path": "asset-exchange/settlement/src/bitcoin-timeout-policy.mjs",
+      "sha256": "eeb7716529289f9d912a7b63382c37c2f3fe4b84b706877e9c6e7b0cf3faa99e"
+    },
+    {
+      "path": "docs/asset-exchange/research/2026-10-29/BASICSWAP_OFFLINE_TYPE_PROBE.json",
+      "sha256": "b37aa06326b65e1fdf3a7f41f90373457c30d5ee438688eef3928a6e18c5972a"
+    },
+    {
+      "path": "docs/asset-exchange/research/2026-10-29/CHAIN_RESEARCH_PROFILES.json",
+      "sha256": "fc8291abcb54aeb8bc9f266980bee550f0c963cf2d8fd1220f08659b26c7019e"
+    },
+    {
+      "path": "docs/asset-exchange/research/2026-10-29/RESEARCH_AND_PAIR_REVIEW.md",
+      "sha256": "67a7a7b1b226e604df4004e2003e922901d8414e8c75ec30fca4e9485f684a17"
+    },
+    {
+      "path": "programs/gpu_escrow/src/lib.rs",
+      "sha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41"
+    }
+  ],
+  "crossChainQualifiedDirections": 0,
+  "oldMatrixScope": "Existing20directions cover BTC/DOGE/LTC/BCH/XMR research only; SOL adds10unreviewed directions, not qualified routes",
+  "primaryReferences": [
+    "https://solana.com/docs/core/accounts",
+    "https://solana.com/docs/core/pda",
+    "https://solana.com/docs/rpc/http/getsignaturestatuses",
+    "https://www.anchor-lang.com/docs/updates/release-notes/1-0-0"
+  ]
+}
