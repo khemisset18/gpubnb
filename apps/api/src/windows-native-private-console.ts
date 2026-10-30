@@ -1,4 +1,3 @@
-import { config } from './config.js';
 import { resolveReleaseIdentity } from './release-identity.js';
 
 /**
@@ -16,8 +15,11 @@ export function privateConsoleAgentCommit(
   const runtimeCommit = resolveReleaseIdentity(env).commit;
   if (
     env.GPUBNB_PRIVATE_CONSOLE_QUALIFICATION !== 'true'
-    || config.BETA_TEST_DEV_BYPASS !== 'true'
-    || config.ESCROW_PROGRAM_ID !== 'NOT_DEPLOYED_YET'
+    // Keep this module import-pure: the server validates its environment
+    // separately with Zod, but policy tests and gateway utilities must not
+    // require production secrets simply to import the authorization function.
+    || env.BETA_TEST_DEV_BYPASS !== 'true'
+    || (env.ESCROW_PROGRAM_ID ?? 'NOT_DEPLOYED_YET') !== 'NOT_DEPLOYED_YET'
     || !SHA40.test(commit)
     || runtimeCommit !== commit.toLowerCase()
   ) return null;
