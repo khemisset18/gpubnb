@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import re
 import threading
+import weakref
 from typing import Any, Mapping
 
 from ._build_info import BUILD_COMMIT
@@ -21,10 +22,25 @@ IDDCX_BACKEND = "iddcx"
 # capture authorization in this Agent process. Clearing this fence requires
 # an explicit service restart; never rearm on unlock/login alone.
 _SESSION_CHANGE_FENCE = threading.Event()
+# WTS HandlerEx must not perform socket, API, or service operations. Wake the
+# interested gateway supervisors; their guardian threads close channels and
+# request physical STOP outside the SCM control callback.
+_FENCE_WAKEUPS: weakref.WeakSet[threading.Event] = weakref.WeakSet()
+_FENCE_WAKEUPS_LOCK = threading.Lock()
+
+
+def register_console_fence_wakeup(wakeup: threading.Event) -> None:
+    with _FENCE_WAKEUPS_LOCK:
+        _FENCE_WAKEUPS.add(wakeup)
+        if _SESSION_CHANGE_FENCE.is_set():
+            wakeup.set()
 
 
 def fence_console_on_session_change() -> None:
     _SESSION_CHANGE_FENCE.set()
+    with _FENCE_WAKEUPS_LOCK:
+        for wakeup in tuple(_FENCE_WAKEUPS):
+            wakeup.set()
 
 
 def console_session_change_fenced() -> bool:
