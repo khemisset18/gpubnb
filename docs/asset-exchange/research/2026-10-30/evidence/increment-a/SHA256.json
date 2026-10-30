@@ -1,0 +1,7 @@
+{
+  "scope": "offline software only; no native execution",
+  "tests": 40,
+  "failures": 0,
+  "skips": 0,
+  "originalLogSha256": "6f2dd9db3fbe0a69b4314eb9e7d74d634c907b028f1b84cfa8136fa2ec08eac8"
+}

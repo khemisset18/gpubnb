@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "qualified": false,
+  "scope": "public construction fixtures only; never funded or signed",
+  "keyProvenance": "Existing public D2 point plus public SEC2 generator; not secure participant keys",
+  "templates": [
+    {
+      "lock": 1,
+      "redeemHex": "6382012088a8203e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb8821038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac6751b175210279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ac68",
+      "outputHex": "a914d647a9562dafdc3470654e557bf52a799ab5b4a387",
+      "redeemSha256": "c93a9ccac2bf74e45c0ab4b07721a6370c1c1db1528d2d638a776c40d937e39b"
+    },
+    {
+      "lock": 1351,
+      "redeemHex": "6382012088a8203e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb8821038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac67024705b175210279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ac68",
+      "outputHex": "a914107d2471f78ddf582491a2712940f558eca4803c87",
+      "redeemSha256": "8c54b01f97dae9106f5902ad32ea71509717272e1c7585f7a00cafde6ad18680"
+    },
+    {
+      "lock": 500000000,
+      "redeemHex": "6382012088a8203e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb8821038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac67040065cd1db175210279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ac68",
+      "outputHex": "a91424e39db40e551e0a123a65db128c6bf37857a6c587",
+      "redeemSha256": "9e9c77c045bcb9055716bca4788ef5cb944f95cceb2ebd8a5d51a4c7ed9f5b86"
+    },
+    {
+      "lock": 4294967295,
+      "redeemHex": "6382012088a8203e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb8821038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac6705ffffffff00b175210279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ac68",
+      "outputHex": "a914da885e22ad2cc8a259c417b001ae68f024024f7a87",
+      "redeemSha256": "cfb2533936555bdfc6fb6822ba8fa5f9477994b088cf8d00f636c5d6b7cd8649"
+    }
+  ]
+}
