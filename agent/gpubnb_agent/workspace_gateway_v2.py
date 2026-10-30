@@ -453,6 +453,15 @@ class GatewaySupervisor(legacy.GatewaySupervisor):
                 name=f"gpubnb-ws-ack-{channel_id[:8]}",
             ).start()
 
+    def _ws_forward_allowed(self, session_id: str, channel_id: str) -> bool:
+        """Runtime-specific media revocation hook, defaulting to legacy relay.
+
+        The Windows private-console subclass checks its one-way WTS fence.
+        Call at both dequeue/send and recv/enqueue boundaries so buffered
+        media cannot flow from a revoked console after a socket is closed.
+        """
+        return True
+
     def _ws_reader(self, session_id: str, channel_id: str, ws: websocket.WebSocket) -> None:
         """Drain code-server immediately while a sender batches Internet writes."""
         outbound = _FrameBuffer(
@@ -489,6 +498,9 @@ class GatewaySupervisor(legacy.GatewaySupervisor):
                     if current is _CLOSE:
                         self._post_ws_frames([make_close()])
                         return
+                    if not self._ws_forward_allowed(session_id, channel_id):
+                        self._post_ws_frames([make_close()])
+                        return
 
                     raw, binary = current  # type: ignore[misc]
                     batch = [make_frame(raw, bool(binary))]
@@ -517,6 +529,12 @@ class GatewaySupervisor(legacy.GatewaySupervisor):
 
                     if close_after_batch:
                         batch.append(make_close())
+                    # The batch may have waited for coalescing/backpressure
+                    # while Windows changed WTS console owners. Drop every
+                    # queued video buffer rather than posting a stale batch.
+                    if not self._ws_forward_allowed(session_id, channel_id):
+                        self._post_ws_frames([make_close()])
+                        return
                     started = time.monotonic()
                     self._post_ws_frames(batch)
                     if first_batch:
@@ -553,11 +571,15 @@ class GatewaySupervisor(legacy.GatewaySupervisor):
 
         try:
             while not self.stop_event.is_set():
+                if not self._ws_forward_allowed(session_id, channel_id):
+                    break
                 if sender_failed.is_set():
                     raise RuntimeError(
                         f"ws_frame_sender_unavailable:channel={channel_id[:8]}"
                     )
                 opcode, data = ws.recv_data()
+                if not self._ws_forward_allowed(session_id, channel_id):
+                    break
                 if opcode == websocket.ABNF.OPCODE_CLOSE:
                     break
                 if opcode not in {
