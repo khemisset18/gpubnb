@@ -13,7 +13,7 @@ function Convert-Stage4ExpiryToUtc {
         $parsed=[DateTimeOffset]::MinValue
         if(-not [DateTimeOffset]::TryParseExact($Value,'o',
             [Globalization.CultureInfo]::InvariantCulture,
-            [Globalization.DateTimeStyles]::RoundtripKind,[ref]$parsed)){
+            [Globalization.DateTimeStyles]::None,[ref]$parsed)){
             throw 'stage4_private_expiry_format_invalid'
         }
         if($parsed.Offset -ne [TimeSpan]::Zero){throw 'stage4_private_expiry_must_be_utc'}
