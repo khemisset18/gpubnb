@@ -134,6 +134,57 @@ class WindowsSessionChangeFenceTests(unittest.TestCase):
         obj._begin_reconnect_grace.assert_called_once_with("console")
         self.assertNotIn("channel", obj._native_channel_sessions)
 
+    def test_already_queued_native_batch_never_posts_after_wts_fence(self):
+        obj = object.__new__(gateway.GatewaySupervisor)
+        obj._native_lock = threading.RLock()
+        obj._native_blocked = set()
+        obj.native_runtimes = {
+            "console": SimpleNamespace(handle=SimpleNamespace(capture_backend="console-dedicated"))
+        }
+        obj._native_channel_sessions = {"channel": "console"}
+        obj.stop_event = threading.Event()
+        obj.channels = {"channel": Mock()}
+        obj.session_channels = {"console": {"channel"}}
+        obj._post_ws_frames = Mock()
+        obj._trace = Mock()
+        obj._browser_frame_seen = set()
+        obj._report_error = Mock()
+        obj._begin_reconnect_grace = Mock()
+        consumed = threading.Event()
+        revoked = threading.Event()
+        live_gate = obj._ws_forward_allowed
+
+        def gate(session_id, channel_id):
+            if threading.current_thread().name.startswith("gpubnb-ws-send-"):
+                # Called only after the sender took the frame from its queue:
+                # revoke at this deterministic in-flight transfer boundary.
+                policy.fence_console_on_session_change()
+                revoked.set()
+            return live_gate(session_id, channel_id)
+
+        obj._ws_forward_allowed = gate
+        sock = Mock()
+        def receive():
+            if not consumed.is_set():
+                consumed.set()
+                return gateway.websocket.ABNF.OPCODE_BINARY, b"QUEUED_BEFORE_WTS"
+            revoked.wait(timeout=3)
+            return gateway.websocket.ABNF.OPCODE_CLOSE, b""
+        sock.recv_data.side_effect = receive
+
+        with (
+            patch.object(policy, "_SESSION_CHANGE_FENCE", threading.Event()),
+            patch.object(policy, "_FENCE_WAKEUPS", weakref.WeakSet()),
+        ):
+            obj._ws_reader("console", "channel", sock)
+
+        self.assertTrue(revoked.is_set())
+        batches = [call.args[0] for call in obj._post_ws_frames.call_args_list]
+        self.assertEqual(len(batches), 1)
+        self.assertTrue(batches[0][0].get("close"))
+        self.assertTrue(all("dataBase64" not in frame for batch in batches for frame in batch))
+        self.assertNotIn("channel", obj._native_channel_sessions)
+
     def test_fenced_browser_input_is_never_forwarded_to_loopback(self):
         obj = object.__new__(gateway.GatewaySupervisor)
         obj._native_lock = threading.RLock()
