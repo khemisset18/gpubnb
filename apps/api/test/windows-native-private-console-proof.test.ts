@@ -62,16 +62,17 @@ test('console claim is bounded in Redis and revoked by negative heartbeat', asyn
     get: async (key: string) => keys.get(key) ?? null,
     del: async (key: string) => { keys.delete(key); },
   } as unknown as Redis;
-  await replaceConsoleProof(storage, 'machine-test', { gpuUuid: GPU, agentCommit: SHA });
-  assert.deepEqual(await readConsoleProof(storage, 'machine-test', SHA), { gpuUuid: GPU, agentCommit: SHA });
-  assert.equal(await readConsoleProof(storage, 'machine-test', 'a'.repeat(40)), null);
-  assert.deepEqual(await qualificationNativeSource(storage, 'machine-test', SHA, false, null), {
+  await replaceConsoleProof(storage, 'machine-test', { gpuUuid: GPU, agentCommit: SHA }, '21');
+  assert.deepEqual(await readConsoleProof(storage, 'machine-test', SHA, '21'), { gpuUuid: GPU, agentCommit: SHA });
+  assert.equal(await readConsoleProof(storage, 'machine-test', 'a'.repeat(40), '21'), null);
+  assert.equal(await readConsoleProof(storage, 'machine-test', SHA, '22'), null, 'stale heartbeat counter must not authorize console');
+  assert.deepEqual(await qualificationNativeSource(storage, 'machine-test', SHA, false, null, BigInt(21)), {
     gpuUuid: GPU, captureBackend: 'console-dedicated',
   });
-  await replaceConsoleProof(storage, 'machine-test', null);
-  assert.equal(await readConsoleProof(storage, 'machine-test', SHA), null);
-  assert.equal(await qualificationNativeSource(storage, 'machine-test', SHA, false, null), null);
-  assert.deepEqual(await qualificationNativeSource(storage, 'machine-test', null, true, GPU), {
+  await replaceConsoleProof(storage, 'machine-test', null, '22');
+  assert.equal(await readConsoleProof(storage, 'machine-test', SHA, '21'), null);
+  assert.equal(await qualificationNativeSource(storage, 'machine-test', SHA, false, null, BigInt(21)), null);
+  assert.deepEqual(await qualificationNativeSource(storage, 'machine-test', null, true, GPU, BigInt(22)), {
     gpuUuid: GPU, captureBackend: 'iddcx',
   });
 });
