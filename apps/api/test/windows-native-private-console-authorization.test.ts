@@ -65,3 +65,35 @@ test('production IddCx and public listings do not acquire a console grant', () =
   assert.match(gateway, /authenticateAgent\(db,redis,machineId,request,route\)/);
   assert.doesNotMatch(api, /ListingStatus\.ACTIVE[^\n]*privateConsoleSessionMarker/);
 });
+
+test('private console qualification is owner-only at preflight, booking and session creation', () => {
+  const api = readFileSync(new URL('../src/desktop-workspace-routes.ts', import.meta.url), 'utf8');
+  const booking = api.slice(
+    api.indexOf('async function createWindowsNativeQualificationBooking('),
+    api.indexOf('async function createWindowsNativeQualificationSession('),
+  );
+  const session = api.slice(
+    api.indexOf('async function createWindowsNativeQualificationSession('),
+    api.indexOf('async function createDesktopWorkspaceSession('),
+  );
+  const preflight = api.slice(
+    api.indexOf("app.get('/qualification/windows-native/preflight'"),
+    api.indexOf("app.post('/qualification/windows-native/booking'"),
+  );
+  assert.match(booking, /source\.captureBackend !== 'console-dedicated' \|\| machine\.ownerId === renterId/);
+  assert.match(booking, /freshSource\.captureBackend === 'console-dedicated' && fresh\.machine\.ownerId !== renterId/);
+  assert.match(session, /qualifiedSource\.captureBackend !== 'console-dedicated' \|\| machine\.ownerId === renterId/);
+  assert.match(preflight, /source\.captureBackend !== 'console-dedicated' \|\| host\.ownerId === session\.userId/);
+});
+
+test('console admission is signed, replay-fenced and independent from public listing availability', () => {
+  const api = readFileSync(new URL('../src/server.ts', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../src/windows-native-private-console-proof.ts', import.meta.url), 'utf8');
+  assert.match(api, /verifyAgentRequestV2/);
+  assert.match(api, /verifiedConsoleProof\(b\.privateConsoleProof/);
+  assert.match(api, /replaceConsoleProof\(redis,m\.id,verifiedConsole,String\(b\.counter\)\)/);
+  assert.match(source, /latestAcceptedCounter/);
+  assert.match(source, /CONSOLE_PROOF_TTL_SECONDS = 90/);
+  assert.match(source, /private-console-proof:v1:/);
+  assert.doesNotMatch(source, /gpuListing\.update/);
+});
