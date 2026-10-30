@@ -1,0 +1,38 @@
+{
+  "run": 40961370001,
+  "job": 123754683329,
+  "commit": "78fa2d1aa889853c8de428004d337bad0b21ddc8",
+  "preparedPlanCommit": "acfe2123a8825c7d3595ef70944dccf7ca3cf074",
+  "artifactId": 12935542062,
+  "artifactSha256": "8f700c1eaccabf13df6873a4ec1a65931779b0bc231007e3b489615e3d18ebef",
+  "workflowConclusion": "failure",
+  "failedStep": "Enforce full D2 qualification without promoting diagnostic success",
+  "diagnosticStatus": "PASS",
+  "qualificationStatus": "BLOCKED",
+  "nativeVectors": 23,
+  "solverClassifications": 5,
+  "generatedBlocks": 1352,
+  "heights": [
+    1350,
+    1351,
+    1352
+  ],
+  "rpcCounts": {
+    "getblockchaininfo": 5,
+    "getblockhash": 1,
+    "getnetworkinfo": 2,
+    "getpeerinfo": 2,
+    "decodescript": 5,
+    "generatetoaddress": 3,
+    "stop": 1
+  },
+  "wallet": false,
+  "signing": false,
+  "transactionBroadcast": false,
+  "externalNetwork": false,
+  "shutdownExitCode": 0,
+  "blockingCriteria": [
+    "full transaction standardness not measured",
+    "positive signature-bound HTLC claim/refund construction not demonstrated"
+  ]
+}
