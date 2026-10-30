@@ -108,6 +108,7 @@ class WindowsSessionChangeFenceTests(unittest.TestCase):
         obj.stop_event = threading.Event()
         obj.channels = {"channel": Mock()}
         obj.session_channels = {"console": {"channel"}}
+        obj.machine_id = "machine-1"
         obj._request = Mock()
         obj._report_error = Mock()
         obj._begin_reconnect_grace = Mock()
