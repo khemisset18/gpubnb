@@ -234,6 +234,7 @@ class WindowsSessionChangeFenceTests(unittest.TestCase):
             "console": SimpleNamespace(handle=SimpleNamespace(capture_backend="console-dedicated"))
         }
         obj._native_channel_sessions = {"channel": "console"}
+        obj.channels = {"channel": Mock()}
         obj._close_session_channels = Mock()
         # Deliberately lie about sessionId: only the previously authorized
         # channel mapping is allowed to control the actual console fence.
