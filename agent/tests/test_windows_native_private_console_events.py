@@ -109,7 +109,9 @@ class WindowsSessionChangeFenceTests(unittest.TestCase):
         obj.channels = {"channel": Mock()}
         obj.session_channels = {"console": {"channel"}}
         obj.machine_id = "machine-1"
-        obj._request = Mock()
+        obj._post_ws_frames = Mock()
+        obj._trace = Mock()
+        obj._browser_frame_seen = set()
         obj._report_error = Mock()
         obj._begin_reconnect_grace = Mock()
         sock = Mock()
@@ -122,13 +124,15 @@ class WindowsSessionChangeFenceTests(unittest.TestCase):
             patch.object(policy, "_FENCE_WAKEUPS", weakref.WeakSet()),
         ):
             obj._ws_reader("console", "channel", sock)
-        calls = obj._request.call_args_list
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0].args[2].get("close"), True)
-        self.assertNotIn("dataBase64", calls[0].args[2])
+        batches = [args.args[0] for args in obj._post_ws_frames.call_args_list]
+        self.assertEqual(len(batches), 1)
+        self.assertTrue(batches[0][0].get("close"))
+        self.assertTrue(all("dataBase64" not in frame for batch in batches for frame in batch))
         self.assertNotIn("channel", obj.channels)
-        obj._begin_reconnect_grace.assert_not_called()
-        sock.close.assert_called_once()
+        # The reconnect callback is reached by the legacy v8 finally block,
+        # but v10's real handler rejects rearm while the WTS fence is set.
+        obj._begin_reconnect_grace.assert_called_once_with("console")
+        self.assertNotIn("channel", obj._native_channel_sessions)
 
     def test_fenced_browser_input_is_never_forwarded_to_loopback(self):
         obj = object.__new__(gateway.GatewaySupervisor)
