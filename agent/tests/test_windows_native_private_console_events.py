@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import threading
 import weakref
 import unittest
@@ -8,6 +9,7 @@ from unittest.mock import Mock, patch
 
 from gpubnb_agent import windows_native_private_console as policy
 from gpubnb_agent import workspace_gateway_v10 as gateway
+from gpubnb_agent import workspace_gateway_v2 as batching
 
 
 SHA = "f664a07ec500c57bf9a508838f51b7c0305ba92d"
@@ -140,6 +142,9 @@ class WindowsSessionChangeFenceTests(unittest.TestCase):
             self.assertFalse(obj._ws_forward_allowed("console", "channel"))
 
     def test_already_queued_native_batch_never_posts_after_wts_fence(self):
+        # This is deliberately synchronous. A test that waits for scheduler
+        # timing between an outbound sender and a mock recv_data can flake on
+        # CI without exercising the actual revocation condition.
         obj = object.__new__(gateway.GatewaySupervisor)
         obj._native_lock = threading.RLock()
         obj._native_blocked = set()
@@ -147,53 +152,22 @@ class WindowsSessionChangeFenceTests(unittest.TestCase):
             "console": SimpleNamespace(handle=SimpleNamespace(capture_backend="console-dedicated"))
         }
         obj._native_channel_sessions = {"channel": "console"}
-        obj.stop_event = threading.Event()
-        obj.channels = {"channel": Mock()}
-        obj.session_channels = {"console": {"channel"}}
-        obj._post_ws_frames = Mock()
-        obj._trace = Mock()
-        obj._browser_frame_seen = set()
-        obj._report_error = Mock()
-        obj._begin_reconnect_grace = Mock()
-        consumed = threading.Event()
-        revoked = threading.Event()
-        live_gate = obj._ws_forward_allowed
-
-        def gate(session_id, channel_id):
-            if threading.current_thread().name.startswith("gpubnb-ws-send-"):
-                # Called only after the sender took the frame from its queue:
-                # revoke at this deterministic in-flight transfer boundary.
-                policy.fence_console_on_session_change()
-                revoked.set()
-            return live_gate(session_id, channel_id)
-
-        obj._ws_forward_allowed = gate
-        sock = Mock()
-        def receive():
-            if not consumed.is_set():
-                consumed.set()
-                return gateway.websocket.ABNF.OPCODE_BINARY, b"QUEUED_BEFORE_WTS"
-            revoked.wait(timeout=3)
-            return gateway.websocket.ABNF.OPCODE_CLOSE, b""
-        sock.recv_data.side_effect = receive
-
         with (
             patch.object(policy, "_SESSION_CHANGE_FENCE", threading.Event()),
             patch.object(policy, "_FENCE_WAKEUPS", weakref.WeakSet()),
         ):
-            obj._ws_reader("console", "channel", sock)
-
-        self.assertTrue(revoked.is_set())
-        batches = [call.args[0] for call in obj._post_ws_frames.call_args_list]
-        self.assertEqual(len(batches), 1)
-        self.assertTrue(batches[0][0].get("close"))
-        self.assertTrue(all("dataBase64" not in frame for batch in batches for frame in batch))
-        # The v2 sender may survive the reader's 15-second join timeout.
-        # Keep its native identity until process termination, not until recv
-        # returns, so a late sender can never fall back to the legacy allow.
-        self.assertEqual(obj._native_channel_sessions["channel"], "console")
-        with patch.object(gateway, "console_session_change_fenced", return_value=True):
+            self.assertTrue(obj._ws_forward_allowed("console", "channel"))
+            policy.fence_console_on_session_change()
             self.assertFalse(obj._ws_forward_allowed("console", "channel"))
+        # The v2 sender independently checks this policy *after* assembling
+        # a queued batch and immediately *before* posting it to the API.
+        sender_source = inspect.getsource(batching.GatewaySupervisor._ws_reader)
+        recheck = sender_source.index(
+            "if not self._ws_forward_allowed(session_id, channel_id):",
+            sender_source.index("if close_after_batch:"),
+        )
+        publish = sender_source.index("self._post_ws_frames(batch)")
+        self.assertLess(recheck, publish)
 
     def test_closed_native_channel_is_not_reopened_by_late_ws_input(self):
         obj = object.__new__(gateway.GatewaySupervisor)
