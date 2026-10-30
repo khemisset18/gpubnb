@@ -25,8 +25,10 @@ This is a *stacked* change on PR #316, not a physical qualification.
 **Do not enable the flags on Render or PC1 yet.** Additional work is mandatory:
 
 1. The Agent heartbeat still reports the **IddCx** native capability by
-   default; there is no separate signed server-side console capability domain
-   today. Never set `nativeDesktopStreamingAvailable=true` manually to bypass
+   default. A separate, explicitly opt-in `probe_private_console_capability()`
+   exists for a physically guarded local console proof, but this measurement is
+   **not sent as a signed, typed capability to the server**. Never set
+   `nativeDesktopStreamingAvailable=true` manually to bypass
    the strict `/qualification/windows-native/preflight` gate.
 2. This commit must be built as one exact-source signed four-component package
    with accepted publisher pin and rollback before installation. The older PC1
