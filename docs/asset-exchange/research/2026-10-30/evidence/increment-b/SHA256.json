@@ -1,0 +1,16 @@
+{
+  "tests": 57,
+  "failures": 0,
+  "skips": 0,
+  "scope": "offline software only; no native execution",
+  "files": [
+    {
+      "path": "offline-tests.log",
+      "sha256": "638674dfc7607d057e98aed8aa22b32a4e6d2b1b314165d291930f829eeb509d"
+    },
+    {
+      "path": "request-only.json",
+      "sha256": "fc0dd2d78bdb94058adc7da7da6efc95d0d4dcf79bb399b4c2a2e97c5fd8e6b2"
+    }
+  ]
+}

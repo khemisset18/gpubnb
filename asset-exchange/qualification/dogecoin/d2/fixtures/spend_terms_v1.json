@@ -1,0 +1,24 @@
+{
+  "scope": "public synthetic intent only; no existing funded outpoint, signature or serialized transaction",
+  "qualified": false,
+  "terms": {
+    "schemaVersion": 1,
+    "network": "regtest",
+    "genesis": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+    "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+    "redeemHex": "6382012088a8203e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb8821038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac67024705b175210279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ac68",
+    "commitmentHex": "3e9410adf673df2f471ff0936fbcf18af1b44fde695915e2b70c27f4eb6a54eb",
+    "claimPublicHex": "038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041",
+    "refundPublicHex": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    "lockTime": 1351,
+    "outpoint": {
+      "txid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "vout": 0
+    },
+    "inputValueKoinu": "500000000",
+    "claimDestinationHex": "76a914ee5a6aa40facefb2655ac23c0c28c57c65c41f9b88ac",
+    "refundDestinationHex": "76a914751e76e8199196d454941c45d1b3a323f1433bd688ac",
+    "claimFeeKoinu": "1000000",
+    "refundFeeKoinu": "1000000"
+  }
+}
