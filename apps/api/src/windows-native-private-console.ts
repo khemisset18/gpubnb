@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { resolveReleaseIdentity } from './release-identity.js';
 
 /**
  * Console capture is a *private qualification* backend, never a substitute for
@@ -12,11 +13,13 @@ export function privateConsoleAgentCommit(
   env: NodeJS.ProcessEnv = process.env,
 ): string | null {
   const commit = env.GPUBNB_PRIVATE_CONSOLE_AGENT_COMMIT ?? '';
+  const runtimeCommit = resolveReleaseIdentity(env).commit;
   if (
     env.GPUBNB_PRIVATE_CONSOLE_QUALIFICATION !== 'true'
     || config.BETA_TEST_DEV_BYPASS !== 'true'
     || config.ESCROW_PROGRAM_ID !== 'NOT_DEPLOYED_YET'
     || !SHA40.test(commit)
+    || runtimeCommit !== commit.toLowerCase()
   ) return null;
   return commit.toLowerCase();
 }
