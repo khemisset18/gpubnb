@@ -8,6 +8,7 @@ from pathlib import Path
 
 from offline_candidate import SOURCE
 from spend_preparation import GENESIS, prepare_spend_pair, stable_hash
+from native_result_contract import scenario_catalog
 
 CASES = (
     "valid_claim", "valid_refund_after_lock", "early_refund", "equal_candidate_height_nonfinal",
@@ -20,13 +21,17 @@ CASES = (
 
 def compile_qualification_request(terms):
     pair = prepare_spend_pair(terms)
+    matrix, matrix_hash = scenario_catalog()
+    if {row['id'] for row in matrix['cases']} != set(CASES):
+        raise ValueError("native scenario/request inventory mismatch")
     here = Path(__file__).resolve().parent
-    paths = ["offline_candidate.py", "htlc_codec.py", "spend_preparation.py", "qualification_request.py",
+    paths = ["offline_candidate.py", "htlc_codec.py", "spend_preparation.py", "qualification_request.py", "native_result_contract.py", "fixtures/native_scenarios_v1.json",
              "fixtures/htlc_codec_v1.json", "fixtures/spend_terms_v1.json", "fixtures/source_policy_map_v1.json"]
     inputs = [{"path":str(p),"sha256":hashlib.sha256((here/p).read_bytes()).hexdigest()} for p in paths]
     return {
         "schemaVersion":1, "kind":"OFFLINE_EXPERIMENT_REQUEST_ONLY", "sourceCommit":SOURCE,
         "network":"regtest", "genesis":GENESIS, "termsDigest":stable_hash(terms),
+        "nativeScenarioMatrixSha256":matrix_hash, "nativeResultVerifier":"OFFLINE_UNAUTHENTICATED_COMPARISON_ONLY",
         "requiredOriginalArchiveSha256":"4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
         "requiredArchiveMembers":["dogecoin-1.14.9/bin/dogecoind","dogecoin-1.14.9/bin/dogecoin-cli",
                                   "dogecoin-1.14.9/lib/libdogecoinconsensus.so.0.0.0"],

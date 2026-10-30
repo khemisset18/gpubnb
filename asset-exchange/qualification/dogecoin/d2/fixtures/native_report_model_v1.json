@@ -1,0 +1,241 @@
+{
+  "schemaVersion": 1,
+  "producer": "MODEL",
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "archiveSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+  "network": "regtest",
+  "genesis": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+  "scenarioMatrixSha256": "b342a03deb7f4149221964bb984453eed7530365e3f7cf486fd261004af618b5",
+  "signedFixtureSetDigest": null,
+  "context": {
+    "interfaces": [
+      "lo"
+    ],
+    "peers": 0,
+    "externalConnections": 0,
+    "walletEnabled": false,
+    "acceptNonstandard": false,
+    "promiscuousMempoolFlags": null,
+    "bip65Enforced": true
+  },
+  "cases": [
+    {
+      "id": "valid_claim",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "PASS",
+        "FINALITY": "PASS",
+        "STANDARDNESS": "PASS",
+        "UTXO": "PASS",
+        "MEMPOOL": "PASS"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "valid_refund_after_lock",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "PASS",
+        "FINALITY": "PASS",
+        "STANDARDNESS": "PASS",
+        "UTXO": "PASS",
+        "MEMPOOL": "PASS"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "early_refund",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "PASS",
+        "FINALITY": "REJECT",
+        "MEMPOOL": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "equal_candidate_height_nonfinal",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "PASS",
+        "FINALITY": "REJECT",
+        "MEMPOOL": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "wrong_signature",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "wrong_claim_key",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "wrong_refund_key",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "wrong_secret",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "short_secret",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "wrong_redeem",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "lock_domain_mismatch",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "changed_signed_lock",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "wrong_outpoint",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "wrong_destination",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "final_sequence",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "REJECT",
+        "FINALITY": "PASS"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "wrong_input_value",
+      "measurementKind": "OFFLINE_PREFLIGHT",
+      "outcomes": {
+        "EXPECTED_INPUT_VALUE_BINDING": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "double_spend",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "UTXO": "REJECT",
+        "MEMPOOL": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "absent_utxo",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "UTXO": "MISSING",
+        "MEMPOOL": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "immature_coinbase",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "UTXO": "REJECT",
+        "MEMPOOL": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "hard_dust",
+      "measurementKind": "NATIVE_CORE",
+      "outcomes": {
+        "SCRIPT": "PASS",
+        "STANDARDNESS": "REJECT",
+        "MEMPOOL": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "soft_dust_reserve",
+      "measurementKind": "NATIVE_POLICY_PROBE",
+      "outcomes": {
+        "SOFT_DUST_SURCHARGE": "PASS"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "dynamic_mempool_fee_floor",
+      "measurementKind": "NATIVE_POLICY_PROBE",
+      "outcomes": {
+        "DYNAMIC_MEMPOOL_FEE_FLOOR": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "excessive_fee",
+      "measurementKind": "OFFLINE_PREFLIGHT",
+      "outcomes": {
+        "USER_FEE_CAP": "REJECT"
+      },
+      "artifact": "public-model.log"
+    },
+    {
+      "id": "script_flag_override",
+      "measurementKind": "OFFLINE_PREFLIGHT",
+      "outcomes": {
+        "EFFECTIVE_SCRIPT_FLAGS": "REJECT"
+      },
+      "artifact": "public-model.log"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "public-model.log",
+      "sha256": "d4fe23a07ee8563d11be75ddf801488fcbe2635894802af2666bc15df56d1143"
+    }
+  ],
+  "consensusLibrarySha256": "3c27dd2f3018a3bd659648129a94ba5f211e84b8ec6d308f7f0db001b5e7902b",
+  "nativeExecutorCommit": null
+}
