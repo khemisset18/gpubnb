@@ -98,3 +98,19 @@ export async function readConsoleProof(
     return null;
   }
 }
+
+/** Prefer the distinct signed console claim; never forge the legacy IddCx boolean. */
+export async function qualificationNativeSource(
+  redis: Redis,
+  machineId: string,
+  approvedCommit: string | null,
+  legacyAvailable: boolean,
+  legacyGpuUuid: string | null,
+): Promise<{ gpuUuid: string; captureBackend: 'console-dedicated' | 'iddcx' } | null> {
+  const console = await readConsoleProof(redis, machineId, approvedCommit);
+  if (console) return { gpuUuid: console.gpuUuid, captureBackend: 'console-dedicated' };
+  if (legacyAvailable && legacyGpuUuid && WINDOWS_NATIVE_GPU_UUID_RE.test(legacyGpuUuid)) {
+    return { gpuUuid: legacyGpuUuid, captureBackend: 'iddcx' };
+  }
+  return null;
+}
