@@ -41,7 +41,11 @@ from .windows_native_capability import (
     fence_native_rental_launch,
     native_rental_physical_cleanup_confirmed,
 )
-from .windows_native_private_console import CONSOLE_BACKEND, selected_capture_backend
+from .windows_native_private_console import (
+    CONSOLE_BACKEND,
+    console_session_change_fenced,
+    selected_capture_backend,
+)
 from .windows_native_runtime import (
     NativeRuntimeHandle,
     launch_windows_native_workspace,
@@ -518,6 +522,9 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             blocked = session_id in self._native_blocked
         if runtime is None or blocked:
             raise RuntimeError("windows_native_runtime_not_ready")
+        if (getattr(runtime.handle, "capture_backend", "iddcx") == CONSOLE_BACKEND
+                and console_session_change_fenced()):
+            raise RuntimeError("native_console_session_change_fenced")
         return runtime
 
     def _stop_native_runtime(self, session_id: str) -> bool | None:
@@ -609,6 +616,11 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         self._trace("native_register_done", session_id=runtime.session_id)
 
     def _report_native_usage(self, runtime: NativeGatewayRuntime) -> None:
+        if (getattr(runtime.handle, "capture_backend", "iddcx") == CONSOLE_BACKEND
+                and console_session_change_fenced()):
+            self._report_error(RuntimeError("native_console_session_change_fenced"))
+            self._native_stop_and_report(runtime.session_id)
+            return
         live_proof_lost = False
         # Default remains IddCx: an experimental console handle can never be
         # credited using the historical virtualDisplay-only status schema.
