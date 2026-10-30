@@ -522,7 +522,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             blocked = session_id in self._native_blocked
         if runtime is None or blocked:
             raise RuntimeError("windows_native_runtime_not_ready")
-        if (getattr(runtime.handle, "capture_backend", "iddcx") == CONSOLE_BACKEND
+        if (getattr(getattr(runtime, "handle", None), "capture_backend", "iddcx") == CONSOLE_BACKEND
                 and console_session_change_fenced()):
             raise RuntimeError("native_console_session_change_fenced")
         return runtime
@@ -616,7 +616,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         self._trace("native_register_done", session_id=runtime.session_id)
 
     def _report_native_usage(self, runtime: NativeGatewayRuntime) -> None:
-        if (getattr(runtime.handle, "capture_backend", "iddcx") == CONSOLE_BACKEND
+        if (getattr(getattr(runtime, "handle", None), "capture_backend", "iddcx") == CONSOLE_BACKEND
                 and console_session_change_fenced()):
             self._report_error(RuntimeError("native_console_session_change_fenced"))
             self._native_stop_and_report(runtime.session_id)
@@ -730,7 +730,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                     continue
                 runtime = self.native_runtimes.get(session_id)
 
-            if runtime is not None and getattr(runtime.handle, "capture_backend", "iddcx") != capture_backend:
+            if runtime is not None and getattr(getattr(runtime, "handle", None), "capture_backend", "iddcx") != capture_backend:
                 # A server-side backend/release change revokes the old session.
                 # Switching capture sources inside an active stream is forbidden.
                 self._report_error(RuntimeError("native_capture_backend_changed"))
