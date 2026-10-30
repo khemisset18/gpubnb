@@ -14,7 +14,8 @@ const { config } = await import('../src/config.js');
 const { registerDesktopWorkspaceRoutes } = await import('../src/desktop-workspace-routes.js');
 
 const host = () => ({id:'private-listing', hourlyLamports:3600n,
-  machine:{operatingSystem:'Windows 11', operational:'AVAILABLE', lastHeartbeatAt:new Date(),
+  machine:{id:'private-machine', operatingSystem:'Windows 11', operational:'AVAILABLE', lastHeartbeatAt:new Date(),
+    nativeDesktopStreamingAvailable:true, lastCounter:BigInt(21),
     nativeDesktopStreamingGpuUuid:'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a'},
   accelerators:[{accelerator:{hardwareUuid:'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a',
     vendor:'NVIDIA', moderationStatus:'CLEAR', status:'AVAILABLE'}}]});

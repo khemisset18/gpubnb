@@ -177,6 +177,25 @@ def _service_class() -> type:
             self._stop_handle = win32event.CreateEvent(None, 1, 0, None)
             self._stop_event = threading.Event()
 
+        def GetAcceptedControls(self) -> int:
+            # Native WTS notifications go to a service's HandlerEx, not to a
+            # window message pump. Register before any console capture can run.
+            return (super().GetAcceptedControls()
+                    | win32service.SERVICE_ACCEPT_SESSIONCHANGE)
+
+        def SvcOtherEx(self, control: int, event_type: int, data: object) -> None:
+            if control != win32service.SERVICE_CONTROL_SESSIONCHANGE:
+                return super().SvcOtherEx(control, event_type, data)
+            # Fail closed for *all* WTS transitions, including lock/unlock,
+            # console disconnect, connect, logoff and fast-user switch. Do not
+            # parse or log tenant/provider identifiers from the event data.
+            from .windows_native_private_console import fence_console_on_session_change
+
+            fence_console_on_session_change()
+            # The gateway reconciliation will stop native console sessions.
+            # The capture worker must still enforce its independent live
+            # provider/renter WTS checks before returning encoded frames.
+
         def SvcStop(self) -> None:
             self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
             self._stop_event.set()
