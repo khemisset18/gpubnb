@@ -1030,6 +1030,12 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         if request_id:
             def report_open_ack() -> None:
                 try:
+                    # A WTS transition may have closed the socket between
+                    # local handshake and the asynchronous browser OPEN ack.
+                    # Never advertise an already-revoked channel as live.
+                    if self._console_channel_fenced(session_id):
+                        self._reject_open(item, "native_console_session_change_fenced")
+                        return
                     self._request(
                         "/agent/workspace-gateway/respond",
                         "POST",
