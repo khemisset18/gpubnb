@@ -63,6 +63,24 @@ class NativeRuntimeHandle:
     application_path: str | None
     audio_ready: bool
     controller_ready: bool
+    capture_backend: str = "iddcx"
+
+
+def _source_proof_matches(report: dict, capture_backend: str) -> bool:
+    """Never present a console capture as a GPUbnb IddCx virtual display."""
+    if capture_backend == "iddcx":
+        return (
+            report.get("virtualDisplay") is True
+            and report.get("consoleDisplay") is not True
+            and report.get("captureBackend") in (None, "iddcx")
+        )
+    if capture_backend == "console-dedicated":
+        return (
+            report.get("captureBackend") == "console-dedicated"
+            and report.get("virtualDisplay") is False
+            and report.get("consoleDisplay") is True
+        )
+    return False
 
 
 def _safe_id(value: object, field: str) -> str:
@@ -166,6 +184,7 @@ def launch_windows_native_workspace(
     gpu_uuid: str,
     *,
     helper_path: str | None = None,
+    private_console_qualification: bool = False,
 ) -> NativeRuntimeHandle:
     """Launch one native Workspace only after every local proof passes.
 
@@ -178,6 +197,9 @@ def launch_windows_native_workspace(
     if not valid_gpu_uuid(gpu_uuid):
         raise RuntimeError("invalid_native_gpu_uuid")
 
+    # Console selection is explicit and private, never inferred from a
+    # listing, host model, remote request, or a production booking.
+    capture_backend = "console-dedicated" if private_console_qualification else "iddcx"
     profile = profile_for_slug(workspace_slug)
     executable = helper_path or find_stream_helper()
     if not executable:
@@ -187,7 +209,9 @@ def launch_windows_native_workspace(
     # launch attempt. The previous implementation called workspace_native_ready()
     # and then repeated the same helper self-test, doubling launch latency and side
     # effects for no security benefit.
-    preflight = windows_native_desktop_preflight(executable)
+    preflight = windows_native_desktop_preflight(
+        executable, capture_backend=capture_backend,
+    )
     if not preflight.available:
         # --self-test itself creates graphics resources. A timeout, malformed
         # report or failed media proof cannot establish that they were cleaned.
@@ -206,7 +230,7 @@ def launch_windows_native_workspace(
 
     command = [
         executable,
-        "--start",
+        "--start-console" if private_console_qualification else "--start",
         "--json",
         "--session-id",
         session_id,
@@ -264,7 +288,6 @@ def launch_windows_native_workspace(
         "separateRenterIdentity",
         "renterSessionActive",
         "providerSessionInactive",
-        "virtualDisplay",
         "providerDesktopExcluded",
         "captureReady",
         "exactGpuBound",
@@ -276,6 +299,14 @@ def launch_windows_native_workspace(
     if missing:
         _raise_after_started_session_validation_failure(
             executable, session_id, f"native_workspace_start_missing_{missing}"
+        )
+    if capture_backend == "iddcx" and report.get("virtualDisplay") is not True:
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_missing_virtualDisplay"
+        )
+    if not _source_proof_matches(report, capture_backend):
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_display_source_mismatch"
         )
     if str(report.get("hardwareEncoder") or "").casefold() != "nvenc":
         _raise_after_started_session_validation_failure(
@@ -314,6 +345,7 @@ def launch_windows_native_workspace(
         application_path=application,
         audio_ready=audio_ready,
         controller_ready=controller_ready,
+        capture_backend=capture_backend,
     )
 
 
@@ -363,6 +395,7 @@ def windows_native_workspace_ready(
     session_id: str,
     *,
     helper_path: str | None = None,
+    capture_backend: str = "iddcx",
 ) -> bool:
     """Return live interactive readiness only from an exact helper status proof."""
     session_id = _safe_id(session_id, "native_session_id")
@@ -378,7 +411,6 @@ def windows_native_workspace_ready(
         "isolatedSession",
         "renterSessionActive",
         "providerSessionInactive",
-        "virtualDisplay",
         "providerDesktopExcluded",
         "exactGpuBound",
         "captureReady",
@@ -389,13 +421,17 @@ def windows_native_workspace_ready(
     )
     if any(report.get(field) is not True for field in required_true):
         return False
-    return str(report.get("hardwareEncoder") or "").casefold() == "nvenc"
+    return (
+        _source_proof_matches(report, capture_backend)
+        and str(report.get("hardwareEncoder") or "").casefold() == "nvenc"
+    )
 
 
 def windows_native_workspace_suspended(
     session_id: str,
     *,
     helper_path: str | None = None,
+    capture_backend: str = "iddcx",
 ) -> bool:
     """Return reconnect-safe suspension only from an exact helper status proof."""
     session_id = _safe_id(session_id, "native_session_id")
@@ -412,7 +448,6 @@ def windows_native_workspace_suspended(
         "isolatedSession",
         "renterSessionActive",
         "providerSessionInactive",
-        "virtualDisplay",
         "providerDesktopExcluded",
         "exactGpuBound",
         "inputIsolation",
@@ -427,7 +462,10 @@ def windows_native_workspace_suspended(
         return False
     if any(report.get(field) is not False for field in required_false):
         return False
-    return str(report.get("hardwareEncoder") or "").casefold() == "nvenc"
+    return (
+        _source_proof_matches(report, capture_backend)
+        and str(report.get("hardwareEncoder") or "").casefold() == "nvenc"
+    )
 
 
 def suspend_windows_native_workspace(
@@ -457,6 +495,7 @@ def resume_windows_native_workspace(
     session_id: str,
     *,
     helper_path: str | None = None,
+    capture_backend: str = "iddcx",
 ) -> str:
     """Resume after fresh proof and return the rotated local media capability."""
     session_id = _safe_id(session_id, "native_session_id")
@@ -468,7 +507,6 @@ def resume_windows_native_workspace(
         "resumed",
         "freshMediaProof",
         "exactGpuBound",
-        "virtualDisplay",
         "providerDesktopExcluded",
         "captureReady",
         "nvencReady",
@@ -479,6 +517,10 @@ def resume_windows_native_workspace(
     missing = next((field for field in required_true if report.get(field) is not True), None)
     if missing:
         raise RuntimeError(f"native_workspace_resume_missing_{missing}")
+    if capture_backend == "iddcx" and report.get("virtualDisplay") is not True:
+        raise RuntimeError("native_workspace_resume_missing_virtualDisplay")
+    if not _source_proof_matches(report, capture_backend):
+        raise RuntimeError("native_workspace_resume_display_source_mismatch")
     if str(report.get("hardwareEncoder") or "").casefold() != "nvenc":
         raise RuntimeError("native_workspace_resume_nvenc_required")
     media_token = _media_token(report.get("mediaToken"))

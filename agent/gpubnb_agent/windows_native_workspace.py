@@ -206,6 +206,8 @@ def find_stream_helper() -> str | None:
 
 def windows_native_desktop_preflight(
     helper_path: str | None = None,
+    *,
+    capture_backend: str = "iddcx",
 ) -> NativeDesktopPreflight:
     """Prove the Windows-native desktop streaming path, or fail closed.
 
@@ -234,6 +236,8 @@ def windows_native_desktop_preflight(
     The helper is responsible for performing the real capture/encode/session
     checks.  This function never infers success from GPU model, CUDA or VRAM.
     """
+    if capture_backend not in ("iddcx", "console-dedicated"):
+        return NativeDesktopPreflight(False, "native_capture_backend_unsupported")
     if platform.system() != "Windows":
         return NativeDesktopPreflight(False, "windows_required")
 
@@ -242,7 +246,8 @@ def windows_native_desktop_preflight(
         return NativeDesktopPreflight(False, "native_stream_helper_missing")
 
     try:
-        result = run_command([executable, "--self-test", "--json"], timeout=30)
+        command = "--self-test-console" if capture_backend == "console-dedicated" else "--self-test"
+        result = run_command([executable, command, "--json"], timeout=30)
     except (OSError, subprocess.SubprocessError, UnicodeError):
         return NativeDesktopPreflight(False, "native_stream_self_test_failed")
     if result.returncode != 0:
@@ -261,7 +266,6 @@ def windows_native_desktop_preflight(
         "separateRenterIdentity",
         "renterSessionActive",
         "providerSessionInactive",
-        "virtualDisplay",
         "providerDesktopExcluded",
         "captureFrame",
         "exactGpuBound",
@@ -269,6 +273,13 @@ def windows_native_desktop_preflight(
         "mediaLoopback",
         "inputIsolation",
     )
+    if capture_backend == "console-dedicated":
+        if (report.get("captureBackend") != "console-dedicated"
+                or report.get("consoleDisplay") is not True
+                or report.get("virtualDisplay") is not False):
+            return NativeDesktopPreflight(False, "native_console_display_proof_missing")
+    elif report.get("virtualDisplay") is not True:
+        return NativeDesktopPreflight(False, "native_stream_self_test_missing_virtualDisplay")
     missing_proof = next((field for field in required_true if report.get(field) is not True), None)
     if missing_proof:
         return NativeDesktopPreflight(False, f"native_stream_self_test_missing_{missing_proof}")

@@ -606,6 +606,10 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
 
     def _report_native_usage(self, runtime: NativeGatewayRuntime) -> None:
         live_proof_lost = False
+        # Default remains IddCx: an experimental console handle can never be
+        # credited using the historical virtualDisplay-only status schema.
+        backend = getattr(getattr(runtime, "handle", None), "capture_backend", "iddcx")
+        proof_args = {"capture_backend": backend} if backend != "iddcx" else {}
         # SUSPEND revokes helper READY before the reconnect API/local pause bit
         # is committed, while RESUME makes helper READY before that bit clears.
         # Serialize both proof modes with the complete native reconnect
@@ -622,7 +626,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                         return
                     self._reconnect_last_liveness[runtime.session_id] = now
 
-                if not windows_native_workspace_suspended(runtime.session_id):
+                if not windows_native_workspace_suspended(runtime.session_id, **proof_args):
                     self._report_error(
                         RuntimeError("windows_native_suspended_proof_lost")
                     )
@@ -644,7 +648,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             if elapsed < WINDOWS_NATIVE_USAGE_INTERVAL_SECONDS:
                 return
 
-            if not windows_native_workspace_ready(runtime.session_id):
+            if not windows_native_workspace_ready(runtime.session_id, **proof_args):
                 live_proof_lost = True
             else:
                 interval = max(1, min(30, elapsed))
@@ -813,7 +817,13 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         if blocked:
             return False
         try:
-            media_token = resume_windows_native_workspace(session_id)
+            with self._native_lock:
+                current = self.native_runtimes.get(session_id)
+                if current is None:
+                    return False
+                backend = getattr(current.handle, "capture_backend", "iddcx")
+            proof_args = {"capture_backend": backend} if backend != "iddcx" else {}
+            media_token = resume_windows_native_workspace(session_id, **proof_args)
             with self._native_lock:
                 runtime = self.native_runtimes.get(session_id)
                 if runtime is None or session_id in self._native_blocked:

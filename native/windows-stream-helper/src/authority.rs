@@ -7,8 +7,8 @@
 use crate::qualification_server::QualificationMediaServer;
 use crate::renter_lease::load_renter_session_lease;
 use crate::service_runtime::{
-    QualifiedGraphicsRuntime, ServiceRuntimeConfig, ServiceRuntimeError,
-    start_qualified_graphics_runtime,
+    QualifiedGraphicsRuntime, RuntimeDisplayBackend, ServiceRuntimeConfig, ServiceRuntimeError,
+    start_dedicated_console_graphics_runtime, start_qualified_graphics_runtime,
 };
 use crate::worker_protocol::WorkerInputEvent;
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
@@ -145,6 +145,9 @@ pub enum AuthorityStatus {
     Ready,
     Suspended,
     Degraded,
+    ConsoleReady,
+    ConsoleSuspended,
+    ConsoleDegraded,
 }
 
 fn hex_nibble(value: u8) -> Option<u8> {
@@ -311,8 +314,17 @@ fn checked_self_test_cleanup(
 }
 
 pub fn run_self_test() -> Result<SelfTestReport, AuthorityError> {
+    run_self_test_backend(RuntimeDisplayBackend::IddCx)
+}
+
+pub fn run_console_self_test() -> Result<SelfTestReport, AuthorityError> {
+    run_self_test_backend(RuntimeDisplayBackend::DedicatedConsole)
+}
+
+fn run_self_test_backend(backend: RuntimeDisplayBackend) -> Result<SelfTestReport, AuthorityError> {
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = backend;
         return Err(AuthorityError::WindowsRequired);
     }
     #[cfg(target_os = "windows")]
@@ -322,13 +334,19 @@ pub fn run_self_test() -> Result<SelfTestReport, AuthorityError> {
             .map_err(|_| AuthorityError::LeaseGpuMismatch)?;
         let session_id = format!("selftest-{}", std::process::id());
         let (generation, display_nonce) = random_runtime_identity()?;
-        let mut runtime = start_qualified_graphics_runtime(runtime_config(
+        let config = runtime_config(
             &session_id,
             &lease.gpu_uuid,
             &lease,
             generation,
             display_nonce,
-        ))
+        );
+        let mut runtime = match backend {
+            RuntimeDisplayBackend::IddCx => start_qualified_graphics_runtime(config),
+            RuntimeDisplayBackend::DedicatedConsole => {
+                start_dedicated_console_graphics_runtime(config)
+            }
+        }
         .map_err(|error| {
             bounded_runtime_failure_code(error.diagnostic_code())
                 .map(AuthorityError::RuntimeFailure)
@@ -382,9 +400,23 @@ pub fn run_self_test() -> Result<SelfTestReport, AuthorityError> {
     }
 }
 
+// Preserve legacy READY parsing fixtures without retaining an unused
+// production wrapper. The real runtime calls parse_backend_ready directly.
+#[cfg(test)]
 fn parse_ready(value: &str) -> Result<StartSessionReport, AuthorityError> {
+    parse_backend_ready(value, RuntimeDisplayBackend::IddCx)
+}
+
+fn parse_backend_ready(
+    value: &str,
+    backend: RuntimeDisplayBackend,
+) -> Result<StartSessionReport, AuthorityError> {
     let mut parts = value.split('|');
-    if parts.next() != Some("READY") {
+    let expected = match backend {
+        RuntimeDisplayBackend::IddCx => "READY",
+        RuntimeDisplayBackend::DedicatedConsole => "READY_CONSOLE",
+    };
+    if parts.next() != Some(expected) {
         return Err(match value {
             "ERR|already_running" => AuthorityError::AlreadyRunning,
             _ => AuthorityError::ControlProtocol,
@@ -443,9 +475,36 @@ pub fn start_session(
     workspace: &str,
     gpu_uuid: &str,
 ) -> Result<StartSessionReport, AuthorityError> {
+    start_session_backend(
+        session_id,
+        workspace,
+        gpu_uuid,
+        RuntimeDisplayBackend::IddCx,
+    )
+}
+
+pub fn start_console_session(
+    session_id: &str,
+    workspace: &str,
+    gpu_uuid: &str,
+) -> Result<StartSessionReport, AuthorityError> {
+    start_session_backend(
+        session_id,
+        workspace,
+        gpu_uuid,
+        RuntimeDisplayBackend::DedicatedConsole,
+    )
+}
+
+fn start_session_backend(
+    session_id: &str,
+    workspace: &str,
+    gpu_uuid: &str,
+    backend: RuntimeDisplayBackend,
+) -> Result<StartSessionReport, AuthorityError> {
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (session_id, workspace, gpu_uuid);
+        let _ = (session_id, workspace, gpu_uuid, backend);
         return Err(AuthorityError::WindowsRequired);
     }
     #[cfg(target_os = "windows")]
@@ -462,7 +521,10 @@ pub fn start_session(
         let executable = env::current_exe().map_err(|_| AuthorityError::Spawn)?;
         let mut command = Command::new(executable);
         command
-            .arg("--authority-child")
+            .arg(match backend {
+                RuntimeDisplayBackend::IddCx => "--authority-child",
+                RuntimeDisplayBackend::DedicatedConsole => "--authority-console-child",
+            })
             .arg("--session-id")
             .arg(session_id)
             .arg("--workspace")
@@ -482,7 +544,7 @@ pub fn start_session(
                 return Err(AuthorityError::RuntimeStart);
             }
             match control_request(session_id, "START", 500, CONTROL_READ_TIMEOUT_MS) {
-                Ok(response) => return parse_ready(&response),
+                Ok(response) => return parse_backend_ready(&response, backend),
                 Err(_) if Instant::now() < deadline => {
                     thread::sleep(Duration::from_millis(100));
                 }
@@ -498,6 +560,9 @@ pub fn status_session(session_id: &str) -> Result<AuthorityStatus, AuthorityErro
         "STATUS|ready" => Ok(AuthorityStatus::Ready),
         "STATUS|suspended" => Ok(AuthorityStatus::Suspended),
         "STATUS|degraded" => Ok(AuthorityStatus::Degraded),
+        "STATUS|console_ready" => Ok(AuthorityStatus::ConsoleReady),
+        "STATUS|console_suspended" => Ok(AuthorityStatus::ConsoleSuspended),
+        "STATUS|console_degraded" => Ok(AuthorityStatus::ConsoleDegraded),
         "ERR|not_running" => Err(AuthorityError::NotRunning),
         _ => Err(AuthorityError::ControlProtocol),
     }
@@ -532,7 +597,10 @@ pub fn resume_session(session_id: &str) -> Result<String, AuthorityError> {
         CONTROL_CONNECT_TIMEOUT_MS,
         CONTROL_READ_TIMEOUT_MS,
     )?;
-    if let Some(token) = response.strip_prefix("OK|resumed|") {
+    if let Some(token) = response
+        .strip_prefix("OK|resumed|")
+        .or_else(|| response.strip_prefix("OK|console_resumed|"))
+    {
         if token.len() == 64
             && token
                 .bytes()
@@ -605,21 +673,55 @@ fn runtime_status(
     let Some(active) = guard.as_ref() else {
         return AuthorityStatus::Degraded;
     };
+    let console = matches!(active.backend(), RuntimeDisplayBackend::DedicatedConsole);
     if active.failed() {
-        return AuthorityStatus::Degraded;
+        return if console {
+            AuthorityStatus::ConsoleDegraded
+        } else {
+            AuthorityStatus::Degraded
+        };
     }
     if active.suspended() {
-        return AuthorityStatus::Suspended;
+        return if console {
+            AuthorityStatus::ConsoleSuspended
+        } else {
+            AuthorityStatus::Suspended
+        };
+    }
+    // STATUS drives Agent READY/usage accounting, even when no new frames
+    // arrive. Never report billable readiness after a fast-user switch.
+    if !active.live_renter_boundary() {
+        return if console {
+            AuthorityStatus::ConsoleDegraded
+        } else {
+            AuthorityStatus::Degraded
+        };
     }
     let identity = match resolve_nvidia_uuid_to_luid(gpu_uuid) {
         Ok(identity) => identity,
-        Err(_) => return AuthorityStatus::Degraded,
+        Err(_) => {
+            return if console {
+                AuthorityStatus::ConsoleDegraded
+            } else {
+                AuthorityStatus::Degraded
+            };
+        }
     };
     if identity.luid != active.display_spec().adapter_luid {
-        return AuthorityStatus::Degraded;
+        return if console {
+            AuthorityStatus::ConsoleDegraded
+        } else {
+            AuthorityStatus::Degraded
+        };
     }
     if active.media_ready() && endpoint_alive {
-        AuthorityStatus::Ready
+        if console {
+            AuthorityStatus::ConsoleReady
+        } else {
+            AuthorityStatus::Ready
+        }
+    } else if console {
+        AuthorityStatus::ConsoleDegraded
     } else {
         AuthorityStatus::Degraded
     }
@@ -645,9 +747,36 @@ pub fn run_authority_child(
     workspace: &str,
     gpu_uuid: &str,
 ) -> Result<(), AuthorityError> {
+    run_authority_child_backend(
+        session_id,
+        workspace,
+        gpu_uuid,
+        RuntimeDisplayBackend::IddCx,
+    )
+}
+
+pub fn run_console_authority_child(
+    session_id: &str,
+    workspace: &str,
+    gpu_uuid: &str,
+) -> Result<(), AuthorityError> {
+    run_authority_child_backend(
+        session_id,
+        workspace,
+        gpu_uuid,
+        RuntimeDisplayBackend::DedicatedConsole,
+    )
+}
+
+fn run_authority_child_backend(
+    session_id: &str,
+    workspace: &str,
+    gpu_uuid: &str,
+    backend: RuntimeDisplayBackend,
+) -> Result<(), AuthorityError> {
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (session_id, workspace, gpu_uuid);
+        let _ = (session_id, workspace, gpu_uuid, backend);
         return Err(AuthorityError::WindowsRequired);
     }
     #[cfg(target_os = "windows")]
@@ -666,13 +795,13 @@ pub fn run_authority_child(
 
         let lease = verified_lease(gpu_uuid)?;
         let (generation, display_nonce) = random_runtime_identity()?;
-        let runtime = start_qualified_graphics_runtime(runtime_config(
-            session_id,
-            gpu_uuid,
-            &lease,
-            generation,
-            display_nonce,
-        ))
+        let config = runtime_config(session_id, gpu_uuid, &lease, generation, display_nonce);
+        let runtime = match backend {
+            RuntimeDisplayBackend::IddCx => start_qualified_graphics_runtime(config),
+            RuntimeDisplayBackend::DedicatedConsole => {
+                start_dedicated_console_graphics_runtime(config)
+            }
+        }
         .map_err(|_| AuthorityError::RuntimeStart)?;
 
         let server = QualificationMediaServer::bind(session_id, generation)
@@ -714,7 +843,11 @@ pub fn run_authority_child(
                         .map(str::to_owned)
                         .ok_or(AuthorityError::MediaProof)?;
                     start_reported = true;
-                    format!("READY|{generation}|{}|{media_token}", endpoint.port())
+                    let tag = match backend {
+                        RuntimeDisplayBackend::IddCx => "READY",
+                        RuntimeDisplayBackend::DedicatedConsole => "READY_CONSOLE",
+                    };
+                    format!("{tag}|{generation}|{}|{media_token}", endpoint.port())
                 }
                 "START" => "ERR|already_running".to_owned(),
                 "STATUS" => {
@@ -723,6 +856,9 @@ pub fn run_authority_child(
                         AuthorityStatus::Ready => "STATUS|ready".to_owned(),
                         AuthorityStatus::Suspended => "STATUS|suspended".to_owned(),
                         AuthorityStatus::Degraded => "STATUS|degraded".to_owned(),
+                        AuthorityStatus::ConsoleReady => "STATUS|console_ready".to_owned(),
+                        AuthorityStatus::ConsoleSuspended => "STATUS|console_suspended".to_owned(),
+                        AuthorityStatus::ConsoleDegraded => "STATUS|console_degraded".to_owned(),
                     }
                 }
                 "SUSPEND" => {
@@ -747,7 +883,11 @@ pub fn run_authority_child(
                         if active.resume_after_fresh_proof().is_err() {
                             "ERR|degraded".to_owned()
                         } else if let Some(token) = active.media_token() {
-                            format!("OK|resumed|{token}")
+                            let tag = match active.backend() {
+                                RuntimeDisplayBackend::IddCx => "resumed",
+                                RuntimeDisplayBackend::DedicatedConsole => "console_resumed",
+                            };
+                            format!("OK|{tag}|{token}")
                         } else {
                             "ERR|degraded".to_owned()
                         }

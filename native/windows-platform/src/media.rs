@@ -12,6 +12,12 @@ use crate::open_application_for_verification;
 use std::path::Path;
 
 pub const MEDIA_ABI_VERSION: u32 = 2;
+// This ABI is deliberately independent from the IddCx/virtualDisplay contract.
+// No production caller may treat its proof_flags as MEDIA_REQUIRED_PROOFS.
+pub const CONSOLE_MEDIA_ABI_VERSION: u32 = 3;
+pub const CONSOLE_MEDIA_REQUEST_SIZE: usize = 80;
+pub const CONSOLE_MEDIA_FRAME_RESULT_SIZE: usize = 64;
+pub const CONSOLE_MEDIA_REQUIRED_PROOFS: u32 = 0x0f;
 pub const MEDIA_REQUEST_SIZE: usize = 64;
 pub const MEDIA_RESULT_SIZE: usize = 64;
 pub const MEDIA_FRAME_RESULT_SIZE: usize = 64;
@@ -115,6 +121,60 @@ pub struct EncodedMediaFrame {
 impl EncodedMediaFrame {
     pub const fn is_keyframe(&self) -> bool {
         self.frame_flags & MEDIA_FRAME_FLAG_KEYFRAME != 0
+    }
+}
+
+/// Driverless console WGC+NVENC proof. Distinct type prevents accidental
+/// promotion to an IddCx virtual-display / browser READY proof.
+pub struct ConsoleMediaSession {
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    expected: ConsoleMediaProbeRequestOwned,
+    #[cfg(target_os = "windows")]
+    inner: windows_impl::PersistentSession,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConsoleMediaProbeRequest<'a> {
+    pub gpu_uuid: &'a str,
+    pub adapter_luid: u64,
+    pub windows_session_id: u32,
+    pub session_nonce: [u8; 16],
+    pub width: u32,
+    pub height: u32,
+    pub refresh_hz: u32,
+    pub capture_timeout_ms: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ConsoleMediaProbeRequestOwned {
+    adapter_luid: u64,
+    windows_session_id: u32,
+    width: u32,
+    height: u32,
+    refresh_hz: u32,
+}
+
+pub struct ConsoleEncodedMediaFrame {
+    pub bytes: Vec<u8>,
+    pub frame_sequence: u64,
+    pub proof_flags: u32,
+    pub frame_flags: u32,
+    pub adapter_luid: u64,
+    pub width: u32,
+    pub height: u32,
+    pub refresh_hz: u32,
+}
+
+impl ConsoleMediaSession {
+    pub fn read_frame(&mut self) -> Result<ConsoleEncodedMediaFrame, MediaProbeError> {
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::read_console_frame(&mut self.inner, self.expected)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err(MediaProbeError::WindowsRequired)
+        }
     }
 }
 
@@ -309,6 +369,113 @@ fn decode_result(
     Ok(result)
 }
 
+fn encode_console_request(
+    request: ConsoleMediaProbeRequest<'_>,
+) -> Result<[u8; CONSOLE_MEDIA_REQUEST_SIZE], MediaProbeError> {
+    if request.adapter_luid == 0
+        || request.windows_session_id == 0
+        || request.windows_session_id == u32::MAX
+        || request.session_nonce == [0; 16]
+        || !(640..=7680).contains(&request.width)
+        || !(480..=4320).contains(&request.height)
+        || !(30..=240).contains(&request.refresh_hz)
+        || request.capture_timeout_ms == 0
+        || request.capture_timeout_ms > 30_000
+    {
+        return Err(MediaProbeError::InvalidRequest);
+    }
+    let uuid =
+        parse_nvidia_gpu_uuid(request.gpu_uuid).map_err(|_| MediaProbeError::InvalidRequest)?;
+    let mut wire = [0u8; CONSOLE_MEDIA_REQUEST_SIZE];
+    wire[0..4].copy_from_slice(&(CONSOLE_MEDIA_REQUEST_SIZE as u32).to_le_bytes());
+    wire[4..8].copy_from_slice(&CONSOLE_MEDIA_ABI_VERSION.to_le_bytes());
+    wire[8..16].copy_from_slice(&request.adapter_luid.to_le_bytes());
+    wire[16..32].copy_from_slice(&uuid);
+    wire[32..48].copy_from_slice(&request.session_nonce);
+    wire[48..52].copy_from_slice(&request.windows_session_id.to_le_bytes());
+    wire[52..56].copy_from_slice(&request.width.to_le_bytes());
+    wire[56..60].copy_from_slice(&request.height.to_le_bytes());
+    wire[60..64].copy_from_slice(&request.refresh_hz.to_le_bytes());
+    wire[64..68].copy_from_slice(&request.capture_timeout_ms.to_le_bytes());
+    // Remaining 12 bytes are strict-zero reserved fields in the C++ ABI.
+    Ok(wire)
+}
+
+/// This never grants GPUbnb browser authority or changes Stage 4 preflight:
+/// it just returns a typed, isolated media object when the signed DLL can
+/// confirm a dedicated unlocked console and single physical monitor.
+pub fn open_console_media_session(
+    request: ConsoleMediaProbeRequest<'_>,
+) -> Result<ConsoleMediaSession, MediaProbeError> {
+    let wire = encode_console_request(request)?;
+    let expected = ConsoleMediaProbeRequestOwned {
+        adapter_luid: request.adapter_luid,
+        windows_session_id: request.windows_session_id,
+        width: request.width,
+        height: request.height,
+        refresh_hz: request.refresh_hz,
+    };
+    #[cfg(target_os = "windows")]
+    {
+        let inner = windows_impl::open_console_persistent_session(&wire, expected)?;
+        Ok(ConsoleMediaSession { expected, inner })
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (wire, expected);
+        Err(MediaProbeError::WindowsRequired)
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ConsoleFrameMetadata {
+    proof_flags: u32,
+    encoded_bytes: usize,
+    frame_sequence: u64,
+    frame_flags: u32,
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn decode_console_frame_header(
+    result: &[u8; CONSOLE_MEDIA_FRAME_RESULT_SIZE],
+    expected: ConsoleMediaProbeRequestOwned,
+    buffer_capacity: usize,
+) -> Result<ConsoleFrameMetadata, MediaProbeError> {
+    if read_u32(result, 0)? != CONSOLE_MEDIA_FRAME_RESULT_SIZE as u32
+        || read_u32(result, 4)? != CONSOLE_MEDIA_ABI_VERSION
+        || read_u32(result, 12)? != 0
+        || read_u64(result, 16)? != expected.adapter_luid
+        || read_u32(result, 24)? != expected.width
+        || read_u32(result, 28)? != expected.height
+        || read_u32(result, 32)? != expected.refresh_hz
+        || read_u32(result, 56)? != 0
+        || read_u32(result, 60)? != 0
+    {
+        return Err(MediaProbeError::InvalidResult);
+    }
+    let proof_flags = read_u32(result, 8)?;
+    let encoded_bytes = read_u32(result, 36)? as usize;
+    let frame_sequence = read_u64(result, 40)?;
+    let required_capacity = read_u32(result, 48)? as usize;
+    let frame_flags = read_u32(result, 52)?;
+    if proof_flags != CONSOLE_MEDIA_REQUIRED_PROOFS
+        || frame_sequence == 0
+        || encoded_bytes == 0
+        || encoded_bytes != required_capacity
+        || encoded_bytes > buffer_capacity
+        || frame_flags & !MEDIA_FRAME_FLAG_KEYFRAME != 0
+    {
+        return Err(MediaProbeError::InvalidResult);
+    }
+    Ok(ConsoleFrameMetadata {
+        proof_flags,
+        encoded_bytes,
+        frame_sequence,
+        frame_flags,
+    })
+}
+
 pub fn open_media_session(request: MediaProbeRequest<'_>) -> Result<MediaSession, MediaProbeError> {
     let wire = encode_request(request)?;
     let expected = MediaProbeRequestOwned {
@@ -491,6 +658,67 @@ mod windows_impl {
         })
     }
 
+    pub(super) fn open_console_persistent_session(
+        wire: &[u8; CONSOLE_MEDIA_REQUEST_SIZE],
+        expected: ConsoleMediaProbeRequestOwned,
+    ) -> Result<PersistentSession, MediaProbeError> {
+        let module = load_verified_module()?;
+        let open: OpenFn = unsafe { symbol(module.0, b"GPUbnbConsoleMediaOpen\0")? };
+        let read: ReadFrameFn = unsafe { symbol(module.0, b"GPUbnbConsoleMediaReadFrame\0")? };
+        let diagnostic: DiagnosticFn =
+            unsafe { symbol(module.0, b"GPUbnbMediaGetLastDiagnostic\0")? };
+        let close: CloseFn = unsafe { symbol(module.0, b"GPUbnbMediaClose\0")? };
+        let mut raw: *mut c_void = std::ptr::null_mut();
+        // SAFETY: fixed 80-byte ABI request, same signer-validated DLL,
+        // owned opaque session is always closed by the paired export.
+        let hr = unsafe { open(wire.as_ptr().cast::<c_void>(), &mut raw) };
+        if hr < 0 || raw.is_null() {
+            let fallback = if hr < 0 { hr } else { 0x8000_4005u32 as i32 };
+            return Err(classify_probe_hresult(fallback));
+        }
+        let _ = expected;
+        Ok(PersistentSession {
+            raw,
+            read,
+            diagnostic,
+            close,
+            _module: module,
+        })
+    }
+
+    pub(super) fn read_console_frame(
+        session: &mut PersistentSession,
+        expected: ConsoleMediaProbeRequestOwned,
+    ) -> Result<ConsoleEncodedMediaFrame, MediaProbeError> {
+        let mut bytes = vec![0u8; MAX_ENCODED_FRAME_BYTES];
+        let mut result = [0u8; CONSOLE_MEDIA_FRAME_RESULT_SIZE];
+        // SAFETY: paired verified DLL, live session handle and exact capacities.
+        let hr = unsafe {
+            (session.read)(
+                session.raw,
+                bytes.as_mut_ptr(),
+                bytes.len() as u32,
+                result.as_mut_ptr().cast::<c_void>(),
+            )
+        };
+        if hr < 0 {
+            // Do not misparse a console ABI as an IddCx diagnostic proof.
+            return Err(classify_probe_hresult(hr));
+        }
+        let verified = decode_console_frame_header(&result, expected, bytes.len())?;
+        bytes.truncate(verified.encoded_bytes);
+        Ok(ConsoleEncodedMediaFrame {
+            bytes,
+            frame_sequence: verified.frame_sequence,
+            proof_flags: verified.proof_flags,
+            frame_flags: verified.frame_flags,
+            adapter_luid: expected.adapter_luid,
+            width: expected.width,
+            height: expected.height,
+            refresh_hz: expected.refresh_hz,
+        })
+    }
+
     pub(super) fn read_persistent_frame(
         session: &mut PersistentSession,
         expected: MediaProbeRequestOwned,
@@ -663,6 +891,112 @@ mod tests {
         assert!(CPP_MEDIA_SOURCE.contains("DXGI_FORMAT_B8G8R8A8_UNORM"));
         assert!(!CPP_MEDIA_SOURCE.contains("DuplicateOutput("));
         assert!(!CPP_MEDIA_SOURCE.contains("IDXGIOutputDuplication"));
+    }
+
+    #[test]
+    fn console_capture_abi_is_disjoint_from_iddcx_version_two() {
+        const CPP: &str = include_str!("../../windows-media/Media.h");
+        assert!(CPP.contains("#define GPUBNB_CONSOLE_MEDIA_ABI_VERSION 3u"));
+        assert!(CPP.contains("struct GPUbnbConsoleProbeRequest"));
+        assert!(CPP.contains("GPUbnbConsoleMediaReadFrame"));
+        assert_eq!(CONSOLE_MEDIA_ABI_VERSION, 3);
+        assert_ne!(CONSOLE_MEDIA_ABI_VERSION, MEDIA_ABI_VERSION);
+        assert_eq!(CONSOLE_MEDIA_FRAME_RESULT_SIZE, 64);
+    }
+
+    #[test]
+    fn console_request_rejects_missing_identity_and_reserved_bytes_are_zero() {
+        let base = ConsoleMediaProbeRequest {
+            gpu_uuid: GPU,
+            adapter_luid: 0x1122_3344_5566_7788,
+            windows_session_id: 42,
+            session_nonce: [0x5A; 16],
+            width: 1920,
+            height: 1080,
+            refresh_hz: 60,
+            capture_timeout_ms: 250,
+        };
+        let wire = encode_console_request(base).expect("strict console wire");
+        assert_eq!(wire.len(), 80);
+        assert_eq!(&wire[0..4], &80u32.to_le_bytes());
+        assert_eq!(&wire[4..8], &3u32.to_le_bytes());
+        assert_eq!(&wire[48..52], &42u32.to_le_bytes());
+        assert_eq!(&wire[68..80], &[0u8; 12]);
+        assert_eq!(
+            encode_console_request(ConsoleMediaProbeRequest {
+                windows_session_id: 0,
+                ..base
+            }),
+            Err(MediaProbeError::InvalidRequest)
+        );
+        assert_eq!(
+            encode_console_request(ConsoleMediaProbeRequest {
+                session_nonce: [0u8; 16],
+                ..base
+            }),
+            Err(MediaProbeError::InvalidRequest)
+        );
+        assert_eq!(
+            encode_console_request(ConsoleMediaProbeRequest {
+                adapter_luid: 0,
+                ..base
+            }),
+            Err(MediaProbeError::InvalidRequest)
+        );
+    }
+
+    #[test]
+    fn console_result_refuses_any_missing_proof_or_wrong_frame_fence() {
+        let expected = ConsoleMediaProbeRequestOwned {
+            adapter_luid: 0x1122_3344_5566_7788,
+            windows_session_id: 42,
+            width: 1920,
+            height: 1080,
+            refresh_hz: 60,
+        };
+        let mut wire = [0u8; CONSOLE_MEDIA_FRAME_RESULT_SIZE];
+        wire[0..4].copy_from_slice(&(CONSOLE_MEDIA_FRAME_RESULT_SIZE as u32).to_le_bytes());
+        wire[4..8].copy_from_slice(&CONSOLE_MEDIA_ABI_VERSION.to_le_bytes());
+        wire[8..12].copy_from_slice(&CONSOLE_MEDIA_REQUIRED_PROOFS.to_le_bytes());
+        wire[16..24].copy_from_slice(&expected.adapter_luid.to_le_bytes());
+        wire[24..28].copy_from_slice(&expected.width.to_le_bytes());
+        wire[28..32].copy_from_slice(&expected.height.to_le_bytes());
+        wire[32..36].copy_from_slice(&expected.refresh_hz.to_le_bytes());
+        wire[36..40].copy_from_slice(&4096u32.to_le_bytes());
+        wire[40..48].copy_from_slice(&1u64.to_le_bytes());
+        wire[48..52].copy_from_slice(&4096u32.to_le_bytes());
+        assert_eq!(
+            decode_console_frame_header(&wire, expected, MAX_ENCODED_FRAME_BYTES),
+            Ok(ConsoleFrameMetadata {
+                proof_flags: CONSOLE_MEDIA_REQUIRED_PROOFS,
+                encoded_bytes: 4096,
+                frame_sequence: 1,
+                frame_flags: 0,
+            })
+        );
+
+        for (offset, replacement) in [
+            (4usize, 2u32), // IddCx version is not console v3.
+            (8, 0x07),      // NVENC absent.
+            (8, 0x1f),      // Unknown extra flag.
+            (12, 9),        // Failed stage must be zero.
+            (24, 1280),     // Dimensions cannot drift.
+            (36, 0),        // Empty bitstream.
+            (48, 8192),     // Capacity mismatch.
+            (52, 0x80),     // Unknown frame flag.
+            (56, 1),        // Reserved fields must be zero.
+        ] {
+            let mut bad = wire;
+            bad[offset..offset + 4].copy_from_slice(&replacement.to_le_bytes());
+            assert_eq!(
+                decode_console_frame_header(&bad, expected, MAX_ENCODED_FRAME_BYTES),
+                Err(MediaProbeError::InvalidResult)
+            );
+        }
+        assert_eq!(
+            decode_console_frame_header(&wire, expected, 1024),
+            Err(MediaProbeError::InvalidResult)
+        );
     }
 
     #[test]

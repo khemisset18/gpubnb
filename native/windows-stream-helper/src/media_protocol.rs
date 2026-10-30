@@ -8,10 +8,13 @@
 //! WorkerMediaProof.
 
 use crate::worker_protocol::{
-    WORKER_MEDIA_REQUIRED_PROOF_FLAGS, WorkerDisplaySpec, WorkerMediaProof,
+    WORKER_CONSOLE_PROOF_PROTOCOL_VERSION, WORKER_CONSOLE_REQUIRED_PROOF_FLAGS,
+    WORKER_MEDIA_REQUIRED_PROOF_FLAGS, WORKER_PROTOCOL_VERSION, WorkerDisplaySpec,
+    WorkerMediaProof,
 };
 
 pub const MEDIA_TRANSPORT_PROTOCOL_VERSION: u16 = 2;
+pub const MEDIA_CONSOLE_TRANSPORT_PROTOCOL_VERSION: u16 = 3;
 pub const MEDIA_FRAME_HEADER_SIZE: usize = 80;
 pub const MEDIA_H264_FRAME_MAX_BYTES: usize = 8 * 1024 * 1024;
 pub const MEDIA_CODEC_H264: u8 = 1;
@@ -88,8 +91,13 @@ fn read_u64(frame: &[u8], offset: usize) -> Result<u64, MediaFrameError> {
 }
 
 fn validate_header_fields(header: WorkerMediaFrameHeader) -> Result<(), MediaFrameError> {
-    if header.protocol_version != MEDIA_TRANSPORT_PROTOCOL_VERSION {
-        return Err(MediaFrameError::ProtocolVersion);
+    match (header.protocol_version, header.proof_flags) {
+        (MEDIA_TRANSPORT_PROTOCOL_VERSION, WORKER_MEDIA_REQUIRED_PROOF_FLAGS)
+        | (MEDIA_CONSOLE_TRANSPORT_PROTOCOL_VERSION, WORKER_CONSOLE_REQUIRED_PROOF_FLAGS) => {}
+        (MEDIA_TRANSPORT_PROTOCOL_VERSION | MEDIA_CONSOLE_TRANSPORT_PROTOCOL_VERSION, _) => {
+            return Err(MediaFrameError::ProofFlags);
+        }
+        _ => return Err(MediaFrameError::ProtocolVersion),
     }
     if header.codec != MEDIA_CODEC_H264 {
         return Err(MediaFrameError::Codec);
@@ -123,9 +131,6 @@ fn validate_header_fields(header: WorkerMediaFrameHeader) -> Result<(), MediaFra
     }
     if header.payload_bytes == 0 || header.payload_bytes as usize > MEDIA_H264_FRAME_MAX_BYTES {
         return Err(MediaFrameError::PayloadLength);
-    }
-    if header.proof_flags != WORKER_MEDIA_REQUIRED_PROOF_FLAGS {
-        return Err(MediaFrameError::ProofFlags);
     }
     Ok(())
 }
@@ -162,7 +167,10 @@ pub fn decode_worker_media_frame_header(
         return Err(MediaFrameError::InvalidLength);
     }
     let protocol_version = u16::from_le_bytes([frame[0], frame[1]]);
-    if protocol_version != MEDIA_TRANSPORT_PROTOCOL_VERSION {
+    if !matches!(
+        protocol_version,
+        MEDIA_TRANSPORT_PROTOCOL_VERSION | MEDIA_CONSOLE_TRANSPORT_PROTOCOL_VERSION
+    ) {
         return Err(MediaFrameError::ProtocolVersion);
     }
     let header_size = u16::from_le_bytes([frame[2], frame[3]]) as usize;
@@ -195,6 +203,41 @@ pub fn decode_worker_media_frame_header(
     Ok(header)
 }
 
+fn validate_media_frame_header_domain(
+    expected_generation: u64,
+    expected_command_sequence: u64,
+    expected_windows_session_id: u32,
+    expected_display: WorkerDisplaySpec,
+    proof: WorkerMediaProof,
+    header: WorkerMediaFrameHeader,
+    console: bool,
+) -> Result<(), MediaFrameError> {
+    let expected_version = if console {
+        MEDIA_CONSOLE_TRANSPORT_PROTOCOL_VERSION
+    } else {
+        MEDIA_TRANSPORT_PROTOCOL_VERSION
+    };
+    let expected_proof_version = if console {
+        WORKER_CONSOLE_PROOF_PROTOCOL_VERSION
+    } else {
+        WORKER_PROTOCOL_VERSION
+    };
+    if header.protocol_version != expected_version
+        || proof.protocol_version != expected_proof_version
+    {
+        return Err(MediaFrameError::ProtocolVersion);
+    }
+    validate_header_fields(header)?;
+    validate_media_frame_identity(
+        expected_generation,
+        expected_command_sequence,
+        expected_windows_session_id,
+        expected_display,
+        proof,
+        header,
+    )
+}
+
 pub fn validate_worker_media_frame_header(
     expected_generation: u64,
     expected_command_sequence: u64,
@@ -203,7 +246,44 @@ pub fn validate_worker_media_frame_header(
     proof: WorkerMediaProof,
     header: WorkerMediaFrameHeader,
 ) -> Result<(), MediaFrameError> {
-    validate_header_fields(header)?;
+    validate_media_frame_header_domain(
+        expected_generation,
+        expected_command_sequence,
+        expected_windows_session_id,
+        expected_display,
+        proof,
+        header,
+        false,
+    )
+}
+
+pub fn validate_worker_console_media_frame_header(
+    expected_generation: u64,
+    expected_command_sequence: u64,
+    expected_windows_session_id: u32,
+    expected_display: WorkerDisplaySpec,
+    proof: WorkerMediaProof,
+    header: WorkerMediaFrameHeader,
+) -> Result<(), MediaFrameError> {
+    validate_media_frame_header_domain(
+        expected_generation,
+        expected_command_sequence,
+        expected_windows_session_id,
+        expected_display,
+        proof,
+        header,
+        true,
+    )
+}
+
+fn validate_media_frame_identity(
+    expected_generation: u64,
+    expected_command_sequence: u64,
+    expected_windows_session_id: u32,
+    expected_display: WorkerDisplaySpec,
+    proof: WorkerMediaProof,
+    header: WorkerMediaFrameHeader,
+) -> Result<(), MediaFrameError> {
     if header.generation != expected_generation || header.generation != proof.generation {
         return Err(MediaFrameError::Generation);
     }

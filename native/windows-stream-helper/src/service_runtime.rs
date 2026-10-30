@@ -7,13 +7,14 @@
 //! -> GPUbnb IddCx display -> fresh DXGI frame -> exact-GPU NVENC bitstream.
 
 use crate::graphics_proof::{
-    CaptureFrameProof, EncodeCodec, NvencProof, PixelFormat, VirtualDisplayProof,
-    validate_graphics_proof_chain,
+    CaptureFrameProof, DedicatedConsoleDisplayProof, EncodeCodec, NvencProof, PixelFormat,
+    VirtualDisplayProof, validate_dedicated_console_chain, validate_graphics_proof_chain,
 };
 use crate::lifecycle::WorkspaceKind;
 use crate::media_protocol::{
     BoundMediaFrame, MEDIA_FRAME_HEADER_SIZE, bind_worker_media_payload,
-    decode_worker_media_frame_header, validate_worker_media_frame_header,
+    decode_worker_media_frame_header, validate_worker_console_media_frame_header,
+    validate_worker_media_frame_header,
 };
 use crate::worker_protocol::{
     WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE, WORKER_MEDIA_POLL_FRAME_SIZE, WORKER_PROTOCOL_VERSION,
@@ -21,7 +22,8 @@ use crate::worker_protocol::{
     WorkerInputFrame, WorkerMediaPollStatus, WorkerMediaProof, decode_and_validate_worker_hello,
     decode_worker_media_diagnostic, decode_worker_media_poll, decode_worker_media_proof,
     encode_worker_command, encode_worker_display_spec, encode_worker_input,
-    validate_worker_media_diagnostic, validate_worker_media_poll, validate_worker_media_proof,
+    validate_worker_console_media_proof, validate_worker_media_diagnostic,
+    validate_worker_media_poll, validate_worker_media_proof,
 };
 use gpubnb_windows_platform::PlatformError;
 use gpubnb_windows_platform::gpu_identity::resolve_nvidia_uuid_to_luid;
@@ -142,6 +144,28 @@ pub struct ServiceRuntimeConfig<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeDisplayBackend {
+    IddCx,
+    DedicatedConsole,
+}
+
+impl RuntimeDisplayBackend {
+    fn prepare_command(self) -> WorkerCommand {
+        match self {
+            Self::IddCx => WorkerCommand::PrepareDisplay,
+            Self::DedicatedConsole => WorkerCommand::PrepareConsoleDisplay,
+        }
+    }
+
+    fn capture_command(self) -> WorkerCommand {
+        match self {
+            Self::IddCx => WorkerCommand::StartCapture,
+            Self::DedicatedConsole => WorkerCommand::StartConsoleCapture,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeMediaState {
     Ready,
     Suspended,
@@ -153,6 +177,7 @@ pub struct QualifiedGraphicsRuntime {
     // then losing the pipe wakes/fails the worker, the Job Object kills any
     // remaining worker tree, and the IddCx lease is removed.
     media_capability: Option<MediaCapabilityToken>,
+    backend: RuntimeDisplayBackend,
     pipe: WorkerPipe,
     media_pipe: WorkerMediaPipe,
     worker: Option<RenterWorkerProcess>,
@@ -160,6 +185,7 @@ pub struct QualifiedGraphicsRuntime {
     generation: u64,
     stream_epoch: u64,
     windows_session_id: u32,
+    renter_user_sid: String,
     provider_user_sid: String,
     renter_isolation: RenterSessionIsolationProof,
     display_spec: WorkerDisplaySpec,
@@ -172,6 +198,10 @@ pub struct QualifiedGraphicsRuntime {
 }
 
 impl QualifiedGraphicsRuntime {
+    pub const fn backend(&self) -> RuntimeDisplayBackend {
+        self.backend
+    }
+
     pub const fn generation(&self) -> u64 {
         self.generation
     }
@@ -234,9 +264,21 @@ impl QualifiedGraphicsRuntime {
         error
     }
 
+    /// Fresh WTS token proof: a recycled console session number or fast-user
+    /// switch must never be treated as the original renter identity.
+    pub fn live_renter_boundary(&self) -> bool {
+        query_renter_session_token(
+            self.windows_session_id,
+            &self.renter_user_sid,
+            &self.provider_user_sid,
+        )
+        .is_ok()
+    }
+
     fn ensure_provider_boundary(&mut self) -> Result<(), ServiceRuntimeError> {
-        if ensure_provider_process_absent(self.windows_session_id, &self.provider_user_sid).is_err()
-        {
+        // A session checked only at START can be displaced by fast-user
+        // switching. Revoke the capability before returning any buffered frame.
+        if !self.live_renter_boundary() {
             return Err(self.fail(ServiceRuntimeError::RenterSession));
         }
         Ok(())
@@ -287,7 +329,9 @@ impl QualifiedGraphicsRuntime {
                 generation: self.generation,
                 command_sequence: sequence,
                 windows_session_id: self.windows_session_id,
+                renter_user_sid: &self.renter_user_sid,
                 provider_user_sid: &self.provider_user_sid,
+                backend: self.backend,
                 display_spec: self.display_spec,
                 gpu_uuid: &self.gpu_uuid,
             },
@@ -299,6 +343,9 @@ impl QualifiedGraphicsRuntime {
         if frame.header.frame_sequence <= self.last_frame_sequence {
             return Err(self.fail(ServiceRuntimeError::MediaTransport));
         }
+        // The worker could have spent time capturing/encoding a frame while
+        // the console changed owners; never accept it without a second check.
+        self.ensure_provider_boundary()?;
         self.last_frame_sequence = frame.header.frame_sequence;
         Ok(Some(frame))
     }
@@ -396,7 +443,9 @@ impl QualifiedGraphicsRuntime {
                 generation: self.generation,
                 command_sequence: sequence,
                 windows_session_id: self.windows_session_id,
+                renter_user_sid: &self.renter_user_sid,
                 provider_user_sid: &self.provider_user_sid,
+                backend: self.backend,
                 display_spec: self.display_spec,
                 gpu_uuid: &self.gpu_uuid,
             },
@@ -418,6 +467,8 @@ impl QualifiedGraphicsRuntime {
             Ok(value) => value,
             Err(error) => return Err(self.fail(error)),
         };
+        // RESUME is another asynchronous capture boundary.
+        self.ensure_provider_boundary()?;
         self.last_frame_sequence = frame.header.frame_sequence;
         self.pending_media_frame = Some(frame);
         self.media_capability = Some(media_capability);
@@ -481,7 +532,9 @@ struct MediaFrameFence<'a> {
     generation: u64,
     command_sequence: u64,
     windows_session_id: u32,
+    renter_user_sid: &'a str,
     provider_user_sid: &'a str,
+    backend: RuntimeDisplayBackend,
     display_spec: WorkerDisplaySpec,
     gpu_uuid: &'a str,
 }
@@ -547,7 +600,9 @@ fn receive_bound_media_frame_after_proof(
         generation,
         command_sequence,
         windows_session_id,
+        renter_user_sid,
         provider_user_sid,
+        backend,
         display_spec,
         gpu_uuid,
     } = fence;
@@ -573,13 +628,22 @@ fn receive_bound_media_frame_after_proof(
 
     let proof: WorkerMediaProof =
         decode_worker_media_proof(proof_frame).map_err(|_| ServiceRuntimeError::MediaProof)?;
-    validate_worker_media_proof(
-        generation,
-        command_sequence,
-        windows_session_id,
-        display_spec,
-        proof,
-    )
+    match backend {
+        RuntimeDisplayBackend::IddCx => validate_worker_media_proof(
+            generation,
+            command_sequence,
+            windows_session_id,
+            display_spec,
+            proof,
+        ),
+        RuntimeDisplayBackend::DedicatedConsole => validate_worker_console_media_proof(
+            generation,
+            command_sequence,
+            windows_session_id,
+            display_spec,
+            proof,
+        ),
+    }
     .map_err(|_| ServiceRuntimeError::MediaProof)?;
 
     let header_bytes = media_pipe
@@ -587,14 +651,24 @@ fn receive_bound_media_frame_after_proof(
         .map_err(|_| ServiceRuntimeError::MediaTransport)?;
     let header = decode_worker_media_frame_header(&header_bytes)
         .map_err(|_| ServiceRuntimeError::MediaTransport)?;
-    validate_worker_media_frame_header(
-        generation,
-        command_sequence,
-        windows_session_id,
-        display_spec,
-        proof,
-        header,
-    )
+    match backend {
+        RuntimeDisplayBackend::IddCx => validate_worker_media_frame_header(
+            generation,
+            command_sequence,
+            windows_session_id,
+            display_spec,
+            proof,
+            header,
+        ),
+        RuntimeDisplayBackend::DedicatedConsole => validate_worker_console_media_frame_header(
+            generation,
+            command_sequence,
+            windows_session_id,
+            display_spec,
+            proof,
+            header,
+        ),
+    }
     .map_err(|_| ServiceRuntimeError::MediaTransport)?;
 
     // Header validation happens before allocation and guarantees a non-zero
@@ -617,6 +691,49 @@ fn receive_bound_media_frame_after_proof(
         ensure_provider_process_absent(windows_session_id, provider_user_sid)
             .map(|_| true)
             .map_err(|_| ServiceRuntimeError::RenterSession)?;
+
+    if matches!(backend, RuntimeDisplayBackend::DedicatedConsole) {
+        // A WTS number can be recycled. Recheck the exact renter SID on every
+        // frame, *before* returning any H.264 bytes to the browser server.
+        query_renter_session_token(windows_session_id, renter_user_sid, provider_user_sid)
+            .map_err(|_| ServiceRuntimeError::RenterSession)?;
+        return validate_dedicated_console_chain(
+            generation,
+            windows_session_id,
+            gpu_uuid,
+            DedicatedConsoleDisplayProof {
+                generation,
+                windows_session_id,
+                console_nonce: display_spec.display_nonce,
+                adapter_luid: display_spec.adapter_luid,
+                width: display_spec.width,
+                height: display_spec.height,
+                refresh_hz: display_spec.refresh_hz,
+                renter_console_exclusive: provider_desktop_excluded,
+                one_monitor_validated: true, // Verified by WGC console ABI-v3.
+            },
+            CaptureFrameProof {
+                generation,
+                windows_session_id,
+                display_nonce: display_spec.display_nonce,
+                adapter_luid: display_spec.adapter_luid,
+                frame_sequence: proof.frame_sequence,
+                width: proof.width,
+                height: proof.height,
+                format: PixelFormat::Bgra8Unorm,
+            },
+            &NvencProof {
+                generation,
+                adapter_luid: display_spec.adapter_luid,
+                gpu_uuid: gpu_uuid.to_owned(),
+                input_frame_sequence: proof.frame_sequence,
+                codec: EncodeCodec::H264,
+                encoded_bytes: u64::from(proof.encoded_bytes),
+            },
+        )
+        .map_err(|_| ServiceRuntimeError::GraphicsProof)
+        .map(|()| frame);
+    }
 
     validate_graphics_proof_chain(
         generation,
@@ -733,6 +850,20 @@ fn classify_virtual_display_failure(error: PlatformError) -> ServiceRuntimeError
 pub fn start_qualified_graphics_runtime(
     config: ServiceRuntimeConfig<'_>,
 ) -> Result<QualifiedGraphicsRuntime, ServiceRuntimeError> {
+    start_graphics_runtime(config, RuntimeDisplayBackend::IddCx)
+}
+
+/// Explicit opt-in. Never selected by the legacy --start/Agent preflight.
+pub fn start_dedicated_console_graphics_runtime(
+    config: ServiceRuntimeConfig<'_>,
+) -> Result<QualifiedGraphicsRuntime, ServiceRuntimeError> {
+    start_graphics_runtime(config, RuntimeDisplayBackend::DedicatedConsole)
+}
+
+fn start_graphics_runtime(
+    config: ServiceRuntimeConfig<'_>,
+    backend: RuntimeDisplayBackend,
+) -> Result<QualifiedGraphicsRuntime, ServiceRuntimeError> {
     validate_config(config)?;
 
     let signer = worker_signer()?;
@@ -813,25 +944,31 @@ pub fn start_qualified_graphics_runtime(
     // The privileged service is the only process allowed to mutate the IddCx
     // control device. This remains fail-closed while the physical qualification
     // gate in windows-platform/windows-idd is false.
-    let display = activate_virtual_display_lease(
-        config.gpu_uuid,
-        VirtualDisplayRequest {
-            operation: VirtualDisplayOperation::PlugMonitor,
-            generation: config.generation,
-            windows_session_id: config.windows_session_id,
-            render_adapter_luid: identity.luid,
-            display_nonce: config.display_nonce,
-            width: config.width,
-            height: config.height,
-            refresh_hz: config.refresh_hz,
-        },
-    )
-    .map_err(classify_virtual_display_failure)?;
+    let display = if matches!(backend, RuntimeDisplayBackend::IddCx) {
+        Some(
+            activate_virtual_display_lease(
+                config.gpu_uuid,
+                VirtualDisplayRequest {
+                    operation: VirtualDisplayOperation::PlugMonitor,
+                    generation: config.generation,
+                    windows_session_id: config.windows_session_id,
+                    render_adapter_luid: identity.luid,
+                    display_nonce: config.display_nonce,
+                    width: config.width,
+                    height: config.height,
+                    refresh_hz: config.refresh_hz,
+                },
+            )
+            .map_err(classify_virtual_display_failure)?,
+        )
+    } else {
+        None
+    };
 
     let startup = (|| -> Result<(BoundMediaFrame, MediaCapabilityToken), ServiceRuntimeError> {
         let prepare = encode_worker_command(WorkerCommandFrame {
             protocol_version: WORKER_PROTOCOL_VERSION,
-            command: WorkerCommand::PrepareDisplay,
+            command: backend.prepare_command(),
             generation: config.generation,
             sequence: 1,
         })
@@ -844,7 +981,7 @@ pub fn start_qualified_graphics_runtime(
 
         let capture = encode_worker_command(WorkerCommandFrame {
             protocol_version: WORKER_PROTOCOL_VERSION,
-            command: WorkerCommand::StartCapture,
+            command: backend.capture_command(),
             generation: config.generation,
             sequence: 2,
         })
@@ -859,7 +996,9 @@ pub fn start_qualified_graphics_runtime(
                 generation: config.generation,
                 command_sequence: 2,
                 windows_session_id: config.windows_session_id,
+                renter_user_sid: config.renter_user_sid,
                 provider_user_sid: config.provider_user_sid,
+                backend,
                 display_spec,
                 gpu_uuid: config.gpu_uuid,
             },
@@ -891,10 +1030,12 @@ pub fn start_qualified_graphics_runtime(
         pipe,
         media_pipe,
         worker: Some(worker),
-        display: Some(display),
+        display,
+        backend,
         generation: config.generation,
         stream_epoch: config.generation,
         windows_session_id: config.windows_session_id,
+        renter_user_sid: config.renter_user_sid.to_owned(),
         provider_user_sid: config.provider_user_sid.to_owned(),
         renter_isolation,
         display_spec,
@@ -917,6 +1058,26 @@ mod tests {
         assert_eq!(
             next_stream_epoch(u64::MAX),
             Err(ServiceRuntimeError::MediaCapability)
+        );
+    }
+
+    #[test]
+    fn backend_commands_cannot_select_the_other_capture_engine() {
+        assert_eq!(
+            RuntimeDisplayBackend::IddCx.prepare_command(),
+            WorkerCommand::PrepareDisplay
+        );
+        assert_eq!(
+            RuntimeDisplayBackend::IddCx.capture_command(),
+            WorkerCommand::StartCapture
+        );
+        assert_eq!(
+            RuntimeDisplayBackend::DedicatedConsole.prepare_command(),
+            WorkerCommand::PrepareConsoleDisplay
+        );
+        assert_eq!(
+            RuntimeDisplayBackend::DedicatedConsole.capture_command(),
+            WorkerCommand::StartConsoleCapture
         );
     }
 

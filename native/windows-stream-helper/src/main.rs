@@ -17,7 +17,14 @@ const WORKSPACES: [&str; 4] = ["cloud-desktop", "creator", "cad", "gaming"];
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Command {
     SelfTest,
+    SelfTestConsole,
     Start {
+        session_id: String,
+        workspace: String,
+        gpu_uuid: String,
+        application: Option<String>,
+    },
+    StartConsole {
         session_id: String,
         workspace: String,
         gpu_uuid: String,
@@ -36,6 +43,11 @@ enum Command {
         session_id: String,
     },
     AuthorityChild {
+        session_id: String,
+        workspace: String,
+        gpu_uuid: String,
+    },
+    AuthorityConsoleChild {
         session_id: String,
         workspace: String,
         gpu_uuid: String,
@@ -288,9 +300,38 @@ fn parse_authority_child(args: &[String]) -> Result<Command, CliError> {
 fn parse_args(args: &[String]) -> Result<Command, CliError> {
     match args.first().map(String::as_str) {
         Some("--authority-child") => parse_authority_child(args),
+        Some("--authority-console-child") => match parse_authority_child(args)? {
+            Command::AuthorityChild {
+                session_id,
+                workspace,
+                gpu_uuid,
+            } => Ok(Command::AuthorityConsoleChild {
+                session_id,
+                workspace,
+                gpu_uuid,
+            }),
+            _ => Err(CliError::new("invalid_authority_arguments", 2)),
+        },
         Some("--self-test") if args.len() == 2 && args[1] == "--json" => Ok(Command::SelfTest),
+        Some("--self-test-console") if args.len() == 2 && args[1] == "--json" => {
+            Ok(Command::SelfTestConsole)
+        }
         Some("--self-test") => Err(CliError::new("invalid_self_test_arguments", 2)),
         Some("--start") => parse_start(args),
+        Some("--start-console") => match parse_start(args)? {
+            Command::Start {
+                session_id,
+                workspace,
+                gpu_uuid,
+                application,
+            } => Ok(Command::StartConsole {
+                session_id,
+                workspace,
+                gpu_uuid,
+                application,
+            }),
+            _ => Err(CliError::new("invalid_start_arguments", 2)),
+        },
         Some("--stop") => parse_session_command(args, |session_id| Command::Stop { session_id }),
         Some("--suspend") => {
             parse_session_command(args, |session_id| Command::Suspend { session_id })
@@ -328,6 +369,22 @@ fn execute(command: &Command) -> Result<String, CliError> {
                 ))
             }
         }
+        Command::SelfTestConsole => {
+            #[cfg(not(target_os = "windows"))]
+            {
+                Err(CliError::new("windows_required", 20))
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let report = gpubnb_windows_stream_helper::authority::run_console_self_test()
+                    .map_err(authority_error)?;
+                Ok(format!(
+                    r#"{{"schemaVersion":1,"platform":"windows","captureBackend":"console-dedicated","helperVersion":"{}","gpuUuid":"{}","isolatedSession":true,"separateRenterIdentity":true,"renterSessionActive":true,"providerSessionInactive":true,"consoleDisplay":true,"virtualDisplay":false,"providerDesktopExcluded":true,"captureFrame":true,"exactGpuBound":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaLoopback":true,"inputIsolation":true,"audioAvailable":false}}"#,
+                    env!("CARGO_PKG_VERSION"),
+                    report.gpu_uuid
+                ))
+            }
+        }
         Command::Start {
             session_id,
             workspace,
@@ -353,6 +410,31 @@ fn execute(command: &Command) -> Result<String, CliError> {
                 ))
             }
         }
+        Command::StartConsole {
+            session_id,
+            workspace,
+            gpu_uuid,
+            application: _,
+        } => {
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = (session_id, workspace, gpu_uuid);
+                Err(CliError::new("windows_required", 20))
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let report = gpubnb_windows_stream_helper::authority::start_console_session(
+                    session_id, workspace, gpu_uuid,
+                )
+                .map_err(authority_error)?;
+                Ok(format!(
+                    r#"{{"schemaVersion":1,"captureBackend":"console-dedicated","consoleDisplay":true,"virtualDisplay":false,"sessionId":"{session_id}","workspaceSlug":"{workspace}","gpuUuid":"{gpu_uuid}","helperVersion":"{}","isolatedSession":true,"separateRenterIdentity":true,"renterSessionActive":true,"providerSessionInactive":true,"providerDesktopExcluded":true,"captureReady":true,"exactGpuBound":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true,"mediaUrl":"http://127.0.0.1:{}/session/{session_id}","mediaToken":"{}","audioReady":false,"controllerReady":false}}"#,
+                    env!("CARGO_PKG_VERSION"),
+                    report.media_port,
+                    report.media_token
+                ))
+            }
+        }
         Command::Status { session_id } => {
             #[cfg(not(target_os = "windows"))]
             {
@@ -364,13 +446,22 @@ fn execute(command: &Command) -> Result<String, CliError> {
                 use gpubnb_windows_stream_helper::authority::AuthorityStatus;
                 let status = gpubnb_windows_stream_helper::authority::status_session(session_id)
                     .map_err(authority_error)?;
-                let (ready, suspended) = match status {
-                    AuthorityStatus::Ready => (true, false),
-                    AuthorityStatus::Suspended => (false, true),
-                    AuthorityStatus::Degraded => (false, false),
+                let (ready, suspended, console) = match status {
+                    AuthorityStatus::Ready => (true, false, false),
+                    AuthorityStatus::Suspended => (false, true, false),
+                    AuthorityStatus::Degraded => (false, false, false),
+                    AuthorityStatus::ConsoleReady => (true, false, true),
+                    AuthorityStatus::ConsoleSuspended => (false, true, true),
+                    AuthorityStatus::ConsoleDegraded => (false, false, true),
                 };
+                let capture_backend = if console {
+                    "console-dedicated"
+                } else {
+                    "iddcx"
+                };
+                let virtual_display = !console;
                 Ok(format!(
-                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","running":true,"suspended":{suspended},"isolatedSession":true,"renterSessionActive":true,"providerSessionInactive":true,"virtualDisplay":true,"providerDesktopExcluded":true,"exactGpuBound":true,"captureReady":{ready},"nvencReady":{ready},"hardwareEncoder":"nvenc","mediaReady":{ready},"inputIsolation":true,"inputReady":{ready}}}"#
+                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","captureBackend":"{capture_backend}","consoleDisplay":{console},"running":true,"suspended":{suspended},"isolatedSession":true,"renterSessionActive":true,"providerSessionInactive":true,"virtualDisplay":{virtual_display},"providerDesktopExcluded":true,"exactGpuBound":true,"captureReady":{ready},"nvencReady":{ready},"hardwareEncoder":"nvenc","mediaReady":{ready},"inputIsolation":true,"inputReady":{ready}}}"#
                 ))
             }
         }
@@ -397,11 +488,26 @@ fn execute(command: &Command) -> Result<String, CliError> {
             }
             #[cfg(target_os = "windows")]
             {
+                use gpubnb_windows_stream_helper::authority::AuthorityStatus;
                 let media_token =
                     gpubnb_windows_stream_helper::authority::resume_session(session_id)
                         .map_err(authority_error)?;
+                // Re-read the actual authority backend after fresh media proof.
+                let status = gpubnb_windows_stream_helper::authority::status_session(session_id)
+                    .map_err(authority_error)?;
+                let console = match status {
+                    AuthorityStatus::Ready => false,
+                    AuthorityStatus::ConsoleReady => true,
+                    _ => return Err(CliError::new("native_session_degraded", 21)),
+                };
+                let capture_backend = if console {
+                    "console-dedicated"
+                } else {
+                    "iddcx"
+                };
+                let virtual_display = !console;
                 Ok(format!(
-                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","resumed":true,"freshMediaProof":true,"exactGpuBound":true,"virtualDisplay":true,"providerDesktopExcluded":true,"captureReady":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true,"mediaToken":"{media_token}"}}"#
+                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","resumed":true,"freshMediaProof":true,"captureBackend":"{capture_backend}","consoleDisplay":{console},"exactGpuBound":true,"virtualDisplay":{virtual_display},"providerDesktopExcluded":true,"captureReady":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true,"mediaToken":"{media_token}"}}"#
                 ))
             }
         }
@@ -424,6 +530,11 @@ fn execute(command: &Command) -> Result<String, CliError> {
             session_id,
             workspace,
             gpu_uuid,
+        }
+        | Command::AuthorityConsoleChild {
+            session_id,
+            workspace,
+            gpu_uuid,
         } => {
             #[cfg(not(target_os = "windows"))]
             {
@@ -432,9 +543,16 @@ fn execute(command: &Command) -> Result<String, CliError> {
             }
             #[cfg(target_os = "windows")]
             {
-                gpubnb_windows_stream_helper::authority::run_authority_child(
-                    session_id, workspace, gpu_uuid,
-                )
+                match command {
+                    Command::AuthorityConsoleChild { .. } => {
+                        gpubnb_windows_stream_helper::authority::run_console_authority_child(
+                            session_id, workspace, gpu_uuid,
+                        )
+                    }
+                    _ => gpubnb_windows_stream_helper::authority::run_authority_child(
+                        session_id, workspace, gpu_uuid,
+                    ),
+                }
                 .map_err(authority_error)?;
                 Ok(r#"{"ok":true,"authorityStopped":true}"#.to_owned())
             }
