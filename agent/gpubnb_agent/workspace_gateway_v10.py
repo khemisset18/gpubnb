@@ -41,6 +41,7 @@ from .windows_native_capability import (
     fence_native_rental_launch,
     native_rental_physical_cleanup_confirmed,
 )
+from .windows_native_private_console import CONSOLE_BACKEND, selected_capture_backend
 from .windows_native_runtime import (
     NativeRuntimeHandle,
     launch_windows_native_workspace,
@@ -411,6 +412,8 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         self,
         session_id: str,
         workspace_slug: str,
+        *,
+        private_console_qualification: bool = False,
     ) -> NativeGatewayRuntime:
         self._trace("native_start_begin", session_id=session_id)
         if workspace_slug not in WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS:
@@ -440,6 +443,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 session_id,
                 workspace_slug,
                 str(specs[0].hardware_uuid),
+                **({'private_console_qualification': True} if private_console_qualification else {}),
             )
         except Exception as exc:
             code = _native_error_code(exc)
@@ -699,10 +703,27 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 continue
             if status not in {"READY", "RUNNING"}:
                 continue
+            # The server-signed desired session, exact Agent build, and a
+            # separate local opt-in must agree before console media is touched.
+            # Never treat missing or malformed authority as console permission.
+            try:
+                capture_backend = selected_capture_backend(session)
+            except RuntimeError as exc:
+                self._report_error(exc)
+                if session_id in self.native_runtimes:
+                    self._native_stop_and_report(session_id)
+                continue
             with self._native_lock:
                 if session_id in self._native_blocked:
                     continue
                 runtime = self.native_runtimes.get(session_id)
+
+            if runtime is not None and getattr(runtime.handle, "capture_backend", "iddcx") != capture_backend:
+                # A server-side backend/release change revokes the old session.
+                # Switching capture sources inside an active stream is forbidden.
+                self._report_error(RuntimeError("native_capture_backend_changed"))
+                self._native_stop_and_report(session_id)
+                continue
 
             if runtime is None:
                 if status == "RUNNING":
@@ -719,7 +740,10 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 if time.monotonic() < self.start_retry_at.get(session_id, 0.0):
                     continue
                 try:
-                    runtime = self._start_native_runtime(session_id, workspace_slug)
+                    runtime = self._start_native_runtime(
+                        session_id, workspace_slug,
+                        **({'private_console_qualification': True} if capture_backend == CONSOLE_BACKEND else {}),
+                    )
                 except Exception as exc:
                     failures = self.start_failures.get(session_id, 0) + 1
                     self.start_failures[session_id] = failures
