@@ -35,6 +35,7 @@ import {
 } from './resource-allocation-service.js';
 import { preparationPhase, safeConnection } from './workspace-renter-routes.js';
 import { WINDOWS_NATIVE_GPU_UUID_RE } from './windows-native-capability.js';
+import { privateConsoleAgentCommit, privateConsoleSessionMarker } from './windows-native-private-console.js';
 
 const desktopWorkspaceSlugs = ['cloud-desktop', 'creator', 'cad', 'gaming'] as const;
 type DesktopWorkspaceSlug = typeof desktopWorkspaceSlugs[number];
@@ -949,6 +950,10 @@ async function createWindowsNativeQualificationSession(
             storageQuotaMiB: spec.storageQuotaMiB,
             networkAccess: 'RESTRICTED',
             autoStopMinutes: 60,
+            // Created by the private API; never chosen by the browser or GPU listing.
+            ...(privateConsoleAgentCommit() !== null
+              ? { privateConsoleQualification: privateConsoleSessionMarker(privateConsoleAgentCommit()) }
+              : {}),
           },
           connectionType: 'GPUBNB_GATEWAY',
           preparationProgress: 100,
