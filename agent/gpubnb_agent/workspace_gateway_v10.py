@@ -21,7 +21,6 @@ Security boundaries:
 """
 from __future__ import annotations
 
-import base64
 import platform
 import re
 import socket
@@ -845,6 +844,10 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             is_native = session_id in self.native_runtimes
         if not is_native:
             return super()._begin_reconnect_grace(session_id)
+        if self._console_channel_fenced(session_id):
+            # WTS STOP owns the session now. Never start reconnect grace,
+            # suspend or resume after the Windows console changed owners.
+            return
 
         # SUSPEND makes the helper physically non-READY before the reconnect API
         # marks the session paused. Hold the same transition lock used by RESUME
@@ -942,66 +945,25 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 return
         return super()._handle(item)
 
-    def _ws_reader(self, session_id: str, channel_id: str, ws: websocket.WebSocket) -> None:
+    def _ws_forward_allowed(self, session_id: str, channel_id: str) -> bool:
+        # The v2 batch sender checks this again immediately before publishing
+        # already-buffered H.264 frames. Keep all legacy batching, backpressure,
+        # channel accounting and reconnect logic untouched.
         with self._native_lock:
-            native = channel_id in self._native_channel_sessions
-        if not native:
-            return super()._ws_reader(session_id, channel_id, ws)
+            authorized = self._native_channel_sessions.get(channel_id)
+        if authorized is not None:
+            if authorized != session_id or self._console_channel_fenced(authorized):
+                return False
+        return super()._ws_forward_allowed(session_id, channel_id)
 
-        # Do not use the legacy reader: it can forward a buffered frame after
-        # recv_data() without rechecking the WTS console transition fence.
+    def _ws_reader(self, session_id: str, channel_id: str, ws: websocket.WebSocket) -> None:
         try:
-            while not self.stop_event.is_set():
-                if self._console_channel_fenced(session_id):
-                    break
-                opcode, data = ws.recv_data()
-                if opcode == websocket.ABNF.OPCODE_CLOSE:
-                    break
-                if self._console_channel_fenced(session_id):
-                    break
-                raw = data.encode() if isinstance(data, str) else bytes(data)
-                if len(raw) > legacy.WS_MAX_FRAME_BYTES:
-                    raise RuntimeError("windows_native_frame_too_large")
-                # The WTS fence can arrive between receiving a worker frame
-                # and sending it to the control plane. Recheck at send time.
-                if self._console_channel_fenced(session_id):
-                    break
-                self._request(
-                    "/agent/workspace-gateway/ws-frame",
-                    "POST",
-                    {
-                        "machineId": self.machine_id,
-                        "channelId": channel_id,
-                        "dataBase64": base64.b64encode(raw).decode(),
-                        "binary": opcode == websocket.ABNF.OPCODE_BINARY,
-                    },
-                )
-        except Exception as exc:
-            self._report_error(RuntimeError(
-                f"windows_native_reader_failed:{_native_websocket_error_code(exc)}"
-            ))
+            return super()._ws_reader(session_id, channel_id, ws)
         finally:
+            # Keep the mapping valid until v2's outbound sender has joined:
+            # otherwise queued frames could bypass the console WTS guard.
             with self._native_lock:
                 self._native_channel_sessions.pop(channel_id, None)
-            self.channels.pop(channel_id, None)
-            self.session_channels.get(session_id, set()).discard(channel_id)
-            try:
-                ws.close()
-            except Exception:
-                pass
-            try:
-                self._request(
-                    "/agent/workspace-gateway/ws-frame",
-                    "POST",
-                    {"machineId": self.machine_id, "channelId": channel_id, "close": True},
-                )
-            except Exception:
-                pass
-            if not self._console_channel_fenced(session_id) and not self.session_channels.get(session_id):
-                try:
-                    self._begin_reconnect_grace(session_id)
-                except Exception as exc:
-                    self._report_error(exc)
 
     def _ws_open(self, item: dict[str, Any]) -> None:
         session_id = str(item.get("sessionId") or "")
