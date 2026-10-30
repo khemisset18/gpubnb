@@ -29,7 +29,7 @@ foreach ($record in $manifest.files) {
         }
         Assert-Stage4Certificate -Certificate $sig.SignerCertificate -ExpectedPublisherSha256 $ExpectedPublisherSha256 -MinimumValidityHours 0 -RequirePrivateKey $false
         if($manifest.timestamped -ne $false -or $null -ne $sig.TimeStamperCertificate -or
-            [DateTimeOffset]::Parse($manifest.expiresUtc).UtcDateTime -ne $sig.SignerCertificate.NotAfter.ToUniversalTime()){
+            (Convert-Stage4ExpiryToUtc $manifest.expiresUtc) -ne $sig.SignerCertificate.NotAfter.ToUniversalTime()){
             throw "stage4_private_certificate_metadata_mismatch:$($record.name)"
         }
     }
