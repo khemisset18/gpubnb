@@ -132,7 +132,12 @@ class WindowsSessionChangeFenceTests(unittest.TestCase):
         # The reconnect callback is reached by the legacy v8 finally block,
         # but v10's real handler rejects rearm while the WTS fence is set.
         obj._begin_reconnect_grace.assert_called_once_with("console")
-        self.assertNotIn("channel", obj._native_channel_sessions)
+        # The v2 sender may survive the reader's 15-second join timeout.
+        # Keep its native identity until process termination, not until recv
+        # returns, so a late sender can never fall back to the legacy allow.
+        self.assertEqual(obj._native_channel_sessions["channel"], "console")
+        with patch.object(gateway, "console_session_change_fenced", return_value=True):
+            self.assertFalse(obj._ws_forward_allowed("console", "channel"))
 
     def test_already_queued_native_batch_never_posts_after_wts_fence(self):
         obj = object.__new__(gateway.GatewaySupervisor)
@@ -183,7 +188,43 @@ class WindowsSessionChangeFenceTests(unittest.TestCase):
         self.assertEqual(len(batches), 1)
         self.assertTrue(batches[0][0].get("close"))
         self.assertTrue(all("dataBase64" not in frame for batch in batches for frame in batch))
-        self.assertNotIn("channel", obj._native_channel_sessions)
+        # The v2 sender may survive the reader's 15-second join timeout.
+        # Keep its native identity until process termination, not until recv
+        # returns, so a late sender can never fall back to the legacy allow.
+        self.assertEqual(obj._native_channel_sessions["channel"], "console")
+        with patch.object(gateway, "console_session_change_fenced", return_value=True):
+            self.assertFalse(obj._ws_forward_allowed("console", "channel"))
+
+    def test_closed_native_channel_is_not_reopened_by_late_ws_input(self):
+        obj = object.__new__(gateway.GatewaySupervisor)
+        obj._native_lock = threading.RLock()
+        obj._native_blocked = set()
+        obj.native_runtimes = {
+            "console": SimpleNamespace(handle=SimpleNamespace(capture_backend="console-dedicated"))
+        }
+        obj._native_channel_sessions = {"closed-channel": "console"}
+        obj.channels = {}  # Reader ended while a sender could still be alive.
+        obj._close_session_channels = Mock()
+        obj._report_error = Mock()
+        obj._trace = Mock()
+        item = {
+            "kind": "ws_send", "sessionId": "console", "channelId": "closed-channel",
+            "dataBase64": "AAECAw==", "binary": True,
+        }
+        with patch.object(gateway, "console_session_change_fenced", return_value=False):
+            obj._handle(item)
+        obj._close_session_channels.assert_called_once_with("console")
+
+    def test_unknown_native_sender_channel_never_uses_legacy_allow(self):
+        obj = object.__new__(gateway.GatewaySupervisor)
+        obj._native_lock = threading.RLock()
+        obj._native_blocked = set()
+        obj.native_runtimes = {
+            "console": SimpleNamespace(handle=SimpleNamespace(capture_backend="console-dedicated"))
+        }
+        obj._native_channel_sessions = {}
+        with patch.object(gateway, "console_session_change_fenced", return_value=False):
+            self.assertFalse(obj._ws_forward_allowed("console", "stale-channel"))
 
     def test_fenced_browser_input_is_never_forwarded_to_loopback(self):
         obj = object.__new__(gateway.GatewaySupervisor)
