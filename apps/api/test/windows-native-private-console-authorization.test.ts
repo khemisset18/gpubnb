@@ -21,6 +21,23 @@ test('console selection is disabled without explicit private flag and source pin
   }), null);
 });
 
+test('authorization requires private, no-payment config and exact running release SHA', () => {
+  const authorized = {
+    GPUBNB_PRIVATE_CONSOLE_QUALIFICATION: 'true',
+    GPUBNB_PRIVATE_CONSOLE_AGENT_COMMIT: SHA,
+    BETA_TEST_DEV_BYPASS: 'true',
+    ESCROW_PROGRAM_ID: 'NOT_DEPLOYED_YET',
+    RENDER_GIT_COMMIT: SHA,
+  };
+  assert.equal(privateConsoleAgentCommit(authorized), SHA);
+  assert.equal(privateConsoleAgentCommit({ ...authorized, BETA_TEST_DEV_BYPASS: 'false' }), null);
+  assert.equal(privateConsoleAgentCommit({ ...authorized, ESCROW_PROGRAM_ID: 'LIVE_PAYMENT_PROGRAM' }), null);
+  assert.equal(privateConsoleAgentCommit({ ...authorized, RENDER_GIT_COMMIT: 'a'.repeat(40) }), null);
+  assert.equal(privateConsoleAgentCommit({ ...authorized, RENDER_GIT_COMMIT: 'invalid' }), null);
+  assert.equal(privateConsoleAgentCommit({ ...authorized, GPUBNB_PRIVATE_CONSOLE_AGENT_COMMIT: SHA.slice(0, 7) }), null);
+  assert.equal(privateConsoleAgentCommit({ ...authorized, GPUBNB_PRIVATE_CONSOLE_QUALIFICATION: 'false' }), null);
+});
+
 test('only an exact, immutable server session marker can select console', () => {
   const limits = { privateConsoleQualification: privateConsoleSessionMarker(SHA) };
   assert.deepEqual(privateConsoleDesiredFields(limits, SHA), {
