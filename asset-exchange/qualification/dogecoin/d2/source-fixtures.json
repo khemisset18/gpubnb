@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "sourceRepository": "https://github.com/dogecoin/dogecoin",
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "license": "MIT",
+  "licenseFile": "DOGECOIN_COPYING",
+  "sourceFileSha256": {
+    "src/chainparams.cpp": "150d3733903d05f22e2ce3bc195a65f99ced183e16f2e75f52a72d0df8ec5d9c",
+    "src/script/bitcoinconsensus.h": "9fcf59c6b31f724c27d686652b9c66b5f93ff6e934c8152edc82fa1490ec1507",
+    "src/script/bitcoinconsensus.cpp": "f44773796160bf88a913f0e445c09ff7089f388870558af5ca6f503af12f19ac",
+    "src/test/data/tx_valid.json": "77fadb4ec19115405b733d8f3a406aaf7010993bc080d128a232fd1681c0279f",
+    "src/rpc/mining.cpp": "90e11cddd7fa3918978b2fb362d3b111bf102c9f307395205baa8b15a930954d",
+    "src/rpc/rawtransaction.cpp": "ecf3cb464e7b955bda3d51e99cded73b354583fab1a1b2b678a36d656b303ff4",
+    "src/validation.cpp": "e9f13df6a83e057fba52f3525fec894ba13a1dcec52be3cf71b13fd181c79e00"
+  },
+  "publicSignatureFixture": {
+    "sourcePath": "src/test/data/tx_valid.json",
+    "jsonArrayIndex": 73,
+    "flags": 1,
+    "scriptPubKeyHex": "ab21038479a0fa998cd35259a2ef0a7a5c68662c1474f88ccb6d08a7677bbec7f22041ac",
+    "serializedTransaction": "01000000012432b60dc72cebc1a27ce0969c0989c895bdd9e62e8234839117f8fc32d17fbc000000004a493046022100a576b52051962c25e642c0fd3d77ee6c92487048e5d90818bcf5b51abaccd7900221008204f8fb121be4ec3b24483b1f92d89b1b0548513a134e345c5442e86e8617a501ffffffff010000000000000000016a00000000",
+    "expected": 1,
+    "note": "Existing upstream public signed fixture is verified only; no key material or signing."
+  }
+}

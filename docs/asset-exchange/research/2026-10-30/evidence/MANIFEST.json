@@ -1,0 +1,43 @@
+{
+  "scope": "offline software tests only; no Dogecoin native execution",
+  "foundation": {
+    "pass": 196,
+    "fail": 0,
+    "skip": 0
+  },
+  "d0OfflineTests": 31,
+  "d1OfflineTests": 11,
+  "d2OfflineTests": 28,
+  "files": [
+    {
+      "file": "foundation.tap",
+      "originalSha256": "66936fb52ae0b1d13458e4a0f1be546a78394e2cd6c3b93eb948e32d3a5115f0",
+      "storedSha256": "66936fb52ae0b1d13458e4a0f1be546a78394e2cd6c3b93eb948e32d3a5115f0",
+      "originalBytes": 46984
+    },
+    {
+      "file": "d0-tests.log.gz",
+      "originalSha256": "3ba828223f50d3e2d92c2ae65f30a4384bd0260248407edf387febf2fd586b2a",
+      "storedSha256": "a57ad302d8f266632c43bc68e60b2ad50f1bda05cf7eb192238edf018c4451ca",
+      "originalBytes": 4430
+    },
+    {
+      "file": "d1-tests.log.gz",
+      "originalSha256": "124d72edbd5eeb6ec44d0dbb0fe9ac12929cc46aec2ee993c0c4fedba8ea2e9e",
+      "storedSha256": "7b5235eb3af22e0265cc1071d96ca5a5081926184a32f48b59fb36218d532da4",
+      "originalBytes": 1811
+    },
+    {
+      "file": "d2-tests.log.gz",
+      "originalSha256": "e3f36ae570f19bf3d603d859194e615ab51e4ade05fc98e4156ca40ded577c39",
+      "storedSha256": "e7fde386c5983b378d4315824ec067db2d636693801c1f773d0872a9835de2ab",
+      "originalBytes": 4487
+    },
+    {
+      "file": "syntax.log.gz",
+      "originalSha256": "6ed31ff06bf7589bfcff7843a0d63e976256cede3566b93dd810e25fefdf61d7",
+      "storedSha256": "d89a0228e17c826167601a9c0c1f92d1f957b91bbd647b5aa99409f021d661d0",
+      "originalBytes": 8747
+    }
+  ]
+}
