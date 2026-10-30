@@ -1,0 +1,9 @@
+{
+  "status": "PASS \u2014 VERIFIED",
+  "scope": "published0.10.4 ZST-vector rejection only",
+  "crateSha256": "115e54d64eb62cdebad391c19efc9dce4981c690c85a33a12199d99bb9546fee",
+  "outputSha256": "648589df1da4c0f537839d3899a2e4a08f15523ee271f7fc14231c527a1f223c",
+  "scannerDisposition": "BLOCKED; no ignore/exception/filter/version spoof",
+  "financialMigration": "NOT QUALIFIED",
+  "oldVulnerableVersionExecuted": false
+}

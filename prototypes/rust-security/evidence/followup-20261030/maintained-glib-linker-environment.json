@@ -1,0 +1,30 @@
+{
+  "reason": "sandbox normalized absolute symlinks to dangling relative links; copied exact existing native runtime bytes for linking",
+  "files": [
+    {
+      "source": "/usr/lib/x86_64-linux-gnu/libglib-2.0.so.0.8000.0",
+      "linkerFile": "/workspace/scratch/1e74791da067/crypto-native-dev/prefix/usr/lib/x86_64-linux-gnu/libglib-2.0.so",
+      "sha256": "42467d0dbcc0a6c9e0a31f05a5944095504ce98f093c3fe0825f0a1533fa8207"
+    },
+    {
+      "source": "/usr/lib/x86_64-linux-gnu/libgobject-2.0.so.0.8000.0",
+      "linkerFile": "/workspace/scratch/1e74791da067/crypto-native-dev/prefix/usr/lib/x86_64-linux-gnu/libgobject-2.0.so",
+      "sha256": "99bf0727e0ca4faf12ab09b753b3d03294562c29c559b970c4dad435f9ec2bc6"
+    },
+    {
+      "source": "/usr/lib/x86_64-linux-gnu/libgio-2.0.so.0.8000.0",
+      "linkerFile": "/workspace/scratch/1e74791da067/crypto-native-dev/prefix/usr/lib/x86_64-linux-gnu/libgio-2.0.so",
+      "sha256": "d8c4cf698e9b8790584cc5ede813a86ec4f041c0d58daa452b72431572685a87"
+    },
+    {
+      "source": "/usr/lib/x86_64-linux-gnu/libgmodule-2.0.so.0.8000.0",
+      "linkerFile": "/workspace/scratch/1e74791da067/crypto-native-dev/prefix/usr/lib/x86_64-linux-gnu/libgmodule-2.0.so",
+      "sha256": "f8445c01952fd3ff0bb4f17f73be821af3e4b9b61546ff517392e9baeb8f2126"
+    },
+    {
+      "source": "/usr/lib/x86_64-linux-gnu/libgthread-2.0.so.0.8000.0",
+      "linkerFile": "/workspace/scratch/1e74791da067/crypto-native-dev/prefix/usr/lib/x86_64-linux-gnu/libgthread-2.0.so",
+      "sha256": "ada85713638e7c43fd56d0af8786dbc438e88b7ea345d5f943f1790954d17e8a"
+    }
+  ]
+}

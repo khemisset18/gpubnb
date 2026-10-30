@@ -1,0 +1,104 @@
+name: Asset Exchange isolated Rust security prototypes
+
+on:
+  pull_request:
+    paths:
+      - prototypes/rust-security/**
+      - programs/gpu_escrow/**
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/asset-exchange-rust-security-prototypes.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  anchor-host-compatibility:
+    name: Anchor host ABI and public verification vectors (not SBF qualification)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Preserve original advisory evidence and conflicting fixed ranges
+        run: python3 -m unittest discover -s prototypes/rust-security/constraints -p 'test_*.py' -v
+      - name: Host-only migration regression and independent fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 prototypes/rust-security/run_anchor_probe.py "$RUNNER_TEMP/anchor-host-prototype"
+      - name: Generated host account validation and all instruction metadata
+        shell: bash
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/account-constraint-target
+        run: |
+          set -euo pipefail
+          python3 prototypes/rust-security/constraints/run_review.py "$RUNNER_TEMP/anchor-constraints"
+      - name: Published Borsh backport diagnostic without scanner exception
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 prototypes/rust-security/constraints/run_borsh_backport.py "$RUNNER_TEMP/borsh-backport"
+      - name: Preserve host prototype evidence on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: anchor-host-prototype-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/anchor-host-prototype/*.json
+            ${{ runner.temp }}/anchor-host-prototype/*.log
+            ${{ runner.temp }}/anchor-host-prototype/*.tsv
+            ${{ runner.temp }}/anchor-constraints/*.json
+            ${{ runner.temp }}/anchor-constraints/*.log
+            ${{ runner.temp }}/anchor-constraints/*.tsv
+            ${{ runner.temp }}/borsh-backport/*.json
+            ${{ runner.temp }}/borsh-backport/*.log
+          if-no-files-found: error
+          retention-days: 30
+
+  glib-native-backport:
+    name: GLib native official-backport diagnostic (scanner remains blocking)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Extract verified Ubuntu development metadata without system installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 prototypes/rust-security/glib/bootstrap_native_dev.py "$RUNNER_TEMP/glib-native-dev"
+      - name: Compare optimized native baseline and official backport
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/glib-native-dev/environment.sh"
+          python3 prototypes/rust-security/glib/run_probe.py "$RUNNER_TEMP/glib-native-prototype"
+      - name: Test the actual GTK3 and GObject native component interfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 prototypes/rust-security/glib/gtk_native_probe.py > "$RUNNER_TEMP/glib-native-prototype/gtk-native-component.json"
+      - name: Published maintained GLib regression (not a Tauri integration)
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/glib-native-dev/environment.sh"
+          cargo run --locked --release --manifest-path prototypes/rust-security/glib/maintained/Cargo.toml 2>&1 | tee "$RUNNER_TEMP/glib-native-prototype/maintained-glib.log"
+          grep -F 'GLIB_VARIANT_STR_ITER_PASS comparisons=3072 wrong_type_rejected=true' "$RUNNER_TEMP/glib-native-prototype/maintained-glib.log"
+      - name: Preserve native prototype evidence including baseline failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: glib-native-prototype-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/glib-native-prototype/*.json
+            ${{ runner.temp }}/glib-native-prototype/*.log
+          if-no-files-found: error
+          retention-days: 30

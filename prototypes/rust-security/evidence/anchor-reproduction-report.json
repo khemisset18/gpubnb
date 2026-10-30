@@ -1,0 +1,16 @@
+{
+  "status": "PASS_HOST_PROTOTYPE_ONLY",
+  "independentAbiFixtures": 30,
+  "wycheproofVectorsPerVersion": 476,
+  "rawIdlIdentical": false,
+  "semanticIdlAfterAssertedAddressDecode": "PASS",
+  "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+  "baseCommit": "470926f416cf84caa4a407f219c72d6984f3a45b",
+  "notTested": [
+    "SBF runtime",
+    "CPI/account constraints",
+    "client migration",
+    "deployment",
+    "on-chain signatures"
+  ]
+}

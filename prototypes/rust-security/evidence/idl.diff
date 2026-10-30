@@ -1,0 +1,13 @@
+--- baseline
+
++++ candidate
+
+@@ -1,6 +1,6 @@
+
+ {
+   "address": [
+-    "\"Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m\""
++    "Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m"
+   ],
+   "errors": [
+     [

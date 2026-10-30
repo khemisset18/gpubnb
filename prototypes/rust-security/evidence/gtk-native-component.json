@@ -1,0 +1,30 @@
+{
+  "status": "PASS_NATIVE_COMPONENT_ONLY",
+  "gtkVersion": [
+    3,
+    24,
+    41
+  ],
+  "checks": 4,
+  "libraries": {
+    "libgtk-3.so.0": {
+      "resolved": "/usr/lib/x86_64-linux-gnu/libgtk-3.so.0.2409.32",
+      "sha256": "0611fd19d1354a39a7cfafceffa3bdf4289d4c497c7f69ff337f86e99cf37d93"
+    },
+    "libglib-2.0.so.0": {
+      "resolved": "/usr/lib/x86_64-linux-gnu/libglib-2.0.so.0.8000.0",
+      "sha256": "42467d0dbcc0a6c9e0a31f05a5944095504ce98f093c3fe0825f0a1533fa8207"
+    },
+    "libgobject-2.0.so.0": {
+      "resolved": "/usr/lib/x86_64-linux-gnu/libgobject-2.0.so.0.8000.0",
+      "sha256": "99bf0727e0ca4faf12ab09b753b3d03294562c29c559b970c4dad435f9ec2bc6"
+    }
+  },
+  "notTested": [
+    "Rust GTK wrapper",
+    "Tauri/Wry/WebKit event loop",
+    "GUI",
+    "native packaging",
+    "Windows"
+  ]
+}

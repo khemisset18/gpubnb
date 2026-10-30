@@ -1,0 +1,49 @@
+{
+  "observedDate": "2026-10-30",
+  "rustsecPatched": [
+    ">=1.0.0-alpha.1",
+    "^0.10.4"
+  ],
+  "githubMachineRange": "introduced0;fixed1.0.0-alpha.1",
+  "githubLastKnownAffected": "<=0.10.3",
+  "activeTrivyResult": "borsh0.10.4 GHSA-fjx5-qpf4-xjf2 MEDIUM",
+  "disposition": "BLOCKED pending upstream data reconciliation; no scanner waiver",
+  "sources": [
+    {
+      "path": "rustsec-borsh.md",
+      "url": "https://raw.githubusercontent.com/RustSec/advisory-db/main/crates/borsh/RUSTSEC-2023-0033.md",
+      "sha256": "1fd189db4b6ba316bf9842f028cb34fac0aba724c8567972fb33be364ef8c684",
+      "license": "CC0-1.0",
+      "modification": "readable .md strips trailing spaces only; original bytes recovered exactly from .md.gz",
+      "originalSnapshot": "rustsec-borsh.md.gz",
+      "readableViewSha256": "1199018e318c038841ef5e9435168809b7b00829aa32aff528f6bbc7cca0438f"
+    },
+    {
+      "path": "github-borsh.json",
+      "url": "https://raw.githubusercontent.com/github/advisory-database/main/advisories/github-reviewed/2023/04/GHSA-fjx5-qpf4-xjf2/GHSA-fjx5-qpf4-xjf2.json",
+      "sha256": "4c3aadc6d50891c8915216904db59d7f3cfaef21f0766ab802caf4a539312447",
+      "license": "CC-BY-4.0",
+      "modification": "none"
+    },
+    {
+      "package": "borsh",
+      "version": "0.10.3",
+      "archiveUrl": "https://static.crates.io/crates/borsh/borsh-0.10.3.crate",
+      "archiveSha256": "4114279215a005bc675e386011e594e1d9b800918cea18fcadadcce864a2046b",
+      "sourceFile": "src/de/mod.rs",
+      "sourceSha256": "00b2e5f075bc4ad2d465ee2a3daa8dc313c6b9cafdb6ca39f97b3466ddc481bf",
+      "license": "MIT OR Apache-2.0",
+      "oldVersionExecuted": false
+    },
+    {
+      "package": "borsh",
+      "version": "0.10.4",
+      "archiveUrl": "https://static.crates.io/crates/borsh/borsh-0.10.4.crate",
+      "archiveSha256": "115e54d64eb62cdebad391c19efc9dce4981c690c85a33a12199d99bb9546fee",
+      "sourceFile": "src/de/mod.rs",
+      "sourceSha256": "6d4cb52550aac787186890ba6a0118157f8433d341c79118892bce1959d75fb2",
+      "license": "MIT OR Apache-2.0",
+      "oldVersionExecuted": false
+    }
+  ]
+}

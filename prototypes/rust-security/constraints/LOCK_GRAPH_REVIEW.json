@@ -1,0 +1,154 @@
+{
+  "active": {
+    "commit": "710ff0a98f02178e62942f98056d59879995efbf",
+    "lockSha256": "7eab89d15e587b2858b77b52d3ddf5316606bb68d1c1db7ce12567168e662301",
+    "scope": "Cargo.lock possible all-target/all-feature graph, not a reachability waiver",
+    "dependencies": {
+      "borsh@0.10.4": {
+        "present": true,
+        "directParents": [
+          "anchor-lang@0.31.1",
+          "solana-borsh@2.2.1",
+          "solana-program@2.3.0",
+          "solana-pubkey@2.4.0",
+          "solana-stake-interface@1.2.1"
+        ],
+        "totalPossiblePaths": 251,
+        "shortestExamplePaths": [
+          [
+            "gpu_escrow@0.2.0",
+            "anchor-lang@0.31.1",
+            "borsh@0.10.4"
+          ],
+          [
+            "gpu_escrow@0.2.0",
+            "anchor-lang@0.31.1",
+            "solana-program@2.3.0",
+            "borsh@0.10.4"
+          ],
+          [
+            "gpu_escrow@0.2.0",
+            "anchor-lang@0.31.1",
+            "solana-program@2.3.0",
+            "solana-borsh@2.2.1",
+            "borsh@0.10.4"
+          ]
+        ]
+      },
+      "rand@0.7.3": {
+        "present": true,
+        "directParents": [
+          "libsecp256k1@0.6.0"
+        ],
+        "totalPossiblePaths": 1,
+        "shortestExamplePaths": [
+          [
+            "gpu_escrow@0.2.0",
+            "anchor-lang@0.31.1",
+            "solana-program@2.3.0",
+            "solana-secp256k1-recover@2.2.1",
+            "libsecp256k1@0.6.0",
+            "rand@0.7.3"
+          ]
+        ]
+      },
+      "glib@0.18.5": {
+        "present": true,
+        "directParents": [
+          "atk@0.18.2",
+          "cairo-rs@0.18.5",
+          "gdk-pixbuf@0.18.5",
+          "gdk@0.18.2",
+          "gdkx11@0.18.2",
+          "gio@0.18.4",
+          "gtk@0.18.2",
+          "javascriptcore-rs@1.1.2",
+          "libappindicator@0.9.0",
+          "pango@0.18.3",
+          "soup3@0.5.0",
+          "webkit2gtk@2.0.2"
+        ],
+        "totalPossiblePaths": 576,
+        "shortestExamplePaths": [
+          [
+            "gpubnb-host-desktop@0.1.0",
+            "tauri@2.11.5",
+            "gtk@0.18.2",
+            "glib@0.18.5"
+          ],
+          [
+            "gpubnb-host-desktop@0.1.0",
+            "tauri@2.11.5",
+            "webkit2gtk@2.0.2",
+            "glib@0.18.5"
+          ],
+          [
+            "gpubnb-host-desktop@0.1.0",
+            "tauri-plugin-opener@2.5.4",
+            "tauri@2.11.5",
+            "gtk@0.18.2",
+            "glib@0.18.5"
+          ]
+        ]
+      }
+    }
+  },
+  "prototype": {
+    "commit": "cbf8607549b036d04781026c7b7e3be1da26cff4",
+    "lockSha256": "b780a9625c5c72519b5c8a50ed573fa643d47306bddd309304199e7e48aefdbf",
+    "scope": "Cargo.lock possible all-target/all-feature graph, not a reachability waiver",
+    "dependencies": {
+      "borsh@0.10.4": {
+        "present": false,
+        "directParents": [],
+        "totalPossiblePaths": 0,
+        "shortestExamplePaths": []
+      },
+      "rand@0.7.3": {
+        "present": false,
+        "directParents": [],
+        "totalPossiblePaths": 0,
+        "shortestExamplePaths": []
+      },
+      "glib@0.18.5": {
+        "present": true,
+        "directParents": [
+          "atk@0.18.2",
+          "cairo-rs@0.18.5",
+          "gdk-pixbuf@0.18.5",
+          "gdk@0.18.2",
+          "gdkx11@0.18.2",
+          "gio@0.18.4",
+          "gtk@0.18.2",
+          "javascriptcore-rs@1.1.2",
+          "libappindicator@0.9.0",
+          "pango@0.18.3",
+          "soup3@0.5.0",
+          "webkit2gtk@2.0.2"
+        ],
+        "totalPossiblePaths": 576,
+        "shortestExamplePaths": [
+          [
+            "gpubnb-host-desktop@0.1.0",
+            "tauri@2.11.5",
+            "gtk@0.18.2",
+            "glib@0.18.5"
+          ],
+          [
+            "gpubnb-host-desktop@0.1.0",
+            "tauri@2.11.5",
+            "webkit2gtk@2.0.2",
+            "glib@0.18.5"
+          ],
+          [
+            "gpubnb-host-desktop@0.1.0",
+            "tauri-plugin-opener@2.5.4",
+            "tauri@2.11.5",
+            "gtk@0.18.2",
+            "glib@0.18.5"
+          ]
+        ]
+      }
+    }
+  }
+}

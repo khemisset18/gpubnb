@@ -1,0 +1,35 @@
+{
+  "scope": "generated host account validation and client instruction metadata only",
+  "accountValidationCasesPerVersion": 21,
+  "instructionsWithIndependentMetas": 11,
+  "results": [
+    {
+      "label": "baseline",
+      "commit": "710ff0a98f02178e62942f98056d59879995efbf",
+      "anchor": "0.31.1",
+      "sourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+      "outputSha256": "2309bd35eaaabb9be8a92e017cbb6c88221efe635dc208a549d30854d11fb867",
+      "checks": 55,
+      "status": "PASS \u2014 VERIFIED"
+    },
+    {
+      "label": "candidate",
+      "commit": "cbf8607549b036d04781026c7b7e3be1da26cff4",
+      "anchor": "1.2.2",
+      "sourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+      "outputSha256": "2309bd35eaaabb9be8a92e017cbb6c88221efe635dc208a549d30854d11fb867",
+      "checks": 55,
+      "status": "PASS \u2014 VERIFIED"
+    }
+  ],
+  "financialIntegration": "BLOCKED",
+  "notTested": [
+    "SBF",
+    "dispatcher execution",
+    "financial handlers",
+    "CPI execution",
+    "runtime privilege escalation/rollback",
+    "account close",
+    "on-chain client submission"
+  ]
+}

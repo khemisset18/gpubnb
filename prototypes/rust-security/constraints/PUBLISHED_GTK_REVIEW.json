@@ -1,0 +1,102 @@
+{
+  "observedDate": "2026-10-30",
+  "packages": [
+    {
+      "package": "gtk",
+      "version": "0.19.0",
+      "license": "MIT",
+      "rustVersion": "1.92",
+      "registryUrl": "https://crates.io/api/v1/crates/gtk/0.19.0",
+      "archiveSha256": "a86cafafc177054a1d555a0b302044d2b5f82e1c1e23d152a7ba252dc6bfced0",
+      "manifestSha256": "95bfc223200cbe7c44eb8bed89c00bae9b5605c54e3a65e519bd72a38dbed084",
+      "relevantDependencies": [
+        {
+          "scope": "normal",
+          "name": "glib",
+          "requirement": "0.22"
+        }
+      ]
+    },
+    {
+      "package": "tao",
+      "version": "0.37.2",
+      "license": "Apache-2.0",
+      "rustVersion": "1.85",
+      "registryUrl": "https://crates.io/api/v1/crates/tao/0.37.2",
+      "archiveSha256": "d5777b06fe6435126ae8d816eba269e050e1e10d302cf5461e9c49eccabc3548",
+      "manifestSha256": "49bd52bf0f37b76b35e036d7089c56969a02409b64d177bff41838b019f7d82d",
+      "relevantDependencies": [
+        {
+          "scope": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "name": "gtk",
+          "requirement": "0.18"
+        }
+      ]
+    },
+    {
+      "package": "tauri",
+      "version": "2.12.5",
+      "license": "Apache-2.0 OR MIT",
+      "rustVersion": "1.90",
+      "registryUrl": "https://crates.io/api/v1/crates/tauri/2.12.5",
+      "archiveSha256": "5fb0244332cfb9cee7e2a568bf5da29a36ed8fdbd717f6f47a66b6b7b358c072",
+      "manifestSha256": "7ecaec70bb98cfb858e7ec5ec88122915584c414ac747208916912e05d3026c7",
+      "relevantDependencies": [
+        {
+          "scope": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "name": "gtk",
+          "requirement": "0.18"
+        },
+        {
+          "scope": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "name": "webkit2gtk",
+          "requirement": "2"
+        }
+      ]
+    },
+    {
+      "package": "webkit2gtk",
+      "version": "2.0.2",
+      "license": "MIT",
+      "rustVersion": null,
+      "registryUrl": "https://crates.io/api/v1/crates/webkit2gtk/2.0.2",
+      "archiveSha256": "a1027150013530fb2eaf806408df88461ae4815a45c541c8975e61d6f2fc4793",
+      "manifestSha256": "f22fa00693fc7db89921417b8fd9bfac08cae8b4649f0f942055996b3194e47d",
+      "relevantDependencies": [
+        {
+          "scope": "normal",
+          "name": "glib",
+          "requirement": "^0.18.0"
+        },
+        {
+          "scope": "normal",
+          "name": "gtk",
+          "requirement": "^0.18.0"
+        }
+      ]
+    },
+    {
+      "package": "wry",
+      "version": "0.57.1",
+      "license": "Apache-2.0 OR MIT",
+      "rustVersion": "1.85",
+      "registryUrl": "https://crates.io/api/v1/crates/wry/0.57.1",
+      "archiveSha256": "759c50ddad0ef9913bb5496cb9d509a50433a3b78cb0238d61105526589cf0e9",
+      "manifestSha256": "aeaa65e86bb1998f6d74f229e211cece7022bc6f059aec9a9f0090a40f9d246c",
+      "relevantDependencies": [
+        {
+          "scope": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "name": "gtk",
+          "requirement": "0.18"
+        },
+        {
+          "scope": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "name": "webkit2gtk",
+          "requirement": "=2.0.2"
+        }
+      ]
+    }
+  ],
+  "integration": "BLOCKED",
+  "reason": "maintained gtk0.19/glib0.22 exist; stable Tauri/Wry/Tao/WebKit published manifests still require gtk0.18/glib0.18"
+}

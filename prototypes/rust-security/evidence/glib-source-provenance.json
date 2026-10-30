@@ -1,0 +1,14 @@
+{
+  "crate": "glib",
+  "version": "0.18.5",
+  "registry": "https://index.crates.io/gl/ib/glib",
+  "crateArchiveSha256": "233daaf6e83ae6a12a52055f568f9d7cf4671dabb78ff9560ab6da230ce00ee5",
+  "upstreamFixCommit": "b5a4071e439bef2b5eea76c3aa25e5ae84839e34",
+  "originalFileSha256": "1fd02859333761c45321b32f28b24233446b97d0022a90d3a937ed162585b90e",
+  "patchedFileSha256": "a0f5ee8acb8faa089bcdfbc9a57372609fce7654026ccef7d9a224d05a654ccc",
+  "patchedGitBlob": "e0997f651b103f7b198e528ee41137ad374e19b8",
+  "exactWholeFileMatchToOfficialFix": true,
+  "versionSpoofed": false,
+  "scannerExemptionAdded": false,
+  "license": "MIT; GNOME linked runtime LGPL obligations remain"
+}
