@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 from typing import Any, Mapping
 
 from ._build_info import BUILD_COMMIT
@@ -15,6 +16,19 @@ from ._build_info import BUILD_COMMIT
 _SHA40 = re.compile(r"^[0-9a-fA-F]{40}$")
 CONSOLE_BACKEND = "console-dedicated"
 IDDCX_BACKEND = "iddcx"
+
+# A WTS session transition on the provider PC invalidates every console
+# capture authorization in this Agent process. Clearing this fence requires
+# an explicit service restart; never rearm on unlock/login alone.
+_SESSION_CHANGE_FENCE = threading.Event()
+
+
+def fence_console_on_session_change() -> None:
+    _SESSION_CHANGE_FENCE.set()
+
+
+def console_session_change_fenced() -> bool:
+    return _SESSION_CHANGE_FENCE.is_set()
 
 
 def selected_capture_backend(
@@ -37,6 +51,8 @@ def selected_capture_backend(
         local_opt_in = os.environ.get("GPUBNB_PRIVATE_CONSOLE_QUALIFICATION") == "true"
     if local_opt_in is not True:
         raise RuntimeError("native_console_local_opt_in_required")
+    if console_session_change_fenced():
+        raise RuntimeError("native_console_session_change_fenced")
     if desired_session.get("runtimeBackend") != "WINDOWS_NATIVE":
         raise RuntimeError("native_console_runtime_backend_invalid")
     if desired_session.get("workspaceSlug") != "cloud-desktop":
