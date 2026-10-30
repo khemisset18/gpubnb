@@ -958,6 +958,10 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         if authorized is not None:
             if authorized != session_id or self._console_channel_fenced(authorized):
                 return False
+            # A matching native channel remains valid only while its WTS
+            # desktop is authorized. Do not drop into the unknown-channel
+            # denial below: that would reject even healthy native video.
+            return super()._ws_forward_allowed(session_id, channel_id)
         # An unrecognized channel from a known native runtime never inherits
         # v2's permissive legacy frame forwarding. This covers stale threads,
         # late receives and early-closed loopback connections.
