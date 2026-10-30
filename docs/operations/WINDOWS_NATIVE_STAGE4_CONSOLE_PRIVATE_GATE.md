@@ -1,7 +1,12 @@
 # Stage 4 — private console gateway binding (candidate, NOT deployable)
 
 **Status:** Software-only, feature disabled by default. No Render deployment, Windows
-installation, publication, paid booking, remote streaming or signature changes.
+installation, publication, paid booking or remote streaming. The operator has
+successfully signed and backed up an **older** exact-source c521cbf candidate
+on PC1. The security improvements documented here are a **newer commit** and
+require a *new full Windows build, new local signing and verification* before
+any physical qualification; the older signed copy must NOT be installed for
+this revision.
 This is a *stacked* change on PR #316, not a physical qualification.
 
 ## What is fixed
@@ -35,13 +40,21 @@ This is a *stacked* change on PR #316, not a physical qualification.
 2. This commit must be built as one exact-source signed four-component package
    with accepted publisher pin and rollback before installation. The older PC1
    package `f664a07...` and current Render `40e9ef5...` must not be mixed.
-3. The Windows service now registers `SERVICE_ACCEPT_SESSIONCHANGE` and
-   sets a process-wide console fence for every WTS transition. The gateway
-   refuses new console media and stops usage/sessions on reconciliation. This
-   is **defense in depth, not yet proof of immediate zero-leak revocation**:
-   display topology change and authoritative worker-level media/input buffer
-   revocation must still be physically measured and audited before enablement.
-   Restarting the service is required to clear the WTS transition fence.
+3. The Windows service registers `SERVICE_ACCEPT_SESSIONCHANGE` and sets a
+   one-way process fence for every WTS transition. The control callback only
+   wakes an Agent guardian: it does **not** wait on network or helper STOP.
+   The guardian immediately blocks console channels, closes their sockets,
+   then requests physical STOP and API cleanup. The Agent drops buffered frames
+   received after the fence, rejects newly connected loopback sockets and
+   rejects browser input based on the *authorized channel*, not a client-
+   provided session ID. The renter-session worker independently rechecks its
+   live desktop before sending each proof/header/payload and before injecting
+   input. These protections are **defense in depth, not yet proof of immediate
+   zero-leak revocation**: bytes already inside an in-flight API/HTTP send or
+   socket write can race the WTS event. Proving the lock/switch blackout,
+   display-topology abort and authoritative media/input revocation still
+   requires the physical adversarial campaign. Restarting the service is
+   required to clear the WTS transition fence.
 4. Confirm genuine monitor topology and exact NVIDIA UUID/LUID/NVENC H.264
    SPS/PPS+IDR on physical PC1, and stable browser WebCodecs rendering on PC2.
 5. Perform the isolated 300-second continuously decoded **and rendered** frame
