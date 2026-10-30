@@ -97,3 +97,18 @@ test('console admission is signed, replay-fenced and independent from public lis
   assert.match(source, /private-console-proof:v1:/);
   assert.doesNotMatch(source, /gpuListing\.update/);
 });
+
+test('native buffered browser frames are individually revoked before send', () => {
+  const gateway = readFileSync(new URL('../src/workspace-gateway.ts', import.meta.url), 'utf8');
+  const pump = gateway.slice(
+    gateway.indexOf('const pump=setInterval('),
+    gateway.indexOf('let browserSendChain:', gateway.indexOf('const pump=setInterval(')),
+  );
+  assert.match(pump, /for\(let i=0;i<50;i\+\+\)/);
+  assert.match(pump, /if\(nativeChannel && \(\s*await redis\.exists\(wsChannelKey\(channelId\)\) !== 1\s*\|\| !await channelAuthorized\(\)/);
+  const leaseGate = pump.indexOf('await redis.exists(wsChannelKey(channelId))');
+  const send = pump.indexOf('ws.send(Buffer.from(parsed.dataBase64');
+  assert.ok(leaseGate >= 0 && send > leaseGate);
+  assert.match(pump, /ws\.close\(1008,'native workspace revoked'\)/);
+  assert.match(gateway, /cacheMs: 100/);
+});
