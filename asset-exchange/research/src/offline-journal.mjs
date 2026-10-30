@@ -34,6 +34,7 @@ function eventShape(event, tradeId) {
       exactObject(p, ['leg', 'newEpoch'], 'reorg event'); requireThat(['A', 'B'].includes(p.leg) && Number.isSafeInteger(p.newEpoch) && p.newEpoch > 0, 'invalid reorg identity'); break;
     case 'HOLD': exactObject(p, ['reason'], 'hold event'); text(p.reason, /^[A-Z_]{4,64}$/, 'hold reason'); break;
     case 'RECOVERY_EXPORTED': exactObject(p, ['bundleDigest'], 'recovery event'); digest(p.bundleDigest, 'bundle'); break;
+    case 'OFFLINE_PROTOCOL_EVENT': exactObject(p, ['protocolEventDigest'], 'offline protocol event'); digest(p.protocolEventDigest, 'protocol event'); break;
     default: throw new Error('unsupported journal event; no executable intents allowed');
   }
   requireThat(Buffer.byteLength(JSON.stringify(canonical(event))) <= 4096, 'event byte bound exceeded');
