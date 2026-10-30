@@ -1,0 +1,110 @@
+TAP version 13
+# (node:13) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: a terminal newline cannot bypass the exact digest boundary
+ok 1 - a terminal newline cannot bypass the exact digest boundary
+  ---
+  duration_ms: 1.507467
+  type: 'test'
+  ...
+# Subtest: canonical integer strings cannot use terminal whitespace accepted by BigInt
+ok 2 - canonical integer strings cannot use terminal whitespace accepted by BigInt
+  ---
+  duration_ms: 0.307053
+  type: 'test'
+  ...
+# Subtest: full text match rejects JavaScript dollar-anchor terminal-newline behavior
+ok 3 - full text match rejects JavaScript dollar-anchor terminal-newline behavior
+  ---
+  duration_ms: 0.544198
+  type: 'test'
+  ...
+# Subtest: small shared data graphs cannot cause unbounded canonical expansion
+not ok 4 - small shared data graphs cannot cause unbounded canonical expansion
+  ---
+  duration_ms: 66.259579
+  type: 'test'
+  location: '/workspace/scratch/1e74791da067/doge-old-validator-check-ig0e1irt/review.test.mjs:17:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'throws'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/1e74791da067/doge-old-validator-check-ig0e1irt/review.test.mjs:19:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: canonical object keys are bounded independently from values
+not ok 5 - canonical object keys are bounded independently from values
+  ---
+  duration_ms: 0.758179
+  type: 'test'
+  location: '/workspace/scratch/1e74791da067/doge-old-validator-check-ig0e1irt/review.test.mjs:21:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'throws'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/1e74791da067/doge-old-validator-check-ig0e1irt/review.test.mjs:22:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: aggregate strings cannot bypass individual field bounds
+not ok 6 - aggregate strings cannot bypass individual field bounds
+  ---
+  duration_ms: 1.775186
+  type: 'test'
+  location: '/workspace/scratch/1e74791da067/doge-old-validator-check-ig0e1irt/review.test.mjs:24:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'throws'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/1e74791da067/doge-old-validator-check-ig0e1irt/review.test.mjs:25:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: all six descriptor boundaries reject newline-suffixed identity digests
+ok 7 - all six descriptor boundaries reject newline-suffixed identity digests
+  ---
+  duration_ms: 2.52407
+  type: 'test'
+  ...
+# Subtest: normal canonical bytes and hashes retain the independently specified vector
+ok 8 - normal canonical bytes and hashes retain the independently specified vector
+  ---
+  duration_ms: 1.49669
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 5
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 287.728044
+(node:6) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)

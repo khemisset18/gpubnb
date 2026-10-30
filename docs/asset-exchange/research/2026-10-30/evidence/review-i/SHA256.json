@@ -1,0 +1,14 @@
+{
+  "docs/asset-exchange/research/2026-10-30/evidence/review-i/before-final-cases.log": "d8392b02ff9d97bd3aa9653e0579a3b7155a4eacd8730414ecd5615f0edf0460",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-i/foundation.log": "93d87a6c1053966987590b9a675ed1e484a3e1065306c0900873de6cef1b7269",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-i/syntax.log": "20fe1b4c2b3742dd0d2210877fed8b3d9ffa6c288569bd7170a2bf6ccc23658e",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-i/after-fix.log": "397d6f75f2e9d8dd83b6d1ba691eac6d13d064cb091c11c4538d3928121a2ee1",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-i/before-fix.log": "c74d47457c1e6f70d63ea43c1f16e2a3de81b434435aae42b83d88523d3a844d",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-i/d2-tests.log": "9af8925d9dfc14b65e839faa8ad620fdf229884c7248136846c9b7950591d509",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-i/before-case-provenance.json": "64779b7977f11fd9da115c0247ef17be6bf4147f98e98857f11eb1c15e6f3a33",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-i/preserved-test-residue.json": "f65a0a5674d45b5a80b3e0a84df5ca5877c88ae6847a91c37b0b10b13aefe03a",
+  "docs/asset-exchange/research/2026-10-30/evidence/review-i/active-rust-paths.json": "6e458e074c918095ff0cd7d89359dc696ff279a75af250c41f351387b663861a",
+  "asset-exchange/research/src/offline-data.mjs": "a515dfcc39ed31c1962fa17d71506f5388ba38df18383ca4e0dbcb69d623c270",
+  "asset-exchange/research/test/offline-data-review.test.mjs": "092f31645d9bfe84db87f5983815177402472e382c1705fb61e75c5301614aa3",
+  "asset-exchange/qualification/dogecoin/d2/test_native_result_contract.py": "cae9e5ead69c52b8457a4b3cc6552a0365ac76ded5183ce1af4ee6a58808f8c1"
+}

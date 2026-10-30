@@ -1,0 +1,9 @@
+{
+  "originalCommit": "c6d4bd58cee3f787b43cbfe96ae6a5c0997c263f",
+  "originalPath": "asset-exchange/research/src/offline-data.mjs",
+  "originalSourceSHA256": "8aecf65c8ce37101ea86fc286e47328f01e883b02367ffcc0074b3cf7d2a106c",
+  "testSourceSHA256": "092f31645d9bfe84db87f5983815177402472e382c1705fb61e75c5301614aa3",
+  "adaptation": "imports only redirected to exact Git source in disposable directory; no validator semantics changed",
+  "beforeFailures": 3,
+  "beforePasses": 5
+}

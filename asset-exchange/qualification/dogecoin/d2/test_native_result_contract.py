@@ -102,6 +102,18 @@ class NativeResultContractTests(unittest.TestCase):
             report=example();report[key]='forbidden'
             with self.assertRaises(ValueError):compare_report(report,HERE/'fixtures')
 
+    def test_fifo_cannot_block_the_cli_and_oversized_artifacts_fail_before_hashing(self):
+        import os
+        with tempfile.TemporaryDirectory() as raw:
+            directory=Path(raw);os.mkfifo(directory/'fifo.log',0o600)
+            result=subprocess.run([sys.executable,str(HERE/'native_result_contract.py'),str(directory),'fifo.log'],capture_output=True,text=True,timeout=3)
+            self.assertEqual(result.returncode,1,result.stderr)
+            output=json.loads(result.stdout)
+            self.assertEqual(output['comparison'],'REJECTED');self.assertIn('regular',output['error'])
+            (directory/'public-model.log').write_bytes(b'x'*262145)
+            with self.assertRaisesRegex(ValueError,'bounded single-link'):
+                compare_report(example(),directory)
+
     def test_scenario_expectations_cannot_be_silently_replaced(self):
         matrix=json.loads((HERE/'fixtures/native_scenarios_v1.json').read_text())
         matrix['cases'][0]['expected']['SCRIPT']='REJECT'
