@@ -466,3 +466,41 @@ test('WebSocket error then server policy 1008 remains visible to the viewer', ()
   socket.emit('close', { code: 1008, wasClean: true });
   assert.deepEqual(states.at(-1), { state: 'closed', closeCode: 1008, wasClean: true });
 });
+
+test('queued media fallout after socket error cannot mask the actual 1006 close', async () => {
+  const socket = new FakeSocket();
+  const states = [];
+  const errors = [];
+  let releasePush;
+  let pushed = 0;
+  const client = new WindowsNativeDesktopClient({
+    canvas: fakeCanvas(),
+    onState: (state) => states.push(state),
+    onError: (error) => errors.push(error.message),
+    webSocketFactory: () => socket,
+    mediaFactory: () => ({
+      push() {
+        pushed += 1;
+        return new Promise((resolve, reject) => { releasePush = reject; });
+      },
+      close() {},
+    }),
+  });
+  client.start('/native/session/abc', 'https://example.test/page');
+  socket.readyState = 1;
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  await Promise.resolve();
+  assert.equal(pushed, 1, 'first decoder call is in flight');
+
+  socket.readyState = 3;
+  socket.emit('error');
+  releasePush(new Error('windows_native_decoder_failed'));
+  await client.mediaQueue;
+  assert.equal(pushed, 1, 'second queued decode must be cancelled');
+  assert.deepEqual(errors, ['windows_native_gateway_socket_error'],
+    'decoder rejection after socket error is not a second root cause');
+  assert.equal(socket.closed.length, 0, 'no synthetic close during queue cancellation');
+  socket.emit('close', { code: 1006, wasClean: false });
+  assert.deepEqual(states.at(-1), { state: 'closed', closeCode: 1006, wasClean: false });
+});
