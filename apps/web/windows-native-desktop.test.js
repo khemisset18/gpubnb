@@ -447,7 +447,8 @@ test('WebSocket error blocks input immediately and preserves the real abnormal C
   socket.emit('close', { code: 1006, wasClean: false, reason: 'SECRET_NEVER_PROPAGATE' });
   assert.equal(mediaCloseCount, 1, 'decoder closed once');
   assert.deepEqual(states.at(-1), { state: 'closed', closeCode: 1006, wasClean: false });
-  assert.equal(JSON.stringify(states).includes('SECRET_NEVER_PROPAGATE'), false);
+  assert.equal(Object.hasOwn(states.at(-1), 'reason'), false,
+    'close reason must never leave the transport boundary');
   socket.emit('close', { code: 1008, wasClean: true });
   assert.equal(states.filter(state => state.state === 'closed').length, 1);
 });
