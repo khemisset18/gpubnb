@@ -100,6 +100,48 @@ class NativeQuarantineRecoveryTests(unittest.TestCase):
         self.assertTrue(self.runtime.path.exists())
         self.unfence.assert_called_once_with(TARGET["sessionId"])
 
+    def test_terminal_active_claim_with_stopped_runtime_requires_full_proof(self) -> None:
+        # Exact production incident: native STOP failed, server retired the
+        # allocation, local rental fence persisted RENTAL_ACTIVE, runtime STOPPED.
+        self.claims.save({self.claim.resource_id: replace(self.claim, state="RENTAL_ACTIVE")})
+        self.runtime.save({self.record.resource_id: replace(self.record, state="STOPPED")})
+        before = self.bytes()
+        recovery = self.recovery()
+        recovery.prepare()
+        self.assertEqual(self.bytes(), before, "prepare must never erase active claims")
+        self.authorize.assert_called()
+        self.stop.assert_called_once_with(TARGET["sessionId"])
+        self.probe.prove.assert_called_once_with(GPU)
+        recovery.finish()
+        self.assertEqual(self.claims.load(), {})
+        self.assertEqual(self.runtime.load()[TARGET["resourceId"]].state, "STOPPED")
+        self.assertEqual(self.runtime.load()[TARGET["resourceId"]].runtime_generation, 92)
+        self.assertEqual(self.stop.call_count, 2)
+        self.unfence.assert_called_once_with(TARGET["sessionId"])
+
+    def test_terminal_active_claim_server_refusal_preserves_fence(self) -> None:
+        self.claims.save({self.claim.resource_id: replace(self.claim, state="RENTAL_ACTIVE")})
+        self.runtime.save({self.record.resource_id: replace(self.record, state="STOPPED")})
+        before = self.bytes()
+        self.authorize.side_effect = None
+        self.authorize.return_value = {**self.approval({}), "allowed": False}
+        with self.assertRaisesRegex(ExecutionControlError, "authority_refused"):
+            self.recovery().prepare()
+        self.assertEqual(self.bytes(), before)
+        self.stop.assert_not_called()
+        self.probe.prove.assert_not_called()
+
+    def test_terminal_active_claim_failed_stop_preserves_fence(self) -> None:
+        self.claims.save({self.claim.resource_id: replace(self.claim, state="RENTAL_ACTIVE")})
+        self.runtime.save({self.record.resource_id: replace(self.record, state="STOPPED")})
+        before = self.bytes()
+        self.stop.side_effect = RuntimeError("native_workspace_stop_failed")
+        with self.assertRaisesRegex(RuntimeError, "native_workspace_stop_failed"):
+            self.recovery().prepare()
+        self.assertEqual(self.bytes(), before)
+        self.probe.prove.assert_not_called()
+        self.unfence.assert_not_called()
+
     def test_no_finish_without_a_fresh_prepare(self) -> None:
         before = self.bytes()
         with self.assertRaisesRegex(ExecutionControlError, "native_cleanup_not_prepared"):
