@@ -236,6 +236,7 @@ export function mountWindowsNativeDesktop({
           // Never retry a revoked browser session or obscure the security gate.
           if (state.closeCode === 1008) {
             stopped = true;
+            if (proofTimer !== null) clearIntervalFn(proofTimer);
             setStatus('Session vidéo non autorisée — ouvrir une nouvelle session');
             return;
           }
