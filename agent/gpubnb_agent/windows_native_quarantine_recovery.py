@@ -71,7 +71,7 @@ class NativeQuarantineRecovery:
                 or claim.hardware_uuid.casefold() != hardware
                 or claim.holder_id != f"rental:{session}"
                 or claim.fencing_token != str(claim.runtime_generation)
-                or claim.state not in {"QUARANTINED", "QUIESCENT"}):
+                or claim.state not in {"QUARANTINED", "QUIESCENT", "RENTAL_ACTIVE"}):
                 raise ExecutionControlError("native_cleanup_claim_authority_unverified")
         current = runtimes.get(resource)
         if current is None or current.hardware_uuid.casefold() != hardware:
@@ -85,6 +85,14 @@ class NativeQuarantineRecovery:
                 # canonical stop, not erasure by a native cleanup diagnostic.
                 raise ExecutionControlError("native_cleanup_runtime_process_unverified")
         claim = claims.get(resource)
+        # The Gateway may have reported STOP failure after the server retired a
+        # native rental, leaving a durable RENTAL_ACTIVE claim next to a STOPPED
+        # runtime tombstone. Never rewrite that claim as an inventory shortcut.
+        # This exception applies only to a process-free STOPPED runtime; _prove
+        # still requires fresh signed terminal-session/lease authority, an
+        # idempotent physical Helper STOP and NVIDIA quiescence before release.
+        if claim is not None and claim.state == "RENTAL_ACTIVE" and current.state != "STOPPED":
+            raise ExecutionControlError("native_cleanup_claim_authority_unverified")
         if claim is not None and current.runtime_generation < claim.runtime_generation:
             raise ExecutionControlError("native_cleanup_runtime_fence_regressed")
         return _Snapshot(claims, runtimes)
