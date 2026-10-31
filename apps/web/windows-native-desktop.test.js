@@ -413,8 +413,8 @@ test('WebSocket error blocks input immediately and preserves the real abnormal C
       async push() {
         mediaPushCount += 1;
         output(
-          { displayWidth: 100, displayHeight: 100, close() {} },
-          { streamEpoch: 9n, frameSequence: 1n, width: 100, height: 100,
+          { displayWidth: 1280, displayHeight: 720, close() {} },
+          { streamEpoch: 9n, frameSequence: 1n, width: 1280, height: 720,
             keyframe: true, codec: 'avc1.640028' },
         );
       },
