@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   mountWindowsNativeDesktop,
   nativeDesktopStreamPath,
+  safeNativeDesktopErrorCode,
 } from './windows-native-desktop-page.js';
 
 test('native desktop stream path contains only the public session identifier', () => {
@@ -259,4 +260,27 @@ test('policy close 1008 permanently stops retries for revoked session', () => {
   assert.match(status.textContent, /non autorisée/);
   assert.equal(timers.length, 0, 'revoked connection must not reconnect');
   assert.equal(clients.length, 1);
+});
+
+test('native viewer diagnostic codes use exact allowlist, never raw tokens or decoder text', () => {
+  assert.equal(
+    safeNativeDesktopErrorCode(new Error('windows_native_gateway_socket_error')),
+    'windows_native_gateway_socket_error',
+  );
+  assert.equal(
+    safeNativeDesktopErrorCode(new Error('windows_native_h264_sps_required')),
+    'windows_native_h264_sps_required',
+  );
+  for (const message of [
+    'a'.repeat(64),
+    'windows_native_' + 'a'.repeat(64),
+    'Bearer some-token',
+    'session:secret-abc',
+    'https://example.test/?token=secret',
+    'codec failed: secret',
+  ]) {
+    assert.equal(safeNativeDesktopErrorCode(new Error(message)), 'windows_native_client_failed');
+  }
+  assert.equal(safeNativeDesktopErrorCode({ message: 'windows_native_gateway_socket_error' }),
+    'windows_native_client_failed', 'only genuine Error is accepted');
 });
