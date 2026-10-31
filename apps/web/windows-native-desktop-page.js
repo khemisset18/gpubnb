@@ -128,6 +128,9 @@ export function mountWindowsNativeDesktop({
     status.textContent = value;
   };
   const proof = proofIndicator ? new Stage4VideoContinuity() : null;
+  // Backoff recovery is a separate proof, even when no 300s indicator is shown.
+  // One decoded image followed by a frozen stream is NOT a stable connection.
+  const stableProof = new Stage4VideoContinuity({ minimumMs: NATIVE_STABLE_STREAM_MS });
   const showProof = () => {
     if (!proof || !proofIndicator) return;
     const result = proof.snapshot(proofNow());
@@ -145,7 +148,6 @@ export function mountWindowsNativeDesktop({
   let reconnectTimer = null;
   let reconnectAttempt = 0;
   let reconnectStartedAt = null;
-  let stableStreamTimer = null;
   let pageHidden = false;
   let stopped = false;
   const proofTimer = proof ? setIntervalFn(showProof, 1_000) : null;
@@ -158,10 +160,7 @@ export function mountWindowsNativeDesktop({
   };
 
   const releaseCurrent = () => {
-    if (stableStreamTimer !== null) {
-      clearTimeoutFn(stableStreamTimer);
-      stableStreamTimer = null;
-    }
+    stableProof.reset();
     const client = currentClient;
     const unbind = unbindCurrent;
     currentClient = null;
@@ -219,10 +218,7 @@ export function mountWindowsNativeDesktop({
             });
           }
           resetProof();
-          if (stableStreamTimer !== null) {
-            clearTimeoutFn(stableStreamTimer);
-            stableStreamTimer = null;
-          }
+          stableProof.reset();
           const unbind = unbindCurrent;
           currentClient = null;
           unbindCurrent = null;
@@ -245,17 +241,20 @@ export function mountWindowsNativeDesktop({
           return;
         }
 
-        if (state?.state === 'ready' && stableStreamTimer === null) {
-          // Only reset exponential backoff after sustained decoded-video uptime.
-          // Short-lived readiness otherwise creates an unbounded rapid reconnect loop.
-          stableStreamTimer = setTimeoutFn(() => {
-            stableStreamTimer = null;
-            if (client === currentClient && !stopped && !pageHidden) markRecovered();
-          }, NATIVE_STABLE_STREAM_MS);
+        if (state?.state === 'ready') {
+          const timestamp = proofNow();
+          // The continuity engine requires rising frame sequence, same stream
+          // epoch and no gap >3s throughout the 10s backoff recovery period.
+          // A scheduled timer alone never proves video is being rendered.
+          if (stableProof.observe(state, timestamp).video300sObserved) {
+            markRecovered();
+            stableProof.reset();
+          }
+          proof?.observe(state, timestamp);
+        } else {
+          stableProof.reset();
+          resetProof();
         }
-
-        if (state?.state === 'ready') proof?.observe(state, proofNow());
-        else resetProof();
         showProof();
 
         const label = {
