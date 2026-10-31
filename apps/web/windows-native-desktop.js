@@ -70,6 +70,9 @@ export class WindowsNativeDesktopClient {
     this.streamEpoch = null;
     this.started = false;
     this.closed = false;
+    // WebSocket 'error' precedes 'close'; block all input and decoding at the
+    // first transport failure, but retain the later CloseEvent's real code.
+    this.socketError = false;
     this.mediaQueue = Promise.resolve();
     this.pressedKeys = new Set();
     this.pressedButtons = new Set();
@@ -119,7 +122,7 @@ export class WindowsNativeDesktopClient {
   }
 
   #onRendered(metadata) {
-    if (this.closed) return;
+    if (this.closed || this.socketError) return;
     if (this.streamEpoch !== metadata.streamEpoch) {
       // Release any held state through the old epoch before switching fences.
       // A reconnect/new stream must never strand a key/button in the renter OS.
@@ -151,10 +154,10 @@ export class WindowsNativeDesktopClient {
     socket.binaryType = 'arraybuffer';
 
     socket.addEventListener('open', () => {
-      if (!this.closed) this.#state({ state: 'connected' });
+      if (!this.closed && !this.socketError) this.#state({ state: 'connected' });
     });
     socket.addEventListener('message', (event) => {
-      if (this.closed) return;
+      if (this.closed || this.socketError) return;
       if (
         !(event.data instanceof ArrayBuffer) &&
         !(event.data instanceof Uint8Array) &&
@@ -168,13 +171,22 @@ export class WindowsNativeDesktopClient {
         .catch((error) => this.#fatal(error));
     });
     socket.addEventListener('error', () => {
-      this.#fatal(new Error('windows_native_gateway_socket_error'));
+      if (this.closed || this.socketError) return;
+      this.socketError = true;
+      // Disable all incoming media and renter input immediately, without
+      // initiating a synthetic 1000 close that would hide the actual 1006/1008.
+      this.#releasePressedInput();
+      this.input = null;
+      this.media.close();
+      this.onError(new Error('windows_native_gateway_socket_error'));
+      // Per WebSocket, the actual CloseEvent follows an error. The close
+      // listener owns state transition and retry/policy decisions.
     });
     socket.addEventListener('close', (event) => {
       if (this.closed) return;
-      this.#releasePressedInput();
+      if (!this.socketError) this.#releasePressedInput();
       this.closed = true;
-      this.media.close();
+      if (!this.socketError) this.media.close();
       // Only bounded standard close metadata crosses the UI boundary: never
       // emit a peer-supplied reason, URL, capability, cookie or frame bytes.
       const closeCode = Number.isInteger(event?.code) && event.code >= 1000 && event.code <= 4999
@@ -185,7 +197,7 @@ export class WindowsNativeDesktopClient {
   }
 
   #requireInput() {
-    if (!this.input || this.closed) return null;
+    if (!this.input || this.closed || this.socketError) return null;
     return this.input;
   }
 
@@ -312,7 +324,7 @@ export class WindowsNativeDesktopClient {
     if (this.closed) return;
     this.#releasePressedInput();
     this.closed = true;
-    this.media.close();
+    if (!this.socketError) this.media.close();
     try {
       if (this.socket && this.socket.readyState < 2) this.socket.close(1000, 'client_close');
     } catch {}
