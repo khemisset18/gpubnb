@@ -170,12 +170,16 @@ export class WindowsNativeDesktopClient {
     socket.addEventListener('error', () => {
       this.#fatal(new Error('windows_native_gateway_socket_error'));
     });
-    socket.addEventListener('close', () => {
+    socket.addEventListener('close', (event) => {
       if (this.closed) return;
       this.#releasePressedInput();
       this.closed = true;
       this.media.close();
-      this.#state({ state: 'closed' });
+      // Only bounded standard close metadata crosses the UI boundary: never
+      // emit a peer-supplied reason, URL, capability, cookie or frame bytes.
+      const closeCode = Number.isInteger(event?.code) && event.code >= 1000 && event.code <= 4999
+        ? event.code : null;
+      this.#state({ state: 'closed', closeCode, wasClean: event?.wasClean === true });
     });
     this.#state({ state: 'connecting' });
   }

@@ -381,3 +381,19 @@ test('new stream epoch releases held input through the old fence before switchin
     [10n, 'button', 0, true],
   ]);
 });
+
+
+test('native WebSocket close exposes only bounded code and clean flag, never reason', () => {
+  const socket = new FakeSocket();
+  const states = [];
+  const client = new WindowsNativeDesktopClient({
+    canvas: fakeCanvas(),
+    onState: (state) => states.push(state),
+    webSocketFactory: () => socket,
+    mediaFactory: () => ({ async push() {}, close() {} }),
+  });
+  client.start('/native/session/abc', 'https://example.test/page');
+  socket.emit('close', { code: 1008, wasClean: true, reason: 'never-log-me' });
+  assert.deepEqual(states.at(-1), { state: 'closed', closeCode: 1008, wasClean: true });
+  assert.equal(JSON.stringify(states).includes('never-log-me'), false);
+});
