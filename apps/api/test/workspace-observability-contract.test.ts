@@ -56,9 +56,10 @@ test('websocket close diagnostics include the code without exposing the remote r
 test('native desktop reconnect backoff requires sustained decoded video before resetting',async()=>{
   const page=await readFile(new URL('../../web/windows-native-desktop-page.js',import.meta.url),'utf8');
   assert.match(page,/NATIVE_STABLE_STREAM_MS = 10 \* 1000/);
-  assert.match(page,/state\?\.state === 'ready' && stableStreamTimer === null/);
-  assert.match(page,/stableStreamTimer = setTimeoutFn\(\(\) => \{/);
-  assert.match(page,/if \(client === currentClient && !stopped && !pageHidden\) markRecovered\(\)/);
-  assert.match(page,/if \(stableStreamTimer !== null\) \{\s*clearTimeoutFn\(stableStreamTimer\)/);
+  assert.match(page,/new Stage4VideoContinuity\(\{ minimumMs: NATIVE_STABLE_STREAM_MS \}\)/);
+  assert.match(page,/stableProof\.observe\(state, timestamp\)\.video300sObserved/);
+  assert.match(page,/if \(stableProof\.observe\(state, timestamp\)\.video300sObserved\) \{\s*markRecovered\(\);\s*stableProof\.reset\(\)/);
+  assert.match(page,/stableProof\.reset\(\)/);
+  assert.doesNotMatch(page,/stableStreamTimer/, 'a timed callback alone cannot prove sustained video');
   assert.doesNotMatch(page,/if \(state\?\.state === 'ready'\) markRecovered\(\)/);
 });
