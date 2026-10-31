@@ -397,3 +397,72 @@ test('native WebSocket close exposes only bounded code and clean flag, never rea
   assert.deepEqual(states.at(-1), { state: 'closed', closeCode: 1008, wasClean: true });
   assert.equal(JSON.stringify(states).includes('never-log-me'), false);
 });
+
+test('WebSocket error blocks input immediately and preserves the real abnormal CloseEvent', async () => {
+  const socket = new FakeSocket();
+  const states = [];
+  const errors = [];
+  let mediaCloseCount = 0;
+  let mediaPushCount = 0;
+  const client = new WindowsNativeDesktopClient({
+    canvas: fakeCanvas(),
+    onState: (state) => states.push(state),
+    onError: (error) => errors.push(error.message),
+    webSocketFactory: () => socket,
+    mediaFactory: ({ output }) => ({
+      async push() {
+        mediaPushCount += 1;
+        output(
+          { displayWidth: 100, displayHeight: 100, close() {} },
+          { streamEpoch: 9n, frameSequence: 1n, width: 100, height: 100,
+            keyframe: true, codec: 'avc1.640028' },
+        );
+      },
+      close() { mediaCloseCount += 1; },
+    }),
+    inputFactory: () => ({
+      key() { return true; },
+      mouseButton() { return true; },
+    }),
+  });
+
+  client.start('/native/session/abc', 'https://example.test/page');
+  socket.readyState = 1;
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  await client.mediaQueue;
+  assert.equal(client.key('KeyA'), true);
+
+  socket.readyState = 3;
+  socket.emit('error');
+  assert.deepEqual(errors, ['windows_native_gateway_socket_error']);
+  assert.equal(client.key('KeyA'), false, 'no input after transport failure');
+  assert.equal(client.pointerButton(0), false, 'no input after transport failure');
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  await client.mediaQueue;
+  assert.equal(mediaPushCount, 1, 'no decoding after transport failure');
+  assert.equal(states.filter(state => state.state === 'closed').length, 0,
+    'await real CloseEvent rather than invent local closure');
+  assert.equal(socket.closed.length, 0, 'do not cause synthetic local close');
+
+  socket.emit('close', { code: 1006, wasClean: false, reason: 'SECRET_NEVER_PROPAGATE' });
+  assert.equal(mediaCloseCount, 1, 'decoder closed once');
+  assert.deepEqual(states.at(-1), { state: 'closed', closeCode: 1006, wasClean: false });
+  assert.equal(JSON.stringify(states).includes('SECRET_NEVER_PROPAGATE'), false);
+  socket.emit('close', { code: 1008, wasClean: true });
+  assert.equal(states.filter(state => state.state === 'closed').length, 1);
+});
+
+test('WebSocket error then server policy 1008 remains visible to the viewer', () => {
+  const socket = new FakeSocket();
+  const states = [];
+  const client = new WindowsNativeDesktopClient({
+    canvas: fakeCanvas(),
+    onState: (state) => states.push(state),
+    webSocketFactory: () => socket,
+    mediaFactory: () => ({ async push() {}, close() {} }),
+  });
+  client.start('/native/session/abc', 'https://example.test/page');
+  socket.emit('error');
+  socket.emit('close', { code: 1008, wasClean: true });
+  assert.deepEqual(states.at(-1), { state: 'closed', closeCode: 1008, wasClean: true });
+});
