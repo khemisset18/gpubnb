@@ -101,7 +101,9 @@ export class WindowsNativeDesktopClient {
   }
 
   #fatal(error) {
-    if (this.closed) return;
+    // Ignore decoder/queue fallout from a socket error: only the browser's
+    // subsequent CloseEvent may classify transport closure (1006/1008/etc.).
+    if (this.closed || this.socketError) return;
     const safe = error instanceof Error ? error : new Error('windows_native_client_failed');
     this.onError(safe);
     this.close();
@@ -167,7 +169,12 @@ export class WindowsNativeDesktopClient {
         return;
       }
       this.mediaQueue = this.mediaQueue
-        .then(() => this.media.push(event.data))
+        .then(() => {
+          // A previously enqueued packet must not decode after an error or
+          // revoked input boundary, even when the promise settles later.
+          if (this.closed || this.socketError) return;
+          return this.media.push(event.data);
+        })
         .catch((error) => this.#fatal(error));
     });
     socket.addEventListener('error', () => {
