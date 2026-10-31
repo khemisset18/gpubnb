@@ -1,8 +1,80 @@
 'use strict';
 
-function safeNativeDesktopErrorCode(error) {
+// Only fixed, source-owned diagnostic codes may reach DevTools or the DOM.
+// Arbitrary Error.message strings can be credentials or untrusted codec errors.
+const SAFE_NATIVE_DESKTOP_ERROR_CODES = new Set([
+  'windows_native_canvas_context',
+  'windows_native_canvas_required',
+  'windows_native_chunk_factory_required',
+  'windows_native_client_callback',
+  'windows_native_client_factory',
+  'windows_native_client_state',
+  'windows_native_decode_queue_full',
+  'windows_native_decode_queue_invalid',
+  'windows_native_decoder_error_callback',
+  'windows_native_decoder_factory',
+  'windows_native_decoder_failed',
+  'windows_native_decoder_not_ready',
+  'windows_native_decoder_output_required',
+  'windows_native_decoder_output_unbound',
+  'windows_native_decoder_required',
+  'windows_native_gateway_base_invalid',
+  'windows_native_gateway_cross_origin',
+  'windows_native_gateway_downgrade',
+  'windows_native_gateway_scheme',
+  'windows_native_gateway_socket_error',
+  'windows_native_gateway_url_credentials',
+  'windows_native_gateway_url_invalid',
+  'windows_native_h264_sps_required',
+  'windows_native_input_channel_not_ready',
+  'windows_native_input_epoch',
+  'windows_native_input_flags',
+  'windows_native_input_key',
+  'windows_native_input_kind',
+  'windows_native_input_mouse_absolute',
+  'windows_native_input_mouse_button',
+  'windows_native_input_mouse_delta',
+  'windows_native_input_mouse_relative',
+  'windows_native_input_mouse_wheel',
+  'windows_native_input_pointer_geometry',
+  'windows_native_input_scan_code',
+  'windows_native_input_sender',
+  'windows_native_input_sequence',
+  'windows_native_input_target',
+  'windows_native_media_binary_required',
+  'windows_native_media_chunk_length',
+  'windows_native_media_chunk_range',
+  'windows_native_media_clock',
+  'windows_native_media_codec',
+  'windows_native_media_dimensions',
+  'windows_native_media_epoch',
+  'windows_native_media_flags',
+  'windows_native_media_frame_length',
+  'windows_native_media_frame_mismatch',
+  'windows_native_media_frame_order',
+  'windows_native_media_keyframe_required',
+  'windows_native_media_magic',
+  'windows_native_media_packet_length',
+  'windows_native_media_packet_type',
+  'windows_native_media_sequence',
+  'windows_native_media_session_required',
+  'windows_native_media_timeout',
+  'windows_native_media_timeout_invalid',
+  'windows_native_media_version',
+  'windows_native_page_contract',
+  'windows_native_page_environment',
+  'windows_native_render_callback',
+  'windows_native_session_id_invalid',
+  'windows_native_video_frame_dimensions',
+  'windows_native_video_frame_required',
+  'windows_native_webcodecs_config_unsupported',
+  'windows_native_webcodecs_unavailable',
+  'windows_native_websocket_required',
+]);
+
+export function safeNativeDesktopErrorCode(error) {
   const message = error instanceof Error ? error.message : '';
-  return /^[A-Za-z0-9_:-]{1,120}$/u.test(message) ? message : 'windows_native_client_failed';
+  return SAFE_NATIVE_DESKTOP_ERROR_CODES.has(message) ? message : 'windows_native_client_failed';
 }
 
 import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261003-input-blob-1';
