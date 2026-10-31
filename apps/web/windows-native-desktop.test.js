@@ -37,17 +37,22 @@ class FakeSocket {
 function fakeCanvas() {
   const listeners = new Map();
   const draws = [];
+  const clears = [];
   const attributes = new Map();
   return {
     width: 0,
     height: 0,
     draws,
+    clears,
     attributes,
     focused: 0,
     getContext() {
       return {
         drawImage(frame, x, y, width, height) {
           draws.push({ frame, x, y, width, height });
+        },
+        clearRect(x, y, width, height) {
+          clears.push({ x, y, width, height });
         },
       };
     },
@@ -539,5 +544,35 @@ test('late decoded frames after close or socket error are disposed, never painte
     assert.equal(frame.disposed, 1, closeKind);
     assert.equal(client.key('KeyA'), false, closeKind);
     assert.equal(states.some(state => state.state === 'ready'), false, closeKind);
+  }
+});
+
+test('browser clears displayed renter frame on local stop and policy revocation', async () => {
+  for (const action of ['local', 'policy', 'transport-error']) {
+    const socket = new FakeSocket();
+    const canvas = fakeCanvas();
+    const client = new WindowsNativeDesktopClient({
+      canvas,
+      webSocketFactory: () => socket,
+      mediaFactory: ({ output }) => ({
+        async push() {
+          output({ displayWidth: 1280, displayHeight: 720, close() {} },
+            { streamEpoch: 7n, frameSequence: 1n, width: 1280, height: 720,
+              codec: 'avc1.640028', keyframe: true });
+        },
+        close() {},
+      }),
+    });
+    client.start('/native/session/abc', 'https://example.test/page');
+    socket.readyState = 1;
+    socket.emit('message', { data: new ArrayBuffer(1) });
+    await client.mediaQueue;
+    assert.equal(canvas.draws.length, 1, action);
+    if (action === 'local') client.close();
+    if (action === 'policy') socket.emit('close', { code: 1008, wasClean: true });
+    if (action === 'transport-error') socket.emit('error');
+    assert.deepEqual(canvas.clears.at(-1),
+      { x: 0, y: 0, width: 1280, height: 720 }, action);
+    assert.equal(client.key('KeyA'), false, action);
   }
 });
