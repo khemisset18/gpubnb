@@ -160,15 +160,24 @@ class NativeQuarantineRecoveryTests(unittest.TestCase):
             {"session_id": "other_session_01"},
             {"holder_id": "rental:other_session_01"},
             {"hardware_uuid": "GPU-bbbbbbbb-1111-2222-3333-aaaaaaaaaaaa"},
-            {"fencing_token": "89"},
             {"resource_id": "resource_other_01"},
         ):
             with self.subTest(fields=fields):
-                self.claims.save({self.claim.resource_id: replace(self.claim, state="RENTAL_ACTIVE", **fields)})
+                foreign = replace(self.claim, state="RENTAL_ACTIVE", **fields)
+                self.claims.save({foreign.resource_id: foreign})
                 before = self.bytes()
                 with self.assertRaisesRegex(ExecutionControlError, "claim_authority_unverified"):
                     self.recovery().prepare()
                 self.assertEqual(self.bytes(), before)
+        # An inconsistent persisted fence is rejected by the canonical store
+        # parser before NativeQuarantineRecovery reaches its own scope guard.
+        self.claims.save({self.claim.resource_id: replace(
+            self.claim, state="RENTAL_ACTIVE", fencing_token="89",
+        )})
+        before = self.bytes()
+        with self.assertRaisesRegex(ExecutionControlError, "rental_claim_store_record_invalid"):
+            self.recovery().prepare()
+        self.assertEqual(self.bytes(), before)
         self.claims.save({self.claim.resource_id: replace(self.claim, state="RENTAL_ACTIVE")})
         for fields in ({"pid": 999}, {"process_creation_token": "foreign_process"},
                        {"command_id": "active_command"}):
