@@ -224,3 +224,39 @@ test('pagehide closes transport and pageshow recreates it without reviving after
   windowObject.emit('pageshow', { persisted: true });
   assert.equal(clients.length, 2, 'explicit close must never reconnect');
 });
+
+
+test('policy close 1008 permanently stops retries for revoked session', () => {
+  const status = { textContent: '' };
+  const documentObject = {
+    querySelector(selector) {
+      return {
+        '#nativeDesktopCanvas': {},
+        '#nativeDesktopStatus': status,
+        '#nativeDesktopClose': { addEventListener() {} },
+      }[selector] ?? null;
+    },
+  };
+  const clients = [];
+  const timers = [];
+  mountWindowsNativeDesktop({
+    documentObject,
+    locationObject: {
+      href: 'https://example.test/windows-native-desktop.html?session=sess-1',
+      search: '?session=sess-1',
+    },
+    clientFactory(options) {
+      clients.push(options);
+      return { bindDom() { return () => {}; }, start() {}, close() {} };
+    },
+    setTimeoutFn(callback, delay) {
+      timers.push({ callback, delay });
+      return timers.length;
+    },
+    clearTimeoutFn() {},
+  });
+  clients[0].onState({ state: 'closed', closeCode: 1008, wasClean: true });
+  assert.match(status.textContent, /non autorisée/);
+  assert.equal(timers.length, 0, 'revoked connection must not reconnect');
+  assert.equal(clients.length, 1);
+});
