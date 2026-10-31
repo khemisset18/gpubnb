@@ -82,13 +82,22 @@ export class WindowsNativeDesktopClient {
       onRendered: (metadata) => this.#onRendered(metadata),
     });
     this.renderer = renderer;
+    const outputFrame = (frame, metadata) => {
+      if (this.closed || this.socketError) {
+        // Decoder output may still arrive asynchronously after authority is
+        // revoked. Never paint a late frame, and release its GPU resources.
+        try { frame?.close?.(); } catch {}
+        return;
+      }
+      renderer.render(frame, metadata);
+    };
     this.media = mediaFactory
       ? mediaFactory({
-          output: (frame, metadata) => renderer.render(frame, metadata),
+          output: outputFrame,
           onError: (error) => this.#fatal(error),
         })
       : new WindowsNativeWebCodecsSession({
-          output: (frame, metadata) => renderer.render(frame, metadata),
+          output: outputFrame,
           onError: (error) => this.#fatal(error),
         });
     if (!this.media || typeof this.media.push !== 'function' || typeof this.media.close !== 'function') {
