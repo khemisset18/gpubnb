@@ -132,6 +132,13 @@ export class WindowsNativeDesktopClient {
     this.socket.send(new Blob([frame.slice()], { type: 'application/octet-stream' }));
   }
 
+  #blackout() {
+    // An expired/revoked viewer must not keep showing the last decoded image.
+    // The 2D canvas uses alpha:false, so clearing restores opaque black.
+    // Do not block transport cleanup if graphics context was lost.
+    try { this.renderer.context?.clearRect?.(0, 0, this.canvas.width, this.canvas.height); } catch {}
+  }
+
   #onRendered(metadata) {
     if (this.closed || this.socketError) return;
     if (this.streamEpoch !== metadata.streamEpoch) {
@@ -194,6 +201,7 @@ export class WindowsNativeDesktopClient {
       this.#releasePressedInput();
       this.input = null;
       this.media.close();
+      this.#blackout();
       this.onError(new Error('windows_native_gateway_socket_error'));
       // Per WebSocket, the actual CloseEvent follows an error. The close
       // listener owns state transition and retry/policy decisions.
@@ -203,6 +211,7 @@ export class WindowsNativeDesktopClient {
       if (!this.socketError) this.#releasePressedInput();
       this.closed = true;
       if (!this.socketError) this.media.close();
+      this.#blackout();
       // Only bounded standard close metadata crosses the UI boundary: never
       // emit a peer-supplied reason, URL, capability, cookie or frame bytes.
       const closeCode = Number.isInteger(event?.code) && event.code >= 1000 && event.code <= 4999
@@ -341,6 +350,7 @@ export class WindowsNativeDesktopClient {
     this.#releasePressedInput();
     this.closed = true;
     if (!this.socketError) this.media.close();
+    this.#blackout();
     try {
       if (this.socket && this.socket.readyState < 2) this.socket.close(1000, 'client_close');
     } catch {}
