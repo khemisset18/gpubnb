@@ -138,6 +138,14 @@ export function mountWindowsNativeDesktop({
         if (client !== currentClient) return;
 
         if (state?.state === 'closed') {
+          // Record only WebSocket protocol metadata to diagnose the FIRST
+          // closure, never a session URL, HTTP headers or video payload.
+          if (Number.isInteger(state.closeCode)) {
+            globalThis.console?.info?.('gpubnb_native_ws_closed', {
+              code: state.closeCode,
+              wasClean: state.wasClean === true,
+            });
+          }
           resetProof();
           if (stableStreamTimer !== null) {
             clearTimeoutFn(stableStreamTimer);
@@ -150,6 +158,13 @@ export function mountWindowsNativeDesktop({
 
           if (stopped) {
             setStatus('Session vidéo fermée');
+            return;
+          }
+          // Render sends 1008 when the workspace authority expires/revokes.
+          // Never retry a revoked browser session or obscure the security gate.
+          if (state.closeCode === 1008) {
+            stopped = true;
+            setStatus('Session vidéo non autorisée — ouvrir une nouvelle session');
             return;
           }
           if (pageHidden) return;
@@ -179,7 +194,9 @@ export function mountWindowsNativeDesktop({
       },
       onError: (error) => {
         if (client !== currentClient) return;
-        setStatus(`Connexion interrompue — ${safeNativeDesktopErrorCode(error)}`);
+        const code = safeNativeDesktopErrorCode(error);
+        globalThis.console?.warn?.('gpubnb_native_client_error', code);
+        setStatus(`Connexion interrompue — ${code}`);
       },
     });
 
