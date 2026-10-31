@@ -505,3 +505,39 @@ test('queued media fallout after socket error cannot mask the actual 1006 close'
   socket.emit('close', { code: 1006, wasClean: false });
   assert.deepEqual(states.at(-1), { state: 'closed', closeCode: 1006, wasClean: false });
 });
+
+test('late decoded frames after close or socket error are disposed, never painted', () => {
+  for (const closeKind of ['error', 'closed']) {
+    const canvas = fakeCanvas();
+    const socket = new FakeSocket();
+    const states = [];
+    let output;
+    const client = new WindowsNativeDesktopClient({
+      canvas,
+      webSocketFactory: () => socket,
+      onState: (state) => states.push(state),
+      mediaFactory: (options) => {
+        output = options.output;
+        return { async push() {}, close() {} };
+      },
+    });
+    client.start('/native/session/abc', 'https://example.test/page');
+    if (closeKind === 'error') {
+      socket.emit('error');
+    } else {
+      client.close();
+    }
+    const frame = {
+      displayWidth: 1280, displayHeight: 720, disposed: 0,
+      close() { this.disposed += 1; },
+    };
+    output(frame, {
+      streamEpoch: 9n, frameSequence: 3n, width: 1280, height: 720,
+      codec: 'avc1.640028', keyframe: true,
+    });
+    assert.equal(canvas.draws.length, 0, closeKind);
+    assert.equal(frame.disposed, 1, closeKind);
+    assert.equal(client.key('KeyA'), false, closeKind);
+    assert.equal(states.some(state => state.state === 'ready'), false, closeKind);
+  }
+});
