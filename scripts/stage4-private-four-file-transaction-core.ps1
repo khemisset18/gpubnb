@@ -114,6 +114,16 @@ function Invoke-Stage4FourFileTransactionCore {
             $node=$node.Parent
         }
     }
+    # A previous abruptly interrupted swap can leave GUID-named .old/.new
+    # files in the live directory. Never begin another swap or stop the Agent
+    # while that state has not been independently inspected and recovered.
+    # Successful swaps intentionally retain .old backups and also require
+    # explicit reconciliation before the next maintenance attempt.
+    $unreconciled=@(Get-ChildItem -LiteralPath $target -Force -ErrorAction Stop |
+        Where-Object { $_.Name -like '.stage4-*' })
+    if ($unreconciled.Count -gt 0) {
+        throw 'stage4_core_unreconciled_transaction_requires_independent_recovery'
+    }
     if (-not (& $IsControlledServiceRunning)) {
         throw 'stage4_core_service_not_running'
     }
