@@ -106,7 +106,8 @@ function Run-Case {
     param([string]$Title,[int]$FailAfter=0,[bool]$BadHealth=$false,
         [bool]$FailStartOnce=$false,[bool]$ExpectRollback=$false,
         [bool]$BadOldHash=$false,[int]$FailDuringStaging=0,
-        [bool]$ExpectRollbackUnhealthy=$false,[bool]$FailNewHealthOnly=$false)
+        [bool]$ExpectRollbackUnhealthy=$false,[bool]$FailNewHealthOnly=$false,
+        [bool]$OrphanTransaction=$false)
     $root=Join-Path $env:TEMP ('GPUbnb-stage4-maintenance-test-'+[Guid]::NewGuid().ToString('N'))
     $candidate=Join-Path $root 'candidate'
     $target=Join-Path $root 'installed'
@@ -123,6 +124,9 @@ function Run-Case {
         $oldSddl[$name]=(Get-Acl -LiteralPath $oldFile).Sddl
     }
     if($BadOldHash){$oldHashes[$names[0]]=('0'*64)}
+    if($OrphanTransaction) {
+        [IO.File]::WriteAllText((Join-Path $target ('.stage4-'+([Guid]::NewGuid().ToString('N'))+'.old.'+$names[0])),'unreconciled-backup')
+    }
     $script:stage4FakeRunning=$true
     $script:stage4FakeStartFailures=if($FailStartOnce){1}else{0}
     $script:stage4FakeStopCalls=0
@@ -183,6 +187,20 @@ function Run-Case {
                 }
             }
             Write-Host ('PASS rollback old four hashes and SDDL '+$Title)
+        } elseif($OrphanTransaction) {
+            if($null -eq $errorText -or
+                $errorText -cne 'stage4_core_unreconciled_transaction_requires_independent_recovery' -or
+                $script:stage4FakeStopCalls -ne 0) {
+                throw ('stage4_test_recovery_barrier_bypassed:'+$Title+':'+$errorText)
+            }
+            foreach($name in $names) {
+                $original=Join-Path $target $name
+                if((Get-FileHash -LiteralPath $original -Algorithm SHA256).Hash -ine $oldHashes[$name] -or
+                    (Get-Acl -LiteralPath $original).Sddl -cne $oldSddl[$name]) {
+                    throw ('stage4_test_recovery_barrier_modified_original:'+$name)
+                }
+            }
+            Write-Host ('PASS unreconciled transaction blocks service stop '+$Title)
         } elseif($BadOldHash) {
             if($null -eq $errorText -or
                 $errorText -notlike 'stage4_core_input_drift:*' -or
@@ -234,6 +252,7 @@ function Run-Case {
 }
 
 Run-Case -Title 'normal-success'
+Run-Case -Title 'orphan_transaction_blocks_next_swap' -OrphanTransaction $true
 foreach($i in 1..4){
     Run-Case -Title ('pre_stop_staging_failure_'+$i) -FailDuringStaging $i
 }
