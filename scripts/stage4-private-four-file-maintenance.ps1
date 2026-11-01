@@ -44,12 +44,7 @@ $readinessArgs=@{
     RenterAccount=$RenterAccount
 }
 $readiness=(& (Join-Path $PSScriptRoot 'stage4-private-install-readiness.ps1') @readinessArgs | Out-String) | ConvertFrom-Json
-if ($readiness.kind -cne 'STAGE4_PC1_PRIVATE_INSTALL_READINESS_READONLY' -or
-    $readiness.localPreflightPassed -cne $true -or
-    $readiness.installAuthorized -cne $false -or @($readiness.checks).Count -ne 6 -or
-    @($readiness.checks | Where-Object { $_.passed -cne $true }).Count -ne 6) {
-    throw 'stage4_maintenance_all_six_readiness_checks_required'
-}
+[void](Assert-Stage4MaintenanceReadiness -Readiness $readiness)
 $svc=Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
 $exe=Join-Path $installed 'gpubnb-agent.exe'
 $proc=if ($null -eq $svc) { $null } else {
