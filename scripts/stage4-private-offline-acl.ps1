@@ -35,7 +35,7 @@ function New-Stage4ScratchAclSnapshot {
 function Convert-Stage4ScratchExpectedSddl {
     [CmdletBinding()]
     param([Parameter(Mandatory=$true)][string]$Sddl)
-    return [regex]::Replace($Sddl, '\\(([^;()]+);([^;()]*);',
+    return [regex]::Replace($Sddl, '\(([^;()]+);([^;()]*);',
         [Text.RegularExpressions.MatchEvaluator]{
             param($match)
             $flags=$match.Groups[2].Value
