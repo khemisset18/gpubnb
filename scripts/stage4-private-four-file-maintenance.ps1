@@ -173,10 +173,7 @@ $isStopped = {
     return ((Get-Service -Name 'GPUbnbAgent').Status -eq 'Stopped')
 }
 $checkRuntime = {
-    # A local log line alone cannot attest which Agent process ran it.
-    # Require a fresh LocalSystem process, stable PID and pinned on-disk Agent
-    # hash in addition to the post-start heartbeat. This is still NOT an
-    # independent server-side attestation of the installed build.
+    # This local proof is not an independent server-side attestation.
     Start-Sleep -Seconds 32
     if (-not (& $isRunning)) { return $false }
     if ($script:stage4ServiceStartUtc -eq [DateTime]::MinValue) { return $false }
@@ -205,22 +202,7 @@ $checkRuntime = {
         try {
             $payload=$line.Substring($pos+12) | ConvertFrom-Json
             if ($payload.event -cne 'heartbeat') { continue }
-            $stamp=($line -split ' ')[0] -replace '([+-]\d{2})(\d{2})
-$args=@{
-    TargetDirectory=$installed
-    CandidateDirectory=$CandidateDirectory
-    OldHashes=$oldHashes
-    NewHashes=$newHashes
-    OldSddl=$oldSddl
-    StopControlledService=$stop
-    StartControlledService=$start
-    IsControlledServiceRunning=$isRunning
-    IsControlledServiceStopped=$isStopped
-    ValidateControlledRuntime=$checkRuntime
-    MaintenanceToken='STAGE4-PHYSICAL-MAINTENANCE-AUTHORIZED-BY-PREFLIGHT'
-}
-Invoke-Stage4FourFileTransactionCore @args | ConvertTo-Json -Depth 8
-,'$1:$2'
+            $stamp=($line -split ' ')[0] -replace '([+-]\d{2})(\d{2})$','$1:$2'
             $parsed=[DateTimeOffset]::Parse($stamp,[Globalization.CultureInfo]::InvariantCulture)
             if ($parsed.UtcDateTime -ge $startedUtc -and
                 $parsed.UtcDateTime -ge $script:stage4ServiceStartUtc) {
@@ -233,11 +215,7 @@ Invoke-Stage4FourFileTransactionCore @args | ConvertTo-Json -Depth 8
     $serviceAfter=Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
     if ($null -eq $serviceAfter -or $serviceAfter.ProcessId -ne $service.ProcessId) { return $false }
     $hashAfter=(Get-FileHash -LiteralPath $expectedExe -Algorithm SHA256).Hash
-    return (Test-Stage4NewProcessProof -ServiceStartUtc $script:stage4ServiceStartUtc `
-        -ProcessCreationUtc $startedUtc -InitialProcessId $service.ProcessId `
-        -FinalProcessId $serviceAfter.ProcessId -InitialFileHash $hash `
-        -FinalFileHash $hashAfter -OldPinnedHash $oldHashes['gpubnb-agent.exe'] `
-        -NewPinnedHash $newHashes['gpubnb-agent.exe'])
+    return (Test-Stage4NewProcessProof -ServiceStartUtc $script:stage4ServiceStartUtc -ProcessCreationUtc $startedUtc -InitialProcessId $service.ProcessId -FinalProcessId $serviceAfter.ProcessId -InitialFileHash $hash -FinalFileHash $hashAfter -OldPinnedHash $oldHashes['gpubnb-agent.exe'] -NewPinnedHash $newHashes['gpubnb-agent.exe'])
 }
 $args=@{
     TargetDirectory=$installed
