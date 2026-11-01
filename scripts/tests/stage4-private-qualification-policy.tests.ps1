@@ -32,6 +32,41 @@ $pin='3060de709bd0db7fa8588b7480a8a04f94b2a7df005ee48361cbdcd39b0e9619'
 $machine='cmsiggruy0004df0tn669f6bn'
 $gpu='GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a'
 $renter='gpubnb-renter-qual'
+# Exercise the SAME SHA40 guard used by verify-stage4-private-qualification.ps1.
+# This does not forge a signed package or bypass real Authenticode checks.
+if ($verifier -notmatch 'Assert-Stage4PrivateBuildIdentity' -or
+    $verifier -match 'ExpectedCommit\\.Substring\\(0,12\\)') {
+    throw 'private_qualification_real_verifier_not_using_sha40_guard'
+}
+$identityBase=[pscustomobject]@{
+    agent=[pscustomobject]@{frozen=$true;agentVersion='0.6.6';buildCommit=$commit}
+    helper=[pscustomobject]@{sourceCommit=$commit;workerSignerSha256=$pin;mutationAuthority='release-candidate'}
+    worker=[pscustomobject]@{sourceCommit=$commit;mediaSignerSha256=$pin}
+    media=[pscustomobject]@{sourceCommit=$commit;mediaAbi=2;nvencApi='13.0'}
+    agentRuntime=[pscustomobject]@{tlsContext=$true}
+}
+if (-not (Assert-Stage4PrivateBuildIdentity -Identity $identityBase -ExpectedCommit $commit -ExpectedPublisherSha256 $pin)) {
+    throw 'private_qualification_sha40_exact_rejected'
+}
+function Expect-IdentityRejection([string]$Title,[scriptblock]$Mutate) {
+    $copy=$identityBase | ConvertTo-Json -Depth 12 | ConvertFrom-Json
+    & $Mutate $copy
+    $denied=$false
+    try { [void](Assert-Stage4PrivateBuildIdentity -Identity $copy -ExpectedCommit $commit -ExpectedPublisherSha256 $pin) }
+    catch { $denied=($_.Exception.Message -like 'private_qualification_embedded_identity_mismatch*') }
+    if (-not $denied) { throw ('private_qualification_identity_not_rejected:'+$Title) }
+    Write-Host ('PASS exact shared verifier identity gate '+$Title)
+}
+Expect-IdentityRejection 'SHA12 agent refused' {param($m)$m.agent.buildCommit=$commit.Substring(0,12)}
+Expect-IdentityRejection 'wrong SHA40 agent refused' {param($m)$m.agent.buildCommit=('f'*40)}
+Expect-IdentityRejection 'wrong SHA40 Helper refused' {param($m)$m.helper.sourceCommit=('f'*40)}
+Expect-IdentityRejection 'wrong SHA40 Worker refused' {param($m)$m.worker.sourceCommit=('f'*40)}
+Expect-IdentityRejection 'wrong SHA40 Media refused' {param($m)$m.media.sourceCommit=('f'*40)}
+Expect-IdentityRejection 'mismatched Worker signer refused' {param($m)$m.worker.mediaSignerSha256=('e'*64)}
+Expect-IdentityRejection 'mismatched Helper signer refused' {param($m)$m.helper.workerSignerSha256=('e'*64)}
+Expect-IdentityRejection 'wrong Agent release refused' {param($m)$m.agent.agentVersion='0.6.5'}
+Write-Host 'PASS real signed verifier calls the same exact SHA40 identity gate'
+
 $script:base=[ordered]@{
     schemaVersion=1
     kind='GPUBNB_STAGE4_PRIVATE_QUALIFICATION_INSTALLER_CANDIDATE'
