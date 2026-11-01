@@ -1,0 +1,136 @@
+#Requires -Version 5.1
+# Execute the same production swap core with TEMP-only fixtures and fake service.
+# No certificate trust, Program Files writes, service, Render or hardware use.
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'stage4-private-four-file-transaction-core.ps1')
+$names=@('gpubnb-agent.exe','gpubnb-windows-stream.exe',
+    'gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')
+
+function Run-Case {
+    param([string]$Title,[int]$FailAfter=0,[bool]$BadHealth=$false,
+        [bool]$FailStartOnce=$false,[bool]$ExpectRollback=$false,
+        [bool]$BadOldHash=$false)
+    $root=Join-Path $env:TEMP ('GPUbnb-stage4-maintenance-test-'+[Guid]::NewGuid().ToString('N'))
+    $candidate=Join-Path $root 'candidate'
+    $target=Join-Path $root 'installed'
+    [void](New-Item -ItemType Directory -Path $candidate -Force)
+    [void](New-Item -ItemType Directory -Path $target -Force)
+    $oldHashes=@{};$newHashes=@{};$oldSddl=@{}
+    foreach($name in $names) {
+        $oldFile=Join-Path $target $name
+        $newFile=Join-Path $candidate $name
+        [IO.File]::WriteAllText($oldFile,('real-original-for-test-'+$name))
+        [IO.File]::WriteAllText($newFile,('new-replacement-for-test-'+$name))
+        $oldHashes[$name]=(Get-FileHash -LiteralPath $oldFile -Algorithm SHA256).Hash
+        $newHashes[$name]=(Get-FileHash -LiteralPath $newFile -Algorithm SHA256).Hash
+        $oldSddl[$name]=(Get-Acl -LiteralPath $oldFile).Sddl
+    }
+    if($BadOldHash){$oldHashes[$names[0]]=('0'*64)}
+    $script:stage4FakeRunning=$true
+    $script:stage4FakeStartFailures=if($FailStartOnce){1}else{0}
+    $script:stage4FakeStopCalls=0
+    $stop={
+        $script:stage4FakeStopCalls++
+        $script:stage4FakeRunning=$false
+    }
+    $start={
+        if($script:stage4FakeStartFailures -gt 0) {
+            $script:stage4FakeStartFailures--
+            throw 'stage4_test_injected_start_failure'
+        }
+        $script:stage4FakeRunning=$true
+    }
+    $running={ return $script:stage4FakeRunning }
+    $stopped={ return (-not $script:stage4FakeRunning) }
+    $health={ return (-not $BadHealth) }
+    $args=@{
+        TargetDirectory=$target
+        CandidateDirectory=$candidate
+        OldHashes=$oldHashes
+        NewHashes=$newHashes
+        OldSddl=$oldSddl
+        StopControlledService=$stop
+        StartControlledService=$start
+        IsControlledServiceRunning=$running
+        IsControlledServiceStopped=$stopped
+        ValidateControlledRuntime=$health
+        InjectFailureAfter=$FailAfter
+    }
+    try {
+        $response=$null
+        $errorText=$null
+        try { $response=Invoke-Stage4FourFileTransactionCore @args }
+        catch { $errorText=$_.Exception.Message }
+        if(-not $script:stage4FakeRunning) {
+            throw ('stage4_test_service_not_recovered:'+$Title)
+        }
+        if($ExpectRollback) {
+            if($null -eq $errorText -or
+                $errorText -notlike 'stage4_core_ROLLBACK_VERIFIED:*') {
+                throw ('stage4_test_rollback_not_reported:'+$Title+':'+$errorText)
+            }
+            foreach($name in $names){
+                $path=Join-Path $target $name
+                if((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $oldHashes[$name] -or
+                    (Get-Acl -LiteralPath $path).Sddl -cne $oldSddl[$name]){
+                    throw ('stage4_test_original_hash_acl_not_restored:'+$Title+':'+$name)
+                }
+            }
+            Write-Host ('PASS rollback old four hashes and SDDL '+$Title)
+        } elseif($BadOldHash) {
+            if($null -eq $errorText -or
+                $errorText -notlike 'stage4_core_input_drift:*' -or
+                $script:stage4FakeStopCalls -ne 0) {
+                throw 'stage4_test_bad_preflight_mutated_service'
+            }
+            Write-Host ('PASS reject drift without stop '+$Title)
+        } else {
+            if($null -ne $errorText -or $response.kind -ne 'STAGE4_PRIVATE_FOUR_FILE_TRANSACTION' -or
+                $response.isTemporaryFixture -cne $true -or
+                $response.actualPC1Touched -cne $false -or
+                $response.publicBookabilityEnabled -cne $false -or
+                $response.quarantineModified -cne $false) {
+                throw ('stage4_test_nominal_failed:'+$Title+':'+$errorText)
+            }
+            foreach($name in $names) {
+                $live=Join-Path $target $name
+                if((Get-FileHash -LiteralPath $live -Algorithm SHA256).Hash -ine $newHashes[$name] -or
+                    (Get-Acl -LiteralPath $live).Sddl -cne $oldSddl[$name]) {
+                    throw ('stage4_test_new_hash_acl_wrong:'+$Title+':'+$name)
+                }
+            }
+            if(@($response.backupFiles | Where-Object { -not (Test-Path -LiteralPath $_) }).Count -ne 0) {
+                throw 'stage4_test_old_originals_not_retained'
+            }
+            Write-Host ('PASS 4-file replacement with ACLs and saved originals '+$Title)
+        }
+    } finally {
+        Remove-Item -LiteralPath $root -Force -Recurse -ErrorAction Stop
+    }
+}
+
+Run-Case -Title 'normal-success'
+foreach($i in 1..4){
+    Run-Case -Title ('failure_after_'+$i) -FailAfter $i -ExpectRollback $true
+}
+Run-Case -Title 'failed_post_start_health' -BadHealth $true -ExpectRollback $true
+Run-Case -Title 'first_service_start_failed' -FailStartOnce $true -ExpectRollback $true
+Run-Case -Title 'pinned_hash_drift' -BadOldHash $true
+
+$refused=$false
+try {
+    $args=@{
+        TargetDirectory='C:\Program Files\GPUbnb'
+        CandidateDirectory='C:\Users\Public'
+        OldHashes=@{};NewHashes=@{};OldSddl=@{}
+        StopControlledService={throw 'must_not_stop'}
+        StartControlledService={throw 'must_not_start'}
+        IsControlledServiceRunning={$true}
+        IsControlledServiceStopped={$true}
+        ValidateControlledRuntime={$true}
+    }
+    Invoke-Stage4FourFileTransactionCore @args | Out-Null
+}catch{ $refused=$_.Exception.Message -eq 'stage4_core_rejects_unapproved_install_path' }
+if(-not $refused) {throw 'stage4_core_real_path_not_rejected_without_scope'}
+Write-Host 'PASS production target rejected without maintenance authorization token'
