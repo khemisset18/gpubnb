@@ -56,7 +56,9 @@ function Invoke-Stage4FourFileTransactionCore {
         [Parameter(Mandatory=$true)][scriptblock]$IsControlledServiceStopped,
         [Parameter(Mandatory=$true)][scriptblock]$ValidateControlledRuntime,
         [string]$MaintenanceToken='',
-        [ValidateRange(0,4)][int]$InjectFailureAfter=0
+        [ValidateRange(0,4)][int]$InjectFailureAfter=0,
+        # TEMP fixture only: prove cleanup of a partial pre-stop staging failure.
+        [ValidateRange(0,4)][int]$InjectStageFailureAfter=0
     )
     $ErrorActionPreference='Stop'
     $names=@('gpubnb-agent.exe','gpubnb-windows-stream.exe',
@@ -69,7 +71,7 @@ function Invoke-Stage4FourFileTransactionCore {
         (Split-Path -Leaf $target) -ceq 'installed' -and
         $candidate -ieq (Join-Path (Split-Path -Parent $target) 'candidate'))
     $physical=($target -ieq 'C:\Program Files\GPUbnb' -and
-        $InjectFailureAfter -eq 0 -and
+        $InjectFailureAfter -eq 0 -and $InjectStageFailureAfter -eq 0 -and
         $MaintenanceToken -ceq 'STAGE4-PHYSICAL-MAINTENANCE-AUTHORIZED-BY-PREFLIGHT')
     if ($env:OS -cne 'Windows_NT' -or -not [Environment]::Is64BitProcess -or
         -not ($fixture -or $physical) -or
@@ -119,6 +121,7 @@ function Invoke-Stage4FourFileTransactionCore {
         $failedPaths[$name]=Join-Path $target ('.stage4-'+$tag+'.failed.'+$name)
     }
     try {
+        $stagedCount=0
         foreach($name in $names) {
             Copy-Item -LiteralPath (Join-Path $candidate $name) -Destination $staged[$name] -ErrorAction Stop
             # Copy into the SAME NTFS parent. Inherited ACL provenance is
@@ -127,6 +130,10 @@ function Invoke-Stage4FourFileTransactionCore {
             if ((Get-FileHash -LiteralPath $staged[$name] -Algorithm SHA256).Hash -ine $NewHashes[$name] -or
                 (Get-Acl -LiteralPath $staged[$name]).Sddl -cne $OldSddl[$name]) {
                 throw "stage4_core_pre_stop_stage_bytes_or_acl_mismatch:$name"
+            }
+            $stagedCount++
+            if ($InjectStageFailureAfter -eq $stagedCount) {
+                throw 'stage4_core_injected_pre_stop_staging_failure'
             }
         }
         $serviceStopAttempted=$true
@@ -176,10 +183,28 @@ function Invoke-Stage4FourFileTransactionCore {
         }
     } catch {
         $reason=$_.Exception.Message
-        # If staging fails, original files and service have not changed.
-        # Never stop a healthy production service merely to tidy a failed stage.
+        # If staging fails, the service and originals are untouched, but copies
+        # may have been created in the installation directory. Remove only our
+        # GUID-named staged paths; never stop a healthy production service.
         if (-not $serviceStopAttempted) {
-            throw ('stage4_core_pre_stop_no_mutation:'+$reason)
+            $cleanupErrors=@()
+            foreach ($name in $names) {
+                $path=$staged[$name]
+                if (Test-Path -LiteralPath $path) {
+                    try {
+                        $entry=Get-Item -LiteralPath $path -Force -ErrorAction Stop
+                        if ($entry.PSIsContainer -or
+                            ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                            throw 'stage4_core_unexpected_staged_path'
+                        }
+                        Remove-Item -LiteralPath $path -Force -ErrorAction Stop
+                    } catch { $cleanupErrors+=($_.Exception.Message) }
+                }
+            }
+            if ($cleanupErrors.Count -gt 0) {
+                throw ('stage4_core_pre_stop_cleanup_failed:'+$reason+':'+($cleanupErrors -join ';'))
+            }
+            throw ('stage4_core_pre_stop_cleanup_verified:'+$reason)
         }
         $rollbackError=$null
         try {
