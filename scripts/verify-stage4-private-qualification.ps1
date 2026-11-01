@@ -40,14 +40,20 @@ $allowFiles=@(
     'build-identities.json','gpubnb-agent.exe','gpubnb-windows-stream.exe',
     'gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll'
 )
-foreach ($item in @(Get-Item -LiteralPath $root -Force)+@(Get-ChildItem -LiteralPath $root -Force -Recurse)) {
+# On Windows, Resolve-Path may return an 8.3 alias (RUNNER~1) while
+# Get-ChildItem produces long absolute paths. Never compare these different
+# string spellings to decide whether an item is the root directory.
+$rootItem=Get-Item -LiteralPath $root -Force -ErrorAction Stop
+if (-not $rootItem.PSIsContainer -or
+    ($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw 'private_qualification_reparse_point_forbidden'
+}
+foreach ($item in @(Get-ChildItem -LiteralPath $root -Force -Recurse -ErrorAction Stop)) {
     if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
         throw 'private_qualification_reparse_point_forbidden'
     }
-    if ($item.FullName -ne $root) {
-        if ($item.PSIsContainer -or $item.Name -cnotin $allowFiles) {
-            throw 'private_qualification_unexpected_payload'
-        }
+    if ($item.PSIsContainer -or $item.Name -cnotin $allowFiles) {
+        throw 'private_qualification_unexpected_payload'
     }
 }
 $up=Join-Path $root 'unsigned-stage4.manifest.json'
