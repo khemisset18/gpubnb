@@ -4,6 +4,51 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'stage4-private-four-file-transaction-core.ps1')
+# Regression for the PC1 incident: SIX PASSED checks must be accepted.
+# The former wrapper erroneously required SIX failures. Exercise the real
+# shared gate against synthetic data with no service or filesystem mutation.
+$namesExpected=@(
+    'nonoverlapping-real-folders',
+    'new-package-complete-signed-pinned',
+    'old-backup-hashes-signatures-acls',
+    'machine-context-publisher-chain',
+    'known-service-process-topology',
+    'expected-gpu-uuid'
+)
+$good=[pscustomobject]@{
+    kind='STAGE4_PC1_PRIVATE_INSTALL_READINESS_READONLY'
+    localPreflightPassed=$true
+    installAuthorized=$false
+    checks=@($namesExpected | ForEach-Object {
+        [pscustomobject]@{name=$_;passed=$true;detail='fixture'}
+    })
+}
+if(-not (Assert-Stage4MaintenanceReadiness -Readiness $good)) {
+    throw 'stage4_readiness_all_six_true_rejected'
+}
+Write-Host 'PASS real readiness gate accepts six TRUE results'
+
+function Test-ReadinessReject {
+    param([string]$Label,[scriptblock]$Mutate)
+    $report=(ConvertTo-Json -InputObject $good -Depth 10 | ConvertFrom-Json)
+    & $Mutate $report
+    $blocked=$false
+    try { [void](Assert-Stage4MaintenanceReadiness -Readiness $report) }
+    catch { $blocked=$true }
+    if(-not $blocked) { throw ('stage4_readiness_missing_rejection:'+$Label) }
+    Write-Host ('PASS fail-closed readiness '+$Label)
+}
+Test-ReadinessReject 'one failed check' {param($r)$r.checks[3].passed=$false}
+Test-ReadinessReject 'all six failed' {param($r)foreach($c in $r.checks){$c.passed=$false}}
+Test-ReadinessReject 'duplicate named check' {param($r)$r.checks[5].name=$r.checks[0].name}
+Test-ReadinessReject 'unknown named check' {param($r)$r.checks[5].name='fake-check'}
+Test-ReadinessReject 'missing named check' {param($r)$r.checks=@($r.checks | Select-Object -First 5)}
+Test-ReadinessReject 'extra named check' {param($r)$r.checks+=@([pscustomobject]@{name='extra';passed=$true})}
+Test-ReadinessReject 'nonboolean passed string' {param($r)$r.checks[1].passed='True'}
+Test-ReadinessReject 'overall preflight false' {param($r)$r.localPreflightPassed=$false}
+Test-ReadinessReject 'install already authorized' {param($r)$r.installAuthorized=$true}
+Test-ReadinessReject 'wrong report kind' {param($r)$r.kind='WRONG_KIND'}
+
 $maintenance=Join-Path (Split-Path -Parent $PSScriptRoot) 'stage4-private-four-file-maintenance.ps1'
 $tokens=$null;$parseErrors=$null
 [void][Management.Automation.Language.Parser]::ParseFile($maintenance,[ref]$tokens,[ref]$parseErrors)
@@ -15,7 +60,7 @@ if($maintenanceSource -notmatch '\[switch\]\$Apply' -or
     $maintenanceSource -notmatch '\[switch\]\$OperatorPresentAndApproved' -or
     $maintenanceSource -notmatch 'stage4_maintenance_exact_live_service_identity_failed' -or
     $maintenanceSource -notmatch 'stage4_maintenance_local_claim_runtime_scope_changed' -or
-    $maintenanceSource -notmatch 'stage4_maintenance_all_six_readiness_checks_required' -or
+    $maintenanceSource -notmatch 'Assert-Stage4MaintenanceReadiness' -or
     $maintenanceSource -notmatch 'stage4ServiceStartUtc' -or
     $maintenanceSource -notmatch 'heartbeat' -or
     $maintenanceSource -notmatch 'stage4_maintenance_explicit_operator_approval_required') {
