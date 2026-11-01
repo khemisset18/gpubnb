@@ -72,3 +72,30 @@ de maintenance explicite, une release serveur privée alignée et un
 DiagnosticRun signé prouvant nettoyage/STOP/GPU quiescent. Seulement après :
 session locataire exclusive et test PC1 vers PC2 H.264 + clavier/souris
 pendant au moins 300 000 ms. Ne jamais capturer le bureau administrateur.
+
+## Correction du premier test scratch : héritage NTFS
+
+Le premier exercice PC1 a retourné stage4_offline_scratch_directory_acl_mismatch
+et a créé le marqueur INCOMPLETE. Les dossiers source et scratch avaient
+le même propriétaire mais des ACE héritées différentes selon le parent.
+Ceci ne prouve pas que la sauvegarde est corrompue.
+
+Le correctif construit, EN MEMOIRE, un instantané d'ACL explicitement
+protégé depuis les permissions effectives du fichier ou dossier live.
+Il applique ce snapshot UNIQUEMENT dans le clone, puis compare strictement
+le SDDL complet ainsi que les signatures et empreintes sauvegardées.
+L'installation et la sauvegarde originales ne sont jamais modifiées.
+Les tests Windows reproduisent deux parents NTFS avec des ACE différentes
+et vérifient le refus d'une ACE supplémentaire.
+
+Un résultat réussi signifie uniquement que les droits effectifs ont été
+copiés dans le clone ; la relation parent/enfant NTFS originelle ne peut
+pas être reproduite dans Downloads et reste explicitement non attestée.
+Le rapport conserve originalParentInheritanceReproduced=false,
+realServiceRollbackTested=false et installationAuthorized=false.
+
+Ne pas réutiliser, effacer ou renommer le dossier d'échec
+GPUbnb-Stage4-rollback-rehearsal-20261101-A1.
+Toute nouvelle exécution requiert d'abord tests CI et revue du SHA exact,
+puis un nouveau nom scratch. Aucun succès du correctif sur PC1 n'est
+confirmé à ce stade.
