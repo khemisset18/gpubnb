@@ -1,0 +1,37 @@
+name: Stage 4 private backend source compatibility (read-only)
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stage4-private-source-delta-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  pinned-private-source-delta:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13.7'
+      - name: Offline adversarial tests of source evidence (no Docker, deploy or network)
+        run: python -m unittest discover -s scripts/tests -p test_stage4_private_backend_delta.py -v
+      - name: Compare exact live-Render Git source SHA against signed PC1 source SHA
+        run: |
+          python scripts/stage4_private_backend_delta.py \
+            --repo . \
+            --private-render-commit 26af83d8e8ef87b1f218a5b08671047594e645dc \
+            --pc1-candidate-commit 32ffdc72ec7041310c4b07e286ac4c2818906c \
+            --expect-api-source-unchanged \
+            --expect-web-source-changed
+      # No secrets, deploy, PC1 service, quarantine, booking, signed evidence, or hardware use.
