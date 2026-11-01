@@ -58,10 +58,10 @@ test('only the first authenticated upstream WebSocket frame starts paid time', a
   const frame = source.slice(frameStart, frameEnd);
   assert.match(frame, /binding\.machineId!==machineId/);
   assert.match(frame, /activateGatewaySession\(db,binding\.sessionId,machineId\)/);
-  assert.match(frame, /enqueueBoundedList\(redis,wsInputKey\(channelId\)/);
+  assert.match(frame, /redis\.eval\(ENQUEUE_BOUND_WS_FRAME_SCRIPT,3,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\)/);
   assert.ok(
-    frame.indexOf('activateGatewaySession') < frame.indexOf('enqueueBoundedList(redis,wsInputKey(channelId)'),
-    'activation must succeed before a legacy frame enters the renter delivery queue',
+    frame.indexOf('activateGatewaySession') < frame.indexOf('ENQUEUE_BOUND_WS_FRAME_SCRIPT'),
+    'billing activation must succeed before a frame enters the bounded, atomic channel-fenced delivery queue',
   );
 
   const batchStart = source.indexOf("app.post('/agent/workspace-gateway/ws-frames'");
