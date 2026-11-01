@@ -183,6 +183,10 @@ $pass=@($checks | Where-Object { -not $_.passed }).Count -eq 0
 [ordered]@{
     kind='STAGE4_PC1_PRIVATE_INSTALL_READINESS_READONLY'
     machineId=$ExpectedMachineId
+    gpuUuid=$ExpectedGpuUuid
+    renterAccount=$RenterAccount
+    candidateManifestSha256=$ExpectedCandidateManifestSha256.ToLowerInvariant()
+    backupManifestSha256=$ExpectedBackupManifestSha256.ToLowerInvariant()
     sourceCommit=$ExpectedCommit
     localPreflightPassed=$pass
     installAuthorized=$false

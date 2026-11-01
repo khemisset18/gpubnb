@@ -52,3 +52,50 @@ The script requires these **external** pins, which must be independently recorde
 It checks, read only, the independent new candidate verifier, old installed and backed-up 4-file hashes and ACL, backup signer validity, the machine-context signer chain (only a proxy for real `LocalSystem` trust), exact old service process topology and no active Helper/Worker process, and the physical NVIDIA GPU UUID inventory. The JSON report intentionally marks `installAuthorized=false`, `installationPerformed=false`, `backendReleaseAligned=false`, `renterConsoleQualified=false`, and `physicalCleanupProven=false` **even when every local check passes**.
 
 **A successful local report must never be treated as a green light to start streaming, overwrite files, deploy Render or change quarantine.** Actual signed LocalSystem execution, rollback under the live Windows conditions, a compatible backend rollout and the canonical signed owner cleanup diagnostic remain separate gates. If the certificate chain is not trusted in machine context, stop and address an approved publisher/trust policy separately; never add a root CA silently or disable Windows signature checks.
+
+## Evidence correlation before an authorized physical maintenance window
+
+A separate read-only validation layer is provided by
+`scripts/stage4-private-cutover-evidence-policy.ps1` and
+`scripts/stage4-private-cutover-evidence.ps1`. It consumes an externally
+SHA-256-pinned JSON report produced by the existing PC1 administrative
+`stage4-private-install-readiness.ps1`. The updated readiness report binds
+the *claimed* source commit, machine ID, GPU UUID, renter account, candidate
+manifest SHA-256 and old backup manifest SHA-256. It requires all six
+independent local readiness checks to pass exactly once, and rejects any
+report claiming that services, certificate stores, backend, quarantine or
+public booking have already been changed.
+
+The external readiness-report SHA-256 **must be recorded independently**
+from the file prior to review; a hash calculated from an untrusted report
+and then supplied back to the tool is not independent authentication.
+The `ObservedPrivateRenderCommit` input is informational only: it is not
+a server-signed deployment attestation, and a matching value cannot
+prove backend alignment. The tool ALWAYS reports
+`installationAuthorized=false`, `installationPerformed=false`,
+`backendReleaseIndependentlyAttested=false` and
+`quarantineModified=false`. It cannot install, stop services, mutate
+files, change trust, contact a server or alter the machine.
+
+Offline adversarial tests (PowerShell 5.1 and 7) reject mismatched
+machine/GPU/renter/source/manifest hashes, missing, duplicated, failed
+or fabricated readiness checks and spurious positive authorization flags.
+These tests are software-only; they do not prove LocalSystem operational
+trust, service stop/restart/rollback on real Windows, original backup
+recoverability during maintenance, backend compatibility, signed physical
+cleanup, safe renter isolation or the 300-second PC2 input/video acceptance.
+
+**Current known facts (2026-11-01):** private Render deploy
+`26af83d8e8ef87b1f218a5b08671047594e645dc` is different from
+original audited unsigned source
+`32ffdc72ec7041310c4b07e286ac4c4c2818906c`. Windows PC1 is
+still quarantined with `WORKSPACE_CLEANUP_FAILED`. No new privately
+signed installable scoped candidate or physical cutover is confirmed.
+Do not use this tool or the report to authorize an installation.
+The certificate without timestamp expires 2026-11-13 UTC. Public booking
+must remain OFF, and the provider's desktop must never be captured.
+
+This evidence gate is preparatory. An actual installer with guaranteed
+four-file rollback and explicit reviewed release authority remains
+**separate uncompleted work**. The owner currently has no new command
+to run on PC1.
