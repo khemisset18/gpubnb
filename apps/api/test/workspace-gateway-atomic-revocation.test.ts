@@ -19,9 +19,12 @@ test('both Agent frame paths atomically require the original Redis channel bindi
   assert.match(deduped, /redis\.call\('GET', KEYS\[4\]\) ~= ARGV\[7\]/);
   assert.match(bounded, /redis\.call\('GET', KEYS\[3\]\) ~= ARGV\[6\]/);
   assert.match(machine, /redis\.call\('GET', KEYS\[3\]\) ~= ARGV\[6\]/);
-  assert.match(gateway, /enqueueBoundNativeMachineRelay\(redis,row\.machineId,channelId,channelBinding,relay\)/);
-  assert.match(gateway, /redis\.eval\(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,4,markerKey,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\)/);
-  assert.match(gateway, /redis\.eval\(ENQUEUE_BOUND_WS_FRAME_SCRIPT,3,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\)/);
+  assert.match(deduped, /ARGV\[8\] == '1' and redis\.call\('EXISTS', KEYS\[5\]\) ~= 1/);
+  assert.match(bounded, /ARGV\[7\] == '1' and redis\.call\('EXISTS', KEYS\[4\]\) ~= 1/);
+  assert.match(machine, /redis\.call\('EXISTS', KEYS\[4\]\) ~= 1/);
+  assert.match(gateway, /enqueueBoundNativeMachineRelay\(redis,row\.machineId,channelId,channelBinding,browserSessionKey,relay\)/);
+  assert.match(gateway, /redis\.eval\(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,5,markerKey,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\),binding\.browserSessionKey/);
+  assert.match(gateway, /redis\.eval\(ENQUEUE_BOUND_WS_FRAME_SCRIPT,4,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\),binding\.browserSessionKey/);
 });
 
 const withRedis = process.env.REDIS_URL ? test : test.skip;
@@ -29,6 +32,7 @@ withRedis('real Redis: revoked/replaced native channel cannot enqueue frames, ev
   const redis = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: 2 });
   const prefix = 'gpubnb:test:stage4:frame-fence:' + crypto.randomUUID();
   const bindingKey = prefix + ':channel';
+  const browserKey = prefix + ':browser';
   const queueKey = prefix + ':queue';
   const bytesKey = prefix + ':bytes';
   const machineQueueKey = prefix + ':machine-queue';
@@ -40,21 +44,22 @@ withRedis('real Redis: revoked/replaced native channel cannot enqueue frames, ev
   const payload = JSON.stringify({dataBase64:'AA==',binary:true,close:false});
 
   async function sendSingle(expected = binding) {
-    return Number(await redis.eval(bounded, 3, queueKey, bytesKey, bindingKey,
-      payload, '120', String(Buffer.byteLength(payload)), '512', '16777216', expected));
+    return Number(await redis.eval(bounded, 4, queueKey, bytesKey, bindingKey, browserKey,
+      payload, '120', String(Buffer.byteLength(payload)), '512', '16777216', expected, '1'));
   }
   async function sendMachine(expected = binding) {
     const relay = JSON.stringify({id:'request',kind:'ws_send',channelId:'channel',sessionId:'session-a',binary:true,dataBase64:'AA=='});
-    return Number(await redis.eval(machine, 3, machineQueueKey, machineBytesKey, bindingKey,
+    return Number(await redis.eval(machine, 4, machineQueueKey, machineBytesKey, bindingKey, browserKey,
       relay, '120', String(Buffer.byteLength(relay)), '512', '33554432', expected));
   }
   async function sendBatch(marker: string, expected = binding) {
-    return Number(await redis.eval(deduped, 4, marker, queueKey, bytesKey, bindingKey,
-      '180', '120', payload, String(Buffer.byteLength(payload)), '512', '16777216', expected));
+    return Number(await redis.eval(deduped, 5, marker, queueKey, bytesKey, bindingKey, browserKey,
+      '180', '120', payload, String(Buffer.byteLength(payload)), '512', '16777216', expected, '1'));
   }
 
   try {
     assert.equal(await redis.set(bindingKey, binding, 'EX', 60), 'OK');
+    assert.equal(await redis.set(browserKey, 'valid-browser-session', 'EX', 60), 'OK');
     assert.equal(await sendSingle(), 1);
     assert.equal(await sendBatch(marker1), 1);
     assert.equal(await sendMachine(), 1);
@@ -81,8 +86,13 @@ withRedis('real Redis: revoked/replaced native channel cannot enqueue frames, ev
     assert.equal(await sendBatch(marker2, changed), 1);
     assert.equal(await sendMachine(changed), 1);
     assert.equal(await sendBatch(marker2, changed), 0, 'completed frame retries remain deduped');
+    await redis.del(browserKey);
+    assert.equal(await sendSingle(changed), -2, 'deleted browser session must reject a single frame');
+    assert.equal(await sendBatch(prefix + ':seen:3', changed), -2, 'deleted browser session must reject a batched frame');
+    assert.equal(await sendMachine(changed), -2, 'deleted browser session must reject remote input');
+    assert.equal(await redis.llen(machineQueueKey), 2);
   } finally {
-    await redis.del(bindingKey, queueKey, bytesKey, machineQueueKey, machineBytesKey, marker1, marker2).catch(() => undefined);
+    await redis.del(bindingKey, browserKey, queueKey, bytesKey, machineQueueKey, machineBytesKey, marker1, marker2).catch(() => undefined);
     redis.disconnect();
   }
 });
