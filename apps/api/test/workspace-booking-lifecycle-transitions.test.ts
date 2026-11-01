@@ -58,7 +58,7 @@ test('only the first authenticated upstream WebSocket frame starts paid time', a
   const frame = source.slice(frameStart, frameEnd);
   assert.match(frame, /binding\.machineId!==machineId/);
   assert.match(frame, /activateGatewaySession\(db,binding\.sessionId,machineId\)/);
-  assert.match(frame, /redis\.eval\(ENQUEUE_BOUND_WS_FRAME_SCRIPT,3,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\)/);
+  assert.match(frame, /redis\.eval\(ENQUEUE_BOUND_WS_FRAME_SCRIPT,4,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\),binding\.browserSessionKey/);
   assert.ok(
     frame.indexOf('activateGatewaySession') < frame.indexOf('ENQUEUE_BOUND_WS_FRAME_SCRIPT'),
     'billing activation must succeed before a frame enters the bounded, atomic channel-fenced delivery queue',
