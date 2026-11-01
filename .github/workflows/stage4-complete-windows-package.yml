@@ -58,6 +58,8 @@ jobs:
           if (-not $?) { throw 'stage4_private_qualification_policy_tests_failed' }
           & ./scripts/tests/stage4-private-cutover-evidence.tests.ps1
           if (-not $?) { throw 'stage4_private_cutover_evidence_tests_failed' }
+          & ./scripts/tests/stage4-private-offline-rollback.tests.ps1
+          if (-not $?) { throw 'stage4_private_offline_rollback_tests_failed' }
       - name: PowerShell package and signing preflight tests (7)
         shell: pwsh
         run: |
@@ -67,6 +69,8 @@ jobs:
           if (-not $?) { throw 'stage4_private_qualification_policy_tests_failed' }
           & ./scripts/tests/stage4-private-cutover-evidence.tests.ps1
           if (-not $?) { throw 'stage4_private_cutover_evidence_tests_failed' }
+          & ./scripts/tests/stage4-private-offline-rollback.tests.ps1
+          if (-not $?) { throw 'stage4_private_offline_rollback_tests_failed' }
       - name: Browser regression tests
         run: node --test apps/web/windows-native*.test.js
       - name: Native Windows unit tests
