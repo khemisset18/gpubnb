@@ -82,12 +82,10 @@ function Invoke-Stage4FourFileTransactionCore {
     try {
         foreach($name in $names) {
             Copy-Item -LiteralPath (Join-Path $candidate $name) -Destination $staged[$name] -ErrorAction Stop
-            # Same NTFS parent directory as original. Copy original ACL onto
-            # stage, then require EXACT original SDDL before any service stop.
-            Set-Acl -LiteralPath $staged[$name] -AclObject $originalAcl[$name] -ErrorAction Stop
-            if ((Get-Acl -LiteralPath $staged[$name]).Sddl -cne $OldSddl[$name] -or
-                (Get-FileHash -LiteralPath $staged[$name] -Algorithm SHA256).Hash -ine $NewHashes[$name]) {
-                throw "stage4_core_staging_acl_or_hash_mismatch:$name"
+            # Stage only bytes. Windows ReplaceFile merges the replaced
+            # destination's ACL and metadata at commit, or fails closed.
+            if ((Get-FileHash -LiteralPath $staged[$name] -Algorithm SHA256).Hash -ine $NewHashes[$name]) {
+                throw "stage4_core_staging_hash_mismatch:$name"
             }
         }
         $serviceStopAttempted=$true
@@ -97,8 +95,13 @@ function Invoke-Stage4FourFileTransactionCore {
         }
         $i=0
         foreach($name in $names) {
-            Move-Item -LiteralPath (Join-Path $target $name) -Destination $oldPaths[$name] -ErrorAction Stop
-            Move-Item -LiteralPath $staged[$name] -Destination (Join-Path $target $name) -ErrorAction Stop
+            # ReplaceFileW preserves the OLD target DACL, writing the old
+            # bytes to a same-volume backup. NEVER ignore metadata/ACL merge errors.
+            [IO.File]::Replace($staged[$name],(Join-Path $target $name),$oldPaths[$name],$false)
+            if ((Get-FileHash -LiteralPath $oldPaths[$name] -Algorithm SHA256).Hash -ine $OldHashes[$name] -or
+                (Get-Acl -LiteralPath $oldPaths[$name]).Sddl -cne $OldSddl[$name]) {
+                throw "stage4_core_backup_original_not_pinned:$name"
+            }
             $i++
             if ($InjectFailureAfter -eq $i) { throw 'stage4_core_injected_partial_swap' }
         }
