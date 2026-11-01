@@ -55,6 +55,7 @@ function Invoke-Stage4FourFileTransactionCore {
     $oldPaths=@{}
     $failedPaths=@{}
     $originalAcl=@{}
+    $serviceStopAttempted=$false
     $newInstalled=$false
     foreach($name in $names) {
         if (-not $OldHashes.ContainsKey($name) -or -not $NewHashes.ContainsKey($name) -or
@@ -89,6 +90,7 @@ function Invoke-Stage4FourFileTransactionCore {
                 throw "stage4_core_staging_acl_or_hash_mismatch:$name"
             }
         }
+        $serviceStopAttempted=$true
         & $StopControlledService
         if (-not (& $IsControlledServiceStopped)) {
             throw 'stage4_core_stop_not_confirmed'
@@ -126,6 +128,11 @@ function Invoke-Stage4FourFileTransactionCore {
         }
     } catch {
         $reason=$_.Exception.Message
+        # If staging fails, original files and service have not changed.
+        # Never stop a healthy production service merely to tidy a failed stage.
+        if (-not $serviceStopAttempted) {
+            throw ('stage4_core_pre_stop_no_mutation:'+$reason)
+        }
         $rollbackError=$null
         try {
             if (-not (& $IsControlledServiceStopped)) {
