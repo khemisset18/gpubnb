@@ -456,9 +456,11 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
               sessionId, userId: browser.userId,
               readBrowser: () => redis.get(browserSessionKey),
               readWorkspace: () => activeGatewaySession(db,sessionId),
-              // A cancelled console stream must not wait one second for a
-              // cached workspace authorization to expire before blacking out.
-              cacheMs: 100,
+              // Native frame/input authorization must not reuse a previously
+              // positive result after a server-side revocation. This does not
+              // eliminate already-in-flight socket bytes; WTS/worker fencing
+              // and physical isolation qualification remain mandatory.
+              cacheMs: 0,
             })
           : async () => true;
         const browserPending=new BrowserPendingBudget();
