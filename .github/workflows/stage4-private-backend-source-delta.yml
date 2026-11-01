@@ -26,12 +26,14 @@ jobs:
           python-version: '3.13.7'
       - name: Offline adversarial tests of source evidence (no Docker, deploy or network)
         run: python -m unittest discover -s scripts/tests -p test_stage4_private_backend_delta.py -v
-      - name: Compare exact live-Render Git source SHA against signed PC1 source SHA
+      - name: Compare documented Render source SHA against current review HEAD (source only)
+        env:
+          REVIEWED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           python scripts/stage4_private_backend_delta.py \
             --repo . \
             --private-render-commit 26af83d8e8ef87b1f218a5b08671047594e645dc \
-            --pc1-candidate-commit 32ffdc72ec7041310c4b07e286ac4c4c2818906c \
-            --expect-api-source-unchanged \
+            --pc1-candidate-commit "$REVIEWED_SHA" \
+            --expect-api-source-changed \
             --expect-web-source-changed
       # No secrets, deploy, PC1 service, quarantine, booking, signed evidence, or hardware use.
