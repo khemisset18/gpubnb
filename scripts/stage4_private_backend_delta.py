@@ -89,7 +89,9 @@ def make_report(repo: Path, base: str, candidate: str) -> dict[str, object]:
     return {
         "kind": "STAGE4_PRIVATE_RENDER_SOURCE_DELTA_READONLY",
         "privateRenderObservedCommit": base,
-        "pc1SignedCandidateSourceCommit": candidate,
+        "reviewedSourceCommit": candidate,
+        # This is only a source snapshot. Nothing here proves a signed or live artifact.
+        "reviewedSourceBuiltSignedOrInstalled": False,
         "apiDockerBuildIncludesWebAssets": True,
         **analysis,
         # A source-code diff is not an attestation of the live Docker image.
@@ -110,6 +112,7 @@ def main() -> int:
     parser.add_argument("--private-render-commit", required=True)
     parser.add_argument("--pc1-candidate-commit", required=True)
     parser.add_argument("--expect-api-source-unchanged", action="store_true")
+    parser.add_argument("--expect-api-source-changed", action="store_true")
     parser.add_argument("--expect-web-source-changed", action="store_true")
     args = parser.parse_args()
     report = make_report(
@@ -119,6 +122,8 @@ def main() -> int:
     )
     if args.expect_api_source_unchanged and not report["apiRuntimeInputsIdenticalAtSource"]:
         raise SystemExit("stage4_delta_api_runtime_inputs_changed_review_required")
+    if args.expect_api_source_changed and report["apiRuntimeInputsIdenticalAtSource"]:
+        raise SystemExit("stage4_delta_expected_api_runtime_change_missing")
     if args.expect_web_source_changed and report["webAssetsIdenticalAtSource"]:
         raise SystemExit("stage4_delta_web_difference_expectation_failed")
     print(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False))
