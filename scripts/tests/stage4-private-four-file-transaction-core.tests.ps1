@@ -68,6 +68,37 @@ if($maintenanceSource -notmatch '\[switch\]\$Apply' -or
 }
 Write-Host 'PASS real wrapper parse and fail-closed preflight/consent/heartbeat policy'
 
+# The same fresh-process proof invoked by the real physical wrapper.
+$startUtc=[DateTime]::UtcNow.AddMinutes(-1)
+$validProof=@{
+    ServiceStartUtc=$startUtc
+    ProcessCreationUtc=$startUtc.AddSeconds(1)
+    InitialProcessId=1337
+    FinalProcessId=1337
+    InitialFileHash=('a'*64)
+    FinalFileHash=('a'*64)
+    OldPinnedHash=('b'*64)
+    NewPinnedHash=('a'*64)
+}
+if (-not (Test-Stage4NewProcessProof @validProof)) {
+    throw 'stage4_fresh_process_proof_positive_refused'
+}
+function Expect-ProcessProofRejection([string]$Label,[scriptblock]$Mutate) {
+    $proof=@{};foreach($key in $validProof.Keys){$proof[$key]=$validProof[$key]}
+    & $Mutate $proof
+    if (Test-Stage4NewProcessProof @proof) {
+        throw ('stage4_fresh_process_proof_not_rejected:'+$Label)
+    }
+    Write-Host ('PASS reject stale process evidence '+$Label)
+}
+Expect-ProcessProofRejection 'wrong PID' {param($p)$p.FinalProcessId=1338}
+Expect-ProcessProofRejection 'PID missing' {param($p)$p.InitialProcessId=0}
+Expect-ProcessProofRejection 'pre-existing stale service' {param($p)$p.ProcessCreationUtc=$p.ServiceStartUtc.AddMinutes(-1)}
+Expect-ProcessProofRejection 'file replaced after heartbeat' {param($p)$p.FinalFileHash=('c'*64)}
+Expect-ProcessProofRejection 'unpinned executable' {param($p)$p.InitialFileHash=('d'*64);$p.FinalFileHash=('d'*64)}
+Expect-ProcessProofRejection 'invalid executable hash' {param($p)$p.InitialFileHash='not-sha256';$p.FinalFileHash='not-sha256'}
+Write-Host 'PASS fresh LocalSystem process and pinned binary health proof policy'
+
 $names=@('gpubnb-agent.exe','gpubnb-windows-stream.exe',
     'gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')
 
