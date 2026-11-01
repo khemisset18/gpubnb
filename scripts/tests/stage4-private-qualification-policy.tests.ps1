@@ -8,7 +8,8 @@ $scripts=Split-Path -Parent $PSScriptRoot
 $names=@(
     'stage4-private-qualification-policy.ps1',
     'new-stage4-private-qualification-package.ps1',
-    'verify-stage4-private-qualification.ps1'
+    'verify-stage4-private-qualification.ps1',
+    'stage4-private-install-readiness.ps1'
 )
 foreach ($name in $names) {
     $tokens=$null;$errors=$null
@@ -95,4 +96,21 @@ Expect-PolicyRejection 'expired signature' {param($m)$m.expiresUtc=[DateTime]::U
 Expect-PolicyRejection 'duplicated binary' {param($m)$m.files[1].name='gpubnb-agent.exe'}
 Expect-PolicyRejection 'missing binary' {param($m)$m.files=@($m.files[0],$m.files[1],$m.files[2])}
 Expect-PolicyRejection 'changed source hash' {param($m)$m.files[0].unsignedSha256='not-a-hash'}
+# The maintenance preflight is explicitly observational. Invalid external pins
+# must fail BEFORE any file access, certificate interaction or service query.
+$readiness=Get-Content -LiteralPath (Join-Path $scripts 'stage4-private-install-readiness.ps1') -Raw
+if ($readiness -match '\b(?:Stop-Service|Restart-Service|Start-Service|Stop-Process|Remove-Service|Import-Certificate|Export-PfxCertificate|Set-Service|Restart-Computer|Set-MpPreference|Copy-Item|Set-Acl)\b' -or
+    $readiness -notmatch 'installAuthorized=\$false' -or
+    $readiness -notmatch 'quarantineModified=\$false') {
+    throw 'private_qualification_readiness_mutation_or_authority'
+}
+$refused=$false
+try {
+    & (Join-Path $scripts 'stage4-private-install-readiness.ps1') -CandidateDirectory 'does-not-exist' -BackupDirectory 'does-not-exist' -ExpectedCandidateManifestSha256 'invalid' -ExpectedBackupManifestSha256 ('a'*64) -ExpectedCommit $commit -ExpectedPublisherSha256 $pin -ExpectedMachineId $machine -ExpectedGpuUuid $gpu -RenterAccount $renter | Out-Null
+} catch {
+    $refused=$_.Exception.Message -like 'stage4_install_readiness_external_pins_invalid*'
+}
+if (-not $refused) { throw 'stage4_install_readiness_bad_external_pin_not_rejected' }
+Write-Host 'PASS read-only installation readiness policy and invalid external pin rejection'
+
 Write-Host 'PASS all private qualification policy adversarial checks'
