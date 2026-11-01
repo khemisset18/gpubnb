@@ -231,6 +231,12 @@ function Invoke-Stage4FourFileTransactionCore {
             if (-not (& $IsControlledServiceRunning)) {
                 throw 'stage4_core_rollback_restart_not_confirmed'
             }
+            # File hash/ACL restoration and a Windows Running status are not
+            # evidence that the restored Agent can actually run health checks.
+            # Never report ROLLBACK_VERIFIED on an unhealthy old process.
+            if (-not (& $ValidateControlledRuntime)) {
+                throw 'stage4_core_rollback_runtime_unhealthy'
+            }
         } catch { $rollbackError=$_.Exception.Message }
         if ($rollbackError) {
             throw ('stage4_core_ROLLBACK_FAILED:'+$reason+':'+$rollbackError)
