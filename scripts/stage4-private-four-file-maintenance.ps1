@@ -173,28 +173,67 @@ $isStopped = {
     return ((Get-Service -Name 'GPUbnbAgent').Status -eq 'Stopped')
 }
 $checkRuntime = {
-    # The agent logs 'heartbeat' only after the signed API call succeeds.
+    # A local log line alone cannot attest which Agent process ran it.
+    # Require a fresh LocalSystem process, stable PID and pinned on-disk Agent
+    # hash in addition to the post-start heartbeat. This is still NOT an
+    # independent server-side attestation of the installed build.
     Start-Sleep -Seconds 32
     if (-not (& $isRunning)) { return $false }
-    $sig=Get-AuthenticodeSignature -LiteralPath 'C:\Program Files\GPUbnb\gpubnb-agent.exe'
-    if ($sig.Status -ne 'Valid') { return $false }
     if ($script:stage4ServiceStartUtc -eq [DateTime]::MinValue) { return $false }
+    $service=Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
+    if ($null -eq $service -or $service.ProcessId -le 0 -or
+        $service.StartName -cne 'LocalSystem' -or $service.State -cne 'Running') { return $false }
+    $process=Get-CimInstance Win32_Process -Filter "ProcessId=$($service.ProcessId)"
+    if ($null -eq $process -or $process.SessionId -ne 0 -or
+        $process.ExecutablePath -ine 'C:\Program Files\GPUbnb\gpubnb-agent.exe' -or
+        $null -eq $process.CreationDate) { return $false }
+    try { $startedUtc=([DateTime]$process.CreationDate).ToUniversalTime() }
+    catch { return $false }
+    if ($startedUtc -lt $script:stage4ServiceStartUtc.AddSeconds(-5)) { return $false }
+    $expectedExe='C:\Program Files\GPUbnb\gpubnb-agent.exe'
+    $sig=Get-AuthenticodeSignature -LiteralPath $expectedExe
+    if ($sig.Status -ne 'Valid') { return $false }
+    $hash=(Get-FileHash -LiteralPath $expectedExe -Algorithm SHA256).Hash
+    if ($hash -ine $newHashes['gpubnb-agent.exe'] -and
+        $hash -ine $oldHashes['gpubnb-agent.exe']) { return $false }
     $log=Join-Path $env:ProgramData 'GPUbnb\agent.log'
     if (-not (Test-Path -LiteralPath $log -PathType Leaf)) { return $false }
+    $heartbeatAfterStart=$false
     foreach($line in @(Get-Content -LiteralPath $log -Tail 2000)) {
         $pos=$line.IndexOf('agent_event ')
         if ($pos -lt 0) { continue }
         try {
             $payload=$line.Substring($pos+12) | ConvertFrom-Json
             if ($payload.event -cne 'heartbeat') { continue }
-            $stamp=($line -split ' ')[0] -replace '([+-]\d{2})(\d{2})$','$1:$2'
+            $stamp=($line -split ' ')[0] -replace '([+-]\d{2})(\d{2})
+$args=@{
+    TargetDirectory=$installed
+    CandidateDirectory=$CandidateDirectory
+    OldHashes=$oldHashes
+    NewHashes=$newHashes
+    OldSddl=$oldSddl
+    StopControlledService=$stop
+    StartControlledService=$start
+    IsControlledServiceRunning=$isRunning
+    IsControlledServiceStopped=$isStopped
+    ValidateControlledRuntime=$checkRuntime
+    MaintenanceToken='STAGE4-PHYSICAL-MAINTENANCE-AUTHORIZED-BY-PREFLIGHT'
+}
+Invoke-Stage4FourFileTransactionCore @args | ConvertTo-Json -Depth 8
+,'$1:$2'
             $parsed=[DateTimeOffset]::Parse($stamp,[Globalization.CultureInfo]::InvariantCulture)
-            if ($parsed.UtcDateTime -ge $script:stage4ServiceStartUtc) {
-                return $true
+            if ($parsed.UtcDateTime -ge $startedUtc -and
+                $parsed.UtcDateTime -ge $script:stage4ServiceStartUtc) {
+                $heartbeatAfterStart=$true
+                break
             }
         } catch {}
     }
-    return $false
+    if (-not $heartbeatAfterStart -or -not (& $isRunning)) { return $false }
+    $serviceAfter=Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
+    if ($null -eq $serviceAfter -or $serviceAfter.ProcessId -ne $service.ProcessId) { return $false }
+    $hashAfter=(Get-FileHash -LiteralPath $expectedExe -Algorithm SHA256).Hash
+    return ($hashAfter -ieq $hash)
 }
 $args=@{
     TargetDirectory=$installed
