@@ -92,6 +92,10 @@ const ENQUEUE_DEDUPED_WS_FRAME_SCRIPT=`
 if redis.call('GET', KEYS[4]) ~= ARGV[7] then
   return -2
 end
+-- On native paths, deletion of the browser cookie is a revocation as well.
+if ARGV[8] == '1' and redis.call('EXISTS', KEYS[5]) ~= 1 then
+  return -2
+end
 if redis.call('EXISTS', KEYS[1]) == 1 then
   return 0
 end
@@ -115,6 +119,9 @@ const ENQUEUE_BOUND_WS_FRAME_SCRIPT=`
 if redis.call('GET', KEYS[3]) ~= ARGV[6] then
   return -2
 end
+if ARGV[7] == '1' and redis.call('EXISTS', KEYS[4]) ~= 1 then
+  return -2
+end
 local count = redis.call('LLEN', KEYS[1])
 local currentBytes = tonumber(redis.call('GET', KEYS[2]) or '0')
 local itemBytes = tonumber(ARGV[3])
@@ -130,8 +137,11 @@ return 1
 const ENQUEUE_BOUND_MACHINE_RELAY_SCRIPT=`
 -- Browser-to-Agent native send/open is atomic with the current channel grant.
 -- A stale positive result from an in-flight DB read cannot requeue data after
--- an already committed Redis channel revocation.
+-- an already committed Redis channel or browser cookie revocation.
 if redis.call('GET', KEYS[3]) ~= ARGV[6] then
+  return -2
+end
+if redis.call('EXISTS', KEYS[4]) ~= 1 then
   return -2
 end
 local count = redis.call('LLEN', KEYS[1])
@@ -175,10 +185,10 @@ async function enqueueBoundedList(redis:Redis,listKey:string,bytesKey:string,pay
   return accepted===1;
 }
 
-async function enqueueBoundNativeMachineRelay(redis:Redis,machineId:string,channelId:string,expectedBinding:string,relay:RelayRequest):Promise<boolean>{
+async function enqueueBoundNativeMachineRelay(redis:Redis,machineId:string,channelId:string,expectedBinding:string,browserSessionKey:string,relay:RelayRequest):Promise<boolean>{
   const payload=JSON.stringify(relay);
-  const accepted=Number(await redis.eval(ENQUEUE_BOUND_MACHINE_RELAY_SCRIPT,3,
-    machineQueue(machineId),machineQueueBytesKey(machineId),wsChannelKey(channelId),
+  const accepted=Number(await redis.eval(ENQUEUE_BOUND_MACHINE_RELAY_SCRIPT,4,
+    machineQueue(machineId),machineQueueBytesKey(machineId),wsChannelKey(channelId),browserSessionKey,
     payload,String(MACHINE_QUEUE_TTL_SECONDS),String(Buffer.byteLength(payload,'utf8')),
     String(MACHINE_QUEUE_MAX_ITEMS),String(WS_MACHINE_QUEUE_MAX_BYTES),expectedBinding));
   return accepted===1;
@@ -398,7 +408,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       }
       const relayPayload=JSON.stringify({dataBase64,binary:frame.binary===true,close});
       const relayBytes=Buffer.byteLength(relayPayload,'utf8');
-      const enqueued=Number(await redis.eval(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,4,markerKey,wsInputKey(channelId),wsInputBytesKey(channelId),wsChannelKey(channelId),String(WS_FRAME_DEDUPE_TTL_SECONDS),String(WS_INPUT_TTL_SECONDS),relayPayload,String(relayBytes),String(WS_INPUT_MAX_ITEMS),String(WS_REDIS_INPUT_MAX_BYTES),bindingRaw));
+      const enqueued=Number(await redis.eval(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,5,markerKey,wsInputKey(channelId),wsInputBytesKey(channelId),wsChannelKey(channelId),binding.browserSessionKey,String(WS_FRAME_DEDUPE_TTL_SECONDS),String(WS_INPUT_TTL_SECONDS),relayPayload,String(relayBytes),String(WS_INPUT_MAX_ITEMS),String(WS_REDIS_INPUT_MAX_BYTES),bindingRaw,isWindowsNativeRuntime(binding.runtimeBackend)?'1':'0'));
       if(enqueued===-2){stale++;continue;}
       if(enqueued===-1)return reply.code(429).send({error:'workspace_ws_browser_backpressure'});
       if(enqueued===1){accepted++;if(close)await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId));}else{duplicates++;}
@@ -433,7 +443,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       await redis.set(wsUpstreamReadyKey(channelId),'1','EX',ttl);await redis.expire(wsChannelKey(channelId),ttl);
     }
     const relayPayload=JSON.stringify({dataBase64,binary:body.binary===true,close});
-    const enqueued=Number(await redis.eval(ENQUEUE_BOUND_WS_FRAME_SCRIPT,3,wsInputKey(channelId),wsInputBytesKey(channelId),wsChannelKey(channelId),relayPayload,String(WS_INPUT_TTL_SECONDS),String(Buffer.byteLength(relayPayload,'utf8')),String(WS_INPUT_MAX_ITEMS),String(WS_REDIS_INPUT_MAX_BYTES),bindingRaw));
+    const enqueued=Number(await redis.eval(ENQUEUE_BOUND_WS_FRAME_SCRIPT,4,wsInputKey(channelId),wsInputBytesKey(channelId),wsChannelKey(channelId),binding.browserSessionKey,relayPayload,String(WS_INPUT_TTL_SECONDS),String(Buffer.byteLength(relayPayload,'utf8')),String(WS_INPUT_MAX_ITEMS),String(WS_REDIS_INPUT_MAX_BYTES),bindingRaw,isWindowsNativeRuntime(binding.runtimeBackend)?'1':'0'));
     if(enqueued===-2)return close?{ok:true,stale:true}:reply.code(409).send({error:'unknown_gateway_channel'});
     if(enqueued===-1)return reply.code(429).send({error:'workspace_ws_browser_backpressure'});
     if(close)await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId));
@@ -535,7 +545,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
           }
           const openRelay={id:openRequestId,sessionId,kind:'ws_open',channelId,path:targetPath,headers:relayHeaders(request.headers as Record<string,unknown>)} satisfies RelayRequest;
           const accepted=nativeChannel
-            ? await enqueueBoundNativeMachineRelay(redis,row.machineId,channelId,channelBinding,openRelay)
+            ? await enqueueBoundNativeMachineRelay(redis,row.machineId,channelId,channelBinding,browserSessionKey,openRelay)
             : await enqueueMachineRelay(redis,row.machineId,openRelay);
           if(!accepted)throw new Error('workspace_machine_queue_backpressure');
         })();
@@ -628,7 +638,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
               return;
             }
             const accepted=nativeChannel
-              ? await enqueueBoundNativeMachineRelay(redis,row.machineId,channelId,channelBinding,relay)
+              ? await enqueueBoundNativeMachineRelay(redis,row.machineId,channelId,channelBinding,browserSessionKey,relay)
               : await enqueueMachineRelay(redis,row.machineId,relay);
             if(!accepted)throw new Error('workspace_machine_queue_backpressure');
           });
