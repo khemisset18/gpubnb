@@ -152,7 +152,7 @@ if (-not $OperatorPresentAndApproved) {
 }
 # Recheck exact original bytes and ACLs in the core immediately before staging,
 # then STOP service before all four same-parent rename operations.
-$stoppedAt=[DateTime]::MinValue
+$script:stage4ServiceStartUtc=[DateTime]::MinValue
 $stop = {
     $s=Get-Service -Name 'GPUbnbAgent' -ErrorAction Stop
     if ($s.Status -ne 'Stopped') {
@@ -163,6 +163,7 @@ $stop = {
 $start = {
     $s=Get-Service -Name 'GPUbnbAgent' -ErrorAction Stop
     if ($s.Status -ne 'Running') {
+        $script:stage4ServiceStartUtc=[DateTime]::UtcNow
         $s.Start()
         $s.WaitForStatus([ServiceProcess.ServiceControllerStatus]::Running,[TimeSpan]::FromSeconds(45))
     }
@@ -177,10 +178,44 @@ $isStopped = {
     return ((Get-Service -Name 'GPUbnbAgent').Status -eq 'Stopped')
 }
 $checkRuntime = {
-    Start-Sleep -Seconds 12
+    # The agent writes a 'heartbeat' event only AFTER the signed API call
+    # returns successfully. A merely Running Windows service is insufficient.
+    Start-Sleep -Seconds 32
     if (-not (& $isRunning)) { return $false }
     $sig=Get-AuthenticodeSignature -LiteralPath 'C:\Program Files\GPUbnb\gpubnb-agent.exe'
-    return ($sig.Status -eq 'Valid')
+    if ($sig.Status -ne 'Valid') { return $false }
+    if ($script:stage4ServiceStartUtc -eq [DateTime]::MinValue) { return $false }
+    $log=Join-Path $env:ProgramData 'GPUbnb\agent.log'
+    if (-not (Test-Path -LiteralPath $log -PathType Leaf)) { return $false }
+    foreach($line in @(Get-Content -LiteralPath $log -Tail 2000)) {
+        $pos=$line.IndexOf('agent_event ')
+        if ($pos -lt 0) { continue }
+        try {
+            $payload=$line.Substring($pos+12) | ConvertFrom-Json
+            if ($payload.event -cne 'heartbeat') { continue }
+            $stamp=($line -split ' ')[0] -replace '([+-]\d{2})(\d{2})
+$args=@{
+    TargetDirectory=$installed
+    CandidateDirectory=$CandidateDirectory
+    OldHashes=$oldHashes
+    NewHashes=$newHashes
+    OldSddl=$oldSddl
+    StopControlledService=$stop
+    StartControlledService=$start
+    IsControlledServiceRunning=$isRunning
+    IsControlledServiceStopped=$isStopped
+    ValidateControlledRuntime=$checkRuntime
+    MaintenanceToken='STAGE4-PHYSICAL-MAINTENANCE-AUTHORIZED-BY-PREFLIGHT'
+}
+Invoke-Stage4FourFileTransactionCore @args | ConvertTo-Json -Depth 8
+,'$1:$2'
+            $parsed=[DateTimeOffset]::Parse($stamp,[Globalization.CultureInfo]::InvariantCulture)
+            if ($parsed.UtcDateTime -ge $script:stage4ServiceStartUtc) {
+                return $true
+            }
+        } catch {}
+    }
+    return $false
 }
 $args=@{
     TargetDirectory=$installed
