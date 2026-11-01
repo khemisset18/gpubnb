@@ -33,7 +33,7 @@ function Assert-Stage4PrivateQualificationPolicy {
         $Manifest.publicBookabilityEnabled -cne $false -or
         $Manifest.iddDriverIncluded -cne $false -or
         $Manifest.installationPerformed -cne $false -or
-        $Manifest.installable -cne $false -or
+        $Manifest.installable -cne $true -or
         $Manifest.installationReviewRequired -cne $true -or
         $Manifest.signatureStatus -cne 'private-signed' -or
         $Manifest.timestamped -cne $false -or
