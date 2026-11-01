@@ -54,11 +54,15 @@ jobs:
         run: |
           & ./scripts/tests/stage4-private-test-sign-copies.tests.ps1
           if (-not $?) { throw 'stage4_private_tests_failed' }
+          & ./scripts/tests/stage4-private-qualification-policy.tests.ps1
+          if (-not $?) { throw 'stage4_private_qualification_policy_tests_failed' }
       - name: PowerShell package and signing preflight tests (7)
         shell: pwsh
         run: |
           & ./scripts/tests/stage4-private-test-sign-copies.tests.ps1
           if (-not $?) { throw 'stage4_private_tests_failed' }
+          & ./scripts/tests/stage4-private-qualification-policy.tests.ps1
+          if (-not $?) { throw 'stage4_private_qualification_policy_tests_failed' }
       - name: Browser regression tests
         run: node --test apps/web/windows-native*.test.js
       - name: Native Windows unit tests
