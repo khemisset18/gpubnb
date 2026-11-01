@@ -87,6 +87,11 @@ return nextBytes
 `;
 
 const ENQUEUE_DEDUPED_WS_FRAME_SCRIPT=`
+-- Fence the channel binding in the same Redis transaction as the enqueue.
+-- A revoked/replaced lease must never be allowed to add a new buffered frame.
+if redis.call('GET', KEYS[4]) ~= ARGV[7] then
+  return -2
+end
 if redis.call('EXISTS', KEYS[1]) == 1 then
   return 0
 end
@@ -103,6 +108,23 @@ if redis.call('SET', KEYS[1], '1', 'EX', ARGV[1], 'NX') then
   return 1
 end
 return 0
+`;
+
+const ENQUEUE_BOUND_WS_FRAME_SCRIPT=`
+-- The binding and enqueue are linearized by Redis (no check-then-use window).
+if redis.call('GET', KEYS[3]) ~= ARGV[6] then
+  return -2
+end
+local count = redis.call('LLEN', KEYS[1])
+local currentBytes = tonumber(redis.call('GET', KEYS[2]) or '0')
+local itemBytes = tonumber(ARGV[3])
+if count >= tonumber(ARGV[4]) or currentBytes + itemBytes > tonumber(ARGV[5]) then
+  return -1
+end
+redis.call('LPUSH', KEYS[1], ARGV[1])
+redis.call('SET', KEYS[2], currentBytes + itemBytes, 'EX', ARGV[2])
+redis.call('EXPIRE', KEYS[1], ARGV[2])
+return 1
 `;
 
 type RelayRequest={id:string;sessionId:string;kind:'http'|'ws_open'|'ws_send'|'ws_close';method?:string;path?:string;headers?:Record<string,string>;bodyBase64?:string;channelId?:string;dataBase64?:string;binary?:boolean};
@@ -348,7 +370,8 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       }
       const relayPayload=JSON.stringify({dataBase64,binary:frame.binary===true,close});
       const relayBytes=Buffer.byteLength(relayPayload,'utf8');
-      const enqueued=Number(await redis.eval(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,3,markerKey,wsInputKey(channelId),wsInputBytesKey(channelId),String(WS_FRAME_DEDUPE_TTL_SECONDS),String(WS_INPUT_TTL_SECONDS),relayPayload,String(relayBytes),String(WS_INPUT_MAX_ITEMS),String(WS_REDIS_INPUT_MAX_BYTES)));
+      const enqueued=Number(await redis.eval(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,4,markerKey,wsInputKey(channelId),wsInputBytesKey(channelId),wsChannelKey(channelId),String(WS_FRAME_DEDUPE_TTL_SECONDS),String(WS_INPUT_TTL_SECONDS),relayPayload,String(relayBytes),String(WS_INPUT_MAX_ITEMS),String(WS_REDIS_INPUT_MAX_BYTES),bindingRaw));
+      if(enqueued===-2){stale++;continue;}
       if(enqueued===-1)return reply.code(429).send({error:'workspace_ws_browser_backpressure'});
       if(enqueued===1){accepted++;if(close)await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId));}else{duplicates++;}
     }
@@ -382,7 +405,9 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       await redis.set(wsUpstreamReadyKey(channelId),'1','EX',ttl);await redis.expire(wsChannelKey(channelId),ttl);
     }
     const relayPayload=JSON.stringify({dataBase64,binary:body.binary===true,close});
-    if(!await enqueueBoundedList(redis,wsInputKey(channelId),wsInputBytesKey(channelId),relayPayload,WS_INPUT_TTL_SECONDS,WS_INPUT_MAX_ITEMS,WS_REDIS_INPUT_MAX_BYTES))return reply.code(429).send({error:'workspace_ws_browser_backpressure'});
+    const enqueued=Number(await redis.eval(ENQUEUE_BOUND_WS_FRAME_SCRIPT,3,wsInputKey(channelId),wsInputBytesKey(channelId),wsChannelKey(channelId),relayPayload,String(WS_INPUT_TTL_SECONDS),String(Buffer.byteLength(relayPayload,'utf8')),String(WS_INPUT_MAX_ITEMS),String(WS_REDIS_INPUT_MAX_BYTES),bindingRaw));
+    if(enqueued===-2)return close?{ok:true,stale:true}:reply.code(409).send({error:'unknown_gateway_channel'});
+    if(enqueued===-1)return reply.code(429).send({error:'workspace_ws_browser_backpressure'});
     if(close)await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId));
     return {ok:true};
   });
