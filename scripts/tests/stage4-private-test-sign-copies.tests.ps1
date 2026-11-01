@@ -80,7 +80,7 @@ try {
         $path=Join-Path $dir $name;[IO.File]::WriteAllBytes($path,$b)
         $records+=@{name=$name;sha256=(Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant();architecture='AMD64';imports=@('kernel32.dll')}
     }
-    $identity=@{agent=@{frozen=$true;agentVersion='0.6.6';buildCommit=$commit.Substring(0,12)};
+    $identity=@{agent=@{frozen=$true;agentVersion='0.6.6';buildCommit=$commit};
         agentRuntime=@{idnaCodec=$true;dnsResolution=$true;tlsContext=$true};
         helper=@{sourceCommit=$commit;workerSignerSha256=$pin;mutationAuthority='release-candidate';workerProtocol=1;mediaTransportProtocol=2;browserMediaProtocol=1;browserInputProtocol=1};
         worker=@{sourceCommit=$commit;mediaSignerSha256=$pin};media=@{sourceCommit=$commit;mediaAbi=2;nvencApi='13.0'}}

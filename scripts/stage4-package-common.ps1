@@ -175,7 +175,7 @@ function Read-Stage4Package {
     $ip=Join-Path $root 'build-identities.json'
     if((Get-FileHash -LiteralPath $ip -Algorithm SHA256).Hash.ToLowerInvariant() -cne $m.buildIdentitiesSha256){throw 'stage4_identity_hash_mismatch'}
     $id=Get-Content -LiteralPath $ip -Raw | ConvertFrom-Json
-    if($id.agent.frozen -ne $true -or $id.agent.agentVersion -cne '0.6.6' -or $id.agent.buildCommit -cne $Commit.Substring(0,12)){throw 'stage4_agent_identity_mismatch'}
+    if($id.agent.frozen -ne $true -or $id.agent.agentVersion -cne '0.6.6' -or $id.agent.buildCommit -cne $Commit){throw 'stage4_agent_identity_mismatch'}
     if($id.agentRuntime.idnaCodec -ne $true -or $id.agentRuntime.dnsResolution -ne $true -or $id.agentRuntime.tlsContext -ne $true){throw 'stage4_frozen_agent_runtime_mismatch'}
     if($id.helper.sourceCommit -cne $Commit -or $id.worker.sourceCommit -cne $Commit -or $id.media.sourceCommit -cne $Commit){throw 'stage4_component_commit_mismatch'}
     if($id.helper.workerSignerSha256 -cne $Publisher -or $id.worker.mediaSignerSha256 -cne $Publisher){throw 'stage4_embedded_pin_mismatch'}

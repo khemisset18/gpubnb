@@ -42,7 +42,7 @@ try {
     }
     $info=Join-Path $agentRoot 'gpubnb_agent\_build_info.py'
     $source=Get-Content -LiteralPath $info -Raw
-    $source=[regex]::Replace($source,'BUILD_COMMIT = "[^"]+"',('BUILD_COMMIT = "'+$head.Substring(0,12)+'"'))
+    $source=[regex]::Replace($source,'BUILD_COMMIT = "[^"]+"',('BUILD_COMMIT = "'+$head+'"'))
     [IO.File]::WriteAllText($info,$source,[Text.UTF8Encoding]::new($false))
     $env:PYTHONPATH=$agentRoot
     & python -m PyInstaller --clean --noconfirm --onefile --name gpubnb-agent `

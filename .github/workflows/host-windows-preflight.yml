@@ -142,15 +142,15 @@ jobs:
           if ($commit -notmatch '^[0-9a-f]{40}$') {
             throw "Unexpected source commit: $commit"
           }
-          $short = $commit.Substring(0, 12)
+          $sourceCommit = $commit
           $path = 'agent/gpubnb_agent/_build_info.py'
           $content = Get-Content $path -Raw
-          $updated = [regex]::Replace($content, 'BUILD_COMMIT = "[^"]+"', "BUILD_COMMIT = `"$short`"")
+          $updated = [regex]::Replace($content, 'BUILD_COMMIT = "[^"]+"', "BUILD_COMMIT = `"$sourceCommit`"")
           if ($updated -eq $content) {
             throw 'Unable to stamp Agent BUILD_COMMIT.'
           }
           Set-Content $path $updated -Encoding utf8
-          Write-Host "Stamped Agent build commit $short"
+          Write-Host "Stamped Agent build commit $sourceCommit"
 
       - name: Test agent CLI
         shell: pwsh
@@ -200,7 +200,7 @@ jobs:
           if ($standaloneVersion -ne $expectedAgentVersion) {
             throw "Standalone Agent version mismatch: expected $expectedAgentVersion, got $standaloneVersion."
           }
-          $expectedCommit = '${{ github.event.pull_request.head.sha || github.sha }}'.Substring(0, 12)
+          $expectedCommit = '${{ github.event.pull_request.head.sha || github.sha }}'
           $buildInfo = (& ./dist/gpubnb-agent.exe build-info | Out-String) | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Standalone agent build-info command failed.' }
           if (-not $buildInfo.frozen) { throw 'Standalone agent does not report itself as frozen.' }
@@ -273,7 +273,7 @@ jobs:
           if ($installedAgentVersion -ne $expectedAgentVersion) {
             throw "Installed Agent version mismatch: expected $expectedAgentVersion, got $installedAgentVersion."
           }
-          $expectedCommit = '${{ github.event.pull_request.head.sha || github.sha }}'.Substring(0, 12)
+          $expectedCommit = '${{ github.event.pull_request.head.sha || github.sha }}'
           $installedBuildInfo = (& $installedSidecar build-info | Out-String) | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Installed agent build-info command failed.' }
           if (-not $installedBuildInfo.frozen) { throw 'Installed agent does not report itself as frozen.' }

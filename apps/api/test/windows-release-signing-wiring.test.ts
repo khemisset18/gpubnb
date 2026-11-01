@@ -67,3 +67,19 @@ test('Windows frozen Agent must publish full 40-character Git SHA, not a truncat
   assert.match(stage4Test, /agentBuildCommit = \$sourceCommit/);
   assert.doesNotMatch(stage4Test, /agentBuildCommit = \$sourceCommit\.Substring\(0,\s*12\)/);
 });
+
+test('all Windows Stage 4 package paths require full Agent source identity', async () => {
+  const files = [
+    '../../../.github/workflows/host-windows-preflight.yml',
+    '../../../scripts/build-stage4-unsigned-package.ps1',
+    '../../../scripts/verify-stage4-package.ps1',
+    '../../../scripts/stage4-package-common.ps1',
+    '../../../scripts/verify-windows-release.ps1',
+    '../../../scripts/verify_stage4_package.py',
+  ];
+  for (const file of files) {
+    const contents = await readFile(new URL(file, import.meta.url), 'utf8');
+    assert.doesNotMatch(contents, /(?:buildCommit|BUILD_COMMIT)[^\r\n]{0,150}(?:Substring\(0,\s*12\)|\[:12\])/,
+      file + ' must not validate a shortened Agent commit');
+  }
+});
