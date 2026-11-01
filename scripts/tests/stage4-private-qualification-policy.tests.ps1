@@ -194,7 +194,8 @@ try {
                 -ExpectedGpuUuid $gpu -RenterAccount $renter | Out-Null
         } catch { $message=$_.Exception.Message }
         if ($message -notlike '*private_qualification_embedded_identity_mismatch*') {
-            throw ('private_qualification_real_verifier_identity_bypass:'+$Title+':'+$message)
+            $inventory=@(Get-ChildItem -LiteralPath $fixtureRoot -Force -Recurse | ForEach-Object { $_.FullName }) -join '|'
+            throw ('private_qualification_real_verifier_identity_bypass:'+$Title+':'+$message+':inventory='+$inventory+':root='+$fixtureRoot)
         }
         Write-Host ('PASS actual private verifier entrypoint rejects '+$Title)
     }
