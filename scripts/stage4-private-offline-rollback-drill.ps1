@@ -19,7 +19,6 @@ if ($env:OS -cne 'Windows_NT' -or -not [Environment]::Is64BitProcess) {
     throw 'stage4_offline_windows_x64_required'
 }
 . (Join-Path $PSScriptRoot 'stage4-private-offline-rollback-policy.ps1')
-. (Join-Path $PSScriptRoot 'stage4-private-offline-acl.ps1')
 $downloads=Join-Path $env:USERPROFILE 'Downloads'
 [void](Assert-Stage4OfflineRollbackPaths -CandidateDirectory $CandidateDirectory -BackupDirectory $BackupDirectory -OutputDirectory $OutputDirectory -DownloadsDirectory $downloads)
 
@@ -85,7 +84,7 @@ try {
             throw "stage4_offline_candidate_copy_or_signature_invalid:$name"
         }
     }
-    # Overlay ONLY scratch files with exact backed-up bytes and original file ACLs.
+    # Overlay ONLY scratch files with exact backed-up bytes; verify live ACL against pinned manifest without modifying scratch or live ACLs.
     foreach ($name in $names) {
         $record=@($backup.files | Where-Object { $_.name -ceq $name })
         if ($record.Count -ne 1) { throw "stage4_offline_missing_backup:$name" }
@@ -101,17 +100,13 @@ try {
         $acl=Get-Acl -LiteralPath $live
         if ($acl.Sddl -cne $record[0].sddl) { throw "stage4_offline_live_acl_changed:$name" }
         Copy-Item -LiteralPath $saved -Destination $target -Force -ErrorAction Stop
-        $snapshot=New-Stage4ScratchAclSnapshot -OriginalAcl $acl
-        Set-Acl -LiteralPath $target -AclObject $snapshot -ErrorAction Stop
-        $verified.Add([pscustomobject]@{name=$name;sha256=$record[0].sha256;scratchAclSnapshot=$snapshot;signer=$record[0].signerSha256})
+        $verified.Add([pscustomobject]@{name=$name;sha256=$record[0].sha256;signer=$record[0].signerSha256})
     }
-    # Reconstruct ONLY scratch directory ACL, never the installed directory.
+    # ACLs of the live directory remain independently compared with the pinned backup;
+    # a scratch child of Downloads cannot demonstrate Program Files inherited ACL semantics.
     $directoryAcl=Get-Acl -LiteralPath $original
     if ($directoryAcl.Sddl -cne $backup.directorySddl) { throw 'stage4_offline_live_directory_acl_changed' }
-    $directorySnapshot=New-Stage4ScratchAclSnapshot -OriginalAcl $directoryAcl -Directory
-    Set-Acl -LiteralPath $scratch -AclObject $directorySnapshot -ErrorAction Stop
-    [void](Assert-Stage4ScratchAclSnapshot -Expected $directorySnapshot -Observed (Get-Acl -LiteralPath $scratch) -Label 'scratch-directory')
-    # Verify AGAIN after the directory ACL is applied (inheritance may change files).
+    # Independently verify FOUR file bytes and signatures after overlay.
     foreach ($record in $verified) {
         $path=Join-Path $scratch $record.name
         $sig=Get-AuthenticodeSignature -LiteralPath $path
@@ -121,10 +116,9 @@ try {
             $sig.SignerCertificate.NotAfter.ToUniversalTime() -le [DateTime]::UtcNow.AddHours(24)) {
             throw "stage4_offline_scratch_restore_verification_failed:$($record.name)"
         }
-        [void](Assert-Stage4ScratchAclSnapshot -Expected $record.scratchAclSnapshot -Observed (Get-Acl -LiteralPath $path) -Label $record.name)
     }
     $report=[ordered]@{
-        kind='STAGE4_PRIVATE_SCRATCH_ROLLBACK_RECONSTRUCTION'
+        kind='STAGE4_PRIVATE_SCRATCH_BYTES_ONLY_RECONSTRUCTION'
         machineId=$ExpectedMachineId
         gpuUuid=$ExpectedGpuUuid
         sourceCommit=$ExpectedCommit
@@ -132,10 +126,13 @@ try {
         backupManifestSha256=$ExpectedBackupManifestSha256.ToLowerInvariant()
         scratchDirectory=$scratch
         scratchCandidateToOldBackupOverlayVerified=$true
-        scratchFourFileHashesSignaturesAndPortableAclsVerified=$true
-        scratchDirectoryPortableAclVerified=$true
-        scratchAclMode='protected-explicit-snapshot-of-original-effective-aces'
+        scratchFourFileHashesAndSignaturesVerified=$true
+        liveFourFileAclsMatchPinnedBackup=$true
+        liveDirectoryAclMatchesPinnedBackup=$true
+        scratchAclReconstructionVerified=$false
         originalParentInheritanceReproduced=$false
+        realServiceFileAclsRestored=$false
+        evidenceScope='file-byte-overlay-only-and-independent-live-acl-inspection'
         filesVerified=4
         installationAuthorized=$false
         installationPerformed=$false
