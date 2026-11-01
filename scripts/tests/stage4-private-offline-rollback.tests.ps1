@@ -41,11 +41,11 @@ try {
         [void](New-Item -ItemType Directory -Path $dir)
     }
     $valid=Join-Path $downloads 'GPUbnb-Stage4-rollback-rehearsal-TEST1234'
-    $args=@{CandidateDirectory=$candidate;BackupDirectory=$backup;OutputDirectory=$valid;DownloadsDirectory=$downloads}
-    if (-not (Assert-Stage4OfflineRollbackPaths @args)) { throw 'offline_rollback_valid_scratch_rejected' }
+    $script:baseParams=@{CandidateDirectory=$candidate;BackupDirectory=$backup;OutputDirectory=$valid;DownloadsDirectory=$downloads}
+    if (-not (Assert-Stage4OfflineRollbackPaths @baseParams)) { throw 'offline_rollback_valid_scratch_rejected' }
     Write-Host 'PASS new scratch child'
     function Reject([string]$label,[hashtable]$replacement){
-        $changed=@{} + $args
+        $changed=@{} + $script:baseParams
         foreach($kv in $replacement.GetEnumerator()){$changed[$kv.Key]=$kv.Value}
         $failed=$false
         try{[void](Assert-Stage4OfflineRollbackPaths @changed)}catch{$failed=$true}
