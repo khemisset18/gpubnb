@@ -74,7 +74,8 @@ $names=@('gpubnb-agent.exe','gpubnb-windows-stream.exe',
 function Run-Case {
     param([string]$Title,[int]$FailAfter=0,[bool]$BadHealth=$false,
         [bool]$FailStartOnce=$false,[bool]$ExpectRollback=$false,
-        [bool]$BadOldHash=$false,[int]$FailDuringStaging=0)
+        [bool]$BadOldHash=$false,[int]$FailDuringStaging=0,
+        [bool]$ExpectRollbackUnhealthy=$false,[bool]$FailNewHealthOnly=$false)
     $root=Join-Path $env:TEMP ('GPUbnb-stage4-maintenance-test-'+[Guid]::NewGuid().ToString('N'))
     $candidate=Join-Path $root 'candidate'
     $target=Join-Path $root 'installed'
@@ -94,6 +95,7 @@ function Run-Case {
     $script:stage4FakeRunning=$true
     $script:stage4FakeStartFailures=if($FailStartOnce){1}else{0}
     $script:stage4FakeStopCalls=0
+    $script:stage4HealthCalls=0
     $stop={
         $script:stage4FakeStopCalls++
         $script:stage4FakeRunning=$false
@@ -107,7 +109,10 @@ function Run-Case {
     }
     $running={ return $script:stage4FakeRunning }
     $stopped={ return (-not $script:stage4FakeRunning) }
-    $health={ return (-not $BadHealth) }
+    $health={
+        $script:stage4HealthCalls++
+        return (-not $BadHealth -and (-not $FailNewHealthOnly -or $script:stage4HealthCalls -ge 2))
+    }
     $args=@{
         TargetDirectory=$target
         CandidateDirectory=$candidate
@@ -130,10 +135,14 @@ function Run-Case {
         if(-not $script:stage4FakeRunning) {
             throw ('stage4_test_service_not_recovered:'+$Title)
         }
-        if($ExpectRollback) {
-            if($null -eq $errorText -or
-                $errorText -notlike 'stage4_core_ROLLBACK_VERIFIED:*') {
-                throw ('stage4_test_rollback_not_reported:'+$Title+':'+$errorText)
+        if($ExpectRollback -or $ExpectRollbackUnhealthy) {
+            $expectedPrefix=if($ExpectRollbackUnhealthy){
+                'stage4_core_ROLLBACK_FAILED:*:stage4_core_rollback_runtime_unhealthy'
+            }else{
+                'stage4_core_ROLLBACK_VERIFIED:*'
+            }
+            if($null -eq $errorText -or $errorText -notlike $expectedPrefix) {
+                throw ('stage4_test_rollback_health_incorrect:'+$Title+':'+$errorText)
             }
             foreach($name in $names){
                 $path=Join-Path $target $name
@@ -200,7 +209,8 @@ foreach($i in 1..4){
 foreach($i in 1..4){
     Run-Case -Title ('failure_after_'+$i) -FailAfter $i -ExpectRollback $true
 }
-Run-Case -Title 'failed_post_start_health' -BadHealth $true -ExpectRollback $true
+Run-Case -Title 'failed_post_start_health_old_agent_still_unhealthy' -BadHealth $true -ExpectRollbackUnhealthy $true
+Run-Case -Title 'failed_new_agent_health_old_agent_healthy' -FailNewHealthOnly $true -ExpectRollback $true
 Run-Case -Title 'first_service_start_failed' -FailStartOnce $true -ExpectRollback $true
 Run-Case -Title 'pinned_hash_drift' -BadOldHash $true
 
