@@ -284,4 +284,35 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn buffered_old_epoch_mouse_input_cannot_cross_stop_and_resume() {
+        let mut before_stop = BrowserInputFence::new(41).expect("old fence");
+        assert_eq!(
+            before_stop.accept(&packet(KIND_MOUSE_BUTTON, 0, 41, 1, 1, 0)),
+            Ok(WorkerInputEvent::MouseButton {
+                button: WorkerMouseButton::Left,
+                key_up: false,
+            })
+        );
+
+        // STOP/RESUME rotates the stream epoch and creates a new fence.
+        let mut after_resume = BrowserInputFence::new(42).expect("new fence");
+        assert_eq!(
+            after_resume.accept(&packet(KIND_MOUSE_BUTTON, FLAG_KEY_UP, 41, 2, 1, 0)),
+            Err(BrowserInputError::StreamEpoch)
+        );
+        assert_eq!(
+            after_resume.accept(&packet(KIND_MOUSE_BUTTON, FLAG_KEY_UP, 42, 2, 1, 0)),
+            Err(BrowserInputError::Sequence)
+        );
+        assert_eq!(
+            after_resume.accept(&packet(KIND_MOUSE_BUTTON, FLAG_KEY_UP, 42, 1, 1, 0)),
+            Ok(WorkerInputEvent::MouseButton {
+                button: WorkerMouseButton::Left,
+                key_up: true,
+            })
+        );
+    }
+
 }
