@@ -68,3 +68,32 @@ function Assert-Stage4PrivateQualificationPolicy {
     }
     return $true
 }
+
+# Used by the actual private qualification verifier, not only policy fixtures.
+# Reject truncated Agent identities and mixed-version four-component builds.
+function Assert-Stage4PrivateBuildIdentity {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]$Identity,
+        [Parameter(Mandatory=$true)][string]$ExpectedCommit,
+        [Parameter(Mandatory=$true)][string]$ExpectedPublisherSha256
+    )
+    if ($ExpectedCommit -cnotmatch '^[0-9a-f]{40}$' -or
+        $ExpectedPublisherSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        $null -eq $Identity -or
+        $Identity.agent.frozen -cne $true -or
+        $Identity.agent.agentVersion -cne '0.6.6' -or
+        $Identity.agent.buildCommit -cne $ExpectedCommit -or
+        $Identity.helper.sourceCommit -cne $ExpectedCommit -or
+        $Identity.worker.sourceCommit -cne $ExpectedCommit -or
+        $Identity.media.sourceCommit -cne $ExpectedCommit -or
+        $Identity.helper.workerSignerSha256 -cne $ExpectedPublisherSha256 -or
+        $Identity.worker.mediaSignerSha256 -cne $ExpectedPublisherSha256 -or
+        $Identity.helper.mutationAuthority -cne 'release-candidate' -or
+        $Identity.media.mediaAbi -ne 2 -or
+        $Identity.media.nvencApi -cne '13.0' -or
+        $Identity.agentRuntime.tlsContext -cne $true) {
+        throw 'private_qualification_embedded_identity_mismatch'
+    }
+    return $true
+}
