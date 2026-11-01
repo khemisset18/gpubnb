@@ -70,20 +70,8 @@ if ((Get-FileHash -LiteralPath $ip -Algorithm SHA256).Hash.ToLowerInvariant() -c
     throw 'private_qualification_build_identity_hash_mismatch'
 }
 $id=Get-Content -LiteralPath $ip -Raw | ConvertFrom-Json
-if ($id.agent.frozen -cne $true -or
-    $id.agent.agentVersion -cne '0.6.6' -or
-    $id.agent.buildCommit -cne $ExpectedCommit.Substring(0,12) -or
-    $id.helper.sourceCommit -cne $ExpectedCommit -or
-    $id.worker.sourceCommit -cne $ExpectedCommit -or
-    $id.media.sourceCommit -cne $ExpectedCommit -or
-    $id.helper.workerSignerSha256 -cne $ExpectedPublisherSha256 -or
-    $id.worker.mediaSignerSha256 -cne $ExpectedPublisherSha256 -or
-    $id.helper.mutationAuthority -cne 'release-candidate' -or
-    $id.media.mediaAbi -ne 2 -or
-    $id.media.nvencApi -cne '13.0' -or
-    $id.agentRuntime.tlsContext -cne $true) {
-    throw 'private_qualification_embedded_identity_mismatch'
-}
+[void](Assert-Stage4PrivateBuildIdentity -Identity $id -ExpectedCommit $ExpectedCommit `
+    -ExpectedPublisherSha256 $ExpectedPublisherSha256)
 if (@($unsigned.files).Count -ne 4) {
     throw 'private_qualification_unsigned_components_invalid'
 }
