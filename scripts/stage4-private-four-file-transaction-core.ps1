@@ -3,6 +3,45 @@
 # The physical wrapper can call it only with an explicit scoped maintenance token.
 Set-StrictMode -Version Latest
 
+# Mandatory before ANY service stop: the precise six read-only checks, all PASS.
+# Keep the policy here so Windows CI can execute the EXACT gate used by PC1.
+function Assert-Stage4MaintenanceReadiness {
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)]$Readiness)
+    $expected=@(
+        'nonoverlapping-real-folders',
+        'new-package-complete-signed-pinned',
+        'old-backup-hashes-signatures-acls',
+        'machine-context-publisher-chain',
+        'known-service-process-topology',
+        'expected-gpu-uuid'
+    )
+    if ($null -eq $Readiness -or
+        $Readiness.kind -cne 'STAGE4_PC1_PRIVATE_INSTALL_READINESS_READONLY' -or
+        $Readiness.localPreflightPassed -isnot [bool] -or
+        $Readiness.localPreflightPassed -ne $true -or
+        $Readiness.installAuthorized -isnot [bool] -or
+        $Readiness.installAuthorized -ne $false) {
+        throw 'stage4_maintenance_all_six_readiness_checks_required'
+    }
+    $checks=@($Readiness.checks)
+    if ($checks.Count -ne $expected.Count) {
+        throw 'stage4_maintenance_all_six_readiness_checks_required'
+    }
+    $seen=@{}
+    foreach($check in $checks) {
+        if ($null -eq $check -or
+            $check.name -cnotin $expected -or
+            $seen.ContainsKey([string]$check.name) -or
+            $check.passed -isnot [bool] -or
+            $check.passed -ne $true) {
+            throw 'stage4_maintenance_all_six_readiness_checks_required'
+        }
+        $seen[[string]$check.name]=$true
+    }
+    return $true
+}
+
 function Invoke-Stage4FourFileTransactionCore {
     [CmdletBinding()]
     param(
