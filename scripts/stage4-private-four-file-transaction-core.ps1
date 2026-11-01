@@ -107,9 +107,17 @@ function Invoke-Stage4FourFileTransactionCore {
         }
         foreach($name in $names) {
             $path=Join-Path $target $name
-            if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $NewHashes[$name] -or
-                (Get-Acl -LiteralPath $path).Sddl -cne $OldSddl[$name]) {
-                throw "stage4_core_installed_not_pinned:$name"
+            if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $NewHashes[$name]) {
+                throw "stage4_core_installed_hash_mismatch:$name"
+            }
+            $observedSddl=(Get-Acl -LiteralPath $path).Sddl
+            if ($observedSddl -cne $OldSddl[$name]) {
+                # Synthetic test diagnostics only; never include live PC1 ACLs in errors.
+                if ($fixture) {
+                    throw ("stage4_core_fixture_acl_diff:" + $name +
+                        ":expected=" + $OldSddl[$name] + ":observed=" + $observedSddl)
+                }
+                throw "stage4_core_installed_acl_mismatch:$name"
             }
         }
         & $StartControlledService
