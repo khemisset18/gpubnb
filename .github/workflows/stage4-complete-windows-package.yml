@@ -15,8 +15,8 @@ concurrency:
   group: stage4-package-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
-  # Fast isolated ACL regression; no compiler or package artifacts required.
-  offline-rollback-acl-regression:
+  # Fast isolated four-file scratch overlay; no compiler or package artifacts required.
+  offline-rollback-byte-regression:
     runs-on: windows-2025
     timeout-minutes: 10
     steps:
@@ -24,16 +24,16 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Scratch ACL inheritance regression (Windows PowerShell 5.1)
+      - name: Scratch byte overlay regression (Windows PowerShell 5.1)
         shell: powershell
         run: |
           & ./scripts/tests/stage4-private-offline-rollback.tests.ps1
-          if (-not $?) { throw 'offline_rollback_acl_ps51_failed' }
-      - name: Scratch ACL inheritance regression (PowerShell 7)
+          if (-not $?) { throw 'offline_rollback_byte_ps51_failed' }
+      - name: Scratch byte overlay regression (PowerShell 7)
         shell: pwsh
         run: |
           & ./scripts/tests/stage4-private-offline-rollback.tests.ps1
-          if (-not $?) { throw 'offline_rollback_acl_ps7_failed' }
+          if (-not $?) { throw 'offline_rollback_byte_ps7_failed' }
   four-components:
     runs-on: windows-2025
     timeout-minutes: 35
