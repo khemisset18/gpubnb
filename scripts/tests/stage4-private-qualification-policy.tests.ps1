@@ -91,7 +91,7 @@ Expect-PolicyRejection 'existing install mutation rejected' {param($m)$m.install
 Expect-PolicyRejection 'no review bypass' {param($m)$m.installationReviewRequired=$false}
 Expect-PolicyRejection 'wrong source kind' {param($m)$m.sourceKind='LOCAL_TEST_ONLY_NOT_RELEASE'}
 Expect-PolicyRejection 'wrong protocol' {param($m)$m.protocols.browserInput=2}
-Expect-PolicyRejection 'expired signature' {param($m)$m.expiresUtc=[DateTime]::UtcNow.AddHours(-1).ToString('o'}
+Expect-PolicyRejection 'expired signature' {param($m)$m.expiresUtc=[DateTime]::UtcNow.AddHours(-1).ToString('o')}
 Expect-PolicyRejection 'duplicated binary' {param($m)$m.files[1].name='gpubnb-agent.exe'}
 Expect-PolicyRejection 'missing binary' {param($m)$m.files=@($m.files[0],$m.files[1],$m.files[2])}
 Expect-PolicyRejection 'changed source hash' {param($m)$m.files[0].unsignedSha256='not-a-hash'}
