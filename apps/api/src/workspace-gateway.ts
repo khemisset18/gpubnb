@@ -127,6 +127,25 @@ redis.call('EXPIRE', KEYS[1], ARGV[2])
 return 1
 `;
 
+const ENQUEUE_BOUND_MACHINE_RELAY_SCRIPT=`
+-- Browser-to-Agent native send/open is atomic with the current channel grant.
+-- A stale positive result from an in-flight DB read cannot requeue data after
+-- an already committed Redis channel revocation.
+if redis.call('GET', KEYS[3]) ~= ARGV[6] then
+  return -2
+end
+local count = redis.call('LLEN', KEYS[1])
+local currentBytes = tonumber(redis.call('GET', KEYS[2]) or '0')
+local itemBytes = tonumber(ARGV[3])
+if count >= tonumber(ARGV[4]) or currentBytes + itemBytes > tonumber(ARGV[5]) then
+  return -1
+end
+redis.call('LPUSH', KEYS[1], ARGV[1])
+redis.call('SET', KEYS[2], currentBytes + itemBytes, 'EX', ARGV[2])
+redis.call('EXPIRE', KEYS[1], ARGV[2])
+return 1
+`;
+
 type RelayRequest={id:string;sessionId:string;kind:'http'|'ws_open'|'ws_send'|'ws_close';method?:string;path?:string;headers?:Record<string,string>;bodyBase64?:string;channelId?:string;dataBase64?:string;binary?:boolean};
 type RelayResponse={status:number;headers?:Record<string,string>;bodyBase64?:string;error?:string};
 type GatewayChannelBinding={sessionId:string;machineId:string;browserSessionKey:string;runtimeBackend:WorkspaceRuntimeBackend};
@@ -153,6 +172,15 @@ async function enqueueBoundedList(redis:Redis,listKey:string,bytesKey:string,pay
   const size=Buffer.byteLength(payload,'utf8');
   if(size>maxBytes)return false;
   const accepted=Number(await redis.eval(ENQUEUE_BOUNDED_LIST_SCRIPT,2,listKey,bytesKey,payload,String(ttlSeconds),String(size),String(maxItems),String(maxBytes)));
+  return accepted===1;
+}
+
+async function enqueueBoundNativeMachineRelay(redis:Redis,machineId:string,channelId:string,expectedBinding:string,relay:RelayRequest):Promise<boolean>{
+  const payload=JSON.stringify(relay);
+  const accepted=Number(await redis.eval(ENQUEUE_BOUND_MACHINE_RELAY_SCRIPT,3,
+    machineQueue(machineId),machineQueueBytesKey(machineId),wsChannelKey(channelId),
+    payload,String(MACHINE_QUEUE_TTL_SECONDS),String(Buffer.byteLength(payload,'utf8')),
+    String(MACHINE_QUEUE_MAX_ITEMS),String(WS_MACHINE_QUEUE_MAX_BYTES),expectedBinding));
   return accepted===1;
 }
 
@@ -498,13 +526,17 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         // soon as ws_open itself is enqueued. LPUSH/RPOP preserves ws_open before
         // ws_send, so legacy agents can still establish code-server and exchange
         // their first frame while newer agents additionally return an explicit ACK.
+        const channelBinding=JSON.stringify({sessionId,machineId:row.machineId,browserSessionKey,runtimeBackend:row.runtimeBackend} satisfies GatewayChannelBinding);
         const setup=(async()=>{
-          await redis.set(wsChannelKey(channelId),JSON.stringify({sessionId,machineId:row.machineId,browserSessionKey,runtimeBackend:row.runtimeBackend} satisfies GatewayChannelBinding),'EX',channelTtl);
+          await redis.set(wsChannelKey(channelId),channelBinding,'EX',channelTtl);
           if(browserClosed){
             await redis.del(wsChannelKey(channelId));
             throw new Error('workspace_channel_closed_during_setup');
           }
-          const accepted=await enqueueMachineRelay(redis,row.machineId,{id:openRequestId,sessionId,kind:'ws_open',channelId,path:targetPath,headers:relayHeaders(request.headers as Record<string,unknown>)} satisfies RelayRequest);
+          const openRelay={id:openRequestId,sessionId,kind:'ws_open',channelId,path:targetPath,headers:relayHeaders(request.headers as Record<string,unknown>)} satisfies RelayRequest;
+          const accepted=nativeChannel
+            ? await enqueueBoundNativeMachineRelay(redis,row.machineId,channelId,channelBinding,openRelay)
+            : await enqueueMachineRelay(redis,row.machineId,openRelay);
           if(!accepted)throw new Error('workspace_machine_queue_backpressure');
         })();
         const upstreamProbe=setup.then(async()=>{
@@ -595,7 +627,10 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
               browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1008,'workspace session expired');
               return;
             }
-            if(!await enqueueMachineRelay(redis,row.machineId,relay))throw new Error('workspace_machine_queue_backpressure');
+            const accepted=nativeChannel
+              ? await enqueueBoundNativeMachineRelay(redis,row.machineId,channelId,channelBinding,relay)
+              : await enqueueMachineRelay(redis,row.machineId,relay);
+            if(!accepted)throw new Error('workspace_machine_queue_backpressure');
           });
           browserSendChain=task.finally(()=>browserPending.release(frame.length)).catch(error=>{
             gatewayLog.error({err:error,event:'workspace_gateway_send_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway browser frame relay failed');
