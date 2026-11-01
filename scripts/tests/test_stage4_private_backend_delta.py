@@ -100,7 +100,7 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
             Path(__file__).resolve().parents[2]
             / ".github/workflows/stage4-private-backend-source-delta.yml"
         ).read_text(encoding="utf-8")
-        pins = re.findall(r"--private-render-commit\\s+([^\\s\\\\]+)", workflow)
+        pins = re.findall(r"--private-render-commit\s+([^\s\\]+)", workflow)
         self.assertEqual(pins, ["26af83d8e8ef87b1f218a5b08671047594e645dc"])
         self.assertIn("REVIEWED_SHA: " + "$"+"{{ github.event.pull_request.head.sha || github.sha }}", workflow)
         self.assertIn('--pc1-candidate-commit "$REVIEWED_SHA"', workflow)
