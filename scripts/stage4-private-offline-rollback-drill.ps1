@@ -19,6 +19,7 @@ if ($env:OS -cne 'Windows_NT' -or -not [Environment]::Is64BitProcess) {
     throw 'stage4_offline_windows_x64_required'
 }
 . (Join-Path $PSScriptRoot 'stage4-private-offline-rollback-policy.ps1')
+. (Join-Path $PSScriptRoot 'stage4-private-offline-acl.ps1')
 $downloads=Join-Path $env:USERPROFILE 'Downloads'
 [void](Assert-Stage4OfflineRollbackPaths -CandidateDirectory $CandidateDirectory -BackupDirectory $BackupDirectory -OutputDirectory $OutputDirectory -DownloadsDirectory $downloads)
 
@@ -100,27 +101,27 @@ try {
         $acl=Get-Acl -LiteralPath $live
         if ($acl.Sddl -cne $record[0].sddl) { throw "stage4_offline_live_acl_changed:$name" }
         Copy-Item -LiteralPath $saved -Destination $target -Force -ErrorAction Stop
-        Set-Acl -LiteralPath $target -AclObject $acl -ErrorAction Stop
-        $verified.Add([pscustomobject]@{name=$name;sha256=$record[0].sha256;aclSddl=$record[0].sddl;signer=$record[0].signerSha256})
+        $snapshot=New-Stage4ScratchAclSnapshot -OriginalAcl $acl
+        Set-Acl -LiteralPath $target -AclObject $snapshot -ErrorAction Stop
+        $verified.Add([pscustomobject]@{name=$name;sha256=$record[0].sha256;scratchAclSnapshot=$snapshot;signer=$record[0].signerSha256})
     }
     # Reconstruct ONLY scratch directory ACL, never the installed directory.
     $directoryAcl=Get-Acl -LiteralPath $original
     if ($directoryAcl.Sddl -cne $backup.directorySddl) { throw 'stage4_offline_live_directory_acl_changed' }
-    Set-Acl -LiteralPath $scratch -AclObject $directoryAcl -ErrorAction Stop
-    if ((Get-Acl -LiteralPath $scratch).Sddl -cne $backup.directorySddl) {
-        throw 'stage4_offline_scratch_directory_acl_mismatch'
-    }
+    $directorySnapshot=New-Stage4ScratchAclSnapshot -OriginalAcl $directoryAcl -Directory
+    Set-Acl -LiteralPath $scratch -AclObject $directorySnapshot -ErrorAction Stop
+    [void](Assert-Stage4ScratchAclSnapshot -Expected $directorySnapshot -Observed (Get-Acl -LiteralPath $scratch) -Label 'scratch-directory')
     # Verify AGAIN after the directory ACL is applied (inheritance may change files).
     foreach ($record in $verified) {
         $path=Join-Path $scratch $record.name
         $sig=Get-AuthenticodeSignature -LiteralPath $path
         if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $record.sha256 -or
-            (Get-Acl -LiteralPath $path).Sddl -cne $record.aclSddl -or
             $sig.Status -ne 'Valid' -or $null -eq $sig.SignerCertificate -or
             $sig.SignerCertificate.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256) -ine $record.signer -or
             $sig.SignerCertificate.NotAfter.ToUniversalTime() -le [DateTime]::UtcNow.AddHours(24)) {
             throw "stage4_offline_scratch_restore_verification_failed:$($record.name)"
         }
+        [void](Assert-Stage4ScratchAclSnapshot -Expected $record.scratchAclSnapshot -Observed (Get-Acl -LiteralPath $path) -Label $record.name)
     }
     $report=[ordered]@{
         kind='STAGE4_PRIVATE_SCRATCH_ROLLBACK_RECONSTRUCTION'
@@ -131,8 +132,10 @@ try {
         backupManifestSha256=$ExpectedBackupManifestSha256.ToLowerInvariant()
         scratchDirectory=$scratch
         scratchCandidateToOldBackupOverlayVerified=$true
-        scratchFourFileHashesSignaturesAndAclsVerified=$true
-        scratchDirectoryAclVerified=$true
+        scratchFourFileHashesSignaturesAndPortableAclsVerified=$true
+        scratchDirectoryPortableAclVerified=$true
+        scratchAclMode='protected-explicit-snapshot-of-original-effective-aces'
+        originalParentInheritanceReproduced=$false
         filesVerified=4
         installationAuthorized=$false
         installationPerformed=$false
