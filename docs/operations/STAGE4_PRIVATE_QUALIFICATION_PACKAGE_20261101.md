@@ -35,3 +35,20 @@ Before any `Stop-Service` or file replacement is designed, reviewed and independ
 7. Only after cleanup, validate exact WTS renter console, protected SID/session/GPU lease and real PC2 video 300 s + input and lock/switch revocation negative tests. Never expose `hicha`.
 
 A missing prerequisite means **NO GO**. The staged package and existing PC1 service remain intact.
+
+
+## Read-only Windows installation readiness audit
+
+Only **after** a separately signed scoped private candidate has been produced and independently verified, the local operator may use `scripts/stage4-private-install-readiness.ps1` to gather Windows-PC1 evidence **without** stopping a process or editing Windows. This operation is not an installer and cannot authorize itself.
+
+The script requires these **external** pins, which must be independently recorded before invocation:
+
+- Candidate manifest SHA-256 as printed by the separate private packaging run (not a value guessed from an untrusted downloaded manifest)
+- Exact underlying source commit (for the current original unsigned source, `32ffdc72ec7041310c4b07e286ac4c4c2818906c`)
+- Publisher certificate SHA-256 `3060de709bd0db7fa8588b7480a8a04f94b2a7df005ee48361cbdcd39b0e9619`
+- Machine ID `cmsiggruy0004df0tn669f6bn`, NVIDIA UUID `GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a` and renter `gpubnb-renter-qual`
+- Existing verified backup folder and its separately recorded manifest SHA-256 `77095e5b23b2aa7b985e6c71b5ac8d36ed7ab987d39cd946aebc042996de44bd`
+
+It checks, read only, the independent new candidate verifier, old installed and backed-up 4-file hashes and ACL, backup signer validity, the machine-context signer chain (only a proxy for real `LocalSystem` trust), exact old service process topology and no active Helper/Worker process, and the physical NVIDIA GPU UUID inventory. The JSON report intentionally marks `installAuthorized=false`, `installationPerformed=false`, `backendReleaseAligned=false`, `renterConsoleQualified=false`, and `physicalCleanupProven=false` **even when every local check passes**.
+
+**A successful local report must never be treated as a green light to start streaming, overwrite files, deploy Render or change quarantine.** Actual signed LocalSystem execution, rollback under the live Windows conditions, a compatible backend rollout and the canonical signed owner cleanup diagnostic remain separate gates. If the certificate chain is not trusted in machine context, stop and address an approved publisher/trust policy separately; never add a root CA silently or disable Windows signature checks.
