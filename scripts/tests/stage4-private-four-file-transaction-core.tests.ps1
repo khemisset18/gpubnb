@@ -4,6 +4,25 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'stage4-private-four-file-transaction-core.ps1')
+$maintenance=Join-Path (Split-Path -Parent $PSScriptRoot) 'stage4-private-four-file-maintenance.ps1'
+$tokens=$null;$parseErrors=$null
+[void][Management.Automation.Language.Parser]::ParseFile($maintenance,[ref]$tokens,[ref]$parseErrors)
+if($parseErrors.Count -ne 0) {
+    throw ('stage4_maintenance_wrapper_parser_error:'+$parseErrors[0].Message)
+}
+$maintenanceSource=Get-Content -LiteralPath $maintenance -Raw
+if($maintenanceSource -notmatch '\[switch\]\$Apply' -or
+    $maintenanceSource -notmatch '\[switch\]\$OperatorPresentAndApproved' -or
+    $maintenanceSource -notmatch 'stage4_maintenance_exact_live_service_identity_failed' -or
+    $maintenanceSource -notmatch 'stage4_maintenance_local_claim_runtime_scope_changed' -or
+    $maintenanceSource -notmatch 'stage4_maintenance_all_six_readiness_checks_required' -or
+    $maintenanceSource -notmatch 'stage4ServiceStartUtc' -or
+    $maintenanceSource -notmatch 'heartbeat' -or
+    $maintenanceSource -notmatch 'stage4_maintenance_explicit_operator_approval_required') {
+    throw 'stage4_maintenance_wrapper_required_safety_check_missing'
+}
+Write-Host 'PASS real wrapper parse and fail-closed preflight/consent/heartbeat policy'
+
 $names=@('gpubnb-agent.exe','gpubnb-windows-stream.exe',
     'gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')
 
