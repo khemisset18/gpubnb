@@ -454,6 +454,8 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         const channelAuthorized = nativeChannel
           ? createGatewayChannelLeaseGuard({
               sessionId, userId: browser.userId,
+              expectedMachineId: row.machineId,
+              expectedRuntimeBackend: row.runtimeBackend,
               readBrowser: () => redis.get(browserSessionKey),
               readWorkspace: () => activeGatewaySession(db,sessionId),
               // Native frame/input authorization must not reuse a previously
