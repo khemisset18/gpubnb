@@ -112,3 +112,21 @@ test('native buffered browser frames are individually revoked before send', () =
   assert.match(pump, /ws\.close\(1008,'native workspace revoked'\)/);
   assert.match(gateway, /cacheMs: 0/);
 });
+
+test('native WebSocket close fences Redis immediately and pending batches stop before send', () => {
+  const gateway = readFileSync(new URL('../src/workspace-gateway.ts', import.meta.url), 'utf8');
+  const pump = gateway.slice(
+    gateway.indexOf('const pump=setInterval('),
+    gateway.indexOf('let browserSendChain:', gateway.indexOf('const pump=setInterval(')),
+  );
+  assert.match(pump, /if\(browserClosed \|\| ws\.readyState!==WebSocket\.OPEN\)break/);
+  assert.match(pump, /if\(!browserClosed && ws\.readyState===WebSocket\.OPEN\)/);
+  const close = gateway.slice(gateway.indexOf("ws.on('close',(closeCode"), gateway.indexOf("});\n      });", gateway.indexOf("ws.on('close',(closeCode")));
+  const immediateFence = close.indexOf('void redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId))');
+  const queueClose = close.indexOf('void browserSendChain.then(');
+  assert.ok(immediateFence >= 0 && queueClose > immediateFence,
+    'closing a native WebSocket must revoke the Redis channel key before queued cleanup');
+  const input = gateway.slice(gateway.indexOf("ws.on('message',(data:WebSocket.Data"), gateway.indexOf("ws.on('close',(closeCode"));
+  assert.match(input, /if\(browserClosed\|\|!await channelAuthorized\(\)\)/);
+  assert.ok(input.indexOf('await channelAuthorized()') < input.indexOf('enqueueMachineRelay(redis,row.machineId,relay)'));
+});
