@@ -93,6 +93,22 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
         self.assertTrue(report["apiRuntimeInputsIdenticalAtSource"])
         self.assertTrue(report["webAssetsIdenticalAtSource"])
 
+    def test_workflow_pins_exact_production_commit_ids(self) -> None:
+        import re
+        workflow = (
+            Path(__file__).resolve().parents[2]
+            / ".github/workflows/stage4-private-backend-source-delta.yml"
+        ).read_text(encoding="utf-8")
+        expected = {
+            "private-render-commit": "26af83d8e8ef87b1f218a5b08671047594e645dc",
+            "pc1-candidate-commit": "32ffdc72ec7041310c4b07e286ac4c4c2818906c",
+        }
+        for option, sha in expected.items():
+            with self.subTest(option=option):
+                pins = re.findall(r"--" + re.escape(option) + r"\s+([^\s\\]+)", workflow)
+                self.assertEqual(pins, [sha])
+                self.assertEqual(len(pins[0]), 40)
+
     def test_wrong_pins_and_non_ancestor_fail_closed(self) -> None:
         self._write("apps/web/index.js", "changed\n")
         head = self._commit("later")
