@@ -22,19 +22,27 @@ foreach ($flag in @('installationAuthorized','installationPerformed','realServic
         throw "offline_rollback_must_fail_closed:$flag"
     }
 }
-# Mutation commands must remain visibly targeted at the sandbox variables;
-# do not allow new unreviewed Copy-Item/Set-Acl destinations or output paths.
+# No ACL mutation in the operational scratch drill. Inherited NTFS ACLs are
+# parent-specific; this experiment tests file bytes, not ACL reconstruction.
 $copyLines=@($source -split '\r?\n' | Where-Object { $_ -match '^\s*Copy-Item\b' })
-$aclLines=@($source -split '\r?\n' | Where-Object { $_ -match '^\s*Set-Acl\b' })
-if ($copyLines.Count -ne 2 -or @($copyLines | Where-Object { $_ -notmatch '-Destination \$target' }).Count -gt 0 -or
-    $aclLines.Count -ne 2 -or @($aclLines | Where-Object { $_ -notmatch '-LiteralPath \$(target|scratch)\b' }).Count -gt 0) {
-    throw 'offline_rollback_mutation_targets_changed_requires_review'
+if ($copyLines.Count -ne 2 -or
+    @($copyLines | Where-Object { $_ -notmatch '-Destination \$target' }).Count -gt 0 -or
+    $source -match '\b(?:Set-Acl|icacls|SetSecurityDescriptorSddlForm|SetAccessRuleProtection)\b') {
+    throw 'offline_rollback_dangerous_mutation_or_wrong_copy_target'
+}
+foreach($flag in @('scratchAclReconstructionVerified','originalParentInheritanceReproduced',
+    'realServiceFileAclsRestored')) {
+    if ($source -cnotmatch "(?m)^\s*$flag=\`$false\s*$") {
+        throw "offline_rollback_must_not_claim_acl_reconstruction:$flag"
+    }
+}
+foreach($flag in @('scratchFourFileHashesAndSignaturesVerified','liveFourFileAclsMatchPinnedBackup',
+    'liveDirectoryAclMatchesPinnedBackup')) {
+    if ($source -cnotmatch "(?m)^\s*$flag=\`$true\s*$") {
+        throw "offline_rollback_missing_evidence_flag:$flag"
+    }
 }
 . $policyPath
-. (Join-Path $scripts 'stage4-private-offline-acl.ps1')
-if ($source -cnotmatch 'originalParentInheritanceReproduced=\$false' -or $source -cnotmatch 'Assert-Stage4ScratchAclSnapshot') {
-    throw 'offline_rollback_must_report_real_inheritance_not_reproduced'
-}
 $root=Join-Path $env:TEMP ('gpubnb-offline-rollback-tests-'+[Guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $root)
 try {
@@ -65,71 +73,37 @@ try {
     Reject 'installed folder as candidate' @{CandidateDirectory='C:\Program Files\GPUbnb'}
     [void](New-Item -ItemType Directory -Path $valid)
     Reject 'output already exists' @{}
-    # Windows reproduction: two distinct parents propagate conflicting inherited rights.
-    # Exercise a real ACL clone under a different parent with no SYSTEM path writes.
-    $aclRoot=Join-Path $root 'acl-repro'
-    $parentOriginal=Join-Path $aclRoot 'source-parent'
-    $parentScratch=Join-Path $aclRoot 'scratch-parent'
-    foreach($dir in @($aclRoot,$parentOriginal,$parentScratch)) {
-        [void](New-Item -ItemType Directory -Path $dir)
+    # Reconstruct a fake four-file candidate-to-backup overlay in a fresh scratch
+    # directory; verify hash differences and exact old bytes after replacement.
+    # No test of real service or ACL restoration is implied.
+    $scratch=Join-Path $root 'scratch'
+    [void](New-Item -ItemType Directory -Path $scratch)
+    $files=@('gpubnb-agent.exe','gpubnb-windows-stream.exe',
+        'gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')
+    foreach($name in $files) {
+        $newFile=Join-Path $candidate $name
+        $oldFile=Join-Path $backup $name
+        $clone=Join-Path $scratch $name
+        [IO.File]::WriteAllText($newFile,("candidate-"+$name))
+        [IO.File]::WriteAllText($oldFile,("backup-"+$name))
+        $oldHash=(Get-FileHash -LiteralPath $oldFile -Algorithm SHA256).Hash
+        Copy-Item -LiteralPath $newFile -Destination $clone
+        if ((Get-FileHash -LiteralPath $clone -Algorithm SHA256).Hash -eq $oldHash) {
+            throw "offline_rollback_fixture_candidate_same_as_backup:$name"
+        }
+        Copy-Item -LiteralPath $oldFile -Destination $clone -Force
+        if ((Get-FileHash -LiteralPath $clone -Algorithm SHA256).Hash -ne $oldHash) {
+            throw "offline_rollback_fixture_overlay_mismatch:$name"
+        }
     }
-    $userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User
-    $everyoneSid=[Security.Principal.SecurityIdentifier]::new('S-1-1-0')
-    $inherit=[Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit
-    foreach($entry in @(
-        @{path=$parentOriginal;rights=[Security.AccessControl.FileSystemRights]::ReadAndExecute},
-        @{path=$parentScratch;rights=[Security.AccessControl.FileSystemRights]::Modify}
-    )) {
-        $acl=Get-Acl -LiteralPath $entry.path
-        $acl.SetAccessRuleProtection($true,$false)
-        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($userSid,
-            [Security.AccessControl.FileSystemRights]::FullControl,$inherit,
-            [Security.AccessControl.PropagationFlags]::None,
-            [Security.AccessControl.AccessControlType]::Allow))
-        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($everyoneSid,
-            $entry.rights,$inherit,
-            [Security.AccessControl.PropagationFlags]::None,
-            [Security.AccessControl.AccessControlType]::Allow))
-        Set-Acl -LiteralPath $entry.path -AclObject $acl
+    Write-Host 'PASS four-file scratch overlay restores pinned bytes only'
+    # A real Windows parent ACL difference does not invalidate *byte* checks.
+    $aclA=Get-Acl -LiteralPath $candidate
+    $aclB=Get-Acl -LiteralPath $scratch
+    if ($null -eq $aclA -or $null -eq $aclB) {
+        throw 'offline_rollback_fixture_acl_inspection_unavailable'
     }
-    $origin=Join-Path $parentOriginal 'installed'
-    $destination=Join-Path $parentScratch 'scratch-installed'
-    [void](New-Item -ItemType Directory -Path $origin)
-    [void](New-Item -ItemType Directory -Path $destination)
-    $originAcl=Get-Acl -LiteralPath $origin
-    $destinationAcl=Get-Acl -LiteralPath $destination
-    if ($originAcl.AreAccessRulesProtected -or $destinationAcl.AreAccessRulesProtected -or
-        $originAcl.Sddl -ceq $destinationAcl.Sddl) {
-        throw 'offline_rollback_test_did_not_reproduce_inherited_acl_difference'
-    }
-    $snapshot=New-Stage4ScratchAclSnapshot -OriginalAcl $originAcl -Directory
-    Set-Acl -LiteralPath $destination -AclObject $snapshot
-    $observedDirectory=Get-Acl -LiteralPath $destination
-    if ($snapshot.Sddl -cne $observedDirectory.Sddl) {
-        Write-Host "ACL_FIXTURE_EXPECTED=$($snapshot.Sddl)"
-        Write-Host "ACL_FIXTURE_OBSERVED=$($observedDirectory.Sddl)"
-        Write-Host "ACL_FIXTURE_FLAGS=$($snapshot.AreAccessRulesProtected)/$($observedDirectory.AreAccessRulesProtected)"
-    }
-    [void](Assert-Stage4ScratchAclSnapshot -Expected $snapshot -Observed $observedDirectory -Label 'test-scratch-directory')
-    $bad=Get-Acl -LiteralPath $destination
-    $bad.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($everyoneSid,
-        [Security.AccessControl.FileSystemRights]::WriteData,
-        [Security.AccessControl.AccessControlType]::Allow))
-    $rejected=$false
-    try { [void](Assert-Stage4ScratchAclSnapshot -Expected $snapshot -Observed $bad -Label 'injected-extra-right') }
-    catch { $rejected=$true }
-    if (-not $rejected) { throw 'offline_rollback_acl_extra_permission_not_rejected' }
-    Write-Host 'PASS inherited directory ACL normalizes to protected scratch snapshot; extra right rejected'
-    $originFile=Join-Path $origin 'test.bin'
-    $scratchFile=Join-Path $destination 'test.bin'
-    [IO.File]::WriteAllText($originFile,'old')
-    [IO.File]::WriteAllText($scratchFile,'old')
-    $originalFileAcl=Get-Acl -LiteralPath $originFile
-    $fileSnapshot=New-Stage4ScratchAclSnapshot -OriginalAcl $originalFileAcl
-    Set-Acl -LiteralPath $scratchFile -AclObject $fileSnapshot
-    [void](Assert-Stage4ScratchAclSnapshot -Expected $fileSnapshot -Observed (Get-Acl -LiteralPath $scratchFile) -Label 'test-scratch-file')
-    Write-Host 'PASS file ACL normalized snapshot'
-
+    Write-Host 'PASS scratch ACL is inspected, never transplanted'
     Write-Host 'PASS offline rollback script parse and fail-closed static checks'
 }
 finally {
