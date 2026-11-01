@@ -178,8 +178,7 @@ $isStopped = {
     return ((Get-Service -Name 'GPUbnbAgent').Status -eq 'Stopped')
 }
 $checkRuntime = {
-    # The agent writes a 'heartbeat' event only AFTER the signed API call
-    # returns successfully. A merely Running Windows service is insufficient.
+    # The agent logs 'heartbeat' only after the signed API call succeeds.
     Start-Sleep -Seconds 32
     if (-not (& $isRunning)) { return $false }
     $sig=Get-AuthenticodeSignature -LiteralPath 'C:\Program Files\GPUbnb\gpubnb-agent.exe'
@@ -193,22 +192,7 @@ $checkRuntime = {
         try {
             $payload=$line.Substring($pos+12) | ConvertFrom-Json
             if ($payload.event -cne 'heartbeat') { continue }
-            $stamp=($line -split ' ')[0] -replace '([+-]\d{2})(\d{2})
-$args=@{
-    TargetDirectory=$installed
-    CandidateDirectory=$CandidateDirectory
-    OldHashes=$oldHashes
-    NewHashes=$newHashes
-    OldSddl=$oldSddl
-    StopControlledService=$stop
-    StartControlledService=$start
-    IsControlledServiceRunning=$isRunning
-    IsControlledServiceStopped=$isStopped
-    ValidateControlledRuntime=$checkRuntime
-    MaintenanceToken='STAGE4-PHYSICAL-MAINTENANCE-AUTHORIZED-BY-PREFLIGHT'
-}
-Invoke-Stage4FourFileTransactionCore @args | ConvertTo-Json -Depth 8
-,'$1:$2'
+            $stamp=($line -split ' ')[0] -replace '([+-]\d{2})(\d{2})$','$1:$2'
             $parsed=[DateTimeOffset]::Parse($stamp,[Globalization.CultureInfo]::InvariantCulture)
             if ($parsed.UtcDateTime -ge $script:stage4ServiceStartUtc) {
                 return $true
