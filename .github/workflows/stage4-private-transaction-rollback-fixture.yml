@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: stage4-rollback-fixture-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 jobs:
   simulated-four-file-rollback:
     name: Temporary-only transaction rollback Windows PS 5.1 and 7
