@@ -1,10 +1,11 @@
 /** Revalidate an already-open native channel; an upgrade is not a permanent grant. */
 export function createGatewayChannelLeaseGuard({
-  sessionId, userId, readBrowser, readWorkspace, now = Date.now, cacheMs = 1000, timeoutMs = 5000,
+  sessionId, userId, expectedMachineId, expectedRuntimeBackend, readBrowser, readWorkspace, now = Date.now, cacheMs = 1000, timeoutMs = 5000,
 }: {
   sessionId: string; userId: string;
+  expectedMachineId?: string; expectedRuntimeBackend?: string;
   readBrowser: () => Promise<string | null>;
-  readWorkspace: () => Promise<{ renterId: string; expiresAt: Date } | null>;
+  readWorkspace: () => Promise<{ renterId: string; expiresAt: Date; machineId?: string; runtimeBackend?: string } | null>;
   now?: () => number; cacheMs?: number; timeoutMs?: number;
 }) {
   let checkedAt: number | null = null;
@@ -30,7 +31,12 @@ export function createGatewayChannelLeaseGuard({
         allowed = typeof browser === 'object' && browser !== null
           && 'sessionId' in browser && browser.sessionId === sessionId
           && 'userId' in browser && browser.userId === userId
-          && row?.renterId === userId && Number.isFinite(expiresAt)
+          && row?.renterId === userId
+          // A native channel is bound to the machine and runtime selected at upgrade.
+          // Do not relay to a stale machine if a session is reassigned in the DB.
+          && (expectedMachineId === undefined || row?.machineId === expectedMachineId)
+          && (expectedRuntimeBackend === undefined || row?.runtimeBackend === expectedRuntimeBackend)
+          && Number.isFinite(expiresAt)
           && Number.isFinite(current) && current >= time && expiresAt > current;
         checkedAt = current;
         validUntil = allowed ? Math.min(current + cacheMs, expiresAt) : current;
