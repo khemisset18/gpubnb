@@ -148,4 +148,64 @@ try {
 if (-not $refused) { throw 'stage4_install_readiness_bad_external_pin_not_rejected' }
 Write-Host 'PASS read-only installation readiness policy and invalid external pin rejection'
 
+
+# Full verifier ENTRYPOINT regression (not just the synthetic policy helper).
+# Synthetic manifests and dummy PE files intentionally cannot yield a SUCCESS
+# signed-package verification; negative cases must be rejected BEFORE PE checks.
+$fixtureRoot=Join-Path $env:TEMP ('stage4-private-verifier-test-'+[Guid]::NewGuid().ToString('N'))
+[void](New-Item -ItemType Directory -Path $fixtureRoot -Force)
+try {
+    $identityFile=Join-Path $fixtureRoot 'build-identities.json'
+    $unsignedFile=Join-Path $fixtureRoot 'unsigned-stage4.manifest.json'
+    $signedFile=Join-Path $fixtureRoot 'stage4-private-qualification.manifest.json'
+    $unsignedManifest=[ordered]@{
+        schemaVersion=2;kind='STAGE4_UNSIGNED_PRIVATE_CANDIDATE'
+        sourceCommit=$commit;publisherSha256=$pin;installable=$false
+        publicBookabilityEnabled=$false;iddDriverIncluded=$false
+        buildIdentitiesSha256='';files=@($script:base.files | ForEach-Object {
+            @{name=$_.name;sha256=$_.unsignedSha256;architecture='AMD64';imports=@()}
+        })
+    }
+    foreach($record in $script:base.files) {
+        [IO.File]::WriteAllText((Join-Path $fixtureRoot $record.name),'dummy PE - MUST NOT PASS')
+    }
+    function Write-PrivateVerifierFixture([string]$AgentCommit,[string]$HelperCommit,[string]$WorkerCommit,[string]$MediaCommit) {
+        $identity=$identityBase | ConvertTo-Json -Depth 12 | ConvertFrom-Json
+        $identity.agent.buildCommit=$AgentCommit
+        $identity.helper.sourceCommit=$HelperCommit
+        $identity.worker.sourceCommit=$WorkerCommit
+        $identity.media.sourceCommit=$MediaCommit
+        [IO.File]::WriteAllText($identityFile,($identity | ConvertTo-Json -Depth 12))
+        $unsignedManifest.buildIdentitiesSha256=(Get-FileHash -LiteralPath $identityFile -Algorithm SHA256).Hash.ToLowerInvariant()
+        [IO.File]::WriteAllText($unsignedFile,($unsignedManifest | ConvertTo-Json -Depth 12))
+        $signed=$script:base | ConvertTo-Json -Depth 12 | ConvertFrom-Json
+        $signed.buildIdentitiesSha256=$unsignedManifest.buildIdentitiesSha256
+        $signed.sourceUnsignedManifestSha256=(Get-FileHash -LiteralPath $unsignedFile -Algorithm SHA256).Hash.ToLowerInvariant()
+        [IO.File]::WriteAllText($signedFile,($signed | ConvertTo-Json -Depth 12))
+        return (Get-FileHash -LiteralPath $signedFile -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    function Expect-RealVerifierIdentityReject([string]$Title,[string]$Agent,[string]$Helper,[string]$Worker,[string]$Media) {
+        $hash=Write-PrivateVerifierFixture $Agent $Helper $Worker $Media
+        $message=''
+        try {
+            & (Join-Path $scripts 'verify-stage4-private-qualification.ps1') `
+                -PackageDirectory $fixtureRoot -ExpectedManifestSha256 $hash -ExpectedCommit $commit `
+                -ExpectedPublisherSha256 $pin -ExpectedMachineId $machine `
+                -ExpectedGpuUuid $gpu -RenterAccount $renter | Out-Null
+        } catch { $message=$_.Exception.Message }
+        if ($message -notlike '*private_qualification_embedded_identity_mismatch*') {
+            throw ('private_qualification_real_verifier_identity_bypass:'+$Title+':'+$message)
+        }
+        Write-Host ('PASS actual private verifier entrypoint rejects '+$Title)
+    }
+    Expect-RealVerifierIdentityReject 'SHA12 Agent' ($commit.Substring(0,12)) $commit $commit $commit
+    Expect-RealVerifierIdentityReject 'wrong SHA40 Agent' ('f'*40) $commit $commit $commit
+    Expect-RealVerifierIdentityReject 'mixed Worker' $commit $commit ('f'*40) $commit
+    Expect-RealVerifierIdentityReject 'mixed Helper' $commit ('f'*40) $commit $commit
+    Expect-RealVerifierIdentityReject 'mixed Media' $commit $commit $commit ('f'*40)
+} finally {
+    if(Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Force -Recurse }
+}
+Write-Host 'PASS real verifier fail-closed identity regression (no false positive signed package)'
+
 Write-Host 'PASS all private qualification policy adversarial checks'
