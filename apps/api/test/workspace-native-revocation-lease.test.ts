@@ -167,3 +167,40 @@ test('native grant is revoked if the server reassigns the channel machine or run
   runtimeBackend = 'WINDOWS_NATIVE';
   assert.equal(await authorized(), true);
 });
+
+test('native revocation while browser lease fetch is pending rejects every coalesced check', async () => {
+  const sessionId = 'pending-browser', userId = 'renter';
+  let resolveRead!: (value: string | null) => void;
+  let browserReads = 0;
+  const authorized = createGatewayChannelLeaseGuard({
+    sessionId, userId, cacheMs: 0,
+    readBrowser: () => {
+      browserReads++;
+      return new Promise<string | null>((resolve) => { resolveRead = resolve; });
+    },
+    readWorkspace: async () => ({ renterId: userId, expiresAt: new Date(Date.now() + 60_000) }),
+  });
+  const pending = Array.from({ length: 12 }, () => authorized());
+  assert.equal(browserReads, 1);
+  // Redis revoked the browser token while the read was awaiting its result.
+  resolveRead(null);
+  assert.deepEqual(await Promise.all(pending), Array(12).fill(false));
+});
+
+test('native revocation while database lookup is pending rejects every coalesced check', async () => {
+  const sessionId = 'pending-db', userId = 'renter';
+  let resolveRead!: (value: { renterId: string; expiresAt: Date } | null) => void;
+  let workspaceReads = 0;
+  const authorized = createGatewayChannelLeaseGuard({
+    sessionId, userId, cacheMs: 0,
+    readBrowser: async () => JSON.stringify({ sessionId, userId }),
+    readWorkspace: () => {
+      workspaceReads++;
+      return new Promise((resolve) => { resolveRead = resolve; });
+    },
+  });
+  const pending = Array.from({ length: 12 }, () => authorized());
+  assert.equal(workspaceReads, 1);
+  resolveRead(null);
+  assert.deepEqual(await Promise.all(pending), Array(12).fill(false));
+});
