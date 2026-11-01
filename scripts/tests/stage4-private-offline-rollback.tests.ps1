@@ -31,6 +31,10 @@ if ($copyLines.Count -ne 2 -or @($copyLines | Where-Object { $_ -notmatch '-Dest
     throw 'offline_rollback_mutation_targets_changed_requires_review'
 }
 . $policyPath
+. (Join-Path $scripts 'stage4-private-offline-acl.ps1')
+if ($source -cnotmatch 'originalParentInheritanceReproduced=\$false' -or $source -cnotmatch 'Assert-Stage4ScratchAclSnapshot') {
+    throw 'offline_rollback_must_report_real_inheritance_not_reproduced'
+}
 $root=Join-Path $env:TEMP ('gpubnb-offline-rollback-tests-'+[Guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $root)
 try {
@@ -61,6 +65,65 @@ try {
     Reject 'installed folder as candidate' @{CandidateDirectory='C:\Program Files\GPUbnb'}
     [void](New-Item -ItemType Directory -Path $valid)
     Reject 'output already exists' @{}
+    # Windows reproduction: two distinct parents propagate conflicting inherited rights.
+    # Exercise a real ACL clone under a different parent with no SYSTEM path writes.
+    $aclRoot=Join-Path $root 'acl-repro'
+    $parentOriginal=Join-Path $aclRoot 'source-parent'
+    $parentScratch=Join-Path $aclRoot 'scratch-parent'
+    foreach($dir in @($aclRoot,$parentOriginal,$parentScratch)) {
+        [void](New-Item -ItemType Directory -Path $dir)
+    }
+    $userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User
+    $everyoneSid=[Security.Principal.SecurityIdentifier]::new('S-1-1-0')
+    $inherit=[Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit
+    foreach($entry in @(
+        @{path=$parentOriginal;rights=[Security.AccessControl.FileSystemRights]::ReadAndExecute},
+        @{path=$parentScratch;rights=[Security.AccessControl.FileSystemRights]::Modify}
+    )) {
+        $acl=Get-Acl -LiteralPath $entry.path
+        $acl.SetAccessRuleProtection($true,$false)
+        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($userSid,
+            [Security.AccessControl.FileSystemRights]::FullControl,$inherit,
+            [Security.AccessControl.PropagationFlags]::None,
+            [Security.AccessControl.AccessControlType]::Allow))
+        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($everyoneSid,
+            $entry.rights,$inherit,
+            [Security.AccessControl.PropagationFlags]::None,
+            [Security.AccessControl.AccessControlType]::Allow))
+        Set-Acl -LiteralPath $entry.path -AclObject $acl
+    }
+    $origin=Join-Path $parentOriginal 'installed'
+    $destination=Join-Path $parentScratch 'scratch-installed'
+    [void](New-Item -ItemType Directory -Path $origin)
+    [void](New-Item -ItemType Directory -Path $destination)
+    $originAcl=Get-Acl -LiteralPath $origin
+    $destinationAcl=Get-Acl -LiteralPath $destination
+    if ($originAcl.AreAccessRulesProtected -or $destinationAcl.AreAccessRulesProtected -or
+        $originAcl.Sddl -ceq $destinationAcl.Sddl) {
+        throw 'offline_rollback_test_did_not_reproduce_inherited_acl_difference'
+    }
+    $snapshot=New-Stage4ScratchAclSnapshot -OriginalAcl $originAcl -Directory
+    Set-Acl -LiteralPath $destination -AclObject $snapshot
+    [void](Assert-Stage4ScratchAclSnapshot -Expected $snapshot -Observed (Get-Acl -LiteralPath $destination) -Label 'test-scratch-directory')
+    $bad=Get-Acl -LiteralPath $destination
+    $bad.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($everyoneSid,
+        [Security.AccessControl.FileSystemRights]::WriteData,
+        [Security.AccessControl.AccessControlType]::Allow))
+    $rejected=$false
+    try { [void](Assert-Stage4ScratchAclSnapshot -Expected $snapshot -Observed $bad -Label 'injected-extra-right') }
+    catch { $rejected=$true }
+    if (-not $rejected) { throw 'offline_rollback_acl_extra_permission_not_rejected' }
+    Write-Host 'PASS inherited directory ACL normalizes to protected scratch snapshot; extra right rejected'
+    $originFile=Join-Path $origin 'test.bin'
+    $scratchFile=Join-Path $destination 'test.bin'
+    [IO.File]::WriteAllText($originFile,'old')
+    [IO.File]::WriteAllText($scratchFile,'old')
+    $originalFileAcl=Get-Acl -LiteralPath $originFile
+    $fileSnapshot=New-Stage4ScratchAclSnapshot -OriginalAcl $originalFileAcl
+    Set-Acl -LiteralPath $scratchFile -AclObject $fileSnapshot
+    [void](Assert-Stage4ScratchAclSnapshot -Expected $fileSnapshot -Observed (Get-Acl -LiteralPath $scratchFile) -Label 'test-scratch-file')
+    Write-Host 'PASS file ACL normalized snapshot'
+
     Write-Host 'PASS offline rollback script parse and fail-closed static checks'
 }
 finally {
