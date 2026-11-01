@@ -233,7 +233,11 @@ Invoke-Stage4FourFileTransactionCore @args | ConvertTo-Json -Depth 8
     $serviceAfter=Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
     if ($null -eq $serviceAfter -or $serviceAfter.ProcessId -ne $service.ProcessId) { return $false }
     $hashAfter=(Get-FileHash -LiteralPath $expectedExe -Algorithm SHA256).Hash
-    return ($hashAfter -ieq $hash)
+    return (Test-Stage4NewProcessProof -ServiceStartUtc $script:stage4ServiceStartUtc `
+        -ProcessCreationUtc $startedUtc -InitialProcessId $service.ProcessId `
+        -FinalProcessId $serviceAfter.ProcessId -InitialFileHash $hash `
+        -FinalFileHash $hashAfter -OldPinnedHash $oldHashes['gpubnb-agent.exe'] `
+        -NewPinnedHash $newHashes['gpubnb-agent.exe'])
 }
 $args=@{
     TargetDirectory=$installed
