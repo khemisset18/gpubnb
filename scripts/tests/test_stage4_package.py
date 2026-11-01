@@ -36,7 +36,7 @@ class PackageTests(unittest.TestCase):
         for n in s.NAMES:
             (self.root/n).write_bytes(fixture_pe())
         self.identity = {
-            'agent': {'frozen': True, 'agentVersion': '0.6.6', 'buildCommit': COMMIT[:12]},
+            'agent': {'frozen': True, 'agentVersion': '0.6.6', 'buildCommit': COMMIT},
             'agentRuntime': {'idnaCodec': True, 'dnsResolution': True, 'tlsContext': True},
             'helper': {'sourceCommit': COMMIT, 'workerSignerSha256': PIN, 'mutationAuthority': 'release-candidate',
                        'workerProtocol': 1, 'mediaTransportProtocol': 2, 'browserMediaProtocol': 1, 'browserInputProtocol': 1},

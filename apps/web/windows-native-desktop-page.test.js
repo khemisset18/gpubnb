@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   mountWindowsNativeDesktop,
   nativeDesktopStreamPath,
+  safeNativeDesktopErrorCode,
 } from './windows-native-desktop-page.js';
 
 test('native desktop stream path contains only the public session identifier', () => {
@@ -223,4 +224,135 @@ test('pagehide closes transport and pageshow recreates it without reviving after
 
   windowObject.emit('pageshow', { persisted: true });
   assert.equal(clients.length, 2, 'explicit close must never reconnect');
+});
+
+
+test('policy close 1008 permanently stops retries for revoked session', () => {
+  const status = { textContent: '' };
+  const documentObject = {
+    querySelector(selector) {
+      return {
+        '#nativeDesktopCanvas': {},
+        '#nativeDesktopStatus': status,
+        '#nativeDesktopClose': { addEventListener() {} },
+      }[selector] ?? null;
+    },
+  };
+  const clients = [];
+  const timers = [];
+  mountWindowsNativeDesktop({
+    documentObject,
+    locationObject: {
+      href: 'https://example.test/windows-native-desktop.html?session=sess-1',
+      search: '?session=sess-1',
+    },
+    clientFactory(options) {
+      clients.push(options);
+      return { bindDom() { return () => {}; }, start() {}, close() {} };
+    },
+    setTimeoutFn(callback, delay) {
+      timers.push({ callback, delay });
+      return timers.length;
+    },
+    clearTimeoutFn() {},
+  });
+  clients[0].onState({ state: 'closed', closeCode: 1008, wasClean: true });
+  assert.match(status.textContent, /non autorisée/);
+  assert.equal(timers.length, 0, 'revoked connection must not reconnect');
+  assert.equal(clients.length, 1);
+});
+
+test('native viewer diagnostic codes use exact allowlist, never raw tokens or decoder text', () => {
+  assert.equal(
+    safeNativeDesktopErrorCode(new Error('windows_native_gateway_socket_error')),
+    'windows_native_gateway_socket_error',
+  );
+  assert.equal(
+    safeNativeDesktopErrorCode(new Error('windows_native_h264_sps_required')),
+    'windows_native_h264_sps_required',
+  );
+  for (const message of [
+    'a'.repeat(64),
+    'windows_native_' + 'a'.repeat(64),
+    'Bearer some-token',
+    'session:secret-abc',
+    'https://example.test/?token=secret',
+    'codec failed: secret',
+  ]) {
+    assert.equal(safeNativeDesktopErrorCode(new Error(message)), 'windows_native_client_failed');
+  }
+  assert.equal(safeNativeDesktopErrorCode({ message: 'windows_native_gateway_socket_error' }),
+    'windows_native_client_failed', 'only genuine Error is accepted');
+});
+
+test('reconnect backoff resets only after ten seconds of continuously rendered frames', () => {
+  const status = { textContent: '' };
+  const clients = [];
+  const timers = [];
+  let clock = 0;
+  mountWindowsNativeDesktop({
+    documentObject: {
+      querySelector(selector) {
+        return {
+          '#nativeDesktopCanvas': {},
+          '#nativeDesktopStatus': status,
+          '#nativeDesktopClose': { addEventListener() {} },
+        }[selector] ?? null;
+      },
+    },
+    locationObject: {
+      href: 'https://example.test/windows-native-desktop.html?session=sess-1',
+      search: '?session=sess-1',
+    },
+    clientFactory(options) {
+      clients.push(options);
+      return { bindDom() { return () => {}; }, start() {}, close() {} };
+    },
+    setTimeoutFn(callback, delay) {
+      const timer = { callback, delay };
+      timers.push(timer);
+      return timers.length;
+    },
+    clearTimeoutFn() {},
+    now: () => clock,
+    proofNow: () => clock,
+  });
+  const frame = (epoch, sequence) => ({
+    state: 'ready', streamEpoch: BigInt(epoch), frameSequence: BigInt(sequence),
+    renderedFrames: sequence, codec: 'avc1.640028',
+  });
+
+  clients[0].onState({ state: 'closed', closeCode: 1006 });
+  assert.equal(timers.at(-1).delay, 250);
+  timers.at(-1).callback();
+  assert.equal(clients.length, 2);
+
+  // One frame followed by 11 seconds of silence does not reset backoff.
+  clock = 1000;
+  clients[1].onState(frame(5, 1));
+  clock = 12_000;
+  clients[1].onState({ state: 'closed', closeCode: 1006 });
+  assert.equal(timers.at(-1).delay, 500);
+  timers.at(-1).callback();
+  assert.equal(clients.length, 3);
+
+  // Even two frames >3 seconds apart are not continuous video.
+  clock = 15_000;
+  clients[2].onState(frame(6, 1));
+  clock = 19_000;
+  clients[2].onState(frame(6, 2));
+  clock = 20_000;
+  clients[2].onState({ state: 'closed', closeCode: 1006 });
+  assert.equal(timers.at(-1).delay, 1000);
+  timers.at(-1).callback();
+  assert.equal(clients.length, 4);
+
+  // Six properly rendered, monotonic frames spanning 10 seconds reset backoff.
+  for (let i = 0; i <= 5; i += 1) {
+    clock = 25_000 + i * 2_000;
+    clients[3].onState(frame(7, i + 1));
+  }
+  clock = 36_000;
+  clients[3].onState({ state: 'closed', closeCode: 1006 });
+  assert.equal(timers.at(-1).delay, 250);
 });

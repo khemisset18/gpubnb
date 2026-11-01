@@ -41,6 +41,12 @@ from .windows_native_capability import (
     fence_native_rental_launch,
     native_rental_physical_cleanup_confirmed,
 )
+from .windows_native_private_console import (
+    CONSOLE_BACKEND,
+    console_session_change_fenced,
+    register_console_fence_wakeup,
+    selected_capture_backend,
+)
 from .windows_native_runtime import (
     NativeRuntimeHandle,
     launch_windows_native_workspace,
@@ -186,6 +192,49 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         self._native_blocked: set[str] = set()
         self._native_lock = threading.RLock()
         self._native_resume_locks: dict[str, threading.Lock] = {}
+        self._native_channel_sessions: dict[str, str] = {}
+        self._console_fence_wakeup = threading.Event()
+        register_console_fence_wakeup(self._console_fence_wakeup)
+        threading.Thread(
+            target=self._watch_console_session_fence,
+            daemon=True,
+            name="gpubnb-console-wts-revoker",
+        ).start()
+
+    def _watch_console_session_fence(self) -> None:
+        # WTS HandlerEx only sets an Event. Never block the Windows service
+        # control handler on a socket close, helper STOP, or network request.
+        while not self.stop_event.is_set():
+            if self._console_fence_wakeup.wait(timeout=0.5):
+                break
+        if not self._console_fence_wakeup.is_set():
+            return
+        with self._native_lock:
+            affected = [
+                session_id for session_id, runtime in self.native_runtimes.items()
+                if getattr(runtime.handle, "capture_backend", "iddcx") == CONSOLE_BACKEND
+            ]
+            self._native_blocked.update(affected)
+        # Disconnect buffered media/input first; physical STOP and API reporting
+        # follow, outside the lock. The worker separately checks WTS before
+        # publishing frames and injecting input.
+        for session_id in affected:
+            self._close_session_channels(session_id)
+        for session_id in affected:
+            try:
+                self._native_stop_and_report(session_id)
+            except Exception:
+                self._report_error(RuntimeError("native_console_wts_revocation_failed"))
+
+    def _console_channel_fenced(self, session_id: str) -> bool:
+        with self._native_lock:
+            runtime = self.native_runtimes.get(session_id)
+            if runtime is None or session_id in self._native_blocked:
+                return True
+            return (
+                getattr(runtime.handle, "capture_backend", "iddcx") == CONSOLE_BACKEND
+                and console_session_change_fenced()
+            )
 
     def _request(
         self,
@@ -411,6 +460,8 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         self,
         session_id: str,
         workspace_slug: str,
+        *,
+        private_console_qualification: bool = False,
     ) -> NativeGatewayRuntime:
         self._trace("native_start_begin", session_id=session_id)
         if workspace_slug not in WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS:
@@ -440,6 +491,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 session_id,
                 workspace_slug,
                 str(specs[0].hardware_uuid),
+                **({'private_console_qualification': True} if private_console_qualification else {}),
             )
         except Exception as exc:
             code = _native_error_code(exc)
@@ -514,6 +566,9 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             blocked = session_id in self._native_blocked
         if runtime is None or blocked:
             raise RuntimeError("windows_native_runtime_not_ready")
+        if (getattr(getattr(runtime, "handle", None), "capture_backend", "iddcx") == CONSOLE_BACKEND
+                and console_session_change_fenced()):
+            raise RuntimeError("native_console_session_change_fenced")
         return runtime
 
     def _stop_native_runtime(self, session_id: str) -> bool | None:
@@ -605,6 +660,11 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         self._trace("native_register_done", session_id=runtime.session_id)
 
     def _report_native_usage(self, runtime: NativeGatewayRuntime) -> None:
+        if (getattr(getattr(runtime, "handle", None), "capture_backend", "iddcx") == CONSOLE_BACKEND
+                and console_session_change_fenced()):
+            self._report_error(RuntimeError("native_console_session_change_fenced"))
+            self._native_stop_and_report(runtime.session_id)
+            return
         live_proof_lost = False
         # Default remains IddCx: an experimental console handle can never be
         # credited using the historical virtualDisplay-only status schema.
@@ -699,10 +759,27 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 continue
             if status not in {"READY", "RUNNING"}:
                 continue
+            # The server-issued HTTPS desired session, exact Agent build, and a
+            # separate local opt-in must agree before console media is touched.
+            # Never treat missing or malformed authority as console permission.
+            try:
+                capture_backend = selected_capture_backend(session)
+            except RuntimeError as exc:
+                self._report_error(exc)
+                if session_id in self.native_runtimes:
+                    self._native_stop_and_report(session_id)
+                continue
             with self._native_lock:
                 if session_id in self._native_blocked:
                     continue
                 runtime = self.native_runtimes.get(session_id)
+
+            if runtime is not None and getattr(getattr(runtime, "handle", None), "capture_backend", "iddcx") != capture_backend:
+                # A server-side backend/release change revokes the old session.
+                # Switching capture sources inside an active stream is forbidden.
+                self._report_error(RuntimeError("native_capture_backend_changed"))
+                self._native_stop_and_report(session_id)
+                continue
 
             if runtime is None:
                 if status == "RUNNING":
@@ -719,7 +796,10 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 if time.monotonic() < self.start_retry_at.get(session_id, 0.0):
                     continue
                 try:
-                    runtime = self._start_native_runtime(session_id, workspace_slug)
+                    runtime = self._start_native_runtime(
+                        session_id, workspace_slug,
+                        **({'private_console_qualification': True} if capture_backend == CONSOLE_BACKEND else {}),
+                    )
                 except Exception as exc:
                     failures = self.start_failures.get(session_id, 0) + 1
                     self.start_failures[session_id] = failures
@@ -764,6 +844,10 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             is_native = session_id in self.native_runtimes
         if not is_native:
             return super()._begin_reconnect_grace(session_id)
+        if self._console_channel_fenced(session_id):
+            # WTS STOP owns the session now. Never start reconnect grace,
+            # suspend or resume after the Windows console changed owners.
+            return
 
         # SUSPEND makes the helper physically non-READY before the reconnect API
         # marks the session paused. Hold the same transition lock used by RESUME
@@ -849,6 +933,55 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             return self._stop_native_runtime(session_id)
         return super()._stop_runtime(session_id)
 
+    def _handle(self, item: dict[str, Any]) -> None:
+        if item.get("kind") == "ws_send":
+            channel_id = str(item.get("channelId") or "")
+            with self._native_lock:
+                session_id = self._native_channel_sessions.get(channel_id)
+            # Never trust the browser-supplied sessionId for a media/input
+            # decision: the mapping comes from the original authorized OPEN.
+            # A dead channel's mapping is deliberately retained as a
+            # fail-closed tombstone, even after the reader has exited.
+            if session_id is not None and (
+                channel_id not in self.channels or self._console_channel_fenced(session_id)
+            ):
+                self._close_session_channels(session_id)
+                return
+        return super()._handle(item)
+
+    def _ws_forward_allowed(self, session_id: str, channel_id: str) -> bool:
+        # The v2 batch sender checks this again immediately before publishing
+        # already-buffered H.264 frames. Keep all legacy batching, backpressure,
+        # channel accounting and reconnect logic untouched.
+        with self._native_lock:
+            authorized = self._native_channel_sessions.get(channel_id)
+        if authorized is not None:
+            if authorized != session_id or self._console_channel_fenced(authorized):
+                return False
+            # A matching native channel remains valid only while its WTS
+            # desktop is authorized. Do not drop into the unknown-channel
+            # denial below: that would reject even healthy native video.
+            return super()._ws_forward_allowed(session_id, channel_id)
+        # An unrecognized channel from a known native runtime never inherits
+        # v2's permissive legacy frame forwarding. This covers stale threads,
+        # late receives and early-closed loopback connections.
+        with self._native_lock:
+            if session_id in self.native_runtimes or session_id in self._native_blocked:
+                return False
+        return super()._ws_forward_allowed(session_id, channel_id)
+
+    def _ws_reader(self, session_id: str, channel_id: str, ws: websocket.WebSocket) -> None:
+        # Keep the native channel's authorization identity after the reader
+        # returns. v2 joins its outbound sender for at most 15 seconds; an
+        # in-flight HTTP request can outlive that join. Dropping this mapping
+        # while a sender remains alive would silently revert
+        # _ws_forward_allowed to the legacy allow-by-default policy.
+        #
+        # Channel IDs are random/never reused, and this private-console
+        # authority is process-fenced on WTS transition. Retain the binding
+        # until service restart (rather than risk a fail-open GC).
+        return super()._ws_reader(session_id, channel_id, ws)
+
     def _ws_open(self, item: dict[str, Any]) -> None:
         session_id = str(item.get("sessionId") or "")
         with self._native_lock:
@@ -873,11 +1006,19 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             # forwarded to the privileged helper. Its capability is injected
             # exclusively by the Agent over a kernel-direct loopback socket.
             ws = _connect_native_websocket(runtime)
+            # The loopback connection may have blocked while Windows changed
+            # console owners. Check again before registering any relay channel.
+            if self._console_channel_fenced(session_id):
+                raise RuntimeError("native_console_session_change_fenced")
             set_timeout = getattr(ws, "settimeout", None)
             if callable(set_timeout):
                 set_timeout(None)
-            self.channels[channel_id] = ws
-            self.session_channels.setdefault(session_id, set()).add(channel_id)
+            with self._native_lock:
+                if self._console_channel_fenced(session_id):
+                    raise RuntimeError("native_console_session_change_fenced")
+                self.channels[channel_id] = ws
+                self.session_channels.setdefault(session_id, set()).add(channel_id)
+                self._native_channel_sessions[channel_id] = session_id
             reader = threading.Thread(
                 target=self._ws_reader,
                 args=(session_id, channel_id, ws),
@@ -891,8 +1032,10 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 session_id=session_id,
                 detail=f"code={_native_websocket_error_code(exc)}",
             )
-            self.channels.pop(channel_id, None)
-            self.session_channels.get(session_id, set()).discard(channel_id)
+            with self._native_lock:
+                self._native_channel_sessions.pop(channel_id, None)
+                self.channels.pop(channel_id, None)
+                self.session_channels.get(session_id, set()).discard(channel_id)
             if ws is not None:
                 try:
                     ws.close()
@@ -904,6 +1047,12 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         if request_id:
             def report_open_ack() -> None:
                 try:
+                    # A WTS transition may have closed the socket between
+                    # local handshake and the asynchronous browser OPEN ack.
+                    # Never advertise an already-revoked channel as live.
+                    if self._console_channel_fenced(session_id):
+                        self._reject_open(item, "native_console_session_change_fenced")
+                        return
                     self._request(
                         "/agent/workspace-gateway/respond",
                         "POST",

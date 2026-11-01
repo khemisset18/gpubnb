@@ -94,7 +94,7 @@ def pe_info(path):
 def check_identity(identity, commit, publisher):
     a, h, w, m = (identity[x] for x in ("agent", "helper", "worker", "media"))
     require(a.get("frozen") is True and a.get("agentVersion") == "0.6.6" and
-            a.get("buildCommit") == commit[:12], "stage4_agent_identity_mismatch")
+            a.get("buildCommit") == commit, "stage4_agent_identity_mismatch")
     require(identity.get("agentRuntime") == {"idnaCodec": True, "dnsResolution": True, "tlsContext": True},
             "stage4_frozen_agent_runtime_mismatch")
     require(h.get("sourceCommit") == w.get("sourceCommit") == m.get("sourceCommit") == commit,

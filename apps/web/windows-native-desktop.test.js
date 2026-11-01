@@ -37,17 +37,22 @@ class FakeSocket {
 function fakeCanvas() {
   const listeners = new Map();
   const draws = [];
+  const clears = [];
   const attributes = new Map();
   return {
     width: 0,
     height: 0,
     draws,
+    clears,
     attributes,
     focused: 0,
     getContext() {
       return {
         drawImage(frame, x, y, width, height) {
           draws.push({ frame, x, y, width, height });
+        },
+        clearRect(x, y, width, height) {
+          clears.push({ x, y, width, height });
         },
       };
     },
@@ -380,4 +385,194 @@ test('new stream epoch releases held input through the old fence before switchin
     [10n, 'key', 'ControlLeft', true],
     [10n, 'button', 0, true],
   ]);
+});
+
+
+test('native WebSocket close exposes only bounded code and clean flag, never reason', () => {
+  const socket = new FakeSocket();
+  const states = [];
+  const client = new WindowsNativeDesktopClient({
+    canvas: fakeCanvas(),
+    onState: (state) => states.push(state),
+    webSocketFactory: () => socket,
+    mediaFactory: () => ({ async push() {}, close() {} }),
+  });
+  client.start('/native/session/abc', 'https://example.test/page');
+  socket.emit('close', { code: 1008, wasClean: true, reason: 'never-log-me' });
+  assert.deepEqual(states.at(-1), { state: 'closed', closeCode: 1008, wasClean: true });
+  assert.equal(JSON.stringify(states).includes('never-log-me'), false);
+});
+
+test('WebSocket error blocks input immediately and preserves the real abnormal CloseEvent', async () => {
+  const socket = new FakeSocket();
+  const states = [];
+  const errors = [];
+  let mediaCloseCount = 0;
+  let mediaPushCount = 0;
+  const client = new WindowsNativeDesktopClient({
+    canvas: fakeCanvas(),
+    onState: (state) => states.push(state),
+    onError: (error) => errors.push(error.message),
+    webSocketFactory: () => socket,
+    mediaFactory: ({ output }) => ({
+      async push() {
+        mediaPushCount += 1;
+        output(
+          { displayWidth: 1280, displayHeight: 720, close() {} },
+          { streamEpoch: 9n, frameSequence: 1n, width: 1280, height: 720,
+            keyframe: true, codec: 'avc1.640028' },
+        );
+      },
+      close() { mediaCloseCount += 1; },
+    }),
+    inputFactory: () => ({
+      key() { return true; },
+      mouseButton() { return true; },
+    }),
+  });
+
+  client.start('/native/session/abc', 'https://example.test/page');
+  socket.readyState = 1;
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  await client.mediaQueue;
+  assert.equal(client.key('KeyA'), true);
+
+  socket.readyState = 3;
+  socket.emit('error');
+  assert.deepEqual(errors, ['windows_native_gateway_socket_error']);
+  assert.equal(client.key('KeyA'), false, 'no input after transport failure');
+  assert.equal(client.pointerButton(0), false, 'no input after transport failure');
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  await client.mediaQueue;
+  assert.equal(mediaPushCount, 1, 'no decoding after transport failure');
+  assert.equal(states.filter(state => state.state === 'closed').length, 0,
+    'await real CloseEvent rather than invent local closure');
+  assert.equal(socket.closed.length, 0, 'do not cause synthetic local close');
+
+  socket.emit('close', { code: 1006, wasClean: false, reason: 'SECRET_NEVER_PROPAGATE' });
+  assert.equal(mediaCloseCount, 1, 'decoder closed once');
+  assert.deepEqual(states.at(-1), { state: 'closed', closeCode: 1006, wasClean: false });
+  assert.equal(Object.hasOwn(states.at(-1), 'reason'), false,
+    'close reason must never leave the transport boundary');
+  socket.emit('close', { code: 1008, wasClean: true });
+  assert.equal(states.filter(state => state.state === 'closed').length, 1);
+});
+
+test('WebSocket error then server policy 1008 remains visible to the viewer', () => {
+  const socket = new FakeSocket();
+  const states = [];
+  const client = new WindowsNativeDesktopClient({
+    canvas: fakeCanvas(),
+    onState: (state) => states.push(state),
+    webSocketFactory: () => socket,
+    mediaFactory: () => ({ async push() {}, close() {} }),
+  });
+  client.start('/native/session/abc', 'https://example.test/page');
+  socket.emit('error');
+  socket.emit('close', { code: 1008, wasClean: true });
+  assert.deepEqual(states.at(-1), { state: 'closed', closeCode: 1008, wasClean: true });
+});
+
+test('queued media fallout after socket error cannot mask the actual 1006 close', async () => {
+  const socket = new FakeSocket();
+  const states = [];
+  const errors = [];
+  let releasePush;
+  let pushed = 0;
+  const client = new WindowsNativeDesktopClient({
+    canvas: fakeCanvas(),
+    onState: (state) => states.push(state),
+    onError: (error) => errors.push(error.message),
+    webSocketFactory: () => socket,
+    mediaFactory: () => ({
+      push() {
+        pushed += 1;
+        return new Promise((resolve, reject) => { releasePush = reject; });
+      },
+      close() {},
+    }),
+  });
+  client.start('/native/session/abc', 'https://example.test/page');
+  socket.readyState = 1;
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  await Promise.resolve();
+  assert.equal(pushed, 1, 'first decoder call is in flight');
+
+  socket.readyState = 3;
+  socket.emit('error');
+  releasePush(new Error('windows_native_decoder_failed'));
+  await client.mediaQueue;
+  assert.equal(pushed, 1, 'second queued decode must be cancelled');
+  assert.deepEqual(errors, ['windows_native_gateway_socket_error'],
+    'decoder rejection after socket error is not a second root cause');
+  assert.equal(socket.closed.length, 0, 'no synthetic close during queue cancellation');
+  socket.emit('close', { code: 1006, wasClean: false });
+  assert.deepEqual(states.at(-1), { state: 'closed', closeCode: 1006, wasClean: false });
+});
+
+test('late decoded frames after close or socket error are disposed, never painted', () => {
+  for (const closeKind of ['error', 'closed']) {
+    const canvas = fakeCanvas();
+    const socket = new FakeSocket();
+    const states = [];
+    let output;
+    const client = new WindowsNativeDesktopClient({
+      canvas,
+      webSocketFactory: () => socket,
+      onState: (state) => states.push(state),
+      mediaFactory: (options) => {
+        output = options.output;
+        return { async push() {}, close() {} };
+      },
+    });
+    client.start('/native/session/abc', 'https://example.test/page');
+    if (closeKind === 'error') {
+      socket.emit('error');
+    } else {
+      client.close();
+    }
+    const frame = {
+      displayWidth: 1280, displayHeight: 720, disposed: 0,
+      close() { this.disposed += 1; },
+    };
+    output(frame, {
+      streamEpoch: 9n, frameSequence: 3n, width: 1280, height: 720,
+      codec: 'avc1.640028', keyframe: true,
+    });
+    assert.equal(canvas.draws.length, 0, closeKind);
+    assert.equal(frame.disposed, 1, closeKind);
+    assert.equal(client.key('KeyA'), false, closeKind);
+    assert.equal(states.some(state => state.state === 'ready'), false, closeKind);
+  }
+});
+
+test('browser clears displayed renter frame on local stop and policy revocation', async () => {
+  for (const action of ['local', 'policy', 'transport-error']) {
+    const socket = new FakeSocket();
+    const canvas = fakeCanvas();
+    const client = new WindowsNativeDesktopClient({
+      canvas,
+      webSocketFactory: () => socket,
+      mediaFactory: ({ output }) => ({
+        async push() {
+          output({ displayWidth: 1280, displayHeight: 720, close() {} },
+            { streamEpoch: 7n, frameSequence: 1n, width: 1280, height: 720,
+              codec: 'avc1.640028', keyframe: true });
+        },
+        close() {},
+      }),
+    });
+    client.start('/native/session/abc', 'https://example.test/page');
+    socket.readyState = 1;
+    socket.emit('message', { data: new ArrayBuffer(1) });
+    await client.mediaQueue;
+    assert.equal(canvas.draws.length, 1, action);
+    if (action === 'local') client.close();
+    if (action === 'policy') socket.emit('close', { code: 1008, wasClean: true });
+    if (action === 'transport-error') socket.emit('error');
+    assert.deepEqual(canvas.clears.at(-1),
+      { x: 0, y: 0, width: 1280, height: 720 }, action);
+    assert.equal(client.key('KeyA'), false, action);
+  }
 });

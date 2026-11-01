@@ -1,8 +1,80 @@
 'use strict';
 
-function safeNativeDesktopErrorCode(error) {
+// Only fixed, source-owned diagnostic codes may reach DevTools or the DOM.
+// Arbitrary Error.message strings can be credentials or untrusted codec errors.
+const SAFE_NATIVE_DESKTOP_ERROR_CODES = new Set([
+  'windows_native_canvas_context',
+  'windows_native_canvas_required',
+  'windows_native_chunk_factory_required',
+  'windows_native_client_callback',
+  'windows_native_client_factory',
+  'windows_native_client_state',
+  'windows_native_decode_queue_full',
+  'windows_native_decode_queue_invalid',
+  'windows_native_decoder_error_callback',
+  'windows_native_decoder_factory',
+  'windows_native_decoder_failed',
+  'windows_native_decoder_not_ready',
+  'windows_native_decoder_output_required',
+  'windows_native_decoder_output_unbound',
+  'windows_native_decoder_required',
+  'windows_native_gateway_base_invalid',
+  'windows_native_gateway_cross_origin',
+  'windows_native_gateway_downgrade',
+  'windows_native_gateway_scheme',
+  'windows_native_gateway_socket_error',
+  'windows_native_gateway_url_credentials',
+  'windows_native_gateway_url_invalid',
+  'windows_native_h264_sps_required',
+  'windows_native_input_channel_not_ready',
+  'windows_native_input_epoch',
+  'windows_native_input_flags',
+  'windows_native_input_key',
+  'windows_native_input_kind',
+  'windows_native_input_mouse_absolute',
+  'windows_native_input_mouse_button',
+  'windows_native_input_mouse_delta',
+  'windows_native_input_mouse_relative',
+  'windows_native_input_mouse_wheel',
+  'windows_native_input_pointer_geometry',
+  'windows_native_input_scan_code',
+  'windows_native_input_sender',
+  'windows_native_input_sequence',
+  'windows_native_input_target',
+  'windows_native_media_binary_required',
+  'windows_native_media_chunk_length',
+  'windows_native_media_chunk_range',
+  'windows_native_media_clock',
+  'windows_native_media_codec',
+  'windows_native_media_dimensions',
+  'windows_native_media_epoch',
+  'windows_native_media_flags',
+  'windows_native_media_frame_length',
+  'windows_native_media_frame_mismatch',
+  'windows_native_media_frame_order',
+  'windows_native_media_keyframe_required',
+  'windows_native_media_magic',
+  'windows_native_media_packet_length',
+  'windows_native_media_packet_type',
+  'windows_native_media_sequence',
+  'windows_native_media_session_required',
+  'windows_native_media_timeout',
+  'windows_native_media_timeout_invalid',
+  'windows_native_media_version',
+  'windows_native_page_contract',
+  'windows_native_page_environment',
+  'windows_native_render_callback',
+  'windows_native_session_id_invalid',
+  'windows_native_video_frame_dimensions',
+  'windows_native_video_frame_required',
+  'windows_native_webcodecs_config_unsupported',
+  'windows_native_webcodecs_unavailable',
+  'windows_native_websocket_required',
+]);
+
+export function safeNativeDesktopErrorCode(error) {
   const message = error instanceof Error ? error.message : '';
-  return /^[A-Za-z0-9_:-]{1,120}$/u.test(message) ? message : 'windows_native_client_failed';
+  return SAFE_NATIVE_DESKTOP_ERROR_CODES.has(message) ? message : 'windows_native_client_failed';
 }
 
 import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261003-input-blob-1';
@@ -56,6 +128,9 @@ export function mountWindowsNativeDesktop({
     status.textContent = value;
   };
   const proof = proofIndicator ? new Stage4VideoContinuity() : null;
+  // Backoff recovery is a separate proof, even when no 300s indicator is shown.
+  // One decoded image followed by a frozen stream is NOT a stable connection.
+  const stableProof = new Stage4VideoContinuity({ minimumMs: NATIVE_STABLE_STREAM_MS });
   const showProof = () => {
     if (!proof || !proofIndicator) return;
     const result = proof.snapshot(proofNow());
@@ -73,7 +148,6 @@ export function mountWindowsNativeDesktop({
   let reconnectTimer = null;
   let reconnectAttempt = 0;
   let reconnectStartedAt = null;
-  let stableStreamTimer = null;
   let pageHidden = false;
   let stopped = false;
   const proofTimer = proof ? setIntervalFn(showProof, 1_000) : null;
@@ -86,10 +160,7 @@ export function mountWindowsNativeDesktop({
   };
 
   const releaseCurrent = () => {
-    if (stableStreamTimer !== null) {
-      clearTimeoutFn(stableStreamTimer);
-      stableStreamTimer = null;
-    }
+    stableProof.reset();
     const client = currentClient;
     const unbind = unbindCurrent;
     currentClient = null;
@@ -138,11 +209,16 @@ export function mountWindowsNativeDesktop({
         if (client !== currentClient) return;
 
         if (state?.state === 'closed') {
-          resetProof();
-          if (stableStreamTimer !== null) {
-            clearTimeoutFn(stableStreamTimer);
-            stableStreamTimer = null;
+          // Record only WebSocket protocol metadata to diagnose the FIRST
+          // closure, never a session URL, HTTP headers or video payload.
+          if (Number.isInteger(state.closeCode)) {
+            globalThis.console?.info?.('gpubnb_native_ws_closed', {
+              code: state.closeCode,
+              wasClean: state.wasClean === true,
+            });
           }
+          resetProof();
+          stableProof.reset();
           const unbind = unbindCurrent;
           currentClient = null;
           unbindCurrent = null;
@@ -152,22 +228,33 @@ export function mountWindowsNativeDesktop({
             setStatus('Session vidéo fermée');
             return;
           }
+          // Render sends 1008 when the workspace authority expires/revokes.
+          // Never retry a revoked browser session or obscure the security gate.
+          if (state.closeCode === 1008) {
+            stopped = true;
+            if (proofTimer !== null) clearIntervalFn(proofTimer);
+            setStatus('Session vidéo non autorisée — ouvrir une nouvelle session');
+            return;
+          }
           if (pageHidden) return;
           scheduleReconnect();
           return;
         }
 
-        if (state?.state === 'ready' && stableStreamTimer === null) {
-          // Only reset exponential backoff after sustained decoded-video uptime.
-          // Short-lived readiness otherwise creates an unbounded rapid reconnect loop.
-          stableStreamTimer = setTimeoutFn(() => {
-            stableStreamTimer = null;
-            if (client === currentClient && !stopped && !pageHidden) markRecovered();
-          }, NATIVE_STABLE_STREAM_MS);
+        if (state?.state === 'ready') {
+          const timestamp = proofNow();
+          // The continuity engine requires rising frame sequence, same stream
+          // epoch and no gap >3s throughout the 10s backoff recovery period.
+          // A scheduled timer alone never proves video is being rendered.
+          if (stableProof.observe(state, timestamp).video300sObserved) {
+            markRecovered();
+            stableProof.reset();
+          }
+          proof?.observe(state, timestamp);
+        } else {
+          stableProof.reset();
+          resetProof();
         }
-
-        if (state?.state === 'ready') proof?.observe(state, proofNow());
-        else resetProof();
         showProof();
 
         const label = {
@@ -179,7 +266,9 @@ export function mountWindowsNativeDesktop({
       },
       onError: (error) => {
         if (client !== currentClient) return;
-        setStatus(`Connexion interrompue — ${safeNativeDesktopErrorCode(error)}`);
+        const code = safeNativeDesktopErrorCode(error);
+        globalThis.console?.warn?.('gpubnb_native_client_error', code);
+        setStatus(`Connexion interrompue — ${code}`);
       },
     });
 

@@ -10,6 +10,7 @@ import { dataPlaneHostBootstrapEnabled, issueHostTunnelBootstrap, loadDataPlaneH
 import { verifyAgentRequest, verifyAgentRequestV2 } from './security.js';
 import { consumeWorkspaceAccessGrant } from './workspace-access.js';
 import { enterQuarantine } from './quarantine-service.js';
+import { privateConsoleAgentCommit, privateConsoleDesiredFields } from './windows-native-private-console.js';
 import { waitForGatewayQueueItem } from './gateway-queue.js';
 import {
   browserGatewayFrameAllowed,
@@ -234,11 +235,18 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   });
   app.get('/agent/workspace-gateway/:machineId/desired',async(request,reply)=>{
     const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/desired`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});
-    const rows=await db.workspaceSession.findMany({where:{machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,expiresAt:true,runtimeBackend:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});
+    const rows=await db.workspaceSession.findMany({where:{machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,expiresAt:true,runtimeBackend:true,connectionMetadata:true,resourceLimits:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});
     // The agent needs to know which container/image to run per session - a
     // flat workspaceSlug is what workspace_gateway.py's _reconcile_sessions
     // reads (defaulting to 'developer' for any older/unrecognized value).
-    const sessions=rows.map(({machineWorkspace,...row})=>({...row,workspaceSlug:machineWorkspace.workspace.slug}));
+    const approvedConsoleCommit=privateConsoleAgentCommit();
+    const sessions=rows.map(({machineWorkspace,resourceLimits,...row})=>({
+      ...row,
+      workspaceSlug:machineWorkspace.workspace.slug,
+      ...(row.runtimeBackend === WorkspaceRuntimeBackend.WINDOWS_NATIVE
+        ? privateConsoleDesiredFields(resourceLimits,approvedConsoleCommit)
+        : {}),
+    }));
     return {sessions,dataPlane:{hostTunnelEnabled:dataPlaneHostBootstrapEnabled()}};
   });
   app.get('/agent/workspace-gateway/:machineId/sessions/:sessionId/data-plane-host',{config:{rateLimit:{max:120,timeWindow:'1 minute'}}},async(request,reply)=>{
@@ -442,9 +450,17 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         const channelId=crypto.randomUUID();const channelLogId=channelId.slice(0,8);const targetPath='/'+targetSuffix+url.search;const browserSessionKey=gatewaySessionKey(token);
         const channelTtl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((row.expiresAt.getTime()-Date.now())/1000)));
         const openRequestId=crypto.randomUUID();let browserClosed=false;let browserBackpressureSince=0;
-        const channelAuthorized=isWindowsNativeRuntime(row.runtimeBackend)
-          ?createGatewayChannelLeaseGuard({sessionId,userId:browser.userId,readBrowser:()=>redis.get(browserSessionKey),readWorkspace:()=>activeGatewaySession(db,sessionId)})
-          :async()=>true;
+        const nativeChannel = isWindowsNativeRuntime(row.runtimeBackend);
+        const channelAuthorized = nativeChannel
+          ? createGatewayChannelLeaseGuard({
+              sessionId, userId: browser.userId,
+              readBrowser: () => redis.get(browserSessionKey),
+              readWorkspace: () => activeGatewaySession(db,sessionId),
+              // A cancelled console stream must not wait one second for a
+              // cached workspace authorization to expire before blacking out.
+              cacheMs: 100,
+            })
+          : async () => true;
         const browserPending=new BrowserPendingBudget();
         const gatewayLog=app.log.child({accessRequestId:browser.accessRequestId,bookingId:row.bookingId,jobId:row.jobId,workspaceSessionId:sessionId,machineId:row.machineId,channelId,channel:channelLogId,openRequestId});
         gatewayLog.info({event:'workspace_gateway_browser_connected'},'workspace gateway browser websocket connected');
@@ -502,6 +518,19 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
               const parsed=JSON.parse(frame) as {dataBase64?:unknown;binary?:unknown;close?:unknown};
               if(parsed.close===true){if(ws.readyState===WebSocket.OPEN)ws.close(1000,'upstream closed');break;}
               if(typeof parsed.binary!=='boolean'||!isStrictBase64Payload(parsed.dataBase64,WS_MAX_BASE64_BYTES,WS_MAX_FRAME_BYTES))throw new Error('workspace_ws_redis_frame_invalid');
+              // Native media frames can wait in Redis after a Windows WTS STOP.
+              // A single authorization at the start of a 50-frame batch does
+              // not revoke buffered images inside that batch. Check the
+              // channel's Redis lease and the current workspace grant for
+              // EVERY native frame immediately before delivery.
+              if(nativeChannel && (
+                await redis.exists(wsChannelKey(channelId)) !== 1
+                || !await channelAuthorized()
+              )){
+                browserClosed=true;clearInterval(pump);
+                if(ws.readyState===WebSocket.OPEN)ws.close(1008,'native workspace revoked');
+                return;
+              }
               if(ws.readyState===WebSocket.OPEN)ws.send(Buffer.from(parsed.dataBase64,'base64'),{binary:parsed.binary});
             }
           })()

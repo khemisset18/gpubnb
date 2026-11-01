@@ -200,6 +200,24 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
         probe = True
         sys_info = system_inventory()
         telemetry = telemetry_snapshot()
+        # Separate, physically measured console proof. This is sent only as
+        # part of the v2 raw-body signed heartbeat, never as an IddCx claim.
+        private_console_proof = None
+        if os.environ.get("GPUBNB_PRIVATE_CONSOLE_QUALIFICATION") == "true":
+            from ._build_info import BUILD_COMMIT
+            from .windows_native_capability import probe_private_console_capability
+
+            measured = probe_private_console_capability(enabled=True)
+            private_console_proof = {
+                "schemaVersion": 1,
+                "captureBackend": "console-dedicated",
+                "available": bool(measured.available),
+                "gpuUuid": measured.gpu_uuid if measured.available else None,
+                "agentCommit": BUILD_COMMIT,
+                "helperVersion": measured.helper_version if measured.available else None,
+                "hardwareEncoder": measured.hardware_encoder if measured.available else None,
+                "measuredAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            }
 
     current_fp = sys_info.get("machineFingerprint") or ""
     hw_changed, previous_fp = detect_hardware_change(current_fp)
@@ -245,6 +263,7 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
                 "agentVersion": __version__,
                 "hardwareChanged": hw_changed,
                 "telemetry": telemetry,
+                **({"privateConsoleProof": private_console_proof} if private_console_proof is not None else {}),
                 **sys_info,
             }
             result = client.request(

@@ -402,6 +402,21 @@ struct MediaSendFence {
 }
 
 #[cfg(target_os = "windows")]
+fn ensure_console_media_transfer_allowed(
+    console_mode: bool,
+    windows_session_id: u32,
+) -> Result<(), WorkerError> {
+    if console_mode {
+        // The WGC/NVENC step and each pipe transfer can block. Reject any
+        // intervening WTS lock/switch before publishing another buffer; the
+        // LocalSystem authority independently checks the renter SID again.
+        ensure_current_renter_input_desktop(windows_session_id)
+            .map_err(|_| WorkerError::new("renter_desktop_not_active", 21))?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
 fn send_encoded_media_frame(
     control: &WorkerPipeClient,
     media_pipe: &WorkerMediaPipeClient,
@@ -467,12 +482,15 @@ fn send_encoded_media_frame(
     // oversized/invalid frame therefore cannot leave a proof stranded on the
     // control channel. Once valid, publish the small proof first so the service
     // learns the exact bounded payload length before the potentially large write.
+    ensure_console_media_transfer_allowed(console_mode, windows_session_id)?;
     control
         .send_frame(&proof)
         .map_err(|_| WorkerError::new("media_proof_send_failed", 21))?;
+    ensure_console_media_transfer_allowed(console_mode, windows_session_id)?;
     media_pipe
         .send_message(&header)
         .map_err(|_| WorkerError::new("media_header_send_failed", 21))?;
+    ensure_console_media_transfer_allowed(console_mode, windows_session_id)?;
     media_pipe
         .send_message(&media.bytes)
         .map_err(|_| WorkerError::new("media_payload_send_failed", 21))?;
@@ -691,6 +709,13 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         input,
                     )
                     .map_err(|_| WorkerError::new("input_frame_fence_failed", 21))?;
+                    // The input frame itself can have waited on the pipe
+                    // while Windows switched the console to another user.
+                    // Recheck immediately before any OS input mutation.
+                    ensure_console_media_transfer_allowed(
+                        console_mode.unwrap_or(false),
+                        windows_session_id,
+                    )?;
                     inject_input(windows_session_id, platform_input(event))
                         .map_err(|_| WorkerError::new("input_injection_failed", 21))?;
                 }

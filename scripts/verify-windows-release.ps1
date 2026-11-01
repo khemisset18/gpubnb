@@ -66,9 +66,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Installed agent build-info command failed.' }
     if (-not $buildInfo.frozen) { throw 'Installed agent does not report itself as a frozen build.' }
     if ($ExpectedCommit) {
-        $expectedShort = $ExpectedCommit.Substring(0, 12)
-        if ($buildInfo.buildCommit -ne $expectedShort) {
-            throw "Installed agent buildCommit mismatch: expected $expectedShort (from $ExpectedCommit), got $($buildInfo.buildCommit). The published binary was NOT built from the commit it claims to be."
+        $expectedCommitFull = $ExpectedCommit
+        if ($buildInfo.buildCommit -ne $expectedCommitFull) {
+            throw "Installed agent buildCommit mismatch: expected $expectedCommitFull, got $($buildInfo.buildCommit). The published binary was NOT built from the commit it claims to be."
         }
     }
 

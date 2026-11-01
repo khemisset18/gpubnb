@@ -316,7 +316,7 @@ try {
 } catch {
     throw 'release_candidate_agent_build_info_invalid'
 }
-if ($agentInfo.frozen -ne $true -or [string]$agentInfo.buildCommit -cne $sourceCommit.Substring(0, 12) -or
+if ($agentInfo.frozen -ne $true -or [string]$agentInfo.buildCommit -cne $sourceCommit -or
     [string]$agentInfo.agentVersion -cne '0.6.6') {
     throw 'release_candidate_agent_build_identity_mismatch'
 }
@@ -361,7 +361,7 @@ $manifest = [ordered]@{
     userModePublisherCertificateSha256 = $workerSignerSha256
     explicitlyApprovedPublisherSha256 = $expectedPublisher
     agentUnsignedInputSha256 = $expectedAgentHash
-    agentBuildCommit = $sourceCommit.Substring(0, 12)
+    agentBuildCommit = $sourceCommit
     files = $files
     iddDriverProductionSigningRequired = $true
     iddDriverIncluded = $false

@@ -29,6 +29,29 @@ try {
     $leaseText="schema=1`nwindows_session_id=42`nrenter_user_sid=S-1-5-21-1-2-3-1002`nprovider_user_sid=S-1-5-21-1-2-3-1001`ngpu_uuid=GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a`n"
     $leaseArgs=@{Text=$leaseText;SessionId=42;RenterSid='S-1-5-21-1-2-3-1002';ProviderSid='S-1-5-21-1-2-3-1001';GpuUuid='GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a'}
     if(-not (Assert-Stage4RenterLease @leaseArgs)){throw 'stage4_positive_lease_failed'}
+    # Regression: Windows PowerShell 5.1 can deserialize an ISO UTC JSON
+    # string to DateTime. DateTimeOffset.Parse(DateTime.ToString()) fails
+    # when the implicit formatted date uses another culture (e.g. 11/13).
+    $utc=[DateTime]::SpecifyKind([DateTime]::new(2026,11,13,0,20,59),[DateTimeKind]::Utc)
+    $iso=$utc.ToString('o',[Globalization.CultureInfo]::InvariantCulture)
+    $originalCulture=[Threading.Thread]::CurrentThread.CurrentCulture
+    try {
+        foreach($locale in @('fr-FR','en-US')){
+            [Threading.Thread]::CurrentThread.CurrentCulture=[Globalization.CultureInfo]::GetCultureInfo($locale)
+            $json=('{ "expiresUtc": "'+$iso+'" }' | ConvertFrom-Json)
+            foreach($value in @($utc,$iso,$json.expiresUtc)){
+                $actual=Convert-Stage4ExpiryToUtc $value
+                if($actual -ne $utc){throw "stage4_private_expiry_utc_regression:$locale"}
+            }
+        }
+    } finally {
+        [Threading.Thread]::CurrentThread.CurrentCulture=$originalCulture
+    }
+    Expect-Failure 'stage4_private_expiry_format_invalid' { Convert-Stage4ExpiryToUtc '11/13/2026 00:20:59' }
+    Expect-Failure 'stage4_private_expiry_timezone_required' {
+        Convert-Stage4ExpiryToUtc ([DateTime]::SpecifyKind($utc,[DateTimeKind]::Unspecified))
+    }
+    Write-Host 'PASS signed expiry normalization on fr-FR and en-US'
     Write-Host 'PASS exact existing renter WTS lease'
     $leaseArgs.SessionId=43
     Expect-Failure 'stage4_renter_lease_stale_or_mismatched' {Assert-Stage4RenterLease @leaseArgs}
@@ -57,7 +80,7 @@ try {
         $path=Join-Path $dir $name;[IO.File]::WriteAllBytes($path,$b)
         $records+=@{name=$name;sha256=(Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant();architecture='AMD64';imports=@('kernel32.dll')}
     }
-    $identity=@{agent=@{frozen=$true;agentVersion='0.6.6';buildCommit=$commit.Substring(0,12)};
+    $identity=@{agent=@{frozen=$true;agentVersion='0.6.6';buildCommit=$commit};
         agentRuntime=@{idnaCodec=$true;dnsResolution=$true;tlsContext=$true};
         helper=@{sourceCommit=$commit;workerSignerSha256=$pin;mutationAuthority='release-candidate';workerProtocol=1;mediaTransportProtocol=2;browserMediaProtocol=1;browserInputProtocol=1};
         worker=@{sourceCommit=$commit;mediaSignerSha256=$pin};media=@{sourceCommit=$commit;mediaAbi=2;nvencApi='13.0'}}

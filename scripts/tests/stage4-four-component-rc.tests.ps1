@@ -32,7 +32,7 @@ foreach ($marker in @(
     'explicitlyApprovedPublisherSha256 = $expectedPublisher',
     "'gpubnb-agent.exe' = "+'$agentCandidate',
     'agentUnsignedInputSha256 = $expectedAgentHash',
-    'agentBuildCommit = $sourceCommit.Substring(0, 12)'
+    'agentBuildCommit = $sourceCommit'
 )) {
     if (-not $source.Contains($marker)) { throw "release_builder_gate_missing:$marker" }
 }

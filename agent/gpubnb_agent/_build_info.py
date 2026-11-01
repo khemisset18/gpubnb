@@ -1,6 +1,6 @@
 """Build metadata for this specific agent artifact, not the source tree.
 
-BUILD_COMMIT is overwritten by CI with the real 12-char commit SHA
+BUILD_COMMIT is overwritten by CI with the full 40-character commit SHA
 immediately before PyInstaller freezes the agent (see
 .github/workflows/publish-host-test-release.yml), so a running exe can
 report exactly which commit it was actually built from - this is the field

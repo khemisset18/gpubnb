@@ -54,3 +54,32 @@ test('Windows signer requires a current private-key certificate and RFC3161 time
   assert.match(source, /-RequireTimestamp/);
   assert.match(source, /-ExpectedSignerSha256 \$signerCertificateSha256/);
 });
+
+test('Windows frozen Agent must publish full 40-character Git SHA, not a truncated commit', async () => {
+  const workflow = await readFile(workflowUrl, 'utf8');
+  const candidate = await readFile(new URL('../../../scripts/build-windows-native-release-candidate.ps1', import.meta.url), 'utf8');
+  assert.match(workflow, /\$commit = \$env:GITHUB_SHA\r?\n/);
+  assert.doesNotMatch(workflow, /\$env:GITHUB_SHA\.Substring\(0,\s*12\)/);
+  assert.match(candidate, /agentInfo\.buildCommit -cne \$sourceCommit/);
+  assert.match(candidate, /agentBuildCommit = \$sourceCommit/);
+  assert.doesNotMatch(candidate, /\$sourceCommit\.Substring\(0,\s*12\)/);
+  const stage4Test = await readFile(new URL('../../../scripts/tests/stage4-four-component-rc.tests.ps1', import.meta.url), 'utf8');
+  assert.match(stage4Test, /agentBuildCommit = \$sourceCommit/);
+  assert.doesNotMatch(stage4Test, /agentBuildCommit = \$sourceCommit\.Substring\(0,\s*12\)/);
+});
+
+test('all Windows Stage 4 package paths require full Agent source identity', async () => {
+  const files = [
+    '../../../.github/workflows/host-windows-preflight.yml',
+    '../../../scripts/build-stage4-unsigned-package.ps1',
+    '../../../scripts/verify-stage4-package.ps1',
+    '../../../scripts/stage4-package-common.ps1',
+    '../../../scripts/verify-windows-release.ps1',
+    '../../../scripts/verify_stage4_package.py',
+  ];
+  for (const file of files) {
+    const contents = await readFile(new URL(file, import.meta.url), 'utf8');
+    assert.doesNotMatch(contents, /(?:buildCommit|BUILD_COMMIT)[^\r\n]{0,150}(?:Substring\(0,\s*12\)|\[:12\])/,
+      file + ' must not validate a shortened Agent commit');
+  }
+});

@@ -1,5 +1,27 @@
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
+# Preserve ISO-8601 expiry instants across Windows PowerShell 5.1 ConvertFrom-Json
+# (which may return DateTime), regardless of the host's date culture.
+function Convert-Stage4ExpiryToUtc {
+    param($Value)
+    if($Value -is [DateTimeOffset]) { return $Value.UtcDateTime }
+    if($Value -is [DateTime]) {
+        if($Value.Kind -eq [DateTimeKind]::Unspecified){throw 'stage4_private_expiry_timezone_required'}
+        return $Value.ToUniversalTime()
+    }
+    if($Value -is [string]) {
+        $parsed=[DateTimeOffset]::MinValue
+        if(-not [DateTimeOffset]::TryParseExact($Value,'o',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::None,[ref]$parsed)){
+            throw 'stage4_private_expiry_format_invalid'
+        }
+        if($parsed.Offset -ne [TimeSpan]::Zero){throw 'stage4_private_expiry_must_be_utc'}
+        return $parsed.UtcDateTime
+    }
+    throw 'stage4_private_expiry_type_invalid'
+}
+
 function Assert-Stage4Certificate {
     param($Certificate, [string]$ExpectedPublisherSha256, [int]$MinimumValidityHours = 24, [bool]$RequirePrivateKey=$true)
     if ($null -eq $Certificate -or ($RequirePrivateKey -and -not $Certificate.HasPrivateKey)) {
@@ -153,7 +175,7 @@ function Read-Stage4Package {
     $ip=Join-Path $root 'build-identities.json'
     if((Get-FileHash -LiteralPath $ip -Algorithm SHA256).Hash.ToLowerInvariant() -cne $m.buildIdentitiesSha256){throw 'stage4_identity_hash_mismatch'}
     $id=Get-Content -LiteralPath $ip -Raw | ConvertFrom-Json
-    if($id.agent.frozen -ne $true -or $id.agent.agentVersion -cne '0.6.6' -or $id.agent.buildCommit -cne $Commit.Substring(0,12)){throw 'stage4_agent_identity_mismatch'}
+    if($id.agent.frozen -ne $true -or $id.agent.agentVersion -cne '0.6.6' -or $id.agent.buildCommit -cne $Commit){throw 'stage4_agent_identity_mismatch'}
     if($id.agentRuntime.idnaCodec -ne $true -or $id.agentRuntime.dnsResolution -ne $true -or $id.agentRuntime.tlsContext -ne $true){throw 'stage4_frozen_agent_runtime_mismatch'}
     if($id.helper.sourceCommit -cne $Commit -or $id.worker.sourceCommit -cne $Commit -or $id.media.sourceCommit -cne $Commit){throw 'stage4_component_commit_mismatch'}
     if($id.helper.workerSignerSha256 -cne $Publisher -or $id.worker.mediaSignerSha256 -cne $Publisher){throw 'stage4_embedded_pin_mismatch'}
