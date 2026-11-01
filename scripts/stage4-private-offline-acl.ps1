@@ -27,6 +27,26 @@ function New-Stage4ScratchAclSnapshot {
     return $snapshot
 }
 
+
+# Windows drops the ID (inherited-ACE provenance) flag when a protected
+# scratch DACL is persisted. Normalize ONLY this flag in the expected
+# descriptor. Keep principal SIDs, rights, ACE order, owner, group, other ACE
+# flags and DACL protection strict. Never use this for the live installation.
+function Convert-Stage4ScratchExpectedSddl {
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)][string]$Sddl)
+    return [regex]::Replace($Sddl, '\\(([^;()]+);([^;()]*);',
+        [Text.RegularExpressions.MatchEvaluator]{
+            param($match)
+            $flags=$match.Groups[2].Value
+            if ($flags.Length % 2 -ne 0) {
+                throw 'stage4_scratch_unrecognized_ace_flags'
+            }
+            $normalized=$flags.Replace('ID','')
+            return '('+$match.Groups[1].Value+';'+$normalized+';'
+        })
+}
+
 function Assert-Stage4ScratchAclSnapshot {
     [CmdletBinding()]
     param(
@@ -38,7 +58,7 @@ function Assert-Stage4ScratchAclSnapshot {
     )
     if (-not $Expected.AreAccessRulesProtected -or
         -not $Observed.AreAccessRulesProtected -or
-        $Expected.Sddl -cne $Observed.Sddl) {
+        (Convert-Stage4ScratchExpectedSddl -Sddl $Expected.Sddl) -cne $Observed.Sddl) {
         throw "stage4_scratch_acl_snapshot_mismatch:$Label"
     }
     return $true
