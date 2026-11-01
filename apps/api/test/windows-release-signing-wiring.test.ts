@@ -63,4 +63,7 @@ test('Windows frozen Agent must publish full 40-character Git SHA, not a truncat
   assert.match(candidate, /agentInfo\.buildCommit -cne \$sourceCommit/);
   assert.match(candidate, /agentBuildCommit = \$sourceCommit/);
   assert.doesNotMatch(candidate, /\$sourceCommit\.Substring\(0,\s*12\)/);
+  const stage4Test = await readFile(new URL('../../../scripts/tests/stage4-four-component-rc.tests.ps1', import.meta.url), 'utf8');
+  assert.match(stage4Test, /agentBuildCommit = \$sourceCommit/);
+  assert.doesNotMatch(stage4Test, /agentBuildCommit = \$sourceCommit\.Substring\(0,\s*12\)/);
 });
