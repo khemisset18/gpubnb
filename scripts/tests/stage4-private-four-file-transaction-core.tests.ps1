@@ -74,7 +74,7 @@ $names=@('gpubnb-agent.exe','gpubnb-windows-stream.exe',
 function Run-Case {
     param([string]$Title,[int]$FailAfter=0,[bool]$BadHealth=$false,
         [bool]$FailStartOnce=$false,[bool]$ExpectRollback=$false,
-        [bool]$BadOldHash=$false)
+        [bool]$BadOldHash=$false,[int]$FailDuringStaging=0)
     $root=Join-Path $env:TEMP ('GPUbnb-stage4-maintenance-test-'+[Guid]::NewGuid().ToString('N'))
     $candidate=Join-Path $root 'candidate'
     $target=Join-Path $root 'installed'
@@ -120,6 +120,7 @@ function Run-Case {
         IsControlledServiceStopped=$stopped
         ValidateControlledRuntime=$health
         InjectFailureAfter=$FailAfter
+        InjectStageFailureAfter=$FailDuringStaging
     }
     try {
         $response=$null
@@ -149,6 +150,24 @@ function Run-Case {
                 throw 'stage4_test_bad_preflight_mutated_service'
             }
             Write-Host ('PASS reject drift without stop '+$Title)
+        } elseif($FailDuringStaging -gt 0) {
+            if($null -eq $errorText -or
+                $errorText -notlike 'stage4_core_pre_stop_cleanup_verified:*' -or
+                $script:stage4FakeStopCalls -ne 0) {
+                throw ('stage4_test_pre_stop_cleanup_or_service_failure:'+$Title+':'+$errorText)
+            }
+            foreach($name in $names) {
+                $live=Join-Path $target $name
+                if((Get-FileHash -LiteralPath $live -Algorithm SHA256).Hash -ine $oldHashes[$name] -or
+                    (Get-Acl -LiteralPath $live).Sddl -cne $oldSddl[$name]) {
+                    throw ('stage4_test_pre_stop_original_changed:'+$Title+':'+$name)
+                }
+            }
+            if(@(Get-ChildItem -LiteralPath $target -Force |
+                Where-Object { $_.Name -like '.stage4-*' }).Count -ne 0) {
+                throw ('stage4_test_pre_stop_staged_files_remain:'+$Title)
+            }
+            Write-Host ('PASS interrupted pre-stop staging cleaned without service stop '+$Title)
         } else {
             if($null -ne $errorText -or $response.kind -ne 'STAGE4_PRIVATE_FOUR_FILE_TRANSACTION' -or
                 $response.isTemporaryFixture -cne $true -or
@@ -175,6 +194,9 @@ function Run-Case {
 }
 
 Run-Case -Title 'normal-success'
+foreach($i in 1..4){
+    Run-Case -Title ('pre_stop_staging_failure_'+$i) -FailDuringStaging $i
+}
 foreach($i in 1..4){
     Run-Case -Title ('failure_after_'+$i) -FailAfter $i -ExpectRollback $true
 }
