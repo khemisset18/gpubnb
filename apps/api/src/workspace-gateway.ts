@@ -475,6 +475,10 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         // their first frame while newer agents additionally return an explicit ACK.
         const setup=(async()=>{
           await redis.set(wsChannelKey(channelId),JSON.stringify({sessionId,machineId:row.machineId,browserSessionKey,runtimeBackend:row.runtimeBackend} satisfies GatewayChannelBinding),'EX',channelTtl);
+          if(browserClosed){
+            await redis.del(wsChannelKey(channelId));
+            throw new Error('workspace_channel_closed_during_setup');
+          }
           const accepted=await enqueueMachineRelay(redis,row.machineId,{id:openRequestId,sessionId,kind:'ws_open',channelId,path:targetPath,headers:relayHeaders(request.headers as Record<string,unknown>)} satisfies RelayRequest);
           if(!accepted)throw new Error('workspace_machine_queue_backpressure');
         })();
@@ -510,12 +514,13 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
           browserBackpressureSince=0;
           pumpBusy=true;
           void (async()=>{
-            if(!await channelAuthorized()){
+            if(!await channelAuthorized() || browserClosed || ws.readyState!==WebSocket.OPEN){
               browserClosed=true;clearInterval(pump);
               if(ws.readyState===WebSocket.OPEN)ws.close(1008,'workspace session expired');
               return;
             }
             for(let i=0;i<50;i++){
+              if(browserClosed || ws.readyState!==WebSocket.OPEN)break;
               if(ws.bufferedAmount>WS_BROWSER_BUFFERED_HIGH_WATER_BYTES)break;
               const frame=await redis.rpop(wsInputKey(channelId));if(!frame)break;
               await accountDequeuedBytes(redis,wsInputBytesKey(channelId),frame,WS_INPUT_TTL_SECONDS);
@@ -535,7 +540,11 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
                 if(ws.readyState===WebSocket.OPEN)ws.close(1008,'native workspace revoked');
                 return;
               }
-              if(ws.readyState===WebSocket.OPEN)ws.send(Buffer.from(parsed.dataBase64,'base64'),{binary:parsed.binary});
+              // Avoid delivery after a close that raced with the asynchronous lease reads.
+              // Socket bytes already sent before revocation cannot be recalled.
+              if(!browserClosed && ws.readyState===WebSocket.OPEN){
+                ws.send(Buffer.from(parsed.dataBase64,'base64'),{binary:parsed.binary});
+              }
             }
           })()
             .catch(error=>{gatewayLog.error({err:error,event:'workspace_gateway_pump_failed',sessionId,machineId:row.machineId,channel:channelLogId},'workspace gateway websocket pump failed');if(ws.readyState===WebSocket.OPEN)ws.close(1011,'gateway relay failed');})
@@ -570,6 +579,10 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         });
         ws.on('close',(closeCode:number,closeReason:Buffer)=>{
           browserClosed=true;clearInterval(pump);
+          // Fence native upstream media immediately; waiting for a queued
+          // browserSendChain must not keep the Redis channel lease alive.
+          if(nativeChannel)void redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId))
+            .catch(error=>gatewayLog.error({err:error,event:'workspace_gateway_close_fence_failed'},'native channel fence failed'));
           // Close reason may be supplied by a remote peer: never log its raw contents.
           // The code, reason length and buffered bytes are sufficient to correlate
           // a browser disconnect with gateway backpressure and Agent ws_close.
