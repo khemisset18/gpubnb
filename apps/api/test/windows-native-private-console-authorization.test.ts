@@ -110,5 +110,5 @@ test('native buffered browser frames are individually revoked before send', () =
   const send = pump.indexOf('ws.send(Buffer.from(parsed.dataBase64');
   assert.ok(leaseGate >= 0 && send > leaseGate);
   assert.match(pump, /ws\.close\(1008,'native workspace revoked'\)/);
-  assert.match(gateway, /cacheMs: 100/);
+  assert.match(gateway, /cacheMs: 0/);
 });
