@@ -45,6 +45,8 @@ test('signed physical console report accepts only exact GPU, NVENC, version, tim
   assert.equal(verifiedConsoleProof({ ...positive, available: false }, context), null);
   assert.equal(verifiedConsoleProof({ ...positive, gpuUuid: null }, context), null);
   assert.equal(verifiedConsoleProof({ ...positive, agentCommit: 'a'.repeat(40) }, context), null);
+  assert.equal(verifiedConsoleProof({ ...positive, agentCommit: SHA.slice(0, 12) }, context), null);
+  assert.equal(verifiedConsoleProof({ ...positive, agentCommit: 'dev' }, context), null);
   assert.equal(verifiedConsoleProof({ ...positive, hardwareEncoder: null }, context), null);
   assert.equal(verifiedConsoleProof({ ...positive, helperVersion: null }, context), null);
   assert.equal(verifiedConsoleProof({ ...positive, measuredAt: new Date(NOW - 60_001).toISOString() }, context), null);

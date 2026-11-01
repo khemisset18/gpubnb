@@ -101,9 +101,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # Stamp the real commit into the frozen exe BEFORE building it, so a
+          # Stamp the full 40-character commit into the frozen exe BEFORE building it, so a
           # running agent can always report exactly what it was built from.
-          $commit = $env:GITHUB_SHA.Substring(0, 12)
+          $commit = $env:GITHUB_SHA
           Set-Content -Path agent/gpubnb_agent/_build_info.py -Encoding utf8 -Value @"
           `"`"`"Build metadata for this specific agent artifact - written by CI, see publish-host-test-release.yml.`"`"`"
           from __future__ import annotations

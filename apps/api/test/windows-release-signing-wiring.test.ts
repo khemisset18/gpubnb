@@ -54,3 +54,13 @@ test('Windows signer requires a current private-key certificate and RFC3161 time
   assert.match(source, /-RequireTimestamp/);
   assert.match(source, /-ExpectedSignerSha256 \$signerCertificateSha256/);
 });
+
+test('Windows frozen Agent must publish full 40-character Git SHA, not a truncated commit', async () => {
+  const workflow = await readFile(workflowUrl, 'utf8');
+  const candidate = await readFile(new URL('../../../scripts/build-windows-native-release-candidate.ps1', import.meta.url), 'utf8');
+  assert.match(workflow, /\$commit = \$env:GITHUB_SHA\r?\n/);
+  assert.doesNotMatch(workflow, /\$env:GITHUB_SHA\.Substring\(0,\s*12\)/);
+  assert.match(candidate, /agentInfo\.buildCommit -cne \$sourceCommit/);
+  assert.match(candidate, /agentBuildCommit = \$sourceCommit/);
+  assert.doesNotMatch(candidate, /\$sourceCommit\.Substring\(0,\s*12\)/);
+});
