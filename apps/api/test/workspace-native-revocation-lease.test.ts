@@ -65,3 +65,73 @@ test('positive TTL caching permits a revoked grant before cache expiration (regr
   nowMs += 100;
   assert.equal(await authorized(), false);
 });
+
+test('zero-cache native channel fails closed after Redis/DB corruption or loss', async () => {
+  const sessionId = 'native-session';
+  const userId = 'renter';
+  let browser: string | null = JSON.stringify({ sessionId, userId });
+  let workspace: { renterId: string; expiresAt: Date } | null = {
+    renterId: userId,
+    expiresAt: new Date(60_000),
+  };
+  const authorized = createGatewayChannelLeaseGuard({
+    sessionId,
+    userId,
+    cacheMs: 0,
+    now: () => 1_000,
+    readBrowser: async () => browser,
+    readWorkspace: async () => workspace,
+  });
+  assert.equal(await authorized(), true);
+
+  browser = '{malformed json';
+  assert.equal(await authorized(), false, 'must not reuse positive grant after malformed browser lease');
+  browser = JSON.stringify({ sessionId, userId });
+  workspace = null;
+  assert.equal(await authorized(), false, 'missing workspace grant must immediately deny');
+  workspace = { renterId: 'other-user', expiresAt: new Date(60_000) };
+  assert.equal(await authorized(), false, 'renter identity change must immediately deny');
+  workspace = { renterId: userId, expiresAt: new Date(1_000) };
+  assert.equal(await authorized(), false, 'expired workspace must immediately deny');
+
+  workspace = { renterId: userId, expiresAt: new Date(60_000) };
+  assert.equal(await authorized(), true, 'a fresh valid server grant can pass the next fresh check');
+});
+
+test('concurrent native checks share only an in-flight read, never a completed positive cache', async () => {
+  const sessionId = 'native-session';
+  const userId = 'renter';
+  const raw = JSON.stringify({ sessionId, userId });
+  let resolveBrowser: ((value: string | null) => void) | undefined;
+  let browserReads = 0;
+  let workspaceReads = 0;
+  let workspaceActive = true;
+  const authorized = createGatewayChannelLeaseGuard({
+    sessionId,
+    userId,
+    cacheMs: 0,
+    now: () => 1_000,
+    readBrowser: () => {
+      browserReads++;
+      return new Promise<string | null>((resolve) => { resolveBrowser = resolve; });
+    },
+    readWorkspace: async () => {
+      workspaceReads++;
+      return workspaceActive ? { renterId: userId, expiresAt: new Date(60_000) } : null;
+    },
+  });
+  const inFlight = Array.from({ length: 8 }, () => authorized());
+  assert.equal(browserReads, 1, 'one pending network read may be shared among concurrent requests');
+  assert.equal(workspaceReads, 1);
+  assert.ok(resolveBrowser);
+  resolveBrowser(raw);
+  assert.deepEqual(await Promise.all(inFlight), Array(8).fill(true));
+
+  workspaceActive = false;
+  const next = authorized();
+  assert.equal(browserReads, 2, 'next check must not reuse previous completed grant');
+  assert.ok(resolveBrowser);
+  resolveBrowser(raw);
+  assert.equal(await next, false, 'revocation must be checked after coalesced request settled');
+  assert.equal(workspaceReads, 2);
+});
