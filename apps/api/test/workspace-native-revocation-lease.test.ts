@@ -135,3 +135,35 @@ test('concurrent native checks share only an in-flight read, never a completed p
   assert.equal(await next, false, 'revocation must be checked after coalesced request settled');
   assert.equal(workspaceReads, 2);
 });
+
+test('native grant is revoked if the server reassigns the channel machine or runtime backend', async () => {
+  const sessionId = 'native-session';
+  const userId = 'renter';
+  const browser = JSON.stringify({ sessionId, userId });
+  let machineId = 'pc1';
+  let runtimeBackend = 'WINDOWS_NATIVE';
+  const authorized = createGatewayChannelLeaseGuard({
+    sessionId,
+    userId,
+    expectedMachineId: 'pc1',
+    expectedRuntimeBackend: 'WINDOWS_NATIVE',
+    cacheMs: 0,
+    now: () => 1_000,
+    readBrowser: async () => browser,
+    readWorkspace: async () => ({
+      renterId: userId,
+      expiresAt: new Date(60_000),
+      machineId,
+      runtimeBackend,
+    }),
+  });
+
+  assert.equal(await authorized(), true);
+  machineId = 'pc2';
+  assert.equal(await authorized(), false, 'old WebSocket cannot follow a reassigned machine');
+  machineId = 'pc1';
+  runtimeBackend = 'DOCKER';
+  assert.equal(await authorized(), false, 'old native WebSocket cannot change its runtime backend');
+  runtimeBackend = 'WINDOWS_NATIVE';
+  assert.equal(await authorized(), true);
+});
