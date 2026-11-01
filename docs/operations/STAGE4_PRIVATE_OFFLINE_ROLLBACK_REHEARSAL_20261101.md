@@ -1,101 +1,94 @@
-# Stage 4 — Reconstruction de sauvegarde en bac à sable
+# Stage 4 — exercice hors installation : quatre fichiers seulement
 
-**Statut : PR en brouillon, logiciel uniquement. Aucune installation autorisée.**
+## Constat Windows et décision
 
-Le PC1 a réussi six contrôles locaux (6/6), sans installation.
-Le manifeste du nouveau paquet privé signé est :
-d0c465b4fcfd4d14c56a6d4e8e07d93db990738aad66ed8e6eea787da8c30335
+Le préflight PC1 a validé six contrôles en lecture seule, le nouveau
+paquet privé signé et la sauvegarde d'origine (hashes et ACL du vrai
+C:\Program Files\GPUbnb). Le premier essai scratch A1 s'est arrêté
+avec stage4_offline_scratch_directory_acl_mismatch. Le correctif
+suivant a échoué à nouveau sur PC1 A2 :
+stage4_scratch_acl_snapshot_mismatch:scratch-directory.
 
-L'ancien manifeste de sauvegarde est :
-77095e5b23b2aa7b985e6c71b5ac8d36ed7ab987d39cd946aebc042996de44bd
+**Ni A1 ni A2 ne sont une preuve de restauration. Ne les effacer ni
+les réutiliser.** Ces échecs ont montré que le test était mal posé :
+les ACE héritées de Program Files dépendent de son parent NTFS,
+alors que Downloads possède un parent différent. Windows recalcule
+les ACE héritées lorsqu'on applique une DACL à un autre endroit.
+Des tests GitHub verts sur des ACL synthétiques ne valident pas les
+permissions NTFS particulières du PC1.
 
-Source Windows : 32ffdc72ec7041310c4b07e286ac4c4c2818906c
-Signataire SHA-256 : 3060de709bd0db7fa8588b7480a8a04f94b2a7df005ee48361cbdcd39b0e9619
-Machine : cmsiggruy0004df0tn669f6bn
-GPU : GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a
-Compte locataire : gpubnb-renter-qual
+Sources Microsoft :
+- https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/set-acl?view=powershell-5.1
+- https://learn.microsoft.com/en-us/windows/win32/secauthz/automatic-propagation-of-inheritable-aces
+- https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/0f0c6ffc-f57d-47f8-a6c8-63889e874e24
 
-Le certificat de test n'a pas d'horodatage et expire le 13 novembre 2026 UTC.
+## Exercice corrigé : preuve de restauration des octets, pas des ACL
 
-## Contrat du nouvel outil
+Le script scripts/stage4-private-offline-rollback-drill.ps1 garde
+toutes les validations d'identité, manifeste, certificat, signature
+et comparaison du backup avec les fichiers du service en lecture seule.
+Il refuse toute sortie existante, chemin système, chevauchement,
+ancêtre reparse point, mauvaise machine, mauvais GPU ou mauvais signer.
 
-Le script scripts/stage4-private-offline-rollback-drill.ps1 :
+Dans un nouveau sous-dossier DIRECT de Downloads, l'outil :
+1. Copie exactement les quatre binaires signés du candidat neuf
+   dans un clone temporaire et vérifie signatures et hashes.
+2. Remplace ces quatre copies TEMPORAIRES uniquement par les quatre
+   fichiers de la sauvegarde épinglée ; aucune écriture live.
+3. Vérifie après copie les quatre hashes SHA-256, signatures
+   Authenticode, signataire et expiration.
+4. Vérifie en lecture seule les SDDL des quatre fichiers live ET
+   du dossier Program Files contre le manifeste de sauvegarde ;
+   **il n'applique aucune ACL au clone**.
+5. Produit un rapport scindant explicitement les garanties :
+   - scratchFourFileHashesAndSignaturesVerified=true ;
+   - liveFourFileAclsMatchPinnedBackup=true ;
+   - liveDirectoryAclMatchesPinnedBackup=true ;
+   - scratchAclReconstructionVerified=false ;
+   - originalParentInheritanceReproduced=false ;
+   - realServiceFileAclsRestored=false ;
+   - realServiceRollbackTested=false ;
+   - installationAuthorized=false.
 
-1. Refuse toute sortie existante ou hors d'un nouveau sous-dossier direct de
-   Downloads préfixé GPUbnb-Stage4-rollback-rehearsal-, ainsi que les
-   chevauchements de chemins et les reparse points des dossiers sources.
-2. Relance les six contrôles du script d'audit existant, avec tous les
-   identifiants et manifestes SHA-256 externes.
-3. Copie quatre binaires du nouveau candidat dans un dossier isolé, confirme
-   signatures et hashes, puis restaure les quatre fichiers sauvegardés
-   **uniquement dans cette copie de test**.
-4. Applique les ACL des fichiers et du dossier sur cette copie, et vérifie
-   de nouveau hashes, signatures, expirations et ACL. Aucun service réel ne
-   doit être arrêté ou redémarré.
-5. En cas d'échec, écrit INCOMPLETE-DO-NOT-USE.txt dans le nouveau dossier.
-   En cas de succès, écrit offline-rollback-rehearsal.report.json ; tous
-   les champs d'autorisation d'installation/déploiement/quarantaine restent false.
+Si un contrôle échoue, le dossier reçoit
+INCOMPLETE-DO-NOT-USE.txt ; il ne peut pas être utilisé comme
+package d'installation.
 
-Cet exercice apporte une preuve utile de reconstruction à partir d'une
-sauvegarde dans un bac à sable. **Ce n'est PAS un exercice de rollback réel**
-du service ou une garantie de compatibilité entre versions.
+L'exercice prouve seulement l'exactitude des octets de quatre copies
+et la conformité des ACL live à l'instant du contrôle. Il NE prouve
+ni restauration fonctionnelle d'un service arrêté, ni confiance
+LocalSystem réelle, ni durée/expiration d'un nouvel installateur,
+ni compatibilité de la release privée Render ni session locataire.
 
-## Exécution : uniquement après CI Windows et revue
+## Traçabilité du test
 
-Avant d'envisager une exécution locale, exiger les tests Windows 5.1 et 7
-réussis sur le SHA exact de la PR, revue de code, téléchargement vérifié à
-une empreinte GitHub indépendante. Les scripts sont à lancer seulement sous
-le compte de maintenance administrateur hicha, jamais dans le compte locataire.
-Les paramètres attendus incluent :
+Le candidat installé n'a PAS changé :
+- Machine : cmsiggruy0004df0tn669f6bn ;
+- GPU : GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a ;
+- Commit source : 32ffdc72ec7041310c4b07e286ac4c4c2818906c ;
+- Candidat manifeste SHA256 : d0c465b4fcfd4d14c56a6d4e8e07d93db990738aad66ed8e6eea787da8c30335 ;
+- Backup manifeste SHA256 : 77095e5b23b2aa7b985e6c71b5ac8d36ed7ab987d39cd946aebc042996de44bd ;
+- Signataire SHA256 : 3060de709bd0db7fa8588b7480a8a04f94b2a7df005ee48361cbdcd39b0e9619 ;
+- Signatures sans timestamp : certificat de test expire
+  le 2026-11-13T00:20:59Z.
 
-- CandidateDirectory : Downloads\GPUbnb-Stage4-nouveau-paquet-prive-32ffdc72
-- ExpectedCandidateManifestSha256 : d0c465b4fcfd4d14c56a6d4e8e07d93db990738aad66ed8e6eea787da8c30335
-- BackupDirectory : Downloads\GPUbnb-backup-old-26af83-20261101
-- ExpectedBackupManifestSha256 : 77095e5b23b2aa7b985e6c71b5ac8d36ed7ab987d39cd946aebc042996de44bd
-- ExpectedCommit : 32ffdc72ec7041310c4b07e286ac4c4c2818906c
-- ExpectedPublisherSha256 : 3060de709bd0db7fa8588b7480a8a04f94b2a7df005ee48361cbdcd39b0e9619
-- ExpectedMachineId : cmsiggruy0004df0tn669f6bn
-- ExpectedGpuUuid : GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a
-- RenterAccount : gpubnb-renter-qual
-- OutputDirectory : nouveau sous-dossier direct de Downloads préfixé GPUbnb-Stage4-rollback-rehearsal-
+Aucune nouvelle exécution PC1 ne doit être demandée sans que la
+CI Windows 5.1/7 et les autres workflows soient verts au HEAD exact.
+Même dans ce cas, un succès scratch ne donne PAS l'autorisation
+d'installer le nouveau paquet.
 
-## Verrous inchangés
+## Verrous physiques inchangés
 
-Render privé exécute actuellement 26af83d8e8ef87b1f218a5b08671047594e645dc,
-différent du paquet Windows 32ffdc72... La compatibilité de ces versions n'est
-pas attestée. La quarantaine WORKSPACE_CLEANUP_FAILED reste active. Les
-annonces publiques doivent rester désactivées.
+Render privé est actuellement au commit
+26af83d8e8ef87b1f218a5b08671047594e645dc,
+différent de la source candidate Windows 32ffdc72...
+La compatibilité doit être attestée avant déploiement privé.
 
-Le vrai cutover nécessite encore : un installateur séparé et revu, un
-rollback transactionnel testé sur un vrai service Windows, une autorisation
-de maintenance explicite, une release serveur privée alignée et un
-DiagnosticRun signé prouvant nettoyage/STOP/GPU quiescent. Seulement après :
-session locataire exclusive et test PC1 vers PC2 H.264 + clavier/souris
-pendant au moins 300 000 ms. Ne jamais capturer le bureau administrateur.
+PC1 est toujours en quarantaine WORKSPACE_CLEANUP_FAILED.
+Il manque un diagnostic cleanup propriétaire signé, un rollback
+transactionnel réel du service (avec permissions NTFS dans son
+dossier réel), confiance LocalSystem, session console exclusive
+renter et validation H264 + input PC1 vers PC2 pendant 300 s.
 
-## Correction du premier test scratch : héritage NTFS
-
-Le premier exercice PC1 a retourné stage4_offline_scratch_directory_acl_mismatch
-et a créé le marqueur INCOMPLETE. Les dossiers source et scratch avaient
-le même propriétaire mais des ACE héritées différentes selon le parent.
-Ceci ne prouve pas que la sauvegarde est corrompue.
-
-Le correctif construit, EN MEMOIRE, un instantané d'ACL explicitement
-protégé depuis les permissions effectives du fichier ou dossier live.
-Il applique ce snapshot UNIQUEMENT dans le clone, puis compare strictement
-le SDDL complet ainsi que les signatures et empreintes sauvegardées.
-L'installation et la sauvegarde originales ne sont jamais modifiées.
-Les tests Windows reproduisent deux parents NTFS avec des ACE différentes
-et vérifient le refus d'une ACE supplémentaire.
-
-Un résultat réussi signifie uniquement que les droits effectifs ont été
-copiés dans le clone ; la relation parent/enfant NTFS originelle ne peut
-pas être reproduite dans Downloads et reste explicitement non attestée.
-Le rapport conserve originalParentInheritanceReproduced=false,
-realServiceRollbackTested=false et installationAuthorized=false.
-
-Ne pas réutiliser, effacer ou renommer le dossier d'échec
-GPUbnb-Stage4-rollback-rehearsal-20261101-A1.
-Toute nouvelle exécution requiert d'abord tests CI et revue du SHA exact,
-puis un nouveau nom scratch. Aucun succès du correctif sur PC1 n'est
-confirmé à ce stade.
+**Toujours NO-GO pour installer, déployer, lever la quarantaine,
+ouvrir les réservations ou capter le bureau administrateur.**
