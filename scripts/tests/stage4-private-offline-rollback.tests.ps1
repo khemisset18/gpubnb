@@ -104,7 +104,13 @@ try {
     }
     $snapshot=New-Stage4ScratchAclSnapshot -OriginalAcl $originAcl -Directory
     Set-Acl -LiteralPath $destination -AclObject $snapshot
-    [void](Assert-Stage4ScratchAclSnapshot -Expected $snapshot -Observed (Get-Acl -LiteralPath $destination) -Label 'test-scratch-directory')
+    $observedDirectory=Get-Acl -LiteralPath $destination
+    if ($snapshot.Sddl -cne $observedDirectory.Sddl) {
+        Write-Host "ACL_FIXTURE_EXPECTED=$($snapshot.Sddl)"
+        Write-Host "ACL_FIXTURE_OBSERVED=$($observedDirectory.Sddl)"
+        Write-Host "ACL_FIXTURE_FLAGS=$($snapshot.AreAccessRulesProtected)/$($observedDirectory.AreAccessRulesProtected)"
+    }
+    [void](Assert-Stage4ScratchAclSnapshot -Expected $snapshot -Observed $observedDirectory -Label 'test-scratch-directory')
     $bad=Get-Acl -LiteralPath $destination
     $bad.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($everyoneSid,
         [Security.AccessControl.FileSystemRights]::WriteData,
