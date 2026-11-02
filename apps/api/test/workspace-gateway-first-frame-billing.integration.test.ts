@@ -61,8 +61,9 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
           if(text.includes('Remove only the exact payload')&&scenario==='compensation-failure')throw new Error('injected Redis cleanup outage');
           return (originalEval as (...args:unknown[])=>Promise<unknown>)(script,...args);
         }) as typeof redis.eval;
+        let commitFaultEnabled=true;
         const faultDb=new Proxy(db,{get(target,key){
-          if(key==='$transaction'&&['db-failure','compensation-failure','lost-commit-ack','unknown-commit'].includes(scenario))return async(callback:(tx:unknown)=>Promise<unknown>,options:unknown)=>{
+          if(key==='$transaction'&&commitFaultEnabled&&['db-failure','compensation-failure','lost-commit-ack','unknown-commit'].includes(scenario))return async(callback:(tx:unknown)=>Promise<unknown>,options:unknown)=>{
             const result=await db.$transaction(async tx=>callback(new Proxy(tx,{get(inner,property){
               if(property==='workspaceGatewayAcceptance'&&!['lost-commit-ack','unknown-commit'].includes(scenario))return new Proxy(tx.workspaceGatewayAcceptance,{get(model,method){if(method==='create')return async()=>{throw new Error('injected receipt write failure');};return Reflect.get(model,method);}});
               return Reflect.get(inner,property);
@@ -70,7 +71,7 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
             if(['lost-commit-ack','unknown-commit'].includes(scenario))throw new Error('injected lost DB commit acknowledgement');
             return result;
           };
-          if(key==='workspaceGatewayAcceptance'&&scenario==='unknown-commit')return new Proxy(db.workspaceGatewayAcceptance,{get(model,method){if(method==='findUnique')return async()=>{throw new Error('injected receipt read outage');};return Reflect.get(model,method);}});
+          if(key==='workspaceGatewayAcceptance'&&commitFaultEnabled&&scenario==='unknown-commit')return new Proxy(db.workspaceGatewayAcceptance,{get(model,method){if(method==='findUnique')return async()=>{throw new Error('injected receipt read outage');};return Reflect.get(model,method);}});
           return Reflect.get(target,key);
         }});
         const app=Fastify();await app.register(cookie);
@@ -120,6 +121,7 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
             await redis.set(activationKey,'1','EX',120);
             await db.workspaceSession.update({where:{id:fixture.session.id},data:{status:WorkspaceSessionStatus.STOP_REQUESTED}});
             const before=await redis.llen(queueKey);
+            commitFaultEnabled=false;
             const late=await send();
             assert.ok(batch?late.json().stale===1:late.statusCode===409);
             assert.equal(await redis.llen(queueKey),before,'STOP rejects even with a live activation hint');

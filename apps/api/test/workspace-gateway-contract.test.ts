@@ -155,11 +155,10 @@ test('concurrent websocket activation accepts the transaction winner',()=>{
   assert.match(api,/winner\?\{activated:false,expiresAt:winner\.expiresAt\}:null/);
 });
 
-test('committed activation caching cannot precede the accepted first frame',()=>{
+test('activation hints never bypass authoritative frame admission',()=>{
   assert.match(api,/wsSessionActivatedKey=\(sessionId:string\)=>`workspace-gateway:ws-session-activated:\$\{sessionId\}`/);
-  assert.match(api,/const activatedKey=wsSessionActivatedKey\(sessionId\)/);
-  assert.match(api,/const cachedTtl=await redis\.ttl\(activatedKey\)/);
-  assert.match(api,/if\(cachedTtl>0\)return \{enqueued:await enqueue\(\)\}/);
+  assert.doesNotMatch(api,/if\(cachedTtl>0\)return/);
+  assert.match(api,/SELECT "id" FROM "WorkspaceSession" WHERE "id"=\$\{sessionId\} FOR UPDATE/);
   assert.match(api,/redis\.set\(wsSessionActivatedKey\(sessionId\),'1','EX',ttl\)/);
   assert.match(api,/redis\.del\(wsSessionActivatedKey\(sessionId\)\)/);
   assert.match(api,/committedGatewayFrame\(db,sessionId,channelId,channelBinding,frame\)/);

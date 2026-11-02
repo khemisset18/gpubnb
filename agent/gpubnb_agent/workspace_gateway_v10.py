@@ -984,8 +984,17 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
 
     def _ws_open(self, item: dict[str, Any]) -> None:
         session_id = str(item.get("sessionId") or "")
+        channel_id = str(item.get("channelId") or "")
         with self._native_lock:
             is_native = session_id in self.native_runtimes
+            # Reserve channel identities once for the lifetime of this process.
+            # A delayed OPEN must not resurrect a closed socket, including after
+            # a failed handshake or after the native runtime has disappeared.
+            replay = channel_id in self._native_channel_sessions
+            revoked = session_id in self._native_blocked
+        if replay or revoked:
+            self._reject_open(item, "windows_native_channel_authorization_consumed")
+            return
         if not is_native:
             return super()._ws_open(item)
 
@@ -1002,6 +1011,12 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 self._reject_open(item, "workspace_reconnect_not_ready")
                 return
             runtime = self._native_runtime(session_id)
+            with self._native_lock:
+                if channel_id in self._native_channel_sessions:
+                    self._reject_open(item, "windows_native_channel_authorization_consumed")
+                    return
+                self._native_channel_sessions[channel_id] = session_id
+                opened_handle = runtime.handle
             # No browser header, cookie, subprotocol or authorization value is
             # forwarded to the privileged helper. Its capability is injected
             # exclusively by the Agent over a kernel-direct loopback socket.
@@ -1014,7 +1029,9 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             if callable(set_timeout):
                 set_timeout(None)
             with self._native_lock:
-                if self._console_channel_fenced(session_id):
+                if (self._console_channel_fenced(session_id)
+                        or self.native_runtimes.get(session_id) is not runtime
+                        or runtime.handle is not opened_handle):
                     raise RuntimeError("native_console_session_change_fenced")
                 self.channels[channel_id] = ws
                 self.session_channels.setdefault(session_id, set()).add(channel_id)
@@ -1033,7 +1050,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 detail=f"code={_native_websocket_error_code(exc)}",
             )
             with self._native_lock:
-                self._native_channel_sessions.pop(channel_id, None)
+                # Keep the consumed authorization tombstone even on failure.
                 self.channels.pop(channel_id, None)
                 self.session_channels.get(session_id, set()).discard(channel_id)
             if ws is not None:
