@@ -266,6 +266,11 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
                 **({"privateConsoleProof": private_console_proof} if private_console_proof is not None else {}),
                 **sys_info,
             }
+            if private_console_proof is not None:
+                from .windows_agent_process_proof import measure_windows_agent_process
+                process_proof = measure_windows_agent_process(machine_id, challenge)
+                if process_proof is not None:
+                    payload["agentProcessProof"] = process_proof
             result = client.request(
                 "/agent/heartbeat", "POST", payload,
                 signed_headers(key, machine_id, "POST", "/agent/heartbeat", payload),

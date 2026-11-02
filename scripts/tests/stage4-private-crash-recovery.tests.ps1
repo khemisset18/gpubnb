@@ -11,8 +11,13 @@ function Run-Child([string]$Root,[string]$Step,[bool]$Recover) {
     $args=@('-NoProfile','-NonInteractive','-File',$child,'-Root',$Root)
     if($Step){$args+=@('-CrashAt',$Step)}
     if($Recover){$args+='-Recover'}
-    & $exe @args
-    return $LASTEXITCODE
+    $savedPreference=$ErrorActionPreference
+    try {
+        $ErrorActionPreference='Continue'
+        & $exe @args > (Join-Path $Root 'child.log') 2>&1
+        $code=$LASTEXITCODE
+    } finally {$ErrorActionPreference=$savedPreference}
+    return $code
 }
 foreach($step in $steps) {
     $root=Join-Path $env:TEMP ('GPUbnb-stage4-maintenance-test-'+[Guid]::NewGuid().ToString('N'))
@@ -33,7 +38,7 @@ foreach($step in $steps) {
             if((Run-Child $root 'recovery-removed-gpubnb-agent.exe' $true) -eq 0) {throw 'expected_recovery_process_death'}
         }
         foreach($attempt in 1..2) {
-            if((Run-Child $root '' $true) -ne 0) {throw ('recovery_failed:'+ $step)}
+            if((Run-Child $root '' $true) -ne 0) {throw ('recovery_failed:'+ $step+':'+(Get-Content (Join-Path $root 'child.log') -Raw))}
             foreach($pin in $pins) {
                 $live=Join-Path $target $pin.name
                 $expected=if($step -ceq 'journal-committed'){$pin.newHash}else{$pin.oldHash}

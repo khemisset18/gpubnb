@@ -9,7 +9,7 @@ function Assert-Stage4JournalPath([string]$Path) {
         if (($node.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw 'stage4_journal_reparse_forbidden'
         }
-        $node=if($node.PSIsContainer){$node.Parent}else{$node.Directory}
+        $node=if($node -is [IO.DirectoryInfo]){$node.Parent}else{$node.Directory}
     }
 }
 
