@@ -54,7 +54,10 @@ foreach($step in $steps) {
         Write-Host ('PASS fresh-process crash recovery and idempotence: '+$step)
     } finally {Remove-Item -LiteralPath $root -Recurse -Force}
 }
-# The tamper-rejection child above must exit nonzero; without this reset, GitHub
-# Actions appends `exit $LASTEXITCODE` to the step and reports exit code 1 even
-# when every test passed (last native exit code leak, not a test failure).
-$LASTEXITCODE = 0
+# The final tamper-rejection child intentionally exits nonzero. GitHub Actions
+# reads $LASTEXITCODE in its calling PowerShell scope after this script returns.
+# A plain $LASTEXITCODE assignment here only updates this script's scope, leaving
+# the caller with the child's failure code even though all assertions passed.
+# Reset the caller-visible value only after the complete suite succeeds; any
+# assertion failure still throws before this line.
+$global:LASTEXITCODE = 0
