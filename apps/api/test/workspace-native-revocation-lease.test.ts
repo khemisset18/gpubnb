@@ -98,43 +98,47 @@ test('zero-cache native channel fails closed after Redis/DB corruption or loss',
   assert.equal(await authorized(), true, 'a fresh valid server grant can pass the next fresh check');
 });
 
-test('concurrent native checks share only an in-flight read, never a completed positive cache', async () => {
-  const sessionId = 'native-session';
-  const userId = 'renter';
-  const raw = JSON.stringify({ sessionId, userId });
-  let resolveBrowser: ((value: string | null) => void) | undefined;
-  let browserReads = 0;
-  let workspaceReads = 0;
-  let workspaceActive = true;
+test('a new native check cannot inherit a positive read begun before revocation', async () => {
+  const sessionId = 'native-session', userId = 'renter';
+  let active = true;
+  let finishOld!: () => void;
+  let reads = 0;
   const authorized = createGatewayChannelLeaseGuard({
-    sessionId,
-    userId,
-    cacheMs: 0,
-    now: () => 1_000,
-    readBrowser: () => {
-      browserReads++;
-      return new Promise<string | null>((resolve) => { resolveBrowser = resolve; });
-    },
-    readWorkspace: async () => {
-      workspaceReads++;
-      return workspaceActive ? { renterId: userId, expiresAt: new Date(60_000) } : null;
+    sessionId, userId, cacheMs: 0, now: () => 1_000,
+    readBrowser: async () => active ? JSON.stringify({ sessionId, userId }) : null,
+    readWorkspace: () => {
+      reads++;
+      if (reads === 1) return new Promise(resolve => {
+        finishOld = () => resolve({ renterId: userId, expiresAt: new Date(60_000) });
+      });
+      return Promise.resolve(null);
     },
   });
-  const inFlight = Array.from({ length: 8 }, () => authorized());
-  assert.equal(browserReads, 1, 'one pending network read may be shared among concurrent requests');
-  assert.equal(workspaceReads, 1);
-  assert.ok(resolveBrowser);
-  resolveBrowser(raw);
-  assert.deepEqual(await Promise.all(inFlight), Array(8).fill(true));
-
-  workspaceActive = false;
-  const next = authorized();
-  assert.equal(browserReads, 2, 'next check must not reuse previous completed grant');
-  assert.ok(resolveBrowser);
-  resolveBrowser(raw);
-  assert.equal(await next, false, 'revocation must be checked after coalesced request settled');
-  assert.equal(workspaceReads, 2);
+  const old = authorized();
+  active = false; // revoke after the old cookie was read, before its DB result
+  assert.equal(await authorized(), false, 'later caller must perform fresh reads');
+  assert.equal(reads, 2);
+  finishOld();
+  assert.equal(await old, false, 'known denial must fence an older positive result');
 });
+
+for (const operation of ['video', 'input']) {
+  test(`channel invalidation fences delayed ${operation} authorization permanently`, async () => {
+    let release!: (value: string) => void;
+    let reads = 0;
+    const guard = createGatewayChannelLeaseGuard({
+      sessionId: 's', userId: 'u', cacheMs: 0,
+      readBrowser: () => { reads++; return new Promise(resolve => { release = resolve; }); },
+      readWorkspace: async () => ({ renterId: 'u', expiresAt: new Date(Date.now() + 60_000) }),
+    });
+    const pending = guard();
+    guard.invalidate();
+    release(JSON.stringify({ sessionId: 's', userId: 'u' }));
+    assert.equal(await pending, false);
+    assert.equal(await guard(), false);
+    assert.equal(reads, 1, 'old channel cannot be resurrected');
+  });
+}
 
 test('native grant is revoked if the server reassigns the channel machine or runtime backend', async () => {
   const sessionId = 'native-session';
@@ -168,39 +172,39 @@ test('native grant is revoked if the server reassigns the channel machine or run
   assert.equal(await authorized(), true);
 });
 
-test('native revocation while browser lease fetch is pending rejects every coalesced check', async () => {
+test('native revocation while browser lease fetch is pending rejects every independent check', async () => {
   const sessionId = 'pending-browser', userId = 'renter';
-  let resolveRead!: (value: string | null) => void;
+  const resolvers: ((value: string | null) => void)[] = [];
   let browserReads = 0;
   const authorized = createGatewayChannelLeaseGuard({
     sessionId, userId, cacheMs: 0,
     readBrowser: () => {
       browserReads++;
-      return new Promise<string | null>((resolve) => { resolveRead = resolve; });
+      return new Promise<string | null>((resolve) => { resolvers.push(resolve); });
     },
     readWorkspace: async () => ({ renterId: userId, expiresAt: new Date(Date.now() + 60_000) }),
   });
   const pending = Array.from({ length: 12 }, () => authorized());
-  assert.equal(browserReads, 1);
+  assert.equal(browserReads, 12);
   // Redis revoked the browser token while the read was awaiting its result.
-  resolveRead(null);
+  resolvers.forEach(resolve => resolve(null));
   assert.deepEqual(await Promise.all(pending), Array(12).fill(false));
 });
 
-test('native revocation while database lookup is pending rejects every coalesced check', async () => {
+test('native revocation while database lookup is pending rejects every independent check', async () => {
   const sessionId = 'pending-db', userId = 'renter';
-  let resolveRead!: (value: { renterId: string; expiresAt: Date } | null) => void;
+  const resolvers: ((value: { renterId: string; expiresAt: Date } | null) => void)[] = [];
   let workspaceReads = 0;
   const authorized = createGatewayChannelLeaseGuard({
     sessionId, userId, cacheMs: 0,
     readBrowser: async () => JSON.stringify({ sessionId, userId }),
     readWorkspace: () => {
       workspaceReads++;
-      return new Promise((resolve) => { resolveRead = resolve; });
+      return new Promise((resolve) => { resolvers.push(resolve); });
     },
   });
   const pending = Array.from({ length: 12 }, () => authorized());
-  assert.equal(workspaceReads, 1);
-  resolveRead(null);
+  assert.equal(workspaceReads, 12);
+  resolvers.forEach(resolve => resolve(null));
   assert.deepEqual(await Promise.all(pending), Array(12).fill(false));
 });

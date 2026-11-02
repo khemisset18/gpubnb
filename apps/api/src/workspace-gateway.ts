@@ -134,6 +134,15 @@ redis.call('EXPIRE', KEYS[1], ARGV[2])
 return 1
 `;
 
+const NATIVE_DELIVERY_FENCE_SCRIPT=`
+-- Final Redis read after the DB check: both immutable channel binding and
+-- browser identity must still match the upgrade. This does not make the DB
+-- and Redis a joint transaction or recall bytes already sent to a socket.
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+if redis.call('GET', KEYS[2]) ~= ARGV[2] then return 0 end
+return 1
+`;
+
 const ENQUEUE_BOUND_MACHINE_RELAY_SCRIPT=`
 -- Browser-to-Agent native send/open is atomic with the current channel grant.
 -- A stale positive result from an in-flight DB read cannot requeue data after
@@ -514,7 +523,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         const channelTtl=Math.max(30,Math.min(SESSION_TTL_SECONDS,Math.ceil((row.expiresAt.getTime()-Date.now())/1000)));
         const openRequestId=crypto.randomUUID();let browserClosed=false;let browserBackpressureSince=0;
         const nativeChannel = isWindowsNativeRuntime(row.runtimeBackend);
-        const channelAuthorized = nativeChannel
+        const nativeLease = nativeChannel
           ? createGatewayChannelLeaseGuard({
               sessionId, userId: browser.userId,
               expectedMachineId: row.machineId,
@@ -527,7 +536,13 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
               // and physical isolation qualification remain mandatory.
               cacheMs: 0,
             })
-          : async () => true;
+          : null;
+        const channelAuthorized = async () => {
+          if (!nativeLease) return true;
+          const allowed = await nativeLease();
+          if (!allowed) nativeLease.invalidate();
+          return allowed;
+        };
         const browserPending=new BrowserPendingBudget();
         const gatewayLog=app.log.child({accessRequestId:browser.accessRequestId,bookingId:row.bookingId,jobId:row.jobId,workspaceSessionId:sessionId,machineId:row.machineId,channelId,channel:channelLogId,openRequestId});
         gatewayLog.info({event:'workspace_gateway_browser_connected'},'workspace gateway browser websocket connected');
@@ -600,10 +615,10 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
               // channel's Redis lease and the current workspace grant for
               // EVERY native frame immediately before delivery.
               if(nativeChannel && (
-                await redis.exists(wsChannelKey(channelId)) !== 1
-                || !await channelAuthorized()
+                !await channelAuthorized()
+                || Number(await redis.eval(NATIVE_DELIVERY_FENCE_SCRIPT,2,wsChannelKey(channelId),browserSessionKey,channelBinding,raw)) !== 1
               )){
-                browserClosed=true;clearInterval(pump);
+                browserClosed=true;clearInterval(pump);nativeLease?.invalidate();
                 if(ws.readyState===WebSocket.OPEN)ws.close(1008,'native workspace revoked');
                 return;
               }
@@ -633,7 +648,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
           }
           const relay:RelayRequest={id:crypto.randomUUID(),sessionId,kind:'ws_send',channelId,dataBase64:frame.toString('base64'),binary:isBinary};
           const task=browserSendChain.then(async()=>{
-            if(browserClosed||!await channelAuthorized()){
+            if(browserClosed||!await channelAuthorized()||browserClosed){
               browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1008,'workspace session expired');
               return;
             }
@@ -648,7 +663,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
           });
         });
         ws.on('close',(closeCode:number,closeReason:Buffer)=>{
-          browserClosed=true;clearInterval(pump);
+          browserClosed=true;clearInterval(pump);nativeLease?.invalidate();
           // Fence native upstream media immediately; waiting for a queued
           // browserSendChain must not keep the Redis channel lease alive.
           if(nativeChannel)void redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId))

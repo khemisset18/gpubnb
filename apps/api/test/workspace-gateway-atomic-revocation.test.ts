@@ -14,6 +14,7 @@ function script(name: string): string {
 const deduped = script('ENQUEUE_DEDUPED_WS_FRAME_SCRIPT');
 const bounded = script('ENQUEUE_BOUND_WS_FRAME_SCRIPT');
 const machine = script('ENQUEUE_BOUND_MACHINE_RELAY_SCRIPT');
+const delivery = script('NATIVE_DELIVERY_FENCE_SCRIPT');
 
 test('both Agent frame paths atomically require the original Redis channel binding', () => {
   assert.match(deduped, /redis\.call\('GET', KEYS\[4\]\) ~= ARGV\[7\]/);
@@ -93,6 +94,33 @@ withRedis('real Redis: revoked/replaced native channel cannot enqueue frames, ev
     assert.equal(await redis.llen(machineQueueKey), 2);
   } finally {
     await redis.del(bindingKey, browserKey, queueKey, bytesKey, machineQueueKey, machineBytesKey, marker1, marker2).catch(() => undefined);
+    redis.disconnect();
+  }
+});
+
+withRedis('real Redis: final native delivery fence rejects revoked cookies and reused channel IDs', async () => {
+  const redis = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: 2 });
+  const prefix = 'gpubnb:test:stage4:delivery:' + crypto.randomUUID();
+  const channel = prefix + ':channel', browser = prefix + ':browser';
+  const binding = JSON.stringify({ sessionId: 's', machineId: 'm' });
+  const cookie = JSON.stringify({ sessionId: 's', userId: 'u' });
+  const deliver = async () => Number(await redis.eval(delivery, 2, channel, browser, binding, cookie));
+  try {
+    await redis.set(channel, binding, 'EX', 60);
+    await redis.set(browser, cookie, 'EX', 60);
+    assert.equal(await deliver(), 1);
+    // Old DB authorization has completed; revoke before the last Redis fence.
+    await redis.del(browser);
+    assert.equal(await deliver(), 0, 'queued media cannot use a deleted cookie');
+    await redis.set(browser, JSON.stringify({ sessionId: 'other', userId: 'u' }), 'EX', 60);
+    assert.equal(await deliver(), 0, 'mere cookie existence cannot authorize another identity');
+    await redis.set(browser, cookie, 'EX', 60);
+    await redis.set(channel, binding + ' ', 'EX', 60);
+    assert.equal(await deliver(), 0, 'replacement channel must not inherit the old binding');
+    await redis.del(channel);
+    assert.equal(await deliver(), 0);
+  } finally {
+    await redis.del(channel, browser).catch(() => undefined);
     redis.disconnect();
   }
 });
