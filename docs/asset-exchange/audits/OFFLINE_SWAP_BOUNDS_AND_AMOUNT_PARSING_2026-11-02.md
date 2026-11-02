@@ -138,14 +138,54 @@ Additional local results:
 Every non-POSIX result above is reproducible offline and executes no Dogecoin
 binary, generates no key, signs nothing and contacts no blockchain.
 
+## CI result on this branch
+
+Run [41452403525](https://github.com/khemisset18/gpubnb/actions/runs/41452403525)
+and [41452335133](https://github.com/khemisset18/gpubnb/actions/runs/41452335133):
+
+| Job | Result |
+| --- | --- |
+| Zero-dependency foundation safety tests | PASS |
+| api | PASS |
+| agent | PASS |
+| contract | PASS |
+| desktop-security | PASS |
+| production-gates | PASS |
+| dependency-audit | FAIL — shared trees only |
+| security-static-analysis | FAIL — shared trees only |
+
+`Zero-dependency foundation safety tests` PASS covers `npm run check`, the full
+`asset-exchange` Node suite, the DOGE D0/D1/D2 Python suites and the Linux
+network-isolation preflight, i.e. exactly the suite that could not be executed
+completely on this Windows host.
+
 ## Remaining boundaries
 
 - **BLOCKED**: D2 native claim/refund, exact native script flags, standardness and
   admission outcomes, UTXO/finality context. No new native proof was produced.
-- **BLOCKED**: global `security-static-analysis`. It still fails on the unchanged
-  `Cargo.lock` advisories `borsh 0.10.4`, `glib 0.18.5`, `rand 0.7.3`. That is a
-  shared dependency graph outside the exchange perimeter; it is documented, not
-  modified, and not waived.
+- **BLOCKED**: `security-static-analysis`, `blockingCount: 7`, on dependency files
+  this branch does not touch:
+
+  | Target | Package | Installed | Advisory | Severity | Fixed |
+  | --- | --- | --- | --- | --- | --- |
+  | `Cargo.lock` | borsh | 0.10.4 | GHSA-fjx5-qpf4-xjf2 | MEDIUM | 1.0.0-alpha.1 |
+  | `Cargo.lock` | glib | 0.18.5 | GHSA-wrw7-89jp-8q8g | MEDIUM | 0.20.0 |
+  | `Cargo.lock` | rand | 0.7.3 | GHSA-cq8v-f236-94qc | LOW | 0.9.3 / 0.10.1 / 0.8.6 |
+  | `package-lock.json` | glob | 13.0.6 | CVE-2026-118773 | MEDIUM | 14.0.2 |
+  | `package-lock.json` | minimatch | 10.2.5 | CVE-2026-118764 | MEDIUM | 11.0.1 |
+  | `apps/api/package-lock.json` | glob | 13.0.6 | CVE-2026-118773 | MEDIUM | 14.0.2 |
+  | `apps/api/package-lock.json` | minimatch | 10.2.5 | CVE-2026-118764 | MEDIUM | 11.0.1 |
+
+- **BLOCKED**: `dependency-audit` now reports `moderate: 3` in both the root and
+  `apps/api` npm trees (`@fastify/static` → `glob` → `minimatch`), reproduced
+  locally with `npm audit --json`. This is new since the #320 run and is caused by
+  the two `CVE-2026-1187xx` publications above, not by this branch: `git diff` to
+  the base touches no dependency or lockfile. `asset-exchange/package.json`
+  declares no dependencies, so no exchange package is affected.
+- Both gate failures are in shared configuration and shared dependency graphs that
+  this mission forbids modifying without explicit authorization. They are recorded
+  here and in the PR body, **not** waived, suppressed, downgraded or excluded, and
+  no severity threshold was lowered.
 - **NOT TESTED**: the POSIX journal, recovery and crash-recovery paths on this
   host. Linux CI remains the only authority for them.
 - **NOT TESTED**: the quadratic `structuredClone` cost inside the new event bound.
