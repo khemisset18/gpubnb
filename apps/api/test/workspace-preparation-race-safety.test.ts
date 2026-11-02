@@ -7,7 +7,7 @@ test('ensureComputePreparation is Serializable and recovers from the WorkspaceSe
 
   const fnStart = source.indexOf('async function ensureComputePreparation(');
   assert.ok(fnStart >= 0);
-  const fnEnd = source.indexOf('\nconst activeWorkspaceSessions', fnStart);
+  const fnEnd = source.indexOf("\napp.post('/bookings/:bookingId/workspace-sessions'", fnStart);
   assert.ok(fnEnd > fnStart);
   const fnBody = source.slice(fnStart, fnEnd);
 
