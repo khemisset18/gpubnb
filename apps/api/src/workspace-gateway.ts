@@ -165,7 +165,7 @@ redis.call('EXPIRE', KEYS[1], ARGV[2])
 return 1
 `;
 
-type RelayRequest={id:string;sessionId:string;kind:'http'|'ws_open'|'ws_send'|'ws_close';method?:string;path?:string;headers?:Record<string,string>;bodyBase64?:string;channelId?:string;dataBase64?:string;binary?:boolean};
+type RelayRequest={id:string;sessionId:string;kind:'http'|'ws_open'|'ws_send'|'ws_close';nativeChannelBinding?:string;method?:string;path?:string;headers?:Record<string,string>;bodyBase64?:string;channelId?:string;dataBase64?:string;binary?:boolean};
 type RelayResponse={status:number;headers?:Record<string,string>;bodyBase64?:string;error?:string};
 type GatewayChannelBinding={sessionId:string;machineId:string;browserSessionKey:string;runtimeBackend:WorkspaceRuntimeBackend};
 type AgentWsFrame={frameId?:string;channelId?:string;dataBase64?:string;binary?:boolean;close?:boolean};
@@ -195,7 +195,8 @@ async function enqueueBoundedList(redis:Redis,listKey:string,bytesKey:string,pay
 }
 
 async function enqueueBoundNativeMachineRelay(redis:Redis,machineId:string,channelId:string,expectedBinding:string,browserSessionKey:string,relay:RelayRequest):Promise<boolean>{
-  const payload=JSON.stringify(relay);
+  // Internal fencing metadata is removed before returning work to the Agent.
+  const payload=JSON.stringify({...relay,nativeChannelBinding:expectedBinding});
   const accepted=Number(await redis.eval(ENQUEUE_BOUND_MACHINE_RELAY_SCRIPT,4,
     machineQueue(machineId),machineQueueBytesKey(machineId),wsChannelKey(channelId),browserSessionKey,
     payload,String(MACHINE_QUEUE_TTL_SECONDS),String(Buffer.byteLength(payload,'utf8')),
@@ -236,6 +237,44 @@ async function authenticateAgent(db:PrismaClient,redis:Redis,machineId:string,re
   return verifyAgentRequest(redis,machineId,machine.agentPublicKey,request.method,routePath,request.headers['x-agent-timestamp'],request.headers['x-agent-signature']);
 }
 export async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.workspaceSession.findFirst({where:{id:sessionId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,renterId:true,machineId:true,bookingId:true,jobId:true,status:true,expiresAt:true,runtimeBackend:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});}
+
+// A successful enqueue is not a lasting input grant: STOP/cookie revocation
+// can occur while a command is buffered in the shared machine queue.
+export async function authorizeQueuedGatewayRelay(db:PrismaClient,redis:Redis,machineId:string,queued:RelayRequest,timeoutMs=5000):Promise<RelayRequest|null>{
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{
+    return await Promise.race([
+      validateQueuedGatewayRelay(db,redis,machineId,queued),
+      new Promise<null>(resolve=>{timer=setTimeout(()=>resolve(null),timeoutMs);}),
+    ]);
+  }catch{return null;}
+  finally{if(timer!==undefined)clearTimeout(timer);}
+}
+
+async function validateQueuedGatewayRelay(db:PrismaClient,redis:Redis,machineId:string,queued:RelayRequest):Promise<RelayRequest|null>{
+  const {nativeChannelBinding,...relay}=queued;
+  if(relay.kind!=='ws_open'&&relay.kind!=='ws_send')return relay;
+  if(!nativeChannelBinding){
+    const row=await activeGatewaySession(db,relay.sessionId);
+    // Pre-upgrade native queue entries have no immutable enqueue binding.
+    // Drop them rather than re-authorizing them against a replacement channel.
+    return row&&row.machineId===machineId&&!isWindowsNativeRuntime(row.runtimeBackend)?relay:null;
+  }
+  try{
+    const binding=JSON.parse(nativeChannelBinding) as GatewayChannelBinding;
+    if(!relay.channelId||binding.sessionId!==relay.sessionId||binding.machineId!==machineId
+      ||!isWindowsNativeRuntime(binding.runtimeBackend)||typeof binding.browserSessionKey!=='string')return null;
+    // No pending authorization is shared with a pump or another request.
+    const row=await activeGatewaySession(db,relay.sessionId);
+    if(!row||row.machineId!==machineId||row.runtimeBackend!==binding.runtimeBackend)return null;
+    const browserRaw=await redis.get(binding.browserSessionKey);
+    const browser:unknown=browserRaw?JSON.parse(browserRaw):null;
+    if(typeof browser!=='object'||browser===null||!('sessionId' in browser)||browser.sessionId!==relay.sessionId
+      ||!('userId' in browser)||browser.userId!==row.renterId)return null;
+    if(Number(await redis.eval(NATIVE_DELIVERY_FENCE_SCRIPT,2,wsChannelKey(relay.channelId),binding.browserSessionKey,nativeChannelBinding,browserRaw!))!==1)return null;
+    return row.expiresAt.getTime()>Date.now()?relay:null;
+  }catch{return null;}
+}
 
 // The commercial rental clock's one true start: a real upstream frame proven exchanged
 // between the container and the authenticated renter's browser (see the two call sites
@@ -324,7 +363,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,machineId:true,bookingId:true,renterId:true}});if(!row)return reply.code(404).send({error:'workspace_session_not_available'});
     return issueHostTunnelBootstrap(runtime,{sessionId:row.id,machineId:row.machineId,bookingId:row.bookingId,renterUserId:row.renterId});
   });
-  app.get('/agent/workspace-gateway/:machineId/next',{config:{rateLimit:{max:AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE,timeWindow:'1 minute'}}},async(request,reply)=>{const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/next`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});const raw=await waitForGatewayQueueItem(redis,machineQueue(machineId));if(!raw)return reply.code(204).send();await accountDequeuedBytes(redis,machineQueueBytesKey(machineId),raw,MACHINE_QUEUE_TTL_SECONDS);return JSON.parse(raw);});
+  app.get('/agent/workspace-gateway/:machineId/next',{config:{rateLimit:{max:AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE,timeWindow:'1 minute'}}},async(request,reply)=>{const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/next`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});const raw=await waitForGatewayQueueItem(redis,machineQueue(machineId));if(!raw)return reply.code(204).send();await accountDequeuedBytes(redis,machineQueueBytesKey(machineId),raw,MACHINE_QUEUE_TTL_SECONDS);const relay=await authorizeQueuedGatewayRelay(db,redis,machineId,JSON.parse(raw) as RelayRequest);return relay??reply.code(204).send();});
   app.get('/agent/workspace-gateway/:machineId/next-batch',{config:{rateLimit:{max:AGENT_TUNNEL_RATE_LIMIT_PER_MINUTE,timeWindow:'1 minute'}}},async(request,reply)=>{
     const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/next-batch`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});
     const queueKey=machineQueue(machineId);const bytesKey=machineQueueBytesKey(machineId);const first=await waitForGatewayQueueItem(redis,queueKey);if(!first)return reply.code(204).send();
@@ -336,7 +375,13 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       await accountDequeuedBytes(redis,bytesKey,raw,MACHINE_QUEUE_TTL_SECONDS);
       items.push(JSON.parse(raw) as RelayRequest);batchBytes+=candidateBytes;
     }
-    return {items};
+    const authorizedItems:RelayRequest[]=[];const deniedSessions=new Set<string>();
+    for(const item of items){
+      const allowed=await authorizeQueuedGatewayRelay(db,redis,machineId,item);
+      if(allowed)authorizedItems.push(allowed);else deniedSessions.add(item.sessionId);
+    }
+    // A later known denial in this batch also invalidates earlier positives.
+    return {items:authorizedItems.filter(item=>item.kind==='ws_close'||!deniedSessions.has(item.sessionId))};
   });
   app.post('/agent/workspace-gateway/:sessionId/register',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;runtimeId?:string;localPort?:number};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/register`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!/^[a-zA-Z0-9_.-]{6,100}$/.test(String(body.runtimeId||''))||!Number.isInteger(body.localPort)||Number(body.localPort)<1024||Number(body.localPort)>65535)return reply.code(400).send({error:'invalid_runtime_registration'});

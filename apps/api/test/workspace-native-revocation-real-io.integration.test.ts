@@ -20,7 +20,7 @@ function percentile(sorted: number[], p: number) {
 // seeded native sessions. This is a one-second paced authorization workload,
 // not encoded video, a saturation test, or a production SLO qualification.
 integration('30/60 FPS x 1/4/8 streams: real activeGatewaySession authorization and SQL counts', async () => {
-  const { activeGatewaySession } = await import('../src/workspace-gateway.js');
+  const { activeGatewaySession, authorizeQueuedGatewayRelay } = await import('../src/workspace-gateway.js');
   const { seedReadySession } = await import('./fixtures/native-gateway-session.js');
   const redis = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: 2 });
   const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
@@ -88,6 +88,21 @@ integration('30/60 FPS x 1/4/8 streams: real activeGatewaySession authorization 
     const browserKey = prefix + ':revocation';
     keys.push(browserKey);
     await redis.set(browserKey, JSON.stringify({sessionId: fixture.session.id, userId: fixture.renter.id}), 'EX', 60);
+    const channelId = crypto.randomUUID();
+    const channelKey = 'workspace-gateway:ws-channel:' + channelId;
+    keys.push(channelKey);
+    const binding = JSON.stringify({sessionId:fixture.session.id,machineId:fixture.machine.id,browserSessionKey:browserKey,runtimeBackend:'WINDOWS_NATIVE'});
+    await redis.set(channelKey,binding,'EX',60);
+    const queued = {id:crypto.randomUUID(),sessionId:fixture.session.id,kind:'ws_send' as const,channelId,nativeChannelBinding:binding,dataBase64:'AA==',binary:true};
+    const allowed = await authorizeQueuedGatewayRelay(db,redis,fixture.machine.id,queued);
+    assert.ok(allowed, 'real DB and Redis authorize a current queued native input');
+    assert.equal('nativeChannelBinding' in allowed,false);
+    await redis.del(channelKey);
+    assert.equal(await authorizeQueuedGatewayRelay(db,redis,fixture.machine.id,queued),null,'real Redis channel revocation discards buffered input');
+    await redis.set(channelKey,binding,'EX',60);
+    await redis.del(browserKey);
+    assert.equal(await authorizeQueuedGatewayRelay(db,redis,fixture.machine.id,queued),null,'real Redis cookie revocation discards buffered input');
+    await redis.set(browserKey,JSON.stringify({sessionId:fixture.session.id,userId:fixture.renter.id}),'EX',60);
     let release!: () => void, entered!: () => void;
     const barrier = new Promise<void>(resolve => { entered = resolve; });
     let reads = 0;
@@ -104,6 +119,7 @@ integration('30/60 FPS x 1/4/8 streams: real activeGatewaySession authorization 
     await barrier;
     await db.workspaceSession.update({where: {id: fixture.session.id}, data: {status: WorkspaceSessionStatus.STOP_REQUESTED}});
     assert.equal(await guard(), false, 'a committed DB STOP denies the fresh check');
+    assert.equal(await authorizeQueuedGatewayRelay(db,redis,fixture.machine.id,queued),null,'real PostgreSQL STOP discards buffered input even with live Redis keys');
     release();
     assert.equal(await old, false, 'known DB denial fences the older successful query');
     await db.workspaceSession.update({where: {id: fixture.session.id}, data: {status: WorkspaceSessionStatus.READY, expiresAt: new Date(0)}});

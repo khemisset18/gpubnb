@@ -31,6 +31,14 @@ pub enum BrowserInputError {
     Event,
 }
 
+#[cfg(any(target_os = "windows", test))]
+pub(crate) fn next_stream_epoch(current: u64) -> Result<u64, BrowserInputError> {
+    if current == 0 {
+        return Err(BrowserInputError::StreamEpoch);
+    }
+    current.checked_add(1).ok_or(BrowserInputError::StreamEpoch)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BrowserInputFrame {
     pub stream_epoch: u64,
@@ -324,16 +332,26 @@ mod tests {
         // Regression control: resetting only the sequence accepts the replay.
         let mut reused = BrowserInputFence::new(old_epoch).expect("reused epoch");
         assert!(reused.accept(&old).is_ok());
-        let next = crate::service_runtime::next_stream_epoch(old_epoch).expect("fresh connection");
+        let next = next_stream_epoch(old_epoch).expect("fresh connection");
         let mut reconnected = BrowserInputFence::new(next).expect("new connection fence");
         assert_eq!(
             reconnected.accept(&old),
             Err(BrowserInputError::StreamEpoch)
         );
-        assert!(reconnected.accept(&packet(KIND_KEY, 0, next, 1, 0x1e, 0)).is_ok());
+        assert!(
+            reconnected
+                .accept(&packet(KIND_KEY, 0, next, 1, 0x1e, 0))
+                .is_ok()
+        );
         assert_eq!(
             reconnected.accept(&packet(KIND_KEY, 0, next, 1, 0x1e, 0)),
             Err(BrowserInputError::Sequence)
         );
+    }
+
+    #[test]
+    fn connection_epochs_cannot_start_at_zero_or_wrap() {
+        assert_eq!(next_stream_epoch(0), Err(BrowserInputError::StreamEpoch));
+        assert_eq!(next_stream_epoch(u64::MAX), Err(BrowserInputError::StreamEpoch));
     }
 }

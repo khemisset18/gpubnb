@@ -817,11 +817,9 @@ fn worker_signer() -> Result<[u8; 32], ServiceRuntimeError> {
     Ok(out)
 }
 
-pub(crate) fn next_stream_epoch(current: u64) -> Result<u64, ServiceRuntimeError> {
-    match current.checked_add(1) {
-        Some(value) if value != 0 => Ok(value),
-        _ => Err(ServiceRuntimeError::MediaCapability),
-    }
+fn next_stream_epoch(current: u64) -> Result<u64, ServiceRuntimeError> {
+    crate::browser_input_protocol::next_stream_epoch(current)
+        .map_err(|_| ServiceRuntimeError::MediaCapability)
 }
 
 fn validate_config(config: ServiceRuntimeConfig<'_>) -> Result<(), ServiceRuntimeError> {
