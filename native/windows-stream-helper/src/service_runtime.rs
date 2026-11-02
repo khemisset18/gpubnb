@@ -207,9 +207,25 @@ impl QualifiedGraphicsRuntime {
     }
 
     /// Browser-visible reconnect fence. This is independent from the secret
-    /// media capability and rotates after every successful suspend/resume proof.
+    /// media capability and rotates on every authenticated browser connection
+    /// and every successful suspend/resume proof.
     pub const fn stream_epoch(&self) -> u64 {
         self.stream_epoch
+    }
+
+    /// A new connection resets its input sequence, so it must never inherit
+    /// an earlier connection's epoch even without a SUSPEND/RESUME transition.
+    pub(crate) fn begin_browser_connection(&mut self) -> Result<u64, ServiceRuntimeError> {
+        if self.media_token().is_none() {
+            return Err(ServiceRuntimeError::MediaCapability);
+        }
+        self.ensure_provider_boundary()?;
+        let epoch = match next_stream_epoch(self.stream_epoch) {
+            Ok(value) => value,
+            Err(error) => return Err(self.fail(error)),
+        };
+        self.stream_epoch = epoch;
+        Ok(epoch)
     }
 
     pub const fn windows_session_id(&self) -> u32 {
@@ -801,7 +817,7 @@ fn worker_signer() -> Result<[u8; 32], ServiceRuntimeError> {
     Ok(out)
 }
 
-fn next_stream_epoch(current: u64) -> Result<u64, ServiceRuntimeError> {
+pub(crate) fn next_stream_epoch(current: u64) -> Result<u64, ServiceRuntimeError> {
     match current.checked_add(1) {
         Some(value) if value != 0 => Ok(value),
         _ => Err(ServiceRuntimeError::MediaCapability),

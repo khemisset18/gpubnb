@@ -154,7 +154,10 @@ impl QualificationMediaServer {
         }
 
         let mut stream = self.accept_upgraded(runtime)?;
-        let mut input_fence = BrowserInputFence::new(self.stream_epoch)
+        let stream_epoch = runtime
+            .begin_browser_connection()
+            .map_err(|_| QualificationMediaServerError::Upgrade)?;
+        let mut input_fence = BrowserInputFence::new(stream_epoch)
             .map_err(|_| QualificationMediaServerError::Input)?;
         let started = Instant::now();
         let mut sent = 0u32;
@@ -200,7 +203,7 @@ impl QualificationMediaServer {
                     continue;
                 }
             };
-            write_browser_media_frame(&mut stream, self.stream_epoch, &frame)?;
+            write_browser_media_frame(&mut stream, stream_epoch, &frame)?;
             sent = sent
                 .checked_add(1)
                 .ok_or(QualificationMediaServerError::Protocol)?;
@@ -356,18 +359,17 @@ impl QualificationMediaServer {
         // Fetch the capability only after the connection arrives. A SUSPEND
         // revokes the previous token and RESUME creates a fresh token, so a
         // listener that was already waiting must never authenticate stale bytes.
-        let (media_token, stream_epoch) = {
+        let media_token = {
             let guard = runtime
                 .lock()
                 .map_err(|_| QualificationMediaServerError::Upgrade)?;
             let active = guard
                 .as_ref()
                 .ok_or(QualificationMediaServerError::Upgrade)?;
-            let media_token = active
+            active
                 .media_token()
                 .map(str::to_owned)
-                .ok_or(QualificationMediaServerError::Upgrade)?;
-            (media_token, active.stream_epoch())
+                .ok_or(QualificationMediaServerError::Upgrade)?
         };
         let upgrade =
             match authenticate_local_media_upgrade(&request, &self.session_id, &media_token) {
@@ -380,6 +382,28 @@ impl QualificationMediaServer {
                     return Err(QualificationMediaServerError::Upgrade);
                 }
             };
+        let stream_epoch = {
+            let mut guard = runtime
+                .lock()
+                .map_err(|_| QualificationMediaServerError::Upgrade)?;
+            let active = guard
+                .as_mut()
+                .ok_or(QualificationMediaServerError::Upgrade)?;
+            // SUSPEND/RESUME may have rotated the token while authentication
+            // was in flight. Reauthenticate the current capability under the
+            // same runtime lock as allocation of the connection's fresh epoch.
+            authenticate_local_media_upgrade(
+                &request,
+                &self.session_id,
+                active
+                    .media_token()
+                    .ok_or(QualificationMediaServerError::Upgrade)?,
+            )
+            .map_err(|_| QualificationMediaServerError::Upgrade)?;
+            active
+                .begin_browser_connection()
+                .map_err(|_| QualificationMediaServerError::Upgrade)?
+        };
         let accept = websocket_accept_value(&upgrade.websocket_key);
         let response = format!(
             "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"

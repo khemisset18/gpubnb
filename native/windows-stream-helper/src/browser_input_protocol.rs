@@ -314,4 +314,26 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn reconnect_without_suspend_rejects_the_previous_connections_first_input() {
+        let old_epoch = 41;
+        let old = packet(KIND_KEY, 0, old_epoch, 1, 0x1e, 0);
+        let mut original = BrowserInputFence::new(old_epoch).expect("original connection");
+        assert!(original.accept(&old).is_ok());
+        // Regression control: resetting only the sequence accepts the replay.
+        let mut reused = BrowserInputFence::new(old_epoch).expect("reused epoch");
+        assert!(reused.accept(&old).is_ok());
+        let next = crate::service_runtime::next_stream_epoch(old_epoch).expect("fresh connection");
+        let mut reconnected = BrowserInputFence::new(next).expect("new connection fence");
+        assert_eq!(
+            reconnected.accept(&old),
+            Err(BrowserInputError::StreamEpoch)
+        );
+        assert!(reconnected.accept(&packet(KIND_KEY, 0, next, 1, 0x1e, 0)).is_ok());
+        assert_eq!(
+            reconnected.accept(&packet(KIND_KEY, 0, next, 1, 0x1e, 0)),
+            Err(BrowserInputError::Sequence)
+        );
+    }
 }
