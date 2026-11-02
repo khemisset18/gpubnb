@@ -352,6 +352,9 @@ mod tests {
     #[test]
     fn connection_epochs_cannot_start_at_zero_or_wrap() {
         assert_eq!(next_stream_epoch(0), Err(BrowserInputError::StreamEpoch));
-        assert_eq!(next_stream_epoch(u64::MAX), Err(BrowserInputError::StreamEpoch));
+        assert_eq!(
+            next_stream_epoch(u64::MAX),
+            Err(BrowserInputError::StreamEpoch)
+        );
     }
 }
