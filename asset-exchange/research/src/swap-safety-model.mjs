@@ -1,20 +1,28 @@
 // Offline design model only. No node, signer, wallet, transport or executor.
-import {createHash} from 'node:crypto';
+//
+// Every value entering this model passes the shared bounded canonicalizer in
+// ./offline-data.mjs. That module rejects cyclic graphs, non-plain prototypes,
+// sparse arrays, unsafe keys, unsafe numbers and enforces global node/depth/
+// key/text bounds. The former private canonicalizer here was unbounded, so a
+// cyclic or deeply nested event payload raised a raw RangeError
+// ("Maximum call stack size exceeded") instead of a fail-closed model error.
+// dataHash() is byte-identical to that former digest for plain JSON data, so
+// existing persisted replay digests stay valid.
+import {canonical, dataHash, freeze, requireThat} from './offline-data.mjs';
 
-function requireThat(value, message) { if (!value) throw new Error(message); }
+// A trade in this model has fewer than twenty legitimate lifecycle events. A
+// chain-alert (REORG/UNCERTAIN) event, however, is always accepted, so the
+// durable replay history could otherwise grow without bound: 5,001 repeated
+// events took ~16 s because every event structuredClones the whole state.
+// The bound fails closed and never silently forgets a replay digest.
+export const MAX_RECORDED_EVENTS = 4096;
+
 function integer(value, name) {
   requireThat(typeof value === 'string' && /^(0|[1-9][0-9]{0,77})$/.test(value), `${name}: canonical unsigned integer string required`);
   return BigInt(value);
 }
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
-  requireThat(value === null || ['string', 'boolean', 'number'].includes(typeof value), 'non-JSON event');
-  if (typeof value === 'number') requireThat(Number.isSafeInteger(value), 'unsafe numeric event');
-  return value;
-}
-const hash = value => createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
-const deepFreeze = value => { if (value && typeof value === 'object') { for (const child of Object.values(value)) deepFreeze(child); Object.freeze(value); } return value; };
+const hash = dataHash;
+const deepFreeze = freeze;
 
 export function coinQuoteToAtomic(decimal, decimals) {
   requireThat(Number.isSafeInteger(decimals) && decimals >= 0 && decimals <= 12, 'invalid decimals');
@@ -66,7 +74,10 @@ export function checkRecoveryPlan(plan) {
 export function createOfflineTrade({tradeId, termsDigest, networks}) {
   requireThat(typeof tradeId === 'string' && tradeId.length >= 8 && /^[a-f0-9]{64}$/.test(termsDigest), 'trade and terms required');
   requireThat(networks?.A && networks?.B && networks.A !== networks.B, 'two explicit distinct leg identities required');
-  return deepFreeze({simulationOnly: true, qualified: false, executableOperations: [], tradeId, termsDigest, networks: structuredClone(networks), state: 'OFFER_CREATED', seen: {}, funded: {}, resolutions: {}});
+  // Bounded first: a cyclic graph would make structuredClone()/deepFreeze()
+  // recurse forever and would also make the resulting state unjournalable.
+  canonical(networks);
+  return freeze({simulationOnly: true, qualified: false, executableOperations: [], tradeId, termsDigest, networks: structuredClone(networks), state: 'OFFER_CREATED', seen: {}, funded: {}, resolutions: {}});
 }
 
 function trustedModelEvidence(current, event) {
@@ -80,8 +91,14 @@ function trustedModelEvidence(current, event) {
 export function applyOfflineEvent(current, event) {
   requireThat(current?.simulationOnly === true && current.qualified === false && current.executableOperations.length === 0, 'offline model boundary');
   requireThat(typeof event?.id === 'string' && /^[a-zA-Z0-9:-]{8,128}$/.test(event.id) && event.tradeId === current.tradeId, 'event identity required');
+  // An id that shadows an Object.prototype member ('constructor', 'toString',
+  // '__proto__', ...) would be indistinguishable from an inherited property in
+  // the replay map. Reject it explicitly instead of relying on a truthiness read.
+  requireThat(!(event.id in Object.prototype), 'event identity must not shadow an object prototype member');
+  requireThat(current.seen && typeof current.seen === 'object' && !Array.isArray(current.seen), 'replay history required');
   const digest = hash(event);
-  if (current.seen[event.id]) { requireThat(current.seen[event.id] === digest, 'conflicting replay'); return current; }
+  if (Object.hasOwn(current.seen, event.id)) { requireThat(current.seen[event.id] === digest, 'conflicting replay'); return current; }
+  requireThat(Object.keys(current.seen).length < MAX_RECORDED_EVENTS, 'recorded event history exceeds bound; explicit checkpoint required');
   const chainAlert = ['REORG', 'UNCERTAIN'].includes(event.type);
   requireThat(!['COMPLETED', 'REFUNDED', 'CANCELLED', 'FAILED'].includes(current.state) || (chainAlert && ['COMPLETED', 'REFUNDED'].includes(current.state)), 'terminal state');
   const next = structuredClone(current); next.seen[event.id] = digest;
