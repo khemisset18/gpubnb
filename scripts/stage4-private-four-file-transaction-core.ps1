@@ -2,6 +2,7 @@
 # Shared four-file swap engine. Direct invocation is limited to a fresh TEMP fixture.
 # The physical wrapper can call it only with an explicit scoped maintenance token.
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'stage4-private-transaction-journal.ps1')
 
 # Mandatory before ANY service stop: the precise six read-only checks, all PASS.
 # Keep the policy here so Windows CI can execute the EXACT gate used by PC1.
@@ -84,7 +85,8 @@ function Invoke-Stage4FourFileTransactionCore {
         [string]$MaintenanceToken='',
         [ValidateRange(0,4)][int]$InjectFailureAfter=0,
         # TEMP fixture only: prove cleanup of a partial pre-stop staging failure.
-        [ValidateRange(0,4)][int]$InjectStageFailureAfter=0
+        [ValidateRange(0,4)][int]$InjectStageFailureAfter=0,
+        [scriptblock]$TransactionCheckpoint={param($step)}
     )
     $ErrorActionPreference='Stop'
     $names=@('gpubnb-agent.exe','gpubnb-windows-stream.exe',
@@ -98,6 +100,7 @@ function Invoke-Stage4FourFileTransactionCore {
         $candidate -ieq (Join-Path (Split-Path -Parent $target) 'candidate'))
     $physical=($target -ieq 'C:\Program Files\GPUbnb' -and
         $InjectFailureAfter -eq 0 -and $InjectStageFailureAfter -eq 0 -and
+        -not $PSBoundParameters.ContainsKey('TransactionCheckpoint') -and
         $MaintenanceToken -ceq 'STAGE4-PHYSICAL-MAINTENANCE-AUTHORIZED-BY-PREFLIGHT')
     if ($env:OS -cne 'Windows_NT' -or -not [Environment]::Is64BitProcess -or
         -not ($fixture -or $physical) -or
@@ -114,6 +117,8 @@ function Invoke-Stage4FourFileTransactionCore {
             $node=$node.Parent
         }
     }
+    $maintenanceLock=Open-Stage4MaintenanceLock $target
+    try {
     # A previous abruptly interrupted swap can leave GUID-named .old/.new
     # files in the live directory. Never begin another swap or stop the Agent
     # while that state has not been independently inspected and recovered.
@@ -156,6 +161,11 @@ function Invoke-Stage4FourFileTransactionCore {
         $oldPaths[$name]=Join-Path $target ('.stage4-'+$tag+'.old.'+$name)
         $failedPaths[$name]=Join-Path $target ('.stage4-'+$tag+'.failed.'+$name)
     }
+    $journal=[pscustomobject]@{version=1;target=$target;tag=$tag;phase='PREPARED';files=@(
+        $names | ForEach-Object { [pscustomobject]@{name=$_;oldHash=$OldHashes[$_];newHash=$NewHashes[$_];sddl=$OldSddl[$_]} }
+    )}
+    Write-Stage4TransactionJournal $target $journal
+    & $TransactionCheckpoint 'journal-prepared'
     try {
         $stagedCount=0
         foreach($name in $names) {
@@ -167,6 +177,9 @@ function Invoke-Stage4FourFileTransactionCore {
                 (Get-Acl -LiteralPath $staged[$name]).Sddl -cne $OldSddl[$name]) {
                 throw "stage4_core_pre_stop_stage_bytes_or_acl_mismatch:$name"
             }
+            $flush=[IO.File]::Open($staged[$name],[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::None)
+            try{$flush.Flush($true)}finally{$flush.Dispose()}
+            & $TransactionCheckpoint ('staged-'+$name)
             $stagedCount++
             if ($InjectStageFailureAfter -eq $stagedCount) {
                 throw 'stage4_core_injected_pre_stop_staging_failure'
@@ -177,12 +190,15 @@ function Invoke-Stage4FourFileTransactionCore {
         if (-not (& $IsControlledServiceStopped)) {
             throw 'stage4_core_stop_not_confirmed'
         }
+        & $TransactionCheckpoint 'service-stopped'
         $i=0
         foreach($name in $names) {
             # Same-parent renames keep each file's native NTFS security descriptor.
             # Staged ACL was already verified against the pinned ORIGINAL SDDL.
             Move-Item -LiteralPath (Join-Path $target $name) -Destination $oldPaths[$name] -ErrorAction Stop
+            & $TransactionCheckpoint ('old-renamed-'+$name)
             Move-Item -LiteralPath $staged[$name] -Destination (Join-Path $target $name) -ErrorAction Stop
+            & $TransactionCheckpoint ('new-renamed-'+$name)
             if ((Get-FileHash -LiteralPath $oldPaths[$name] -Algorithm SHA256).Hash -ine $OldHashes[$name] -or
                 (Get-Acl -LiteralPath $oldPaths[$name]).Sddl -cne $OldSddl[$name]) {
                 throw "stage4_core_backup_original_not_pinned:$name"
@@ -205,6 +221,10 @@ function Invoke-Stage4FourFileTransactionCore {
             -not (& $ValidateControlledRuntime)) {
             throw 'stage4_core_runtime_not_healthy'
         }
+        & $TransactionCheckpoint 'runtime-healthy'
+        $journal.phase='COMMITTED'
+        Write-Stage4TransactionJournal $target $journal
+        & $TransactionCheckpoint 'journal-committed'
         $newInstalled=$true
         return [pscustomobject]@{
             kind='STAGE4_PRIVATE_FOUR_FILE_TRANSACTION'
@@ -240,6 +260,7 @@ function Invoke-Stage4FourFileTransactionCore {
             if ($cleanupErrors.Count -gt 0) {
                 throw ('stage4_core_pre_stop_cleanup_failed:'+$reason+':'+($cleanupErrors -join ';'))
             }
+            Remove-Item -LiteralPath (Join-Path $target '.stage4-transaction.json') -Force
             throw ('stage4_core_pre_stop_cleanup_verified:'+$reason)
         }
         $rollbackError=$null
@@ -277,6 +298,9 @@ function Invoke-Stage4FourFileTransactionCore {
         if ($rollbackError) {
             throw ('stage4_core_ROLLBACK_FAILED:'+$reason+':'+$rollbackError)
         }
+        $journal.phase='ROLLED_BACK'
+        Write-Stage4TransactionJournal $target $journal
         throw ('stage4_core_ROLLBACK_VERIFIED:'+$reason)
     }
+    } finally { $maintenanceLock.Dispose() }
 }

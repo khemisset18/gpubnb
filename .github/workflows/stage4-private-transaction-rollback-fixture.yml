@@ -24,6 +24,8 @@ jobs:
           if (-not $?) { throw 'stage4_fixture_ps51_failed' }
           & ./scripts/tests/stage4-private-four-file-transaction-core.tests.ps1
           if (-not $?) { throw 'stage4_core_ps51_failed' }
+          & ./scripts/tests/stage4-private-crash-recovery.tests.ps1
+          if (-not $?) { throw 'stage4_crash_ps51_failed' }
       - name: Simulate successful installation and injected partial rollbacks with PowerShell 7
         shell: pwsh
         run: |
@@ -31,4 +33,6 @@ jobs:
           if (-not $?) { throw 'stage4_fixture_ps7_failed' }
           & ./scripts/tests/stage4-private-four-file-transaction-core.tests.ps1
           if (-not $?) { throw 'stage4_core_ps7_failed' }
+          & ./scripts/tests/stage4-private-crash-recovery.tests.ps1
+          if (-not $?) { throw 'stage4_crash_ps7_failed' }
       # Never stop a real Windows service, access Program Files or deploy anything.
