@@ -29,7 +29,7 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
   const db=new PrismaClient(),redis=new Redis(process.env.REDIS_URL!,{maxRetriesPerRequest:1});
   t.after(async()=>{redis.disconnect();await db.$disconnect();});
   for(const batch of [false,true]){
-    for(const scenario of ['full','closed','cookie','db-stop','expired','db-failure','compensation-failure','positive','concurrent','lost-commit-ack','unknown-commit','redis-error','lost-redis-ack'] as const){
+    for(const scenario of ['full','closed','cookie','db-stop','expired','db-failure','compensation-failure','positive','concurrent','lost-commit-ack','unknown-commit','redis-error','lost-redis-ack','late-active-redis-ack'] as const){
       await t.test(`${batch?'ws-frames':'ws-frame'} / ${scenario}`,async()=>{
         const fixture=await seedReadySession(db,crypto.randomBytes(8).toString('hex'),{bookingStatus:BookingStatus.STARTING,expectedSeconds:900});
         const pair=nacl.sign.keyPair();
@@ -42,6 +42,7 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
         await redis.set(channelKey,binding,'EX',120);await redis.set(browserKey,JSON.stringify({sessionId:fixture.session.id,userId:fixture.renter.id}),'EX',120);
         const originalEval=redis.eval.bind(redis);
         let gate:ReturnType<typeof barrier>|undefined,entered:ReturnType<typeof barrier>|undefined;
+        let delayActivatedAck=false;const delayedAckCompleted=barrier();
         let queuedBeforeCommit:string|undefined;
         if(scenario==='db-stop')await db.workspaceSession.update({where:{id:fixture.session.id},data:{status:WorkspaceSessionStatus.STOP_REQUESTED}});
         if(scenario==='expired')await db.workspaceSession.update({where:{id:fixture.session.id},data:{expiresAt:new Date(0)}});
@@ -54,6 +55,12 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
             if(scenario==='redis-error')throw new Error('injected Redis outage before admission');
             const result=await (originalEval as (...args:unknown[])=>Promise<unknown>)(script,...args);
             if(scenario==='lost-redis-ack')throw new Error('injected lost Redis admission acknowledgement');
+            if(scenario==='late-active-redis-ack'&&delayActivatedAck&&Number(result)===1){
+              // Redis already accepted the frame; delay only its acknowledgement
+              // beyond the gateway's five-second RPC timeout.
+              await new Promise<void>(resolve=>setTimeout(resolve,5200));
+              delayedAckCompleted.resolve();
+            }
             if(Number(result)===1&&scenario==='positive'){
               queuedBeforeCommit=(await redis.lrange(queueKey,0,0))[0];assert.ok(queuedBeforeCommit);
               assert.equal(await committedGatewayFrame(db,fixture.session.id,channelId,binding,queuedBeforeCommit),false,'uncommitted first frame is not deliverable');
@@ -90,6 +97,18 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
           return app.inject({method:'POST',url:route,...signed(route,fixture.machine.id,pair,batch?{machineId:fixture.machine.id,frames:[frame]}:{machineId:fixture.machine.id,...frame})});
         };
         try{
+          if(scenario==='late-active-redis-ack'){
+            const initial=await send();assert.equal(initial.statusCode,200);
+            delayActivatedAck=true;
+            const late=await send();assert.equal(late.statusCode,500,'late Redis acknowledgement is still reported as an error');
+            await delayedAckCompleted.promise;
+            await new Promise<void>(resolve=>setImmediate(resolve));
+            assert.equal(await redis.llen(queueKey),2,'a frame admitted for an already-billable session must not be compensated');
+            if(batch)assert.equal(await redis.exists(seen.at(-1)!),1,'late ACK may not delete a valid dedupe marker');
+            const booking=await db.booking.findUniqueOrThrow({where:{id:fixture.booking.id}});
+            assert.ok(booking.workspaceActivatedAt,'existing billing activation remains committed');
+            return;
+          }
           const responses=scenario==='concurrent'?await Promise.all([send(),send(),send(),send()]):await(async()=>{
             const pending=send();if(entered){await entered.promise;await redis.del(scenario==='closed'?channelKey:browserKey);gate!.resolve();}return [await pending];
           })();
