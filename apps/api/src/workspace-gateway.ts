@@ -385,7 +385,7 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
     let timer:ReturnType<typeof setTimeout>|undefined;
     // A timed-out Redis request may still execute later. Its orphaned first
     // frame has no committed receipt; also compensate when a late reply arrives.
-    void operation.then(value=>{if(abandoned&&Number(value)===1)void compensate().catch(()=>undefined);},()=>undefined);
+    void operation.then(value=>{if(abandoned&&receiptId&&Number(value)===1)void compensate().catch(()=>undefined);},()=>undefined);
     try{return Number(await Promise.race([operation,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('gateway_acceptance_redis_timeout')),5000);})]));}
     finally{if(timer!==undefined)clearTimeout(timer);}
   };
@@ -418,7 +418,6 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
       return {enqueued,expiresAt:activation.expiresAt};
     },{maxWait:5000,timeout:10000});
   }catch(error){
-    abandoned=true;
     // A DB commit acknowledgement can be lost. Preserve a committed receipt
     // if it can be recovered; never blindly roll back another activation.
     if(receiptId){
@@ -432,6 +431,11 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
       }
       if(committed)return {enqueued:1,expiresAt:committed.expiresAt};
     }
+    // Only uncommitted first-frame admissions require compensation. An already
+    // activated session has valid queued bytes even when Redis's ACK is late.
+    // Mark abandonment after the receipt check: a lost DB commit ACK must not
+    // cause the late Redis callback to delete a committed, billable frame.
+    abandoned=true;
     if(accepted)await compensate().catch(()=>undefined);
     throw error;
   }
@@ -770,7 +774,16 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
               if(!await committedGatewayFrame(db,sessionId,channelId,channelBinding,frame)){
                 pendingAcceptanceFrame=frame;
                 if(pendingAcceptanceSince===0)pendingAcceptanceSince=performance.now();
-                if(performance.now()-pendingAcceptanceSince>15000)throw new Error('gateway_acceptance_commit_timeout');
+                if(performance.now()-pendingAcceptanceSince>15000){
+                  // An aborted first-frame transaction may leave a receipt-tagged
+                  // item already popped from Redis. Never deliver an uncommitted
+                  // frame, but do not permanently poison a healthy channel or
+                  // block a later, independently committed retry behind it.
+                  gatewayLog.warn({event:'gateway_acceptance_uncommitted_discarded',sessionId,channel:channelLogId},'uncommitted first frame expired');
+                  pendingAcceptanceFrame=null;pendingAcceptanceSince=0;
+                  await accountDequeuedBytes(redis,wsInputBytesKey(channelId),frame,WS_INPUT_TTL_SECONDS);
+                  continue;
+                }
                 break;
               }
               pendingAcceptanceFrame=null;pendingAcceptanceSince=0;
