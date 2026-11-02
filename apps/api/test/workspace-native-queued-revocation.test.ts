@@ -7,7 +7,7 @@ process.env.REDIS_URL ??= 'redis://localhost:6379';
 process.env.SESSION_SECRET ??= 'isolated-test-session-secret-0123456789';
 process.env.INTERNAL_SERVICE_TOKEN ??= 'isolated-test-internal-token-0123456789';
 process.env.PLATFORM_WALLET ??= '11111111111111111111111111111111';
-const { authorizeQueuedGatewayRelay } = await import('../src/workspace-gateway.js');
+const { authorizeQueuedGatewayRelay, authorizeQueuedGatewayBatch } = await import('../src/workspace-gateway.js');
 
 function fixture(kind: 'ws_send' | 'ws_open') {
   const binding = JSON.stringify({sessionId:'s',machineId:'m',browserSessionKey:'browser',runtimeBackend:'WINDOWS_NATIVE'});
@@ -105,4 +105,27 @@ test('current container relays remain wire compatible and stripped of native met
   f.state.row!.runtimeBackend='CONTAINER';
   delete (f.queued as {nativeChannelBinding?:string}).nativeChannelBinding;
   assert.deepEqual(await f.authorize(),f.queued);
+});
+
+test('a revoked old channel does not drop a fresh reconnect OPEN for the same session',async()=>{
+  const f=fixture('ws_send');
+  const fresh={...f.queued,id:'new',kind:'ws_open' as const,channelId:'new-channel'};
+  f.redis.eval=async(_script,_count,channel)=>channel.endsWith(':new-channel')?1:0;
+  const result=await authorizeQueuedGatewayBatch(f.db as never,f.redis as never,'m',[fresh,f.queued]);
+  assert.equal(result.length,1);
+  assert.equal(result[0]!.id,'new');
+  assert.equal('nativeChannelBinding' in result[0]!,false);
+});
+test('a later channel denial also removes an earlier positive for that same channel',async()=>{
+  const f=fixture('ws_send');let reads=0;
+  f.redis.eval=async()=>++reads===1?1:0;
+  const result=await authorizeQueuedGatewayBatch(f.db as never,f.redis as never,'m',[f.queued,{...f.queued,id:'later'}]);
+  assert.deepEqual(result,[]);
+});
+test('a later database STOP removes earlier positives across the whole session',async()=>{
+  const f=fixture('ws_send');let reads=0;
+  f.db.workspaceSession.findFirst=async()=>++reads===1?f.state.row:null;
+  const close={...f.queued,id:'cleanup',kind:'ws_close' as const};
+  const result=await authorizeQueuedGatewayBatch(f.db as never,f.redis as never,'m',[f.queued,{...f.queued,id:'other',channelId:'other-channel'},close]);
+  assert.deepEqual(result.map(item=>item.id),['cleanup']);
 });

@@ -240,40 +240,67 @@ export async function activeGatewaySession(db:PrismaClient,sessionId:string){ret
 
 // A successful enqueue is not a lasting input grant: STOP/cookie revocation
 // can occur while a command is buffered in the shared machine queue.
+type QueuedGatewayDecision={relay:RelayRequest|null;scope:'channel'|'session'};
+
 export async function authorizeQueuedGatewayRelay(db:PrismaClient,redis:Redis,machineId:string,queued:RelayRequest,timeoutMs=5000):Promise<RelayRequest|null>{
+  return (await decideQueuedGatewayRelay(db,redis,machineId,queued,timeoutMs)).relay;
+}
+
+async function decideQueuedGatewayRelay(db:PrismaClient,redis:Redis,machineId:string,queued:RelayRequest,timeoutMs=5000):Promise<QueuedGatewayDecision>{
   let timer:ReturnType<typeof setTimeout>|undefined;
   try{
     return await Promise.race([
       validateQueuedGatewayRelay(db,redis,machineId,queued),
-      new Promise<null>(resolve=>{timer=setTimeout(()=>resolve(null),timeoutMs);}),
+      new Promise<QueuedGatewayDecision>(resolve=>{timer=setTimeout(()=>resolve({relay:null,scope:'session'}),timeoutMs);}),
     ]);
-  }catch{return null;}
+  }catch{return {relay:null,scope:'session'};}
   finally{if(timer!==undefined)clearTimeout(timer);}
 }
 
-async function validateQueuedGatewayRelay(db:PrismaClient,redis:Redis,machineId:string,queued:RelayRequest):Promise<RelayRequest|null>{
+async function validateQueuedGatewayRelay(db:PrismaClient,redis:Redis,machineId:string,queued:RelayRequest):Promise<QueuedGatewayDecision>{
   const {nativeChannelBinding,...relay}=queued;
-  if(relay.kind!=='ws_open'&&relay.kind!=='ws_send')return relay;
+  const allow:QueuedGatewayDecision={relay,scope:'channel'};
+  const denyChannel:QueuedGatewayDecision={relay:null,scope:'channel'};
+  const denySession:QueuedGatewayDecision={relay:null,scope:'session'};
+  if(relay.kind!=='ws_open'&&relay.kind!=='ws_send')return allow;
   if(!nativeChannelBinding){
     const row=await activeGatewaySession(db,relay.sessionId);
-    // Pre-upgrade native queue entries have no immutable enqueue binding.
-    // Drop them rather than re-authorizing them against a replacement channel.
-    return row&&row.machineId===machineId&&!isWindowsNativeRuntime(row.runtimeBackend)?relay:null;
+    if(!row||row.machineId!==machineId)return denySession;
+    // Old native entries lack an immutable enqueue binding: drop only that
+    // channel, so a fresh reconnect in the same batch can still open.
+    return isWindowsNativeRuntime(row.runtimeBackend)?denyChannel:allow;
   }
+  let binding:GatewayChannelBinding;
   try{
-    const binding=JSON.parse(nativeChannelBinding) as GatewayChannelBinding;
+    binding=JSON.parse(nativeChannelBinding) as GatewayChannelBinding;
     if(!relay.channelId||binding.sessionId!==relay.sessionId||binding.machineId!==machineId
-      ||!isWindowsNativeRuntime(binding.runtimeBackend)||typeof binding.browserSessionKey!=='string')return null;
-    // No pending authorization is shared with a pump or another request.
-    const row=await activeGatewaySession(db,relay.sessionId);
-    if(!row||row.machineId!==machineId||row.runtimeBackend!==binding.runtimeBackend)return null;
-    const browserRaw=await redis.get(binding.browserSessionKey);
-    const browser:unknown=browserRaw?JSON.parse(browserRaw):null;
-    if(typeof browser!=='object'||browser===null||!('sessionId' in browser)||browser.sessionId!==relay.sessionId
-      ||!('userId' in browser)||browser.userId!==row.renterId)return null;
-    if(Number(await redis.eval(NATIVE_DELIVERY_FENCE_SCRIPT,2,wsChannelKey(relay.channelId),binding.browserSessionKey,nativeChannelBinding,browserRaw!))!==1)return null;
-    return row.expiresAt.getTime()>Date.now()?relay:null;
-  }catch{return null;}
+      ||!isWindowsNativeRuntime(binding.runtimeBackend)||typeof binding.browserSessionKey!=='string')return denyChannel;
+  }catch{return denyChannel;}
+  // No pending authorization is shared with a pump or another request.
+  const row=await activeGatewaySession(db,relay.sessionId);
+  if(!row||row.machineId!==machineId||row.runtimeBackend!==binding.runtimeBackend)return denySession;
+  const browserRaw=await redis.get(binding.browserSessionKey);
+  let browser:unknown;
+  try{browser=browserRaw?JSON.parse(browserRaw):null;}catch{return denyChannel;}
+  if(typeof browser!=='object'||browser===null||!('sessionId' in browser)||browser.sessionId!==relay.sessionId
+    ||!('userId' in browser)||browser.userId!==row.renterId)return denyChannel;
+  if(Number(await redis.eval(NATIVE_DELIVERY_FENCE_SCRIPT,2,wsChannelKey(relay.channelId!),binding.browserSessionKey,nativeChannelBinding,browserRaw!))!==1)return denyChannel;
+  return row.expiresAt.getTime()>Date.now()?allow:denySession;
+}
+
+export async function authorizeQueuedGatewayBatch(db:PrismaClient,redis:Redis,machineId:string,items:RelayRequest[]):Promise<RelayRequest[]>{
+  const authorizedItems:RelayRequest[]=[];
+  const deniedSessions=new Set<string>();const deniedChannels=new Set<string>();
+  const channelScope=(item:RelayRequest)=>JSON.stringify([item.sessionId,item.channelId]);
+  for(const item of items){
+    const decision=await decideQueuedGatewayRelay(db,redis,machineId,item);
+    if(decision.relay)authorizedItems.push(decision.relay);
+    else if(decision.scope==='session')deniedSessions.add(item.sessionId);
+    else deniedChannels.add(channelScope(item));
+  }
+  // A later DB denial fences the entire session. A closed/replaced channel
+  // fences only that connection, never a fresh reconnect's independent OPEN.
+  return authorizedItems.filter(item=>item.kind==='ws_close'||(!deniedSessions.has(item.sessionId)&&!deniedChannels.has(channelScope(item))));
 }
 
 // The commercial rental clock's one true start: a real upstream frame proven exchanged
@@ -375,13 +402,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       await accountDequeuedBytes(redis,bytesKey,raw,MACHINE_QUEUE_TTL_SECONDS);
       items.push(JSON.parse(raw) as RelayRequest);batchBytes+=candidateBytes;
     }
-    const authorizedItems:RelayRequest[]=[];const deniedSessions=new Set<string>();
-    for(const item of items){
-      const allowed=await authorizeQueuedGatewayRelay(db,redis,machineId,item);
-      if(allowed)authorizedItems.push(allowed);else deniedSessions.add(item.sessionId);
-    }
-    // A later known denial in this batch also invalidates earlier positives.
-    return {items:authorizedItems.filter(item=>item.kind==='ws_close'||!deniedSessions.has(item.sessionId))};
+    return {items:await authorizeQueuedGatewayBatch(db,redis,machineId,items)};
   });
   app.post('/agent/workspace-gateway/:sessionId/register',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;runtimeId?:string;localPort?:number};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/register`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!/^[a-zA-Z0-9_.-]{6,100}$/.test(String(body.runtimeId||''))||!Number.isInteger(body.localPort)||Number(body.localPort)<1024||Number(body.localPort)>65535)return reply.code(400).send({error:'invalid_runtime_registration'});
