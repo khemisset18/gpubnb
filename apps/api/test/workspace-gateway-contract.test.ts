@@ -95,7 +95,7 @@ test('agent tunnel preserves long-lived websocket handshakes and absorbs startup
 test('batched upstream frames are retry-idempotent before entering browser queue',()=>{
   assert.match(api,/wsFrameSeenKey=\(machineId:string,frameId:string\)/);
   assert.match(api,/ENQUEUE_DEDUPED_WS_FRAME_SCRIPT/);
-  assert.match(api,/redis\.call\('SET', KEYS\[1\], '1', 'EX', ARGV\[1\], 'NX'\)/);
+  assert.match(api,/redis\.call\('SET', KEYS\[1\], owner, 'EX', ARGV\[1\], 'NX'\)/);
   assert.match(api,/redis\.call\('LPUSH', KEYS\[2\], ARGV\[3\]\)/);
   assert.match(api,/frame_id_required/);
   assert.match(transport,/"frameId": str\(uuid\.uuid4\(\)\)/);
@@ -142,7 +142,7 @@ test('redis relay queues are bounded by item count, bytes and ttl',()=>{
 
 test('billing activation remains tied to a real upstream websocket frame',()=>{
   assert.match(api,/app\.post\('\/agent\/workspace-gateway\/ws-frame'/);
-  assert.match(api,/activateGatewaySession\(db,binding\.sessionId,machineId\)/);
+  assert.match(api,/acceptGatewayFrame\(\{db,redis,sessionId:binding\.sessionId/);
   assert.match(api,/A real upstream frame remains the billing activation signal/);
 });
 
@@ -155,14 +155,14 @@ test('concurrent websocket activation accepts the transaction winner',()=>{
   assert.match(api,/winner\?\{activated:false,expiresAt:winner\.expiresAt\}:null/);
 });
 
-test('session activation is cached away from repeated websocket frames',()=>{
+test('committed activation caching cannot precede the accepted first frame',()=>{
   assert.match(api,/wsSessionActivatedKey=\(sessionId:string\)=>`workspace-gateway:ws-session-activated:\$\{sessionId\}`/);
-  assert.match(api,/const activatedKey=wsSessionActivatedKey\(binding\.sessionId\)/);
-  assert.match(api,/let ttl=await redis\.ttl\(activatedKey\)/);
-  assert.match(api,/if\(ttl<1\)\{\s*const activation=await activateGatewaySession/);
-  assert.match(api,/redis\.set\(activatedKey,'1','EX',ttl\)/);
+  assert.match(api,/const activatedKey=wsSessionActivatedKey\(sessionId\)/);
+  assert.match(api,/const cachedTtl=await redis\.ttl\(activatedKey\)/);
+  assert.match(api,/if\(cachedTtl>0\)return \{enqueued:await enqueue\(\)\}/);
+  assert.match(api,/redis\.set\(wsSessionActivatedKey\(sessionId\),'1','EX',ttl\)/);
   assert.match(api,/redis\.del\(wsSessionActivatedKey\(sessionId\)\)/);
-  assert.match(api,/Channel readiness is intentionally separate from session activation/);
+  assert.match(api,/committedGatewayFrame\(db,sessionId,channelId,channelBinding,frame\)/);
 });
 
 test('websocket subprotocol may cross the authenticated gateway',()=>{

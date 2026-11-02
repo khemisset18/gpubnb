@@ -53,26 +53,21 @@ test('only the first authenticated upstream WebSocket frame starts paid time', a
   assert.match(helper, /where:\{id:row\.bookingId,workspaceActivatedAt:null\}/, 'the write itself must be gated on workspaceActivatedAt, not merely on status - the true idempotency key');
   assert.match(helper, /action:'INTERACTIVE_WORKSPACE_CONNECTED'/);
 
-  const frameStart = source.indexOf("app.post('/agent/workspace-gateway/ws-frame'");
-  const frameEnd = source.indexOf('\n  });', frameStart);
-  const frame = source.slice(frameStart, frameEnd);
-  assert.match(frame, /binding\.machineId!==machineId/);
-  assert.match(frame, /activateGatewaySession\(db,binding\.sessionId,machineId\)/);
-  assert.match(frame, /redis\.eval\(ENQUEUE_BOUND_WS_FRAME_SCRIPT,4,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\),binding\.browserSessionKey/);
-  assert.ok(
-    frame.indexOf('activateGatewaySession') < frame.indexOf('ENQUEUE_BOUND_WS_FRAME_SCRIPT'),
-    'billing activation must succeed before a frame enters the bounded, atomic channel-fenced delivery queue',
-  );
+  for (const path of ['ws-frame','ws-frames']) {
+    const routeStart = source.indexOf(`app.post('/agent/workspace-gateway/${path}'`);
+    const routeEnd = source.indexOf('\n  });',routeStart);
+    const route=source.slice(routeStart,routeEnd);
+    assert.match(route,/binding\.machineId!==machineId/);
+    assert.match(route,/acceptGatewayFrame\(\{db,redis,sessionId:binding\.sessionId/);
+    assert.doesNotMatch(route,/activateGatewaySession\(db,/,'routes may not activate billing outside the acceptance transaction');
+  }
+  const acceptance=source.slice(source.indexOf('export async function acceptGatewayFrame'),source.indexOf('export async function committedGatewayFrame'));
+  assert.ok(acceptance.indexOf('const enqueued=await enqueue()')<acceptance.indexOf('activateGatewaySessionTx(tx,sessionId,machineId)'));
+  assert.match(acceptance,/if\(enqueued!==1\)return \{enqueued\}/);
+  assert.match(acceptance,/tx\.workspaceGatewayAcceptance\.create/);
+  assert.match(acceptance,/FOR UPDATE/);
+  assert.match(acceptance,/if\(accepted\)await compensate\(\)/);
 
-  const batchStart = source.indexOf("app.post('/agent/workspace-gateway/ws-frames'");
-  const batchEnd = source.indexOf('\n  });', batchStart);
-  const batch = source.slice(batchStart, batchEnd);
-  assert.match(batch, /activateGatewaySession\(db,binding\.sessionId,machineId\)/);
-  assert.match(batch, /ENQUEUE_DEDUPED_WS_FRAME_SCRIPT/);
-  assert.ok(
-    batch.indexOf('activateGatewaySession') < batch.indexOf('ENQUEUE_DEDUPED_WS_FRAME_SCRIPT'),
-    'activation must succeed before a batched frame enters the renter delivery queue',
-  );
 });
 
 test('developer usage remains zero while READY and increments only for RUNNING plus ACTIVE', async () => {
