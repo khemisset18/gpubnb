@@ -626,11 +626,34 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   });
   app.post('/agent/workspace-gateway/:sessionId/stopped',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;cleaned?:boolean};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/stopped`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
-    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.READY]}},select:{id:true,bookingId:true,startedAt:true}});if(!row)return reply.code(409).send({error:'workspace_not_stoppable'});
-    if(body.cleaned!==true){await runBookingTransaction(db,async tx=>{await tx.machine.update({where:{id:machineId},data:{operational:MachineOperational.UNAVAILABLE}});await enterQuarantine(tx,{machineId,reasonCode:'WORKSPACE_CLEANUP_FAILED',reason:"L'agent a signalé la fin de la session Workspace sans confirmer le nettoyage de l'environnement isolé.",details:{sessionId},source:'workspace-gateway.stopped'});await tx.workspaceSession.updateMany({where:{id:row.id,machineId,runtimeBackend:{in:gatewayRuntimeBackends()}},data:{status:WorkspaceSessionStatus.QUARANTINED,endedAt:new Date()}});},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,maxWait:5_000,timeout:10_000});return reply.code(409).send({error:'workspace_cleanup_unverified'});}
-    const neverActivated=row.startedAt===null;const endedAt=new Date();
-    const release=await runBookingTransaction(db,async tx=>{
-      await tx.workspaceSession.update({where:{id:row.id},data:{status:neverActivated?WorkspaceSessionStatus.TIMED_OUT:WorkspaceSessionStatus.COMPLETED,endedAt,connectionMetadata:{},...(neverActivated?{terminationReason:SessionTerminationReason.TIMEOUT,preparationStep:'INTERACTIVE_CONNECTION_TIMEOUT'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:neverActivated?'INTERACTIVE_CONNECTION_NEVER_ESTABLISHED':'GATEWAY_CLEANUP_VERIFIED'}}}});
+    const acknowledgeable:WorkspaceSessionStatus[]=[WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.READY];
+    const result=await runBookingTransaction(db,async tx=>{
+      // Read again on EVERY Serializable retry. A snapshot captured before the
+      // transaction would let late ACKs overwrite its winner's terminal state.
+      const row=await tx.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()}},select:{id:true,bookingId:true,status:true,startedAt:true}});
+      if(!row)return {error:'workspace_not_stoppable'} as const;
+      if(!acknowledgeable.includes(row.status)){
+        if(body.cleaned===true&&(row.status===WorkspaceSessionStatus.COMPLETED||row.status===WorkspaceSessionStatus.TIMED_OUT)){
+          return {ok:true,activated:row.startedAt!==null,machineReleased:false,alreadyApplied:true} as const;
+        }
+        return {error:row.status===WorkspaceSessionStatus.QUARANTINED?'workspace_cleanup_unverified':'workspace_not_stoppable'} as const;
+      }
+      const neverActivated=row.startedAt===null;const endedAt=new Date();
+      const changed=await tx.workspaceSession.updateMany({
+        where:{id:row.id,machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:acknowledgeable}},
+        data:body.cleaned!==true?{status:WorkspaceSessionStatus.QUARANTINED,endedAt}:{
+          status:neverActivated?WorkspaceSessionStatus.TIMED_OUT:WorkspaceSessionStatus.COMPLETED,endedAt,connectionMetadata:{},
+          ...(neverActivated?{terminationReason:SessionTerminationReason.TIMEOUT,preparationStep:'INTERACTIVE_CONNECTION_TIMEOUT'}:{}),
+        },
+      });
+      if(changed.count!==1)return {error:'workspace_not_stoppable'} as const;
+      // Only the CAS winner can emit events, quarantine, settle or release.
+      if(body.cleaned!==true){
+        await tx.machine.update({where:{id:machineId},data:{operational:MachineOperational.UNAVAILABLE}});
+        await enterQuarantine(tx,{machineId,reasonCode:'WORKSPACE_CLEANUP_FAILED',reason:"L'agent a signalé la fin de la session Workspace sans confirmer le nettoyage de l'environnement isolé.",details:{sessionId},source:'workspace-gateway.stopped'});
+        return {error:'workspace_cleanup_unverified'} as const;
+      }
+      await tx.workspaceSessionEvent.create({data:{sessionId:row.id,actorType:'AGENT',actorId:machineId,action:neverActivated?'INTERACTIVE_CONNECTION_NEVER_ESTABLISHED':'GATEWAY_CLEANUP_VERIFIED'}});
       if(neverActivated){
         await tx.booking.updateMany({where:{id:row.bookingId,status:{in:[BookingStatus.FUNDED,BookingStatus.STARTING]}},data:{status:BookingStatus.DEGRADED}});
         await tx.payment.updateMany({where:{bookingId:row.bookingId,status:PaymentStatus.ESCROW_FUNDED},data:{status:PaymentStatus.SETTLEMENT_PENDING}});
@@ -645,10 +668,12 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         },
         data:{operational:neverActivated?MachineOperational.DEGRADED:MachineOperational.AVAILABLE},
       });
-      return machineUpdate.count===1;
+      const release=machineUpdate.count===1;
+      return {ok:true,activated:!neverActivated,machineReleased:release,alreadyApplied:false} as const;
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,maxWait:5_000,timeout:10_000});
+    if('error' in result)return reply.code(409).send({error:result.error});
     await redis.del(wsSessionActivatedKey(sessionId));
-    return {ok:true,activated:!neverActivated,machineReleased:release};
+    return result;
   });
 
   const wss=new WebSocketServer({noServer:true,maxPayload:WS_MAX_FRAME_BYTES});
