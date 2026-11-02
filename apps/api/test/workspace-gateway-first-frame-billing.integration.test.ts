@@ -29,7 +29,7 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
   const db=new PrismaClient(),redis=new Redis(process.env.REDIS_URL!,{maxRetriesPerRequest:1});
   t.after(async()=>{redis.disconnect();await db.$disconnect();});
   for(const batch of [false,true]){
-    for(const scenario of ['full','closed','cookie','db-stop','expired','db-failure','compensation-failure','positive','concurrent','lost-commit-ack'] as const){
+    for(const scenario of ['full','closed','cookie','db-stop','expired','db-failure','compensation-failure','positive','concurrent','lost-commit-ack','unknown-commit'] as const){
       await t.test(`${batch?'ws-frames':'ws-frame'} / ${scenario}`,async()=>{
         const fixture=await seedReadySession(db,crypto.randomBytes(8).toString('hex'),{bookingStatus:BookingStatus.STARTING,expectedSeconds:900});
         const pair=nacl.sign.keyPair();
@@ -62,14 +62,15 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
           return (originalEval as (...args:unknown[])=>Promise<unknown>)(script,...args);
         }) as typeof redis.eval;
         const faultDb=new Proxy(db,{get(target,key){
-          if(key==='$transaction'&&['db-failure','compensation-failure','lost-commit-ack'].includes(scenario))return async(callback:(tx:unknown)=>Promise<unknown>,options:unknown)=>{
+          if(key==='$transaction'&&['db-failure','compensation-failure','lost-commit-ack','unknown-commit'].includes(scenario))return async(callback:(tx:unknown)=>Promise<unknown>,options:unknown)=>{
             const result=await db.$transaction(async tx=>callback(new Proxy(tx,{get(inner,property){
-              if(property==='workspaceGatewayAcceptance'&&scenario!=='lost-commit-ack')return new Proxy(tx.workspaceGatewayAcceptance,{get(model,method){if(method==='create')return async()=>{throw new Error('injected receipt write failure');};return Reflect.get(model,method);}});
+              if(property==='workspaceGatewayAcceptance'&&!['lost-commit-ack','unknown-commit'].includes(scenario))return new Proxy(tx.workspaceGatewayAcceptance,{get(model,method){if(method==='create')return async()=>{throw new Error('injected receipt write failure');};return Reflect.get(model,method);}});
               return Reflect.get(inner,property);
             }})) as never,options as never);
-            if(scenario==='lost-commit-ack')throw new Error('injected lost DB commit acknowledgement');
+            if(['lost-commit-ack','unknown-commit'].includes(scenario))throw new Error('injected lost DB commit acknowledgement');
             return result;
           };
+          if(key==='workspaceGatewayAcceptance'&&scenario==='unknown-commit')return new Proxy(db.workspaceGatewayAcceptance,{get(model,method){if(method==='findUnique')return async()=>{throw new Error('injected receipt read outage');};return Reflect.get(model,method);}});
           return Reflect.get(target,key);
         }});
         const app=Fastify();await app.register(cookie);
@@ -93,7 +94,7 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
           const booking=await db.booking.findUniqueOrThrow({where:{id:fixture.booking.id}});
           const receipts=await db.workspaceGatewayAcceptance.count({where:{sessionId:fixture.session.id}});
           const events=await db.workspaceSessionEvent.count({where:{sessionId:fixture.session.id,action:'INTERACTIVE_WORKSPACE_CONNECTED'}});
-          if(!['positive','concurrent','lost-commit-ack'].includes(scenario)){
+          if(!['positive','concurrent','lost-commit-ack','unknown-commit'].includes(scenario)){
             assert.equal(session.startedAt,null,'no paid start when first acceptance/commit failed');
             assert.equal(booking.workspaceActivatedAt,null);assert.equal(booking.status,BookingStatus.STARTING);
             assert.equal(session.status,scenario==='db-stop'?WorkspaceSessionStatus.STOP_REQUESTED:WorkspaceSessionStatus.READY);assert.equal(receipts,0);assert.equal(events,0);
@@ -109,12 +110,19 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
               assert.equal(await committedGatewayFrame(db,fixture.session.id,channelId,binding,orphan),false,'orphan cannot deliver despite cleanup outage');
             }
           }else{
-            assert.ok(responses.every(r=>r.statusCode===200));assert.ok(session.startedAt);assert.ok(booking.workspaceActivatedAt);
+            assert.ok(responses.every(r=>r.statusCode===(scenario==='unknown-commit'?500:200)));assert.ok(session.startedAt);assert.ok(booking.workspaceActivatedAt);
             assert.equal(receipts,1);assert.equal(events,1,'concurrent contenders activate once');
             const queued=await redis.lrange(queueKey,0,-1),first=queued.find(raw=>JSON.parse(raw).activationReceiptId);assert.ok(first);
             assert.equal(await committedGatewayFrame(db,fixture.session.id,channelId,binding,first),true);
             await assert.rejects(committedGatewayFrame(db,fixture.session.id,channelId,binding,JSON.stringify({...JSON.parse(first),dataBase64:'AQ=='})),/receipt_mismatch/);
             if(queuedBeforeCommit)assert.equal(queuedBeforeCommit,first);
+            // A retained Redis activation hint must not authorize after DB STOP.
+            await redis.set(activationKey,'1','EX',120);
+            await db.workspaceSession.update({where:{id:fixture.session.id},data:{status:WorkspaceSessionStatus.STOP_REQUESTED}});
+            const before=await redis.llen(queueKey);
+            const late=await send();
+            assert.ok(batch?late.json().stale===1:late.statusCode===409);
+            assert.equal(await redis.llen(queueKey),before,'STOP rejects even with a live activation hint');
           }
         }finally{redis.eval=originalEval as typeof redis.eval;await app.close();await redis.del(channelKey,browserKey,queueKey,bytesKey,activationKey,readyKey,...seen);await fixture.cleanup();}
       });

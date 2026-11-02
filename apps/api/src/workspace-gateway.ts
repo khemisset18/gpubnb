@@ -390,9 +390,8 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
     finally{if(timer!==undefined)clearTimeout(timer);}
   };
   if(frame.close)return {enqueued:await enqueue()};
-  const activatedKey=wsSessionActivatedKey(sessionId);
-  const cachedTtl=await redis.ttl(activatedKey);
-  if(cachedTtl>0)return {enqueued:await enqueue()};
+  // Redis activation markers are hints, never authorization. A STOP or expiry
+  // in PostgreSQL must also fence frames from an already activated session.
   try{
     return await db.$transaction(async tx=>{
       // Serialize first-frame contenders and STOP/status updates on this row.
@@ -423,7 +422,14 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
     // A DB commit acknowledgement can be lost. Preserve a committed receipt
     // if it can be recovered; never blindly roll back another activation.
     if(receiptId){
-      const committed=await db.workspaceGatewayAcceptance.findUnique({where:{id:receiptId}}).catch(()=>null);
+      let committed;
+      try{committed=await db.workspaceGatewayAcceptance.findUnique({where:{id:receiptId}});}
+      catch{
+        // Unknown is not absent: the commit may have succeeded. Removing its
+        // accepted frame here would leave billing without the accepted payload.
+        // Keep the receipt-gated frame; delivery retries the authoritative read.
+        throw error;
+      }
       if(committed)return {enqueued:1,expiresAt:committed.expiresAt};
     }
     if(accepted)await compensate().catch(()=>undefined);
