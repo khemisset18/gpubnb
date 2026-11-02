@@ -245,5 +245,6 @@ class WindowsSessionChangeFenceTests(unittest.TestCase):
             })
         obj._reject_open.assert_called_once()
         self.assertFalse(obj.channels)
-        self.assertFalse(obj._native_channel_sessions)
+        self.assertEqual(obj._native_channel_sessions, {"channel": "console"})
+        # Failed admission consumes the channel identity; it never becomes live.
         sock.close.assert_called_once()

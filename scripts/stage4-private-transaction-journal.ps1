@@ -16,7 +16,8 @@ function Assert-Stage4JournalPath([string]$Path) {
 function Write-Stage4TransactionJournal([string]$Target,$Journal) {
     $path=Join-Path $Target '.stage4-transaction.json'
     $pending=Join-Path $Target '.stage4-transaction.pending'
-    foreach($file in @($path,$pending)) {
+    $previous=Join-Path $Target '.stage4-transaction.previous'
+    foreach($file in @($path,$pending,$previous)) {
         if(Test-Path -LiteralPath $file) { Assert-Stage4JournalPath $file }
     }
     $bytes=[Text.Encoding]::UTF8.GetBytes(($Journal | ConvertTo-Json -Depth 8 -Compress))
@@ -24,7 +25,7 @@ function Write-Stage4TransactionJournal([string]$Target,$Journal) {
         [IO.FileShare]::None,4096,[IO.FileOptions]::WriteThrough)
     try { $stream.Write($bytes,0,$bytes.Length);$stream.Flush($true) }
     finally { $stream.Dispose() }
-    if(Test-Path -LiteralPath $path) { [IO.File]::Replace($pending,$path,$null) }
+    if(Test-Path -LiteralPath $path) { [IO.File]::Replace($pending,$path,$previous) }
     else { [IO.File]::Move($pending,$path) }
 }
 

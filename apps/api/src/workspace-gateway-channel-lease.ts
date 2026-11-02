@@ -52,6 +52,7 @@ export function createGatewayChannelLeaseGuard({
       } catch { result = false; }
       finally { if(timer!==undefined)clearTimeout(timer); }
       if (!result) {
+        invalidated = true; // Denial is terminal: a reconnect needs a new channel.
         revision++; // A known denial fences outstanding positive reads.
         allowed = false;
         checkedAt = null;

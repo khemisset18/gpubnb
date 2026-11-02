@@ -29,7 +29,7 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
   const db=new PrismaClient(),redis=new Redis(process.env.REDIS_URL!,{maxRetriesPerRequest:1});
   t.after(async()=>{redis.disconnect();await db.$disconnect();});
   for(const batch of [false,true]){
-    for(const scenario of ['full','closed','cookie','db-stop','expired','db-failure','compensation-failure','positive','concurrent','lost-commit-ack','unknown-commit'] as const){
+    for(const scenario of ['full','closed','cookie','db-stop','expired','db-failure','compensation-failure','positive','concurrent','lost-commit-ack','unknown-commit','redis-error','lost-redis-ack'] as const){
       await t.test(`${batch?'ws-frames':'ws-frame'} / ${scenario}`,async()=>{
         const fixture=await seedReadySession(db,crypto.randomBytes(8).toString('hex'),{bookingStatus:BookingStatus.STARTING,expectedSeconds:900});
         const pair=nacl.sign.keyPair();
@@ -51,7 +51,9 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
           const text=String(script);
           if(text.includes('Fence the channel binding')||text.includes('binding and enqueue are linearized')){
             if(entered){entered.resolve();await gate!.promise;}
+            if(scenario==='redis-error')throw new Error('injected Redis outage before admission');
             const result=await (originalEval as (...args:unknown[])=>Promise<unknown>)(script,...args);
+            if(scenario==='lost-redis-ack')throw new Error('injected lost Redis admission acknowledgement');
             if(Number(result)===1&&scenario==='positive'){
               queuedBeforeCommit=(await redis.lrange(queueKey,0,0))[0];assert.ok(queuedBeforeCommit);
               assert.equal(await committedGatewayFrame(db,fixture.session.id,channelId,binding,queuedBeforeCommit),false,'uncommitted first frame is not deliverable');
@@ -106,7 +108,7 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
               assert.equal(await redis.llen(queueKey),0);assert.equal(Number(await redis.get(bytesKey)??'0'),0);
               for(const marker of seen)assert.equal(await redis.exists(marker),0);
             }
-            if(scenario==='compensation-failure'){
+            if(scenario==='compensation-failure'||scenario==='lost-redis-ack'){
               const orphan=(await redis.lrange(queueKey,0,0))[0];assert.ok(orphan);
               assert.equal(await committedGatewayFrame(db,fixture.session.id,channelId,binding,orphan),false,'orphan cannot deliver despite cleanup outage');
             }

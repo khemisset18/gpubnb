@@ -35,10 +35,10 @@ test('native zero-cache grant denies immediately on next check after revocation'
   assert.equal(browserReads, 2);
   assert.equal(workspaceReads, 2);
   browserActive = true;
-  assert.equal(await authorized(), true);
+  assert.equal(await authorized(), false, 'restoring a cookie never resurrects its old channel');
   workspaceActive = false;
   assert.equal(await authorized(), false);
-  assert.equal(workspaceReads, 4);
+  assert.equal(workspaceReads, 2);
   assert.equal(nowMs, 1_000);
 });
 
@@ -66,36 +66,22 @@ test('positive TTL caching permits a revoked grant before cache expiration (regr
   assert.equal(await authorized(), false);
 });
 
-test('zero-cache native channel fails closed after Redis/DB corruption or loss', async () => {
-  const sessionId = 'native-session';
-  const userId = 'renter';
-  let browser: string | null = JSON.stringify({ sessionId, userId });
-  let workspace: { renterId: string; expiresAt: Date } | null = {
-    renterId: userId,
-    expiresAt: new Date(60_000),
-  };
-  const authorized = createGatewayChannelLeaseGuard({
-    sessionId,
-    userId,
-    cacheMs: 0,
-    now: () => 1_000,
-    readBrowser: async () => browser,
-    readWorkspace: async () => workspace,
-  });
-  assert.equal(await authorized(), true);
-
-  browser = '{malformed json';
-  assert.equal(await authorized(), false, 'must not reuse positive grant after malformed browser lease');
-  browser = JSON.stringify({ sessionId, userId });
-  workspace = null;
-  assert.equal(await authorized(), false, 'missing workspace grant must immediately deny');
-  workspace = { renterId: 'other-user', expiresAt: new Date(60_000) };
-  assert.equal(await authorized(), false, 'renter identity change must immediately deny');
-  workspace = { renterId: userId, expiresAt: new Date(1_000) };
-  assert.equal(await authorized(), false, 'expired workspace must immediately deny');
-
-  workspace = { renterId: userId, expiresAt: new Date(60_000) };
-  assert.equal(await authorized(), true, 'a fresh valid server grant can pass the next fresh check');
+test('native denial is terminal across corruption, identity changes, expiry and outages', async () => {
+  for(const reason of ['malformed','missing','renter','expired','network']) {
+    let denied=false;
+    const make=()=>createGatewayChannelLeaseGuard({sessionId:'s',userId:'u',cacheMs:0,now:()=>1000,
+      readBrowser:async()=>denied&&reason==='malformed'?'{invalid':JSON.stringify({sessionId:'s',userId:'u'}),
+      readWorkspace:async()=>{
+        if(denied&&reason==='network')throw new Error('network unavailable');
+        if(denied&&reason==='missing')return null;
+        return {renterId:denied&&reason==='renter'?'other':'u',expiresAt:new Date(denied&&reason==='expired'?1000:60000)};
+      },
+    });
+    const guard=make();assert.equal(await guard(),true);
+    denied=true;assert.equal(await guard(),false,reason);
+    denied=false;assert.equal(await guard(),false,'old channel cannot regain authority');
+    assert.equal(await make()(),true,'fresh channel performs independent authorization');
+  }
 });
 
 test('a new native check cannot inherit a positive read begun before revocation', async () => {
@@ -169,7 +155,7 @@ test('native grant is revoked if the server reassigns the channel machine or run
   runtimeBackend = 'DOCKER';
   assert.equal(await authorized(), false, 'old native WebSocket cannot change its runtime backend');
   runtimeBackend = 'WINDOWS_NATIVE';
-  assert.equal(await authorized(), true);
+  assert.equal(await authorized(), false, 'restoring the old runtime never revives its denied channel');
 });
 
 test('native revocation while browser lease fetch is pending rejects every independent check', async () => {

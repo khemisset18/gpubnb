@@ -73,27 +73,17 @@ test('30/60 FPS over 1/4/8 native channels revalidates every frame, with p50/p95
   }
 });
 
-test('a Redis read outage and PostgreSQL read outage both deny the next native frame', async () => {
-  const sessionId = 's', userId = 'u';
-  let browserDown = false;
-  let databaseDown = false;
-  const guard = createGatewayChannelLeaseGuard({
-    sessionId, userId, cacheMs: 0,
-    readBrowser: async () => {
-      if (browserDown) throw new Error('synthetic_redis_unavailable');
-      return JSON.stringify({ sessionId, userId });
-    },
-    readWorkspace: async () => {
-      if (databaseDown) throw new Error('synthetic_db_unavailable');
-      return { renterId: userId, expiresAt: new Date(Date.now() + 60_000) };
-    },
-  });
-  assert.equal(await guard(), true);
-  browserDown = true;
-  assert.equal(await guard(), false);
-  browserDown = false;
-  databaseDown = true;
-  assert.equal(await guard(), false);
+test('a Redis read outage and PostgreSQL read outage each terminate an independent native channel', async () => {
+  for(const store of ['redis','postgres']) {
+    let down=false;
+    const guard=createGatewayChannelLeaseGuard({sessionId:'s',userId:'u',cacheMs:0,
+      readBrowser:async()=>{if(down&&store==='redis')throw new Error('redis outage');return JSON.stringify({sessionId:'s',userId:'u'});},
+      readWorkspace:async()=>{if(down&&store==='postgres')throw new Error('postgres outage');return {renterId:'u',expiresAt:new Date(Date.now()+60000)};},
+    });
+    assert.equal(await guard(),true);
+    down=true;assert.equal(await guard(),false,store);
+    down=false;assert.equal(await guard(),false,'old channel remains revoked after recovery');
+  }
 });
 
 test('authorization timeout denies and does not keep a positive cached grant', async () => {
@@ -111,7 +101,7 @@ test('authorization timeout denies and does not keep a positive cached grant', a
   blocked = true;
   assert.equal(await guard(), false, 'a blocked Redis read must time out fail closed');
   blocked = false;
-  assert.equal(await guard(), true, 'a later fresh grant may recover after a timeout');
+  assert.equal(await guard(), false, 'timeout permanently revokes this channel even after network recovery');
 });
 
 test('input backpressure rejects excessive queued native frames without allocating unbounded bytes', () => {
