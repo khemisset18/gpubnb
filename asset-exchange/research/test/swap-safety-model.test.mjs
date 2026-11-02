@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {coinQuoteToAtomic, reserveFees, checkTimeoutBudget, checkRecoveryPlan, createOfflineTrade, applyOfflineEvent} from '../src/swap-safety-model.mjs';
+import {createHash} from 'node:crypto';
+import {MAX_RECORDED_EVENTS, coinQuoteToAtomic, reserveFees, checkTimeoutBudget, checkRecoveryPlan, createOfflineTrade, applyOfflineEvent} from '../src/swap-safety-model.mjs';
 const terms = 'a'.repeat(64), tradeId = 'fixture-trade-01';
 const recovery = {backendIndependent: true, restoreTested: true, termsBound: true, userControlsRequiredKeys: true, backendHasSpendMaterial: false, feeBudgetBound: true, fundingMalleable: true, canReconstructAndResign: true, signerProfileTested: true};
 const event = (id, type, extra = {}) => ({id: 'event-' + id, tradeId, type, ...extra});
@@ -111,4 +112,58 @@ test('pre-lock uncertainty cannot be used to skip contract review and independen
   const held = applyOfflineEvent(initial, event('prelock-hold', 'UNCERTAIN'));
   assert.throws(() => applyOfflineEvent(held, event('prelock-bypass', 'RECONCILE', {reviewedAfterIncident: true, proofs: {}})));
   assert.equal(applyOfflineEvent(held, event('safe-cancel', 'CANCEL')).state, 'CANCELLED');
+});
+
+test('cyclic and deeply nested payloads fail closed instead of overflowing the call stack', () => {
+  const state = prepared();
+
+  const cyclic = {id: 'cyclic-event-01', tradeId, type: 'CANCEL'};
+  cyclic.self = cyclic;
+  assert.throws(() => applyOfflineEvent(state, cyclic), /data nesting exceeds bound|non-JSON data/);
+
+  let deep = 'leaf';
+  for (let i = 0; i < 100000; i += 1) deep = {n: deep};
+  assert.throws(() => applyOfflineEvent(state, {id: 'deep-event-0001', tradeId, type: 'CANCEL', junk: deep}), /data nesting exceeds bound/);
+
+  const networks = {A: 'a', B: 'b'};
+  networks.self = networks;
+  assert.throws(() => createOfflineTrade({tradeId, termsDigest: terms, networks}), /data nesting exceeds bound|non-JSON data/);
+});
+
+test('event payload text, key count and node budget are bounded before hashing', () => {
+  const state = prepared();
+  assert.throws(() => applyOfflineEvent(state, {id: 'oversize-text-1', tradeId, type: 'CANCEL', junk: 'x'.repeat(4097)}), /exceeds bound/);
+  const wide = Object.fromEntries(Array.from({length: 65}, (_, index) => ['k' + index, 0]));
+  assert.throws(() => applyOfflineEvent(state, {id: 'oversize-keys-1', tradeId, type: 'CANCEL', junk: wide}), /exceeds bound/);
+  assert.throws(() => applyOfflineEvent(state, {id: 'unsafe-key-0001', tradeId, type: 'CANCEL', junk: JSON.parse('{"__proto__":{"x":1}}')}), /unsafe object key/);
+  assert.throws(() => applyOfflineEvent(state, {id: 'unsafe-number-01', tradeId, type: 'CANCEL', junk: 1.5}), /unsafe JSON number/);
+});
+
+test('event identities cannot shadow Object.prototype members', () => {
+  const state = prepared();
+  for (const id of ['constructor', 'toString', 'hasOwnProperty', 'isPrototypeOf', 'toLocaleString']) {
+    assert.throws(() => applyOfflineEvent(state, {id, tradeId, type: 'CANCEL'}), /event identity must not shadow/);
+  }
+});
+
+test('durable replay history is bounded and never forgets a recorded digest', () => {
+  const seen = {};
+  for (let index = 0; index < MAX_RECORDED_EVENTS - 1; index += 1) seen['seed-' + String(index).padStart(12, '0')] = 'a'.repeat(64);
+  const almost = {simulationOnly: true, qualified: false, executableOperations: [], tradeId, termsDigest: terms,
+    networks: {A: 'a', B: 'b'}, state: 'UNKNOWN_REQUIRES_RECONCILIATION', seen, funded: {}, resolutions: {}};
+
+  const atBound = applyOfflineEvent(almost, {id: 'bound-last-0001', tradeId, type: 'UNCERTAIN'});
+  assert.equal(Object.keys(atBound.seen).length, MAX_RECORDED_EVENTS);
+  assert.throws(() => applyOfflineEvent(atBound, {id: 'bound-over-0001', tradeId, type: 'UNCERTAIN'}), /checkpoint required/);
+  // The bound must fail closed, not silently drop history: the newest digest still replays.
+  assert.equal(applyOfflineEvent(atBound, {id: 'bound-last-0001', tradeId, type: 'UNCERTAIN'}), atBound);
+  assert.equal(atBound.seen['bound-last-0001'], atBound.seen[Object.keys(atBound.seen).at(-1)]);
+});
+
+test('bounded canonicalization keeps the previously persisted replay digest byte-identical', () => {
+  const replay = event('lock-compat-01', 'LOCK_OBSERVED', {leg: 'A', proof: proof('A')});
+  const sortKeys = value => Array.isArray(value) ? value.map(sortKeys)
+    : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, sortKeys(value[key])])) : value;
+  const legacyDigest = createHash('sha256').update(JSON.stringify(sortKeys(replay))).digest('hex');
+  assert.equal(applyOfflineEvent(prepared(), replay).seen[replay.id], legacyDigest);
 });
