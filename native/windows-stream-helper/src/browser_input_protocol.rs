@@ -197,12 +197,14 @@ impl BrowserInputFence {
 /// buttons while the same renter desktop is still authorized. If WTS changes,
 /// release input is rejected and the session must stop rather than target a
 /// different desktop. The wire protocol stays unchanged.
+#[cfg(any(windows, test))]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct PressedBrowserInput {
     keys: Vec<(u16, bool)>,
     buttons: Vec<WorkerMouseButton>,
 }
 
+#[cfg(any(windows, test))]
 impl PressedBrowserInput {
     pub(crate) fn observe(&mut self, event: WorkerInputEvent) {
         match event {
