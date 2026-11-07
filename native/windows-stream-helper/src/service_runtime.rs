@@ -419,10 +419,11 @@ impl QualifiedGraphicsRuntime {
         // arrives but the input frame write or caller is interrupted, STOP can
         // still attempt a fenced release. Key/button-up remains tracked until
         // both writes complete, so a partial release cannot erase the hold.
-        if matches!(event,
+        if matches!(
+            event,
             WorkerInputEvent::KeyScan { key_up: false, .. }
-                | WorkerInputEvent::MouseButton { key_up: false, .. })
-        {
+                | WorkerInputEvent::MouseButton { key_up: false, .. }
+        ) {
             self.pressed_browser_input.observe(event);
         }
         if self.pipe.send_frame(&command).is_err() || self.pipe.send_frame(&input).is_err() {
@@ -454,9 +455,7 @@ impl QualifiedGraphicsRuntime {
             // this narrow key-up path while failing/stopping so a media error
             // does not leave a stuck key, while the live WTS identity check in
             // write_worker_input_event still blocks any owner-desktop target.
-            if let Err(error) = self.write_worker_input_event(event) {
-                return Err(error);
-            }
+            self.write_worker_input_event(event)?;
         }
         Ok(())
     }

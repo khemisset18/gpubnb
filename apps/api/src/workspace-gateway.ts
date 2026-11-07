@@ -420,13 +420,31 @@ async function validateQueuedGatewayRelay(db:PrismaClient,redis:Redis,machineId:
   try{browser=browserRaw?JSON.parse(browserRaw):null;}catch{return denyChannel;}
   if(typeof browser!=='object'||browser===null||!('sessionId' in browser)||browser.sessionId!==relay.sessionId
     ||!('userId' in browser)||typeof browser.userId!=='string'||!browserRaw)return denyChannel;
+  // Preserve why the final fence failed. A PostgreSQL/session denial must
+  // invalidate earlier positives for the whole session in this batch, while
+  // an exact Redis channel/cookie mismatch only invalidates that connection.
+  // Treat timeouts and incomplete Redis reads as session-wide unknowns so the
+  // delivery path remains fail-closed.
+  let databaseAuthorityObserved=false;
+  let redisFenceCompleted=false;
+  let redisFenceAccepted=false;
+  let sessionActiveAtAdmission=false;
   const authorized=await withNativeGatewaySessionFence(
     db,relay.sessionId,machineId,browser.userId,binding.runtimeBackend,
-    async isActive=>Number(await redis.eval(
-      NATIVE_DELIVERY_FENCE_SCRIPT,2,wsChannelKey(relay.channelId!),binding.browserSessionKey,nativeChannelBinding,browserRaw,
-    ))===1&&isActive(),
+    async isActive=>{
+      databaseAuthorityObserved=true;
+      redisFenceAccepted=Number(await redis.eval(
+        NATIVE_DELIVERY_FENCE_SCRIPT,2,wsChannelKey(relay.channelId!),binding.browserSessionKey,nativeChannelBinding,browserRaw,
+      ))===1;
+      redisFenceCompleted=true;
+      if(!redisFenceAccepted)return false;
+      sessionActiveAtAdmission=isActive();
+      return sessionActiveAtAdmission;
+    },
   );
-  return authorized?allow:denyChannel;
+  if(authorized)return allow;
+  if(!databaseAuthorityObserved||!redisFenceCompleted||redisFenceAccepted&&!sessionActiveAtAdmission)return denySession;
+  return denyChannel;
 }
 
 export async function authorizeQueuedGatewayBatch(db:PrismaClient,redis:Redis,machineId:string,items:RelayRequest[]):Promise<RelayRequest[]>{

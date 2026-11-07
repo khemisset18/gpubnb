@@ -30,7 +30,8 @@ test('both Agent frame paths atomically require the original Redis channel bindi
   assert.match(gateway, /mw\."machineId"=ws\."machineId"/);
   assert.match(gateway, /FOR \$\{sessionLock\} OF ws FOR SHARE OF m,mw,w/);
   assert.match(gateway, /options\.lockSessionForMutation\?Prisma\.raw\('UPDATE'\):Prisma\.raw\('SHARE'\)/);
-  assert.match(gateway, /operation\(\(\)=>operationActive&&performance\.now\(\)<activeUntil\)/);
+  const activeFenceCalls=gateway.match(/operation\(\(\)=>operationActive&&performance\.now\(\)<activeUntil,tx\)/g)??[];
+  assert.equal(activeFenceCalls.length,2,'both mutation and admission callbacks receive the bounded live-session predicate');
   assert.match(gateway, /redis\.eval\(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,5,markerKey,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\),binding\.browserSessionKey/);
   assert.match(gateway, /redis\.eval\(ENQUEUE_BOUND_WS_FRAME_SCRIPT,4,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\),binding\.browserSessionKey/);
 });

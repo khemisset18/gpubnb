@@ -216,8 +216,14 @@ impl QualificationMediaServer {
             .release_browser_input_for_epoch(stream_epoch)
             .map_err(|_| QualificationMediaServerError::Input);
         match result {
-            Ok(value) => { cleanup?; Ok(value) }
-            Err(error) => { let _ = cleanup; Err(error) }
+            Ok(value) => {
+                cleanup?;
+                Ok(value)
+            }
+            Err(error) => {
+                let _ = cleanup;
+                Err(error)
+            }
         }
     }
 
@@ -252,7 +258,8 @@ impl QualificationMediaServer {
                             let mut guard = runtime
                                 .lock()
                                 .map_err(|_| QualificationMediaServerError::Input)?;
-                            let active = guard.as_mut().ok_or(QualificationMediaServerError::Input)?;
+                            let active =
+                                guard.as_mut().ok_or(QualificationMediaServerError::Input)?;
                             require_connection_epoch(stream_epoch, active.stream_epoch())?;
                             active
                                 .inject_input(event)
@@ -307,8 +314,14 @@ impl QualificationMediaServer {
                 None => Ok(()),
             });
         match result {
-            Ok(value) => { cleanup?; Ok(value) }
-            Err(error) => { let _ = cleanup; Err(error) }
+            Ok(value) => {
+                cleanup?;
+                Ok(value)
+            }
+            Err(error) => {
+                let _ = cleanup;
+                Err(error)
+            }
         }
     }
 

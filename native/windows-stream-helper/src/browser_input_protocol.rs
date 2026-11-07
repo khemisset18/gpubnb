@@ -208,7 +208,11 @@ pub(crate) struct PressedBrowserInput {
 impl PressedBrowserInput {
     pub(crate) fn observe(&mut self, event: WorkerInputEvent) {
         match event {
-            WorkerInputEvent::KeyScan { scan_code, key_up, extended } => {
+            WorkerInputEvent::KeyScan {
+                scan_code,
+                key_up,
+                extended,
+            } => {
                 let key = (scan_code, extended);
                 if key_up {
                     self.keys.retain(|held| *held != key);
@@ -232,11 +236,21 @@ impl PressedBrowserInput {
     pub(crate) fn release_events(&self) -> Vec<WorkerInputEvent> {
         let mut releases = Vec::with_capacity(self.keys.len() + self.buttons.len());
         releases.extend(self.keys.iter().rev().map(|(scan_code, extended)| {
-            WorkerInputEvent::KeyScan { scan_code: *scan_code, key_up: true, extended: *extended }
+            WorkerInputEvent::KeyScan {
+                scan_code: *scan_code,
+                key_up: true,
+                extended: *extended,
+            }
         }));
-        releases.extend(self.buttons.iter().rev().map(|button| {
-            WorkerInputEvent::MouseButton { button: *button, key_up: true }
-        }));
+        releases.extend(
+            self.buttons
+                .iter()
+                .rev()
+                .map(|button| WorkerInputEvent::MouseButton {
+                    button: *button,
+                    key_up: true,
+                }),
+        );
         releases
     }
 }
@@ -409,26 +423,72 @@ mod tests {
     #[test]
     fn interrupted_browser_input_releases_only_keys_and_buttons_still_held() {
         let mut held = PressedBrowserInput::default();
-        held.observe(WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: false, extended: false });
-        held.observe(WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: false, extended: false });
-        held.observe(WorkerInputEvent::MouseButton { button: WorkerMouseButton::Left, key_up: false });
-        held.observe(WorkerInputEvent::MouseButton { button: WorkerMouseButton::Right, key_up: false });
-        held.observe(WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: true, extended: false });
+        held.observe(WorkerInputEvent::KeyScan {
+            scan_code: 0x1d,
+            key_up: false,
+            extended: false,
+        });
+        held.observe(WorkerInputEvent::KeyScan {
+            scan_code: 0x1d,
+            key_up: false,
+            extended: false,
+        });
+        held.observe(WorkerInputEvent::MouseButton {
+            button: WorkerMouseButton::Left,
+            key_up: false,
+        });
+        held.observe(WorkerInputEvent::MouseButton {
+            button: WorkerMouseButton::Right,
+            key_up: false,
+        });
+        held.observe(WorkerInputEvent::KeyScan {
+            scan_code: 0x1d,
+            key_up: true,
+            extended: false,
+        });
         held.observe(WorkerInputEvent::MouseMoveRelative { dx: 1, dy: 0 });
-        assert_eq!(held.release_events(), vec![
-            WorkerInputEvent::MouseButton { button: WorkerMouseButton::Right, key_up: true },
-            WorkerInputEvent::MouseButton { button: WorkerMouseButton::Left, key_up: true },
-        ]);
+        assert_eq!(
+            held.release_events(),
+            vec![
+                WorkerInputEvent::MouseButton {
+                    button: WorkerMouseButton::Right,
+                    key_up: true
+                },
+                WorkerInputEvent::MouseButton {
+                    button: WorkerMouseButton::Left,
+                    key_up: true
+                },
+            ]
+        );
     }
 
     #[test]
     fn pressed_browser_input_releases_preserve_extended_scan_code_identity() {
         let mut held = PressedBrowserInput::default();
-        held.observe(WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: false, extended: false });
-        held.observe(WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: false, extended: true });
-        assert_eq!(held.release_events(), vec![
-            WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: true, extended: true },
-            WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: true, extended: false },
-        ]);
+        held.observe(WorkerInputEvent::KeyScan {
+            scan_code: 0x1d,
+            key_up: false,
+            extended: false,
+        });
+        held.observe(WorkerInputEvent::KeyScan {
+            scan_code: 0x1d,
+            key_up: false,
+            extended: true,
+        });
+        assert_eq!(
+            held.release_events(),
+            vec![
+                WorkerInputEvent::KeyScan {
+                    scan_code: 0x1d,
+                    key_up: true,
+                    extended: true
+                },
+                WorkerInputEvent::KeyScan {
+                    scan_code: 0x1d,
+                    key_up: true,
+                    extended: false
+                },
+            ]
+        );
     }
 }
