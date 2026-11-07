@@ -1,5 +1,8 @@
 import { invariant } from "../../core/src/errors.mjs";
 
+const MAX_JSON_BYTES = 1024 * 1024;
+const MAX_JSON_DEPTH = 32;
+
 export async function readBody(req, { maxBytes = 64 * 1024 } = {}) {
   invariant(Number.isSafeInteger(maxBytes) && maxBytes >= 1 && maxBytes <= 1024 * 1024, "BODY_LIMIT_CONFIG", "invalid body limit");
   const chunks = [];
@@ -36,8 +39,15 @@ function parseStringToken(text, state) {
 function parseValue(text, state) {
   skipWs(text, state);
   const ch = text[state.i];
-  if (ch === "{") return parseObject(text, state);
-  if (ch === "[") return parseArray(text, state);
+  if (ch === "{" || ch === "[") {
+    invariant(state.depth < MAX_JSON_DEPTH, "JSON_DEPTH", "JSON nesting exceeds limit");
+    state.depth++;
+    try {
+      return ch === "{" ? parseObject(text, state) : parseArray(text, state);
+    } finally {
+      state.depth--;
+    }
+  }
   if (ch === '"') { parseStringToken(text, state); return; }
 
   const rest = text.slice(state.i);
@@ -85,7 +95,8 @@ function parseObject(text, state) {
 export function parseStrictJson(text) {
   invariant(typeof text === "string", "JSON_TYPE", "JSON body must be text");
   invariant(text.length > 0, "JSON_EMPTY", "JSON body required");
-  const state = { i: 0 };
+  invariant(text.length <= MAX_JSON_BYTES && Buffer.byteLength(text, "utf8") <= MAX_JSON_BYTES, "JSON_SIZE", "JSON body exceeds parser limit");
+  const state = { i: 0, depth: 0 };
   parseValue(text, state);
   skipWs(text, state);
   invariant(state.i === text.length, "JSON_TRAILING", "trailing JSON data");
