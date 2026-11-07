@@ -50,7 +50,25 @@ jobs:
           docker buildx version
           # The floating tag is used solely for discovery. No container executes
           # until the immutable index+child are independently verified and scanned.
-          index_digest="$(docker buildx imagetools inspect "$MINIO_TAG" | awk '$1 == "Digest:" {print $2; exit}')"
+          # Avoid an early-exiting pipe consumer under pipefail (SIGPIPE in
+          # docker buildx can otherwise masquerade as a registry failure).
+          # Keep the registry diagnostic even if resolution fails.
+          : > s3-evidence/registry-resolution.log
+          resolved=0
+          for attempt in 1 2 3; do
+            if docker buildx imagetools inspect "$MINIO_TAG" \
+              > s3-evidence/minio-inspection.txt \
+              2>> s3-evidence/registry-resolution.log; then
+              resolved=1
+              break
+            fi
+            sleep "$attempt"
+          done
+          [[ "$resolved" == 1 ]] || {
+            echo 'MinIO registry lookup failed; no fixture will execute' >&2
+            exit 1
+          }
+          index_digest="$(awk '$1 == "Digest:" && !found {print $2; found=1}' s3-evidence/minio-inspection.txt)"
           [[ "$index_digest" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
             echo 'Could not resolve a valid immutable MinIO index digest' >&2
             exit 1
