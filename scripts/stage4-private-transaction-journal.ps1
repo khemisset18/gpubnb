@@ -2,6 +2,7 @@
 # Recovery deliberately requires the same explicit maintenance scope as installation.
 # The journal is evidence of intent, never permission to stop a real service.
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'stage4-windows-path-policy.ps1')
 
 function Assert-Stage4JournalPath([string]$Path) {
     $node=Get-Item -LiteralPath $Path -Force -ErrorAction Stop
@@ -48,8 +49,8 @@ function Invoke-Stage4FourFileRecovery {
         [scriptblock]$RecoveryCheckpoint={param($step)}
     )
     $ErrorActionPreference='Stop'
-    $target=[IO.Path]::GetFullPath($TargetDirectory).TrimEnd('\')
-    $temp=[IO.Path]::GetFullPath($env:TEMP).TrimEnd('\')
+    $target=Get-Stage4CanonicalWindowsPath -Path $TargetDirectory
+    $temp=Get-Stage4CanonicalWindowsPath -Path $env:TEMP
     $fixture=($target.StartsWith($temp+'\GPUbnb-stage4-maintenance-test-',[StringComparison]::OrdinalIgnoreCase) -and
         (Split-Path -Leaf (Split-Path -Parent $target)) -cmatch '^GPUbnb-stage4-maintenance-test-[a-f0-9]{32}$' -and
         (Split-Path -Leaf $target) -ceq 'installed')
@@ -67,9 +68,11 @@ function Invoke-Stage4FourFileRecovery {
         if((Get-Item -LiteralPath $path).Length -gt 65536) {throw 'stage4_recovery_journal_too_large'}
         $journal=Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
         $names=@('gpubnb-agent.exe','gpubnb-windows-stream.exe','gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')
-        if($journal.version -ne 1 -or $journal.target -cne $target -or
+        if($journal.version -ne 2 -or $journal.target -cne $target -or
             $journal.tag -cnotmatch '^[a-f0-9]{32}$' -or
-            $journal.phase -cnotin @('PREPARED','COMMITTED','ROLLED_BACK') -or
+            $journal.oldAgentCommit -cnotmatch '^[0-9a-f]{40}$' -or
+            $journal.newAgentCommit -cnotmatch '^[0-9a-f]{40}$' -or
+            $journal.phase -cnotin @('PREPARED','REPLACING','VALIDATING','RESTORING','COMMITTED','ROLLED_BACK') -or
             @($journal.files).Count -ne 4) {throw 'stage4_recovery_journal_invalid'}
         $seen=@{};$restore=@{}
         # Validate ALL candidates before the first service or file mutation.
@@ -93,26 +96,40 @@ function Invoke-Stage4FourFileRecovery {
             if(Test-Path -LiteralPath $failed) { Assert-Stage4JournalPath $failed }
             $restore[$name]=$source
         }
-        if($journal.phase -ceq 'PREPARED') {
+        # Every non-COMMITTED phase is a rollback candidate. REPLACING may
+        # have only half the renames complete; VALIDATING may have all new
+        # files live; RESTORING may itself be partially applied after a crash.
+        # Validate all pinned recovery sources above, stop the service, then
+        # idempotently restore each old component from its verified backup.
+        if($journal.phase -cne 'COMMITTED') {
             if(-not (& $IsControlledServiceStopped)) { & $StopControlledService }
             if(-not (& $IsControlledServiceStopped)) {throw 'stage4_recovery_stop_unconfirmed'}
             & $RecoveryCheckpoint 'recovery-stopped'
             foreach($pin in $journal.files) {
                 $name=[string]$pin.name;$live=Join-Path $target $name
                 if($restore[$name] -cne $live) {
-                    # Preserve the pinned backup throughout recovery, including
-                    # recovery-process crashes. Copy to a new sibling then rename.
-                    $copy=Join-Path $target ('.stage4-'+$journal.tag+'.recover.'+$name)
-                    if(Test-Path -LiteralPath $copy) {Assert-Stage4JournalPath $copy}
-                    Copy-Item -LiteralPath $restore[$name] -Destination $copy -Force
-                    $flush=[IO.File]::Open($copy,[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::None)
-                    try{$flush.Flush($true)}finally{$flush.Dispose()}
-                    if((Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash -ine $pin.oldHash -or
-                        (Get-Acl -LiteralPath $copy).Sddl -cne $pin.sddl) {throw 'stage4_recovery_copy_not_pinned'}
-                    if(Test-Path -LiteralPath $live) {Remove-Item -LiteralPath $live -Force}
-                    & $RecoveryCheckpoint ('recovery-removed-'+$name)
-                    Move-Item -LiteralPath $copy -Destination $live
-                    & $RecoveryCheckpoint ('recovery-restored-'+$name)
+                    $liveIsOld=$false
+                    if(Test-Path -LiteralPath $live) {
+                        $liveEntry=Get-Item -LiteralPath $live -Force
+                        if($liveEntry.PSIsContainer -or
+                            (Get-FileHash -LiteralPath $live -Algorithm SHA256).Hash -ine $pin.oldHash -or
+                            (Get-Acl -LiteralPath $live).Sddl -cne $pin.sddl) {
+                            # Preserve an unexpected/new component for evidence.
+                            # A unique same-directory rename is atomic and keeps
+                            # the original ACL; no security descriptor is rebuilt.
+                            $failed=Join-Path $target ('.stage4-'+$journal.tag+'.recovery-failed-'+[Guid]::NewGuid().ToString('N')+'.'+$name)
+                            if(Test-Path -LiteralPath $failed) {Assert-Stage4JournalPath $failed}
+                            Move-Item -LiteralPath $live -Destination $failed
+                            & $RecoveryCheckpoint ('recovery-removed-'+$name)
+                        } else { $liveIsOld=$true }
+                    }
+                    if(-not $liveIsOld) {
+                        # Consume the already verified old backup by same-parent
+                        # rename. If recovery crashes after this move, the next
+                        # run verifies the now-live old file as its source.
+                        Move-Item -LiteralPath $restore[$name] -Destination $live
+                        & $RecoveryCheckpoint ('recovery-restored-'+$name)
+                    }
                 }
             }
         }
@@ -123,7 +140,14 @@ function Invoke-Stage4FourFileRecovery {
                 (Get-Acl -LiteralPath $live).Sddl -cne $pin.sddl) {throw 'stage4_recovery_final_pin_mismatch'}
         }
         if(-not (& $IsControlledServiceRunning)) { & $StartControlledService }
-        if(-not (& $IsControlledServiceRunning) -or -not (& $ValidateControlledRuntime)) {throw 'stage4_recovery_runtime_unhealthy'}
+        $runtimeHealthy=(& $IsControlledServiceRunning) -and (& $ValidateControlledRuntime)
+        if(-not $runtimeHealthy) {
+            if(-not (& $IsControlledServiceStopped)) {
+                & $StopControlledService
+                if(-not (& $IsControlledServiceStopped)) {throw 'stage4_recovery_unhealthy_service_stop_not_confirmed'}
+            }
+            throw 'stage4_recovery_runtime_unhealthy'
+        }
         if($journal.phase -cne 'COMMITTED') {$journal.phase='ROLLED_BACK';Write-Stage4TransactionJournal $target $journal}
         return [pscustomobject]@{kind='STAGE4_DURABLE_RECOVERY';phase=$journal.phase;isTemporaryFixture=$fixture;powerLossProven=$false}
     } finally { $lock.Dispose() }

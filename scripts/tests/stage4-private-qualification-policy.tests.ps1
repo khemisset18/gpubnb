@@ -5,6 +5,40 @@ $ErrorActionPreference='Stop'
 $scripts=Split-Path -Parent $PSScriptRoot
 . (Join-Path $scripts 'stage4-package-common.ps1')
 . (Join-Path $scripts 'stage4-private-qualification-policy.ps1')
+$pathPolicyPath=Join-Path $scripts 'stage4-windows-path-policy.ps1'
+$pathTokens=$null;$pathErrors=$null
+[void][Management.Automation.Language.Parser]::ParseFile($pathPolicyPath,[ref]$pathTokens,[ref]$pathErrors)
+if($pathErrors.Count -ne 0){throw ('stage4_path_policy_parser_error:'+$pathErrors[0].Message)}
+$readinessSource=Get-Content -LiteralPath (Join-Path $scripts 'stage4-private-install-readiness.ps1') -Raw
+$offlinePathSource=Get-Content -LiteralPath (Join-Path $scripts 'stage4-private-offline-rollback-policy.ps1') -Raw
+if($readinessSource -notmatch 'Assert-Stage4InstallPathsDisjoint' -or
+    $offlinePathSource -notmatch 'Get-Stage4CanonicalWindowsPath' -or
+    (Get-Content -LiteralPath $pathPolicyPath -Raw) -notmatch 'GetLongPathName') {
+    throw 'stage4_83_path_canonicalization_not_shared_with_install_guards'
+}
+$installedCanonical=Get-Stage4CanonicalWindowsPath -Path 'C:\Program Files\GPUbnb' -AllowMissingLeaf
+$shortProgramFiles=[Text.StringBuilder]::new(32768)
+$shortLength=[GpubnbStage4PathNative]::GetShortPathName($env:ProgramFiles,$shortProgramFiles,[uint32]$shortProgramFiles.Capacity)
+if($shortLength -gt 0 -and $shortLength -lt $shortProgramFiles.Capacity -and
+    $shortProgramFiles.ToString() -ine $env:ProgramFiles) {
+    $fixtureBackup=Join-Path $env:TEMP ('stage4-path-policy-'+[Guid]::NewGuid().ToString('N'))
+    [void](New-Item -ItemType Directory -Path $fixtureBackup)
+    try {
+        $alias=Join-Path $shortProgramFiles.ToString() 'GPUbnb'
+        $rejected=$false
+        try { [void](Assert-Stage4InstallPathsDisjoint -CandidateDirectory $alias `
+            -BackupDirectory $fixtureBackup -InstalledDirectory $installedCanonical) }
+        catch { $rejected=$_.Exception.Message -eq 'stage4_install_readiness_paths_overlap' }
+        if(-not $rejected){throw 'stage4_83_installed_path_alias_bypassed_overlap_guard'}
+    } finally { Remove-Item -LiteralPath $fixtureBackup -Recurse -Force }
+} else {
+    # Some CI volumes disable 8.3 aliases. Exercise expansion where available;
+    # the installed path itself is still canonicalized and kept exact.
+    if((Get-Stage4CanonicalWindowsPath -Path $installedCanonical -AllowMissingLeaf) -ine $installedCanonical) {
+        throw 'stage4_path_canonicalization_not_idempotent'
+    }
+    Write-Host 'SKIP dynamic 8.3 alias case: the Windows volume has no Program Files short alias'
+}
 $names=@(
     'stage4-private-qualification-policy.ps1',
     'new-stage4-private-qualification-package.ps1',

@@ -906,7 +906,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
         stop.assert_called_once_with("sess-1")
         supervisor._release_native_claims.assert_called_once_with("sess-1")
         supervisor._close_session_channels.assert_called_once_with("sess-1")
-        self.assertNotIn("sess-1", supervisor._native_blocked)
+        self.assertIn("sess-1", supervisor._native_blocked)
 
     def test_gateway_running_session_without_runtime_fails_closed_instead_of_restarting(self):
         supervisor = object.__new__(gateway_v10.GatewaySupervisor)

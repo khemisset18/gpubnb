@@ -55,6 +55,8 @@ jobs:
         with:
           python-version: '3.13.7'
           architecture: x64
+      - name: Independent verifier substitution regression
+        run: python -m unittest discover -s scripts/tests -p 'test_verify_stage4_package.py' -v
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: 22

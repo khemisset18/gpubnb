@@ -23,7 +23,13 @@ test('both Agent frame paths atomically require the original Redis channel bindi
   assert.match(deduped, /ARGV\[8\] == '1' and redis\.call\('EXISTS', KEYS\[5\]\) ~= 1/);
   assert.match(bounded, /ARGV\[7\] == '1' and redis\.call\('EXISTS', KEYS\[4\]\) ~= 1/);
   assert.match(machine, /redis\.call\('EXISTS', KEYS\[4\]\) ~= 1/);
-  assert.match(gateway, /enqueueBoundNativeMachineRelay\(redis,row\.machineId,channelId,channelBinding,browserSessionKey,relay\)/);
+  assert.match(gateway, /enqueueAuthorizedNativeMachineRelay\(db,redis,sessionId,browser\.userId,row\.machineId,row\.runtimeBackend,channelId,channelBinding,browserSessionKey,relay\)/);
+  assert.match(gateway, /withNativeGatewaySessionFence\(db,sessionId,machineId,userId,runtimeBackend/);
+  assert.match(gateway, /ws\."status"::text IN \('READY','RUNNING'\)/);
+  assert.match(gateway, /ws\."expiresAt">clock_timestamp\(\)/);
+  assert.match(gateway, /mw\."machineId"=ws\."machineId"/);
+  assert.match(gateway, /FOR SHARE OF ws/);
+  assert.match(gateway, /operation\(\(\)=>operationActive&&performance\.now\(\)<activeUntil\)/);
   assert.match(gateway, /redis\.eval\(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,5,markerKey,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\),binding\.browserSessionKey/);
   assert.match(gateway, /redis\.eval\(ENQUEUE_BOUND_WS_FRAME_SCRIPT,4,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\),binding\.browserSessionKey/);
 });

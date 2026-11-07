@@ -50,10 +50,16 @@ Test-ReadinessReject 'install already authorized' {param($r)$r.installAuthorized
 Test-ReadinessReject 'wrong report kind' {param($r)$r.kind='WRONG_KIND'}
 
 $maintenance=Join-Path (Split-Path -Parent $PSScriptRoot) 'stage4-private-four-file-maintenance.ps1'
+$recovery=Join-Path (Split-Path -Parent $PSScriptRoot) 'stage4-private-four-file-recover.ps1'
 $tokens=$null;$parseErrors=$null
 [void][Management.Automation.Language.Parser]::ParseFile($maintenance,[ref]$tokens,[ref]$parseErrors)
 if($parseErrors.Count -ne 0) {
     throw ('stage4_maintenance_wrapper_parser_error:'+$parseErrors[0].Message)
+}
+$recoveryTokens=$null;$recoveryParseErrors=$null
+[void][Management.Automation.Language.Parser]::ParseFile($recovery,[ref]$recoveryTokens,[ref]$recoveryParseErrors)
+if($recoveryParseErrors.Count -ne 0) {
+    throw ('stage4_recovery_wrapper_parser_error:'+$recoveryParseErrors[0].Message)
 }
 $maintenanceSource=Get-Content -LiteralPath $maintenance -Raw
 if($maintenanceSource -notmatch '\[switch\]\$Apply' -or
@@ -63,10 +69,28 @@ if($maintenanceSource -notmatch '\[switch\]\$Apply' -or
     $maintenanceSource -notmatch 'Assert-Stage4MaintenanceReadiness' -or
     $maintenanceSource -notmatch 'stage4ServiceStartUtc' -or
     $maintenanceSource -notmatch 'heartbeat' -or
+    $maintenanceSource -notmatch 'serverAccepted' -or
+    $maintenanceSource -notmatch 'OldAgentCommit' -or
+    $maintenanceSource -notmatch '\[int\]\$eventProcessId -ne \[int\]\$service\.ProcessId' -or
+    $maintenanceSource -notmatch 'pinnedLegacyHeartbeatAfterStart' -or
+    $maintenanceSource -notmatch 'stage4CounterBeforeStart' -or
     $maintenanceSource -notmatch 'stage4_maintenance_explicit_operator_approval_required') {
     throw 'stage4_maintenance_wrapper_required_safety_check_missing'
 }
 Write-Host 'PASS real wrapper parse and fail-closed preflight/consent/heartbeat policy'
+$recoverySource=Get-Content -LiteralPath $recovery -Raw
+if($recoverySource -notmatch '\[switch\]\$Recover' -or
+    $recoverySource -notmatch '\[switch\]\$OperatorPresentAndApproved' -or
+    $recoverySource -notmatch 'stage4_recovery_machine_identity_mismatch' -or
+    $recoverySource -notmatch 'oldAgentCommit' -or
+    $recoverySource -notmatch 'newAgentCommit' -or
+    $recoverySource -notmatch 'serverAccepted' -or
+    $recoverySource -notmatch 'processId' -or
+    $recoverySource -notmatch 'Invoke-Stage4FourFileRecovery' -or
+    $recoverySource -notmatch 'ValidateControlledRuntime') {
+    throw 'stage4_recovery_wrapper_required_safety_check_missing'
+}
+Write-Host 'PASS separate explicit crash-recovery entry point parses and remains fail closed'
 
 # The same fresh-process proof invoked by the real physical wrapper.
 $startUtc=[DateTime]::UtcNow.AddMinutes(-1)
@@ -154,6 +178,8 @@ function Run-Case {
         OldHashes=$oldHashes
         NewHashes=$newHashes
         OldSddl=$oldSddl
+        OldAgentCommit=('a'*40)
+        NewAgentCommit=('b'*40)
         StopControlledService=$stop
         StartControlledService=$start
         IsControlledServiceRunning=$running
@@ -167,8 +193,11 @@ function Run-Case {
         $errorText=$null
         try { $response=Invoke-Stage4FourFileTransactionCore @args }
         catch { $errorText=$_.Exception.Message }
-        if(-not $script:stage4FakeRunning) {
+        if(-not $script:stage4FakeRunning -and -not $ExpectRollbackUnhealthy) {
             throw ('stage4_test_service_not_recovered:'+$Title)
+        }
+        if($ExpectRollbackUnhealthy -and $script:stage4FakeRunning) {
+            throw ('stage4_test_unhealthy_restored_agent_left_running:'+$Title)
         }
         if($ExpectRollback -or $ExpectRollbackUnhealthy) {
             $expectedPrefix=if($ExpectRollbackUnhealthy){
@@ -269,7 +298,7 @@ try {
     $args=@{
         TargetDirectory='C:\Program Files\GPUbnb'
         CandidateDirectory='C:\Users\Public'
-        OldHashes=@{};NewHashes=@{};OldSddl=@{}
+        OldHashes=@{};NewHashes=@{};OldSddl=@{};OldAgentCommit=('a'*40);NewAgentCommit=('b'*40)
         StopControlledService={throw 'must_not_stop'}
         StartControlledService={throw 'must_not_start'}
         IsControlledServiceRunning={$true}

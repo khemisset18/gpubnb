@@ -4,7 +4,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $names=@('gpubnb-agent.exe','gpubnb-windows-stream.exe','gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')
 $steps=@('journal-prepared')+@($names | ForEach-Object {'staged-'+$_})+@('service-stopped')+
-    @($names | ForEach-Object {'old-renamed-'+$_;'new-renamed-'+$_})+@('runtime-healthy','journal-committed')
+    @('journal-replacing')+@($names | ForEach-Object {'old-renamed-'+$_;'new-renamed-'+$_})+
+    @('journal-validating','runtime-healthy','journal-committed','journal-restoring')
 $exe=(Get-Process -Id $PID).Path
 $child=Join-Path $PSScriptRoot 'stage4-private-crash-recovery-child.ps1'
 function Run-Child([string]$Root,[string]$Step,[bool]$Recover) {

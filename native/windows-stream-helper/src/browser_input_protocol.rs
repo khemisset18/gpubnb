@@ -193,6 +193,52 @@ impl BrowserInputFence {
     }
 }
 
+/// Tracks injected holds so a disconnected browser can release keys or mouse
+/// buttons while the same renter desktop is still authorized. If WTS changes,
+/// release input is rejected and the session must stop rather than target a
+/// different desktop. The wire protocol stays unchanged.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub(crate) struct PressedBrowserInput {
+    keys: Vec<(u16, bool)>,
+    buttons: Vec<WorkerMouseButton>,
+}
+
+impl PressedBrowserInput {
+    pub(crate) fn observe(&mut self, event: WorkerInputEvent) {
+        match event {
+            WorkerInputEvent::KeyScan { scan_code, key_up, extended } => {
+                let key = (scan_code, extended);
+                if key_up {
+                    self.keys.retain(|held| *held != key);
+                } else if !self.keys.contains(&key) {
+                    self.keys.push(key);
+                }
+            }
+            WorkerInputEvent::MouseButton { button, key_up } => {
+                if key_up {
+                    self.buttons.retain(|held| *held != button);
+                } else if !self.buttons.contains(&button) {
+                    self.buttons.push(button);
+                }
+            }
+            WorkerInputEvent::MouseMoveRelative { .. }
+            | WorkerInputEvent::MouseMoveAbsolute { .. }
+            | WorkerInputEvent::MouseWheel { .. } => {}
+        }
+    }
+
+    pub(crate) fn release_events(&self) -> Vec<WorkerInputEvent> {
+        let mut releases = Vec::with_capacity(self.keys.len() + self.buttons.len());
+        releases.extend(self.keys.iter().rev().map(|(scan_code, extended)| {
+            WorkerInputEvent::KeyScan { scan_code: *scan_code, key_up: true, extended: *extended }
+        }));
+        releases.extend(self.buttons.iter().rev().map(|button| {
+            WorkerInputEvent::MouseButton { button: *button, key_up: true }
+        }));
+        releases
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -356,5 +402,31 @@ mod tests {
             next_stream_epoch(u64::MAX),
             Err(BrowserInputError::StreamEpoch)
         );
+    }
+
+    #[test]
+    fn interrupted_browser_input_releases_only_keys_and_buttons_still_held() {
+        let mut held = PressedBrowserInput::default();
+        held.observe(WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: false, extended: false });
+        held.observe(WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: false, extended: false });
+        held.observe(WorkerInputEvent::MouseButton { button: WorkerMouseButton::Left, key_up: false });
+        held.observe(WorkerInputEvent::MouseButton { button: WorkerMouseButton::Right, key_up: false });
+        held.observe(WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: true, extended: false });
+        held.observe(WorkerInputEvent::MouseMoveRelative { dx: 1, dy: 0 });
+        assert_eq!(held.release_events(), vec![
+            WorkerInputEvent::MouseButton { button: WorkerMouseButton::Right, key_up: true },
+            WorkerInputEvent::MouseButton { button: WorkerMouseButton::Left, key_up: true },
+        ]);
+    }
+
+    #[test]
+    fn pressed_browser_input_releases_preserve_extended_scan_code_identity() {
+        let mut held = PressedBrowserInput::default();
+        held.observe(WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: false, extended: false });
+        held.observe(WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: false, extended: true });
+        assert_eq!(held.release_events(), vec![
+            WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: true, extended: true },
+            WorkerInputEvent::KeyScan { scan_code: 0x1d, key_up: true, extended: false },
+        ]);
     }
 }

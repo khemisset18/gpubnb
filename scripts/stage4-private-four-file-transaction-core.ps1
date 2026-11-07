@@ -3,6 +3,7 @@
 # The physical wrapper can call it only with an explicit scoped maintenance token.
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'stage4-private-transaction-journal.ps1')
+. (Join-Path $PSScriptRoot 'stage4-windows-path-policy.ps1')
 
 # Mandatory before ANY service stop: the precise six read-only checks, all PASS.
 # Keep the policy here so Windows CI can execute the EXACT gate used by PC1.
@@ -77,6 +78,8 @@ function Invoke-Stage4FourFileTransactionCore {
         [Parameter(Mandatory=$true)][hashtable]$OldHashes,
         [Parameter(Mandatory=$true)][hashtable]$NewHashes,
         [Parameter(Mandatory=$true)][hashtable]$OldSddl,
+        [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-f]{40}$')][string]$OldAgentCommit,
+        [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-f]{40}$')][string]$NewAgentCommit,
         [Parameter(Mandatory=$true)][scriptblock]$StopControlledService,
         [Parameter(Mandatory=$true)][scriptblock]$StartControlledService,
         [Parameter(Mandatory=$true)][scriptblock]$IsControlledServiceRunning,
@@ -91,9 +94,9 @@ function Invoke-Stage4FourFileTransactionCore {
     $ErrorActionPreference='Stop'
     $names=@('gpubnb-agent.exe','gpubnb-windows-stream.exe',
         'gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')
-    $target=[IO.Path]::GetFullPath($TargetDirectory).TrimEnd('\')
-    $candidate=[IO.Path]::GetFullPath($CandidateDirectory).TrimEnd('\')
-    $temp=[IO.Path]::GetFullPath($env:TEMP).TrimEnd('\')
+    $target=Get-Stage4CanonicalWindowsPath -Path $TargetDirectory
+    $candidate=Get-Stage4CanonicalWindowsPath -Path $CandidateDirectory
+    $temp=Get-Stage4CanonicalWindowsPath -Path $env:TEMP
     $fixture=($target.StartsWith($temp+'\GPUbnb-stage4-maintenance-test-',[StringComparison]::OrdinalIgnoreCase) -and
         (Split-Path -Leaf (Split-Path -Parent $target)) -cmatch '^GPUbnb-stage4-maintenance-test-[a-f0-9]{32}$' -and
         (Split-Path -Leaf $target) -ceq 'installed' -and
@@ -161,7 +164,7 @@ function Invoke-Stage4FourFileTransactionCore {
         $oldPaths[$name]=Join-Path $target ('.stage4-'+$tag+'.old.'+$name)
         $failedPaths[$name]=Join-Path $target ('.stage4-'+$tag+'.failed.'+$name)
     }
-    $journal=[pscustomobject]@{version=1;target=$target;tag=$tag;phase='PREPARED';files=@(
+    $journal=[pscustomobject]@{version=2;target=$target;tag=$tag;phase='PREPARED';oldAgentCommit=$OldAgentCommit;newAgentCommit=$NewAgentCommit;files=@(
         $names | ForEach-Object { [pscustomobject]@{name=$_;oldHash=$OldHashes[$_];newHash=$NewHashes[$_];sddl=$OldSddl[$_]} }
     )}
     Write-Stage4TransactionJournal $target $journal
@@ -191,6 +194,9 @@ function Invoke-Stage4FourFileTransactionCore {
             throw 'stage4_core_stop_not_confirmed'
         }
         & $TransactionCheckpoint 'service-stopped'
+        $journal.phase='REPLACING'
+        Write-Stage4TransactionJournal $target $journal
+        & $TransactionCheckpoint 'journal-replacing'
         $i=0
         foreach($name in $names) {
             # Same-parent renames keep each file's native NTFS security descriptor.
@@ -206,6 +212,9 @@ function Invoke-Stage4FourFileTransactionCore {
             $i++
             if ($InjectFailureAfter -eq $i) { throw 'stage4_core_injected_partial_swap' }
         }
+        $journal.phase='VALIDATING'
+        Write-Stage4TransactionJournal $target $journal
+        & $TransactionCheckpoint 'journal-validating'
         foreach($name in $names) {
             $path=Join-Path $target $name
             if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $NewHashes[$name]) {
@@ -265,6 +274,9 @@ function Invoke-Stage4FourFileTransactionCore {
         }
         $rollbackError=$null
         try {
+            $journal.phase='RESTORING'
+            Write-Stage4TransactionJournal $target $journal
+            & $TransactionCheckpoint 'journal-restoring'
             if (-not (& $IsControlledServiceStopped)) {
                 & $StopControlledService
                 if (-not (& $IsControlledServiceStopped)) {
@@ -292,6 +304,12 @@ function Invoke-Stage4FourFileTransactionCore {
             # evidence that the restored Agent can actually run health checks.
             # Never report ROLLBACK_VERIFIED on an unhealthy old process.
             if (-not (& $ValidateControlledRuntime)) {
+                if (-not (& $IsControlledServiceStopped)) {
+                    & $StopControlledService
+                    if (-not (& $IsControlledServiceStopped)) {
+                        throw 'stage4_core_unhealthy_rollback_stop_not_confirmed'
+                    }
+                }
                 throw 'stage4_core_rollback_runtime_unhealthy'
             }
         } catch { $rollbackError=$_.Exception.Message }

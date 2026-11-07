@@ -1,6 +1,7 @@
 import { createGatewayChannelLeaseGuard } from './workspace-gateway-channel-lease.js';
 import crypto from 'node:crypto';
 import type { Socket } from 'node:net';
+import { performance } from 'node:perf_hooks';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { BookingStatus, JobStatus, MachineConnectivity, MachineOperational, ModerationStatus, PaymentStatus, Prisma, SessionTerminationReason, WorkspaceRuntimeBackend, WorkspaceSessionStatus, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
@@ -220,6 +221,18 @@ async function enqueueBoundNativeMachineRelay(redis:Redis,machineId:string,chann
   return accepted===1;
 }
 
+async function enqueueAuthorizedNativeMachineRelay(
+  db:PrismaClient,redis:Redis,sessionId:string,userId:string,machineId:string,
+  runtimeBackend:WorkspaceRuntimeBackend,channelId:string,expectedBinding:string,
+  browserSessionKey:string,relay:RelayRequest,
+):Promise<boolean>{
+  return withNativeGatewaySessionFence(db,sessionId,machineId,userId,runtimeBackend,
+    async isActive=>{
+      const accepted=await enqueueBoundNativeMachineRelay(redis,machineId,channelId,expectedBinding,browserSessionKey,relay);
+      return isActive()&&accepted;
+    });
+}
+
 async function accountDequeuedBytes(redis:Redis,bytesKey:string,payload:string,ttlSeconds:number):Promise<void>{
   const size=Buffer.byteLength(payload,'utf8');
   await redis.eval(ACCOUNT_DEQUEUED_LIST_BYTES_SCRIPT,1,bytesKey,String(size),String(ttlSeconds));
@@ -253,6 +266,112 @@ async function authenticateAgent(db:PrismaClient,redis:Redis,machineId:string,re
   return verifyAgentRequest(redis,machineId,machine.agentPublicKey,request.method,routePath,request.headers['x-agent-timestamp'],request.headers['x-agent-signature']);
 }
 export async function activeGatewaySession(db:PrismaClient,sessionId:string){return db.workspaceSession.findFirst({where:{id:sessionId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,renterId:true,machineId:true,bookingId:true,jobId:true,status:true,expiresAt:true,runtimeBackend:true,connectionMetadata:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});}
+
+class NativeGatewayFenceRollback extends Error {}
+
+/**
+ * Serialize a native channel operation with PostgreSQL session revocations.
+ * Authority row locks remain held through the caller's final Redis fence and its
+ * synchronous ws.send/enqueue admission point. A STOP update that wins first
+ * is observed as inactive; if this operation wins first, STOP cannot commit
+ * until it has reached that admission point. A frame admitted before STOP may
+ * still be buffered by the local socket/TCP stack; TCP bytes already handed
+ * off cannot be recalled. No extra API generation is needed for channel reuse:
+ * each upgrade gets a new UUID binding, Agent channel identities are consumed,
+ * and the native helper independently rotates its runtime/stream epochs.
+ */
+export async function withNativeGatewaySessionFence(
+  db:PrismaClient,
+  sessionId:string,
+  machineId:string,
+  userId:string,
+  runtimeBackend:WorkspaceRuntimeBackend,
+  operation:(isActive:()=>boolean,tx:Prisma.TransactionClient)=>Promise<boolean>,
+  options:{lockSessionForMutation?:boolean}={},
+):Promise<boolean>{
+  if(!isWindowsNativeRuntime(runtimeBackend))return false;
+  try{return await db.$transaction(async tx=>{
+    // Keep the active-session predicate and row lock in one SQL round trip.
+    // This is the same fail-closed predicate as activeGatewaySession(), with
+    // the joined tables checked before the session row is admitted.
+    const sessionLock=options.lockSessionForMutation?Prisma.raw('UPDATE'):Prisma.raw('SHARE');
+    const locked=await tx.$queryRaw<Array<{id:string;machineId:string;renterId:string;runtimeBackend:WorkspaceRuntimeBackend;remainingMs:bigint}>>`
+      SELECT ws."id",ws."machineId",ws."renterId",ws."runtimeBackend"::text AS "runtimeBackend",
+        FLOOR(GREATEST(0,EXTRACT(EPOCH FROM (ws."expiresAt"-clock_timestamp()))*1000))::bigint AS "remainingMs"
+      FROM "WorkspaceSession" AS ws
+      JOIN "Machine" AS m ON m."id"=ws."machineId"
+      JOIN "MachineWorkspace" AS mw ON mw."id"=ws."machineWorkspaceId"
+      JOIN "WorkspaceDefinition" AS w ON w."id"=mw."workspaceId"
+      WHERE ws."id"=${sessionId} AND ws."machineId"=${machineId}
+        AND mw."machineId"=ws."machineId"
+        AND ws."runtimeBackend"::text=${runtimeBackend}
+        AND ws."status"::text IN ('READY','RUNNING')
+        AND ws."expiresAt">clock_timestamp()
+        AND m."connectivity"::text='ONLINE'
+        AND m."moderationStatus"::text='CLEAR'
+        AND w."slug" IN (${Prisma.join(GATEWAY_WORKSPACE_SLUGS)})
+      FOR ${sessionLock} OF ws FOR SHARE OF m,mw,w
+    `;
+    if(locked.length!==1)return false;
+    const row=locked[0]!;
+    if(row.machineId!==machineId||row.renterId!==userId||row.runtimeBackend!==runtimeBackend)return false;
+    const remainingMs=Number(row.remainingMs);
+    if(!Number.isFinite(remainingMs)||remainingMs<=0)return false;
+    const activeUntil=performance.now()+remainingMs;
+    let operationActive=true;let timer:ReturnType<typeof setTimeout>|undefined;
+    try{
+      // DB mutation callbacks must stay inside the transaction until all of
+      // their writes finish; Prisma's transaction timeout bounds that work.
+      // The shorter race is for Redis/socket admission callbacks only.
+      const result=options.lockSessionForMutation
+        ? await operation(()=>operationActive&&performance.now()<activeUntil,tx)
+        : await Promise.race([
+            operation(()=>operationActive&&performance.now()<activeUntil,tx),
+            new Promise<boolean>(resolve=>{timer=setTimeout(()=>{operationActive=false;resolve(false);},4_000);}),
+          ]);
+      if(options.lockSessionForMutation&&!result)throw new NativeGatewayFenceRollback();
+      return result;
+    }finally{
+      operationActive=false;
+      if(timer!==undefined)clearTimeout(timer);
+    }
+  },{maxWait:5_000,timeout:5_000});}catch(error){if(error instanceof NativeGatewayFenceRollback)return false;throw error;}
+}
+
+/**
+ * Publish a native revocation before waiting for the Agent/helper cleanup path.
+ * WTS can change while an Agent HTTP batch is in flight; moving the session to
+ * STOPPING under the same row lock makes every later frame/input fence fail.
+ * Bytes already admitted to a socket/TCP buffer remain non-recallable.
+ */
+export async function markNativeGatewayRevocationStarted(
+  db:PrismaClient,redis:Redis,sessionId:string,machineId:string,
+):Promise<boolean>{
+  const revoked=await db.$transaction(async tx=>{
+    const locked=await tx.$queryRaw<Array<{id:string}>>`
+      SELECT ws."id" FROM "WorkspaceSession" AS ws
+      WHERE ws."id"=${sessionId} AND ws."machineId"=${machineId}
+        AND ws."runtimeBackend"::text='WINDOWS_NATIVE'
+      FOR UPDATE OF ws
+    `;
+    if(locked.length!==1)return false;
+    const current=await tx.workspaceSession.findUnique({where:{id:sessionId},select:{status:true}});
+    if(!current)return false;
+    if([WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED].includes(current.status)){
+      const changed=await tx.workspaceSession.updateMany({
+        where:{id:sessionId,machineId,runtimeBackend:WorkspaceRuntimeBackend.WINDOWS_NATIVE,status:current.status},
+        data:{status:WorkspaceSessionStatus.STOPPING},
+      });
+      if(changed.count!==1)return false;
+      await tx.workspaceSessionEvent.create({data:{sessionId,actorType:'AGENT',actorId:machineId,action:'NATIVE_GATEWAY_AUTHORITY_REVOKED'}});
+      return true;
+    }
+    return [WorkspaceSessionStatus.STOPPING,WorkspaceSessionStatus.COMPLETED,WorkspaceSessionStatus.FAILED,
+      WorkspaceSessionStatus.CANCELLED,WorkspaceSessionStatus.TIMED_OUT,WorkspaceSessionStatus.QUARANTINED].includes(current.status);
+  },{maxWait:5_000,timeout:5_000});
+  if(revoked)await redis.del(wsSessionActivatedKey(sessionId));
+  return revoked;
+}
 
 // A successful enqueue is not a lasting input grant: STOP/cookie revocation
 // can occur while a command is buffered in the shared machine queue.
@@ -292,16 +411,21 @@ async function validateQueuedGatewayRelay(db:PrismaClient,redis:Redis,machineId:
     if(!relay.channelId||binding.sessionId!==relay.sessionId||binding.machineId!==machineId
       ||!isWindowsNativeRuntime(binding.runtimeBackend)||typeof binding.browserSessionKey!=='string')return denyChannel;
   }catch{return denyChannel;}
-  // No pending authorization is shared with a pump or another request.
-  const row=await activeGatewaySession(db,relay.sessionId);
-  if(!row||row.machineId!==machineId||row.runtimeBackend!==binding.runtimeBackend)return denySession;
+  // Read the cookie first, then serialize the final exact-cookie/channel check
+  // with PostgreSQL STOP/status updates. If the read or SQL started before a
+  // revocation, a STOP that commits first still makes this operation deny.
   const browserRaw=await redis.get(binding.browserSessionKey);
   let browser:unknown;
   try{browser=browserRaw?JSON.parse(browserRaw):null;}catch{return denyChannel;}
   if(typeof browser!=='object'||browser===null||!('sessionId' in browser)||browser.sessionId!==relay.sessionId
-    ||!('userId' in browser)||browser.userId!==row.renterId)return denyChannel;
-  if(Number(await redis.eval(NATIVE_DELIVERY_FENCE_SCRIPT,2,wsChannelKey(relay.channelId!),binding.browserSessionKey,nativeChannelBinding,browserRaw!))!==1)return denyChannel;
-  return row.expiresAt.getTime()>Date.now()?allow:denySession;
+    ||!('userId' in browser)||typeof browser.userId!=='string'||!browserRaw)return denyChannel;
+  const authorized=await withNativeGatewaySessionFence(
+    db,relay.sessionId,machineId,browser.userId,binding.runtimeBackend,
+    async isActive=>Number(await redis.eval(
+      NATIVE_DELIVERY_FENCE_SCRIPT,2,wsChannelKey(relay.channelId!),binding.browserSessionKey,nativeChannelBinding,browserRaw,
+    ))===1&&isActive(),
+  );
+  return authorized?allow:denyChannel;
 }
 
 export async function authorizeQueuedGatewayBatch(db:PrismaClient,redis:Redis,machineId:string,items:RelayRequest[]):Promise<RelayRequest[]>{
@@ -530,18 +654,32 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   });
   app.post('/agent/workspace-gateway/:sessionId/register',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;runtimeId?:string;localPort?:number};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/register`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!/^[a-zA-Z0-9_.-]{6,100}$/.test(String(body.runtimeId||''))||!Number.isInteger(body.localPort)||Number(body.localPort)<1024||Number(body.localPort)>65535)return reply.code(400).send({error:'invalid_runtime_registration'});
-    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,bookingId:true,connectionMetadata:true,booking:{select:{expectedSeconds:true}}}});if(!row)return reply.code(409).send({error:'workspace_not_registerable'});
-    const metadata=row.connectionMetadata&&typeof row.connectionMetadata==='object'?row.connectionMetadata as Record<string,unknown>:null;
-    const firstRegistration=row.status===WorkspaceSessionStatus.READY&&typeof metadata?.gatewayPath!=='string';
-    const readyAt=new Date();const activationDeadline=new Date(readyAt.getTime()+INTERACTIVE_CONNECT_TIMEOUT_SECONDS*1000);
-    await db.$transaction([
-      db.workspaceSession.update({where:{id:row.id},data:{connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort)},gatewayLastSeenAt:readyAt,...(firstRegistration?{readyAt,startedAt:null,expiresAt:activationDeadline,preparationProgress:100,preparationStep:'WAITING_FOR_INTERACTIVE_CONNECTION'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}}),
-      ...(firstRegistration?[
-        db.booking.updateMany({where:{id:row.bookingId,status:BookingStatus.FUNDED},data:{status:BookingStatus.STARTING,startsAt:readyAt,endsAt:activationDeadline}}),
-        db.machineAllocation.updateMany({where:{bookingId:row.bookingId},data:{startsAt:readyAt,endsAt:activationDeadline}}),
-        db.acceleratorAllocation.updateMany({where:{bookingId:row.bookingId},data:{startsAt:readyAt,endsAt:activationDeadline}}),
-      ]:[]),
-    ]);
+    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,renterId:true,runtimeBackend:true,status:true,bookingId:true,connectionMetadata:true,booking:{select:{expectedSeconds:true}}}});if(!row)return reply.code(409).send({error:'workspace_not_registerable'});
+    const register=async(tx:Prisma.TransactionClient,current:{id:string;status:WorkspaceSessionStatus;bookingId:string;connectionMetadata:Prisma.JsonValue|null},requireFundedBooking:boolean):Promise<boolean>=>{
+      const metadata=current.connectionMetadata&&typeof current.connectionMetadata==='object'?current.connectionMetadata as Record<string,unknown>:null;
+      const firstRegistration=current.status===WorkspaceSessionStatus.READY&&typeof metadata?.gatewayPath!=='string';
+      const readyAt=new Date();const activationDeadline=new Date(readyAt.getTime()+INTERACTIVE_CONNECT_TIMEOUT_SECONDS*1000);
+      if(firstRegistration){
+        const booking=await tx.booking.updateMany({where:{id:current.bookingId,status:BookingStatus.FUNDED},data:{status:BookingStatus.STARTING,startsAt:readyAt,endsAt:activationDeadline}});
+        if(requireFundedBooking&&booking.count!==1)return false;
+        await tx.machineAllocation.updateMany({where:{bookingId:current.bookingId},data:{startsAt:readyAt,endsAt:activationDeadline}});
+        await tx.acceleratorAllocation.updateMany({where:{bookingId:current.bookingId},data:{startsAt:readyAt,endsAt:activationDeadline}});
+      }
+      await tx.workspaceSession.update({where:{id:current.id},data:{connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort)},gatewayLastSeenAt:readyAt,...(firstRegistration?{readyAt,startedAt:null,expiresAt:activationDeadline,preparationProgress:100,preparationStep:'WAITING_FOR_INTERACTIVE_CONNECTION'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}});
+      return true;
+    };
+    if(isWindowsNativeRuntime(row.runtimeBackend)){
+      const accepted=await withNativeGatewaySessionFence(db,sessionId,machineId,row.renterId,row.runtimeBackend,async(isActive,tx)=>{
+        const current=await tx.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:row.runtimeBackend,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,bookingId:true,connectionMetadata:true}});
+        if(!current||!isActive())return false;
+        return await register(tx,current,true)&&isActive();
+      },{lockSessionForMutation:true});
+      if(!accepted)return reply.code(409).send({error:'workspace_not_registerable'});
+    }else{
+      const current=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,bookingId:true,connectionMetadata:true}});
+      if(!current)return reply.code(409).send({error:'workspace_not_registerable'});
+      await db.$transaction(async tx=>register(tx,current,false));
+    }
     return {ok:true,gatewayPath:`/workspace-gateway/${sessionId}`};
   });
   app.post('/agent/workspace-gateway/:sessionId/usage',async(request,reply)=>{
@@ -551,8 +689,30 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
     if(!/^\d{1,20}$/.test(String(body.counter||''))||!Number.isInteger(body.intervalSeconds)||Number(body.intervalSeconds)<1||Number(body.intervalSeconds)>30||body.available!==true)return reply.code(400).send({error:'invalid_usage_sample'});
     const counter=BigInt(String(body.counter));
-    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},readyAt:{not:null},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,bookingId:true,lastMetricCounter:true,booking:{select:{status:true,validSeconds:true,expectedSeconds:true}}}});
+    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},readyAt:{not:null},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,renterId:true,runtimeBackend:true,status:true,bookingId:true,lastMetricCounter:true,booking:{select:{status:true,validSeconds:true,expectedSeconds:true}}}});
     if(!row)return reply.code(409).send({error:'workspace_not_billable'});
+    if(isWindowsNativeRuntime(row.runtimeBackend)){
+      let conflict='workspace_not_billable';
+      let acceptedUsage:{validIncrement:number;pendingActivation:boolean}|null=null;
+      const accepted=await withNativeGatewaySessionFence(db,sessionId,machineId,row.renterId,row.runtimeBackend,async(isActive,tx)=>{
+        const current=await tx.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:row.runtimeBackend,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},readyAt:{not:null},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,bookingId:true,lastMetricCounter:true,booking:{select:{status:true,validSeconds:true,expectedSeconds:true}}}});
+        if(!current||!isActive())return false;
+        const pendingActivation=current.status===WorkspaceSessionStatus.READY&&current.booking.status===BookingStatus.STARTING;
+        const billable=current.status===WorkspaceSessionStatus.RUNNING&&current.booking.status===BookingStatus.ACTIVE;
+        if(!pendingActivation&&!billable)return false;
+        if(counter<=current.lastMetricCounter){conflict='usage_counter_replay';return false;}
+        const sessionUpdate=await tx.workspaceSession.updateMany({where:{id:current.id,status:current.status,lastMetricCounter:{lt:counter}},data:{lastMetricCounter:counter,gatewayLastSeenAt:new Date()}});
+        if(sessionUpdate.count!==1){conflict='usage_counter_replay';return false;}
+        if(pendingActivation){acceptedUsage={validIncrement:0,pendingActivation:true};return isActive();}
+        const increment=Math.min(Number(body.intervalSeconds),Math.max(0,current.booking.expectedSeconds-current.booking.validSeconds));
+        const bookingUpdate=await tx.booking.updateMany({where:{id:current.bookingId,status:BookingStatus.ACTIVE,validSeconds:current.booking.validSeconds},data:{validSeconds:{increment}}});
+        if(bookingUpdate.count!==1)throw new Error('native_gateway_usage_booking_changed');
+        acceptedUsage={validIncrement:increment,pendingActivation:false};
+        return isActive();
+      },{lockSessionForMutation:true});
+      if(!accepted)return reply.code(409).send({error:conflict});
+      return {ok:true,...acceptedUsage!};
+    }
     const pendingActivation=row.status===WorkspaceSessionStatus.READY&&row.booking.status===BookingStatus.STARTING;
     const billable=row.status===WorkspaceSessionStatus.RUNNING&&row.booking.status===BookingStatus.ACTIVE;
     if(!pendingActivation&&!billable)return reply.code(409).send({error:'workspace_not_billable'});
@@ -623,6 +783,14 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     if(close)await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId));
     else if(enqueued===1)await markAcceptedGatewayFrame(redis,binding.sessionId,channelId,binding,acceptedFrame.expiresAt);
     return {ok:true};
+  });
+  app.post('/agent/workspace-gateway/:sessionId/revocation-started',async(request,reply)=>{
+    const sessionId=String((request.params as {sessionId?:string}).sessionId||'');
+    const body=request.body as {machineId?:string};const machineId=String(body.machineId||'');
+    const route=`/agent/workspace-gateway/${sessionId}/revocation-started`;
+    if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
+    if(!await markNativeGatewayRevocationStarted(db,redis,sessionId,machineId))return reply.code(409).send({error:'workspace_revocation_not_applicable'});
+    return {ok:true,revoked:true};
   });
   app.post('/agent/workspace-gateway/:sessionId/stopped',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;cleaned?:boolean};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/stopped`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});
@@ -751,7 +919,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
           }
           const openRelay={id:openRequestId,sessionId,kind:'ws_open',channelId,path:targetPath,headers:relayHeaders(request.headers as Record<string,unknown>)} satisfies RelayRequest;
           const accepted=nativeChannel
-            ? await enqueueBoundNativeMachineRelay(redis,row.machineId,channelId,channelBinding,browserSessionKey,openRelay)
+            ? await enqueueAuthorizedNativeMachineRelay(db,redis,sessionId,browser.userId,row.machineId,row.runtimeBackend,channelId,channelBinding,browserSessionKey,openRelay)
             : await enqueueMachineRelay(redis,row.machineId,openRelay);
           if(!accepted)throw new Error('workspace_machine_queue_backpressure');
         })();
@@ -816,22 +984,27 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
               const parsed=JSON.parse(frame) as {dataBase64?:unknown;binary?:unknown;close?:unknown};
               if(parsed.close===true){if(ws.readyState===WebSocket.OPEN)ws.close(1000,'upstream closed');break;}
               if(typeof parsed.binary!=='boolean'||!isStrictBase64Payload(parsed.dataBase64,WS_MAX_BASE64_BYTES,WS_MAX_FRAME_BYTES))throw new Error('workspace_ws_redis_frame_invalid');
-              // Native media frames can wait in Redis after a Windows WTS STOP.
-              // A single authorization at the start of a 50-frame batch does
-              // not revoke buffered images inside that batch. Check the
-              // channel's Redis lease and the current workspace grant for
-              // EVERY native frame immediately before delivery.
-              if(nativeChannel && (
-                !await channelAuthorized()
-                || Number(await redis.eval(NATIVE_DELIVERY_FENCE_SCRIPT,2,wsChannelKey(channelId),browserSessionKey,channelBinding,raw)) !== 1
-              )){
-                browserClosed=true;clearInterval(pump);nativeLease?.invalidate();
-                if(ws.readyState===WebSocket.OPEN)ws.close(1008,'native workspace revoked');
-                return;
-              }
-              // Avoid delivery after a close that raced with the asynchronous lease reads.
-              // Socket bytes already sent before revocation cannot be recalled.
-              if(!browserClosed && ws.readyState===WebSocket.OPEN){
+              if(nativeChannel){
+                // Hold the PostgreSQL session row lock through the final Redis
+                // fence and synchronous ws.send. STOP/status updates therefore
+                // serialize with this commit point; a pre-STOP DB read cannot
+                // authorize a buffered frame after STOP has committed. Bytes
+                // already accepted by ws.send/TCP remain non-recallable.
+                const delivered=await withNativeGatewaySessionFence(db,sessionId,row.machineId,browser.userId,row.runtimeBackend,async isActive=>{
+                  // `raw` was identity-checked at upgrade. Requiring Redis to
+                  // still contain those exact bytes detects deletion or
+                  // rotation in one atomic final check without another GET.
+                  if(Number(await redis.eval(NATIVE_DELIVERY_FENCE_SCRIPT,2,wsChannelKey(channelId),browserSessionKey,channelBinding,raw))!==1||!isActive())return false;
+                  if(browserClosed||ws.readyState!==WebSocket.OPEN)return false;
+                  ws.send(Buffer.from(parsed.dataBase64,'base64'),{binary:parsed.binary});
+                  return true;
+                });
+                if(!delivered){
+                  browserClosed=true;clearInterval(pump);nativeLease?.invalidate();
+                  if(ws.readyState===WebSocket.OPEN)ws.close(1008,'native workspace revoked');
+                  return;
+                }
+              }else if(!browserClosed && ws.readyState===WebSocket.OPEN){
                 ws.send(Buffer.from(parsed.dataBase64,'base64'),{binary:parsed.binary});
               }
             }
@@ -855,13 +1028,14 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
           }
           const relay:RelayRequest={id:crypto.randomUUID(),sessionId,kind:'ws_send',channelId,dataBase64:frame.toString('base64'),binary:isBinary};
           const task=browserSendChain.then(async()=>{
-            if(browserClosed||!await channelAuthorized()||browserClosed){
-              browserClosed=true;clearInterval(pump);if(ws.readyState===WebSocket.OPEN)ws.close(1008,'workspace session expired');
+            const accepted=nativeChannel
+              ? (!browserClosed&&await enqueueAuthorizedNativeMachineRelay(db,redis,sessionId,browser.userId,row.machineId,row.runtimeBackend,channelId,channelBinding,browserSessionKey,relay))
+              : (!browserClosed&&await enqueueMachineRelay(redis,row.machineId,relay));
+            if(!accepted&&nativeChannel){
+              browserClosed=true;clearInterval(pump);nativeLease?.invalidate();
+              if(ws.readyState===WebSocket.OPEN)ws.close(1008,'workspace session expired');
               return;
             }
-            const accepted=nativeChannel
-              ? await enqueueBoundNativeMachineRelay(redis,row.machineId,channelId,channelBinding,browserSessionKey,relay)
-              : await enqueueMachineRelay(redis,row.machineId,relay);
             if(!accepted)throw new Error('workspace_machine_queue_backpressure');
           });
           browserSendChain=task.finally(()=>browserPending.release(frame.length)).catch(error=>{

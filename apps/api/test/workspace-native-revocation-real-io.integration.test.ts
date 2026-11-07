@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import test from 'node:test';
-import { BookingStatus, PrismaClient, WorkspaceSessionStatus } from '@prisma/client';
+import { BookingStatus, PrismaClient, WorkspaceRuntimeBackend, WorkspaceSessionStatus } from '@prisma/client';
 import { Redis } from 'ioredis';
 import { createGatewayChannelLeaseGuard } from '../src/workspace-gateway-channel-lease.js';
 
@@ -16,10 +16,10 @@ function percentile(sorted: number[], p: number) {
   return sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)]!;
 }
 
-// The real Prisma authorization predicate, relations and result shape over
-// seeded native sessions. This is a one-second paced authorization workload,
-// not encoded video, a saturation test, or a production SLO qualification.
-integration('30/60 FPS x 1/4/8 streams: real activeGatewaySession authorization and SQL counts', async () => {
+// The production queued-relay authorization path over seeded native sessions.
+// This is a one-second paced admission workload, not encoded
+// video, a saturation test, or a production SLO qualification.
+integration('30/60 FPS x 1/4/8 streams: real session fence and Redis binding EVAL', async () => {
   const { activeGatewaySession, authorizeQueuedGatewayRelay } = await import('../src/workspace-gateway.js');
   const { seedReadySession } = await import('./fixtures/native-gateway-session.js');
   const redis = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: 2 });
@@ -37,7 +37,7 @@ integration('30/60 FPS x 1/4/8 streams: real activeGatewaySession authorization 
     }
     for (const fps of [30, 60] as const) {
       for (const channels of [1, 4, 8]) {
-        let redisReads = 0, authorizationQueries = 0;
+        let redisFences = 0;
         const samples: number[] = [];
         const frames = fps * channels;
         const before = performance.now(), cpuBefore = process.cpuUsage();
@@ -46,18 +46,21 @@ integration('30/60 FPS x 1/4/8 streams: real activeGatewaySession authorization 
         await Promise.all(fixtures.slice(0, channels).map(async (fixture, i) => {
           const sessionId = fixture.session.id, userId = fixture.renter.id;
           const browserKey = prefix + ':cookie:' + fps + ':' + channels + ':' + i;
+          const channelId = crypto.randomUUID();
+          const bindingKey = 'workspace-gateway:ws-channel:' + channelId;
           keys.push(browserKey);
-          await redis.set(browserKey, JSON.stringify({sessionId, userId}), 'EX', 60);
-          const guard = createGatewayChannelLeaseGuard({
-            sessionId, userId, cacheMs: 0,
-            expectedMachineId: fixture.machine.id, expectedRuntimeBackend: 'WINDOWS_NATIVE',
-            readBrowser: async () => { redisReads++; return redis.get(browserKey); },
-            readWorkspace: async () => { authorizationQueries++; return activeGatewaySession(db, sessionId); },
-          });
+          keys.push(bindingKey);
+          const browserRaw = JSON.stringify({sessionId, userId});
+          const bindingRaw = JSON.stringify({sessionId, machineId: fixture.machine.id, browserSessionKey: browserKey, runtimeBackend: 'WINDOWS_NATIVE'});
+          await redis.set(browserKey, browserRaw, 'EX', 60);
+          await redis.set(bindingKey, bindingRaw, 'EX', 60);
+          const relay = {id:crypto.randomUUID(),sessionId,kind:'ws_send' as const,channelId,nativeChannelBinding:bindingRaw,dataBase64:'AA==',binary:true};
           const channelStart = performance.now();
           for (let frame = 0; frame < fps; frame++) {
             const started = performance.now();
-            assert.equal(await guard(), true);
+            redisFences++;
+            const accepted = await authorizeQueuedGatewayRelay(db,redis,fixture.machine.id,relay);
+            assert.ok(accepted);
             samples.push(performance.now() - started);
             // Pace by the original deadline, so slow authorization is visible
             // in wall time instead of adding a full sleep after every query.
@@ -65,20 +68,19 @@ integration('30/60 FPS x 1/4/8 streams: real activeGatewaySession authorization 
             if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
           }
         }));
-        assert.equal(redisReads, frames);
-        assert.equal(authorizationQueries, frames);
-        assert.ok(sqlQueries >= frames, 'count actual Prisma SQL, including relation queries');
+        assert.equal(redisFences, frames);
+        assert.ok(sqlQueries >= frames, 'count the combined locked active-session predicate per frame');
         samples.sort((a, b) => a - b);
         const summary = {
-          kind: 'ci-ephemeral-real-prisma-authorization-not-video-or-production',
-          fps, channels, checkedFrames: frames, redisReads, authorizationQueries, sqlQueries,
+          kind: 'ci-ephemeral-real-prisma-session-fence-plus-redis-eval-not-video-or-production',
+          fps, channels, checkedFrames: frames, redisFences, sqlQueries,
           sqlQueriesPerFrame: sqlQueries / frames,
           p50Ms: percentile(samples, 0.5), p95Ms: percentile(samples, 0.95), p99Ms: percentile(samples, 0.99),
           wallMs: performance.now() - before, cpuMicroseconds: process.cpuUsage(cpuBefore),
           rssBefore, rssAfter: process.memoryUsage().rss,
-          // The real video delivery path additionally executes a final Redis
-          // fence and queue accounting. They are NOT included in these timings.
-          includesVideoQueue: false,
+          // Queue accounting, encoded video, browser TCP and Windows capture
+          // remain outside this admission-only timing.
+          includesEncodedVideoOrBrowserSocket: false,
         };
         assert.ok(summary.p50Ms >= 0 && summary.p95Ms >= summary.p50Ms && summary.p99Ms >= summary.p95Ms);
         console.log('STAGE4_NATIVE_REAL_AUTH ' + JSON.stringify(summary));
@@ -128,6 +130,99 @@ integration('30/60 FPS x 1/4/8 streams: real activeGatewaySession authorization 
     if(keys.length) await redis.del(...keys).catch(() => undefined);
     redis.disconnect();
     for (const fixture of fixtures.reverse()) await fixture.cleanup();
+    await db.$disconnect();
+  }
+});
+
+integration('PostgreSQL session row lock orders native send commits against STOP', async () => {
+  const { markNativeGatewayRevocationStarted, withNativeGatewaySessionFence } = await import('../src/workspace-gateway.js');
+  const { seedReadySession } = await import('./fixtures/native-gateway-session.js');
+  const db = new PrismaClient();
+  const fixture = await seedReadySession(db, crypto.randomBytes(8).toString('hex'), {
+    bookingStatus: BookingStatus.STARTING, expectedSeconds: 900,
+  });
+  const barrier = () => {
+    let open!: () => void;
+    const promise = new Promise<void>(resolve => { open = resolve; });
+    return { promise, open };
+  };
+  try {
+    const entered = barrier(), release = barrier();
+    let sendCommitted = false;
+    const nativeSend = withNativeGatewaySessionFence(
+      db, fixture.session.id, fixture.machine.id, fixture.renter.id, WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+      async () => { entered.open(); await release.promise; sendCommitted = true; return true; },
+    );
+    await entered.promise; // The native operation holds FOR SHARE now.
+    let stopCommitted = false;
+    const stop = markNativeGatewayRevocationStarted(
+      db, redis, fixture.session.id, fixture.machine.id,
+    ).then(value => { stopCommitted = value; return value; });
+    await new Promise(resolve => setTimeout(resolve, 25));
+    assert.equal(stopCommitted, false, 'STOP must wait while a previously admitted synchronous send reaches its commit point');
+    release.open();
+    assert.equal(await nativeSend, true);
+    assert.equal(await stop,true);
+    assert.equal(sendCommitted, true);
+    assert.equal(stopCommitted, true);
+    assert.equal((await db.workspaceSession.findUniqueOrThrow({where:{id:fixture.session.id}})).status,WorkspaceSessionStatus.STOPPING);
+    let deniedPostRevokeSends=0;
+    assert.equal(await withNativeGatewaySessionFence(
+      db,fixture.session.id,fixture.machine.id,fixture.renter.id,WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+      async()=>{deniedPostRevokeSends++;return true;},
+    ),false);
+    assert.equal(deniedPostRevokeSends,0,'frames waiting after the committed WTS revocation must not reach Redis or ws.send');
+
+    // Registration and usage mutate the session, so they take FOR UPDATE.
+    // They must also serialize with STOP and run their writes in this same tx.
+    await db.workspaceSession.update({where:{id:fixture.session.id},data:{status:WorkspaceSessionStatus.READY}});
+    const mutationEntered=barrier(),releaseMutation=barrier();
+    let mutationCommitted=false, mutationStopCommitted=false;
+    const mutation=withNativeGatewaySessionFence(
+      db,fixture.session.id,fixture.machine.id,fixture.renter.id,WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+      async (_isActive,tx)=>{
+        await tx.workspaceSession.update({where:{id:fixture.session.id},data:{gatewayLastSeenAt:new Date()}});
+        mutationEntered.open();
+        await releaseMutation.promise;
+        mutationCommitted=true;
+        return true;
+      },
+      {lockSessionForMutation:true},
+    );
+    await mutationEntered.promise;
+    const mutationStop=db.workspaceSession.update({
+      where:{id:fixture.session.id},data:{status:WorkspaceSessionStatus.STOP_REQUESTED},
+    }).then(value=>{mutationStopCommitted=true;return value;});
+    await new Promise(resolve=>setTimeout(resolve,25));
+    assert.equal(mutationStopCommitted,false,'STOP must wait for an admitted native registration/usage mutation transaction');
+    releaseMutation.open();
+    assert.equal(await mutation,true);
+    await mutationStop;
+    assert.equal(mutationCommitted,true);
+    assert.equal(mutationStopCommitted,true);
+
+    // When STOP owns the row lock first, a frame waiting on FOR SHARE observes
+    // the committed terminal status and never invokes its send callback.
+    const stopLocked = barrier(), finishStop = barrier();
+    const terminalFirst = db.$transaction(async tx => {
+      await tx.$queryRaw`SELECT "id" FROM "WorkspaceSession" WHERE "id"=${fixture.session.id} FOR UPDATE`;
+      await tx.workspaceSession.update({ where: { id: fixture.session.id }, data: { status: WorkspaceSessionStatus.COMPLETED } });
+      stopLocked.open();
+      await finishStop.promise;
+    });
+    await stopLocked.promise;
+    let staleSendCalls = 0;
+    const waitingSends = Array.from({ length: 4 }, () => withNativeGatewaySessionFence(
+      db, fixture.session.id, fixture.machine.id, fixture.renter.id, WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+      async () => { staleSendCalls++; return true; },
+    ));
+    await new Promise(resolve => setTimeout(resolve, 25));
+    finishStop.open();
+    await terminalFirst;
+    assert.deepEqual(await Promise.all(waitingSends), [false, false, false, false]);
+    assert.equal(staleSendCalls, 0, 'all sends queued behind committed STOP must be rejected');
+  } finally {
+    await fixture.cleanup();
     await db.$disconnect();
   }
 });

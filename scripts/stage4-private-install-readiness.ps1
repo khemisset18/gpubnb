@@ -34,16 +34,10 @@ if ($ExpectedBackupManifestSha256 -cnotmatch '^[a-fA-F0-9]{64}$' -or
 . (Join-Path $PSScriptRoot 'stage4-package-common.ps1')
 $pathsValid=$false
 try {
-    $candidate=[IO.Path]::GetFullPath($CandidateDirectory).TrimEnd('\')
-    $backup=[IO.Path]::GetFullPath($BackupDirectory).TrimEnd('\')
-    if ($candidate -ieq $backup -or
-        $candidate -ieq $installed -or $backup -ieq $installed -or
-        $candidate.StartsWith($installed+'\',[StringComparison]::OrdinalIgnoreCase) -or
-        $backup.StartsWith($installed+'\',[StringComparison]::OrdinalIgnoreCase) -or
-        $candidate.StartsWith($backup+'\',[StringComparison]::OrdinalIgnoreCase) -or
-        $backup.StartsWith($candidate+'\',[StringComparison]::OrdinalIgnoreCase)) {
-        throw 'stage4_install_readiness_paths_overlap'
-    }
+    $pathPins=Assert-Stage4InstallPathsDisjoint -CandidateDirectory $CandidateDirectory `
+        -BackupDirectory $BackupDirectory -InstalledDirectory $installed
+    $candidate=$pathPins.candidate
+    $backup=$pathPins.backup
     foreach ($dir in @($candidate,$backup)) {
         $d=Get-Item -LiteralPath $dir -Force -ErrorAction Stop
         if (-not $d.PSIsContainer -or ($d.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {

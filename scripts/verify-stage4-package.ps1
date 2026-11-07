@@ -12,8 +12,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if ($env:OS -cne 'Windows_NT' -or -not [Environment]::Is64BitProcess) { throw 'stage4_windows_x64_required' }
-$root=(Resolve-Path -LiteralPath $PackageDirectory -ErrorAction Stop).Path
 . (Join-Path $PSScriptRoot 'stage4-package-common.ps1')
+$root=Get-Stage4CanonicalWindowsPath -Path $PackageDirectory
+$snapshot=Open-Stage4PackageReadFence -Directory $root -Status $SignatureStatus
+try {
 $manifest=Read-Stage4Package $root $ExpectedManifestSha256 $ExpectedCommit $ExpectedPublisherSha256 $SignatureStatus
 foreach ($record in $manifest.files) {
     $file=Join-Path $root $record.name
@@ -55,6 +57,16 @@ if ($ExecuteBuildIdentity) {
         }
     }
 }
+if ((Get-FileHash -LiteralPath (Join-Path $root 'stage4.manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $ExpectedManifestSha256 -or
+    (Get-FileHash -LiteralPath (Join-Path $root 'build-identities.json') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $manifest.buildIdentitiesSha256) {
+    throw 'stage4_manifest_or_identity_changed_during_verification'
+}
+foreach ($record in $manifest.files) {
+    if ((Get-FileHash -LiteralPath (Join-Path $root $record.name) -Algorithm SHA256).Hash.ToLowerInvariant() -cne $record.sha256) {
+        throw "stage4_component_changed_during_verification:$($record.name)"
+    }
+}
 [ordered]@{ok=$true;filesVerified=4;sourceCommit=$ExpectedCommit;manifestSha256=$ExpectedManifestSha256;
     signatureStatus=$SignatureStatus;authenticodeVerified=($SignatureStatus -ceq 'private-signed');
     hardwareQualified=$false;installationPerformed=$false;publicBookabilityEnabled=$false} | ConvertTo-Json
+} finally { Close-Stage4PackageReadFence $snapshot }

@@ -22,7 +22,10 @@ if ($env:OS -cne 'Windows_NT' -or -not [Environment]::Is64BitProcess) {
 if ($ExpectedManifestSha256 -cnotmatch '^[0-9a-f]{64}$') {
     throw 'private_qualification_expected_manifest_invalid'
 }
-$root=(Resolve-Path -LiteralPath $PackageDirectory -ErrorAction Stop).Path
+$root=Get-Stage4CanonicalWindowsPath -Path $PackageDirectory
+$snapshot=Open-Stage4PackageReadFence -Directory $root -Status 'private-signed' `
+    -ManifestName 'stage4-private-qualification.manifest.json'
+try {
 if (Test-Path -LiteralPath (Join-Path $root 'INCOMPLETE-DO-NOT-INSTALL.txt')) {
     throw 'private_qualification_incomplete_package'
 }
@@ -108,8 +111,19 @@ foreach ($f in $manifest.files) {
     Assert-Stage4Certificate -Certificate $sig.SignerCertificate -ExpectedPublisherSha256 $ExpectedPublisherSha256 `
         -MinimumValidityHours 24 -RequirePrivateKey $false
 }
+if ((Get-FileHash -LiteralPath $mp -Algorithm SHA256).Hash.ToLowerInvariant() -cne $ExpectedManifestSha256 -or
+    (Get-FileHash -LiteralPath $up -Algorithm SHA256).Hash.ToLowerInvariant() -cne $manifest.sourceUnsignedManifestSha256 -or
+    (Get-FileHash -LiteralPath $ip -Algorithm SHA256).Hash.ToLowerInvariant() -cne $manifest.buildIdentitiesSha256) {
+    throw 'private_qualification_manifest_or_identity_changed_during_verification'
+}
+foreach ($f in $manifest.files) {
+    if ((Get-FileHash -LiteralPath (Join-Path $root $f.name) -Algorithm SHA256).Hash.ToLowerInvariant() -cne $f.sha256) {
+        throw "private_qualification_component_changed_during_verification:$($f.name)"
+    }
+}
 [ordered]@{ok=$true;kind='PRIVATE_QUALIFICATION_INSTALLER_CANDIDATE';filesVerified=4
     sourceCommit=$ExpectedCommit;machineId=$ExpectedMachineId;gpuUuid=$ExpectedGpuUuid
     manifestSha256=$ExpectedManifestSha256;authenticodeVerified=$true
     installationReviewRequired=$true;installationPerformed=$false;hardwareQualified=$false
     quarantineModified=$false;publicBookabilityEnabled=$false} | ConvertTo-Json
+} finally { Close-Stage4PackageReadFence $snapshot }

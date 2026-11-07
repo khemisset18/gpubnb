@@ -11,7 +11,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import base58
 from nacl.signing import SigningKey
@@ -183,7 +183,12 @@ def agent_request(client: ApiClient, key: SigningKey, machine_id: str, path: str
     raise last_error  # type: ignore[misc]
 
 
-def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, Any]:
+def heartbeat(
+    client: ApiClient,
+    key: SigningKey,
+    machine_id: str,
+    on_server_accept: Callable[[int, dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
     # A heartbeat is one inventory transaction. Legacy heartbeat fields, v2
     # telemetry and generic accelerator providers must observe the same physical
     # snapshot instead of independently re-running nvidia-smi/Docker/CIM probes.
@@ -276,6 +281,15 @@ def heartbeat(client: ApiClient, key: SigningKey, machine_id: str) -> dict[str, 
                 signed_headers(key, machine_id, "POST", "/agent/heartbeat", payload),
             )
             save_counter(counter)
+            # This callback is local observability only. It runs only after the
+            # signed request received a successful API response and the accepted
+            # anti-replay counter was persisted. It must never change heartbeat
+            # success or retry behavior.
+            if on_server_accept is not None:
+                try:
+                    on_server_accept(counter, result)
+                except Exception:
+                    pass
             return result
         except (urllib.error.URLError, RuntimeError, TimeoutError, OSError) as exc:
             last_error = exc

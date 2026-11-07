@@ -145,6 +145,14 @@ if (-not $Apply) {
 if (-not $OperatorPresentAndApproved) {
     throw 'stage4_maintenance_explicit_operator_approval_required'
 }
+$oldBuildInfoRaw=@(& $exe 'build-info' 2>$null) -join "`n"
+try { $oldBuildInfo=$oldBuildInfoRaw | ConvertFrom-Json } catch { throw 'stage4_maintenance_old_agent_build_info_invalid' }
+$oldAgentCommit=[string]$oldBuildInfo.buildCommit
+if ($oldAgentCommit -cnotmatch '^[0-9a-f]{40}$' -or
+    [IO.Path]::GetFullPath([string]$oldBuildInfo.executable) -ine [IO.Path]::GetFullPath($exe) -or
+    (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -ine $oldHashes['gpubnb-agent.exe']) {
+    throw 'stage4_maintenance_old_agent_identity_unpinned'
+}
 # Recheck exact original bytes and ACLs in the core immediately before staging,
 # then STOP service before all four same-parent rename operations.
 $script:stage4ServiceStartUtc=[DateTime]::MinValue
@@ -158,6 +166,7 @@ $stop = {
 $start = {
     $s=Get-Service -Name 'GPUbnbAgent' -ErrorAction Stop
     if ($s.Status -ne 'Running') {
+        $script:stage4CounterBeforeStart=& $readAgentCounter
         $script:stage4ServiceStartUtc=[DateTime]::UtcNow
         $s.Start()
         $s.WaitForStatus([ServiceProcess.ServiceControllerStatus]::Running,[TimeSpan]::FromSeconds(45))
@@ -172,14 +181,40 @@ $isRunning = {
 $isStopped = {
     return ((Get-Service -Name 'GPUbnbAgent').Status -eq 'Stopped')
 }
+$agentConfigPath=Join-Path (Join-Path $env:ProgramData 'GPUbnb') 'config.json'
+$agentConfigItem=Get-Item -LiteralPath $agentConfigPath -Force -ErrorAction Stop
+if (($agentConfigItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw 'stage4_maintenance_agent_config_symlink_forbidden'
+}
+$agentConfig=Get-Content -LiteralPath $agentConfigPath -Raw | ConvertFrom-Json
+if ($agentConfig.machineId -cne $ExpectedMachineId) {
+    throw 'stage4_maintenance_agent_machine_identity_mismatch'
+}
+$counterPath=Join-Path (Join-Path $env:ProgramData 'GPUbnb') 'counter'
+$readAgentCounter = {
+    $entry=Get-Item -LiteralPath $counterPath -Force -ErrorAction Stop
+    if (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $entry.PSIsContainer) {
+        throw 'stage4_maintenance_counter_path_invalid'
+    }
+    $value=[long]0
+    if (-not [long]::TryParse((Get-Content -LiteralPath $counterPath -Raw).Trim(),[ref]$value) -or $value -lt 0) {
+        throw 'stage4_maintenance_counter_value_invalid'
+    }
+    return $value
+}
+$script:stage4CounterBeforeStart=$null
 $checkRuntime = {
-    # This local proof is not an independent server-side attestation.
+    # Require an accepted API heartbeat from this fresh service process. The
+    # server response carries ok=true and a monotone counter saved by the Agent;
+    # no arbitrary text-only log match can satisfy this gate.
     Start-Sleep -Seconds 32
     if (-not (& $isRunning)) { return $false }
     if ($script:stage4ServiceStartUtc -eq [DateTime]::MinValue) { return $false }
     $service=Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
     if ($null -eq $service -or $service.ProcessId -le 0 -or
         $service.StartName -cne 'LocalSystem' -or $service.State -cne 'Running') { return $false }
+    $agentProcesses=@(Get-CimInstance Win32_Process -Filter "Name='gpubnb-agent.exe'")
+    if ($agentProcesses.Count -ne 1 -or [int]$agentProcesses[0].ProcessId -ne [int]$service.ProcessId) { return $false }
     $process=Get-CimInstance Win32_Process -Filter "ProcessId=$($service.ProcessId)"
     if ($null -eq $process -or $process.SessionId -ne 0 -or
         $process.ExecutablePath -ine 'C:\Program Files\GPUbnb\gpubnb-agent.exe' -or
@@ -195,23 +230,80 @@ $checkRuntime = {
         $hash -ine $oldHashes['gpubnb-agent.exe']) { return $false }
     $log=Join-Path $env:ProgramData 'GPUbnb\agent.log'
     if (-not (Test-Path -LiteralPath $log -PathType Leaf)) { return $false }
+    $startupProofAfterStart=$false
+    $startupProofCommit=$null
     $heartbeatAfterStart=$false
+    $pinnedLegacyHeartbeatAfterStart=$false
+    $acceptedCounter=[long]0
+    $readEventValue={param($event,[string]$name)$property=$event.PSObject.Properties[$name];if($null -eq $property){return $null};return $property.Value}
     foreach($line in @(Get-Content -LiteralPath $log -Tail 2000)) {
         $pos=$line.IndexOf('agent_event ')
         if ($pos -lt 0) { continue }
         try {
             $payload=$line.Substring($pos+12) | ConvertFrom-Json
-            if ($payload.event -cne 'heartbeat') { continue }
             $stamp=($line -split ' ')[0] -replace '([+-]\d{2})(\d{2})$','$1:$2'
             $parsed=[DateTimeOffset]::Parse($stamp,[Globalization.CultureInfo]::InvariantCulture)
-            if ($parsed.UtcDateTime -ge $startedUtc -and
-                $parsed.UtcDateTime -ge $script:stage4ServiceStartUtc) {
-                $heartbeatAfterStart=$true
-                break
+            if ($parsed.UtcDateTime -lt $startedUtc -or
+                $parsed.UtcDateTime -lt $script:stage4ServiceStartUtc) { continue }
+            if ($payload.event -ceq 'diagnostic_poll_loop_started') {
+                $eventMachineId=& $readEventValue $payload 'machineId'
+                $eventCommit=& $readEventValue $payload 'buildCommit'
+                $eventProcessId=& $readEventValue $payload 'processId'
+                $expectedProcessCommit=if($hash -ieq $oldHashes['gpubnb-agent.exe']){$oldAgentCommit}else{$ExpectedCommit}
+                if ($eventMachineId -cne $ExpectedMachineId -or
+                    $eventCommit -cne $expectedProcessCommit -or
+                    ($null -ne $eventProcessId -and [int]$eventProcessId -ne [int]$service.ProcessId) -or
+                    ($hash -ieq $newHashes['gpubnb-agent.exe'] -and [int]$eventProcessId -ne [int]$service.ProcessId)) { continue }
+                $startupProofAfterStart=$true
+                $startupProofCommit=[string]$eventCommit
+                continue
+            }
+            if ($payload.event -ceq 'heartbeat') {
+                $eventMachineId=& $readEventValue $payload 'machineId'
+                $eventCommit=& $readEventValue $payload 'buildCommit'
+                $eventProcessId=& $readEventValue $payload 'processId'
+                $serverAccepted=& $readEventValue $payload 'serverAccepted'
+                $eventCounter=& $readEventValue $payload 'counter'
+                $heartbeatCounter=[long]0
+                $enhancedProof=($eventMachineId -ceq $ExpectedMachineId -and
+                    $eventCommit -cmatch '^[0-9a-f]{40}$' -and
+                    $serverAccepted -is [bool] -and $serverAccepted -and
+                    $payload.result.ok -is [bool] -and $payload.result.ok -and
+                    [long]::TryParse([string]$eventCounter,[ref]$heartbeatCounter) -and
+                    $heartbeatCounter -gt 0 -and
+                    [int]$eventProcessId -eq [int]$service.ProcessId -and
+                    [string]$eventCommit -ceq $startupProofCommit)
+                if ($enhancedProof -and
+                    $startupProofAfterStart -and
+                    $eventCommit -ceq $startupProofCommit -and
+                    $heartbeatCounter -gt $script:stage4CounterBeforeStart -and
+                    (($hash -ieq $newHashes['gpubnb-agent.exe'] -and $eventCommit -ceq $ExpectedCommit) -or
+                        ($hash -ieq $oldHashes['gpubnb-agent.exe'] -and $eventCommit -ceq $oldAgentCommit))) {
+                    $acceptedCounter=$heartbeatCounter
+                    $heartbeatAfterStart=$true
+                    break
+                }
+                # The already installed rollback image predates explicit PID
+                # heartbeat fields. Accept it only when its exact file hash and
+                # build commit are pinned, its sole service process emitted a
+                # fresh machine-bound startup event, and its successful server
+                # response is followed by a monotone persisted counter advance.
+                if ($hash -ieq $oldHashes['gpubnb-agent.exe'] -and
+                    $startupProofAfterStart -and $eventCommit -ceq $oldAgentCommit -and
+                    $payload.result.ok -is [bool] -and $payload.result.ok) {
+                    $pinnedLegacyHeartbeatAfterStart=$true
+                }
             }
         } catch {}
     }
-    if (-not $heartbeatAfterStart -or -not (& $isRunning)) { return $false }
+    if (-not $startupProofAfterStart -or -not ($heartbeatAfterStart -or $pinnedLegacyHeartbeatAfterStart) -or -not (& $isRunning)) { return $false }
+    if ($null -eq $script:stage4CounterBeforeStart) { return $false }
+    try { $counterAfterStart=& $readAgentCounter } catch { return $false }
+    if ($counterAfterStart -le $script:stage4CounterBeforeStart -or
+        ($acceptedCounter -gt 0 -and $counterAfterStart -lt $acceptedCounter)) { return $false }
+    if ($heartbeatAfterStart -and $acceptedCounter -le $script:stage4CounterBeforeStart) { return $false }
+    $configAfter=Get-Content -LiteralPath $agentConfigPath -Raw | ConvertFrom-Json
+    if ($configAfter.machineId -cne $ExpectedMachineId) { return $false }
     $serviceAfter=Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
     if ($null -eq $serviceAfter -or $serviceAfter.ProcessId -ne $service.ProcessId) { return $false }
     $hashAfter=(Get-FileHash -LiteralPath $expectedExe -Algorithm SHA256).Hash
@@ -223,6 +315,8 @@ $args=@{
     OldHashes=$oldHashes
     NewHashes=$newHashes
     OldSddl=$oldSddl
+    OldAgentCommit=$oldAgentCommit
+    NewAgentCommit=$ExpectedCommit
     StopControlledService=$stop
     StartControlledService=$start
     IsControlledServiceRunning=$isRunning

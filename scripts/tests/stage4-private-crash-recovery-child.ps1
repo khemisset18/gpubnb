@@ -21,6 +21,11 @@ if($Recover) {
     $pins=Get-Content -LiteralPath (Join-Path $Root 'pins.json') -Raw | ConvertFrom-Json
     $old=@{};$new=@{};$sddl=@{}
     foreach($pin in $pins){$old[$pin.name]=$pin.oldHash;$new[$pin.name]=$pin.newHash;$sddl[$pin.name]=$pin.sddl}
-    Invoke-Stage4FourFileTransactionCore @callbacks -CandidateDirectory (Join-Path $Root 'candidate') `
-        -OldHashes $old -NewHashes $new -OldSddl $sddl -TransactionCheckpoint $checkpoint | Out-Null
+    $transactionArgs=@{};foreach($key in $callbacks.Keys){$transactionArgs[$key]=$callbacks[$key]}
+    $transactionArgs.CandidateDirectory=Join-Path $Root 'candidate'
+    $transactionArgs.OldHashes=$old;$transactionArgs.NewHashes=$new;$transactionArgs.OldSddl=$sddl
+    $transactionArgs.OldAgentCommit=('a'*40);$transactionArgs.NewAgentCommit=('b'*40)
+    $transactionArgs.TransactionCheckpoint=$checkpoint
+    if($CrashAt -ceq 'journal-restoring') { $transactionArgs.InjectFailureAfter=4 }
+    Invoke-Stage4FourFileTransactionCore @transactionArgs | Out-Null
 }

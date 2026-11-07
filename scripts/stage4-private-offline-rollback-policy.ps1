@@ -2,6 +2,7 @@
 # Pure path policy for a scratch-only Stage 4 backup reconstruction.
 # Does NOT grant permission to install, stop services, alter trust, or clear quarantine.
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'stage4-windows-path-policy.ps1')
 
 function Assert-Stage4OfflineRollbackPaths {
     [CmdletBinding()]
@@ -11,11 +12,11 @@ function Assert-Stage4OfflineRollbackPaths {
         [Parameter(Mandatory=$true)][string]$OutputDirectory,
         [Parameter(Mandatory=$true)][string]$DownloadsDirectory
     )
-    $candidate=[IO.Path]::GetFullPath($CandidateDirectory).TrimEnd('\')
-    $backup=[IO.Path]::GetFullPath($BackupDirectory).TrimEnd('\')
-    $output=[IO.Path]::GetFullPath($OutputDirectory).TrimEnd('\')
-    $downloads=[IO.Path]::GetFullPath($DownloadsDirectory).TrimEnd('\')
-    $installed='C:\Program Files\GPUbnb'
+    $candidate=Get-Stage4CanonicalWindowsPath -Path $CandidateDirectory
+    $backup=Get-Stage4CanonicalWindowsPath -Path $BackupDirectory
+    $output=Get-Stage4CanonicalWindowsPath -Path $OutputDirectory -AllowMissingLeaf
+    $downloads=Get-Stage4CanonicalWindowsPath -Path $DownloadsDirectory
+    $installed=Get-Stage4CanonicalWindowsPath -Path 'C:\Program Files\GPUbnb' -AllowMissingLeaf
     $paths=@($candidate,$backup,$output)
     if ((Test-Path -LiteralPath $output) -or
         -not (Test-Path -LiteralPath $downloads -PathType Container) -or
