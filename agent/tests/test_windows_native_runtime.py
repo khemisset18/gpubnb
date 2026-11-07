@@ -888,7 +888,14 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
         supervisor._native_lock = threading.RLock()
         supervisor.native_runtimes = {}
         supervisor._native_blocked = set()
+        supervisor._native_start_tokens = {}
+        supervisor._native_start_backends = {}
+        supervisor._native_revocation_pending = set()
+        supervisor._native_revocation_inflight = set()
         supervisor.usage_last_report = {"sess-1": 10.0}
+        supervisor.machine_id = "machine-1"
+        supervisor._request = Mock(return_value={"revoked": True})
+        supervisor._report_error = Mock()
         supervisor._close_session_channels = Mock()
         supervisor._release_native_claims = Mock(return_value=True)
         supervisor._trace = Mock()
@@ -911,6 +918,10 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
     def test_gateway_running_session_without_runtime_fails_closed_instead_of_restarting(self):
         supervisor = object.__new__(gateway_v10.GatewaySupervisor)
         supervisor._native_lock = threading.RLock()
+        supervisor._native_start_tokens = {}
+        supervisor._native_start_backends = {}
+        supervisor._native_revocation_pending = set()
+        supervisor._native_revocation_inflight = set()
         supervisor._native_desired_sessions = [{
             "id": "sess-1",
             "status": "RUNNING",

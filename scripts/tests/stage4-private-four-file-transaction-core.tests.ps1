@@ -293,11 +293,15 @@ Run-Case -Title 'failed_new_agent_health_old_agent_healthy' -FailNewHealthOnly $
 Run-Case -Title 'first_service_start_failed' -FailStartOnce $true -ExpectRollback $true
 Run-Case -Title 'pinned_hash_drift' -BadOldHash $true
 
+$unsafeRoot=Join-Path $env:TEMP ('GPUbnb-stage4-unauthorized-'+[Guid]::NewGuid().ToString('N'))
+$unsafeTarget=Join-Path $unsafeRoot 'installed'
+$unsafeCandidate=Join-Path $unsafeRoot 'candidate'
+[void](New-Item -ItemType Directory -Path $unsafeTarget,$unsafeCandidate -Force)
 $refused=$false
 try {
     $args=@{
-        TargetDirectory='C:\Program Files\GPUbnb'
-        CandidateDirectory='C:\Users\Public'
+        TargetDirectory=$unsafeTarget
+        CandidateDirectory=$unsafeCandidate
         OldHashes=@{};NewHashes=@{};OldSddl=@{};OldAgentCommit=('a'*40);NewAgentCommit=('b'*40)
         StopControlledService={throw 'must_not_stop'}
         StartControlledService={throw 'must_not_start'}
@@ -307,5 +311,6 @@ try {
     }
     Invoke-Stage4FourFileTransactionCore @args | Out-Null
 }catch{ $refused=$_.Exception.Message -eq 'stage4_core_rejects_unapproved_install_path' }
-if(-not $refused) {throw 'stage4_core_real_path_not_rejected_without_scope'}
-Write-Host 'PASS production target rejected without maintenance authorization token'
+Remove-Item -LiteralPath $unsafeRoot -Force -Recurse
+if(-not $refused) {throw 'stage4_core_nonfixture_path_not_rejected_without_scope'}
+Write-Host 'PASS non-fixture install path rejected without maintenance authorization token'

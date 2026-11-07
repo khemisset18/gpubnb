@@ -357,7 +357,7 @@ export async function markNativeGatewayRevocationStarted(
     if(locked.length!==1)return false;
     const current=await tx.workspaceSession.findUnique({where:{id:sessionId},select:{status:true}});
     if(!current)return false;
-    if([WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED].includes(current.status)){
+    if(current.status===WorkspaceSessionStatus.READY||current.status===WorkspaceSessionStatus.RUNNING||current.status===WorkspaceSessionStatus.STOP_REQUESTED){
       const changed=await tx.workspaceSession.updateMany({
         where:{id:sessionId,machineId,runtimeBackend:WorkspaceRuntimeBackend.WINDOWS_NATIVE,status:current.status},
         data:{status:WorkspaceSessionStatus.STOPPING},
@@ -366,8 +366,9 @@ export async function markNativeGatewayRevocationStarted(
       await tx.workspaceSessionEvent.create({data:{sessionId,actorType:'AGENT',actorId:machineId,action:'NATIVE_GATEWAY_AUTHORITY_REVOKED'}});
       return true;
     }
-    return [WorkspaceSessionStatus.STOPPING,WorkspaceSessionStatus.COMPLETED,WorkspaceSessionStatus.FAILED,
-      WorkspaceSessionStatus.CANCELLED,WorkspaceSessionStatus.TIMED_OUT,WorkspaceSessionStatus.QUARANTINED].includes(current.status);
+    return current.status===WorkspaceSessionStatus.STOPPING||current.status===WorkspaceSessionStatus.COMPLETED||
+      current.status===WorkspaceSessionStatus.FAILED||current.status===WorkspaceSessionStatus.CANCELLED||
+      current.status===WorkspaceSessionStatus.TIMED_OUT||current.status===WorkspaceSessionStatus.QUARANTINED;
   },{maxWait:5_000,timeout:5_000});
   if(revoked)await redis.del(wsSessionActivatedKey(sessionId));
   return revoked;
@@ -983,7 +984,9 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
               await accountDequeuedBytes(redis,wsInputBytesKey(channelId),frame,WS_INPUT_TTL_SECONDS);
               const parsed=JSON.parse(frame) as {dataBase64?:unknown;binary?:unknown;close?:unknown};
               if(parsed.close===true){if(ws.readyState===WebSocket.OPEN)ws.close(1000,'upstream closed');break;}
-              if(typeof parsed.binary!=='boolean'||!isStrictBase64Payload(parsed.dataBase64,WS_MAX_BASE64_BYTES,WS_MAX_FRAME_BYTES))throw new Error('workspace_ws_redis_frame_invalid');
+              const dataBase64=parsed.dataBase64;
+              const binary=parsed.binary;
+              if(typeof binary!=='boolean'||typeof dataBase64!=='string'||!isStrictBase64Payload(dataBase64,WS_MAX_BASE64_BYTES,WS_MAX_FRAME_BYTES))throw new Error('workspace_ws_redis_frame_invalid');
               if(nativeChannel){
                 // Hold the PostgreSQL session row lock through the final Redis
                 // fence and synchronous ws.send. STOP/status updates therefore
@@ -996,7 +999,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
                   // rotation in one atomic final check without another GET.
                   if(Number(await redis.eval(NATIVE_DELIVERY_FENCE_SCRIPT,2,wsChannelKey(channelId),browserSessionKey,channelBinding,raw))!==1||!isActive())return false;
                   if(browserClosed||ws.readyState!==WebSocket.OPEN)return false;
-                  ws.send(Buffer.from(parsed.dataBase64,'base64'),{binary:parsed.binary});
+                  ws.send(Buffer.from(dataBase64,'base64'),{binary});
                   return true;
                 });
                 if(!delivered){

@@ -109,8 +109,9 @@ class NativeChannelReplayTests(unittest.TestCase):
         stopped = threading.Event()
 
         class BlockingSocket:
-            def send_binary(self, payload):
+            def send(self, payload, *, opcode):
                 self.payload = payload
+                self.opcode = opcode
                 started.set()
                 if not release.wait(2):
                     raise TimeoutError("test input send barrier timed out")
@@ -148,6 +149,7 @@ class NativeChannelReplayTests(unittest.TestCase):
         self.assertFalse(sender.is_alive())
         self.assertFalse(stopper.is_alive())
         self.assertEqual(socket.payload, b"input")
+        self.assertEqual(socket.opcode, gateway.websocket.ABNF.OPCODE_BINARY)
         self.assertTrue(stopped.is_set())
         self.assertIn(SESSION, obj._native_blocked)
 

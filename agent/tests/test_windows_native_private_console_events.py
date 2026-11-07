@@ -45,6 +45,8 @@ class WindowsSessionChangeFenceTests(unittest.TestCase):
         supervisor = object.__new__(gateway.GatewaySupervisor)
         supervisor._native_lock = threading.RLock()
         supervisor._native_blocked = set()
+        supervisor._native_start_tokens = {}
+        supervisor._native_start_backends = {}
         supervisor.native_runtimes = {
             "sess-1": SimpleNamespace(handle=SimpleNamespace(capture_backend="console-dedicated"))
         }
@@ -83,6 +85,8 @@ class WindowsSessionChangeFenceTests(unittest.TestCase):
         obj = object.__new__(gateway.GatewaySupervisor)
         obj._native_lock = threading.RLock()
         obj._native_blocked = set()
+        obj._native_start_tokens = {}
+        obj._native_start_backends = {}
         obj._console_fence_wakeup = threading.Event()
         obj._console_fence_wakeup.set()
         obj.stop_event = threading.Event()

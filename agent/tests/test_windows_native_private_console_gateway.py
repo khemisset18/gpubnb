@@ -27,6 +27,10 @@ def supervisor_for(*, desired):
     obj._native_desired_sessions = [desired]
     obj.native_runtimes = {}
     obj._native_blocked = set()
+    obj._native_start_tokens = {}
+    obj._native_start_backends = {}
+    obj._native_revocation_pending = set()
+    obj._native_revocation_inflight = set()
     obj.start_retry_at = {}
     obj.start_failures = {}
     obj._report_error = Mock()
