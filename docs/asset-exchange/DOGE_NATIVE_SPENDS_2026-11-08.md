@@ -31,3 +31,9 @@ Offline validation before first execution: 84 D2 tests, including ten new signer
   https://github.com/basicswap/basicswap
 
 Avoid: conflating source claims with runtime evidence, default-regtest policy bypass, legacy signatures treated as input-amount commitments, lock equality treated as finality, silent fee mutation, stale UTXO evidence, shared participant keys, and recovery depending on backend key custody.
+
+## First native execution, retained FAIL
+
+Run 42424163266 at 772041f232bb160af7b64c0b880d50f3b654f171 reached a confirmed valid claim and all preceding controls, then failed the expected error-string assertion for the confirmed double spend. Actual node error: -26 / 18: bad-txns-inputs-spent; expected incorrectly: Missing inputs (-25, missing parent). Dogecoin validation.cpp distinguishes these branches. The native transaction was rejected, not accepted. Correct the assertion and add code/reason regressions; preserve the original FAIL. Refund/restart/reorg were not reached in this first run.
+
+Artifact 13595260005 ZIP SHA256: 624dd32c258f05637c914e37c57be285fb9ad768b45bbd8f41d75b7d041065f3. Independently downloaded and hash-checked. Its complete bytes are retained alongside subsequent evidence; no signature result is inferred from a software model.

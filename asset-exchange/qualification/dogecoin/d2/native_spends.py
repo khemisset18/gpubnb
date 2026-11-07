@@ -47,6 +47,13 @@ def manifest():
            'multi-node deep reorg and all D3-D9 requirements not covered']}
 
 
+def require_rejection(exit_code, stderr, reason):
+    expected_code = -25 if reason == 'Missing inputs' else -26
+    match = re.search(r'^error code: (-?[0-9]+)$', stderr, re.MULTILINE)
+    require(exit_code != 0 and match is not None and int(match[1]) == expected_code
+            and reason.lower() in stderr.lower(), 'expected rejection absent: '+reason)
+
+
 def native_verifier(path):
     require(hashlib.sha256(path.read_bytes()).hexdigest()==LIBRARY_SHA256, 'library changed')
     lib=ctypes.CDLL(str(path),mode=ctypes.RTLD_LOCAL)
@@ -112,7 +119,7 @@ def run(args):
         require(len(r.stdout)<=2*1024**2 and len(r.stderr)<=8192,'RPC output bound')
         row.update(exitCode=r.returncode,stdout=r.stdout,stderr=r.stderr);save()
         if reject:
-            require(r.returncode!=0 and reject.lower() in r.stderr.lower(),'expected rejection absent: '+reject)
+            require_rejection(r.returncode, r.stderr, reject)
             return {'exitCode':r.returncode,'reason':r.stderr}
         r.check_returncode()
         text=r.stdout.strip()
@@ -219,7 +226,7 @@ def run(args):
         require(rpc('gettxout',funding_id,'0','true') is None,'claim input remains unspent')
         row['confirmed']=rpc('getrawtransaction',claim_id,'1');save()
         conflict=spend(0,amount=98*COIN)
-        record('double_spend',conflict,htlc.output,1,'Missing inputs')
+        record('double_spend',conflict,htlc.output,1,'bad-txns-inputs-spent')
         mine() # tip 1355: refund is now final for candidate 1356.
         # Signed public recovery bytes survive a real daemon SIGKILL. Private
         # signing material is destroyed before recovery/broadcast.

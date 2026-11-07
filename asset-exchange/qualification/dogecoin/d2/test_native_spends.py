@@ -6,6 +6,13 @@ from unittest.mock import patch
 import native_spends
 
 class NativeSpendsGuards(unittest.TestCase):
+    def test_spent_and_absent_prevouts_have_distinct_native_errors(self):
+        spent='error code: -26\nerror message:\n18: bad-txns-inputs-spent\n'
+        missing='error code: -25\nerror message:\nMissing inputs\n'
+        native_spends.require_rejection(26,spent,'bad-txns-inputs-spent')
+        native_spends.require_rejection(25,missing,'Missing inputs')
+        for code, text, reason in [(26,spent,'Missing inputs'),(25,missing,'bad-txns-inputs-spent'),(0,spent,'bad-txns-inputs-spent'),(1,'connection refused','non-final'),(1,'error code: -1\nnon-final','non-final')]:
+            with self.assertRaises(ValueError):native_spends.require_rejection(code,text,reason)
     def test_manifest_never_promotes_financial_qualification(self):
         with patch('subprocess.run',side_effect=AssertionError('process')),patch('ctypes.CDLL',side_effect=AssertionError('native')):
             m=native_spends.manifest()
