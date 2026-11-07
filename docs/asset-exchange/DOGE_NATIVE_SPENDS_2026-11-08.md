@@ -37,3 +37,9 @@ Avoid: conflating source claims with runtime evidence, default-regtest policy by
 Run 42424163266 at 772041f232bb160af7b64c0b880d50f3b654f171 reached a confirmed valid claim and all preceding controls, then failed the expected error-string assertion for the confirmed double spend. Actual node error: -26 / 18: bad-txns-inputs-spent; expected incorrectly: Missing inputs (-25, missing parent). Dogecoin validation.cpp distinguishes these branches. The native transaction was rejected, not accepted. Correct the assertion and add code/reason regressions; preserve the original FAIL. Refund/restart/reorg were not reached in this first run.
 
 Artifact 13595260005 ZIP SHA256: 624dd32c258f05637c914e37c57be285fb9ad768b45bbd8f41d75b7d041065f3. Independently downloaded and hash-checked. Its complete bytes are retained alongside subsequent evidence; no signature result is inferred from a software model.
+
+## Second native execution, retained FAIL
+
+Run 42424472851 at fb790f56c74485dce39e8cb55d964fbe34042761 passed the spent-input rejection but exposed restart at genesis after SIGKILL: index on disk still described one block while blk data had the newly mined blocks. Artifact 13594912323 ZIP SHA256 d1a3afa469288fabdc71f93b9c6efda3df7939b4eed8c441407da5d5c311792b independently verified. No refund broadcast/reorg was reached.
+
+Recovery now retains the observed stale tip, rebuilds the disposable local index with source-supported -reindex (init.cpp ThreadImport / LoadExternalBlockFile), and requires the exact prior tip hash and height plus refund script/value/confirmations before broadcast. No remine, no public synchronization, no lowering confirmations. Public signed bytes are fsynced with their parent directory before keys are removed. This is a process-crash experiment, not power-loss durability qualification.

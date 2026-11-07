@@ -2,6 +2,8 @@ import argparse
 import json
 from pathlib import Path
 import unittest
+import tempfile
+import os
 from unittest.mock import patch
 import native_spends
 
@@ -13,6 +15,20 @@ class NativeSpendsGuards(unittest.TestCase):
         native_spends.require_rejection(25,missing,'Missing inputs')
         for code, text, reason in [(26,spent,'Missing inputs'),(25,missing,'bad-txns-inputs-spent'),(0,spent,'bad-txns-inputs-spent'),(1,'connection refused','non-final'),(1,'error code: -1\nnon-final','non-final')]:
             with self.assertRaises(ValueError):native_spends.require_rejection(code,text,reason)
+    def test_recovery_requires_exact_tip_not_just_height(self):
+        good={'chain':'regtest','blocks':1355,'bestblockhash':'a'*64}
+        self.assertTrue(native_spends.tip_matches(good,1355,'a'*64))
+        for changes in [{'chain':'main'},{'blocks':True},{'blocks':0},{'bestblockhash':'b'*64}]:
+            self.assertFalse(native_spends.tip_matches({**good,**changes},1355,'a'*64))
+    def test_signed_recovery_is_exclusive_fsynced_and_never_overwrites(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'refund.hex'
+            native_spends.persist_signed(path,b'public synthetic tx')
+            self.assertEqual(bytes.fromhex(path.read_text().strip()),b'public synthetic tx')
+            self.assertEqual(path.stat().st_mode & 0o777,0o600)
+            with self.assertRaises(FileExistsError):native_spends.persist_signed(path,b'different')
+            link=Path(tmp)/'link.hex';link.symlink_to(path)
+            with self.assertRaises(OSError):native_spends.persist_signed(link,b'different')
     def test_manifest_never_promotes_financial_qualification(self):
         with patch('subprocess.run',side_effect=AssertionError('process')),patch('ctypes.CDLL',side_effect=AssertionError('native')):
             m=native_spends.manifest()

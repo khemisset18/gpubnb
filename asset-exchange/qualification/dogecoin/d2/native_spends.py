@@ -37,6 +37,7 @@ def manifest():
         'sourceCommit':SOURCE_COMMIT, 'archiveSha256':SHA256, 'librarySha256':LIBRARY_SHA256,
         'nodes':1, 'maxRpc':MAX_RPC, 'maxGeneratedBlocks':MAX_BLOCKS,
         'maxWallSeconds':600, 'maxCpuSeconds':420, 'maxAddressSpaceMiB':2048, 'maxDataMiB':512,
+        'recovery':'verify exact persisted tip; rebuild local index from existing block files if required; never remine',
         'maxBroadcastFixtures':32, 'maxFixtureBytes':10000, 'rpcAllowlist':sorted(METHODS),
         'signer':'OpenSSL secp256k1 ECDSA; three fresh disposable keys; strict low-S DER; legacy SIGHASH_ALL',
         'walletEnabled':False, 'externalNetwork':False, 'acceptNonstandard':False,
@@ -52,6 +53,24 @@ def require_rejection(exit_code, stderr, reason):
     match = re.search(r'^error code: (-?[0-9]+)$', stderr, re.MULTILINE)
     require(exit_code != 0 and match is not None and int(match[1]) == expected_code
             and reason.lower() in stderr.lower(), 'expected rejection absent: '+reason)
+
+
+def tip_matches(observation, height, block_hash):
+    return (type(observation) is dict and observation.get('chain') == 'regtest'
+            and type(observation.get('blocks')) is int and observation['blocks'] == height
+            and observation.get('bestblockhash') == block_hash)
+
+
+def persist_signed(path, raw):
+    require(type(raw) is bytes and 0 < len(raw) <= 10000, 'bounded recovery bytes required')
+    fd=os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        with os.fdopen(fd, 'wb', closefd=False) as stream:
+            stream.write(raw.hex().encode()+b'\n');stream.flush();os.fsync(fd)
+    finally:os.close(fd)
+    directory=os.open(Path(path).parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:os.fsync(directory)
+    finally:os.close(directory)
 
 
 def native_verifier(path):
@@ -133,10 +152,11 @@ def run(args):
     def save():
         (out/'native-spends-report.json').write_text(dumps(report,indent=2,sort_keys=True)+'\n')
         (out/'rpc-requests.json').write_text(dumps(trace,indent=2,sort_keys=True)+'\n')
-    def start():
+    def start(reindex=False):
         nonlocal process,log
         log=(out/'daemon-console.log').open('a')
-        process=subprocess.Popen(daemon,env=env,stdout=log,stderr=subprocess.STDOUT)
+        report.setdefault('processStarts',[]).append({'reindex':reindex})
+        process=subprocess.Popen(daemon+(['-reindex=1'] if reindex else []),env=env,stdout=log,stderr=subprocess.STDOUT)
         deadline=time.monotonic()+45
         while True:
             require(process.poll() is None,'daemon exited')
@@ -227,16 +247,33 @@ def run(args):
         row['confirmed']=rpc('getrawtransaction',claim_id,'1');save()
         conflict=spend(0,amount=98*COIN)
         record('double_spend',conflict,htlc.output,1,'bad-txns-inputs-spent')
-        mine() # tip 1355: refund is now final for candidate 1356.
+        expected_tip=mine()[0] # tip 1355: refund is now final for candidate 1356.
         # Signed public recovery bytes survive a real daemon SIGKILL. Private
         # signing material is destroyed before recovery/broadcast.
-        recovery=out/'refund-signed.hex';recovery.write_text(refund_raw.hex()+'\n')
+        recovery=out/'refund-signed.hex';persist_signed(recovery,refund_raw)
         for signer in signers:signer.destroy()
         process.kill();process.wait(timeout=15);log.close()
         report['crashExitCode']=process.returncode
         require(process.returncode==-signal.SIGKILL,'real kill not observed')
-        restarted=start();require(restarted['blocks']==1355,'restart lost chain tip')
-        require(rpc('gettxout',funding_id,'1','true') is not None,'refund UTXO missing after restart')
+        restarted=start();report['firstRestart']=restarted;save()
+        if not tip_matches(restarted,1355,expected_tip):
+            # The failed earlier experiment proved that the block index can lag
+            # the persisted blk file. Rebuild only this disposable local index.
+            process.kill();process.wait(timeout=15);log.close()
+            report['blocksBeforeReindex']=[{'name':p.name,'size':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted((data/'regtest'/'blocks').glob('blk*.dat'))]
+            require(report['blocksBeforeReindex'],'no existing blocks to recover')
+            restarted=start(reindex=True)
+            deadline=time.monotonic()+45
+            while not tip_matches(restarted,1355,expected_tip):
+                require(time.monotonic()<deadline,'reindex did not restore exact prior tip')
+                time.sleep(.5);restarted=rpc('getblockchaininfo')
+            report['reindexedRestart']=restarted
+        require(tip_matches(restarted,1355,expected_tip),'recovery tip mismatch')
+        recovered_utxo=rpc('gettxout',funding_id,'1','true')
+        require(recovered_utxo is not None and recovered_utxo['scriptPubKey']['hex']==htlc.output.hex()
+                and Decimal(str(recovered_utxo['value']))==Decimal(100) and recovered_utxo['confirmations']==3,
+                'refund UTXO mismatch after recovery')
+        report['recoveredRefundUtxo']=recovered_utxo
         row=record('valid_refund_after_crash',bytes.fromhex(recovery.read_text().strip()),htlc.output,1)
         refund_id=submit(bytes.fromhex(recovery.read_text().strip()))
         row['mempool']=rpc('getmempoolentry',refund_id)
