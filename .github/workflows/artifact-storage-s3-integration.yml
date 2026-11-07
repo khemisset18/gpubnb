@@ -29,8 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      MINIO_IMAGE: cgr.dev/chainguard/minio@sha256:e234321fd3abff7fb968b0674056e883b702aa1ad93a0d4d795cb6c21fa46407
-      MINIO_AMD64_IMAGE: cgr.dev/chainguard/minio@sha256:abdbe7d805b4dc931053275bc65d6c96ea88e66fd121aa3bb87d7354ecd875c5
+      # Resolve the maintained image once per CI run, then use only immutable
+      # digests. Every selected image is verified and scanned BEFORE execution.
+      MINIO_TAG: cgr.dev/chainguard/minio:latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -41,6 +42,38 @@ jobs:
       - name: Install locked API dependencies
         working-directory: apps/api
         run: npm ci
+      - name: Resolve a current immutable MinIO image and exact linux/amd64 child
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s3-evidence
+          docker buildx version
+          # The floating tag is used solely for discovery. No container executes
+          # until the immutable index+child are independently verified and scanned.
+          index_digest="$(docker buildx imagetools inspect "$MINIO_TAG" | awk '$1 == "Digest:" {print $2; exit}')"
+          [[ "$index_digest" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+            echo 'Could not resolve a valid immutable MinIO index digest' >&2
+            exit 1
+          }
+          repository="${MINIO_TAG%:*}"
+          index_image="$repository@$index_digest"
+          docker buildx imagetools inspect --raw "$index_image" > s3-evidence/minio-index.json
+          amd64_digest="$(jq -er '
+            [.manifests[]? | select(.platform.os == "linux" and .platform.architecture == "amd64"
+              and (.platform.variant == null or .platform.variant == "")) | .digest]
+            | if length == 1 then .[0] else error("exactly one linux/amd64 image required") end
+          ' s3-evidence/minio-index.json)"
+          [[ "$amd64_digest" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+            echo 'Invalid architecture-pinned MinIO child digest' >&2
+            exit 1
+          }
+          printf 'MINIO_IMAGE=%s\n' "$index_image" >> "$GITHUB_ENV"
+          printf 'MINIO_AMD64_IMAGE=%s\n' "$repository@$amd64_digest" >> "$GITHUB_ENV"
+          printf 'source-tag=%s\nindex=%s\nlinux-amd64=%s\n' \
+            "$MINIO_TAG" "$index_image" "$repository@$amd64_digest" \
+            > s3-evidence/resolved-fixture.txt
+          sha256sum s3-evidence/minio-index.json > s3-evidence/minio-index.sha256
+          echo 'Fixture image resolved to immutable index and linux/amd64 digests'
       - name: Verify pinned fixture signature and signed SBOM before execution
         shell: bash
         run: |
