@@ -35,10 +35,20 @@ export function parseCookieHeader(header) {
   return result;
 }
 
-export function createMemorySessionStore() {
+// This in-memory store is a bounded local fallback; production should use
+// a durable session store with a reviewed expiration/eviction policy.
+const MAX_MEMORY_SESSIONS = 4_096;
+
+export function createMemorySessionStore({ maxSessions = MAX_MEMORY_SESSIONS } = {}) {
+  invariant(Number.isSafeInteger(maxSessions) && maxSessions >= 1 && maxSessions <= MAX_MEMORY_SESSIONS,
+    "SESSION_STORE_CAP", "invalid in-memory session cap");
   const rows = new Map();
   return Object.freeze({
-    async put(sessionHashHex, record) { rows.set(sessionHashHex, structuredClone(record)); },
+    async put(sessionHashHex, record) {
+      invariant(rows.has(sessionHashHex) || rows.size < maxSessions,
+        "SESSION_STORE_FULL", "in-memory session store capacity reached");
+      rows.set(sessionHashHex, structuredClone(record));
+    },
     async get(sessionHashHex) {
       const value = rows.get(sessionHashHex);
       return value ? structuredClone(value) : null;

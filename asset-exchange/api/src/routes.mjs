@@ -10,6 +10,7 @@ function errorResponse(error) {
   if (["CSRF_REQUIRED", "CSRF_INVALID", "OBJECT_AUTHZ", "ORIGIN_FORBIDDEN", "FETCH_SITE_FORBIDDEN", "ADMIN_NOT_AUTHORIZED", "ADMIN_ASSERTION_INVALID", "ADMIN_USER_VERIFICATION"].includes(error.code)) return { statusCode: 403, body: { error: "forbidden" } };
   if (["OFFER_NOT_OPEN", "STALE_EPOCH", "DEPLOYMENT_MISMATCH", "ADMIN_CHALLENGE_REPLAY", "ADMIN_CHALLENGE_EXPIRED", "ADMIN_TRANSITION_BLOCKED", "ADMIN_DEPLOYMENT_MISMATCH"].includes(error.code)) return { statusCode: 409, body: { error: "conflict" } };
   if (error.code.startsWith("RATE_")) return { statusCode: 429, body: { error: "rate_limited" } };
+  if (error.code === "SESSION_STORE_FULL") return { statusCode: 503, body: { error: "service_unavailable" } };
   if (error.code === "BODY_TOO_LARGE") return { statusCode: 413, body: { error: "payload_too_large" } };
   return { statusCode: 400, body: { error: "invalid_request" } };
 }
