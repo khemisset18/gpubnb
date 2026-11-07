@@ -533,6 +533,37 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
     finally{if(timer!==undefined)clearTimeout(timer);}
   };
   if(frame.close)return {enqueued:await enqueue()};
+  // The Redis activation marker is an optimization hint, never authority.
+  // For an already activated native session, use a single shared row fence
+  // instead of serializing every frame behind FOR UPDATE. STOP still needs
+  // an exclusive lock on the same session row; it cannot commit between
+  // this admission check and its Redis enqueue. Concurrent frames can share
+  // the lock, and the authoritative booking/status/machine predicates are
+  // checked again inside the transaction even when the Redis hint is stale.
+  if(isWindowsNativeRuntime(binding.runtimeBackend) && (await redis.exists(wsSessionActivatedKey(sessionId)))===1){
+    const activated=await db.$transaction(async tx=>{
+      const rows=await tx.$queryRaw<Array<{expiresAt:Date}>>`
+        SELECT ws."expiresAt"
+        FROM "WorkspaceSession" AS ws
+        JOIN "Booking" AS b ON b."id"=ws."bookingId"
+        JOIN "Machine" AS m ON m."id"=ws."machineId"
+        WHERE ws."id"=${sessionId} AND ws."machineId"=${machineId}
+          AND ws."runtimeBackend"::text=${binding.runtimeBackend}
+          AND ws."status"::text IN ('READY','RUNNING')
+          AND ws."expiresAt">clock_timestamp()
+          AND m."connectivity"::text='ONLINE'
+          AND m."moderationStatus"::text='CLEAR'
+          AND b."workspaceActivatedAt" IS NOT NULL
+        FOR SHARE OF ws
+      `;
+      if(rows.length!==1)return null;
+      return {enqueued:await enqueue(),expiresAt:rows[0]!.expiresAt};
+    },{maxWait:5_000,timeout:10_000});
+    if(activated)return activated;
+    // An expired/stale activation hint never authorizes an enqueue. The
+    // exclusive first-frame path below revalidates and returns a denial or
+    // performs the initial billing activation if it was still pending.
+  }
   // Redis activation markers are hints, never authorization. A STOP or expiry
   // in PostgreSQL must also fence frames from an already activated session.
   try{
