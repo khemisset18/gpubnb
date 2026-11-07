@@ -1,0 +1,70 @@
+name: Asset Exchange DOGE Private Signed Regtest
+
+# Temporary exact-branch trigger for this user-authorized experiment only.
+on:
+  push:
+    branches: [asset-exchange/doge-native-spends-20261107]
+    paths: ['.github/workflows/asset-exchange-dogecoin-native-spends.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: doge-private-signed-regtest-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  signed-regtest:
+    if: github.repository == 'khemisset18/gpubnb' && github.ref == 'refs/heads/asset-exchange/doge-native-spends-20261107'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact experiment commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require unchanged frozen harness and test before native execution
+        run: |
+          set -euo pipefail
+          git diff --exit-code 5eaa3b8c9e7a97f9620f460ec7883e18da39ca17 HEAD -- asset-exchange/qualification/dogecoin/
+          bash -n asset-exchange/qualification/dogecoin/d2/run-native-spends.sh
+          python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d2 -p 'test_*.py' -v
+          python3 asset-exchange/qualification/dogecoin/d2/native_spends.py --manifest
+          openssl version -a
+      - name: Download qualified D0 archive and signed attestations
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dogecoin-d0-verified-evidence-99724d5b66b9475dcb96f6c471c75ce01ed60f9a
+          run-id: 40866305437
+          github-token: ${{ github.token }}
+          path: dist/doge-d0-verified
+      - name: Execute bounded signed transactions exclusively inside private Regtest namespace
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bash asset-exchange/qualification/dogecoin/d2/run-native-spends.sh \
+            "$GITHUB_WORKSPACE/dist/doge-d0-verified" "$RUNNER_TEMP/doge-native-spends" \
+            AUTHORIZE_D2_PRIVATE_SIGNED_REGTEST
+      - name: Retain public evidence including failures, never private keys or node data
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dogecoin-native-spends-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/doge-native-spends/verification/
+            ${{ runner.temp }}/doge-native-spends/regtest-run/evidence/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve complete D2 gate independently of experiment success
+        run: |
+          python3 - "$RUNNER_TEMP/doge-native-spends/regtest-run/evidence/native-spends-report.json" <<'PY'
+          import json, sys
+          report=json.load(open(sys.argv[1]))
+          print(json.dumps({k:report[k] for k in ('experimentStatus','qualificationStatus')},indent=2))
+          if report['experimentStatus'] != 'PASS' or report['qualificationStatus'] != 'PASS':
+              raise SystemExit('D2 remains BLOCKED until all frozen qualification criteria are independently verified')
+          PY
