@@ -81,3 +81,47 @@ test("matching independent tips are consistent", () => {
   });
   assert.equal(tipEvidenceConsistency([a, b]), "CONSISTENT");
 });
+
+function permutations(items) {
+  if (items.length < 2) return [items];
+  return items.flatMap((item, index) => permutations(items.filter((_, i) => i !== index)).map(rest => [item, ...rest]));
+}
+
+const tipBase = {
+  chainId: "bitcoin", networkId: "regtest", sourceId: "node-a",
+  tipHash: "11".repeat(32), tipHeight: 100, observedAtUnixMs: 2000000000000
+};
+
+test("tip uncertainty cannot hide a later network conflict in any ordering", () => {
+  const rows = [tipBase,
+    { ...tipBase, sourceId: "node-b", tipHash: "22".repeat(32) },
+    { ...tipBase, sourceId: "node-c", networkId: "mainnet" }];
+  for (const order of permutations(rows)) assert.equal(tipEvidenceConsistency(order), "CONFLICT");
+});
+
+test("tip hash-height contradictions are checked between every source", () => {
+  const rows = [tipBase,
+    { ...tipBase, sourceId: "node-b", tipHash: "22".repeat(32) },
+    { ...tipBase, sourceId: "node-c", tipHash: "22".repeat(32), tipHeight: 101 }];
+  for (const order of permutations(rows)) assert.equal(tipEvidenceConsistency(order), "CONFLICT");
+});
+
+test("a single conflicted transaction observation is never consistent", () => {
+  assert.equal(evidenceConsistency([{ ...base, conflictStatus: "CONFLICTED" }]), "CONFLICT");
+});
+
+test("transaction uncertainty cannot hide later conflicts in any ordering", () => {
+  for (const mutation of [{ networkId: "mainnet" }, { observedTxid: "different-txid" }, { conflictStatus: "CONFLICTED" }]) {
+    const rows = [base,
+      { ...base, sourceId: "node-b", blockHash: "different-block" },
+      { ...base, sourceId: "node-c", ...mutation }];
+    for (const order of permutations(rows)) assert.equal(evidenceConsistency(order), "CONFLICT");
+  }
+});
+
+test("unconfirmed first observation cannot hide conflicting confirmed inclusions", () => {
+  const rows = [{ ...base, confirmations: 0, blockHash: null, blockHeight: null },
+    { ...base, sourceId: "node-b" },
+    { ...base, sourceId: "node-c", blockHash: "different-block" }];
+  for (const order of permutations(rows)) assert.equal(evidenceConsistency(order), "UNCERTAIN");
+});
