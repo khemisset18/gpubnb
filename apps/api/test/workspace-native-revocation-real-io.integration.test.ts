@@ -228,3 +228,86 @@ integration('PostgreSQL session row lock orders native send commits against STOP
     await db.$disconnect();
   }
 });
+
+
+// A first accepted frame uses the exclusive billing transaction. Subsequent
+// frames should share the PostgreSQL row lock, permitting concurrent streams
+// while keeping STOP's exclusive update ordered after admitted enqueues.
+integration('activated native frames admit concurrently with shared fences and still serialize STOP', async () => {
+  const { acceptGatewayFrame, markNativeGatewayRevocationStarted } = await import('../src/workspace-gateway.js');
+  const { seedReadySession } = await import('./fixtures/native-gateway-session.js');
+  const db = new PrismaClient();
+  const redis = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: 2 });
+  const fixture = await seedReadySession(db, crypto.randomBytes(8).toString('hex'), {
+    bookingStatus: BookingStatus.STARTING, expectedSeconds: 900,
+  });
+  const channelId = crypto.randomUUID();
+  const channelKey = 'workspace-gateway:ws-channel:' + channelId;
+  const queueKey = 'workspace-gateway:ws-input:' + channelId;
+  const bytesKey = 'workspace-gateway:ws-input-bytes:' + channelId;
+  const cookieKey = 'gpubnb:test:shared-fence:' + channelId;
+  const hintKey = 'workspace-gateway:ws-session-activated:' + fixture.session.id;
+  const binding = JSON.stringify({
+    sessionId: fixture.session.id, machineId: fixture.machine.id,
+    browserSessionKey: cookieKey, runtimeBackend: 'WINDOWS_NATIVE',
+  });
+  const frame = { dataBase64: 'AA==', binary: true, close: false };
+  const submit = () => acceptGatewayFrame({
+    db, redis, sessionId: fixture.session.id, machineId: fixture.machine.id,
+    channelId, bindingRaw: binding, frame,
+  });
+  const gate = () => {
+    let open!: () => void;
+    const promise = new Promise<void>(resolve => { open = resolve; });
+    return { promise, open };
+  };
+  const bothEntered = gate(), releaseRedis = gate();
+  const originalEval = redis.eval.bind(redis);
+  let stop: Promise<boolean> | undefined;
+  let pending: Promise<unknown>[] = [];
+  try {
+    await redis.set(channelKey, binding, 'EX', 120);
+    await redis.set(cookieKey, JSON.stringify({sessionId: fixture.session.id, userId: fixture.renter.id}), 'EX', 120);
+    assert.equal((await submit()).enqueued, 1, 'initial activation must commit a receipt first');
+    assert.ok((await db.booking.findUniqueOrThrow({where:{id:fixture.booking.id}})).workspaceActivatedAt);
+    // An intentionally stale hint must never replace the PostgreSQL predicate.
+    await redis.set(hintKey, '1', 'EX', 120);
+    let entered = 0;
+    redis.eval = (async (script: unknown, ...args: unknown[]) => {
+      if (String(script).includes('The binding and enqueue are linearized by Redis')) {
+        entered++;
+        if (entered === 2) bothEntered.open();
+        await releaseRedis.promise;
+      }
+      return (originalEval as (...args: unknown[]) => Promise<unknown>)(script, ...args);
+    }) as typeof redis.eval;
+    pending = [submit(), submit()];
+    // If frames still take FOR UPDATE, the second callback cannot reach EVAL.
+    let timeout!: ReturnType<typeof setTimeout>;
+    try {
+      await Promise.race([
+        bothEntered.promise,
+        new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('native_frames_still_serialized')), 3000); }),
+      ]);
+    } finally { clearTimeout(timeout); }
+    let stopDone = false;
+    stop = markNativeGatewayRevocationStarted(db, redis, fixture.session.id, fixture.machine.id)
+      .then(value => { stopDone = true; return value; });
+    await new Promise(resolve => setTimeout(resolve, 25));
+    assert.equal(stopDone, false, 'STOP must wait for both in-flight shared-fence admissions');
+    releaseRedis.open();
+    assert.deepEqual((await Promise.all(pending) as {enqueued:number}[]).map(x => x.enqueued), [1, 1]);
+    assert.equal(await stop, true);
+    assert.equal((await db.workspaceSession.findUniqueOrThrow({where:{id:fixture.session.id}})).status, WorkspaceSessionStatus.STOPPING);
+    assert.equal((await submit()).enqueued, -2, 'a committed STOP denies even with a live activation hint');
+  } finally {
+    releaseRedis.open();
+    await Promise.allSettled(pending);
+    if (stop) await stop.catch(() => undefined);
+    redis.eval = originalEval as typeof redis.eval;
+    await redis.del(channelKey, queueKey, bytesKey, cookieKey, hintKey).catch(() => undefined);
+    redis.disconnect();
+    await fixture.cleanup();
+    await db.$disconnect();
+  }
+});
