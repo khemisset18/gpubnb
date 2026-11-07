@@ -984,9 +984,10 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
               await accountDequeuedBytes(redis,wsInputBytesKey(channelId),frame,WS_INPUT_TTL_SECONDS);
               const parsed=JSON.parse(frame) as {dataBase64?:unknown;binary?:unknown;close?:unknown};
               if(parsed.close===true){if(ws.readyState===WebSocket.OPEN)ws.close(1000,'upstream closed');break;}
-              const dataBase64=parsed.dataBase64;
-              const binary=parsed.binary;
-              if(typeof binary!=='boolean'||typeof dataBase64!=='string'||!isStrictBase64Payload(dataBase64,WS_MAX_BASE64_BYTES,WS_MAX_FRAME_BYTES))throw new Error('workspace_ws_redis_frame_invalid');
+              if(typeof parsed.binary!=='boolean'||typeof parsed.dataBase64!=='string'||
+                !isStrictBase64Payload(parsed.dataBase64,WS_MAX_BASE64_BYTES,WS_MAX_FRAME_BYTES))throw new Error('workspace_ws_redis_frame_invalid');
+              const dataBase64:string=parsed.dataBase64;
+              const binary:boolean=parsed.binary;
               if(nativeChannel){
                 // Hold the PostgreSQL session row lock through the final Redis
                 // fence and synchronous ws.send. STOP/status updates therefore
