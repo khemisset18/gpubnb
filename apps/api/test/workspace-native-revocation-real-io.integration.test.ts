@@ -138,6 +138,7 @@ integration('PostgreSQL session row lock orders native send commits against STOP
   const { markNativeGatewayRevocationStarted, withNativeGatewaySessionFence } = await import('../src/workspace-gateway.js');
   const { seedReadySession } = await import('./fixtures/native-gateway-session.js');
   const db = new PrismaClient();
+  const redis = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: 2 });
   const fixture = await seedReadySession(db, crypto.randomBytes(8).toString('hex'), {
     bookingStatus: BookingStatus.STARTING, expectedSeconds: 900,
   });
@@ -222,6 +223,7 @@ integration('PostgreSQL session row lock orders native send commits against STOP
     assert.deepEqual(await Promise.all(waitingSends), [false, false, false, false]);
     assert.equal(staleSendCalls, 0, 'all sends queued behind committed STOP must be rejected');
   } finally {
+    redis.disconnect();
     await fixture.cleanup();
     await db.$disconnect();
   }
