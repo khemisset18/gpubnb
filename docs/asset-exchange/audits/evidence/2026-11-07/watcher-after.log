@@ -1,0 +1,20 @@
+✔ watcher evidence rejects unknown fields (0.819095ms)
+✔ disagreement never collapses to trusted evidence (0.312864ms)
+✔ network mismatch is a conflict (0.100348ms)
+✔ tip quorum requires two distinct sources (0.270622ms)
+✔ different honest tips are uncertain, never consistent (0.13453ms)
+✔ same hash with impossible different heights is conflict (0.133899ms)
+✔ matching independent tips are consistent (0.133488ms)
+✔ tip uncertainty cannot hide a later network conflict in any ordering (0.305032ms)
+✔ tip hash-height contradictions are checked between every source (0.186136ms)
+✔ a single conflicted transaction observation is never consistent (0.139096ms)
+✔ transaction uncertainty cannot hide later conflicts in any ordering (0.745616ms)
+✔ unconfirmed first observation cannot hide conflicting confirmed inclusions (0.130654ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 68.222856

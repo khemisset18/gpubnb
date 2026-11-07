@@ -1,0 +1,138 @@
+✔ watcher evidence rejects unknown fields (0.747909ms)
+✔ disagreement never collapses to trusted evidence (0.273846ms)
+✔ network mismatch is a conflict (0.094239ms)
+✔ tip quorum requires two distinct sources (0.278953ms)
+✔ different honest tips are uncertain, never consistent (0.101621ms)
+✔ same hash with impossible different heights is conflict (0.071606ms)
+✔ matching independent tips are consistent (0.083253ms)
+✖ tip uncertainty cannot hide a later network conflict in any ordering (0.729171ms)
+✖ tip hash-height contradictions are checked between every source (0.214177ms)
+✖ a single conflicted transaction observation is never consistent (0.252084ms)
+✖ transaction uncertainty cannot hide later conflicts in any ordering (0.165175ms)
+✖ unconfirmed first observation cannot hide conflicting confirmed inclusions (0.159617ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 7
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 64.911859
+
+✖ failing tests:
+
+test at asset-exchange/chain-watchers/test/evidence.test.mjs:95:1
+✖ tip uncertainty cannot hide a later network conflict in any ordering (0.729171ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'UNCERTAIN'
+  - 'CONFLICT'
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/chain-watchers/test/evidence.test.mjs:99:50)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'UNCERTAIN',
+    expected: 'CONFLICT',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at asset-exchange/chain-watchers/test/evidence.test.mjs:102:1
+✖ tip hash-height contradictions are checked between every source (0.214177ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'UNCERTAIN'
+  - 'CONFLICT'
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/chain-watchers/test/evidence.test.mjs:106:50)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'UNCERTAIN',
+    expected: 'CONFLICT',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at asset-exchange/chain-watchers/test/evidence.test.mjs:109:1
+✖ a single conflicted transaction observation is never consistent (0.252084ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'CONSISTENT'
+  - 'CONFLICT'
+        ^
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/chain-watchers/test/evidence.test.mjs:110:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'CONSISTENT',
+    expected: 'CONFLICT',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at asset-exchange/chain-watchers/test/evidence.test.mjs:113:1
+✖ transaction uncertainty cannot hide later conflicts in any ordering (0.165175ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'UNCERTAIN'
+  - 'CONFLICT'
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/chain-watchers/test/evidence.test.mjs:118:52)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'UNCERTAIN',
+    expected: 'CONFLICT',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at asset-exchange/chain-watchers/test/evidence.test.mjs:122:1
+✖ unconfirmed first observation cannot hide conflicting confirmed inclusions (0.159617ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'CONSISTENT'
+  - 'UNCERTAIN'
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/chain-watchers/test/evidence.test.mjs:126:50)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'CONSISTENT',
+    expected: 'UNCERTAIN',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
