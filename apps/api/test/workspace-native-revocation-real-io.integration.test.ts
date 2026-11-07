@@ -299,7 +299,12 @@ integration('activated native frames admit concurrently with shared fences and s
     assert.deepEqual((await Promise.all(pending) as {enqueued:number}[]).map(x => x.enqueued), [1, 1]);
     assert.equal(await stop, true);
     assert.equal((await db.workspaceSession.findUniqueOrThrow({where:{id:fixture.session.id}})).status, WorkspaceSessionStatus.STOPPING);
-    assert.equal((await submit()).enqueued, -2, 'a committed STOP denies even with a live activation hint');
+    // A delayed activation marker write can resurrect the Redis hint, but
+    // the database remains authoritative and must reject the stale grant.
+    await redis.set(hintKey, '1', 'EX', 120);
+    const beforeDenied = await redis.llen(queueKey);
+    assert.equal((await submit()).enqueued, -2, 'a committed STOP denies even with a stale activation hint');
+    assert.equal(await redis.llen(queueKey), beforeDenied, 'the stale hint must not enqueue a post-STOP frame');
   } finally {
     releaseRedis.open();
     await Promise.allSettled(pending);
