@@ -7,7 +7,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "test": "node --test core/test/*.test.mjs api/test/*.test.mjs worker/test/*.test.mjs chain-watchers/test/*.test.mjs recovery/test/*.test.mjs settlement/test/*.test.mjs release/test/*.test.mjs research/test/*.test.mjs",
+    "test": "node --test core/test/*.test.mjs api/test/*.test.mjs worker/test/*.test.mjs chain-watchers/test/*.test.mjs recovery/test/*.test.mjs settlement/test/*.test.mjs release/test/*.test.mjs research/test/*.test.mjs qualification/dogecoin/d2/native-tx.test.mjs qualification/dogecoin/d2/native-regtest.test.mjs",
     "check": "node tools/check-syntax.mjs"
   }
 }
