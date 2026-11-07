@@ -9,14 +9,14 @@ test('runtime registration opens a bounded activation window without starting pa
   const end = source.indexOf('\n  });', start);
   const body = source.slice(start, end).replace(/\s+/g, '');
 
-  assert.match(body, /firstRegistration=row\.status===WorkspaceSessionStatus\.READY&&typeofmetadata\?\.gatewayPath!==['"]string['"]/);
+  assert.match(body, /firstRegistration=current\.status===WorkspaceSessionStatus\.READY&&typeofmetadata\?\.gatewayPath!==['"]string['"]/);
   assert.match(body, /activationDeadline=newDate\(readyAt\.getTime\(\)\+INTERACTIVE_CONNECT_TIMEOUT_SECONDS\*1000\)/);
   assert.match(body, /readyAt,startedAt:null,expiresAt:activationDeadline/);
   assert.doesNotMatch(body, /startedAt:readyAt/);
   assert.doesNotMatch(body, /status:WorkspaceSessionStatus\.RUNNING/);
   assert.match(
     body,
-    /booking\.updateMany\(\{where:\{id:row\.bookingId,status:BookingStatus\.FUNDED\},data:\{status:BookingStatus\.STARTING,startsAt:readyAt,endsAt:activationDeadline/,
+    /booking\.updateMany\(\{where:\{id:current\.bookingId,status:BookingStatus\.FUNDED\},data:\{status:BookingStatus\.STARTING,startsAt:readyAt,endsAt:activationDeadline/,
   );
 });
 
