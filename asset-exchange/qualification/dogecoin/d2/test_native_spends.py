@@ -20,6 +20,18 @@ class NativeSpendsGuards(unittest.TestCase):
         self.assertTrue(native_spends.tip_matches(good,1355,'a'*64))
         for changes in [{'chain':'main'},{'blocks':True},{'blocks':0},{'bestblockhash':'b'*64}]:
             self.assertFalse(native_spends.tip_matches({**good,**changes},1355,'a'*64))
+    def test_recovery_inspects_framed_records_and_exact_tip_before_restart(self):
+        header=bytes(range(80));tip=native_spends.hash256(header)[::-1].hex()
+        frame=bytes.fromhex('fabfb5da')+(81).to_bytes(4,'little')+header+b'X'
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'blk00000.dat';path.write_bytes(frame+b'\0'*32)
+            proof=native_spends.inspect_block_files(Path(tmp),tip)
+            self.assertEqual(proof[0]['records'],1)
+            with self.assertRaisesRegex(ValueError,'tip missing'):
+                native_spends.inspect_block_files(Path(tmp),'0'*64)
+            for damaged in [frame[:-1],frame+b'bad',bytes.fromhex('c0c0c0c0')+frame[4:]]:
+                path.write_bytes(damaged)
+                with self.assertRaises(ValueError):native_spends.inspect_block_files(Path(tmp),tip)
     def test_signed_recovery_is_exclusive_fsynced_and_never_overwrites(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'refund.hex'

@@ -43,3 +43,9 @@ Artifact 13595260005 ZIP SHA256: 624dd32c258f05637c914e37c57be285fb9ad768b45bbd8
 Run 42424472851 at fb790f56c74485dce39e8cb55d964fbe34042761 passed the spent-input rejection but exposed restart at genesis after SIGKILL: index on disk still described one block while blk data had the newly mined blocks. Artifact 13594912323 ZIP SHA256 d1a3afa469288fabdc71f93b9c6efda3df7939b4eed8c441407da5d5c311792b independently verified. No refund broadcast/reorg was reached.
 
 Recovery now retains the observed stale tip, rebuilds the disposable local index with source-supported -reindex (init.cpp ThreadImport / LoadExternalBlockFile), and requires the exact prior tip hash and height plus refund script/value/confirmations before broadcast. No remine, no public synchronization, no lowering confirmations. Public signed bytes are fsynced with their parent directory before keys are removed. This is a process-crash experiment, not power-loss durability qualification.
+
+## Third native execution, retained FAIL
+
+Run 42424908068 at c002d552082a3a007b0200dd40224ce0e1c3a10e failed to restore the prior tip by reindexing after a normal startup. Artifact 13594434879 ZIP SHA256 fb235f7cdf819d0375b5aeef998507e58a6ae5351bb07a3cc988ed7c46a4c161 independently verified. The reindex log reports only one block loaded. Existing evidence does not prove whether the normal restart altered block storage or the original records were already absent.
+
+Next experiment inspects framed block records and requires the exact prior header hash on disk immediately after SIGKILL, before any restart. It records count and SHA256, then starts directly with -reindex and reindex diagnostics. Exact height/hash and refund UTXO requirements remain unchanged. A missing block record stops before restart; this is diagnostic evidence, not assumed recovery success.

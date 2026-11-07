@@ -61,6 +61,25 @@ def tip_matches(observation, height, block_hash):
             and observation.get('bestblockhash') == block_hash)
 
 
+def inspect_block_files(directory, expected_tip):
+    """Read framed local records before any restart can change their contents."""
+    files=[];tip_found=False
+    for path in sorted(directory.glob('blk*.dat')):
+        require(not path.is_symlink() and path.is_file(), 'regular block file required')
+        require(path.stat().st_size <= 512*1024**2, 'block file size bound')
+        raw=path.read_bytes();offset=0;count=0
+        while offset+8 <= len(raw) and raw[offset:offset+4] == bytes.fromhex('fabfb5da'):
+            size=int.from_bytes(raw[offset+4:offset+8], 'little')
+            require(80 <= size <= 4*1024**2 and offset+8+size <= len(raw), 'invalid local block frame')
+            header=raw[offset+8:offset+88]
+            tip_found |= hash256(header)[::-1].hex() == expected_tip
+            count+=1;offset+=8+size
+        require(not any(raw[offset:]), 'unrecognized nonzero block file tail')
+        files.append({'name':path.name,'size':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'records':count})
+    require(files and tip_found, 'exact pre-crash tip missing from local block records')
+    return files
+
+
 def persist_signed(path, raw):
     require(type(raw) is bytes and 0 < len(raw) <= 10000, 'bounded recovery bytes required')
     fd=os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -115,7 +134,7 @@ def run(args):
     config=data/'dogecoin.conf';config.write_text('regtest=1\ntestnet=0\n');config.chmod(0o600)
     common=[f'-datadir={data}',f'-conf={config}','-regtest=1','-testnet=0','-rpcport=18332']
     daemon=[str(bins/'dogecoind'),*common,'-server=1','-daemon=0','-listen=0','-connect=0','-dnsseed=0','-dns=0',
-            '-discover=0','-upnp=0','-listenonion=0','-onion=0','-disablewallet=1','-debug=rpc','-txindex=1',
+            '-discover=0','-upnp=0','-listenonion=0','-onion=0','-disablewallet=1','-debug=rpc','-debug=reindex','-txindex=1',
             '-rpcbind=127.0.0.1','-rpcallowip=127.0.0.1','-printtoconsole=1','-dbcache=64','-par=1',
             '-acceptnonstdtxn=0','-maxmempool=5']
     env={'PATH':'/usr/bin:/bin:/usr/sbin:/sbin','LANG':'C.UTF-8'}
@@ -255,19 +274,16 @@ def run(args):
         process.kill();process.wait(timeout=15);log.close()
         report['crashExitCode']=process.returncode
         require(process.returncode==-signal.SIGKILL,'real kill not observed')
-        restarted=start();report['firstRestart']=restarted;save()
-        if not tip_matches(restarted,1355,expected_tip):
-            # The failed earlier experiment proved that the block index can lag
-            # the persisted blk file. Rebuild only this disposable local index.
-            process.kill();process.wait(timeout=15);log.close()
-            report['blocksBeforeReindex']=[{'name':p.name,'size':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted((data/'regtest'/'blocks').glob('blk*.dat'))]
-            require(report['blocksBeforeReindex'],'no existing blocks to recover')
-            restarted=start(reindex=True)
-            deadline=time.monotonic()+45
-            while not tip_matches(restarted,1355,expected_tip):
-                require(time.monotonic()<deadline,'reindex did not restore exact prior tip')
-                time.sleep(.5);restarted=rpc('getblockchaininfo')
-            report['reindexedRestart']=restarted
+        # Reindex immediately after the crash. A normal startup may initialize
+        # from stale metadata and alter block storage before recovery begins.
+        report['blocksBeforeReindex']=inspect_block_files(data/'regtest'/'blocks',expected_tip)
+        save()
+        restarted=start(reindex=True)
+        deadline=time.monotonic()+45
+        while not tip_matches(restarted,1355,expected_tip):
+            require(time.monotonic()<deadline,'reindex did not restore exact prior tip')
+            time.sleep(.5);restarted=rpc('getblockchaininfo')
+        report['reindexedRestart']=restarted
         require(tip_matches(restarted,1355,expected_tip),'recovery tip mismatch')
         recovered_utxo=rpc('gettxout',funding_id,'1','true')
         require(recovered_utxo is not None and recovered_utxo['scriptPubKey']['hex']==htlc.output.hex()
