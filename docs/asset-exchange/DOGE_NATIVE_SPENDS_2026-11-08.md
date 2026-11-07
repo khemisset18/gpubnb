@@ -1,0 +1,33 @@
+# Private signed Dogecoin experiment — 8 November 2026
+
+User explicitly authorizes development, ephemeral test keys/signatures, private mining and transaction submission. No real funds, public blockchain connection, deployment or merge. The previous diagnostic-only authorization is not reused to imply that signatures were already tested.
+
+## Exact experiment
+
+New `qualification/dogecoin/d2/native_spends.py` and `run-native-spends.sh` reuse the original D0 archive SHA256, signed provenance, signed SPDX and member validation. Only a fresh, separate Linux namespace with one UP loopback interface can reach key generation or native loading. The signer is OpenSSL secp256k1 ECDSA; keys stay in private runner storage and are removed before recovery. Removal is not claimed as physical secure erasure. No wallet is enabled.
+
+One Dogecoin 1.14.9 process, max 1360 synthetic blocks, max 180 RPC requests, max 32 registered transaction fixtures, max 600 seconds, 2 GiB address space, 512 MiB data. RPC binds to loopback; P2P/DNS/discovery/Tor disabled. `acceptnonstdtxn=0`; no promiscuous flag override. Source at e0a1c157791544e818c901bd9341896965afbf9d: init.cpp sets fRequireStandard from that flag; validation.cpp enforces IsStandardTx, AreInputsStandard and STANDARD_SCRIPT_VERIFY_FLAGS. C ABI flags are reported separately and are not asserted equivalent to all standard policy flags.
+
+Mine 1352 blocks to one ephemeral miner key; verify genesis/version/zero peers and active BIP65; spend a mature coinbase into four 100-DOGE HTLC outputs with distinct claim/refund keys and change. Synthetic funding fee: 1 DOGE; claim/refund fees: 1 DOGE. Lock height 1355. Signatures use legacy SIGHASH_ALL only and low-S DER. Persist only public transactions, signatures, keys and revealed synthetic preimage.
+
+Required experiment assertions: valid funding/claim/refund signatures, wrong keys/preimage/length/outpoint/signed lock, lock domain, final sequence, early/equal-candidate refund finality, hard dust and nonminimal push policy rejection, mempool acceptance and spent UTXOs, conflicting spend rejection, actual SIGKILL/restart followed by refund from persisted signed bytes with signing keys removed, invalidate/reconsider refund block and chain UTXO restoration. Rejection reasons are checked, not merely any RPC error.
+
+## Acceptance and limits
+
+`experimentStatus=PASS` requires every implemented assertion. `qualificationStatus=BLOCKED` remains unconditional because the complete frozen 24-case matrix, dynamic mempool pressure, soft-dust instrumentation, independent review and all D3–D9 scenarios are not covered. An assertion failure stays FAIL and retains evidence. No existing test, scenario matrix, capability, financial route or qualification gate is weakened.
+
+Offline validation before first execution: 84 D2 tests, including ten new signer/isolation/manifest controls. OpenSSL signatures are independently verified with OpenSSL; this alone is not native Dogecoin signature proof. The node execution must provide that proof.
+
+## Research informing implementation
+
+- Decred Bison/DCRDEX `client/asset/doge/doge.go`, snapshot fc63460615e8dca83fc19520f32a1cb00be4acfa: distinct DOGE adapter, soft dust threshold and DOGE-specific fees. Reuse of Bitcoin-shaped transaction structures does not imply identical policy. No third-party code copied.
+  https://github.com/decred/dcrdex/blob/fc63460615e8dca83fc19520f32a1cb00be4acfa/client/asset/doge/doge.go
+- COMIT BTC–XMR README explicitly warns that its cryptography has not been formally audited and warns about fee-bumping side effects. Publication or working software is not our security qualification.
+  https://github.com/comit-network/xmr-btc-swap
+- The published BTC–XMR protocol uses a distinct construction for Monero; it must not inherit Bitcoin HTLC flags or scripts.
+  https://arxiv.org/abs/2101.12332
+- Eigenwallet and BasicSwap are implementation references, not automatic audit endorsements. Their own security and maintenance claims must be verified against a specific version/audit scope before integration.
+  https://github.com/eigenwallet/core
+  https://github.com/basicswap/basicswap
+
+Avoid: conflating source claims with runtime evidence, default-regtest policy bypass, legacy signatures treated as input-amount commitments, lock equality treated as finality, silent fee mutation, stale UTXO evidence, shared participant keys, and recovery depending on backend key custody.
