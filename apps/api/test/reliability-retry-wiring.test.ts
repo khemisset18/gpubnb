@@ -16,7 +16,7 @@ test('production heartbeat retries only the PostgreSQL transaction after one-tim
   assert.doesNotMatch(callback, /redis\./, 'retry callback must remain PostgreSQL-only');
 });
 
-test('workspace stopped route retries both replay-safe Serializable cleanup transactions and deletes Redis only after commit', async () => {
+test('workspace stopped route uses one replay-safe Serializable CAS cleanup and deletes Redis only after commit', async () => {
   const source = await readFile(new URL('../src/workspace-gateway.ts', import.meta.url), 'utf8');
   const start = source.indexOf("app.post('/agent/workspace-gateway/:sessionId/stopped'");
   // The route contains nested callbacks whose own `});` terminators appear before the
@@ -24,9 +24,13 @@ test('workspace stopped route retries both replay-safe Serializable cleanup tran
   const end = source.indexOf('const wss=new WebSocketServer', start);
   assert.ok(start >= 0 && end > start);
   const body = source.slice(start, end).replace(/\s+/g, '');
-  assert.equal((body.match(/runBookingTransaction\(db,asynctx=>/g) ?? []).length, 2);
-  assert.equal((body.match(/isolationLevel:Prisma\.TransactionIsolationLevel\.Serializable,maxWait:5_000,timeout:10_000/g) ?? []).length, 2);
-  const cleanupTx = body.lastIndexOf('runBookingTransaction(db,asynctx=>');
+  // Cleanup is now one Serializable CAS transaction. A second transaction
+  // based on a pre-read row could overwrite a concurrent terminal winner.
+  assert.equal((body.match(/runBookingTransaction\(db,asynctx=>/g) ?? []).length, 1);
+  assert.equal((body.match(/isolationLevel:Prisma\.TransactionIsolationLevel\.Serializable,maxWait:5_000,timeout:10_000/g) ?? []).length, 1);
+  assert.match(body, /constchanged=awaittx\.workspaceSession\.updateMany\(/);
+  assert.match(body, /if\(changed\.count!==1\)return\{error:'workspace_not_stoppable'\}asconst/);
+  const cleanupTx = body.indexOf('runBookingTransaction(db,asynctx=>');
   const redisDelete = body.indexOf('redis.del(wsSessionActivatedKey(sessionId))');
   assert.ok(cleanupTx >= 0 && redisDelete > cleanupTx, 'Redis cleanup must not be replayed inside the transaction callback');
 });

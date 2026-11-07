@@ -6,6 +6,7 @@
 //! renter WTS token -> ACL/PID-fenced pipe -> signed worker -> exact GPU mapping
 //! -> GPUbnb IddCx display -> fresh DXGI frame -> exact-GPU NVENC bitstream.
 
+use crate::browser_input_protocol::PressedBrowserInput;
 use crate::graphics_proof::{
     CaptureFrameProof, DedicatedConsoleDisplayProof, EncodeCodec, NvencProof, PixelFormat,
     VirtualDisplayProof, validate_dedicated_console_chain, validate_graphics_proof_chain,
@@ -193,6 +194,7 @@ pub struct QualifiedGraphicsRuntime {
     next_sequence: u64,
     last_frame_sequence: u64,
     pending_media_frame: Option<BoundMediaFrame>,
+    pressed_browser_input: PressedBrowserInput,
     media_state: RuntimeMediaState,
     last_failure: Option<ServiceRuntimeError>,
 }
@@ -207,9 +209,26 @@ impl QualifiedGraphicsRuntime {
     }
 
     /// Browser-visible reconnect fence. This is independent from the secret
-    /// media capability and rotates after every successful suspend/resume proof.
+    /// media capability and rotates on every authenticated browser connection
+    /// and every successful suspend/resume proof.
     pub const fn stream_epoch(&self) -> u64 {
         self.stream_epoch
+    }
+
+    /// A new connection resets its input sequence, so it must never inherit
+    /// an earlier connection's epoch even without a SUSPEND/RESUME transition.
+    pub(crate) fn begin_browser_connection(&mut self) -> Result<u64, ServiceRuntimeError> {
+        if self.media_token().is_none() {
+            return Err(ServiceRuntimeError::MediaCapability);
+        }
+        self.ensure_provider_boundary()?;
+        self.release_pressed_browser_input()?;
+        let epoch = match next_stream_epoch(self.stream_epoch) {
+            Ok(value) => value,
+            Err(error) => return Err(self.fail(error)),
+        };
+        self.stream_epoch = epoch;
+        Ok(epoch)
     }
 
     pub const fn windows_session_id(&self) -> u32 {
@@ -257,6 +276,14 @@ impl QualifiedGraphicsRuntime {
     }
 
     fn fail(&mut self, error: ServiceRuntimeError) -> ServiceRuntimeError {
+        // A transport/media failure can occur while browser keys or mouse
+        // buttons are held. Attempt their release before invalidating the
+        // runtime state, but only while the exact renter WTS identity still
+        // owns the input desktop. A changed/ambiguous session is never a reason
+        // to inject cleanup input into the provider desktop.
+        if error != ServiceRuntimeError::RenterSession && self.live_renter_boundary() {
+            let _ = self.release_pressed_browser_input();
+        }
         self.media_capability.take();
         self.pending_media_frame = None;
         self.media_state = RuntimeMediaState::Failed;
@@ -354,11 +381,23 @@ impl QualifiedGraphicsRuntime {
         if !matches!(self.media_state, RuntimeMediaState::Ready) {
             return Err(ServiceRuntimeError::WorkerProtocol);
         }
-        self.ensure_provider_boundary()?;
+        match self.write_worker_input_event(event) {
+            Ok(()) => Ok(()),
+            Err(error) => Err(self.fail(error)),
+        }
+    }
+
+    fn write_worker_input_event(
+        &mut self,
+        event: WorkerInputEvent,
+    ) -> Result<(), ServiceRuntimeError> {
+        if !self.live_renter_boundary() {
+            return Err(ServiceRuntimeError::RenterSession);
+        }
         let sequence = self.next_sequence;
         let next_sequence = match sequence.checked_add(1) {
             Some(value) => value,
-            None => return Err(self.fail(ServiceRuntimeError::WorkerProtocol)),
+            None => return Err(ServiceRuntimeError::WorkerProtocol),
         };
         let command = encode_worker_command(WorkerCommandFrame {
             protocol_version: WORKER_PROTOCOL_VERSION,
@@ -366,7 +405,7 @@ impl QualifiedGraphicsRuntime {
             generation: self.generation,
             sequence,
         })
-        .map_err(|_| self.fail(ServiceRuntimeError::WorkerProtocol))?;
+        .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
         let input = encode_worker_input(WorkerInputFrame {
             protocol_version: WORKER_PROTOCOL_VERSION,
             generation: self.generation,
@@ -374,12 +413,51 @@ impl QualifiedGraphicsRuntime {
             windows_session_id: self.windows_session_id,
             event,
         })
-        .map_err(|_| self.fail(ServiceRuntimeError::WorkerProtocol))?;
+        .map_err(|_| ServiceRuntimeError::WorkerProtocol)?;
 
+        // Track a key/button-down before the first pipe write. If the command
+        // arrives but the input frame write or caller is interrupted, STOP can
+        // still attempt a fenced release. Key/button-up remains tracked until
+        // both writes complete, so a partial release cannot erase the hold.
+        if matches!(event,
+            WorkerInputEvent::KeyScan { key_up: false, .. }
+                | WorkerInputEvent::MouseButton { key_up: false, .. })
+        {
+            self.pressed_browser_input.observe(event);
+        }
         if self.pipe.send_frame(&command).is_err() || self.pipe.send_frame(&input).is_err() {
-            return Err(self.fail(ServiceRuntimeError::WorkerProtocol));
+            return Err(ServiceRuntimeError::WorkerProtocol);
         }
         self.next_sequence = next_sequence;
+        self.pressed_browser_input.observe(event);
+        Ok(())
+    }
+
+    /// Release an interrupted browser connection only while it still owns the
+    /// current stream epoch. A lock/session change that already rotated the
+    /// epoch must never cause cleanup input to target a different desktop.
+    pub(crate) fn release_browser_input_for_epoch(
+        &mut self,
+        expected_epoch: u64,
+    ) -> Result<(), ServiceRuntimeError> {
+        if expected_epoch != self.stream_epoch
+            || !matches!(self.media_state, RuntimeMediaState::Ready)
+        {
+            return Ok(());
+        }
+        self.release_pressed_browser_input()
+    }
+
+    fn release_pressed_browser_input(&mut self) -> Result<(), ServiceRuntimeError> {
+        for event in self.pressed_browser_input.release_events() {
+            // Release packets are generated only from tracked holds. Permit
+            // this narrow key-up path while failing/stopping so a media error
+            // does not leave a stuck key, while the live WTS identity check in
+            // write_worker_input_event still blocks any owner-desktop target.
+            if let Err(error) = self.write_worker_input_event(event) {
+                return Err(error);
+            }
+        }
         Ok(())
     }
 
@@ -387,6 +465,9 @@ impl QualifiedGraphicsRuntime {
         if !matches!(self.media_state, RuntimeMediaState::Ready) {
             return Err(ServiceRuntimeError::WorkerProtocol);
         }
+        // Release held keys/buttons while the renter desktop is still proven
+        // active, before SUSPEND rotates the browser epoch and drops authority.
+        self.release_pressed_browser_input()?;
         let sequence = self.next_sequence;
         let next_sequence = match sequence.checked_add(1) {
             Some(value) => value,
@@ -482,9 +563,11 @@ impl QualifiedGraphicsRuntime {
         // cleanup. A stalled stop must not leave an old media token usable.
         self.media_capability.take();
         self.pending_media_frame = None;
+        // Best-effort key/button release is still fenced by the live renter
+        // WTS identity. If that boundary changed, never inject into its owner;
+        // the worker is stopped below regardless.
+        let mut stop_error = self.release_pressed_browser_input().err();
         self.media_state = RuntimeMediaState::Failed;
-
-        let mut stop_error = None;
         if let Some(worker) = self.worker.as_ref() {
             let command = encode_worker_command(WorkerCommandFrame {
                 protocol_version: WORKER_PROTOCOL_VERSION,
@@ -802,10 +885,8 @@ fn worker_signer() -> Result<[u8; 32], ServiceRuntimeError> {
 }
 
 fn next_stream_epoch(current: u64) -> Result<u64, ServiceRuntimeError> {
-    match current.checked_add(1) {
-        Some(value) if value != 0 => Ok(value),
-        _ => Err(ServiceRuntimeError::MediaCapability),
-    }
+    crate::browser_input_protocol::next_stream_epoch(current)
+        .map_err(|_| ServiceRuntimeError::MediaCapability)
 }
 
 fn validate_config(config: ServiceRuntimeConfig<'_>) -> Result<(), ServiceRuntimeError> {
@@ -1043,6 +1124,7 @@ fn start_graphics_runtime(
         next_sequence: 3,
         last_frame_sequence: initial_media_frame.header.frame_sequence,
         pending_media_frame: Some(initial_media_frame),
+        pressed_browser_input: PressedBrowserInput::default(),
         media_state: RuntimeMediaState::Ready,
         last_failure: None,
     })
