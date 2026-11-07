@@ -1,0 +1,24 @@
+[
+  {
+    "argv": [
+      "unshare",
+      "--net",
+      "true"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "unshare: unshare failed: Operation not permitted\n"
+  },
+  {
+    "argv": [
+      "unshare",
+      "--user",
+      "--map-root-user",
+      "--net",
+      "true"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "unshare: cannot open /proc/self/uid_map: No such file or directory\n"
+  }
+]

@@ -1,0 +1,12 @@
+✔ Pearl source-derived profiles match all six pinned network records without activation (1.680395ms)
+✔ every cross-network substitution rejects, including identical regtest/simnet genesis and HRP (0.688072ms)
+✔ Pearl rejects homonymous tokens, Bitcoin genesis, custom signet magic and missing fields (0.223712ms)
+✔ identity validation rejects getters and inherited data without invoking getters (0.328138ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 76.313174

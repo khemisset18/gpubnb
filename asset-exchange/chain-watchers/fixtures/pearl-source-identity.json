@@ -1,0 +1,49 @@
+{
+  "repository": "pearl-research-labs/pearl",
+  "commit": "0dbdb2ffd8b81193a5079bb67a59aecc10ad501c",
+  "scope": "source identity only; default signet; no native or address qualification",
+  "files": {
+    "node/chaincfg/genesis.go": "690beb8be3c87bd3d16ec58925ad5663f8086192d1ac81974615192949b723f6",
+    "node/chaincfg/params.go": "5c4f989e4e8310dac98b8a6fe19119e7864c5e4055303a5bc3432d5ec8e8c107",
+    "node/chaincfg/chainhash/hash.go": "d72e41b74b8e320b00a200df444db73723b6db0dc722f34c7a0270e4b82fa2b6",
+    "node/wire/protocol.go": "0451888b812af4bafdb71e94e00c007c1c4578a1d18cae4b6aaa10e6acb4685c"
+  },
+  "networks": {
+    "mainnet": {
+      "networkId": "mainnet",
+      "genesisHash": "a18d3093b7ff618f0cdd073fa3d10374e2e0105fe7ef53ff48b55f41c58dadd7",
+      "wireMagicHex": "50524c4d",
+      "addressHrp": "prl"
+    },
+    "regtest": {
+      "networkId": "regtest",
+      "genesisHash": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832",
+      "wireMagicHex": "50524c52",
+      "addressHrp": "rprl"
+    },
+    "testnet": {
+      "networkId": "testnet",
+      "genesisHash": "10f0be7be9950f74021d0f7c62989d1e2541c4d46f3c95b74e61679864b43d18",
+      "wireMagicHex": "50524c31",
+      "addressHrp": "tprl"
+    },
+    "testnet2": {
+      "networkId": "testnet2",
+      "genesisHash": "b0c86d0cd8825f4d72260d2de46f470429eece413811d5d82b5f2e2ea0336f96",
+      "wireMagicHex": "50524c32",
+      "addressHrp": "tprl"
+    },
+    "simnet": {
+      "networkId": "simnet",
+      "genesisHash": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832",
+      "wireMagicHex": "50524c53",
+      "addressHrp": "rprl"
+    },
+    "signet": {
+      "networkId": "signet",
+      "genesisHash": "2fef231e6125467452c9fb569e2f78c9dd534d04111fcf2cd28d9d0e93b00f34",
+      "wireMagicHex": "40cf030a",
+      "addressHrp": "tprl"
+    }
+  }
+}

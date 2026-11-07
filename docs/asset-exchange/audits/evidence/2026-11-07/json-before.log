@@ -1,0 +1,81 @@
+✔ strict JSON rejects duplicate keys at any object depth (1.231566ms)
+✔ strict JSON accepts escaped strings and arrays (0.483607ms)
+✔ strict JSON rejects trailing data (0.083394ms)
+✖ deep JSON is rejected with a bounded parser error before stack exhaustion (2.485926ms)
+✖ JSON depth boundary accepts 32 containers and rejects 33 (0.206666ms)
+✖ direct parser input is bounded before parsing (6.315866ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 3
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 80.089923
+
+✖ failing tests:
+
+test at asset-exchange/api/test/strict-json.test.mjs:18:1
+✖ deep JSON is rejected with a bounded parser error before stack exhaustion (2.485926ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  RangeError: Maximum call stack size exceeded
+      at TestContext.<anonymous> (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/api/test/strict-json.test.mjs:20:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: RangeError: Maximum call stack size exceeded
+        at RegExp.test (<anonymous>)
+        at skipWs (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/api/src/strict-json.mjs:16:40)
+        at parseValue (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/api/src/strict-json.mjs:37:3)
+        at parseArray (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/api/src/strict-json.mjs:54:5)
+        at parseValue (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/api/src/strict-json.mjs:40:26)
+        at parseArray (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/api/src/strict-json.mjs:54:5)
+        at parseValue (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/api/src/strict-json.mjs:40:26)
+        at parseArray (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/api/src/strict-json.mjs:54:5)
+        at parseValue (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/api/src/strict-json.mjs:40:26)
+        at parseArray (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/api/src/strict-json.mjs:54:5),
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at asset-exchange/api/test/strict-json.test.mjs:24:1
+✖ JSON depth boundary accepts 32 containers and rejects 33 (0.206666ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/api/test/strict-json.test.mjs:26:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at asset-exchange/api/test/strict-json.test.mjs:29:1
+✖ direct parser input is bounded before parsing (6.315866ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/44921c6f8796/gpubnb/asset-exchange/api/test/strict-json.test.mjs:30:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    operator: 'throws',
+    diff: 'simple'
+  }

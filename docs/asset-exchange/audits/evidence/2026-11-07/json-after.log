@@ -1,0 +1,14 @@
+✔ strict JSON rejects duplicate keys at any object depth (1.190184ms)
+✔ strict JSON accepts escaped strings and arrays (0.472471ms)
+✔ strict JSON rejects trailing data (0.086458ms)
+✔ deep JSON is rejected with a bounded parser error before stack exhaustion (0.386252ms)
+✔ JSON depth boundary accepts 32 containers and rejects 33 (0.185625ms)
+✔ direct parser input is bounded before parsing (0.318152ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 70.404795

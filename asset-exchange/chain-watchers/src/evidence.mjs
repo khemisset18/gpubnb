@@ -37,12 +37,15 @@ export function tipEvidenceConsistency(evidences) {
   invariant(sourceIds.size === parsed.length, "TIP_EVIDENCE_DUPLICATE_SOURCE", "duplicate tip source is not an independent witness");
 
   const first = parsed[0];
-  for (const item of parsed.slice(1)) {
+  const heightsByHash = new Map();
+  let uncertain = false;
+  for (const item of parsed) {
     if (item.chainId !== first.chainId || item.networkId !== first.networkId) return "CONFLICT";
-    if (item.tipHash === first.tipHash && item.tipHeight !== first.tipHeight) return "CONFLICT";
-    if (item.tipHash !== first.tipHash || item.tipHeight !== first.tipHeight) return "UNCERTAIN";
+    if (heightsByHash.has(item.tipHash) && heightsByHash.get(item.tipHash) !== item.tipHeight) return "CONFLICT";
+    heightsByHash.set(item.tipHash, item.tipHeight);
+    if (item.tipHash !== first.tipHash || item.tipHeight !== first.tipHeight) uncertain = true;
   }
-  return "CONSISTENT";
+  return uncertain ? "UNCERTAIN" : "CONSISTENT";
 }
 
 export function createChainEvidence(input) {
@@ -87,14 +90,15 @@ export function evidenceConsistency(evidences) {
   invariant(Array.isArray(evidences) && evidences.length > 0, "EVIDENCE_SET", "at least one evidence record required");
   const parsed = evidences.map(createChainEvidence);
   const first = parsed[0];
+  const confirmedBlocks = new Set();
 
-  for (const item of parsed.slice(1)) {
+  for (const item of parsed) {
     if (item.chainId !== first.chainId || item.networkId !== first.networkId || item.observedTxid !== first.observedTxid) {
       return "CONFLICT";
     }
-    if (item.conflictStatus === "CONFLICTED" || first.conflictStatus === "CONFLICTED") return "CONFLICT";
-    if (item.blockHash !== first.blockHash && item.confirmations > 0 && first.confirmations > 0) return "UNCERTAIN";
+    if (item.conflictStatus === "CONFLICTED") return "CONFLICT";
+    if (item.confirmations > 0) confirmedBlocks.add(item.blockHash);
   }
 
-  return "CONSISTENT";
+  return confirmedBlocks.size > 1 ? "UNCERTAIN" : "CONSISTENT";
 }
