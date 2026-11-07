@@ -1,0 +1,1072 @@
+✔ keeps a stable machine publishable (1.055946ms)
+✔ requires verification when inventory changes outside a session (0.113698ms)
+✔ quarantines and freezes on removal during an active bound session (0.067731ms)
+✔ quarantines an identity mutation during an active session (0.049814ms)
+✔ does not quarantine a missing accelerator outside a session (0.077685ms)
+✔ treats a legacy GPU mismatch as verification outside a session (0.049333ms)
+✔ accepts unknown future accelerator kinds (3.255837ms)
+✔ rejects duplicate identities (0.823592ms)
+✔ rejects unsafe and unbounded metadata (0.832865ms)
+✔ rejects impossible memory and metric values (1.256072ms)
+✔ selects a compatible primary GPU without excluding other devices (0.264252ms)
+✔ rejects unknown top-level fields and excessive devices (0.385402ms)
+✔ Netlify same-origin API routing is generated from provider-neutral build origins (0.703403ms)
+✔ private-beta bookings stay on the registered Compute API path, with Developer unlocked only after GPU_PROOF completes (0.204383ms)
+✔ professional account pages and protected API routes exist (0.360435ms)
+✔ Compute session has protected lifecycle, metrics and emergency stop (0.310621ms)
+✔ Compute is prepared before renter arrival and access waits for READY (0.245854ms)
+✔ account schema separates private identity and user capabilities (0.103584ms)
+✔ workspace catalogue uses one responsive four-column grid (0.180016ms)
+✔ machine rollout bucket is deterministic and bounded (0.584957ms)
+✔ zero rollout fails closed without publishing an endpoint (0.563526ms)
+✔ enabled assignment contains transport coordinates only (0.1284ms)
+✔ rollout threshold is stable and monotonic for each machine (0.105036ms)
+✔ a stale Developer preparation is reclaimed before any queued job with a new fenced attempt (2.274693ms)
+✔ legacy active jobs remain reclaimable during nullable-column rollout (0.165966ms)
+✔ a lost recovery race never claims a second queued job or issues a new lease (0.095501ms)
+✔ normal queued work receives one auditable attempt and one explicit lease (0.150383ms)
+✔ every new queued rental job is gated to five minutes before startsAt (0.204322ms)
+✔ artifact integrity verifier accepts exact SHA-256 and byte count (0.598067ms)
+✔ artifact integrity verifier rejects size and checksum corruption (0.34412ms)
+﹣ historical filesystem artifact migrates through a real S3-compatible server (0.557747ms) # SKIP
+✔ dry-run verifies source but never writes destination or DB (10.654237ms)
+✔ apply copies, verifies destination, then conditionally updates DB (2.25885ms)
+✔ source checksum mismatch blocks copy and metadata update (1.805918ms)
+✔ destination corruption blocks DB update after copy (1.92885ms)
+✔ concurrent metadata change is never overwritten (1.627944ms)
+✔ already migrated keys skip and unknown prefixes fail closed (0.219295ms)
+✔ a partial run is resumable because migrated rows are skipped on the next run (2.28635ms)
+﹣ S3-compatible backend performs a real put/get round trip (0.443968ms) # SKIP
+✔ artifact kind only allows a single safe path segment (1.208121ms)
+✔ artifact object key is deterministic and path-safe (0.17545ms)
+✔ filesystem backend writes backend-aware keys and reads legacy keys (14.487562ms)
+✔ filesystem backend rejects path escape and unknown backend (0.711244ms)
+✔ S3 backend writes deterministic backend-aware keys and reads object bodies (0.722552ms)
+✔ S3 backend refuses cross-bucket and malformed object keys (0.349538ms)
+✔ S3 backend maps object-store 404 to the API storage-not-found contract (0.168399ms)
+✔ routed storage keeps legacy filesystem reads after S3 write cutover (2.411686ms)
+✔ application/octet-stream is parsed as a Buffer for artifact uploads (60.098815ms)
+✔ artifact kind must be a single safe path segment (5.374981ms)
+✔ declared artifact size must match the authenticated binary body (2.904427ms)
+✔ artifact route rejects non-binary parsed bodies (2.689077ms)
+✔ private-beta marketplace exposes only the registered Compute workspace (1.462529ms)
+✔ incompatible Compute workspace is explained instead of being offered as compatible (0.132216ms)
+✔ marketplace routes the renter through GPU then the registered Compute preparation route (5.528889ms)
+✔ Compute server route creates GPU_PROOF through ensureComputePreparation (0.556145ms)
+✔ bookings page follows GPU_PROOF, then exposes the automatically prepared Developer workspace once it completes (0.88364ms)
+✔ private-beta workspace browser scripts parse as valid JavaScript (89.811153ms)
+✔ Developer renter routes are registered (via device-authorization-routes) and reachable, but the marketplace still only lists Compute (1.617148ms)
+✔ the full workspace catalogue always covers all thirteen manifests, once each (0.297481ms)
+✔ the catalogue only marks a workspace bookable when it is both compatible and executable, never from compatibility alone (0.348267ms)
+✔ an incompatible workspace in the full catalogue is explained, not silently hidden (0.16168ms)
+✔ the workspace-catalogue route is wired to the full thirteen-workspace engine, separately from the booking route (0.723864ms)
+✔ Data Workspace has its own real booking, status and access routes, parallel to Developer's (0.540391ms)
+✔ retry is not scoped to a single workspace slug, and re-enqueues using the session's own slug (0.515234ms)
+✔ the workspace-gateway route filters and the executable-slug gate all agree on which slugs run through the persistent gateway (0.822079ms)
+✔ AI Workspace has its own real booking, status and access routes, parallel to Data's (0.442376ms)
+✔ Video Workspace has its own real booking, status and access routes, parallel to AI's (0.574733ms)
+✔ Audio Workspace has its own real booking, status and access routes, parallel to Video's (0.472771ms)
+✔ API Workspace has its own real booking, status and access routes, parallel to Audio's (0.51976ms)
+✔ API Workspace is compatible even with a modest CPU-only-capable machine - no vram/cuda minimum by design (0.196041ms)
+✔ Mobile Workspace has its own real booking, status and access routes, parallel to API's (0.625368ms)
+✔ Mobile Workspace no longer requires virtualization - it is a plain container, not a VM (0.143192ms)
+✔ Mobile Workspace is bookable now that its real runtime has been built, tested and live-validated (0.089323ms)
+✔ Security Lab Workspace has its own real booking, status and access routes, parallel to Mobile's (0.648802ms)
+✔ Security Lab Workspace no longer requires virtualization - it is a plain container, not a VM (0.164383ms)
+✔ Security Lab Workspace is bookable now that its real runtime has been built, tested and live-validated (0.068712ms)
+✔ database trigger covers every resource-locking booking state (4.292885ms)
+✔ database trigger releases or cancels allocations for every terminal booking state (0.743272ms)
+✔ synchronization is transaction-scoped, serialized per machine, and idempotent (0.902509ms)
+✔ moving a booking backwards cannot resurrect a terminal allocation (3.041821ms)
+✔ payment and execution states preserve the resource lock (1.093922ms)
+✔ terminal booking states release or cancel physical resources (0.19561ms)
+✔ created and disputed bookings do not silently mutate allocations (0.095031ms)
+✔ POST /bookings/:id/cancel only ever transitions AWAITING_DEPOSIT bookings, owned by the caller (5.524712ms)
+✔ the booking overlap check excludes CANCELLED, so a cancelled hold frees its time slot (0.983528ms)
+✔ the dashboard exposes listing.id on each booking, not just its title (0.688461ms)
+✔ terminal bookings cannot be resurrected into reserving or executing states (5.008016ms)
+✔ every paid or executing booking state requires a live resource allocation (0.821017ms)
+✔ normal settlement transitions remain possible after completion (0.745646ms)
+✔ 1) a serialization conflict on the first attempt succeeds on retry (4.014082ms)
+✔ 2) a conflict repeated on every attempt is exhausted after maxAttempts and rethrown, not swallowed (5.237295ms)
+✔ 3) a real business rejection (time_slot_unavailable) is never retried (0.557046ms)
+✔ 4) an unrecognized error is never retried and is not classified as retryable (0.284592ms)
+✔ 5) the isolation level is passed through to every attempt, including retries - Serializable is not silently dropped (1.734732ms)
+✔ 6) omitting isolationLevel keeps the previous default behaviour - no options object forced on callers that never asked for one (0.183893ms)
+✔ 7) maxWait and timeout are threaded through alongside isolationLevel, without forcing unrelated defaults (0.180247ms)
+✔ 8) maxWait/timeout alone (no isolationLevel) are still passed through (0.176892ms)
+✔ isRetryableBookingTransactionError recognizes both known transient Prisma codes (0.101201ms)
+✔ a raw query (tx.$queryRaw, e.g. SELECT ... FOR UPDATE) that fails on a genuine Postgres serialization conflict is retried, even though it surfaces as P2010 (0.24284ms)
+✔ a raw query failure for an unrelated reason (P2010 without a transient SQLSTATE) is never retried - P2010 alone is too broad to blindly retry (0.081651ms)
+✔ two concurrent SELECT ... FOR UPDATE-style raw-query conflicts retry through runBookingTransaction end to end (1.178999ms)
+✔ POST /bookings only forwards known business errors to the client, and rethrows anything else (C-concurrent-booking) (4.011519ms)
+✔ diagnostic_cleanup_unverified and gpu_proof_cleanup_unverified are both classified as cleanup-unverified (5.694519ms)
+✔ a cleanup-unverified terminal report quarantines the machine (via the shared enterQuarantine helper) and marks it UNAVAILABLE (1.003909ms)
+✔ the booking is degraded, never completed, on a cleanup-unverified report (1.118008ms)
+✔ the payment is only ever pushed to settlement review, never marked as a paid success (0.749572ms)
+✔ quarantine is applied idempotently: guarded on moderationStatus already CLEAR (0.709873ms)
+✔ an unrelated errorCode never triggers automatic quarantine (0.886054ms)
+✔ terminal re-reports are fenced: only the same attempt may retry the same terminal status without replaying side effects (0.786476ms)
+✔ nothing in server.ts silently clears a quarantine back to CLEAR: lifting it requires a controlled diagnostic decision (0.911592ms)
+﹣ overlapping bookings on the same listing cannot even be created concurrently - booking_no_overlap wins the race first, before allocation (20.881813ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ the same booking allocated twice concurrently (client retry racing itself) never creates two allocations (4.204805ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ non-overlapping windows on the same accelerator all succeed concurrently - contention alone must not cause spurious rejections (5.800721ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ more concurrent claim callers than queued jobs: every job is claimed exactly once, no duplicate claim, no lost job (17.118895ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ claiming from an empty queue concurrently returns null for everyone, no crash (3.782599ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ two concurrent finalizations of the same Developer stop: only one does the real work, the other is a clean idempotent no-op (18.293015ms) # no reachable local Postgres/Redis for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ concurrent settlement request calls on the same booking never double-charge the settlement calculation (3.962986ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ concurrent confirmSettlement calls with the SAME signature settle exactly once - no double settlement, no double refund (3.708859ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ confirmSettlement with a DIFFERENT signature than the one already recorded is cleanly rejected, never silently overwritten (3.260665ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+✔ gateway command rollout is fail closed by default (0.691095ms)
+✔ command rollout must be nested inside Agent QUIC rollout (0.258984ms)
+✔ non-zero rollout requires private gateway coordinates and a strong token (0.185825ms)
+✔ protocol understands mining kinds while production dispatch keeps them dark (0.281928ms)
+✔ durable identity is preserved while rental-private fields are stripped before Gateway dispatch (0.606029ms)
+✔ rental stop envelope fails closed without a proven Developer runtime (0.113979ms)
+✔ terminal Redis ACK must match durable command identity before completion (0.210612ms)
+✔ machine auth cache is Redis Cluster-safe and contains only gateway auth material (1.29476ms)
+✔ revocation fails closed without deleting the audit-visible cache record (0.135942ms)
+✔ unsafe identifiers and non-base58 public keys are rejected before Redis (0.294397ms)
+✔ control-plane events are versioned, bounded and deterministically partitioned (1.560804ms)
+✔ control-plane event validation fails closed on routing or schema tampering (0.45829ms)
+✔ control-plane payloads cannot become an unbounded event-bus transport (0.614711ms)
+✔ shadow mode dual-writes but never becomes read authority (0.997649ms)
+✔ hot mode is an explicit authority cutover (0.096994ms)
+✔ unsafe shadow plans fail closed (0.413343ms)
+✔ control plane issues a short-lived Ed25519 authority scoped to one edge, role and renter session (1.964122ms)
+✔ changing edge, role, machine, booking or renter after signing invalidates authority (0.658256ms)
+✔ authority TTL and identifiers are hard bounded (0.738966ms)
+✔ canonical binding and authority claim property order are protocol-stable across runtimes (0.225534ms)
+✔ HTML/service/tunnel readiness can never claim an interactive Developer session (0.617957ms)
+✔ Management alone is not interactive; ExtensionHost completes the proof (0.147479ms)
+✔ ExtensionHost arriving before Management is valid but still not interactive (0.07433ms)
+✔ losing a critical VS Code stream after INTERACTIVE becomes DEGRADED (0.098677ms)
+✔ fallback and reconnect are explicit, bounded events (0.30362ms)
+✔ event order is fail-closed and closed sessions cannot be resurrected (0.136703ms)
+✔ new transports default off while migration fallback stays on (1.013333ms)
+✔ malformed rollout configuration fails closed (0.363199ms)
+✔ browser WebTransport cannot be enabled without the direct transport capability (0.102632ms)
+✔ EDGE_QUIC and DIRECT_QUIC cannot be enabled without exact-release qualification (0.164024ms)
+✔ Render qualification is cryptographically scoped to the actual deployed commit id (0.123073ms)
+✔ qualified release may enable a bounded canary and records the evidence SHA (0.072697ms)
+✔ canary assignment is stable, bounded and session-scoped (0.331982ms)
+✔ Host bootstrap is disabled by default and requires an explicit true flag (0.912753ms)
+✔ enabled Host bootstrap requires exact-release production qualification (0.259034ms)
+✔ enabled Host bootstrap fails closed on partial or unsafe configuration (43.802372ms)
+✔ bootstrap returns a fresh HOST authority without exposing the private signing key (1.924994ms)
+✔ native client prefers a freshly verified direct QUIC path (1.298535ms)
+✔ stale direct verification falls back to the best healthy edge (0.159717ms)
+✔ browser does not use direct QUIC until WebTransport rollout is explicitly enabled (0.246025ms)
+✔ browser may use direct path only behind the WebTransport capability flag (0.077745ms)
+✔ unhealthy edges are skipped and legacy remains a bounded migration fallback (0.083283ms)
+✔ no transport silently succeeds when every path is unavailable (0.302348ms)
+✔ interactive Developer rejects materially unstable host networks before allocation (0.136773ms)
+✔ invalid telemetry is fail-closed instead of poisoning ranking (0.089292ms)
+✔ session binding is scoped, versioned and bounded in time (0.927615ms)
+✔ stream metadata is fail-closed and arbitrary ports require APP_PORT kind (0.154879ms)
+✔ Developer is interactive only when Management and ExtensionHost are both live (0.096884ms)
+✔ Zod rejects oversized constrained collections without accumulating per-element issues (1.590649ms)
+✔ actual telemetry schema preserves defaults, absent optionals, nulls and error paths (3.386401ms)
+✔ actual config defaults preserve production and financial guards after Zod migration (1409.088205ms)
+✔ Fastify asynchronous validation cannot replace the validated request body (86.395287ms)
+✔ Solana/Jayson preserves concurrent asynchronous JSON-RPC results and errors without network access (12.930914ms)
+✔ provider-neutral topology requires migration, API and delivery worker roles (4.843933ms)
+✔ Docker image contains both API and worker build outputs and runs non-root (1.599712ms)
+✔ runtime topology contains no hosting-provider hostname or provider-only process kind (0.685056ms)
+/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/src/config.ts:105
+export const config = schema.parse(process.env);
+                             ^
+
+ZodError: [
+  {
+    "expected": "string",
+    "code": "invalid_type",
+    "path": [
+      "DATABASE_URL"
+    ],
+    "message": "Invalid input: expected string, received undefined"
+  }
+]
+    at <anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/src/config.ts:105:30)
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async <anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/dev-bypass-settlement-reconciler.test.ts:18:42)
+
+Node.js v24.22.1
+✖ test/dev-bypass-settlement-reconciler.test.ts (339.883484ms)
+✔ a completed booking with a live Developer runtime fails closed instead of resurrecting without allocation (2.129047ms)
+✔ a stale diagnostic result cannot close a booking after a Developer session wins the race (0.295569ms)
+✔ beta payment bypass skips the legacy GPU diagnostic queue (0.146287ms)
+✔ creating Developer cancels only a still-queued beta diagnostic before enqueuing WORKSPACE_PREPARE (7.638957ms)
+✔ inventory accepts GPU strings at the exact Accelerator column widths (1.785358ms)
+✔ inventory rejects a gpuModel one character past Accelerator.model VarChar(160) (0.605047ms)
+✔ inventory rejects a driverVersion one character past Accelerator.driverVersion VarChar(80) (0.183032ms)
+✔ inventory rejects a cudaVersion one character past Accelerator.cudaVersion VarChar(40) (0.148671ms)
+✔ creates opaque secrets and stores only digests (0.915147ms)
+✔ rejects malformed public keys and fingerprints (0.366504ms)
+✔ requires browser authorization before consumption (0.183812ms)
+✔ authorizes and consumes exactly once (0.184904ms)
+✔ rejects repeated browser authorization (0.129932ms)
+✔ rejects authorization and consumption after expiration (0.145626ms)
+✔ a fully passing diagnostic clears the mandatory-check gate (0.957109ms)
+✔ a FAIL on a mandatory check (GPU) blocks the gate and never gets silently treated as PASS (0.120259ms)
+✔ an UNKNOWN mandatory check is exactly as blocking as FAIL - never promoted to PASS (0.075733ms)
+✔ a mandatory check entirely missing from the report is treated as NOT_CHECKED, not as an implicit PASS (0.111004ms)
+✔ RAM and CUDA are informational only - a WARNING/FAIL on either never blocks the mandatory gate (0.0811ms)
+✔ the first failing mandatory check (in fixed order) determines the reasonCode (0.080349ms)
+✔ an orphaned GPU allocation blocks the gate with ORPHANED_ALLOCATION, even when every hardware check passes (0.069223ms)
+✔ a RUNNING diagnostic the agent never reported back on is surfaced as TIMED_OUT once its timeout window elapses, never left silently RUNNING forever (0.077104ms)
+✔ only the lease owner executes and the lease is released afterward (1.344844ms)
+✔ a competing owner makes the task skip without side effects (0.152597ms)
+✔ release never deletes a successor lease after ownership changes (0.116493ms)
+✔ renewal detects ownership loss without deleting the successor (1100.668485ms)
+✔ a task finishing after its last confirmed TTL is marked lease-lost (0.476707ms)
+✔ invalid task names fail closed before touching Redis (0.472991ms)
+✔ agent-restart recovery uses the automatic GPU_PROOF-to-Developer handoff (4.979083ms)
+✔ agent is killed only after genuine code-server traffic activated the booking (0.703574ms)
+✔ recovery requires exact runtime adoption, clean COMPLETED termination, and four-resource cleanup (0.661771ms)
+✔ recovery proves a fresh heartbeat from the restarted Agent after normal completion (0.811914ms)
+✔ real E2E requires upstream code-server frames on both VS Code channels (4.756853ms)
+✔ real E2E requires clean COMPLETED termination after activation (0.897611ms)
+﹣ Developer Workspace full lifecycle: booking -> GPU proof -> Workspace ready (clock NOT started) -> real activation (clock starts, workspaceActivatedAt set once, purchased duration honored) -> Stop -> settlement -> machine/listing available again (15.145086ms) # no reachable local Postgres/Redis for this E2E test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+✔ main real-GPU harness proves the Developer container sees exactly the leased hardware UUID (4.328377ms)
+﹣ full GPU rental lifecycle: heartbeat -> inventory -> publish -> booking -> allocation -> signed authority -> release -> available again (0.443418ms) # SKIP
+✔ run.sh preserves pre-existing GPUbnb Docker resources during harness cleanup (3.729741ms)
+✔ recovery-agent-restart.sh preserves pre-existing GPUbnb Docker resources during harness cleanup (0.73488ms)
+✔ real E2E rental observes the Developer workspace created automatically by GPU_PROOF finalization (4.42427ms)
+✔ GPU_PROOF completion must leave the rental reserved for subsequent Developer activation (0.861207ms)
+✔ onboarding bootstrap is explicitly excluded from rental qualification (0.752916ms)
+✔ main real-GPU harness proves exact per-session Docker cleanup before EXIT teardown (3.984117ms)
+✔ writes and reads an artifact file (7.06713ms)
+✔ sha256 hash is 64 hex chars (0.288919ms)
+✔ creates nested directory structure for storage key (0.945402ms)
+✔ returns a queued gateway item without sleeping (0.616244ms)
+✔ waits efficiently until a gateway item appears (0.131105ms)
+✔ returns null at the long-poll deadline without a hot loop (0.104815ms)
+✔ verified GPU proof automatically analyzes and queues the persistent Developer workspace (3.866063ms)
+✔ legacy manual Developer request remains race-safe and returns the concurrent session (0.786556ms)
+✔ the proof container is ephemeral but the renter Developer runtime is detached and not --rm (0.958982ms)
+✔ PC B labels GPU proof RUNNING as verification, not as an opened workspace (0.56672ms)
+﹣ a fresh Compute rental needs no second renter click after verified GPU_PROOF (14.41141ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ GPU_PROOF-only booking on a Developer-incompatible machine completes and releases the machine (15.014634ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ a fresh Developer-capable booking automatically queues Developer and keeps the GPU locked (3.713566ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ automatic Developer handoff cancels only a queued GPU diagnostic (3.064405ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ startsAt/endsAt are refreshed to now regardless of how long the booking had already been open (3.187396ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ a second booking cannot claim the same accelerator while the first is waiting to open its Developer workspace (3.159576ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+✔ completeGpuProofJob runs through the retry helper, not a raw unretried transaction (0.619969ms)
+﹣ completeGpuProofJob never resets startsAt/endsAt once the real rental clock has already started (3.056372ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ completeGpuProofJob never mutates a booking that already reached a different terminal status (3.03475ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+✔ Test C (critical): a successful GPU_PROOF job unlocks STARTING to ACTIVE, never to COMPLETED (1.05267ms)
+✔ Test G-equivalent (idempotence): re-running the reconciler against an already-ACTIVE booking is a safe no-op (0.239786ms)
+✔ a failed GPU_PROOF job still degrades the booking immediately, matching the pre-fix behaviour exactly (0.660269ms)
+✔ Test F: a genuinely expired ACTIVE booking with no live Developer session settles to COMPLETED (0.297101ms)
+✔ the expiry sweep excludes a booking whose GPU_PROOF job is still active, both in its query and its re-check inside the transaction (0.218063ms)
+✔ Test E: this expiry sweep never even queries a booking that already has a live Developer session (query-level exclusion) (0.143473ms)
+✔ the expiry sweep is a no-op outside the dev-bypass gate, exactly like every other mechanism in this file (0.101811ms)
+✔ findExpiredActiveDeveloperBookings only ever matches ACTIVE bookings whose real endsAt has passed (0.086218ms)
+✔ GPU Proof uses an immutable fixed CUDA workload (6.422898ms)
+✔ rental execution has cancellation, signed metrics and verified cleanup gates (3.868176ms)
+✔ thermal quarantine boundary is exactly 98 C, never below (0.800798ms)
+✔ 98 C enters quarantine with an explicit measured thermal cause (0.98452ms)
+✔ hottest physical GPU is the one that owns the thermal decision (0.446592ms)
+✔ an existing unrelated quarantine is never overwritten by temperature (0.133618ms)
+✔ thermal quarantine auto-queues a real diagnostic after cooldown (0.275459ms)
+✔ cooldown above recovery threshold does not auto-start a diagnostic (0.119607ms)
+✔ workspace access freshness never exceeds the API offline threshold (3.892713ms)
+✔ Render preserves the same 300 second heartbeat offline budget for web and worker (1.352545ms)
+✔ website Host download uses the exact published Windows installer asset (6.036661ms)
+✔ Host download visibly exposes immutable release identity and checksum (1.794872ms)
+✔ Host release metadata bypasses transient cache failures while remaining fail closed (1.059331ms)
+✔ Windows release smoke test rejects an installer with the wrong embedded Agent version (0.70782ms)
+✔ preserves Fastify rate-limit errors as HTTP 429 (2.716819ms)
+✔ preserves other client errors without leaking their message (0.113278ms)
+✔ keeps server and malformed errors on the internal-error path (0.09492ms)
+✔ lease tokens are opaque fixed-size capabilities and only hashes are compared (0.949177ms)
+✔ lease deadline has a 30 second safety floor (0.491829ms)
+✔ active lease predicate binds job, machine, attempt, token and expiry (0.334706ms)
+✔ terminal idempotence only accepts the same fenced attempt (0.160208ms)
+✔ qualified job protocol is fail-closed for pre-0.6.2 or malformed agents (0.373714ms)
+✔ new jobs are never assigned to an agent without the fencing protocol (11.203993ms)
+✔ leased jobs have an independent signed renewal endpoint (0.76853ms)
+✔ state and completion mutations are fenced by attempt plus token (0.430929ms)
+✔ /complete retries a Postgres serialization conflict instead of surfacing a raw 500, and keeps its Serializable isolation (0.308768ms)
+✔ proof finalization cannot be replayed by an obsolete attempt (1.948284ms)
+✔ proof finalization's job lookup is retried on a transient failure, not left as a raw unretried read (0.237942ms)
+✔ heartbeat derives availability from server-owned runtime state (0.33054ms)
+✔ heartbeat publishability requires Docker and NVIDIA runtime, and hides the listing on ANY loss of publishability, not only an outdated agent (0.167999ms)
+✔ a 30 second API-agent outage cannot stale or quarantine a job with a 90 second lease (1.220741ms)
+✔ a 90 second job lease leaves explicit margin for a 30 second network outage (0.682202ms)
+✔ API defaults, example environment and agent refresh loop preserve the same lease safety budget (5.534928ms)
+✔ active explicit lease wins over an old updatedAt timestamp (1.48363ms)
+✔ expired explicit lease times out a claimed job and quarantines its machine (0.968626ms)
+✔ legacy claimed row without a lease still uses updatedAt during rollout (0.329629ms)
+✔ queued never-claimed job expires by updatedAt and may safely release RESERVED machine (0.217633ms)
+✔ lost sweep CAS race causes zero booking/session/machine/payment side effects (0.304171ms)
+✔ stale job never settles payment as success (0.221418ms)
+✔ allows the diagnostic happy path (0.513932ms)
+✔ terminal statuses cannot transition (0.094631ms)
+✔ cannot skip directly from queued to running (0.07431ms)
+✔ exact GPU listing creation uses bounded retry while preserving the machine advisory lock (4.047031ms)
+✔ owner listing lifecycle retries both serialized machine-scoped transitions (0.875158ms)
+﹣ agent diagnostic routes: cross-machine auth is rejected, owner isolation holds, and a quarantined agent can still run a real diagnostic end-to-end (15.734368ms) # no reachable local Postgres/Redis: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ a stale (timed-out) RUNNING run never shadows a fresh one, and self-heals to TIMED_OUT - regression for a real bug found live against production (6.396907ms) # no reachable local Postgres/Redis: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ force-clear: never accessible to the owner, requires the internal token, and a CRITICAL-severity reason requires an explicit risk confirmation naming that exact code (5.277966ms) # no reachable local Postgres/Redis: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+✔ presence key uses a Redis Cluster hash tag per machine (0.560941ms)
+✔ new connection fences an older gateway connection (1.215432ms)
+✔ presence rejects replayed or out-of-order sequence numbers (0.184794ms)
+✔ heartbeat cannot make a funded machine available while work is pending (0.684545ms)
+✔ active workspace remains RUNNING even when the heartbeat carries no session id (0.092768ms)
+✔ degraded booking fails closed (0.332393ms)
+✔ unsupported agent stays unavailable when no runtime is active (0.054691ms)
+✔ supported idle agent may become available (0.12805ms)
+✔ host readiness blocks publication before link and heartbeat (0.78941ms)
+✔ host readiness requires Docker, NVIDIA runtime and verified GPU evidence (0.127029ms)
+✔ an agent whose reported protocol version is too old is AGENT_OUTDATED, not silently treated as ready (0.091916ms)
+✔ an active listing does not block another verified GPU on a multi-GPU host (0.085077ms)
+✔ full-machine allocation drives reserved and active session states (0.115261ms)
+✔ quarantine always fails closed (0.078005ms)
+✔ quarantine surfaces the real stable reasonCode instead of a generic label (1.522758ms)
+✔ an offline (stale-heartbeat) machine is never READY, independent of quarantine (0.109593ms)
+✔ accepts multi-month reservations without a product duration limit (0.595072ms)
+✔ treats adjacent reservations as non-overlapping (0.104425ms)
+✔ instant rental ends no later than the next future reservation (0.636594ms)
+✔ requires bilateral acceptance of a negotiated price (0.143322ms)
+✔ scheduled reservation time starts at the agreed hour even if provider is late (0.122261ms)
+✔ accepts unknown and future accelerator identities (0.494113ms)
+✔ marketplace exposes a busy state and the actual dynamic release time (4.83522ms)
+✔ marketplace disables rental while the GPU is rented or working (0.804052ms)
+▶ mining configuration policy
+  ✔ charges one percent only for the managed pool (0.664906ms)
+  ✔ accepts independently configured GPU and CPU resources (2.180414ms)
+  ✔ accepts supported secret-manager references for owner pools (0.274497ms)
+  ✔ rejects raw owner-pool passwords and unsupported secret references (0.758805ms)
+  ✔ stops only the resource selected by a partial rental (0.15517ms)
+  ✔ stops every miner for an exclusive-machine rental (0.0738ms)
+  ✔ locks configuration changes for the rented resource (0.292023ms)
+  ✔ allows CPU configuration while only a GPU is rented (0.281347ms)
+  ✔ requires the machine owner (0.123523ms)
+  ✔ uses optimistic concurrency (0.14169ms)
+  ✔ rejects enabling mining on a quarantined resource (0.151865ms)
+  ✔ rejects an NVIDIA-only profile on AMD (0.178654ms)
+  ✔ rejects GPU mining when the hardware vendor is unknown (0.139157ms)
+  ✔ accepts a pinned dual-vendor profile on AMD (0.172726ms)
+  ✔ requires CPU-specific limits (0.24949ms)
+  ✔ requires GPU intensity and rejects CPU controls on a GPU (0.177874ms)
+✔ mining configuration policy (7.281147ms)
+▶ mining profile catalog
+  ✔ approves only enabled profiles for the expected resource kind and GPU vendor (0.547141ms)
+  ✔ rejects profiles without pinned runtime provenance plus unknown profiles (0.095071ms)
+✔ mining profile catalog (1.443941ms)
+✔ every enabled mining profile has pinned Host runtime provenance (0.809921ms)
+✔ unqualified GPU miners remain disabled (0.118796ms)
+✔ a fresh heartbeat repairs a missing Accelerator -> MiningResource mapping (1.351244ms)
+✔ a slot/BIOS reorder keeps the same MiningResource identity per hardware UUID (0.277342ms)
+✔ a GPU that stops reporting is disabled as a resource and marked missing, not left dangling (0.212084ms)
+✔ a quarantined accelerator that stops reporting is never overwritten back to MISSING (0.223361ms)
+✔ a machine-level quarantine overrides GPU availability when syncing accelerator status (0.20896ms)
+✔ a repeated heartbeat for the same GPU refreshes the existing resource instead of duplicating it (0.158946ms)
+✔ start payload binds hardware and preserves i64 fence as exact string (0.795119ms)
+✔ stop payload carries only resource identity and exact generation (0.521504ms)
+✔ lease for another GPU can never be reused (0.254368ms)
+✔ GPU resource key is based on stable hardware UUID, never slot index (0.476086ms)
+✔ inventory reorder updates the same MiningResource ids (0.655132ms)
+✔ mining runtime verifies the agent before entering the retried transaction (4.879236ms)
+✔ mining runtime retry is bounded and protected by the event idempotency key (1.226579ms)
+✔ owner mining page exposes rental-first controls (4.573752ms)
+✔ mining UI uses owner-only API routes and optimistic concurrency (0.835649ms)
+✔ mining UI never asks owners for a raw pool password (1.049917ms)
+✔ dashboard links to mining without claiming the runtime is production-ready (0.74873ms)
+✔ builds a deterministic idempotent offline transition plan (1.427868ms)
+✔ computes the heartbeat cutoff from a trusted server clock (0.448204ms)
+✔ rejects invalid offline thresholds (0.252394ms)
+✔ offline cancellation closes the explicit lease and unfinished attempt atomically (5.063282ms)
+✔ offline sweep never turns an offline machine back to available or claims financial success (0.817152ms)
+/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/src/config.ts:105
+export const config = schema.parse(process.env);
+                             ^
+
+ZodError: [
+  {
+    "expected": "string",
+    "code": "invalid_type",
+    "path": [
+      "DATABASE_URL"
+    ],
+    "message": "Invalid input: expected string, received undefined"
+  }
+]
+    at <anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/src/config.ts:105:30)
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async <anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/orphaned-deposit-booking-reconciler.test.ts:28:46)
+
+Node.js v24.22.1
+✖ test/orphaned-deposit-booking-reconciler.test.ts (328.24154ms)
+✔ a new pairing code immediately invalidates the previous code for the same host (0.749572ms)
+✔ concurrent requests leave exactly one active code for a host (0.217943ms)
+✔ a pairing code can only be consumed once and clears the host reference (0.124014ms)
+✔ pairing codes remain isolated between different hosts (0.114119ms)
+✔ unrelated Redis keys keep their original behavior (0.181198ms)
+✔ installing the guard twice is idempotent (0.128531ms)
+✔ historical two-machine result cannot be mistaken for current release qualification (3.915156ms)
+✔ current physical qualification remains fail-closed until the real two-PC flow is proven (0.849009ms)
+✔ two-PC operator procedure describes the current real qualification path (4.22106ms)
+✔ PC A preflight locks release/Agent/GPU identity and is read-only toward Docker resources (0.743111ms)
+✔ PC B preflight proves the configured public browser/API/gateway path and exact build identity (0.690554ms)
+✔ API publishes only an exact non-secret deployment commit for qualification (0.719887ms)
+✔ PC B reserves the workspace tab synchronously before requesting the one-time access grant (0.727468ms)
+✔ evidence collector stays fail-closed and cannot self-declare physical qualification passed (0.668512ms)
+✔ CI parses every physical qualification PowerShell helper before merge (0.60754ms)
+✔ current gate advertises tooling but remains NOT YET PASSED and evidence bundles are gitignored (0.999662ms)
+✔ active web/build/deployment configuration contains no Render API or gateway hardcodes (19.306889ms)
+✔ verification scripts use the provider-neutral runtime contract, never the legacy Render blueprint (1.107893ms)
+✖ quarantine history is immutable: a second quarantine never overwrites the first, and is recorded as REENTERED (35.05495ms)
+✖ clearQuarantine resolves open history events and appends a CLEARED entry (0.674711ms)
+✖ a forced admin clear is never hidden in history: details.forced is set with the operator id (0.143262ms)
+✖ diagnostic PASS on every mandatory check clears an active quarantine (controlled transition, not a bare heartbeat) (0.031016ms)
+✖ diagnostic FAIL on a mandatory check maintains the quarantine with the specific reasonCode (0.035533ms)
+✖ a diagnostic that could not execute at all (agent-side error) maintains quarantine, never clears it (0.028663ms)
+✖ a second result submission for an already-completed diagnostic run is rejected as a conflict, never silently reapplied (0.070915ms)
+✖ repair never clears a quarantine by itself - a fresh diagnostic remains mandatory afterwards (0.069483ms)
+✖ a quarantined machine cannot be published (createExactGpuListing fails closed with the real reason) (0.042152ms)
+✖ a quarantined machine cannot be rented (allocateBookingResources fails closed) (0.057065ms)
+✖ end-to-end: QUARANTINED -> diagnostic -> real PASS results -> CLEAR -> publication succeeds (0.143042ms)
+✖ a stale machine (30+ days without a heartbeat) is identified as STALE, distinct from a merely offline one (0.023975ms)
+✖ the agent challenge endpoint no longer requires moderationStatus CLEAR (a quarantined machine must still authenticate to run its diagnostic) (0.017696ms)
+✔ quarantine UI shows the durable cause and exposes one automatic resolution action (4.504619ms)
+✔ one-click resolution chains safe repair then a real diagnostic, never a force clear (0.300686ms)
+✔ quarantine-service remains the only production authority for quarantine state writes (21.834276ms)
+✔ quarantine-service writes machine state and durable event history together (0.76858ms)
+﹣ configured Redis provides the atomic capabilities required by GPUbnb (0.474914ms) # SKIP
+✔ capability proof exercises every Redis semantic GPUbnb depends on (1.019912ms)
+✔ capability proof fails closed when one-shot consumption is unavailable (0.410348ms)
+✔ capability proof fails closed when Streams are unavailable (0.152526ms)
+✔ readiness caches a successful full capability proof for a bounded interval (0.658396ms)
+✔ failed readiness proof is never cached (0.274527ms)
+✔ runtime topology declares every Redis capability required by the state contract (5.018802ms)
+✔ one-time credentials use atomic consume-once semantics (1.59804ms)
+✔ agent anti-replay remains atomic under concurrent verification (0.731144ms)
+✔ presence, leases and scheduler authority retain ownership-checked atomic operations (1.185298ms)
+✔ workspace relay keeps bounded queue and backpressure primitives (0.828589ms)
+✔ outbox remains durable in Postgres while Redis Streams are delivery-only (0.715531ms)
+✔ routing prefers locality while never assigning a draining gateway (0.988015ms)
+✔ routing rejects saturated or unhealthy connection gateways (0.396127ms)
+✔ capacity arithmetic is bounded and rejects incoherent snapshots (0.106778ms)
+✔ release identity prefers explicit provider-neutral override (1.002496ms)
+✔ release identity uses the Render deployment commit in production (0.234387ms)
+✔ release identity accepts GitHub SHA for CI and rejects ambiguous values (0.098476ms)
+✔ production heartbeat retries only the PostgreSQL transaction after one-time Redis challenge consumption (4.445432ms)
+✔ workspace stopped route retries both replay-safe Serializable cleanup transactions and deletes Redis only after commit (0.895899ms)
+✔ canonical payload hash is stable across key order (0.60019ms)
+✔ outbox validation rejects unsafe identifiers and oversized payloads (0.807567ms)
+✔ machine commands require monotonic sequence and future expiry (0.172355ms)
+✔ retry policy is bounded and deterministic (0.179276ms)
+✔ worker-controlled limits are clamped (0.126678ms)
+✔ records a deterministic outbox event (1.58501ms)
+✔ preparation reserves an ordered command and matching event (0.388976ms)
+✔ stop requests are reason-bound and idempotent (0.224713ms)
+✔ rejects malformed identifiers before database writes (0.334586ms)
+✔ exact GPU is publishable only with fresh verified resource authority (0.928336ms)
+✔ missing Accelerator to MiningResource authority blocks publication before booking (0.103433ms)
+✔ quarantine, missing isolation and stale evidence fail closed (0.093619ms)
+✔ resource authority quarantine and unsafe runtime block publication (0.066839ms)
+✔ live allocation or another reservable listing blocks duplicate publication (0.121801ms)
+✔ listOwnerRentalGpus surfaces the blocking legacy listing id so the owner can archive it (0.931462ms)
+✔ listOwnerRentalGpus never sets blockingListingId when the GPU is publishable (0.196431ms)
+✔ pause hides new bookings without cancelling an existing committed booking (0.909569ms)
+✔ resume requires both fresh machine presence and healthy exact GPU (0.554372ms)
+✔ archive is refused while a committed booking still exists (0.254507ms)
+✔ archive releases the listing identity once no committed booking remains (0.145075ms)
+✔ security-suspended listing cannot be owner-resumed or owner-archived (2.337517ms)
+✔ legacy FULL_MACHINE listing with no dependency is archived (0.324341ms)
+✔ legacy archive refuses a listing with an active booking (0.426052ms)
+✔ legacy archive refuses a listing with a live machine allocation (0.204753ms)
+✔ legacy archive refuses a listing with a live accelerator allocation (0.2834ms)
+✔ a released allocation does not block legacy archive (0.313065ms)
+✔ legacy archive refuses a listing with a live job (0.154509ms)
+✔ legacy archive refuses a listing with a live workspace session (lease) (0.139907ms)
+✔ legacy archive refuses a listing with an unsettled payment (0.122843ms)
+✔ legacy archive allows a SETTLED booking whose payment was PARTIALLY_REFUNDED (0.088502ms)
+✔ legacy archive is a no-op success when the listing is already archived (idempotent) (0.062883ms)
+✔ legacy archive never touches a SELECTED_ACCELERATORS listing (0.152836ms)
+✔ archiving one legacy listing leaves a sibling legacy listing on the same machine untouched (0.178725ms)
+✔ healthy exact GPU restores HIDDEN_OFFLINE listing (1.042195ms)
+✔ stale or quarantined exact GPU never reactivates listing (0.172837ms)
+✔ listing with zero or multiple accelerator links never auto-recovers (0.114861ms)
+✔ legacy machine-level publication is blocked before historical handler execution (55.876024ms)
+✔ legacy FULL_MACHINE booking is blocked before historical handler execution (5.520296ms)
+✔ SELECTED_ACCELERATORS booking reaches the historical booking transaction (11.101531ms)
+✔ verified exact GPU with fresh authority remains public (0.542164ms)
+✔ reserved and running GPUs may remain visible while availability is handled separately (0.136873ms)
+✔ stale, quarantined or unisolated GPU disappears from public marketplace (0.103333ms)
+✔ missing, quarantined or unsafe MiningResource fails closed (0.077205ms)
+✔ publish UI requires one exact server-qualified GPU (4.378052ms)
+✔ exact GPU rental routes are registered in the real API route graph (0.983678ms)
+✔ legacy machine-level listing publication and booking are fail-closed (0.978741ms)
+✔ new rental listing path is SELECTED_ACCELERATORS only (0.561943ms)
+✔ renter marketplace and workspace chooser use exact selected GPU routes (0.888978ms)
+✔ owner machines and listings pages use server-authoritative rental views (1.003588ms)
+✔ owner listing lifecycle exposes pause resume archive without overloading security statuses (1.677358ms)
+﹣ buildRentalResourceAuthority resolves a real Compute/GPU_PROOF session (rental_resource_authority_missing_for_session regression) (1.153681ms) # SKIP
+▶ rental resource authority
+  ✔ preempts an older mining lease with one newer fence and refreshes idempotently (1.826879ms)
+  ✔ full-machine authority maps every qualified GPU resource (5.431675ms)
+  ✔ repairs a missing GPU resource mapping from stable hardware identity (0.455766ms)
+  ✔ fails closed when an existing GPU resource is disabled (0.134059ms)
+  ✔ rejects overlapping live sessions before creating a fencing war (0.346483ms)
+  ✔ releases the exact rental lease only after stop intent (0.473472ms)
+  ✔ does not release a live READY rental lease (0.197824ms)
+✔ rental resource authority (9.774484ms)
+✔ rental authority polling has a dedicated rate-limit budget (4.295209ms)
+✔ rental heartbeat policy defaults without importing production config (0.583695ms)
+✔ rental heartbeat policy honors the same validated range as app config (0.092497ms)
+✔ invalid rental heartbeat policy fails closed (0.50624ms)
+✔ prepareComputeRental writes session, job, outbox and machine command in one transaction (2.224769ms)
+✔ prepareComputeRental is idempotent for an existing renter session (0.183973ms)
+✔ stopRentalSession atomically requests cancellation and emits a runtime-bound stop command (0.646729ms)
+✔ maintained API and web sources have no executable legacy copies at repository root (4.260147ms)
+✔ repository entry points route to maintained API and web trees (1.430241ms)
+✔ root agent.py remains an explicit compatibility launcher, not a duplicate implementation (0.874496ms)
+✔ allocateBookingResources creates a MachineAllocation for a FULL_MACHINE listing (1.839798ms)
+✔ hot presence canary blocks the real allocation before any allocation write (1.019802ms)
+✔ allocateBookingResources refuses to double-allocate an already-allocated booking (0.369848ms)
+✔ allocateBookingResources allocates the exact verified GPU linked to the listing (0.463307ms)
+✔ allocateBookingResources rejects a selected accelerator that is not rentable (0.569534ms)
+✔ allocation fails closed when the exact GPU MiningResource authority is missing (0.909769ms)
+✔ allocation fails closed when exact GPU authority is stale or already bound to a rental (0.420394ms)
+✔ allocateBookingResources never allocates a resource for a booking that is no longer AWAITING_DEPOSIT (0.563476ms)
+✔ allocateBookingResources fails closed when it loses the row-lock race for a booking the reconciler cancels mid-transaction (0.225414ms)
+✔ lease and fence keys are guaranteed to share a Redis Cluster slot (0.671876ms)
+✔ lease acquisition is idempotent and produces monotonic fencing tokens (1.163195ms)
+✔ runtime authority snapshot matches regardless of ordering (0.64769ms)
+✔ runtime authority snapshot rejects a session that ended during the diagnostic (0.088712ms)
+✔ runtime authority snapshot rejects a session that started during the diagnostic (0.054231ms)
+✔ runtime authority canonicalization is deterministic and de-duplicates ids (0.422727ms)
+✔ an old agent with no runtimeCleanup proof cannot clear quarantine (1.125069ms)
+✔ runtime cleanup failure maps to WORKSPACE_CLEANUP_FAILED (0.544097ms)
+✔ runtime cleanliness plus every existing mandatory check can pass (0.082783ms)
+✔ diagnostic wiring derives runtime cleanliness server-side from bounded evidence and fresh authority (6.207329ms)
+✔ API reconciliation tick is protected by a distributed lease (3.991548ms)
+✔ API offline and stale-job sweep is protected by a distributed lease (0.728169ms)
+✔ delivery worker uses the same development-bookings scheduler authority (0.623765ms)
+✔ distributed lease helper uses ownership-checked renewal and release (0.824001ms)
+✔ provider-specific single-process assumption is gone from runtime scheduler comments (0.579009ms)
+✔ cursor pagination is bounded and deterministic (1.316452ms)
+✔ idempotency keys reject weak or injectable values (0.171414ms)
+✔ batch sizes are capped to protect workers (0.082843ms)
+✔ stable shard assignment is repeatable and bounded (0.218103ms)
+✔ billing evidence outlives raw telemetry (0.098546ms)
+{"level":"info","message":"scheduler_presence_shadow","machineId":"machine_00000001","live":false,"phase":null,"gatewayId":null,"reason":"presence_missing_or_expired"}
+{"level":"info","message":"scheduler_presence_shadow","machineId":"machine_00000001","live":false,"phase":null,"gatewayId":null,"reason":"presence_read_error:redis_down"}
+✔ presence bucket is deterministic and bounded (0.815429ms)
+✔ hot rollout cannot exceed parent Agent QUIC rollout (0.400093ms)
+✔ legacy mode never blocks allocation on missing Redis presence (0.630255ms)
+✔ shadow mode observes missing presence without blocking allocation (0.803201ms)
+✔ hot mode with zero rollout remains non-blocking (0.342087ms)
+✔ assigned hot machine must have a live gateway presence (0.285663ms)
+✔ live DRAINING phase proves connectivity but does not invent business availability (0.576515ms)
+✔ quarantined hot machine is rejected (0.344436ms)
+✔ Redis errors fail closed only for assigned hot machines (0.405832ms)
+✔ accepts a valid v2 signature exactly once (25.576656ms)
+✔ rejects any body alteration (4.386274ms)
+✔ rejects an invalid signature and an expired timestamp (5.011231ms)
+✔ rejects a signature presented for another machine (12.136366ms)
+✔ rejects malformed nonces and unsupported versions (3.39209ms)
+✔ constant-time token comparison accepts exact value (0.49197ms)
+✔ constant-time token comparison rejects missing, short and different values (0.092437ms)
+✔ trusts production and numbered GPUbnb Netlify previews only (0.219396ms)
+✔ every agent endpoint carrying a body requires the raw-body-bound V2 signature (4.722813ms)
+✔ registers device authorization routes after security plugins and hooks (3.757592ms)
+✔ a frozen payment has a manual resolution path (C6) (4.786888ms)
+✔ settlement finalization is reachable via internal, token-protected routes (4.351903ms)
+✔ pays only forty minutes and refunds twenty minutes of a one-hour booking (0.605477ms)
+✔ does not grant full payment at ninety percent availability (0.084315ms)
+✔ refunds the full escrow when no service time is validated (0.056904ms)
+✔ complete-minute rounding never overpays and preserves the escrow invariant (0.073849ms)
+✔ an incomplete first minute is not billed (0.093569ms)
+✔ rejects unsafe or impossible duration values (0.333144ms)
+✔ requestSettlement atomically persists calculated settlement and outbox event (1.588455ms)
+✔ confirmSettlement creates a partial refund, settles booking and releases resources once (0.897211ms)
+✔ confirmSettlement is idempotent for the same finalized signature (0.184864ms)
+✔ confirmSettlement refuses a conflicting signature (0.374656ms)
+✔ requestSettlement refuses an escrow amount mismatch (0.311422ms)
+✔ billing unit is one minute (0.582884ms)
+✔ 45 minutes of a 60-minute reservation makes 4.50 of 6 payable (0.160077ms)
+✔ 40 minutes of a 60-minute reservation is billed as 40 minutes (0.083334ms)
+✔ an incomplete minute is not billed (0.111646ms)
+✔ the next completed minute becomes billable (0.071646ms)
+✔ 90 percent availability remains minute-proportional (0.055522ms)
+✔ full service pays the full escrow minus commission (0.059267ms)
+✔ a fully completed non-round reservation pays the full escrow (0.062443ms)
+✔ zero validated service refunds the full amount (0.061541ms)
+✔ settlement invariant holds for every second of an hour (1.907118ms)
+✔ integer rounding never overcharges the renter (0.083003ms)
+✔ rejects invalid durations and commissions (0.244402ms)
+✔ one lamport never creates money (0.241578ms)
+✔ escrow expires one hour after booking end (0.071976ms)
+✔ booking digest is deterministic and domain separated (1.271967ms)
+✔ escrow PDA is deterministic (3.392741ms)
+✔ stalled activation re-checks execution liveness inside a serializable, retry-wrapped transaction (4.658468ms)
+✔ expired claimed activation fails closed instead of releasing the machine (0.946062ms)
+✔ only never-claimed work can release a machine and release is guarded by runtime absence (0.873245ms)
+✔ stalled activation never claims financial success (1.315892ms)
+✔ reconcileStalledActivations degrades FUNDED/STARTING bookings whose start time is long past without reaching ACTIVE (4.111036ms)
+✔ the grace period is a real safety margin, not effectively zero (0.831633ms)
+✔ the reconciliation interval runs both reconcilers on every tick, independently of each other failing (0.82221ms)
+✔ static dependency upgrade preserves files, fallback, caching, ranges and traversal protection (71.778595ms)
+✔ browser Supabase usage is auth-only and never queries Prisma application tables directly (3.846404ms)
+✔ rejected Supabase sessions are cleared locally instead of retried forever (0.709613ms)
+✔ database migration revokes current and future Data API privileges from browser roles (0.548854ms)
+✔ transaction advisory helper reports PostgreSQL lock ownership (0.772024ms)
+✔ transaction advisory helper rejects unbounded task names (0.315828ms)
+✔ destructive periodic sweeps are fenced before reading mutable state (6.020777ms)
+✔ portal pages expose accessible navigation and real targets (6.068569ms)
+✔ account pages render real API collections safely (1.174221ms)
+✔ cross-origin GET requests remain simple and preserve error status (0.859464ms)
+✔ listing publication requires a server-qualified exact GPU linked by Host (0.762601ms)
+✔ installer downloads are verified by the Netlify function (1.705269ms)
+✔ heartbeat accepts NVIDIA with cudaVersion (3.2569ms)
+✔ heartbeat accepts AMD without cudaVersion (0.428395ms)
+✔ heartbeat accepts Intel with gpuVendor INTEL (0.127809ms)
+✔ inventory accepts without nvidiaRuntimeAvailable (1.542978ms)
+✔ inventory accepts with nvidiaRuntimeAvailable false (0.143713ms)
+✔ allows only a healthy ready renter session (1.141352ms)
+✔ rejects another user (0.207528ms)
+✔ rejects unready workspace (0.081932ms)
+✔ rejects expired session (0.052889ms)
+✔ rejects stale heartbeat (0.057094ms)
+✔ rejects quarantined machine (0.050636ms)
+✔ a 35s-old heartbeat - representative of real agent cadence, not just clock skew - must still be accepted (0.212811ms)
+✔ workspace-renter-routes.ts wires a heartbeat threshold wide enough for real agent cadence, never the tighter clock-skew-on-submission constant (0.546461ms)
+✔ workspace access grant is opaque, scoped, correlated and one-time (2.130809ms)
+✔ workspace access request correlation remains optional for compatibility (0.170313ms)
+✔ invalid oversized token is rejected without lookup (0.110704ms)
+﹣ activates from STARTING exactly as before: booking becomes ACTIVE, real clock starts (14.970759ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ also activates from ACTIVE (the GPU_DIAGNOSTIC beta-bypass path already proved the GPU before any workspace opened) (3.83723ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ a 15-minute booking still grants a full ~15 minutes after activation, even though 8 minutes already elapsed since booking creation (4.662734ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ is idempotent: a second call (refresh, reconnect, double click) never re-extends the deadline (5.198558ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ refuses to activate a session that is not actually READY yet (3.241266ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+﹣ refuses to activate a booking in a status that was never eligible in the first place (3.272202ms) # no reachable local Postgres for this test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+✔ runtime registration opens a bounded activation window without starting paid time (4.228059ms)
+✔ grant consumption authenticates the browser but cannot activate or bill the booking (0.648041ms)
+✔ only the first authenticated upstream WebSocket frame starts paid time (0.678586ms)
+✔ developer usage remains zero while READY and increments only for RUNNING plus ACTIVE (0.574192ms)
+✔ a cleaned workspace that never became interactive is recorded as a failure (0.626899ms)
+✔ verified Developer cleanup cannot release a machine while another runtime still owns it (1.199399ms)
+✔ generic compute start and metrics routes cannot bypass the Developer billing gate (0.642072ms)
+✔ the dev-bypass diagnostic reconciler never touches a booking with a real Developer session (0.443337ms)
+✔ workspace browser CSP is scoped away from agent and API routes (0.700919ms)
+✔ workspace response overrides API CSP and grants only the authenticated session service-worker scope (55.24357ms)
+✔ workspace service-worker scope encodes the session id and cannot escape the gateway prefix (0.241859ms)
+✔ workspace absolute-path redirects remain inside the authenticated session prefix (3.123952ms)
+✔ high-end machine receives an explainable AI score (1.01222ms)
+✔ missing requirements produce explicit incompatibility (0.195019ms)
+✔ catalogue contains exactly thirteen unique workspaces (0.237302ms)
+✔ a real low-VRAM machine (this session's own 4GB GTX 1650) is incompatible with AI Workspace (needs 8GB minimum) (0.211374ms)
+✔ the same real low-VRAM machine is compatible with Compute Workspace (no VRAM requirement) (0.150332ms)
+✔ a mid-tier machine meets AI Workspace minimum but not its recommended tier, scored as LIMITED not READY (0.140879ms)
+✔ a high-tier 24GB card is READY for every GPU-requiring workspace in the catalogue (0.304431ms)
+✔ the engine produces a strictly different verdict across the three tiers for the same workspace (0.101931ms)
+✔ no GPU detected at all is incompatible with any workspace requiring VRAM (0.121701ms)
+✔ insufficient RAM alone is incompatible even with an otherwise capable GPU (0.197423ms)
+✔ insufficient storage alone is flagged explicitly, not silently ignored (0.259444ms)
+✔ Docker unavailable blocks any workspace whose manifest requires it (0.098145ms)
+✔ CUDA unavailable blocks a CUDA-requiring workspace even with ample VRAM (0.992021ms)
+✔ a workspace with no GPU requirement at all is never blocked by GPU fields, even when they are null (0.122191ms)
+✔ creator Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY (0.117264ms)
+✔ creator Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit (0.086848ms)
+✔ cloud-desktop Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY (0.115852ms)
+✔ cloud-desktop Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit (0.041091ms)
+✔ cad Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY (0.0207ms)
+✔ cad Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit (0.017036ms)
+✔ gaming Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY (0.025137ms)
+✔ gaming Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit (0.030686ms)
+✔ workspace/developer atomically re-verifies the booking (status + endsAt) inside its own transaction, before creating the session (4.639299ms)
+✔ safeConnection requires a well-formed gatewayPath, not just a truthy object (0.916699ms)
+✔ preparationPhase reports GATEWAY_NOT_READY when status is READY but the gateway has not registered (0.105517ms)
+✔ preparationPhase reports the real READY status once the gateway connection is confirmed (0.050335ms)
+✔ preparationPhase is unaffected by connectionReady while still PREPARING (0.044136ms)
+✔ preparationPhase passes through terminal/running statuses unchanged regardless of connectionReady (0.082773ms)
+✔ gateway never returns a direct host endpoint to the renter (0.872673ms)
+✔ websocket upgrades fail explicitly and expose a minimal edge health probe (0.16168ms)
+✔ browser websocket consumes an explicit signed agent open acknowledgement (0.177433ms)
+✔ legacy agents retain first-upstream-frame readiness during rollout (0.09407ms)
+✔ nonce-bound v2 auth is preferred for both GET and body relay traffic (0.072608ms)
+✔ websocket tunnel batches both directions with bounded payloads (0.160699ms)
+✔ agent tunnel preserves long-lived websocket handshakes and absorbs startup bursts (0.120018ms)
+✔ batched upstream frames are retry-idempotent before entering browser queue (0.093419ms)
+✔ websocket tunnel has dedicated throughput and payload guards (0.085157ms)
+✔ browser delivery pump is serialized, bounded and close-aware (0.231183ms)
+✔ redis relay queues are bounded by item count, bytes and ttl (0.149171ms)
+✔ billing activation remains tied to a real upstream websocket frame (0.085597ms)
+✔ concurrent websocket activation accepts the transaction winner (0.05376ms)
+✔ session activation is cached away from repeated websocket frames (0.097335ms)
+✔ websocket subprotocol may cross the authenticated gateway (0.043554ms)
+✔ agent developer runtime binds only to loopback and has no host bind mount (0.206807ms)
+✔ cleanup is fail closed and expired sessions are stopped (0.078206ms)
+✔ an already accepted websocket frame is deduped before queue capacity rejection (0.557106ms)
+✔ workspace gateway liveness tolerates several missed 10s reports but expires stale registrations (0.504598ms)
+✔ future gateway timestamps are fail-closed (0.081441ms)
+﹣ gateway register is the only thing that makes a Developer workspace openable, and is idempotent (16.51681ms) # no reachable local Postgres/Redis for this E2E test: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+✔ browser pending budget is bounded by both items and bytes (1.121904ms)
+✔ strict base64 rejects malformed or decoded-oversize frames (0.414264ms)
+✔ workspace absolute redirects stay inside the authenticated gateway prefix (0.120168ms)
+✔ websocket data normalization preserves bytes and fragmented buffers (0.117975ms)
+✔ websocket rejection is a complete non-cacheable HTTP response (0.70133ms)
+✔ websocket rejection never exposes internal details beyond the stable error code (0.146698ms)
+✔ renter workspace access propagates the Fastify request id into the one-time grant (5.308441ms)
+✔ gateway critical websocket logs share one complete correlation context (1.064969ms)
+✔ workspace correlation never adds bearer secrets or payload data to the child logger (0.875298ms)
+✔ ensureComputePreparation is Serializable and recovers from the WorkspaceSession.bookingId race (C7) (4.228771ms)
+✔ the workspace-sessions route never returns a raw Prisma error message to the client (C7) (0.921026ms)
+✔ workspace progress reports are authenticated, fenced and refresh the explicit lease (4.262942ms)
+✔ Developer workspace retry remains restricted to terminal sessions and creates one new immutable attempt (0.749712ms)
+✔ Developer workspace status module still exposes phase, elapsed time, last activity and terminal error (0.72212ms)
+✔ private-beta renter UI separates current Compute reservations from collapsed history (0.818443ms)
+✔ workspace retry now covers a failed Compute/GPU_PROOF session too, creating the correct job type (0.733077ms)
+✔ private-beta renter UI keeps the latest terminal GPU_PROOF failure visible (0.645217ms)
+✔ WorkspaceSession is unique per (bookingId, machineWorkspaceId), not per bookingId alone (4.251073ms)
+✔ a matching migration drops the old constraint and creates the composite one (0.62032ms)
+✔ requesting a Developer session scopes its existing-session lookup to the Developer machineWorkspace (0.73463ms)
+✔ the Developer workspace status and access routes never return an unrelated compute session (0.832824ms)
+✔ POST /workspace-sessions/:id/start re-anchors expiresAt to startedAt + expectedSeconds (source check) (0.933945ms)
+﹣ workspace-sessions/:id/start formula: expiresAt tracks expectedSeconds, not the original booking window (0.08095ms) # SKIP
+✔ verified activated Developer cleanup finalizes once and releases an idle machine (1.703526ms)
+✔ already terminal session is an idempotent success with no second state mutation (0.943449ms)
+✔ missing or non-Developer session fails closed (0.488224ms)
+✔ counts only available intervals backed by a workload proof (0.5333ms)
+✔ never validates more usage than the booking duration (0.106287ms)
+ℹ tests 690
+ℹ suites 3
+ℹ pass 641
+ℹ fail 15
+ℹ cancelled 0
+ℹ skipped 34
+ℹ todo 0
+ℹ duration_ms 31643.319678
+
+✖ failing tests:
+
+test at test/dev-bypass-settlement-reconciler.test.ts:1:1
+✖ test/dev-bypass-settlement-reconciler.test.ts (339.883484ms)
+  'test failed'
+
+test at test/orphaned-deposit-booking-reconciler.test.ts:1:1
+✖ test/orphaned-deposit-booking-reconciler.test.ts (328.24154ms)
+  'test failed'
+
+test at test/quarantine-diagnostics-system.test.ts:1:5366
+✖ quarantine history is immutable: a second quarantine never overwrites the first, and is recorded as REENTERED (35.05495ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+
+test at test/quarantine-diagnostics-system.test.ts:1:6976
+✖ clearQuarantine resolves open history events and appends a CLEARED entry (0.674711ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+
+test at test/quarantine-diagnostics-system.test.ts:1:8003
+✖ a forced admin clear is never hidden in history: details.forced is set with the operator id (0.143262ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+
+test at test/quarantine-diagnostics-system.test.ts:1:8787
+✖ diagnostic PASS on every mandatory check clears an active quarantine (controlled transition, not a bare heartbeat) (0.031016ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+
+test at test/quarantine-diagnostics-system.test.ts:1:9925
+✖ diagnostic FAIL on a mandatory check maintains the quarantine with the specific reasonCode (0.035533ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+
+test at test/quarantine-diagnostics-system.test.ts:1:11194
+✖ a diagnostic that could not execute at all (agent-side error) maintains quarantine, never clears it (0.028663ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+
+test at test/quarantine-diagnostics-system.test.ts:1:12050
+✖ a second result submission for an already-completed diagnostic run is rejected as a conflict, never silently reapplied (0.070915ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+
+test at test/quarantine-diagnostics-system.test.ts:1:13421
+✖ repair never clears a quarantine by itself - a fresh diagnostic remains mandatory afterwards (0.069483ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+
+test at test/quarantine-diagnostics-system.test.ts:1:15183
+✖ a quarantined machine cannot be published (createExactGpuListing fails closed with the real reason) (0.042152ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+
+test at test/quarantine-diagnostics-system.test.ts:1:15865
+✖ a quarantined machine cannot be rented (allocateBookingResources fails closed) (0.057065ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+
+test at test/quarantine-diagnostics-system.test.ts:1:17253
+✖ end-to-end: QUARANTINED -> diagnostic -> real PASS results -> CLEAR -> publication succeeds (0.143042ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+
+test at test/quarantine-diagnostics-system.test.ts:1:20330
+✖ a stale machine (30+ days without a heartbeat) is identified as STALE, distinct from a merely offline one (0.023975ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+
+test at test/quarantine-diagnostics-system.test.ts:1:21114
+✖ the agent challenge endpoint no longer requires moderationStatus CLEAR (a quarantined machine must still authenticate to run its diagnostic) (0.017696ms)
+  PrismaClientInitializationError: 
+  Invalid `prisma.user.findMany()` invocation in
+  /workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:38
+  
+    45 if (!hasDb) return;
+    46 const prisma = new PrismaClient();
+    47 try {
+  → 48   const owners = await prisma.user.findMany(
+  Can't reach database server at `localhost:5432`
+  
+  Please make sure your database server is running at `localhost:5432`.
+      at ei.handleRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:242:13)
+      at ei.handleAndLogRequestError (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at async a (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at async TestContext.<anonymous> (/workspace/scratch/44921c6f8796/gpubnb-dependencies/apps/api/test/quarantine-diagnostics-system.test.ts:48:20)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
