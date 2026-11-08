@@ -1,10 +1,7 @@
 name: Asset Exchange DOGE Private Signed Regtest
 
-# Temporary exact-branch trigger for this user-authorized experiment only.
+# Manual exact-branch experiment; temporary automatic trigger retired after evidence capture.
 on:
-  push:
-    branches: [asset-exchange/doge-native-spends-20261107]
-    paths: ['.github/workflows/asset-exchange-dogecoin-native-spends.yml']
   workflow_dispatch:
 
 permissions:
@@ -25,7 +22,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 2
+          fetch-depth: 0
       - name: Require unchanged frozen harness and test before native execution
         run: |
           set -euo pipefail

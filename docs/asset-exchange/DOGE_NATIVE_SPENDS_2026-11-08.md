@@ -57,3 +57,28 @@ Run 42425569513 at 40908d22a0640c6f8df70efb638296779995ebf5: native experiment s
 Sixteen native cases, 47 RPC calls, 1356 generated blocks. After SIGKILL (-9), 1356 framed records including genesis and the exact prior tip are present on disk. Immediate reindex restores exact height 1355/hash d48ad7190813c011677c5852debf2486ed645b87406221a38bab9ef1458ad38a. The 100-DOGE refund input has three confirmations and exact expected script. Previously signed refund is admitted and confirmed after private key removal. Invalidation restores its chain UTXO and mempool entry; reconsideration restores one confirmation. Final daemon stop returns zero, zero peers, loopback-only namespace and no wallet/key residue. This proves the implemented private process-crash scenario, not general power-loss or multi-node recovery.
 
 Next frozen extension adds the matrix's wrong signature, wrong redeem, wrong destination, absent UTXO, and immature coinbase cases. Signature failures are distinct from a valid signature rejected for missing or immature input. Resource/RPC/network budgets and full D2 gate are unchanged.
+
+## Fifth execution: expanded native experiment PASS
+
+Run 42512160122 at 21aad6bab1e049a01c1dcc0d92749252fa68138a, frozen harness 8e41cbda5829ab41fa77b7c0203ab5a8882aa1e1. Artifact 13629588765 SHA256 94f6afeae4ffbd7e5087e5758ca8a0de9067c6beed7c1168f4393d5343a6326d. Archive digest and every internal SHA256SUMS entry independently verified. Native step PASS; overall workflow FAIL because the complete-D2 gate remains BLOCKED.
+
+21 actual C-ABI cases, 54 RPC calls, 1356 generated blocks, 88 offline tests PASS. All five added adversarial cases give their required results. Immature coinbase has one confirmation and a valid script signature, but admission rejects with -26 / bad-txns-premature-spend-of-coinbase. Absent input has a valid signature for the synthetic script, gettxout returns null and admission rejects with -25 / Missing inputs. Wrong signature/redeem are rejected by script validation; changed destination fails native signature verification. Recovery, refund confirmation and invalidate/reconsider pass again. No private keys, cookies, wallet or node data are included in archived artifacts.
+
+All five complete ZIPs, including the three FAIL attempts, are retained locally and in their original GitHub workflow artifacts. Only the separate SHA256SUMS inventory is committed under audits/evidence/doge-native-20261108. Archive retention in Actions is 30 days; the local copies preserve the original downloaded bytes. Automated approval review rejected republication of the detailed archives in the repository; no archive or detailed RPC dump is included in this final publication. The fourth run's positive funding/claim/refund signatures were also parsed independently from raw transaction bytes and verified with cryptography 50.0.2 secp256k1 ECDSA, legacy SIGHASH_ALL and low-S checks; this is a second parser/provider path, not an independent human audit.
+
+The temporary exact-branch push trigger is removed. Manual dispatch retains exact repository/branch gating and frozen harness comparison; full fetch history keeps that comparison valid after documentation commits. Existing signed D0 provenance and full D2 gate are unchanged.
+
+## Remaining acceptance gaps, not waived
+
+The 21 executed records include funding and nonminimal-push controls in addition to the 19 NATIVE_CORE scenario identities in the frozen 24-case inventory (`valid_refund_after_crash` corresponds to `valid_refund_after_lock`). Matching identities is not automatic proof of every semantic subcriterion: C-ABI flags 517 are only P2SH/DERSIG/CLTV, and positive admission supplies the additional node policy evidence.
+
+| Frozen inventory item | Evidence status | Remaining requirement |
+| --- | --- | --- |
+| 19 NATIVE_CORE identities | Native observations retained | Independent review and indexing of every expected script/finality/UTXO/policy result |
+| wrong_input_value | Offline preflight tests PASS | Bind exact expected intent value to the native report; legacy signature does not commit input amount |
+| excessive_fee | Offline preflight tests PASS | Bind explicit user cap to the fixture manifest; node cap is a different rule |
+| script_flag_override | Offline preflight tests PASS | Preserve source-pinned standardness/no-override checks |
+| soft_dust_reserve | NOT_TESTED natively | Source-pinned native GetDogecoinDustFee instrumentation; sendrawtransaction does not exercise the free-relay surcharge path |
+| dynamic_mempool_fee_floor | NOT_TESTED natively | Separately frozen bounded pressure fixture and observed rolling floor/rejection |
+
+The broader completion plan also requires adversarial limits/flags beyond this inventory (noncanonical signature, extra stack, bare HTLC, non-push-only or oversized scriptSig, excess sigops, negative/oversized lock operand and before-activation behavior with distinct signed participants). Historical diagnostic controls are not silently promoted to full signed-spend coverage. Multi-node/deeper reorg and power-loss durability remain outside this one-node process-crash experiment. D2 BLOCKED; D3–D9 BLOCKED; all 20 exchange directions BLOCKED. No financial activation, deployment or merge is performed.
