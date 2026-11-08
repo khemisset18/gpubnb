@@ -138,14 +138,24 @@ integration('real endpoint first-frame billing: Redis refusal never commits paid
             assert.equal(await committedGatewayFrame(db,fixture.session.id,channelId,binding,first),true);
             await assert.rejects(committedGatewayFrame(db,fixture.session.id,channelId,binding,JSON.stringify({...JSON.parse(first),dataBase64:'AQ=='})),/receipt_mismatch/);
             if(queuedBeforeCommit)assert.equal(queuedBeforeCommit,first);
-            // A retained Redis activation hint must not authorize after DB STOP.
-            await redis.set(activationKey,'1','EX',120);
+            // A direct test-only DB STOP bypasses the normal tombstone publisher.
+            // Expire the bounded Redis lease explicitly: renewal must then fail
+            // the authoritative DB snapshot instead of resurrecting the receipt.
+            const authorityBeforeStop=await redis.get(activationKey);
+            if(scenario==='unknown-commit'){
+              assert.equal(authorityBeforeStop,null,'unknown DB commit state must not publish unverified Redis authority');
+              commitFaultEnabled=false;
+              const recovered=await send();
+              assert.equal(recovered.statusCode,200,'a retry recovers the durable receipt after DB visibility returns');
+              assert.ok(await redis.get(activationKey),'receipt recovery must install a bounded generation lease');
+            }else assert.ok(authorityBeforeStop&&!authorityBeforeStop.startsWith('revoked:'),'activation publishes a durable receipt generation');
             await db.workspaceSession.update({where:{id:fixture.session.id},data:{status:WorkspaceSessionStatus.STOP_REQUESTED}});
+            await redis.del(activationKey);
             const before=await redis.llen(queueKey);
             commitFaultEnabled=false;
             const late=await send();
             assert.ok(batch?late.json().stale===1:late.statusCode===409);
-            assert.equal(await redis.llen(queueKey),before,'STOP rejects even with a live activation hint');
+            assert.equal(await redis.llen(queueKey),before,'STOP rejects even with a retained receipt generation');
           }
         }finally{redis.eval=originalEval as typeof redis.eval;await app.close();await redis.del(channelKey,browserKey,queueKey,bytesKey,activationKey,readyKey,...seen);await fixture.cleanup();}
       });

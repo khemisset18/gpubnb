@@ -134,6 +134,56 @@ integration('30/60 FPS x 1/4/8 streams: real session fence and Redis binding EVA
   }
 });
 
+integration('30/60 FPS x 1/4/8 streams: real generation admission has zero hot-path SQL',async()=>{
+  const {acceptGatewayFrame}=await import('../src/workspace-gateway.js');
+  const {seedReadySession}=await import('./fixtures/native-gateway-session.js');
+  const redis=new Redis(process.env.REDIS_URL!,{maxRetriesPerRequest:2});
+  const db=new PrismaClient({log:[{emit:'event',level:'query'}]});
+  let sqlQueries=0;db.$on('query',()=>{sqlQueries++;});
+  const fixtures:Awaited<ReturnType<typeof seedReadySession>>[]=[];
+  const keys:string[]=[],requests:Array<Parameters<typeof acceptGatewayFrame>[0]>=[];
+  try{
+    for(let i=0;i<8;i++){
+      const fixture=await seedReadySession(db,crypto.randomBytes(8).toString('hex'),{bookingStatus:BookingStatus.STARTING,expectedSeconds:900});
+      fixtures.push(fixture);
+      const channelId=crypto.randomUUID(),browserKey=`gpubnb:test:generation-load:${crypto.randomUUID()}`;
+      const channelKey='workspace-gateway:ws-channel:'+channelId;
+      const bindingRaw=JSON.stringify({sessionId:fixture.session.id,machineId:fixture.machine.id,browserSessionKey:browserKey,runtimeBackend:'WINDOWS_NATIVE'});
+      keys.push(channelKey,browserKey,'workspace-gateway:ws-session-activated:'+fixture.session.id,
+        'workspace-gateway:ws-input:'+channelId,'workspace-gateway:ws-input-bytes:'+channelId);
+      await redis.set(channelKey,bindingRaw,'EX',120);await redis.set(browserKey,'live','EX',120);
+      const request={db,redis,sessionId:fixture.session.id,machineId:fixture.machine.id,channelId,bindingRaw,
+        frame:{dataBase64:'AA==',binary:true,close:false}};
+      requests.push(request);
+      assert.equal((await acceptGatewayFrame(request)).enqueued,1,'the measured session must first commit billing and its receipt');
+    }
+    for(const fps of [30,60] as const)for(const channels of [1,4,8]){
+      // Warm or renew each two-second receipt lease outside the measured region.
+      await redis.del(...requests.slice(0,channels).map(request=>'workspace-gateway:ws-session-activated:'+request.sessionId));
+      assert.deepEqual((await Promise.all(requests.slice(0,channels).map(acceptGatewayFrame))).map(x=>x.enqueued),Array(channels).fill(1));
+      sqlQueries=0;const samples:number[]=[];const before=performance.now();
+      await Promise.all(requests.slice(0,channels).map(async request=>{
+        const channelStart=performance.now();
+        for(let frame=0;frame<fps;frame++){
+          const started=performance.now(),accepted=await acceptGatewayFrame(request);
+          assert.equal(accepted.enqueued,1);samples.push(performance.now()-started);
+          const remaining=channelStart+(frame+1)*1000/fps-performance.now();
+          if(remaining>0)await new Promise(resolve=>setTimeout(resolve,remaining));
+        }
+      }));
+      samples.sort((a,b)=>a-b);const frames=fps*channels;
+      const summary={kind:'ci-ephemeral-real-redis-generation-admission-not-video-or-production',fps,channels,frames,
+        sqlQueries,sqlQueriesPerFrame:sqlQueries/frames,redisGets:frames,redisEvals:frames,
+        p50Ms:percentile(samples,.5),p95Ms:percentile(samples,.95),p99Ms:percentile(samples,.99),wallMs:performance.now()-before};
+      assert.equal(sqlQueries,0,'a hot receipt lease must issue no Prisma query per frame');
+      console.log('STAGE4_GENERATION_ADMISSION_REAL '+JSON.stringify(summary));
+    }
+  }finally{
+    if(keys.length)await redis.del(...keys).catch(()=>undefined);redis.disconnect();
+    for(const fixture of fixtures.reverse())await fixture.cleanup();await db.$disconnect();
+  }
+});
+
 integration('PostgreSQL session row lock orders native send commits against STOP', async () => {
   const { markNativeGatewayRevocationStarted, withNativeGatewaySessionFence } = await import('../src/workspace-gateway.js');
   const { seedReadySession } = await import('./fixtures/native-gateway-session.js');
@@ -231,9 +281,10 @@ integration('PostgreSQL session row lock orders native send commits against STOP
 
 
 // A first accepted frame uses the exclusive billing transaction. Subsequent
-// frames should share the PostgreSQL row lock, permitting concurrent streams
-// while keeping STOP's exclusive update ordered after admitted enqueues.
-integration('activated native frames admit concurrently with shared fences and still serialize STOP', async () => {
+// frames use a short Redis lease carrying the durable receipt generation. STOP
+// must not wait for their delayed Redis operations: its tombstone is the
+// linearization point that rejects those stale generations.
+integration('activated native frames are generation-fenced without delaying STOP', async () => {
   const { acceptGatewayFrame, markNativeGatewayRevocationStarted } = await import('../src/workspace-gateway.js');
   const { seedReadySession } = await import('./fixtures/native-gateway-session.js');
   const db = new PrismaClient();
@@ -270,8 +321,9 @@ integration('activated native frames admit concurrently with shared fences and s
     await redis.set(cookieKey, JSON.stringify({sessionId: fixture.session.id, userId: fixture.renter.id}), 'EX', 120);
     assert.equal((await submit()).enqueued, 1, 'initial activation must commit a receipt first');
     assert.ok((await db.booking.findUniqueOrThrow({where:{id:fixture.booking.id}})).workspaceActivatedAt);
-    // An intentionally stale hint must never replace the PostgreSQL predicate.
-    await redis.set(hintKey, '1', 'EX', 120);
+    const authority = await redis.get(hintKey);
+    assert.ok(authority && !authority.startsWith('revoked:'), 'activation must publish its durable receipt generation');
+    const beforePending = await redis.llen(queueKey);
     let entered = 0;
     redis.eval = (async (script: unknown, ...args: unknown[]) => {
       if (String(script).includes('The binding and enqueue are linearized by Redis')) {
@@ -282,7 +334,8 @@ integration('activated native frames admit concurrently with shared fences and s
       return (originalEval as (...args: unknown[]) => Promise<unknown>)(script, ...args);
     }) as typeof redis.eval;
     pending = [submit(), submit()];
-    // If frames still take FOR UPDATE, the second callback cannot reach EVAL.
+    // If activated frames still take a PostgreSQL row lock, the second callback
+    // cannot reach Redis concurrently.
     let timeout!: ReturnType<typeof setTimeout>;
     try {
       await Promise.race([
@@ -290,21 +343,22 @@ integration('activated native frames admit concurrently with shared fences and s
         new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('native_frames_still_serialized')), 3000); }),
       ]);
     } finally { clearTimeout(timeout); }
-    let stopDone = false;
-    stop = markNativeGatewayRevocationStarted(db, redis, fixture.session.id, fixture.machine.id)
-      .then(value => { stopDone = true; return value; });
-    await new Promise(resolve => setTimeout(resolve, 25));
-    assert.equal(stopDone, false, 'STOP must wait for both in-flight shared-fence admissions');
-    releaseRedis.open();
-    assert.deepEqual((await Promise.all(pending) as {enqueued:number}[]).map(x => x.enqueued), [1, 1]);
-    assert.equal(await stop, true);
+    stop = markNativeGatewayRevocationStarted(db, redis, fixture.session.id, fixture.machine.id);
+    let stopTimeout!: ReturnType<typeof setTimeout>;
+    try {
+      assert.equal(await Promise.race([
+        stop,
+        new Promise<never>((_, reject) => { stopTimeout = setTimeout(() => reject(new Error('stop_waited_for_stale_frame_admissions')), 3000); }),
+      ]), true, 'STOP must commit without waiting for lock-free frame snapshots');
+    } finally { clearTimeout(stopTimeout); }
     assert.equal((await db.workspaceSession.findUniqueOrThrow({where:{id:fixture.session.id}})).status, WorkspaceSessionStatus.STOPPING);
-    // A delayed activation marker write can resurrect the Redis hint, but
-    // the database remains authoritative and must reject the stale grant.
-    await redis.set(hintKey, '1', 'EX', 120);
-    const beforeDenied = await redis.llen(queueKey);
-    assert.equal((await submit()).enqueued, -2, 'a committed STOP denies even with a stale activation hint');
-    assert.equal(await redis.llen(queueKey), beforeDenied, 'the stale hint must not enqueue a post-STOP frame');
+    assert.match(await redis.get(hintKey) ?? '', /^revoked:/, 'STOP must replace the generation before it returns');
+    releaseRedis.open();
+    assert.deepEqual((await Promise.all(pending) as {enqueued:number}[]).map(x => x.enqueued), [-2, -2],
+      'Redis must reject every database snapshot carrying the pre-STOP generation');
+    assert.equal(await redis.llen(queueKey), beforePending, 'stale in-flight frames must not append queue bytes');
+    assert.equal((await submit()).enqueued, -2, 'a fresh post-STOP attempt is denied by the database too');
+    assert.equal(await redis.llen(queueKey), beforePending, 'a post-STOP frame must not enter the queue');
   } finally {
     releaseRedis.open();
     await Promise.allSettled(pending);

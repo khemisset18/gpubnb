@@ -15,6 +15,7 @@ const deduped = script('ENQUEUE_DEDUPED_WS_FRAME_SCRIPT');
 const bounded = script('ENQUEUE_BOUND_WS_FRAME_SCRIPT');
 const machine = script('ENQUEUE_BOUND_MACHINE_RELAY_SCRIPT');
 const delivery = script('NATIVE_DELIVERY_FENCE_SCRIPT');
+const revokeAuthority = script('REVOKE_GATEWAY_AUTHORITY_SCRIPT');
 
 test('both Agent frame paths atomically require the original Redis channel binding', () => {
   assert.match(deduped, /redis\.call\('GET', KEYS\[4\]\) ~= ARGV\[7\]/);
@@ -23,6 +24,14 @@ test('both Agent frame paths atomically require the original Redis channel bindi
   assert.match(deduped, /ARGV\[8\] == '1' and redis\.call\('EXISTS', KEYS\[5\]\) ~= 1/);
   assert.match(bounded, /ARGV\[7\] == '1' and redis\.call\('EXISTS', KEYS\[4\]\) ~= 1/);
   assert.match(machine, /redis\.call\('EXISTS', KEYS\[4\]\) ~= 1/);
+  assert.match(deduped, /redis\.call\('GET', KEYS\[6\]\)/);
+  assert.match(deduped, /authority ~= ARGV\[10\]/);
+  assert.match(bounded, /redis\.call\('GET', KEYS\[5\]\)/);
+  assert.match(bounded, /authority ~= ARGV\[8\]/);
+  assert.doesNotMatch(deduped, /if not authority[\s\S]*?redis\.call\('SET', KEYS\[6\]/,
+    'an enqueue must never recreate a missing authority from a stale database snapshot');
+  assert.doesNotMatch(bounded, /if not authority[\s\S]*?redis\.call\('SET', KEYS\[5\]/,
+    'an enqueue must never recreate a missing authority from a stale database snapshot');
   assert.match(gateway, /enqueueAuthorizedNativeMachineRelay\(db,redis,sessionId,browser\.userId,row\.machineId,row\.runtimeBackend,channelId,channelBinding,browserSessionKey,relay\)/);
   assert.match(gateway, /withNativeGatewaySessionFence\(db,sessionId,machineId,userId,runtimeBackend/);
   assert.match(gateway, /ws\."status"::text IN \('READY','RUNNING'\)/);
@@ -32,8 +41,8 @@ test('both Agent frame paths atomically require the original Redis channel bindi
   assert.match(gateway, /options\.lockSessionForMutation\?Prisma\.raw\('UPDATE'\):Prisma\.raw\('SHARE'\)/);
   const activeFenceCalls=gateway.match(/operation\(\(\)=>operationActive&&performance\.now\(\)<activeUntil,tx\)/g)??[];
   assert.equal(activeFenceCalls.length,2,'both mutation and admission callbacks receive the bounded live-session predicate');
-  assert.match(gateway, /redis\.eval\(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,5,markerKey,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\),binding\.browserSessionKey/);
-  assert.match(gateway, /redis\.eval\(ENQUEUE_BOUND_WS_FRAME_SCRIPT,4,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\),binding\.browserSessionKey/);
+  assert.match(gateway, /redis\.eval\(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,6,markerKey,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\),binding\.browserSessionKey,wsSessionActivatedKey\(sessionId\)/);
+  assert.match(gateway, /redis\.eval\(ENQUEUE_BOUND_WS_FRAME_SCRIPT,5,wsInputKey\(channelId\),wsInputBytesKey\(channelId\),wsChannelKey\(channelId\),binding\.browserSessionKey,wsSessionActivatedKey\(sessionId\)/);
 });
 
 const withRedis = process.env.REDIS_URL ? test : test.skip;
@@ -46,15 +55,17 @@ withRedis('real Redis: revoked/replaced native channel cannot enqueue frames, ev
   const bytesKey = prefix + ':bytes';
   const machineQueueKey = prefix + ':machine-queue';
   const machineBytesKey = prefix + ':machine-queue-bytes';
+  const authorityKey = prefix + ':authority';
   const marker1 = prefix + ':seen:1';
   const marker2 = prefix + ':seen:2';
   const binding = JSON.stringify({ sessionId:'session-a',machineId:'machine-a',runtimeBackend:'WINDOWS_NATIVE' });
   const changed = JSON.stringify({ sessionId:'session-b',machineId:'machine-b',runtimeBackend:'WINDOWS_NATIVE' });
   const payload = JSON.stringify({dataBase64:'AA==',binary:true,close:false});
+  const authority = '00000000-0000-4000-8000-000000000001';
 
   async function sendSingle(expected = binding) {
-    return Number(await redis.eval(bounded, 4, queueKey, bytesKey, bindingKey, browserKey,
-      payload, '120', String(Buffer.byteLength(payload)), '512', '16777216', expected, '1'));
+    return Number(await redis.eval(bounded, 5, queueKey, bytesKey, bindingKey, browserKey, authorityKey,
+      payload, '120', String(Buffer.byteLength(payload)), '512', '16777216', expected, '1', authority));
   }
   async function sendMachine(expected = binding) {
     const relay = JSON.stringify({id:'request',kind:'ws_send',channelId:'channel',sessionId:'session-a',binary:true,dataBase64:'AA=='});
@@ -62,13 +73,16 @@ withRedis('real Redis: revoked/replaced native channel cannot enqueue frames, ev
       relay, '120', String(Buffer.byteLength(relay)), '512', '33554432', expected));
   }
   async function sendBatch(marker: string, expected = binding) {
-    return Number(await redis.eval(deduped, 5, marker, queueKey, bytesKey, bindingKey, browserKey,
-      '180', '120', payload, String(Buffer.byteLength(payload)), '512', '16777216', expected, '1'));
+    return Number(await redis.eval(deduped, 6, marker, queueKey, bytesKey, bindingKey, browserKey, authorityKey,
+      '180', '120', payload, String(Buffer.byteLength(payload)), '512', '16777216', expected, '1', 'owner', authority));
   }
 
   try {
     assert.equal(await redis.set(bindingKey, binding, 'EX', 60), 'OK');
     assert.equal(await redis.set(browserKey, 'valid-browser-session', 'EX', 60), 'OK');
+    assert.equal(await sendSingle(), -2, 'a missing authority cannot be recreated by an enqueue');
+    assert.equal(await redis.exists(authorityKey), 0, 'a stale enqueue must be side-effect free');
+    assert.equal(await redis.set(authorityKey, authority, 'EX', 60), 'OK');
     assert.equal(await sendSingle(), 1);
     assert.equal(await sendBatch(marker1), 1);
     assert.equal(await sendMachine(), 1);
@@ -95,13 +109,18 @@ withRedis('real Redis: revoked/replaced native channel cannot enqueue frames, ev
     assert.equal(await sendBatch(marker2, changed), 1);
     assert.equal(await sendMachine(changed), 1);
     assert.equal(await sendBatch(marker2, changed), 0, 'completed frame retries remain deduped');
+    await redis.eval(revokeAuthority, 1, authorityKey, 'revoked:', crypto.randomUUID(), '120');
+    const beforeRevokedGeneration = await redis.llen(queueKey);
+    assert.equal(await sendSingle(changed), -2, 'a tombstone rejects the previous durable receipt generation');
+    assert.equal(await sendBatch(prefix + ':seen:generation', changed), -2, 'batched stale generations are rejected too');
+    assert.equal(await redis.llen(queueKey), beforeRevokedGeneration, 'a stale generation cannot append queue bytes');
     await redis.del(browserKey);
     assert.equal(await sendSingle(changed), -2, 'deleted browser session must reject a single frame');
     assert.equal(await sendBatch(prefix + ':seen:3', changed), -2, 'deleted browser session must reject a batched frame');
     assert.equal(await sendMachine(changed), -2, 'deleted browser session must reject remote input');
     assert.equal(await redis.llen(machineQueueKey), 2);
   } finally {
-    await redis.del(bindingKey, browserKey, queueKey, bytesKey, machineQueueKey, machineBytesKey, marker1, marker2).catch(() => undefined);
+    await redis.del(bindingKey, browserKey, authorityKey, queueKey, bytesKey, machineQueueKey, machineBytesKey, marker1, marker2, prefix + ':seen:generation').catch(() => undefined);
     redis.disconnect();
   }
 });

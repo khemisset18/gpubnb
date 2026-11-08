@@ -84,7 +84,7 @@ test('native mutation fence rolls back writes when expiry invalidates its final 
 });
 
 test('native WTS revocation takes the session UPDATE lock and blocks later delivery before helper cleanup', async () => {
-  let queryText = '', status = 'READY', updateCount = 0, activationDeleted = false;
+  let queryText = '', status = 'READY', updateCount = 0, authorityTombstoned = false;
   const tx = {
     $queryRaw: async (strings: TemplateStringsArray) => { queryText = strings.join('?'); return [{id:'s'}]; },
     workspaceSession: {
@@ -98,12 +98,15 @@ test('native WTS revocation takes the session UPDATE lock and blocks later deliv
     workspaceSessionEvent: {create: async () => ({})},
   };
   const db = {$transaction: async (operation: (value: unknown) => Promise<unknown>) => operation(tx)};
-  const redis = {del: async (...keys:string[]) => { activationDeleted=keys.includes('workspace-gateway:ws-session-activated:s'); return 1; }};
+  const redis = {eval: async (script:string,_keyCount:number,key:string,prefix:string) => {
+    authorityTombstoned=key==='workspace-gateway:ws-session-activated:s'&&prefix==='revoked:'&&script.includes("redis.call('SET', KEYS[1]");
+    return 1;
+  }};
   assert.equal(await markNativeGatewayRevocationStarted(db as never,redis as never,'s','m'),true);
   assert.match(queryText,/FOR UPDATE OF ws/);
   assert.equal(updateCount,1);
   assert.equal(status,'STOPPING');
-  assert.equal(activationDeleted,true);
+  assert.equal(authorityTombstoned,true,'revocation must replace the generation instead of deleting its fence');
 });
 
 test('native queued relay whose cookie read began before STOP cannot restore authorization', async () => {

@@ -10,12 +10,20 @@ signing, Secure Boot disablement, EV certificate purchase or trust-store edit.
 No production API/Render changes, no crypto-exchange changes, no PR merge.
 No execution on the generation-90 quarantined GPU.
 
+For the PR #333 internal qualification, the historical commit above is lineage
+only, never the candidate identity. Build all four user-mode components from the
+exact final `git rev-parse HEAD`, regenerate and independently verify the package
+manifest against that SHA, and record the resulting file hashes and signer pin.
+No external security approval is required for this internal campaign, but none of
+the technical gates below may be skipped. This runbook still does not authorize
+commands on PC1/PC2 or real streaming by an automated development task.
+
 ## STOP before touching a physical host
 
 The software is integrated for *private qualification*; CI and an unsigned
 build do **not** authorize installing or running the software on PC1.
 
-The operator must establish these independent prerequisites:
+The operator must establish these separately verifiable prerequisites:
 
 1. **Approved, complete, exact-commit Windows host package**: Helper, worker,
    media DLL and their dependencies; provenance, SHA-256 and Authenticode
@@ -144,7 +152,7 @@ revocation and test observations are still mandatory before security signoff.
 
 ## Evidence record and final gate
 
-A future independent test report should bind: approved release SHA and signed
+A future internal qualification report should bind: approved release SHA and signed
 package hashes, binary signer pin, platform edition/build, non-quarantined
 NVIDIA UUID/LUID, monitor path fingerprint (redacted), renter console authority
 result, FPS/sequence and H.264 proof, 300-second window and max-gap, witnessed

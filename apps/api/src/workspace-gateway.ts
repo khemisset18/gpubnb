@@ -97,6 +97,19 @@ end
 if ARGV[8] == '1' and redis.call('EXISTS', KEYS[5]) ~= 1 then
   return -2
 end
+-- The durable receipt is the session authority generation. A stale database
+-- read cannot enqueue after STOP replaces this key with a tombstone. The first
+-- frame is admitted only while no authority/tombstone exists. Activated frames
+-- install their committed receipt separately after a bounded PostgreSQL read;
+-- an enqueue script must never resurrect an absent authority generation.
+local authority = redis.call('GET', KEYS[6])
+if ARGV[10] ~= '*' then
+  if ARGV[10] == '' then
+    if authority then return -2 end
+  else
+    if authority ~= ARGV[10] then return -2 end
+  end
+end
 if redis.call('EXISTS', KEYS[1]) == 1 then
   return 0
 end
@@ -124,6 +137,14 @@ end
 if ARGV[7] == '1' and redis.call('EXISTS', KEYS[4]) ~= 1 then
   return -2
 end
+local authority = redis.call('GET', KEYS[5])
+if ARGV[8] ~= '*' then
+  if ARGV[8] == '' then
+    if authority then return -2 end
+  else
+    if authority ~= ARGV[8] then return -2 end
+  end
+end
 local count = redis.call('LLEN', KEYS[1])
 local currentBytes = tonumber(redis.call('GET', KEYS[2]) or '0')
 local itemBytes = tonumber(ARGV[3])
@@ -133,6 +154,36 @@ end
 redis.call('LPUSH', KEYS[1], ARGV[1])
 redis.call('SET', KEYS[2], currentBytes + itemBytes, 'EX', ARGV[2])
 redis.call('EXPIRE', KEYS[1], ARGV[2])
+return 1
+`;
+
+const INSTALL_GATEWAY_AUTHORITY_SCRIPT=`
+local current = redis.call('GET', KEYS[1])
+-- '1' is the pre-generation activation hint. Migrate it only after the caller
+-- has obtained a fresh bounded PostgreSQL snapshot containing this receipt.
+if current and current ~= ARGV[1] and current ~= '1' then return 0 end
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+return 1
+`;
+
+const MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT=`
+-- Do not refresh the short authority lease here: doing so on every frame would
+-- prevent periodic PostgreSQL revalidation. STOP between enqueue and this mark
+-- also suppresses publication of a fresh upstream-ready hint.
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+redis.call('EXPIRE', KEYS[2], ARGV[2])
+redis.call('SET', KEYS[3], '1', 'EX', ARGV[2])
+redis.call('EXPIRE', KEYS[4], ARGV[2])
+return 1
+`;
+
+const REVOKE_GATEWAY_AUTHORITY_SCRIPT=`
+local current = redis.call('GET', KEYS[1])
+if current and string.sub(current, 1, string.len(ARGV[1])) == ARGV[1] then
+  redis.call('EXPIRE', KEYS[1], ARGV[3])
+  return 1
+end
+redis.call('SET', KEYS[1], ARGV[1] .. ARGV[2], 'EX', ARGV[3])
 return 1
 `;
 
@@ -198,6 +249,47 @@ const wsChannelKey=(channelId:string)=>`workspace-gateway:ws-channel:${channelId
 const wsUpstreamReadyKey=(channelId:string)=>`workspace-gateway:ws-upstream-ready:${channelId}`;
 const wsSessionActivatedKey=(sessionId:string)=>`workspace-gateway:ws-session-activated:${sessionId}`;
 const wsFrameSeenKey=(machineId:string,frameId:string)=>`workspace-gateway:ws-frame-seen:${machineId}:${frameId}`;
+const GATEWAY_AUTHORITY_REVOKED_PREFIX='revoked:';
+const GATEWAY_AUTHORITY_ID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const GATEWAY_AUTHORITY_LEASE_SECONDS=2;
+const GATEWAY_AUTHORITY_QUERY_TIMEOUT_MS=4_000;
+const GATEWAY_AUTHORITY_REDIS_TIMEOUT_MS=5_000;
+
+async function boundedGatewayRedis<T>(operation:PromiseLike<T>):Promise<T>{
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{return await Promise.race([
+    Promise.resolve(operation),
+    new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('gateway_authority_redis_timeout')),GATEWAY_AUTHORITY_REDIS_TIMEOUT_MS);}),
+  ]);}finally{if(timer!==undefined)clearTimeout(timer);}
+}
+
+function gatewaySessionTtl(expiresAt?:Date):number{
+  if(!expiresAt)return SESSION_TTL_SECONDS;
+  return Math.max(1,Math.min(SESSION_TTL_SECONDS,Math.ceil((expiresAt.getTime()-Date.now())/1000)));
+}
+
+function gatewayAuthorityLeaseTtl(expiresAt?:Date):number{
+  return Math.min(GATEWAY_AUTHORITY_LEASE_SECONDS,gatewaySessionTtl(expiresAt));
+}
+
+function gatewayAuthorityTombstoneTtl(expiresAt?:Date):number{
+  // This is much longer than the bounded DB read. A query that began before
+  // STOP cannot outlive the tombstone and reinstall its stale receipt.
+  return Math.max(60,gatewaySessionTtl(expiresAt));
+}
+
+async function installGatewayAuthority(redis:Redis,sessionId:string,authorityId:string,expiresAt?:Date):Promise<boolean>{
+  return Number(await boundedGatewayRedis(redis.eval(
+    INSTALL_GATEWAY_AUTHORITY_SCRIPT,1,wsSessionActivatedKey(sessionId),authorityId,String(gatewayAuthorityLeaseTtl(expiresAt)),
+  )))===1;
+}
+
+export async function revokeGatewayAuthority(redis:Redis,sessionId:string,expiresAt?:Date):Promise<void>{
+  await boundedGatewayRedis(redis.eval(
+    REVOKE_GATEWAY_AUTHORITY_SCRIPT,1,wsSessionActivatedKey(sessionId),
+    GATEWAY_AUTHORITY_REVOKED_PREFIX,crypto.randomUUID(),String(gatewayAuthorityTombstoneTtl(expiresAt)),
+  ));
+}
 
 function parseCookie(header:string|undefined,name:string){for(const part of (header||'').split(';')){const [key,...rest]=part.trim().split('=');if(key===name){try{return decodeURIComponent(rest.join('='));}catch{return null;}}}return null;}
 function safePath(value:string){return value.startsWith('/')&&!value.includes('..')&&value.length<=4096;}
@@ -348,30 +440,31 @@ export async function markNativeGatewayRevocationStarted(
   db:PrismaClient,redis:Redis,sessionId:string,machineId:string,
 ):Promise<boolean>{
   const revoked=await db.$transaction(async tx=>{
-    const locked=await tx.$queryRaw<Array<{id:string}>>`
-      SELECT ws."id" FROM "WorkspaceSession" AS ws
+    const locked=await tx.$queryRaw<Array<{id:string;expiresAt:Date}>>`
+      SELECT ws."id",ws."expiresAt" FROM "WorkspaceSession" AS ws
       WHERE ws."id"=${sessionId} AND ws."machineId"=${machineId}
         AND ws."runtimeBackend"::text='WINDOWS_NATIVE'
       FOR UPDATE OF ws
     `;
-    if(locked.length!==1)return false;
+    if(locked.length!==1)return null;
     const current=await tx.workspaceSession.findUnique({where:{id:sessionId},select:{status:true}});
-    if(!current)return false;
+    if(!current)return null;
     if(current.status===WorkspaceSessionStatus.READY||current.status===WorkspaceSessionStatus.RUNNING||current.status===WorkspaceSessionStatus.STOP_REQUESTED){
       const changed=await tx.workspaceSession.updateMany({
         where:{id:sessionId,machineId,runtimeBackend:WorkspaceRuntimeBackend.WINDOWS_NATIVE,status:current.status},
         data:{status:WorkspaceSessionStatus.STOPPING},
       });
-      if(changed.count!==1)return false;
+      if(changed.count!==1)return null;
       await tx.workspaceSessionEvent.create({data:{sessionId,actorType:'AGENT',actorId:machineId,action:'NATIVE_GATEWAY_AUTHORITY_REVOKED'}});
-      return true;
+      return locked[0]!.expiresAt;
     }
     return current.status===WorkspaceSessionStatus.STOPPING||current.status===WorkspaceSessionStatus.COMPLETED||
       current.status===WorkspaceSessionStatus.FAILED||current.status===WorkspaceSessionStatus.CANCELLED||
       current.status===WorkspaceSessionStatus.TIMED_OUT||current.status===WorkspaceSessionStatus.QUARANTINED;
   },{maxWait:5_000,timeout:5_000});
-  if(revoked)await redis.del(wsSessionActivatedKey(sessionId));
-  return revoked;
+  if(revoked===null||revoked===false)return false;
+  await revokeGatewayAuthority(redis,sessionId,revoked===true?undefined:revoked);
+  return true;
 }
 
 // A successful enqueue is not a lasting input grant: STOP/cookie revocation
@@ -500,11 +593,33 @@ async function activateGatewaySessionTx(tx:Prisma.TransactionClient,sessionId:st
     return {activated:true,expiresAt};
 }
 
-type AcceptedGatewayFrame={enqueued:number;expiresAt?:Date};
+type AcceptedGatewayFrame={enqueued:number;expiresAt?:Date;authorityId?:string};
+type LiveGatewayFrameAuthority={
+  startedAt:Date|null;expiresAt:Date;
+  booking:{workspaceActivatedAt:Date|null;status:BookingStatus};
+  gatewayAcceptance:{id:string}|null;
+};
 
-// Redis acceptance is the external decision made inside a locked PostgreSQL
-// activation transaction. A rejected/unknown acceptance cannot commit billing.
-// The receipt gates first-frame delivery until that DB transaction commits.
+async function liveGatewayFrameAuthority(
+  db:Pick<PrismaClient,'workspaceSession'>,sessionId:string,machineId:string,runtimeBackend:WorkspaceRuntimeBackend,
+):Promise<LiveGatewayFrameAuthority|null>{
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const query=db.workspaceSession.findFirst({where:{id:sessionId,machineId,
+    runtimeBackend,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},
+    machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR}},
+    select:{startedAt:true,expiresAt:true,booking:{select:{workspaceActivatedAt:true,status:true}},gatewayAcceptance:{select:{id:true}}},
+  });
+  try{
+    return await Promise.race([
+      query,
+      new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('gateway_authority_db_timeout')),GATEWAY_AUTHORITY_QUERY_TIMEOUT_MS);}),
+    ]);
+  }finally{if(timer!==undefined)clearTimeout(timer);}
+}
+
+// First-frame Redis acceptance is the external decision made inside a locked
+// PostgreSQL activation transaction. A rejected/unknown acceptance cannot commit
+// billing. The receipt gates delivery until that DB transaction commits.
 export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId,bindingRaw,frame,markerKey}: {
   db:PrismaClient;redis:Redis;sessionId:string;machineId:string;channelId:string;
   bindingRaw:string;frame:{dataBase64:string;binary:boolean;close:boolean};markerKey?:string;
@@ -518,13 +633,13 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
     await redis.eval(COMPENSATE_GATEWAY_ACCEPTANCE_SCRIPT,3,wsInputKey(channelId),wsInputBytesKey(channelId),markerKey??wsInputKey(channelId),
       payload,String(Buffer.byteLength(payload,'utf8')),markerKey?'1':'0',markerOwner);
   };
-  const enqueue=async()=>{
+  const enqueue=async(authorityId:string)=>{
     const bytes=String(Buffer.byteLength(payload,'utf8'));
     const operation=markerKey
-      ? redis.eval(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,5,markerKey,wsInputKey(channelId),wsInputBytesKey(channelId),wsChannelKey(channelId),binding.browserSessionKey,
-          String(WS_FRAME_DEDUPE_TTL_SECONDS),String(WS_INPUT_TTL_SECONDS),payload,bytes,String(WS_INPUT_MAX_ITEMS),String(WS_REDIS_INPUT_MAX_BYTES),bindingRaw,isWindowsNativeRuntime(binding.runtimeBackend)?'1':'0',markerOwner)
-      : redis.eval(ENQUEUE_BOUND_WS_FRAME_SCRIPT,4,wsInputKey(channelId),wsInputBytesKey(channelId),wsChannelKey(channelId),binding.browserSessionKey,
-          payload,String(WS_INPUT_TTL_SECONDS),bytes,String(WS_INPUT_MAX_ITEMS),String(WS_REDIS_INPUT_MAX_BYTES),bindingRaw,isWindowsNativeRuntime(binding.runtimeBackend)?'1':'0');
+      ? redis.eval(ENQUEUE_DEDUPED_WS_FRAME_SCRIPT,6,markerKey,wsInputKey(channelId),wsInputBytesKey(channelId),wsChannelKey(channelId),binding.browserSessionKey,wsSessionActivatedKey(sessionId),
+          String(WS_FRAME_DEDUPE_TTL_SECONDS),String(WS_INPUT_TTL_SECONDS),payload,bytes,String(WS_INPUT_MAX_ITEMS),String(WS_REDIS_INPUT_MAX_BYTES),bindingRaw,isWindowsNativeRuntime(binding.runtimeBackend)?'1':'0',markerOwner,authorityId)
+      : redis.eval(ENQUEUE_BOUND_WS_FRAME_SCRIPT,5,wsInputKey(channelId),wsInputBytesKey(channelId),wsChannelKey(channelId),binding.browserSessionKey,wsSessionActivatedKey(sessionId),
+          payload,String(WS_INPUT_TTL_SECONDS),bytes,String(WS_INPUT_MAX_ITEMS),String(WS_REDIS_INPUT_MAX_BYTES),bindingRaw,isWindowsNativeRuntime(binding.runtimeBackend)?'1':'0',authorityId);
     let timer:ReturnType<typeof setTimeout>|undefined;
     // A timed-out Redis request may still execute later. Its orphaned first
     // frame has no committed receipt; also compensate when a late reply arrives.
@@ -532,56 +647,56 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
     try{return Number(await Promise.race([operation,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('gateway_acceptance_redis_timeout')),5000);})]));}
     finally{if(timer!==undefined)clearTimeout(timer);}
   };
-  if(frame.close)return {enqueued:await enqueue()};
-  // The Redis activation marker is an optimization hint, never authority.
-  // For an already activated native session, use a single shared row fence
-  // instead of serializing every frame behind FOR UPDATE. STOP still needs
-  // an exclusive lock on the same session row; it cannot commit between
-  // this admission check and its Redis enqueue. Concurrent frames can share
-  // the lock, and the authoritative booking/status/machine predicates are
-  // checked again inside the transaction even when the Redis hint is stale.
-  if(isWindowsNativeRuntime(binding.runtimeBackend) && (await redis.exists(wsSessionActivatedKey(sessionId)))===1){
-    const activated=await db.$transaction(async tx=>{
-      const rows=await tx.$queryRaw<Array<{expiresAt:Date}>>`
-        SELECT ws."expiresAt"
-        FROM "WorkspaceSession" AS ws
-        JOIN "Booking" AS b ON b."id"=ws."bookingId"
-        JOIN "Machine" AS m ON m."id"=ws."machineId"
-        WHERE ws."id"=${sessionId} AND ws."machineId"=${machineId}
-          AND ws."runtimeBackend"::text=${binding.runtimeBackend}
-          AND ws."status"::text IN ('READY','RUNNING')
-          AND ws."expiresAt">clock_timestamp()
-          AND m."connectivity"::text='ONLINE'
-          AND m."moderationStatus"::text='CLEAR'
-          AND b."workspaceActivatedAt" IS NOT NULL
-        FOR SHARE OF ws
-      `;
-      if(rows.length!==1)return null;
-      return {enqueued:await enqueue(),expiresAt:rows[0]!.expiresAt};
-    },{maxWait:5_000,timeout:10_000});
-    if(activated)return activated;
-    // An expired/stale activation hint never authorizes an enqueue. The
-    // exclusive first-frame path below revalidates and returns a denial or
-    // performs the initial billing activation if it was still pending.
+  if(frame.close)return {enqueued:await enqueue('*')};
+  // The hot path is Redis-only. Its short lease is a durable-receipt generation:
+  // STOP replaces it with a tombstone, and expiry forces a bounded PostgreSQL
+  // revalidation. PostgreSQL or Redis failures therefore cannot renew authority.
+  const authorityKey=wsSessionActivatedKey(sessionId);
+  const cachedAuthority=await boundedGatewayRedis(redis.get(authorityKey));
+  if(cachedAuthority?.startsWith(GATEWAY_AUTHORITY_REVOKED_PREFIX))return {enqueued:-2};
+  if(cachedAuthority&&cachedAuthority!=='1'){
+    if(!GATEWAY_AUTHORITY_ID_RE.test(cachedAuthority))return {enqueued:-2};
+    const hotEnqueued=await enqueue(cachedAuthority);
+    if(hotEnqueued!==-2)return {enqueued:hotEnqueued,authorityId:cachedAuthority};
+    // The short lease can expire between GET and EVAL. Retry once if another
+    // caller renewed the same receipt; only a genuinely absent lease may fall
+    // through to PostgreSQL. Tombstones, malformed values and new generations
+    // remain terminal denials.
+    const observedAuthority=await boundedGatewayRedis(redis.get(authorityKey));
+    if(observedAuthority===cachedAuthority)return {enqueued:await enqueue(cachedAuthority),authorityId:cachedAuthority};
+    if(observedAuthority!==null)return {enqueued:-2};
   }
-  // Redis activation markers are hints, never authorization. A STOP or expiry
-  // in PostgreSQL must also fence frames from an already activated session.
+  // Only a missing/legacy lease or the once-per-session commercial activation
+  // reaches PostgreSQL. First-frame billing retains its exclusive row lock.
+  const live=await liveGatewayFrameAuthority(db,sessionId,machineId,binding.runtimeBackend);
+  if(!live||(!live.booking.workspaceActivatedAt&&(live.startedAt!==null||
+    live.booking.status!==BookingStatus.STARTING&&live.booking.status!==BookingStatus.ACTIVE)))return {enqueued:-2};
+  if(live.booking.workspaceActivatedAt!==null){
+    if(!live.gatewayAcceptance)return {enqueued:-2};
+    if(!await installGatewayAuthority(redis,sessionId,live.gatewayAcceptance.id,live.expiresAt))return {enqueued:-2};
+    return {enqueued:await enqueue(live.gatewayAcceptance.id),expiresAt:live.expiresAt,authorityId:live.gatewayAcceptance.id};
+  }
   try{
-    return await db.$transaction(async tx=>{
+    const outcome=await db.$transaction(async tx=>{
       // Serialize first-frame contenders and STOP/status updates on this row.
-      // Redis and PostgreSQL still do NOT constitute a common atomic store.
+      // This is the only frame path allowed to hold the row lock during Redis
+      // admission because billing must not commit without that first enqueue.
       await tx.$queryRaw`SELECT "id" FROM "WorkspaceSession" WHERE "id"=${sessionId} FOR UPDATE`;
       const row=await tx.workspaceSession.findFirst({where:{id:sessionId,machineId,
         runtimeBackend:binding.runtimeBackend,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},expiresAt:{gt:new Date()},
         machine:{connectivity:MachineConnectivity.ONLINE,moderationStatus:ModerationStatus.CLEAR}},
-        select:{startedAt:true,expiresAt:true,booking:{select:{workspaceActivatedAt:true,status:true}}}});
+        select:{startedAt:true,expiresAt:true,booking:{select:{workspaceActivatedAt:true,status:true}},gatewayAcceptance:{select:{id:true}}}});
       if(!row||(!row.booking.workspaceActivatedAt&&(row.startedAt!==null||row.booking.status!==BookingStatus.STARTING&&row.booking.status!==BookingStatus.ACTIVE)))return {enqueued:-2};
-      if(row.booking.workspaceActivatedAt!==null)return {enqueued:await enqueue(),expiresAt:row.expiresAt};
+      // Another first-frame transaction may have activated while this caller
+      // waited for the row lock. Leave the transaction before touching Redis.
+      if(row.booking.workspaceActivatedAt!==null)return row.gatewayAcceptance
+        ? {enqueued:-3,expiresAt:row.expiresAt,authorityId:row.gatewayAcceptance.id}
+        : {enqueued:-2};
       if(row.booking.workspaceActivatedAt===null){
         receiptId=crypto.randomUUID();
         payload=JSON.stringify({...frame,activationReceiptId:receiptId});
       }
-      const enqueued=await enqueue();
+      const enqueued=await enqueue('');
       if(enqueued!==1)return {enqueued}; // No activation writes on any refusal or duplicate.
       accepted=true;
       const activation=await activateGatewaySessionTx(tx,sessionId,machineId);
@@ -589,8 +704,14 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
       if(receiptId)await tx.workspaceGatewayAcceptance.create({data:{id:receiptId,sessionId,channelId,
         bindingSha256:crypto.createHash('sha256').update(bindingRaw).digest('hex'),
         payloadSha256:crypto.createHash('sha256').update(payload).digest('hex'),acceptedAt:new Date(),expiresAt:activation.expiresAt}});
-      return {enqueued,expiresAt:activation.expiresAt};
+      return {enqueued,expiresAt:activation.expiresAt,authorityId:receiptId!};
     },{maxWait:5000,timeout:10000});
+    if(outcome.enqueued!==-3){
+      if(outcome.enqueued===1&&outcome.authorityId)await installGatewayAuthority(redis,sessionId,outcome.authorityId,outcome.expiresAt);
+      return outcome;
+    }
+    if(!await installGatewayAuthority(redis,sessionId,outcome.authorityId!,outcome.expiresAt!))return {enqueued:-2};
+    return {enqueued:await enqueue(outcome.authorityId!),expiresAt:outcome.expiresAt!,authorityId:outcome.authorityId!};
   }catch(error){
     // A DB commit acknowledgement can be lost. Preserve a committed receipt
     // if it can be recovered; never blindly roll back another activation.
@@ -603,7 +724,10 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
         // Keep the receipt-gated frame; delivery retries the authoritative read.
         throw error;
       }
-      if(committed)return {enqueued:1,expiresAt:committed.expiresAt};
+      if(committed){
+        await installGatewayAuthority(redis,sessionId,committed.id,committed.expiresAt);
+        return {enqueued:1,expiresAt:committed.expiresAt,authorityId:committed.id};
+      }
     }
     // Only uncommitted first-frame admissions require compensation. An already
     // activated session has valid queued bytes even when Redis's ACK is late.
@@ -627,14 +751,12 @@ export async function committedGatewayFrame(db:PrismaClient,sessionId:string,cha
   return true;
 }
 
-async function markAcceptedGatewayFrame(redis:Redis,sessionId:string,channelId:string,binding:GatewayChannelBinding,expiresAt?:Date){
-  const ttl=expiresAt?Math.max(1,Math.min(SESSION_TTL_SECONDS,Math.ceil((expiresAt.getTime()-Date.now())/1000))):await redis.ttl(wsSessionActivatedKey(sessionId));
-  if(ttl<1)return;
-  // Activation is an already committed DB fact, never the proof of delivery.
-  await redis.set(wsSessionActivatedKey(sessionId),'1','EX',ttl);
-  await redis.expire(binding.browserSessionKey,ttl);
-  await redis.set(wsUpstreamReadyKey(channelId),'1','EX',ttl);
-  await redis.expire(wsChannelKey(channelId),ttl);
+async function markAcceptedGatewayFrame(redis:Redis,sessionId:string,channelId:string,binding:GatewayChannelBinding,authorityId:string|undefined,expiresAt?:Date){
+  if(!authorityId)return false;
+  return Number(await boundedGatewayRedis(redis.eval(
+    MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT,4,wsSessionActivatedKey(sessionId),binding.browserSessionKey,
+    wsUpstreamReadyKey(channelId),wsChannelKey(channelId),authorityId,String(gatewaySessionTtl(expiresAt)),
+  )))===1;
 }
 
 export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClient,redis:Redis):void{
@@ -809,7 +931,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       const enqueued=acceptedFrame.enqueued;
       if(enqueued===-2){stale++;continue;}
       if(enqueued===-1)return reply.code(429).send({error:'workspace_ws_browser_backpressure'});
-      if(enqueued===1){accepted++;if(close)await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId));else await markAcceptedGatewayFrame(redis,binding.sessionId,channelId,binding,acceptedFrame.expiresAt);}else{duplicates++;}
+      if(enqueued===1){accepted++;if(close)await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId));else await markAcceptedGatewayFrame(redis,binding.sessionId,channelId,binding,acceptedFrame.authorityId,acceptedFrame.expiresAt);}else{duplicates++;}
     }
     return {ok:true,accepted,duplicates,stale};
   });
@@ -831,7 +953,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     if(enqueued===-2)return close?{ok:true,stale:true}:reply.code(409).send({error:'unknown_gateway_channel'});
     if(enqueued===-1)return reply.code(429).send({error:'workspace_ws_browser_backpressure'});
     if(close)await redis.del(wsChannelKey(channelId),wsUpstreamReadyKey(channelId));
-    else if(enqueued===1)await markAcceptedGatewayFrame(redis,binding.sessionId,channelId,binding,acceptedFrame.expiresAt);
+    else if(enqueued===1)await markAcceptedGatewayFrame(redis,binding.sessionId,channelId,binding,acceptedFrame.authorityId,acceptedFrame.expiresAt);
     return {ok:true};
   });
   app.post('/agent/workspace-gateway/:sessionId/revocation-started',async(request,reply)=>{
@@ -890,7 +1012,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       return {ok:true,activated:!neverActivated,machineReleased:release,alreadyApplied:false} as const;
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,maxWait:5_000,timeout:10_000});
     if('error' in result)return reply.code(409).send({error:result.error});
-    await redis.del(wsSessionActivatedKey(sessionId));
+    await revokeGatewayAuthority(redis,sessionId);
     return result;
   });
 

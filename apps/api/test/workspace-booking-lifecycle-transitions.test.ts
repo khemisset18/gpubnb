@@ -62,7 +62,8 @@ test('only the first authenticated upstream WebSocket frame starts paid time', a
     assert.doesNotMatch(route,/activateGatewaySession\(db,/,'routes may not activate billing outside the acceptance transaction');
   }
   const acceptance=source.slice(source.indexOf('export async function acceptGatewayFrame'),source.indexOf('export async function committedGatewayFrame'));
-  assert.ok(acceptance.indexOf('const enqueued=await enqueue()')<acceptance.indexOf('activateGatewaySessionTx(tx,sessionId,machineId)'));
+  assert.ok(acceptance.indexOf("const enqueued=await enqueue('')")<acceptance.indexOf('activateGatewaySessionTx(tx,sessionId,machineId)'),
+    'the first frame must enter the receipt-gated queue before billing activation commits');
   assert.match(acceptance,/if\(enqueued!==1\)return \{enqueued\}/);
   assert.match(acceptance,/tx\.workspaceGatewayAcceptance\.create/);
   assert.match(acceptance,/FOR UPDATE/);
