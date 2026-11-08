@@ -49,3 +49,11 @@ Recovery now retains the observed stale tip, rebuilds the disposable local index
 Run 42424908068 at c002d552082a3a007b0200dd40224ce0e1c3a10e failed to restore the prior tip by reindexing after a normal startup. Artifact 13594434879 ZIP SHA256 fb235f7cdf819d0375b5aeef998507e58a6ae5351bb07a3cc988ed7c46a4c161 independently verified. The reindex log reports only one block loaded. Existing evidence does not prove whether the normal restart altered block storage or the original records were already absent.
 
 Next experiment inspects framed block records and requires the exact prior header hash on disk immediately after SIGKILL, before any restart. It records count and SHA256, then starts directly with -reindex and reindex diagnostics. Exact height/hash and refund UTXO requirements remain unchanged. A missing block record stops before restart; this is diagnostic evidence, not assumed recovery success.
+
+## Fourth execution: native experiment PASS, complete D2 BLOCKED
+
+Run 42425569513 at 40908d22a0640c6f8df70efb638296779995ebf5: native experiment step PASS; final full-D2 gate FAIL by design (qualification BLOCKED). Artifact 13595650348 ZIP SHA256 103c15b6d7798173fe392aa7d0db4904379d3aa38807cbeb11a326a06b91769d independently matches upload digest; all internal SHA256SUMS entries verified.
+
+Sixteen native cases, 47 RPC calls, 1356 generated blocks. After SIGKILL (-9), 1356 framed records including genesis and the exact prior tip are present on disk. Immediate reindex restores exact height 1355/hash d48ad7190813c011677c5852debf2486ed645b87406221a38bab9ef1458ad38a. The 100-DOGE refund input has three confirmations and exact expected script. Previously signed refund is admitted and confirmed after private key removal. Invalidation restores its chain UTXO and mempool entry; reconsideration restores one confirmation. Final daemon stop returns zero, zero peers, loopback-only namespace and no wallet/key residue. This proves the implemented private process-crash scenario, not general power-loss or multi-node recovery.
+
+Next frozen extension adds the matrix's wrong signature, wrong redeem, wrong destination, absent UTXO, and immature coinbase cases. Signature failures are distinct from a valid signature rejected for missing or immature input. Resource/RPC/network budgets and full D2 gate are unchanged.

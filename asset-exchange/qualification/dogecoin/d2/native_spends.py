@@ -217,6 +217,18 @@ def run(args):
         active=rpc('getblockchaininfo')
         require(active['blocks']==1352 and any(x.get('id')=='bip65' and x.get('reject',{}).get('status') is True for x in active['softforks']),'CLTV activation missing')
         report['activation']=active
+        # A real last-block coinbase is unspent but immature. Its valid
+        # signature must not be confused with eligibility to spend.
+        immature_id=rpc('getblock',active['bestblockhash'])['tx'][0]
+        known_txs.add(immature_id)
+        immature=rpc('gettxout',immature_id,'0','true')
+        require(immature is not None and immature['coinbase'] is True and immature['confirmations']==1
+                and immature['scriptPubKey']['hex']==destination.hex(),'immature coinbase context mismatch')
+        report['immatureCoinbaseUtxo']=immature
+        immature_outs=[(int(Decimal(str(immature['value']))*COIN)-COIN,destination)]
+        immature_sig=miner.sign(sighash(immature_id,0,destination,immature_outs))
+        record('immature_coinbase',transaction(immature_id,0,push(immature_sig)+push(miner.public),immature_outs),
+               destination,1,'bad-txns-premature-spend-of-coinbase')
         first=rpc('getblockhash','1');known_blocks.add(first)
         coinbase=rpc('getblock',first)['tx'][0];known_txs.add(coinbase)
         coin=rpc('getrawtransaction',coinbase,'1')
@@ -246,9 +258,24 @@ def run(args):
         record('wrong_refund_key',spend(2,'refund',key=claim),htlc.output,0)
         record('wrong_secret',spend(2,preimage=b'x'*32),htlc.output,0,'script-verify')
         record('short_secret',spend(2,preimage=b'x'*31),htlc.output,0,'script-verify')
-        for name,offset in [('changed_signed_lock',-1),('wrong_outpoint',6)]:
+        for name,offset in [('changed_signed_lock',-1),('wrong_outpoint',6),('wrong_destination',-10)]:
             mutated=bytearray(valid);mutated[offset]^=1
             record(name,bytes(mutated),htlc.output,0)
+        outs=[(99*COIN,destination)]
+        badsig=claim.sign(hash256(b'public incorrect digest, no secret material'))
+        ss=push(badsig)+push(secret)+b'\x51'+push(htlc.redeem)
+        record('wrong_signature',transaction(funding_id,2,ss,outs),htlc.output,0,'script-verify')
+        good_sig=claim.sign(sighash(funding_id,2,htlc.redeem,outs))
+        wrong_redeem=htlc.redeem[:-1]+b'\x61'
+        ss=push(good_sig)+push(secret)+b'\x51'+push(wrong_redeem)
+        record('wrong_redeem',transaction(funding_id,2,ss,outs),htlc.output,0,'script-verify')
+        absent_id=hash256(b'public nonexistent funding transaction for DOGE D2').hex()
+        known_txs.add(absent_id)
+        require(rpc('gettxout',absent_id,'0','true') is None,'absent fixture unexpectedly exists')
+        absent_sig=claim.sign(sighash(absent_id,0,htlc.redeem,outs))
+        ss=push(absent_sig)+push(secret)+b'\x51'+push(htlc.redeem)
+        absent_row=record('absent_utxo',transaction(absent_id,0,ss,outs),htlc.output,1,'Missing inputs')
+        absent_row['observedUtxo']=None;save()
         record('lock_domain_mismatch',spend(2,'refund',lock=500000000),htlc.output,0)
         record('final_sequence',spend(2,'refund',sequence=0xffffffff),htlc.output,0,'script-verify')
         record('early_refund',refund_raw,htlc.output,1,'non-final')
