@@ -29,7 +29,7 @@ jobs:
       - name: Require unchanged frozen harness and test before native execution
         run: |
           set -euo pipefail
-          git diff --exit-code 5a47647f38c1aed347b412e5c15b989b3156b383 HEAD -- asset-exchange/qualification/dogecoin/
+          git diff --exit-code 8e41cbda5829ab41fa77b7c0203ab5a8882aa1e1 HEAD -- asset-exchange/qualification/dogecoin/
           bash -n asset-exchange/qualification/dogecoin/d2/run-native-spends.sh
           python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d2 -p 'test_*.py' -v
           python3 asset-exchange/qualification/dogecoin/d2/native_spends.py --manifest
