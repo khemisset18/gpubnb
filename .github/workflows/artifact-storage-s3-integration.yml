@@ -29,8 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      MINIO_IMAGE: cgr.dev/chainguard/minio@sha256:e234321fd3abff7fb968b0674056e883b702aa1ad93a0d4d795cb6c21fa46407
-      MINIO_AMD64_IMAGE: cgr.dev/chainguard/minio@sha256:abdbe7d805b4dc931053275bc65d6c96ea88e66fd121aa3bb87d7354ecd875c5
+      MINIO_IMAGE: cgr.dev/chainguard/minio@sha256:869ca3178831d9f521ea02258a0f0d4fbc1e9f84302e707514e1f861b860865d
+      MINIO_AMD64_IMAGE: cgr.dev/chainguard/minio@sha256:e8bfe3456721ee96befba0ae28d0a65a620b810b60cca731f0863e8c70f2d703
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
