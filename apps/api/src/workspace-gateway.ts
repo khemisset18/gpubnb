@@ -751,8 +751,14 @@ export async function committedGatewayFrame(db:PrismaClient,sessionId:string,cha
   return true;
 }
 
-async function markAcceptedGatewayFrame(redis:Redis,sessionId:string,channelId:string,binding:GatewayChannelBinding,authorityId:string|undefined,expiresAt?:Date){
-  if(!authorityId)return false;
+export async function markAcceptedGatewayFrame(redis:Redis,sessionId:string,channelId:string,binding:GatewayChannelBinding,authorityId:string|undefined,expiresAt?:Date){
+  // A Redis-only hot-path admission intentionally has no database expiry
+  // snapshot. Never turn that absence into the one-hour fallback TTL: the
+  // browser/channel bindings already carry their session-bounded TTL, and the
+  // next lease renewal (at most two seconds later) can refresh them from a
+  // fresh PostgreSQL expiry. This also keeps a stale readiness hint from
+  // outliving the workspace merely because frames remain busy.
+  if(!authorityId||!expiresAt)return false;
   return Number(await boundedGatewayRedis(redis.eval(
     MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT,4,wsSessionActivatedKey(sessionId),binding.browserSessionKey,
     wsUpstreamReadyKey(channelId),wsChannelKey(channelId),authorityId,String(gatewaySessionTtl(expiresAt)),

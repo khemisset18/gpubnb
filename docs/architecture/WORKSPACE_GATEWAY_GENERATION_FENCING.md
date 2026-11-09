@@ -24,7 +24,10 @@ created for the first accepted upstream frame. Redis stores that UUID under
 The valid lease is deliberately short but authoritative for its remaining
 lifetime. Therefore loss of PostgreSQL after a successful renewal can leave at
 most two seconds of already-issued authority; it cannot create or extend a
-lease. Per-frame readiness updates do not refresh it.
+lease. Per-frame readiness updates do not refresh it. A Redis-only hot-path
+frame also does not refresh browser, channel or readiness TTLs because it has no
+authoritative session expiry snapshot. The next PostgreSQL-backed lease renewal
+may refresh those keys, bounded by the freshly read `expiresAt`.
 
 ## First-frame billing
 
@@ -80,3 +83,5 @@ Tests must prove all of the following:
    enqueue.
 6. PostgreSQL renewal failure, Redis failure, backpressure and malformed
    generations fail closed.
+7. A hot-path frame without `expiresAt` cannot replace the session-bounded Redis
+   TTLs with the one-hour fallback.

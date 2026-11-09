@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { performance } from 'node:perf_hooks';
 import { createGatewayChannelLeaseGuard } from '../src/workspace-gateway-channel-lease.js';
-import { acceptGatewayFrame, revokeGatewayAuthority } from '../src/workspace-gateway.js';
+import { acceptGatewayFrame, markAcceptedGatewayFrame, revokeGatewayAuthority } from '../src/workspace-gateway.js';
 import {
   BrowserPendingBudget,
   WS_BROWSER_PENDING_MAX_BYTES,
@@ -135,6 +135,28 @@ test('30/60 FPS over 1/4/8 native channels revalidates every frame, with p50/p95
 
 test('30/60 FPS over 1/4/8 channels uses zero PostgreSQL reads while generation leases are hot',async()=>{
   for(const fps of [30,60] as const)for(const channels of [1,4,8])await syntheticGenerationLoad(fps,channels);
+});
+
+test('a Redis-only hot-path frame cannot extend browser or channel TTLs without a session expiry',async()=>{
+  let evalCalls=0;
+  const redis={eval:async()=>{evalCalls++;return 1;}};
+  const marked=await markAcceptedGatewayFrame(redis as never,'session','channel',{
+    sessionId:'session',machineId:'machine',browserSessionKey:'browser:session',runtimeBackend:'WINDOWS_NATIVE',
+  },authorityId(1));
+  assert.equal(marked,false);
+  assert.equal(evalCalls,0,'an unknown expiry must not fall back to a 3600-second Redis refresh');
+});
+
+test('a database-backed authority refresh remains bounded by its known session expiry',async()=>{
+  let evalArguments:unknown[]=[];
+  const redis={eval:async(...args:unknown[])=>{evalArguments=args;return 1;}};
+  const expiresAt=new Date(Date.now()+30_000);
+  const marked=await markAcceptedGatewayFrame(redis as never,'session','channel',{
+    sessionId:'session',machineId:'machine',browserSessionKey:'browser:session',runtimeBackend:'WINDOWS_NATIVE',
+  },authorityId(1),expiresAt);
+  assert.equal(marked,true);
+  const ttl=Number(evalArguments.at(-1));
+  assert.ok(ttl>=1&&ttl<=30,`refresh TTL ${ttl} must not exceed the remaining session lifetime`);
 });
 
 test('a STOP tombstone wins when a hot-path generation was read before its delayed enqueue',async()=>{
