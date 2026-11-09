@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import resource
 import signal
+import stat
 import subprocess
 import time
 
@@ -20,7 +21,7 @@ from script_diagnostics import (ARCHIVE, SHA256, LIBRARY_SHA256, SOURCE_COMMIT,
     extract_verified_members, hash160, base58check, require, read_json,
     validate_handoff, validate_namespace, validate_network)
 from offline_candidate import build_candidate
-from test_signer import EphemeralSigner, transaction, sighash, hash256, push
+from test_signer import EphemeralSigner, transaction, sighash, hash256, push, compact, decode_der, encode_der, ORDER
 
 AUTHORIZATION = 'AUTHORIZE_D2_PRIVATE_SIGNED_REGTEST'
 MAX_BLOCKS = 1360
@@ -90,6 +91,32 @@ def persist_signed(path, raw):
     directory=os.open(Path(path).parent, os.O_RDONLY | os.O_DIRECTORY)
     try:os.fsync(directory)
     finally:os.close(directory)
+
+
+def read_signed(path, expected_sha256):
+    """Read only the exact public refund pinned before funding, never a new intent."""
+    require(type(expected_sha256) is str and re.fullmatch('[0-9a-f]{64}',expected_sha256),
+            'expected refund digest required')
+    fd=os.open(path,os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info=os.fstat(fd)
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink==1 and 1 < info.st_size <= 20001,
+                'bounded single-link regular recovery file required')
+        with os.fdopen(fd,'rb',closefd=False) as stream:data=stream.read(20002)
+    finally:os.close(fd)
+    require(len(data)<=20001 and re.fullmatch(b'(?:[0-9a-f]{2})+\n',data),
+            'canonical public recovery hex required')
+    raw=bytes.fromhex(data[:-1].decode('ascii'))
+    require(hashlib.sha256(raw).hexdigest()==expected_sha256,'signed recovery digest mismatch')
+    return raw
+
+
+def prepare_recovery(path, raw):
+    """Durably create and read back the authorized refund BEFORE funding."""
+    digest=hashlib.sha256(raw).hexdigest()
+    persist_signed(path,raw)
+    require(read_signed(path,digest)==raw,'pre-lock recovery readback mismatch')
+    return digest
 
 
 def native_verifier(path):
@@ -243,9 +270,7 @@ def run(args):
         sig=miner.sign(sighash(coinbase,0,destination,outputs))
         funding=transaction(coinbase,0,push(sig)+push(miner.public),outputs)
         record('funding_signature',funding,destination,1)
-        funding_id=submit(funding);mine()
-        report['fundingUtxo']=rpc('gettxout',funding_id,'0','true')
-        require(report['fundingUtxo']['confirmations']==1,'funding confirmation missing')
+        funding_id=hash256(funding)[::-1].hex()
         def spend(index=0,branch='claim',key=None,preimage=secret,lock=None,sequence=0xfffffffe,amount=99*COIN):
             lock=(0 if branch=='claim' else 1355) if lock is None else lock
             key=key or (claim if branch=='claim' else refund)
@@ -254,6 +279,20 @@ def run(args):
             ss=push(sig)+(push(preimage)+b'\x51' if branch=='claim' else b'\0')+push(htlc.redeem)
             return transaction(funding_id,index,ss,outs,lock,sequence)
         valid=spend();refund_raw=spend(1,'refund')
+        # The durable refund must exist before funds can enter this HTLC.
+        require(verify(htlc.output,refund_raw)=={'result':1,'error':0,'flags':FLAGS},
+                'pre-lock refund signature invalid')
+        recovery=out/'refund-signed.hex'
+        recovery_digest=prepare_recovery(recovery,refund_raw)
+        report['preLockRecovery']={'refundSha256':recovery_digest,'fundingTxid':funding_id,
+            'refundVout':1,'inputValueKoinu':100*COIN,'lockHeight':1355,
+            'rpcCountBeforeFunding':len(trace),'readbackVerified':True,'fileAndDirectoryFsynced':True}
+        save()
+        require(submit(funding)==funding_id,'funding identity changed; refund invalid')
+        mine()
+        report['fundingUtxo']=rpc('gettxout',funding_id,'0','true')
+        require(report['fundingUtxo']['confirmations']==1,'funding confirmation missing')
+
         record('wrong_claim_key',spend(2,key=refund),htlc.output,0,'script-verify')
         record('wrong_refund_key',spend(2,'refund',key=claim),htlc.output,0)
         record('wrong_secret',spend(2,preimage=b'x'*32),htlc.output,0,'script-verify')
@@ -266,6 +305,26 @@ def run(args):
         ss=push(badsig)+push(secret)+b'\x51'+push(htlc.redeem)
         record('wrong_signature',transaction(funding_id,2,ss,outs),htlc.output,0,'script-verify')
         good_sig=claim.sign(sighash(funding_id,2,htlc.redeem,outs))
+        claim_ss=push(good_sig)+push(secret)+b'\x51'+push(htlc.redeem)
+        record('changed_signed_amount',transaction(funding_id,2,claim_ss,[(98*COIN,destination)]),htlc.output,0,'script-verify')
+        record('changed_signed_sequence',transaction(funding_id,2,claim_ss,outs,sequence=0xfffffffd),htlc.output,0,'script-verify')
+        malformed=good_sig[:-1]+b'\0\x01'
+        record('noncanonical_der',transaction(funding_id,2,push(malformed)+push(secret)+b'\x51'+push(htlc.redeem),outs),htlc.output,0,'script-verify')
+        r,s=decode_der(good_sig[:-1])
+        high_s=encode_der(r,ORDER-s)+b'\x01'
+        record('high_s_policy',transaction(funding_id,2,push(high_s)+push(secret)+b'\x51'+push(htlc.redeem),outs),htlc.output,1,'script-verify')
+        record('extra_stack_policy',transaction(funding_id,2,push(b'extra')+claim_ss,outs),htlc.output,1,'script-verify')
+        record('nonpush_only_scriptsig',transaction(funding_id,2,b'\x61'+claim_ss,outs),htlc.output,0,'scriptsig-not-pushonly')
+        # Malformed-fixture serialization only: keep the production test codec's size bound.
+        base=transaction(funding_id,2,claim_ss,outs)
+        require(base[41]<253,'fixture requires short script length')
+        large=push(b'x'*520)*3+claim_ss
+        oversized=base[:41]+compact(len(large))+large+base[42+base[41]:]
+        record('oversized_scriptsig',oversized,htlc.output,1,'scriptsig-size')
+        bare_outs=[(99*COIN,htlc.redeem)]
+        bare_sig=claim.sign(sighash(funding_id,2,htlc.redeem,bare_outs))
+        bare_ss=push(bare_sig)+push(secret)+b'\x51'+push(htlc.redeem)
+        record('bare_htlc_output',transaction(funding_id,2,bare_ss,bare_outs),htlc.output,1,'scriptpubkey')
         wrong_redeem=htlc.redeem[:-1]+b'\x61'
         ss=push(good_sig)+push(secret)+b'\x51'+push(wrong_redeem)
         record('wrong_redeem',transaction(funding_id,2,ss,outs),htlc.output,0,'script-verify')
@@ -296,7 +355,7 @@ def run(args):
         expected_tip=mine()[0] # tip 1355: refund is now final for candidate 1356.
         # Signed public recovery bytes survive a real daemon SIGKILL. Private
         # signing material is destroyed before recovery/broadcast.
-        recovery=out/'refund-signed.hex';persist_signed(recovery,refund_raw)
+        require(read_signed(recovery,recovery_digest)==refund_raw,'recovery changed before crash')
         for signer in signers:signer.destroy()
         process.kill();process.wait(timeout=15);log.close()
         report['crashExitCode']=process.returncode
@@ -317,8 +376,9 @@ def run(args):
                 and Decimal(str(recovered_utxo['value']))==Decimal(100) and recovered_utxo['confirmations']==3,
                 'refund UTXO mismatch after recovery')
         report['recoveredRefundUtxo']=recovered_utxo
-        row=record('valid_refund_after_crash',bytes.fromhex(recovery.read_text().strip()),htlc.output,1)
-        refund_id=submit(bytes.fromhex(recovery.read_text().strip()))
+        recovered_refund=read_signed(recovery,recovery_digest)
+        row=record('valid_refund_after_crash',recovered_refund,htlc.output,1)
+        refund_id=submit(recovered_refund)
         row['mempool']=rpc('getmempoolentry',refund_id)
         refund_block=mine()[0]
         row['confirmed']=rpc('getrawtransaction',refund_id,'1')
