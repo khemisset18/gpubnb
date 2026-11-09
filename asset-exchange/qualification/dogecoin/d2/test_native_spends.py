@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import unittest
@@ -8,6 +9,53 @@ from unittest.mock import patch
 import native_spends
 
 class NativeSpendsGuards(unittest.TestCase):
+    def test_prelock_recovery_roundtrip_and_external_digest(self):
+        raw=b'public synthetic refund'
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'refund.hex'
+            digest=native_spends.prepare_recovery(path,raw)
+            self.assertEqual(digest,hashlib.sha256(raw).hexdigest())
+            self.assertEqual(native_spends.read_signed(path,digest),raw)
+            path.write_text(b'different refund'.hex()+'\n')
+            with self.assertRaisesRegex(ValueError,'digest mismatch'):
+                native_spends.read_signed(path,digest)
+
+    def test_recovery_rejects_missing_noncanonical_and_oversized_files(self):
+        raw=b'\xab\xcd';digest=hashlib.sha256(raw).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'refund.hex'
+            with self.assertRaises(FileNotFoundError):native_spends.read_signed(path,digest)
+            for data in [b'',b'abcd',b'ABCD\n',b'abc\n',b'abcd\n\n',b' abcd\n',b'abcd\x00\n',b'ab'*10001+b'\n']:
+                with self.subTest(data_length=len(data)):
+                    path.write_bytes(data)
+                    with self.assertRaises(ValueError):native_spends.read_signed(path,digest)
+
+    def test_recovery_rejects_links_directory_and_fifo_without_blocking(self):
+        raw=b'public refund';digest=hashlib.sha256(raw).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);path=root/'refund.hex'
+            native_spends.prepare_recovery(path,raw)
+            link=root/'symlink';link.symlink_to(path)
+            with self.assertRaises(OSError):native_spends.read_signed(link,digest)
+            hard=root/'hardlink';os.link(path,hard)
+            for entry in [path,hard,root]:
+                with self.assertRaises(ValueError):native_spends.read_signed(entry,digest)
+            fifo=root/'fifo';os.mkfifo(fifo)
+            with self.assertRaises(ValueError):native_spends.read_signed(fifo,digest)
+
+    def test_recovery_requires_digest_before_opening_file(self):
+        with patch('native_spends.os.open',side_effect=AssertionError('must not open')):
+            for digest in [None,1,'','a'*63,'A'*64,'g'*64]:
+                with self.assertRaises(ValueError):native_spends.read_signed('unused',digest)
+
+    def test_prelock_fails_on_file_or_directory_fsync_failure(self):
+        for failed_call in [1,2]:
+            with self.subTest(failed_call=failed_call),tempfile.TemporaryDirectory() as tmp:
+                effects=[None]*(failed_call-1)+[OSError('injected durability failure')]
+                with patch('native_spends.os.fsync',side_effect=effects):
+                    with self.assertRaisesRegex(OSError,'durability'):
+                        native_spends.prepare_recovery(Path(tmp)/'refund.hex',b'public refund')
+
     def test_spent_and_absent_prevouts_have_distinct_native_errors(self):
         spent='error code: -26\nerror message:\n18: bad-txns-inputs-spent\n'
         missing='error code: -25\nerror message:\nMissing inputs\n'
