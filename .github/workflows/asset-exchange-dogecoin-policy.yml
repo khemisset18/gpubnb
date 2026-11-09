@@ -1,0 +1,83 @@
+name: Asset Exchange DOGE Native Policy Diagnostics
+on:
+  push:
+    branches: [asset-exchange/doge-policy-probes-20261109]
+    paths: ['.github/workflows/asset-exchange-dogecoin-policy.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: doge-policy-probes-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  policy:
+    if: github.repository == 'khemisset18/gpubnb' && github.ref == 'refs/heads/asset-exchange/doge-policy-probes-20261109'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify frozen harness and offline guards
+        run: |
+          set -euo pipefail
+          git diff --exit-code 6e36f21539301519e8900f8c4d8af0db6efed699 HEAD -- asset-exchange/qualification/dogecoin/
+          python3 -m unittest discover -s asset-exchange/qualification/dogecoin/policy -p 'test_*.py' -v
+      - name: Fetch exact upstream source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: dogecoin/dogecoin
+          ref: e0a1c157791544e818c901bd9341896965afbf9d
+          path: dist/doge-policy-source
+          persist-credentials: false
+      - name: Install diagnostic build prerequisites
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev \
+            libboost-system-dev libboost-filesystem-dev libboost-chrono-dev \
+            libboost-program-options-dev libboost-test-dev libboost-thread-dev
+      - name: Build diagnostic test executable without changing implementation
+        run: |
+          set -euo pipefail
+          mkdir -p dist/policy-evidence
+          python3 asset-exchange/qualification/dogecoin/policy/prepare.py dist/doge-policy-source
+          git -C dist/doge-policy-source diff > dist/policy-evidence/test-registration.patch
+          sha256sum asset-exchange/qualification/dogecoin/policy/gpubnb_policy_tests.cpp > dist/policy-evidence/test-source.sha256
+          g++ --version > dist/policy-evidence/toolchain.txt
+          dpkg-query -W libssl-dev libevent-dev libboost-system-dev libboost-filesystem-dev libboost-chrono-dev libboost-program-options-dev libboost-test-dev libboost-thread-dev >> dist/policy-evidence/toolchain.txt
+          cd dist/doge-policy-source
+          ./autogen.sh > ../policy-evidence/autogen.log 2>&1
+          ./configure --disable-wallet --without-gui --without-miniupnpc --disable-zmq --disable-bench --disable-man --enable-tests CXXFLAGS='-O1 -g0' > ../policy-evidence/configure.log 2>&1
+          make -j2 -C src test/test_dogecoin > ../policy-evidence/build.log 2>&1
+          sha256sum src/test/test_dogecoin > ../policy-evidence/diagnostic-binary.sha256
+          sha256sum src/dogecoin-fees.cpp src/txmempool.cpp src/validation.cpp > ../policy-evidence/implementation.sha256
+      - name: Execute only private Regtest policy diagnostics in separate namespace
+        run: |
+          set -euo pipefail
+          probe_binary="$GITHUB_WORKSPACE/dist/doge-policy-source/src/test/test_dogecoin"
+          probe_digest="$(sha256sum "$probe_binary" | cut -d' ' -f1)"
+          parent_namespace="$(readlink /proc/self/ns/net)"
+          output="$GITHUB_WORKSPACE/dist/policy-evidence/observations"
+          trap 'if sudo test -d "$output"; then sudo chown -R "$(id -u):$(id -g)" "$output"; fi' EXIT
+          sudo unshare --net -- /bin/bash -c 'ip link set lo up; exec /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin "$@"' policy \
+            /usr/bin/python3 "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/policy/run.py" \
+            "$probe_binary" "$probe_digest" "$parent_namespace" "$output"
+      - name: Retain diagnostic provenance and summary metrics only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: doge-policy-diagnostics-${{ github.sha }}
+          path: dist/policy-evidence/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Report probe status separately from full D2 qualification
+        run: |
+          python3 - <<'PY'
+          import json
+          r=json.load(open('dist/policy-evidence/observations/report.json'))
+          assert r['probeStatus']=='PASS' and r['qualificationStatus']=='BLOCKED'
+          print('Native source diagnostic probes PASS; D2 remains BLOCKED. This is not the D0 executable.')
+          PY
