@@ -1,6 +1,6 @@
 name: Asset Exchange DOGE Private Signed Regtest
 
-# Temporary exact-branch trigger for frozen refund-hardening evidence.
+# Retry frozen harness after run 42674069726 failed before jobs (GitHub internal server error).
 on:
   workflow_dispatch:
   push:
