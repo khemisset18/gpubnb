@@ -1,0 +1,199 @@
+{
+  "runId": 42674622556,
+  "artifactId": 13699627293,
+  "archiveSha256": "8a6efb39a9eb6e129045e256c5a1d8e155250823b0b50aa1df15056d7d7d571a",
+  "frozenHarness": "e44c7650fed64206c68461ef9f6bf1ab73582511",
+  "executionCommit": "da059ba1ac07be3e43c98d8294eca498ce010cd7",
+  "experimentStatus": "PASS",
+  "qualificationStatus": "BLOCKED",
+  "nativeCases": 29,
+  "rpcCalls": 63,
+  "generatedBlocks": 1356,
+  "preLockFundingRpcIndex": 13,
+  "refundBytesMatchBeforeAndAfterCrash": true,
+  "fileHashesVerified": true,
+  "independentECDSAVerification": [
+    "funding_signature",
+    "valid_claim",
+    "valid_refund_after_crash"
+  ],
+  "keysRemoved": true,
+  "crashExitCode": -9,
+  "refundRestoredConfirmations": 1,
+  "cases": [
+    {
+      "id": "immature_coinbase",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": true
+    },
+    {
+      "id": "funding_signature",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": false
+    },
+    {
+      "id": "wrong_claim_key",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": true
+    },
+    {
+      "id": "wrong_refund_key",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": false
+    },
+    {
+      "id": "wrong_secret",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": true
+    },
+    {
+      "id": "short_secret",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": true
+    },
+    {
+      "id": "changed_signed_lock",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": false
+    },
+    {
+      "id": "wrong_outpoint",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": false
+    },
+    {
+      "id": "wrong_destination",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": false
+    },
+    {
+      "id": "wrong_signature",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": true
+    },
+    {
+      "id": "changed_signed_amount",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": true
+    },
+    {
+      "id": "changed_signed_sequence",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": true
+    },
+    {
+      "id": "noncanonical_der",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": true
+    },
+    {
+      "id": "high_s_policy",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": true
+    },
+    {
+      "id": "extra_stack_policy",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": true
+    },
+    {
+      "id": "nonpush_only_scriptsig",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": true
+    },
+    {
+      "id": "oversized_scriptsig",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": true
+    },
+    {
+      "id": "bare_htlc_output",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": true
+    },
+    {
+      "id": "wrong_redeem",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": true
+    },
+    {
+      "id": "absent_utxo",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": true
+    },
+    {
+      "id": "lock_domain_mismatch",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": false
+    },
+    {
+      "id": "final_sequence",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejected": true
+    },
+    {
+      "id": "early_refund",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": true
+    },
+    {
+      "id": "hard_dust",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": true
+    },
+    {
+      "id": "nonminimal_push",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": true
+    },
+    {
+      "id": "valid_claim",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": false
+    },
+    {
+      "id": "equal_candidate_height_nonfinal",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": true
+    },
+    {
+      "id": "double_spend",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": true
+    },
+    {
+      "id": "valid_refund_after_crash",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejected": false
+    }
+  ]
+}

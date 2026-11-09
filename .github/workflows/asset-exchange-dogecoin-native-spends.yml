@@ -1,11 +1,8 @@
 name: Asset Exchange DOGE Private Signed Regtest
 
-# Retry frozen harness after run 42674069726 failed before jobs (GitHub internal server error).
+# Manual exact-branch experiment; temporary trigger retired after run 42674622556.
 on:
   workflow_dispatch:
-  push:
-    branches: [asset-exchange/doge-refund-hardening-20261109]
-    paths: [.github/workflows/asset-exchange-dogecoin-native-spends.yml]
 
 permissions:
   contents: read
