@@ -1,0 +1,23 @@
+Running 2 test cases...
+[1;36;49msoft-dust amount=0 surcharge=1000000[0;39;49m
+[1;36;49msoft-dust amount=999999 surcharge=1000000[0;39;49m
+[1;36;49msoft-dust amount=1000000 surcharge=0[0;39;49m
+[1;36;49msoft-dust amount=1000001 surcharge=0[0;39;49m
+[1;36;49msoft-dust aggregate=2000000; OP_RETURN exemption verified[0;39;49m
+[1;36;49mrolling-floor paid=100000000 required=18470589805 floor-per-k=117647068823 occupied-before=960 rejection=mempool min fee not met[0;39;49m
+
+Test module "Bitcoin Test Suite" has passed with:
+  2 test cases out of 248 passed
+  246 test cases out of 248 skipped
+  26 assertions out of 26 passed
+
+  Test suite "gpubnb_policy" has passed with:
+    2 test cases out of 2 passed
+    26 assertions out of 26 passed
+
+    Test case "gpubnb_policy/soft_dust_boundaries" has passed with:
+      10 assertions out of 10 passed
+
+    Test case "gpubnb_policy/rolling_floor_rejects_previously_admissible_spend" has passed with:
+      16 assertions out of 16 passed
+

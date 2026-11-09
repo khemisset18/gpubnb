@@ -1,8 +1,5 @@
 name: Asset Exchange DOGE Native Policy Diagnostics
 on:
-  push:
-    branches: [asset-exchange/doge-policy-probes-20261109]
-    paths: ['.github/workflows/asset-exchange-dogecoin-policy.yml']
   workflow_dispatch:
 permissions:
   contents: read
