@@ -16,3 +16,7 @@ New integration regressions use AnchorDeserialize from the actual anchor-lang de
 No dependency or lockfile change is necessary to add these tests. No advisory ignore, VEX exemption, severity downgrade, scanner filter or security gate change is made. A failing Trivy gate stays FAIL while the contradictory feed result is investigated. glib and rand remain separate unresolved findings. This is a correction of evidence and a regression test, not a claim that the full Rust dependency tree is safe.
 
 Official registry dependency queries also confirm anchor-lang 0.31.3 and 0.32.3 still require borsh ^0.10.3, while 1.2.2 requires ^1.5.7 and changes the Solana crate family. A major financial-contract migration should not be undertaken solely to eliminate this already-corrected ZST issue; rand may still require a separate parent migration. Raw relevant dependency constraints are retained in evidence/borsh-20261109/anchor-constraints.json.
+
+## Executed regression result
+
+CI run 42543552791, contract job 128923579045 at d9bad54a3d6f737f81ded0de9605f33308213e25: all seven existing contract tests and both new Borsh regressions PASS, zero failures/ignored tests. Filtered result lines are retained in evidence/borsh-20261109/contract-tests.log. This confirms the guarded behavior through the actual locked Anchor dependency. Static-security job 128923578974 still reports three findings and fails with Trivy v0.70.0. No suppression was introduced; scanner/feed reconciliation remains separate from demonstrated runtime behavior.
