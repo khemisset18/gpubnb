@@ -67,3 +67,24 @@ The pre-lock durable refund still survives SIGKILL, removal of ephemeral keys, i
 7. D9 requires independent audit/release sign-offs. This implementation session cannot sign itself off as an independent audit.
 
 The latest owner request authorizes continuation of the private qualification work; historical documents describing earlier narrower authorization are not new permission requests. Public-network use, real funds and production activation remain outside these experiments.
+
+
+## Practical recovery priorities and verified retry
+
+Reuse existing implementations and failure patterns instead of multiplying executors. DCRDEX at fc63460615e8dca83fc19520f32a1cb00be4acfa, client/asset/btc/btc.go, Refund, retries a cached signed refund. Dogecoin at the pinned source, src/rpc/rawtransaction.cpp lines 903–929, recognizes an already-mempool transaction and returns its same txid. This is the reference pattern for the new test, not a claim that DCRDEX has certified this implementation.
+
+| User-visible failure | Required behavior | Current evidence |
+| --- | --- | --- |
+| App/node crashes after lock | Read the refund saved before funding and recover it after restart | Native private test PASS; independent-host/encrypted-envelope integration remains outstanding |
+| Broadcast acknowledgement is lost | Reuse exact persisted bytes; same txid, unchanged fee, one confirmed output | New native test PASS, run 42875442068 |
+| Fees become insufficient | Preserve recoverability, expose pending status, and apply only an explicitly bounded safe fee adjustment | Source diagnostic proves floor rejection; end-to-end fee adjustment remains unqualified |
+| Transaction disappears after a fork | Return to pending and verify the restored chain state before completion | One-node invalidate/reconsider PASS; multi-node partition/reorg remains outstanding |
+| Wrong secret, key, destination or script | Reject the spend | Native signed negative controls PASS |
+
+Run [42875442068](https://github.com/khemisset18/gpubnb/actions/runs/42875442068) uses frozen harness a8b107057e2d48df324ebc6e91cf15615f3fec54 at execution commit 5d5d6fc9825e9b24bea061570982ad77d727a25c. It extends the existing refund-after-crash case without creating another executor. The harness deliberately discards the first broadcast return value and retries the persisted bytes without signing again. It does not inject a physical network outage; it tests the ambiguous-acknowledgement recovery behavior after successful node admission.
+
+All 32 native cases PASS. The downloaded artifact and internal hashes verify; the RPC trace independently shows two successful broadcasts of identical refund bytes, returning the same txid. There is one confirmed output of 99 DOGE, and the mempool fee remains 1 DOGE. Keys were removed before both attempts. Invalidate/reconsider still restores one confirmation. The software suite remains 94 tests PASS. Full qualification remains BLOCKED and the final workflow gate retains that result.
+
+Artifact 13790614781 SHA256 f1db67f4f70cb1e409922bbabb6b58fb3749a3dfabbde9c5b66f1495cfe335e8. Bounded summary: audits/evidence/doge-refund-retry-20261110/summary.json. Detailed transaction/RPC evidence is not republished in git. Temporary trigger retired after capture.
+
+Reference: https://github.com/decred/dcrdex/blob/fc63460615e8dca83fc19520f32a1cb00be4acfa/client/asset/btc/btc.go

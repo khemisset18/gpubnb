@@ -1,11 +1,8 @@
 name: Asset Exchange DOGE Private Signed Regtest
 
-# Temporary trigger for persisted-refund retry, same private experiment.
+# Manual exact-branch experiment; retry evidence captured in run 42875442068.
 on:
   workflow_dispatch:
-  push:
-    branches: [asset-exchange/doge-script-boundaries-20261110]
-    paths: [.github/workflows/asset-exchange-dogecoin-native-spends.yml]
 
 permissions:
   contents: read
