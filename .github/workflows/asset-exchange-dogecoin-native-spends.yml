@@ -1,6 +1,6 @@
 name: Asset Exchange DOGE Private Signed Regtest
 
-# Manual exact-branch experiment; temporary trigger retired after run 42674622556.
+# Manual exact-branch experiment; retry evidence captured in run 42875442068.
 on:
   workflow_dispatch:
 
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   signed-regtest:
-    if: github.repository == 'khemisset18/gpubnb' && github.ref == 'refs/heads/asset-exchange/doge-refund-hardening-20261109'
+    if: github.repository == 'khemisset18/gpubnb' && github.ref == 'refs/heads/asset-exchange/doge-script-boundaries-20261110'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -26,7 +26,7 @@ jobs:
       - name: Require unchanged frozen harness and test before native execution
         run: |
           set -euo pipefail
-          git diff --exit-code e44c7650fed64206c68461ef9f6bf1ab73582511 HEAD -- asset-exchange/qualification/dogecoin/
+          git diff --exit-code a8b107057e2d48df324ebc6e91cf15615f3fec54 HEAD -- asset-exchange/qualification/dogecoin/
           bash -n asset-exchange/qualification/dogecoin/d2/run-native-spends.sh
           python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d2 -p 'test_*.py' -v
           python3 asset-exchange/qualification/dogecoin/d2/native_spends.py --manifest

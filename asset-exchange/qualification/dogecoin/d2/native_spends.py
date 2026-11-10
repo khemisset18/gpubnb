@@ -119,6 +119,19 @@ def prepare_recovery(path, raw):
     return digest
 
 
+def adversarial_redeems(redeem):
+    """Deliberately unsafe test scripts; never production contract candidates."""
+    marker=b'\x67\x02\x4b\x05\xb1\x75'
+    require(type(redeem) is bytes and redeem.count(marker)==1,
+            'exact fixture refund boundary required')
+    return [
+        ('negative_cltv_operand',redeem.replace(marker,b'\x67\x4f\xb1\x75'),'refund',0,'script-verify'),
+        ('oversized_cltv_operand',redeem.replace(marker,b'\x67\x06\0\0\0\0\0\x01\xb1\x75'),'refund',0,'script-verify'),
+        # Fourteen unreachable CHECKSIGs plus the two HTLC CHECKSIGs: 16 > 15.
+        ('excess_p2sh_sigops',b'\0\x63'+b'\xac'*14+b'\x68'+redeem,'claim',1,'bad-txns-nonstandard-inputs'),
+    ]
+
+
 def native_verifier(path):
     require(hashlib.sha256(path.read_bytes()).hexdigest()==LIBRARY_SHA256, 'library changed')
     lib=ctypes.CDLL(str(path),mode=ctypes.RTLD_LOCAL)
@@ -177,7 +190,7 @@ def run(args):
         elif method=='getblockhash':require(params in [('0',),('1',)],'height allowlist')
         elif method in ('getblock','invalidateblock','reconsiderblock'):require(len(params)==1 and params[0] in known_blocks,'unknown block')
         elif method in ('getrawtransaction','getmempoolentry'):require(params[0] in known_txs and (params[1:]==('1',) if method=='getrawtransaction' else len(params)==1),'unknown tx')
-        elif method=='gettxout':require(len(params)==3 and params[0] in known_txs and params[1] in ('0','1','2','3','4') and params[2] in ('true','false'),'UTXO params')
+        elif method=='gettxout':require(len(params)==3 and params[0] in known_txs and params[1] in ('0','1','2','3','4','5','6') and params[2] in ('true','false'),'UTXO params')
         else:require(not params,'unexpected RPC params')
         row={'method':method,'params':params};trace.append(row);save()
         r=subprocess.run([str(bins/'dogecoin-cli'),*common,'-rpcconnect=127.0.0.1',method,*params],env=env,capture_output=True,text=True,timeout=180 if method=='generatetoaddress' else 15)
@@ -262,11 +275,13 @@ def run(args):
         matches=[v for v in coin['vout'] if v['scriptPubKey']['hex']==destination.hex()]
         require(len(matches)==1,'one expected coinbase output required')
         v=matches[0];value=int(Decimal(str(v['value']))*COIN)
-        require(value>401*COIN and v['n']==0,'coinbase amount/index outside experiment')
+        require(value>701*COIN and v['n']==0,'coinbase amount/index outside experiment')
         secret=hashlib.sha256(b'GPUbnb public disposable D2 preimage 2026-11-07').digest()
         htlc=build_candidate(hashlib.sha256(secret).digest(),claim.public,refund.public,1355)
         report['htlc']={'redeemHex':htlc.redeem.hex(),'outputHex':htlc.output.hex(),'lock':1355,'preimageHex':secret.hex()}
-        outputs=[(100*COIN,htlc.output)]*4+[(value-400*COIN-COIN,destination)]
+        unsafe=adversarial_redeems(htlc.redeem)
+        unsafe_outputs=[b'\xa9\x14'+hash160(x[1])+b'\x87' for x in unsafe]
+        outputs=[(100*COIN,htlc.output)]*4+[(100*COIN,s) for s in unsafe_outputs]+[(value-700*COIN-COIN,destination)]
         sig=miner.sign(sighash(coinbase,0,destination,outputs))
         funding=transaction(coinbase,0,push(sig)+push(miner.public),outputs)
         record('funding_signature',funding,destination,1)
@@ -292,6 +307,24 @@ def run(args):
         mine()
         report['fundingUtxo']=rpc('gettxout',funding_id,'0','true')
         require(report['fundingUtxo']['confirmations']==1,'funding confirmation missing')
+
+        for index,(fixture,output) in enumerate(zip(unsafe,unsafe_outputs),start=4):
+            name,redeem,branch,expected,rejection=fixture
+            utxo=rpc('gettxout',funding_id,str(index),'true')
+            require(utxo is not None and utxo['confirmations']==1 and not utxo['coinbase']
+                    and utxo['scriptPubKey']['hex']==output.hex()
+                    and Decimal(str(utxo['value']))==Decimal(100),'adversarial funding context mismatch')
+            # nLockTime=0 is final: rejection must come from the script/policy,
+            # never from an immature input or a future transaction lock.
+            fixture_outs=[(99*COIN,destination)]
+            key=refund if branch=='refund' else claim
+            signature=key.sign(sighash(funding_id,index,redeem,fixture_outs))
+            selector=b'\0' if branch=='refund' else push(secret)+b'\x51'
+            script_sig=push(signature)+selector+push(redeem)
+            raw=transaction(funding_id,index,script_sig,fixture_outs)
+            row=record(name,raw,output,expected,rejection)
+            row['fundedPrevout']={'vout':index,'valueKoinu':100*COIN,'confirmations':1,'scriptPubKeyHex':output.hex()}
+            row['redeemHex']=redeem.hex();save()
 
         record('wrong_claim_key',spend(2,key=refund),htlc.output,0,'script-verify')
         record('wrong_refund_key',spend(2,'refund',key=claim),htlc.output,0)
@@ -378,11 +411,27 @@ def run(args):
         report['recoveredRefundUtxo']=recovered_utxo
         recovered_refund=read_signed(recovery,recovery_digest)
         row=record('valid_refund_after_crash',recovered_refund,htlc.output,1)
-        refund_id=submit(recovered_refund)
+        # Model a lost acknowledgement: Core receives the first broadcast, but
+        # recovery deliberately discards its reply. Retry the persisted bytes,
+        # never create/sign another transaction or infer success from a timeout.
+        submit(recovered_refund)
+        refund_id=hash256(recovered_refund)[::-1].hex()
+        before_retry=rpc('getmempoolentry',refund_id)
+        retry_bytes=read_signed(recovery,recovery_digest)
+        require(retry_bytes==recovered_refund,'retry changed persisted refund')
+        require(submit(retry_bytes)==refund_id,'retry changed refund identity')
         row['mempool']=rpc('getmempoolentry',refund_id)
+        require(row['mempool']['fee']==before_retry['fee'] and row['mempool']['size']==before_retry['size'],
+                'retry changed mempool refund')
+        report['refundRetry']={'firstAcknowledgementDiscarded':True,'sameBytes':True,
+            'sameTxid':True,'broadcastAttempts':2,'feeUnchanged':True,'newSignatureCreated':False}
         refund_block=mine()[0]
         row['confirmed']=rpc('getrawtransaction',refund_id,'1')
         require(row['confirmed']['confirmations']==1,'refund not confirmed')
+        require(len(row['confirmed']['vout'])==1
+                and Decimal(str(row['confirmed']['vout'][0]['value']))==Decimal(99)
+                and row['confirmed']['vout'][0]['scriptPubKey']['hex']==destination.hex(),
+                'retry refund destination/value mismatch')
         require(rpc('gettxout',funding_id,'1','true') is None,'refund UTXO still unspent')
         rpc('invalidateblock',refund_block)
         report['refundReorg']={'transaction':rpc('getrawtransaction',refund_id,'1'),

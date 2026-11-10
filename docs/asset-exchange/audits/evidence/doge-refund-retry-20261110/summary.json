@@ -1,0 +1,25 @@
+{
+  "runId": 42875442068,
+  "executionCommit": "5d5d6fc9825e9b24bea061570982ad77d727a25c",
+  "frozenHarness": "a8b107057e2d48df324ebc6e91cf15615f3fec54",
+  "artifactId": 13790614781,
+  "archiveSha256": "f1db67f4f70cb1e409922bbabb6b58fb3749a3dfabbde9c5b66f1495cfe335e8",
+  "experimentStatus": "PASS",
+  "qualificationStatus": "BLOCKED",
+  "nativeCases": 32,
+  "rpcCalls": 69,
+  "generatedBlocks": 1356,
+  "refundRetry": {
+    "broadcastAttempts": 2,
+    "feeUnchanged": true,
+    "firstAcknowledgementDiscarded": true,
+    "newSignatureCreated": false,
+    "sameBytes": true,
+    "sameTxid": true
+  },
+  "verifiedSuccessfulBroadcastsOfIdenticalRefund": 2,
+  "confirmedRefundOutputs": 1,
+  "confirmedRefundValueDoge": "99",
+  "refundRestoredConfirmations": 1,
+  "allInternalFileHashesVerified": true
+}
