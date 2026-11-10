@@ -1,0 +1,220 @@
+{
+  "runId": 42863850857,
+  "artifactId": 13786012991,
+  "archiveSha256": "0692b3e7957a43126b2d7841bd3252d977b56278b3f663cab219f7b38ad230fc",
+  "frozenHarness": "863e905302b1ad34c93f14f6e9aaded9e19ddbfa",
+  "executionCommit": "030647a43f1b00f7f240f6d09f35636046b5f657",
+  "experimentStatus": "PASS",
+  "qualificationStatus": "BLOCKED",
+  "nativeCases": 32,
+  "rpcCalls": 68,
+  "generatedBlocks": 1356,
+  "preLockFundingRpcIndex": 13,
+  "allInternalFileHashesVerified": true,
+  "independentECDSAVerification": [
+    "funding_signature",
+    "valid_claim",
+    "valid_refund_after_crash",
+    "negative_cltv_operand",
+    "oversized_cltv_operand",
+    "excess_p2sh_sigops"
+  ],
+  "fundedAdversarialPrevoutsVerified": true,
+  "keysRemoved": true,
+  "crashExitCode": -9,
+  "refundRestoredConfirmations": 1,
+  "cases": [
+    {
+      "id": "immature_coinbase",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": "error code: -26\nerror message:\n16: bad-txns-premature-spend-of-coinbase\n"
+    },
+    {
+      "id": "funding_signature",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": null
+    },
+    {
+      "id": "negative_cltv_operand",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": "error code: -26\nerror message:\n64: non-mandatory-script-verify-flag (Negative locktime)\n"
+    },
+    {
+      "id": "oversized_cltv_operand",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": "error code: -26\nerror message:\n64: non-mandatory-script-verify-flag (unknown error)\n"
+    },
+    {
+      "id": "excess_p2sh_sigops",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": "error code: -26\nerror message:\n64: bad-txns-nonstandard-inputs\n"
+    },
+    {
+      "id": "wrong_claim_key",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": "error code: -26\nerror message:\n16: mandatory-script-verify-flag-failed (Signature must be zero for failed CHECK(MULTI)SIG operation)\n"
+    },
+    {
+      "id": "wrong_refund_key",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": null
+    },
+    {
+      "id": "wrong_secret",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": "error code: -26\nerror message:\n16: mandatory-script-verify-flag-failed (Script failed an OP_EQUALVERIFY operation)\n"
+    },
+    {
+      "id": "short_secret",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": "error code: -26\nerror message:\n16: mandatory-script-verify-flag-failed (Script failed an OP_EQUALVERIFY operation)\n"
+    },
+    {
+      "id": "changed_signed_lock",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": null
+    },
+    {
+      "id": "wrong_outpoint",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": null
+    },
+    {
+      "id": "wrong_destination",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": null
+    },
+    {
+      "id": "wrong_signature",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": "error code: -26\nerror message:\n16: mandatory-script-verify-flag-failed (Signature must be zero for failed CHECK(MULTI)SIG operation)\n"
+    },
+    {
+      "id": "changed_signed_amount",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": "error code: -26\nerror message:\n16: mandatory-script-verify-flag-failed (Signature must be zero for failed CHECK(MULTI)SIG operation)\n"
+    },
+    {
+      "id": "changed_signed_sequence",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": "error code: -26\nerror message:\n16: mandatory-script-verify-flag-failed (Signature must be zero for failed CHECK(MULTI)SIG operation)\n"
+    },
+    {
+      "id": "noncanonical_der",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": "error code: -26\nerror message:\n64: non-mandatory-script-verify-flag (Non-canonical DER signature)\n"
+    },
+    {
+      "id": "high_s_policy",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": "error code: -26\nerror message:\n64: non-mandatory-script-verify-flag (Non-canonical signature: S value is unnecessarily high)\n"
+    },
+    {
+      "id": "extra_stack_policy",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": "error code: -26\nerror message:\n64: non-mandatory-script-verify-flag (unknown error)\n"
+    },
+    {
+      "id": "nonpush_only_scriptsig",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": "error code: -26\nerror message:\n64: scriptsig-not-pushonly\n"
+    },
+    {
+      "id": "oversized_scriptsig",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": "error code: -26\nerror message:\n64: scriptsig-size\n"
+    },
+    {
+      "id": "bare_htlc_output",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": "error code: -26\nerror message:\n64: scriptpubkey\n"
+    },
+    {
+      "id": "wrong_redeem",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": "error code: -26\nerror message:\n16: mandatory-script-verify-flag-failed (Script evaluated without error but finished with a false/empty top stack element)\n"
+    },
+    {
+      "id": "absent_utxo",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": "error code: -25\nerror message:\nMissing inputs\n"
+    },
+    {
+      "id": "lock_domain_mismatch",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": null
+    },
+    {
+      "id": "final_sequence",
+      "cAbiResult": 0,
+      "expected": 0,
+      "nodeRejection": "error code: -26\nerror message:\n64: non-mandatory-script-verify-flag (Locktime requirement not satisfied)\n"
+    },
+    {
+      "id": "early_refund",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": "error code: -26\nerror message:\n64: non-final\n"
+    },
+    {
+      "id": "hard_dust",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": "error code: -26\nerror message:\n64: dust\n"
+    },
+    {
+      "id": "nonminimal_push",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": "error code: -26\nerror message:\n64: non-mandatory-script-verify-flag (Data push larger than necessary)\n"
+    },
+    {
+      "id": "valid_claim",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": null
+    },
+    {
+      "id": "equal_candidate_height_nonfinal",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": "error code: -26\nerror message:\n64: non-final\n"
+    },
+    {
+      "id": "double_spend",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": "error code: -26\nerror message:\n18: bad-txns-inputs-spent\n"
+    },
+    {
+      "id": "valid_refund_after_crash",
+      "cAbiResult": 1,
+      "expected": 1,
+      "nodeRejection": null
+    }
+  ]
+}

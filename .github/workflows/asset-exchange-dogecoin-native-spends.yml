@@ -1,11 +1,8 @@
 name: Asset Exchange DOGE Private Signed Regtest
 
-# Temporary exact-branch trigger for funded script-boundary evidence.
+# Manual exact-branch experiment; automatic trigger retired after run 42863850857.
 on:
   workflow_dispatch:
-  push:
-    branches: [asset-exchange/doge-script-boundaries-20261110]
-    paths: [.github/workflows/asset-exchange-dogecoin-native-spends.yml]
 
 permissions:
   contents: read
