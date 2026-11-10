@@ -9,6 +9,10 @@ from unittest.mock import patch
 import native_spends
 
 class NativeSpendsGuards(unittest.TestCase):
+    def test_unsafe_fixture_generation_requires_exact_refund_boundary(self):
+        for raw in [None,b'',b'\x67\x02\x4b\x05\xb1\x75'*2]:
+            with self.assertRaises(ValueError):native_spends.adversarial_redeems(raw)
+
     def test_prelock_recovery_roundtrip_and_external_digest(self):
         raw=b'public synthetic refund'
         with tempfile.TemporaryDirectory() as tmp:
