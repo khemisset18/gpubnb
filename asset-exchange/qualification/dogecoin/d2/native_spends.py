@@ -411,11 +411,27 @@ def run(args):
         report['recoveredRefundUtxo']=recovered_utxo
         recovered_refund=read_signed(recovery,recovery_digest)
         row=record('valid_refund_after_crash',recovered_refund,htlc.output,1)
-        refund_id=submit(recovered_refund)
+        # Model a lost acknowledgement: Core receives the first broadcast, but
+        # recovery deliberately discards its reply. Retry the persisted bytes,
+        # never create/sign another transaction or infer success from a timeout.
+        submit(recovered_refund)
+        refund_id=hash256(recovered_refund)[::-1].hex()
+        before_retry=rpc('getmempoolentry',refund_id)
+        retry_bytes=read_signed(recovery,recovery_digest)
+        require(retry_bytes==recovered_refund,'retry changed persisted refund')
+        require(submit(retry_bytes)==refund_id,'retry changed refund identity')
         row['mempool']=rpc('getmempoolentry',refund_id)
+        require(row['mempool']['fee']==before_retry['fee'] and row['mempool']['size']==before_retry['size'],
+                'retry changed mempool refund')
+        report['refundRetry']={'firstAcknowledgementDiscarded':True,'sameBytes':True,
+            'sameTxid':True,'broadcastAttempts':2,'feeUnchanged':True,'newSignatureCreated':False}
         refund_block=mine()[0]
         row['confirmed']=rpc('getrawtransaction',refund_id,'1')
         require(row['confirmed']['confirmations']==1,'refund not confirmed')
+        require(len(row['confirmed']['vout'])==1
+                and Decimal(str(row['confirmed']['vout'][0]['value']))==Decimal(99)
+                and row['confirmed']['vout'][0]['scriptPubKey']['hex']==destination.hex(),
+                'retry refund destination/value mismatch')
         require(rpc('gettxout',funding_id,'1','true') is None,'refund UTXO still unspent')
         rpc('invalidateblock',refund_block)
         report['refundReorg']={'transaction':rpc('getrawtransaction',refund_id,'1'),
