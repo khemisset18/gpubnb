@@ -1,0 +1,39 @@
+name: Asset Exchange LTC L0 offline provenance guards
+
+on:
+  pull_request:
+    paths:
+      - 'asset-exchange/qualification/litecoin/l0/**'
+      - 'docs/asset-exchange/LITECOIN_ADAPTER_SPEC_V1.md'
+      - '.github/workflows/asset-exchange-litecoin-l0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ltc-l0-offline-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  offline-provenance:
+    name: LTC L0 fail-closed metadata and GPG guard tests (no chain)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Exact checkout (no retained credentials)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Python syntax
+        run: python3 -m compileall -q asset-exchange/qualification/litecoin/l0/
+      - name: Offline adverse-case tests (no Litecoin execution)
+        run: python3 -m unittest discover -s asset-exchange/qualification/litecoin/l0 -p 'test_*.py' -v
+      - name: Assert no activation or LTC native/manual network jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e asset-exchange/qualification/litecoin/l0/.env
+          grep -q 'settlementEnabled.*False' asset-exchange/qualification/litecoin/l0/verify_release.py
+          grep -q 'l0Qualified.*False' asset-exchange/qualification/litecoin/l0/verify_release.py
+          echo 'LTC_L0_OFFLINE_ONLY_NO_ACTIVATION=PASS'
