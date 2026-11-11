@@ -23,7 +23,7 @@ on:
         type: choice
         required: true
         default: both
-        options: [both, d3, multinode]
+        options: [both, d3, multinode, fee-pinning]
 
 permissions:
   contents: read
@@ -119,7 +119,7 @@ jobs:
   # The registered workflow provides a manual entry on the development branch.
   # These jobs can never run from push, PR, schedule, main or another repository.
   doge-d3-private-manual:
-    if: github.event_name == 'workflow_dispatch' && inputs.doge_suite != 'multinode' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
+    if: github.event_name == 'workflow_dispatch' && inputs.doge_suite != 'multinode' && inputs.doge_suite != 'fee-pinning' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
     permissions:
       contents: read
       actions: read
@@ -128,12 +128,13 @@ jobs:
       diagnostic_suite: d3
 
   doge-recovery-multinode-private-manual:
-    if: github.event_name == 'workflow_dispatch' && inputs.doge_suite != 'd3' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
+    if: github.event_name == 'workflow_dispatch' && inputs.doge_suite != 'd3' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && ((inputs.doge_suite == 'fee-pinning' && github.ref == 'refs/heads/asset-exchange/doge-fee-pinning-20261111') || (inputs.doge_suite != 'fee-pinning' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'))
     permissions:
       contents: read
       actions: read
     uses: ./.github/workflows/asset-exchange-dogecoin-multinode.yml
     with:
       execution_commit: ${{ github.sha }}
-      harness_commit: a5548ecc8e610b3d5c3ccd4903bd245dacda7326
+      harness_commit: 428b64fa35ae60375e5eac4f624225c768c3580b
       authorization: AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST
+      lab_suite: ${{ inputs.doge_suite == 'fee-pinning' && 'fee-pinning' || 'multinode' }}

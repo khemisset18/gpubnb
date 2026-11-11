@@ -36,12 +36,15 @@ def push(raw):
     return b'\x4d' + struct.pack('<H', len(raw)) + raw
 
 
-def transaction(txid, vout, script, outputs, lock=0, sequence=0xfffffffe):
+def transaction(txid, vout, script, outputs, lock=0, sequence=0xfffffffe, *, max_outputs=8):
     require(type(txid) is str and len(txid) == 64 and all(c in '0123456789abcdef' for c in txid), 'canonical outpoint hash required')
     for value in (vout, lock, sequence):
         require(type(value) is int and 0 <= value <= 0xffffffff, 'uint32 required')
     require(type(script) is bytes and len(script) <= 1650, 'bounded scriptSig required')
-    require(type(outputs) is list and 1 <= len(outputs) <= 8, 'bounded outputs required')
+    # The recovery profile keeps the default eight-output bound. Only the
+    # private native pressure fixture opts into a larger, still finite bound.
+    require(type(max_outputs) is int and 1 <= max_outputs <= 1601, 'bounded output limit required')
+    require(type(outputs) is list and 1 <= len(outputs) <= max_outputs, 'bounded outputs required')
     raw = struct.pack('<I', 1) + b'\x01' + bytes.fromhex(txid)[::-1] + struct.pack('<I', vout)
     raw += compact(len(script)) + script + struct.pack('<I', sequence) + compact(len(outputs))
     total = 0
@@ -54,9 +57,9 @@ def transaction(txid, vout, script, outputs, lock=0, sequence=0xfffffffe):
     return raw + struct.pack('<I', lock)
 
 
-def sighash(txid, vout, script_code, outputs, lock=0, sequence=0xfffffffe):
+def sighash(txid, vout, script_code, outputs, lock=0, sequence=0xfffffffe, *, max_outputs=8):
     # Single-input, legacy SIGHASH_ALL only. Spent amount is NOT committed.
-    return hash256(transaction(txid, vout, script_code, outputs, lock, sequence) + struct.pack('<I', 1))
+    return hash256(transaction(txid, vout, script_code, outputs, lock, sequence, max_outputs=max_outputs) + struct.pack('<I', 1))
 
 
 def decode_der(sig):

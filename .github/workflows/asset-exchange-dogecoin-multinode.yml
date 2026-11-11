@@ -16,6 +16,12 @@ on:
         description: AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST
         type: string
         required: true
+      lab_suite:
+        description: Fixed isolated experiment
+        type: choice
+        required: true
+        default: multinode
+        options: [multinode, fee-pinning]
   workflow_call:
     inputs:
       execution_commit:
@@ -27,6 +33,10 @@ on:
       authorization:
         type: string
         required: true
+      lab_suite:
+        type: string
+        default: multinode
+        required: false
 permissions:
   contents: read
   actions: read
@@ -35,7 +45,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   private-multinode:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && ((inputs.lab_suite == 'multinode' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111') || (inputs.lab_suite == 'fee-pinning' && github.ref == 'refs/heads/asset-exchange/doge-fee-pinning-20261111'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -49,6 +59,7 @@ jobs:
           EXECUTION_COMMIT: ${{ inputs.execution_commit }}
           HARNESS_COMMIT: ${{ inputs.harness_commit }}
           LAB_AUTHORIZATION: ${{ inputs.authorization }}
+          LAB_SUITE: ${{ inputs.lab_suite }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -57,6 +68,7 @@ jobs:
           assert re.fullmatch('[0-9a-f]{40}',os.environ['HARNESS_COMMIT'])
           assert os.environ['EXECUTION_COMMIT']==os.environ['GITHUB_SHA']
           assert os.environ['LAB_AUTHORIZATION']=='AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST'
+          assert os.environ['LAB_SUITE'] in ('multinode','fee-pinning')
           PY
           git diff --exit-code "$HARNESS_COMMIT" HEAD -- asset-exchange/qualification/dogecoin/ asset-exchange/chain-watchers/ asset-exchange/recovery/ asset-exchange/wallet-agent/ asset-exchange/core/src/errors.mjs .github/workflows/asset-exchange-dogecoin-multinode.yml
           bash -n asset-exchange/qualification/dogecoin/d0/verify-runtime-evidence.sh
@@ -65,7 +77,7 @@ jobs:
           python3 -m unittest discover -s asset-exchange/wallet-agent/dogecoin -p 'test_*.py' -v
           python3 -m unittest discover -s asset-exchange/recovery/dogecoin -p 'test_*.py' -v
           node --test asset-exchange/chain-watchers/test/*.test.mjs
-          python3 asset-exchange/qualification/dogecoin/d6/multinode.py --manifest
+          python3 asset-exchange/qualification/dogecoin/d6/multinode.py --manifest --lab-suite "$LAB_SUITE"
       - name: Download preserved qualified D0 archive and attestations
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -77,9 +89,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           LAB_AUTHORIZATION: ${{ inputs.authorization }}
+          LAB_SUITE: ${{ inputs.lab_suite }}
         run: |
           bash asset-exchange/qualification/dogecoin/d6/run-multinode.sh \
-            "$GITHUB_WORKSPACE/dist/doge-d0-verified" "$RUNNER_TEMP/doge-multinode" "$LAB_AUTHORIZATION"
+            "$GITHUB_WORKSPACE/dist/doge-d0-verified" "$RUNNER_TEMP/doge-multinode" "$LAB_AUTHORIZATION" "$LAB_SUITE"
       - name: Check watcher behavior against native paired observations
         run: |
           node asset-exchange/qualification/dogecoin/d6/check-watcher-evidence.mjs \
