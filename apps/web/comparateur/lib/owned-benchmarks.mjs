@@ -8,7 +8,13 @@ export const ALGORITHMS=Object.freeze({
   RVN:Object.freeze({name:'KawPoW',unit:'H/s'}),
   ETC:Object.freeze({name:'Etchash',unit:'H/s'}),
   ERG:Object.freeze({name:'Autolykos v2',unit:'H/s'}),
-  FLUX:Object.freeze({name:'FluxHash / Equihash',unit:'Sol/s'})
+  FLUX:Object.freeze({name:'FluxHash / Equihash',unit:'Sol/s'}),
+  ALPH:Object.freeze({name:'Blake3',unit:'H/s'}),
+  KAS:Object.freeze({name:'kHeavyHash',unit:'H/s'}),
+  CFX:Object.freeze({name:'Octopus',unit:'H/s'}),
+  NEOX:Object.freeze({name:'KawPoW',unit:'H/s'}),
+  BEAM:Object.freeze({name:'BeamHash III',unit:'Sol/s'}),
+  CTXC:Object.freeze({name:'Cuckatoo32',unit:'Graph/s'})
 });
 const isNum=(v,min,max)=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
 const validId=id=>typeof id==='string'&&/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)&&id.length<=100;
