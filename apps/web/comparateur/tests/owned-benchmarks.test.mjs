@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateOwnedBenchmark,validateOwnedBenchmarkDataset,ALGORITHMS} from '../lib/owned-benchmarks.mjs';
+import {validateOwnedBenchmark,validateOwnedBenchmarkDataset,validatePublishedOwnedBenchmarks,ALGORITHMS} from '../lib/owned-benchmarks.mjs';
 
 const now=Date.parse('2026-11-11T18:00:00.000Z');
 const ids=new Set(['nvidia-rtx-3060','amd-7950x']);
@@ -62,4 +62,18 @@ test('rejects stale or future samples and any dataset duplication',()=>{
 });
 test('cannot publish other miners user data merely by setting consent flag',()=>{
   assert.equal(validateOwnedBenchmark(sample({sampleMethod:'user-upload',consentToPublish:true}),ids,now),null);
+});
+
+test('sanitized published file can be validated without leaking consent flag',()=>{
+  const privateDoc={schemaVersion:1,source:'gpubnb-owned-lab',samples:[sample()]};
+  const sanitized=validateOwnedBenchmarkDataset(privateDoc,ids,now);
+  const publicBytes=JSON.parse(JSON.stringify(sanitized));
+  const validated=validatePublishedOwnedBenchmarks(publicBytes,ids,now);
+  assert.ok(validated);
+  assert.equal(validated.samples.length,1);
+  assert.equal(validated.samples[0].consentToPublish,undefined);
+  assert.equal(validatePublishedOwnedBenchmarks({...publicBytes,
+    samples:[{...publicBytes.samples[0],privateToken:'secret'}]},ids,now),null);
+  assert.equal(validatePublishedOwnedBenchmarks({...publicBytes,
+    samples:[{...publicBytes.samples[0],hashrate:'invalid'}]},ids,now),null);
 });
