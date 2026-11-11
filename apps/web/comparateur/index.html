@@ -142,9 +142,9 @@
     <section class="pow-section" aria-labelledby="powHeading">
       <div class="compare-header">
         <div>
-          <span class="section-kicker">QUATRE AUTRES RÉSEAUX · SANS API COMMERCIALE</span>
-          <h2 id="powHeading">Comparez les autres cryptos minables</h2>
-          <p>Ravencoin, Ethereum Classic, Ergo et Flux. Un calcul théorique transparent, à partir des données d'un nœud propre ou de vos mesures réelles.</p>
+          <span class="section-kicker">CATALOGUE MULTI-CRYPTO · GPU / CPU / ASIC</span>
+          <h2 id="powHeading">14 cryptomonnaies, des calculs adaptés</h2>
+          <p>GPUbnb Host, profils de minage, Bitcoin et Zcash : rendement théorique par algorithme ou gains Pearl observés. Aucune performance inventée ni API payante.</p>
         </div>
         <span class="mode-pill" id="powMode" role="status">Données manuelles</span>
       </div>
@@ -152,12 +152,39 @@
         <div class="pow-entry">
           <label for="powCoin">Cryptomonnaie</label>
           <select id="powCoin">
-            <option value="RVN">Ravencoin (RVN) — KawPoW</option>
-            <option value="ETC">Ethereum Classic (ETC) — Etchash</option>
-            <option value="ERG">Ergo (ERG) — Autolykos v2</option>
-            <option value="FLUX">Flux (FLUX) — FluxHash / Equihash</option>
+            <optgroup label="GPU et algorithmes spécialisés">
+              <option value="PRL">Pearl (PRL) — GPU / IA</option>
+              <option value="RVN">Ravencoin (RVN) — KawPoW</option>
+              <option value="ETC">Ethereum Classic (ETC) — Etchash</option>
+              <option value="ERG">Ergo (ERG) — Autolykos v2</option>
+              <option value="FLUX">Flux (FLUX) — FluxHash</option>
+              <option value="CFX">Conflux (CFX) — Octopus</option>
+              <option value="NEOX">Neoxa (NEOX) — KawPoW</option>
+              <option value="BEAM">Beam (BEAM) — BeamHash III</option>
+              <option value="CTXC">Cortex (CTXC) — Cuckatoo32</option>
+            </optgroup>
+            <optgroup label="ASIC dominants : équipement spécialisé">
+              <option value="BTC">Bitcoin (BTC) — SHA-256</option>
+              <option value="ZEC">Zcash (ZEC) — Equihash 200,9</option>
+              <option value="KAS">Kaspa (KAS) — kHeavyHash</option>
+              <option value="ALPH">Alephium (ALPH) — Blake3</option>
+            </optgroup>
           </select>
-          <div class="pow-hardware"><span>Matériel sélectionné</span><strong id="powDevice">—</strong><small id="powAlgorithm">Chaque algorithme demande un hashrate mesuré séparément.</small></div>
+          <div class="pow-hardware"><span id="powDeviceContext">Matériel sélectionné</span><strong id="powDevice">—</strong><small id="powAlgorithm">Chaque algorithme demande un hashrate mesuré séparément.</small></div>
+          <div class="pow-asics" id="powAsicFields" hidden>
+            <p class="pow-caution">Pour cette monnaie, un ASIC spécialisé est nécessaire pour une rentabilité réaliste. Les watts et le hashrate d'une carte graphique ne sont pas représentatifs.</p>
+            <label for="powAsicWatts">Consommation réelle de votre ASIC (W)</label>
+            <input id="powAsicWatts" type="number" min="1" max="20000" step="any" placeholder="Puissance mesurée de votre ASIC">
+          </div>
+          <div class="pow-pearl" id="powPearlFields" hidden>
+            <p class="pow-caution">Pearl utilise PearlHash / Proof of Useful Work. Le hashrate GPU classique ne permet pas de calculer un rendement fiable. Saisissez les PRL réellement observés pour UN GPU.</p>
+            <div class="pow-pair">
+              <div><label for="powPearlCoins">PRL bruts observés / GPU</label><input id="powPearlCoins" type="number" min="0" step="any" placeholder="Montant observé avant frais"></div>
+              <div><label for="powPearlHours">Heures de minage mesurées</label><input id="powPearlHours" type="number" min="1" max="8760" step="any" placeholder="Ex. 168"></div>
+            </div>
+            <p class="field-hint">Historique de pool, pas une promesse de gains futurs. Si les frais sont déjà déduits, réglez les frais de pool à 0 % pour éviter de les compter deux fois.</p>
+          </div>
+          <div id="powHashFields">
           <div class="pow-pair">
             <div><label for="powDeviceRate">Hashrate mesuré / appareil</label><input id="powDeviceRate" type="number" min="0.000001" step="any" placeholder="Mesure réelle"></div>
             <div><label for="powDeviceScale">Unité de puissance</label><select id="powDeviceScale"><option value="1">H/s</option><option value="1000">kH/s</option><option value="1000000">MH/s</option><option value="1000000000">GH/s</option><option value="1000000000000">TH/s</option></select></div>
@@ -177,6 +204,7 @@
             </div>
             <p class="field-hint" id="powRewardHelp">Renseignez la récompense effectivement attribuée au mineur, pas forcément la récompense totale.</p>
           </div>
+          </div>
           <label for="powPrice">Cours de la cryptomonnaie en € <small>(facultatif, manuel)</small></label>
           <input id="powPrice" type="number" min="0" max="10000000" step="any" placeholder="Sans cours, résultats en cryptomonnaie uniquement">
         </div>
@@ -193,7 +221,7 @@
             <div><span>Net par an</span><strong id="powNetYear">—</strong></div>
           </div>
           <p class="pow-explanation" id="powExplanation" aria-live="polite">Entrez les performances de votre GPU et les mesures du réseau pour obtenir une estimation.</p>
-          <p class="field-hint">Les émissions et la difficulté changent. Le résultat n'inclut pas nécessairement les frais de transaction, récompenses d'oncles, MEV, frais développeur ou électricité hors matériel saisi.</p>
+          <p class="field-hint">Les projections ne garantissent aucun gain. Pearl utilise des gains de pool mesurés ; les ASIC exigent des caractéristiques propres. La difficulté, le cours et les frais réels peuvent évoluer.</p>
         </div>
       </div>
     </section>
