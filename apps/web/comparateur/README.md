@@ -101,3 +101,24 @@ node --test apps/web/comparateur/tests/*.test.mjs
 ```
 
 Ne pas fusionner ni déployer sans accord explicite.
+
+
+## Les cinq monnaies prévues dans GPUbnb
+
+Le comparateur intègre désormais les **cinq cryptomonnaies déjà listées dans le module de configuration de minage du site**, sans modifier ce dernier :
+
+- **XMR / RandomX** : moteur spécialisé ; données du réseau préparées depuis `monerod` local.
+- **RVN / KawPoW** et **ETC / Etchash** : nouveau calculateur multichaîne et collecteurs expérimentaux depuis nos propres nœuds, non déployés ni validés contre un daemon live.
+- **ERG / Autolykos v2** et **FLUX / FluxHash** : nouveau calculateur multichaîne avec données réseau saisies manuellement ; leurs collecteurs spécifiques restent à développer.
+- Revenus affichés **en coins par jour, mois (30 jours) et an (365 jours)**. Les montants en euros restent liés à un cours **saisi manuellement**.
+- Aucune valeur, benchmark ou cours de crypto n'est inventé ; les mesures réseau manquantes restent indisponibles.
+
+Voir [la matrice détaillée des cinq cryptomonnaies et les guides d'intégration gratuite](docs/CINQ_CRYPTOS_POW.md).
+
+Tests du moteur autonome et des collecteurs :
+
+```bash
+node --test apps/web/comparateur/tests/*.test.mjs
+```
+
+Les valeurs du fichier `data/pow-reseaux.json` restent vides avant une collecte vérifiée depuis nos nœuds et une publication autorisée. Aucun de ces outils ne modifie d'autres modules GPUbnb. **Ne pas fusionner sans accord explicite.**
