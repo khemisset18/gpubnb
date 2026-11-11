@@ -1,0 +1,10 @@
+{
+  "name": "gpubnb-comparateur-rentabilite",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Comparateur GPUbnb indépendant : calculs de minage originaux et tests sans abonnement",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  }
+}
