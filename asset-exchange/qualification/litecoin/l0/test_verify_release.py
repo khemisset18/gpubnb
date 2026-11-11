@@ -13,7 +13,10 @@ import verify_release as ltc
 
 FPR = "0123456789ABCDEF0123456789ABCDEF01234567"
 OTHER = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
-GOOD_STATUS = f"[GNUPG:] GOODSIG 0123456789ABCDEF Test Signer\n[GNUPG:] VALIDSIG {FPR}\n".encode()
+GOOD_STATUS = (
+    f"[GNUPG:] GOODSIG {FPR[-16:]} Test Signer\n"
+    f"[GNUPG:] VALIDSIG {FPR} 2026-09-09 1788975885 0 4 0 22 10 01 {FPR}\n"
+).encode()
 VALID_SUMS = f"{ltc.ARCHIVE_SHA256}  {ltc.ARCHIVE_NAME}\n".encode()
 
 
@@ -74,9 +77,25 @@ class LitecoinL0Tests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     ltc.assert_signer(status, fingerprint)
 
+    def test_gpg_status_must_be_complete_and_signature_ids_consistent(self) -> None:
+        truncated = (f"[GNUPG:] GOODSIG {FPR[-16:]} Test\n"
+                     f"[GNUPG:] VALIDSIG {FPR}\n").encode()
+        mismatch = GOOD_STATUS.replace(FPR[-16:].encode(), b"0" * 16, 1)
+        malformed_primary = GOOD_STATUS.replace(
+            f" 01 {FPR}\n".encode(), b" 01 FFFFFFFF\n")
+        for bad_status in (
+            truncated, mismatch, malformed_primary,
+            GOOD_STATUS + b"[GNUPG:] EXPSIG 0 Expired\n",
+            GOOD_STATUS + b"[GNUPG:] KEYREVOKED\n",
+            GOOD_STATUS + b"[GNUPG:] GOODSIG 0000000000000000 Extra\n",
+        ):
+            with self.subTest(status=bad_status[-90:]):
+                with self.assertRaises(ValueError):
+                    ltc.assert_signer(bad_status, FPR)
+
     def test_pinned_primary_fingerprint_may_approve_explicit_subkey(self) -> None:
         subkey = OTHER
-        status = (f"[GNUPG:] GOODSIG 0 Test\n[GNUPG:] VALIDSIG {subkey}"
+        status = (f"[GNUPG:] GOODSIG {subkey[-16:]} Test\n[GNUPG:] VALIDSIG {subkey}"
                   f" 2026-09-09 1788975885 0 4 0 1 10 00 {FPR}\n").encode()
         ltc.assert_signer(status, FPR)
 
@@ -116,6 +135,7 @@ class LitecoinL0Tests(unittest.TestCase):
         argv = gpg.call_args.args[0]
         self.assertIn("--no-default-keyring", argv)
         self.assertIn("--no-options", argv)
+        self.assertIn("--no-auto-key-retrieve", argv)
         self.assertIn("--batch", argv)
         self.assertNotIn("--recv-keys", argv)
         self.assertFalse(proof["l0Qualified"])

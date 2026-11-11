@@ -30,8 +30,9 @@ MAX_SUMS_BYTES = 128 * 1024
 FINGERPRINT = re.compile(r"[A-F0-9]{40}\Z")
 SUM_LINE = re.compile(r"([0-9a-f]{64})  ([A-Za-z0-9_.-]+)\Z")
 REJECT_STATUS = {
-    "BADSIG", "ERRSIG", "REVKEYSIG", "EXPKEYSIG", "KEYEXPIRED",
-    "SIGEXPIRED", "NODATA", "NO_PUBKEY", "DECRYPTION_FAILED", "TRUST_NEVER",
+    "BADSIG", "ERRSIG", "REVKEYSIG", "EXPKEYSIG", "EXPSIG",
+    "KEYREVOKED", "KEYEXPIRED", "SIGEXPIRED", "NODATA", "NO_PUBKEY",
+    "DECRYPTION_FAILED", "TRUST_NEVER",
 }
 
 
@@ -88,8 +89,8 @@ def assert_signer(status: bytes, expected_fingerprint: str) -> None:
         lines = status.decode("utf-8", errors="strict").splitlines()
     except UnicodeDecodeError as exc:
         raise ValueError("ltc_l0_gpg_status_invalid") from exc
-    valid = []
-    good = 0
+    good_key_ids: list[str] = []
+    valid: list[tuple[str, str]] = []
     for line in lines:
         if not line.startswith("[GNUPG:] "):
             continue
@@ -100,19 +101,26 @@ def assert_signer(status: bytes, expected_fingerprint: str) -> None:
         if status_code in REJECT_STATUS:
             raise ValueError("ltc_l0_gpg_rejected_signature")
         if status_code == "GOODSIG":
-            good += 1
-        if status_code == "VALIDSIG":
-            if len(fields) < 2 or FINGERPRINT.fullmatch(fields[1]) is None:
+            if len(fields) < 2 or re.fullmatch(r"[A-F0-9]{16}", fields[1]) is None:
+                raise ValueError("ltc_l0_gpg_goodsig_malformed")
+            good_key_ids.append(fields[1])
+        elif status_code == "VALIDSIG":
+            # GnuPG format: signing fingerprint, date, timestamp, expiry,
+            # signature version, reserved, public-key algorithm, hash
+            # algorithm, signature class, optional primary fingerprint.
+            # Never mistake arbitrary trailing fields for a primary key.
+            if len(fields) not in (10, 11) or FINGERPRINT.fullmatch(fields[1]) is None:
                 raise ValueError("ltc_l0_gpg_validsig_malformed")
-            # GPG may sign with a subkey; the last optional fingerprint
-            # identifies its primary key. Both must be explicitly anchored.
-            known = {fields[1]}
-            if len(fields) >= 11 and FINGERPRINT.fullmatch(fields[-1]):
-                known.add(fields[-1])
-            valid.append(known)
-    if good != 1 or len(valid) != 1 or fingerprint not in valid[0]:
+            if any(not fields[i].isdigit() for i in (3, 4, 5, 6, 7, 8)):
+                raise ValueError("ltc_l0_gpg_validsig_malformed")
+            primary = fields[10] if len(fields) == 11 else fields[1]
+            if FINGERPRINT.fullmatch(primary) is None:
+                raise ValueError("ltc_l0_gpg_validsig_malformed")
+            valid.append((fields[1], primary))
+    if (len(good_key_ids) != 1 or len(valid) != 1
+            or good_key_ids[0] != valid[0][0][-16:]
+            or fingerprint not in valid[0]):
         raise ValueError("ltc_l0_signer_fingerprint_mismatch")
-
 
 def verify_release(archive: Path, signed_sums: Path, keyring: Path, signer_fingerprint: str) -> dict:
     # Fail without any GPG execution if the operator supplies an unbounded or
@@ -129,7 +137,7 @@ def verify_release(archive: Path, signed_sums: Path, keyring: Path, signer_finge
     archive_sha256(archive, ARCHIVE_SHA256, ARCHIVE_SIZE_BYTES)
     with tempfile.TemporaryDirectory(prefix="ltc-l0-gpg-") as home:
         args = ["gpg", "--batch", "--no-tty", "--no-options", "--homedir", home,
-                "--no-default-keyring", "--keyring", str(keyring.resolve()),
+                "--no-auto-key-retrieve", "--no-default-keyring", "--keyring", str(keyring.resolve()),
                 "--status-fd", "2", "--decrypt", str(signed_sums.resolve())]
         result = subprocess.run(args, stdin=subprocess.DEVNULL, capture_output=True, timeout=30, check=False)
     if result.returncode != 0:
