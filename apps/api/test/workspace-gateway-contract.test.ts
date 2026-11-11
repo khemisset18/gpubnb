@@ -171,7 +171,7 @@ test('durable receipt generations fence lock-free activated frame admission',()=
     'already-activated frames must not hold a PostgreSQL row lock');
   assert.match(activated,/return \{enqueued:await enqueue\(cachedAuthority\),authorityId:cachedAuthority\}/,
     'a valid short Redis lease must avoid a PostgreSQL query on the hot path');
-  assert.match(activated,/installGatewayAuthority\(redis,sessionId,live\.gatewayAcceptance\.id,live\.expiresAt\)/,
+  assert.match(activated,/installGatewayAuthority\(redis,sessionId,live\.gatewayAcceptance\.id,live\.expiresAt,validationDeadline\)/,
     'a fresh authoritative snapshot must CAS-install its durable receipt before enqueue');
   assert.match(api,/GATEWAY_AUTHORITY_LEASE_SECONDS=2/);
   assert.match(api,/gateway_authority_db_timeout/);

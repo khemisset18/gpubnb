@@ -17,9 +17,30 @@ created for the first accepted upstream frame. Redis stores that UUID under
   seconds. Only an active, unexpired session on a clear online machine with a
   committed receipt may CAS-install the receipt. A tombstone or another receipt
   is never overwritten.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:e5e2e45831d0c5af50dc2a0457db72183e099eaba0d1b869abd7620f93e08241 -->
+
 - Lease expiry bounds stale authority after DB-only status, connectivity or
   moderation changes. A PostgreSQL failure during renewal refuses the frame.
   A Redis read, CAS or enqueue failure also refuses the frame.
+- Before the PostgreSQL read, renewal samples Redis `TIME` and fixes a
+  15-second validation deadline. The install Lua checks that deadline using
+  Redis's clock, including after a first-frame transaction or lost commit ACK.
+  It is never refreshed during recovery. Caller timeouts do not cancel queued
+  Redis commands: an expired validation must be refused even after the STOP
+  tombstone has disappeared. The deadline is shorter than the 60-second minimum
+  tombstone lifetime. Only renewal/first activation adds this `TIME` call; the
+  hot frame path remains unchanged. Missing deadlines fail closed, so mixed
+  API versions must be drained before relying on this guarantee.
+
+Redis documents [atomic script execution](https://redis.io/docs/latest/develop/programmability/eval-intro/)
+and its [server clock](https://redis.io/docs/latest/commands/time/). Both the
+sample and comparison use that clock, avoiding API/Redis clock skew. Normal
+Redis expiry assumptions still apply (no backward server-clock jumps or restore
+of stale authority from a snapshot).
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 The valid lease is deliberately short but authoritative for its remaining
 lifetime. Therefore loss of PostgreSQL after a successful renewal can leave at

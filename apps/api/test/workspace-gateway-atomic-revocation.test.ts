@@ -151,3 +151,27 @@ withRedis('real Redis: final native delivery fence rejects revoked cookies and r
     redis.disconnect();
   }
 });
+
+
+test('an expired validation cannot reinstall authority after the STOP tombstone is gone', {skip:!process.env.REDIS_URL}, async () => {
+  const redis=new Redis(process.env.REDIS_URL!, {maxRetriesPerRequest:1});
+  const key='gpubnb:test:authority-deadline:'+crypto.randomUUID();
+  const receipt=crypto.randomUUID(), install=script('INSTALL_GATEWAY_AUTHORITY_SCRIPT');
+  try {
+    const [seconds,micros]=await redis.time();
+    const now=Number(seconds)*1000+Math.floor(Number(micros)/1000);
+    const expired=now-1, fresh=now+15000;
+    assert.equal(Number(await redis.eval(install,1,key,receipt,'2',String(fresh))),1);
+    await redis.eval(revokeAuthority,1,key,'revoked:',crypto.randomUUID(),'60');
+    assert.equal(Number(await redis.eval(install,1,key,receipt,'2',String(fresh))),0);
+    // Model the state after tombstone expiry without sleeping a minute. The
+    // delayed EVAL still carries the original, now expired, validation deadline.
+    await redis.del(key);
+    assert.equal(Number(await redis.eval(install,1,key,receipt,'2',String(expired))),0,
+      'a queued Redis command survives a caller timeout but must lose its authority');
+    assert.equal(await redis.get(key),null);
+    // Fail closed for old callers which do not supply the deadline.
+    assert.equal(Number(await redis.eval(install,1,key,receipt,'2')),0);
+    assert.equal(Number(await redis.eval(install,1,key,receipt,'2','invalid')),0);
+  } finally {await redis.del(key);redis.disconnect();}
+});

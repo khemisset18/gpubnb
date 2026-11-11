@@ -158,6 +158,12 @@ return 1
 `;
 
 const INSTALL_GATEWAY_AUTHORITY_SCRIPT=`
+-- Caller timeouts do not cancel queued commands. Expire the validation itself
+-- using Redis's clock so even execution after tombstone expiry fails closed.
+local deadline = tonumber(ARGV[3])
+local now = redis.call('TIME')
+local nowMs = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
+if not deadline or nowMs >= deadline then return 0 end
 local current = redis.call('GET', KEYS[1])
 -- '1' is the pre-generation activation hint. Migrate it only after the caller
 -- has obtained a fresh bounded PostgreSQL snapshot containing this receipt.
@@ -253,6 +259,8 @@ const GATEWAY_AUTHORITY_REVOKED_PREFIX='revoked:';
 const GATEWAY_AUTHORITY_ID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const GATEWAY_AUTHORITY_LEASE_SECONDS=2;
 const GATEWAY_AUTHORITY_QUERY_TIMEOUT_MS=4_000;
+// Covers first-frame lock wait + transaction, and stays below the 60s tombstone.
+const GATEWAY_AUTHORITY_VALIDATION_MS=15_000;
 const GATEWAY_AUTHORITY_REDIS_TIMEOUT_MS=5_000;
 
 async function boundedGatewayRedis<T>(operation:PromiseLike<T>):Promise<T>{
@@ -278,9 +286,9 @@ function gatewayAuthorityTombstoneTtl(expiresAt?:Date):number{
   return Math.max(60,gatewaySessionTtl(expiresAt));
 }
 
-async function installGatewayAuthority(redis:Redis,sessionId:string,authorityId:string,expiresAt?:Date):Promise<boolean>{
+async function installGatewayAuthority(redis:Redis,sessionId:string,authorityId:string,expiresAt:Date|undefined,validationDeadline:number):Promise<boolean>{
   return Number(await boundedGatewayRedis(redis.eval(
-    INSTALL_GATEWAY_AUTHORITY_SCRIPT,1,wsSessionActivatedKey(sessionId),authorityId,String(gatewayAuthorityLeaseTtl(expiresAt)),
+    INSTALL_GATEWAY_AUTHORITY_SCRIPT,1,wsSessionActivatedKey(sessionId),authorityId,String(gatewayAuthorityLeaseTtl(expiresAt)),String(validationDeadline),
   )))===1;
 }
 
@@ -668,12 +676,16 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
   }
   // Only a missing/legacy lease or the once-per-session commercial activation
   // reaches PostgreSQL. First-frame billing retains its exclusive row lock.
+  // Sample Redis before any DB snapshot; a delayed TIME reply only shortens
+  // validity. Do not refresh this deadline during receipt/commit recovery.
+  const [seconds,micros]=await boundedGatewayRedis(redis.time());
+  const validationDeadline=Number(seconds)*1000+Math.floor(Number(micros)/1000)+GATEWAY_AUTHORITY_VALIDATION_MS;
   const live=await liveGatewayFrameAuthority(db,sessionId,machineId,binding.runtimeBackend);
   if(!live||(!live.booking.workspaceActivatedAt&&(live.startedAt!==null||
     live.booking.status!==BookingStatus.STARTING&&live.booking.status!==BookingStatus.ACTIVE)))return {enqueued:-2};
   if(live.booking.workspaceActivatedAt!==null){
     if(!live.gatewayAcceptance)return {enqueued:-2};
-    if(!await installGatewayAuthority(redis,sessionId,live.gatewayAcceptance.id,live.expiresAt))return {enqueued:-2};
+    if(!await installGatewayAuthority(redis,sessionId,live.gatewayAcceptance.id,live.expiresAt,validationDeadline))return {enqueued:-2};
     return {enqueued:await enqueue(live.gatewayAcceptance.id),expiresAt:live.expiresAt,authorityId:live.gatewayAcceptance.id};
   }
   try{
@@ -707,10 +719,10 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
       return {enqueued,expiresAt:activation.expiresAt,authorityId:receiptId!};
     },{maxWait:5000,timeout:10000});
     if(outcome.enqueued!==-3){
-      if(outcome.enqueued===1&&outcome.authorityId)await installGatewayAuthority(redis,sessionId,outcome.authorityId,outcome.expiresAt);
+      if(outcome.enqueued===1&&outcome.authorityId)await installGatewayAuthority(redis,sessionId,outcome.authorityId,outcome.expiresAt,validationDeadline);
       return outcome;
     }
-    if(!await installGatewayAuthority(redis,sessionId,outcome.authorityId!,outcome.expiresAt!))return {enqueued:-2};
+    if(!await installGatewayAuthority(redis,sessionId,outcome.authorityId!,outcome.expiresAt!,validationDeadline))return {enqueued:-2};
     return {enqueued:await enqueue(outcome.authorityId!),expiresAt:outcome.expiresAt!,authorityId:outcome.authorityId!};
   }catch(error){
     // A DB commit acknowledgement can be lost. Preserve a committed receipt
@@ -725,7 +737,7 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
         throw error;
       }
       if(committed){
-        await installGatewayAuthority(redis,sessionId,committed.id,committed.expiresAt);
+        await installGatewayAuthority(redis,sessionId,committed.id,committed.expiresAt,validationDeadline);
         return {enqueued:1,expiresAt:committed.expiresAt,authorityId:committed.id};
       }
     }

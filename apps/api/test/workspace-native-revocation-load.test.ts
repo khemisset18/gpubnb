@@ -20,6 +20,7 @@ const authorityId=(index:number)=>`00000000-0000-4000-8000-${index.toString(16).
 function generationRedis(authorities:Map<string,string>,beforeEnqueue?:()=>Promise<void>){
   const counters={gets:0,evals:0};
   return {counters,
+    time:async()=>[String(Math.floor(Date.now()/1000)),String((Date.now()%1000)*1000)],
     get:async(key:string)=>{counters.gets++;return authorities.get(key)??null;},
     eval:async(script:string,keyCount:number,...values:unknown[])=>{
       counters.evals++;
