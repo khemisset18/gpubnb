@@ -26,8 +26,9 @@ function activeNetwork() {
     if (!Number.isFinite(difficulty) || !Number.isFinite(rewardXmr)) return null;
     return {difficulty,rewardXmr,mode:'manual'};
   }
+  const maxAge = ownNetwork?.source==='public-monero-rpc' ? 5*60*60000 : 20*60000;
   if (!ownNetwork || !ownTimestamp ||
-    Date.now()-ownTimestamp > 20 * 60000) return null;
+    Date.now()-ownTimestamp > maxAge) return null;
   return {...ownNetwork,mode:'node'};
 }
 
@@ -47,9 +48,10 @@ function render() {
   el('xmrManualFields').hidden = !manual;
   const network = activeNetwork();
   el('xmrState').textContent = manual ? 'Données réseau manuelles' :
-    network ? 'Nœud GPUbnb · 30 blocs' : 'Nœud indisponible';
+    network ? (network.source==='public-monero-rpc' ?
+      'Réseau public recoupé · 30 blocs' : 'Nœud GPUbnb · 30 blocs') : 'Réseau indisponible';
   el('xmrUpdated').textContent = manual ? 'Saisie utilisateur · fraîcheur non vérifiée' :
-    network ? 'Mis à jour : '+new Date(ownTimestamp).toLocaleString('fr-FR') : feedStatus;
+    network ? (network.source==='public-monero-rpc'?'Nœuds communautaires · ':'Mis à jour : ')+new Date(ownTimestamp).toLocaleString('fr-FR') : feedStatus;
   const hash = number('xmrHashrate', 0.001, 1e9);
   if (!network) {
     resetResults(manual ? 'Entrez une difficulté et une récompense réelles de votre nœud.' :
