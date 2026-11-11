@@ -4,8 +4,10 @@ Review date: 2026-11-12. Scope: LTC_BASECHAIN_TRANSPARENT_V1.
 This is a *placeholder audit register*, not a completed audit or approval.
 
 ## Decision
-- L0: BLOCKED — release binary/source provenance, independent publisher-key
-  trust, signed source tag and reproduced build missing.
+- L0: BLOCKED — official public archive hash, signed checksum manifest and
+  exact signed source tag have now passed cryptographic checks on exact code
+  SHA d6e9edf (run 43123327322). Independent out-of-band publisher identity
+  trust, reproduced source build and independent attestations still missing.
 - L1–L8: NOT_TESTED — no authorized Litecoin-native chain/test transactions,
   independently recoverable funds, two-node reorg or real wallet/hardware signer.
 - L9: BLOCKED — 40 cases in section 19 of `LITECOIN_ADAPTER_SPEC_V1.md`

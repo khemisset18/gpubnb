@@ -17,7 +17,9 @@
 - Sources: https://github.com/litecoin-project/litecoin/releases/tag/v0.21.5.8 and https://download.litecoin.org/litecoin-0.21.5.8/
 - Official `SHA256SUMS.asc` and publisher key are NOT independently authenticated in this mission.
 - GitHub tag verification `unknown_key` is an unresolved trust-chain issue, not proven falsification.
-- No upstream release binaries or native transactions executed, and no reproduced build.
+- A candidate archive has since been downloaded and SHA-256 checked in a
+  public, read-only GitHub Actions provenance job. It was NEVER executed.
+  No native transactions or reproduced build have occurred (see follow-up).
 
 ## Foundation scan failures, exact original SHA
 Source artifacts: 43119395855 / `trivy-filesystem-report` artifact 13898884865 and
@@ -71,8 +73,10 @@ Missing evidence means BLOCKED, never PASS.
 - The upstream download directory
   https://download.litecoin.org/litecoin-0.21.5.8/
   lists `davidburkett38-key.pgp` at **5,560 bytes**, unlike the 3,159-byte
-  repository copy. Contents and certification/expiry have not been checked;
-  the difference is not proof of a valid renewal.
+  repository copy. The actual 5,560-byte release key was downloaded in
+  run 43123327322, matched to the expected full fingerprint and passed
+  GPG verification of the signed manifest and source tag. This evidence
+  does not replace an independent out-of-band identity/trust check.
 - Two Gitian Linux assertion files are in
   https://github.com/litecoin-project/gitian.sigs.ltc/tree/master/0.21.5.8-linux
   under `davidburkett38` and `losh11`. Each claims the same x86_64 archive
@@ -82,9 +86,41 @@ Missing evidence means BLOCKED, never PASS.
   are they substitutes for a genuinely reproduced local build.
 - The official release metadata for `SHA256SUMS.asc` (1,793 bytes)
   advertises SHA-256 `69f88cae8cb1016bcdcefc2a5b8689dd940c42a04e380afa309a34250522d022`.
-  The actual manifest and archive have not been downloaded here; no GPG
-  verification claim for either.
-- Action: fetch refreshed key via independently authenticated channel; verify
-  full fingerprint and signed renewal/subkey status; rerun source tag and
-  manifest checks; hash actual archive bytes; evaluate reproducible build.
+  Both public files were subsequently downloaded and cryptographically
+  checked in a networked CI run. See exact-HEAD run below.
+- Action: obtain an independent out-of-band signer identity endorsement;
+  inspect key expiration/certifications and build dependencies; arrange
+  independent reproducible source build comparison and Gitian signoff;
+  only then reassess L0.
 - All financial flags remain disabled; `L0=BLOCKED`.
+
+## Verified official public artifacts — exact code SHA d6e9edf (2026-11-12)
+- Workflow https://github.com/khemisset18/gpubnb/actions/runs/43123327322
+  status **SUCCESS**, source checked out at
+  `d6e9edf6824697674573a88b69da917bfaa82e78`, not the synthetic
+  pull-request merge SHA.
+- Run artifact `ltc-l0-public-provenance-observations`, artifact ID
+  `13900479732`, ZIP digest
+  `sha256:c0d146f9cb4788ac3c451d16643106596aad8fcfbdb1f5148aff2e74ea17af3f`.
+- Observed actual SHA-256, pinned checks and payloads:
+  - `SHA256SUMS.asc`: `69f88cae8cb1016bcdcefc2a5b8689dd940c42a04e380afa309a34250522d022`
+    (publisher GitHub asset digest pin).
+  - refreshed `davidburkett38-key.pgp` from official release directory:
+    `72151da0ab796aec3393ec8834d3ae2a12f6d37e07947357a5d59ad2caa1d7da`,
+    fingerprint `D35621D53A1CC6A3456758D03620E9D387E55666`.
+  - `litecoin-0.21.5.8-x86_64-linux-gnu.tar.gz`:
+    `43200c9f9d65ebc126ea5833ca9429e144c4b3273da6bb9f4e89fd7450ab1be9`;
+    measured 36,951,482 bytes.
+  - `v0.21.5.8.tag` raw annotated Git object:
+    `ad26778aaf0fe45bc2d15990871bbc071662ae203cdb41473364b30332b90788`
+    (SHA-256) and pinned Git tag object OID `ee2aea3fc3fd95213d1a041d561b52e07ae6dc63`.
+- Actual verifier results: `BINARY_VERIFY_EXIT=0`, `TAG_VERIFY_EXIT=0`.
+  `binary-provenance.json`: `binaryChecksumAndSignatureVerified=true`.
+  `source-tag.json`: `tagSignatureCryptographicallyVerifiedWithProvidedKey=true`.
+  **Both outputs explicitly say `l0Qualified=false`, `settlementEnabled=false`.**
+  No native Litecoin executable was extracted, installed, run or connected.
+- Limits: key was obtained from a publisher-controlled download host, not
+  independently certified out of band; no isolated reproducible build, audited
+  dependency graph or verified multiple-builder release attestations.
+  Accordingly `L0=BLOCKED`. All historical checks are attributed to
+  their exact code SHA. Never treat passing GPG as proof of financial safety.
