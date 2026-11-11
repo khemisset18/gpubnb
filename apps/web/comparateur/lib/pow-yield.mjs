@@ -59,8 +59,12 @@ export function estimatePoW({
 export function validateOwnPoWSnapshot(doc,now=Date.now()){
  if(!doc||doc.schemaVersion!==1||!isId(doc.coin)||doc.network!=='mainnet'||
  (doc.source!=='own-node'&&doc.source!=='public-chain-rpc')||
- (doc.source==='public-chain-rpc'&&!((doc.coin==='ETC'&&doc.operator==='ETC Blockscout')||
+ (doc.source==='public-chain-rpc'&&!((doc.coin==='ETC'&&
+   ['ETC Blockscout','ETC ETCMC','ETC ETC Desktop'].includes(doc.operator))||
    (doc.coin==='RVN'&&doc.operator==='RavencoinExplorer')))||
+ (doc.source==='public-chain-rpc'&&doc.coin==='ETC'&&(
+   typeof doc.usedFallback!=='boolean'||
+   doc.usedFallback!==(doc.operator!=='ETC Blockscout')))||
  doc.algorithm!==COINS[doc.coin].algorithm||
  doc.unit!==COINS[doc.coin].unit||
  !is(doc.networkRate,0.000001,1e25)||!is(doc.blockSeconds,1,7200)||
@@ -76,6 +80,8 @@ export function validateOwnPoWSnapshot(doc,now=Date.now()){
  return Object.freeze({
  coin:doc.coin,networkRate:doc.networkRate,blockSeconds:doc.blockSeconds,
  minerRewardCoins:doc.minerRewardCoins,unit:doc.unit,blockHeight:doc.blockHeight,
- collectedAt:doc.collectedAt,source:doc.source,operator:doc.operator||null,methodology:doc.methodology
+ collectedAt:doc.collectedAt,source:doc.source,operator:doc.operator||null,
+ usedFallback:doc.source==='public-chain-rpc'&&doc.coin==='ETC'?doc.usedFallback:false,
+ methodology:doc.methodology
  });
 }
