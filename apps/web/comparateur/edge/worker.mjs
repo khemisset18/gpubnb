@@ -8,17 +8,21 @@
  * A missing/stale response is shown as unavailable, never invented.
  */
 import {collectMoneroPublic,collectEtcPublic,collectRvnPublic} from './public-sources.mjs';
-import {validateMoneroSnapshot} from '../lib/monero-feed.mjs';
-import {validateOwnPoWSnapshot} from '../lib/pow-yield.mjs';
+import {validateMoneroSnapshot,MAX_PUBLIC_AGE_MS} from '../lib/monero-feed.mjs';
+import {validateOwnPoWSnapshot,PUBLIC_FRESH_MS} from '../lib/pow-yield.mjs';
 
 const KEYS=Object.freeze({XMR:'net:xmr',ETC:'net:etc',RVN:'net:rvn'});
+// No stale-data reset after an outage: expiry is measured from the LAST successful collection.
+const BACKUP_MAX_MS=Math.min(MAX_PUBLIC_AGE_MS,PUBLIC_FRESH_MS);
+const BACKUP_TTL_SECONDS=BACKUP_MAX_MS/1000;
+const EXPECTED_REFRESH_MS=2*60*60*1000;
 const jsonHeaders=Object.freeze({
  'Content-Type':'application/json; charset=utf-8',
  'Cache-Control':'no-store, max-age=0',
  'X-Content-Type-Options':'nosniff',
  'Referrer-Policy':'no-referrer'
 });
-const NO_MONERO={status:'unavailable',reason:'Données blockchain absentes ou trop anciennes'};
+const NO_MONERO={status:'unavailable',reason:'Service indisponible : dernier relevé valide absent ou âgé de plus de 24 h'};
 const emptyPow={schemaVersion:1,networks:[]};
 
 async function loadValidated(env,coin,now=Date.now()){
@@ -41,7 +45,8 @@ export async function collectAutomated(env,{clock=()=>Date.now(),fetchImpl=fetch
   ['RVN',()=>collectRvnPublic(fetchImpl,clock())]
  ];
  // Independent failures never erase another coin's last good sample.
- // Each sample expires at read-time (5 hours for best-effort public sources).
+ // On failure, the previous valid sample is NEVER overwritten or retimestamped.
+ // KV deletes it after 24 hours and validation also enforces 24h at read time.
  const outcomes=await Promise.all(jobs.map(async ([coin,build])=>{
   try{
    const data=await build();
@@ -49,7 +54,7 @@ export async function collectAutomated(env,{clock=()=>Date.now(),fetchImpl=fetch
    const valid=coin==='XMR'?validateMoneroSnapshot(data,now):
      validateOwnPoWSnapshot(data,now);
    if(!valid)throw Error('Failed independent validation');
-   await env.SNAPSHOTS.put(KEYS[coin],JSON.stringify(data));
+   await env.SNAPSHOTS.put(KEYS[coin],JSON.stringify(data),{expirationTtl:BACKUP_TTL_SECONDS});
    return {coin,ok:true};
   }catch(error){
    // Never log response payloads or error body to avoid provider data leakage.
@@ -72,11 +77,14 @@ export async function handleRequest(request,env,now=Date.now()){
  if(url.pathname==='/api/status'){
   const found=await Promise.all(Object.keys(KEYS).map(async coin=>{
    const data=await loadValidated(env,coin,now);
-   return {coin,status:data?'ok':'unavailable',collectedAt:data?.collectedAt||null,
+   const ageMs=data?Math.max(0,now-Date.parse(data.collectedAt)):null;
+   const mode=data?(ageMs>EXPECTED_REFRESH_MS?'saved':'fresh'):'unavailable';
+   return {coin,status:mode,collectedAt:data?.collectedAt||null,
+    ageHours:ageMs===null?null:Math.round(ageMs/360000)/10,
     source:data?.source||null};
   }));
   return sendJson({service:'gpubnb-comparateur',refresh:'every-two-hours',
-    pricing:'manual-only',sources:found});
+    pricing:'manual-only',backupMaxHours:24,sources:found});
  }
  if(!env?.ASSETS?.fetch)return sendJson({status:'not_found'},404);
  return env.ASSETS.fetch(request);
