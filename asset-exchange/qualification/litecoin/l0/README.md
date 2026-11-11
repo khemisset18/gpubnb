@@ -78,3 +78,40 @@ Unit tests use mock GPG output only to exercise failure logic. They are
 **NOT cryptographic verification**, node execution or financial tests.
 This slice adds no Litecoin wallet, network/RPC service, real keys, funds,
 mainnet/testnet broadcast or deployment. DOGE and Core remain untouched.
+
+## Source tag cryptographic guard (separate from binary guard)
+
+`verify_tag.py` accepts **raw annotated tag object bytes**, e.g. obtained
+from an already-cloned official source repository on a dedicated operator host:
+
+```bash
+git -C /private/litecoin cat-file tag v0.21.5.8 > /private/read-only/v0.21.5.8.tag
+python3 asset-exchange/qualification/litecoin/l0/verify_tag.py \
+  --tag-object /private/read-only/v0.21.5.8.tag \
+  --trusted-keyring /private/read-only/trusted-public.gpg \
+  --trusted-fingerprint <40_HEX_AUTHENTICATED_INDEPENDENTLY>
+```
+
+This checks the exact annotated Git object SHA-1
+`ee2aea3fc3fd95213d1a041d561b52e07ae6dc63`,
+its target commit, version tag, GPG detached signature and the **single**
+signing fingerprint. GPG signature validity does not prove the signer identity.
+Even success returns `L0_PARTIAL_SIGNED_TAG_ONLY` and
+`l0Qualified=false`. No clone, fetch, key lookup or network connection is
+performed by the verifier.
+
+**Observed expiration blocker (2026-11-12):** the 3,159-byte archived
+`contrib/gitian-keys/davidburkett38-key.pgp` key at v0.21.5.8 has
+fingerprint `D35621D53A1CC6A3456758D03620E9D387E55666`, but its
+expiration is **2022-04-26**. The authentic annotated tag object was
+reconstructed using official GitHub API tag data (object SHA-1 matched).
+GnuPG reports `VALIDSIG` **and** `KEYEXPIRED` / `EXPKEYSIG`
+under the archived key for the 2026-09-09 tag; the CLI may return exit 0,
+but our verifier must reject those status codes.
+
+The official release directory lists a separate **5,560-byte** key file,
+which may contain a renewed certification; this has NOT been downloaded
+and its public-key status is NOT verified. A key from that directory
+must be fingerprint-checked and independently authenticated before any
+trust decision. Do not bypass expiry checks. See
+`docs/asset-exchange/LTC_EVIDENCE_INDEX.md`.

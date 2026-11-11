@@ -44,3 +44,47 @@ binary+source hashes, GPG key trust chain, exact command and tool versions,
 signed outputs (redacted of secrets), isolated VM/environment and policy
 decision, block heights and chain identity, failure traces and artifact hashes.
 Missing evidence means BLOCKED, never PASS.
+
+## Follow-up: pinned source tag cryptographic analysis (2026-11-12)
+
+- Official security fingerprint: David Burkett
+  `D35621D53A1CC6A3456758D03620E9D387E55666` from
+  https://github.com/litecoin-project/litecoin/blob/v0.21.5.8/SECURITY.md .
+- Public key: `contrib/gitian-keys/davidburkett38-key.pgp` in the official
+  tag source, 3,159 bytes, SHA-256
+  `c514703dde4bd7d36dcd47ee5c7109efa7d8fa03d269e1cf44a6d8e992e923e8`.
+- Source GitHub annotated tag API signature and payload retrieved independently
+  of the key text. Original payload 150 bytes SHA-256
+  `37a1ab7011679340f5c560a984b5e9f92dcad4b439e186c105d2ca62f0ba0898`;
+  ASCII armored tag signature 870 bytes SHA-256
+  `2586ac650f8182bd7d20d78609409b8ff0bcfd59f81527de8b17c6113ffeb5df`.
+- Reconstructed raw tag object 1,020 bytes. Git SHA-1 of
+  `b"tag 1020\\0" + raw_tag` matched annotated tag object
+  `ee2aea3fc3fd95213d1a041d561b52e07ae6dc63`.
+- Local GnuPG executed against the reconstructed **real upstream tag** and
+  the upstream archived public key: `VALIDSIG` cryptographically,
+  plus `KEYEXPIRED` and `EXPKEYSIG`. GPG exited 0 despite these error
+  statuses. The archived key's primary and subkey expiration timestamps are
+  2022-04-26T01:50:51Z. A tag from 2026-09-09 is NOT ACCEPTED under this key.
+  This result is a real cryptographic tag check, not a test of the real binary,
+  not an identity authentication and not a PASS for L0.
+- The upstream download directory
+  https://download.litecoin.org/litecoin-0.21.5.8/
+  lists `davidburkett38-key.pgp` at **5,560 bytes**, unlike the 3,159-byte
+  repository copy. Contents and certification/expiry have not been checked;
+  the difference is not proof of a valid renewal.
+- Two Gitian Linux assertion files are in
+  https://github.com/litecoin-project/gitian.sigs.ltc/tree/master/0.21.5.8-linux
+  under `davidburkett38` and `losh11`. Each claims the same x86_64 archive
+  hash `43200c9f9d65ebc126ea5833ca9429e144c4b3273da6bb9f4e89fd7450ab1be9`
+  and source commit `ec1b6489a900d09cf5991e220dce089c77a232a2`.
+  Their assertion **signatures have not been independently verified**, nor
+  are they substitutes for a genuinely reproduced local build.
+- The official release metadata for `SHA256SUMS.asc` (1,793 bytes)
+  advertises SHA-256 `69f88cae8cb1016bcdcefc2a5b8689dd940c42a04e380afa309a34250522d022`.
+  The actual manifest and archive have not been downloaded here; no GPG
+  verification claim for either.
+- Action: fetch refreshed key via independently authenticated channel; verify
+  full fingerprint and signed renewal/subkey status; rerun source tag and
+  manifest checks; hash actual archive bytes; evaluate reproducible build.
+- All financial flags remain disabled; `L0=BLOCKED`.

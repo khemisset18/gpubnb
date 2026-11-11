@@ -6,7 +6,7 @@ This document is an evidence ledger, not an activation signal.
 
 | Gate | Status | Evidence and remaining blockers |
 |---|---|---|
-| L0: source/binary provenance | BLOCKED | Offline GPG parser guard tests, original 11/11 on e7e8c0d; release metadata pins, but official tag signature, independently authenticated publisher key, downloaded archive and reproducible build not verified. Updated tests require a new exact-SHA CI result. |
+| L0: source/binary provenance | BLOCKED | Offline GPG parser guard tests, original 11/11 on e7e8c0d; release metadata pins, but official tag signature, independently authenticated publisher key, downloaded archive and reproducible build not verified. Offline GPG tests on 9f7d423 passed 12/12. Signed source tag verification added as separate offline guard; tests on next HEAD pending. |
 | L1: Litecoin Regtest isolation | NOT_TESTED | No native node; no proved network/genesis identity or firewall evidence. |
 | L2: strict MWEB exclusion | NOT_TESTED | Only non-executable transparent-only specification; no executable validation path. |
 | L3: scripts and signature rules | NOT_TESTED | No Litecoin-native HTLC vectors or consensus/policy tests. |
@@ -24,3 +24,10 @@ No Mainnet, public broadcast, real funds, signing authority, merge, deployment o
 CI on historical HEAD e7e8c0d: LTC L0 run 43119399878 passed (11/11);
 G5 run 43119399548 passed. General CI runs 43119395855 and 43119399483
 failed strict vulnerability gates. None of those historical runs qualifies a later SHA.
+
+## Source tag status — 2026-11-12
+The official Git annotated tag object SHA1 was reconstructed and matched,
+GPG verified its signature mathematically using the archived public key,
+but that key expired in 2022, triggering KEYEXPIRED/EXPKEYSIG for the
+2026 tag. L0 remains BLOCKED until an independently authenticated, current
+signing key is verified. See LTC_EVIDENCE_INDEX.md. No real binary verified.
