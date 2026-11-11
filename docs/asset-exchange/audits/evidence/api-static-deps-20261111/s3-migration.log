@@ -1,0 +1,16 @@
+TAP version 13
+# Subtest: historical filesystem artifact migrates through a real S3-compatible server
+ok 1 - historical filesystem artifact migrates through a real S3-compatible server
+  ---
+  duration_ms: 70.886238
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 421.265256

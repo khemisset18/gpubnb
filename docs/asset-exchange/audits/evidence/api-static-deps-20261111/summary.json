@@ -13,6 +13,26 @@
     "https://github.com/advisories/GHSA-3g3m-2fjr-6pw4",
     "https://github.com/advisories/GHSA-g3hv-75wg-m249"
   ],
+  "latestCi": {
+    "api": {
+      "failed": 0,
+      "passed": 700,
+      "postgresAndRedisPreflight": "PASS",
+      "skipped": 2,
+      "typescript": "PASS"
+    },
+    "executionCommit": "0923d0dc7469bd977ef0a5b176fc891fa257a99b",
+    "npmApiVulnerabilities": 0,
+    "npmRootVulnerabilities": 0,
+    "overall": "FAIL_REMAINING_RUST_FINDINGS",
+    "run": "https://github.com/khemisset18/gpubnb/actions/runs/43064350267",
+    "s3DedicatedRun": "https://github.com/khemisset18/gpubnb/actions/runs/43064350230",
+    "s3DedicatedTests": {
+      "failed": 0,
+      "passed": 2,
+      "skipped": 0
+    }
+  },
   "license": "MIT",
   "lockSha256": {
     "apps/api/package-lock.json": "650bd7e1d7a757065418f050daedabf9af2534b7c98f660b776297cd6cf09ba9",
