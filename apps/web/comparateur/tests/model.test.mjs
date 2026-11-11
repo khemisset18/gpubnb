@@ -45,7 +45,7 @@ test('accepts a fresh feed only for known devices and finite amounts', () => {
   assert.equal(result.map.get('gpu-one')[0].gross, 1.2);
 });
 test('rejects stale, future, empty or malicious feed', () => {
-  assert.equal(validateFeed(snapshot(now - 3 * 60 * 60 * 1000), known, now), null);
+  assert.equal(validateFeed(snapshot(now - 25 * 60 * 60 * 1000), known, now), null);
   assert.equal(validateFeed(snapshot(now + 6 * 60 * 1000), known, now), null);
   assert.equal(validateFeed({ ...snapshot(now), source:'' }, known, now), null);
   assert.equal(validateFeed({ ...snapshot(now), currency:'USD' }, known, now), null);
@@ -56,4 +56,11 @@ test('rejects stale, future, empty or malicious feed', () => {
   d.devices[0].coins[0].coin = 'RVN';
   d.devices[0].coins[0].grossEur24h = '2000';
   assert.equal(validateFeed(d, known, now), null);
+});
+
+test('automatic gross returns may fall back for 24h but never longer',()=>{
+  const original=snapshot(now);
+  assert.ok(validateFeed(original,known,now + 23 * 60 * 60 * 1000));
+  assert.ok(validateFeed(original,known,now + 24 * 60 * 60 * 1000));
+  assert.equal(validateFeed(original,known,now + 24 * 60 * 60 * 1000 + 1),null);
 });
