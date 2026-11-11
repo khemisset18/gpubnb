@@ -1,0 +1,400 @@
+{
+  "artifacts": [
+    {
+      "artifactId": 13897201321,
+      "zipSha256": "256572b208d626a8c8d68ebf7f731b886c08fa21268291228a4da1eeaba05d1c"
+    },
+    {
+      "artifactId": 13897096479,
+      "zipSha256": "e2ecb0a4dd2a7f8df490e3791e122ac19fd29f0e2d3798240f06349604360b9b"
+    },
+    {
+      "artifactId": 13896776975,
+      "zipSha256": "2842654e9d9002dd08dba96c00c2a5a0485b159d52f6dfc03a95f3c2a636def6"
+    },
+    {
+      "artifactId": 13895534375,
+      "zipSha256": "65561bc50bec4f8806b373944d321ff7b139f337eeb684335b5ac655cd6ece92"
+    },
+    {
+      "artifactId": 13895509636,
+      "zipSha256": "547a7a66f278e8adfd43e3a4a9faaf72040bd2a2adf1f3c2c57c89a62697be22"
+    }
+  ],
+  "checksAfterDownload": [
+    "all five ZIP SHA256 digests and safe paths",
+    "all three native evidence checksum lists",
+    "both native RPC counters in all three VMs including one disconnected attempt exclusion",
+    "both public parcel receipts, allowlists, file hashes and source bytes",
+    "all four bundle terms and ECDSA signatures",
+    "every public child header identity and canonical previous link",
+    "public stream reconstructed from native RPC response bytes",
+    "three distinct boot hashes and source-to-consumer linkage",
+    "both consumer-node refund bytes and confirmation anchors",
+    "replacement native tip and standalone confirmed receipt with zero broadcasts"
+  ],
+  "confirmedParcel": {
+    "artifactId": 13895534375,
+    "blocks": 1360,
+    "manifestSha256": "0d711f6c5b3828e619f8237dd6097c4ec5c204e3f0889466ded02e93e1675941"
+  },
+  "counts": {
+    "fail": 0,
+    "pass": 15,
+    "skip": 0
+  },
+  "countsScope": "Fourteen incidents plus a fresh-VM replacement check; the literal in-place reboot remains NOT_TESTED.",
+  "executionCommit": "6307538265aef8273447891f445a28531043d1b5",
+  "experimentStatus": "PASS",
+  "harnessCommit": "19f20a368c15b5cd762c9cb76fecc3549fc3dfe1",
+  "hostedImage": {
+    "label": "ubuntu-24.04",
+    "runnerVersion": "2.338.2",
+    "version": "20261101.360.1"
+  },
+  "incidentChecksOnIndependentVm": 14,
+  "independentVmRecovery": "PASS",
+  "jobs": [
+    {
+      "artifactId": 13897201321,
+      "evidenceFileSha256": {
+        "daemon-a.log": "72ece7effea543f98823067c4336d73c01cc0b3fdcebf549b9f309e77b7a2bd7",
+        "daemon-b.log": "87e82885b6e29bf2945745dbed95fca4b0b65eaffc7ee9c332ef0980a8f9be78",
+        "fee-bundle-cap.json": "1156b6f058dbc7407a7989943806f67cb0a3877540591da13b60266dd7c49366",
+        "fee-bundle-conflict.json": "44e4f33f19b19cfea0a7b393a8a39089d2e6073ea9d145b6884fcf86c6d1e041",
+        "fee-bundle-main.json": "6561b6a9308d84c88f57467a6d7b4139c7ad95eeaf2949ba06fb928a2c288e52",
+        "fee-bundle-parent.json": "cb4ec1fcb1dd59b477f4448fa272cea30ed3c6044468ab5ab735a9c124930d15",
+        "multinode-report.json": "cf58d63d48eeb22628dfb806d16ad269e76f9ce9690cae18402f6b49be0a233b",
+        "rpc-requests.json": "5e1423ba33d82b1f574cbe4f393ab7487ef6a45d4884c2838cfd7cf9ebc5a235"
+      },
+      "experimentStatus": "PASS",
+      "generatedBlocks": 1355,
+      "handoff": {
+        "oldNodeDirectoriesCopied": false,
+        "onlyAllowlistedPublicFiles": true,
+        "originBootHash": "b8e1c0e38f71a57894070ee71f00bbcb68599748d3383f44b693256836489fae",
+        "phase": "prepared",
+        "privateKeysCopied": false,
+        "producerBootHash": "b8e1c0e38f71a57894070ee71f00bbcb68599748d3383f44b693256836489fae",
+        "publicBlocks": 1355,
+        "serverOrExchangeDatabaseCopied": false,
+        "sha256": "ace1f4d52cfac8c0cb68ad23c2ce603d2e0b0f1c4c92fe3f4591b0e24b1ac0b9"
+      },
+      "labSuite": "recovery-handoff",
+      "nativeServerAudit": {
+        "a": {
+          "methods": {
+            "addnode": 1,
+            "generatetoaddress": 3,
+            "getblock": 1357,
+            "getblockchaininfo": 3,
+            "getblockhash": 3,
+            "getnetworkinfo": 1,
+            "getpeerinfo": 3,
+            "getrawtransaction": 3,
+            "sendrawtransaction": 2,
+            "stop": 1
+          },
+          "nativeCalls": 1377
+        },
+        "b": {
+          "methods": {
+            "getblockchaininfo": 3,
+            "getblockhash": 1,
+            "getnetworkinfo": 1,
+            "getpeerinfo": 3,
+            "getrawmempool": 7,
+            "getrawtransaction": 1,
+            "stop": 1
+          },
+          "nativeCalls": 17
+        }
+      },
+      "qualificationStatus": "BLOCKED",
+      "rpcCalls": 1396,
+      "standaloneInvocations": 0
+    },
+    {
+      "artifactId": 13896776975,
+      "evidenceFileSha256": {
+        "cleanroom-proof-18332-vm-cap-rebroadcast.json": "edc6e471d34898dcded17091c1372a8561de0e2441c55b73880b3e3e26d49c47",
+        "cleanroom-proof-18332-vm-conflict-observe.json": "edc6e471d34898dcded17091c1372a8561de0e2441c55b73880b3e3e26d49c47",
+        "cleanroom-proof-18332-vm-conflict-rebroadcast.json": "edc6e471d34898dcded17091c1372a8561de0e2441c55b73880b3e3e26d49c47",
+        "cleanroom-proof-18332-vm-main-observe.json": "012f1152c42c969f5353f5a9686d84ed0ef60443c00305b12e2258a110b351dd",
+        "cleanroom-proof-18332-vm-main-rebroadcast.json": "edc6e471d34898dcded17091c1372a8561de0e2441c55b73880b3e3e26d49c47",
+        "cleanroom-proof-18333-vm-conflict-rebroadcast.json": "edc6e471d34898dcded17091c1372a8561de0e2441c55b73880b3e3e26d49c47",
+        "daemon-a.log": "1c3a897c010c0d674a6c23b2b86a8a030d061cd0809443cf749b4fa402451831",
+        "daemon-b.log": "d6d239618fbe09150c512b28acff2979249be68d571ccfb2ab10824fa7642d3d",
+        "multinode-report.json": "e4e602205b8cd0d48fff9afc09265bb45805545e5db5d7b1630ba026862c3f3f",
+        "rpc-requests.json": "5ddec55b8afd5de630fc09309442939d0544778ec42de9f7a5f850e6649e45d2"
+      },
+      "experimentStatus": "PASS",
+      "generatedBlocks": 6,
+      "labSuite": "recovery-independent",
+      "nativePressureLast": {
+        "bytes": 4149109,
+        "maxmempool": 5000000,
+        "mempoolminfee": "0.01841703",
+        "size": 76,
+        "usage": 4946960
+      },
+      "nativeServerAudit": {
+        "a": {
+          "methods": {
+            "addnode": 3,
+            "generatetoaddress": 2,
+            "getblock": 5,
+            "getblockchaininfo": 41,
+            "getblockhash": 32,
+            "getblockheader": 17,
+            "getmempoolentry": 11,
+            "getmempoolinfo": 82,
+            "getnetworkinfo": 20,
+            "getpeerinfo": 21,
+            "getrawmempool": 1,
+            "getrawtransaction": 38,
+            "gettxout": 14,
+            "invalidateblock": 1,
+            "reconsiderblock": 1,
+            "sendrawtransaction": 82,
+            "stop": 2
+          },
+          "nativeCalls": 373
+        },
+        "b": {
+          "methods": {
+            "generatetoaddress": 1,
+            "getblockchaininfo": 13,
+            "getblockhash": 5,
+            "getblockheader": 2,
+            "getmempoolentry": 1,
+            "getmempoolinfo": 1,
+            "getnetworkinfo": 4,
+            "getpeerinfo": 7,
+            "getrawtransaction": 5,
+            "gettxout": 2,
+            "sendrawtransaction": 1,
+            "setnetworkactive": 4,
+            "stop": 2
+          },
+          "nativeCalls": 48
+        }
+      },
+      "qualificationStatus": "BLOCKED",
+      "recovery": {
+        "backendCheckoutPresent": false,
+        "cases": [
+          {
+            "id": 1,
+            "name": "backend-totally-absent",
+            "producerJobAlreadyCompleted": true,
+            "publicBlockchainReplayed": true,
+            "status": "PASS"
+          },
+          {
+            "broadcasts": 0,
+            "exactRefusal": "RPC getblockchaininfo failed",
+            "id": 2,
+            "name": "blockchain-connection-loss",
+            "status": "PASS"
+          },
+          {
+            "broadcasts": 0,
+            "exactRefusal": "bundle digest mismatch",
+            "id": 4,
+            "name": "corrupt-recovery-bundle",
+            "packageSha256": "fb5b125c925570f7a23c183e27da0fee4c43b1eb4279a834cfe6482c16e2121b",
+            "status": "PASS"
+          },
+          {
+            "broadcasts": 0,
+            "exactRefusal": "bundle digest mismatch",
+            "id": 5,
+            "name": "attacker-modifies-bundle-with-retained-receipt",
+            "packageSha256": "fb5b125c925570f7a23c183e27da0fee4c43b1eb4279a834cfe6482c16e2121b",
+            "status": "PASS"
+          },
+          {
+            "broadcasts": 0,
+            "exactRefusal": "wrong recovery network/source",
+            "id": 6,
+            "name": "wrong-network",
+            "packageSha256": "fb5b125c925570f7a23c183e27da0fee4c43b1eb4279a834cfe6482c16e2121b",
+            "status": "PASS"
+          },
+          {
+            "broadcasts": 0,
+            "exactRefusal": "refund destination/value mismatch",
+            "id": 7,
+            "name": "wrong-destination",
+            "packageSha256": "fb5b125c925570f7a23c183e27da0fee4c43b1eb4279a834cfe6482c16e2121b",
+            "status": "PASS"
+          },
+          {
+            "broadcasts": 0,
+            "exactRefusal": "refund fee or retained amount violates policy",
+            "id": 8,
+            "name": "wrong-amount",
+            "packageSha256": "fb5b125c925570f7a23c183e27da0fee4c43b1eb4279a834cfe6482c16e2121b",
+            "status": "PASS"
+          },
+          {
+            "distinctTransactionsBroadcast": 1,
+            "id": 14,
+            "name": "double-refund-attempt",
+            "samePendingTxid": "8085b3eb32e65817a31a1ed2d6368490f2804e27852a67ec6655b07857b9aeb1",
+            "status": "PASS"
+          },
+          {
+            "automaticReplacement": false,
+            "exactRefusal": "funding unavailable or ambiguous; no broadcast",
+            "id": 10,
+            "name": "transaction-blocked-by-valid-claim",
+            "status": "PASS"
+          },
+          {
+            "aClaimObserved": true,
+            "bRefundObserved": true,
+            "id": 11,
+            "name": "divergent-mempools",
+            "status": "PASS"
+          },
+          {
+            "afterReconsideration": "CONFIRMED",
+            "id": 12,
+            "name": "confirmed-refund-reorganisation",
+            "rollbackDepth": 4,
+            "standaloneTransition": "REORGED",
+            "status": "PASS"
+          },
+          {
+            "broadcasts": 0,
+            "exactRefusal": "no pre-signed refund covers current fee floor; signatory or new authorization required",
+            "id": 13,
+            "name": "fee-floor-exceeds-presigned-cap",
+            "nativeFloor": "0.01841703",
+            "pressureTransactions": 77,
+            "status": "PASS"
+          },
+          {
+            "id": 15,
+            "name": "original-signer-unavailable",
+            "newSignatures": 0,
+            "selectedExistingFeeKoinu": "1000000",
+            "status": "PASS"
+          },
+          {
+            "broadcasts": 0,
+            "confirmedOnBothNodes": true,
+            "id": 9,
+            "name": "refund-already-confirmed",
+            "retainedKoinu": "99000000",
+            "status": "PASS",
+            "txid": "90dd851fb924fa20317e23f0cd84d97aa7f1e1ea8c126d544f5a3cf1033d6733"
+          }
+        ],
+        "consumerBootHash": "45c44dd7bd5e2224174a114fe567da8ae44f0b18f61eb62461a506e3abfa1cf9",
+        "inPlaceVmReboot": "NOT_TESTED",
+        "inheritedSecrets": false,
+        "nativeSignerInvocations": 0,
+        "originBootHash": "b8e1c0e38f71a57894070ee71f00bbcb68599748d3383f44b693256836489fae",
+        "originalNodeDirectoriesPresent": false,
+        "physicalMachineIndependence": "NOT_TESTED",
+        "producerBootHash": "b8e1c0e38f71a57894070ee71f00bbcb68599748d3383f44b693256836489fae",
+        "qualificationStatus": "BLOCKED",
+        "replacementVmTestPending": true,
+        "separateVm": true
+      },
+      "rpcCalls": 426,
+      "standaloneInvocations": 12
+    },
+    {
+      "artifactId": 13895509636,
+      "evidenceFileSha256": {
+        "cleanroom-proof-18332-vm-main-rebroadcast.json": "9c2b674a84236d76535eca2c590080d39f76936a9215bf1a070252dba6f76b37",
+        "daemon-a.log": "39cc428751a3da19ee7a51bbe35d1ef25af666fc7c21ce38e8c271e8c243872b",
+        "daemon-b.log": "d22a73cea4b60f7398e38f700ed4b325be6a8bb24cf1ae1b6d809d153bc5d619",
+        "multinode-report.json": "f1840bac9ddbf2e5f4786ff3e81d79ad737f078be0337edf09b98053088ed5bd",
+        "rpc-requests.json": "fd9160a7cdc824ab55a6ad4d81052108a8e0cb6ed364dfcc3a8df5d3a324dc0a"
+      },
+      "experimentStatus": "PASS",
+      "generatedBlocks": 0,
+      "labSuite": "recovery-resume",
+      "nativeServerAudit": {
+        "a": {
+          "methods": {
+            "addnode": 1,
+            "getblockchaininfo": 8,
+            "getblockhash": 4,
+            "getblockheader": 2,
+            "getnetworkinfo": 2,
+            "getpeerinfo": 4,
+            "getrawtransaction": 3,
+            "gettxout": 1,
+            "stop": 2
+          },
+          "nativeCalls": 27
+        },
+        "b": {
+          "methods": {
+            "getblockchaininfo": 5,
+            "getblockhash": 1,
+            "getnetworkinfo": 1,
+            "getpeerinfo": 3,
+            "stop": 2
+          },
+          "nativeCalls": 12
+        }
+      },
+      "qualificationStatus": "BLOCKED",
+      "recovery": {
+        "backendCheckoutPresent": false,
+        "cases": [
+          {
+            "confirmedRetryBroadcasts": 0,
+            "id": 3,
+            "literalInPlaceReboot": "NOT_TESTED",
+            "name": "fresh-vm-replacement-after-recovery-machine-loss",
+            "originalWorkspaceAndProcessGone": true,
+            "restoredOnlyPublicPackage": true,
+            "status": "PASS"
+          }
+        ],
+        "consumerBootHash": "8f955f2004d5d222732296cf5a7da72a39b33fe51ce6cc1d305576a148f5a561",
+        "inPlaceVmReboot": "NOT_TESTED",
+        "inheritedSecrets": false,
+        "nativeSignerInvocations": 0,
+        "originBootHash": "b8e1c0e38f71a57894070ee71f00bbcb68599748d3383f44b693256836489fae",
+        "originalNodeDirectoriesPresent": false,
+        "physicalMachineIndependence": "NOT_TESTED",
+        "producerBootHash": "45c44dd7bd5e2224174a114fe567da8ae44f0b18f61eb62461a506e3abfa1cf9",
+        "qualificationStatus": "BLOCKED",
+        "separateVm": true
+      },
+      "rpcCalls": 43,
+      "standaloneInvocations": 1
+    }
+  ],
+  "literalInPlaceVmReboot": "NOT_TESTED",
+  "physicalMachineIndependence": "NOT_TESTED",
+  "preparedParcel": {
+    "artifactId": 13897096479,
+    "blocks": 1355,
+    "manifestSha256": "ace1f4d52cfac8c0cb68ad23c2ce603d2e0b0f1c4c92fe3f4591b0e24b1ac0b9"
+  },
+  "qualificationStatus": "BLOCKED",
+  "refund": {
+    "bothConsumerNodesConfirmed": true,
+    "confirmedDuplicateBroadcasts": 0,
+    "feeKoinu": "1000000",
+    "originalSigningKeysAvailable": false,
+    "replacementVmStandaloneConfirmed": true,
+    "retainedKoinu": "99000000",
+    "txid": "90dd851fb924fa20317e23f0cd84d97aa7f1e1ea8c126d544f5a3cf1033d6733"
+  },
+  "replacementVmChecks": 1,
+  "runId": 43111959236,
+  "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43111959236",
+  "schemaVersion": 1,
+  "settlementAllowed": false
+}

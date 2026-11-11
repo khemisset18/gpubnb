@@ -22,6 +22,7 @@ from recovery_core import read_regular, load_bundle, GENESIS
 MAGIC=bytes.fromhex('fabfb5da')
 MAX_CHAIN_BYTES=16*1024**2
 RUNTIME=(
+    'asset-exchange/qualification/dogecoin/d2/DOGECOIN_COPYING',
     'asset-exchange/qualification/dogecoin/d0/verify-runtime-evidence.sh',
     'asset-exchange/qualification/dogecoin/d1/network_identity.py',
     *('asset-exchange/qualification/dogecoin/d2/'+x+'.py' for x in
