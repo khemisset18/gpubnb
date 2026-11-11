@@ -1,6 +1,18 @@
 name: Asset Exchange DOGE Native Policy Diagnostics
 on:
   workflow_dispatch:
+    inputs:
+      diagnostic_suite:
+        description: Explicit native diagnostic suite
+        type: choice
+        required: true
+        default: policy
+        options: [policy, d3]
+  workflow_call:
+    inputs:
+      diagnostic_suite:
+        type: string
+        required: true
 permissions:
   contents: read
 concurrency:
@@ -8,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   policy:
-    if: github.repository == 'khemisset18/gpubnb' && github.ref == 'refs/heads/asset-exchange/doge-refund-fees-20261111'
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -42,7 +54,7 @@ jobs:
           mkdir -p dist/policy-evidence
           python3 asset-exchange/qualification/dogecoin/policy/prepare.py dist/doge-policy-source
           git -C dist/doge-policy-source diff > dist/policy-evidence/test-registration.patch
-          sha256sum asset-exchange/qualification/dogecoin/policy/gpubnb_policy_tests.cpp > dist/policy-evidence/test-source.sha256
+          sha256sum asset-exchange/qualification/dogecoin/policy/gpubnb_policy_tests.cpp asset-exchange/qualification/dogecoin/policy/gpubnb_d3_tests.cpp > dist/policy-evidence/test-source.sha256
           g++ --version > dist/policy-evidence/toolchain.txt
           dpkg-query -W libssl-dev libevent-dev libboost-system-dev libboost-filesystem-dev libboost-chrono-dev libboost-program-options-dev libboost-test-dev libboost-thread-dev >> dist/policy-evidence/toolchain.txt
           cd dist/doge-policy-source
@@ -50,8 +62,10 @@ jobs:
           ./configure --disable-wallet --without-gui --without-miniupnpc --disable-zmq --disable-bench --disable-man --enable-tests CXXFLAGS='-O1 -g0' > ../policy-evidence/configure.log 2>&1
           make -j2 -C src test/test_dogecoin > ../policy-evidence/build.log 2>&1
           sha256sum src/test/test_dogecoin > ../policy-evidence/diagnostic-binary.sha256
-          sha256sum src/dogecoin-fees.cpp src/txmempool.cpp src/validation.cpp > ../policy-evidence/implementation.sha256
+          sha256sum src/dogecoin-fees.cpp src/txmempool.cpp src/validation.cpp src/script/interpreter.cpp src/test/test_bitcoin.cpp src/chainparams.cpp src/policy/policy.h > ../policy-evidence/implementation.sha256
       - name: Execute only private Regtest policy diagnostics in separate namespace
+        env:
+          DIAGNOSTIC_SUITE: ${{ inputs.diagnostic_suite }}
         run: |
           set -euo pipefail
           probe_binary="$GITHUB_WORKSPACE/dist/doge-policy-source/src/test/test_dogecoin"
@@ -61,7 +75,7 @@ jobs:
           trap 'if sudo test -d "$output"; then sudo chown -R "$(id -u):$(id -g)" "$output"; fi' EXIT
           sudo unshare --net -- /bin/bash -c 'ip link set lo up; exec /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin "$@"' policy \
             /usr/bin/python3 "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/policy/run.py" \
-            "$probe_binary" "$probe_digest" "$parent_namespace" "$output"
+            "$probe_binary" "$probe_digest" "$parent_namespace" "$output" "$DIAGNOSTIC_SUITE"
       - name: Retain diagnostic provenance and summary metrics only
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

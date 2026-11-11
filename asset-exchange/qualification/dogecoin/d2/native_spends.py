@@ -43,9 +43,9 @@ def manifest():
         'signer':'OpenSSL secp256k1 ECDSA; three fresh disposable keys; strict low-S DER; legacy SIGHASH_ALL',
         'walletEnabled':False, 'externalNetwork':False, 'acceptNonstandard':False,
         'promiscuousMempoolFlags':None, 'qualificationStatus':'BLOCKED',
-        'blockingCriteria':['full frozen 24-case matrix not covered',
-           'dynamic mempool pressure and soft-dust fee instrumentation absent',
-           'independent review of native signed evidence still required',
+        'blockingCriteria':['this runner alone is not the consolidated 24-case decision',
+           'separate source-policy diagnostics do not prove realistic network pressure',
+           'reviewed versioned profile and required signer/recovery integration still incomplete',
            'multi-node deep reorg and all D3-D9 requirements not covered']}
 
 
@@ -54,6 +54,13 @@ def require_rejection(exit_code, stderr, reason):
     match = re.search(r'^error code: (-?[0-9]+)$', stderr, re.MULTILINE)
     require(exit_code != 0 and match is not None and int(match[1]) == expected_code
             and reason.lower() in stderr.lower(), 'expected rejection absent: '+reason)
+
+
+def register_fixture(submitted, raw):
+    require(type(raw) is bytes and len(raw)<=10000 and
+            (raw.hex() in submitted or len(submitted)<32),'fixture budget')
+    submitted.add(raw.hex())
+    return hash256(raw)[::-1].hex()
 
 
 def tip_matches(observation, height, block_hash):
@@ -229,8 +236,7 @@ def run(args):
         require(sum(p.stat().st_size for p in data.rglob('*') if p.is_file())<=512*1024**2,'disk budget')
         return hashes
     def submit(raw,reject=None):
-        require(type(raw)is bytes and len(raw)<=10000 and len(submitted)<32,'fixture budget')
-        submitted.add(raw.hex());tid=hash256(raw)[::-1].hex();known_txs.add(tid)
+        tid=register_fixture(submitted,raw);known_txs.add(tid)
         result=rpc('sendrawtransaction',raw.hex(),reject=reject)
         if not reject:require(result==tid,'native txid mismatch')
         return result

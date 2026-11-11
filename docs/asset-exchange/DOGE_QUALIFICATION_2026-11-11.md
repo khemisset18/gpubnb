@@ -1,0 +1,56 @@
+# DOGE qualification: implemented components and execution state — 11 November 2026
+
+Base: PR351 at268936e87d56cd4fa18b35ec85c1ee094bddc6c0, local equivalent724ca3d4303981097fba60b6427d932fbf918c88. PR344/349/350/351 and security PR337/338/345/347/348 were re-read before consolidation. Nothing is merged into main/dev or deployed. No existing security gate is suppressed.
+
+| Phase | Status | Actual native evidence | New deliverable / remaining blocker |
+| --- | --- | --- | --- |
+| D0 | PASS for retained source-rebuild route | Run40866305437, verified signed archive/SBOM handoff | Pins unchanged; upstream-prebuilt GPG route remains a distinct unqualified route |
+| D1 | PASS for pinned private Regtest identity | Run40892872892; repeated identities in signed native runs | Mainnet/Testnet public nodes are not executed or authorized |
+| D2 | BLOCKED | 32-case D0 experiment42875442068, three source-policy tests43005573333;24 scoped predicates reviewed | Separate internal review accepts each observation in its declared type; exact profile/signer/recovery requirements remain incomplete |
+| D3 | BLOCKED | Existing post-BIP65 height claims/refunds; four new source-native cases not executed yet | Signed pre/post activation, time/MTP vs block finality, sighash variants and legacy malleability are implemented for manual execution |
+| D4 | BLOCKED | Confirmed native funding/claim/refund, invalid controls, crash/reindex and identical retry | New actual recovery-intent validation is integrated pre-lock in the prepared multi-node drill; drill not executed yet |
+| D5 | BLOCKED | Source-native fee reconstruction43005573333 PASS, dust/floor controls | Finite pre-signed ladder and unavailable-signer refusal implemented/tested; pending RBF/realistic relay/pinning scenarios remain incomplete |
+| D6 | NOT_TESTED | New two-node drill has not run | Relay, different dust policy, partition, conflicting forks, three-block rollback, AuxPoW fork blocks, reconnect/restart and watcher reconciliation implemented |
+| D7 | NOT_TESTED | New independent-environment drill has not run | Standalone verified zipapp, pre-lock bundle, keyless retransmission, confirmation/reorg journal and backend-hidden mount-namespace adapter implemented |
+| D8 | BLOCKED | Public OpenSSL signature verification on disposable test fixtures | External software-signing request/response policy and exact displayed terms implemented; hardware compatibility NOT_TESTED |
+| D9 | BLOCKED | Separate internal technical D2 review completed | External independent audit, required earlier gates and release sign-offs missing |
+
+D0 archive SHA2564f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8; consensus library3c27dd2f3018a3bd659648129a94ba5f211e84b8ec6d308f7f0db001b5e7902b. Dogecoin sourcee0a1c157791544e818c901bd9341896965afbf9d, version1.14.9. Diagnostic rebuilds keep separate identities.
+
+## Concrete changes
+
+- A shared bounded legacy transaction reader and standalone recovery CLI verify funding bytes/outpoint/value, exact P2SH contract, signature, destination, fee cap and native active-chain observations. The package can inspect from an empty directory with no backend source on its import path.
+- External software-signer request/response policy binds independently trusted term/request digests, network/source, amounts, destination, fee ladder, lock, sequence and response deadline. The deadline does not invalidate an already-signed refund after CLTV.
+- Recovery never silently replaces a different pending non-RBF refund or signs a new transaction when keys are gone. A finite ladder cannot cover arbitrary fee increases; coverage exhaustion is an explicit blocked result.
+- The prepared two-node drill funds the immutable recovery bundle only after semantic validation and durable persistence. It deletes all four ephemeral signing keys before partition. A copied standalone package in a separate filesystem namespace hides the backend and node-A state, then accesses node-B RPC. Four recovery invocations are planned: retransmit, confirm, observe rollback, observe restoration.
+- The watcher adapter turns missing observations into UNKNOWN, rejects stale/conflicting tips, records reorganization/conflict evidence and never declares automatic settlement from one stale source.
+- The second D2 review found a retry-budget bug at32 unique fixtures. register_fixture now allows identical retries at the cap while rejecting a33rd unique transaction. Stale manifest blocker wording is corrected.
+- Review of the pinned mining RPC caught an AuxPoW test mistake before execution: fourth argument0 does not create AuxPoW. The lab initially mines without AuxPoW before activation, then explicitly requests AuxPoW for every fork/recovery block. It checks real native AuxPoW fields, not an inferred capability.
+- Readiness failures before an RPC request reaches the server are kept in the client trace but excluded from the exact server-method audit. Structured native errors remain counted.
+
+## Verification completed locally
+
+| Suite | Result | Scope |
+| --- | --- | --- |
+| D2 Python | 95 PASS | Existing software/codec guards plus retry-cap regression; not a new native run |
+| D3/policy guards | 9 PASS | Exact source and suite selection, namespace/binary/preparation refusal |
+| Two-node guards | 13 PASS | Scope, method/parameter/resource/peer/manual-trigger checks; no node started |
+| Standalone recovery | 15 PASS | Real OpenSSL public-signature checks, mocked RPC safety, persisted bundle/journal, isolated reproducible zipapp |
+| Signer/fee policy | 12 PASS | Disposable software signatures and hostile request/fee/byte mutations; no hardware claim |
+| Chain watchers | 24 PASS | Includes8 new DOGE observation/state tests |
+
+168 selected software tests pass. The second D2 reviewer additionally reran58 existing offline tests and independently parsed32 transactions, verified23 valid and9 intentionally invalid signatures, and verified five evidence archives. That second internal reading is not an external human D9 audit.
+
+## Controlled native execution
+
+No native blockchain effect is added to push/PR/schedule. The dedicated workflows expose manual dispatch/reusable calls, and both native jobs require the original event workflow_dispatch, exact repository/ID and this development branch. The existing registered workspace-reliability manual workflow calls them on this branch; its original jobs remain intact. This avoids a main/dev change solely to register a new manual workflow. GitHub's called-workflow context remains that of the manual caller.
+
+The D6 workflow requires exact execution/harness commits, verifies the preserved D0/D1 run/attestation identity, bounds blocks/RPC/CPU/memory/disk/time, and captures only its public evidence allowlist. The D3 runner compiles only test additions against pinned unmodified source. Frozen commit values are filled after publication; no native result is asserted before a successful actual run.
+
+Manual launch currently requires GitHub sign-in in the browser because the connected API tools do not expose workflow dispatch and the local CLI has no authenticated account. This is an execution-access requirement, not a request for Mainnet/funds/merge approval.
+
+## Evidence and limits
+
+See audits/DOGE_D2_SECOND_REVIEW_2026-11-11.md for the per-scenario second review. Source references remain pinned in research/2026-11-11/reference-index.json and the D3 note. No full signed-transaction/RPC archive is republished in git. Private keys, original data directories and ephemeral RPC credentials are excluded from artifact paths.
+
+Current important limits: the local-pool source diagnostic is not evidence for global-mempool unconfirmed-ancestor/CSV behavior; multi-node AuxPoW adversarial parent/merkle validation is not complete; the new independent recovery/native D3 drills still await actual execution; hardware signer testing and external audit require resources/people outside this implementation session. All financial routes remain gated.

@@ -107,3 +107,26 @@ jobs:
           done
       - name: Strict TypeScript contract
         run: npx tsc -p tsconfig.json --noEmit
+
+
+  # The registered workflow provides a manual entry on the development branch.
+  # These jobs can never run from push, PR, schedule, main or another repository.
+  doge-d3-private-manual:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/asset-exchange-dogecoin-policy.yml
+    with:
+      diagnostic_suite: d3
+
+  doge-recovery-multinode-private-manual:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/asset-exchange-dogecoin-multinode.yml
+    with:
+      execution_commit: ${{ github.sha }}
+      harness_commit: HARNESS_FREEZE_PENDING
+      authorization: AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST
