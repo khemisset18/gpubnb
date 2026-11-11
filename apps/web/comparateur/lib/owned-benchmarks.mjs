@@ -53,3 +53,28 @@ export function validateOwnedBenchmarkDataset(doc, knownDeviceIds,now=Date.now()
   }
   return Object.freeze({schemaVersion:1,source:'gpubnb-owned-lab',samples:Object.freeze(samples)});
 }
+
+
+/** Validate the already-sanitized public output of the local operator publisher.
+ * This does not verify that the original measurements were truthful.
+ * Require an allow-list of current GPUbnb hardware IDs from the application.
+ */
+export function validatePublishedOwnedBenchmarks(doc,knownDeviceIds,now=Date.now()){
+  if(!doc||doc.schemaVersion!==1||doc.source!=='gpubnb-owned-lab'||
+    !Array.isArray(doc.samples)||doc.samples.length>1000)return null;
+  const fields=new Set(['deviceId','coin','algorithm','unit','hashrate','watts',
+    'durationSeconds','deviceCount','observedAt','powerScope','sampleMethod']);
+  const samples=[],seen=new Set();
+  for(const raw of doc.samples){
+    if(!raw||typeof raw!=='object'||Object.keys(raw).some(k=>!fields.has(k)))return null;
+    // Internal validation requires the operator's original consent-to-publish flag,
+    // which is never copied into the public file.
+    const sample=validateOwnedBenchmark({...raw,consentToPublish:true},knownDeviceIds,now);
+    if(!sample)return null;
+    const id=sample.deviceId+'/'+sample.coin+'/'+sample.observedAt;
+    if(seen.has(id))return null;
+    seen.add(id);
+    samples.push(sample);
+  }
+  return Object.freeze({schemaVersion:1,source:'gpubnb-owned-lab',samples:Object.freeze(samples)});
+}
