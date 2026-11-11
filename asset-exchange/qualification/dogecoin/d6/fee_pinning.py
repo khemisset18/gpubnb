@@ -13,7 +13,7 @@ from script_diagnostics import require, hash160
 from test_signer import transaction, sighash, push, hash256
 
 COIN=100_000_000
-PRESSURE_COUNT=64
+PRESSURE_COUNT=80
 PRESSURE_OUTPUTS=1600
 SCENARIOS={
     1:('pending-refund','mempool-policy/exchange-protocol'),
@@ -81,7 +81,7 @@ def run_fee_suite(c):
             (value-17*COIN,miner_script)]
     funding=p2pkh(cb,0,miner,miner_script,value,outs);fid=_id(funding)
     pressure_parent=p2pkh(pcb,0,miner,miner_script,pvalue,
-        [(50*COIN,miner_script)]*PRESSURE_COUNT+[(pvalue-(50*PRESSURE_COUNT+1)*COIN,miner_script)],limit=65)
+        [(50*COIN,miner_script)]*PRESSURE_COUNT+[(pvalue-(50*PRESSURE_COUNT+1)*COIN,miner_script)],limit=PRESSURE_COUNT+1)
     pid=_id(pressure_parent)
     def htlc_spend(prev,index,key,branch,fee,sequence=0xfffffffe,value=COIN):
         lock=1355 if branch=='refund' else 0
@@ -221,10 +221,12 @@ def run_fee_suite(c):
     rpc('b','setnetworkactive','false');wait('pressure partition',lambda:not peers('a') and not peers('b'))
     again=recover();require(again['txid']==_id(low) and again['state']=='PENDING','lost refund could not be retransmitted')
     before=rpc('a','getmempoolinfo');required_rate=100_000*1000//len(low)
+    result['pressureBefore']=before;result['pressureObservations']=[]
     pressure_after=None
     for raw in pressure:
         submit('a',raw);result['pressureTransactionsSubmitted']+=1
         info=rpc('a','getmempoolinfo')
+        result['pressureObservations'].append(info)
         if _rate(info['mempoolminfee'])>required_rate and _id(low) not in rpc('a','getrawmempool'):
             pressure_after=info;break
     require(pressure_after is not None,'bounded native pressure did not raise the floor and evict the refund')

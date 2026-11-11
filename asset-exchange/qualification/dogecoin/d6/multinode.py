@@ -59,7 +59,7 @@ def manifest(lab_suite='multinode'):
             'production watcher deployment','all D0-D9 requirements']}
     if lab_suite=='fee-pinning':
         result.update(maxBroadcastFixtures=FEE_MAX_FIXTURES,maxFixtureBytes=FEE_MAX_BYTES,
-            rpcAllowlist=sorted(METHODS|{'setmocktime'}),maxRpc=800,maxPressureTransactions=64,
+            rpcAllowlist=sorted(METHODS|{'setmocktime'}),maxRpc=800,maxPressureTransactions=80,
             maxPressureOutputsPerTransaction=1601,maxMockTimeAdvanceSeconds=21600,
             replacementPolicy={'a':'upstream default enabled, explicit opt-in required','b':'explicitly disabled'},
             repeatsPreviouslyQualifiedSuite=False)

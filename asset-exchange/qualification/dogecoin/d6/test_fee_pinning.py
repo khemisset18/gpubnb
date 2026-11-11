@@ -30,7 +30,7 @@ class FeeMatrixBoundaries(unittest.TestCase):
         old=multinode.manifest();new=multinode.manifest('fee-pinning')
         self.assertEqual(old['maxBroadcastFixtures'],8);self.assertEqual(old['maxRpc'],480)
         self.assertEqual(new['maxBroadcastFixtures'],96);self.assertEqual(new['maxRpc'],800)
-        self.assertEqual(new['maxFixtureBytes'],60000);self.assertEqual(new['maxPressureTransactions'],64)
+        self.assertEqual(new['maxFixtureBytes'],60000);self.assertEqual(new['maxPressureTransactions'],80)
         self.assertFalse(new['repeatsPreviouslyQualifiedSuite']);self.assertEqual(new['qualificationStatus'],'BLOCKED')
         self.assertNotIn('setmocktime',old['rpcAllowlist']);self.assertIn('setmocktime',new['rpcAllowlist'])
         for name in ['signrawtransaction','sendtoaddress','settxfee']:self.assertNotIn(name,new['rpcAllowlist'])

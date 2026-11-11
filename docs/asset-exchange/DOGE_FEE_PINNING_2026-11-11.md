@@ -34,7 +34,7 @@ Native status at preparation: **NOT_TESTED**. Every case must produce actual nat
 
 ## Exact effects and bounds
 
-Two D0-qualified native nodes, UP loopback-only namespace, no wallets/DNS/public peers;1370 generated blocks maximum,800 total RPC maximum including standalone calls,96 registered signed fixtures maximum. At most64 pressure transactions each have1601 standard outputs and fewer than60000 bytes. This explicit larger test-codec bound does not change the default eight-output recovery bound. Both nodes enforce standardness.
+Two D0-qualified native nodes, UP loopback-only namespace, no wallets/DNS/public peers;1370 generated blocks maximum,800 total RPC maximum including standalone calls,96 registered signed fixtures maximum. At most80 pressure transactions each have1601 standard outputs and fewer than60000 bytes. This explicit larger test-codec bound does not change the default eight-output recovery bound. Both nodes enforce standardness.
 
 All recovery bundles are semantically checked, fsynced and read back before funding; all four ephemeral keys are removed before funding broadcast. A normal node restart checks native mempool reload and service-cookie rotation. A separate incident withholds only the disposable node's own mempool dump by reversible rename, preserving its chain and UTXOs. This is declared fault injection, not a physical outage claim.
 
@@ -43,3 +43,9 @@ Real bounded mempool pressure must evict the low-fee refund and increase the act
 The recovery adapter now refreshes only its explicitly selected private blockchain RPC credential after restart and enforces the remaining parent RPC budget before each subprocess. Its public package and bundle remain pinned. Expected refusals are limited to three exact protocol errors, never arbitrary ignored failures.
 
 All experiment success remains separate from D2–D9 and financial activation. Real-machine/VM independence, broader AuxPoW expansion, hardware signers, complete phase review and external audit are separate acceptance work. No funds, production activation or merge is authorized.
+
+## Native correction trail
+
+The first manually authorized run [43107629845](https://github.com/khemisset18/gpubnb/actions/runs/43107629845), execution commit `d2c6e5024fc944c915d957669954465c7f30cd21`, passed11 scenarios, then failed scenario5; scenarios6,12,13 were not reached. Native output showed64 admitted pressure transactions occupying4169792 bytes of the5000000-byte mempool and a zero rolling minimum: there was no eviction to claim. The preserved failure artifact is13895435556, SHA256 `2bd8655084167de54ffa31c4985005c323aada96a682aec07124e76bb4670859`; its internal checksums were independently verified.
+
+The correction permits80 finite pressure fixtures within the unchanged96-fixture/800-RPC/5MB bounds and records every native pressure observation. It changes no node admission, standardness, relay, replacement or recovery fee-cap rule. A new native run is required before marking the remaining cases successful.
