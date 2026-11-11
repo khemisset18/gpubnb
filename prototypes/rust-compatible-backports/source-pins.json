@@ -1,0 +1,50 @@
+{
+  "activeSourceChanges": false,
+  "baseCommit": "a5eb4d065ec8443c6cf13fdc8c18cec97a64e6ed",
+  "borsh": {
+    "advisory": "GHSA-fjx5-qpf4-xjf2",
+    "archiveSha256": "115e54d64eb62cdebad391c19efc9dce4981c690c85a33a12199d99bb9546fee",
+    "disposition": "Published decoder already contains ZST fix; discrepancy stays blocking; no repeated vulnerable execution or scanner exemption.",
+    "previousVerifiedProbe": "https://github.com/khemisset18/gpubnb/pull/319",
+    "rustSecPatched": [
+      "^0.10.4",
+      ">=1.0.0-alpha.1"
+    ],
+    "version": "0.10.4"
+  },
+  "patches": [
+    {
+      "adaptation": "Exact complete fixed file; two mutability corrections. Version retained.",
+      "advisory": "GHSA-wrw7-89jp-8q8g",
+      "afterSha256": "a0f5ee8acb8faa089bcdfbc9a57372609fce7654026ccef7d9a224d05a654ccc",
+      "archiveGitCommit": "42b9caf98e03ded086362d9653ca58fe94dc8658",
+      "archiveSha256": "233daaf6e83ae6a12a52055f568f9d7cf4671dabb78ff9560ab6da230ce00ee5",
+      "beforeSha256": "1fd02859333761c45321b32f28b24233446b97d0022a90d3a937ed162585b90e",
+      "file": "src/variant_iter.rs",
+      "name": "glib",
+      "patch": "patches/glib-variant-out-parameter.patch",
+      "upstreamFix": "https://github.com/gtk-rs/gtk-rs-core/pull/1343",
+      "upstreamFixCommit": "b5a4071e439bef2b5eea76c3aa25e5ae84839e34",
+      "version": "0.18.5"
+    },
+    {
+      "adaptation": "Backport removal of three reseeding log callbacks only. Keep reseeding algorithms, public API, optional log feature and package version; no version spoof.",
+      "advisory": "GHSA-cq8v-f236-94qc",
+      "afterSha256": "9cc31f6b759dc298506b78b811b6d89cb4e9ded221effa8d3393c2370ee8f55f",
+      "archiveGitCommit": "074cb6a997f91db653f8a53c755ddc07495ab429",
+      "archiveSha256": "6a6b1679d49b24bbfe0c803429aa1874472f50d9b363131f0e89fc356b544d03",
+      "beforeSha256": "93d2fbf62d1a5765437c4360b94a2df69921fb9cd5b704c4c2023f53eb15ee03",
+      "file": "src/rngs/adapter/reseeding.rs",
+      "name": "rand",
+      "patch": "patches/rand-reseed-logging.patch",
+      "upstreamFix": "https://github.com/rust-random/rand/pull/1763",
+      "upstreamFixCommit": "605731b59aabb38338e65f2a6a7ba8a9e480d00d",
+      "upstreamFixed08Commit": "5309f25bb5e7d21ac01c5b6f476badd06f9cdc3f",
+      "version": "0.7.3"
+    }
+  ],
+  "previousPrototype": "35fb07cbc1487d05f5f38d0450e9dbdb0a63301e",
+  "qualificationStatus": "BLOCKED",
+  "scannerExemptions": false,
+  "schemaVersion": 1
+}

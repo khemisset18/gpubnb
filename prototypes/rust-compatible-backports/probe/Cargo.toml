@@ -1,0 +1,12 @@
+[package]
+name = "gpubnb-security-backport-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+glib = "=0.18.5"
+log = "0.4"
+rand = { version = "=0.7.3", features = ["log"] }
+rand_chacha = "=0.2.2"
+rand_core = "=0.5.1"
