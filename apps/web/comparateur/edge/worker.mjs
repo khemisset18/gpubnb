@@ -16,8 +16,7 @@ const jsonHeaders=Object.freeze({
  'Content-Type':'application/json; charset=utf-8',
  'Cache-Control':'no-store, max-age=0',
  'X-Content-Type-Options':'nosniff',
- 'Referrer-Policy':'no-referrer',
- 'Access-Control-Allow-Origin':'same-origin'
+ 'Referrer-Policy':'no-referrer'
 });
 const NO_MONERO={status:'unavailable',reason:'Données blockchain absentes ou trop anciennes'};
 const emptyPow={schemaVersion:1,networks:[]};
