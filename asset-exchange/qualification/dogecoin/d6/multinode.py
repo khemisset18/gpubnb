@@ -24,6 +24,7 @@ from script_diagnostics import (ARCHIVE, SHA256, LIBRARY_SHA256, SOURCE_COMMIT,
 from native_spends import native_verifier, prepare_recovery, read_signed, require_rejection
 from offline_candidate import build_candidate
 from test_signer import EphemeralSigner, transaction, sighash, hash256, push
+from auxpow_fixtures import vectors as auxpow_vectors, MAX_PROOFS
 
 AUTHORIZATION = 'AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST'
 COIN = 100_000_000
@@ -35,7 +36,8 @@ RPC_PORTS = {'a':18332, 'b':18333}
 MAX_BLOCKS, MAX_RPC, MAX_FIXTURES = 1370, 480, 8
 METHODS = frozenset({'getblockchaininfo','getblockhash','getnetworkinfo','getpeerinfo',
     'generatetoaddress','getblock','getrawtransaction','gettxout','sendrawtransaction',
-    'getmempoolentry','getrawmempool','getblockheader','getmempoolinfo','addnode','setnetworkactive','invalidateblock','reconsiderblock','stop'})
+    'getmempoolentry','getrawmempool','getblockheader','getmempoolinfo','addnode','setnetworkactive','invalidateblock','reconsiderblock','stop',
+    'createauxblock','submitauxblock'})
 
 
 def manifest():
@@ -48,13 +50,14 @@ def manifest():
         'maxCpuSecondsPerProcess':600,'maxAddressSpaceMiBPerProcess':2048,'maxDataMiB':1024,
         'maxForkDepth':5,'maxObservedRollbackDepth':3,'keys':'four ephemeral OpenSSL keys; removed before partition',
         'initialAuxpow':False,'postActivationForkAuxpow':True,
+        'maxAuxpowFixtures':MAX_PROOFS,'maxAuxpowParentAttemptsPerFixture':256,
         'walletEnabled':False,'externalNetwork':False,'acceptNonstandard':False,
         'promiscuousMempoolFlags':None,'settlementAllowed':False,'qualificationStatus':'BLOCKED',
-        'notCovered':['independent external review','AuxPoW malformed-parent/merkle adversarial matrix',
+        'notCovered':['independent external review','complete AuxPoW adversarial matrix beyond eight fixed fixtures',
             'production watcher deployment','all D0-D9 requirements']}
 
 
-def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted):
+def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted, aux_submitted=frozenset()):
     require(node in NODES and method in METHODS, 'fixed node/method required')
     require(type(params) in (tuple,list) and all(type(p) is str for p in params), 'string RPC parameters required')
     params=tuple(params)
@@ -76,6 +79,12 @@ def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted):
     elif method=='gettxout':require(len(params)==3 and params[0] in txids and params[1] in ('0','1','2','3')
                 and params[2] in ('true','false'),'registered funding output required')
     elif method=='sendrawtransaction':require(len(params)==1 and params[0] in submitted,'registered signed fixture required')
+    elif method=='createauxblock':require(node=='a' and params==(addresses[node],),'fixed private template destination required')
+    elif method=='submitauxblock':require(node=='a' and len(params)==2 and params[0] in blocks
+                and type(aux_submitted) in (set,frozenset) and len(aux_submitted)<=MAX_PROOFS
+                and params in aux_submitted and 0<len(params[1])<=8192
+                and len(params[1])%2==0 and re.fullmatch('[0-9a-f]+',params[1]),
+                'registered private AuxPoW fixture required')
     else:require(not params,'unexpected RPC parameters')
 
 
@@ -149,7 +158,7 @@ def run(args, recovery_runner=None, bundle_validator=None):
     for path in (bins,out,keys):path.mkdir(mode=0o700)
     report={'experimentStatus':'FAIL','qualificationStatus':'BLOCKED','settlementAllowed':False,
         'manifest':manifest(),'mainnetUsed':False,'realFundsUsed':False,'namespaceBefore':links,'stages':[]}
-    trace=[];signers=[];key_specs=[];processes={};logs={};common={};addresses={};blocks=set();txids=set();submitted=set();external_calls=[];generated=0
+    trace=[];signers=[];key_specs=[];processes={};logs={};common={};addresses={};blocks=set();txids=set();submitted=set();aux_submitted=set();external_calls=[];generated=0
     env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8'}
     def dump(value):return json.dumps(value,indent=2,sort_keys=True,default=lambda x:str(x) if isinstance(x,Decimal) else (_ for _ in ()).throw(TypeError()))+'\n'
     def save():
@@ -161,9 +170,10 @@ def run(args, recovery_runner=None, bundle_validator=None):
     signal.signal(signal.SIGALRM,alarm);signal.signal(signal.SIGTERM,alarm);signal.alarm(900)
     def rpc(node,method,*params,reject=None,missing_ok=False):
         nonlocal generated
-        validate_rpc(node,method,params,addresses=addresses,blocks=blocks,txids=txids,submitted=submitted)
+        validate_rpc(node,method,params,addresses=addresses,blocks=blocks,txids=txids,submitted=submitted,aux_submitted=aux_submitted)
         require(len(trace)+len(external_calls)<MAX_RPC,'RPC budget exceeded')
         if method=='generatetoaddress':generated+=int(params[0]);require(generated<=MAX_BLOCKS,'block budget exceeded')
+        if method=='submitauxblock':require(generated<MAX_BLOCKS,'AuxPoW block budget exceeded')
         row={'source':node,'method':method,'params':list(params)};trace.append(row);save()
         result=subprocess.run([str(bins/'dogecoin-cli'),*common[node],'-rpcconnect=127.0.0.1',method,*params],
             env=env,capture_output=True,text=True,timeout=180 if method=='generatetoaddress' else 15)
@@ -430,6 +440,43 @@ def run(args, recovery_runner=None, bundle_validator=None):
         restored=wait_for('restart reconvergence',synchronized)
         require(restored['bestblockhash']==expected_tip and restored['blocks']==1360,'restart changed winning chain')
         for n in NODES:require(tx(n,recovery_id)['confirmations']==1,'restart lost recovery confirmation')
+        # Submit seven deliberately malformed proofs before the valid proof for
+        # the very same cached native template. This excludes duplicate-block
+        # shortcuts and demonstrates that rejection does not poison the cache.
+        template=rpc('a','createauxblock',addresses['a'])
+        require(template['height']==1361 and template['previousblockhash']==expected_tip
+                and template['chainid']==98 and template['bits']=='207fffff'
+                and re.fullmatch('[0-9a-f]{64}',template['hash']),'native AuxPoW template mismatch')
+        blocks.add(template['hash'])
+        fixtures=auxpow_vectors(template['hash'],template['target'])
+        require(len(fixtures)==MAX_PROOFS,'fixed AuxPoW fixture count required')
+        aux_submitted.update((template['hash'],f['hex']) for f in fixtures)
+        probe={'template':template,'cases':[],'keysUnavailable':not list(keys.iterdir())}
+        require(probe['keysUnavailable'],'signing keys present during AuxPoW probes')
+        report['auxpowAdversarial']=probe;save()
+        for fixture in fixtures:
+            offset=len((out/'daemon-a.log').read_text())
+            accepted=rpc('a','submitauxblock',template['hash'],fixture['hex'])
+            require(type(accepted) is bool and accepted is fixture['expectedAccepted'],
+                    'native AuxPoW acceptance mismatch: '+fixture['case'])
+            row={k:v for k,v in fixture.items() if k!='hex'}
+            row['nativeAccepted']=accepted;probe['cases'].append(row);save()
+            if not accepted:
+                wait_for('native AuxPoW rejection log',lambda:fixture['expectedNativeReason']
+                    in (out/'daemon-a.log').read_text()[offset:],timeout=5)
+                unchanged=synchronized()
+                require(unchanged is not None and unchanged['bestblockhash']==expected_tip
+                        and unchanged['blocks']==1360,'rejected AuxPoW changed a native tip')
+                row.update(nativeReasonObserved=True,bothTipsUnchanged=True);save()
+            else:
+                generated+=1
+                accepted_tip=wait_for('valid AuxPoW private relay',synchronized)
+                require(accepted_tip['blocks']==1361 and accepted_tip['bestblockhash']==template['hash'],
+                        'valid AuxPoW control failed independent relay')
+                probe['nativeAcceptedBlocks']=[assert_auxpow(n,template['hash']) for n in NODES]
+                probe['sameTemplateValidAfterRejections']=True
+                for n in NODES:require(tx(n,recovery_id)['confirmations']==2,'AuxPoW control lost recovery confirmation')
+                save()
         for n in NODES:
             check_peers(rpc(n,'getpeerinfo'));rpc(n,'stop');processes[n].wait(timeout=15);logs[n].close()
             require(processes[n].returncode==0,'unclean final node stop')

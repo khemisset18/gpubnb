@@ -15,16 +15,17 @@ Both nodes run in a new Linux network namespace with only UP loopback. Peer and 
 5. Delete all four ephemeral signing keys. Broadcast a dust-policy control accepted by A and rejected by B, then prove B accepts the valid block containing that transaction.
 6. Partition B. A mines a claim on one fork; B mines the conflicting refund on a longer fork. Capture independent observations of the differing tips.
 7. Reconnect and require convergence to the same exact best hash at height1359. A rolls back three blocks. Its former claim may no longer be marked confirmed; the competing refund is independently confirmed by both nodes.
-8. Check the native post-activation block's AuxPoW flag, chain ID98 and AuxPoW JSON evidence. Adversarial malformed-parent/merkle AuxPoW tests remain outside this experiment.
+8. Check the native post-activation block's AuxPoW flag, chain ID98 and AuxPoW JSON evidence. The original three successful runs did not exercise malformed-parent/merkle AuxPoW proofs. A subsequent bounded probe is prepared below; its native result must be recorded separately.
 9. With all signing keys gone, submit the cheaper pre-signed refund to B, require its native insufficient-priority rejection and mempool absence, then run the standalone tool. Its observed0.01DOGE/kB relay floor must select the already-signed0.01DOGE-fee variant. Prove exact bytes, destination,0.99DOGE recovered, mempool relay and confirmations independently on A and B at height1360. This is selection after rejection, not replacement of a pending transaction.
    Run43057545782 additionally passed the regression that re-relays this already-pending higher-fee variant through node A, whose lower floor would also allow the cheaper variant. It retained the pending transaction's identity, exact bytes and signature. The run used240 shared RPC calls with exact per-node native method counteraudits.
 10. Restart A cleanly and verify exact winning tip and refund confirmation after reconnection.
+11. Request one native createauxblock template at height1361. Submit seven malformed proofs, each with its exact expected new native rejection log and both tips unchanged. Then submit the valid proof for that same template, require relay and identical acceptance on both nodes, and retain the prior refund with two confirmations. The eight fixtures and at most256 parent nonce attempts per fixture are fixed; this stage is NOT_TESTED until its manual native run succeeds.
 
 The optional standalone-recovery hook additionally observes confirmation, local invalidate/reconsider rollback and reconfirmation through the separate recovery environment. Its calls share the fixed RPC budget. A baseline execution without that hook explicitly reports independent recovery as NOT_TESTED.
 
 ## Bounds
 
-Two nodes; at most1370 generated blocks across forks;480 RPC calls including independent recovery;8 unique submitted fixtures;10000 bytes per fixture;900 seconds wall time;600 CPU seconds and2GiB address space per process;1024MiB combined node data; at most one loopback peer per node. No Mainnet, public peers, real funds or production keys are involved.
+Two nodes; at most1370 generated blocks across forks;480 RPC calls including independent recovery;8 unique signed transaction fixtures;10000 bytes per transaction;8 separate AuxPoW proofs of at most4096 bytes each;256 parent nonce attempts per proof;900 seconds wall time;600 CPU seconds and2GiB address space per process;1024MiB combined node data; at most one loopback peer per node. No Mainnet, public peers, real funds or production keys are involved.
 
 ## Manual execution
 
@@ -49,3 +50,9 @@ The immutable bundle carries only public contract/funding/refund transactions an
 All three native artifacts were downloaded and checked against their Actions SHA256. Every internal evidence digest, public refund signature/terms and native server RPC-method counter was checked again locally. The latest five-call sequence was B:PENDING→A:PENDING→B:CONFIRMED→B:REORGED→B:CONFIRMED, with both broadcasts containing exactly the same pre-signed bytes. Independent reviews and the remaining adversarial matrix are still required before full qualification.
 
 Pinned Dogecoin1.14.9 source explains the1-DOGE fee fixture: `src/validation.cpp:788–815` checks rolling mempool fees and relay priority; `src/txmempool.h:47–56` defines free priority; `src/rpc/rawtransaction.cpp:897–909` uses `fLimitFree=false`. A100-DOGE aged input can bypass the simple relay-priority rejection, so a claim that merely raising minrelaytxfee always rejects it would be false. No upstream behavior is modified for this test.
+
+## Bounded AuxPoW negative controls
+
+The new preparation reuses pinned Dogecoin QA serialization and the native unit-test mutations, with exact source hashes in auxpow-source-fixtures.json. Python standard-library scrypt replaces the old external ltc_scrypt helper; all five published upstream input/hash vectors pass. The helper can only construct the fixed minimal-difficulty private Regtest profile and performs no node launch or RPC at import. Eighteen local software guards pass; they do not establish native acceptance.
+
+The seven negative controls cover insufficient parent work, a parent with chain ID98, a mismatched parent merkle root, a missing child-chain root in the coinbase, a mismatched tree size, a wrong chain index, and a31-element chain branch. Each non-work mutation is mined to adequate parent work so that a generic work failure cannot masquerade as its specific rejection. The final positive control must be accepted for the same template after all seven rejections. The laboratory still does not claim a complete AuxPoW matrix or external independent review.
