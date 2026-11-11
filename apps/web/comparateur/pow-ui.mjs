@@ -123,6 +123,10 @@ function render(){
   const electricityEurKwh=number('electricity',0,5);
   const poolFeePercent=number('poolFee',0,100);
   const coinEur=number('powPrice',0,1e7,true);
+  if(!meta.requiresAsic && byId('tabCpu').getAttribute('aria-pressed')==='true'){
+    reset('Ce profil est destiné à un GPU. Sélectionnez « Carte graphique » en haut du comparateur ou choisissez le calcul Monero pour le CPU.');
+    return;
+  }
   if(pearl){
     const observedCoins=number('powPearlCoins',0,1e10);
     const observedHours=number('powPearlHours',1,8760);
