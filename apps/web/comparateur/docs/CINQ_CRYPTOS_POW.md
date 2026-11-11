@@ -1,3 +1,5 @@
+> **Document historique (première étape).** Le catalogue du comparateur couvre maintenant **14 cryptomonnaies** ; consulter [COUVERTURE_COMPLETE_CRYPTOS.md](COUVERTURE_COMPLETE_CRYPTOS.md) pour la liste et les précautions actuelles (PRL, BTC, ZEC, ALPH, KAS, CFX, NEOX, BEAM, CTXC). Le document ci-dessous décrit uniquement la première extension de cinq cryptos.
+
 # GPUbnb · 5 cryptomonnaies minables — moteur indépendant, sans API commerciale
 
 **Situation : 11 novembre 2026.** Cette extension n'est présente que dans \`apps/web/comparateur/\` sur la PR #353. Rien n'est fusionné ou déployé.
