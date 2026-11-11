@@ -1,0 +1,225 @@
+{
+  "artifactId": 13881740242,
+  "artifactSha256": "14a69a121549263722206292d02da2662c86a8871591fa8e71a62fa8855ae6da",
+  "auxpow": {
+    "cases": [
+      {
+        "bothTipsUnchanged": true,
+        "case": "parent-work",
+        "expectedAccepted": false,
+        "expectedNativeReason": "AUX proof of work failed",
+        "nativeAccepted": false,
+        "nativeReasonObserved": true,
+        "parentAttempts": 1,
+        "sha256": "0850c6d7b1204d21c6db44696fc735c7211a0809bbdc458af642c62825af3db7"
+      },
+      {
+        "bothTipsUnchanged": true,
+        "case": "parent-chain-id",
+        "expectedAccepted": false,
+        "expectedNativeReason": "Aux POW parent has our chain ID",
+        "nativeAccepted": false,
+        "nativeReasonObserved": true,
+        "parentAttempts": 3,
+        "sha256": "c3d3c2626a70344ab1765157558248fb16fc2bc73679c33fe175b196a7eb9dae"
+      },
+      {
+        "bothTipsUnchanged": true,
+        "case": "parent-merkle-root",
+        "expectedAccepted": false,
+        "expectedNativeReason": "Aux POW merkle root incorrect",
+        "nativeAccepted": false,
+        "nativeReasonObserved": true,
+        "parentAttempts": 1,
+        "sha256": "36280c54264778ddc912458a0214a3a18ddddf9124ffa71f4562b6aa11a2daa5"
+      },
+      {
+        "bothTipsUnchanged": true,
+        "case": "chain-root",
+        "expectedAccepted": false,
+        "expectedNativeReason": "Aux POW missing chain merkle root in parent coinbase",
+        "nativeAccepted": false,
+        "nativeReasonObserved": true,
+        "parentAttempts": 4,
+        "sha256": "347328bd001f46fcc17b0322c1d0618838379edce1cd3e6e5e273483e5a24821"
+      },
+      {
+        "bothTipsUnchanged": true,
+        "case": "chain-size",
+        "expectedAccepted": false,
+        "expectedNativeReason": "Aux POW merkle branch size does not match parent coinbase",
+        "nativeAccepted": false,
+        "nativeReasonObserved": true,
+        "parentAttempts": 1,
+        "sha256": "38653dafa549f1f6803ea25a83d35c204138304f13813f1a367499dcb249612f"
+      },
+      {
+        "bothTipsUnchanged": true,
+        "case": "chain-index",
+        "expectedAccepted": false,
+        "expectedNativeReason": "Aux POW wrong index",
+        "nativeAccepted": false,
+        "nativeReasonObserved": true,
+        "parentAttempts": 5,
+        "sha256": "c00dbcfc47048293c2534755bdba1d0bf61ac6506f2d2a17b09af3d61dcffa1e"
+      },
+      {
+        "bothTipsUnchanged": true,
+        "case": "chain-branch-length",
+        "expectedAccepted": false,
+        "expectedNativeReason": "Aux POW chain merkle branch too long",
+        "nativeAccepted": false,
+        "nativeReasonObserved": true,
+        "parentAttempts": 5,
+        "sha256": "663cc9f0a1a39a20bdb01f8eb9aa199aef7b0c87eaed1e8435f5ad7f869b3316"
+      },
+      {
+        "case": "valid-control",
+        "expectedAccepted": true,
+        "expectedNativeReason": null,
+        "nativeAccepted": true,
+        "parentAttempts": 5,
+        "sha256": "1b3b4fe51b42199e8a76b21ba6da04cb948f68cb56c3c6b9c1763e69022b7751"
+      }
+    ],
+    "keysUnavailable": true,
+    "nativeAcceptedBlocks": [
+      {
+        "auxpowChainId": 98,
+        "auxpowFields": [
+          "chainindex",
+          "chainmerklebranch",
+          "index",
+          "merklebranch",
+          "parentblock",
+          "tx"
+        ],
+        "hash": "2b9d1533c2aa82e8f5199a2e7f5003bfd5f5ac41e11678393e225282655e8970",
+        "height": 1361,
+        "source": "a",
+        "version": 6422788
+      },
+      {
+        "auxpowChainId": 98,
+        "auxpowFields": [
+          "chainindex",
+          "chainmerklebranch",
+          "index",
+          "merklebranch",
+          "parentblock",
+          "tx"
+        ],
+        "hash": "2b9d1533c2aa82e8f5199a2e7f5003bfd5f5ac41e11678393e225282655e8970",
+        "height": 1361,
+        "source": "b",
+        "version": 6422788
+      }
+    ],
+    "sameTemplateValidAfterRejections": true,
+    "template": {
+      "bits": "207fffff",
+      "chainid": 98,
+      "coinbasevalue": 1000000000000,
+      "hash": "2b9d1533c2aa82e8f5199a2e7f5003bfd5f5ac41e11678393e225282655e8970",
+      "height": 1361,
+      "previousblockhash": "b6b030ccf9e82065dbc6169f4124846f057ff8818eb33457a23bde2289ac0cd3",
+      "target": "0000000000000000000000000000000000000000000000000000000000ffff7f"
+    }
+  },
+  "evidenceFileSha256": {
+    "SHA256SUMS": "7c5c9033c26809ead8b966c59ee53cedde4e1b6709876854d85dd8d723257516",
+    "cleanroom-proof-18332-rebroadcast.json": "cfe6c38174d823a24337c85fc1e82ab70d6cb5f35956624a179daef713c33092",
+    "cleanroom-proof-18333-observe.json": "cfe6c38174d823a24337c85fc1e82ab70d6cb5f35956624a179daef713c33092",
+    "cleanroom-proof-18333-rebroadcast.json": "cfe6c38174d823a24337c85fc1e82ab70d6cb5f35956624a179daef713c33092",
+    "daemon-a.log": "b0170d32818378adf277b07b140493e64f484223ab6fb2fa5ff28fdfdfd91db3",
+    "daemon-b.log": "2b80bac00435cf42fd96d33bea2efd08ab25db1b49790101dfd80fd5ba6f7baa",
+    "multinode-report.json": "6cfd86852ead957f25ee478fe3cad8c3be6f617824abb46315e84c98789e02b8",
+    "recovery-bundle.json": "6cff926486cbe795ae5d7a452012383a351e14f4a966702fa556dc7d70cb8d69",
+    "refund-conflict.hex": "338730ab3de191a0a8c4913a0a54624aeb34f9cd3d2fc89e4ed825ad555b28c4",
+    "refund-recovery-high.hex": "17514ab1d1b2529779f3c00ef762aab11d0506ed179ad476821cce3591eab72c",
+    "refund-recovery.hex": "32979478ed89f0a4f49fbb65be2950930069f31a842357e6893745834c883add",
+    "rpc-requests.json": "f0303071fa937dc0c9bf7d9e164ec2ec12c8c759874abe3c877267a3626552fc",
+    "watcher-review.json": "b43edfdd03a40ea3962ccdc27aeb3e0e0e41c695f3a9f6166ac8cdb9f21062f4"
+  },
+  "exactPendingRerelayBytesReverified": true,
+  "executionCommit": "6ebdaef913e6b102c0835fbab261da9ac4cc11b6",
+  "experimentStatus": "PASS",
+  "generatedBlocks": 1364,
+  "harnessCommit": "a5548ecc8e610b3d5c3ccd4903bd245dacda7326",
+  "keylessRefundTermsAndPublicSignaturesReverified": true,
+  "nativeMethodCounters": {
+    "a": {
+      "addnode": 4,
+      "createauxblock": 1,
+      "generatetoaddress": 5,
+      "getblock": 3,
+      "getblockchaininfo": 31,
+      "getblockhash": 6,
+      "getblockheader": 2,
+      "getmempoolentry": 2,
+      "getmempoolinfo": 1,
+      "getnetworkinfo": 5,
+      "getpeerinfo": 11,
+      "getrawmempool": 18,
+      "getrawtransaction": 21,
+      "gettxout": 4,
+      "sendrawtransaction": 5,
+      "stop": 2,
+      "submitauxblock": 8
+    },
+    "b": {
+      "generatetoaddress": 3,
+      "getblock": 2,
+      "getblockchaininfo": 35,
+      "getblockhash": 13,
+      "getblockheader": 7,
+      "getmempoolentry": 2,
+      "getmempoolinfo": 1,
+      "getnetworkinfo": 8,
+      "getpeerinfo": 12,
+      "getrawmempool": 12,
+      "getrawtransaction": 31,
+      "gettxout": 7,
+      "invalidateblock": 1,
+      "reconsiderblock": 1,
+      "sendrawtransaction": 4,
+      "setnetworkactive": 4,
+      "stop": 1
+    }
+  },
+  "qualificationStatus": "BLOCKED",
+  "recoveredKoinu": "99000000",
+  "recoveryTransitions": [
+    {
+      "source": "b",
+      "state": "PENDING",
+      "transition": "PENDING"
+    },
+    {
+      "source": "a",
+      "state": "PENDING",
+      "transition": "PENDING"
+    },
+    {
+      "source": "b",
+      "state": "CONFIRMED",
+      "transition": "CONFIRMED"
+    },
+    {
+      "source": "b",
+      "state": "PENDING",
+      "transition": "REORGED"
+    },
+    {
+      "source": "b",
+      "state": "CONFIRMED",
+      "transition": "CONFIRMED"
+    }
+  ],
+  "rpcCalls": 276,
+  "run": "https://github.com/khemisset18/gpubnb/actions/runs/43074060943",
+  "schemaVersion": 1,
+  "selectedFeeKoinu": "1000000",
+  "settlementAllowed": false,
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d"
+}
