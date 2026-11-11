@@ -5,7 +5,8 @@ import { parseMoneroHeader } from './monero-direct.mjs';
 
 export const BLOCK_SAMPLE = 30;
 export const MAX_SNAPSHOT_AGE_MS = 20 * 60 * 1000;
-export const MAX_PUBLIC_AGE_MS = 5 * 60 * 60 * 1000;
+// Public sources are refreshed every two hours; keep the LAST successful sample for at most 24 hours.
+export const MAX_PUBLIC_AGE_MS = 24 * 60 * 60 * 1000;
 const finitePositive = n => typeof n === 'number' && Number.isFinite(n) && n > 0;
 
 function positiveInteger(value) {
