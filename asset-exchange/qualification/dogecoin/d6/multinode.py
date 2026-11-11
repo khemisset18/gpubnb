@@ -364,11 +364,13 @@ def run(args, recovery_runner=None, bundle_validator=None):
         # Parent may provide the separately packaged recovery CLI here; the base lab still
         # proves independent node-B broadcast of stored bytes without any surviving signer.
         hook_results=[]
-        def independent_recovery(mode, expected_state=None, expected_transition=None):
-            require(recovery_runner is not None and len(hook_results)<4,'at most four independent recovery calls required')
+        def independent_recovery(mode, expected_state=None, expected_transition=None, node='b'):
+            require(node in NODES and recovery_runner is not None and len(hook_results)<5,
+                'at most five private independent recovery calls required')
             result=recovery_runner({'mode':mode,'bundlePath':str(bundle_path),'bundleSha256':bundle_digest,
                 'cliPath':str(bins/'dogecoin-cli'),'cliSha256':report['members']['dogecoin-cli']['sha256'],
-                'nodeCommonArguments':list(common['b']),'nodeBDataDirectory':str(work/'data-b'),'nodeBRpcPort':RPC_PORTS['b'],
+                'nodeCommonArguments':list(common[node]),'nodeBDataDirectory':str(work/('data-'+node)),
+                'nodeBRpcPort':RPC_PORTS[node],
                 'backendDirectoryToHide':str(HERE.parents[3]),'nodeADataDirectoryToHide':str(work/'data-a'),
                 'originalKeysDirectoryToHide':str(keys),'parentNetNs':parent,'parentMountNs':os.readlink('/proc/self/ns/mnt'),
                 'expectedRefundTxid':recovery_id,'evidenceDirectory':str(out)})
@@ -379,9 +381,10 @@ def run(args, recovery_runner=None, bundle_validator=None):
             require(type(calls) is list and len(calls)<=64,'bounded external recovery RPC audit required')
             for call in calls:
                 require(type(call) is dict and set(call)=={'method','params'},'exact recovery RPC audit row required')
-                validate_rpc('b',call['method'],call['params'],addresses=addresses,blocks=blocks,txids=txids,submitted=submitted | {recovery_raw.hex(),recovery_high.hex()})
-            external_calls.extend(calls)
+                validate_rpc(node,call['method'],call['params'],addresses=addresses,blocks=blocks,txids=txids,submitted=submitted | {recovery_raw.hex(),recovery_high.hex()})
+            external_calls.extend({'source':node,**call} for call in calls)
             require(len(trace)+len(external_calls)<=MAX_RPC,'recovery exceeded shared RPC budget')
+            result['source']=node
             hook_results.append(result);report['independentRecoveryHook']=hook_results;save()
             return result
         if recovery_runner:
@@ -390,6 +393,13 @@ def run(args, recovery_runner=None, bundle_validator=None):
             require(submit('b',read_signed(out/'refund-recovery-high.hex',recovery_high_sha))==recovery_id,'stored refund identity mismatch')
             report['independentRecoveryHook']={'status':'NOT_TESTED','reason':'standalone recovery process not injected'}
         wait_for('recovery refund mempool relay',lambda:recovery_id in rpc('a','getrawmempool'))
+        if recovery_runner:
+            repeated=independent_recovery('rebroadcast','PENDING',node='a')
+            require(repeated.get('selectedFeeKoinu')==str(RECOVERY_FEES[1]),
+                'lower observed fee floor switched the already-pending refund')
+            report['keylessFeeRecovery']['lowerFloorPendingRerelay']={
+                'source':'a','nodeRelayDogePerKb':str(rpc('a','getnetworkinfo')['relayfee']),
+                'samePendingTxid':True,'sameSignedBytes':True,'selectedFeeKoinu':repeated['selectedFeeKoinu']};save()
         recovery_block=mine('b')[0];final=wait_for('recovery block relay',synchronized)
         for n in NODES:
             recovered=tx(n,recovery_id)
@@ -427,7 +437,7 @@ def run(args, recovery_runner=None, bundle_validator=None):
             methods=re.findall(r'ThreadRPCServer method=([a-zA-Z0-9_]+)',(out/('daemon-'+n+'.log')).read_text())
             from collections import Counter
             expected=Counter(t['method'] for t in trace if t['source']==n and t.get('reachedServer'))
-            if n=='b':expected.update(c['method'] for c in external_calls)
+            expected.update(c['method'] for c in external_calls if c['source']==n)
             require(set(methods)<=METHODS and Counter(methods)==expected,'server method audit mismatch')
         report['namespaceAfter']=json.loads(subprocess.check_output(['ip','-json','link','show'],text=True))
         validate_namespace(parent,os.readlink('/proc/self/ns/net'),report['namespaceAfter'])

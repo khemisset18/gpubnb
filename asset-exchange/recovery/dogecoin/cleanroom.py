@@ -50,7 +50,11 @@ def run_recovery_hook(context):
     require(all(name in context for name in required),'incomplete cleanroom context')
     require(context['mode'] in ('observe','rebroadcast'),'unsupported cleanroom operation')
     out=Path(context['evidenceDirectory']).resolve()
-    clean=out.parent/'recovery-cleanroom'
+    port=context['nodeBRpcPort']
+    require(type(port) is int and port in (18332,18333),'fixed private recovery RPC endpoint required')
+    # Each node keeps its own cookie and observation journal. Do not reuse a
+    # copied node-B credential when demonstrating re-relay through node A.
+    clean=out.parent/('recovery-cleanroom-'+str(port))
     hidden=[str(Path(context[name]).resolve()) for name in
             ('backendDirectoryToHide','nodeADataDirectoryToHide','originalKeysDirectoryToHide')]
     require(len(set(hidden))==3,'distinct backend/node/key paths required')
@@ -77,7 +81,7 @@ def run_recovery_hook(context):
     require(str(clean) in PACKAGE_DIGESTS and hashlib.sha256(read_regular(clean/'doge-recovery.pyz')).hexdigest()==PACKAGE_DIGESTS[str(clean)],
             'standalone package differs from reviewed cleanroom copy')
     load_bundle(clean/'bundle.json',context['bundleSha256'])
-    proof=out/('cleanroom-proof-'+context['mode']+'.json')
+    proof=out/('cleanroom-proof-'+str(port)+'-'+context['mode']+'.json')
     trace=clean/'rpc-trace.json'
     args=[str(clean/'doge-recovery.pyz'),str(clean/'bundle.json'),context['bundleSha256'],
           str(clean/'dogecoin-cli'),str(clean/'rpc'),str(context['nodeBRpcPort']),context['parentNetNs'],context['parentMountNs'],
@@ -98,4 +102,5 @@ def run_recovery_hook(context):
     require(isolation['backendUnavailable'] and isolation['separateMountNamespace'],'backend isolation proof missing')
     return {'txid':observation.get('refundTxid'),'state':observation['state'],
             'transition':observation['transition'],'rpcCalls':calls,'isolationProof':isolation,
-            'action':observation.get('action'),'qualificationStatus':'BLOCKED'}
+            'action':observation.get('action'),'selectedFeeKoinu':observation.get('selectedFeeKoinu'),
+            'qualificationStatus':'BLOCKED'}

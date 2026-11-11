@@ -31,7 +31,10 @@ jobs:
       - name: Verify frozen harness and offline guards
         run: |
           set -euo pipefail
+          mkdir -p dist/policy-evidence
+          git rev-parse HEAD > dist/policy-evidence/execution-commit.txt
           git diff --exit-code 497621f4bfecfb6b3f574ca3234a769091ef454e HEAD -- asset-exchange/qualification/dogecoin/
+          bash -n asset-exchange/qualification/dogecoin/policy/build-dependencies.sh
           python3 -m unittest discover -s asset-exchange/qualification/dogecoin/policy -p 'test_*.py' -v
       - name: Fetch exact upstream source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -40,25 +43,29 @@ jobs:
           ref: e0a1c157791544e818c901bd9341896965afbf9d
           path: dist/doge-policy-source
           persist-credentials: false
-      - name: Install diagnostic build prerequisites
-        timeout-minutes: 10
+      - name: Fetch pinned official Boost dependency
+        timeout-minutes: 12
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: boostorg/boost
+          ref: a7090e8ce184501cfc9e80afa6cafb5bfd3b371c
+          submodules: recursive
+          path: dist/doge-policy-boost
+          persist-credentials: false
+      - name: Fetch pinned official Libevent dependency
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: libevent/libevent
+          ref: 5df3037d10556bfcb675bc73e516978b75fc7bc7
+          path: dist/doge-policy-libevent
+          persist-credentials: false
+      - name: Build pinned diagnostic dependencies without package mirror access
+        timeout-minutes: 20
         run: |
           set -euo pipefail
-          # The runner's Azure HTTP mirror can stall indefinitely. Use signed
-          # official Ubuntu HTTPS repositories with bounded retries/timeouts.
-          source_list="$RUNNER_TEMP/doge-ubuntu.list"
-          cat > "$source_list" <<'APT'
-          deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu jammy main universe
-          deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu jammy-updates main universe
-          deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://security.ubuntu.com/ubuntu jammy-security main universe
-          APT
-          apt_options=(-o "Dir::Etc::sourcelist=$source_list" -o 'Dir::Etc::sourceparts=-'
-            -o Acquire::Retries=1 -o Acquire::https::Timeout=20)
-          sudo timeout 180 apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update
-          sudo DEBIAN_FRONTEND=noninteractive timeout 300 apt-get "${apt_options[@]}" install -y --no-install-recommends \
-            build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev \
-            libboost-system-dev libboost-filesystem-dev libboost-chrono-dev \
-            libboost-program-options-dev libboost-test-dev libboost-thread-dev
+          bash asset-exchange/qualification/dogecoin/policy/build-dependencies.sh \
+            "$GITHUB_WORKSPACE/dist/doge-policy-boost" "$GITHUB_WORKSPACE/dist/doge-policy-libevent" \
+            "$RUNNER_TEMP/doge-policy-prefix" "$GITHUB_WORKSPACE/dist/policy-evidence"
       - name: Build diagnostic test executable without changing implementation
         run: |
           set -euo pipefail
@@ -67,10 +74,15 @@ jobs:
           git -C dist/doge-policy-source diff > dist/policy-evidence/test-registration.patch
           sha256sum asset-exchange/qualification/dogecoin/policy/gpubnb_policy_tests.cpp asset-exchange/qualification/dogecoin/policy/gpubnb_d3_tests.cpp > dist/policy-evidence/test-source.sha256
           g++ --version > dist/policy-evidence/toolchain.txt
-          dpkg-query -W libssl-dev libevent-dev libboost-system-dev libboost-filesystem-dev libboost-chrono-dev libboost-program-options-dev libboost-test-dev libboost-thread-dev >> dist/policy-evidence/toolchain.txt
+          dpkg-query -W libssl-dev autoconf automake libtool >> dist/policy-evidence/toolchain.txt
+          dependency_prefix="$RUNNER_TEMP/doge-policy-prefix"
           cd dist/doge-policy-source
           ./autogen.sh > ../policy-evidence/autogen.log 2>&1
-          ./configure --disable-wallet --without-gui --without-miniupnpc --disable-zmq --disable-bench --disable-man --enable-tests CXXFLAGS='-O1 -g0' > ../policy-evidence/configure.log 2>&1
+          PKG_CONFIG_PATH="$dependency_prefix/lib/pkgconfig" ./configure \
+            --disable-wallet --without-gui --without-miniupnpc --disable-zmq --disable-bench --disable-man --enable-tests \
+            --with-boost="$dependency_prefix" --with-boost-libdir="$dependency_prefix/lib" \
+            CPPFLAGS="-I$dependency_prefix/include" LDFLAGS="-L$dependency_prefix/lib" CXXFLAGS='-O1 -g0' \
+            > ../policy-evidence/configure.log 2>&1
           make -j2 -C src test/test_dogecoin > ../policy-evidence/build.log 2>&1
           sha256sum src/test/test_dogecoin > ../policy-evidence/diagnostic-binary.sha256
           sha256sum src/dogecoin-fees.cpp src/txmempool.cpp src/validation.cpp src/script/interpreter.cpp src/test/test_bitcoin.cpp src/chainparams.cpp src/policy/policy.h > ../policy-evidence/implementation.sha256

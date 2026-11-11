@@ -31,6 +31,8 @@ Dogecoin's COPYING was examined: MIT license. The new tests use upstream public 
 
 ## Manual integration
 
+The initial11November2026 manual launches did not reach compilation: the runner's Ubuntu package mirror stalled and a bounded official HTTPS retry failed at DNS resolution. These are infrastructure failures, not native test results. The next diagnostic build compiles the same dependency versions from official Git sources: Boost1.74.0 at a7090e8ce184501cfc9e80afa6cafb5bfd3b371c (including every exact gitlinked submodule) and Libevent2.1.12 at5df3037d10556bfcb675bc73e516978b75fc7bc7. Their BSL1.0/BSD licenses were read. The existing Dogecoin dependency recipe's Boost library selection and Libevent configure options are reused; upstream Dogecoin implementations remain unchanged. The source dependency builder verifies clean exact commits/submodule states before executing either build, records license/source/library hashes, uses only the existing OpenSSL development package, and has fixed CPU/address-space/time bounds. This route is diagnostic-only and does not replace D0 binaries.
+
 The existing workflow remains `workflow_dispatch` only. A `diagnostic_suite` choice (`policy`, `d3`) is passed as a quoted argument through a controlled environment variable. It records both diagnostic source hashes and all relevant implementation hashes. After integrating this commit, the orchestrating parent must freeze the final harness SHA and exact branch in that workflow before any manual execution; the inherited branch/SHA guard is intentionally not replaced with a guessed commit here.
 
 Example runner command inside the already verified private namespace:

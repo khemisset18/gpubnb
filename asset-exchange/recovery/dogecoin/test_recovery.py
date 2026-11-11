@@ -127,6 +127,15 @@ class RecoveryTests(unittest.TestCase):
             rpc=FakeRpc(self.bundle,state,rate)
             with self.assertRaisesRegex(ValueError,reason):recovery.rebroadcast(self.bundle,rpc)
             self.assertFalse(any(m=='sendrawtransaction' for m,_ in rpc.calls))
+    def test_falling_fee_floor_rebroadcasts_the_existing_pending_variant(self):
+        rpc=FakeRpc(self.bundle,'PENDING',rate='0')
+        rpc.index=1
+        with patch.object(fixture_module.EphemeralSigner,'sign',side_effect=AssertionError('no signer')):
+            result=recovery.rebroadcast(self.bundle,rpc)
+        self.assertEqual(result['refundTxid'],self.bundle['refunds'][1]['txid'])
+        self.assertEqual(result['selectedFeeKoinu'],self.bundle['refunds'][1]['feeKoinu'])
+        broadcasts=[p for m,p in rpc.calls if m=='sendrawtransaction']
+        self.assertEqual(broadcasts,[(self.bundle['refunds'][1]['transactionHex'],)])
     def test_confirmed_refund_is_idempotent_and_equal_lock_is_nonfinal(self):
         rpc=FakeRpc(self.bundle,'CONFIRMED');result=recovery.rebroadcast(self.bundle,rpc)
         self.assertEqual(result['action'],'ALREADY_CONFIRMED')

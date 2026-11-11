@@ -1,0 +1,62 @@
+{
+  "artifactId": 13871291677,
+  "artifactSha256": "835ccff965ac7412f6a24f722205e943b7b2b9afb0cf2dc51bc42b49af3bf1c0",
+  "attempt": 1,
+  "checks": {
+    "archiveAndInternalDigests": true,
+    "exactDaemonRpcMethodCounteraudit": true,
+    "lowFeeNativeRejectionAndAbsence": true,
+    "publicRefundSignaturesAndTerms": true,
+    "selectedExactPresignedBytes": true,
+    "selectedValueAndDestinationConfirmedOnBothNodes": true
+  },
+  "executionCommit": "f9c490d5dcf07239501ef51406da365b31d50d63",
+  "experimentStatus": "PASS",
+  "fork": {
+    "aHeight": 1357,
+    "aRollbackDepth": 3,
+    "bHeight": 1359,
+    "commonHeight": 1354,
+    "winningBranchLength": 5
+  },
+  "generatedBlocks": 1363,
+  "harnessCommit": "497621f4bfecfb6b3f574ca3234a769091ef454e",
+  "jobId": 130639965571,
+  "keylessFees": {
+    "feeCapKoinu": "1000000",
+    "fundingValueKoinu": "100000000",
+    "keysUnavailable": true,
+    "lowFeeKoinu": "100000",
+    "lowFeeTxid": "2f36ba4782794013403521a12ea14dc68b96afbd30f5932ff8cafba93d896c43",
+    "nativeLowFeeRejection": {
+      "exitCode": 26,
+      "reason": "error code: -26\nerror message:\n66: insufficient priority\n"
+    },
+    "newSignatureCreated": false,
+    "nodeBRelayDogePerKb": "0.01000000",
+    "pendingReplacementAttempted": false,
+    "retainedValueKoinu": "99000000",
+    "selectedFeeKoinu": "1000000",
+    "selectedTxid": "35b3fa21c14f0a295b2d40272e65d8257da465ae94d2572b7ca417be6b67337d"
+  },
+  "limits": [
+    "Not arbitrary fee coverage",
+    "Not replacement of a pending transaction",
+    "Falling-floor pending rerelay regression fixed later; not covered by this artifact",
+    "Not physical second machine or hardware signer",
+    "External D9 audit missing"
+  ],
+  "qualificationStatus": "BLOCKED",
+  "recoveryBundleSha256": "3a2ce67a84434cd307bd760b992b3584e6751119ab857d6eeeafa78260aa5d7e",
+  "recoveryTransitions": [
+    "PENDING",
+    "CONFIRMED",
+    "REORGED",
+    "CONFIRMED"
+  ],
+  "rpcCalls": 206,
+  "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43054425427",
+  "schemaVersion": 1,
+  "scope": "native private Regtest pre-signed fee selection after signer removal; no pending replacement",
+  "settlementAllowed": false
+}

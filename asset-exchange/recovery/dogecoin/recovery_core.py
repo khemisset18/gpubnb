@@ -213,9 +213,13 @@ def rebroadcast(bundle,rpc,previous=None):
         required=(rate*(len(entry['transactionHex'])//2)+999)//1000
         if amount(entry['feeKoinu'])>=required:eligible.append(entry)
     require(eligible,'no pre-signed refund covers current fee floor; signatory or new authorization required')
-    entry=min(eligible,key=lambda x:amount(x['feeKoinu']))
     if status['state']=='PENDING':
-        require(status['refundTxid']==entry['txid'],'different refund is pending; automatic non-RBF replacement forbidden')
+        # A falling fee floor must not switch an already-pending higher-fee
+        # refund to a cheaper conflicting variant. Re-relay its exact bytes.
+        entry=next((x for x in eligible if x['txid']==status['refundTxid']),None)
+        require(entry is not None,'pending refund no longer covers fee floor; automatic non-RBF replacement forbidden')
+    else:
+        entry=min(eligible,key=lambda x:amount(x['feeKoinu']))
     lock=entry['lockTime'];cutoff=chain['blocks']+1 if lock<500_000_000 else chain['mediantime']
     require(lock<cutoff,'refund is not final for next block')
     require(rpc('sendrawtransaction',entry['transactionHex'])==entry['txid'],'broadcast acknowledgement mismatch')
