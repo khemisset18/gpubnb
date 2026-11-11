@@ -82,7 +82,7 @@ const eur = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maxim
 const eurFine = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:4});
 const num = new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2});
 const inputs = ['quantity','power','electricity','hours','poolFee','purchase'];
-const state = {kind:'gpu',device:'nvidia-rtx-3060',manual:new Map(),live:new Map(),source:'',updatedAt:null};
+const state = {kind:'gpu',device:'nvidia-rtx-3060',manual:new Map(),live:new Map(),source:'',updatedAt:null,feedFetchFailed:false,hasHadFeed:false};
 
 function numberField(id,min,max,optional=false){
   const value = byId(id).value.trim();
@@ -102,7 +102,29 @@ function config(){
   };
 }
 function validConfig(s){return Object.values(s).every(v=>v===null||Number.isFinite(v))&&Number.isInteger(s.quantity);}
-function getRates(id){return state.live.get(id)||[];}
+function liveFeedAvailable(){
+  const age=Date.now()-state.updatedAt;
+  return Number.isFinite(state.updatedAt)&&state.live.size>0 &&
+    age>=-5*60000 && age<=miningCore.MAX_FEED_AGE_MS;
+}
+function savedFeed(){
+  return liveFeedAvailable() && (state.feedFetchFailed ||
+    Date.now()-state.updatedAt>miningCore.RECENT_FEED_MS);
+}
+function getRates(id){return liveFeedAvailable()?(state.live.get(id)||[]):[];}
+function renderFeedStatus(){
+  const el=byId('feedStatus'),active=liveFeedAvailable(),saved=savedFeed();
+  el.classList.toggle('live',active&&!saved);
+  el.replaceChildren();
+  const dot=document.createElement('span');dot.className='tiny-dot';
+  const text=active?
+    (saved?'Dernier relevé sauvegardé · ':'Source : ')+state.source+
+      ' · '+new Date(state.updatedAt).toLocaleString('fr-FR')+
+      (saved?' · conservation maximum 24 h':''):
+    state.hasHadFeed?'Service indisponible · aucun rendement automatique valide de moins de 24 h':
+      'Mode manuel · Pas de flux temps réel connecté';
+  el.append(dot,document.createTextNode(' '+text));
+}
 function rateFor(id){
   if(state.manual.has(id))return {gross:state.manual.get(id),mode:'manual'};
   const options=getRates(id);
@@ -157,8 +179,9 @@ function renderResults(){
   put('roiOut',data&&s.purchase!=null&&s.purchase>0?
     data.net>0?num.format(Math.ceil(s.purchase*s.quantity/data.net))+' j':'Non rentable':'—');
   const rate=rateFor(state.device),mode=byId('resultBadge');
-  mode.textContent=!rate?'À renseigner':rate.mode==='live'?'Source connectée':'Calcul manuel';
-  mode.classList.toggle('live',Boolean(rate&&rate.mode==='live'));
+  mode.textContent=!rate?'À renseigner':rate.mode==='live'?(savedFeed()?'Relevé sauvegardé':'Source connectée'):'Calcul manuel';
+  mode.classList.toggle('live',Boolean(rate&&rate.mode==='live'&&!savedFeed()));
+  renderFeedStatus();
   for(const id of ['day','month','year','netOut']){
     byId(id).classList.toggle('negative',Boolean(data&&data.net<0));
     byId(id).classList.toggle('positive',Boolean(data&&data.net>0));
@@ -226,15 +249,14 @@ async function refreshFeed(){
     if(!response.ok)throw Error('Flux indisponible');
     const parsed=validateFeed(await response.json());
     if(!parsed)throw Error('Aucune donnée fraîche');
+    if(Number.isFinite(state.updatedAt)&&parsed.ts<state.updatedAt)
+      throw Error('Réponse arrivée en retard : ne pas remplacer un relevé plus récent');
     state.live=parsed.map;state.source=parsed.source;state.updatedAt=parsed.ts;
-    const el=byId('feedStatus');el.classList.add('live');el.replaceChildren();
-    const dot=document.createElement('span');dot.className='tiny-dot';
-    el.append(dot,document.createTextNode(' Source : '+state.source+' · '+new Date(parsed.ts).toLocaleString('fr-FR')));
+    state.feedFetchFailed=false;state.hasHadFeed=true;
   }catch{
-    state.live=new Map();state.source='';state.updatedAt=null;
-    const el=byId('feedStatus');el.classList.remove('live');el.replaceChildren();
-    const dot=document.createElement('span');dot.className='tiny-dot';
-    el.append(dot,document.createTextNode(' Mode manuel · Pas de flux temps réel connecté'));
+    // Keep the last successful earnings snapshot in memory, without extending its timestamp.
+    // getRates() hides it automatically once it is older than 24 hours.
+    state.feedFetchFailed=true;
   }
   syncRateInput();renderResults();
 }
