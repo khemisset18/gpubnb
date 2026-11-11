@@ -1,0 +1,56 @@
+{
+  "additionalBaselineCheck": {
+    "noNewAllowlistOrSuppression": true,
+    "rawSerializableCalls": [
+      "apps/api/src/accelerator-heartbeat-service.ts:85",
+      "apps/api/src/server.ts:98",
+      "apps/api/src/server.ts:220"
+    ],
+    "serializableGuard": "FAIL",
+    "sourceFilesUnchanged": true
+  },
+  "fixedAdvisories": [
+    "https://github.com/advisories/GHSA-3g3m-2fjr-6pw4",
+    "https://github.com/advisories/GHSA-g3hv-75wg-m249"
+  ],
+  "license": "MIT",
+  "lockSha256": {
+    "apps/api/package-lock.json": "650bd7e1d7a757065418f050daedabf9af2534b7c98f660b776297cd6cf09ba9",
+    "package-lock.json": "eec8bb79e6df379c6b6899dfdcac8c92d9cec960166168bd4cfb113bac70f86e"
+  },
+  "qualificationStatus": "BLOCKED",
+  "remainingGeneralCiRustFindings": [
+    "GHSA-fjx5-qpf4-xjf2 (borsh0.10.4)",
+    "GHSA-wrw7-89jp-8q8g (glib0.18.5)",
+    "GHSA-cq8v-f236-94qc (rand0.7.3)"
+  ],
+  "schemaVersion": 1,
+  "triggerRun": "https://github.com/khemisset18/gpubnb/actions/runs/43057237120",
+  "upstreamRelease": "https://github.com/fastify/fastify-static/releases/tag/v10.1.10",
+  "validation": {
+    "apiTypeScriptBuild": "PASS",
+    "focusedSecurityAndHttpTests": {
+      "failed": 0,
+      "passed": 9
+    },
+    "nativeDogeEffects": "NONE"
+  },
+  "versions": {
+    "apps/api/package-lock.json": {
+      "@fastify/send": "4.2.1",
+      "@fastify/static": "10.1.10",
+      "content-disposition": "3.0.0",
+      "glob": "14.0.4",
+      "minimatch": "11.0.8",
+      "path-scurry": "3.0.0"
+    },
+    "package-lock.json": {
+      "@fastify/send": "4.2.1",
+      "@fastify/static": "10.1.10",
+      "content-disposition": "3.0.0",
+      "glob": "14.0.4",
+      "minimatch": "11.0.8",
+      "path-scurry": "3.0.0"
+    }
+  }
+}

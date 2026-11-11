@@ -1,6 +1,6 @@
 # DOGE D3 native diagnostic suite — 11 November 2026
 
-Status: implemented; native compilation/execution NOT_TESTED. No D3 qualification decision is granted. Nine Python safety/orchestration guards pass. A syntax-only compiler invocation stops at missing boost/foreach.hpp in the local environment, before parsing the new test file; compilation success is not claimed. No Dogecoin executable/library has been run for this work.
+Status: native execution NOT_TESTED. No D3 qualification decision is granted. Nine Python safety/orchestration guards pass. Run43057545782 successfully built pinned official dependencies and reached diagnostic compilation; it caught the missing chainparams.h include for Params() in the new test file. That include is now explicit; successful compilation and all four native cases must still be observed in the manual retry. Upstream Dogecoin implementations remain unchanged.
 
 The existing policy diagnostic build now also registers `gpubnb_d3_tests.cpp`. The default runner selection remains `policy`. Its optional fifth argument `d3` selects exactly four D3 cases, with distinct case count and mandatory metric markers. An unknown suite fails before any subprocess or binary read. Namespace isolation, source/binary hashes, CPU 180 s, address space 2 GiB, file limit 64 MiB and wall time 240 s remain required. Both source diagnostics remain separate from the D0-qualified executable.
 
