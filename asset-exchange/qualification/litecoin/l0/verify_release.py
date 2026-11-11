@@ -107,7 +107,7 @@ def assert_signer(status: bytes, expected_fingerprint: str) -> None:
             # GPG may sign with a subkey; the last optional fingerprint
             # identifies its primary key. Both must be explicitly anchored.
             known = {fields[1]}
-            if len(fields) >= 12 and FINGERPRINT.fullmatch(fields[-1]):
+            if len(fields) >= 11 and FINGERPRINT.fullmatch(fields[-1]):
                 known.add(fields[-1])
             valid.append(known)
     if good != 1 or len(valid) != 1 or fingerprint not in valid[0]:
