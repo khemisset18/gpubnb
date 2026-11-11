@@ -5,6 +5,7 @@ import { parseMoneroHeader } from './monero-direct.mjs';
 
 export const BLOCK_SAMPLE = 30;
 export const MAX_SNAPSHOT_AGE_MS = 20 * 60 * 1000;
+export const MAX_PUBLIC_AGE_MS = 5 * 60 * 60 * 1000;
 const finitePositive = n => typeof n === 'number' && Number.isFinite(n) && n > 0;
 
 function positiveInteger(value) {
@@ -67,14 +68,20 @@ export function makeMoneroSnapshot(infoRpc, lastRpc, rangeRpc, now = Date.now())
 export function validateMoneroSnapshot(doc, now = Date.now()) {
   if (!doc || doc.schemaVersion !== 1 || doc.coin !== 'XMR' ||
     doc.algorithm !== 'RandomX' || doc.network !== 'mainnet' ||
-    doc.source !== 'own-monero-node' || doc.sampleBlocks !== BLOCK_SAMPLE ||
+    (!['own-monero-node','public-monero-rpc'].includes(doc.source)) ||
+    (doc.source==='public-monero-rpc'&&(
+      !Array.isArray(doc.operators)||doc.operators.length!==2||
+      doc.operators[0]!=='monero.rs'||doc.operators[1]!=='nodely.io'||
+      doc.crossCheckedAt!==doc.collectedAt)) ||
+    doc.sampleBlocks !== BLOCK_SAMPLE ||
     !Number.isSafeInteger(doc.blockHeight) || doc.blockHeight < 1978433 ||
     !finitePositive(doc.difficulty) || !finitePositive(doc.rewardXmr) ||
     doc.rewardXmr > 25 || doc.quality !== 'estimated-from-30-blocks') return null;
   const collected = Date.parse(doc.collectedAt || '');
   const block = Date.parse(doc.blockTimestamp || '');
   if (!Number.isFinite(collected) || !Number.isFinite(block) ||
-    collected > now + 5*60000 || now - collected > MAX_SNAPSHOT_AGE_MS ||
+    collected > now + 5*60000 ||
+    now-collected > (doc.source==='public-monero-rpc'?MAX_PUBLIC_AGE_MS:MAX_SNAPSHOT_AGE_MS) ||
     block > collected + 5*60000 || collected - block > 30*60000 ||
     !Number.isFinite(now)) return null;
   return Object.freeze({ difficulty: doc.difficulty, rewardXmr: doc.rewardXmr,
