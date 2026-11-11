@@ -1,0 +1,34 @@
+{
+  "assumptions": {
+    "blockHashUsesDoubleSha256OfChildHeader": true,
+    "loadblockRevalidatesPublicBlocks": true,
+    "nodeDatabaseTransferRequired": false,
+    "proofOfWorkUsesScryptNotTheChildIdentityHash": true,
+    "rawGetblockBooleanFalseSupported": true,
+    "regtestMessageMagicHex": "fabfb5da",
+    "sameHostContainerIsPhysicalMachine": false
+  },
+  "baseCommit": "26e27eb06bd22b7aa029c5b60e307c54138993df",
+  "basePr": 356,
+  "hostedVmDocumentation": {
+    "checkedAt": "2026-11-11",
+    "selectedImage": "ubuntu-24.04",
+    "separatePhysicalHostsProven": false,
+    "url": "https://docs.github.com/en/actions/concepts/runners/github-hosted-runners"
+  },
+  "nativeSource": {
+    "commit": "e0a1c157791544e818c901bd9341896965afbf9d",
+    "license": "MIT",
+    "readFilesSha256": {
+      "COPYING": "ff692211a86e69de91712125c9d6015fa5b1d15125329f80c09a9b61ec464bf6",
+      "src/chainparams.cpp": "150d3733903d05f22e2ce3bc195a65f99ced183e16f2e75f52a72d0df8ec5d9c",
+      "src/init.cpp": "fffc4fe0fbf7031043b3bc75fb615b5e4a298d2cdcf81dd28dc44a06af206a4e",
+      "src/primitives/pureheader.cpp": "4078e166e5fa04250e142fd9aef94c3a06b850b1be14b6cf0872ec6fd076b27e",
+      "src/rpc/blockchain.cpp": "219a002f86ba8f9e9d1a862cb9d76a255c5c6ae56f5ff94d592a31c4e5698455",
+      "src/validation.cpp": "e9f13df6a83e057fba52f3525fec894ba13a1dcec52be3cf71b13fd181c79e00"
+    },
+    "release": "1.14.9",
+    "repository": "https://github.com/dogecoin/dogecoin"
+  },
+  "schemaVersion": 1
+}

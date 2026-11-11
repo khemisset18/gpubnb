@@ -53,14 +53,15 @@ def run_fee_suite(c):
     result={'requiredScenarios':15,'cases':[],'qualificationStatus':'BLOCKED',
             'profileSequence':0xfffffffe,'nativeOptInControlSequence':0xfffffffd,
             'previousQualifiedSuiteRepeated':False,'pressureTransactionsSubmitted':0}
-    report['feePinning']=result;save()
+    producing=c.get('handoff') is not None
+    report['recoveryPreparation' if producing else 'feePinning']=result;save()
     def record(number,**details):
         require(number in SCENARIOS and all(r['id']!=number for r in result['cases']),'unique required scenario')
         name,scope=SCENARIOS[number]
         result['cases'].append({'id':number,'name':name,'expectationScope':scope,'status':'PASS',**details});save()
     rpc('a','addnode','127.0.0.1:18445','onetry')
     wait('fee-lab private peers',lambda:peers('a') and peers('b'))
-    mine('a',1352);initial=wait('fee-lab initial relay',sync)
+    canonical=mine('a',1352);initial=wait('fee-lab initial relay',sync)
     require(initial['blocks']==1352,'unexpected fee-lab activation height')
     def coinbase(height):
         bh=rpc('a','getblockhash',str(height));c['blocks'].add(bh)
@@ -132,7 +133,9 @@ def run_fee_suite(c):
     unfunded=bundle(unconfirmed,0,COIN-1_000_000,[(unconfirmed_refund,1_000_000)],1_000_000)
     require(c['bundle_validator'] is not None,'pre-lock semantic validator required')
     receipts={}
-    for label,b in [('main',main),('cap',capped),('parent',unfunded)]:
+    ready=[('main',main),('cap',capped),('parent',unfunded)]
+    if producing:ready.append(('conflict',bundle(funding,1,COIN,[(pinned_refund,2_000_000)],2_000_000)))
+    for label,b in ready:
         c['bundle_validator'](b);path=out/('fee-bundle-'+label+'.json')
         receipts[label]=(path,c['persist_bundle'](path,b))
     unauthorized=bundle(funding,2,COIN,[(optlow,1_000_000)],1_000_000)
@@ -144,8 +147,13 @@ def run_fee_suite(c):
     result['keysRemovedBeforeFunding']=True;result['preLockBundleDigests']={k:v[1] for k,v in receipts.items()};save()
     submit('a',funding);submit('a',pressure_parent)
     wait('private funding relay',lambda:_id(funding) in rpc('b','getrawmempool'))
-    mine('a');mine('a',2);wait('mature fee funding relay',sync)
+    canonical+=mine('a');canonical+=mine('a',2);wait('mature fee funding relay',sync)
     for n in ('a','b'):require(tx(n,fid)['confirmations']==3,'funding confirmation mismatch')
+    if producing:
+        c['handoff'](canonical,receipts,{'funding':funding.hex(),'low':low.hex(),'high':high.hex(),
+            'claim':pinned_claim.hex(),'conflictRefund':pinned_refund.hex(),
+            'pressure':[x.hex() for x in pressure]},result['preparedFixtureSha256'])
+        return
     rpc('b','setnetworkactive','false');wait('fee partition',lambda:not peers('a') and not peers('b'))
     def recover(label='main',mode='rebroadcast',error=None):
         path,digest=receipts[label]

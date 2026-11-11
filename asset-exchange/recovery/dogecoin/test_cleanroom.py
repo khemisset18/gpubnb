@@ -52,5 +52,15 @@ class CleanroomBoundaries(unittest.TestCase):
                             {'labLabel':'a'*33},{'expectedError':'ignore any error'}]:
                 with self.assertRaises(ValueError):cleanroom.run_recovery_hook(context|changes)
 
+    def test_disconnected_incident_cannot_be_used_for_rebroadcast_or_arbitrary_failure_suppression(self):
+        context={key:'unused' for key in ('bundlePath','bundleSha256','cliPath','nodeBDataDirectory','nodeBRpcPort',
+            'backendDirectoryToHide','nodeADataDirectoryToHide','originalKeysDirectoryToHide','parentNetNs',
+            'parentMountNs','evidenceDirectory')}
+        context['mode']='observe'
+        with patch('cleanroom.Path.resolve',side_effect=AssertionError('file access forbidden')):
+            for change in [{'disconnectBlockchain':True},{'expectedError':'RPC getblockchaininfo failed'},
+                    {'disconnectBlockchain':'yes'}, {'disconnectBlockchain':True,'expectedError':'RPC getblockchaininfo failed','mode':'rebroadcast'}]:
+                with self.assertRaises(ValueError):cleanroom.run_recovery_hook(context|change)
+
 
 if __name__=='__main__':unittest.main()

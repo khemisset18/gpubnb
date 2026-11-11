@@ -35,6 +35,8 @@ P2P_PORTS = {'a':18444, 'b':18445}
 RPC_PORTS = {'a':18332, 'b':18333}
 MAX_BLOCKS, MAX_RPC, MAX_FIXTURES = 1370, 480, 8
 FEE_MAX_FIXTURES, FEE_MAX_BYTES = 96, 60000
+VM_SUITES=('recovery-handoff','recovery-independent','recovery-resume')
+LAB_SUITES=('multinode','fee-pinning',*VM_SUITES)
 METHODS = frozenset({'getblockchaininfo','getblockhash','getnetworkinfo','getpeerinfo',
     'generatetoaddress','getblock','getrawtransaction','gettxout','sendrawtransaction',
     'getmempoolentry','getrawmempool','getblockheader','getmempoolinfo','addnode','setnetworkactive','invalidateblock','reconsiderblock','stop',
@@ -42,7 +44,7 @@ METHODS = frozenset({'getblockchaininfo','getblockhash','getnetworkinfo','getpee
 
 
 def manifest(lab_suite='multinode'):
-    require(lab_suite in ('multinode','fee-pinning'),'fixed laboratory suite required')
+    require(lab_suite in LAB_SUITES,'fixed laboratory suite required')
     result={'schemaVersion':1,'authorization':AUTHORIZATION,'network':'regtest','labSuite':lab_suite,
         'sourceCommit':SOURCE_COMMIT,'archiveSha256':SHA256,'librarySha256':LIBRARY_SHA256,
         'nodes':2,'peerEndpoints':[f'127.0.0.1:{P2P_PORTS[x]}' for x in NODES],
@@ -57,18 +59,24 @@ def manifest(lab_suite='multinode'):
         'promiscuousMempoolFlags':None,'settlementAllowed':False,'qualificationStatus':'BLOCKED',
         'notCovered':['independent external review','complete AuxPoW adversarial matrix beyond eight fixed fixtures',
             'production watcher deployment','all D0-D9 requirements']}
-    if lab_suite=='fee-pinning':
+    if lab_suite in ('fee-pinning',*VM_SUITES):
         result.update(maxBroadcastFixtures=FEE_MAX_FIXTURES,maxFixtureBytes=FEE_MAX_BYTES,
             rpcAllowlist=sorted(METHODS|{'setmocktime'}),maxRpc=800,maxPressureTransactions=80,
             maxPressureOutputsPerTransaction=1601,maxMockTimeAdvanceSeconds=21600,
             replacementPolicy={'a':'upstream default enabled, explicit opt-in required','b':'explicitly disabled'},
             repeatsPreviouslyQualifiedSuite=False)
+        if lab_suite in VM_SUITES:
+            result.update(rpcAllowlist=sorted(METHODS),maxRpc=1800 if lab_suite=='recovery-handoff' else 800,
+                maxGeneratedBlocks=1370 if lab_suite=='recovery-handoff' else 16,
+                importedPublicBlocksMaximum=1362,physicalMachineIndependence='NOT_TESTED',
+                signingAllowed=lab_suite=='recovery-handoff',maxObservedRollbackDepth=4,
+                maxMockTimeAdvanceSeconds=0,keys='producer: ephemeral keys removed before funding; consumer: no signing keys')
     return result
 
 
 def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted, aux_submitted=frozenset(),
                  lab_suite='multinode',mocktimes=frozenset()):
-    require(lab_suite in ('multinode','fee-pinning'),'fixed laboratory suite required')
+    require(lab_suite in LAB_SUITES,'fixed laboratory suite required')
     methods=METHODS|({'setmocktime'} if lab_suite=='fee-pinning' else set())
     require(node in NODES and method in methods, 'fixed node/method required')
     require(type(params) in (tuple,list) and all(type(p) is str for p in params), 'string RPC parameters required')
@@ -77,6 +85,8 @@ def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted, a
         require(len(params)==4 and params[0] in ('1352','1','2','4')
                 and params[1]==addresses[node] and params[2]=='1000000'
                 and params[3]==('0' if params[0]=='1352' else '1'), 'bounded mining parameters required')
+        require(lab_suite not in ('recovery-independent','recovery-resume') or params[0]!='1352',
+                'consumer may replay public blocks but cannot remine initial chain')
     elif method=='addnode':
         other='b' if node=='a' else 'a'
         require(params==(f'127.0.0.1:{P2P_PORTS[other]}','onetry'), 'only fixed private peer allowed')
@@ -84,7 +94,9 @@ def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted, a
     elif method=='setmocktime':require(len(params)==1 and params[0] in mocktimes,'registered private mock clock required')
     elif method=='getblockhash':require(len(params)==1 and re.fullmatch(r'0|[1-9][0-9]{0,3}',params[0]) is not None
                 and int(params[0])<=MAX_BLOCKS,'bounded active-chain height required')
-    elif method in ('getblock','invalidateblock','reconsiderblock'):require(len(params)==1 and params[0] in blocks, 'registered block required')
+    elif method=='getblock':require((len(params)==1 or (lab_suite in VM_SUITES and len(params)==2 and params[1]=='false'))
+                and params[0] in blocks,'registered block and permitted encoding required')
+    elif method in ('invalidateblock','reconsiderblock'):require(len(params)==1 and params[0] in blocks, 'registered block required')
     elif method=='getblockheader':require(len(params) in (1,2) and params[0] in blocks
                 and params[1:] in ((),('true',)),'registered verbose block header required')
     elif method=='getrawtransaction':require(len(params)==2 and params[0] in txids and params[1]=='1','registered verbose transaction required')
@@ -180,6 +192,19 @@ def run(args, recovery_runner=None, bundle_validator=None):
     def save():
         (out/'multinode-report.json').write_text(dump(report));(out/'rpc-requests.json').write_text(dump(trace))
     save();report['members']=extract_verified_members(evidence/ARCHIVE,sbom,bins)
+    handoff_root=getattr(args,'handoff_directory',None);handoff_manifest=None
+    if lab_suite in VM_SUITES:
+        require(re.fullmatch('[0-9a-f]{40}',getattr(args,'execution_commit','') or '') is not None,
+                'exact VM experiment execution commit required')
+    if lab_suite in ('recovery-independent','recovery-resume'):
+        from vm_recovery import load_parcel
+        require(handoff_root is not None,'independently retained handoff required')
+        handoff_manifest=load_parcel(handoff_root,getattr(args,'handoff_sha256',None))
+        require(handoff_manifest['executionCommit']==args.execution_commit,'VM handoff source differs from dispatched execution')
+        require(set(handoff_manifest['addresses'])==set(NODES)
+                and all(re.fullmatch('[mn][1-9A-HJ-NP-Za-km-z]{25,34}',v) for v in handoff_manifest['addresses'].values()),
+                'fixed public Regtest mining destinations required')
+        addresses.update(handoff_manifest['addresses'])
     resource.setrlimit(resource.RLIMIT_CPU,(600,600));resource.setrlimit(resource.RLIMIT_AS,(2*1024**3,2*1024**3))
     resource.setrlimit(resource.RLIMIT_FSIZE,(512*1024**2,512*1024**2))
     def alarm(*_):raise TimeoutError('private multi-node wall-time budget')
@@ -189,7 +214,7 @@ def run(args, recovery_runner=None, bundle_validator=None):
         validate_rpc(node,method,params,addresses=addresses,blocks=blocks,txids=txids,submitted=submitted,
             aux_submitted=aux_submitted,lab_suite=lab_suite,mocktimes=mocktimes)
         require(len(trace)+len(external_calls)<rpc_limit,'RPC budget exceeded')
-        if method=='generatetoaddress':generated+=int(params[0]);require(generated<=MAX_BLOCKS,'block budget exceeded')
+        if method=='generatetoaddress':generated+=int(params[0]);require(generated<=limits['maxGeneratedBlocks'],'block budget exceeded')
         if method=='submitauxblock':require(generated<MAX_BLOCKS,'AuxPoW block budget exceeded')
         row={'source':node,'method':method,'params':list(params)};trace.append(row);save()
         result=subprocess.run([str(bins/'dogecoin-cli'),*common[node],'-rpcconnect=127.0.0.1',method,*params],
@@ -205,7 +230,7 @@ def run(args, recovery_runner=None, bundle_validator=None):
         if not value:return None
         try:return json.loads(value,parse_float=Decimal)
         except json.JSONDecodeError:return value
-    def start(node):
+    def start(node,import_file=None):
         data=work/('data-'+node)
         if node not in common:
             data.mkdir(mode=0o700);config=data/'dogecoin.conf';config.write_text('regtest=1\ntestnet=0\n');config.chmod(0o600)
@@ -217,8 +242,13 @@ def run(args, recovery_runner=None, bundle_validator=None):
             '-rpcallowip=127.0.0.1','-printtoconsole=1','-dbcache=32','-par=1','-acceptnonstdtxn=0','-maxmempool=5',
             '-harddustlimit='+('0.002' if node=='b' else '0.001'),
             '-minrelaytxfee='+('0.01' if node=='b' else '0.001')]
-        if lab_suite=='fee-pinning':
+        if lab_suite in ('fee-pinning',*VM_SUITES):
             daemon+=['-mempoolreplacement='+('0' if node=='b' else '1'),'-debug=mempoolrej']
+        if import_file is not None:
+            require(lab_suite in ('recovery-independent','recovery-resume') and handoff_root is not None
+                    and Path(import_file).resolve()==Path(handoff_root).resolve()/'public-chain.dat',
+                    'only verified public block handoff may be imported')
+            daemon+=['-loadblock='+str(import_file)]
         report.setdefault('processStarts',[]).append({'source':node,'arguments':[x.replace(str(data),'PRIVATE_DATADIR') for x in daemon[1:]]})
         processes[node]=subprocess.Popen(daemon,env=env,stdout=log,stderr=subprocess.STDOUT)
         deadline=time.monotonic()+45
@@ -292,9 +322,25 @@ def run(args, recovery_runner=None, bundle_validator=None):
             pool.rename(backup)
             entry['retainedTestDumpSha256']=hashlib.sha256(backup.read_bytes()).hexdigest()
         report.setdefault('feeRestarts',[]).append(entry);save();return start(node)
+    def import_chain(path,tip,height):
+        require(lab_suite in ('recovery-independent','recovery-resume') and handoff_manifest is not None
+                and tip==handoff_manifest['blocks'][-1] and height==len(handoff_manifest['blocks']),
+                'verified independent public chain required')
+        for node in NODES:
+            rpc(node,'stop');processes[node].wait(timeout=15);logs[node].close()
+            require(processes[node].returncode==0,'unclean genesis node stop')
+            start(node,path)
+            wait_for('public block import '+node,lambda:rpc(node,'getblockchaininfo').get('bestblockhash')==tip)
+        require(synchronized()['blocks']==height,'public replay height mismatch')
+        report['publicReplay']={'blocks':height,'tip':tip,'nodeDatabasesTransferred':False,
+            'streamSha256':hashlib.sha256(path.read_bytes()).hexdigest()};save()
     def independent_fee_recovery(context):
-        require(lab_suite=='fee-pinning' and recovery_runner is not None,'standalone fee recovery required')
-        require(len(report.get('feeRecoveryCalls',[]))<12,'bounded fee recovery invocations required')
+        require(lab_suite in ('fee-pinning','recovery-independent','recovery-resume') and recovery_runner is not None,'standalone fee recovery required')
+        label='feeRecoveryCalls' if lab_suite=='fee-pinning' else 'independentRecoveryCalls'
+        require(len(report.get(label,[]))<(12 if lab_suite=='fee-pinning' else 24),'bounded fee recovery invocations required')
+        disconnected=context.get('disconnectBlockchain',False)
+        require(type(disconnected) is bool and (not disconnected or lab_suite=='recovery-independent'),
+                'disconnect injection only in independent VM incident scope')
         node=context.pop('source','a')
         require(node in NODES,'fixed recovery source required')
         remaining=rpc_limit-len(trace)-len(external_calls)
@@ -309,9 +355,9 @@ def run(args, recovery_runner=None, bundle_validator=None):
         for call in calls:
             require(set(call)=={'method','params'},'exact recovery RPC row required')
             validate_rpc(node,call['method'],call['params'],addresses=addresses,blocks=blocks,txids=txids,submitted=submitted)
-        external_calls.extend({'source':node,**c} for c in calls)
+        external_calls.extend({'source':node,'reachedServer':not disconnected,**c} for c in calls)
         result.update(source=node,labLabel=context.get('labLabel',''))
-        report.setdefault('feeRecoveryCalls',[]).append(result);save();return result
+        report.setdefault(label,[]).append(result);save();return result
     def finish():
         for n in NODES:
             check_peers(rpc(n,'getpeerinfo'));rpc(n,'stop');processes[n].wait(timeout=15);logs[n].close()
@@ -320,7 +366,7 @@ def run(args, recovery_runner=None, bundle_validator=None):
             methods=re.findall(r'ThreadRPCServer method=([a-zA-Z0-9_]+)',(out/('daemon-'+n+'.log')).read_text())
             from collections import Counter
             expected=Counter(t['method'] for t in trace if t['source']==n and t.get('reachedServer'))
-            expected.update(c['method'] for c in external_calls if c['source']==n)
+            expected.update(c['method'] for c in external_calls if c['source']==n and c.get('reachedServer',True))
             require(set(methods)<=set(limits['rpcAllowlist']) and Counter(methods)==expected,'server method audit mismatch')
         report['namespaceAfter']=json.loads(subprocess.check_output(['ip','-json','link','show'],text=True))
         validate_namespace(parent,os.readlink('/proc/self/ns/net'),report['namespaceAfter'])
@@ -331,18 +377,32 @@ def run(args, recovery_runner=None, bundle_validator=None):
             identity={'blockchain':chain,'genesis':rpc(n,'getblockhash','0'),'network':rpc(n,'getnetworkinfo'),'peers':peer_view(n)}
             validate_network(identity);report.setdefault('initialIdentities',{})[n]=identity
         verify=native_verifier(bins/'libdogecoinconsensus.so.0.0.0')
+        if lab_suite in ('recovery-independent','recovery-resume'):
+            from vm_recovery import consume
+            consume(dict(rpc=rpc,submit=submit,mine=mine,tx=tx,wait=wait_for,sync=synchronized,
+                peers=peer_view,recover=independent_fee_recovery,import_chain=import_chain,
+                keys=keys,out=out,report=report,save=save,submitted=submitted,txids=txids,blocks=blocks,
+                addresses=addresses,executionCommit=args.execution_commit),handoff_root,handoff_manifest,
+                resume=lab_suite=='recovery-resume')
+            finish();return
         key_specs=test_key_specs(keys);(keys/'node-b').mkdir(mode=0o700)
         for directory,role in key_specs:signers.append(EphemeralSigner(directory,role))
         miner_a,miner_b,claim,refund=signers
         require(len({x.public for x in signers})==4,'four distinct test keys required')
         for n,key in zip(NODES,(miner_a,miner_b)):addresses[n]=base58check(b'\x6f'+hash160(key.public))
-        if lab_suite=='fee-pinning':
+        if lab_suite in ('fee-pinning','recovery-handoff'):
             from fee_pinning import run_fee_suite
+            handoff=None
+            if lab_suite=='recovery-handoff':
+                from vm_recovery import write_parcel
+                def handoff(canonical,receipts,fixtures,prepared):
+                    return write_parcel(dict(out=out,rpc=rpc,report=report,save=save,addresses=addresses,
+                        executionCommit=args.execution_commit),canonical,receipts,fixtures,prepared)
             run_fee_suite(dict(rpc=rpc,submit=submit,mine=mine,tx=tx,wait=wait_for,sync=synchronized,
                 peers=peer_view,restart=restart,recover=independent_fee_recovery,destroy_keys=destroy_keys,
                 signers=signers,addresses=addresses,blocks=blocks,txids=txids,submitted=submitted,
                 mocktimes=mocktimes,keys=keys,out=out,report=report,save=save,verify=verify,
-                bundle_validator=bundle_validator,persist_bundle=persist_bundle,normalize=normalize_observation))
+                bundle_validator=bundle_validator,persist_bundle=persist_bundle,normalize=normalize_observation,handoff=handoff))
             finish();return
         destination=b'\x76\xa9\x14'+hash160(refund.public)+b'\x88\xac'
         claim_destination=b'\x76\xa9\x14'+hash160(claim.public)+b'\x88\xac'
@@ -567,7 +627,8 @@ def run(args, recovery_runner=None, bundle_validator=None):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--manifest',action='store_true')
-    parser.add_argument('--lab-suite',choices=('multinode','fee-pinning'),default='multinode')
+    parser.add_argument('--lab-suite',choices=LAB_SUITES,default='multinode')
+    parser.add_argument('--handoff-directory');parser.add_argument('--handoff-sha256');parser.add_argument('--execution-commit')
     for name in ('evidence','verification','work','authorization','parent-net-ns'):parser.add_argument('--'+name)
     args=parser.parse_args()
     if args.manifest:print(json.dumps(manifest(args.lab_suite),indent=2,sort_keys=True))

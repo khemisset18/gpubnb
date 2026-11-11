@@ -26,6 +26,7 @@ for name in hidden:
 assert not list(pathlib.Path.cwd().glob('*.pem'))
 record={'separateMountNamespace':True,'backendUnavailable':True,'nodeADataUnavailable':True,
         'originalSigningKeysUnavailable':True,'isolatedPython':True,'walletKeysProvided':False,
+        'networkNamespace':os.readlink('/proc/self/ns/net'),
         'standalonePackageSha256':__import__('hashlib').sha256(pathlib.Path(app).read_bytes()).hexdigest()}
 pathlib.Path(proof).write_text(json.dumps(record,sort_keys=True)+'\\n')
 command=[sys.executable,'-I',app,mode,'--bundle',bundle,'--bundle-sha256',digest,
@@ -47,7 +48,8 @@ PACKAGE_DIGESTS={}
 EXPECTED_REFUSALS=frozenset({
     'funding unavailable or ambiguous; no broadcast',
     'no pre-signed refund covers current fee floor; signatory or new authorization required',
-    'pending refund no longer covers fee floor; automatic non-RBF replacement forbidden'})
+    'pending refund no longer covers fee floor; automatic non-RBF replacement forbidden',
+    'RPC getblockchaininfo failed'})
 
 
 def refresh_service_cookie(source,target):
@@ -79,6 +81,10 @@ def run_recovery_hook(context):
     require(type(label) is str and re.fullmatch('[a-z0-9-]{0,32}',label),'bounded cleanroom label required')
     expected_error=context.get('expectedError')
     require(expected_error is None or expected_error in EXPECTED_REFUSALS,'unsupported expected recovery refusal')
+    disconnected=context.get('disconnectBlockchain',False)
+    require(type(disconnected) is bool and (expected_error=='RPC getblockchaininfo failed')==disconnected,
+            'disconnected incident requires its exact connection refusal')
+    require(not disconnected or context['mode']=='observe','disconnected incident is observation-only')
     out=Path(context['evidenceDirectory']).resolve()
     port=context['nodeBRpcPort']
     require(type(port) is int and port in (18332,18333),'fixed private recovery RPC endpoint required')
@@ -116,7 +122,8 @@ def run_recovery_hook(context):
     args=[str(clean/'doge-recovery.pyz'),str(clean/'bundle.json'),context['bundleSha256'],
           str(clean/'dogecoin-cli'),str(clean/'rpc'),str(context['nodeBRpcPort']),context['parentNetNs'],context['parentMountNs'],
           str(budget),context['mode'],str(clean/'journal.json'),str(trace),str(proof),*hidden]
-    command=['unshare','--mount','--propagation','private','--','/bin/bash','-c',MOUNTS,
+    mount_script=MOUNTS.replace('set -euo pipefail\n','set -euo pipefail\nip link set lo up\n',1) if disconnected else MOUNTS
+    command=['unshare',*(['--net'] if disconnected else []),'--mount','--propagation','private','--','/bin/bash','-c',mount_script,
             'doge-recovery-cleanroom',*hidden,sys.executable,'-I',str(clean/'entry.py'),*args]
     with subprocess.Popen(command,cwd=clean,env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8'},
             stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,start_new_session=True) as child:
@@ -138,8 +145,11 @@ def run_recovery_hook(context):
     require(len(calls)<=budget,'standalone RPC budget exceeded')
     isolation=json.loads(read_regular(proof))
     require(isolation['backendUnavailable'] and isolation['separateMountNamespace'],'backend isolation proof missing')
+    require((isolation['networkNamespace']!=os.readlink('/proc/self/ns/net'))==disconnected,
+            'recovery network incident isolation mismatch')
     return {'txid':observation.get('refundTxid'),'state':observation['state'],
             'transition':observation['transition'],'rpcCalls':calls,'isolationProof':isolation,
             'action':observation.get('action'),'selectedFeeKoinu':observation.get('selectedFeeKoinu'),
             'expectedRefusal':observation.get('error'),
+            'blockchainDisconnected':disconnected,
             'qualificationStatus':'BLOCKED'}
