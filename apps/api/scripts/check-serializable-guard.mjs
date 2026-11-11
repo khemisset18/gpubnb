@@ -24,6 +24,7 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -50,52 +51,37 @@ function listTsFiles(dir) {
   return out;
 }
 
-const TRANSACTION_CALL = /\b(?:db|tx|prisma)\.\$transaction\s*\(/g;
-
-/** Given source and the index right after a call's opening '(', returns the index of its matching ')'. */
-function findMatchingParen(source, openIndex) {
-  let depth = 1;
-  let i = openIndex;
-  while (i < source.length && depth > 0) {
-    const ch = source[i];
-    if (ch === '(') depth++;
-    else if (ch === ')') depth--;
-    // Skip over string/template literals so a ')' or '(' inside a string can't desync depth.
-    else if (ch === '"' || ch === "'" || ch === '`') {
-      const quote = ch;
-      i++;
-      while (i < source.length && source[i] !== quote) {
-        if (source[i] === '\\') i++;
-        i++;
-      }
-    }
-    i++;
+// Parse real calls: quotes and parentheses in comments must not consume later
+// transactions or make an unrelated callback appear Serializable.
+export function findSerializableTransactions(source) {
+  const file = ts.createSourceFile('guard.ts', source, ts.ScriptTarget.Latest, true);
+  const found = [];
+  function containsSerializable(node) {
+    if ((ts.isIdentifier(node) || ts.isStringLiteralLike(node)) && node.text === 'Serializable') return true;
+    return ts.forEachChild(node, containsSerializable) === true;
   }
-  return depth === 0 ? i - 1 : -1;
+  function visit(node) {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && ts.isIdentifier(node.expression.expression)
+      && /^(db|tx|prisma)$/.test(node.expression.expression.text)
+      && node.expression.name.text === '$transaction'
+      && node.arguments.some(containsSerializable)) {
+      found.push({line:file.getLineAndCharacterOfPosition(node.getStart(file)).line+1,
+        snippet:node.getText(file).slice(0,120).replace(/\s+/g,' ')});
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  return found;
 }
 
-function lineNumberAt(source, index) {
-  return source.slice(0, index).split('\n').length;
-}
-
+function main() {
 const violations = [];
 for (const file of listTsFiles(srcDir)) {
   const source = readFileSync(file, 'utf8');
-  for (const match of source.matchAll(TRANSACTION_CALL)) {
-    const openParenIndex = match.index + match[0].length - 1;
-    const closeParenIndex = findMatchingParen(source, openParenIndex + 1);
-    if (closeParenIndex === -1) continue; // unbalanced - shouldn't happen in valid TS, skip rather than false-positive
-    const args = source.slice(openParenIndex + 1, closeParenIndex);
-    if (/\bSerializable\b/.test(args)) {
-      const relFile = path.relative(repoRoot, file).replace(/\\/g, '/');
-      const line = lineNumberAt(source, match.index);
-      if (allowlist.has(`${relFile}:${line}`)) continue;
-      violations.push({
-        file: relFile,
-        line,
-        snippet: match[0] + args.slice(0, 80).replace(/\s+/g, ' ') + (args.length > 80 ? '…' : ''),
-      });
-    }
+  const relFile = path.relative(repoRoot, file).replace(/\\/g, '/');
+  for (const finding of findSerializableTransactions(source)) {
+    if (!allowlist.has(`${relFile}:${finding.line}`)) violations.push({file:relFile,...finding});
   }
 }
 
@@ -109,3 +95,6 @@ if (violations.length > 0) {
 }
 
 console.log('Serializable transaction guard: OK - every Serializable .$transaction() call goes through runBookingTransaction.');
+
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

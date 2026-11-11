@@ -17,17 +17,48 @@ created for the first accepted upstream frame. Redis stores that UUID under
   seconds. Only an active, unexpired session on a clear online machine with a
   committed receipt may CAS-install the receipt. A tombstone or another receipt
   is never overwritten.
+
 - Lease expiry bounds stale authority after DB-only status, connectivity or
   moderation changes. A PostgreSQL failure during renewal refuses the frame.
-  A Redis read, CAS or enqueue failure also refuses the frame.
+  Redis read, CAS or enqueue failures before admission refuse the frame. Once
+  the first payload and its receipt are committed, a subsequent authority
+  publication failure preserves that accepted result but returns no authority
+  for readiness; later frames require a fresh successful renewal.
+
+- Before the PostgreSQL read, renewal samples Redis `TIME` and fixes a
+  15-second validation deadline. The install Lua checks that deadline using
+  Redis's clock, including after a first-frame transaction or lost commit ACK.
+  It is never refreshed during recovery. If a first-frame transaction outlives
+  that deadline, one new attempt samples Redis again and reads a fresh active
+  PostgreSQL snapshot with the same committed receipt; the Redis CAS still
+  refuses a tombstone or different generation. An already activated session
+  also revalidates against the durable receipt when its initial snapshot expires.
+  Caller timeouts do not cancel queued
+  Redis commands: an expired validation must be refused even after the STOP
+  tombstone has disappeared. The deadline is shorter than the 60-second minimum
+  tombstone lifetime. Only renewal/first activation adds this `TIME` call; the
+  hot frame path remains unchanged. Missing deadlines fail closed, so mixed
+  API versions must be drained before relying on this guarantee.
+
+Redis documents [atomic script execution](https://redis.io/docs/latest/develop/programmability/eval-intro/)
+and its [server clock](https://redis.io/docs/latest/commands/time/). Both the
+sample and comparison use that clock, avoiding API/Redis clock skew. Normal
+Redis expiry assumptions still apply (no backward server-clock jumps or restore
+of stale authority from a snapshot).
 
 The valid lease is deliberately short but authoritative for its remaining
 lifetime. Therefore loss of PostgreSQL after a successful renewal can leave at
 most two seconds of already-issued authority; it cannot create or extend a
-lease. Per-frame readiness updates do not refresh it. A Redis-only hot-path
-frame also does not refresh browser, channel or readiness TTLs because it has no
-authoritative session expiry snapshot. The next PostgreSQL-backed lease renewal
-may refresh those keys, bounded by the freshly read `expiresAt`.
+lease. Per-frame readiness updates do not refresh it.
+
+A Redis-only hot-path frame does not refresh browser, channel or authority TTLs because it has no
+authoritative session expiry snapshot. It does publish the legacy upstream-ready
+hint, bounded atomically by the minimum remaining browser/channel PTTL, after
+checking the exact channel binding and generation. Missing or persistent
+bindings are refused. This lets a second legacy channel open while another
+channel keeps the session generation hot. The hint does not authorize delivery.
+The next PostgreSQL-backed lease renewal may refresh bindings, bounded by the
+freshly read `expiresAt`.
 
 ## First-frame billing
 

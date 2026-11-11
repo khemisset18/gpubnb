@@ -158,6 +158,12 @@ return 1
 `;
 
 const INSTALL_GATEWAY_AUTHORITY_SCRIPT=`
+-- Caller timeouts do not cancel queued commands. Expire the validation itself
+-- using Redis's clock so even execution after tombstone expiry fails closed.
+local deadline = tonumber(ARGV[3])
+local now = redis.call('TIME')
+local nowMs = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
+if not deadline or nowMs >= deadline then return 0 end
 local current = redis.call('GET', KEYS[1])
 -- '1' is the pre-generation activation hint. Migrate it only after the caller
 -- has obtained a fresh bounded PostgreSQL snapshot containing this receipt.
@@ -171,6 +177,16 @@ const MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT=`
 -- prevent periodic PostgreSQL revalidation. STOP between enqueue and this mark
 -- also suppresses publication of a fresh upstream-ready hint.
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+if redis.call('GET', KEYS[4]) ~= ARGV[3] then return 0 end
+if redis.call('EXISTS', KEYS[2]) ~= 1 then return 0 end
+if ARGV[2] == '0' then
+  -- A hot frame has no SQL expiry snapshot. Publish legacy readiness using
+  -- only the remaining binding lifetimes; never extend any authorization.
+  local ttl = math.min(redis.call('PTTL', KEYS[2]), redis.call('PTTL', KEYS[4]))
+  if ttl <= 0 then return 0 end
+  redis.call('SET', KEYS[3], '1', 'PX', ttl)
+  return 1
+end
 redis.call('EXPIRE', KEYS[2], ARGV[2])
 redis.call('SET', KEYS[3], '1', 'EX', ARGV[2])
 redis.call('EXPIRE', KEYS[4], ARGV[2])
@@ -253,6 +269,8 @@ const GATEWAY_AUTHORITY_REVOKED_PREFIX='revoked:';
 const GATEWAY_AUTHORITY_ID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const GATEWAY_AUTHORITY_LEASE_SECONDS=2;
 const GATEWAY_AUTHORITY_QUERY_TIMEOUT_MS=4_000;
+// Bounds the age of a snapshot at Redis installation, below the 60s tombstone.
+const GATEWAY_AUTHORITY_VALIDATION_MS=15_000;
 const GATEWAY_AUTHORITY_REDIS_TIMEOUT_MS=5_000;
 
 async function boundedGatewayRedis<T>(operation:PromiseLike<T>):Promise<T>{
@@ -278,9 +296,9 @@ function gatewayAuthorityTombstoneTtl(expiresAt?:Date):number{
   return Math.max(60,gatewaySessionTtl(expiresAt));
 }
 
-async function installGatewayAuthority(redis:Redis,sessionId:string,authorityId:string,expiresAt?:Date):Promise<boolean>{
+async function installGatewayAuthority(redis:Redis,sessionId:string,authorityId:string,expiresAt:Date|undefined,validationDeadline:number):Promise<boolean>{
   return Number(await boundedGatewayRedis(redis.eval(
-    INSTALL_GATEWAY_AUTHORITY_SCRIPT,1,wsSessionActivatedKey(sessionId),authorityId,String(gatewayAuthorityLeaseTtl(expiresAt)),
+    INSTALL_GATEWAY_AUTHORITY_SCRIPT,1,wsSessionActivatedKey(sessionId),authorityId,String(gatewayAuthorityLeaseTtl(expiresAt)),String(validationDeadline),
   )))===1;
 }
 
@@ -668,12 +686,43 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
   }
   // Only a missing/legacy lease or the once-per-session commercial activation
   // reaches PostgreSQL. First-frame billing retains its exclusive row lock.
+  // Sample Redis before any DB snapshot; a delayed TIME reply only shortens
+  // validity. Do not refresh this deadline during receipt/commit recovery.
+  const [seconds,micros]=await boundedGatewayRedis(redis.time());
+  const validationDeadline=Number(seconds)*1000+Math.floor(Number(micros)/1000)+GATEWAY_AUTHORITY_VALIDATION_MS;
+  const revalidateAuthority=async(authorityId:string):Promise<Date|undefined>=>{
+    // Never extend an old snapshot. A new deadline is valid only with a new
+    // PostgreSQL read and the same durable receipt; the Redis CAS still fences STOP.
+    const [retrySeconds,retryMicros]=await boundedGatewayRedis(redis.time());
+    const retryDeadline=Number(retrySeconds)*1000+Math.floor(Number(retryMicros)/1000)+GATEWAY_AUTHORITY_VALIDATION_MS;
+    const fresh=await liveGatewayFrameAuthority(db,sessionId,machineId,binding.runtimeBackend);
+    if(!fresh?.booking.workspaceActivatedAt||fresh.gatewayAcceptance?.id!==authorityId)return undefined;
+    return await installGatewayAuthority(redis,sessionId,authorityId,fresh.expiresAt,retryDeadline)?fresh.expiresAt:undefined;
+  };
+  // Once the receipt and payload have committed, an authority-publication
+  // outage must not turn that accepted frame into an error and trigger a resend.
+  // Without a confirmed install, withhold readiness and let the next frame
+  // perform the normal authoritative renewal.
+  const publishCommittedAuthority=async(authorityId:string,expiresAt:Date):Promise<Date|undefined>=>{
+    try{
+      if(await installGatewayAuthority(redis,sessionId,authorityId,expiresAt,validationDeadline))return expiresAt;
+      return await revalidateAuthority(authorityId);
+    }catch{return undefined;}
+  };
   const live=await liveGatewayFrameAuthority(db,sessionId,machineId,binding.runtimeBackend);
   if(!live||(!live.booking.workspaceActivatedAt&&(live.startedAt!==null||
     live.booking.status!==BookingStatus.STARTING&&live.booking.status!==BookingStatus.ACTIVE)))return {enqueued:-2};
   if(live.booking.workspaceActivatedAt!==null){
     if(!live.gatewayAcceptance)return {enqueued:-2};
-    if(!await installGatewayAuthority(redis,sessionId,live.gatewayAcceptance.id,live.expiresAt))return {enqueued:-2};
+    if(!await installGatewayAuthority(redis,sessionId,live.gatewayAcceptance.id,live.expiresAt,validationDeadline)){
+      // An already activated session can outlive its initial read deadline.
+      // Do not fail a valid frame solely because PostgreSQL was slow: obtain
+      // another fresh DB snapshot, with the *same* receipt, before Redis CAS.
+      // STOP tombstones and changed generations still refuse installation.
+      const freshExpiry=await revalidateAuthority(live.gatewayAcceptance.id);
+      if(!freshExpiry)return {enqueued:-2};
+      return {enqueued:await enqueue(live.gatewayAcceptance.id),expiresAt:freshExpiry,authorityId:live.gatewayAcceptance.id};
+    }
     return {enqueued:await enqueue(live.gatewayAcceptance.id),expiresAt:live.expiresAt,authorityId:live.gatewayAcceptance.id};
   }
   try{
@@ -707,10 +756,17 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
       return {enqueued,expiresAt:activation.expiresAt,authorityId:receiptId!};
     },{maxWait:5000,timeout:10000});
     if(outcome.enqueued!==-3){
-      if(outcome.enqueued===1&&outcome.authorityId)await installGatewayAuthority(redis,sessionId,outcome.authorityId,outcome.expiresAt);
+      if(outcome.enqueued===1&&outcome.authorityId){
+        const expiry=await publishCommittedAuthority(outcome.authorityId,outcome.expiresAt);
+        return expiry?{...outcome,expiresAt:expiry}:{enqueued:outcome.enqueued,expiresAt:outcome.expiresAt};
+      }
       return outcome;
     }
-    if(!await installGatewayAuthority(redis,sessionId,outcome.authorityId!,outcome.expiresAt!))return {enqueued:-2};
+    if(!await installGatewayAuthority(redis,sessionId,outcome.authorityId!,outcome.expiresAt!,validationDeadline)){
+      const freshExpiry=await revalidateAuthority(outcome.authorityId!);
+      if(!freshExpiry)return {enqueued:-2};
+      return {enqueued:await enqueue(outcome.authorityId!),expiresAt:freshExpiry,authorityId:outcome.authorityId!};
+    }
     return {enqueued:await enqueue(outcome.authorityId!),expiresAt:outcome.expiresAt!,authorityId:outcome.authorityId!};
   }catch(error){
     // A DB commit acknowledgement can be lost. Preserve a committed receipt
@@ -725,8 +781,8 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
         throw error;
       }
       if(committed){
-        await installGatewayAuthority(redis,sessionId,committed.id,committed.expiresAt);
-        return {enqueued:1,expiresAt:committed.expiresAt,authorityId:committed.id};
+        const freshExpiry=await publishCommittedAuthority(committed.id,committed.expiresAt);
+        return freshExpiry?{enqueued:1,expiresAt:freshExpiry,authorityId:committed.id}:{enqueued:1,expiresAt:committed.expiresAt};
       }
     }
     // Only uncommitted first-frame admissions require compensation. An already
@@ -752,16 +808,12 @@ export async function committedGatewayFrame(db:PrismaClient,sessionId:string,cha
 }
 
 export async function markAcceptedGatewayFrame(redis:Redis,sessionId:string,channelId:string,binding:GatewayChannelBinding,authorityId:string|undefined,expiresAt?:Date){
-  // A Redis-only hot-path admission intentionally has no database expiry
-  // snapshot. Never turn that absence into the one-hour fallback TTL: the
-  // browser/channel bindings already carry their session-bounded TTL, and the
-  // next lease renewal (at most two seconds later) can refresh them from a
-  // fresh PostgreSQL expiry. This also keeps a stale readiness hint from
-  // outliving the workspace merely because frames remain busy.
-  if(!authorityId||!expiresAt)return false;
+  // Hot frames still prove that a legacy upstream is alive. Lua derives the
+  // hint's TTL from existing bindings, without renewing their authority.
+  if(!authorityId)return false;
   return Number(await boundedGatewayRedis(redis.eval(
     MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT,4,wsSessionActivatedKey(sessionId),binding.browserSessionKey,
-    wsUpstreamReadyKey(channelId),wsChannelKey(channelId),authorityId,String(gatewaySessionTtl(expiresAt)),
+    wsUpstreamReadyKey(channelId),wsChannelKey(channelId),authorityId,expiresAt?String(gatewaySessionTtl(expiresAt)):'0',JSON.stringify(binding),
   )))===1;
 }
 

@@ -98,3 +98,17 @@ fn untrusted_arguments_are_never_echoed_in_errors() {
         "application_not_qualified",
     );
 }
+
+#[cfg(all(feature = "physical-qualification", not(target_os = "windows")))]
+#[test]
+fn physical_qualification_refuses_non_windows_without_starting_capture() {
+    let output = Command::new(env!("CARGO_BIN_EXE_gpubnb-windows-physical-qualify"))
+        .output()
+        .expect("qualification process starts");
+    assert_eq!(output.status.code(), Some(20));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap().trim(),
+        r#"{"ok":false,"error":"windows_required"}"#
+    );
+    assert!(output.stderr.is_empty());
+}
