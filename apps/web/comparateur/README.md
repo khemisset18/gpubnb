@@ -70,3 +70,7 @@ Critères de contrôle : nombre d'appareils entier, montants et paramètres born
 - Respecter les limites d'appels, les politiques de cache et les autorisations d'affichage. Vérifier un jeu de données réel et son contrat avant de désigner le comparateur comme « temps réel ».
 
 **Aucune intégration fournisseur réelle n'est activée dans cette PR** : le flux d'exemple reste vide, les données non disponibles déclenchent le mode manuel. Ne pas fusionner sans validation explicite du propriétaire.
+
+## Étude des fournisseurs API
+
+Voir [l'évaluation comparative Minerstat / hashrate.no](docs/ETUDE_FOURNISSEURS.md) : endpoints GPU/CPU, quotas, conditions d'utilisation commerciale, risques juridiques, plan de validation, échantillons nécessaires et demandes de licence à envoyer. **Aucune source live n'est activée et aucune demande n'a été envoyée.**
