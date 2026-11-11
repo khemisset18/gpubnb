@@ -1,6 +1,6 @@
-# GPUbnb — Comparateur autonome (version claire)
+# GPUbnb — Comparateur autonome (identité GPUbnb)
 
-Ce projet est **indépendant du dépôt GPUbnb**. Il fonctionne sans framework et ne modifie aucun fichier de GPUbnb.
+Ce comparateur est **isolé dans son propre dossier** et utilise les couleurs de GPUbnb (`#070908`, `#a6ff3f`). Il fonctionne sans framework et ne modifie aucun fichier existant du site principal. La page est intégrable dans un hébergement séparé ou sous un sous-chemin quand son intégration sera validée.
 
 ## Voir la page
 
