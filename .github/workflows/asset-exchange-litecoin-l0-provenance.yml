@@ -63,12 +63,13 @@ jobs:
           echo 'DOWNLOAD_PIN_HASHES=PASS_BINARY_NOT_EXECUTED' >> "$evidence/metadata.txt"
 
           expected='D35621D53A1CC6A3456758D03620E9D387E55666'
-          actual="$(gpg --batch --no-options --with-colons --show-keys \
-            --with-fingerprint "$work/davidburkett38-key.pgp" \
+          mkdir -m 700 "$work/gnupg"
+          actual="$(gpg --batch --no-options --homedir "$work/gnupg" \
+            --with-colons --show-keys --with-fingerprint \
+            "$work/davidburkett38-key.pgp" \
             | awk -F: '$1=="fpr" {print $10; exit}')"
           test "$actual" = "$expected"
           echo "RELEASE_PUBLIC_KEY_FINGERPRINT=$actual" >> "$evidence/metadata.txt"
-          mkdir -m 700 "$work/gnupg"
           gpg --batch --no-options --homedir "$work/gnupg" --import \
             "$work/davidburkett38-key.pgp" >/dev/null
           gpg --batch --no-options --homedir "$work/gnupg" --export "$expected" \
