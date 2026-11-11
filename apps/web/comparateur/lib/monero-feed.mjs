@@ -72,7 +72,11 @@ export function validateMoneroSnapshot(doc, now = Date.now()) {
     (!['own-monero-node','public-monero-rpc'].includes(doc.source)) ||
     (doc.source==='public-monero-rpc'&&(
       !Array.isArray(doc.operators)||doc.operators.length!==2||
-      doc.operators[0]!=='monero.rs'||doc.operators[1]!=='nodely.io'||
+      new Set(doc.operators).size!==2||
+      doc.operators.some(x=>!['monero.rs','nodely.io','hostingwire.net'].includes(x))||
+      !doc.operators.includes(doc.activeOperator)||
+      typeof doc.usedFallback!=='boolean'||
+      doc.usedFallback!==(doc.activeOperator!=='monero.rs')||
       doc.crossCheckedAt!==doc.collectedAt)) ||
     doc.sampleBlocks !== BLOCK_SAMPLE ||
     !Number.isSafeInteger(doc.blockHeight) || doc.blockHeight < 1978433 ||
@@ -87,5 +91,7 @@ export function validateMoneroSnapshot(doc, now = Date.now()) {
     !Number.isFinite(now)) return null;
   return Object.freeze({ difficulty: doc.difficulty, rewardXmr: doc.rewardXmr,
     height: doc.blockHeight, collectedAt: doc.collectedAt,
-    sampleBlocks: BLOCK_SAMPLE, source: doc.source });
+    sampleBlocks: BLOCK_SAMPLE, source: doc.source,
+    activeOperator:doc.source==='public-monero-rpc'?doc.activeOperator:null,
+    usedFallback:doc.source==='public-monero-rpc'?doc.usedFallback:false });
 }
