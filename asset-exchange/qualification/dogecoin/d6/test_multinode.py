@@ -39,6 +39,8 @@ class MultiNodeGuards(unittest.TestCase):
             self.assertIn("github.repository_id == '1305325878'",condition)
             self.assertIn("refs/heads/asset-exchange/doge-independent-recovery-20261111",condition)
             self.assertIn('uses: ./.github/workflows/asset-exchange-dogecoin-',section)
+        self.assertIn("inputs.doge_suite != 'multinode'",text.split('\n  doge-d3-private-manual:\n',1)[1].split('\n  doge-recovery-',1)[0])
+        self.assertIn("inputs.doge_suite != 'd3'",text.split('\n  doge-recovery-multinode-private-manual:\n',1)[1])
     def test_existing_signer_roles_and_paths_are_reused_without_collisions(self):
         specs=multinode.test_key_specs(Path('/fixed/test-keys'))
         self.assertEqual(len({d/(role+'.pem') for d,role in specs}),4)

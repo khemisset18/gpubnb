@@ -41,10 +41,21 @@ jobs:
           path: dist/doge-policy-source
           persist-credentials: false
       - name: Install diagnostic build prerequisites
+        timeout-minutes: 10
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          # The runner's Azure HTTP mirror can stall indefinitely. Use signed
+          # official Ubuntu HTTPS repositories with bounded retries/timeouts.
+          source_list="$RUNNER_TEMP/doge-ubuntu.list"
+          cat > "$source_list" <<'APT'
+          deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu jammy main universe
+          deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu jammy-updates main universe
+          deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://security.ubuntu.com/ubuntu jammy-security main universe
+          APT
+          apt_options=(-o "Dir::Etc::sourcelist=$source_list" -o 'Dir::Etc::sourceparts=-'
+            -o Acquire::Retries=1 -o Acquire::https::Timeout=20)
+          sudo timeout 180 apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update
+          sudo DEBIAN_FRONTEND=noninteractive timeout 300 apt-get "${apt_options[@]}" install -y --no-install-recommends \
             build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev \
             libboost-system-dev libboost-filesystem-dev libboost-chrono-dev \
             libboost-program-options-dev libboost-test-dev libboost-thread-dev

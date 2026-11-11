@@ -27,6 +27,8 @@ from test_signer import EphemeralSigner, transaction, sighash, hash256, push
 
 AUTHORIZATION = 'AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST'
 COIN = 100_000_000
+RECOVERY_VALUE = COIN
+RECOVERY_FEES = (100_000, 1_000_000)
 NODES = ('a', 'b')
 P2P_PORTS = {'a':18444, 'b':18445}
 RPC_PORTS = {'a':18332, 'b':18333}
@@ -186,7 +188,8 @@ def run(args, recovery_runner=None, bundle_validator=None):
             f'-port={P2P_PORTS[node]}','-bind=127.0.0.1','-onlynet=ipv4','-dnsseed=0','-dns=0','-discover=0','-upnp=0',
             '-listenonion=0','-onion=0','-disablewallet=1','-debug=rpc','-txindex=1','-rpcbind=127.0.0.1',
             '-rpcallowip=127.0.0.1','-printtoconsole=1','-dbcache=32','-par=1','-acceptnonstdtxn=0','-maxmempool=5',
-            '-harddustlimit='+('0.002' if node=='b' else '0.001')]
+            '-harddustlimit='+('0.002' if node=='b' else '0.001'),
+            '-minrelaytxfee='+('0.01' if node=='b' else '0.001')]
         report.setdefault('processStarts',[]).append({'source':node,'arguments':[x.replace(str(data),'PRIVATE_DATADIR') for x in daemon[1:]]})
         processes[node]=subprocess.Popen(daemon,env=env,stdout=log,stderr=subprocess.STDOUT)
         deadline=time.monotonic()+45
@@ -271,7 +274,8 @@ def run(args, recovery_runner=None, bundle_validator=None):
         value=int(Decimal(str(v['value']))*COIN);require(value>301*COIN,'mature funding amount too small')
         secret=hashlib.sha256(b'GPUbnb public private-lab multi-node fixture 2026-11-11').digest()
         htlc=build_candidate(hashlib.sha256(secret).digest(),claim.public,refund.public,1355)
-        outputs=[(100*COIN,htlc.output),(100*COIN,htlc.output),(100*COIN,miner_script),(value-301*COIN,miner_script)]
+        outputs=[(100*COIN,htlc.output),(RECOVERY_VALUE,htlc.output),(100*COIN,miner_script),
+            (value-201*COIN-RECOVERY_VALUE,miner_script)]
         sig=miner_a.sign(sighash(coinbase,0,miner_script,outputs))
         funding=transaction(coinbase,0,push(sig)+push(miner_a.public),outputs);funding_id=hash256(funding)[::-1].hex();txids.add(funding_id)
         def spend(index,key,branch,amount=99*COIN):
@@ -281,9 +285,11 @@ def run(args, recovery_runner=None, bundle_validator=None):
             raw=transaction(funding_id,index,ss,outs,lock)
             require(verify(htlc.output,raw)=={'result':1,'error':0,'flags':517},'native fixture signature invalid')
             txids.add(hash256(raw)[::-1].hex());return raw
-        claim_raw=spend(0,claim,'claim');refund_raw=spend(0,refund,'refund');recovery_raw=spend(1,refund,'refund')
-        recovery_high=spend(1,refund,'refund',98*COIN)
-        claim_id,refund_id,recovery_id=(hash256(x)[::-1].hex() for x in (claim_raw,refund_raw,recovery_raw))
+        claim_raw=spend(0,claim,'claim');refund_raw=spend(0,refund,'refund')
+        recovery_raw=spend(1,refund,'refund',RECOVERY_VALUE-RECOVERY_FEES[0])
+        recovery_high=spend(1,refund,'refund',RECOVERY_VALUE-RECOVERY_FEES[1])
+        claim_id,refund_id,recovery_low_id,recovery_id=(hash256(x)[::-1].hex()
+            for x in (claim_raw,refund_raw,recovery_raw,recovery_high))
         recovery_path=out/'refund-recovery.hex';recovery_sha=prepare_recovery(recovery_path,recovery_raw)
         prepare_recovery(out/'refund-conflict.hex',refund_raw)
         recovery_high_sha=prepare_recovery(out/'refund-recovery-high.hex',recovery_high)
@@ -293,12 +299,13 @@ def run(args, recovery_runner=None, bundle_validator=None):
         bundle={'domain':'GPUBNB:DOGE:RECOVERY:v1','schemaVersion':1,'network':'regtest',
             'genesis':report['initialIdentities']['a']['genesis'],'sourceCommit':SOURCE_COMMIT,
             'contract':{'redeemHex':htlc.redeem.hex(),'outputHex':htlc.output.hex()},
-            'funding':{'txid':funding_id,'vout':1,'valueKoinu':str(100*COIN),'transactionHex':funding.hex()},
-            'policy':{'maxFeeKoinu':str(2*COIN),'minRefundKoinu':str(98*COIN)},
+            'funding':{'txid':funding_id,'vout':1,'valueKoinu':str(RECOVERY_VALUE),'transactionHex':funding.hex()},
+            'policy':{'maxFeeKoinu':str(RECOVERY_FEES[1]),'minRefundKoinu':str(RECOVERY_VALUE-RECOVERY_FEES[1])},
             'refunds':[{'transactionHex':raw.hex(),'sha256':digest,'txid':hash256(raw)[::-1].hex(),
-                'destinationHex':destination.hex(),'outputValueKoinu':str(amount),'feeKoinu':str(100*COIN-amount),
+                'destinationHex':destination.hex(),'outputValueKoinu':str(amount),'feeKoinu':str(RECOVERY_VALUE-amount),
                 'lockTime':1355,'sequence':0xfffffffe}
-                for raw,digest,amount in [(recovery_raw,recovery_sha,99*COIN),(recovery_high,recovery_high_sha,98*COIN)]]}
+                for raw,digest,amount in [(recovery_raw,recovery_sha,RECOVERY_VALUE-RECOVERY_FEES[0]),
+                    (recovery_high,recovery_high_sha,RECOVERY_VALUE-RECOVERY_FEES[1])]]}
         if bundle_validator is not None:bundle_validator(bundle)
         bundle_path=out/'recovery-bundle.json';bundle_digest=persist_bundle(bundle_path,bundle)
         report['recoveryBundleSha256']=bundle_digest
@@ -308,7 +315,8 @@ def run(args, recovery_runner=None, bundle_validator=None):
         funding_block=mine('a')[0];wait_for('funding confirmation relay',synchronized)
         for n in NODES:
             observed=rpc(n,'gettxout',funding_id,'1','true')
-            require(observed is not None and observed['confirmations']==1 and Decimal(str(observed['value']))==100
+            require(observed is not None and observed['confirmations']==1
+                    and Decimal(str(observed['value']))*COIN==RECOVERY_VALUE
                     and observed['scriptPubKey']['hex']==htlc.output.hex(),'independent funding UTXO mismatch')
         report['fundingAnchor']={'fundingBlockHash':funding_block,'fundingHeight':1353};save()
         destroy_keys()
@@ -338,6 +346,20 @@ def run(args, recovery_runner=None, bundle_validator=None):
             losing=tx(n,claim_id);require(losing is None or losing.get('confirmations',0)==0,'orphaned claim still confirmed')
         snapshot('reorged_claim',claim_id,refund_id);snapshot('converged_refund',refund_id)
         report['auxpow']=[assert_auxpow(n,converged['bestblockhash']) for n in NODES]
+        # A young 1-DOGE input stays below Dogecoin's free-priority threshold.
+        # Merely increasing minrelaytxfee on a 100-DOGE input is insufficient:
+        # sendrawtransaction can accept high-priority, below-floor transactions.
+        low_rejection=submit('b',read_signed(recovery_path,recovery_sha),reject='insufficient priority')
+        require(recovery_low_id not in rpc('b','getrawmempool'),'insufficient-fee refund entered node-B mempool')
+        fee_network=rpc('b','getnetworkinfo')
+        require(Decimal(str(fee_network['relayfee']))==Decimal('0.01'),'strict relay fee profile missing')
+        report['keylessFeeRecovery']={'fundingValueKoinu':str(RECOVERY_VALUE),
+            'lowFeeKoinu':str(RECOVERY_FEES[0]),'selectedFeeKoinu':str(RECOVERY_FEES[1]),
+            'retainedValueKoinu':str(RECOVERY_VALUE-RECOVERY_FEES[1]),
+            'feeCapKoinu':str(RECOVERY_FEES[1]),'lowFeeTxid':recovery_low_id,'selectedTxid':recovery_id,
+            'nodeBRelayDogePerKb':str(fee_network['relayfee']),'nativeLowFeeRejection':low_rejection,
+            'keysUnavailable':not list(keys.iterdir()),'newSignatureCreated':False,
+            'pendingReplacementAttempted':False};save()
         # Integration hook receives only public recovery data and node-B connection metadata.
         # Parent may provide the separately packaged recovery CLI here; the base lab still
         # proves independent node-B broadcast of stored bytes without any surviving signer.
@@ -365,11 +387,17 @@ def run(args, recovery_runner=None, bundle_validator=None):
         if recovery_runner:
             independent_recovery('rebroadcast')
         else:
-            require(submit('b',read_signed(recovery_path,recovery_sha))==recovery_id,'stored refund identity mismatch')
+            require(submit('b',read_signed(out/'refund-recovery-high.hex',recovery_high_sha))==recovery_id,'stored refund identity mismatch')
             report['independentRecoveryHook']={'status':'NOT_TESTED','reason':'standalone recovery process not injected'}
         wait_for('recovery refund mempool relay',lambda:recovery_id in rpc('a','getrawmempool'))
         recovery_block=mine('b')[0];final=wait_for('recovery block relay',synchronized)
-        for n in NODES:require(tx(n,recovery_id)['confirmations']==1,'second-node refund not independently confirmed')
+        for n in NODES:
+            recovered=tx(n,recovery_id)
+            require(recovered['confirmations']==1,'second-node refund not independently confirmed')
+            require(len(recovered['vout'])==1 and Decimal(str(recovered['vout'][0]['value']))*COIN==RECOVERY_VALUE-RECOVERY_FEES[1]
+                and recovered['vout'][0]['scriptPubKey']['hex']==destination.hex(),'native recovery amount/destination mismatch')
+            mempool_low=tx(n,recovery_low_id)
+            require(mempool_low is None or mempool_low.get('confirmations',0)==0,'lower-fee variant unexpectedly confirmed')
         snapshot('recovery_refund_confirmed',recovery_id)
         if recovery_runner:
             independent_recovery('observe','CONFIRMED')

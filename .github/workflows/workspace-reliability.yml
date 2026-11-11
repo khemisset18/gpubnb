@@ -17,13 +17,20 @@ on:
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:
+    inputs:
+      doge_suite:
+        description: Private DOGE experiments to run on the authorized development branch
+        type: choice
+        required: true
+        default: both
+        options: [both, d3, multinode]
 
 permissions:
   contents: read
 
 concurrency:
   group: workspace-reliability-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
   workspace-agent-soak:
@@ -112,7 +119,7 @@ jobs:
   # The registered workflow provides a manual entry on the development branch.
   # These jobs can never run from push, PR, schedule, main or another repository.
   doge-d3-private-manual:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
+    if: github.event_name == 'workflow_dispatch' && inputs.doge_suite != 'multinode' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
     permissions:
       contents: read
       actions: read
@@ -121,7 +128,7 @@ jobs:
       diagnostic_suite: d3
 
   doge-recovery-multinode-private-manual:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
+    if: github.event_name == 'workflow_dispatch' && inputs.doge_suite != 'd3' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
     permissions:
       contents: read
       actions: read
