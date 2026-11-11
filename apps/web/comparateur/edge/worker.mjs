@@ -81,7 +81,9 @@ export async function handleRequest(request,env,now=Date.now()){
    const mode=data?(ageMs>EXPECTED_REFRESH_MS?'saved':'fresh'):'unavailable';
    return {coin,status:mode,collectedAt:data?.collectedAt||null,
     ageHours:ageMs===null?null:Math.round(ageMs/360000)/10,
-    source:data?.source||null};
+    source:data?.source||null,
+    operator:data?.activeOperator||data?.operator||null,
+    fallback:data?.usedFallback===true};
   }));
   return sendJson({service:'gpubnb-comparateur',refresh:'every-two-hours',
     pricing:'manual-only',backupMaxHours:24,sources:found});
