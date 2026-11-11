@@ -12,8 +12,6 @@ export const ALGORITHMS=Object.freeze({
 });
 const isNum=(v,min,max)=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
 const validId=id=>typeof id==='string'&&/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)&&id.length<=100;
-const allowedKeys=new Set(['deviceId','coin','algorithm','unit','hashrate','watts',
- 'durationSeconds','deviceCount','observedAt','powerScope','sampleMethod','consentToPublish']);
 /**
  * Returns only allowed public measurement fields and strips unknown properties.
  * Default policy: lab-measured only. User-provided submissions MUST NOT be published
