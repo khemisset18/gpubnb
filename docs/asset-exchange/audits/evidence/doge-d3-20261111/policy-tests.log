@@ -1,0 +1,33 @@
+Running 4 test cases...
+[1;36;49md3-activation before-height=1350 after-height=1351 policy-reject=non-mandatory-script-verify-flag (Negative locktime) consensus-reject=non-mandatory-script-verify-flag (Negative locktime)[0;39;49m
+[1;36;49md3-finality lock=1794415923 mtp=1794415823 block-time=1794415953 mempool-reject=non-final csv-active=false blocks=1354[0;39;49m
+[1;36;49md3-sighash type=1 signed-mutations=9 checked-input=0[0;39;49m
+[1;36;49md3-sighash type=2 signed-mutations=9 checked-input=0[0;39;49m
+[1;36;49md3-sighash type=3 signed-mutations=9 checked-input=0[0;39;49m
+[1;36;49md3-sighash type=129 signed-mutations=9 checked-input=0[0;39;49m
+[1;36;49md3-sighash type=130 signed-mutations=9 checked-input=0[0;39;49m
+[1;36;49md3-sighash type=131 signed-mutations=9 checked-input=0[0;39;49m
+[1;36;49md3-single-out-of-range constant-one=true profile-must-reject=true[0;39;49m
+[1;36;49md3-malleability script-consensus-valid=true standard-script=false txid-changed=true child-prevout-stale=true[0;39;49m
+
+Test module "Bitcoin Test Suite" has passed with:
+  4 test cases out of 253 passed
+  249 test cases out of 253 skipped
+  2357 assertions out of 2357 passed
+
+  Test suite "gpubnb_d3" has passed with:
+    4 test cases out of 4 passed
+    2357 assertions out of 2357 passed
+
+    Test case "gpubnb_d3/bip65_block_activation_differs_from_mempool_policy" has passed with:
+      1134 assertions out of 1134 passed
+
+    Test case "gpubnb_d3/timestamp_mtp_finality_and_height_domain" has passed with:
+      1141 assertions out of 1141 passed
+
+    Test case "gpubnb_d3/signed_legacy_sighash_mutation_matrix" has passed with:
+      70 assertions out of 70 passed
+
+    Test case "gpubnb_d3/legacy_scriptsig_malleability_changes_funding_txid" has passed with:
+      12 assertions out of 12 passed
+

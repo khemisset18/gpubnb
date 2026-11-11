@@ -1,10 +1,10 @@
 # DOGE D3 native diagnostic suite — 11 November 2026
 
-Status: native execution NOT_TESTED. No D3 qualification decision is granted. Nine Python safety/orchestration guards pass. Run43057545782 successfully built pinned official dependencies and reached diagnostic compilation; it caught the missing chainparams.h include for Params() in the new test file. That include is now explicit; successful compilation and all four native cases must still be observed in the manual retry. Upstream Dogecoin implementations remain unchanged.
+Status: all four selected native source-diagnostic cases PASS in manual run43060202035,2357 assertions passed, exit0. The original D0 executable is not replaced and full D3 qualification remains BLOCKED by D2/profile prerequisites and required review. Nine Python safety/orchestration guards pass. The prior build43057545782 caught a missing chainparams.h include; the explicit include corrected compilation. All seven recorded upstream implementation/fixture hashes match the pinned source, and both test source hashes match the repository. Detailed metrics, artifact digest and bounds are in audits/evidence/doge-d3-20261111/.
 
 The existing policy diagnostic build now also registers `gpubnb_d3_tests.cpp`. The default runner selection remains `policy`. Its optional fifth argument `d3` selects exactly four D3 cases, with distinct case count and mandatory metric markers. An unknown suite fails before any subprocess or binary read. Namespace isolation, source/binary hashes, CPU 180 s, address space 2 GiB, file limit 64 MiB and wall time 240 s remain required. Both source diagnostics remain separate from the D0-qualified executable.
 
-| Case | Native operations to execute | What a passing run would establish |
+| Case | Native operations executed | Verified result |
 | --- | --- | --- |
 | `bip65_block_activation_differs_from_mempool_policy` | Real funded P2SH scripts, native mempool admission, ProcessNewBlock and TestBlockValidity at heights 1350 and 1351 | A signed negative-CLTV script is already rejected by mempool standard policy before BIP65, but block consensus ignores NOP2 before activation; the same invalid operand is rejected in a post-activation block. A correctly locked signed spend confirms at activation. Mempool behavior cannot stand in for consensus activation proof |
 | `timestamp_mtp_finality_and_height_domain` | Real funding after BIP65, native signed script validation, IsFinalTx/CheckFinalTx boundaries, actual admission and block confirmation | Equality is non-final, height/time domains cannot be exchanged, final sequence cannot bypass CLTV. While CSV/BIP113 is explicitly not active, a time-locked refund can be rejected by the mempool's MTP policy yet confirm in a block whose timestamp passes the lock |
@@ -42,3 +42,9 @@ python3 asset-exchange/qualification/dogecoin/policy/run.py BINARY SHA256 PARENT
 ```
 
 Only an actual successful native run with all four cases and required metrics can produce probeStatus PASS. qualificationStatus remains BLOCKED pending complete D3 requirements, D2 prerequisites and review. Hardware compatibility, clean-room recovery, multi-node behavior and D9 independent audit are outside this diagnostic.
+
+## Verified execution
+
+Execution66afc5bf1fdff1666280a74c8f45604a14ca89b8 used frozen harness f875ff245092a8c309a604d90d736a56404aeb51. Actions artifact13873608252 SHA256cdfcd5c56061b70c8d8a54c7052322a6d66b5071b617a92a61a07c799d591002; diagnostic executable858826c8b7d9d2db2613e5ff7162124809fab23701b4ed496cf2e53ed879281b. Its internal observation hashes were rechecked after download.
+
+Case assertions: activation1134, time/finality1141, signed sighash mutations70, malleability12. The detailed Boost report selected4 of253 upstream cases; the other249 were deliberately skipped, not claimed as passes. A distinct loopback-only namespace was verified before and after execution. The first two cases use actual native chain UTXOs/blocks; the last two are signed primitive diagnostics with synthetic outpoints.

@@ -1,0 +1,38 @@
+{
+  "candidate": {
+    "amd64Digest": "sha256:a697f71bfd66a04519dcab6c68991fc29da077969eac3af5e26983e81e44a16a",
+    "descriptorCount": 2,
+    "indexDigest": "sha256:db3f583fa49121942168bd6383a773b2cde3384c9a99bf7193560b9a0f3a28fd",
+    "registry": "cgr.dev/chainguard/minio",
+    "tag": "latest"
+  },
+  "candidateStatus": "NOT_TESTED_PENDING_CI",
+  "oldAmd64Digest": "sha256:abdbe7d805b4dc931053275bc65d6c96ea88e66fd121aa3bb87d7354ecd875c5",
+  "oldArtifactId": 13872688563,
+  "oldArtifactSha256": "f2071c0aa1f73cfee04fe08632a8acb93038c80b5ebae38acd2579a17b0dae02",
+  "oldFindings": {
+    "CVE-2026-116591": [
+      "mc",
+      "minio"
+    ],
+    "CVE-2026-84243": [
+      "glibc-2.44",
+      "glibc-2.44-locale-posix",
+      "ld-linux-2.44"
+    ]
+  },
+  "oldScanRun": "https://github.com/khemisset18/gpubnb/actions/runs/43061441056",
+  "qualificationStatus": "BLOCKED",
+  "requirements": [
+    "Existing exact vendor certificate/issuer verification",
+    "Existing signed SBOM verification",
+    "All-severity Trivy scan with ignore-unfixed=false",
+    "Private container network and synthetic S3 credentials",
+    "Actual put/get and historical migration roundtrips"
+  ],
+  "schemaVersion": 1,
+  "vendorReferences": [
+    "https://images.chainguard.dev/security/CGA-52rq-vccq-x6mp",
+    "https://images.chainguard.dev/directory/image/minio/provenance"
+  ]
+}

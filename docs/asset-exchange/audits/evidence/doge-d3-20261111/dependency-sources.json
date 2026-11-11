@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Boost1.74.0",
+    "commit": "a7090e8ce184501cfc9e80afa6cafb5bfd3b371c",
+    "licenseSha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566",
+    "submoduleStatusSha256": "c9d176962d9de2c9038e1c301b39954314c68657d45ffc5165504421c9f732aa"
+  },
+  {
+    "name": "Libevent2.1.12",
+    "commit": "5df3037d10556bfcb675bc73e516978b75fc7bc7",
+    "licenseSha256": "ff02effc9b331edcdac387d198691bfa3e575e7d244ad10cb826aa51ef085670",
+    "submoduleStatusSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]
