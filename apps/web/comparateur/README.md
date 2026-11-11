@@ -122,3 +122,51 @@ node --test apps/web/comparateur/tests/*.test.mjs
 ```
 
 Les valeurs du fichier `data/pow-reseaux.json` restent vides avant une collecte vérifiée depuis nos nœuds et une publication autorisée. Aucun de ces outils ne modifie d'autres modules GPUbnb. **Ne pas fusionner sans accord explicite.**
+
+
+## Audit GitHub et cybersécurité — version gratuite
+
+Voir **[REVUE_GITHUB_SECURITE.md](docs/REVUE_GITHUB_SECURITE.md)** : comparaison de XMRig, kawpowminer, Ravencoin Core, Core-Geth, Ergo, Flux et Miningcore, avec **licences**, possibilités de mesure et frais/dons intégrés. Ces logiciels n'ont **pas** été copiés, installés ou déclenchés par le comparateur.
+
+### Notre base de benchmarks GPUbnb, libre de données tierces
+
+- Schéma original : \`lib/owned-benchmarks.mjs\`.
+- Fichier public : \`data/owned-benchmarks.json\` (**vide** jusqu'à la première mesure réelle).
+- Tests de sécurité : \`tests/owned-benchmarks.test.mjs\`.
+- Publication **uniquement depuis des mesures de laboratoire approuvées**, sur le poste de l'opérateur ; pas d'accès à GPUbnb Host, pas d'aspiration de la base XMRig et pas d'upload public :
+
+\`\`\`bash
+cd apps/web/comparateur
+npm test
+# Après avoir réalisé soi-même des mesures (5 minutes minimum) et examiné la provenance :
+node tools/review-owned-benchmarks.mjs /chemin/prive/mesures-approuvees.json
+\`\`\`
+
+Format de mesure locale (exemple de **structure**, chiffres inventés pour montrer les champs et **à ne jamais publier comme une vraie performance**) :
+
+\`\`\`json
+{
+  "schemaVersion": 1,
+  "source": "gpubnb-owned-lab",
+  "samples": [{
+    "deviceId": "nvidia-rtx-3060",
+    "coin": "RVN", "algorithm": "KawPoW", "unit": "H/s",
+    "hashrate": 1000000, "watts": 150,
+    "durationSeconds": 600, "deviceCount": 1,
+    "observedAt": "2026-11-11T18:00:00Z",
+    "powerScope": "wall-whole-rig",
+    "sampleMethod": "operator-measured",
+    "consentToPublish": true
+  }]
+}
+\`\`\`
+
+Le programme valide l'algorithme, l'unité, les bornes, le catalogue matériel, la durée, la date, les doublons et l'attestation opérateur. Il ne publie **pas** les autres champs privés, tels qu'un numéro de série, une adresse de wallet, une IP ou un token de mineur. Le booléen \`consentToPublish\` n'est pas une preuve juridique : une preuve du droit de publication doit être conservée séparément par l'opérateur.
+
+**Important** : les mesures en W concernent ici le **rig entier à la prise** pour un seul appareil, alors que le formulaire de calcul possède un W indicatif par appareil. Ne pas mélanger automatiquement ces données sans expliciter le périmètre électrique.
+
+### Pas de nouveau composant payant
+
+La base et les tests utilisent seulement Node.js et son moteur de test natif, **zéro dépendance npm additionnelle**. Aucune donnée tierce, API à clé, facture d'abonnement, intégration GitHub Actions dans le site principal ou automatisme de minage n'est ajoutée.
+
+**La PR reste brouillon. Ne pas fusionner ni déployer sans accord explicite.**
