@@ -135,6 +135,6 @@ jobs:
     uses: ./.github/workflows/asset-exchange-dogecoin-multinode.yml
     with:
       execution_commit: ${{ github.sha }}
-      harness_commit: 1fc4f3b2c0a98215778b55d3f7f428260a0b6d6b
+      harness_commit: 428b64fa35ae60375e5eac4f624225c768c3580b
       authorization: AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST
       lab_suite: ${{ inputs.doge_suite == 'fee-pinning' && 'fee-pinning' || 'multinode' }}
