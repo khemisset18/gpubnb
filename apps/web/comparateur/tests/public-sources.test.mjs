@@ -107,8 +107,9 @@ test('Monero invalid primary -> backups; two-node quorum mandatory',async()=>{
  await assert.rejects(collectMoneroPublic(mockFetch({moneroDown:['monero.rs','xmr.hostingwire.net']}).fetchImpl,now));
  const mismatch=mockFetch({moneroMismatch:['xmr.nodely.dev','xmr.hostingwire.net']});
  // Two bad nodes that agree may still be untrustworthy; independent public RPC is not cryptographic proof.
- const result=await collectMoneroPublic(mismatch.fetchImpl,now);
- assert.equal(result.usedFallback,true);
+ // A group of nodes whose reported tip disagrees with their own 30-block
+ // history is rejected instead of being treated as a verified backup.
+ await assert.rejects(collectMoneroPublic(mismatch.fetchImpl,now));
 });
 test('ETC main RPC works without querying backups; source is validated',async()=>{
  const {fetchImpl,calls}=mockFetch();
