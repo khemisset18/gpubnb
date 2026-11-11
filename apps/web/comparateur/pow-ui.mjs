@@ -76,9 +76,9 @@ function render(){
     for(const id of networkFields.filter(x=>x!=='powNetworkScale'))byId(id).value='';
   }
   const useNode=!manual&&Boolean(snapshot);
-  byId('powMode').textContent=useNode?'Nœud GPUbnb vérifié':'Réseau manuel';
+  byId('powMode').textContent=useNode?(snapshot.source==='public-chain-rpc'?'Données publiques estimées':'Nœud GPUbnb'):'Réseau manuel';
   byId('powObservedAt').textContent=useNode?
-    'Observation propre : '+new Date(snapshot.collectedAt).toLocaleString('fr-FR'):
+    (snapshot.operator||'Observation propre')+' · '+new Date(snapshot.collectedAt).toLocaleString('fr-FR'):
     'Saisie manuelle, non vérifiée en temps réel';
   for(const [id,suffix] of [['powDayUnit','jour'],['powMonthUnit','mois'],['powYearUnit','an']])
     byId(id).textContent=coin+' / '+suffix;
