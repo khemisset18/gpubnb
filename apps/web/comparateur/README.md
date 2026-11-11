@@ -74,3 +74,11 @@ Critères de contrôle : nombre d'appareils entier, montants et paramètres born
 ## Étude des fournisseurs API
 
 Voir [l'évaluation comparative Minerstat / hashrate.no](docs/ETUDE_FOURNISSEURS.md) : endpoints GPU/CPU, quotas, conditions d'utilisation commerciale, risques juridiques, plan de validation, échantillons nécessaires et demandes de licence à envoyer. **Aucune source live n'est activée et aucune demande n'a été envoyée.**
+
+## Option sans fournisseurs de données commerciaux
+
+Une alternative **autonome** (phase de recherche, pas encore connectée à l'interface) est documentée ici :
+- [Plan de données autonomes](docs/PLAN_DONNEES_AUTONOMES.md) : benchmarks originaux et états des réseaux obtenus depuis nos propres nœuds.
+- [Prototype Monero via nœud local](docs/MINAGE_AUTONOME_MONERO.md) : modèle de rémunération XMR/RandomX, CLI sans clé API, cinq tests unitaires.
+
+La quantité de coins théoriquement minables peut être calculée sans achat de flux de données ; **le taux coin/EUR n'est pas fourni par la blockchain**. À défaut de source de prix utilisable commercialement, la conversion en euros reste manuelle. Le prototype ne change pas le comparateur publié ni le fichier `data/rendements.json` et ne nécessite aucun accès à GPUbnb Host.
