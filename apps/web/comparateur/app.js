@@ -1,4 +1,6 @@
 'use strict';
+const miningCore = globalThis.GPUBNBProfitCore;
+if (!miningCore) throw new Error('Moteur de calcul indisponible.');
 
 /*
  * GPUbnb — comparateur autonome.
@@ -99,7 +101,7 @@ function config(){
     purchase:numberField('purchase',0,1000000,true)
   };
 }
-function validConfig(s){return Object.values(s).every(v=>v===null||Number.isFinite(v));}
+function validConfig(s){return Object.values(s).every(v=>v===null||Number.isFinite(v))&&Number.isInteger(s.quantity);}
 function getRates(id){return state.live.get(id)||[];}
 function rateFor(id){
   if(state.manual.has(id))return {gross:state.manual.get(id),mode:'manual'};
@@ -110,10 +112,10 @@ function rateFor(id){
 }
 function profit(rate,watts,s,quantity){
   if(!rate||!validConfig(s))return null;
-  const gross = rate.gross * s.hours/24 * quantity;
-  const electricity = watts/1000 * s.hours * s.electricity * quantity;
-  const fees = gross * s.poolFee/100;
-  return {gross,electricity,fees,net:gross-electricity-fees,kwh:watts/1000*s.hours*quantity};
+  return miningCore.profit({
+    grossEur24h:rate.gross,watts,quantity,hours:s.hours,
+    electricityEurKwh:s.electricity,poolFeePercent:s.poolFee
+  });
 }
 function put(id,value){byId(id).textContent=value;}
 function updateCoins(){
@@ -216,18 +218,7 @@ function renderTable(){
   byId('tableEmpty').hidden=options.length>0;
 }
 function validateFeed(doc){
-  if(!doc||doc.currency!=='EUR'||!Array.isArray(doc.devices)||typeof doc.source!=='string'||!doc.source.trim())return null;
-  const ts=Date.parse(doc.updatedAt||''),age=Date.now()-ts;
-  if(!Number.isFinite(ts)||age < -300000||age > 2*60*60*1000)return null;
-  const map=new Map(),known=new Set(DEVICES.map(d=>d.id));
-  for(const device of doc.devices){
-    if(!device||!known.has(device.id)||!Array.isArray(device.coins))continue;
-    const entries=device.coins.filter(c=>c&&typeof c.coin==='string'&&
-      Number.isFinite(c.grossEur24h)&&c.grossEur24h>=0)
-      .map((c,i)=>({id:String(i),coin:c.coin,algorithm:String(c.algorithm||''),gross:c.grossEur24h,mode:'live'}));
-    if(entries.length)map.set(device.id,entries);
-  }
-  return {map,source:doc.source.slice(0,100),ts};
+  return miningCore.validateFeed(doc,new Set(DEVICES.map(d=>d.id)));
 }
 async function refreshFeed(){
   try{
