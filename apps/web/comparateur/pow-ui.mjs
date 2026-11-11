@@ -129,6 +129,7 @@ async function refresh(){
   if(byId('powNetworkRate').dataset.manual!=='true'){
     const snapshot=freshFeed(currentCoin);
     if(snapshot)setNetworkFromFeed(snapshot);
+    else for(const id of ['powNetworkRate','powBlockSeconds','powMinerReward'])byId(id).value='';
   }
   render();
 }
@@ -141,7 +142,8 @@ for(const id of allFields){
 }
 for(const id of ['quantity','hours','power','electricity','poolFee'])byId(id).addEventListener('input',render);
 byId('deviceSelect').addEventListener('change',updateDevice);
-for(const id of ['tabGpu','tabCpu','deviceSearch'])byId(id).addEventListener('click',updateDevice);
+for(const id of ['tabGpu','tabCpu'])byId(id).addEventListener('click',updateDevice);
+byId('deviceSearch').addEventListener('input',updateDevice);
 switchCoin(currentCoin);
 refresh();
 setInterval(refresh,5*60*1000);
