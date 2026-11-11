@@ -11,7 +11,8 @@ export const COINS=Object.freeze({
  FLUX:Object.freeze({symbol:'FLUX',name:'Flux',algorithm:'FluxHash / Equihash',hardware:'GPU',unit:'Sol/s',comment:'Utiliser la récompense PoW versée aux mineurs, PAS la récompense totale partagée avec les FluxNodes.'})
 });
 export const FRESH_MS=20*60*1000;
-export const PUBLIC_FRESH_MS=5*60*60*1000;
+// Keep a public observation for at most 24 hours from its LAST SUCCESSFUL collection.
+export const PUBLIC_FRESH_MS=24*60*60*1000;
 const is=(v,min,max)=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
 const isId=coin=>Object.hasOwn(COINS,coin);
 const sameKind=(coin,unit)=>unit===COINS[coin]?.unit;
