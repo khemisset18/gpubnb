@@ -51,14 +51,16 @@ function render() {
   const network = activeNetwork();
   const publicData = Boolean(network && network.source === 'public-monero-rpc');
   const saved = publicData && (lastFetchFailed || Date.now()-ownTimestamp > REFRESH_MS);
+  const backup = publicData && network.usedFallback===true;
   const when = network && ownTimestamp ? new Date(ownTimestamp).toLocaleString('fr-FR') : '';
   el('xmrState').textContent = manual ? 'Données réseau manuelles' :
     !network ? 'Service indisponible' : saved ? 'Dernier relevé sauvegardé' :
+    backup ? 'Source de secours active' :
     publicData ? 'Réseau public · actualisé' : 'Nœud GPUbnb · 30 blocs';
   el('xmrUpdated').textContent = manual ? 'Saisie utilisateur · fraîcheur non vérifiée' :
     !network ? 'Service indisponible · aucun relevé valide de moins de 24 h' :
     saved ? 'Dernière mesure : '+when+' · conservée 24 h maximum' :
-    (publicData?'Source publique · ':'Mis à jour : ')+when;
+    (publicData?(network.activeOperator||'Source publique')+' · ':'Mis à jour : ')+when;
   const hash = number('xmrHashrate', 0.001, 1e9);
   if (!network) {
     resetResults(manual ? 'Entrez une difficulté et une récompense réelles de votre nœud.' :
