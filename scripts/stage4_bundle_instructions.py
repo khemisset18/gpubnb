@@ -60,14 +60,14 @@ que le certificat existe encore, est valide ou est approuvé sur PC1.
 
 ## Identité immuable de CETTE archive
 
-- Commit source exact : \`{commit}\`
-- SHA-256 du manifeste : \`{manifest_digest}\`
-- SHA-256 du certificat éditeur attendu : \`{publisher}\`
+- Commit source exact : `{commit}`
+- SHA-256 du manifeste : `{manifest_digest}`
+- SHA-256 du certificat éditeur attendu : `{publisher}`
 - Signature des quatre exécutables : **absente**
 - Statut : **unsigned / installable=false / publicBookabilityEnabled=false**
 
 Le SHA-256 de l'archive interne est publié séparément dans
-\`stage4-provenance.txt\` de l'artefact GitHub correspondant. Contrôler ces
+`stage4-provenance.txt` de l'artefact GitHub correspondant. Contrôler ces
 valeurs contre les preuves du workflow **du même SHA** ; une empreinte
 présente à l'intérieur d'une archive ne vaut pas authentification externe.
 
