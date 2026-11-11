@@ -82,3 +82,22 @@ Une alternative **autonome** (phase de recherche, pas encore connectée à l'int
 - [Prototype Monero via nœud local](docs/MINAGE_AUTONOME_MONERO.md) : modèle de rémunération XMR/RandomX, CLI sans clé API, cinq tests unitaires.
 
 La quantité de coins théoriquement minables peut être calculée sans achat de flux de données ; **le taux coin/EUR n'est pas fourni par la blockchain**. À défaut de source de prix utilisable commercialement, la conversion en euros reste manuelle. Le prototype ne change pas le comparateur publié ni le fichier `data/rendements.json` et ne nécessite aucun accès à GPUbnb Host.
+
+
+## Extension gratuite Monero / RandomX (calcul indépendant)
+
+La page présente désormais une **section Monero/XMR distincte**. Elle reprend le matériel choisi et les paramètres de coût, demande un hashrate **mesuré** sur RandomX, puis calcule les quantités théoriques de XMR par jour, mois (30 j) et an (365 j).
+
+- **Sans fournisseur payant :** moyenne des 30 derniers blocs obtenue depuis **un nœud Monero mainnet GPUbnb synchronisé**, avec validation de la provenance et expiration des données après 20 minutes.
+- **Sans nœud :** saisie manuelle de la difficulté et de la récompense réelle par bloc. L'interface précise que ces valeurs ne sont pas du temps réel.
+- **Cours XMR/EUR :** uniquement manuel à ce stade ; aucune source de prix commercialement libre n'est intégrée.
+- **Aucune valeur inventée :** sans hashrate mesuré ou sans données de réseau, le résultat reste indisponible.
+- **Rien ne tourne automatiquement depuis cette PR :** l'opérateur doit installer et synchroniser son nœud puis lancer un outil de génération d'instantanés. Aucun accès à GPUbnb Host n'est nécessaire.
+
+Voir **[le guide de mise en service Monero](docs/MONERO_EN_PROPRE.md)**. Pour vérifier les calculs :
+
+```bash
+node --test apps/web/comparateur/tests/*.test.mjs
+```
+
+Ne pas fusionner ni déployer sans accord explicite.
