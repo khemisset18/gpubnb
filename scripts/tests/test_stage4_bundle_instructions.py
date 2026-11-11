@@ -53,6 +53,7 @@ class Stage4BundleInstructionsTests(unittest.TestCase):
         self.assertIn(self.digest, body)
         self.assertIn("NON INSTALLABLE", body)
         self.assertNotIn("/pull/303", body)
+        self.assertNotIn(chr(92) + chr(96), body, "no backslash-escaped Markdown ticks")
         self.assertNotIn("db149c275c0b1a1bf7e5079448f0532328fd0491", body)
 
     def test_rejects_stale_or_modified_readme(self):
