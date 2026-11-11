@@ -277,3 +277,37 @@ integration('slow first activation and lost commit ACK can republish only after 
     }finally{await redis.del(...keys);redis.disconnect();await fixture.cleanup();await db.$disconnect();}
   });
 });
+
+integration('post-commit revalidation outage preserves the accepted frame without readiness authority',async t=>{
+  const {acceptGatewayFrame,markAcceptedGatewayFrame}=await import('../src/workspace-gateway.js');
+  const {seedReadySession}=await import('./fixtures/native-gateway-session.js');
+  for(const outage of ['redis-time','database'] as const)for(const loseAck of [false,true])await t.test(`${outage}, ${loseAck?'lost ACK':'normal ACK'}`,async()=>{
+    const db=new PrismaClient(),redis=new Redis(process.env.REDIS_URL!,{maxRetriesPerRequest:1});
+    const fixture=await seedReadySession(db,crypto.randomBytes(8).toString('hex'),{bookingStatus:BookingStatus.STARTING,expectedSeconds:900});
+    const sessionId=fixture.session.id,machineId=fixture.machine.id,channelId=crypto.randomUUID();
+    const browserSessionKey='gpubnb:test:postcommit:'+channelId;
+    const binding={sessionId,machineId,browserSessionKey,runtimeBackend:'WINDOWS_NATIVE' as const};
+    const authorityKey='workspace-gateway:ws-session-activated:'+sessionId,channelKey='workspace-gateway:ws-channel:'+channelId;
+    const keys=[authorityKey,browserSessionKey,channelKey,'workspace-gateway:ws-input:'+channelId,'workspace-gateway:ws-input-bytes:'+channelId,'workspace-gateway:ws-upstream-ready:'+channelId];
+    try{
+      await redis.set(browserSessionKey,'1','EX',60);await redis.set(channelKey,JSON.stringify(binding),'EX',60);
+      const actualTime=redis.time.bind(redis);let times=0,reads=0;
+      redis.time=(async()=>{times++;if(times>1&&outage==='redis-time')throw new Error('injected Redis TIME outage');const time=await actualTime();return times===1?[String(Number(time[0])-16),time[1]]:time;}) as typeof redis.time;
+      const originalFind=db.workspaceSession.findFirst.bind(db.workspaceSession);
+      const faultDb=new Proxy(db,{get(target,key){
+        if(key==='workspaceSession')return new Proxy(target.workspaceSession,{get(model,method){
+          if(method==='findFirst')return async(...args:unknown[])=>{reads++;if(reads>1&&outage==='database')throw new Error('injected PostgreSQL outage');return (originalFind as (...args:unknown[])=>Promise<unknown>)(...args);};
+          return Reflect.get(model,method);
+        }});
+        if(key==='$transaction'&&loseAck)return async(...args:unknown[])=>{await (db.$transaction as (...args:unknown[])=>Promise<unknown>).apply(db,args);throw new Error('lost-commit-ack');};
+        const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+      }});
+      const accepted=await acceptGatewayFrame({db:faultDb,redis,sessionId,machineId,channelId,bindingRaw:JSON.stringify(binding),frame:{dataBase64:'AA==',binary:true,close:false}});
+      assert.equal(accepted.enqueued,1);assert.equal(accepted.authorityId,undefined);
+      assert.equal(await redis.get(authorityKey),null);
+      assert.equal(await redis.llen('workspace-gateway:ws-input:'+channelId),1);
+      assert.equal(await db.workspaceGatewayAcceptance.count({where:{sessionId}}),1);
+      assert.equal(await markAcceptedGatewayFrame(redis,sessionId,channelId,binding,accepted.authorityId,accepted.expiresAt),false);
+    }finally{await redis.del(...keys);redis.disconnect();await fixture.cleanup();await db.$disconnect();}
+  });
+});

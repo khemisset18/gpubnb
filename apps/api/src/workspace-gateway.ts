@@ -699,6 +699,16 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
     if(!fresh?.booking.workspaceActivatedAt||fresh.gatewayAcceptance?.id!==authorityId)return undefined;
     return await installGatewayAuthority(redis,sessionId,authorityId,fresh.expiresAt,retryDeadline)?fresh.expiresAt:undefined;
   };
+  // Once the receipt and payload have committed, an authority-publication
+  // outage must not turn that accepted frame into an error and trigger a resend.
+  // Without a confirmed install, withhold readiness and let the next frame
+  // perform the normal authoritative renewal.
+  const publishCommittedAuthority=async(authorityId:string,expiresAt:Date):Promise<Date|undefined>=>{
+    try{
+      if(await installGatewayAuthority(redis,sessionId,authorityId,expiresAt,validationDeadline))return expiresAt;
+      return await revalidateAuthority(authorityId);
+    }catch{return undefined;}
+  };
   const live=await liveGatewayFrameAuthority(db,sessionId,machineId,binding.runtimeBackend);
   if(!live||(!live.booking.workspaceActivatedAt&&(live.startedAt!==null||
     live.booking.status!==BookingStatus.STARTING&&live.booking.status!==BookingStatus.ACTIVE)))return {enqueued:-2};
@@ -739,11 +749,8 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
     },{maxWait:5000,timeout:10000});
     if(outcome.enqueued!==-3){
       if(outcome.enqueued===1&&outcome.authorityId){
-        const installed=await installGatewayAuthority(redis,sessionId,outcome.authorityId,outcome.expiresAt,validationDeadline);
-        if(!installed){
-          const freshExpiry=await revalidateAuthority(outcome.authorityId);
-          return freshExpiry?{...outcome,expiresAt:freshExpiry}:{enqueued:outcome.enqueued,expiresAt:outcome.expiresAt};
-        }
+        const expiry=await publishCommittedAuthority(outcome.authorityId,outcome.expiresAt);
+        return expiry?{...outcome,expiresAt:expiry}:{enqueued:outcome.enqueued,expiresAt:outcome.expiresAt};
       }
       return outcome;
     }
@@ -766,8 +773,7 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
         throw error;
       }
       if(committed){
-        const installed=await installGatewayAuthority(redis,sessionId,committed.id,committed.expiresAt,validationDeadline);
-        const freshExpiry=installed?committed.expiresAt:await revalidateAuthority(committed.id);
+        const freshExpiry=await publishCommittedAuthority(committed.id,committed.expiresAt);
         return freshExpiry?{enqueued:1,expiresAt:freshExpiry,authorityId:committed.id}:{enqueued:1,expiresAt:committed.expiresAt};
       }
     }

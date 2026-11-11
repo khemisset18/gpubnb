@@ -21,9 +21,18 @@ created for the first accepted upstream frame. Redis stores that UUID under
 
 <!-- coderabbit-ai-generated-section:v1:e5e2e45831d0c5af50dc2a0457db72183e099eaba0d1b869abd7620f93e08241 -->
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:840d56d11b06d27d8babf3755329f879a5b008f1fe9793c0c61391d28ba4bf55 -->
+
 - Lease expiry bounds stale authority after DB-only status, connectivity or
   moderation changes. A PostgreSQL failure during renewal refuses the frame.
-  A Redis read, CAS or enqueue failure also refuses the frame.
+  Redis read, CAS or enqueue failures before admission refuse the frame. Once
+  the first payload and its receipt are committed, a subsequent authority
+  publication failure preserves that accepted result but returns no authority
+  for readiness; later frames require a fresh successful renewal.
+
+<!-- /coderabbit-ai-generated:v1 -->
 - Before the PostgreSQL read, renewal samples Redis `TIME` and fixes a
   15-second validation deadline. The install Lua checks that deadline using
   Redis's clock, including after a first-frame transaction or lost commit ACK.
