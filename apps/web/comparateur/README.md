@@ -207,3 +207,21 @@ Le navigateur peut afficher **« Source de secours active »** avec le nom de l'
 Voir [les règles de basculement, de sécurité et les sources vérifiées](docs/BASCULEMENT_SOURCES.md).
 
 **Limite** : la liste est codée et testée contre des réponses simulées, **mais aucun service n'est encore déployé** et les autorisations de réutilisation commerciale doivent être confirmées. Nodely demande de prendre contact pour les charges commerciales importantes. Ne pas présenter le basculement comme une garantie de disponibilité.
+
+
+## Catalogue de rentabilité complet : 14 cryptos
+
+Après recoupement **en lecture seule** avec les catalogues GPUbnb Host et web, le comparateur couvre :
+
+- GPU/CPU existants : **XMR, RVN, ETC, ERG, FLUX**.
+- Catalogue GPUbnb Host supplémentaire : **PRL (Pearl), ALPH (Alephium), KAS (Kaspa), CFX (Conflux), NEOX (Neoxa)**.
+- Profils natifs additionnels : **BEAM (Beam Mimblewimble) et CTXC (Cortex)**.
+- Monnaies ajoutées à la demande : **BTC (Bitcoin) et ZEC (Zcash)**.
+
+Détails exacts : **[COUVERTURE_COMPLETE_CRYPTOS.md](docs/COUVERTURE_COMPLETE_CRYPTOS.md)**, précisant la différence entre « présent dans le catalogue », « lancement approuvé par GPUbnb Host » et « données automatiques réellement connectées ».
+
+**Pearl (PRL) n'est pas calculé comme un hashrate minier standard** : un panneau séparé transforme uniquement les gains PRL *bruts observés dans un pool pour un GPU et une durée réellement mesurée* en projections jour/mois/an. Ces gains historiques ne garantissent pas un futur paiement.
+
+**BTC, ZEC, Kaspa et Alephium** ont un profil d'équipement **ASIC dominant** ; ils demandent un hashrate et une puissance spécifiques de l'ASIC, sans emprunter le wattage d'un GPU. **Neoxa** requiert la *part mineur réelle* (20 % de la subvention de bloc). **Beam / Flux / Zcash / Cortex** affichent leurs unités Sol/s ou Graph/s sans les confondre avec les H/s.
+
+**Important :** seule une partie des réseaux (XMR, RVN, ETC) dispose de collecteurs automatiques expérimentaux. Les autres monnaies restent en **calcul à partir de mesures manuelles**, sans tarif de données, sans rendements ni cours inventés. Leur ajout **ne change pas** les profils exécutables de GPUbnb Host ni le site principal. Aucun service n'est déployé et **aucune fusion n'a été effectuée**.
