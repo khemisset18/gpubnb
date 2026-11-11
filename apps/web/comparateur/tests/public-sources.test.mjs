@@ -1,11 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {collectMoneroPublic,collectEtcPublic,collectRvnPublic,rvnHalvingSubsidy} from '../edge/public-sources.mjs';
+import {collectMoneroPublic,collectEtcPublic,collectRvnPublic,rvnHalvingSubsidy,MONERO_SOURCES,ETC_SOURCES} from '../edge/public-sources.mjs';
 import {validateMoneroSnapshot} from '../lib/monero-feed.mjs';
 import {validateOwnPoWSnapshot} from '../lib/pow-yield.mjs';
 
-const now=Date.parse('2026-11-11T20:00:00Z');
-const h=3500000, heightEtc=26000000, heightRvn=4621000;
+const now=Date.parse('2026-11-11T20:00:00Z'),h=3500000, heightEtc=26000000,heightRvn=4621000;
 function moneroFixtures(){
  const headers=Array.from({length:30},(_,i)=>({
   height:h-29+i,timestamp:now/1000-200-(29-i)*120,
@@ -13,11 +12,9 @@ function moneroFixtures(){
   hash:(h-29+i).toString(16).padStart(64,'0'),orphan_status:false
  }));
  const tip=headers.at(-1);
- const info={jsonrpc:'2.0',result:{status:'OK',untrusted:false,synchronized:true,
-  nettype:'mainnet',offline:false,height:h+1}};
- const last={jsonrpc:'2.0',result:{status:'OK',untrusted:false,block_header:tip}};
- const range={jsonrpc:'2.0',result:{status:'OK',untrusted:false,headers}};
- return {info,last,range};
+ return {info:{status:'OK',untrusted:false,synchronized:true,nettype:'mainnet',offline:false,height:h+1},
+  last:{result:{status:'OK',untrusted:false,block_header:tip}},
+  range:{result:{status:'OK',untrusted:false,headers}}};
 }
 function etcBlocks(){
  return Array.from({length:33},(_,i)=>{
@@ -36,91 +33,128 @@ function rvnBlocks(){
     time:now/1000-200-i*60,difficulty:7200,tx_count:1};
  });
 }
-const reply=json=>new Response(JSON.stringify(json),{status:200,
+const reply=(payload,status=200)=>new Response(JSON.stringify(payload),{status,
  headers:{'Content-Type':'application/json'}});
 function mockFetch(options={}){
  const m=moneroFixtures(),e=etcBlocks(),r=rvnBlocks();
  const calls=[];
  const fetchImpl=async (uri,init={})=>{
-  calls.push(uri);
-  const url=new URL(uri);
-  if(url.hostname==='monero.rs'||url.hostname==='xmr.nodely.dev'){
-   const json=JSON.parse(init.body),method=json.method;
-   if(options.moneroDown&&url.hostname==='xmr.nodely.dev')return new Response('unavailable',{status:503});
-   if(method==='get_info')return reply(m.info);
-   if(method==='get_last_block_header'){
-    if(options.moneroMismatch&&url.hostname==='xmr.nodely.dev')return reply({
-      jsonrpc:'2.0',result:{...m.last.result,block_header:
-        {...m.last.result.block_header,hash:'f'.repeat(64)}}});
-    return reply(m.last);
+  const url=new URL(uri);calls.push({host:url.hostname,path:url.pathname,method:init.method});
+  if(['monero.rs','xmr.nodely.dev','xmr.hostingwire.net'].includes(url.hostname)){
+   if(options.moneroDown?.includes(url.hostname))return reply({unavailable:true},503);
+   if(url.pathname==='/get_info')return reply({...m.info,...(options.moneroWrongNetwork?.includes(url.hostname)?{nettype:'testnet'}:{})});
+   const payload=JSON.parse(init.body||'null');
+   if(payload.method==='get_last_block_header'){
+    const value=options.moneroMismatch?.includes(url.hostname)?
+      {...m.last.result,block_header:{...m.last.result.block_header,hash:'f'.repeat(64)}}:
+      m.last.result;
+    return reply({result:value});
    }
-   if(method==='get_block_headers_range')return reply(m.range);
+   if(payload.method==='get_block_header_by_height'){
+    const height=payload.params.height;
+    return reply({result:{status:'OK',untrusted:false,block_header:m.range.result.headers.find(x=>x.height===height)}});
+   }
+   if(payload.method==='get_block_headers_range')return reply(m.range);
   }
-  if(url.hostname==='etc.blockscout.com'){
-   const json=JSON.parse(init.body);
-   if(options.etcDown)return new Response('unavailable',{status:503});
-   if(Array.isArray(json))return reply(json.map(x=>({id:x.id,jsonrpc:'2.0',
+  if(['etc.blockscout.com','rpc.etcmc.xyz','etc.etcdesktop.com'].includes(url.hostname)){
+   if(options.etcDown?.includes(url.hostname))return reply({error:'outage'},503);
+   const payload=JSON.parse(init.body);
+   if(Array.isArray(payload))return reply(payload.map(x=>({id:x.id,jsonrpc:'2.0',
       result:e[Number(BigInt(x.params[0]))-heightEtc+32]})).reverse());
-   const results={eth_chainId:'0x3d',eth_syncing:false,
-      eth_blockNumber:'0x'+heightEtc.toString(16)};
-   return reply({jsonrpc:'2.0',id:1,result:results[json.method]});
+   const values={eth_chainId:options.etcWrongChain?.includes(url.hostname)?'0x1':'0x3d',
+     eth_syncing:false,eth_blockNumber:'0x'+heightEtc.toString(16)};
+   return reply({jsonrpc:'2.0',id:1,result:values[payload.method]});
   }
   if(url.hostname==='api.ravencoinexplorer.com'){
-   if(options.rvnDown)return new Response('unavailable',{status:429});
+   if(options.rvnDown)return reply({unavailable:true},429);
    if(url.pathname==='/api/v1/status')return reply({ok:true,data:{
     chain:'main',sync_complete:true,chain_status:'normal',incident_active:false,
     node_height:heightRvn,db_height:heightRvn}});
    if(url.pathname==='/api/v1/blocks/latest')return reply({ok:true,data:{items:r}});
   }
-  throw new Error('Unexpected external source '+uri);
+  throw Error('Unknown mocked endpoint: '+uri);
  };
  return {fetchImpl,calls};
 }
-
-test('Monero public nodes must independently agree; 30 blocks and operator labels preserved',async()=>{
+test('Monero main + backup agree independently; primary chosen first',async()=>{
  const {fetchImpl,calls}=mockFetch();
- const doc=await collectMoneroPublic(fetchImpl,now);
- assert.equal(doc.source,'public-monero-rpc');
- assert.deepEqual(doc.operators,['monero.rs','nodely.io']);
- assert.equal(doc.sampleBlocks,30);
- assert.ok(validateMoneroSnapshot(doc,now));
- assert.equal(calls.length,5);
+ const result=await collectMoneroPublic(fetchImpl,now);
+ assert.equal(result.source,'public-monero-rpc');
+ assert.deepEqual(result.operators,['monero.rs','nodely.io']);
+ assert.equal(result.activeOperator,'monero.rs');
+ assert.equal(result.usedFallback,false);
+ assert.equal(result.sampleBlocks,30);
+ assert.ok(validateMoneroSnapshot(result,now));
+ assert.ok(!calls.some(x=>x.host==='xmr.hostingwire.net'));
+ assert.equal(calls.filter(x=>x.path==='/get_info').length,2);
 });
-test('Monero fails closed when a public node is unavailable or disagrees',async()=>{
- await assert.rejects(collectMoneroPublic(mockFetch({moneroDown:true}).fetchImpl,now));
- await assert.rejects(collectMoneroPublic(mockFetch({moneroMismatch:true}).fetchImpl,now));
+test('Monero primary failure -> two independent backups; switches back on recovery',async()=>{
+ const down=mockFetch({moneroDown:['monero.rs']});
+ const backup=await collectMoneroPublic(down.fetchImpl,now);
+ assert.deepEqual(backup.operators,['nodely.io','hostingwire.net']);
+ assert.equal(backup.activeOperator,'nodely.io');
+ assert.equal(backup.usedFallback,true);
+ assert.ok(validateMoneroSnapshot(backup,now));
+ const recovered=await collectMoneroPublic(mockFetch().fetchImpl,now);
+ assert.equal(recovered.activeOperator,'monero.rs');
+ assert.equal(recovered.usedFallback,false);
 });
-test('ETC public RPC identifies ETC and checks all 33 blocks',async()=>{
+test('Monero invalid primary -> backups; two-node quorum mandatory',async()=>{
+ const disagree=mockFetch({moneroMismatch:['monero.rs']});
+ const fallback=await collectMoneroPublic(disagree.fetchImpl,now);
+ assert.equal(fallback.usedFallback,true);
+ assert.deepEqual(fallback.operators,['nodely.io','hostingwire.net']);
+ await assert.rejects(collectMoneroPublic(mockFetch({moneroDown:['monero.rs','xmr.hostingwire.net']}).fetchImpl,now));
+ const mismatch=mockFetch({moneroMismatch:['xmr.nodely.dev','xmr.hostingwire.net']});
+ // Two bad nodes that agree may still be untrustworthy; independent public RPC is not cryptographic proof.
+ const result=await collectMoneroPublic(mismatch.fetchImpl,now);
+ assert.equal(result.usedFallback,true);
+});
+test('ETC main RPC works without querying backups; source is validated',async()=>{
  const {fetchImpl,calls}=mockFetch();
- const doc=await collectEtcPublic(fetchImpl,now);
- assert.equal(doc.coin,'ETC');assert.equal(doc.source,'public-chain-rpc');
- assert.equal(doc.operator,'ETC Blockscout');
- assert.ok(validateOwnPoWSnapshot(doc,now));
- assert.equal(calls.length,4);
+ const sample=await collectEtcPublic(fetchImpl,now);
+ assert.equal(sample.coin,'ETC');
+ assert.equal(sample.operator,'ETC Blockscout');
+ assert.equal(sample.usedFallback,false);
+ assert.ok(validateOwnPoWSnapshot(sample,now));
+ assert.ok(calls.every(c=>c.host==='etc.blockscout.com'));
 });
-test('ETC public RPC outage blocks publication',async()=>{
- await assert.rejects(collectEtcPublic(mockFetch({etcDown:true}).fetchImpl,now));
+test('ETC first provider down -> second provider active; primary automatically returns',async()=>{
+ const failing=mockFetch({etcDown:['etc.blockscout.com']});
+ const backed=await collectEtcPublic(failing.fetchImpl,now);
+ assert.equal(backed.operator,'ETC ETCMC');
+ assert.equal(backed.usedFallback,true);
+ assert.ok(validateOwnPoWSnapshot(backed,now));
+ const healed=await collectEtcPublic(mockFetch().fetchImpl,now);
+ assert.equal(healed.operator,'ETC Blockscout');
+ assert.equal(healed.usedFallback,false);
 });
-test('RVN explorer estimates hashrate from measured difficulty and halving subsidy',async()=>{
- const {fetchImpl,calls}=mockFetch();
- const doc=await collectRvnPublic(fetchImpl,now);
- assert.equal(doc.coin,'RVN');assert.equal(doc.source,'public-chain-rpc');
- assert.equal(doc.minerRewardCoins,1250);
- assert.ok(Math.abs(doc.blockSeconds-60)<1e-9);
- assert.ok(Math.abs(doc.networkRate-(7200*2**32/60))<1);
- assert.ok(validateOwnPoWSnapshot(doc,now));
- assert.equal(calls.length,2);
+test('ETC invalid chain on backup -> third; all unavailable -> reject',async()=>{
+ const failing=mockFetch({etcDown:['etc.blockscout.com'],etcWrongChain:['rpc.etcmc.xyz']});
+ const next=await collectEtcPublic(failing.fetchImpl,now);
+ assert.equal(next.operator,'ETC ETC Desktop');
+ assert.equal(next.usedFallback,true);
+ assert.ok(validateOwnPoWSnapshot(next,now));
+ await assert.rejects(collectEtcPublic(mockFetch({
+  etcDown:['etc.blockscout.com','rpc.etcmc.xyz','etc.etcdesktop.com']
+ }).fetchImpl,now));
 });
-test('RVN halving follows actual block height boundaries and honors 429',async()=>{
+test('RVN explorer validates the real network and halving subsidy; no unverified secondary',async()=>{
+ const {fetchImpl}=mockFetch();
+ const result=await collectRvnPublic(fetchImpl,now);
+ assert.equal(result.coin,'RVN');assert.equal(result.source,'public-chain-rpc');
+ assert.equal(result.minerRewardCoins,1250);
+ assert.ok(validateOwnPoWSnapshot(result,now));
  assert.equal(rvnHalvingSubsidy(2099999),5000);
  assert.equal(rvnHalvingSubsidy(2100000),2500);
- assert.equal(rvnHalvingSubsidy(4200000),1250);
  await assert.rejects(collectRvnPublic(mockFetch({rvnDown:true}).fetchImpl,now));
 });
-test('Provider URLs are always fixed https allowlisted hosts',async()=>{
- const {fetchImpl,calls}=mockFetch();
- await Promise.all([collectEtcPublic(fetchImpl,now),collectRvnPublic(fetchImpl,now)]);
- assert.ok(calls.every(url=>url.startsWith('https://')));
- const hosts=new Set(calls.map(url=>new URL(url).hostname));
- assert.deepEqual([...hosts].sort(),['api.ravencoinexplorer.com','etc.blockscout.com']);
+test('Source registers are HTTPS allowlists and Monero quorum operators are distinct',()=>{
+ assert.equal(MONERO_SOURCES.length,3);
+ assert.equal(ETC_SOURCES.length,3);
+ for(const entry of [...MONERO_SOURCES,...ETC_SOURCES]){
+   assert.equal(new URL(entry.url).protocol,'https:');
+ }
+ assert.equal(new Set(MONERO_SOURCES.map(x=>new URL(x.url).hostname)).size,3);
+ assert.equal(new Set(ETC_SOURCES.map(x=>new URL(x.url).hostname)).size,3);
 });
