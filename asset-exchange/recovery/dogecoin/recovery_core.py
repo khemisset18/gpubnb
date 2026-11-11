@@ -102,7 +102,9 @@ def persist_bundle(path,value):
 
 
 class Rpc:
-    def __init__(self,binary,datadir,port,parent_namespace):
+    def __init__(self,binary,datadir,port,parent_namespace,maximum_calls=64):
+        require(type(maximum_calls) is int and 1<=maximum_calls<=64,'bounded recovery RPC budget required')
+        self.maximum_calls=maximum_calls
         links=json.loads(subprocess.check_output(['ip','-json','link','show'],text=True))
         current=os.readlink('/proc/self/ns/net')
         require(type(parent_namespace) is str and parent_namespace.startswith('net:[') and current!=parent_namespace,
@@ -116,7 +118,7 @@ class Rpc:
         self.calls=[]
 
     def __call__(self,method,*params,missing_ok=False):
-        require(method in METHODS and len(self.calls)<64,'recovery RPC budget/method bound')
+        require(method in METHODS and len(self.calls)<self.maximum_calls,'recovery RPC budget/method bound')
         self.calls.append({'method':method,'params':list(map(str,params))})
         result=subprocess.run(self.base+[method,*map(str,params)],env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8'},
                 capture_output=True,text=True,timeout=15)
@@ -250,6 +252,7 @@ def main(argv=None):
     parser.add_argument('--bundle',required=True);parser.add_argument('--bundle-sha256',required=True)
     parser.add_argument('--rpc-cli');parser.add_argument('--rpc-datadir');parser.add_argument('--rpc-port',type=int)
     parser.add_argument('--parent-net-ns');parser.add_argument('--authorization');parser.add_argument('--journal');parser.add_argument('--rpc-trace')
+    parser.add_argument('--rpc-budget',type=int,default=64)
     args=parser.parse_args(argv)
     paths=[str(Path(path).resolve()) for path in (args.bundle,args.journal,args.rpc_trace) if path]
     require(len(paths)==len(set(paths)),'bundle, observation journal and trace must be distinct files')
@@ -260,7 +263,7 @@ def main(argv=None):
     else:
         require(args.authorization==AUTHORIZATION,'exact private recovery scope required')
         require(all(x is not None for x in (args.rpc_cli,args.rpc_datadir,args.rpc_port,args.parent_net_ns)),'RPC recovery parameters required')
-        rpc=Rpc(args.rpc_cli,args.rpc_datadir,args.rpc_port,args.parent_net_ns)
+        rpc=Rpc(args.rpc_cli,args.rpc_datadir,args.rpc_port,args.parent_net_ns,args.rpc_budget)
         previous=None
         if args.journal and Path(args.journal).exists():
             previous=decode_json(read_regular(args.journal))

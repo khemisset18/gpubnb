@@ -1,0 +1,65 @@
+{
+  "baseCommit": "a5eb4d065ec8443c6cf13fdc8c18cec97a64e6ed",
+  "basePr": 354,
+  "dogecoinCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "dogecoinLicense": "MIT, retained in qualification/dogecoin/d2/DOGECOIN_COPYING",
+  "files": [
+    {
+      "path": "src/validation.cpp",
+      "sha256": "e9f13df6a83e057fba52f3525fec894ba13a1dcec52be3cf71b13fd181c79e00"
+    },
+    {
+      "path": "src/validation.h",
+      "sha256": "8549c1b0d4f17b10f947865745b41cfc13f00cc89b6aeae1ed4f8a460063dc93"
+    },
+    {
+      "path": "src/txmempool.cpp",
+      "sha256": "144eb2a64976c08e72beb36e0aeaba5daf0d188ba46c97a2d4f627e84b386501"
+    },
+    {
+      "path": "src/policy/policy.h",
+      "sha256": "1929f7a8c27228fabed8eb44223dda53dd86ea448f009fdd77e0024f9826ab51"
+    },
+    {
+      "path": "src/init.cpp",
+      "sha256": "fffc4fe0fbf7031043b3bc75fb615b5e4a298d2cdcf81dd28dc44a06af206a4e"
+    },
+    {
+      "path": "src/rpc/rawtransaction.cpp",
+      "sha256": "ecf3cb464e7b955bda3d51e99cded73b354583fab1a1b2b678a36d656b303ff4"
+    },
+    {
+      "path": "qa/rpc-tests/replace-by-fee.py",
+      "sha256": "a3aa53c3167a7e3dcfa40772ff7b154da69225adb657fb9609be0a15132e335f"
+    },
+    {
+      "path": "doc/fee-recommendation.md",
+      "sha256": "2dc1a312f7198c3e8f6911666e1712a9dcf4c29a5f5294520af489e350175c67"
+    }
+  ],
+  "nativeStatusAtPreparation": "NOT_TESTED",
+  "qualificationStatus": "BLOCKED",
+  "references": [
+    {
+      "commit": "fc63460615e8dca83fc19520f32a1cb00be4acfa",
+      "files": [
+        "client/asset/doge/doge.go",
+        "client/asset/btc/btc.go"
+      ],
+      "license": "Blue Oak Model License 1.0.0",
+      "method": "retain exact cached refunds and bounded fee limits; no external fee API is used by this laboratory",
+      "repository": "decred/dcrdex"
+    },
+    {
+      "commit": "d9313b20fc131251b50a4cf1cbcabeefbb006656",
+      "files": [
+        "basicswap/interface/doge/doge.py",
+        "tests/basicswap/extended/test_doge.py"
+      ],
+      "license": "MIT",
+      "method": "native private DOGE transaction fee accounting and explicit legacy/relay parameters",
+      "repository": "basicswap/basicswap"
+    }
+  ],
+  "schemaVersion": 1
+}

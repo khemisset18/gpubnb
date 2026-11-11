@@ -34,14 +34,16 @@ NODES = ('a', 'b')
 P2P_PORTS = {'a':18444, 'b':18445}
 RPC_PORTS = {'a':18332, 'b':18333}
 MAX_BLOCKS, MAX_RPC, MAX_FIXTURES = 1370, 480, 8
+FEE_MAX_FIXTURES, FEE_MAX_BYTES = 96, 60000
 METHODS = frozenset({'getblockchaininfo','getblockhash','getnetworkinfo','getpeerinfo',
     'generatetoaddress','getblock','getrawtransaction','gettxout','sendrawtransaction',
     'getmempoolentry','getrawmempool','getblockheader','getmempoolinfo','addnode','setnetworkactive','invalidateblock','reconsiderblock','stop',
     'createauxblock','submitauxblock'})
 
 
-def manifest():
-    return {'schemaVersion':1,'authorization':AUTHORIZATION,'network':'regtest',
+def manifest(lab_suite='multinode'):
+    require(lab_suite in ('multinode','fee-pinning'),'fixed laboratory suite required')
+    result={'schemaVersion':1,'authorization':AUTHORIZATION,'network':'regtest','labSuite':lab_suite,
         'sourceCommit':SOURCE_COMMIT,'archiveSha256':SHA256,'librarySha256':LIBRARY_SHA256,
         'nodes':2,'peerEndpoints':[f'127.0.0.1:{P2P_PORTS[x]}' for x in NODES],
         'rpcEndpoints':[f'127.0.0.1:{RPC_PORTS[x]}' for x in NODES],
@@ -55,10 +57,20 @@ def manifest():
         'promiscuousMempoolFlags':None,'settlementAllowed':False,'qualificationStatus':'BLOCKED',
         'notCovered':['independent external review','complete AuxPoW adversarial matrix beyond eight fixed fixtures',
             'production watcher deployment','all D0-D9 requirements']}
+    if lab_suite=='fee-pinning':
+        result.update(maxBroadcastFixtures=FEE_MAX_FIXTURES,maxFixtureBytes=FEE_MAX_BYTES,
+            rpcAllowlist=sorted(METHODS|{'setmocktime'}),maxRpc=800,maxPressureTransactions=64,
+            maxPressureOutputsPerTransaction=1601,maxMockTimeAdvanceSeconds=21600,
+            replacementPolicy={'a':'upstream default enabled, explicit opt-in required','b':'explicitly disabled'},
+            repeatsPreviouslyQualifiedSuite=False)
+    return result
 
 
-def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted, aux_submitted=frozenset()):
-    require(node in NODES and method in METHODS, 'fixed node/method required')
+def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted, aux_submitted=frozenset(),
+                 lab_suite='multinode',mocktimes=frozenset()):
+    require(lab_suite in ('multinode','fee-pinning'),'fixed laboratory suite required')
+    methods=METHODS|({'setmocktime'} if lab_suite=='fee-pinning' else set())
+    require(node in NODES and method in methods, 'fixed node/method required')
     require(type(params) in (tuple,list) and all(type(p) is str for p in params), 'string RPC parameters required')
     params=tuple(params)
     if method=='generatetoaddress':
@@ -69,6 +81,7 @@ def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted, a
         other='b' if node=='a' else 'a'
         require(params==(f'127.0.0.1:{P2P_PORTS[other]}','onetry'), 'only fixed private peer allowed')
     elif method=='setnetworkactive':require(params in [('true',),('false',)], 'explicit network state required')
+    elif method=='setmocktime':require(len(params)==1 and params[0] in mocktimes,'registered private mock clock required')
     elif method=='getblockhash':require(len(params)==1 and re.fullmatch(r'0|[1-9][0-9]{0,3}',params[0]) is not None
                 and int(params[0])<=MAX_BLOCKS,'bounded active-chain height required')
     elif method in ('getblock','invalidateblock','reconsiderblock'):require(len(params)==1 and params[0] in blocks, 'registered block required')
@@ -146,6 +159,9 @@ def persist_bundle(path, bundle):
 
 def run(args, recovery_runner=None, bundle_validator=None):
     require(args.authorization==AUTHORIZATION,'exact multi-node scope required')
+    lab_suite=getattr(args,'lab_suite','multinode')
+    limits=manifest(lab_suite)
+    rpc_limit=limits['maxRpc']
     parent=args.parent_net_ns
     links=json.loads(subprocess.check_output(['ip','-json','link','show'],text=True))
     validate_namespace(parent,os.readlink('/proc/self/ns/net'),links)
@@ -157,8 +173,8 @@ def run(args, recovery_runner=None, bundle_validator=None):
     bins,out,keys=[work/x for x in ('bin','evidence','keys')]
     for path in (bins,out,keys):path.mkdir(mode=0o700)
     report={'experimentStatus':'FAIL','qualificationStatus':'BLOCKED','settlementAllowed':False,
-        'manifest':manifest(),'mainnetUsed':False,'realFundsUsed':False,'namespaceBefore':links,'stages':[]}
-    trace=[];signers=[];key_specs=[];processes={};logs={};common={};addresses={};blocks=set();txids=set();submitted=set();aux_submitted=set();external_calls=[];generated=0
+        'manifest':limits,'mainnetUsed':False,'realFundsUsed':False,'namespaceBefore':links,'stages':[]}
+    trace=[];signers=[];key_specs=[];processes={};logs={};common={};addresses={};blocks=set();txids=set();submitted=set();aux_submitted=set();external_calls=[];generated=0;mocktimes=set()
     env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8'}
     def dump(value):return json.dumps(value,indent=2,sort_keys=True,default=lambda x:str(x) if isinstance(x,Decimal) else (_ for _ in ()).throw(TypeError()))+'\n'
     def save():
@@ -170,8 +186,9 @@ def run(args, recovery_runner=None, bundle_validator=None):
     signal.signal(signal.SIGALRM,alarm);signal.signal(signal.SIGTERM,alarm);signal.alarm(900)
     def rpc(node,method,*params,reject=None,missing_ok=False):
         nonlocal generated
-        validate_rpc(node,method,params,addresses=addresses,blocks=blocks,txids=txids,submitted=submitted,aux_submitted=aux_submitted)
-        require(len(trace)+len(external_calls)<MAX_RPC,'RPC budget exceeded')
+        validate_rpc(node,method,params,addresses=addresses,blocks=blocks,txids=txids,submitted=submitted,
+            aux_submitted=aux_submitted,lab_suite=lab_suite,mocktimes=mocktimes)
+        require(len(trace)+len(external_calls)<rpc_limit,'RPC budget exceeded')
         if method=='generatetoaddress':generated+=int(params[0]);require(generated<=MAX_BLOCKS,'block budget exceeded')
         if method=='submitauxblock':require(generated<MAX_BLOCKS,'AuxPoW block budget exceeded')
         row={'source':node,'method':method,'params':list(params)};trace.append(row);save()
@@ -200,6 +217,8 @@ def run(args, recovery_runner=None, bundle_validator=None):
             '-rpcallowip=127.0.0.1','-printtoconsole=1','-dbcache=32','-par=1','-acceptnonstdtxn=0','-maxmempool=5',
             '-harddustlimit='+('0.002' if node=='b' else '0.001'),
             '-minrelaytxfee='+('0.01' if node=='b' else '0.001')]
+        if lab_suite=='fee-pinning':
+            daemon+=['-mempoolreplacement='+('0' if node=='b' else '1'),'-debug=mempoolrej']
         report.setdefault('processStarts',[]).append({'source':node,'arguments':[x.replace(str(data),'PRIVATE_DATADIR') for x in daemon[1:]]})
         processes[node]=subprocess.Popen(daemon,env=env,stdout=log,stderr=subprocess.STDOUT)
         deadline=time.monotonic()+45
@@ -228,8 +247,8 @@ def run(args, recovery_runner=None, bundle_validator=None):
         require(size<=1024*1024**2,'laboratory data budget exceeded')
         return result
     def submit(node,raw,reject=None):
-        require(type(raw) is bytes and 0<len(raw)<=10000,'bounded fixture bytes required')
-        require(raw.hex() in submitted or len(submitted)<MAX_FIXTURES,'fixture count budget')
+        require(type(raw) is bytes and 0<len(raw)<=limits['maxFixtureBytes'],'bounded fixture bytes required')
+        require(raw.hex() in submitted or len(submitted)<limits['maxBroadcastFixtures'],'fixture count budget')
         submitted.add(raw.hex());tid=hash256(raw)[::-1].hex();txids.add(tid)
         result=rpc(node,'sendrawtransaction',raw.hex(),reject=reject)
         if not reject:require(result==tid,'native transaction identity mismatch')
@@ -259,6 +278,53 @@ def run(args, recovery_runner=None, bundle_validator=None):
                 'native post-activation AuxPoW block evidence missing')
         return {'source':node,'height':block['height'],'hash':block['hash'],'version':block['version'],
             'auxpowChainId':block['version'] >> 16,'auxpowFields':sorted(block['auxpow'])}
+    def restart(node,lose_mempool=False):
+        require(lab_suite=='fee-pinning' and node=='a'
+                and len(report.get('feeRestarts',[]))<2,'bounded fee-lab restart required')
+        rpc(node,'stop');processes[node].wait(timeout=15);logs[node].close()
+        require(processes[node].returncode==0,'unclean fee-lab stop')
+        entry={'source':node,'privateMempoolDumpWithheld':lose_mempool}
+        if lose_mempool:
+            pool=work/('data-'+node)/'regtest'/'mempool.dat'
+            require(pool.is_file() and not pool.is_symlink(),'private test mempool dump missing')
+            backup=pool.with_name('mempool.saved-fee-incident')
+            require(not backup.exists(),'fresh mempool incident backup required')
+            pool.rename(backup)
+            entry['retainedTestDumpSha256']=hashlib.sha256(backup.read_bytes()).hexdigest()
+        report.setdefault('feeRestarts',[]).append(entry);save();return start(node)
+    def independent_fee_recovery(context):
+        require(lab_suite=='fee-pinning' and recovery_runner is not None,'standalone fee recovery required')
+        require(len(report.get('feeRecoveryCalls',[]))<12,'bounded fee recovery invocations required')
+        node=context.pop('source','a')
+        require(node in NODES,'fixed recovery source required')
+        remaining=rpc_limit-len(trace)-len(external_calls)
+        require(remaining>0,'no RPC budget remains for independent recovery')
+        result=recovery_runner({**context,'cliPath':str(bins/'dogecoin-cli'),
+            'nodeBDataDirectory':str(work/('data-'+node)),'nodeBRpcPort':RPC_PORTS[node],
+            'backendDirectoryToHide':str(HERE.parents[3]),'nodeADataDirectoryToHide':str(work/'data-a'),
+            'originalKeysDirectoryToHide':str(keys),'parentNetNs':parent,
+            'parentMountNs':os.readlink('/proc/self/ns/mnt'),'evidenceDirectory':str(out),
+            'maxRpcCalls':min(64,remaining)})
+        calls=result['rpcCalls'];require(len(calls)<=min(64,remaining),'external fee recovery budget mismatch')
+        for call in calls:
+            require(set(call)=={'method','params'},'exact recovery RPC row required')
+            validate_rpc(node,call['method'],call['params'],addresses=addresses,blocks=blocks,txids=txids,submitted=submitted)
+        external_calls.extend({'source':node,**c} for c in calls)
+        result.update(source=node,labLabel=context.get('labLabel',''))
+        report.setdefault('feeRecoveryCalls',[]).append(result);save();return result
+    def finish():
+        for n in NODES:
+            check_peers(rpc(n,'getpeerinfo'));rpc(n,'stop');processes[n].wait(timeout=15);logs[n].close()
+            require(processes[n].returncode==0,'unclean final node stop')
+            require(not list((work/('data-'+n)).rglob('wallet*')),'wallet residue')
+            methods=re.findall(r'ThreadRPCServer method=([a-zA-Z0-9_]+)',(out/('daemon-'+n+'.log')).read_text())
+            from collections import Counter
+            expected=Counter(t['method'] for t in trace if t['source']==n and t.get('reachedServer'))
+            expected.update(c['method'] for c in external_calls if c['source']==n)
+            require(set(methods)<=set(limits['rpcAllowlist']) and Counter(methods)==expected,'server method audit mismatch')
+        report['namespaceAfter']=json.loads(subprocess.check_output(['ip','-json','link','show'],text=True))
+        validate_namespace(parent,os.readlink('/proc/self/ns/net'),report['namespaceAfter'])
+        report.update(experimentStatus='PASS',generatedBlocks=generated,rpcCalls=len(trace)+len(external_calls),keysRemoved=True)
     try:
         for n in NODES:
             chain=start(n)
@@ -270,6 +336,14 @@ def run(args, recovery_runner=None, bundle_validator=None):
         miner_a,miner_b,claim,refund=signers
         require(len({x.public for x in signers})==4,'four distinct test keys required')
         for n,key in zip(NODES,(miner_a,miner_b)):addresses[n]=base58check(b'\x6f'+hash160(key.public))
+        if lab_suite=='fee-pinning':
+            from fee_pinning import run_fee_suite
+            run_fee_suite(dict(rpc=rpc,submit=submit,mine=mine,tx=tx,wait=wait_for,sync=synchronized,
+                peers=peer_view,restart=restart,recover=independent_fee_recovery,destroy_keys=destroy_keys,
+                signers=signers,addresses=addresses,blocks=blocks,txids=txids,submitted=submitted,
+                mocktimes=mocktimes,keys=keys,out=out,report=report,save=save,verify=verify,
+                bundle_validator=bundle_validator,persist_bundle=persist_bundle,normalize=normalize_observation))
+            finish();return
         destination=b'\x76\xa9\x14'+hash160(refund.public)+b'\x88\xac'
         claim_destination=b'\x76\xa9\x14'+hash160(claim.public)+b'\x88\xac'
         miner_script=b'\x76\xa9\x14'+hash160(miner_a.public)+b'\x88\xac'
@@ -383,7 +457,8 @@ def run(args, recovery_runner=None, bundle_validator=None):
                 'nodeBRpcPort':RPC_PORTS[node],
                 'backendDirectoryToHide':str(HERE.parents[3]),'nodeADataDirectoryToHide':str(work/'data-a'),
                 'originalKeysDirectoryToHide':str(keys),'parentNetNs':parent,'parentMountNs':os.readlink('/proc/self/ns/mnt'),
-                'expectedRefundTxid':recovery_id,'evidenceDirectory':str(out)})
+                'expectedRefundTxid':recovery_id,'evidenceDirectory':str(out),
+                'maxRpcCalls':min(64,MAX_RPC-len(trace)-len(external_calls))})
             require(type(result) is dict and result.get('txid')==recovery_id,'independent recovery hook identity mismatch')
             if expected_state:require(result.get('state')==expected_state,'independent recovery state mismatch')
             if expected_transition:require(result.get('transition')==expected_transition,'independent recovery transition mismatch')
@@ -477,18 +552,7 @@ def run(args, recovery_runner=None, bundle_validator=None):
                 probe['sameTemplateValidAfterRejections']=True
                 for n in NODES:require(tx(n,recovery_id)['confirmations']==2,'AuxPoW control lost recovery confirmation')
                 save()
-        for n in NODES:
-            check_peers(rpc(n,'getpeerinfo'));rpc(n,'stop');processes[n].wait(timeout=15);logs[n].close()
-            require(processes[n].returncode==0,'unclean final node stop')
-            require(not list((work/('data-'+n)).rglob('wallet*')),'wallet residue')
-            methods=re.findall(r'ThreadRPCServer method=([a-zA-Z0-9_]+)',(out/('daemon-'+n+'.log')).read_text())
-            from collections import Counter
-            expected=Counter(t['method'] for t in trace if t['source']==n and t.get('reachedServer'))
-            expected.update(c['method'] for c in external_calls if c['source']==n)
-            require(set(methods)<=METHODS and Counter(methods)==expected,'server method audit mismatch')
-        report['namespaceAfter']=json.loads(subprocess.check_output(['ip','-json','link','show'],text=True))
-        validate_namespace(parent,os.readlink('/proc/self/ns/net'),report['namespaceAfter'])
-        report.update(experimentStatus='PASS',generatedBlocks=generated,rpcCalls=len(trace)+len(external_calls),keysRemoved=True)
+        finish()
     except BaseException as error:
         report['error']=type(error).__name__+': '+str(error);raise
     finally:
@@ -503,9 +567,10 @@ def run(args, recovery_runner=None, bundle_validator=None):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--manifest',action='store_true')
+    parser.add_argument('--lab-suite',choices=('multinode','fee-pinning'),default='multinode')
     for name in ('evidence','verification','work','authorization','parent-net-ns'):parser.add_argument('--'+name)
     args=parser.parse_args()
-    if args.manifest:print(json.dumps(manifest(),indent=2,sort_keys=True))
+    if args.manifest:print(json.dumps(manifest(args.lab_suite),indent=2,sort_keys=True))
     else:
         require(all(getattr(args,k.replace('-','_')) for k in ('evidence','verification','work','authorization','parent-net-ns')),'all laboratory arguments required')
         sys.path.insert(0,str(HERE.parents[2]/'recovery'/'dogecoin'))
