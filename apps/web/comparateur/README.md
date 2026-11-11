@@ -170,3 +170,12 @@ Le programme valide l'algorithme, l'unité, les bornes, le catalogue matériel, 
 La base et les tests utilisent seulement Node.js et son moteur de test natif, **zéro dépendance npm additionnelle**. Aucune donnée tierce, API à clé, facture d'abonnement, intégration GitHub Actions dans le site principal ou automatisme de minage n'est ajoutée.
 
 **La PR reste brouillon. Ne pas fusionner ni déployer sans accord explicite.**
+
+
+## En-têtes de sécurité HTTP
+
+Le fichier optionnel \`_headers\` de **ce seul dossier comparateur** configure une politique restrictive CSP, \`nosniff\`, \`no-referrer\`, bloque la géolocalisation/caméra/micro et la mise en iframe, et évite la mise en cache des instantanés de minage.
+
+**Attention** : le fichier \`_headers\` s'applique automatiquement seulement lorsque **le contenu de \`apps/web/comparateur/\` est déployé comme racine d'un site statique compatible, par exemple un site Netlify indépendant**. Il n'est pas appliqué automatiquement au site GPUbnb actuel. Pour d'autres hébergeurs, configurer les mêmes en-têtes dans le serveur HTTP. La balise CSP de \`index.html\` apporte une protection côté navigateur mais ne remplace pas \`frame-ancestors\` en en-tête serveur.
+
+Les seuls accès réseau attendus du comparateur sont les fichiers JSON locaux de notre propre hébergement. **Pas de script externe, de publicité, de portefeuille, de mineur lancé ni de clé privée côté navigateur.**
