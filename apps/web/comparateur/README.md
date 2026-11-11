@@ -50,3 +50,23 @@ Pour activer des données réelles :
 ## Installation sans toucher à GPUbnb
 
 Vous pouvez publier ce dossier sur un site séparé. Le dépôt `khemisset18/gpubnb` (branche principale) n'est pas nécessaire pour tester le comparateur. Une fois validé, un simple lien depuis GPUbnb pourra y conduire, mais rien n'est modifié automatiquement.
+
+## Qualité, sécurité et mise en production
+
+Les calculs et la validation de la fraîcheur des données sont isolés dans `model.js`, sans dépendance externe. Exécutez les tests unitaires depuis la racine du dépôt avec :
+
+```bash
+node --test apps/web/comparateur/tests/model.test.mjs
+```
+
+Critères de contrôle : nombre d'appareils entier, montants et paramètres bornés, frais de pool et coût d'électricité déduits, données de rentabilité en EUR uniquement, rejet d'une source vide, d'une date future de plus de 5 minutes, d'un flux âgé de plus de 2 heures, et d'identifiants matériels inconnus. Les valeurs manquantes ne sont **jamais** remplacées par des profits inventés.
+
+### Raccordement des données réelles (à effectuer avec une autorisation de fournisseur)
+
+- Source envisageable : Minerstat API (https://minerstat.com/api-docs) ou hashrate.no (https://www.hashrate.no/c/api). **Vérifier les conditions et les quotas du fournisseur**, notamment pour l'usage commercial et la redistribution.
+- Faire les appels depuis une tâche serveur / fonction serverless, **jamais depuis le navigateur**.
+- Mapper explicitement les identifiants CPU/GPU et les algorithmes, puis fournir un revenu brut `grossEur24h` pour **1 appareil minant 24 h**, sans frais ni électricité déduits. Ne pas réutiliser une valeur de bénéfice net fournie par l'API : cela compterait les coûts deux fois.
+- Convertir les montants avec une source de change datée et publier uniquement les valeurs vérifiées au format `data/rendements.json`, avec source et horodatage réel de la collecte.
+- Respecter les limites d'appels, les politiques de cache et les autorisations d'affichage. Vérifier un jeu de données réel et son contrat avant de désigner le comparateur comme « temps réel ».
+
+**Aucune intégration fournisseur réelle n'est activée dans cette PR** : le flux d'exemple reste vide, les données non disponibles déclenchent le mode manuel. Ne pas fusionner sans validation explicite du propriétaire.
