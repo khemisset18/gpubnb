@@ -2,14 +2,16 @@
    No commercial API; no network or GPU benchmarks are invented.
    All data stays in the browser; own-node feed is optional. */
 import { estimateMoneroYield } from './lib/monero-direct.mjs';
-import { validateMoneroSnapshot } from './lib/monero-feed.mjs';
+import { validateMoneroSnapshot,MAX_PUBLIC_AGE_MS } from './lib/monero-feed.mjs';
 
 const el = id => document.getElementById(id);
 const euro = new Intl.NumberFormat('fr-FR', {style:'currency',currency:'EUR',maximumFractionDigits:4});
 const xmr = new Intl.NumberFormat('fr-FR', {maximumFractionDigits:12});
 let ownNetwork = null;
 let ownTimestamp = null;
-let feedStatus = 'Aucun instantané de nœud connecté';
+let feedStatus = 'Aucune mesure réseau disponible';
+let lastFetchFailed = false;
+const REFRESH_MS = 2 * 60 * 60 * 1000;
 
 function number(id, min, max, optional = false) {
   const value = el(id).value.trim();
@@ -26,7 +28,7 @@ function activeNetwork() {
     if (!Number.isFinite(difficulty) || !Number.isFinite(rewardXmr)) return null;
     return {difficulty,rewardXmr,mode:'manual'};
   }
-  const maxAge = ownNetwork?.source==='public-monero-rpc' ? 5*60*60000 : 20*60000;
+  const maxAge = ownNetwork?.source==='public-monero-rpc' ? MAX_PUBLIC_AGE_MS : 20*60000;
   if (!ownNetwork || !ownTimestamp ||
     Date.now()-ownTimestamp > maxAge) return null;
   return {...ownNetwork,mode:'node'};
@@ -47,11 +49,16 @@ function render() {
   const manual = el('xmrManual').checked;
   el('xmrManualFields').hidden = !manual;
   const network = activeNetwork();
+  const publicData = Boolean(network && network.source === 'public-monero-rpc');
+  const saved = publicData && (lastFetchFailed || Date.now()-ownTimestamp > REFRESH_MS);
+  const when = network && ownTimestamp ? new Date(ownTimestamp).toLocaleString('fr-FR') : '';
   el('xmrState').textContent = manual ? 'Données réseau manuelles' :
-    network ? (network.source==='public-monero-rpc' ?
-      'Réseau public recoupé · 30 blocs' : 'Nœud GPUbnb · 30 blocs') : 'Réseau indisponible';
+    !network ? 'Service indisponible' : saved ? 'Dernier relevé sauvegardé' :
+    publicData ? 'Réseau public · actualisé' : 'Nœud GPUbnb · 30 blocs';
   el('xmrUpdated').textContent = manual ? 'Saisie utilisateur · fraîcheur non vérifiée' :
-    network ? (network.source==='public-monero-rpc'?'Nœuds communautaires · ':'Mis à jour : ')+new Date(ownTimestamp).toLocaleString('fr-FR') : feedStatus;
+    !network ? 'Service indisponible · aucun relevé valide de moins de 24 h' :
+    saved ? 'Dernière mesure : '+when+' · conservée 24 h maximum' :
+    (publicData?'Source publique · ':'Mis à jour : ')+when;
   const hash = number('xmrHashrate', 0.001, 1e9);
   if (!network) {
     resetResults(manual ? 'Entrez une difficulté et une récompense réelles de votre nœud.' :
@@ -98,13 +105,16 @@ async function updateNetwork() {
     const response = await fetch('data/monero-reseau.json?t='+Date.now(),{cache:'no-store'});
     if (!response.ok) throw Error('Snapshot missing');
     const parsed = validateMoneroSnapshot(await response.json());
-    if (!parsed) throw Error('No valid own-node snapshot');
+    if (!parsed) throw Error('No valid network snapshot');
     ownNetwork = parsed;
+    lastFetchFailed = false;
     ownTimestamp = Date.parse(parsed.collectedAt);
     feedStatus = 'Réseau vérifié';
   } catch {
-    ownNetwork = null; ownTimestamp = null;
-    feedStatus = 'Aucun instantané récent du nœud GPUbnb';
+    // Keep the last verified in-memory measurement if Cloudflare temporarily fails.
+    // activeNetwork() enforces the original collectedAt timestamp and 24h maximum.
+    lastFetchFailed = true;
+    feedStatus = 'Service indisponible · aucun relevé récent';
   }
   render();
 }
