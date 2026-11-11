@@ -31,7 +31,7 @@ jobs:
       - name: Verify frozen harness and offline guards
         run: |
           set -euo pipefail
-          git diff --exit-code e0694a9916ac705f345cf10b88ece1075adb88ed HEAD -- asset-exchange/qualification/dogecoin/
+          git diff --exit-code 497621f4bfecfb6b3f574ca3234a769091ef454e HEAD -- asset-exchange/qualification/dogecoin/
           python3 -m unittest discover -s asset-exchange/qualification/dogecoin/policy -p 'test_*.py' -v
       - name: Fetch exact upstream source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
