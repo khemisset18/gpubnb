@@ -20,6 +20,7 @@ const authorityId=(index:number)=>`00000000-0000-4000-8000-${index.toString(16).
 function generationRedis(authorities:Map<string,string>,beforeEnqueue?:()=>Promise<void>){
   const counters={gets:0,evals:0};
   return {counters,
+    time:async()=>[String(Math.floor(Date.now()/1000)),String((Date.now()%1000)*1000)],
     get:async(key:string)=>{counters.gets++;return authorities.get(key)??null;},
     eval:async(script:string,keyCount:number,...values:unknown[])=>{
       counters.evals++;
@@ -137,14 +138,14 @@ test('30/60 FPS over 1/4/8 channels uses zero PostgreSQL reads while generation 
   for(const fps of [30,60] as const)for(const channels of [1,4,8])await syntheticGenerationLoad(fps,channels);
 });
 
-test('a Redis-only hot-path frame cannot extend browser or channel TTLs without a session expiry',async()=>{
+test('a Redis-only hot-path frame requests readiness without binding TTL renewal',async()=>{
   let evalCalls=0;
   const redis={eval:async()=>{evalCalls++;return 1;}};
   const marked=await markAcceptedGatewayFrame(redis as never,'session','channel',{
     sessionId:'session',machineId:'machine',browserSessionKey:'browser:session',runtimeBackend:'WINDOWS_NATIVE',
   },authorityId(1));
-  assert.equal(marked,false);
-  assert.equal(evalCalls,0,'an unknown expiry must not fall back to a 3600-second Redis refresh');
+  assert.equal(marked,true);
+  assert.equal(evalCalls,1,'hot frames must publish readiness for legacy agents');
 });
 
 test('a database-backed authority refresh remains bounded by its known session expiry',async()=>{
@@ -155,7 +156,7 @@ test('a database-backed authority refresh remains bounded by its known session e
     sessionId:'session',machineId:'machine',browserSessionKey:'browser:session',runtimeBackend:'WINDOWS_NATIVE',
   },authorityId(1),expiresAt);
   assert.equal(marked,true);
-  const ttl=Number(evalArguments.at(-1));
+  const ttl=Number(evalArguments.at(-2));
   assert.ok(ttl>=1&&ttl<=30,`refresh TTL ${ttl} must not exceed the remaining session lifetime`);
 });
 

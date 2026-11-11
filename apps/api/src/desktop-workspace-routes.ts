@@ -1066,7 +1066,7 @@ async function createDesktopWorkspaceSession(
 
   const spec = workspaceSpec[slug];
   try {
-    const session = await db.$transaction(async (tx) => {
+    const session = await runBookingTransaction(db, async (tx) => {
       // Same race boundary as the already-qualified renter routes: re-check the
       // commercial booking inside the transaction before creating a runtime.
       const eligible = await tx.booking.updateMany({

@@ -145,6 +145,16 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo clippy --locked --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification --bin gpubnb-windows-physical-qualify -- -D warnings
 
+      # Linux must also compile the feature-gated entrypoints. Their non-Windows
+      # branches must fail closed, even though no physical capture is possible.
+      - name: Test physical qualification feature on Linux
+        if: runner.os == 'Linux'
+        run: cargo test --locked --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification --all-targets
+
+      - name: Clippy physical qualification feature on Linux
+        if: runner.os == 'Linux'
+        run: cargo clippy --locked --manifest-path native/windows-stream-helper/Cargo.toml --features physical-qualification --all-targets -- -D warnings
+
       - name: Compile Stage 4 release-candidate helper without publishing it
         if: runner.os == 'Windows'
         env:

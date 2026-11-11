@@ -17,17 +17,67 @@ created for the first accepted upstream frame. Redis stores that UUID under
   seconds. Only an active, unexpired session on a clear online machine with a
   committed receipt may CAS-install the receipt. A tombstone or another receipt
   is never overwritten.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:e5e2e45831d0c5af50dc2a0457db72183e099eaba0d1b869abd7620f93e08241 -->
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:840d56d11b06d27d8babf3755329f879a5b008f1fe9793c0c61391d28ba4bf55 -->
+
 - Lease expiry bounds stale authority after DB-only status, connectivity or
   moderation changes. A PostgreSQL failure during renewal refuses the frame.
-  A Redis read, CAS or enqueue failure also refuses the frame.
+  Redis read, CAS or enqueue failures before admission refuse the frame. Once
+  the first payload and its receipt are committed, a subsequent authority
+  publication failure preserves that accepted result but returns no authority
+  for readiness; later frames require a fresh successful renewal.
+
+<!-- /coderabbit-ai-generated:v1 -->
+- Before the PostgreSQL read, renewal samples Redis `TIME` and fixes a
+  15-second validation deadline. The install Lua checks that deadline using
+  Redis's clock, including after a first-frame transaction or lost commit ACK.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:e07c17b1471b52c2747a437f4511211a0e0ed90bbf3098caba39dc5881c8d56f -->
+
+  It is never refreshed during recovery. If a first-frame transaction outlives
+  that deadline, one new attempt samples Redis again and reads a fresh active
+  PostgreSQL snapshot with the same committed receipt; the Redis CAS still
+  refuses a tombstone or different generation. Caller timeouts do not cancel queued
+  Redis commands: an expired validation must be refused even after the STOP
+
+<!-- /coderabbit-ai-generated:v1 -->
+  tombstone has disappeared. The deadline is shorter than the 60-second minimum
+  tombstone lifetime. Only renewal/first activation adds this `TIME` call; the
+  hot frame path remains unchanged. Missing deadlines fail closed, so mixed
+  API versions must be drained before relying on this guarantee.
+
+Redis documents [atomic script execution](https://redis.io/docs/latest/develop/programmability/eval-intro/)
+and its [server clock](https://redis.io/docs/latest/commands/time/). Both the
+sample and comparison use that clock, avoiding API/Redis clock skew. Normal
+Redis expiry assumptions still apply (no backward server-clock jumps or restore
+of stale authority from a snapshot).
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 The valid lease is deliberately short but authoritative for its remaining
 lifetime. Therefore loss of PostgreSQL after a successful renewal can leave at
 most two seconds of already-issued authority; it cannot create or extend a
-lease. Per-frame readiness updates do not refresh it. A Redis-only hot-path
-frame also does not refresh browser, channel or readiness TTLs because it has no
-authoritative session expiry snapshot. The next PostgreSQL-backed lease renewal
-may refresh those keys, bounded by the freshly read `expiresAt`.
+lease. Per-frame readiness updates do not refresh it. <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:0359434e2c82381996268ddeba8385b83d725e5ee9464c9ff53492a3c6dd25b7 -->
+
+A Redis-only hot-path
+frame does not refresh browser, channel or authority TTLs because it has no
+authoritative session expiry snapshot. It does publish the legacy upstream-ready
+hint, bounded atomically by the minimum remaining browser/channel PTTL, after
+checking the exact channel binding and generation. Missing or persistent
+bindings are refused. This lets a second legacy channel open while another
+channel keeps the session generation hot. The hint does not authorize delivery.
+The next PostgreSQL-backed lease renewal may refresh bindings, bounded by the
+freshly read `expiresAt`.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 ## First-frame billing
 

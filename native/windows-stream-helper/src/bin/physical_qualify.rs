@@ -2,7 +2,7 @@
 
 #[cfg(not(target_os = "windows"))]
 fn main() -> std::process::ExitCode {
-    println!(r#"{"ok":false,"error":"windows_required"}"#);
+    println!(r#"{{"ok":false,"error":"windows_required"}}"#);
     std::process::ExitCode::from(20)
 }
 

@@ -47,3 +47,14 @@ test('browser STOP publishes the generation tombstone before reporting success',
   assert.ok(databaseStop >= 0 && redisRevoke > databaseStop && success > redisRevoke,
     'STOP success must follow the durable transition and Redis tombstone');
 });
+
+test('desktop preparation retries its database-only Serializable transaction',async()=>{
+  const source=await readFile(new URL('../src/desktop-workspace-routes.ts',import.meta.url),'utf8');
+  const body=source.slice(source.indexOf('async function createDesktopWorkspaceSession('),source.indexOf('export function registerDesktopWorkspaceRoutes('));
+  assert.match(body,/const session = await runBookingTransaction\(db, async \(tx\) =>/);
+  assert.doesNotMatch(body,/db\.\$transaction|redis\./);
+  assert.match(body,/isolationLevel: Prisma\.TransactionIsolationLevel\.Serializable/);
+  assert.match(body,/await tx\.booking\.updateMany/,'each retry rechecks commercial eligibility');
+  assert.match(body,/await tx\.workspaceSession\.create/);
+  assert.match(body,/await tx\.job\.create/);
+});
