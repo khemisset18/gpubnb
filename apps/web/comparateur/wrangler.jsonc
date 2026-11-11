@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "gpubnb-rentabilite-autonome",
+  "main": "edge/worker.mjs",
+  "compatibility_date": "2026-11-10",
+  "workers_dev": true,
+  "triggers": {
+    "crons": ["17 */2 * * *"]
+  },
+  "kv_namespaces": [
+    {"binding": "SNAPSHOTS"}
+  ],
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/data/monero-reseau.json",
+      "/data/pow-reseaux.json",
+      "/api/status"
+    ]
+  }
+}
