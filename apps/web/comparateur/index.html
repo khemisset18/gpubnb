@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#fbfcfb">
+  <meta name="theme-color" content="#070908">
   <meta name="description" content="Comparateur clair de rentabilité de minage GPU et CPU : revenus par jour, par mois, par an et coût de l’électricité.">
   <title>Comparateur de rentabilité GPU / CPU — GPUbnb</title>
   <link rel="stylesheet" href="style.css">
@@ -14,20 +14,20 @@
   <header class="site-header">
     <div class="layout header-inner">
       <div class="brand"><span class="brand-symbol">G</span><span>GPUbnb</span><span class="brand-separator"></span><span class="brand-extension">Rentabilité</span></div>
-      <div class="header-right"><span class="header-hint">Comparateur indépendant</span><span class="quiet-badge">Version bêta</span></div>
+      <div class="header-right"><span class="header-hint">GPUbnb / OUTILS</span><a class="top-link" href="../index.html">Retour à GPUbnb <span aria-hidden="true">↗</span></a></div>
     </div>
   </header>
   <main class="layout">
     <section class="hero">
-      <div class="eyebrow"><span class="dot"></span> COMPARATEUR GPU & CPU</div>
-      <h1>Combien rapporte<br><span>votre matériel ?</span></h1>
-      <p>Choisissez votre carte graphique ou votre processeur. Calculez votre rendement net par jour, par mois et par an, en tenant compte de l’électricité.</p>
+      <div class="eyebrow"><span class="dot"></span> ANALYSE DU MATÉRIEL <span class="eyebrow-divider"></span> GPU / CPU</div>
+      <h1>Quelle rentabilité pour<br><span>votre GPU ou CPU ?</span></h1>
+      <p>Comparez les performances économiques de votre matériel. Rendement journalier, mensuel et annuel, coûts électriques et profit net — tout en un seul endroit.</p>
     </section>
     <section class="content-grid" id="calculateur" aria-label="Calculateur de rentabilité">
       <div class="form-column">
         <article class="surface form-card">
-          <div class="section-kicker">01 <span>Votre matériel</span></div>
-          <div class="section-heading"><h2>Sélectionnez un appareil</h2><p>Recherchez votre modèle parmi les références courantes.</p></div>
+          <div class="section-kicker">01 <span>MATÉRIEL</span></div>
+          <div class="section-heading"><h2>Choisissez votre configuration</h2><p>Recherchez votre modèle parmi les références courantes.</p></div>
           <div class="segmented" role="group" aria-label="Type d’appareil">
             <button id="tabGpu" class="on" type="button" aria-pressed="true">Carte graphique <small>GPU</small></button>
             <button id="tabCpu" type="button" aria-pressed="false">Processeur <small>CPU</small></button>
@@ -43,7 +43,7 @@
           </div>
         </article>
         <article class="surface form-card">
-          <div class="section-kicker">02 <span>Vos paramètres</span></div>
+          <div class="section-kicker">02 <span>PARAMÈTRES</span></div>
           <div class="section-heading"><h2>Coût et utilisation</h2><p>Les résultats se recalculent dès que vous modifiez une valeur.</p></div>
           <div class="field-row">
             <div><label for="electricity">Prix de l’électricité</label><div class="suffix-field"><input id="electricity" type="number" min="0" max="5" step="0.001" value="0.20"><span>€/kWh</span></div></div>
@@ -55,7 +55,7 @@
           </div>
         </article>
         <article class="surface form-card">
-          <div class="section-kicker">03 <span>Données de minage</span></div>
+          <div class="section-kicker">03 <span>REVENUS DE MINAGE</span></div>
           <div class="section-heading"><h2>Revenu brut estimé</h2><p>Entrez un revenu observé auprès de votre pool de minage. Un flux de données peut être connecté plus tard.</p></div>
           <div id="coinWrap" hidden><label for="coin">Cryptomonnaie / algorithme</label><select id="coin"></select></div>
           <label for="gross">Revenu brut pour 1 appareil, sur 24 h</label>
@@ -66,7 +66,7 @@
       </div>
       <aside class="result-column" aria-label="Résultats de rentabilité">
         <article class="surface result-card">
-          <div class="result-top"><div><span class="section-kicker result-kicker">RÉSULTATS</span><h2>Votre bénéfice net</h2></div><span id="resultBadge" class="mode-pill">À renseigner</span></div>
+          <div class="result-top"><div><span class="section-kicker result-kicker">SYNTHÈSE DE RENTABILITÉ</span><h2>Votre rendement net</h2></div><span id="resultBadge" class="mode-pill">À renseigner</span></div>
           <div class="period-rows">
             <div class="period-row main-period"><div class="period-name">Par jour <small>24 h max.</small></div><div><strong id="day">—</strong><small>€/jour</small></div></div>
             <div class="period-row"><div class="period-name">Par mois <small>30 jours</small></div><div><strong id="month">—</strong><small>€/mois</small></div></div>
@@ -86,11 +86,11 @@
       </aside>
     </section>
     <section class="compare-section" id="comparaison">
-      <div class="compare-header"><div><span class="section-kicker">EXPLORER</span><h2>Comparer les appareils</h2><p>Retrouvez rapidement votre GPU ou CPU. Les gains ne s’affichent que lorsqu’une donnée de rendement est disponible.</p></div><div><label class="visually-hidden" for="tableSearch">Rechercher dans le tableau</label><input id="tableSearch" class="table-search" type="search" placeholder="Filtrer les modèles…"></div></div>
+      <div class="compare-header"><div><span class="section-kicker">COMPARATIF</span><h2>Les modèles en détail</h2><p>Retrouvez rapidement votre GPU ou CPU. Les gains ne s’affichent que lorsqu’une donnée de rendement est disponible.</p></div><div><label class="visually-hidden" for="tableSearch">Rechercher dans le tableau</label><input id="tableSearch" class="table-search" type="search" placeholder="Filtrer les modèles…"></div></div>
       <div class="table-container surface"><table><thead><tr><th>Matériel</th><th>Consommation <small>indicative</small></th><th>Électricité <small>/ jour</small></th><th>Bénéfice net <small>/ jour</small></th><th></th></tr></thead><tbody id="tableBody"></tbody></table><p class="table-empty" id="tableEmpty" hidden>Aucun modèle correspondant.</p><p class="table-caption">La consommation d’une configuration complète peut être supérieure à celle de la puce seule. Les prix d’achat et les revenus en direct nécessitent des fournisseurs de données distincts.</p></div>
     </section>
     <section class="notes" aria-label="Informations utiles"><article><h3>Une formule transparente</h3><p><strong>Profit net = revenu brut − frais de pool − électricité.</strong> Les montants mensuels et annuels sont des projections au même rythme quotidien, pas des prévisions garanties.</p></article><article><h3>Le temps réel, sans chiffres fictifs</h3><p>Pour afficher les revenus miniers actualisés automatiquement, raccordez une API spécialisée au flux de cette page. Aucune clé API ne doit être placée dans le navigateur.</p></article></section>
   </main>
-  <footer class="footer"><div class="layout footer-inner"><strong>GPUbnb <span>· Comparateur indépendant</span></strong><span>Calculs indicatifs · Aucune donnée personnelle requise</span></div></footer>
+  <footer class="footer"><div class="layout footer-inner"><strong>GPUbnb <span>· Mining intelligence</span></strong><span>Calculs indicatifs · Aucune donnée personnelle requise</span></div></footer>
 </body>
 </html>
