@@ -1,5 +1,6 @@
 // GPUbnb diagnostic tests against unmodified Dogecoin v1.14.9 implementations.
 // Test-only ephemeral keys, private Regtest, no wallet/RPC/P2P threads.
+#include "chainparams.h"
 #include "coins.h"
 #include "consensus/consensus.h"
 #include "consensus/validation.h"
