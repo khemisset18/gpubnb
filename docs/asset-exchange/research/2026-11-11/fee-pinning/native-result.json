@@ -1,0 +1,316 @@
+{
+  "artifactId": 13894708328,
+  "artifactSha256": "086129108e4d4e6616357995557218a8a13fb9da0947455584c2233fe4c3a772",
+  "bundleDigests": {
+    "cap": "61f09a693c9cc0b03c714f0bb75c8db53939090779635e161dc71241fbc50692",
+    "main": "9b8ba303bc1d448418a45473b8a7f0682411b6b46ff4e48a37ce0d16634e7475",
+    "parent": "ed80f1e9b84ade31918c5ee0739bc38ec641e7f94f2bc2459cd8ceb7af8935c6"
+  },
+  "duplicateConfirmedRetryBroadcasts": 0,
+  "evidenceFileSha256": {
+    "cleanroom-proof-18332-fees-cap-rebroadcast.json": "dd13a1c9791c041cff32624e65a22cf7a84669240270fc1ecd305bc4e3ee2ade",
+    "cleanroom-proof-18332-fees-main-observe.json": "dd13a1c9791c041cff32624e65a22cf7a84669240270fc1ecd305bc4e3ee2ade",
+    "cleanroom-proof-18332-fees-main-rebroadcast.json": "dd13a1c9791c041cff32624e65a22cf7a84669240270fc1ecd305bc4e3ee2ade",
+    "cleanroom-proof-18332-fees-parent-rebroadcast.json": "dd13a1c9791c041cff32624e65a22cf7a84669240270fc1ecd305bc4e3ee2ade",
+    "daemon-a.log": "07a3a0119952fdb9b0670f0969edd0bb1f24a7202d70520a97299f4319fd73bf",
+    "daemon-b.log": "f1f41eaa8a07f7f94006ad44cffb4ec8ec744b40e7d153b78409534f0547fa7b",
+    "fee-bundle-cap.json": "61f09a693c9cc0b03c714f0bb75c8db53939090779635e161dc71241fbc50692",
+    "fee-bundle-main.json": "9b8ba303bc1d448418a45473b8a7f0682411b6b46ff4e48a37ce0d16634e7475",
+    "fee-bundle-parent.json": "ed80f1e9b84ade31918c5ee0739bc38ec641e7f94f2bc2459cd8ceb7af8935c6",
+    "multinode-report.json": "d955037f569232eeee1b9f0524df51bfd75412082f3d7bc13f72866bfedf2b9a",
+    "rpc-requests.json": "37f1b704950489d9bbb96489bab76ec55b0464d037599e92d9175ab60b7a281c",
+    "watcher-review.json": "3972983c5c735c7696318f6e73d47225ad68a5493d142163ed51fce131dcc0c0"
+  },
+  "executionCommit": "06c96c6284d1c33a771c41d1f9b6ffe533c946bf",
+  "experimentStatus": "PASS",
+  "feeKoinu": "1000000",
+  "generatedBlocks": 1362,
+  "harnessCommit": "428b64fa35ae60375e5eac4f624225c768c3580b",
+  "nativeCases": [
+    {
+      "expectationScope": "mempool-policy/exchange-protocol",
+      "id": 1,
+      "identicalPendingRetry": true,
+      "name": "pending-refund",
+      "status": "PASS",
+      "txid": "30634e278f62e41e1dca0192d32f4e6032810fd17e786d628dc0db02ccaebe81"
+    },
+    {
+      "expectationScope": "mempool-policy",
+      "id": 2,
+      "name": "higher-fee-replacement",
+      "nonOptInNativeRejection": {
+        "exitCode": 26,
+        "reason": "error code: -26\nerror message:\n258: txn-mempool-conflict\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "expectationScope": "mempool-policy",
+      "id": 3,
+      "name": "lower-fee-replacement",
+      "nonOptInNativeRejection": {
+        "exitCode": 26,
+        "reason": "error code: -26\nerror message:\n258: txn-mempool-conflict\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "expectationScope": "mempool-policy/consensus",
+      "id": 4,
+      "name": "claim-conflict",
+      "refundRejectedOnA": {
+        "exitCode": 26,
+        "reason": "error code: -26\nerror message:\n258: txn-mempool-conflict\n"
+      },
+      "status": "PASS",
+      "validClaimFirstSeenOnA": true,
+      "validRefundAdmittedOnB": true
+    },
+    {
+      "after": {
+        "bytes": 4149763,
+        "maxmempool": 5000000,
+        "mempoolminfee": "0.01841703",
+        "size": 79,
+        "usage": 4948960
+      },
+      "before": {
+        "bytes": 935,
+        "maxmempool": 5000000,
+        "mempoolminfee": "0E-8",
+        "size": 4,
+        "usage": 4640
+      },
+      "expectationScope": "mempool-policy",
+      "id": 5,
+      "lowFeeReadmissionRejected": {
+        "exitCode": 26,
+        "reason": "error code: -26\nerror message:\n66: mempool min fee not met\n"
+      },
+      "name": "rising-minimum-while-waiting",
+      "pendingRefundEvictedByActualBoundedPressure": true,
+      "pressureTransactions": 77,
+      "status": "PASS"
+    },
+    {
+      "afterEntry": {
+        "ancestorcount": 1,
+        "ancestorfees": 1000000,
+        "ancestorsize": 277,
+        "currentpriority": "5555555.555555556",
+        "depends": [],
+        "descendantcount": 1,
+        "descendantfees": 1000000,
+        "descendantsize": 277,
+        "fee": "0.01000000",
+        "height": 1359,
+        "modifiedfee": "0.01000000",
+        "size": 277,
+        "startingpriority": "4761904.761904762",
+        "time": 1794434601
+      },
+      "beforeEntry": {
+        "ancestorcount": 1,
+        "ancestorfees": 1000000,
+        "ancestorsize": 277,
+        "currentpriority": "5555555.555555556",
+        "depends": [],
+        "descendantcount": 1,
+        "descendantfees": 1000000,
+        "descendantsize": 277,
+        "fee": "0.01000000",
+        "height": 1359,
+        "modifiedfee": "0.01000000",
+        "size": 277,
+        "startingpriority": "4761904.761904762",
+        "time": 1794434601
+      },
+      "expectationScope": "mempool-policy/exchange-protocol",
+      "floorAfter": {
+        "bytes": 4150040,
+        "maxmempool": 5000000,
+        "mempoolminfee": "0.01302280",
+        "size": 80,
+        "usage": 4950064
+      },
+      "floorBefore": {
+        "bytes": 4150040,
+        "maxmempool": 5000000,
+        "mempoolminfee": "0.01841703",
+        "size": 80,
+        "usage": 4950064
+      },
+      "id": 6,
+      "name": "falling-minimum-while-waiting",
+      "nativeRegtestClockAdvanceSeconds": 21600,
+      "realWallTimeWaitClaimed": false,
+      "samePendingTxid": "81819aa5d26d48102ffe96f046553d595e51e7eaaebf6cb47412085fb06cacf5",
+      "sameSignedBytes": true,
+      "status": "PASS"
+    },
+    {
+      "chainAndFundingPreserved": true,
+      "expectationScope": "mempool-policy/exchange-protocol",
+      "id": 7,
+      "incident": "Only the disposable test node mempool dump was withheld after a clean stop",
+      "name": "transaction-lost-from-mempool",
+      "standaloneState": "UTXO_AVAILABLE",
+      "status": "PASS"
+    },
+    {
+      "expectationScope": "mempool-policy/exchange-protocol",
+      "id": 8,
+      "name": "node-restart",
+      "normalRestartReloadedSameTxid": true,
+      "standaloneRpcReauthenticated": true,
+      "status": "PASS"
+    },
+    {
+      "aOptInReplacementAccepted": true,
+      "bReplacementDisabledRejection": {
+        "exitCode": 26,
+        "reason": "error code: -26\nerror message:\n258: txn-mempool-conflict\n"
+      },
+      "expectationScope": "mempool-policy",
+      "id": 9,
+      "lowerOptInFeeRejected": {
+        "exitCode": 26,
+        "reason": "error code: -26\nerror message:\n66: insufficient fee\n"
+      },
+      "name": "different-node-policies",
+      "policyIsNotConsensus": true,
+      "status": "PASS"
+    },
+    {
+      "exchangeRecoveryRefusedUnconfirmedFunding": true,
+      "expectationScope": "mempool-policy/exchange-protocol",
+      "id": 10,
+      "name": "unconfirmed-parent-and-descendant",
+      "nativeParentAndChildAdmitted": true,
+      "protocolRefusal": "funding unavailable or ambiguous; no broadcast",
+      "status": "PASS"
+    },
+    {
+      "attack": "Valid pre-signed high-fee descendant makes a small parent fee bump uneconomic",
+      "childFeeKoinu": "20000000",
+      "expectationScope": "mempool-policy",
+      "id": 11,
+      "name": "deliberate-economic-pinning",
+      "oldParentAndChildEvicted": true,
+      "parentFeeKoinu": "1000000",
+      "productionRefundFeeCapUnchanged": true,
+      "separatelyAuthorizedDiagnosticReplacementFeeKoinu": "30000000",
+      "smallBumpRejection": {
+        "exitCode": 26,
+        "reason": "error code: -26\nerror message:\n66: insufficient fee\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "expectationScope": "exchange-protocol",
+      "id": 12,
+      "keysUnavailable": true,
+      "name": "original-signing-keys-removed",
+      "originalKeyReacquisition": false,
+      "retainedKoinu": "99000000",
+      "selectedAlreadySignedFeeKoinu": "1000000",
+      "status": "PASS"
+    },
+    {
+      "broadcastCalls": 0,
+      "capKoinu": "100000",
+      "exactProtocolRefusal": "no pre-signed refund covers current fee floor; signatory or new authorization required",
+      "expectationScope": "exchange-protocol",
+      "id": 13,
+      "name": "presigned-coverage-exhausted",
+      "nativeObservedFeeFloor": "0.01841703",
+      "newSignatureCreated": false,
+      "status": "PASS"
+    },
+    {
+      "bothNodesConfirmedRefund": true,
+      "expectationScope": "consensus/exchange-protocol",
+      "id": 14,
+      "name": "reorganisation-during-conflict",
+      "rollbackDepth": 1,
+      "status": "PASS",
+      "winningBranchLength": 4,
+      "winningTip": "ac8119570ee6676a6a2a3e756e8d32a412d9fa675bc0aaa43e2ae7e39d8f13eb"
+    },
+    {
+      "automaticReplacementAttempted": false,
+      "exchangeRejectedUnauthorizedSequence": "refund sequence outside the approved profile",
+      "expectationScope": "exchange-protocol/mempool-policy",
+      "id": 15,
+      "name": "unauthorized-replacement-refused",
+      "nativeNonOptInRejection": {
+        "exitCode": 26,
+        "reason": "error code: -26\nerror message:\n258: txn-mempool-conflict\n"
+      },
+      "productionSequence": 4294967294,
+      "status": "PASS"
+    }
+  ],
+  "nativeRefundConfirmationsPerNode": 1,
+  "nativeServerAudit": {
+    "a": {
+      "methods": {
+        "addnode": 3,
+        "generatetoaddress": 5,
+        "getblock": 2,
+        "getblockchaininfo": 50,
+        "getblockhash": 33,
+        "getblockheader": 15,
+        "getmempoolentry": 12,
+        "getmempoolinfo": 86,
+        "getnetworkinfo": 22,
+        "getpeerinfo": 22,
+        "getrawmempool": 11,
+        "getrawtransaction": 54,
+        "gettxout": 15,
+        "sendrawtransaction": 98,
+        "setmocktime": 1,
+        "stop": 3
+      },
+      "nativeCalls": 432
+    },
+    "b": {
+      "methods": {
+        "generatetoaddress": 2,
+        "getblock": 1,
+        "getblockchaininfo": 12,
+        "getblockhash": 1,
+        "getnetworkinfo": 1,
+        "getpeerinfo": 5,
+        "getrawmempool": 12,
+        "getrawtransaction": 9,
+        "sendrawtransaction": 3,
+        "setmocktime": 1,
+        "setnetworkactive": 4,
+        "stop": 1
+      },
+      "nativeCalls": 52
+    }
+  },
+  "originalSigningKeysRemovedBeforeFunding": true,
+  "physicalMachineIndependence": "NOT_TESTED",
+  "pressureTransactionsSubmitted": 77,
+  "qualificationStatus": "BLOCKED",
+  "refundTxid": "81819aa5d26d48102ffe96f046553d595e51e7eaaebf6cb47412085fb06cacf5",
+  "retainedKoinu": "99000000",
+  "rpcCalls": 488,
+  "runId": 43108343770,
+  "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43108343770",
+  "schemaVersion": 1,
+  "settlementAllowed": false,
+  "softwareChecksInNativeJob": {
+    "lab": 24,
+    "recovery": 21,
+    "signerFee": 12,
+    "watchers": 24
+  },
+  "standaloneInvocations": 10,
+  "verification": "Artifact digest, internal checksums, both native RPC counters, all three bundle terms and ECDSA signatures, transaction bytes/identities, destination/value/fee and native confirmation anchors rechecked after download.",
+  "virtualMachineIndependence": "NOT_TESTED"
+}

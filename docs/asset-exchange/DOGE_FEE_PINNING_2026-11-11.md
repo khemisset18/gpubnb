@@ -12,7 +12,7 @@ Source hashes and established-project references are in [source-index.json](rese
 
 ## Required fifteen scenarios
 
-Native status at preparation: **NOT_TESTED**. Every case must produce actual native observations before it can be recorded as successful. A complete run must retain each case ID1–15 exactly once.
+Native status: **15 PASS,0 FAIL,0 SKIP** in the corrected manually dispatched run [43108343770](https://github.com/khemisset18/gpubnb/actions/runs/43108343770). The report retains each case ID1–15 exactly once. This is the bounded experiment result; full phase qualification remains BLOCKED.
 
 | ID | Scenario | Expected-result layer |
 | --- | --- | --- |
@@ -48,4 +48,12 @@ All experiment success remains separate from D2–D9 and financial activation. R
 
 The first manually authorized run [43107629845](https://github.com/khemisset18/gpubnb/actions/runs/43107629845), execution commit `d2c6e5024fc944c915d957669954465c7f30cd21`, passed11 scenarios, then failed scenario5; scenarios6,12,13 were not reached. Native output showed64 admitted pressure transactions occupying4169792 bytes of the5000000-byte mempool and a zero rolling minimum: there was no eviction to claim. The preserved failure artifact is13895435556, SHA256 `2bd8655084167de54ffa31c4985005c323aada96a682aec07124e76bb4670859`; its internal checksums were independently verified.
 
-The correction permits80 finite pressure fixtures within the unchanged96-fixture/800-RPC/5MB bounds and records every native pressure observation. It changes no node admission, standardness, relay, replacement or recovery fee-cap rule. A new native run is required before marking the remaining cases successful.
+The correction permits80 finite pressure fixtures within the unchanged96-fixture/800-RPC/5MB bounds and records every native pressure observation. It changes no node admission, standardness, relay, replacement or recovery fee-cap rule. The second native execution below validates this correction.
+
+The corrected execution commit is `06c96c6284d1c33a771c41d1f9b6ffe533c946bf`, with frozen harness `428b64fa35ae60375e5eac4f624225c768c3580b`. Artifact13894708328 has SHA256 `086129108e4d4e6616357995557218a8a13fb9da0947455584c2233fe4c3a772`. The [bounded result index](research/2026-11-11/fee-pinning/native-result.json) records cases, hashes and independent checks; full signed archives are not committed.
+
+At pressure transaction77, native usage reached4948960/5000000 bytes after eviction and the rolling floor rose to0.01841703DOGE/kB. Readmission of the cheap refund failed with `mempool min fee not met`. The exhausted0.001DOGE ladder made zero broadcasts. The independent package selected its existing0.01DOGE signature, retained0.99DOGE and reached one active-chain confirmation on both nodes. After a block and the declared six-hour private test-clock advance, the floor decreased to0.01302280DOGE/kB while the exact higher-fee transaction stayed pending. A subsequent retry after confirmation returned `ALREADY_CONFIRMED` with zero broadcasts.
+
+Both native nodes rejected conflicting non-opt-in transactions with `txn-mempool-conflict`; opt-in controls distinguished A's enabled replacement policy from B's disabled policy. The descendant-fee pin produced `insufficient fee` for the small bump and admitted the separately authorized diagnostic fee covering the descendant graph. This does not extend the production refund fee cap. The one-block conflict reorganisation invalidated the claim; the four-block winning refund branch converged on both nodes, and watcher progression remained blocked through uncertainty/conflict.
+
+The run generated1362 synthetic blocks and used488/800 total RPC calls, including10 standalone invocations. After download, artifact/internal hashes, both complete native RPC method counters, all three recovery bundle terms and ECDSA signatures, exact signed transaction bytes, destination/value/fee, and confirmation anchors were checked again. The native workflow also passed24 laboratory,12 signer/fee,21 recovery and24 watcher software checks; D3 was deliberately skipped. The earlier95 D2 checks remain valid for the unchanged codec. Mount-namespace independence is demonstrated; independent VM and physical-machine recovery remain NOT_TESTED.
