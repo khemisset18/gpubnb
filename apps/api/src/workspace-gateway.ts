@@ -714,7 +714,15 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
     live.booking.status!==BookingStatus.STARTING&&live.booking.status!==BookingStatus.ACTIVE)))return {enqueued:-2};
   if(live.booking.workspaceActivatedAt!==null){
     if(!live.gatewayAcceptance)return {enqueued:-2};
-    if(!await installGatewayAuthority(redis,sessionId,live.gatewayAcceptance.id,live.expiresAt,validationDeadline))return {enqueued:-2};
+    if(!await installGatewayAuthority(redis,sessionId,live.gatewayAcceptance.id,live.expiresAt,validationDeadline)){
+      // An already activated session can outlive its initial read deadline.
+      // Do not fail a valid frame solely because PostgreSQL was slow: obtain
+      // another fresh DB snapshot, with the *same* receipt, before Redis CAS.
+      // STOP tombstones and changed generations still refuse installation.
+      const freshExpiry=await revalidateAuthority(live.gatewayAcceptance.id);
+      if(!freshExpiry)return {enqueued:-2};
+      return {enqueued:await enqueue(live.gatewayAcceptance.id),expiresAt:freshExpiry,authorityId:live.gatewayAcceptance.id};
+    }
     return {enqueued:await enqueue(live.gatewayAcceptance.id),expiresAt:live.expiresAt,authorityId:live.gatewayAcceptance.id};
   }
   try{
