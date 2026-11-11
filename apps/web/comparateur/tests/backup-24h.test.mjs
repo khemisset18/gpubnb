@@ -14,7 +14,7 @@ function xmrSample() {
     blockTimestamp:new Date(now-120000).toISOString(),blockHeight:3500000,
     sampleBlocks:30,difficulty:600000000000,rewardXmr:0.6,
     quality:'estimated-from-30-blocks',operators:['monero.rs','nodely.io'],
-    crossCheckedAt:when
+    activeOperator:'monero.rs',usedFallback:false,crossCheckedAt:when
   };
 }
 function powSample(coin) {
@@ -22,6 +22,7 @@ function powSample(coin) {
     schemaVersion:1,coin,network:'mainnet',
     algorithm:coin==='RVN'?'KawPoW':'Etchash',unit:'H/s',
     source:'public-chain-rpc',operator:coin==='RVN'?'RavencoinExplorer':'ETC Blockscout',
+    usedFallback:false,
     collectedAt:new Date(now).toISOString(),
     blockTimestamp:new Date(now-120000).toISOString(),
     blockHeight:coin==='RVN'?4000000:26000000,
