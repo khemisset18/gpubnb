@@ -1,7 +1,8 @@
 /* GPUbnb profitability engine — browser-native, no external dependencies. */
 (function (root) {
   'use strict';
-  const MAX_FEED_AGE_MS = 2 * 60 * 60 * 1000;
+  const MAX_FEED_AGE_MS = 24 * 60 * 60 * 1000;
+  const RECENT_FEED_MS = 2 * 60 * 60 * 1000;
   const MAX_GROSS_EUR_24H = 100000;
   const bounded = (value, min, max) => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 
@@ -41,5 +42,5 @@
     if (map.size === 0) return null;
     return { map, source: doc.source.trim().slice(0, 100), ts };
   }
-  root.GPUBNBProfitCore = Object.freeze({ profit, validateFeed, MAX_FEED_AGE_MS });
+  root.GPUBNBProfitCore = Object.freeze({ profit, validateFeed, MAX_FEED_AGE_MS, RECENT_FEED_MS });
 })(globalThis);
