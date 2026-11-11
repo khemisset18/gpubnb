@@ -79,3 +79,11 @@
 .pow-explanation{background:var(--surface-raised);border:1px solid var(--border);border-radius:8px;font-size:12px;line-height:1.65;margin:24px 0 13px;padding:13px 15px}
 @media(max-width:920px){.pow-layout{grid-template-columns:1fr}.pow-entry{border-right:0;border-bottom:1px solid var(--border)}.pow-periods strong{font-size:21px}}
 @media(max-width:620px){.pow-section{padding-top:48px}.pow-entry,.pow-output{padding:21px}.pow-pair{gap:10px}.pow-pair label{font-size:11px;min-height:32px}.pow-periods{grid-template-columns:1fr;gap:7px}.pow-periods>div{display:grid;grid-template-columns:1fr 1.25fr 90px;gap:8px;align-items:center;padding:12px}.pow-periods strong{margin:0;font-size:19px;text-align:right}.pow-periods small{text-align:right}.pow-network-status{flex-direction:column;gap:6px}.pow-network-status span{text-align:left}}
+
+
+/* Extended crypto catalog: Pearl PoUW observed payouts and ASIC-only equipment. */
+.pow-asics[hidden],.pow-pearl[hidden],#powHashFields[hidden]{display:none!important}
+.pow-asics,.pow-pearl{margin-top:17px}
+.pow-caution{background:rgba(166,255,63,.045);border:1px solid var(--border);border-left:2px solid var(--green);border-radius:7px;padding:13px 15px;margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.65}
+.pow-asics input,.pow-pearl input{max-width:100%}
+.pow-pearl .field-hint{margin-top:12px}
